@@ -1,18 +1,18 @@
 import React from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
-import styles from './ActionRow.module.css';
+import styles from './TaskRow.module.css';
 
-interface ActionRowActionsProps {
+interface TaskRowActionsProps {
   onEdit?: (() => void) | ((...args: any[]) => void);
   onDelete?: () => void;
   color?: string;
   style?: React.CSSProperties;
 }
 
-const ActionRowActions: React.FC<ActionRowActionsProps> = ({ onEdit, onDelete, color = '#94a3b8', style }) => {
+const TaskRowActions: React.FC<TaskRowActionsProps> = ({ onEdit, onDelete, color = '#94a3b8', style }) => {
   return (
     <span
-      className={styles.actionRowActions}
+      className={styles.taskRowActions}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -47,4 +47,7 @@ const ActionRowActions: React.FC<ActionRowActionsProps> = ({ onEdit, onDelete, c
   );
 };
 
-export default ActionRowActions;
+export default TaskRowActions;
+
+
+

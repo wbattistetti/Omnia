@@ -542,7 +542,7 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
           const relatedTarget = e.relatedTarget as HTMLElement | null;
           const isGoingToNode = relatedTarget && nodeContainerRef.current && wrapperRef.current &&
-            (nodeContainerRef.current.contains(relatedTarget as Node) || wrapperRef.current.contains(relatedTarget as Node));
+            (nodeContainerRef.current.contains(relatedTarget) || wrapperRef.current.contains(relatedTarget));
 
           if (isGoingToNode) {
             return;
@@ -752,9 +752,11 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
           // Fallback: usa relatedTarget se elementFromPoint non funziona
           const relatedTarget = e.relatedTarget as HTMLElement | null;
-          const isGoingToToolbar = relatedTarget && toolbarElementRef.current && relatedTarget && toolbarElementRef.current.contains(relatedTarget as Node);
-          const isGoingToNodeContainer = relatedTarget && nodeContainerRef.current && wrapperRef.current &&
-            (nodeContainerRef.current.contains(relatedTarget as Node) || wrapperRef.current.contains(relatedTarget as Node));
+          // ✅ Verifica che relatedTarget sia un Node valido prima di chiamare contains
+          const isValidNode = relatedTarget && relatedTarget instanceof Node;
+          const isGoingToToolbar = isValidNode && toolbarElementRef.current && toolbarElementRef.current.contains(relatedTarget);
+          const isGoingToNodeContainer = isValidNode && nodeContainerRef.current && wrapperRef.current &&
+            (nodeContainerRef.current.contains(relatedTarget) || wrapperRef.current.contains(relatedTarget));
 
           if (isGoingToToolbar || isGoingToNodeContainer) {
             return;
@@ -813,9 +815,11 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
 
           // Fallback: usa relatedTarget se elementFromPoint non funziona
           const relatedTarget = e.relatedTarget as HTMLElement | null;
-          const isGoingToToolbar = relatedTarget && toolbarElementRef.current && toolbarElementRef.current.contains(relatedTarget as Node);
-          const isStillInWrapper = relatedTarget && wrapperRef.current && nodeContainerRef.current &&
-            (wrapperRef.current.contains(relatedTarget as Node) || nodeContainerRef.current.contains(relatedTarget as Node));
+          // ✅ Verifica che relatedTarget sia un Node valido prima di chiamare contains
+          const isValidNode = relatedTarget && relatedTarget instanceof Node;
+          const isGoingToToolbar = isValidNode && toolbarElementRef.current && toolbarElementRef.current.contains(relatedTarget);
+          const isStillInWrapper = isValidNode && wrapperRef.current && nodeContainerRef.current &&
+            (wrapperRef.current.contains(relatedTarget) || nodeContainerRef.current.contains(relatedTarget));
 
             if (isGoingToToolbar || isStillInWrapper) {
               return;

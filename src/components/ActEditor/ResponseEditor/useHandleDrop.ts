@@ -1,5 +1,5 @@
 import { TreeNodeProps } from './types';
-import { createAction } from './actionFactories';
+import { createTask } from './taskFactories';
 import { createParameter } from './parameterFactories';
 import { insertNodeAt } from './treeFactories';
 
@@ -20,27 +20,27 @@ export function handleDropWithInsert({
   selectedStep,
   dispatch,
 }: DropParams) {
-  
+
   if (!item) {
     console.error('[DND][handleDrop] No item provided');
     return null;
   }
-  
-  if (!item.action) {
-    console.error('[DND][handleDrop] Item has no action property:', item);
+
+  if (!item.task) {
+    console.error('[DND][handleDrop] Item has no task property:', item);
     return null;
   }
 
-  const action = item.action;
+  const task = item.task;
   const id = Math.random().toString(36).substr(2, 9);
 
-  const newNode: TreeNodeProps = createAction({
+  const newNode: TreeNodeProps = createTask({
     id,
-    text: typeof action.label === 'object' ? action.label.it || action.label.en || action.id : action.label,
-    type: 'action',
+    text: typeof task.label === 'object' ? task.label.it || task.label.en || task.id : task.label,
+    type: 'task',
     icon: item.icon,
     color: item.color,
-    label: typeof action.label === 'object' ? action.label.it || action.label.en || action.id : action.label,
+    label: typeof task.label === 'object' ? task.label.it || task.label.en || task.id : task.label,
     primaryValue: item.primaryValue,
     parameters: item.parameters ? item.parameters.map(createParameter) : undefined,
   });
@@ -52,7 +52,7 @@ export function handleDropWithInsert({
   }
 
   const targetNode = editorNodes.find(n => n.id === targetId);
-  
+
   if (!targetNode) {
     const nodeToAdd = { ...newNode, level: 0, parentId: undefined };
     dispatch({ type: 'ADD_NODE', node: nodeToAdd });
@@ -71,7 +71,7 @@ export function handleDropWithInsert({
     return id;
   }
 
-  if (targetNode.type === 'action') {
+  if (targetNode.type === 'task') {
     const pos: 'before' | 'after' = position === 'before' ? 'before' : 'after';
     const inserted = insertNodeAt(editorNodes, { ...newNode, level: targetNode.level, parentId: targetNode.parentId }, targetId, pos);
     dispatch({ type: 'SET_NODES', nodes: inserted });
@@ -81,4 +81,4 @@ export function handleDropWithInsert({
   const nodeToAdd = { ...newNode, level: 0, parentId: undefined };
   dispatch({ type: 'ADD_NODE', node: nodeToAdd });
   return id;
-} 
+}

@@ -1,9 +1,9 @@
-// Executive summary: Represents a single draggable action item with icon and label.
+// Executive summary: Represents a single draggable task item with icon and label.
 import React from 'react';
-import styles from './ActionItem.module.css';
+import styles from './TaskItem.module.css';
 import { useDrag } from 'react-dnd';
 import { getEmptyImage } from 'react-dnd-html5-backend';
-import { DND_TYPE_VIEWER } from '../ResponseEditor/ActionRowDnDWrapper';
+import { DND_TYPE_VIEWER } from '../ResponseEditor/TaskRowDnDWrapper';
 
 const MIN_THUMBNAIL_WIDTH = 100;
 
@@ -26,8 +26,8 @@ const iconSVGMap: Record<string, string> = {
   ServerCog: `<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='lucide lucide-server-cog'><rect width='20' height='8' x='2' y='2' rx='2'/><rect width='20' height='8' x='2' y='14' rx='2'/><path d='M6 6h.01M6 18h.01M12 18a2 2 0 1 0 4 0 2 2 0 0 0-4 0zm8 2v2m0 4v2m2-4h-4'/></svg>`,
 };
 
-interface ActionItemProps {
-  action: any; // Assuming action is an object with id, iconName, label, color, description, primaryValue, parameters
+interface TaskItemProps {
+  task: any; // Task object with id, iconName, label, color, description, primaryValue, parameters
   icon: React.ReactNode;
   iconName: string;
   label: string;
@@ -37,13 +37,13 @@ interface ActionItemProps {
   parameters?: { key: string; value: string }[];
 }
 
-const ActionItem: React.FC<ActionItemProps> = ({ action, icon, iconName, label, color, description, primaryValue, parameters }) => {
+const TaskItem: React.FC<TaskItemProps> = ({ task, icon, iconName, label, color, description, primaryValue, parameters }) => {
   const [{ isDragging }, dragRef, preview] = useDrag({
     type: DND_TYPE_VIEWER,
     item: () => {
       return {
         type: DND_TYPE_VIEWER,
-        action,
+        task,
         label,
         icon: iconName,
         color,
@@ -62,7 +62,7 @@ const ActionItem: React.FC<ActionItemProps> = ({ action, icon, iconName, label, 
   }, [preview]);
 
   return (
-    <div 
+    <div
       ref={dragRef}
       className={styles.item}
       style={{
@@ -84,4 +84,5 @@ const ActionItem: React.FC<ActionItemProps> = ({ action, icon, iconName, label, 
   );
 };
 
-export default ActionItem; 
+export default TaskItem;
+

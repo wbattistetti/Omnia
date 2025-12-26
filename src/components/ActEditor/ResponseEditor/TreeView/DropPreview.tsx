@@ -1,10 +1,10 @@
 import React from 'react';
 import { DropPreviewProps } from './TreeViewTypes';
 
-const DropPreview: React.FC<DropPreviewProps> = ({ 
-  dropPreviewIdx, 
-  dropPreviewPosition, 
-  nodes 
+const DropPreview: React.FC<DropPreviewProps> = ({
+  dropPreviewIdx,
+  dropPreviewPosition,
+  nodes
 }) => {
   if (dropPreviewIdx === null || !dropPreviewPosition) {
     return null;
@@ -20,7 +20,7 @@ const DropPreview: React.FC<DropPreviewProps> = ({
     if (!nodeElem) return 0;
 
     // Se è un escalation, calcola la posizione basandosi sulle azioni interne
-    const childrenNodes = targetNode.type === 'escalation' 
+    const childrenNodes = targetNode.type === 'escalation'
       ? nodes.filter(n => n.parentId === targetNode.id).map(child => ({ ...child, level: 1 }))
       : undefined;
 
@@ -28,7 +28,7 @@ const DropPreview: React.FC<DropPreviewProps> = ({
       // Calcola la posizione basandosi sulla struttura del nodo escalation
       const headerHeight = 40; // Altezza approssimativa dell'header escalation
       const padding = 8;
-      const actionHeight = 32; // Altezza approssimativa di ogni ActionRow
+      const taskHeight = 32; // Altezza approssimativa di ogni TaskRow
 
       if (dropPreviewPosition === 'before') {
         // Prima azione interna
@@ -40,8 +40,8 @@ const DropPreview: React.FC<DropPreviewProps> = ({
         // Dopo l'ultima azione interna
         const lastAction = childrenNodes[childrenNodes.length - 1];
         if (lastAction) {
-          const totalActionsHeight = childrenNodes.length * actionHeight;
-          return nodeElem.offsetTop + headerHeight + padding + totalActionsHeight + padding + 2;
+          const totalTasksHeight = childrenNodes.length * taskHeight;
+          return nodeElem.offsetTop + headerHeight + padding + totalTasksHeight + padding + 2;
         }
       }
     }
@@ -68,4 +68,4 @@ const DropPreview: React.FC<DropPreviewProps> = ({
   );
 };
 
-export default DropPreview; 
+export default DropPreview;

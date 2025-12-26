@@ -26,8 +26,7 @@ export const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): Tree
             level: 0,
             included: true,
           });
-          // ✅ MIGRATION: Support both tasks (new) and actions (legacy)
-          const taskRefs = escalation.tasks || escalation.actions || [];
+          const taskRefs = escalation.tasks || [];
           taskRefs.forEach((taskRef: any) => {
             // ✅ Support both taskId (new) and actionInstanceId (legacy)
             const taskId = taskRef.taskId || taskRef.actionInstanceId;
@@ -71,13 +70,13 @@ export const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): Tree
         });
         continue;
       }
-      // Forma B: { type, escalations: [{ actions: [...] }] }
+      // Forma B: { type, escalations: [{ tasks: [...] }] }
       if (val && typeof val === 'object' && Array.isArray((val as any).escalations)) {
         const escs = (val as any).escalations as any[];
         escs.forEach((esc: any, idx: number) => {
           const escId = esc.escalationId || `${stepKey}_${idx + 1}`;
           nodes.push({ id: escId, text: 'recovery', type: 'escalation', level: 0, included: true });
-          (esc.actions || []).forEach((a: any) => {
+          (esc.tasks || []).forEach((a: any) => {
             const actionInstanceId = a.actionInstanceId || `${stepKey}_${idx + 1}_a`;
             const p = Array.isArray(a.parameters) ? a.parameters.find((x: any) => x?.parameterId === 'text') : undefined;
             const key = p?.value;

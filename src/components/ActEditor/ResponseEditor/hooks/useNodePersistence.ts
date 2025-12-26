@@ -26,29 +26,24 @@ export function useNodePersistence(
 
     // ✅ Chiamata sincrona diretta - no setTimeout
     updateSelectedNode((node) => {
-      // ✅ MIGRATION: Normalizza sia tasks (new) che actions (legacy)
-      // Preferisce tasks se presente, altrimenti usa actions
+      // ✅ Normalizza tasks al formato DDT
       const normalized = (nextEscalations || []).map((esc: any) => {
-        // ✅ Prefer tasks over actions
-        const items = esc.tasks || esc.actions || [];
+        const items = esc.tasks || [];
 
         if (debugDrop()) {
           console.log('[DROP_DEBUG][useNodePersistence] 🔄 Normalizing escalation', {
             itemsCount: items.length,
-            hasTasks: !!esc.tasks,
-            hasActions: !!esc.actions
+            hasTasks: !!esc.tasks
           });
         }
 
-        // Normalizza ogni item (task o action) al formato DDT
+        // Normalizza ogni task al formato DDT
         const normalizedItems = items.map((item: any) => {
           if (!item) return null;
 
-          // ✅ Support both task (new) and action (legacy) formats
-          const id = item.templateId || item.actionId || 'sayMessage';
+          const id = item.templateId || 'sayMessage';
           const out: any = {
-            actionId: id, // Legacy field (required by DDT structure)
-            templateId: id // New field
+            templateId: id
           };
 
           // ✅ Preserve taskId if present
@@ -84,8 +79,7 @@ export function useNodePersistence(
         }).filter((x: any) => x != null);
 
         return {
-          tasks: normalizedItems, // ✅ New field
-          actions: normalizedItems  // ✅ Legacy alias (required by DDT structure)
+          tasks: normalizedItems
         };
       });
 
@@ -107,11 +101,9 @@ export function useNodePersistence(
         const escs = Array.isArray(group.escalations) ? [...group.escalations] : [];
         // Aggiorna solo gli indici presenti in normalized
         normalized.forEach((esc: any, i: number) => {
-          if (!escs[i]) escs[i] = { tasks: [], actions: [] };
-          // ✅ normalized già contiene sia tasks che actions con lo stesso contenuto
+          if (!escs[i]) escs[i] = { tasks: [] };
           escs[i] = {
             tasks: esc.tasks,  // ✅ New field (normalizedItems)
-            actions: esc.actions  // ✅ Legacy alias (normalizedItems)
           };
         });
         group.escalations = escs;
@@ -123,11 +115,9 @@ export function useNodePersistence(
         const group = { ...(obj[selectedStepKey] || { type: selectedStepKey, escalations: [] }) };
         const escs = Array.isArray(group.escalations) ? [...group.escalations] : [];
         normalized.forEach((esc: any, i: number) => {
-          if (!escs[i]) escs[i] = { tasks: [], actions: [] };
-          // ✅ normalized già contiene sia tasks che actions con lo stesso contenuto
+          if (!escs[i]) escs[i] = { tasks: [] };
           escs[i] = {
             tasks: esc.tasks,  // ✅ New field (normalizedItems)
-            actions: esc.actions  // ✅ Legacy alias (normalizedItems)
           };
         });
         obj[selectedStepKey] = { ...group, escalations: escs, type: selectedStepKey };
@@ -137,7 +127,7 @@ export function useNodePersistence(
             selectedStepKey,
             escalationsCount: escs.length,
             firstEscTasksCount: escs[0]?.tasks?.length || 0,
-            firstEscActionsCount: escs[0]?.actions?.length || 0
+            firstEscTasksCount: escs[0]?.tasks?.length || 0
           });
         }
 

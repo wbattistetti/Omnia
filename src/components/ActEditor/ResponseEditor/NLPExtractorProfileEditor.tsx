@@ -1,5 +1,5 @@
 import React from 'react';
-import { Wand2, MessageCircle } from 'lucide-react';
+import { Wand2 } from 'lucide-react';
 import { taskRepository } from '../../../services/TaskRepository';
 import type { ProblemIntent } from '../../../types/project';
 import RegexEditor from './RegexEditor';
@@ -14,9 +14,7 @@ import { useProfileState } from './hooks/useProfileState';
 import { useExtractionTesting } from './hooks/useExtractionTesting';
 
 // 🎨 Config Components
-import KindSelector from './Config/KindSelector';
-import ConfidenceInput from './Config/ConfidenceInput';
-import WaitingMessagesConfig from './Config/WaitingMessagesConfig';
+import RecognitionEditor from './RecognitionEditor';
 
 // 📝 Note Components
 import NoteButton from './CellNote/NoteButton';
@@ -303,63 +301,145 @@ export default function NLPExtractorProfileEditor({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', minHeight: 0 }}>
-      {/* Header compatto + tab editor */}
-      <div style={{ padding: 6 }}>
-        {/* ✅ Quando kind === "intent", mostra solo Waiting LLM con messaggio diverso */}
-        {isIntentKind ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <label
-              style={{
-                opacity: 0.8,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <MessageCircle size={14} />
-              Waiting LLM
-            </label>
-            <input
-              value={waitingEsc2 || 'Un momento per favore, sto analizzando la sua richiesta'}
-              onChange={(e) => setWaitingEsc2(e.target.value)}
-              title="Testo mostrato all'utente mentre si attende l'analisi LLM"
-              style={{
-                flex: 1,
-                padding: '6px 8px',
-                border: '2px solid #9ca3af',
-                borderRadius: 6,
-                background: 'rgba(239, 68, 68, 0.2)', // Rosso spento con trasparenza 80%
-              }}
-            />
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 300px) auto 1fr', gap: 12, alignItems: 'center' }}>
-            {/* Kind Selector Component */}
-            <KindSelector
-              kind={kind}
-              setKind={setKind}
-              lockKind={lockKind}
-              setLockKind={setLockKind}
-              inferredKind={inferredKind}
-              hideIfIntent={true}
-            />
+      {/* ✅ Toolbar per kind === 'intent' - spostata sopra RecognitionEditor */}
+      {isIntentKind && (
+        <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+          <button
+            onClick={() => {
+              // ✅ Toggle: se già attivo, deseleziona; altrimenti seleziona
+              if (testPhraseMode === 'all-training') {
+                setTestPhraseMode('all-training'); // Mantieni selezionato (mutualmente esclusivo)
+              } else {
+                setTestPhraseMode('all-training');
+              }
+            }}
+            style={{
+              padding: '4px 8px',
+              border: '1px solid #9ca3af',
+              borderRadius: 4,
+              background: testPhraseMode === 'all-training' ? '#dbeafe' : '#fff',
+              cursor: 'pointer',
+              fontWeight: testPhraseMode === 'all-training' ? 600 : 400
+            }}
+            title="Mostra tutte le frasi di training di tutti gli intenti"
+          >
+            All training phrases
+          </button>
+          <button
+            onClick={() => {
+              // ✅ Toggle: se già attivo, deseleziona; altrimenti seleziona
+              if (testPhraseMode === 'selected-training') {
+                setTestPhraseMode('all-training'); // Deseleziona tornando al default
+              } else {
+                setTestPhraseMode('selected-training');
+              }
+            }}
+            disabled={!intentSelected}
+            style={{
+              padding: '4px 8px',
+              border: '1px solid #9ca3af',
+              borderRadius: 4,
+              background: testPhraseMode === 'selected-training' ? '#dbeafe' : '#fff',
+              cursor: intentSelected ? 'pointer' : 'not-allowed',
+              opacity: intentSelected ? 1 : 0.5,
+              fontWeight: testPhraseMode === 'selected-training' ? 600 : 400
+            }}
+            title={intentSelected ? "Mostra solo le frasi di training dell'intento selezionato" : "Seleziona un intento per vedere le sue frasi"}
+          >
+            Training phrases for selected Intent
+          </button>
+          <button
+            onClick={() => {
+              // ✅ Toggle: se già attivo, deseleziona; altrimenti seleziona
+              if (testPhraseMode === 'test-phrases') {
+                setTestPhraseMode('all-training'); // Deseleziona tornando al default
+              } else {
+                setTestPhraseMode('test-phrases');
+              }
+            }}
+            style={{
+              padding: '4px 8px',
+              border: '1px solid #9ca3af',
+              borderRadius: 4,
+              background: testPhraseMode === 'test-phrases' ? '#dbeafe' : '#fff',
+              cursor: 'pointer',
+              fontWeight: testPhraseMode === 'test-phrases' ? 600 : 400
+            }}
+            title="Mostra le frasi di test (non usate per il training)"
+          >
+            Test Phrases
+          </button>
+        </div>
+      )}
 
-            {/* Confidence Component */}
-            <ConfidenceInput value={minConf} onChange={setMinConf} />
+      {/* ✅ Unified Recognition Editor: Kind, Confidence, Waiting Messages + TesterGrid */}
+      <RecognitionEditor
+        // Config props
+        kind={kind}
+        setKind={setKind}
+        lockKind={lockKind}
+        setLockKind={setLockKind}
+        inferredKind={inferredKind}
+        minConf={minConf}
+        setMinConf={setMinConf}
+        waitingEsc1={waitingEsc1}
+        setWaitingEsc1={setWaitingEsc1}
+        waitingEsc2={waitingEsc2}
+        setWaitingEsc2={setWaitingEsc2}
+        isIntentKind={isIntentKind}
+        // TesterGrid props
+        examplesList={examplesList}
+        rowResults={rowResults}
+        selectedRow={selectedRow}
+        setSelectedRow={setSelectedRow}
+        enabledMethods={enabledMethods}
+        toggleMethod={toggleMethod}
+        runRowTest={runRowTest}
+        expectedKeysForKind={expectedKeysForKind}
+        cellOverrides={cellOverrides}
+        setCellOverrides={setCellOverrides}
+        editingCell={editingCell}
+        setEditingCell={setEditingCell}
+        editingText={editingText}
+        setEditingText={setEditingText}
+        hasNote={hasNote}
+        getNote={getNote}
+        addNote={addNote}
+        deleteNote={deleteNote}
+        isEditing={isEditing}
+        startEditing={startEditing}
+        stopEditing={stopEditing}
+        isHovered={isHovered}
+        setHovered={setHovered}
+        activeEditor={activeEditor}
+        toggleEditor={toggleEditor}
+        mode={testMode}
+        newExample={newExample}
+        setNewExample={setNewExample}
+        setExamplesList={setExamplesList}
+        onCloseEditor={closeEditor}
+        editorProps={{
+          regex,
+          setRegex,
+          node,
+          kind,
+          profile,
+          testCases,
+          setTestCases,
+          onProfileUpdate: (updatedProfile) => {
+            onChange?.(updatedProfile);
+          },
+        }}
+        runAllRows={runAllRows}
+        testing={testing}
+        reportOpen={reportOpen}
+        setReportOpen={setReportOpen}
+        baselineStats={baselineStats}
+        lastStats={lastStats}
+      />
 
-            {/* Waiting Messages Component */}
-            <WaitingMessagesConfig
-              waitingNER={waitingEsc1}
-              setWaitingNER={setWaitingEsc1}
-              waitingLLM={waitingEsc2}
-              setWaitingLLM={setWaitingEsc2}
-            />
-          </div>
-        )}
-
-        {/* OLD tab editors - now replaced by inline editors */}
-        <div style={{ marginTop: 10, display: 'none' }}>
+      {/* OLD tab editors - now replaced by inline editors */}
+      <div style={{ marginTop: 10, display: 'none' }}>
           {activeTab === 'regex' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <label style={{ opacity: 0.8 }}>Regex</label>
@@ -559,133 +639,6 @@ export default function NLPExtractorProfileEditor({
             <div style={{ color: '#b91c1c', marginTop: 6 }}>JSON non valido: {jsonError}</div>
           )}
         </div>
-      </div>
-
-      {/* Tester section - griglia direttamente, senza pannello esterno */}
-      {/* Toolbar per kind === 'intent' - spostata sopra la griglia */}
-      {isIntentKind && (
-        <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
-          <button
-            onClick={() => {
-              // ✅ Toggle: se già attivo, deseleziona; altrimenti seleziona
-              if (testPhraseMode === 'all-training') {
-                setTestPhraseMode('all-training'); // Mantieni selezionato (mutualmente esclusivo)
-              } else {
-                setTestPhraseMode('all-training');
-              }
-            }}
-            style={{
-              padding: '4px 8px',
-              border: '1px solid #9ca3af',
-              borderRadius: 4,
-              background: testPhraseMode === 'all-training' ? '#dbeafe' : '#fff',
-              cursor: 'pointer',
-              fontWeight: testPhraseMode === 'all-training' ? 600 : 400
-            }}
-            title="Mostra tutte le frasi di training di tutti gli intenti"
-          >
-            All training phrases
-          </button>
-          <button
-            onClick={() => {
-              // ✅ Toggle: se già attivo, deseleziona; altrimenti seleziona
-              if (testPhraseMode === 'selected-training') {
-                setTestPhraseMode('all-training'); // Deseleziona tornando al default
-              } else {
-                setTestPhraseMode('selected-training');
-              }
-            }}
-            disabled={!intentSelected}
-            style={{
-              padding: '4px 8px',
-              border: '1px solid #9ca3af',
-              borderRadius: 4,
-              background: testPhraseMode === 'selected-training' ? '#dbeafe' : '#fff',
-              cursor: intentSelected ? 'pointer' : 'not-allowed',
-              opacity: intentSelected ? 1 : 0.5,
-              fontWeight: testPhraseMode === 'selected-training' ? 600 : 400
-            }}
-            title={intentSelected ? "Mostra solo le frasi di training dell'intento selezionato" : "Seleziona un intento per vedere le sue frasi"}
-          >
-            Training phrases for selected Intent
-          </button>
-          <button
-            onClick={() => {
-              // ✅ Toggle: se già attivo, deseleziona; altrimenti seleziona
-              if (testPhraseMode === 'test-phrases') {
-                setTestPhraseMode('all-training'); // Deseleziona tornando al default
-              } else {
-                setTestPhraseMode('test-phrases');
-              }
-            }}
-            style={{
-              padding: '4px 8px',
-              border: '1px solid #9ca3af',
-              borderRadius: 4,
-              background: testPhraseMode === 'test-phrases' ? '#dbeafe' : '#fff',
-              cursor: 'pointer',
-              fontWeight: testPhraseMode === 'test-phrases' ? 600 : 400
-            }}
-            title="Mostra le frasi di test (non usate per il training)"
-          >
-            Test Phrases
-          </button>
-        </div>
-      )}
-      {/* 🎨 Grid - sempre visibile, l'editor si sovrappone quando attivo */}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-            <TesterGrid
-            examplesList={examplesList}
-            rowResults={rowResults}
-            selectedRow={selectedRow}
-            setSelectedRow={setSelectedRow}
-            enabledMethods={enabledMethods}
-            toggleMethod={toggleMethod}
-            runRowTest={runRowTest}
-            kind={kind}
-            expectedKeysForKind={expectedKeysForKind}
-            cellOverrides={cellOverrides}
-            setCellOverrides={setCellOverrides}
-            editingCell={editingCell}
-            setEditingCell={setEditingCell}
-            editingText={editingText}
-            setEditingText={setEditingText}
-            hasNote={hasNote}
-            getNote={getNote}
-            addNote={addNote}
-            deleteNote={deleteNote}
-            isEditing={isEditing}
-            startEditing={startEditing}
-            stopEditing={stopEditing}
-            isHovered={isHovered}
-            setHovered={setHovered}
-            activeEditor={activeEditor}
-            toggleEditor={toggleEditor}
-            mode={testMode}
-            newExample={newExample}
-            setNewExample={setNewExample}
-            setExamplesList={setExamplesList}
-            onCloseEditor={closeEditor}
-            editorProps={{
-              regex,
-              setRegex,
-              node,
-              kind,
-              profile,
-              testCases,
-              setTestCases,
-              onProfileUpdate: (updatedProfile) => {
-                onChange?.(updatedProfile);
-              },
-            }}
-            runAllRows={runAllRows}
-            testing={testing}
-            reportOpen={reportOpen}
-            setReportOpen={setReportOpen}
-            baselineStats={baselineStats}
-            lastStats={lastStats}
-            />
-      </div>
 
       {/* Editor senza Test Values: embeddings, post */}
       {activeEditor === 'embeddings' && (

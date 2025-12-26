@@ -19,52 +19,125 @@ export function buildEscalationModel(
   stepKey: string,
   translations: Record<string, string>
 ): EscalationModel[] {
+  // ✅ Debug: log what we're reading from the node (only if debug flag is set)
+  const shouldDebug = () => {
+    try { return localStorage.getItem('debug.buildEscalationModel') === '1'; } catch { return false; }
+  };
+
+  if (shouldDebug()) {
+    console.log('[DROP_DEBUG][buildEscalationModel] 🔍 Reading node', {
+      stepKey,
+      nodeLabel: node?.label,
+      hasSteps: !!node?.steps,
+      stepsType: Array.isArray(node?.steps) ? 'array' : (node?.steps ? 'object' : 'none'),
+      stepExists: Array.isArray(node?.steps)
+        ? node.steps.some((s: any) => s?.type === stepKey)
+        : !!node?.steps?.[stepKey],
+      escalationsCount: Array.isArray(node?.steps)
+        ? node.steps.find((s: any) => s?.type === stepKey)?.escalations?.length
+        : node?.steps?.[stepKey]?.escalations?.length
+    });
+  }
+
   // Case A: steps as object { start: { escalations: [...] } }
   if (node?.steps && !Array.isArray(node.steps) && node.steps[stepKey] && Array.isArray(node.steps[stepKey].escalations)) {
     const escs = node.steps[stepKey].escalations as any[];
-    return escs.map((esc) => {
-      const taskRefs = esc.tasks || esc.actions || [];
-      return {
-        tasks: taskRefs.map((task: any) => {
-          const p = Array.isArray(task.parameters) ? task.parameters.find((x: any) => x?.parameterId === 'text') : undefined;
-          const textKey = p?.value || task.taskId;
-          const hasDirectText = typeof task.text === 'string' && task.text.length > 0;
-          const translationValue = typeof textKey === 'string' ? translations[textKey] : undefined;
-          const text = hasDirectText
-            ? task.text
-            : (typeof textKey === 'string' ? (translationValue || textKey) : undefined);
+    if (shouldDebug()) {
+      console.log('[DROP_DEBUG][buildEscalationModel] ✅ Case A: steps as object', {
+        escalationsCount: escs.length,
+        tasksCount: escs.reduce((sum, esc) => sum + (esc.tasks?.length || 0), 0)
+      });
+    }
+    const result = escs.map((esc, escIdx) => {
+      const taskRefs = esc.tasks || [];
+      const mappedTasks = taskRefs.map((task: any, taskIdx: number) => {
+        const p = Array.isArray(task.parameters) ? task.parameters.find((x: any) => x?.parameterId === 'text') : undefined;
+        const textKey = p?.value || task.taskId;
+        const hasDirectText = typeof task.text === 'string' && task.text.length > 0;
+        const translationValue = typeof textKey === 'string' ? translations[textKey] : undefined;
+        const text = hasDirectText
+          ? task.text
+          : (typeof textKey === 'string' ? (translationValue || textKey) : undefined);
 
-          if (textKey && !translationValue && !hasDirectText) {
-            const isGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textKey);
+        // ✅ Debug: log each task being processed (only if debug flag is set)
+        if (shouldDebug() && escIdx === 0 && taskIdx === 0) {
+          console.log('[DROP_DEBUG][buildEscalationModel] 🔍 Processing task', {
+            escIdx,
+            taskIdx,
+            templateId: task.templateId,
+            taskId: task.taskId,
+            textKey,
+            hasDirectText,
+            translationValue: translationValue ? translationValue.substring(0, 50) : undefined,
+            text: text ? text.substring(0, 50) : undefined,
+            parameters: task.parameters,
+            color: task.color,
+            label: task.label
+          });
+        }
+
+        // ✅ Only warn if textKey is a valid GUID but translation is missing
+        // Don't warn for temporary taskIds or if task has direct text
+        if (textKey && !translationValue && !hasDirectText) {
+          const isGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textKey);
+          // Only warn for valid GUIDs (not temporary taskIds like "task-123...")
+          if (isGuid) {
             console.warn('[buildEscalationModel] ❌ Translation NOT FOUND', {
               stepKey,
               nodeLabel: node?.label,
               textKey,
-              isGuid,
               taskId: task.taskId,
               templateId: task.templateId,
               hasTaskText: hasDirectText
             });
           }
+        }
 
-          return { templateId: task.templateId, taskId: task.taskId, text, textKey, color: task.color, label: task.label };
-        })
-      };
+        return { templateId: task.templateId, taskId: task.taskId, text, textKey, color: task.color, label: task.label };
+      });
+
+      if (shouldDebug()) {
+        console.log('[DROP_DEBUG][buildEscalationModel] ✅ Escalation mapped', {
+          escIdx,
+          tasksCount: mappedTasks.length,
+          tasks: mappedTasks.map(t => ({ templateId: t.templateId, taskId: t.taskId, hasText: !!t.text }))
+        });
+      }
+
+      return { tasks: mappedTasks };
     });
+
+    if (shouldDebug()) {
+      console.log('[DROP_DEBUG][buildEscalationModel] ✅ Final result', {
+        escalationsCount: result.length,
+        totalTasks: result.reduce((sum, esc) => sum + (esc.tasks?.length || 0), 0)
+      });
+    }
+
+    return result;
   }
 
   // Case B: steps as array [{ type: 'start', escalations: [...] }, ...]
   if (Array.isArray(node?.steps)) {
     const group = (node.steps as any[]).find((g: any) => (g?.type === stepKey));
     if (group && Array.isArray(group.escalations)) {
+      if (shouldDebug()) {
+        console.log('[DROP_DEBUG][buildEscalationModel] ✅ Case B: steps as array', {
+          escalationsCount: group.escalations.length,
+          tasksCount: group.escalations.reduce((sum: number, esc: any) => sum + (esc.tasks?.length || 0), 0)
+        });
+      }
       return (group.escalations as any[]).map((esc: any) => ({
-        tasks: (esc.tasks || esc.actions || []).map((task: any) => {
+        tasks: (esc.tasks || []).map((task: any) => {
           const p = Array.isArray(task.parameters) ? task.parameters.find((x: any) => x?.parameterId === 'text') : undefined;
           const textKey = p?.value;
           const text = (typeof task.text === 'string' && task.text.length > 0)
             ? task.text
             : (typeof textKey === 'string' ? (translations[textKey] || textKey) : undefined);
-          return { templateId: task.templateId, taskId: task.taskId, text, textKey, color: task.color, label: task.label };
+          // ✅ Ensure templateId is never undefined
+          const finalTemplateId = task.templateId || 'sayMessage';
+
+          return { templateId: finalTemplateId, taskId: task.taskId, text, textKey, color: task.color, label: task.label };
         })
       }));
     }

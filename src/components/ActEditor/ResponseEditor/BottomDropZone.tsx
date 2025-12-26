@@ -1,6 +1,6 @@
 import React from 'react';
 import { useDrop } from 'react-dnd';
-import { DND_TYPE_VIEWER } from './ActionRowDnDWrapper';
+import { DND_TYPE_VIEWER } from './TaskRowDnDWrapper';
 import { normalizeTaskFromViewer } from './utils/normalize';
 import { TaskReference } from './types';
 

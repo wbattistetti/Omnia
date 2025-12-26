@@ -221,7 +221,7 @@ export function useResponseEditorToolbar({
       icon: <CheckSquare size={16} />,
       label: "Tasks",
       onClick: handleTasksClick,
-      title: "View and manage available actions and tasks for the dialogue flow.",
+      title: "View and manage available tasks for the dialogue flow.",
       active: tasksPanelMode === 'actions'
     },
   ];

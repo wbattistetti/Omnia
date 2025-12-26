@@ -6,7 +6,7 @@ import { TreeNodeProps } from './types';
 import styles from './TreeNode.module.css';
 import { useDrop, useDrag } from 'react-dnd';
 import { ESCALATION_COLORS } from './escalationColors';
-import ActionRow from './ActionRow';
+import TaskRow from './TaskRow';
 import SmartTooltip from '../../SmartTooltip';
 import { TooltipWrapper } from '../../TooltipWrapper';
 
@@ -151,8 +151,8 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
         return styles.bgNoMatch;
       case 'noinput':
         return styles.bgNoInput;
-      case 'action':
-        return styles.bgAction;
+      case 'task':
+        return styles.bgAction; // Manteniamo bgAction per retrocompatibilità CSS
       default:
         return styles.bgRoot;
     }
@@ -297,21 +297,19 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
         {!collapsed && childrenNodes && childrenNodes.length > 0 && (
           <div style={{ marginLeft: 24, marginTop: 8, opacity: included ? 1 : 0.5, color: included ? undefined : '#bbb' }}>
             {childrenNodes.map(child => (
-              <ActionRow
+              <TaskRow
                 key={child.id}
                 icon={(() => {
-                  const iconComponent = child.type === 'action' && child.icon ? getIconComponent(child.icon) : null;
+                  const iconComponent = child.type === 'task' && child.icon ? getIconComponent(child.icon) : null;
                   return iconComponent || <MessageCircle size={16} />;
                 })()}
                 label={child.label}
                 text={child.primaryValue || child.text}
                 color={child.color}
                 draggable={true}
+                taskId={child.id}
                 onEdit={() => { }} // enable editing mode for escalation children
                 onDelete={onCancelNewNode ? () => onCancelNewNode(child.id) : undefined}
-                onAIGenerate={onAIGenerate}
-                stepType={stepType}
-                data-action-id={child.id}
               />
             ))}
           </div>
@@ -338,9 +336,9 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
       }}
     >
       {/* Drag-and-drop preview arrows/icons can be rendered here if needed, but no debug lines or overlays */}
-      <ActionRow
+      <TaskRow
         icon={(() => {
-          const iconComponent = type === 'action' && icon ? getIconComponent(icon) : null;
+          const iconComponent = type === 'task' && icon ? getIconComponent(icon) : null;
           return iconComponent || <MessageCircle size={16} />;
         })()}
         label={showLabel && label ? label : undefined}
@@ -348,11 +346,9 @@ const TreeNode: React.FC<TreeNodeProps & TreeNodeExtraProps> = ({
         color={color}
         selected={selected}
         draggable={true}
+        taskId={id}
         onEdit={() => { }} // enable editing mode for now
         onDelete={onCancelNewNode ? () => onCancelNewNode(id) : undefined}
-        onAIGenerate={onAIGenerate}
-        stepType={stepType}
-        data-action-id={id}
       />
       {/* Parametri figli indentati */}
       {parameters && parameters.length > 0 && (

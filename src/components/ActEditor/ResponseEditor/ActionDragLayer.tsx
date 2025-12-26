@@ -1,6 +1,6 @@
 import React from 'react';
 import { useDragLayer } from 'react-dnd';
-import { DND_TYPE_VIEWER, DND_TYPE } from './ActionRowDnDWrapper';
+import { DND_TYPE_VIEWER, DND_TYPE } from './TaskRowDnDWrapper';
 import {
   MessageCircle, HelpCircle, Headphones, Shield, PhoneOff,
   Database, Mail, MessageSquare, FunctionSquare as Function,
@@ -32,7 +32,7 @@ const iconMap: Record<string, React.ReactNode> = {
  */
 const ActionDragLayer: React.FC = () => {
   // Disabled - no custom drag preview shown
-  // Only the thin blue preview line in ActionRowDnDWrapper will be visible
+  // Only the thin blue preview line in TaskRowDnDWrapper will be visible
   return null;
 };
 

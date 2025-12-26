@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Check, X } from 'lucide-react';
 import { useDDTManager } from '../../../../context/DDTManagerContext';
 import { ReviewItem } from './types';
-import { getActionIconNode, getActionMeta } from '../actionMeta';
+import { getTaskIconNode, getTaskMeta } from '../taskMeta';
 import { ensureHexColor, tailwindToHex } from '../utils/color';
 import ActionText from '../ActionText';
 import { useFontContext } from '../../../../context/FontContext';
@@ -112,12 +112,12 @@ export default function MessageReviewMessage({ item, onSave, updateSelectedNode 
     // If no color in item, get it from catalog
     let actionColor = item.color ? ensureHexColor(item.color) : undefined;
     if (!actionColor) {
-        const meta = getActionMeta(actionId);
+        const meta = getTaskMeta(actionId);
         if (meta.color) {
             actionColor = tailwindToHex(meta.color) || ensureHexColor(meta.color);
         }
     }
-    const iconNode = getActionIconNode(actionId, actionColor);
+    const iconNode = getTaskIconNode(actionId, actionColor);
 
     return (
         <div

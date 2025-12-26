@@ -166,49 +166,49 @@ export default function LLMInlineEditor({
         onClose={onClose}
       />
 
-      {/* Monaco Editor for LLM Prompt */}
+        {/* Monaco Editor for LLM Prompt */}
       <div>
-        {generating ? (
-          <div
-            style={{
-              height: 500,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: '#1e1e1e',
-              flexDirection: 'column',
-              gap: 12
-            }}
-          >
+          {generating ? (
             <div
               style={{
-                width: 32,
-                height: 32,
-                border: '3px solid #3b82f6',
-                borderTopColor: 'transparent',
-                borderRadius: '50%',
-                animation: 'spin 0.8s linear infinite',
+                height: 500,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: '#1e1e1e',
+                flexDirection: 'column',
+                gap: 12
               }}
-            />
-            <span style={{ color: '#f1f5f9' }}>
-              {isCreateMode ? '🪄 Generating LLM prompt...' : '🔄 Refining LLM prompt...'}
-            </span>
-          </div>
-        ) : (
+            >
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  border: '3px solid #3b82f6',
+                  borderTopColor: 'transparent',
+                  borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite',
+                }}
+              />
+              <span style={{ color: '#f1f5f9' }}>
+                {isCreateMode ? '🪄 Generating LLM prompt...' : '🔄 Refining LLM prompt...'}
+              </span>
+            </div>
+          ) : (
           <div style={{ height: 500, overflow: 'hidden' }}>
-            <EditorPanel
-              code={llmPrompt}
-              onChange={(newPrompt) => {
-                setLlmPrompt(newPrompt);
-                setCurrentValue(newPrompt);
-                if (!hasUserEdited) setHasUserEdited(true);
-              }}
-              fontSize={13}
-              varKeys={[]}
-              language="markdown"
-            />
-          </div>
-        )}
+              <EditorPanel
+                code={llmPrompt}
+                onChange={(newPrompt) => {
+                  setLlmPrompt(newPrompt);
+                  setCurrentValue(newPrompt);
+                  if (!hasUserEdited) setHasUserEdited(true);
+                }}
+                fontSize={13}
+                varKeys={[]}
+                language="markdown"
+              />
+            </div>
+          )}
       </div>
     </div>
   );

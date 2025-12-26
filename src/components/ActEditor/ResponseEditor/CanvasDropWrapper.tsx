@@ -1,6 +1,6 @@
 import React from 'react';
 import { useDrop } from 'react-dnd';
-import { DND_TYPE_VIEWER } from './ActionRowDnDWrapper';
+import { DND_TYPE_VIEWER } from './TaskRowDnDWrapper';
 import { normalizeTaskFromViewer } from './utils/normalize';
 import { TaskReference } from './types';
 
@@ -21,7 +21,7 @@ const CanvasDropWrapper: React.FC<CanvasDropWrapperProps> = ({ onDropTask, onDro
   const [, drop] = useDrop(() => ({
     accept: [DND_TYPE_VIEWER],
     drop: (item: any, monitor) => {
-      // Only handle drop if it wasn't handled by a child (ActionRowDnDWrapper)
+      // Only handle drop if it wasn't handled by a child (TaskRowDnDWrapper)
       const didDrop = monitor.didDrop();
       if (debugDrop()) {
         console.log('[DROP_DEBUG][CanvasDropWrapper] Drop received', { didDrop, itemType: item?.type });

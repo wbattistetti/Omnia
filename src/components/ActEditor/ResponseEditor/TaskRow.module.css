@@ -1,0 +1,6 @@
+.row { display: flex; align-items: center; }
+.row:hover .taskRowActions { opacity: 1; pointer-events: auto; }
+.taskRowActions { opacity: 0; pointer-events: none; }
+
+
+

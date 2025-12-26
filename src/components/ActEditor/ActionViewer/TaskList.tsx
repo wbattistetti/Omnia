@@ -1,6 +1,6 @@
 // Executive summary: Renders a responsive grid of available tasks for drag & drop.
 import React, { useState, useEffect, useRef } from 'react';
-import ActionItem from './ActionItem';
+import TaskItem from './TaskItem';
 import { MessageCircle, HelpCircle, Headphones, Shield, PhoneOff, Database, Mail, MessageSquare, FunctionSquare as Function, Music, Eraser, ArrowRight, Tag, Clock, ServerCog } from 'lucide-react';
 import { useActionsCatalog } from '../../../context/ActionsCatalogContext';
 import { useFontContext } from '../../../context/FontContext';
@@ -63,38 +63,38 @@ const TaskList: React.FC = () => {
           width: '100%',
         }}
       >
-        {actionsCatalog.map((action, index) => {
-          if (!action) {
+        {actionsCatalog.map((task, index) => {
+          if (!task) {
             return null;
           }
           // Estrai label, description, primaryValue, parameters come stringhe
-          const label = typeof action.label === 'object' ? action.label[lang] || action.label.en || action.id : action.label;
-          const description = typeof action.description === 'object' ? action.description[lang] || action.description.en || '' : action.description;
-          // Esempio: primaryValue = action.text[lang] o action.text
+          const label = typeof task.label === 'object' ? task.label[lang] || task.label.en || task.id : task.label;
+          const description = typeof task.description === 'object' ? task.description[lang] || task.description.en || '' : task.description;
+          // Esempio: primaryValue = task.text[lang] o task.text
           let primaryValue = '';
-          if (action.text) {
-            primaryValue = typeof action.text === 'object' ? action.text[lang] || action.text.en || '' : action.text;
+          if (task.text) {
+            primaryValue = typeof task.text === 'object' ? task.text[lang] || task.text.en || '' : task.text;
           }
           // Parametri figli: estrai solo quelli che sono oggetti lingua o stringhe
           let parameters = [];
-          if (action.parameters && Array.isArray(action.parameters)) {
-            parameters = action.parameters.map((param: any) => ({
+          if (task.parameters && Array.isArray(task.parameters)) {
+            parameters = task.parameters.map((param: any) => ({
               key: param.key,
               value: typeof param.value === 'object' ? param.value[lang] || param.value.en || '' : param.value
             }));
           }
           const props = {
-            action,
-            icon: iconMap[action.icon] || <Tag size={24} />,
-            iconName: action.icon,
+            task,
+            icon: iconMap[task.icon] || <Tag size={24} />,
+            iconName: task.icon,
             label,
-            color: action.color,
+            color: task.color,
             description,
             primaryValue,
             parameters
           };
           // Passa key direttamente, NON dentro props
-          return <div className="action-list-item" key={action.id || index}><ActionItem {...props} /></div>;
+          return <div className="action-list-item" key={task.id || index}><TaskItem {...props} /></div>;
         })}
       </div>
     </div>

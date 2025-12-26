@@ -56,22 +56,22 @@ export function useNodeUpdate(
         // Check if introduction actually changed
         const newIntroStep = updated?.steps?.find((s: any) => s.type === 'introduction');
         const hasActions = newIntroStep?.escalations?.some((esc: any) =>
-          esc?.actions && Array.isArray(esc.actions) && esc.actions.length > 0
-        );
+              esc?.actions && Array.isArray(esc.actions) && esc.actions.length > 0
+            );
         const introChanged = JSON.stringify(prev.introduction) !== JSON.stringify(newIntroStep?.escalations);
 
         if (!introChanged) return prev; // No change, return same reference
 
         // Only create new DDT if introduction changed
         const next = { ...prev };
-        if (hasActions) {
-          next.introduction = {
-            type: 'introduction',
+            if (hasActions) {
+              next.introduction = {
+                type: 'introduction',
             escalations: newIntroStep.escalations || []
-          };
-        } else {
-          delete next.introduction;
-        }
+              };
+            } else {
+              delete next.introduction;
+            }
         pendingDDTRef.current = { ddt: next, notify: notifyProvider };
         return next;
       }

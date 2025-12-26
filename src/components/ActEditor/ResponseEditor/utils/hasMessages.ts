@@ -33,11 +33,11 @@ export function hasIntentMessages(ddt: any): boolean {
       return false;
     }
 
-    // Check if at least one escalation has an action with a text value
+    // Check if at least one escalation has a task with a text value
     const hasMessage = escalations.some((esc: any) => {
-      const actions = Array.isArray(esc.actions) ? esc.actions : [];
-      return actions.some((action: any) => {
-        const params = Array.isArray(action.parameters) ? action.parameters : [];
+      const tasks = Array.isArray(esc.tasks) ? esc.tasks : [];
+      return tasks.some((task: any) => {
+        const params = Array.isArray(task.parameters) ? task.parameters : [];
         return params.some((param: any) => {
           // Can be direct text value or textKey
           return param.value || param.textKey;

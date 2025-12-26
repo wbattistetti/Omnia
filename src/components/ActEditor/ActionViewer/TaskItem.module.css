@@ -1,4 +1,4 @@
-/* Executive summary: CSS module for the ActionItem component styles. */
+/* Executive summary: CSS module for the TaskItem component styles. */
 .item {
   display: flex;
   flex-direction: column;
@@ -27,7 +27,7 @@
   white-space: normal;
 }
 
-/* Responsive grid container for action list */
+/* Responsive grid container for task list */
 .action-list-grid-inner {
   padding: 4px 0 0 0;
   overflow-x: hidden;
@@ -39,3 +39,6 @@
   padding: 0;
   margin: 0;
 }
+
+
+

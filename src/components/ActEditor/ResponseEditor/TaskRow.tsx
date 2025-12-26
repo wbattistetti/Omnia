@@ -1,11 +1,11 @@
 import React, { useState, useRef } from 'react';
 import { Check, X } from 'lucide-react';
-import ActionRowActions from './ActionRowActions';
+import TaskRowActions from './TaskRowActions';
 import ActionText from './ActionText';
-import styles from './ActionRow.module.css';
+import styles from './TaskRow.module.css';
 import { useFontContext } from '../../../context/FontContext';
 
-interface ActionRowProps {
+interface TaskRowProps {
   icon?: React.ReactNode;
   label?: string;
   text: string;
@@ -15,13 +15,13 @@ interface ActionRowProps {
   draggable?: boolean;
   selected?: boolean;
   dndPreview?: 'before' | 'after';
-  actionId?: string;
+  taskId?: string; // ✅ Renamed from actionId
   isDragging?: boolean;
   autoEdit?: boolean; // when true, open editor and focus input
   onEditingChange?: (isEditing: boolean) => void; // Callback when editing state changes
 }
 
-function ActionRowInner({
+function TaskRowInner({
   icon,
   label,
   text,
@@ -31,11 +31,11 @@ function ActionRowInner({
   draggable,
   selected,
   dndPreview,
-  actionId,
+  taskId,
   isDragging = false,
   autoEdit = false,
   onEditingChange
-}: ActionRowProps) {
+}: TaskRowProps) {
   const { combinedClass } = useFontContext();
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(text);
@@ -44,7 +44,7 @@ function ActionRowInner({
   // Removed verbose log
   React.useEffect(() => {
     // Removed verbose log - useEffect for side effects only
-  }, [actionId, text, onEdit, editing, label]);
+  }, [taskId, text, onEdit, editing, label]);
 
   // Notify parent when editing state changes
   React.useEffect(() => {
@@ -60,15 +60,15 @@ function ActionRowInner({
 
   // Open editor automatically when asked
   React.useEffect(() => {
-    if (autoEdit && actionId === 'sayMessage' && !editing) {
+    if (autoEdit && taskId === 'sayMessage' && !editing) {
       setEditValue(text || '');
       setEditing(true);
       setTimeout(() => inputRef.current?.focus(), 0);
     }
-  }, [autoEdit, text, actionId, editing]);
+  }, [autoEdit, text, taskId, editing]);
 
   const handleEdit = () => {
-    if (actionId !== 'sayMessage') return;
+    if (taskId !== 'sayMessage') return;
     setEditValue(text);
     setEditing(true);
     setTimeout(() => inputRef.current?.focus(), 0);
@@ -134,24 +134,13 @@ function ActionRowInner({
   };
 
   const handleBlur = (e: React.FocusEvent) => {
-    console.log('[ActionRow] handleBlur called', {
-      editing,
-      text,
-      editValue,
-      trimmedValue: editValue?.trim() || '',
-      trimmedText: text?.trim() || '',
-      relatedTarget: e.relatedTarget
-    });
-
     if (!editing) {
-      console.log('[ActionRow] handleBlur - not editing, ignoring');
       return;
     }
 
     // Check if clicking on confirm/cancel buttons - if so, let them handle it
     const clickedOnButton = e.relatedTarget && (e.relatedTarget as HTMLElement).tagName === 'BUTTON';
     if (clickedOnButton) {
-      console.log('[ActionRow] handleBlur - clicked on button, letting button handle it');
       return;
     }
 
@@ -159,11 +148,8 @@ function ActionRowInner({
     const trimmedValue = editValue?.trim() || '';
     const trimmedText = text?.trim() || '';
 
-    console.log('[ActionRow] handleBlur - checking if empty', { trimmedValue, trimmedText });
-
     // Same check as ESC: if this row is newly added and still empty, remove it
     if (trimmedText.length === 0 && trimmedValue.length === 0) {
-      console.log('[ActionRow] handleBlur - DELETING empty row');
       setEditing(false);
       if (onDelete) {
         onDelete();
@@ -172,7 +158,6 @@ function ActionRowInner({
     }
 
     // If we were editing and there's a value, save it
-    console.log('[ActionRow] handleBlur - saving or restoring', { trimmedValue });
     setEditing(false);
     if (trimmedValue.length > 0) {
       // Save the new value if it's not empty
@@ -204,7 +189,7 @@ function ActionRowInner({
         }}
       >
         {icon && <span style={{ color, display: 'flex', alignItems: 'center', marginRight: 8 }}>{icon}</span>}
-        {actionId && actionId !== 'sayMessage' && actionId !== 'askQuestion' && label && (
+        {taskId && taskId !== 'sayMessage' && taskId !== 'askQuestion' && label && (
           <span
             style={{
               background: '#222',
@@ -223,7 +208,7 @@ function ActionRowInner({
             {label}
           </span>
         )}
-        {actionId === 'sayMessage' && (
+        {taskId === 'sayMessage' && (
           <ActionText
             text={text}
             editing={editing}
@@ -234,7 +219,7 @@ function ActionRowInner({
             onBlur={handleBlur}
           />
         )}
-        {editing && actionId === 'sayMessage' ? (
+        {editing && taskId === 'sayMessage' ? (
           <>
             <button
               onClick={handleEditConfirm}
@@ -256,8 +241,8 @@ function ActionRowInner({
             </button>
           </>
         ) : (
-          <ActionRowActions
-            onEdit={actionId === 'sayMessage' ? handleEdit : undefined}
+          <TaskRowActions
+            onEdit={taskId === 'sayMessage' ? handleEdit : undefined}
             onDelete={onDelete}
             color={'#94a3b8'}
             style={{ marginLeft: 10 }}
@@ -268,12 +253,15 @@ function ActionRowInner({
   );
 }
 
-const areEqual = (prev: ActionRowProps, next: ActionRowProps) => (
+const areEqual = (prev: TaskRowProps, next: TaskRowProps) => (
   prev.text === next.text &&
   prev.label === next.label &&
   prev.selected === next.selected &&
   prev.isDragging === next.isDragging &&
-  prev.actionId === next.actionId
+  prev.taskId === next.taskId
 );
 
-export default React.memo(ActionRowInner, areEqual);
+export default React.memo(TaskRowInner, areEqual);
+
+
+

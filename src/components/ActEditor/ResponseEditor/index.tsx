@@ -226,7 +226,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     Array.isArray(mainList) && mainList.length > 1
   ), [mainList]);
   // ✅ Stato separato per Behaviour/Personality/Recognition (mutualmente esclusivi)
-  const [leftPanelMode, setLeftPanelMode] = useState<RightPanelMode>('actions'); // Always start with actions panel visible
+  const [leftPanelMode, setLeftPanelMode] = useState<RightPanelMode>('actions'); // Always start with tasks panel visible
   // ✅ Stato separato per Test (indipendente)
   const [testPanelMode, setTestPanelMode] = useState<RightPanelMode>('none'); // Test inizia chiuso
   // ✅ Stato separato per Tasks (indipendente)
@@ -735,17 +735,27 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
   // Track introduction separately to avoid recalculating selectedNode when localDDT changes
   const introduction = useMemo(() => localDDT?.introduction, [localDDT?.introduction]);
 
-  // ✅ RISCRITTURA PULITA: selectedNode è uno stato diretto, non una derivazione
+  // ✅ selectedNode è uno stato separato (fonte di verità durante l'editing)
+  // NON è una derivazione da localDDT - questo elimina race conditions e dipendenze circolari
   const [selectedNode, setSelectedNode] = useState<any>(null);
   const [selectedNodePath, setSelectedNodePath] = useState<{
     mainIndex: number;
     subIndex?: number;
   } | null>(null);
 
-  // Inizializza selectedNode quando mainList è pronto
+  // ✅ Caricamento iniziale: calcola selectedNode da localDDT solo quando cambiano gli indici
+  // NON sincronizza durante l'editing - selectedNode è la fonte di verità
   useEffect(() => {
-    if (!selectedNode && mainList.length > 0) {
-      // Usa gli indici attuali da useNodeSelection
+    if (mainList.length === 0) return;
+
+    if (selectedRoot) {
+      const introStep = introduction
+        ? { type: 'introduction', escalations: introduction.escalations }
+        : { type: 'introduction', escalations: [] };
+      const newNode = { ...localDDT, steps: [introStep] };
+      setSelectedNode(newNode);
+      setSelectedNodePath(null);
+    } else {
       const node = selectedSubIndex == null
         ? mainList[selectedMainIndex]
         : getSubDataList(mainList[selectedMainIndex])?.[selectedSubIndex];
@@ -758,82 +768,15 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
         });
       }
     }
-  }, [mainList, selectedNode, selectedMainIndex, selectedSubIndex]);
+    // ✅ IMPORTANTE: NON includere localDDT nelle dipendenze
+    // Questo useEffect deve essere eseguito SOLO quando cambiano gli indici di selezione
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMainIndex, selectedSubIndex, selectedRoot, introduction]);
 
-  // Aggiorna selectedNode quando cambiano gli indici di selezione
-  useEffect(() => {
-    if (mainList.length > 0) {
-      if (selectedRoot) {
-        // Root selected
-        const introStep = introduction
-          ? { type: 'introduction', escalations: introduction.escalations }
-          : { type: 'introduction', escalations: [] };
-        const newNode = { ...localDDT, steps: [introStep] };
 
-        // Debug log removed - too noisy
-        // try {
-        //   if (localStorage.getItem('debug.responseEditor') === '1') {
-        //     console.log('[selectedNode] Updated (root)', {
-        //       hasTestCases: !!newNode.nlpProfile?.testCases,
-        //       testCasesCount: (newNode.nlpProfile?.testCases || []).length
-        //     });
-        //   }
-        // } catch { }
-
-        setSelectedNode(newNode);
-        setSelectedNodePath(null);
-      } else {
-        // Main or sub selected
-        const node = selectedSubIndex == null
-          ? mainList[selectedMainIndex]
-          : getSubDataList(mainList[selectedMainIndex])?.[selectedSubIndex];
-
-        if (node) {
-          // Debug log removed - too noisy
-          // try {
-          //   if (localStorage.getItem('debug.responseEditor') === '1') {
-          //     console.log('[selectedNode] Updated', {
-          //       nodeLabel: node.label,
-          //       hasNlpProfile: !!node.nlpProfile,
-          //       hasTestCases: !!node.nlpProfile?.testCases,
-          //       testCasesCount: (node.nlpProfile?.testCases || []).length,
-          //       testCases: node.nlpProfile?.testCases
-          //     });
-          //   }
-          // } catch { }
-
-          setSelectedNode(node);
-          setSelectedNodePath({
-            mainIndex: selectedMainIndex,
-            subIndex: selectedSubIndex
-          });
-        }
-      }
-    }
-  }, [selectedMainIndex, selectedSubIndex, selectedRoot, localDDT, introduction]); // ✅ Rimosso mainList per evitare sovrascrittura
-
-  // ✅ Aggiorna selectedNode quando mainList cambia (per sincronizzare dopo handleProfileUpdate)
-  useEffect(() => {
-    if (mainList.length > 0 && !selectedRoot && selectedNodePath) {
-      const node = selectedSubIndex == null
-        ? mainList[selectedMainIndex]
-        : getSubDataList(mainList[selectedMainIndex])?.[selectedSubIndex];
-
-      if (node) {
-        // ✅ Aggiorna solo se nlpProfile è diverso (evita loop infiniti)
-        const currentNodeNlpProfile = JSON.stringify(selectedNode?.nlpProfile || {});
-        const newNodeNlpProfile = JSON.stringify(node.nlpProfile || {});
-
-        if (currentNodeNlpProfile !== newNodeNlpProfile) {
-          setSelectedNode(node);
-        }
-      }
-    }
-  }, [mainList]); // ✅ Solo quando mainList cambia (dopo aggiornamento localDDT)
-
-  // ✅ handleProfileUpdate: aggiorna IMMEDIATAMENTE sia selectedNode che localDDT
+  // ✅ handleProfileUpdate: aggiorna selectedNode (UI immediata) + localDDT (persistenza)
   const handleProfileUpdate = useCallback((partialProfile: any) => {
-    // ✅ Aggiorna selectedNode IMMEDIATAMENTE per feedback UI istantaneo
+    // 1. Aggiorna selectedNode PRIMA (UI immediata)
     setSelectedNode((prev: any) => {
       if (!prev) return prev;
       return {
@@ -845,7 +788,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
       };
     });
 
-    // ✅ Aggiorna localDDT per persistenza
+    // 2. Aggiorna localDDT in background (persistenza)
     setLocalDDT((prev: any) => {
       if (!prev || !selectedNodePath) return prev;
 
@@ -856,7 +799,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
 
       const main = mains[mainIndex];
 
-      // Caso MAIN node
       if (subIndex === undefined) {
         const updatedMain = {
           ...main,
@@ -865,14 +807,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
             ...partialProfile
           }
         };
-
         const newMainData = [...mains];
         newMainData[mainIndex] = updatedMain;
-
         return { ...prev, mainData: newMainData };
       }
 
-      // Caso SUB node
       const subList = main.subData || [];
       if (subIndex >= subList.length) return prev;
 
@@ -886,9 +825,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
 
       const newSubData = [...subList];
       newSubData[subIndex] = updatedSub;
-
       const updatedMain = { ...main, subData: newSubData };
-
       const newMainData = [...mains];
       newMainData[mainIndex] = updatedMain;
 
@@ -898,15 +835,89 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
 
   // ✅ Step keys e selectedStepKey sono ora gestiti internamente da BehaviourEditor
 
-  // Node update logic (extracted to hook)
-  const { updateSelectedNode } = useNodeUpdate(
-    localDDT,
-    setLocalDDT,
-    selectedRoot,
-    selectedMainIndex,
-    selectedSubIndex,
-    replaceSelectedDDT
-  );
+  // ✅ updateSelectedNode: aggiorna selectedNode (UI immediata) + localDDT (persistenza)
+  // Approccio transazionale: selectedNode è la fonte di verità durante l'editing
+  const updateSelectedNode = useCallback((updater: (node: any) => any, notifyProvider: boolean = true) => {
+    // 1. Aggiorna selectedNode PRIMA (UI immediata)
+    setSelectedNode((prev: any) => {
+      if (!prev) return prev;
+
+      const updatedNode = updater(prev) || prev;
+
+      // 2. Aggiorna localDDT in background (persistenza, senza impatto sulla UI)
+      setLocalDDT((currentDDT: any) => {
+        if (!currentDDT || !selectedNodePath) return currentDDT;
+
+        const mains = getMainDataList(currentDDT);
+        const { mainIndex, subIndex } = selectedNodePath;
+
+        if (mainIndex >= mains.length) return currentDDT;
+
+        const main = mains[mainIndex];
+        let next: any;
+
+        if (selectedRoot) {
+          // Root: aggiorna introduction
+          const newIntroStep = updatedNode?.steps?.find((s: any) => s.type === 'introduction');
+          const hasTasks = newIntroStep?.escalations?.some((esc: any) =>
+            esc?.tasks && Array.isArray(esc.tasks) && esc.tasks.length > 0
+          );
+
+          next = { ...currentDDT };
+          if (hasTasks) {
+            next.introduction = {
+              type: 'introduction',
+              escalations: newIntroStep.escalations || []
+            };
+          } else {
+            delete next.introduction;
+          }
+        } else if (subIndex === undefined) {
+          // Main node
+          const newMainData = [...mains];
+          newMainData[mainIndex] = updatedNode;
+          next = { ...currentDDT, mainData: newMainData };
+        } else {
+          // Sub node
+          const subList = getSubDataList(main);
+          if (subIndex >= subList.length) return currentDDT;
+          const subIdx = (main.subData || []).findIndex((s: any, idx: number) => idx === subIndex);
+
+          const newSubData = [...(main.subData || [])];
+          newSubData[subIdx] = updatedNode;
+          const newMain = { ...main, subData: newSubData };
+          const newMainData = [...mains];
+          newMainData[mainIndex] = newMain;
+          next = { ...currentDDT, mainData: newMainData };
+        }
+
+        return next;
+      });
+
+      return updatedNode;
+    });
+  }, [selectedNodePath, selectedRoot]);
+
+  // ✅ Persistenza ASINCRONA: osserva localDDT e persiste quando cambia
+  const localDDTRef = useRef(localDDT);
+  useEffect(() => {
+    localDDTRef.current = localDDT;
+  }, [localDDT]);
+
+  useEffect(() => {
+    // Debounce: persisti solo dopo 100ms di inattività
+    const timer = setTimeout(() => {
+      if (localDDTRef.current) {
+        try {
+          replaceSelectedDDT(localDDTRef.current);
+        } catch (e) {
+          console.error('[updateSelectedNode] Failed to persist DDT:', e);
+        }
+      }
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [localDDT, replaceSelectedDDT]);
 
   // ✅ normalizeAndPersistModel è ora gestito internamente da BehaviourEditor
 
@@ -1451,23 +1462,54 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
 
                 {/* ✅ Pannello destro: Test (indipendente, può essere mostrato insieme agli altri) */}
                 {testPanelMode === 'chat' && testPanelWidth > 1 && (
-                  <RightPanel
-                    mode="chat"
-                    width={testPanelWidth}
-                    onWidthChange={setTestPanelWidth}
-                    onStartResize={() => setDraggingPanel('test')}
-                    dragging={draggingPanel === 'test'}
-                    ddt={localDDT}
-                    translations={localTranslations}
-                    selectedNode={selectedNode}
-                    onUpdateDDT={(updater) => {
-                      setLocalDDT((prev: any) => {
-                        const updated = updater(prev);
-                        try { replaceSelectedDDT(updated); } catch { }
-                        return updated;
-                      });
-                    }}
-                  />
+                  <>
+                    <RightPanel
+                      mode="chat"
+                      width={testPanelWidth}
+                      onWidthChange={setTestPanelWidth}
+                      onStartResize={() => setDraggingPanel('test')}
+                      dragging={draggingPanel === 'test'}
+                      hideSplitter={tasksPanelMode === 'actions' && tasksPanelWidth > 1} // ✅ Nascondi splitter se Tasks è visibile (usiamo quello condiviso)
+                      ddt={localDDT}
+                      translations={localTranslations}
+                      selectedNode={selectedNode}
+                      onUpdateDDT={(updater) => {
+                        setLocalDDT((prev: any) => {
+                          const updated = updater(prev);
+                          try { replaceSelectedDDT(updated); } catch { }
+                          return updated;
+                        });
+                      }}
+                    />
+                    {/* ✅ Splitter condiviso tra Test e Tasks - ridimensiona entrambi i pannelli */}
+                    {tasksPanelMode === 'actions' && tasksPanelWidth > 1 && (
+                      <div
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setDraggingPanel('shared'); // ✅ Usa 'shared' per indicare che stiamo ridimensionando entrambi
+                        }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLElement).style.background = '#fb923c55';
+                        }}
+                        onMouseLeave={(e) => {
+                          if (draggingPanel !== 'shared') {
+                            (e.currentTarget as HTMLElement).style.background = 'transparent';
+                          }
+                        }}
+                        style={{
+                          width: 6,
+                          cursor: 'col-resize',
+                          background: draggingPanel === 'shared' ? '#fb923c55' : 'transparent',
+                          transition: 'background 0.1s ease',
+                          flexShrink: 0,
+                          zIndex: draggingPanel === 'shared' ? 10 : 1,
+                        }}
+                        aria-label="Resize test and tasks panels"
+                        role="separator"
+                      />
+                    )}
+                  </>
                 )}
 
                 {/* ✅ Pannello Tasks: sempre presente a destra, collassato quando non attivo */}
@@ -1478,6 +1520,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                     onWidthChange={setTasksPanelWidth}
                     onStartResize={() => setDraggingPanel('tasks')}
                     dragging={draggingPanel === 'tasks'}
+                    hideSplitter={testPanelMode === 'chat' && testPanelWidth > 1} // ✅ Nascondi splitter se Test è visibile (usiamo quello condiviso)
                     ddt={localDDT}
                     translations={localTranslations}
                     selectedNode={selectedNode}
@@ -1496,7 +1539,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
         )}
       </div>
 
-      {/* Drag layer for visual feedback when dragging actions */}
+      {/* Drag layer for visual feedback when dragging tasks */}
       <ActionDragLayer />
     </div>
   );

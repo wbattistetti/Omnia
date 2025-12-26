@@ -1,12 +1,12 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import ActionRow from '../../ResponseEditor/ActionRow';
+import TaskRow from '../../ResponseEditor/TaskRow';
 
-const setup = (props?: Partial<React.ComponentProps<typeof ActionRow>>) => {
+const setup = (props?: Partial<React.ComponentProps<typeof TaskRow>>) => {
   const onEdit = vi.fn();
   const onDelete = vi.fn();
   const utils = render(
-    <ActionRow
+    <TaskRow
       icon={<span data-testid="ico" />}
       label="Custom"
       text="Hello"
@@ -15,15 +15,14 @@ const setup = (props?: Partial<React.ComponentProps<typeof ActionRow>>) => {
       onDelete={onDelete}
       draggable
       selected={false}
-      actionId="customAction"
-      hovered={true}
+      taskId="customTask"
       {...props}
     />
   );
   return { onEdit, onDelete, ...utils };
 };
 
-describe('ActionRow', () => {
+describe('TaskRow', () => {
   test('shows actions on hover to the right of text', () => {
     setup();
     expect(screen.getByTestId('ico')).toBeInTheDocument();
@@ -47,3 +46,6 @@ describe('ActionRow', () => {
     expect(onDelete).toHaveBeenCalled();
   });
 });
+
+
+

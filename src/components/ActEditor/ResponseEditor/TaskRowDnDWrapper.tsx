@@ -2,50 +2,32 @@ import React from 'react';
 import { useDrag, useDrop } from 'react-dnd';
 import { TaskReference } from './types';
 
-export interface ActionRowDnDWrapperProps {
+export interface TaskRowDnDWrapperProps {
   escalationIdx: number;
-  taskIdx: number; // ✅ Index of the task in the escalation
-  task: TaskReference | any; // ✅ TaskReference object
+  taskIdx: number; // Index of the task in the escalation
+  task: TaskReference | any; // TaskReference object
   onMoveTask: (fromEscIdx: number, fromTaskIdx: number, toEscIdx: number, toTaskIdx: number, position: 'before' | 'after') => void;
   onDropTask?: (from: { escalationIdx: number; taskIdx: number; task: TaskReference }, to: { escalationIdx: number; taskIdx: number }, position: 'before' | 'after') => void;
   onDropNewTask?: (task: any, to: { escalationIdx: number; taskIdx: number }, position: 'before' | 'after') => void;
   children: React.ReactNode;
   allowViewerDrop?: boolean;
   isEditing?: boolean; // Disable drag when editing
-  // Legacy props for backward compatibility
-  actionIdx?: number; // @deprecated Use taskIdx instead
-  action?: TaskReference | any; // @deprecated Use task instead
-  onMoveAction?: (fromEscIdx: number, fromTaskIdx: number, toEscIdx: number, toTaskIdx: number, position: 'before' | 'after') => void; // @deprecated Use onMoveTask instead
-  onDropAction?: (from: { escalationIdx: number; taskIdx: number; task: TaskReference }, to: { escalationIdx: number; taskIdx: number }, position: 'before' | 'after') => void; // @deprecated Use onDropTask instead
-  onDropNewAction?: (task: any, to: { escalationIdx: number; taskIdx: number }, position: 'before' | 'after') => void; // @deprecated Use onDropNewTask instead
 }
 
-export const DND_TYPE = 'ACTION_ROW';
-export const DND_TYPE_VIEWER = 'ACTION_VIEWER';
+export const DND_TYPE = 'TASK_ROW';
+export const DND_TYPE_VIEWER = 'TASK_VIEWER';
 
-const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
+const TaskRowDnDWrapper: React.FC<TaskRowDnDWrapperProps> = ({
   escalationIdx,
-  taskIdx: taskIdxProp,
-  task: taskProp,
-  onMoveTask: onMoveTaskProp,
-  onDropTask: onDropTaskProp,
-  onDropNewTask: onDropNewTaskProp,
+  taskIdx,
+  task,
+  onMoveTask,
+  onDropTask,
+  onDropNewTask,
   children,
   allowViewerDrop = true,
   isEditing = false,
-  // Legacy props for backward compatibility
-  actionIdx,
-  action,
-  onMoveAction,
-  onDropAction,
-  onDropNewAction,
 }) => {
-  // Use new props if provided, otherwise fall back to legacy props
-  const taskIdx = taskIdxProp ?? actionIdx ?? 0;
-  const task = taskProp ?? action;
-  const onMoveTask = onMoveTaskProp ?? onMoveAction;
-  const onDropTask = onDropTaskProp ?? onDropAction;
-  const onDropNewTask = onDropNewTaskProp ?? onDropNewAction;
   const ref = React.useRef<HTMLDivElement>(null);
   const [previewPosition, setPreviewPosition] = React.useState<'before' | 'after' | undefined>(undefined);
   const [canShowPreview, setCanShowPreview] = React.useState(false);
@@ -53,7 +35,7 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
   const [{ isDragging }, drag] = useDrag({
     type: DND_TYPE,
     item: () => {
-      return { type: DND_TYPE, escalationIdx, taskIdx, task, actionIdx: taskIdx, action: task }; // Include both for backward compatibility
+      return { type: DND_TYPE, escalationIdx, taskIdx, task };
     },
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
@@ -79,7 +61,7 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
       let show = true;
       if (item.type === DND_TYPE) {
         if (item.escalationIdx === escalationIdx) {
-          const itemTaskIdx = item.taskIdx ?? item.actionIdx;
+          const itemTaskIdx = item.taskIdx;
           if (itemTaskIdx === taskIdx) {
             show = false;
           } else if (position === 'before' && itemTaskIdx === taskIdx - 1) {
@@ -100,12 +82,22 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
         try { return localStorage.getItem('debug.drop') === '1'; } catch { return false; }
       };
 
+      // ✅ Prevent duplicate calls: React DnD may call drop handler multiple times
+      // Check if this drop was already handled by checking monitor.didDrop()
+      if (monitor.didDrop()) {
+        if (debugDrop()) {
+          console.log('[DROP_DEBUG][TaskRowDnDWrapper] ⏭️ Drop already handled by child, skipping');
+        }
+        return undefined;
+      }
+
       if (debugDrop()) {
-        console.log('[DROP_DEBUG][ActionRowDnDWrapper] 🎬 Drop handler called', {
+        console.log('[DROP_DEBUG][TaskRowDnDWrapper] 🎬 Drop handler called', {
           hasRef: !!ref.current,
           canShowPreview,
           previewPosition,
-          itemType: item?.type
+          itemType: item?.type,
+          didDrop: monitor.didDrop()
         });
       }
 
@@ -128,7 +120,7 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
         const position: 'before' | 'after' = hoverClientY < hoverMiddleY ? 'before' : 'after';
 
         if (debugDrop()) {
-          console.log('[DROP_DEBUG][ActionRowDnDWrapper] 🎯 Processing DND_TYPE_VIEWER drop', {
+          console.log('[DROP_DEBUG][TaskRowDnDWrapper] 🎯 Processing DND_TYPE_VIEWER drop', {
             escalationIdx,
             taskIdx,
             position
@@ -136,10 +128,12 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
         }
 
         if (onDropNewTask) {
+          // ✅ Mark as handled BEFORE calling the handler to prevent duplicate calls
+          const result = { handled: true };
           onDropNewTask(item, { escalationIdx, taskIdx }, position);
           setPreviewPosition(undefined);
           setCanShowPreview(false);
-          return { handled: true };
+          return result;
         } else {
           if (debugDrop()) console.warn('[DROP_DEBUG] onDropNewTask NOT PROVIDED!');
           return undefined;
@@ -163,7 +157,7 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
       let handled = false;
 
       if (item.type === DND_TYPE) {
-        const itemTaskIdx = item.taskIdx ?? item.actionIdx;
+        const itemTaskIdx = item.taskIdx;
         if (item.escalationIdx === escalationIdx && itemTaskIdx === taskIdx) {
           setPreviewPosition(undefined);
           setCanShowPreview(false);
@@ -215,4 +209,5 @@ const ActionRowDnDWrapper: React.FC<ActionRowDnDWrapperProps> = ({
   );
 };
 
-export default ActionRowDnDWrapper;
+export default TaskRowDnDWrapper;
+

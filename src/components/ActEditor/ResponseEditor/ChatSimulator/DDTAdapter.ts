@@ -1,4 +1,4 @@
-export type Escalation = { actions: any[] };
+export type Escalation = { tasks: any[] };
 export type StepGroup = { type: string; escalations: Escalation[] };
 
 export function extractTranslations(ddt: any, translations?: any): Record<string, string> {
@@ -52,7 +52,7 @@ export function getStepsArray(node: any): StepGroup[] {
       const v = map[k];
       if (Array.isArray(v?.escalations)) return { type: k, escalations: v.escalations };
       if (Array.isArray(v)) {
-        return { type: k, escalations: [ { actions: v } ] };
+        return { type: k, escalations: [ { tasks: v } ] };
       }
       return { type: k, escalations: [] };
     });
@@ -65,33 +65,36 @@ export function getStepGroup(node: any, stepType: string): StepGroup | undefined
   return steps.find((s) => s.type === stepType);
 }
 
-export function getEscalationActions(node: any, stepType: string, level: number): any[] {
+export function getEscalationTasks(node: any, stepType: string, level: number): any[] {
   const sg = getStepGroup(node, stepType);
   const esc = sg?.escalations?.[level - 1];
-  return esc?.actions || [];
+  return esc?.tasks || [];
 }
 
-export function resolveActionText(action: any, dict: Record<string, string>): string | undefined {
-  if (!action) {
-    console.warn('[DEBUG][RESOLVE_ACTION] ❌ Action is null/undefined');
+// Legacy alias for backward compatibility (will be removed)
+export const getEscalationActions = getEscalationTasks;
+
+export function resolveTaskText(task: any, dict: Record<string, string>): string | undefined {
+  if (!task) {
+    console.warn('[DEBUG][RESOLVE_TASK] ❌ Task is null/undefined');
     return undefined;
   }
 
-  // Priority: action.text (edited text in DDT instance) > dict[key] (old translation values)
-  if (action.text && typeof action.text === 'string' && action.text.trim().length > 0) {
-    console.log('[DEBUG][RESOLVE_ACTION] ✅ Using action.text directly', {
-      text: action.text.substring(0, 50),
-      textLength: action.text.length
+  // Priority: task.text (edited text in DDT instance) > dict[key] (old translation values)
+  if (task.text && typeof task.text === 'string' && task.text.trim().length > 0) {
+    console.log('[DEBUG][RESOLVE_TASK] ✅ Using task.text directly', {
+      text: task.text.substring(0, 50),
+      textLength: task.text.length
     });
-    return action.text;
+    return task.text;
   }
 
-  console.log('[DEBUG][RESOLVE_ACTION] 🔍 Resolving from dict', {
-    actionId: action.actionId,
-    actionInstanceId: action.actionInstanceId,
-    hasParameters: !!action.parameters,
-    parametersCount: action.parameters?.length || 0,
-    parameters: action.parameters?.map((p: any) => ({
+  console.log('[DEBUG][RESOLVE_TASK] 🔍 Resolving from dict', {
+    templateId: task.templateId,
+    taskId: task.taskId,
+    hasParameters: !!task.parameters,
+    parametersCount: task.parameters?.length || 0,
+    parameters: task.parameters?.map((p: any) => ({
       parameterId: p.parameterId,
       key: p.key,
       value: p.value,
@@ -102,10 +105,10 @@ export function resolveActionText(action: any, dict: Record<string, string>): st
     sampleDictKeys: Object.keys(dict).slice(0, 10)
   });
 
-  const p = Array.isArray(action.parameters) ? action.parameters.find((x: any) => (x?.parameterId || x?.key) === 'text') : undefined;
+  const p = Array.isArray(task.parameters) ? task.parameters.find((x: any) => (x?.parameterId || x?.key) === 'text') : undefined;
   const key = p?.value;
 
-  console.log('[DEBUG][RESOLVE_ACTION] 🔍 Text parameter found', {
+  console.log('[DEBUG][RESOLVE_TASK] 🔍 Text parameter found', {
     hasParam: !!p,
     param: p ? {
       parameterId: p.parameterId,
@@ -121,7 +124,7 @@ export function resolveActionText(action: any, dict: Record<string, string>): st
     const isGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key);
     const found = dict[key];
 
-    console.log('[DEBUG][RESOLVE_ACTION] 🔍 Looking up in dict', {
+    console.log('[DEBUG][RESOLVE_TASK] 🔍 Looking up in dict', {
       key,
       isGuid,
       keyInDict: key in dict,
@@ -133,32 +136,35 @@ export function resolveActionText(action: any, dict: Record<string, string>): st
     });
 
     if (found) {
-      console.log('[DEBUG][RESOLVE_ACTION] ✅ Translation found', {
+      console.log('[DEBUG][RESOLVE_TASK] ✅ Translation found', {
         key,
         value: found.substring(0, 50),
         isGuid
       });
       return found;
     } else {
-      console.warn('[DEBUG][RESOLVE_ACTION] ❌ Translation NOT found', {
+      console.warn('[DEBUG][RESOLVE_TASK] ❌ Translation NOT found', {
         key,
         isGuid,
-        actionInstanceId: action.actionInstanceId,
+        taskId: task.taskId,
         dictKeysCount: Object.keys(dict).length,
         keyInDict: key in dict,
         allGuidsInDict: Object.keys(dict).filter(k => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)),
         sampleDictKeys: Object.keys(dict).slice(0, 10),
-        actionInstanceIdInDict: action.actionInstanceId ? (action.actionInstanceId in dict) : false
+        taskIdInDict: task.taskId ? (task.taskId in dict) : false
       });
     }
   } else {
-    console.warn('[DEBUG][RESOLVE_ACTION] ❌ No key found in parameters', {
-      actionId: action.actionId,
-      actionInstanceId: action.actionInstanceId,
-      hasParameters: !!action.parameters,
-      parameters: action.parameters
+    console.warn('[DEBUG][RESOLVE_TASK] ❌ No key found in parameters', {
+      templateId: task.templateId,
+      taskId: task.taskId,
+      hasParameters: !!task.parameters,
+      parameters: task.parameters
     });
   }
 
   return undefined;
 }
+
+// Legacy alias for backward compatibility (will be removed)
+export const resolveActionText = resolveTaskText;

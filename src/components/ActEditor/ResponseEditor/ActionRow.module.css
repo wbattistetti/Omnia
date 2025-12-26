@@ -1,3 +1,0 @@
-.row { display: flex; align-items: center; }
-.row:hover .actionRowActions { opacity: 1; pointer-events: auto; }
-.actionRowActions { opacity: 0; pointer-events: none; }

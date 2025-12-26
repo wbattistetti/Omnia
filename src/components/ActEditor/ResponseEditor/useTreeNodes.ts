@@ -67,16 +67,16 @@ export function useTreeNodes(initialNodes: TreeNodeProps[]) {
         return newNodes;
       }
       // Creazione nuovo nodo da palette
-      if (item && item.action) {
-        const action = item.action;
+      if (item && item.task) {
+        const task = item.task;
         const id = Math.random().toString(36).substr(2, 9);
         const newNode: TreeNodeProps = {
           id,
-          text: typeof action.label === 'object' ? action.label.it || action.label.en || action.id : action.label,
-          type: 'action',
+          text: typeof task.label === 'object' ? task.label.it || task.label.en || task.id : task.label,
+          type: 'task',
           icon: item.icon,
           color: item.color,
-          label: typeof action.label === 'object' ? action.label.it || action.label.en || action.id : action.label,
+          label: typeof task.label === 'object' ? task.label.it || task.label.en || task.id : task.label,
           primaryValue: item.primaryValue,
           parameters: item.parameters,
           onDrop: () => {}
@@ -115,7 +115,7 @@ export function useTreeNodes(initialNodes: TreeNodeProps[]) {
       const newNode = {
         id: newId,
         text: getString(data.label),
-        type: 'action' as const,
+        type: 'task' as const,
         icon: data.icon,
         color: data.color,
         label: getString(data.label),
@@ -138,4 +138,4 @@ export function useTreeNodes(initialNodes: TreeNodeProps[]) {
   }, []);
 
   return { nodes, setNodes, handleDrop, addNode, removeNode };
-} 
+}
