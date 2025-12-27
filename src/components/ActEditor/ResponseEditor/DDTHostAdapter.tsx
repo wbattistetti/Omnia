@@ -284,12 +284,41 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
     };
   }, [currentDDT]);
 
+  // ✅ Stable key per impedire re-mount durante l'editing
+  const editorKey = React.useMemo(() => {
+    const instanceKey = act.instanceId || act.id || 'unknown';
+    return `response-editor-${instanceKey}`;
+  }, [act.instanceId, act.id]);
+
+  // ✅ Stable act prop (solo i campi necessari, memoizzato)
+  const stableAct = React.useMemo(() => {
+    if (!act) return undefined;
+    return {
+      id: act.id,
+      type: act.type,
+      label: act.label,
+      instanceId: act.instanceId
+    };
+  }, [act.id, act.type, act.label, act.instanceId]);
+
+  // ✅ Stable callbacks per evitare re-render
+  const stableOnClose = React.useCallback(() => {
+    try {
+      onClose && onClose();
+    } catch {}
+  }, [onClose]);
+
+  const stableOnWizardComplete = React.useCallback((finalDDT: any) => {
+    handleComplete(finalDDT);
+  }, [handleComplete]);
+
   return (
     <ResponseEditor
+      key={editorKey}
       ddt={safeDDT}
-      onClose={onClose}
-      onWizardComplete={handleComplete}
-      act={act}
+      onClose={stableOnClose}
+      onWizardComplete={stableOnWizardComplete}
+      act={stableAct}
     />
   );
 }

@@ -36,8 +36,25 @@ import { useProjectTranslations } from '../../../context/ProjectTranslationsCont
 import { useDDTTranslations } from '../../../hooks/useDDTTranslations';
 import { ToolbarButton } from '../../../dock/types';
 import { taskTemplateService } from '../../../services/TaskTemplateService';
+import { mapNode } from '../../../dock/ops';
 
-function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, onToolbarUpdate }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string; instanceId?: string }, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void }) {
+function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, onToolbarUpdate, tabId, setDockTree }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string; instanceId?: string }, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void }) {
+
+  // 🔴 LOG: Verifica se il componente viene rimontato
+  useEffect(() => {
+    console.log('🟢 [MOUNT] ResponseEditorInner mounted', {
+      actId: act?.id,
+      instanceId: (act as any)?.instanceId,
+      ddtLabel: ddt?.label,
+      ddtMainDataLength: ddt?.mainData?.length
+    });
+    return () => {
+      console.log('🔴 [UNMOUNT] ResponseEditorInner unmounting', {
+        actId: act?.id,
+        instanceId: (act as any)?.instanceId
+      });
+    };
+  }, []);
 
   // Ottieni projectId corrente per salvare le istanze nel progetto corretto
   const pdUpdate = useProjectDataUpdate();
@@ -80,10 +97,33 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
   // ✅ DDT come ref mutabile (simula VB.NET: modifica diretta sulla struttura in memoria)
   const ddtRef = useRef(ddt);
 
-  // Aggiorna ref solo quando ddt prop cambia da fonti esterne (es. editor riapre)
+  // ✅ Inizializza ddtRef.current solo su cambio istanza (non ad ogni re-render)
+  const prevInstanceRef = useRef<string | undefined>(undefined);
+
+  // ✅ Sincronizza ddtRef.current con ddt prop (fonte di verità dal dockTree)
+  // Quando ddt prop cambia (dal dockTree), aggiorna il buffer locale
   useEffect(() => {
-    ddtRef.current = ddt;
-  }, [ddt]);
+    const instance = (act as any)?.instanceId || act?.id;
+    const isNewInstance = prevInstanceRef.current !== instance;
+
+    if (isNewInstance) {
+      // Nuova istanza → inizializza dal prop ddt (fonte di verità)
+      console.log('[REF_INIT] New instance - initializing from dockTree', {
+        instance,
+        propDDTStartStepTasksCount: ddt?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0
+      });
+      ddtRef.current = ddt;
+      prevInstanceRef.current = instance;
+    } else if (ddt && JSON.stringify(ddt) !== JSON.stringify(ddtRef.current)) {
+      // Stessa istanza ma ddt prop è cambiato → sincronizza (dockTree è stato aggiornato esternamente)
+      console.log('[REF_INIT] Same instance - syncing from dockTree', {
+        instance,
+        propDDTStartStepTasksCount: ddt?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0,
+        refDDTStartStepTasksCount: ddtRef.current?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0
+      });
+      ddtRef.current = ddt;
+    }
+  }, [ddt, (act as any)?.instanceId, act?.id]);
 
   // Debug logger gated by localStorage flag: set localStorage.setItem('debug.responseEditor','1') to enable
   const log = (...args: any[]) => {
@@ -139,24 +179,22 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
   // ✅ Quando chiudi, usa direttamente ddtRef.current (già contiene tutte le modifiche)
   // Non serve più buildDDTFromSelectedNode perché le modifiche sono già nel ref
 
-  // FIX: Salva modifiche quando si clicca "Salva" nel progetto (senza chiudere l'editor)
+  // ✅ Salva modifiche quando si clicca "Salva" nel progetto (senza chiudere l'editor)
+  // Usa ddtRef.current che è sempre sincronizzato con dockTree (fonte di verità)
   React.useEffect(() => {
     const handleProjectSave = async () => {
       if (act?.id || (act as any)?.instanceId) {
         const key = ((act as any)?.instanceId || act?.id) as string;
         const task = taskRepository.getTask(key);
-        const currentDDT = buildDDTFromSelectedNode(selectedNode, selectedNodePath, ddt);
+        const currentDDT = { ...ddtRef.current };
         const hasDDT = currentDDT && Object.keys(currentDDT).length > 0 && currentDDT.mainData && currentDDT.mainData.length > 0;
 
         if (hasDDT && task) {
-          // ✅ Salva DIRETTAMENTE tutto il DDT modificato (come VB.NET)
-          const currentDDT = { ...ddtRef.current };
           const currentTemplateId = getTemplateId(task);
 
           // ✅ CASE-INSENSITIVE
           if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'getdata') {
-            // ✅ Salva tutto il DDT modificato
-            taskRepository.updateTask(key, {
+            await taskRepository.updateTask(key, {
               templateId: 'GetData',
               label: currentDDT.label,
               mainData: currentDDT.mainData,
@@ -166,8 +204,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
               introduction: currentDDT.introduction
             }, currentProjectId || undefined);
           } else {
-            // ✅ Salva tutto il DDT modificato
-            taskRepository.updateTask(key, {
+            await taskRepository.updateTask(key, {
               label: currentDDT.label,
               mainData: currentDDT.mainData,
               constraints: currentDDT.constraints,
@@ -176,10 +213,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
               introduction: currentDDT.introduction
             }, currentProjectId || undefined);
           }
-        } else {
-          // No DDT structure, but save other fields
-          const currentDDT = { ...ddtRef.current };
-          taskRepository.updateTask(key, currentDDT, currentProjectId || undefined);
+        } else if (currentDDT) {
+          await taskRepository.updateTask(key, currentDDT, currentProjectId || undefined);
         }
       }
     };
@@ -758,29 +793,35 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
       // Se abbiamo un instanceId o act.id (caso DDTHostAdapter), salva nell'istanza
       if (act?.id || (act as any)?.instanceId) {
         const key = ((act as any)?.instanceId || act?.id) as string;
-        const task = taskRepository.getTask(key);
         const hasDDT = finalDDT && Object.keys(finalDDT).length > 0 && finalDDT.mainData && finalDDT.mainData.length > 0;
 
-        if (hasDDT && task) {
-          // ✅ Salva DIRETTAMENTE tutto il DDT modificato (come VB.NET: modifichi in memoria, salvi tutto)
-          const currentTemplateId = getTemplateId(task);
-
-          // Debug: verifica cosa stiamo salvando
+        if (hasDDT) {
           const finalMainData = finalDDT?.mainData?.[0];
           const finalSubData = finalMainData?.subData?.[0];
           const finalStartTasks = finalSubData?.steps?.start?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0;
 
-          console.log('[handleEditorClose] 💾 Saving complete DDT (VB.NET style)', {
+          console.log('[handleEditorClose] 💾 Saving complete DDT (SYNC - blocking close until saved)', {
+            key,
             finalStartTasks,
             hasMainData: !!finalMainData,
-            mainDataLength: finalDDT?.mainData?.length || 0,
-            willSaveCompleteDDT: true
+            mainDataLength: finalDDT?.mainData?.length || 0
           });
 
-          // ✅ CASE-INSENSITIVE
+          // ✅ Get or create task
+          let task = taskRepository.getTask(key);
+          if (!task) {
+            const action = act?.type === 'DataRequest' ? 'GetData' :
+              act?.type === 'Message' ? 'SayMessage' :
+                act?.type === 'ProblemClassification' ? 'ClassifyProblem' :
+                  act?.type === 'BackendCall' ? 'callBackend' : 'GetData';
+            task = taskRepository.createTask(action, undefined, key);
+          }
+
+          const currentTemplateId = getTemplateId(task);
+
+          // ✅ CASE-INSENSITIVE - AWAIT OBBLIGATORIO: non chiudere finché non è salvato
           if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'getdata') {
-            // ✅ Salva tutto il DDT modificato
-            taskRepository.updateTask(key, {
+            await taskRepository.updateTask(key, {
               templateId: 'GetData',
               label: finalDDT.label,
               mainData: finalDDT.mainData,
@@ -790,8 +831,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
               introduction: finalDDT.introduction
             }, currentProjectId || undefined);
           } else {
-            // ✅ Salva tutto il DDT modificato
-            taskRepository.updateTask(key, {
+            await taskRepository.updateTask(key, {
               label: finalDDT.label,
               mainData: finalDDT.mainData,
               constraints: finalDDT.constraints,
@@ -800,9 +840,16 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
               introduction: finalDDT.introduction
             }, currentProjectId || undefined);
           }
+
+          console.log('[handleEditorClose] ✅ Save completed - repository is now up to date', {
+            key,
+            mainDataLength: finalDDT.mainData?.length || 0,
+            finalStartTasks
+          });
         } else if (finalDDT) {
-          // No DDT structure, but save other fields
-          taskRepository.updateTask(key, finalDDT, currentProjectId || undefined);
+          // No DDT structure, but save other fields - AWAIT per garantire completamento
+          await taskRepository.updateTask(key, finalDDT, currentProjectId || undefined);
+          console.log('[handleEditorClose] ✅ Save completed (no mainData)', { key });
         }
 
       }
@@ -821,7 +868,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     }
 
     try { onClose && onClose(); } catch { }
-  }, [replaceSelectedDDT, onClose, act?.id, (act as any)?.instanceId, currentProjectId, selectedNode, selectedNodePath, selectedRoot]);
+  }, [replaceSelectedDDT, onClose, act?.id, (act as any)?.instanceId, currentProjectId]);
 
   // ✅ NON serve più tracciare sincronizzazioni - selectedNode è l'unica fonte di verità
   // Helper per convertire steps (oggetto o array) in array
@@ -835,276 +882,28 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     }));
   }, []);
 
-  // ✅ NON serve più salvare prima di cambiare nodo - selectedNode è sempre aggiornato
-  // Quando cambi nodo, carichi direttamente dal prop ddt
-  // useEffect rimosso - non serve più sincronizzazione
-  /*
-  useEffect(() => {
-    const currentIndices = {
-      mainIndex: selectedMainIndex,
-      subIndex: selectedSubIndex,
-      root: selectedRoot || false
-    };
-    const lastIndices = lastIndicesRef.current;
-
-    // Se gli indici sono cambiati e abbiamo un selectedNode valido, salva PRIMA di caricare il nuovo nodo
-    if (lastIndices && selectedNode && selectedNodePath &&
-        (lastIndices.mainIndex !== currentIndices.mainIndex ||
-         lastIndices.subIndex !== currentIndices.subIndex ||
-         lastIndices.root !== currentIndices.root)) {
-
-      try {
-        if (localStorage.getItem('debug.nodeSync') === '1') {
-          console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] 💾 Saving current node before change', {
-            from: lastIndices,
-            to: currentIndices,
-            selectedNodePath
-          });
-        }
-      } catch {}
-
-      // Salva le modifiche del nodo corrente in localDDT
-      // Usa localDDTRef.current per avere sempre l'ultima versione
-      const currentDDT = localDDTRef.current;
-      if (!currentDDT) {
-        try {
-          if (localStorage.getItem('debug.nodeSync') === '1') {
-            console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] ⏭️ Skipping - missing currentDDT');
-          }
-        } catch {}
-        return;
-      }
-
-      const mains = getMainDataList(currentDDT);
-      // ✅ USA lastIndices invece di selectedNodePath per salvare nel path corretto
-      const { mainIndex, subIndex } = lastIndices;
-      const isRoot = lastIndices.root;
-
-      // Log per vedere cosa contiene currentDDT quando salvi
-      if (subIndex !== undefined && !isRoot) {
-        const currentMain = currentDDT?.mainData?.[mainIndex];
-        const currentSubIdx = (currentMain?.subData || []).findIndex((s: any, idx: number) => idx === subIndex);
-        const currentSub = currentMain?.subData?.[currentSubIdx];
-        const currentStartTasks = !Array.isArray(currentSub?.steps)
-          ? currentSub?.steps?.['start']?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0
-          : getStepsAsArray(currentSub?.steps).find((s: any) => s?.type === 'start')?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0;
-
-        // Controlla anche Day (subIndex 0) se stai salvando Month (subIndex 1)
-        if (subIndex === 1) {
-          const daySubIdx = (currentMain?.subData || []).findIndex((s: any, idx: number) => idx === 0);
-          const daySub = currentMain?.subData?.[daySubIdx];
-          const dayStartTasks = !Array.isArray(daySub?.steps)
-            ? daySub?.steps?.['start']?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0
-            : getStepsAsArray(daySub?.steps).find((s: any) => s?.type === 'start')?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0;
-
-          console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] 🔍 currentDDT state when saving Month', {
-            monthStartTasks: currentStartTasks,
-            dayStartTasks: dayStartTasks,
-            dayShouldHave: 2
-          });
-        }
-      }
-
-      try {
-        if (localStorage.getItem('debug.nodeSync') === '1') {
-          console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] 📍 Saving to path from lastIndices', {
-            mainIndex,
-            subIndex,
-            isRoot,
-            selectedNodeLabel: selectedNode?.label
-          });
-        }
-      } catch {}
-
-      if (mainIndex >= mains.length) {
-        try {
-          if (localStorage.getItem('debug.nodeSync') === '1') {
-            console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] ⏭️ Skipping - mainIndex out of bounds');
-          }
-        } catch {}
-        return;
-      }
-
-      const main = mains[mainIndex];
-      let next: any;
-
-      if (isRoot) {
-        const newIntroStep = selectedNode?.steps?.find((s: any) => s.type === 'introduction');
-        const hasTasks = newIntroStep?.escalations?.some((esc: any) =>
-          esc?.tasks && Array.isArray(esc.tasks) && esc.tasks.length > 0
-        );
-
-        next = { ...currentDDT };
-        if (hasTasks) {
-          next.introduction = {
-            type: 'introduction',
-            escalations: newIntroStep.escalations || []
-          };
-        } else {
-          delete next.introduction;
-        }
-      } else if (subIndex === undefined) {
-        const newMainData = [...mains];
-        newMainData[mainIndex] = selectedNode;
-        next = { ...currentDDT, mainData: newMainData };
-      } else {
-        const subList = getSubDataList(main);
-        if (subIndex >= subList.length) {
-          try {
-            if (localStorage.getItem('debug.nodeSync') === '1') {
-              console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] ⏭️ Skipping - subIndex out of bounds');
-            }
-          } catch {}
-          return;
-        }
-        const subIdx = (main.subData || []).findIndex((s: any, idx: number) => idx === subIndex);
-
-        const newSubData = [...(main.subData || [])];
-        newSubData[subIdx] = selectedNode;
-        const newMain = { ...main, subData: newSubData };
-        const newMainData = [...mains];
-        newMainData[mainIndex] = newMain;
-        next = { ...currentDDT, mainData: newMainData };
-      }
-
-      // Log PRIMA di aggiornare localDDTRef
-      if (subIndex !== undefined && !isRoot) {
-        const beforeMain = localDDTRef.current?.mainData?.[mainIndex];
-        const beforeSubIdx = (beforeMain?.subData || []).findIndex((s: any, idx: number) => idx === subIndex);
-        const beforeSub = beforeMain?.subData?.[beforeSubIdx];
-        const beforeStartTasks = !Array.isArray(beforeSub?.steps)
-          ? beforeSub?.steps?.['start']?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0
-          : getStepsAsArray(beforeSub?.steps).find((s: any) => s?.type === 'start')?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0;
-
-        const afterSub = next.mainData?.[mainIndex]?.subData?.find((s: any, idx: number) => idx === subIndex);
-        const afterStartTasks = !Array.isArray(afterSub?.steps)
-          ? afterSub?.steps?.['start']?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0
-          : getStepsAsArray(afterSub?.steps).find((s: any) => s?.type === 'start')?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0;
-
-        console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] 🔍 BEFORE/AFTER localDDTRef update', {
-          nodeLabel: selectedNode?.label,
-          beforeStartTasks,
-          afterStartTasks,
-          willOverwrite: beforeStartTasks !== afterStartTasks && beforeStartTasks > 0
-        });
-      }
-
-      // Aggiorna localDDT e il ref immediatamente
-      // localDDTRef.current è la fonte di verità - aggiorniamolo PRIMA di setLocalDDT
-      localDDTRef.current = next;
-      setLocalDDT(next);
-
-      // Log SEMPRE visibile per debug
-      console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] 🔍 DEBUG - About to log details', {
-        hasSelectedNode: !!selectedNode,
-        hasNext: !!next,
-        isRoot,
-        mainIndex,
-        subIndex
-      });
-
-      // Log dettagliato per vedere cosa è stato salvato
-      if (subIndex !== undefined && !isRoot) {
-        const savedMain = next.mainData?.[mainIndex];
-        const subIdx = (savedMain?.subData || []).findIndex((s: any, idx: number) => idx === subIndex);
-        const savedSub = savedMain?.subData?.[subIdx];
-        const savedSteps = getStepsAsArray(savedSub?.steps);
-
-        // Controlla tutti gli step comuni
-        const stepKeys = ['start', 'notConfirmed', 'confirmed'];
-        const stepDetails: any = {};
-
-        stepKeys.forEach(stepKey => {
-          const savedStep = !Array.isArray(savedSub?.steps)
-            ? savedSub?.steps?.[stepKey]
-            : savedSteps.find((s: any) => s?.type === stepKey);
-          const savedStepTasksCount = savedStep?.escalations?.reduce((acc: number, esc: any) =>
-            acc + (esc?.tasks?.length || 0), 0) || 0;
-
-          const selectedStep = !Array.isArray(selectedNode?.steps)
-            ? selectedNode?.steps?.[stepKey]
-            : getStepsAsArray(selectedNode?.steps).find((s: any) => s?.type === stepKey);
-          const selectedStepTasksCount = selectedStep?.escalations?.reduce((acc: number, esc: any) =>
-            acc + (esc?.tasks?.length || 0), 0) || 0;
-
-          stepDetails[stepKey] = {
-            saved: savedStepTasksCount,
-            selected: selectedStepTasksCount,
-            match: savedStepTasksCount === selectedStepTasksCount
-          };
-        });
-
-        // Log COMPLETO con tutti i dettagli espansi - multipli log per evitare {…}
-        console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] 🔍 COMPLETE SAVE DETAILS - stepDetails', stepDetails);
-        console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] 🔍 COMPLETE SAVE DETAILS - savedSub.steps', savedSub?.steps);
-        console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] 🔍 COMPLETE SAVE DETAILS - selectedNode.steps', selectedNode?.steps);
-
-        // Log per ogni step individualmente
-        Object.keys(stepDetails).forEach(stepKey => {
-          const detail = stepDetails[stepKey];
-          console.log(`[NODE_SYNC][SAVE_BEFORE_CHANGE] 🔍 STEP ${stepKey}`, {
-            saved: detail.saved,
-            selected: detail.selected,
-            match: detail.match
-          });
-        });
-      }
-
-      try {
-        if (localStorage.getItem('debug.nodeSync') === '1') {
-          // Conta i task nel selectedNode che stiamo salvando
-          const steps = getStepsAsArray(selectedNode?.steps);
-          const tasksCount = steps.reduce((acc: number, step: any) =>
-            acc + (step?.escalations?.reduce((a: number, esc: any) =>
-              a + (esc?.tasks?.length || 0), 0) || 0), 0);
-
-          // Conta i task nel nodo salvato in localDDT
-          let savedTasksCount = 0;
-          if (isRoot) {
-            const savedIntro = next.introduction;
-            savedTasksCount = savedIntro?.escalations?.reduce((acc: number, esc: any) =>
-              acc + (esc?.tasks?.length || 0), 0) || 0;
-          } else if (subIndex === undefined) {
-            const savedMain = next.mainData?.[mainIndex];
-            const savedSteps = getStepsAsArray(savedMain?.steps);
-            savedTasksCount = savedSteps.reduce((acc: number, step: any) =>
-              acc + (step?.escalations?.reduce((a: number, esc: any) =>
-                a + (esc?.tasks?.length || 0), 0) || 0), 0);
-          } else {
-            const savedMain = next.mainData?.[mainIndex];
-            // Calcola subIdx come nel blocco di salvataggio sopra
-            const subIdx = (savedMain?.subData || []).findIndex((s: any, idx: number) => idx === subIndex);
-            const savedSub = savedMain?.subData?.[subIdx];
-            const savedSteps = getStepsAsArray(savedSub?.steps);
-            savedTasksCount = savedSteps.reduce((acc: number, step: any) =>
-              acc + (step?.escalations?.reduce((a: number, esc: any) =>
-                a + (esc?.tasks?.length || 0), 0) || 0), 0);
-          }
-
-          console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] ✅ Saved current node to localDDT (synchronous)', {
-            selectedNodeTasksCount: tasksCount,
-            savedTasksCount,
-            match: tasksCount === savedTasksCount
-          });
-        }
-      } catch (e) {
-        console.error('[NODE_SYNC][SAVE_BEFORE_CHANGE] ❌ Error logging details:', e);
-      }
-
-      // Log SEMPRE visibile per conferma
-      console.log('[NODE_SYNC][SAVE_BEFORE_CHANGE] ✅ Saved current node to localDDT (synchronous) - COMPLETED');
-    }
-
-    // Aggiorna il ref con gli indici correnti
-    lastIndicesRef.current = currentIndices;
-  }, [selectedMainIndex, selectedSubIndex, selectedRoot, selectedNode, selectedNodePath, getStepsAsArray]);
-  */
+  // ✅ NON serve più salvare prima di cambiare nodo
+  // dockTree è la fonte di verità - le modifiche sono già salvate immediatamente in updateSelectedNode
 
   // ✅ Caricamento: legge da ddtRef.current (che contiene già le modifiche, come VB.NET)
   useEffect(() => {
+    // 🔴 LOG CHIRURGICO 3: Caricamento nodo
     const currentMainList = getMainDataList(ddtRef.current); // ✅ Leggi dal ref, non dal prop
 
-      if (currentMainList.length === 0) return;
+    console.log('[DEBUG_NODE_LOAD] useEffect triggered', {
+      selectedMainIndex,
+      selectedSubIndex,
+      selectedRoot,
+      mainListLength: currentMainList.length,
+      ddtRefMainDataLength: ddtRef.current?.mainData?.length,
+      ddtPropMainDataLength: ddt?.mainData?.length,
+      currentMainListLength: currentMainList.length
+    });
+
+      if (currentMainList.length === 0) {
+        console.log('[DEBUG_NODE_LOAD] SKIP: currentMainList is empty');
+        return;
+      }
 
       try {
         if (localStorage.getItem('debug.nodeSync') === '1') {
@@ -1143,6 +942,23 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
           : getSubDataList(currentMainList[selectedMainIndex])?.[selectedSubIndex];
 
       if (node) {
+        // 🔴 LOG CHIRURGICO 3 (continuazione): Dettagli del nodo caricato
+        const steps = getStepsAsArray(node?.steps);
+        const startStepTasksCount = steps.find((s: any) => s?.type === 'start')?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0;
+
+        console.log('[DEBUG_NODE_LOAD] Node loaded from ddtRef.current', {
+          mainIndex: selectedMainIndex,
+          subIndex: selectedSubIndex,
+          nodeLabel: node?.label,
+          hasNode: !!node,
+          startStepTasksCount,
+          allStepsTasksCount: steps.reduce((acc: number, step: any) =>
+            acc + (step?.escalations?.reduce((a: number, esc: any) =>
+              a + (esc?.tasks?.length || 0), 0) || 0), 0),
+          ddtRefMainDataLength: ddtRef.current?.mainData?.length,
+          ddtPropMainDataLength: ddt?.mainData?.length
+        });
+
         // Log SEMPRE visibile per debug
         console.log('[NODE_SYNC][LOAD] 🔍 DEBUG - About to log node details', {
           mainIndex: selectedMainIndex,
@@ -1192,8 +1008,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
         }
 
         // Log COMPLETO con tutti i dettagli espansi
-        const steps = getStepsAsArray(node?.steps);
-        const tasksCount = steps.reduce((acc: number, step: any) =>
+        const allStepsArray = getStepsAsArray(node?.steps);
+        const allTasksCount = allStepsArray.reduce((acc: number, step: any) =>
           acc + (step?.escalations?.reduce((a: number, esc: any) =>
             a + (esc?.tasks?.length || 0), 0) || 0), 0);
 
@@ -1215,7 +1031,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
             };
           });
         } else {
-          steps.forEach((step: any) => {
+          allStepsArray.forEach((step: any) => {
             const stepKey = step?.type;
             const stepTasksCount = step?.escalations?.reduce((acc: number, esc: any) =>
               acc + (esc?.tasks?.length || 0), 0) || 0;
@@ -1255,10 +1071,9 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     }
 
 
-    // ✅ IMPORTANTE: NON includere ddt nelle dipendenze per evitare loop infiniti
-    // Questo useEffect deve essere eseguito SOLO quando cambiano gli indici di selezione
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMainIndex, selectedSubIndex, selectedRoot, introduction]);
+    // ✅ Carica il nodo quando cambiano gli indici O quando ddt prop cambia (dal dockTree)
+    // ddtRef.current è già sincronizzato con ddt prop dal useEffect precedente
+  }, [selectedMainIndex, selectedSubIndex, selectedRoot, introduction, ddt]);
 
   // ✅ NON serve più sincronizzare selectedNode con localDDT
   // selectedNode è l'unica fonte di verità durante l'editing
@@ -1282,8 +1097,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
 
   // ✅ Step keys e selectedStepKey sono ora gestiti internamente da BehaviourEditor
 
-  // ✅ updateSelectedNode: modifica DIRETTAMENTE ddtRef.current (come VB.NET)
-  // Quando modifichi selectedNode, modifichi anche la struttura in memoria
+  // ✅ updateSelectedNode: SINGOLA FONTE DI VERITÀ = dockTree
+  // 1. Modifica ddtRef.current (buffer locale per editing)
+  // 2. Aggiorna IMMEDIATAMENTE tab.ddt nel dockTree (fonte di verità)
+  // 3. React re-renderizza con tab.ddt aggiornato
   const updateSelectedNode = useCallback((updater: (node: any) => any, notifyProvider: boolean = true) => {
     try {
       if (localStorage.getItem('debug.nodeSync') === '1') {
@@ -1298,48 +1115,146 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
       if (!prev || !selectedNodePath) return prev;
 
       const updated = updater(prev) || prev;
-
-      // ✅ MODIFICA DIRETTAMENTE il DDT in memoria (come VB.NET)
-      const mains = getMainDataList(ddtRef.current);
       const { mainIndex, subIndex } = selectedNodePath;
       const isRoot = selectedRoot || false;
 
+      // ✅ STEP 1: Costruisci il DDT completo aggiornato
+      const currentDDT = ddtRef.current || ddt;
+      const updatedDDT = { ...currentDDT };
+      const mains = [...(currentDDT.mainData || [])];
+
       if (mainIndex < mains.length) {
-        const main = mains[mainIndex];
+        const main = { ...mains[mainIndex] };
 
         if (isRoot) {
           // Root node (introduction)
           const newIntroStep = updated?.steps?.find((s: any) => s.type === 'introduction');
-          const hasTasks = newIntroStep?.escalations?.some((esc: any) =>
-            esc?.tasks && Array.isArray(esc.tasks) && esc.tasks.length > 0
-          );
-          if (hasTasks) {
-            ddtRef.current.introduction = {
+          if (newIntroStep?.escalations?.some((esc: any) => esc?.tasks?.length > 0)) {
+            updatedDDT.introduction = {
               type: 'introduction',
               escalations: newIntroStep.escalations || []
             };
           } else {
-            delete ddtRef.current.introduction;
+            delete updatedDDT.introduction;
           }
         } else if (subIndex === undefined) {
-          // Main node - modifica diretta
+          // Main node
           mains[mainIndex] = updated;
-          ddtRef.current.mainData = mains;
+          updatedDDT.mainData = mains;
         } else {
-          // Sub node - modifica diretta
-          const subList = main.subData || [];
+          // Sub node
+          const subList = [...(main.subData || [])];
           const subIdx = subList.findIndex((s: any, idx: number) => idx === subIndex);
           if (subIdx >= 0) {
             subList[subIdx] = updated;
             main.subData = subList;
             mains[mainIndex] = main;
-            ddtRef.current.mainData = mains;
+            updatedDDT.mainData = mains;
           }
         }
 
-        // Notifica React del cambiamento (solo per UI, non per persistenza)
-        replaceSelectedDDT({ ...ddtRef.current });
-        // Forza aggiornamento di mainList
+        // ✅ STEP 2: Aggiorna ddtRef.current (buffer locale)
+        ddtRef.current = updatedDDT;
+
+        // ✅ STEP 3: Aggiorna IMMEDIATAMENTE tab.ddt nel dockTree (FONTE DI VERITÀ)
+        if (tabId && setDockTree) {
+          const startStepTasksCount = updatedDDT?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
+          console.log('[DOCK_SAVE] ⚡ Updating dockTree (single source of truth)', {
+            tabId,
+            mainDataLength: updatedDDT?.mainData?.length,
+            startStepTasksCount
+          });
+
+          setDockTree(prev =>
+            mapNode(prev, n => {
+              if (n.kind === 'tabset') {
+                const idx = n.tabs.findIndex(t => t.id === tabId);
+                if (idx !== -1 && n.tabs[idx].type === 'responseEditor') {
+                  const updatedTab = { ...n.tabs[idx], ddt: updatedDDT };
+                  console.log('[DOCK_SAVE] ✅ dockTree updated', {
+                    tabId,
+                    updatedStartStepTasksCount: updatedTab.ddt?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0
+                  });
+                  return {
+                    ...n,
+                    tabs: [
+                      ...n.tabs.slice(0, idx),
+                      updatedTab,
+                      ...n.tabs.slice(idx + 1)
+                    ]
+                  };
+                }
+              }
+              return n;
+            })
+          );
+
+          // ✅ STEP 4: In modalità docking (con tabId), NON salvare asincrono durante il drop
+          // Il salvataggio definitivo avviene in handleEditorClose (sincrono, garantito)
+          // Questo evita race conditions e garantisce coerenza quando riapri l'editor
+          //
+          // Nota: Il salvataggio asincrono durante il drop è utile solo in modalità overlay
+          // (senza tabId), dove non c'è handleEditorClose che salva alla chiusura
+          if (!tabId && (act?.id || (act as any)?.instanceId)) {
+            // Modalità overlay: salva asincrono durante il drop (non c'è chiusura garantita)
+            const key = ((act as any)?.instanceId || act?.id) as string;
+            const hasDDT = updatedDDT && Object.keys(updatedDDT).length > 0 && updatedDDT.mainData && updatedDDT.mainData.length > 0;
+
+            if (hasDDT) {
+              const startStepTasksCount = updatedDDT?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
+              console.log('[DOCK_SAVE] 🚀 Starting immediate save to taskRepository (async, overlay mode)', {
+                key,
+                startStepTasksCount,
+                mainDataLength: updatedDDT?.mainData?.length
+              });
+
+              // Salva in modo asincrono (non bloccare l'UI)
+              void (async () => {
+                try {
+                  const task = taskRepository.getTask(key);
+                  const currentTemplateId = getTemplateId(task);
+
+                  if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'getdata') {
+                    await taskRepository.updateTask(key, {
+                      templateId: 'GetData',
+                      label: updatedDDT.label,
+                      mainData: updatedDDT.mainData,
+                      constraints: updatedDDT.constraints,
+                      examples: updatedDDT.examples,
+                      nlpContract: updatedDDT.nlpContract,
+                      introduction: updatedDDT.introduction
+                    }, currentProjectId || undefined);
+                  } else {
+                    await taskRepository.updateTask(key, {
+                      label: updatedDDT.label,
+                      mainData: updatedDDT.mainData,
+                      constraints: updatedDDT.constraints,
+                      examples: updatedDDT.examples,
+                      nlpContract: updatedDDT.nlpContract,
+                      introduction: updatedDDT.introduction
+                    }, currentProjectId || undefined);
+                  }
+
+                  console.log('[DOCK_SAVE] ✅ taskRepository updated (async, overlay mode)', {
+                    key,
+                    startStepTasksCount: updatedDDT?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0
+                  });
+                } catch (err) {
+                  console.error('[DOCK_SAVE] ❌ Failed to save to taskRepository', err);
+                }
+              })();
+            }
+          } else if (tabId) {
+            // Modalità docking: salvataggio asincrono disabilitato durante il drop
+            // Il salvataggio definitivo avviene in handleEditorClose (sincrono)
+            console.log('[DOCK_SAVE] ⏭️ Skipping async save during drop (docking mode - will save on close)', {
+              tabId,
+              hasAct: !!(act?.id || (act as any)?.instanceId)
+            });
+          }
+        }
+
+        // ✅ Solo invalidatore interno (non notificare provider per evitare re-mount)
         setDDTVersion(v => v + 1);
       }
 
@@ -1351,7 +1266,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
           const tasksCount = steps.reduce((acc: number, step: any) =>
             acc + (step?.escalations?.reduce((a: number, esc: any) =>
               a + (esc?.tasks?.length || 0), 0) || 0), 0);
-          console.log('[NODE_SYNC][UPDATE] ✅ selectedNode updated + DDT modified directly', {
+          console.log('[NODE_SYNC][UPDATE] ✅ selectedNode updated + dockTree updated', {
             stepsCount: steps.length,
             escalationsCount,
             tasksCount
@@ -1361,7 +1276,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
 
       return updated;
     });
-  }, [selectedNode, selectedNodePath, selectedRoot, replaceSelectedDDT]);
+  }, [selectedNodePath, selectedRoot, tabId, setDockTree, ddt]);
 
   // ✅ NON serve più persistenza asincrona
   // Quando chiudi l'editor, costruisci il DDT da selectedNode e salva
@@ -1951,10 +1866,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
   );
 }
 
-export default function ResponseEditor({ ddt, onClose, onWizardComplete, act, hideHeader, onToolbarUpdate }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string; instanceId?: string }, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void }) {
+export default function ResponseEditor({ ddt, onClose, onWizardComplete, act, hideHeader, onToolbarUpdate, tabId, setDockTree }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string; instanceId?: string }, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void }) {
   return (
     <FontProvider>
-      <ResponseEditorInner ddt={ddt} onClose={onClose} onWizardComplete={onWizardComplete} act={act} hideHeader={hideHeader} onToolbarUpdate={onToolbarUpdate} />
+      <ResponseEditorInner ddt={ddt} onClose={onClose} onWizardComplete={onWizardComplete} act={act} hideHeader={hideHeader} onToolbarUpdate={onToolbarUpdate} tabId={tabId} setDockTree={setDockTree} />
     </FontProvider>
   );
 }

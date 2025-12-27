@@ -112,7 +112,7 @@ export function moveTab(tree: DockNode, tabId: string, targetId: string, region:
 
 // helpers
 
-function mapNode(n: DockNode, f: (n: DockNode) => DockNode): DockNode {
+export function mapNode(n: DockNode, f: (n: DockNode) => DockNode): DockNode {
   // Post-order: mappa prima i figli dell'albero originale, poi applica la trasformazione
   let mapped: DockNode;
   if (n.kind === 'split') {

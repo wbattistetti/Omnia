@@ -220,10 +220,20 @@ function DockRenderer(props: {
       tabs={node.tabs}
       active={node.active}
       setActive={(idx) => { props.setActiveTabSetId(node.id); props.setRoot(activateTab(props.rootNode, node.tabs[idx].id)); }}
-      onClose={(tabId) => {
-        // Chiudi la tab nel suo tabset; non spostarla automaticamente altrove.
-        // Delego all'header "Closed" (shelf) la riapertura esplicita.
+      onClose={async (tabId) => {
+        // ✅ PRIMA: Chiama onClose del tab se presente (per salvataggio sincrono)
         const t = getTab(props.rootNode, tabId);
+        if (t && 'onClose' in t && typeof t.onClose === 'function') {
+          try {
+            // ✅ Pass the tab to onClose so it can read tab.ddt (which is updated during editing)
+            await t.onClose(t);
+          } catch (err) {
+            console.error('[DockManager] Error in tab.onClose:', err);
+          }
+        }
+
+        // ✅ POI: Chiudi la tab nel suo tabset; non spostarla automaticamente altrove.
+        // Delego all'header "Closed" (shelf) la riapertura esplicita.
         if (t) props.onTabClosed(t);
         props.setRoot(closeTab(props.rootNode, tabId));
       }}
@@ -242,7 +252,7 @@ function TabSet(props: {
   tabs: DockTab[];
   active: number;
   setActive: (idx: number) => void;
-  onClose: (tabId: string) => void;
+  onClose: (tabId: string) => void | Promise<void>;
   onDragTabStart: (tab: DockTab) => void;
   onDragTabEnd: () => void;
   onHover: (tabsetId: string, region: DockRegion) => void;
@@ -288,7 +298,7 @@ function TabSet(props: {
       }}
     >
       <div className="flex items-center gap-1 px-2 border-b"
-           style={{ backgroundColor: '#e0f2fe', borderColor: '#38bdf8', height: 40 }}>
+        style={{ backgroundColor: '#e0f2fe', borderColor: '#38bdf8', height: 40 }}>
         {props.tabs.map((t, i) => {
           const isActive = props.active === i;
           const isResponseEditor = t.type === 'responseEditor';
@@ -399,14 +409,45 @@ function TabSet(props: {
                 </div>
               )}
 
-              <button className="ml-1" style={{ color: isActive && tabColor ? '#ffffff' : '#0c4a6e' }} onClick={(e) => { e.stopPropagation(); props.onClose(t.id); }}>×</button>
+              <button className="ml-1" style={{ color: isActive && tabColor ? '#ffffff' : '#0c4a6e' }} onClick={async (e) => { e.stopPropagation(); await props.onClose(t.id); }}>×</button>
             </div>
           );
         })}
       </div>
-      <div className="w-full min-h-0" style={{ height: 'calc(100% - 40px)', backgroundColor: '#ffffff' }}>
-        {props.tabs[props.active] && props.renderTabContent(props.tabs[props.active])}
-      </div>
+      {/* ✅ Key stabile sul contenuto del tab per preservare lo stato quando si cambia tab */}
+      {(() => {
+        const activeTab = props.tabs[props.active];
+        console.log('[DEBUG_MEMO] TabSet rendering content', {
+          activeTabId: activeTab?.id,
+          activeTabType: activeTab?.type,
+          activeIndex: props.active,
+          tabsCount: props.tabs.length,
+          willRender: !!activeTab
+        });
+        if (!activeTab) return null;
+
+        // ✅ Per responseEditor, usa una key stabile basata su instanceId per preservare lo stato
+        const stableKey = activeTab.type === 'responseEditor' && (activeTab as any).act?.instanceId
+          ? `response-editor-${(activeTab as any).act.instanceId}`
+          : activeTab.id;
+
+        console.log('[DEBUG_DOCK_KEY] TabSet stableKey calculated', {
+          activeTabId: activeTab.id,
+          activeTabType: activeTab.type,
+          stableKey,
+          instanceId: (activeTab as any).act?.instanceId
+        });
+
+        return (
+          <div
+            key={stableKey}
+            className="w-full min-h-0"
+            style={{ height: 'calc(100% - 40px)', backgroundColor: '#ffffff' }}
+          >
+            {props.renderTabContent(activeTab)}
+          </div>
+        );
+      })()}
       {!!region && (
         <div className="pointer-events-none absolute inset-0">
           <DockOverlay region={region} hostRef={hostRef} />
@@ -420,7 +461,7 @@ function DockOverlay({ region, hostRef }: { region: DockRegion; hostRef: React.R
   const rect = hostRef.current?.getBoundingClientRect();
   if (!rect) return null;
   const w = rect.width, h = rect.height;
-  const r: Record<DockRegion, { x:number;y:number;w:number;h:number }> = {
+  const r: Record<DockRegion, { x: number; y: number; w: number; h: number }> = {
     left: { x: 0, y: 0, w: w * 0.5, h },
     right: { x: w * 0.5, y: 0, w: w * 0.5, h },
     top: { x: 0, y: 0, w, h: h * 0.5 },

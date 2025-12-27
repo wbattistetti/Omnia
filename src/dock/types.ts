@@ -30,6 +30,7 @@ export type DockTabResponseEditor = DockTabBase & {
   act?: { id: string; type: string; label?: string; instanceId?: string };
   headerColor?: string; // Color of the ResponseEditor header (e.g., '#9a4f00' for orange)
   toolbarButtons?: ToolbarButton[]; // Toolbar buttons from ResponseEditor
+  onClose?: (tab: DockTabResponseEditor) => void | Promise<void>; // Callback called before closing the tab (for saving), receives the tab to read current ddt
 };
 
 // Non-Interactive Editor tab - for simple message editing

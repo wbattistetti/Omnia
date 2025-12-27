@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { LandingPage } from './LandingPage';
 import { Toolbar } from './Toolbar';
@@ -22,7 +22,7 @@ import { FlowEditor } from './Flowchart/FlowEditor';
 import { FlowWorkspace } from './FlowWorkspace/FlowWorkspace';
 import { DockWorkspace } from './FlowWorkspace/DockWorkspace';
 import { DockManager } from './Dock/DockManager';
-import { DockNode, DockTab, DockTabResponseEditor, DockTabActEditor } from '../dock/types';
+import { DockNode, DockTab, DockTabResponseEditor, DockTabActEditor, ToolbarButton } from '../dock/types';
 import { FlowCanvasHost } from './FlowWorkspace/FlowCanvasHost';
 import { FlowWorkspaceProvider } from '../flows/FlowStore.tsx';
 import { useFlowActions } from '../flows/FlowStore.tsx';
@@ -43,6 +43,7 @@ import { flowchartVariablesService } from '../services/FlowchartVariablesService
 import ResponseEditor from './ActEditor/ResponseEditor';
 import NonInteractiveResponseEditor from './ActEditor/ResponseEditor/NonInteractiveResponseEditor';
 import { taskRepository } from '../services/TaskRepository';
+import { getTemplateId } from '../utils/taskHelpers';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -97,223 +98,369 @@ export const AppContent: React.FC<AppContentProps> = ({
     active: 0
   });
 
-  // Unified tab content renderer (remove memoization to avoid stale closures)
-  const UnifiedTabContent: React.FC<{ tab: DockTab }> = ({ tab }) => {
-    const { upsertFlow, openFlowBackground } = useFlowActions();
+  // ✅ Unified tab content renderer - Memoizzato con comparatore per evitare re-render inutili
+  const UnifiedTabContent: React.FC<{ tab: DockTab }> = React.memo(
+    ({ tab }) => {
+      // 🔴 LOG CHIRURGICO 3: UnifiedTabContent render
+      console.log('[DEBUG_UNIFIED_RENDER]', {
+        tabId: tab.id,
+        type: tab.type,
+        toolbarButtons: tab.toolbarButtons,
+        headerColor: tab.headerColor
+      });
 
-    // Flow tab
-    if (tab.type === 'flow') {
-      // Check projectId is valid before rendering
-      if (!currentPid) {
-        return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>Waiting for project...</div>;
+      const { upsertFlow, openFlowBackground } = useFlowActions();
+
+      // Flow tab
+      if (tab.type === 'flow') {
+        // Check projectId is valid before rendering
+        if (!currentPid) {
+          return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>Waiting for project...</div>;
+        }
+        return (
+          <FlowCanvasHost
+            projectId={currentPid}
+            flowId={tab.flowId}
+            onCreateTaskFlow={(newFlowId, title, nodes, edges) => {
+              // 1) upsert nel workspace per avere contenuto immediato
+              upsertFlow({ id: newFlowId, title: title || newFlowId, nodes, edges });
+              openFlowBackground(newFlowId);
+              // 2) aggiungi tab accanto a quella corrente nel dock tree
+              setDockTree(prev => upsertAddNextTo(prev, tab.id, { id: `tab_${newFlowId}`, title: title || 'Task', type: 'flow', flowId: newFlowId }));
+            }}
+            onOpenTaskFlow={(taskFlowId, title) => {
+              // Apri la tab del task accanto a quella corrente (senza duplicati)
+              setDockTree(prev => upsertAddNextTo(prev, tab.id, { id: `tab_${taskFlowId}`, title: title || 'Task', type: 'flow', flowId: taskFlowId }));
+              openFlowBackground(taskFlowId);
+            }}
+          />
+        );
       }
-      return (
-        <FlowCanvasHost
-          projectId={currentPid}
-          flowId={tab.flowId}
-          onCreateTaskFlow={(newFlowId, title, nodes, edges) => {
-            // 1) upsert nel workspace per avere contenuto immediato
-            upsertFlow({ id: newFlowId, title: title || newFlowId, nodes, edges });
-            openFlowBackground(newFlowId);
-            // 2) aggiungi tab accanto a quella corrente nel dock tree
-            setDockTree(prev => upsertAddNextTo(prev, tab.id, { id: `tab_${newFlowId}`, title: title || 'Task', type: 'flow', flowId: newFlowId }));
-          }}
-          onOpenTaskFlow={(taskFlowId, title) => {
-            // Apri la tab del task accanto a quella corrente (senza duplicati)
-            setDockTree(prev => upsertAddNextTo(prev, tab.id, { id: `tab_${taskFlowId}`, title: title || 'Task', type: 'flow', flowId: taskFlowId }));
-            openFlowBackground(taskFlowId);
-          }}
-        />
-      );
-    }
 
-    // Response Editor tab
-    if (tab.type === 'responseEditor') {
-      return (
-        <div style={{ width: '100%', height: '100%', backgroundColor: '#0b1220' }}>
-          <ResponseEditor
-            ddt={tab.ddt}
-            onClose={() => {
-              setDockTree(prev => closeTab(prev, tab.id));
-            }}
-            act={tab.act ? {
-              id: tab.act.id,
-              type: tab.act.type,
-              label: tab.act.label,
-              instanceId: tab.act.instanceId
-            } : undefined}
-            hideHeader={true} // Hide internal header when in docking mode
-            onToolbarUpdate={(toolbar, color) => {
-              // Update tab with toolbar and color
-              setDockTree(prev => {
-                return mapNode(prev, n => {
-                  if (n.kind === 'tabset') {
-                    const idx = n.tabs.findIndex(t => t.id === tab.id);
-                    if (idx !== -1 && n.tabs[idx].type === 'responseEditor') {
-                      const updatedTab = { ...n.tabs[idx], toolbarButtons: toolbar, headerColor: color } as DockTabResponseEditor;
-                      return { ...n, tabs: [...n.tabs.slice(0, idx), updatedTab, ...n.tabs.slice(idx + 1)] };
-                    }
-                  }
-                  return n;
-                });
-              });
-            }}
-          />
-        </div>
-      );
-    }
+      // Response Editor tab
+      if (tab.type === 'responseEditor') {
+        // ✅ Stabilizza key, act, ddt, onToolbarUpdate per evitare re-mount
+        const editorKey = useMemo(() => {
+          const instanceKey = tab.act?.instanceId || tab.act?.id || tab.id;
+          const key = `response-editor-${instanceKey}`;
+          console.log('[DEBUG_MEMO] editorKey calculated', {
+            instanceKey,
+            key,
+            tabId: tab.id,
+            actInstanceId: tab.act?.instanceId,
+            actId: tab.act?.id
+          });
+          return key;
+        }, [tab.act?.instanceId, tab.act?.id, tab.id]);
 
-    // Non-Interactive Editor tab
-    if (tab.type === 'nonInteractive') {
-      return (
-        <div style={{ width: '100%', height: '100%', backgroundColor: '#0b1220' }}>
-          <NonInteractiveResponseEditor
-            title={tab.title}
-            value={tab.value}
-            instanceId={tab.instanceId}
-            onChange={(next) => {
-              // Update tab data in place
-              setDockTree(prev => mapNode(prev, n => {
+        const stableAct = useMemo(() => {
+          if (!tab.act) return undefined;
+          return {
+            id: tab.act.id,
+            type: tab.act.type,
+            label: tab.act.label,
+            instanceId: tab.act.instanceId
+          };
+        }, [tab.act?.id, tab.act?.type, tab.act?.label, tab.act?.instanceId]);
+
+        const stableDDT = useMemo(() => {
+          const startStepTasksCount = (tab as any).ddt?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
+          console.log('[STABLE_DDT] Memoizing DDT', {
+            tabId: tab.id,
+            mainDataLength: (tab as any).ddt?.mainData?.length,
+            startStepTasksCount
+          });
+          return tab.ddt;
+        }, [tab.ddt, tab.id]);
+
+        const stableOnToolbarUpdate = useCallback(
+          (toolbar: ToolbarButton[], color: string) => {
+            setDockTree(prev =>
+              mapNode(prev, n => {
                 if (n.kind === 'tabset') {
                   const idx = n.tabs.findIndex(t => t.id === tab.id);
-                  if (idx !== -1) {
-                    const updated = [...n.tabs];
-                    updated[idx] = { ...tab, value: next };
-                    return { ...n, tabs: updated };
+                  if (idx !== -1 && n.tabs[idx].type === 'responseEditor') {
+                    const updatedTab = {
+                      ...n.tabs[idx],
+                      toolbarButtons: toolbar,
+                      headerColor: color
+                    } as DockTabResponseEditor;
+                    return {
+                      ...n,
+                      tabs: [
+                        ...n.tabs.slice(0, idx),
+                        updatedTab,
+                        ...n.tabs.slice(idx + 1)
+                      ]
+                    };
                   }
                 }
                 return n;
-              }));
-            }}
-            onClose={async () => {
-              const t0 = performance.now();
-              try {
-                const svc = await import('../services/ProjectDataService');
-                const dataSvc: any = (svc as any).ProjectDataService;
-                const pid = pdUpdate.getCurrentProjectId() || undefined;
-                if (pid && tab.instanceId) {
-                  const text = tab.value?.template || '';
-                  void dataSvc.updateInstance(pid, tab.instanceId, { message: { text } })
-                    .then(() => {
-                      try {
-                        console.log('[NI][close][PUT ok]', { instanceId: tab.instanceId, text });
-                        taskRepository.updateTask(tab.instanceId, { text }, pid);
-                      } catch { }
-                    })
-                    .catch((e: any) => { try { console.warn('[NI][close][PUT fail]', e); } catch { } });
-                  try { document.dispatchEvent(new CustomEvent('rowMessage:update', { detail: { instanceId: tab.instanceId, text } })); } catch { }
-                }
-              } catch (e) { try { console.warn('[NI][close] background persist setup failed', e); } catch { } }
-              setDockTree(prev => closeTab(prev, tab.id));
-              const t1 = performance.now();
-              try { console.log('[NI][close] panel closed in', Math.round(t1 - t0), 'ms'); } catch { }
-            }}
-            accentColor={tab.accentColor}
-          />
-        </div>
-      );
-    }
+              })
+            );
+          },
+          [tab.id, setDockTree]
+        );
 
-    // Condition Editor tab
-    if (tab.type === 'conditionEditor') {
-      return (
-        <div style={{ width: '100%', height: '100%', backgroundColor: '#1e1e1e' }}>
-          <ConditionEditor
-            open={true}
-            onClose={() => {
-              setDockTree(prev => closeTab(prev, tab.id));
-              // Restore previous viewport position
-              setTimeout(() => {
+        console.log('[DEBUG_MEMO] Rendering ResponseEditor', {
+          editorKey,
+          tabId: tab.id,
+          stableDDTMainDataLength: stableDDT?.mainData?.length,
+          stableActInstanceId: stableAct?.instanceId
+        });
+
+        return (
+          <div style={{ width: '100%', height: '100%', backgroundColor: '#0b1220' }}>
+            <ResponseEditor
+              key={editorKey}
+              ddt={stableDDT}
+              act={stableAct}
+              tabId={tab.id}
+              setDockTree={setDockTree}
+              hideHeader={true}
+              onToolbarUpdate={stableOnToolbarUpdate}
+              onClose={() => {
+                // ✅ Salvataggio gestito da tab.onClose (chiamato da DockManager)
+                // Qui chiudiamo solo il tab
+                setDockTree(prev => closeTab(prev, tab.id));
+              }}
+            />
+          </div>
+        );
+      }
+
+      // Non-Interactive Editor tab
+      if (tab.type === 'nonInteractive') {
+        return (
+          <div style={{ width: '100%', height: '100%', backgroundColor: '#0b1220' }}>
+            <NonInteractiveResponseEditor
+              title={tab.title}
+              value={tab.value}
+              instanceId={tab.instanceId}
+              onChange={(next) => {
+                // Update tab data in place
+                setDockTree(prev => mapNode(prev, n => {
+                  if (n.kind === 'tabset') {
+                    const idx = n.tabs.findIndex(t => t.id === tab.id);
+                    if (idx !== -1) {
+                      const updated = [...n.tabs];
+                      updated[idx] = { ...tab, value: next };
+                      return { ...n, tabs: updated };
+                    }
+                  }
+                  return n;
+                }));
+              }}
+              onClose={async () => {
+                const t0 = performance.now();
                 try {
-                  document.dispatchEvent(new CustomEvent('flowchart:restoreViewport', { bubbles: true }));
-                } catch (err) {
-                  console.warn('[ConditionEditor] Failed to emit restore viewport event', err);
-                }
-              }, 100);
-            }}
-            variables={tab.variables}
-            initialScript={tab.script}
-            variablesTree={tab.variablesTree}
-            label={tab.label}
-            dockWithinParent={false}
-            onRename={(next) => {
-              // Update tab title and label
-              setDockTree(prev => mapNode(prev, n => {
-                if (n.kind === 'tabset') {
-                  const idx = n.tabs.findIndex(t => t.id === tab.id);
-                  if (idx !== -1) {
-                    const updated = [...n.tabs];
-                    updated[idx] = { ...tab, title: next, label: next };
-                    return { ...n, tabs: updated };
+                  const svc = await import('../services/ProjectDataService');
+                  const dataSvc: any = (svc as any).ProjectDataService;
+                  const pid = pdUpdate.getCurrentProjectId() || undefined;
+                  if (pid && tab.instanceId) {
+                    const text = tab.value?.template || '';
+                    void dataSvc.updateInstance(pid, tab.instanceId, { message: { text } })
+                      .then(() => {
+                        try {
+                          console.log('[NI][close][PUT ok]', { instanceId: tab.instanceId, text });
+                          taskRepository.updateTask(tab.instanceId, { text }, pid);
+                        } catch { }
+                      })
+                      .catch((e: any) => { try { console.warn('[NI][close][PUT fail]', e); } catch { } });
+                    try { document.dispatchEvent(new CustomEvent('rowMessage:update', { detail: { instanceId: tab.instanceId, text } })); } catch { }
                   }
-                }
-                return n;
-              }));
-              try { (async () => { (await import('../ui/events')).emitConditionEditorRename(next); })(); } catch { }
-            }}
-            onSave={(script) => {
-              // Update tab script
-              setDockTree(prev => mapNode(prev, n => {
-                if (n.kind === 'tabset') {
-                  const idx = n.tabs.findIndex(t => t.id === tab.id);
-                  if (idx !== -1) {
-                    const updated = [...n.tabs];
-                    updated[idx] = { ...tab, script };
-                    return { ...n, tabs: updated };
-                  }
-                }
-                return n;
-              }));
-              try { (async () => { (await import('../ui/events')).emitConditionEditorSave(script); })(); } catch { }
-            }}
-          />
-        </div>
-      );
-    }
+                } catch (e) { try { console.warn('[NI][close] background persist setup failed', e); } catch { } }
+                setDockTree(prev => closeTab(prev, tab.id));
+                const t1 = performance.now();
+                try { console.log('[NI][close] panel closed in', Math.round(t1 - t0), 'ms'); } catch { }
+              }}
+              accentColor={tab.accentColor}
+            />
+          </div>
+        );
+      }
 
-    // Act Editor tab (BackendCall, etc.)
-    if (tab.type === 'actEditor') {
-      const actEditorTab = tab as DockTabActEditor;
-      return (
-        <div style={{ width: '100%', height: '100%', backgroundColor: '#0b1220' }}>
-          <ResizableActEditorHost
-            act={tab.act ? {
-              id: tab.act.id,
-              type: tab.act.type,
-              label: tab.act.label,
-              instanceId: tab.act.instanceId
-            } : { id: '', type: 'Message', label: '' }}
-            onClose={() => {
-              setDockTree(prev => closeTab(prev, tab.id));
-            }}
-            onToolbarUpdate={(toolbar, color) => {
-              // Update tab with toolbar and color
-              setDockTree(prev => {
-                return mapNode(prev, n => {
+      // Condition Editor tab
+      if (tab.type === 'conditionEditor') {
+        return (
+          <div style={{ width: '100%', height: '100%', backgroundColor: '#1e1e1e' }}>
+            <ConditionEditor
+              open={true}
+              onClose={() => {
+                setDockTree(prev => closeTab(prev, tab.id));
+                // Restore previous viewport position
+                setTimeout(() => {
+                  try {
+                    document.dispatchEvent(new CustomEvent('flowchart:restoreViewport', { bubbles: true }));
+                  } catch (err) {
+                    console.warn('[ConditionEditor] Failed to emit restore viewport event', err);
+                  }
+                }, 100);
+              }}
+              variables={tab.variables}
+              initialScript={tab.script}
+              variablesTree={tab.variablesTree}
+              label={tab.label}
+              dockWithinParent={false}
+              onRename={(next) => {
+                // Update tab title and label
+                setDockTree(prev => mapNode(prev, n => {
                   if (n.kind === 'tabset') {
                     const idx = n.tabs.findIndex(t => t.id === tab.id);
-                    if (idx !== -1 && n.tabs[idx].type === 'actEditor') {
-                      const updatedTab = { ...n.tabs[idx], toolbarButtons: toolbar, headerColor: color } as DockTabActEditor;
-                      return { ...n, tabs: [...n.tabs.slice(0, idx), updatedTab, ...n.tabs.slice(idx + 1)] };
+                    if (idx !== -1) {
+                      const updated = [...n.tabs];
+                      updated[idx] = { ...tab, title: next, label: next };
+                      return { ...n, tabs: updated };
                     }
                   }
                   return n;
+                }));
+                try { (async () => { (await import('../ui/events')).emitConditionEditorRename(next); })(); } catch { }
+              }}
+              onSave={(script) => {
+                // Update tab script
+                setDockTree(prev => mapNode(prev, n => {
+                  if (n.kind === 'tabset') {
+                    const idx = n.tabs.findIndex(t => t.id === tab.id);
+                    if (idx !== -1) {
+                      const updated = [...n.tabs];
+                      updated[idx] = { ...tab, script };
+                      return { ...n, tabs: updated };
+                    }
+                  }
+                  return n;
+                }));
+                try { (async () => { (await import('../ui/events')).emitConditionEditorSave(script); })(); } catch { }
+              }}
+            />
+          </div>
+        );
+      }
+
+      // Act Editor tab (BackendCall, etc.)
+      if (tab.type === 'actEditor') {
+        const actEditorTab = tab as DockTabActEditor;
+        return (
+          <div style={{ width: '100%', height: '100%', backgroundColor: '#0b1220' }}>
+            <ResizableActEditorHost
+              act={tab.act ? {
+                id: tab.act.id,
+                type: tab.act.type,
+                label: tab.act.label,
+                instanceId: tab.act.instanceId
+              } : { id: '', type: 'Message', label: '' }}
+              onClose={() => {
+                setDockTree(prev => closeTab(prev, tab.id));
+              }}
+              onToolbarUpdate={(toolbar, color) => {
+                // Update tab with toolbar and color
+                setDockTree(prev => {
+                  return mapNode(prev, n => {
+                    if (n.kind === 'tabset') {
+                      const idx = n.tabs.findIndex(t => t.id === tab.id);
+                      if (idx !== -1 && n.tabs[idx].type === 'actEditor') {
+                        const updatedTab = { ...n.tabs[idx], toolbarButtons: toolbar, headerColor: color } as DockTabActEditor;
+                        return { ...n, tabs: [...n.tabs.slice(0, idx), updatedTab, ...n.tabs.slice(idx + 1)] };
+                      }
+                    }
+                    return n;
+                  });
                 });
-              });
-            }}
-            hideHeader={true}
-          />
-        </div>
-      );
+              }}
+              hideHeader={true}
+            />
+          </div>
+        );
+      }
+
+      return <div>Unknown tab type</div>;
+    },
+    // ✅ Comparatore personalizzato: ignora toolbarButtons e headerColor per responseEditor
+    (prev, next) => {
+      // 🔴 LOG CHIRURGICO CRITICO: Comparatore
+      console.log('[DEBUG_MEMO] UnifiedTabContent compare', {
+        prevId: prev.tab.id,
+        nextId: next.tab.id,
+        prevToolbar: prev.tab.toolbarButtons,
+        nextToolbar: next.tab.toolbarButtons,
+        prevHeader: prev.tab.headerColor,
+        nextHeader: next.tab.headerColor,
+        prevDDT: prev.tab.ddt,
+        nextDDT: next.tab.ddt,
+        sameTabObject: prev.tab === next.tab
+      });
+
+      const prevTab = prev.tab;
+      const nextTab = next.tab;
+
+      // 🔴 LOG CHIRURGICO 1: Comparatore (dettagli)
+      console.log('[DEBUG_MEMO] Comparatore chiamato', {
+        prevId: prevTab.id,
+        nextId: nextTab.id,
+        prevType: prevTab.type,
+        nextType: nextTab.type,
+        prevDDTRef: prevTab.ddt,
+        nextDDTRef: nextTab.ddt,
+        ddtRefChanged: prevTab.ddt !== nextTab.ddt,
+        prevActId: prevTab.act?.id,
+        nextActId: nextTab.act?.id,
+        prevInstanceId: prevTab.act?.instanceId,
+        nextInstanceId: nextTab.act?.instanceId,
+        prevDDTMainDataLength: prevTab.ddt?.mainData?.length,
+        nextDDTMainDataLength: nextTab.ddt?.mainData?.length,
+        prevDDTMainDataFirstLabel: prevTab.ddt?.mainData?.[0]?.label,
+        nextDDTMainDataFirstLabel: nextTab.ddt?.mainData?.[0]?.label
+      });
+
+      // Se cambia id o type, re-render sempre
+      if (prevTab.id !== nextTab.id || prevTab.type !== nextTab.type) {
+        console.log('[DEBUG_MEMO] DECISIONE: re-render (id/type changed)');
+        return false; // Re-render
+      }
+
+      // ✅ Per responseEditor: dockTree è la fonte di verità - se ddt cambia, re-render
+      if (prevTab.type === 'responseEditor' && nextTab.type === 'responseEditor') {
+        // ✅ Se ddt cambia reference, re-render SEMPRE (dockTree è stato aggiornato)
+        if (prevTab.ddt !== nextTab.ddt) {
+          const prevStartTasksCount = prevTab.ddt?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
+          const nextStartTasksCount = nextTab.ddt?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
+          console.log('[DEBUG_MEMO] DECISIONE: re-render (ddt changed from dockTree)', {
+            prevStartTasksCount,
+            nextStartTasksCount,
+            ddtRefChanged: true
+          });
+          return false; // Re-render (ddt cambiato dal dockTree)
+        }
+
+        // Se cambia act (id o instanceId), re-render
+        if (
+          prevTab.act?.id !== nextTab.act?.id ||
+          prevTab.act?.instanceId !== nextTab.act?.instanceId
+        ) {
+          console.log('[DEBUG_MEMO] DECISIONE: re-render (act changed)');
+          return false; // Re-render
+        }
+
+        // ✅ Ignora toolbarButtons e headerColor - non causano re-render
+        console.log('[DEBUG_MEMO] DECISIONE: SKIP re-render (only toolbar/color changed or no significant change)');
+        return true; // NO re-render
+      }
+
+      // Per altri tipi di tab, usa il comportamento di default (re-render se qualsiasi prop cambia)
+      return false; // Re-render
     }
+  );
 
-    return <div>Unknown tab type</div>;
-  };
-
-  // Memoize renderTabContent to prevent unnecessary re-renders
+  // ✅ Memoize renderTabContent - senza dipendere da setDockTree
   const renderTabContent = React.useCallback((tab: DockTab) => {
+    // 🔴 LOG CHIRURGICO 2: renderTabContent
+    console.log('[DEBUG_RENDER_TAB_CONTENT]', {
+      tabId: tab.id,
+      tabType: tab.type,
+      renderTabContentCalled: true
+    });
     return <UnifiedTabContent tab={tab} />;
-  }, [currentPid, setDockTree]);
+  }, [currentPid]); // ✅ Rimossa dipendenza da setDockTree
   // Safe access: avoid calling context hook if provider not mounted (e.g., during hot reload glitches)
   let refreshData: () => Promise<void> = async () => { };
   try {
@@ -410,9 +557,9 @@ export const AppContent: React.FC<AppContentProps> = ({
             let task = taskRepository.getTask(instanceId);
             if (!task) {
               const action = d.type === 'DataRequest' ? 'GetData' :
-                            d.type === 'Message' ? 'SayMessage' :
-                            d.type === 'ProblemClassification' ? 'ClassifyProblem' :
-                            d.type === 'BackendCall' ? 'callBackend' : 'SayMessage';
+                d.type === 'Message' ? 'SayMessage' :
+                  d.type === 'ProblemClassification' ? 'ClassifyProblem' :
+                    d.type === 'BackendCall' ? 'callBackend' : 'SayMessage';
               task = taskRepository.createTask(action, undefined, instanceId);
             }
             // ✅ Salva DDT nel task (campi diretti, niente wrapper)
@@ -428,9 +575,9 @@ export const AppContent: React.FC<AppContentProps> = ({
             if (!task) {
               // Task doesn't exist, create it with empty DDT
               const action = d.type === 'DataRequest' ? 'GetData' :
-                            d.type === 'Message' ? 'SayMessage' :
-                            d.type === 'ProblemClassification' ? 'ClassifyProblem' :
-                            d.type === 'BackendCall' ? 'callBackend' : 'SayMessage';
+                d.type === 'Message' ? 'SayMessage' :
+                  d.type === 'ProblemClassification' ? 'ClassifyProblem' :
+                    d.type === 'BackendCall' ? 'callBackend' : 'SayMessage';
               // ✅ Crea task con DDT vuoto (campi diretti, niente wrapper)
               task = taskRepository.createTask(action, {
                 label: d.label || 'New DDT',
@@ -484,7 +631,123 @@ export const AppContent: React.FC<AppContentProps> = ({
           })(prev);
 
           if (existing) {
-            // Tab already open, just activate it
+            // Tab already open: ALWAYS update DDT if editorKind is 'ddt' and preparedDDT is available
+            // This synchronizes dockTree with taskRepository when reopening the editor
+            if (editorKind === 'ddt' && preparedDDT) {
+              // Get current DDT from existing tab for comparison
+              let currentTabDDT: any = null;
+              mapNode(prev, n => {
+                if (n.kind === 'tabset') {
+                  const tab = n.tabs.find(t => t.id === tabId);
+                  if (tab && tab.type === 'responseEditor') {
+                    currentTabDDT = (tab as any).ddt;
+                  }
+                }
+                return n;
+              });
+
+              const currentStartStepTasksCount = currentTabDDT?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
+              const newStartStepTasksCount = preparedDDT?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
+
+              console.log('[DOCK_SYNC] 🔄 Updating existing tab DDT from taskRepository', {
+                tabId,
+                currentStartStepTasksCount,
+                newStartStepTasksCount,
+                mainDataLength: preparedDDT?.mainData?.length,
+                willUpdate: currentStartStepTasksCount !== newStartStepTasksCount || JSON.stringify(currentTabDDT) !== JSON.stringify(preparedDDT)
+              });
+
+              // Update tab.ddt with preparedDDT, then activate
+              const updated = mapNode(prev, n => {
+                if (n.kind === 'tabset') {
+                  const idx = n.tabs.findIndex(t => t.id === tabId);
+                  if (idx !== -1 && n.tabs[idx].type === 'responseEditor') {
+                    const existingTab = n.tabs[idx] as DockTabResponseEditor;
+                    // ✅ Create/update onClose callback - will read tab.ddt when called (which is updated during editing)
+                    const handleTabClose = async (tab: DockTabResponseEditor) => {
+                      const key = tab.act?.instanceId || tab.act?.id;
+                      if (!key) return;
+
+                      // ✅ Read DDT from tab (which is updated by updateSelectedNode during editing)
+                      const ddtToSave = tab.ddt;
+                      const hasDDT = ddtToSave && Object.keys(ddtToSave).length > 0 && ddtToSave.mainData && ddtToSave.mainData.length > 0;
+
+                      if (hasDDT) {
+                        const startStepTasksCount = ddtToSave?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
+                        console.log('[DOCK_CLOSE] 💾 Saving DDT to taskRepository (SYNC - blocking close)', {
+                          key,
+                          startStepTasksCount,
+                          mainDataLength: ddtToSave?.mainData?.length
+                        });
+
+                        try {
+                          let task = taskRepository.getTask(key);
+                          if (!task) {
+                            const action = tab.act?.type === 'DataRequest' ? 'GetData' :
+                              tab.act?.type === 'Message' ? 'SayMessage' :
+                                tab.act?.type === 'ProblemClassification' ? 'ClassifyProblem' :
+                                  tab.act?.type === 'BackendCall' ? 'callBackend' : 'GetData';
+                            task = taskRepository.createTask(action, undefined, key);
+                          }
+
+                          const currentTemplateId = getTemplateId(task);
+
+                          if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'getdata') {
+                            await taskRepository.updateTask(key, {
+                              templateId: 'GetData',
+                              label: ddtToSave.label,
+                              mainData: ddtToSave.mainData,
+                              constraints: ddtToSave.constraints,
+                              examples: ddtToSave.examples,
+                              nlpContract: ddtToSave.nlpContract,
+                              introduction: ddtToSave.introduction
+                            }, pdUpdate?.getCurrentProjectId());
+                          } else {
+                            await taskRepository.updateTask(key, {
+                              label: ddtToSave.label,
+                              mainData: ddtToSave.mainData,
+                              constraints: ddtToSave.constraints,
+                              examples: ddtToSave.examples,
+                              nlpContract: ddtToSave.nlpContract,
+                              introduction: ddtToSave.introduction
+                            }, pdUpdate?.getCurrentProjectId());
+                          }
+
+                          console.log('[DOCK_CLOSE] ✅ Save completed - repository is now up to date', {
+                            key,
+                            startStepTasksCount
+                          });
+                        } catch (err) {
+                          console.error('[DOCK_CLOSE] ❌ Failed to save to taskRepository', err);
+                        }
+                      }
+                    };
+
+                    const updatedTab = { ...existingTab, ddt: preparedDDT, onClose: handleTabClose };
+                    console.log('[DOCK_SYNC] ✅ Tab DDT synchronized', {
+                      tabId,
+                      updatedStartStepTasksCount: updatedTab.ddt?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0
+                    });
+                    return {
+                      ...n,
+                      tabs: [
+                        ...n.tabs.slice(0, idx),
+                        updatedTab,
+                        ...n.tabs.slice(idx + 1)
+                      ]
+                    };
+                  }
+                }
+                return n;
+              });
+              return activateTab(updated, tabId);
+            }
+            // Tab already open, just activate it (for non-DDT editors or when preparedDDT is not available)
+            console.log('[DOCK_SYNC] ⚠️ Tab exists but preparedDDT not available or not DDT editor', {
+              tabId,
+              editorKind,
+              hasPreparedDDT: !!preparedDDT
+            });
             return activateTab(prev, tabId);
           }
 
@@ -526,6 +789,76 @@ export const AppContent: React.FC<AppContentProps> = ({
             });
           } else if (editorKind === 'ddt') {
             // ✅ Use prepared DDT (all async work done above)
+            const startStepTasksCount = preparedDDT?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
+            console.log('[DOCK_CREATE] 🆕 Creating new tab with DDT from taskRepository', {
+              tabId,
+              instanceId,
+              mainDataLength: preparedDDT?.mainData?.length,
+              startStepTasksCount,
+              hasPreparedDDT: !!preparedDDT
+            });
+
+            // ✅ Create onClose callback for saving before closing
+            // NOTE: DockManager will pass the tab to onClose, so we can read tab.ddt (which is updated during editing)
+            const handleTabClose = async (tab: DockTabResponseEditor) => {
+              const key = tab.act?.instanceId || tab.act?.id;
+              if (!key) return;
+
+              // ✅ Read DDT from tab (which is updated by updateSelectedNode during editing)
+              const ddtToSave = tab.ddt;
+              const hasDDT = ddtToSave && Object.keys(ddtToSave).length > 0 && ddtToSave.mainData && ddtToSave.mainData.length > 0;
+
+              if (hasDDT) {
+                const startStepTasksCount = ddtToSave?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
+                console.log('[DOCK_CLOSE] 💾 Saving DDT to taskRepository (SYNC - blocking close)', {
+                  key,
+                  startStepTasksCount,
+                  mainDataLength: ddtToSave?.mainData?.length
+                });
+
+                try {
+                  let task = taskRepository.getTask(key);
+                  if (!task) {
+                    const action = tab.act?.type === 'DataRequest' ? 'GetData' :
+                      tab.act?.type === 'Message' ? 'SayMessage' :
+                        tab.act?.type === 'ProblemClassification' ? 'ClassifyProblem' :
+                          tab.act?.type === 'BackendCall' ? 'callBackend' : 'GetData';
+                    task = taskRepository.createTask(action, undefined, key);
+                  }
+
+                  const currentTemplateId = getTemplateId(task);
+
+                  if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'getdata') {
+                    await taskRepository.updateTask(key, {
+                      templateId: 'GetData',
+                      label: ddtToSave.label,
+                      mainData: ddtToSave.mainData,
+                      constraints: ddtToSave.constraints,
+                      examples: ddtToSave.examples,
+                      nlpContract: ddtToSave.nlpContract,
+                      introduction: ddtToSave.introduction
+                    }, pdUpdate?.getCurrentProjectId());
+                  } else {
+                    await taskRepository.updateTask(key, {
+                      label: ddtToSave.label,
+                      mainData: ddtToSave.mainData,
+                      constraints: ddtToSave.constraints,
+                      examples: ddtToSave.examples,
+                      nlpContract: ddtToSave.nlpContract,
+                      introduction: ddtToSave.introduction
+                    }, pdUpdate?.getCurrentProjectId());
+                  }
+
+                  console.log('[DOCK_CLOSE] ✅ Save completed - repository is now up to date', {
+                    key,
+                    startStepTasksCount
+                  });
+                } catch (err) {
+                  console.error('[DOCK_CLOSE] ❌ Failed to save to taskRepository', err);
+                }
+              }
+            };
+
             return splitWithTab(prev, rootTabsetId, 'bottom', {
               id: tabId,
               title: d.label || d.name || 'Response Editor',
@@ -538,7 +871,8 @@ export const AppContent: React.FC<AppContentProps> = ({
                 instanceId: d.instanceId || d.id
               },
               headerColor: '#9a4f00', // Orange color from ResponseEditor header
-              toolbarButtons: [] // Will be updated via callback
+              toolbarButtons: [], // Will be updated via callback
+              onClose: handleTabClose // ✅ Callback for saving before closing
             });
           } else if (editorKind === 'backend') {
             // Open BackendCallEditor for BackendCall type
@@ -704,7 +1038,7 @@ export const AppContent: React.FC<AppContentProps> = ({
             vars[name] = ''; // Empty value, just for autocomplete
           });
         }
-      } catch {}
+      } catch { }
       return vars;
     };
 
@@ -1149,231 +1483,231 @@ export const AppContent: React.FC<AppContentProps> = ({
         <div className="flex flex-col h-screen">
           {/* Toolbar a tutta larghezza */}
           <Toolbar
-              onHome={() => setAppState('landing')}
-              isSaving={isCreatingProject}
-              currentProject={currentProject}
-              onSave={async () => {
-                try {
-                  // show spinner in toolbar while saving
-                  setIsCreatingProject(true);
-                  const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                  const pid = pdUpdate.getCurrentProjectId();
-                  if (!pid) {
-                    console.warn('[Save] No project ID available');
-                    return;
-                  }
-                  console.log('[Save] ═══════════════════════════════════════════════════════');
-                  console.log('[Save] 🚀 START SAVE PROJECT', { projectId: pid, timestamp: new Date().toISOString() });
-                  console.log('[Save] ═══════════════════════════════════════════════════════');
-
-                  // FIX: Emetti evento per salvare modifiche in corso negli editor aperti
-                  window.dispatchEvent(new CustomEvent('project:save', {
-                    detail: { projectId: pid }
-                  }));
-
-                  // ✅ OPTIMIZATION: Parallelize all independent save operations
-                  const saveStart = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-
-                  const saveResults = await Promise.allSettled([
-                    // 1. Update catalog timestamp
-                    (async () => {
-                      const tStart = performance.now();
-                      try {
-                        console.log('[Save][1-catalog] 🚀 START');
-                        await fetch('/api/projects/catalog/update-timestamp', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            projectId: pid,
-                            ownerCompany: currentProject?.ownerCompany || null,
-                            ownerClient: currentProject?.ownerClient || null
-                          })
-                        });
-                        const tEnd = performance.now();
-                        console.log('[Save][1-catalog] ✅ DONE', { ms: Math.round(tEnd - tStart) });
-                      } catch (e) {
-                        const tEnd = performance.now();
-                        console.error('[Save][1-catalog] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
-                      }
-                    })(),
-
-                    // 2. Save translations
-                    (async () => {
-                      if (!pid) return;
-                      const tStart = performance.now();
-                      try {
-                        console.log('[Save][2-translations] 🚀 START');
-                        const translationsContext = (window as any).__projectTranslationsContext;
-                        if (translationsContext?.saveAllTranslations) {
-                          await translationsContext.saveAllTranslations();
-                          const tEnd = performance.now();
-                          console.log('[Save][2-translations] ✅ DONE', { ms: Math.round(tEnd - tStart) });
-                        } else {
-                          const tEnd = performance.now();
-                          console.warn('[Save][2-translations] ⚠️ Context not available', { ms: Math.round(tEnd - tStart) });
-                        }
-                      } catch (e) {
-                        const tEnd = performance.now();
-                        console.error('[Save][2-translations] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
-                      }
-                    })(),
-
-                    // 3. Save tasks
-                    (async () => {
-                      if (!pid) return;
-                      const tStart = performance.now();
-                      try {
-                        console.log('[Save][3-tasks] 🚀 START');
-                        const { taskRepository } = await import('../services/TaskRepository');
-                        const tasksCount = taskRepository.getInternalTasksCount();
-                        console.log('[Save][3-tasks] 📊 Tasks to save', { count: tasksCount });
-                        const saved = await taskRepository.saveAllTasksToDatabase(pid);
-                        const tEnd = performance.now();
-                        if (saved) {
-                          console.log('[Save][3-tasks] ✅ DONE', { ms: Math.round(tEnd - tStart), tasksCount });
-                        } else {
-                          console.warn('[Save][3-tasks] ⚠️ FAILED', { ms: Math.round(tEnd - tStart), tasksCount });
-                        }
-                      } catch (e) {
-                        const tEnd = performance.now();
-                        console.error('[Save][3-tasks] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
-                      }
-                    })(),
-
-                    // 4. Save variable mappings
-                    (async () => {
-                      if (!pid) return;
-                      const tStart = performance.now();
-                      try {
-                        console.log('[Save][4-mappings] 🚀 START');
-                        const { flowchartVariablesService } = await import('../services/FlowchartVariablesService');
-                        const stats = flowchartVariablesService.getStats();
-                        console.log('[Save][4-mappings] 📊 Mappings to save', stats);
-                        const mappingsSaved = await flowchartVariablesService.saveToDatabase(pid);
-                        const tEnd = performance.now();
-                        if (mappingsSaved) {
-                          console.log('[Save][4-mappings] ✅ DONE', { ms: Math.round(tEnd - tStart), stats });
-                        } else {
-                          console.warn('[Save][4-mappings] ⚠️ FAILED', { ms: Math.round(tEnd - tStart), stats });
-                        }
-                      } catch (e) {
-                        const tEnd = performance.now();
-                        console.error('[Save][4-mappings] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
-                      }
-                    })(),
-
-                    // 5. Save acts and conditions
-                    (async () => {
-                      if (!pid || !projectData) return;
-                      const tStart = performance.now();
-                      try {
-                        console.log('[Save][5-acts-conditions] 🚀 START');
-                        const actsCount = projectData?.taskTemplates?.flatMap((cat: any) => cat.items || []).length || 0;
-                        const conditionsCount = projectData?.conditions?.flatMap((cat: any) => cat.items || []).length || 0;
-                        console.log('[Save][5-acts-conditions] 📊 Items to save', { actsCount, conditionsCount });
-
-                        const tActs = performance.now();
-                        await (ProjectDataService as any).saveProjectActsToDb?.(pid, projectData);
-                        const tActsEnd = performance.now();
-                        console.log('[Save][5-acts] ✅ DONE', { ms: Math.round(tActsEnd - tActs), actsCount });
-
-                        const tCond = performance.now();
-                        await (ProjectDataService as any).saveProjectConditionsToDb?.(pid, projectData);
-                        const tCondEnd = performance.now();
-                        console.log('[Save][5-conditions] ✅ DONE', { ms: Math.round(tCondEnd - tCond), conditionsCount });
-
-                        // Reload fresh project data so act.problem is populated from DB
-                        const tReload = performance.now();
-                        let tReloadEnd = tReload;
-                        try {
-                          const fresh = await (ProjectDataService as any).loadProjectData?.();
-                          tReloadEnd = performance.now();
-                          console.log('[Save][5-reload] ✅ DONE', { ms: Math.round(tReloadEnd - tReload) });
-                          if (fresh) {
-                            try { pdUpdate.setData && (pdUpdate as any).setData(fresh); } catch { }
-                          }
-                        } catch (e) {
-                          tReloadEnd = performance.now();
-                          console.error('[Save][5-reload] ❌ ERROR', { ms: Math.round(tReloadEnd - tReload), error: e });
-                        }
-
-                        const tEnd = performance.now();
-                        console.log('[Save][5-acts-conditions] ✅ DONE', {
-                          totalMs: Math.round(tEnd - tStart),
-                          actsMs: Math.round(tActsEnd - tActs),
-                          conditionsMs: Math.round(tCondEnd - tCond),
-                          reloadMs: Math.round(tReloadEnd - tReload)
-                        });
-                      } catch (e) {
-                        const tEnd = performance.now();
-                        console.error('[Save][5-acts-conditions] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
-                      }
-                    })(),
-
-                    // 6. Save flow
-                    (async () => {
-                      if (!pid) return;
-                      const tStart = performance.now();
-                      try {
-                        console.log('[Save][6-flow] 🚀 START');
-                        const svc = await import('../services/FlowPersistService');
-                        const tFlush = performance.now();
-                        await svc.flushFlowPersist();
-                        const tFlushEnd = performance.now();
-                        console.log('[Save][6-flow][flush] ✅ DONE', { ms: Math.round(tFlushEnd - tFlush) });
-
-                        // Final PUT immediate (explicit Save)
-                        const tPut = performance.now();
-                        const putRes = await fetch(`/api/projects/${encodeURIComponent(pid)}/flow?flowId=main`, {
-                          method: 'PUT',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify(((window as any).__flows && (window as any).__flows.main) ? { nodes: (window as any).__flows.main.nodes, edges: (window as any).__flows.main.edges } : { nodes: (window as any).__flowNodes || [], edges: (window as any).__flowEdges || [] })
-                        });
-                        const tPutEnd = performance.now();
-                        if (!putRes.ok) {
-                          console.error('[Save][6-flow][put] ❌ ERROR', { ms: Math.round(tPutEnd - tPut), status: putRes.status, statusText: putRes.statusText });
-                        } else {
-                          console.log('[Save][6-flow][put] ✅ DONE', { ms: Math.round(tPutEnd - tPut) });
-                        }
-
-                        const tEnd = performance.now();
-                        console.log('[Save][6-flow] ✅ DONE', {
-                          totalMs: Math.round(tEnd - tStart),
-                          flushMs: Math.round(tFlushEnd - tFlush),
-                          putMs: Math.round(tPutEnd - tPut)
-                        });
-                      } catch (e) {
-                        const tEnd = performance.now();
-                        console.error('[Save][6-flow] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
-                      }
-                    })()
-                  ]);
-
-                  const saveEnd = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                  const totalMs = Math.round(saveEnd - saveStart);
-
-                  console.log('[Save] ═══════════════════════════════════════════════════════');
-                  console.log('[Save] ✅ ALL OPERATIONS COMPLETED', {
-                    totalMs,
-                    timestamp: new Date().toISOString(),
-                    results: saveResults.map((r, i) => ({
-                      operation: ['catalog', 'translations', 'tasks', 'mappings', 'acts-conditions', 'flow'][i],
-                      status: r.status,
-                      error: r.status === 'rejected' ? String(r.reason) : undefined
-                    }))
-                  });
-                  console.log('[Save] ═══════════════════════════════════════════════════════');
-                  const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-                  // Removed noisy meta POST; language is already stored during bootstrap
-                } catch (e) {
-                  console.error('[SaveProject] commit error', e);
-                } finally {
-                  setIsCreatingProject(false);
+            onHome={() => setAppState('landing')}
+            isSaving={isCreatingProject}
+            currentProject={currentProject}
+            onSave={async () => {
+              try {
+                // show spinner in toolbar while saving
+                setIsCreatingProject(true);
+                const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                const pid = pdUpdate.getCurrentProjectId();
+                if (!pid) {
+                  console.warn('[Save] No project ID available');
+                  return;
                 }
-              }}
-              onRun={() => setShowGlobalDebugger(s => !s)}
-              onSettings={() => setShowBackendBuilder(true)}
-            />
+                console.log('[Save] ═══════════════════════════════════════════════════════');
+                console.log('[Save] 🚀 START SAVE PROJECT', { projectId: pid, timestamp: new Date().toISOString() });
+                console.log('[Save] ═══════════════════════════════════════════════════════');
+
+                // FIX: Emetti evento per salvare modifiche in corso negli editor aperti
+                window.dispatchEvent(new CustomEvent('project:save', {
+                  detail: { projectId: pid }
+                }));
+
+                // ✅ OPTIMIZATION: Parallelize all independent save operations
+                const saveStart = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+
+                const saveResults = await Promise.allSettled([
+                  // 1. Update catalog timestamp
+                  (async () => {
+                    const tStart = performance.now();
+                    try {
+                      console.log('[Save][1-catalog] 🚀 START');
+                      await fetch('/api/projects/catalog/update-timestamp', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          projectId: pid,
+                          ownerCompany: currentProject?.ownerCompany || null,
+                          ownerClient: currentProject?.ownerClient || null
+                        })
+                      });
+                      const tEnd = performance.now();
+                      console.log('[Save][1-catalog] ✅ DONE', { ms: Math.round(tEnd - tStart) });
+                    } catch (e) {
+                      const tEnd = performance.now();
+                      console.error('[Save][1-catalog] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
+                    }
+                  })(),
+
+                  // 2. Save translations
+                  (async () => {
+                    if (!pid) return;
+                    const tStart = performance.now();
+                    try {
+                      console.log('[Save][2-translations] 🚀 START');
+                      const translationsContext = (window as any).__projectTranslationsContext;
+                      if (translationsContext?.saveAllTranslations) {
+                        await translationsContext.saveAllTranslations();
+                        const tEnd = performance.now();
+                        console.log('[Save][2-translations] ✅ DONE', { ms: Math.round(tEnd - tStart) });
+                      } else {
+                        const tEnd = performance.now();
+                        console.warn('[Save][2-translations] ⚠️ Context not available', { ms: Math.round(tEnd - tStart) });
+                      }
+                    } catch (e) {
+                      const tEnd = performance.now();
+                      console.error('[Save][2-translations] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
+                    }
+                  })(),
+
+                  // 3. Save tasks
+                  (async () => {
+                    if (!pid) return;
+                    const tStart = performance.now();
+                    try {
+                      console.log('[Save][3-tasks] 🚀 START');
+                      const { taskRepository } = await import('../services/TaskRepository');
+                      const tasksCount = taskRepository.getInternalTasksCount();
+                      console.log('[Save][3-tasks] 📊 Tasks to save', { count: tasksCount });
+                      const saved = await taskRepository.saveAllTasksToDatabase(pid);
+                      const tEnd = performance.now();
+                      if (saved) {
+                        console.log('[Save][3-tasks] ✅ DONE', { ms: Math.round(tEnd - tStart), tasksCount });
+                      } else {
+                        console.warn('[Save][3-tasks] ⚠️ FAILED', { ms: Math.round(tEnd - tStart), tasksCount });
+                      }
+                    } catch (e) {
+                      const tEnd = performance.now();
+                      console.error('[Save][3-tasks] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
+                    }
+                  })(),
+
+                  // 4. Save variable mappings
+                  (async () => {
+                    if (!pid) return;
+                    const tStart = performance.now();
+                    try {
+                      console.log('[Save][4-mappings] 🚀 START');
+                      const { flowchartVariablesService } = await import('../services/FlowchartVariablesService');
+                      const stats = flowchartVariablesService.getStats();
+                      console.log('[Save][4-mappings] 📊 Mappings to save', stats);
+                      const mappingsSaved = await flowchartVariablesService.saveToDatabase(pid);
+                      const tEnd = performance.now();
+                      if (mappingsSaved) {
+                        console.log('[Save][4-mappings] ✅ DONE', { ms: Math.round(tEnd - tStart), stats });
+                      } else {
+                        console.warn('[Save][4-mappings] ⚠️ FAILED', { ms: Math.round(tEnd - tStart), stats });
+                      }
+                    } catch (e) {
+                      const tEnd = performance.now();
+                      console.error('[Save][4-mappings] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
+                    }
+                  })(),
+
+                  // 5. Save acts and conditions
+                  (async () => {
+                    if (!pid || !projectData) return;
+                    const tStart = performance.now();
+                    try {
+                      console.log('[Save][5-acts-conditions] 🚀 START');
+                      const actsCount = projectData?.taskTemplates?.flatMap((cat: any) => cat.items || []).length || 0;
+                      const conditionsCount = projectData?.conditions?.flatMap((cat: any) => cat.items || []).length || 0;
+                      console.log('[Save][5-acts-conditions] 📊 Items to save', { actsCount, conditionsCount });
+
+                      const tActs = performance.now();
+                      await (ProjectDataService as any).saveProjectActsToDb?.(pid, projectData);
+                      const tActsEnd = performance.now();
+                      console.log('[Save][5-acts] ✅ DONE', { ms: Math.round(tActsEnd - tActs), actsCount });
+
+                      const tCond = performance.now();
+                      await (ProjectDataService as any).saveProjectConditionsToDb?.(pid, projectData);
+                      const tCondEnd = performance.now();
+                      console.log('[Save][5-conditions] ✅ DONE', { ms: Math.round(tCondEnd - tCond), conditionsCount });
+
+                      // Reload fresh project data so act.problem is populated from DB
+                      const tReload = performance.now();
+                      let tReloadEnd = tReload;
+                      try {
+                        const fresh = await (ProjectDataService as any).loadProjectData?.();
+                        tReloadEnd = performance.now();
+                        console.log('[Save][5-reload] ✅ DONE', { ms: Math.round(tReloadEnd - tReload) });
+                        if (fresh) {
+                          try { pdUpdate.setData && (pdUpdate as any).setData(fresh); } catch { }
+                        }
+                      } catch (e) {
+                        tReloadEnd = performance.now();
+                        console.error('[Save][5-reload] ❌ ERROR', { ms: Math.round(tReloadEnd - tReload), error: e });
+                      }
+
+                      const tEnd = performance.now();
+                      console.log('[Save][5-acts-conditions] ✅ DONE', {
+                        totalMs: Math.round(tEnd - tStart),
+                        actsMs: Math.round(tActsEnd - tActs),
+                        conditionsMs: Math.round(tCondEnd - tCond),
+                        reloadMs: Math.round(tReloadEnd - tReload)
+                      });
+                    } catch (e) {
+                      const tEnd = performance.now();
+                      console.error('[Save][5-acts-conditions] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
+                    }
+                  })(),
+
+                  // 6. Save flow
+                  (async () => {
+                    if (!pid) return;
+                    const tStart = performance.now();
+                    try {
+                      console.log('[Save][6-flow] 🚀 START');
+                      const svc = await import('../services/FlowPersistService');
+                      const tFlush = performance.now();
+                      await svc.flushFlowPersist();
+                      const tFlushEnd = performance.now();
+                      console.log('[Save][6-flow][flush] ✅ DONE', { ms: Math.round(tFlushEnd - tFlush) });
+
+                      // Final PUT immediate (explicit Save)
+                      const tPut = performance.now();
+                      const putRes = await fetch(`/api/projects/${encodeURIComponent(pid)}/flow?flowId=main`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(((window as any).__flows && (window as any).__flows.main) ? { nodes: (window as any).__flows.main.nodes, edges: (window as any).__flows.main.edges } : { nodes: (window as any).__flowNodes || [], edges: (window as any).__flowEdges || [] })
+                      });
+                      const tPutEnd = performance.now();
+                      if (!putRes.ok) {
+                        console.error('[Save][6-flow][put] ❌ ERROR', { ms: Math.round(tPutEnd - tPut), status: putRes.status, statusText: putRes.statusText });
+                      } else {
+                        console.log('[Save][6-flow][put] ✅ DONE', { ms: Math.round(tPutEnd - tPut) });
+                      }
+
+                      const tEnd = performance.now();
+                      console.log('[Save][6-flow] ✅ DONE', {
+                        totalMs: Math.round(tEnd - tStart),
+                        flushMs: Math.round(tFlushEnd - tFlush),
+                        putMs: Math.round(tPutEnd - tPut)
+                      });
+                    } catch (e) {
+                      const tEnd = performance.now();
+                      console.error('[Save][6-flow] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
+                    }
+                  })()
+                ]);
+
+                const saveEnd = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                const totalMs = Math.round(saveEnd - saveStart);
+
+                console.log('[Save] ═══════════════════════════════════════════════════════');
+                console.log('[Save] ✅ ALL OPERATIONS COMPLETED', {
+                  totalMs,
+                  timestamp: new Date().toISOString(),
+                  results: saveResults.map((r, i) => ({
+                    operation: ['catalog', 'translations', 'tasks', 'mappings', 'acts-conditions', 'flow'][i],
+                    status: r.status,
+                    error: r.status === 'rejected' ? String(r.reason) : undefined
+                  }))
+                });
+                console.log('[Save] ═══════════════════════════════════════════════════════');
+                const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                // Removed noisy meta POST; language is already stored during bootstrap
+              } catch (e) {
+                console.error('[SaveProject] commit error', e);
+              } finally {
+                setIsCreatingProject(false);
+              }
+            }}
+            onRun={() => setShowGlobalDebugger(s => !s)}
+            onSettings={() => setShowBackendBuilder(true)}
+          />
 
           {/* Area principale: Library Label + Sidebar + Canvas */}
           <div className="flex flex-1 relative overflow-hidden">
@@ -1407,95 +1741,95 @@ export const AppContent: React.FC<AppContentProps> = ({
                 flexDirection: showGlobalDebugger ? 'row' : 'column',
                 position: 'relative'
               }}>
-              {showBackendBuilder ? (
-                <div style={{ flex: 1, minHeight: 0 }}>
-                  <BackendBuilderStudio onClose={() => setShowBackendBuilder(false)} />
-                </div>
-              ) : (
-                <>
-                  {/* Canvas - occupa tutto lo spazio disponibile */}
-                  <div style={{ position: 'relative', flex: 1, minHeight: 0, minWidth: 0 }}>
-                    {currentPid ? (
-                      <FlowWorkspaceProvider>
-                        <DockManager
-                          root={dockTree}
-                          setRoot={setDockTree}
-                          renderTabContent={renderTabContent}
+                {showBackendBuilder ? (
+                  <div style={{ flex: 1, minHeight: 0 }}>
+                    <BackendBuilderStudio onClose={() => setShowBackendBuilder(false)} />
+                  </div>
+                ) : (
+                  <>
+                    {/* Canvas - occupa tutto lo spazio disponibile */}
+                    <div style={{ position: 'relative', flex: 1, minHeight: 0, minWidth: 0 }}>
+                      {currentPid ? (
+                        <FlowWorkspaceProvider>
+                          <DockManager
+                            root={dockTree}
+                            setRoot={setDockTree}
+                            renderTabContent={renderTabContent}
+                          />
+                        </FlowWorkspaceProvider>
+                      ) : (
+                        <FlowEditor
+                          nodes={(window as any).__flowNodes || []}
+                          setNodes={(updater: any) => {
+                            try {
+                              const current = (window as any).__flowNodes || [];
+                              const updated = typeof updater === 'function' ? updater(current) : updater;
+                              (window as any).__flowNodes = updated;
+                            } catch { }
+                          }}
+                          edges={(window as any).__flowEdges || []}
+                          setEdges={(updater: any) => {
+                            try {
+                              const current = (window as any).__flowEdges || [];
+                              const updated = typeof updater === 'function' ? updater(current) : updater;
+                              (window as any).__flowEdges = updated;
+                            } catch { }
+                          }}
+                          currentProject={currentProject}
+                          setCurrentProject={setCurrentProject}
+                          onPlayNode={onPlayNode}
+                          testPanelOpen={testPanelOpen}
+                          setTestPanelOpen={setTestPanelOpen}
+                          testNodeId={testNodeId}
+                          setTestNodeId={setTestNodeId}
                         />
-                      </FlowWorkspaceProvider>
-                    ) : (
-                      <FlowEditor
-                        nodes={(window as any).__flowNodes || []}
-                        setNodes={(updater: any) => {
-                          try {
-                            const current = (window as any).__flowNodes || [];
-                            const updated = typeof updater === 'function' ? updater(current) : updater;
-                            (window as any).__flowNodes = updated;
-                          } catch { }
-                        }}
-                        edges={(window as any).__flowEdges || []}
-                        setEdges={(updater: any) => {
-                          try {
-                            const current = (window as any).__flowEdges || [];
-                            const updated = typeof updater === 'function' ? updater(current) : updater;
-                            (window as any).__flowEdges = updated;
-                          } catch { }
-                        }}
-                        currentProject={currentProject}
-                        setCurrentProject={setCurrentProject}
-                        onPlayNode={onPlayNode}
-                        testPanelOpen={testPanelOpen}
-                        setTestPanelOpen={setTestPanelOpen}
-                        testNodeId={testNodeId}
-                        setTestNodeId={setTestNodeId}
-                      />
-                    )}
-                  </div>
-                </>
-              )}
-              {showGlobalDebugger && (
-                <>
-                  {/* Resizer verticale */}
-                  <div
-                    onMouseDown={handleResizeStart}
-                    style={{
-                      width: '8px',
-                      cursor: 'col-resize',
-                      backgroundColor: isResizing ? '#3b82f6' : 'transparent',
-                      zIndex: 10,
-                      userSelect: 'none',
-                      flexShrink: 0
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isResizing) {
-                        (e.currentTarget as HTMLElement).style.backgroundColor = '#e5e7eb';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isResizing) {
-                        (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
-                      }
-                    }}
-                  />
-
-                  {/* Pannello di debug */}
-                  <div
-                    style={{
-                      width: `${debuggerWidth}px`,
-                      position: 'relative',
-                      overflowY: 'auto',
-                      overflowX: 'hidden',
-                      borderLeft: '1px solid #e5e7eb',
-                      flexShrink: 0
-                    }}
-                  >
-                    <DDEBubbleChat
-                      mode="flow"
-                      // nodes and edges are read directly from window.__flowNodes in flow mode
+                      )}
+                    </div>
+                  </>
+                )}
+                {showGlobalDebugger && (
+                  <>
+                    {/* Resizer verticale */}
+                    <div
+                      onMouseDown={handleResizeStart}
+                      style={{
+                        width: '8px',
+                        cursor: 'col-resize',
+                        backgroundColor: isResizing ? '#3b82f6' : 'transparent',
+                        zIndex: 10,
+                        userSelect: 'none',
+                        flexShrink: 0
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isResizing) {
+                          (e.currentTarget as HTMLElement).style.backgroundColor = '#e5e7eb';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isResizing) {
+                          (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+                        }
+                      }}
                     />
-                  </div>
-                </>
-              )}
+
+                    {/* Pannello di debug */}
+                    <div
+                      style={{
+                        width: `${debuggerWidth}px`,
+                        position: 'relative',
+                        overflowY: 'auto',
+                        overflowX: 'hidden',
+                        borderLeft: '1px solid #e5e7eb',
+                        flexShrink: 0
+                      }}
+                    >
+                      <DDEBubbleChat
+                        mode="flow"
+                      // nodes and edges are read directly from window.__flowNodes in flow mode
+                      />
+                    </div>
+                  </>
+                )}
               </div>
 
             </div>
