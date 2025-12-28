@@ -1,6 +1,6 @@
 import React from 'react';
 import { info } from '../../../utils/logger';
-import { TaskReference } from './types';
+import type { Task } from '../../../types/taskTypes';
 import { normalizeTaskFromViewer } from './utils/normalize';
 
 export type Position = 'before' | 'after';
@@ -247,9 +247,14 @@ export default function useTaskCommands(
       }
 
       // ✅ IDEMPOTENCY CHECK: Check both in the node AND in pending inserts
-      // This prevents duplicate inserts when dropTaskFromViewer is called twice with the same taskId
-      const existingTask = tasks.find((t: any) => t.taskId === normalized.taskId);
-      const isPending = pendingTaskIdsRef.current.has(normalized.taskId);
+      // This prevents duplicate inserts when dropTaskFromViewer is called twice with the same id
+      if (!normalized.id) {
+        console.warn('[useTaskCommands] Normalized task missing id, skipping');
+        return node;
+      }
+      const normalizedId = normalized.id;
+      const existingTask = tasks.find((t: any) => t.id === normalizedId);
+      const isPending = pendingTaskIdsRef.current.has(normalizedId);
 
       if (existingTask || isPending) {
         // Task already exists or is being inserted, this is a duplicate drop - ignore it
@@ -257,12 +262,21 @@ export default function useTaskCommands(
       }
 
       // ✅ Mark this taskId as pending before inserting
-      pendingTaskIdsRef.current.add(normalized.taskId);
+      if (!normalized.id) {
+        console.warn('[useTaskCommands] Normalized task missing id, cannot track pending');
+        return node;
+      }
+      const normalizedId = normalized.id;
+      pendingTaskIdsRef.current.add(normalizedId);
 
       // ✅ For sayMessage tasks, ALWAYS generate a new GUID (don't reuse from catalog)
-      if (normalized.templateId === 'sayMessage') {
+      // In unified model, text is stored directly in task.text, but we also support params for backward compatibility
+      if (normalized.templateId === null && !normalized.text) {
+        // If it's a standalone sayMessage task without text, generate one
         const textKey = generateGuid();
-        normalized.parameters = [{ parameterId: 'text', value: textKey }];
+        // Store in params for backward compatibility
+        if (!normalized.params) normalized.params = {};
+        normalized.params.text = textKey;
       }
 
       let insertIdx = to.taskIdx;
@@ -289,9 +303,11 @@ export default function useTaskCommands(
 
       try { info('RESPONSE_EDITOR', 'dropTaskFromViewer', { to, position, insertIdx }); } catch { }
 
-      // ✅ Clear pending taskId after a short delay (after React has processed the update)
+      // ✅ Clear pending id after a short delay (after React has processed the update)
       setTimeout(() => {
-        pendingTaskIdsRef.current.delete(normalized.taskId);
+        if (normalized.id) {
+          pendingTaskIdsRef.current.delete(normalized.id);
+        }
       }, 500);
 
       return next;
@@ -333,10 +349,16 @@ export default function useTaskCommands(
         parameters = [{ parameterId: 'text', value: textKey }];
       }
 
+      if (!task.id) {
+        console.warn('[useTaskCommands] Task missing id, generating new one');
+      }
+      const taskId = task.id || `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
       const newTask: any = {
+        id: taskId,
         templateId: templateId,
-        taskId: task.taskId || `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        parameters: parameters,
+        // Store parameters in params for backward compatibility
+        params: parameters ? { text: parameters.find((p: any) => p.parameterId === 'text')?.value } : {},
         text: task.text,
         color: task.color,
         label: task.label

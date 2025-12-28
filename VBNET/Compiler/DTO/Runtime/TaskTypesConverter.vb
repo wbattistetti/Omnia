@@ -7,7 +7,7 @@ Imports Newtonsoft.Json.Linq
 Imports DDTEngine
 
 ''' <summary>
-''' JsonConverter per convertire stringhe (es. "SayMessage", "GetData") in TaskTypes enum
+''' JsonConverter per convertire stringhe (es. "SayMessage", "DataRequest") in TaskTypes enum
 ''' Gestisce la deserializzazione da JSON frontend (string) a enum VB.NET
 ''' </summary>
 Public Class TaskTypesConverter
@@ -42,7 +42,7 @@ Public Class TaskTypesConverter
     End Sub
 
     ''' <summary>
-    ''' Converte stringa semantica (es. "SayMessage", "GetData") in TaskTypes enum
+    ''' Converte stringa semantica (es. "SayMessage", "DataRequest") in TaskTypes enum
     ''' </summary>
     Private Function ConvertStringToTaskType(stringValue As String) As TaskTypes
         If String.IsNullOrEmpty(stringValue) Then
@@ -59,7 +59,7 @@ Public Class TaskTypesConverter
             Case "transfer"
                 Return TaskTypes.Transfer
             Case "getdata", "datarequest", "askquestion"
-                Return TaskTypes.GetData
+                Return TaskTypes.DataRequest  ' ✅ Rinominato da GetData (backward compatibility: 'getdata' → DataRequest)
             Case "backendcall", "callbackend", "readfrombackend", "writetobackend"
                 Return TaskTypes.BackendCall
             Case "classifyproblem", "problemclassification"

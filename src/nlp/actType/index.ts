@@ -2,19 +2,7 @@ export * from './types';
 export { getRuleSet, initializeRegistry } from './registry';
 export { classify as inferActType } from './classify';
 
-import { HeuristicType, InternalType } from './types';
-
-export function heuristicToInternal(t: HeuristicType): InternalType {
-  switch (t) {
-    case 'AI_AGENT': return 'AIAgent';
-    case 'MESSAGE': return 'Message';
-    case 'REQUEST_DATA': return 'DataRequest';
-    case 'PROBLEM_SPEC': return 'ProblemClassification';
-    case 'SUMMARY': return 'Summarizer';
-    case 'BACKEND_CALL': return 'BackendCall';
-    case 'NEGOTIATION': return 'Negotiation';
-    case 'UNDEFINED': return 'Message'; // UNDEFINED viene mappato a Message ma con icona speciale
-  }
-}
+// ❌ ELIMINATO: heuristicToInternal - non serve più, usiamo TaskType direttamente
+// ✅ L'euristica ora ritorna TaskType enum direttamente
 
 

@@ -1,14 +1,14 @@
-' TransferAction.vb
-' Action per trasferire all'operatore
+' TransferTask.vb
+' Task per trasferire all'operatore
 
 Option Strict On
 Option Explicit On
 
     ''' <summary>
-    ''' Action per trasferire la conversazione a un operatore umano
+    ''' Task per trasferire la conversazione a un operatore umano
     ''' </summary>
-    Public Class TransferAction
-        Inherits ActionBase
+    Public Class TransferTask
+        Inherits TaskBase
 
         ''' <summary>
         ''' ID dell'operatore (opzionale)
@@ -34,12 +34,6 @@ Option Explicit On
             Priority = ""
         End Sub
 
-        Public Overrides ReadOnly Property ActionId As String
-            Get
-                Return "Transfer"  ' ✅ Simplified: Direct string, no enum conversion
-            End Get
-        End Property
-
         Public Overrides ReadOnly Property Label As String
             Get
                 Return "Transfer to Operator"
@@ -47,7 +41,7 @@ Option Explicit On
         End Property
 
         ''' <summary>
-        ''' Esegue l'azione: trasferisce all'operatore
+        ''' Esegue il task: trasferisce all'operatore
         ''' </summary>
         Public Overrides Sub Execute(dataNode As DDTNode, ddtInstance As DDTInstance, onMessage As Action(Of String))
             ' TODO: Implementare logica per trasferire all'operatore
@@ -65,5 +59,4 @@ Option Explicit On
             ' TODO: Implementare logica di trasferimento effettivo (API call, ecc.)
         End Sub
     End Class
-
 

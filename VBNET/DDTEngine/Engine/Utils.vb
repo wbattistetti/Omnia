@@ -24,8 +24,8 @@ Module Utils
     End Function
 
     <Extension>
-    Public Function HasExitCondition(actions As IEnumerable(Of IAction)) As Boolean
-        Return actions.Any(Function(a) TypeOf (a) Is CloseSessionAction OrElse TypeOf (a) Is TransferAction)
+    Public Function HasExitCondition(tasks As IEnumerable(Of ITask)) As Boolean
+        Return tasks.Any(Function(a) TypeOf (a) Is CloseSessionTask OrElse TypeOf (a) Is TransferTask)
     End Function
 
     <Extension>

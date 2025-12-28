@@ -1,14 +1,14 @@
-' MessageAction.vb
-' Action per inviare un messaggio
+' MessageTask.vb
+' Task per inviare un messaggio
 
 Option Strict On
 Option Explicit On
 
 ''' <summary>
-''' Action per inviare un messaggio all'utente
+''' Task per inviare un messaggio all'utente
 ''' </summary>
-Public Class MessageAction
-    Inherits ActionBase
+Public Class MessageTask
+    Inherits TaskBase
 
     ''' <summary>
     ''' Testo del messaggio da inviare
@@ -36,12 +36,6 @@ Public Class MessageAction
         Me.TextKey = ""
     End Sub
 
-    Public Overrides ReadOnly Property ActionId As String
-        Get
-            Return "SayMessage"  ' ✅ Simplified: Direct string, no enum conversion
-        End Get
-    End Property
-
     Public Overrides ReadOnly Property Label As String
         Get
             Return "Message"
@@ -49,7 +43,7 @@ Public Class MessageAction
     End Property
 
     ''' <summary>
-    ''' Esegue l'azione: processa i placeholder e mostra il messaggio
+    ''' Esegue il task: processa i placeholder e mostra il messaggio
     ''' </summary>
     Public Overrides Sub Execute(dataNode As DDTNode, ddtInstance As DDTInstance, onMessage As Action(Of String))
         If onMessage Is Nothing Then Return
@@ -60,3 +54,4 @@ Public Class MessageAction
         End If
     End Sub
 End Class
+

@@ -16,16 +16,16 @@ Option Explicit On
         Public Property EscalationId As String
 
     ''' <summary>
-    ''' Lista di azioni da eseguire per questa escalation
+    ''' Lista di tasks da eseguire per questa escalation
     ''' </summary>
-    Public Property Actions As List(Of IAction) 'da trasformarte in ienumerable perchè a runtime non cambia la collezione 
+    Public Property Tasks As List(Of ITask) 'da trasformarte in ienumerable perchè a runtime non cambia la collezione
 
     ''' <summary>
     ''' Costruttore
     ''' </summary>
     Public Sub New()
             EscalationId = ""
-            Actions = New List(Of IAction)()
+            Tasks = New List(Of ITask)()
         End Sub
     End Class
 

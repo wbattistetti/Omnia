@@ -6,8 +6,8 @@
  * Extracts all GUIDs (translation keys) from a DDT structure.
  * GUIDs are found in:
  * - node.messages[stepKey].textKey
- * - task.taskId (GUID of the task instance)
- * - task.parameters (where parameterId === 'text').value
+ * - task.id (GUID of the task instance)
+ * - task.params.text (translation key)
  *
  * @param ddt - The DDT object to extract GUIDs from
  * @returns Array of unique GUID strings found in the DDT
@@ -61,8 +61,8 @@ export function extractGUIDsFromDDT(ddt: any): string[] {
             }
             taskRefs.forEach((task: any, taskIdx: number) => {
               debugInfo.tasksProcessed++;
-              // ✅ taskId is the GUID of the task instance
-              const taskId = task.taskId;
+              // ✅ id is the GUID of the task instance
+              const taskId = task.id;
               if (taskId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(taskId)) {
                 guids.add(taskId);
                 debugInfo.fromTaskIds.push({ nodePath: currentNodePath, stepKey, escIdx, taskIdx, guid: taskId, templateId: task.templateId });

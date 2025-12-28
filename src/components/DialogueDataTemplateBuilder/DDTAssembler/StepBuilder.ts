@@ -1,42 +1,63 @@
 // Moved from orchestrator/StepBuilder.ts for modular DDTAssembler structure.
-import { StepGroup, Escalation, TaskReference, KNOWN_ACTIONS } from './types';
+import { StepGroup, Escalation, KNOWN_ACTIONS } from './types';
+import type { Task } from '../../../types/taskTypes';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
- * Builds a TaskReference object and returns it along with the translation key/value to add.
- * ✅ RENAMED: buildActionInstance → buildTaskReference (for clarity)
+ * Builds a complete Task object for escalation.
+ *
+ * Model:
+ * - Each escalation has its own dedicated Task (not shared)
+ * - Task is complete (not lightweight reference)
+ * - Steps are always copied (disconnected from template)
+ * - Contracts are inherited from template (unless overridden)
  */
+export function buildTask(
+  stepType: string,
+  message: string,
+  ddtId: string,
+  translations: Record<string, string>
+): Task {
+  const templateId = stepType === 'start' ? 'askQuestion' : 'sayMessage';
+  const taskId = uuidv4(); // Unique Task ID
+  const parameterId = KNOWN_ACTIONS[templateId]?.defaultParameter || 'text';
+  const valueKey = `runtime.${ddtId}.${stepType}.${templateId}.${taskId}.text`;
+
+  // Save translation key-value pair
+  translations[valueKey] = message;
+
+  // Return complete Task object
+  return {
+    id: taskId,
+    templateId: null, // Standalone task (not derived from template)
+    text: message, // Direct text value
+    // Store parameters for backward compatibility with old system
+    params: {
+      [parameterId]: valueKey
+    },
+    createdAt: new Date(),
+    updatedAt: new Date()
+  };
+}
+
+// Legacy function names for backward compatibility
+// @deprecated Use buildTask instead
 export function buildTaskReference(
   stepType: string,
   message: string,
   ddtId: string,
   translations: Record<string, string>
-): TaskReference {
-  const templateId = stepType === 'start' ? 'askQuestion' : 'sayMessage';  // ✅ Renamed from actionId
-  const guid = uuidv4(); // Use full GUID for uniqueness
-  const taskId = `${templateId}_${guid}`;  // ✅ Renamed from actionInstanceId
-  const parameterId = KNOWN_ACTIONS[templateId].defaultParameter;
-  const valueKey = `runtime.${ddtId}.${stepType}.${templateId}.${guid}.text`;
-  // Salva la coppia chiave-testo direttamente
-  translations[valueKey] = message;
-  return {
-    templateId,  // ✅ Renamed from actionId
-    taskId,      // ✅ Renamed from actionInstanceId
-    parameters: [
-      { parameterId, value: valueKey }
-    ]
-  };
+): Task {
+  return buildTask(stepType, message, ddtId, translations);
 }
 
-// Legacy function name for backward compatibility
-// @deprecated Use buildTaskReference instead
 export function buildActionInstance(
   stepType: string,
   message: string,
   ddtId: string,
   translations: Record<string, string>
-) {
-  return buildTaskReference(stepType, message, ddtId, translations);
+): Task {
+  return buildTask(stepType, message, ddtId, translations);
 }
 
 /**
@@ -50,11 +71,11 @@ export function buildEscalation(
 ): Escalation {
   const escalationId = uuidv4();
   const tasks = messages.map(msg =>
-    buildTaskReference(stepType, msg, ddtId, translations)
+    buildTask(stepType, msg, ddtId, translations)
   );
   return {
     escalationId,
-    tasks,  // ✅ Renamed from actions
+    tasks,
     actions: tasks  // ✅ Legacy alias for backward compatibility
   };
 }

@@ -13,8 +13,8 @@ Imports System.Text.Json.Serialization
         <JsonPropertyName("escalationId")>
         Public Property EscalationId As String
 
-        <JsonPropertyName("actions")>
-        Public Property Actions As List(Of Object) ' Per compatibilità, deserializza come Object
+        <JsonPropertyName("tasks")>
+        Public Property Tasks As List(Of Object) ' Tasks dal frontend
     End Class
 
 

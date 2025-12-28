@@ -1,20 +1,14 @@
-' CloseSessionAction.vb
-' Action per chiudere la conversazione
+' CloseSessionTask.vb
+' Task per chiudere la conversazione
 
 Option Strict On
 Option Explicit On
 
     ''' <summary>
-    ''' Action per chiudere la conversazione/sessione
+    ''' Task per chiudere la conversazione/sessione
     ''' </summary>
-    Public Class CloseSessionAction
-        Inherits ActionBase
-
-        Public Overrides ReadOnly Property ActionId As String
-            Get
-                Return "CloseSession"  ' ✅ Simplified: Direct string, no enum conversion
-            End Get
-        End Property
+    Public Class CloseSessionTask
+        Inherits TaskBase
 
         Public Overrides ReadOnly Property Label As String
             Get
@@ -23,7 +17,7 @@ Option Explicit On
         End Property
 
         ''' <summary>
-        ''' Esegue l'azione: chiude la sessione
+        ''' Esegue il task: chiude la sessione
         ''' </summary>
         Public Overrides Sub Execute(dataNode As DDTNode, ddtInstance As DDTInstance, onMessage As Action(Of String))
             ' TODO: Implementare logica per chiudere sessione
@@ -34,5 +28,4 @@ Option Explicit On
             End If
         End Sub
     End Class
-
 

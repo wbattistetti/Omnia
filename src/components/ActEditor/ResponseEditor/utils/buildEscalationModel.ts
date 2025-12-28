@@ -51,8 +51,8 @@ export function buildEscalationModel(
     const result = escs.map((esc, escIdx) => {
       const taskRefs = esc.tasks || [];
       const mappedTasks = taskRefs.map((task: any, taskIdx: number) => {
-        const p = Array.isArray(task.parameters) ? task.parameters.find((x: any) => x?.parameterId === 'text') : undefined;
-        const textKey = p?.value || task.taskId;
+        // ✅ UNIFIED MODEL: Use task.id and task.params
+        const textKey = task.params?.text || task.id;
         const hasDirectText = typeof task.text === 'string' && task.text.length > 0;
         const translationValue = typeof textKey === 'string' ? translations[textKey] : undefined;
         const text = hasDirectText
@@ -65,7 +65,7 @@ export function buildEscalationModel(
             escIdx,
             taskIdx,
             templateId: task.templateId,
-            taskId: task.taskId,
+            taskId: task.id,
             textKey,
             hasDirectText,
             translationValue: translationValue ? translationValue.substring(0, 50) : undefined,
@@ -86,14 +86,14 @@ export function buildEscalationModel(
               stepKey,
               nodeLabel: node?.label,
               textKey,
-              taskId: task.taskId,
+              taskId: task.id,
               templateId: task.templateId,
               hasTaskText: hasDirectText
             });
           }
         }
 
-        return { templateId: task.templateId, taskId: task.taskId, text, textKey, color: task.color, label: task.label };
+        return { templateId: task.templateId, taskId: task.id, text, textKey, color: task.color, label: task.label };
       });
 
       if (shouldDebug()) {
@@ -137,7 +137,7 @@ export function buildEscalationModel(
           // ✅ Ensure templateId is never undefined
           const finalTemplateId = task.templateId || 'sayMessage';
 
-          return { templateId: finalTemplateId, taskId: task.taskId, text, textKey, color: task.color, label: task.label };
+          return { templateId: finalTemplateId, taskId: task.id, text, textKey, color: task.color, label: task.label };
         })
       }));
     }

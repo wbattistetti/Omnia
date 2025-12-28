@@ -24,6 +24,12 @@ Public Class Task
     Public Property TemplateId As String
 
     ''' <summary>
+    ''' Task text (for SayMessage tasks) - direct property from frontend
+    ''' </summary>
+    <JsonProperty("text")>
+    Public Property Text As String
+
+    ''' <summary>
     ''' Task value (parameters, DDT reference, etc.)
     ''' </summary>
     <JsonProperty("value")>

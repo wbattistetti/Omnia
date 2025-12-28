@@ -18,10 +18,10 @@ Imports System.Text.Json.Serialization
         Public Property Text As String
 
         ''' <summary>
-        ''' Azioni (per compatibilità futura se il JSON le include)
+        ''' Tasks (per compatibilità futura se il JSON le include)
         ''' </summary>
-        <JsonPropertyName("actions")>
-        Public Property Actions As List(Of Object)
+        <JsonPropertyName("tasks")>
+        Public Property Tasks As List(Of Object)
     End Class
 
 

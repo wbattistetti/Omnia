@@ -19,13 +19,21 @@ Public Class FlowCompiler
         Select Case taskType
             Case TaskTypes.SayMessage
                 Dim sayMessageTask As New CompiledTaskSayMessage()
-                ' Estrai text da value
-                If task.Value IsNot Nothing AndAlso task.Value.ContainsKey("text") Then
-                    sayMessageTask.Text = If(task.Value("text")?.ToString(), "")
+                ' ✅ Estrai text da task.Text (nuovo modello) o da task.Value("text") (vecchio modello)
+                Dim textValue As String = ""
+
+                ' Prova prima task.Text (proprietà diretta, nuovo modello)
+                If Not String.IsNullOrEmpty(task.Text) Then
+                    textValue = task.Text
+                ElseIf task.Value IsNot Nothing AndAlso task.Value.ContainsKey("text") Then
+                    ' Fallback: vecchio modello con text in value
+                    textValue = If(task.Value("text")?.ToString(), "")
                 End If
+
+                sayMessageTask.Text = If(String.IsNullOrEmpty(textValue), "", textValue)
                 compiledTask = sayMessageTask
 
-            Case TaskTypes.GetData
+            Case TaskTypes.DataRequest
                 Dim getDataTask As New CompiledTaskGetData()
                 ' DDT verrà caricato dal TaskExecutor usando LoadDDTInstanceFromValue
                 ' Per ora lasciamo Nothing, il TaskExecutor lo caricherà da task.Value("ddt")
@@ -91,7 +99,7 @@ Public Class FlowCompiler
     End Function
 
     ''' <summary>
-    ''' Converte templateId string (es. "SayMessage", "GetData") in TaskTypes enum
+    ''' Converte templateId string (es. "SayMessage", "DataRequest") in TaskTypes enum
     ''' </summary>
     Private Function ConvertTemplateIdToEnum(templateId As String) As TaskTypes
         If String.IsNullOrEmpty(templateId) Then
@@ -108,7 +116,7 @@ Public Class FlowCompiler
             Case "transfer"
                 Return TaskTypes.Transfer
             Case "getdata", "datarequest", "askquestion"
-                Return TaskTypes.GetData
+                Return TaskTypes.DataRequest  ' ✅ Rinominato da GetData (backward compatibility: 'getdata' → DataRequest)
             Case "backendcall", "callbackend", "readfrombackend", "writetobackend"
                 Return TaskTypes.BackendCall
             Case "classifyproblem", "problemclassification"
@@ -259,7 +267,7 @@ Public Class FlowCompiler
                 ' Aggiungi anche alla lista piatta per compatibilità
                 allTasks.Add(compiledTask)
 
-                ' Se task è GetData, manteniamo il DDT nel value (struttura gerarchica)
+                ' Se task è DataRequest, manteniamo il DDT nel value (struttura gerarchica)
                 ' NON espandiamo il DDT - il DDT Engine gestirà tutto
             Next
 

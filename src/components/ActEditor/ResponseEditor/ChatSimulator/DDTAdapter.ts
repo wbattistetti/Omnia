@@ -91,7 +91,7 @@ export function resolveTaskText(task: any, dict: Record<string, string>): string
 
   console.log('[DEBUG][RESOLVE_TASK] 🔍 Resolving from dict', {
     templateId: task.templateId,
-    taskId: task.taskId,
+    taskId: task.id,
     hasParameters: !!task.parameters,
     parametersCount: task.parameters?.length || 0,
     parameters: task.parameters?.map((p: any) => ({
@@ -146,18 +146,18 @@ export function resolveTaskText(task: any, dict: Record<string, string>): string
       console.warn('[DEBUG][RESOLVE_TASK] ❌ Translation NOT found', {
         key,
         isGuid,
-        taskId: task.taskId,
+        taskId: task.id,
         dictKeysCount: Object.keys(dict).length,
         keyInDict: key in dict,
         allGuidsInDict: Object.keys(dict).filter(k => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)),
         sampleDictKeys: Object.keys(dict).slice(0, 10),
-        taskIdInDict: task.taskId ? (task.taskId in dict) : false
+        taskIdInDict: task.id ? (task.id in dict) : false
       });
     }
   } else {
     console.warn('[DEBUG][RESOLVE_TASK] ❌ No key found in parameters', {
       templateId: task.templateId,
-      taskId: task.taskId,
+      taskId: task.id,
       hasParameters: !!task.parameters,
       parameters: task.parameters
     });

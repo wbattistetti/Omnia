@@ -17,8 +17,9 @@ import { v4 as uuidv4 } from 'uuid';
 export async function buildDDTFromTemplate(instance: Task | null): Promise<any | null> {
   if (!instance) return null;
 
-  // If no templateId, this is a template or standalone instance (has full structure)
-  if (!instance.templateId) {
+  // If no templateId or templateId is "UNDEFINED", this is a standalone instance (has full structure)
+  // "UNDEFINED" is a placeholder for tasks that haven't been typed yet, not a real template
+  if (!instance.templateId || instance.templateId === 'UNDEFINED') {
     return {
       label: instance.label,
       mainData: instance.mainData || [],
@@ -199,15 +200,15 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
     ...escalation,
     escalationId: escalation.escalationId ? `e_${uuidv4()}` : undefined,
     tasks: (escalation.tasks || escalation.actions || []).map((task: any) => {
-      const oldGuid = task.taskId || task.actionInstanceId;
+      const oldGuid = task.id;
       const newGuid = uuidv4();
       if (oldGuid) {
         guidMapping.set(oldGuid, newGuid);
       }
       return {
         ...task,
-        taskId: newGuid,  // ✅ New ID for task instance
-        // Keep templateId, parameters, etc. from original
+        id: newGuid,  // ✅ New ID for task instance
+        // Keep templateId, params, etc. from original
       };
     }),
     actions: (escalation.actions || []).map((action: any) => {
@@ -496,7 +497,7 @@ function extractTaskGuidsFromSteps(steps: any, output: string[]): void {
           for (const esc of escalations) {
             const tasks = esc.tasks || esc.actions || [];
             for (const task of tasks) {
-              const guid = task.taskId || task.actionInstanceId;
+              const guid = task.id;
               if (guid && typeof guid === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
                 output.push(guid);
               }
@@ -512,7 +513,7 @@ function extractTaskGuidsFromSteps(steps: any, output: string[]): void {
         for (const esc of step.escalations) {
           const tasks = esc.tasks || esc.actions || [];
           for (const task of tasks) {
-            const guid = task.taskId || task.actionInstanceId;
+            const guid = task.id;
             if (guid && typeof guid === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
               output.push(guid);
             }

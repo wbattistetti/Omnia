@@ -67,8 +67,8 @@ Public Class ActionTypeConverter
                 Return CInt(TaskTypes.CloseSession)
             Case "transfer", "transferaction"
                 Return CInt(TaskTypes.Transfer)
-            Case "getdata", "getdataaction"
-                Return CInt(TaskTypes.GetData)
+            Case "getdata", "getdataaction", "datarequest", "datarequestaction"
+                Return CInt(TaskTypes.DataRequest)  ' ✅ Rinominato da GetData (backward compatibility)
             Case "backendcall", "callbackend", "backendcallaction"
                 Return CInt(TaskTypes.BackendCall)
             Case "classifyproblem", "classifyproblemaction"

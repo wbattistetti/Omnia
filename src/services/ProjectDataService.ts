@@ -258,7 +258,7 @@ export const ProjectDataService = {
   },
 
   // --- Instances API helpers ---
-  async createInstance(projectId: string, payload: { baseActId: string; mode: 'Message' | 'DataRequest' | 'DataConfirmation'; message?: any; overrides?: any }): Promise<any> {
+  async createInstance(projectId: string, payload: { mode: 'Message' | 'DataRequest' | 'DataConfirmation'; message?: any; overrides?: any }): Promise<any> {
     const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -283,7 +283,7 @@ export const ProjectDataService = {
     return res.json();
   },
 
-  async bulkCreateInstances(projectId: string, items: Array<{ baseActId: string; mode: 'Message' | 'DataRequest' | 'DataConfirmation'; message?: any; overrides?: any }>): Promise<any> {
+  async bulkCreateInstances(projectId: string, items: Array<{ mode: 'Message' | 'DataRequest' | 'DataConfirmation'; message?: any; overrides?: any }>): Promise<any> {
     if (!items || items.length === 0) return { ok: true, inserted: 0 };
     const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances/bulk`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items })

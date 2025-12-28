@@ -106,7 +106,7 @@ export function getTaskIdFromRow(row: NodeRowData): string {
 
   // Create Task for row without taskId
   // ✅ Use UNDEFINED instead of Message as default - will be updated by Euristica 1 when user types
-  const newTask = taskRepository.createTask('UNDEFINED', row.text ? { text: row.text } : undefined, row.id);
+  const newTask = taskRepository.createTask(TaskType.UNDEFINED, null, row.text ? { text: row.text } : undefined, row.id);
   (row as any).taskId = newTask.id;
   return newTask.id;
 }
@@ -134,24 +134,25 @@ export function getInstanceIdFromRow(row: NodeRowData): string {
 }
 
 /**
- * Map actId (from Intellisense) to templateId (for Task)
- * actId: "DataRequest" -> templateId: "GetData"
- * actId: "Message" -> templateId: "SayMessage"
+ * ✅ DEPRECATED: Map actId to templateId (legacy - non più usato)
+ * Ora usiamo type: TaskType enum invece di templateId semantico
+ * @deprecated Usa actIdToTaskType() da taskTypes.ts
  */
 function mapActIdToTemplateId(actId: string): string {
+  // Legacy mapping - mantenuto per backward compatibility temporanea
   const mapping: Record<string, string> = {
-    'DataRequest': 'GetData',
+    'DataRequest': 'DataRequest',
     'Message': 'SayMessage',
-    'UNDEFINED': 'UNDEFINED', // ✅ Support for UNDEFINED type
+    'UNDEFINED': 'UNDEFINED',
     'ProblemClassification': 'ClassifyProblem',
     'BackendCall': 'callBackend'
   };
-  return mapping[actId] || actId; // Fallback to actId if no mapping
+  return mapping[actId] || actId;
 }
 
 /**
  * Deriva il tipo di task dal templateId
- * @param templateId - Template ID (es. 'SayMessage', 'GetData', 'UNDEFINED')
+ * @param templateId - Template ID (es. 'SayMessage', 'DataRequest', 'UNDEFINED')
  * @returns Tipo di task (es. 'Message', 'DataRequest', 'UNDEFINED')
  */
 export function deriveTaskTypeFromTemplateId(templateId: string | undefined | null): string | undefined {
@@ -174,7 +175,7 @@ export function deriveTaskTypeFromTemplateId(templateId: string | undefined | nu
  * This is the new way to create rows - creates both Task and InstanceRepository entry
  *
  * @param rowId - Topological ID for the row (if not provided, generates one)
- * @param action - Action ID (can be actId like "DataRequest" or templateId like "GetData") - defaults to 'Message'
+ * @param action - actId dall'UI/Intellisense (es. "Message", "DataRequest", "ProblemClassification") - defaults to 'Message'
  * @param initialText - Initial text for the row
  * @param projectId - Optional project ID
  * @returns NodeRowData with taskId set
@@ -187,8 +188,8 @@ export function createRowWithTask(
 ): NodeRowData {
   const finalRowId = rowId || generateId();
 
-  // Map actId to templateId if needed
-  const templateId = mapActIdToTemplateId(action);
+  // ✅ Convert actId (UI string) to TaskType enum
+  const taskType = actIdToTaskType(action);
 
   // Check if Task already exists (shouldn't happen, but safety check)
   if (taskRepository.hasTask(finalRowId)) {
@@ -204,10 +205,11 @@ export function createRowWithTask(
     }
   }
 
-  // ✅ Create Task in TaskRepository with correct templateId (campi diretti, niente wrapper)
+  // ✅ Create Task in TaskRepository with type (enum) and templateId (null = standalone)
   const task = taskRepository.createTask(
-    templateId,
-    templateId === 'SayMessage' ? { text: initialText } : undefined,  // Campi diretti
+    taskType,                    // ✅ type: TaskType enum (obbligatorio)
+    null,                        // ✅ templateId: null (standalone, non deriva da altri Task)
+    taskType === TaskType.SayMessage ? { text: initialText } : undefined,  // Campi diretti
     finalRowId, // Use same ID for Task and Instance (1:1 relationship)
     projectId
   );
@@ -232,7 +234,7 @@ export function createRowWithTask(
  * ✅ MIGRATION: Uses templateId instead of action
  *
  * @param row - NodeRowData row to update
- * @param newAction - New action ID (can be actId like "DataRequest" or templateId like "GetData")
+ * @param newAction - New action ID (can be actId like "DataRequest" or templateId like "DataRequest")
  * @param projectId - Optional project ID
  */
 export function updateRowTaskAction(

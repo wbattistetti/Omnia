@@ -6,6 +6,7 @@ import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
 import { flowchartVariablesService } from '../../../services/FlowchartVariablesService';
 import { getTemplateId } from '../../../utils/taskHelpers';
 import { buildDDTFromTemplate } from '../../../utils/ddtMergeUtils';
+import { TaskType, actIdToTaskType } from '../../../types/taskTypes';
 
 export default function DDTHostAdapter({ act, onClose }: EditorProps) {
   // Ottieni projectId corrente per salvare le istanze nel progetto corretto
@@ -40,9 +41,9 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
 
       if (!task) {
         const actId = act.id || '';
-        // Map actId to action (e.g., 'DataRequest' -> 'GetData')
-        const action = actId === 'DataRequest' ? 'GetData' : (actId === 'Message' ? 'SayMessage' : actId);
-        task = taskRepository.createTask(action, undefined, instanceKey);
+        // Convert actId to TaskType enum
+        const taskType = actId ? actIdToTaskType(actId) : TaskType.DataRequest;
+        task = taskRepository.createTask(taskType, null, undefined, instanceKey);
         console.log('🔧 [DDTHostAdapter] Created new task:', task.id);
       }
 
@@ -143,7 +144,8 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
 
         if (task) {
           taskRepository.updateTask(instanceKey, {
-            templateId: 'GetData',
+            type: TaskType.DataRequest,  // ✅ type: enum numerico
+            templateId: null,            // ✅ templateId: null (standalone)
             ...newDDT
           }, currentProjectId || undefined);
         }
@@ -218,13 +220,14 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
   // 3. Quando completi il wizard, salva nel Task E aggiorna lo state
   const handleComplete = React.useCallback(async (finalDDT: any) => {
     // ✅ MIGRATION: Use getTemplateId() helper
-    // ✅ FIX: Se c'è un DDT, assicurati che il templateId sia 'GetData'
+    // ✅ FIX: Se c'è un DDT, assicurati che il templateId sia 'DataRequest'
     const task = taskRepository.getTask(instanceKey);
     // ✅ Salva DDT nel Task con campi direttamente (niente wrapper value)
     const hasDDT = finalDDT && Object.keys(finalDDT).length > 0 && finalDDT.mainData && finalDDT.mainData.length > 0;
     if (hasDDT) {
       taskRepository.updateTask(instanceKey, {
-        templateId: 'GetData',
+        type: TaskType.DataRequest,  // ✅ type: enum numerico
+        templateId: null,            // ✅ templateId: null (standalone)
         ...finalDDT  // ✅ Spread: label, mainData, stepPrompts, ecc.
       }, currentProjectId || undefined);
     }

@@ -13,7 +13,7 @@ export function expandDDT(
   ddt: AssembledDDT,
   parentNodeId: string,
   getTask: (taskId: string) => any, // Function to resolve Task from taskId
-  parentRowAction?: string // Action type of parent row (GetData, ClassifyProblem, etc.)
+  parentRowAction?: string // Action type of parent row (DataRequest, ClassifyProblem, etc.)
 ): { tasks: CompiledTask[]; expansion: DDTExpansion } {
   const tasks: CompiledTask[] = [];
   const expansion: DDTExpansion = {
@@ -52,20 +52,18 @@ export function expandDDT(
 
       // Process tasks in recovery (renamed from actions)
       // ✅ MIGRATION: Support both tasks (new) and actions (legacy)
-      const taskRefs = escalation.tasks || escalation.actions || [];
+      const tasks = escalation.tasks || escalation.actions || [];
 
-      for (let taskIndex = 0; taskIndex < taskRefs.length; taskIndex++) {
-        const taskRef = taskRefs[taskIndex];
-        // ✅ MIGRATION: Support both taskId (new) and actionInstanceId (legacy)
-        const taskId = taskRef.taskId || taskRef.actionInstanceId || taskRef.templateId || taskRef.actionId || `task-${recoveryId}-${taskIndex + 1}`;
+      for (let taskIndex = 0; taskIndex < tasks.length; taskIndex++) {
+        const task = tasks[taskIndex];
 
-        // Resolve task from taskId
-        const task = getTask(taskId);
-
-        if (!task) {
-          console.warn(`[DDTExpander] Task not found for taskId: ${taskId}`);
+        // ✅ UNIFIED MODEL: task is already a complete Task object (not a reference)
+        if (!task.id) {
+          console.warn(`[DDTExpander] Task missing id at index ${taskIndex}, skipping`);
           continue;
         }
+        const taskId = task.id;
+        const fullTask = task;
 
         expansion.actionTasks.set(taskId, taskId);
 
@@ -82,22 +80,26 @@ export function expandDDT(
           };
         } else {
           // Subsequent tasks: previous task completed
-          const prevTaskRef = taskRefs[taskIndex - 1];
-          const prevTaskId = prevTaskRef.taskId || prevTaskRef.actionInstanceId || prevTaskRef.templateId || prevTaskRef.actionId || `task-${recoveryId}-${taskIndex}`;
+          const prevTask = tasks[taskIndex - 1];
+          if (!prevTask.id) {
+            console.warn(`[DDTExpander] Previous task missing id at index ${taskIndex - 1}`);
+            continue;
+          }
+          const prevTaskId = prevTask.id;
           condition = buildRecoverySequentialCondition(prevTaskId);
         }
 
-        // ✅ MIGRATION: Use getTemplateId() helper instead of direct task.action access
-        const templateId = getTemplateId(task);
+        // ✅ UNIFIED MODEL: Use getTemplateId() helper to get template type
+        const templateId = getTemplateId(fullTask);
 
         // Create compiled task
-        // Use task.id directly (GUID) - no need to generate new ID
+        // Use fullTask.id directly (GUID) - no need to generate new ID
         const compiledTask: CompiledTask = {
-          id: task.id, // Use task.id directly (GUID)
+          id: fullTask.id, // Use fullTask.id directly (GUID)
           action: templateId,  // ✅ Use templateId (CompiledTask.action is still string for now)
           // ✅ Campi diretti (niente wrapper value)
           ...Object.fromEntries(
-            Object.entries(task).filter(([key]) =>
+            Object.entries(fullTask).filter(([key]) =>
               !['id', 'templateId', 'createdAt', 'updatedAt'].includes(key)
             )
           ),

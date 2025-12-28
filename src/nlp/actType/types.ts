@@ -1,24 +1,12 @@
-export type HeuristicType =
-  | 'AI_AGENT'
-  | 'MESSAGE'
-  | 'REQUEST_DATA'
-  | 'PROBLEM_SPEC'
-  | 'SUMMARY'
-  | 'BACKEND_CALL'
-  | 'NEGOTIATION'
-  | 'UNDEFINED';
+// ✅ UNIFICATO: Usa TaskType enum invece di HeuristicType/InternalType
+import { TaskType } from '../../types/taskTypes';
 
-export type InternalType =
-  | 'AIAgent'
-  | 'Message'
-  | 'DataRequest'
-  | 'ProblemClassification'
-  | 'Summarizer'
-  | 'BackendCall'
-  | 'Negotiation';
+// ❌ ELIMINATO: HeuristicType e InternalType - ora usiamo TaskType enum
 
 export type Lang = 'IT' | 'EN' | 'PT';
 
+// ✅ RuleSet mantiene i nomi legacy per compatibilità con il database
+// I pattern nel database usano ancora 'MESSAGE', 'REQUEST_DATA', ecc.
 export type RuleSet = {
   AI_AGENT: RegExp[];
   MESSAGE: RegExp[];
@@ -32,8 +20,9 @@ export type RuleSet = {
   NEGOTIATION: RegExp[];
 };
 
+// ✅ Inference ora usa TaskType enum
 export type Inference = {
-  type: HeuristicType;
+  type: TaskType;  // ✅ Ora è TaskType enum, non HeuristicType string
   lang?: Lang;
   reason?: string;
 };

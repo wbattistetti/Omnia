@@ -84,8 +84,6 @@ export function useNodeRendering({
             type: (row as any).type,
             mode: (row as any).mode,
             isUndefined: (row as any).isUndefined, // ✅ Preserva flag isUndefined
-            actId: (row as any).actId,
-            baseActId: (row as any).baseActId,
             factoryId: (row as any).factoryId,
             instanceId: (row as any).instanceId,
             taskId: (row as any).taskId

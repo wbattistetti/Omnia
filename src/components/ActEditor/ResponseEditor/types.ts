@@ -30,16 +30,12 @@ export const ICON_KEYS = [
 
 export type IconKey = typeof ICON_KEYS[number] | string;
 
-// ✅ TaskReference: Reference to a TaskInstance in an escalation
-// Replaces: Action (old ambiguous name)
-export interface TaskReference {
-  templateId: string;  // TaskTemplate ID (e.g. "SayMessage", "GetData")
-  taskId: string;     // TaskInstance ID (GUID)
-  parameters?: Array<{ parameterId: string; value: string }>;
-  text?: string;       // Direct text override (optional)
-  color?: string;      // Color override (optional)
-  label?: string;      // Label override (optional, preserves label from dragged item)
-}
+// Import unified Task type
+import type { Task } from '../../../types/taskTypes';
+
+// Legacy type alias for backward compatibility
+// @deprecated Use Task from taskTypes.ts instead
+export type TaskReference = Task;
 
 export interface Constraint {
   id: string;
@@ -55,8 +51,17 @@ export interface Parameter {
   [key: string]: any;
 }
 
+/**
+ * Escalation: Contains tasks to execute in sequence
+ *
+ * Model:
+ * - Each escalation has its own dedicated Tasks (not shared references)
+ * - Tasks are complete Task objects (not lightweight references)
+ * - Steps are always copied (disconnected from template)
+ * - Contracts are inherited from template (unless overridden)
+ */
 export interface Escalation {
-  tasks: TaskReference[];  // ✅ Only tasks, no actions
+  tasks: Task[];  // Complete Task objects (each escalation has its own tasks)
 }
 
 export interface TranslationsContextType {

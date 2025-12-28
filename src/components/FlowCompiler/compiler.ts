@@ -12,7 +12,7 @@ import { getTemplateId } from '../../utils/taskHelpers';
 
 interface CompilerOptions {
   getTask: (taskId: string) => any; // Function to resolve Task from taskId
-  getDDT?: (taskId: string) => AssembledDDT | null; // Function to get DDT for GetData tasks
+  getDDT?: (taskId: string) => AssembledDDT | null; // Function to get DDT for DataRequest tasks
 }
 
 /**
@@ -75,7 +75,7 @@ export function compileFlow(
     // Process rows in sequence
     for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
       const row = rows[rowIndex];
-      // ✅ FIX: Use row.taskId if present, otherwise fallback to row.id
+      // ✅ UNIFIED MODEL: Use row.taskId (NodeRowData.taskId is separate field, not Task.taskId)
       const taskId = row.taskId || row.id;
 
       console.log('[Compiler] 🔍 Looking for task', {
@@ -118,7 +118,7 @@ export function compileFlow(
       } else {
         // Subsequent rows: previous row completed
         const prevRow = rows[rowIndex - 1];
-        // ✅ FIX: Use prevRow.taskId if present, otherwise fallback to prevRow.id
+        // ✅ UNIFIED MODEL: Use prevRow.taskId (NodeRowData.taskId is separate field)
         const prevTaskId = prevRow.taskId || prevRow.id;
         condition = buildSequentialCondition(prevTaskId);
       }
@@ -151,9 +151,9 @@ export function compileFlow(
       taskMap.set(compiledTask.id, compiledTask);
 
       // ✅ MIGRATION: Use templateId instead of task.action
-      // ✅ CASE-INSENSITIVE: If task is GetData, expand DDT
+      // ✅ CASE-INSENSITIVE: If task is DataRequest, expand DDT
       // ✅ Check if task has DDT (mainData indicates DDT)
-      if (templateId && templateId.toLowerCase() === 'getdata' && task.mainData && task.mainData.length > 0 && options.getDDT) {
+      if (templateId && (templateId.toLowerCase() === 'getdata' || templateId.toLowerCase() === 'datarequest') && task.mainData && task.mainData.length > 0 && options.getDDT) {
         const ddt = options.getDDT(task.id);
         if (ddt) {
           const { tasks: ddtTasks, expansion } = expandDDT(

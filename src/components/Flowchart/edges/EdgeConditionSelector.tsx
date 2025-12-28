@@ -151,7 +151,7 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
       for (const r of rows) {
         const isPC = String(r?.type || '').toLowerCase() === 'problemclassification';
         if (!isPC) continue;
-        const actId = r?.baseActId || r?.actId || r?.factoryId || r?.id;
+        const actId = r?.factoryId ?? r?.id;
         if (!actId) continue;
         const key = `problem.${pid}.${actId}`;
         let payload: any = null;

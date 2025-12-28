@@ -1,33 +1,35 @@
 // Types and constants for DDTAssembler StepBuilder
 
+import type { Task } from '../../../types/taskTypes';
+
+/**
+ * ActionParameter: Parameter for task execution (e.g., translation key for text)
+ */
 export type ActionParameter = {
   parameterId: string;
   value: string; // key in translations
 };
 
 /**
- * TaskReference: Reference to a TaskInstance in an escalation
- * Replaces: Action (old ambiguous name)
+ * Escalation: Contains tasks to execute in sequence
  *
- * A TaskReference points to a TaskInstance (via taskId) and includes
- * escalation-specific parameters that may override the Task's default values.
+ * Model:
+ * - Each escalation has its own dedicated Tasks (not shared references)
+ * - Tasks are complete Task objects (not lightweight references)
+ * - Steps are always copied (disconnected from template)
+ * - Contracts are inherited from template (unless overridden)
  */
-export type TaskReference = {
-  templateId: string;  // ✅ TaskTemplate ID (e.g. "SayMessage", "GetData") - was actionId
-  taskId: string;     // ✅ TaskInstance ID (GUID) - was actionInstanceId
-  parameters: ActionParameter[];
-};
-
-// Legacy type alias for backward compatibility during migration
-// @deprecated Use TaskReference instead
-export type Action = TaskReference;
-
 export type Escalation = {
   escalationId: string;
-  tasks: TaskReference[];  // ✅ Renamed from actions to tasks for clarity
+  tasks: Task[];  // Complete Task objects (each escalation has its own tasks)
   // Legacy alias for backward compatibility
-  actions?: TaskReference[];  // @deprecated Use tasks instead
+  actions?: Task[];  // @deprecated Use tasks instead
 };
+
+// Legacy type aliases for backward compatibility
+// @deprecated Use Task from taskTypes.ts instead
+export type TaskReference = Task;
+export type Action = Task;
 
 export type StepGroup = {
   type: 'start' | 'noMatch' | 'noInput' | 'confirmation' | 'success' | 'introduction';

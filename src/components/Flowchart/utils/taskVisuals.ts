@@ -14,7 +14,7 @@ export function resolveTaskType(row: any): ActType {
     return row.type as ActType;
   }
 
-  // 2) Deriva dal task usando TaskRepository
+  // 2) Deriva dal task usando TaskRepository (NodeRowData.taskId is separate field)
   const taskId = row?.taskId || row?.id;
   if (taskId) {
     try {
@@ -43,6 +43,7 @@ export function resolveTaskType(row: any): ActType {
  * ❌ RIMOSSO: parametro act (non esiste più il concetto di Act)
  */
 export function hasTaskDDT(row: any): boolean {
+  // NodeRowData.taskId is separate field, not Task.taskId
   const taskId = row?.taskId || row?.id;
 
   if (!taskId) {

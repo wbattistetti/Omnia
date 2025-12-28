@@ -11,7 +11,7 @@ Public Enum TaskTypes
     SayMessage
     CloseSession
     Transfer
-    GetData
+    DataRequest    ' ✅ Rinominato da GetData
     BackendCall
     ClassifyProblem
 End Enum

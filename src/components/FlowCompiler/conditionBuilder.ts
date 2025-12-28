@@ -57,9 +57,8 @@ export function buildFirstRowCondition(
     const rows = parentNode.data.rows || [];
     if (rows.length === 0) continue;
 
-    // Get last row's taskId
+    // Get last row's taskId (NodeRowData.taskId is separate field, not Task.taskId)
     const lastRow = rows[rows.length - 1];
-    // ✅ FIX: Use lastRow.taskId if present, otherwise fallback to lastRow.id
     const lastTaskId = lastRow.taskId || lastRow.id;
 
     // Build condition for this link: (Parent.Executed ∧ Link.Condition)
@@ -102,7 +101,7 @@ export function buildFirstRowCondition(
     const rows = parentNode.data.rows || [];
     if (rows.length === 0) continue;
 
-    // Get last row's taskId
+    // Get last row's taskId (NodeRowData.taskId is separate field)
     const lastRow = rows[rows.length - 1];
     const lastTaskId = lastRow.taskId || lastRow.id;
 

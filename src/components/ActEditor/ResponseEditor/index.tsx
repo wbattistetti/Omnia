@@ -6,6 +6,7 @@ import { useDDTManager } from '../../../context/DDTManagerContext';
 import { taskRepository } from '../../../services/TaskRepository';
 import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
 import { getTemplateId } from '../../../utils/taskHelpers';
+import { TaskType, actIdToTaskType } from '../../../types/taskTypes';
 import Sidebar from './Sidebar';
 import BehaviourEditor from './BehaviourEditor';
 import RightPanel, { useRightPanelWidth, RightPanelMode } from './RightPanel';
@@ -193,9 +194,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
           const currentTemplateId = getTemplateId(task);
 
           // ✅ CASE-INSENSITIVE
-          if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'getdata') {
+          if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
             await taskRepository.updateTask(key, {
-              templateId: 'GetData',
+              type: TaskType.DataRequest,  // ✅ type: enum numerico
+              templateId: null,            // ✅ templateId: null (standalone)
               label: currentDDT.label,
               mainData: currentDDT.mainData,
               constraints: currentDDT.constraints,
@@ -569,15 +571,16 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                 }
 
                 if (task) {
-                  // Aggiorna il task per impostare templateId = 'GetData' e type = DataRequest
+                  // Aggiorna il task per impostare type = DataRequest e templateId = null
                   const currentTemplateId = getTemplateId(task);
-                  if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'getdata') {
+                  if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
                     taskRepository.updateTask(instanceKey, {
-                      templateId: 'GetData',
-                      // ✅ Fields directly on task (no value wrapper) - copy all fields except id, templateId, createdAt, updatedAt
+                      type: TaskType.DataRequest,  // ✅ type: enum numerico
+                      templateId: null,            // ✅ templateId: null (standalone)
+                      // ✅ Fields directly on task (no value wrapper) - copy all fields except id, type, templateId, createdAt, updatedAt
                       ...Object.fromEntries(
                         Object.entries(task).filter(([key]) =>
-                          !['id', 'templateId', 'createdAt', 'updatedAt'].includes(key)
+                          !['id', 'type', 'templateId', 'createdAt', 'updatedAt'].includes(key)
                         )
                       )
                     }, currentProjectId || undefined);
@@ -587,8 +590,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                   } else {
                   }
                 } else {
-                  // Crea nuovo task con GetData
-                  taskRepository.createTask('GetData', undefined, instanceKey, currentProjectId || undefined);
+                  // Crea nuovo task con DataRequest
+                  taskRepository.createTask(TaskType.DataRequest, null, undefined, instanceKey, currentProjectId || undefined);
 
                   // Verifica creazione
                   const newTask = taskRepository.getTask(instanceKey);
@@ -810,19 +813,18 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
           // ✅ Get or create task
           let task = taskRepository.getTask(key);
           if (!task) {
-            const action = act?.type === 'DataRequest' ? 'GetData' :
-              act?.type === 'Message' ? 'SayMessage' :
-                act?.type === 'ProblemClassification' ? 'ClassifyProblem' :
-                  act?.type === 'BackendCall' ? 'callBackend' : 'GetData';
-            task = taskRepository.createTask(action, undefined, key);
+            // Convert act.type (string) to TaskType enum
+            const taskType = act?.type ? actIdToTaskType(act.type) : TaskType.DataRequest;
+            task = taskRepository.createTask(taskType, null, undefined, key);
           }
 
           const currentTemplateId = getTemplateId(task);
 
           // ✅ CASE-INSENSITIVE - AWAIT OBBLIGATORIO: non chiudere finché non è salvato
-          if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'getdata') {
+          if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
             await taskRepository.updateTask(key, {
-              templateId: 'GetData',
+              type: TaskType.DataRequest,  // ✅ type: enum numerico
+              templateId: null,            // ✅ templateId: null (standalone)
               label: finalDDT.label,
               mainData: finalDDT.mainData,
               constraints: finalDDT.constraints,
@@ -1214,9 +1216,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                   const task = taskRepository.getTask(key);
                   const currentTemplateId = getTemplateId(task);
 
-                  if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'getdata') {
+                  if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
                     await taskRepository.updateTask(key, {
-                      templateId: 'GetData',
+                      type: TaskType.DataRequest,  // ✅ type: enum numerico
+                      templateId: null,            // ✅ templateId: null (standalone)
                       label: updatedDDT.label,
                       mainData: updatedDDT.mainData,
                       constraints: updatedDDT.constraints,
@@ -1544,16 +1547,17 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                 if (act?.id || (act as any)?.instanceId) {
                   const key = ((act as any)?.instanceId || act?.id) as string;
                   // ✅ MIGRATION: Use getTemplateId() helper
-                  // ✅ FIX: Se c'è un DDT, assicurati che il templateId sia 'GetData'
+                  // ✅ FIX: Se c'è un DDT, assicurati che il templateId sia 'DataRequest'
                   const task = taskRepository.getTask(key);
                   const hasDDT = updatedDDT && Object.keys(updatedDDT).length > 0 && updatedDDT.mainData && updatedDDT.mainData.length > 0;
                   if (hasDDT && task) {
                     const currentTemplateId = getTemplateId(task);
                     // ✅ CASE-INSENSITIVE
                     // ✅ Update task con campi DDT direttamente (niente wrapper value)
-                    if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'getdata') {
+                    if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
                       taskRepository.updateTask(key, {
-                        templateId: 'GetData',
+                        type: TaskType.DataRequest,  // ✅ type: enum numerico
+                        templateId: null,            // ✅ templateId: null (standalone)
                         ...updatedDDT  // ✅ Spread: label, mainData, stepPrompts, ecc.
                       }, currentProjectId || undefined);
                     } else {
@@ -1562,8 +1566,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                       }, currentProjectId || undefined);
                     }
                   } else if (hasDDT) {
-                    // Task doesn't exist, create it with GetData templateId
-                    taskRepository.createTask('GetData', updatedDDT, key, currentProjectId || undefined);
+                    // Task doesn't exist, create it with DataRequest type
+                    taskRepository.createTask(TaskType.DataRequest, null, updatedDDT, key, currentProjectId || undefined);
                   } else {
                     // FIX: Salva con projectId per garantire persistenza nel database
                     taskRepository.updateTask(key, {

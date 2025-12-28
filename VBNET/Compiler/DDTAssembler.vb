@@ -25,7 +25,7 @@ Public Class DDTAssembler
 
         Dim instance As New DDTInstance() With {
             .Id = assembled.Id,
-            .Label = assembled.Label,
+            ' ❌ REMOVED: .Label = assembled.Label, (label non serve a runtime, solo per UI)
             .Translations = If(assembled.Translations, New Dictionary(Of String, String)()),
             .MainDataList = New List(Of DDTNode)(),
             .IsAggregate = (assembled.Introduction IsNot Nothing)
@@ -60,7 +60,7 @@ Public Class DDTAssembler
         Dim runtimeNode As New DDTNode() With {
             .Id = ideNode.Id,
             .Name = ideNode.Name,
-            .Label = ideNode.Label,
+            ' ❌ REMOVED: .Label = ideNode.Label, (label non serve a runtime, solo per UI)
             .Type = ideNode.Type,
             .Required = ideNode.Required,
             .Condition = ideNode.Condition,
@@ -141,15 +141,15 @@ Public Class DDTAssembler
     Private Function ConvertEscalation(ideEscalation As Compiler.Escalation) As DDTEngine.Escalation
         Dim runtimeEscalation As New DDTEngine.Escalation() With {
             .EscalationId = ideEscalation.EscalationId,
-            .Actions = New List(Of IAction)()
+            .Tasks = New List(Of ITask)()
         }
 
-        ' Converti Actions (Action[] → IAction[])
-        If ideEscalation.Actions IsNot Nothing Then
-            For Each ideAction As Compiler.Action In ideEscalation.Actions
-                Dim runtimeAction = ConvertAction(ideAction)
+        ' Converti Tasks (Action[] → ITask[])
+        If ideEscalation.Tasks IsNot Nothing Then
+            For Each ideTask As Compiler.Action In ideEscalation.Tasks
+                Dim runtimeAction = ConvertTask(ideTask)
                 If runtimeAction IsNot Nothing Then
-                    runtimeEscalation.Actions.Add(runtimeAction)
+                    runtimeEscalation.Tasks.Add(runtimeAction)
                 End If
             Next
         End If
@@ -158,18 +158,34 @@ Public Class DDTAssembler
     End Function
 
     ''' <summary>
-    ''' Converte Action (IDE) in IAction (Runtime)
+    ''' Converte Task (IDE) in ITask (Runtime)
     ''' </summary>
-    Private Function ConvertAction(ideAction As Compiler.Action) As IAction
-        ' Gestisci sayMessage e askQuestion
-        If ideAction.ActionId = "sayMessage" OrElse ideAction.ActionId = "askQuestion" Then
-            Dim textParam = ideAction.Parameters?.FirstOrDefault(Function(p) p.ParameterId = "text")
-            If textParam IsNot Nothing Then
-                Return New MessageAction(textParam.Value)
-            End If
+    Private Function ConvertTask(ideTask As Compiler.Action) As ITask
+        Dim templateId = ideTask.TemplateId
+
+        ' Mapping: templateId (frontend) → Task type (runtime)
+        If String.IsNullOrEmpty(templateId) Then
+            Return Nothing
         End If
 
-        ' TODO: Gestire altri tipi di Action (CloseSessionAction, TransferAction, etc.)
+        Select Case templateId.ToLower()
+            Case "saymessage", "askquestion"
+                Dim textParam = ideTask.Parameters?.FirstOrDefault(Function(p) p.ParameterId = "text")
+                If textParam IsNot Nothing Then
+                    Return New MessageTask(textParam.Value)
+                End If
+            Case "closesession"
+                Return New CloseSessionTask()
+            Case "transfer"
+                ' TODO: Implement TransferTask
+                Return Nothing
+            Case Else
+                ' Fallback: se templateId non riconosciuto, prova come MessageTask
+                Dim textParam = ideTask.Parameters?.FirstOrDefault(Function(p) p.ParameterId = "text")
+                If textParam IsNot Nothing Then
+                    Return New MessageTask(textParam.Value)
+                End If
+        End Select
 
         Return Nothing
     End Function
@@ -183,11 +199,11 @@ Public Class DDTAssembler
         ' Prendi la prima escalation del primo step
         If stepGroup.Escalations IsNot Nothing AndAlso stepGroup.Escalations.Count > 0 Then
             Dim firstEscalation = stepGroup.Escalations(0)
-            If firstEscalation.Actions IsNot Nothing Then
-                For Each ideAction As Compiler.Action In firstEscalation.Actions
-                    Dim runtimeAction = ConvertAction(ideAction)
+            If firstEscalation.Tasks IsNot Nothing Then
+                For Each ideTask As Compiler.Action In firstEscalation.Tasks
+                    Dim runtimeAction = ConvertTask(ideTask)
                     If runtimeAction IsNot Nothing Then
-                        response.Actions.Add(runtimeAction)
+                        response.Tasks.Add(runtimeAction)
                     End If
                 Next
             End If

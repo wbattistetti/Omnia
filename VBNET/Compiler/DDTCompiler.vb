@@ -110,10 +110,10 @@ Public Class DDTCompiler
             For Each dstep As DialogueStep In node.Steps
                 If dstep.Escalations IsNot Nothing Then
                     For Each escalation As DDTEngine.Escalation In dstep.Escalations
-                        If escalation.Actions IsNot Nothing Then
-                            For Each action As IAction In escalation.Actions
-                                If TypeOf action Is MessageAction Then
-                                    Dim msgAction As MessageAction = DirectCast(action, MessageAction)
+                        If escalation.Tasks IsNot Nothing Then
+                            For Each task As IAction In escalation.Tasks
+                                If TypeOf task Is MessageAction Then
+                                    Dim msgAction As MessageAction = DirectCast(task, MessageAction)
                                     ValidatePlaceholders(msgAction.Text, node, errors)
                                 End If
                             Next

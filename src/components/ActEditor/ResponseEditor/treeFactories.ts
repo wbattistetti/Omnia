@@ -28,8 +28,12 @@ export const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): Tree
           });
           const taskRefs = escalation.tasks || [];
           taskRefs.forEach((taskRef: any) => {
-            // ✅ Support both taskId (new) and actionInstanceId (legacy)
-            const taskId = taskRef.taskId || taskRef.actionInstanceId;
+            // ✅ UNIFIED MODEL: Use task.id (complete Task object)
+            if (!taskRef.id) {
+              console.warn('[treeFactories] Task missing id, skipping');
+              return;
+            }
+            const taskId = taskRef.id;
             if (taskId) {
               const ddtId = ddt.id || ddt._id;
               const key = taskRef.parameters && taskRef.parameters[0] && taskRef.parameters[0].value;

@@ -33,7 +33,7 @@ Public Class Motore
         Dim state As DialogueState = DialogueState.Start
 
         If ddtInstance.IsAggregate AndAlso ddtInstance.Introduction IsNot Nothing Then
-            ExecuteResponse(ddtInstance.Introduction.Actions, Nothing, ddtInstance)
+            ExecuteResponse(ddtInstance.Introduction.Tasks, Nothing, ddtInstance)
         End If
 
         While True
@@ -41,9 +41,9 @@ Public Class Motore
 
             If currDataNode Is Nothing Then Exit While  ' Tutti i dati completati o acquisitionFailed
 
-            Dim actions = GetResponse(currDataNode)
+            Dim tasks = GetResponse(currDataNode)
 
-            Dim isAterminationResponse As Boolean = ExecuteResponse(actions, currDataNode, ddtInstance)
+            Dim isAterminationResponse As Boolean = ExecuteResponse(tasks, currDataNode, ddtInstance)
 
             If isAterminationResponse Then
                 ' Exit condition attivata: marca il dato come acquisitionFailed
@@ -61,7 +61,7 @@ Public Class Motore
         End While
 
         If ddtInstance.SuccessResponse IsNot Nothing Then
-            ExecuteResponse(ddtInstance.SuccessResponse.Actions, Nothing, ddtInstance)
+            ExecuteResponse(ddtInstance.SuccessResponse.Tasks, Nothing, ddtInstance)
         End If
     End Sub
 
@@ -69,7 +69,7 @@ Public Class Motore
     ''' <summary>
     ''' lo step di dialogo dipende dallo stato di acquisizione del dato (start, noMatch, NoInput, ecc)
     ''' </summary>
-    Private Function GetResponse(currDataNode As DDTNode) As IEnumerable(Of IAction)
+    Private Function GetResponse(currDataNode As DDTNode) As IEnumerable(Of ITask)
         Dim dStep = currDataNode.Steps.FirstOrDefault(Function(s) s.Type = currDataNode.State)  'migliorare per gestore  validation conditions multiple
 
         Select Case currDataNode.State
@@ -82,23 +82,23 @@ Public Class Motore
 
         Dim escalationCounter = GetEscalationCounter(dStep, currDataNode.State)
         Dim escalation = dStep.Escalations(escalationCounter)
-        Return currDataNode.Steps.SingleOrDefault(Function(s) s.Type = currDataNode.State).Escalations(escalationCounter).Actions
+        Return currDataNode.Steps.SingleOrDefault(Function(s) s.Type = currDataNode.State).Escalations(escalationCounter).Tasks
 
     End Function
 
     ''' <summary>
-    ''' Eseguire il response significa eseguire la serie di actions di cui è composto
+    ''' Eseguire il response significa eseguire la serie di tasks di cui è composto
     ''' </summary>
-    Private Function ExecuteResponse(actions As IEnumerable(Of IAction), currDataNode As DDTNode, ddtInstance As DDTInstance) As Boolean
+    Private Function ExecuteResponse(tasks As IEnumerable(Of ITask), currDataNode As DDTNode, ddtInstance As DDTInstance) As Boolean
 
-        For Each action As IAction In actions
+        For Each task As ITask In tasks
             ' Passa un lambda che solleva l'evento MessageToShow
-            action.Execute(currDataNode, ddtInstance, Sub(msg As String) RaiseEvent MessageToShow(Me, New MessageEventArgs(msg)))
+            task.Execute(currDataNode, ddtInstance, Sub(msg As String) RaiseEvent MessageToShow(Me, New MessageEventArgs(msg)))
         Next
         If currDataNode IsNot Nothing Then IncrementCounter(currDataNode) 'eccezione in caso si introduction o success di un aggregato
 
         ' Controlla se c'è una exit condition che rende il response un termination response
-        Return Utils.HasExitCondition(actions)
+        Return Utils.HasExitCondition(tasks)
     End Function
 
     ''' <summary>

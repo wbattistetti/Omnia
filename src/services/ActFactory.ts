@@ -37,13 +37,10 @@ export async function createAndAttachAct(opts: CreateAndAttachOpts) {
     suppressUI: true,
   } as any);
 
-  const actId = (created as any)?.actId || (created as any)?.id;
   const factoryId = (created as any)?.factoryId ?? null;
 
   // 2) Immediate row patch
   onImmediateRowUpdate({
-    actId,
-    baseActId: actId,
     factoryId,
     type,
     mode,
@@ -52,8 +49,8 @@ export async function createAndAttachAct(opts: CreateAndAttachOpts) {
   // 3) Async instance creation and patch instanceId
   try {
            const pid = getProjectId?.();
-    if (!pid || !actId) return;
-    const inst = await ProjectDataService.createInstance(pid, { baseActId: actId, mode });
+    if (!pid) return;
+    const inst = await ProjectDataService.createInstance(pid, { mode });
     if ((inst as any)?._id) {
       // Re-assert type/mode on async patch to avoid accidental resets from other updates
       onImmediateRowUpdate({ instanceId: (inst as any)._id, type, mode });

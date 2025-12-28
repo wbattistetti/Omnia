@@ -26,7 +26,8 @@ import { useIntellisensePosition } from './hooks/useIntellisensePosition';
 import { useRowRegistry } from './hooks/useRowRegistry';
 import { isInsideWithPadding, getToolbarRect } from './utils/geometry';
 import { getTaskVisualsByType, resolveTaskType, hasTaskDDT } from '../../utils/taskVisuals';
-import { inferActType, heuristicToInternal } from '../../../../nlp/actType';
+import { inferActType } from '../../../../nlp/actType';
+import { TaskType, taskTypeToTemplateId, taskTypeToHeuristicString } from '../../../../types/taskTypes';
 import { modeToType, typeToMode } from '../../../../utils/normalizers';
 import { idMappingService } from '../../../../services/IdMappingService';
 import { generateId } from '../../../../utils/idGenerator';
@@ -337,14 +338,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       try { pid = ((require('../../state/runtime') as any).getCurrentProjectId?.() || undefined); } catch { }
       if (pid && ((row as any)?.mode === 'Message' || !(row as any)?.mode)) {
         // Per Message, usa row.id come instanceId (row.id è l'instanceId per le righe Message)
-        const instanceId = (row as any)?.instanceId || row.id;
-        const baseActId = (row as any)?.actId || (row as any)?.baseActId || 'Message';
+        const instanceId = (row as any)?.instanceId ?? row.id;
 
         console.log('[Message][SAVE][START]', {
           rowId: row.id,
           rowInstanceId: (row as any)?.instanceId,
           finalInstanceId: instanceId,
-          baseActId,
           label,
           labelLength: label.length,
           projectId: pid,
@@ -362,13 +361,13 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
         if (!task) {
           // Crea l'istanza in memoria se non esiste
-          console.log('[Message][SAVE][CREATE_IN_MEMORY]', { instanceId, baseActId });
-          const projectId = getProjectId?.() || undefined;
+          console.log('[Message][SAVE][CREATE_IN_MEMORY]', { instanceId });
+          const projectId = getProjectId?.() ?? undefined;
 
           // FASE 4: Create Task if row doesn't have taskId
           if (!row.taskId) {
-            // Create Task for this row
-            const newTask = createRowWithTask(instanceId, baseActId, label, projectId);
+            // Create Task for this row (default to Message type)
+            const newTask = createRowWithTask(instanceId, 'Message', label, projectId);
             // Update row to include taskId (will be persisted via onUpdate)
             (row as any).taskId = newTask.taskId;
           } else {
@@ -391,7 +390,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
           // FASE 4: Update Task (TaskRepository internally updates InstanceRepository)
           const taskId = getTaskIdFromRow(row);
-          taskRepository.updateTask(taskId, { text: label }, getProjectId?.() || undefined);
+          taskRepository.updateTask(taskId, { text: label }, getProjectId?.() ?? undefined);
         }
 
         // FASE 4: Verifica dopo l'aggiornamento
@@ -402,12 +401,11 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           messageText: taskAfter?.value?.text?.substring(0, 50) || 'N/A'
         });
 
-        // Passa mode e baseActId per permettere la creazione corretta se l'istanza non esiste nel DB
+        // Passa mode per permettere la creazione corretta se l'istanza non esiste nel DB
         // Questo è cruciale: se l'istanza non esiste, il backend la crea con questi valori
         const payload = {
           message: { text: label },
-          mode: 'Message', // Esplicito: mode Message per evitare default 'DataRequest'
-          baseActId: baseActId // baseActId corretto invece di 'Unknown'
+          mode: 'Message' // Esplicito: mode Message per evitare default 'DataRequest'
         };
 
         console.log('[Message][SAVE][DB_PAYLOAD]', {
@@ -415,8 +413,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           projectId: pid,
           payload: {
             message: { text: label.substring(0, 50) + '...' },
-            mode: payload.mode,
-            baseActId: payload.baseActId
+            mode: payload.mode
           }
         });
 
@@ -537,28 +534,30 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       try {
         // 1️⃣ EURISTICA 1: interpreta la label e decide il TaskType
         const inf = await inferActType(q, { languageOrder: ['IT', 'EN', 'PT'] as any });
-        let taskType = inf.type; // 'REQUEST_DATA', 'MESSAGE', 'UNDEFINED', etc.
+        let taskType = inf.type; // ✅ Ora è TaskType enum (TaskType.SayMessage, TaskType.DataRequest, TaskType.UNDEFINED, ecc.)
 
         // 2️⃣ EURISTICA 2: cerca template DDT
         const DDTTemplateMatcherService = (await import('../../../../services/DDTTemplateMatcherService')).default;
-        const typeForMatch = (taskType === 'REQUEST_DATA') ? 'DataRequest' :
-                            (taskType === 'UNDEFINED') ? 'UNDEFINED' : null;
+        // ✅ Converti TaskType enum → string per euristica 2
+        const typeForMatch = taskTypeToHeuristicString(taskType);
 
         let matchedTemplate = null;
         if (typeForMatch) {
           matchedTemplate = await DDTTemplateMatcherService.findDDTTemplate(q, typeForMatch);
         }
 
-        // 3️⃣ Se Euristica 2 trova match E Euristica 1 era UNDEFINED → override tipo con DataRequest
-        if (matchedTemplate && taskType === 'UNDEFINED') {
-          taskType = 'REQUEST_DATA';
+        // 3️⃣ Se Euristica 2 trova match:
+        // - E Euristica 1 era UNDEFINED → override tipo con DataRequest
+        // - E Euristica 1 era SayMessage → override tipo con DataRequest (es. "chiedi data nascita" → trova template data)
+        if (matchedTemplate && (taskType === TaskType.UNDEFINED || taskType === TaskType.SayMessage)) {
+          taskType = TaskType.DataRequest;
         }
 
         // 4️⃣ CREA TASK
         const projectId = getProjectId?.() || undefined;
-        const internal = heuristicToInternal(taskType as any);
-        const action = internal === 'DataRequest' ? 'GetData' :
-                      internal === 'Message' ? 'Message' : internal;
+        // ✅ Converti TaskType enum → templateId string
+        const templateId = taskTypeToTemplateId(taskType);
+        const action = templateId || 'UNDEFINED';
 
         if (!row.taskId) {
           const task = createRowWithTask(row.id, action, q, projectId);
@@ -584,12 +583,18 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         }
 
         // 5️⃣ AGGIORNA RIGA
+        // ✅ Converti TaskType enum → string per row.type (compatibilità con codice esistente)
+        const rowType = taskType === TaskType.DataRequest ? 'DataRequest' :
+                       taskType === TaskType.SayMessage ? 'Message' :
+                       taskType === TaskType.ClassifyProblem ? 'ProblemClassification' :
+                       taskType === TaskType.BackendCall ? 'BackendCall' : undefined;
+
         const updatedRow = {
           ...row,
           text: q,
-          type: internal as any,
-          mode: internal as any,
-          isUndefined: taskType === 'UNDEFINED' && !matchedTemplate // Solo se UNDEFINED E nessun match
+          type: rowType as any,
+          mode: rowType as any,
+          isUndefined: taskType === TaskType.UNDEFINED && !matchedTemplate // ✅ Solo se UNDEFINED E nessun match
         };
 
         onUpdate(updatedRow as any, q);
@@ -680,8 +685,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         id: row.id,
         type: finalType,
         mode: finalMode,
-        actId: (row as any).actId,
-        baseActId: (row as any).baseActId,
         factoryId: (row as any).factoryId,
         instanceId: (row as any).instanceId,
         // ✅ Rimuovi flag isUndefined quando viene selezionato un tipo
@@ -727,18 +730,17 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             label,
             createdItem,
             hasCreatedItem: !!createdItem,
-            actId: createdItem?.actId,
             id: createdItem?.id,
             type: createdItem?.type,
             mode: createdItem?.mode,
             timestamp: Date.now()
           });
 
-          // Callback che riceve l'item creato con actId e altri metadati
-          const createdActId = createdItem?.actId || createdItem?.id;
+          // Callback che riceve l'item creato
+          const createdItemId = createdItem?.id;
           console.log('🎯 [TEMPLATE_CREATION] Agent act template created:', {
             label,
-            actId: createdActId,
+            id: createdItemId,
             type: createdItem?.type,
             mode: createdItem?.mode
           });
@@ -751,21 +753,19 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           if (!row.taskId) {
             // Create Task for this row
             const task = createRowWithTask(instanceId, key, '', projectId);
-            (row as any).taskId = task.taskId;
+            (row as any).taskId = task.id;  // NodeRowData.taskId = Task.id
           } else {
             // Update Task action
             updateRowTaskAction(row, key, projectId);
           }
 
-          const finalType = createdItem?.type || key;
-          const finalMode = createdItem?.mode || typeToMode(key as any);
+          const finalType = createdItem?.type ?? key;
+          const finalMode = createdItem?.mode ?? typeToMode(key as any);
 
           const updateMeta = {
             id: instanceId,
             type: finalType,
             mode: finalMode,
-            actId: createdActId,
-            baseActId: createdActId,
             factoryId: createdItem?.factoryId,
             // ✅ Rimuovi flag isUndefined quando viene selezionato un tipo
             isUndefined: false
@@ -867,7 +867,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     if (!row.taskId) {
       // Create Task for this row
       const task = createRowWithTask(instanceId, key, row.text || '', projectId);
-      (row as any).taskId = task.taskId;
+      (row as any).taskId = task.id;  // NodeRowData.taskId = Task.id
     } else {
       // Update Task action
       updateRowTaskAction(row, key, projectId);
@@ -890,9 +890,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     immediate({
       id: instanceId,
       type: key,
-      mode,
-      actId: key, // Use type as actId for now
-      baseActId: key
+      mode
     });
 
     try { emitSidebarRefresh(); } catch { }
@@ -923,13 +921,11 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         categoryType: item.categoryType
       });
       (onUpdateWithCategory as any)(row, item.name, item.categoryType, {
-        actId: item.actId,
         factoryId: item.factoryId,
         type: (item as any)?.type,
         mode: (item as any)?.mode,
         userActs: item.userActs,
-        categoryType: item.categoryType,
-        baseActId: item.actId
+        categoryType: item.categoryType
       });
     } else {
       console.log('[🔍 INTELLISENSE] Calling onUpdate', {
@@ -941,29 +937,27 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     // Create instance asynchronously (best-effort)
     try {
       let pid: string | undefined = undefined;
-      try { pid = ((require('../../state/runtime') as any).getCurrentProjectId?.() || undefined); } catch { }
+      try { pid = ((require('../../state/runtime') as any).getCurrentProjectId?.() ?? undefined); } catch { }
 
       console.log('[🔍 ROW_CREATION] Item details:', {
         pid,
-        itemActId: item.actId,
+        itemId: item.id,
         itemCategoryType: item.categoryType,
-        hasActId: !!item.actId,
         hasCategoryType: item.categoryType === 'taskTemplates',
-        willCreateInstance: pid && item.actId && item.categoryType === 'taskTemplates'
+        willCreateInstance: pid && item.id && item.categoryType === 'taskTemplates'
       });
 
       let backendInstanceId: string | undefined = undefined;
-      if (pid && item.actId && item.categoryType === 'taskTemplates') {
+      if (pid && item.id && item.categoryType === 'taskTemplates') {
         // Avoid require in browser; import mapping helpers at top-level
-        const chosenType = (item as any)?.type || modeToType((item as any)?.mode);
+        const chosenType = (item as any)?.type ?? modeToType((item as any)?.mode);
         const modeFromType = typeToMode(chosenType);
-        const inst = await ProjectDataService.createInstance(pid, { baseActId: item.actId, mode: (item as any)?.mode || (modeFromType as any) });
+        const inst = await ProjectDataService.createInstance(pid, { mode: (item as any)?.mode ?? (modeFromType as any) });
 
         console.log('[🔍 INTELLISENSE] ProjectDataService.createInstance result', {
           success: !!inst,
           instance: inst,
           backendId: inst?._id,
-          hasActId: !!item.actId,
           timestamp: Date.now()
         });
 
@@ -980,14 +974,13 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
           (onUpdateWithCategory as any)(row, item.name, item.categoryType, {
             instanceId: frontendInstanceId,
-            baseActId: item.actId,
             type: chosenType,
-            mode: (item as any)?.mode || modeFromType
+            mode: (item as any)?.mode ?? modeFromType
           });
         } else {
           console.log('[⚠️ INTELLISENSE] createInstance failed or returned null', {
             pid,
-            itemActId: item.actId,
+            itemId: item.id,
             itemCategoryType: item.categoryType,
             timestamp: Date.now()
           });
@@ -1002,14 +995,15 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       // ✅ MIGRATION: Use getTemplateId() helper instead of direct task.action access
       // FASE 4: Get row type from Task (since we removed it from NodeRowData)
       const rowTask = taskRepository.getTask(row.id);
-      // Map templateId back to actId (reverse mapping)
-      const actionToActId: Record<string, string> = {
+      // Map templateId to task type
+      const templateIdToTaskType: Record<string, string> = {
         'SayMessage': 'Message',
-        'GetData': 'DataRequest',
+        'GetData': 'DataRequest', // ✅ Backward compatibility
+        'DataRequest': 'DataRequest',
         'ClassifyProblem': 'ProblemClassification',
         'callBackend': 'BackendCall'
       };
-      const rowType = rowTask ? (actionToActId[getTemplateId(rowTask)] || getTemplateId(rowTask)) : undefined;
+      const rowType = rowTask ? (templateIdToTaskType[getTemplateId(rowTask)] ?? getTemplateId(rowTask)) : undefined;
 
       const isProblemClassification = itemCategoryType === 'taskTemplates' &&
         (itemType === 'ProblemClassification' || rowType === 'ProblemClassification');
@@ -1020,7 +1014,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         itemType,
         rowType,
         rowInstanceId: row.id, // row.id IS the instanceId now
-        itemActId: item.actId,
+        itemId: item.id,
         categoryMatch: itemCategoryType === 'taskTemplates',
         typeMatch: itemType === 'ProblemClassification' || rowType === 'ProblemClassification',
         timestamp: Date.now()
@@ -1028,13 +1022,13 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
       if (isProblemClassification) {
         // Use row.id as instanceId (they are the same now)
-        const instanceIdToUse = row.id || (await import('uuid')).v4();
-        const actIdToUse = item.actId || 'problem-classification-fallback';
+        const instanceIdToUse = row.id ?? (await import('uuid')).v4();
+        const taskTypeToUse = item.type ?? 'ProblemClassification';
 
         console.log('[🔍 INTELLISENSE] Creating instance in InstanceRepository', {
           rowId: row.id,
           instanceId: instanceIdToUse,
-          actId: actIdToUse,
+          taskType: taskTypeToUse,
           hadExistingInstanceId: !!row.id, // row.id IS the instanceId now
           timestamp: Date.now()
         });
@@ -1045,7 +1039,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         // ✅ Gli intents sono nel task.intents (campi diretti)
         let initialIntents: any[] = [];
         try {
-          const task = taskRepository.getTask(actIdToUse);
+          const task = taskRepository.getTask(instanceIdToUse);
           if (task?.intents) {
             initialIntents = task.intents;
           }
@@ -1054,13 +1048,13 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         }
 
         // Create instance with intents
-        const instanceId = row.id || generateId(); // Use row.id if available, otherwise generate
-        const projectId = getProjectId?.() || undefined;
+        const instanceId = row.id ?? generateId(); // Use row.id if available, otherwise generate
+        const projectId = getProjectId?.() ?? undefined;
 
         // Migration: Create or update Task
         if (!row.taskId) {
           // Create Task for this row (dual mode)
-          const task = createRowWithTask(instanceId, actIdToUse, row.text || '', projectId);
+          const task = createRowWithTask(instanceId, taskTypeToUse, row.text ?? '', projectId);
           // FASE 4: Update Task with intents if ProblemClassification
           if (initialIntents.length > 0) {
             taskRepository.updateTask(task.id, { intents: initialIntents }, projectId);
@@ -1068,13 +1062,13 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           (row as any).taskId = task.id;
         } else {
           // Update Task action
-          updateRowTaskAction(row, actIdToUse, projectId);
+          updateRowTaskAction(row, taskTypeToUse, projectId);
         }
 
         console.log('[✅ INTELLISENSE] Instance/Task created in repository', {
           instanceId: instanceId,
           taskId: row.taskId,
-          actId: actIdToUse,
+          taskType: taskTypeToUse,
           intentsCount: initialIntents.length,
           timestamp: Date.now()
         });
@@ -1091,8 +1085,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           (onUpdateWithCategory as any)(row, item.name, item.categoryType, {
             instanceId: instanceId,
             taskId: row.taskId, // Include taskId in meta
-            actId: actIdToUse,
-            baseActId: actIdToUse,
             type: (item as any)?.type,
             mode: (item as any)?.mode
           });
@@ -1551,9 +1543,10 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                 actEditorCtx.open({ id: String(taskIdForType), type: type as any, label: row.text, instanceId: row.id });
 
-                // ✅ Ottieni DDT dal task con merge dal template (se templateId esiste)
+                // ✅ Ottieni DDT dal task con merge dal template (se templateId esiste e non è UNDEFINED)
                 let ddt: any = null;
-                if (taskForType?.templateId) {
+                // UNDEFINED is a placeholder, not a real template - treat as standalone
+                if (taskForType?.templateId && taskForType.templateId !== 'UNDEFINED') {
                   // ✅ Use buildDDTFromTemplate to build DDT from template reference
                   const { buildDDTFromTemplate } = await import('../../../../utils/ddtMergeUtils');
                   ddt = await buildDDTFromTemplate(taskForType);

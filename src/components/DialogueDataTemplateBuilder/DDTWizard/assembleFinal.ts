@@ -521,10 +521,10 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
       });
 
       // The main message uses the first escalation's taskId
-      // ✅ MIGRATION: Support both tasks (new) and actions (legacy)
+      // ✅ UNIFIED MODEL: Use tasks (complete Task objects)
       const firstTask = escalations[0]?.tasks?.[0] || escalations[0]?.actions?.[0];
-      if (escalations.length > 0 && firstTask?.taskId) {
-        const firstEscalationTaskId = firstTask.taskId || firstTask.actionInstanceId;  // ✅ Support both
+      if (escalations.length > 0 && firstTask?.id) {
+        const firstEscalationTaskId = firstTask.id;
         const firstEscalationTemplateKey = (escalations[0] as any).__templateKey;
         assembled.messages[stepKey] = { textKey: firstEscalationTaskId };
         // Also store template key if present in first escalation
@@ -536,8 +536,8 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
           stepKey,
           firstEscalationTaskId,
           firstEscalationTemplateKey,
-          escalationTaskId: firstTask.taskId || firstTask.actionInstanceId,
-          keysMatch: firstEscalationTaskId === (firstTask.taskId || firstTask.actionInstanceId)
+          escalationTaskId: firstTask.id,
+          keysMatch: firstEscalationTaskId === firstTask.id
         });
       } else {
         // Fallback: use chosenKey if no escalations (should not happen)

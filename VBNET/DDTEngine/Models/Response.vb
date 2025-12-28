@@ -13,16 +13,16 @@ Public Class Response
     ''' </summary>
 
     ''' <summary>
-    ''' Azioni da eseguire (opzionale)
-    ''' Ora è una lista di IAction invece di List(Of String)
+    ''' Tasks da eseguire (opzionale)
+    ''' Ora è una lista di ITask invece di List(Of String)
     ''' </summary>
-    Public Property Actions As List(Of IAction)
+    Public Property Tasks As List(Of ITask)
 
     ''' <summary>
     ''' Costruttore
     ''' </summary>
     Public Sub New()
-        Actions = New List(Of IAction)()
+        Tasks = New List(Of ITask)()
     End Sub
 End Class
 

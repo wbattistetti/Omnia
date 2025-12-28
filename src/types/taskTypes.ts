@@ -11,15 +11,110 @@ export enum TaskContext {
 
 /**
  * TaskType: Enum numerato per i tipi di task (allineato con VB.NET TaskTypes)
+ * ✅ UNIFICATO: Usato ovunque invece di HeuristicType/InternalType/templateId stringhe
  * Determina il comportamento del task e quale editor usare
  */
 export enum TaskType {
+  UNDEFINED = -1,      // ✅ Task non ancora tipizzato (punto interrogativo)
   SayMessage = 0,      // TaskTypes.SayMessage
   CloseSession = 1,    // TaskTypes.CloseSession
   Transfer = 2,        // TaskTypes.Transfer
-  GetData = 3,         // TaskTypes.GetData
+  DataRequest = 3,     // TaskTypes.DataRequest (rinominato da GetData)
   BackendCall = 4,     // TaskTypes.BackendCall
   ClassifyProblem = 5  // TaskTypes.ClassifyProblem
+}
+
+/**
+ * ✅ Helper: Converte TaskType enum → templateId string (per Task.templateId)
+ */
+export function taskTypeToTemplateId(type: TaskType): string | null {
+  switch (type) {
+    case TaskType.SayMessage: return 'SayMessage';
+    case TaskType.DataRequest: return 'DataRequest';
+    case TaskType.ClassifyProblem: return 'ClassifyProblem';
+    case TaskType.BackendCall: return 'BackendCall';
+    case TaskType.CloseSession: return 'CloseSession';
+    case TaskType.Transfer: return 'Transfer';
+    case TaskType.UNDEFINED: return 'UNDEFINED';
+    default: return null;
+  }
+}
+
+/**
+ * ✅ Helper: Converte templateId string → TaskType enum
+ */
+export function templateIdToTaskType(templateId: string | null | undefined): TaskType {
+  if (!templateId) return TaskType.UNDEFINED;
+  const normalized = templateId.toLowerCase().trim();
+  switch (normalized) {
+    case 'saymessage': return TaskType.SayMessage;
+    case 'getdata': return TaskType.DataRequest; // ✅ Backward compatibility: 'getdata' → DataRequest
+    case 'datarequest': return TaskType.DataRequest;
+    case 'classifyproblem': return TaskType.ClassifyProblem;
+    case 'backendcall': return TaskType.BackendCall;
+    case 'closesession': return TaskType.CloseSession;
+    case 'transfer': return TaskType.Transfer;
+    case 'undefined': return TaskType.UNDEFINED;
+    default: return TaskType.UNDEFINED;
+  }
+}
+
+/**
+ * ✅ Helper: Converte actId/stringa semantica (da UI/Intellisense) → TaskType enum
+ * Usato quando l'utente seleziona un tipo dall'Intellisense o quando si crea un task
+ *
+ * @param actId - Stringa semantica da UI (es. "Message", "DataRequest", "ProblemClassification")
+ * @returns TaskType enum corrispondente
+ */
+export function actIdToTaskType(actId: string): TaskType {
+  const normalized = actId.toLowerCase().trim();
+
+  // Mapping actId (UI) → TaskType enum
+  switch (normalized) {
+    case 'message': return TaskType.SayMessage;
+    case 'datarequest': return TaskType.DataRequest;
+    case 'getdata': return TaskType.DataRequest; // ✅ Backward compatibility
+    case 'problemclassification': return TaskType.ClassifyProblem;
+    case 'classifyproblem': return TaskType.ClassifyProblem;
+    case 'backendcall': return TaskType.BackendCall;
+    case 'callbackend': return TaskType.BackendCall;
+    case 'closesession': return TaskType.CloseSession;
+    case 'transfer': return TaskType.Transfer;
+    case 'undefined': return TaskType.UNDEFINED;
+    default: return TaskType.UNDEFINED;
+  }
+}
+
+/**
+ * ✅ Helper: Converte HeuristicType string (legacy) → TaskType enum
+ * Usato durante la migrazione per compatibilità
+ * @deprecated Usa actIdToTaskType() invece
+ */
+export function heuristicStringToTaskType(heuristic: string): TaskType {
+  const normalized = heuristic.toUpperCase().trim();
+  switch (normalized) {
+    case 'MESSAGE': return TaskType.SayMessage;
+    case 'REQUEST_DATA': return TaskType.DataRequest;
+    case 'PROBLEM_SPEC': return TaskType.ClassifyProblem;
+    case 'BACKEND_CALL': return TaskType.BackendCall;
+    case 'AI_AGENT': return TaskType.SayMessage; // Default to SayMessage
+    case 'NEGOTIATION': return TaskType.SayMessage; // Default to SayMessage
+    case 'SUMMARY': return TaskType.SayMessage; // Default to SayMessage
+    case 'UNDEFINED': return TaskType.UNDEFINED;
+    default: return TaskType.UNDEFINED;
+  }
+}
+
+/**
+ * ✅ Helper: Converte TaskType enum → string per euristica 2 (DDTTemplateMatcherService)
+ */
+export function taskTypeToHeuristicString(type: TaskType): string | null {
+  switch (type) {
+    case TaskType.DataRequest: return 'DataRequest';
+    case TaskType.SayMessage: return 'Message';
+    case TaskType.UNDEFINED: return 'UNDEFINED';
+    default: return null;
+  }
 }
 
 /**
@@ -31,7 +126,7 @@ export function getEditorFromTaskType(type: TaskType): 'message' | 'ddt' | 'prob
     case TaskType.CloseSession:
     case TaskType.Transfer:
       return 'message';
-    case TaskType.GetData:
+    case TaskType.DataRequest:
       return 'ddt';
     case TaskType.ClassifyProblem:
       return 'problem';
@@ -59,8 +154,8 @@ export interface TaskCatalog {
   description: string;           // Description
   icon: string;                  // Icon name (e.g. "MessageCircle", "HelpCircle")
   color: string;                 // UI color (e.g. "text-blue-500")
-  type: TaskType;                // ✅ Enum numerato (comportamento: GetData, SayMessage, ecc.)
-  name?: string;                 // ✅ Nome semantico (opzionale, per built-in: "GetData", "SayMessage")
+  type: TaskType;                // ✅ Enum numerato (comportamento: DataRequest, SayMessage, ecc.)
+  name?: string;                 // ✅ Nome semantico (opzionale, per built-in: "DataRequest", "SayMessage")
   contexts: TaskContext[];        // ✅ Where this catalog entry can be inserted
 
   // Signature: Input parameters schema (if needed)
@@ -113,23 +208,25 @@ export interface TaskHeuristic {
 /**
  * Task: Unified structure for all tasks
  *
+ * - type: TaskType enum numerico (0-19) → Determina il comportamento del task
  * - templateId = null → Task standalone (non referenzia altri Task)
  * - templateId = GUID → Task che referenzia un altro Task (per ereditare struttura/contratti)
  *
  * Esempi:
- * - Task DDT standalone: { id: "guid", templateId: null, label: "...", mainData: [...] }
- * - Task DDT che referenzia: { id: "guid", templateId: "guid-altro-task", label: "...", mainData: [...] }
+ * - Task DDT standalone: { id: "guid", type: TaskType.DataRequest, templateId: null, label: "...", mainData: [...] }
+ * - Task DDT che referenzia: { id: "guid", type: TaskType.DataRequest, templateId: "guid-altro-task", label: "...", mainData: [...] }
  *
  * Per altri tipi di task (SayMessage, BackendCall, ecc.):
- * - Task standalone: { id: "guid", templateId: null, text: "Ciao!", ... }
- * - Task che referenzia: { id: "guid", templateId: "guid-altro-task", text: "Ciao!", ... }
+ * - Task standalone: { id: "guid", type: TaskType.SayMessage, templateId: null, text: "Ciao!", ... }
+ * - Task che referenzia: { id: "guid", type: TaskType.SayMessage, templateId: "guid-altro-task", text: "Ciao!", ... }
  */
 export interface Task {
-  id: string;                    // Unique Task ID
-  templateId: string | null;     // ✅ null = Task standalone, GUID = referenzia un altro Task
+  id: string;                    // ✅ GUID univoco
+  type: TaskType;                 // ✅ Enum numerico (0-19) - Determina il comportamento del task
+  templateId: string | null;      // ✅ null = Task standalone, GUID = referenzia un altro Task
   // ✅ Campi diretti (niente wrapper value):
-  // Per GetData/DDT:
-  label?: string;                // Label del DDT
+  // Per DataRequest/DDT:
+  label?: string;                // Label del DDT (solo per UI, non usato a runtime)
   mainData?: any[];              // Main data array
   stepPrompts?: any;             // Step prompts
   constraints?: any[];           // Constraints

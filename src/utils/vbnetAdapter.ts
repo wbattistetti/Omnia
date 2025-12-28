@@ -13,7 +13,7 @@
  * - SayMessage → 1 (TaskTypes.SayMessage)
  * - CloseSession → 2 (TaskTypes.CloseSession)
  * - Transfer → 3 (TaskTypes.Transfer)
- * - GetData → 4 (TaskTypes.GetData)
+ * - DataRequest → 4 (TaskTypes.DataRequest, rinominato da GetData)
  * - callBackend/BackendCall → 5 (TaskTypes.BackendCall)
  * - ClassifyProblem → 6 (TaskTypes.ClassifyProblem)
  *
@@ -30,7 +30,8 @@ export function templateIdToVBAction(templateId: string): number {
     'SayMessage': 1,        // TaskTypes.SayMessage
     'CloseSession': 2,      // TaskTypes.CloseSession
     'Transfer': 3,          // TaskTypes.Transfer
-    'GetData': 4,           // TaskTypes.GetData
+    'GetData': 4,           // ✅ Backward compatibility: 'GetData' → 4
+    'DataRequest': 4,       // TaskTypes.DataRequest
     'callBackend': 5,       // TaskTypes.BackendCall
     'BackendCall': 5,       // Alias
     'ClassifyProblem': 6,    // TaskTypes.ClassifyProblem
@@ -59,7 +60,7 @@ export function vbActionToTemplateId(action: number): string {
     1: 'SayMessage',
     2: 'CloseSession',
     3: 'Transfer',
-    4: 'GetData',
+    4: 'DataRequest',  // ✅ Rinominato da GetData
     5: 'callBackend',
     6: 'ClassifyProblem',
   };

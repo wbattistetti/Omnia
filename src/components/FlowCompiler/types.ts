@@ -35,7 +35,7 @@ export type Condition =
 export interface CompiledTask {
   id: string; // Task.id (GUID) - same as row.id for flowchart tasks
   action: string; // ✅ DEPRECATED: Use templateId instead. Kept for backward compatibility.
-  templateId?: string; // Task.templateId (e.g., 'SayMessage', 'GetData') - preferred field
+  templateId?: string; // Task.templateId (e.g., 'SayMessage', 'DataRequest') - preferred field
   value: Record<string, any>; // Task.value
   condition: Condition | null; // Execution condition
   state: TaskState; // Current execution state
@@ -46,7 +46,7 @@ export interface CompiledTask {
     stepType?: string; // DDT step type (if from DDT)
     recoveryId?: string; // DDT recovery ID (if from recovery)
     actionId?: string; // DDT action ID (if from recovery)
-    parentRowAction?: string; // Action type of parent row (GetData, ClassifyProblem, etc.)
+    parentRowAction?: string; // Action type of parent row (DataRequest, ClassifyProblem, etc.)
   };
 }
 

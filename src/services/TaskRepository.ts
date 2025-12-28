@@ -1,4 +1,5 @@
 import type { Task, TaskInstance } from '../types/taskTypes';
+import { TaskType } from '../types/taskTypes';
 import { generateId } from '../utils/idGenerator';
 import { getTemplateId } from '../utils/taskHelpers';
 
@@ -38,20 +39,22 @@ class TaskRepository {
   /**
    * Create a new Task
    *
-   * @param templateId - Template ID (null for template, GUID for instance)
+   * @param type - TaskType enum (obbligatorio) - Determina il comportamento del task
+   * @param templateId - Template ID (null = standalone, GUID = referenzia un altro Task)
    * @param fields - Task fields (label, mainData, text, etc.)
    * @param taskId - Optional task ID (generates if not provided)
    * @param projectId - Optional project ID
    * @returns Task
    */
-  createTask(templateId: string | null, fields?: Partial<Task>, taskId?: string, projectId?: string): Task {
+  createTask(type: TaskType, templateId: string | null = null, fields?: Partial<Task>, taskId?: string, projectId?: string): Task {
     const finalTaskId = taskId || generateId();
     const finalProjectId = projectId || this.getCurrentProjectId();
 
     const task: Task = {
       id: finalTaskId,
-      templateId: templateId,  // null = template, GUID = instance
-      ...(fields || {}),        // ✅ Campi diretti (niente wrapper value)
+      type: type,                // ✅ Enum numerico (0-19) - COMPORTAMENTO
+      templateId: templateId,     // ✅ null = standalone, GUID = referenzia un altro Task
+      ...(fields || {}),          // ✅ Campi diretti (niente wrapper value)
       createdAt: new Date(),
       updatedAt: new Date()
     };

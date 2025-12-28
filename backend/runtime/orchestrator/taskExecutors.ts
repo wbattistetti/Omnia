@@ -181,9 +181,9 @@ async function executeSayMessage(
 }
 
 /**
- * Execute GetData task using backend DDT Engine
+ * Execute DataRequest task using backend DDT Engine
  */
-async function executeGetData(
+async function executeGetData(  // ✅ Function name kept for backward compatibility
   task: CompiledTask,
   callbacks: {
     onMessage?: (text: string, stepType?: string, escalationNumber?: number) => void;
@@ -200,8 +200,8 @@ async function executeGetData(
   });
 
   // ✅ DDT fields directly on task (no value wrapper)
+  // ❌ REMOVED: label non serve a runtime (solo per UI)
   const ddt = (task.mainData && task.mainData.length > 0) ? {
-    label: task.label,
     mainData: task.mainData,
     stepPrompts: task.stepPrompts,
     constraints: task.constraints,
@@ -209,12 +209,12 @@ async function executeGetData(
   } : null;
 
   if (!ddt) {
-    console.error('[BACKEND][TaskExecutor][executeGetData] GetData task missing DDT', {
+    console.error('[BACKEND][TaskExecutor][executeGetData] DataRequest task missing DDT', {
       taskId: task.id
     });
     return {
       success: false,
-      error: new Error('GetData task missing DDT')
+      error: new Error('DataRequest task missing DDT')
     };
   }
 

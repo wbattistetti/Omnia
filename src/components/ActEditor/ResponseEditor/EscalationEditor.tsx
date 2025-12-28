@@ -286,7 +286,7 @@ export default function EscalationEditor({
               const templateId = task.templateId || 'sayMessage';
               return (
                 <TaskRowDnDWrapper
-                  key={`${escalationIdx}-${j}-${task.taskId || j}`}
+                  key={`${escalationIdx}-${j}-${task.id || j}`}
                   escalationIdx={escalationIdx}
                   taskIdx={j}
                   task={task}

@@ -7,7 +7,6 @@ export interface IntellisenseItem {
   category: string;
   categoryType: 'taskTemplates' | 'userActs' | 'backendActions' | 'conditions' | 'macrotasks';
   // Underlying entity identifiers
-  actId?: string; // original item.id
   factoryId?: string; // optional backend _id
   icon?: React.ReactNode;
   iconComponent?: React.ComponentType<any>;

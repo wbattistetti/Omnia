@@ -23,11 +23,11 @@
     <Compile Include="Models\TaskTypes.vb" />
     <Compile Include="Models\IVariableContext.vb" />
     <Compile Include="Models\GlobalVariableContext.vb" />
-    <Compile Include="Models\IAction.vb" />
-    <Compile Include="Models\Actions\ActionBase.vb" />
-    <Compile Include="Models\Actions\MessageAction.vb" />
-    <Compile Include="Models\Actions\CloseSessionAction.vb" />
-    <Compile Include="Models\Actions\TransferAction.vb" />
+    <Compile Include="Models\ITask.vb" />
+    <Compile Include="Models\Tasks\TaskBase.vb" />
+    <Compile Include="Models\Tasks\MessageTask.vb" />
+    <Compile Include="Models\Tasks\CloseSessionTask.vb" />
+    <Compile Include="Models\Tasks\TransferTask.vb" />
     <Compile Include="Models\Response.vb" />
     <Compile Include="Models\Escalation.vb" />
     <Compile Include="Models\DialogueStep.vb" />

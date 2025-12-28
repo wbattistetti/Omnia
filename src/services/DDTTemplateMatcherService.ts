@@ -136,33 +136,57 @@ export class DDTTemplateMatcherService {
 
       // ✅ STEP 4: Filtra template in base al tipo trovato da Euristica 1
       if (currentTaskType === 'DataRequest') {
-        // Se Euristica 1 ha trovato DataRequest → cerca SOLO template di tipo DataRequest
-        templates = templates.filter(t => {
-          const templateType = t.type;
-          return (
-            templateType === 3 || // Enum numerico TaskType.GetData
-            templateType === 'datarequest' ||
-            templateType === 'data' || // Legacy
-            t.name?.toLowerCase() === 'datarequest' ||
-            t.name?.toLowerCase() === 'getdata' ||
-            t.name?.toLowerCase() === 'data' ||
-            t.taskType?.toLowerCase() === 'datarequest'
-          );
-        });
+        // ✅ SOLO enum numerico: type === 3 (TaskType.DataRequest)
+        const beforeFilter = templates.length;
+        templates = templates.filter(t => t.type === 3);
+        const afterFilter = templates.length;
+        console.log(`[DDTTemplateMatcherService] 🔍 FILTRO DataRequest: ${beforeFilter} → ${afterFilter} template (solo type === 3)`);
+
+        // Log sample dei template filtrati per debug
+        if (afterFilter > 0 && afterFilter <= 5) {
+          console.log(`[DDTTemplateMatcherService] 📋 Template filtrati:`, templates.map(t => ({
+            id: t.id || t._id,
+            name: t.name,
+            label: t.label,
+            type: t.type
+          })));
+        }
+
+        // ✅ DEBUG: Cerca template "Date" per vedere quale type ha
+        const dateTemplate = DialogueTaskService.getAllTemplates().find(t =>
+          (t.id || t._id?.toString()) === '723a1aa9-a904-4b55-82f3-a501dfbe0351' ||
+          t.label?.toLowerCase() === 'date'
+        );
+        if (dateTemplate) {
+          console.log(`[DDTTemplateMatcherService] 🔍 DEBUG Template "Date":`, {
+            id: dateTemplate.id || dateTemplate._id,
+            name: dateTemplate.name,
+            label: dateTemplate.label,
+            type: dateTemplate.type,
+            typeString: typeof dateTemplate.type,
+            hasType3: dateTemplate.type === 3,
+            taskType: (dateTemplate as any).taskType
+          });
+        }
       } else if (currentTaskType === 'UNDEFINED' || !currentTaskType || currentTaskType === 'Message') {
         // Se Euristica 1 ha trovato UNDEFINED o Message → cerca TUTTI i template
+        console.log(`[DDTTemplateMatcherService] 🔍 Nessun filtro: cerca TUTTI i ${templates.length} template`);
       } else {
         // Altri tipi (BackendCall, ProblemClassification, ecc.) → non cercare template DDT
+        console.log(`[DDTTemplateMatcherService] ⏭️ Skip: tipo ${currentTaskType} non supporta template DDT`);
         return null;
       }
 
       // ✅ STEP 5: Rileva lingua del testo
       const detectedLang = this.detectLanguage(text);
+      console.log(`[DDTTemplateMatcherService] 🌐 Lingua rilevata: ${detectedLang} per testo: "${text}"`);
 
       // ✅ STEP 6: Normalizza testo della riga nodo
       const textNormalized = this.normalizeForMatch(text);
+      console.log(`[DDTTemplateMatcherService] 📝 Testo normalizzato: "${text}" → "${textNormalized}"`);
 
       if (!textNormalized || textNormalized.length === 0) {
+        console.log(`[DDTTemplateMatcherService] ❌ Testo normalizzato vuoto, skip matching`);
         return null;
       }
 
@@ -175,9 +199,12 @@ export class DDTTemplateMatcherService {
         normalizedLabelLength: number; // Lunghezza della label normalizzata
       }> = [];
 
+      console.log(`[DDTTemplateMatcherService] 🔍 Inizio matching su ${templates.length} template`);
+
       for (const template of templates) {
         const templateId = template.id || template._id?.toString() || '';
         if (!templateId) {
+          console.log(`[DDTTemplateMatcherService] ⚠️ Template senza ID, skip:`, template);
           continue;
         }
 
@@ -187,14 +214,17 @@ export class DDTTemplateMatcherService {
         const labelUsed = translatedLabel || originalLabel;
 
         if (!labelUsed) {
+          console.log(`[DDTTemplateMatcherService] ⚠️ Template ${templateId} senza label, skip`);
           continue;
         }
 
         // Normalizza la label
         const templateNormalized = this.normalizeForMatch(labelUsed);
+        console.log(`[DDTTemplateMatcherService] 🔎 Template "${templateId}": label="${labelUsed}" → normalizzata="${templateNormalized}"`);
 
         // Match esatto dopo normalizzazione
         if (templateNormalized === textNormalized) {
+          console.log(`[DDTTemplateMatcherService] ✅ MATCH ESATTO trovato: "${templateNormalized}" === "${textNormalized}"`);
           matches.push({
             template,
             matchType: 'exact',
@@ -206,7 +236,9 @@ export class DDTTemplateMatcherService {
         }
 
         // Match per parole chiave
-        if (this.matchByKeywords(templateNormalized, textNormalized)) {
+        const keywordMatch = this.matchByKeywords(templateNormalized, textNormalized);
+        if (keywordMatch) {
+          console.log(`[DDTTemplateMatcherService] ✅ MATCH KEYWORDS trovato: template="${templateNormalized}" matcha con testo="${textNormalized}"`);
           matches.push({
             template,
             matchType: 'keywords',
@@ -214,11 +246,16 @@ export class DDTTemplateMatcherService {
             templateId,
             normalizedLabelLength: templateNormalized.length
           });
+        } else {
+          console.log(`[DDTTemplateMatcherService] ❌ No match: template="${templateNormalized}" vs testo="${textNormalized}"`);
         }
       }
 
       // ✅ STEP 8: Scegli il match con la label più lunga (più specifica)
+      console.log(`[DDTTemplateMatcherService] 📊 Trovati ${matches.length} match totali`);
+
       if (matches.length === 0) {
+        console.log(`[DDTTemplateMatcherService] ❌ Nessun match trovato per "${textNormalized}"`);
         return null;
       }
 
@@ -227,11 +264,24 @@ export class DDTTemplateMatcherService {
         // Priorità ai match esatti
         if (a.matchType === 'exact' && b.matchType !== 'exact') return -1;
         if (a.matchType !== 'exact' && b.matchType === 'exact') return 1;
-        // Se stesso tipo, ordina per lunghezza decrescente
+        // Se stesso tipo, ordina per lunghezza decrescente (vince quello con più parole)
         return b.normalizedLabelLength - a.normalizedLabelLength;
       });
 
       const bestMatch = matches[0];
+      console.log(`[DDTTemplateMatcherService] 🏆 MIGLIOR MATCH selezionato:`, {
+        templateId: bestMatch.templateId,
+        label: bestMatch.labelUsed,
+        matchType: bestMatch.matchType,
+        normalizedLength: bestMatch.normalizedLabelLength,
+        totalMatches: matches.length,
+        allMatches: matches.map(m => ({
+          templateId: m.templateId,
+          label: m.labelUsed,
+          matchType: m.matchType,
+          length: m.normalizedLabelLength
+        }))
+      });
 
       return {
         template: bestMatch.template,

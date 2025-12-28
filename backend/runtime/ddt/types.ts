@@ -83,24 +83,23 @@ export interface AssembledDDT {
 export interface StepGroup {
   type: string;
   escalations?: Escalation[];
-  actions?: Action[];
+  tasks?: Task[];
 }
 
 export interface Escalation {
-  actions: Action[];
+  tasks: Task[];
   type?: string;
   escalationType?: string;
 }
 
-export interface Action {
-  actionId?: string;
-  actionInstanceId?: string;
+export interface Task {
+  id?: string;
   type?: string;
   text?: string;
-  parameters?: ActionParameter[];
+  parameters?: TaskParameter[];
 }
 
-export interface ActionParameter {
+export interface TaskParameter {
   parameterId?: string;
   key?: string;
   value?: any;
