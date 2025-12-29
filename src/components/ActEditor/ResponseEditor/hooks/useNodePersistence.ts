@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { TaskType, templateIdToTaskType } from '../../../../types/taskTypes';
 
 /**
  * Hook for normalizing and persisting node model changes in ResponseEditor.
@@ -42,7 +43,11 @@ export function useNodePersistence(
           if (!item) return null;
 
           const id = item.templateId || 'sayMessage';
+          // ✅ Determina TaskType dal templateId se non presente
+          const taskType = item.type ?? templateIdToTaskType(id) || TaskType.SayMessage;
+
           const out: any = {
+            type: taskType, // ✅ Aggiunto campo type (enum numerico)
             templateId: id
           };
 
@@ -58,7 +63,7 @@ export function useNodePersistence(
           if (item.color) out.color = item.color;
 
           // Per azioni testuali, aggiungi contenuto se presente (non scartare i vuoti)
-          if (id === 'sayMessage' || id === 'askQuestion') {
+          if (id === 'sayMessage') {
             // Always preserve textKey if present (for translation reference)
             if (typeof item.textKey === 'string') {
               out.parameters = [{ parameterId: 'text', value: item.textKey }];

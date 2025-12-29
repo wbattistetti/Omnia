@@ -2,7 +2,7 @@ Option Strict On
 Option Explicit On
 
 Imports System.Collections.Generic
-Imports System.Text.Json
+Imports Newtonsoft.Json
 Imports DDTEngine
 
 ''' <summary>
@@ -26,24 +26,46 @@ Public Class DDTCompiler
     ''' Compila un DDT da stringa JSON
     ''' </summary>
     Public Function Compile(ddtJson As String) As DDTCompilationResult
+        Console.WriteLine($"🔍 [DDTCompiler] Compile called, ddtJson length={If(ddtJson IsNot Nothing, ddtJson.Length, 0)}")
+        System.Diagnostics.Debug.WriteLine($"🔍 [DDTCompiler] Compile called, ddtJson length={If(ddtJson IsNot Nothing, ddtJson.Length, 0)}")
+
         If String.IsNullOrEmpty(ddtJson) Then
             Throw New ArgumentException("DDT JSON cannot be null or empty", NameOf(ddtJson))
         End If
 
         ' 1. Deserializza JSON in AssembledDDT (struttura IDE tipizzata)
-        Dim options As New JsonSerializerOptions() With {
-            .PropertyNameCaseInsensitive = True,
-            .ReadCommentHandling = JsonCommentHandling.Skip,
-            .AllowTrailingCommas = True
+        Console.WriteLine($"🔍 [DDTCompiler] Step 1: Deserializing JSON to AssembledDDT...")
+        System.Diagnostics.Debug.WriteLine($"🔍 [DDTCompiler] Step 1: Deserializing JSON to AssembledDDT...")
+        Dim settings As New JsonSerializerSettings() With {
+            .NullValueHandling = NullValueHandling.Ignore,
+            .MissingMemberHandling = MissingMemberHandling.Ignore
         }
+        ' ✅ Register custom converters (also specified as attributes, but explicit registration ensures they work)
+        settings.Converters.Add(New MainDataNodeListConverter())
+        settings.Converters.Add(New DialogueStepListConverter())
 
-        Dim assembled As Compiler.AssembledDDT = JsonSerializer.Deserialize(Of Compiler.AssembledDDT)(ddtJson, options)
+        Dim assembled As Compiler.AssembledDDT = JsonConvert.DeserializeObject(Of Compiler.AssembledDDT)(ddtJson, settings)
         If assembled Is Nothing Then
             Throw New InvalidOperationException("Impossibile deserializzare AssembledDDT dal JSON")
         End If
 
+        Console.WriteLine($"✅ [DDTCompiler] AssembledDDT deserialized: Id={assembled.Id}, MainData IsNot Nothing={assembled.MainData IsNot Nothing}")
+        System.Diagnostics.Debug.WriteLine($"✅ [DDTCompiler] AssembledDDT deserialized: Id={assembled.Id}, MainData IsNot Nothing={assembled.MainData IsNot Nothing}")
+        If assembled.MainData IsNot Nothing Then
+            Console.WriteLine($"🔍 [DDTCompiler] AssembledDDT.MainData.Count={assembled.MainData.Count}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [DDTCompiler] AssembledDDT.MainData.Count={assembled.MainData.Count}")
+        End If
+
         ' 2. Trasforma AssembledDDT (IDE) → DDTInstance (Runtime)
+        Console.WriteLine($"🔍 [DDTCompiler] Step 2: Converting AssembledDDT to DDTInstance using DDTAssembler.ToRuntime...")
+        System.Diagnostics.Debug.WriteLine($"🔍 [DDTCompiler] Step 2: Converting AssembledDDT to DDTInstance using DDTAssembler.ToRuntime...")
         Dim instance As DDTInstance = _assembler.ToRuntime(assembled)
+        Console.WriteLine($"✅ [DDTCompiler] DDTInstance created: MainDataList IsNot Nothing={instance.MainDataList IsNot Nothing}")
+        System.Diagnostics.Debug.WriteLine($"✅ [DDTCompiler] DDTInstance created: MainDataList IsNot Nothing={instance.MainDataList IsNot Nothing}")
+        If instance.MainDataList IsNot Nothing Then
+            Console.WriteLine($"🔍 [DDTCompiler] DDTInstance.MainDataList.Count={instance.MainDataList.Count}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [DDTCompiler] DDTInstance.MainDataList.Count={instance.MainDataList.Count}")
+        End If
 
         ' 3. Carica nlpContract per tutti i nodi
         LoadContractsForAllNodes(instance)

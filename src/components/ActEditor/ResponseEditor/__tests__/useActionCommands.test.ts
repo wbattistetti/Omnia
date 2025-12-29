@@ -4,7 +4,7 @@ import useActionCommands from '../../ResponseEditor/useActionCommands';
 import { Escalation } from '../../ResponseEditor/types';
 
 const makeModel = (): Escalation[] => ([
-  { actions: [ { actionId: 'sayMessage', text: 'A' }, { actionId: 'askQuestion', text: 'B' } ] },
+  { actions: [ { actionId: 'sayMessage', text: 'A' }, { actionId: 'DataRequest', text: 'B' } ] },
   { actions: [ { actionId: 'readFromBackend', text: 'C' } ] },
 ]);
 
@@ -30,7 +30,7 @@ describe('useActionCommands', () => {
     render(<Harness ref={ref} />);
     ref.current.deleteAction(0, 0);
     const model: Escalation[] = ref.current.getModel();
-    expect(model[0].actions.map(a => a.actionId)).toEqual(['askQuestion']);
+    expect(model[0].actions.map(a => a.actionId)).toEqual(['DataRequest']);
   });
 
   test('moveAction moves within same escalation', () => {
@@ -39,7 +39,7 @@ describe('useActionCommands', () => {
     // move action index 0 after index 1 within escalation 0
     ref.current.moveAction(0, 0, 0, 1, 'after');
     const model: Escalation[] = ref.current.getModel();
-    expect(model[0].actions.map(a => a.actionId)).toEqual(['askQuestion', 'sayMessage']);
+    expect(model[0].actions.map(a => a.actionId)).toEqual(['DataRequest', 'sayMessage']);
   });
 
   test('moveAction moves across escalations', () => {
@@ -48,7 +48,7 @@ describe('useActionCommands', () => {
     ref.current.moveAction(0, 1, 1, 0, 'before');
     const model: Escalation[] = ref.current.getModel();
     expect(model[0].actions.map(a => a.actionId)).toEqual(['sayMessage']);
-    expect(model[1].actions.map(a => a.actionId)).toEqual(['askQuestion', 'readFromBackend']);
+    expect(model[1].actions.map(a => a.actionId)).toEqual(['DataRequest', 'readFromBackend']);
   });
 
   test('dropFromViewer normalizes and inserts', () => {

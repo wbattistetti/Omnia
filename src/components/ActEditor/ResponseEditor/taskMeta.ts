@@ -15,7 +15,7 @@ export type TaskMeta = {
 const ALIASES: Record<string, string> = {
     // textual
     sayMessage: 'sayMessage',
-    askQuestion: 'askQuestion',
+    // ✅ Rimosso askQuestion: 'askQuestion', (ridondante, usare DataRequest)
     // escalate
     toHuman: 'escalateToHuman',
     toGuardVR: 'escalateToGuardVR',

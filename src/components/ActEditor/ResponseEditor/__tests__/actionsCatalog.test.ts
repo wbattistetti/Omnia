@@ -15,9 +15,9 @@ const mockActionsCatalog = [
     color: 'text-blue-500'
   },
   {
-    id: 'askQuestion',
-    label: { en: 'Question', it: 'Domanda' },
-    description: { en: 'Asks a question', it: 'Pone una domanda' },
+    id: 'DataRequest',
+    label: { en: 'Data Request', it: 'Richiesta Dati' },
+    description: { en: 'Requests data from user', it: 'Richiede dati all\'utente' },
     icon: 'HelpCircle',
     color: 'text-purple-500'
   }
@@ -88,4 +88,4 @@ describe('Actions Catalog Loading', () => {
     // Verifica che il componente si carichi senza errori
     expect(screen.getByText('—')).toBeInTheDocument(); // Label di default
   });
-}); 
+});

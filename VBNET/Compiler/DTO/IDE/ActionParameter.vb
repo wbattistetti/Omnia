@@ -1,16 +1,16 @@
 Option Strict On
 Option Explicit On
 
-Imports System.Text.Json.Serialization
+Imports Newtonsoft.Json
 
 ''' <summary>
-''' TaskParameter: corrisponde ESATTAMENTE a TaskParameter TypeScript del frontend
+''' ActionParameter: corrisponde ESATTAMENTE a ActionParameter TypeScript del frontend
 ''' </summary>
-Public Class TaskParameter
-    <JsonPropertyName("parameterId")>
+Public Class ActionParameter
+    <JsonProperty("parameterId")>
     Public Property ParameterId As String
 
-    <JsonPropertyName("value")>
+    <JsonProperty("value")>
     Public Property Value As String
 End Class
 

@@ -199,7 +199,7 @@ class TaskTemplateService {
   private mapActionIdToTemplateId(actionId: string): string {
     const mapping: Record<string, string> = {
       'sayMessage': 'SayMessage',
-      'askQuestion': 'GetData',
+      // ✅ Rimosso 'askQuestion': 'GetData', (ridondante)
       'readFromBackend': 'callBackend',
       'writeToBackend': 'callBackend',
       'sendSMS': 'sendSMS',
@@ -223,7 +223,7 @@ class TaskTemplateService {
    */
   private determineEditorType(actionId: string): 'message' | 'ddt' | 'problem' | 'backend' | 'simple' {
     if (actionId === 'sayMessage') return 'message';
-    if (actionId === 'askQuestion') return 'ddt';
+    // ✅ Rimosso if (actionId === 'askQuestion') - DataRequest viene gestito automaticamente come 'ddt'
     if (actionId === 'readFromBackend' || actionId === 'writeToBackend') return 'backend';
     return 'simple';
   }

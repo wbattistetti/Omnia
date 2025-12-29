@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { IntentMessages } from '../components/IntentMessagesBuilder';
+import { TaskType, templateIdToTaskType } from '../../../types/taskTypes';
 
 /**
  * Converte IntentMessages in formato DDT steps e li salva nel DDT
@@ -40,11 +41,14 @@ export function saveIntentMessagesToDDT(ddt: any, messages: IntentMessages): any
   // Helper per creare una escalation con un messaggio
   const createEscalation = (text: string): any => {
     const taskId = uuidv4();
+    const templateId = 'sayMessage';
+    const taskType = templateIdToTaskType(templateId) || TaskType.SayMessage;
     return {
       escalationId: uuidv4(),
       tasks: [  // ✅ New field
         {
-          templateId: 'sayMessage',  // ✅ Renamed from actionId
+          type: taskType, // ✅ Aggiunto campo type (enum numerico)
+          templateId: templateId,  // ✅ Renamed from actionId
           taskId: taskId,            // ✅ Renamed from actionInstanceId
           parameters: [
           {

@@ -1,6 +1,7 @@
 import React from 'react';
 import { info } from '../../../utils/logger';
 import type { Task } from '../../../types/taskTypes';
+import { TaskType, templateIdToTaskType } from '../../../types/taskTypes';
 import { normalizeTaskFromViewer } from './utils/normalize';
 
 export type Position = 'before' | 'after';
@@ -354,8 +355,12 @@ export default function useTaskCommands(
       }
       const taskId = task.id || `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
+      // ✅ Determina TaskType dal templateId
+      const taskType = task.type ?? templateIdToTaskType(templateId) || TaskType.SayMessage;
+
       const newTask: any = {
         id: taskId,
+        type: taskType, // ✅ Aggiunto campo type (enum numerico)
         templateId: templateId,
         // Store parameters in params for backward compatibility
         params: parameters ? { text: parameters.find((p: any) => p.parameterId === 'text')?.value } : {},

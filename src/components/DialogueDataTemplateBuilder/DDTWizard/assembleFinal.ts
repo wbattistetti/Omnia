@@ -5,6 +5,7 @@ import type { ArtifactStore } from './artifactStore';
 import { getAllV2Draft } from './V2DraftStore';
 import { taskTemplateService } from '../../../services/TaskTemplateService';
 import { cloneAndAdaptContract, createSubIdMapping } from '../../../utils/contractUtils';
+import { TaskType, templateIdToTaskType } from '../../../types/taskTypes';
 
 export interface AssembledDDT {
   id: string;
@@ -493,8 +494,13 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
           }
         }
 
+        // ✅ Rimosso askQuestion, usa DataRequest per step 'start' quando isAsk
+        const templateIdForTask = stepKey === 'start' && isAsk ? 'DataRequest' : 'sayMessage';
+        const taskType = templateIdToTaskType(templateIdForTask) || TaskType.SayMessage;
+
         const baseTask = {
-          templateId: stepKey === 'start' && isAsk ? 'askQuestion' : 'sayMessage',  // ✅ Renamed from actionId
+          type: taskType, // ✅ Aggiunto campo type (enum numerico)
+          templateId: templateIdForTask,  // ✅ Renamed from actionId
           taskId: actionInstanceId,  // ✅ Renamed from actionInstanceId
           parameters: [{ parameterId: 'text', value: actionInstanceId }]
         };
@@ -506,7 +512,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
             parameters: [{ parameterId: 'text', value: actionInstanceId }]
           }],
           actions: [{  // ✅ Legacy alias for backward compatibility
-            actionId: stepKey === 'start' && isAsk ? 'askQuestion' : 'sayMessage',
+            actionId: templateIdForTask,
             actionInstanceId: actionInstanceId,
             parameters: [{ parameterId: 'text', value: actionInstanceId }]
           }]

@@ -23,6 +23,15 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Visual Studio
+.vs/
+*.user
+*.userosscache
+
+# Build outputs
+**/bin/
+**/obj/
 # Node
 node_modules/
 dist/

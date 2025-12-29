@@ -5,9 +5,8 @@ Imports DDTEngine
 Imports Compiler
 
 ''' <summary>
-''' Esegue task compilati
-''' - Gestisce esecuzione di diversi tipi di task (SayMessage, GetData, ecc.)
-''' - Chiama DDT Engine per task GetData
+''' Esegue task compilati usando executor tipizzati
+''' - Delega l'esecuzione a executor specifici per tipo di task
 ''' - Gestisce callback per messaggi
 ''' </summary>
 Public Class TaskExecutor
@@ -37,91 +36,28 @@ Public Class TaskExecutor
         End If
 
         Try
-            Select Case task.TaskType
-                Case TaskTypes.SayMessage
-                    Return ExecuteSayMessage(DirectCast(task, CompiledTaskSayMessage))
-                Case TaskTypes.DataRequest
-                    Return ExecuteGetData(DirectCast(task, CompiledTaskGetData), state)
-                Case TaskTypes.ClassifyProblem
-                    Return ExecuteClassifyProblem(DirectCast(task, CompiledTaskClassifyProblem))
-                Case TaskTypes.BackendCall
-                    Return ExecuteBackendCall(DirectCast(task, CompiledTaskBackendCall))
-                Case TaskTypes.CloseSession
-                    Return ExecuteCloseSession(DirectCast(task, CompiledTaskCloseSession))
-                Case TaskTypes.Transfer
-                    Return ExecuteTransfer(DirectCast(task, CompiledTaskTransfer))
-                Case Else
-                    Return New TaskExecutionResult() With {
-                        .Success = False,
-                        .Err = $"Unknown task type: {task.TaskType}"
-                    }
-            End Select
+            ' Ottieni l'executor appropriato per il tipo di task
+            Dim executor = TaskExecutorFactory.GetExecutor(task.TaskType, _ddtEngine)
+
+            If executor Is Nothing Then
+                Return New TaskExecutionResult() With {
+                    .Success = False,
+                    .Err = $"No executor found for task type: {task.TaskType}"
+                }
+            End If
+
+            ' Imposta il callback per i messaggi
+            executor.SetMessageCallback(_messageCallback)
+
+            ' Esegui il task usando l'executor specifico
+            Return executor.Execute(task, state)
+
         Catch ex As Exception
             Return New TaskExecutionResult() With {
                 .Success = False,
                 .Err = ex.Message
             }
         End Try
-    End Function
-
-    Private Function ExecuteSayMessage(task As CompiledTaskSayMessage) As TaskExecutionResult
-        If String.IsNullOrEmpty(task.Text) Then
-            Return New TaskExecutionResult() With {
-                .Success = False,
-                .Err = "Message text is empty"
-            }
-        End If
-
-        If _messageCallback IsNot Nothing Then
-            _messageCallback(task.Text, Nothing, 0)
-        End If
-
-        Return New TaskExecutionResult() With {
-            .Success = True
-        }
-    End Function
-
-    Private Function ExecuteGetData(task As CompiledTaskGetData, state As ExecutionState) As TaskExecutionResult
-        If task.DDT Is Nothing Then
-            Return New TaskExecutionResult() With {
-                .Success = False,
-                .Err = "DDT instance is Nothing"
-            }
-        End If
-
-        ' TODO: Implementare esecuzione DDT usando _ddtEngine
-        ' Per ora ritorna successo
-        Return New TaskExecutionResult() With {
-            .Success = True
-        }
-    End Function
-
-    Private Function ExecuteClassifyProblem(task As CompiledTaskClassifyProblem) As TaskExecutionResult
-        ' TODO: Implementare classificazione problema
-        Return New TaskExecutionResult() With {
-            .Success = True
-        }
-    End Function
-
-    Private Function ExecuteBackendCall(task As CompiledTaskBackendCall) As TaskExecutionResult
-        ' TODO: Implementare chiamata backend
-        Return New TaskExecutionResult() With {
-            .Success = True
-        }
-    End Function
-
-    Private Function ExecuteCloseSession(task As CompiledTaskCloseSession) As TaskExecutionResult
-        ' TODO: Implementare chiusura sessione
-        Return New TaskExecutionResult() With {
-            .Success = True
-        }
-    End Function
-
-    Private Function ExecuteTransfer(task As CompiledTaskTransfer) As TaskExecutionResult
-        ' TODO: Implementare trasferimento
-        Return New TaskExecutionResult() With {
-            .Success = True
-        }
     End Function
 End Class
 

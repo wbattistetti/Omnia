@@ -25,6 +25,14 @@
     <Compile Include="TaskExecutor.vb" />
     <Compile Include="ConditionEvaluator.vb" />
     <Compile Include="ExecutionState.vb" />
+    <Compile Include="TaskExecutor\TaskExecutorBase.vb" />
+    <Compile Include="TaskExecutor\DataRequestTaskExecutor.vb" />
+    <Compile Include="TaskExecutor\SayMessageTaskExecutor.vb" />
+    <Compile Include="TaskExecutor\ClassifyProblemTaskExecutor.vb" />
+    <Compile Include="TaskExecutor\BackendTaskExecutor.vb" />
+    <Compile Include="TaskExecutor\CloseSessionTaskExecutor.vb" />
+    <Compile Include="TaskExecutor\TransferTaskExecutor.vb" />
+    <Compile Include="TaskExecutor\TaskExecutorFactory.vb" />
   </ItemGroup>
 
 </Project>

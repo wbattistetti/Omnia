@@ -21,8 +21,8 @@ function actTypeToTaskType(actType: string): TaskType {
     case 'message':
       return TaskType.SayMessage;
     case 'datarequest':
-    case 'askquestion':
-      return TaskType.DataRequest; // ✅ Corretto: TaskType.GetData non esiste più, usare TaskType.DataRequest
+      // ✅ Rimosso case 'askquestion': (ridondante, già gestito da datarequest)
+      return TaskType.DataRequest;
     case 'problemclassification':
     case 'classifyproblem':
       return TaskType.ClassifyProblem;

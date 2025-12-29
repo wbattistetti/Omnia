@@ -189,7 +189,7 @@ function TaskRowInner({
         }}
       >
         {icon && <span style={{ color, display: 'flex', alignItems: 'center', marginRight: 8 }}>{icon}</span>}
-        {taskId && taskId !== 'sayMessage' && taskId !== 'askQuestion' && label && (
+        {taskId && taskId !== 'sayMessage' && label && (
           <span
             style={{
               background: '#222',

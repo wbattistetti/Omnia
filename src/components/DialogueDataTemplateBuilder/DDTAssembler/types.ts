@@ -37,7 +37,7 @@ export type StepGroup = {
 };
 
 export const KNOWN_ACTIONS = {
-  askQuestion: { defaultParameter: 'text' },
+  DataRequest: { defaultParameter: 'text' }, // ✅ Aggiunto DataRequest
   sayMessage: { defaultParameter: 'text' }
-  // ... altri tipi se servono
+  // ✅ Rimosso askQuestion (ridondante)
 };

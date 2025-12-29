@@ -8,10 +8,9 @@ describe('StepBuilder', () => {
 
   describe('buildActionInstance', () => {
     it('should create a valid Action and translation for start step', () => {
-      const { action, translation } = buildActionInstance('start', 'Hello!', ddtId, 0, 0);
-      expect(action.actionId).toBe('askQuestion');
-      expect(action.parameters[0].value).toContain('runtime.ddt_test.start#1.askQuestion_1_1_mock-uuid.text');
-      expect(translation.value).toBe('Hello!');
+      const task = buildActionInstance('start', 'Hello!', ddtId, {});
+      expect(task.type).toBe(3); // TaskType.DataRequest
+      expect(task.params?.text).toContain('runtime.ddt_test.start.DataRequest');
     });
     it('should create a valid Action and translation for noMatch step', () => {
       const { action, translation } = buildActionInstance('noMatch', 'No match!', ddtId, 1, 2);

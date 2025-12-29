@@ -100,7 +100,7 @@ export default function MessageReviewMessage({ item, onSave, updateSelectedNode 
     };
 
     const handleEdit = () => {
-        if (item.textKey || item.actionId === 'sayMessage' || item.actionId === 'askQuestion') {
+        if (item.textKey || item.actionId === 'sayMessage') {
             setEditValue(item.text);
             setEditing(true);
             setTimeout(() => inputRef.current?.focus(), 0);
@@ -130,7 +130,7 @@ export default function MessageReviewMessage({ item, onSave, updateSelectedNode 
                 transition: 'background 0.2s',
             }}
             onMouseEnter={(e) => {
-                if (!editing && (item.textKey || item.actionId === 'sayMessage' || item.actionId === 'askQuestion')) {
+                if (!editing && (item.textKey || item.actionId === 'sayMessage')) {
                     e.currentTarget.style.background = '#f9fafb';
                 }
             }}
@@ -151,7 +151,7 @@ export default function MessageReviewMessage({ item, onSave, updateSelectedNode 
                 </span>
             )}
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
-                {editing && (item.textKey || item.actionId === 'sayMessage' || item.actionId === 'askQuestion') ? (
+                {editing && (item.textKey || item.actionId === 'sayMessage') ? (
                     <>
                         <ActionText
                             text={item.text}
@@ -199,11 +199,11 @@ export default function MessageReviewMessage({ item, onSave, updateSelectedNode 
                     </>
                 ) : (
                     <div
-                        title={(item.textKey || item.actionId === 'sayMessage' || item.actionId === 'askQuestion') ? 'Click to edit' : undefined}
+                        title={(item.textKey || item.actionId === 'sayMessage') ? 'Click to edit' : undefined}
                         onClick={handleEdit}
                         className={combinedClass}
                         style={{
-                            cursor: (item.textKey || item.actionId === 'sayMessage' || item.actionId === 'askQuestion') ? 'pointer' : 'default',
+                            cursor: (item.textKey || item.actionId === 'sayMessage') ? 'pointer' : 'default',
                             flex: 1,
                             wordBreak: 'break-word',
                             lineHeight: '1.5',

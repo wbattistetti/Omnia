@@ -1,6 +1,7 @@
 // Moved from orchestrator/StepBuilder.ts for modular DDTAssembler structure.
 import { StepGroup, Escalation, KNOWN_ACTIONS } from './types';
 import type { Task } from '../../../types/taskTypes';
+import { TaskType, templateIdToTaskType } from '../../../types/taskTypes';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -18,7 +19,8 @@ export function buildTask(
   ddtId: string,
   translations: Record<string, string>
 ): Task {
-  const templateId = stepType === 'start' ? 'askQuestion' : 'sayMessage';
+  // ✅ Rimosso askQuestion, usa DataRequest per step 'start'
+  const templateId = stepType === 'start' ? 'DataRequest' : 'sayMessage';
   const taskId = uuidv4(); // Unique Task ID
   const parameterId = KNOWN_ACTIONS[templateId]?.defaultParameter || 'text';
   const valueKey = `runtime.${ddtId}.${stepType}.${templateId}.${taskId}.text`;
@@ -26,9 +28,13 @@ export function buildTask(
   // Save translation key-value pair
   translations[valueKey] = message;
 
+  // ✅ Determina TaskType dal templateId
+  const taskType = templateIdToTaskType(templateId) || TaskType.SayMessage;
+
   // Return complete Task object
   return {
     id: taskId,
+    type: taskType, // ✅ Aggiunto campo type (enum numerico)
     templateId: null, // Standalone task (not derived from template)
     text: message, // Direct text value
     // Store parameters for backward compatibility with old system

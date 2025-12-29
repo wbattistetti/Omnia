@@ -8,6 +8,7 @@ Imports Newtonsoft.Json
 ''' Task definition
 ''' Tipi del mondo IDE - usati solo per deserializzazione JSON
 ''' Simplified: Uses templateId (string) directly, no conversion needed
+''' ✅ UNIFIED: Uses Newtonsoft.Json attributes for consistency
 ''' </summary>
 Public Class Task
     ''' <summary>
@@ -17,8 +18,17 @@ Public Class Task
     Public Property Id As String
 
     ''' <summary>
+    ''' Task type (enum numerico, e.g., 0=SayMessage, 3=DataRequest)
+    ''' Determina il comportamento del task
+    ''' PRIORITÀ 1: Usa questo campo se presente
+    ''' </summary>
+    <JsonProperty("type")>
+    Public Property Type As Integer?
+
+    ''' <summary>
     ''' Task template ID (string, e.g., "SayMessage", "GetData")
-    ''' Direct mapping from IDE to Runtime - no conversion needed
+    ''' null = Task standalone, GUID = referenzia un altro Task
+    ''' PRIORITÀ 2: Usa questo campo come fallback se Type non è presente
     ''' </summary>
     <JsonProperty("templateId")>
     Public Property TemplateId As String
@@ -30,7 +40,14 @@ Public Class Task
     Public Property Text As String
 
     ''' <summary>
-    ''' Task value (parameters, DDT reference, etc.)
+    ''' Task parameters array (for tasks in escalations)
+    ''' Array of { parameterId: string, value: string }
+    ''' </summary>
+    <JsonProperty("parameters")>
+    Public Property Parameters As List(Of TaskParameter)
+
+    ''' <summary>
+    ''' Task value (parameters, DDT reference, etc.) - legacy format
     ''' </summary>
     <JsonProperty("value")>
     Public Property Value As Dictionary(Of String, Object)
@@ -56,6 +73,7 @@ Public Class Task
     Public Property Examples As List(Of Object)
 
     Public Sub New()
+        Parameters = New List(Of TaskParameter)()
         Value = New Dictionary(Of String, Object)()
         MainData = New List(Of MainDataNode)()
         StepPrompts = New Dictionary(Of String, Object)()

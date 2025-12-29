@@ -17,36 +17,64 @@ Public Class FlowCompiler
     ''' Crea un CompiledTask type-safe in base al TaskType usando il factory pattern
     ''' </summary>
     Private Function CreateTypedCompiledTask(taskType As TaskTypes, task As Task, row As RowData, node As FlowNode, taskId As String, flow As Flow) As CompiledTask
+        Console.WriteLine($"🔍 [FlowCompiler] CreateTypedCompiledTask called: taskType={taskType}, taskId={taskId}")
+        System.Diagnostics.Debug.WriteLine($"🔍 [FlowCompiler] CreateTypedCompiledTask called: taskType={taskType}, taskId={taskId}")
         ' Usa il factory per ottenere il compiler appropriato
         Dim compiler = TaskCompilerFactory.GetCompiler(taskType)
-        Return compiler.Compile(task, row, node, taskId, flow)
+        Console.WriteLine($"🔍 [FlowCompiler] Compiler obtained: type={compiler.GetType().Name}")
+        System.Diagnostics.Debug.WriteLine($"🔍 [FlowCompiler] Compiler obtained: type={compiler.GetType().Name}")
+        Console.WriteLine($"🔍 [FlowCompiler] Calling compiler.Compile for task {taskId}...")
+        System.Diagnostics.Debug.WriteLine($"🔍 [FlowCompiler] Calling compiler.Compile for task {taskId}...")
+        Dim result = compiler.Compile(task, row, node, taskId, flow)
+        Console.WriteLine($"✅ [FlowCompiler] compiler.Compile completed for task {taskId}, result type={result.GetType().Name}")
+        System.Diagnostics.Debug.WriteLine($"✅ [FlowCompiler] compiler.Compile completed for task {taskId}, result type={result.GetType().Name}")
+        Return result
     End Function
 
     ''' <summary>
     ''' Converte templateId string (es. "SayMessage", "DataRequest") in TaskTypes enum
     ''' </summary>
     Private Function ConvertTemplateIdToEnum(templateId As String) As TaskTypes
+        Console.WriteLine($"🔍 [FlowCompiler] ConvertTemplateIdToEnum called: templateId='{templateId}'")
+        System.Diagnostics.Debug.WriteLine($"🔍 [FlowCompiler] ConvertTemplateIdToEnum called: templateId='{templateId}'")
         If String.IsNullOrEmpty(templateId) Then
+            Console.WriteLine($"⚠️ [FlowCompiler] templateId is empty, defaulting to SayMessage")
+            System.Diagnostics.Debug.WriteLine($"⚠️ [FlowCompiler] templateId is empty, defaulting to SayMessage")
             Return TaskTypes.SayMessage ' Default
         End If
 
         Dim normalized = templateId.Trim().ToLower()
+        Console.WriteLine($"🔍 [FlowCompiler] Normalized templateId: '{templateId}' → '{normalized}'")
+        System.Diagnostics.Debug.WriteLine($"🔍 [FlowCompiler] Normalized templateId: '{templateId}' → '{normalized}'")
 
         Select Case normalized
             Case "saymessage", "message"
+                Console.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.SayMessage")
+                System.Diagnostics.Debug.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.SayMessage")
                 Return TaskTypes.SayMessage
             Case "closesession", "closesessionaction"
+                Console.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.CloseSession")
+                System.Diagnostics.Debug.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.CloseSession")
                 Return TaskTypes.CloseSession
             Case "transfer"
+                Console.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.Transfer")
+                System.Diagnostics.Debug.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.Transfer")
                 Return TaskTypes.Transfer
             Case "getdata", "datarequest", "askquestion"
+                Console.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.DataRequest")
+                System.Diagnostics.Debug.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.DataRequest")
                 Return TaskTypes.DataRequest  ' ✅ Rinominato da GetData (backward compatibility: 'getdata' → DataRequest)
             Case "backendcall", "callbackend", "readfrombackend", "writetobackend"
+                Console.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.BackendCall")
+                System.Diagnostics.Debug.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.BackendCall")
                 Return TaskTypes.BackendCall
             Case "classifyproblem", "problemclassification"
+                Console.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.ClassifyProblem")
+                System.Diagnostics.Debug.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.ClassifyProblem")
                 Return TaskTypes.ClassifyProblem
             Case Else
-                Console.WriteLine($"⚠️ [FlowCompiler] Unknown templateId: '{templateId}', defaulting to SayMessage")
+                Console.WriteLine($"⚠️ [FlowCompiler] Unknown templateId: '{templateId}' (normalized: '{normalized}'), defaulting to SayMessage")
+                System.Diagnostics.Debug.WriteLine($"⚠️ [FlowCompiler] Unknown templateId: '{templateId}' (normalized: '{normalized}'), defaulting to SayMessage")
                 Return TaskTypes.SayMessage
         End Select
     End Function
@@ -178,12 +206,16 @@ Public Class FlowCompiler
                 End If
 
                 Console.WriteLine($"✅ [FlowCompiler] Task {taskId} has valid templateId: {task.TemplateId}")
+                System.Diagnostics.Debug.WriteLine($"✅ [FlowCompiler] Task {taskId} has valid templateId: {task.TemplateId}")
 
                 ' ✅ REFACTORED: Crea task type-safe in base al tipo
                 Dim taskType = ConvertTemplateIdToEnum(task.TemplateId)
+                Console.WriteLine($"🔍 [FlowCompiler] Converted templateId '{task.TemplateId}' to taskType={taskType}")
+                System.Diagnostics.Debug.WriteLine($"🔍 [FlowCompiler] Converted templateId '{task.TemplateId}' to taskType={taskType}")
                 Dim compiledTask As CompiledTask = CreateTypedCompiledTask(taskType, task, row, node, taskId, flow)
 
                 Console.WriteLine($"✅ [FlowCompiler] Created CompiledTask: Id={compiledTask.Id}, TaskType={compiledTask.TaskType}")
+                System.Diagnostics.Debug.WriteLine($"✅ [FlowCompiler] Created CompiledTask: Id={compiledTask.Id}, TaskType={compiledTask.TaskType}")
 
                 ' Aggiungi task al TaskGroup
                 taskGroup.Tasks.Add(compiledTask)
