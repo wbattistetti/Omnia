@@ -1,5 +1,6 @@
 import type { NodeRowData } from '../types/project';
 import type { Task, TaskInstance } from '../types/taskTypes';
+import { TaskType, actIdToTaskType } from '../types/taskTypes';
 import { taskRepository } from '../services/TaskRepository';
 // FASE 4: InstanceRepository import removed - TaskRepository handles synchronization internally
 import { generateId } from './idGenerator';

@@ -5,9 +5,10 @@ Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
 ''' <summary>
-''' StepGroup: corrisponde ESATTAMENTE a StepGroup TypeScript del frontend
+''' DialogueStep: corrisponde ESATTAMENTE a DialogueStep TypeScript del frontend
+''' Unificato con DialogueStep runtime per coerenza
 ''' </summary>
-Public Class StepGroup
+Public Class DialogueStep
         ''' <summary>
         ''' Tipo di step: 'start' | 'noMatch' | 'noInput' | 'confirmation' | 'success' | 'introduction'
         ''' </summary>
@@ -23,4 +24,4 @@ Public Class StepGroup
         Public Sub New()
             Escalations = New List(Of Escalation)()
         End Sub
-    End Class
+End Class

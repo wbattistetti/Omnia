@@ -240,33 +240,32 @@ Public Class Parser
 
         Dim trimmedInput As String = input.Trim()
 
-        ' PRIORITÀ 1: Usa regex dal contract se disponibile
+        ' PRIORITÀ 1: Usa regex pre-compilato dal contract se disponibile
         If dataNode.NlpContract IsNot Nothing AndAlso
-           dataNode.NlpContract.Regex IsNot Nothing AndAlso
-           dataNode.NlpContract.Regex.Patterns IsNot Nothing AndAlso
-           dataNode.NlpContract.Regex.Patterns.Count > 0 Then
+           TypeOf dataNode.NlpContract Is CompiledNlpContract Then
+            Dim compiledContract = CType(dataNode.NlpContract, CompiledNlpContract)
 
-            ' Usa il main pattern (primo pattern)
-            Dim mainPattern As String = dataNode.NlpContract.Regex.Patterns(0)
-            Try
-                Dim regex As New Regex(mainPattern, RegexOptions.IgnoreCase)
-                Dim match As Match = regex.Match(trimmedInput)
-                If match.Success Then
-                    ' Se ci sono gruppi named, cerca il valore principale
-                    If match.Groups.Count > 1 Then
-                        ' Preferisci il primo gruppo con valore
-                        For i As Integer = 1 To match.Groups.Count - 1
-                            If Not String.IsNullOrEmpty(match.Groups(i).Value) Then
-                                Return match.Groups(i).Value
-                            End If
-                        Next
+            ' Usa il main regex pre-compilato
+            If compiledContract.CompiledMainRegex IsNot Nothing Then
+                Try
+                    Dim match As Match = compiledContract.CompiledMainRegex.Match(trimmedInput)
+                    If match.Success Then
+                        ' Se ci sono gruppi named, cerca il valore principale
+                        If match.Groups.Count > 1 Then
+                            ' Preferisci il primo gruppo con valore
+                            For i As Integer = 1 To match.Groups.Count - 1
+                                If Not String.IsNullOrEmpty(match.Groups(i).Value) Then
+                                    Return match.Groups(i).Value
+                                End If
+                            Next
+                        End If
+                        ' Altrimenti ritorna il match completo
+                        Return match.Value
                     End If
-                    ' Altrimenti ritorna il match completo
-                    Return match.Value
-                End If
-            Catch
-                ' Pattern invalido, fallback a regex hardcoded
-            End Try
+                Catch
+                    ' Pattern invalido, fallback a regex hardcoded
+                End Try
+            End If
         End If
 
         ' PRIORITÀ 2: Fallback a regex hardcoded (retrocompatibilità)
@@ -360,6 +359,7 @@ Public Class Parser
 
         ' PRIORITÀ 1: Usa regex dal contract se disponibile
         If mainDataNode.NlpContract IsNot Nothing AndAlso
+           TypeOf mainDataNode.NlpContract Is CompiledNlpContract AndAlso
            mainDataNode.NlpContract.Regex IsNot Nothing AndAlso
            mainDataNode.NlpContract.Regex.Patterns IsNot Nothing AndAlso
            mainDataNode.NlpContract.Regex.Patterns.Count > 0 AndAlso

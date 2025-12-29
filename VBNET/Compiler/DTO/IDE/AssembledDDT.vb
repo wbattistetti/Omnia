@@ -25,7 +25,7 @@ Public Class AssembledDDT
     Public Property Translations As Dictionary(Of String, String)
 
     <JsonProperty("introduction")>
-    Public Property Introduction As Compiler.StepGroup
+    Public Property Introduction As Compiler.DialogueStep
 
     Public Sub New()
         Translations = New Dictionary(Of String, String)()

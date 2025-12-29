@@ -33,6 +33,7 @@
     <Compile Include="Models\DialogueStep.vb" />
     <Compile Include="Models\ValidationCondition.vb" />
     <Compile Include="Models\NLPContract.vb" />
+    <Compile Include="Models\CompiledNlpContract.vb" />
     <Compile Include="Models\DDTNode.vb" />
     <Compile Include="Models\ParseResultType.vb" />
     <Compile Include="Models\ParseResult.vb" />

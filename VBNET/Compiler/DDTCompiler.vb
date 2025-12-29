@@ -70,12 +70,16 @@ Public Class DDTCompiler
     End Sub
 
     ''' <summary>
-    ''' Carica nlpContract per un nodo e ricorsivamente per i suoi subData
+    ''' Carica e compila nlpContract per un nodo e ricorsivamente per i suoi subData
     ''' </summary>
     Private Sub LoadContractForNode(node As DDTNode)
-        ' Se il contract non è già presente, prova a caricarlo
+        ' Se il contract non è già presente, prova a caricarlo e compilarlo
         If node.NlpContract Is Nothing Then
-            node.NlpContract = _contractLoader.LoadContract(node)
+            Dim baseContract = _contractLoader.LoadContract(node)
+            If baseContract IsNot Nothing Then
+                ' Pre-compila il contract
+                node.NlpContract = CompiledNlpContract.Compile(baseContract)
+            End If
         End If
 
         ' Ricorsivo per subData
@@ -107,14 +111,14 @@ Public Class DDTCompiler
     Private Sub ValidateNode(node As DDTNode, errors As List(Of String))
         ' Valida placeholder nei messaggi
         If node.Steps IsNot Nothing Then
-            For Each dstep As DialogueStep In node.Steps
+            For Each dstep As DDTEngine.DialogueStep In node.Steps
                 If dstep.Escalations IsNot Nothing Then
                     For Each escalation As DDTEngine.Escalation In dstep.Escalations
                         If escalation.Tasks IsNot Nothing Then
-                            For Each task As IAction In escalation.Tasks
-                                If TypeOf task Is MessageAction Then
-                                    Dim msgAction As MessageAction = DirectCast(task, MessageAction)
-                                    ValidatePlaceholders(msgAction.Text, node, errors)
+                            For Each task As ITask In escalation.Tasks
+                                If TypeOf task Is MessageTask Then
+                                    Dim msgTask As MessageTask = DirectCast(task, MessageTask)
+                                    ValidatePlaceholders(msgTask.Text, node, errors)
                                 End If
                             Next
                         End If

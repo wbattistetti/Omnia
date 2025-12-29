@@ -79,10 +79,10 @@ Public Class DDTNode
     Public Property InvalidConditionId As String
 
     ''' <summary>
-    ''' NLP Contract per l'estrazione dati (regex patterns, mapping, ecc.)
-    ''' Caricato a compile-time dal compiler
+    ''' NLP Contract pre-compilato per l'estrazione dati (regex patterns, mapping, ecc.)
+    ''' Caricato e pre-compilato a compile-time dal compiler
     ''' </summary>
-    Public Property NlpContract As NLPContract
+    Public Property NlpContract As CompiledNlpContract
 
     Public Sub New()
         Synonyms = New List(Of String)()

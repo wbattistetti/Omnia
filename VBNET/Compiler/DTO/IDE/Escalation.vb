@@ -12,10 +12,10 @@ Public Class Escalation
         Public Property EscalationId As String
 
     <JsonPropertyName("tasks")>
-    Public Property Tasks As List(Of Compiler.Action)
+    Public Property Tasks As List(Of Compiler.Task)
 
         Public Sub New()
-            Tasks = New List(Of Action)()
+            Tasks = New List(Of Task)()
         End Sub
     End Class
 

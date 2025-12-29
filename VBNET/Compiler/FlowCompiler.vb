@@ -3,6 +3,9 @@ Option Explicit On
 
 Imports System.Collections.Generic
 Imports System.Linq
+Imports System.IO
+Imports Newtonsoft.Json
+Imports Newtonsoft.Json.Linq
 Imports DDTEngine
 
 ''' <summary>
@@ -11,91 +14,12 @@ Imports DDTEngine
 ''' </summary>
 Public Class FlowCompiler
     ''' <summary>
-    ''' Crea un CompiledTask type-safe in base al TaskType
+    ''' Crea un CompiledTask type-safe in base al TaskType usando il factory pattern
     ''' </summary>
-    Private Function CreateTypedCompiledTask(taskType As TaskTypes, task As Task, row As RowData, node As FlowNode, taskId As String) As CompiledTask
-        Dim compiledTask As CompiledTask
-
-        Select Case taskType
-            Case TaskTypes.SayMessage
-                Dim sayMessageTask As New CompiledTaskSayMessage()
-                ' ✅ Estrai text da task.Text (nuovo modello) o da task.Value("text") (vecchio modello)
-                Dim textValue As String = ""
-
-                ' Prova prima task.Text (proprietà diretta, nuovo modello)
-                If Not String.IsNullOrEmpty(task.Text) Then
-                    textValue = task.Text
-                ElseIf task.Value IsNot Nothing AndAlso task.Value.ContainsKey("text") Then
-                    ' Fallback: vecchio modello con text in value
-                    textValue = If(task.Value("text")?.ToString(), "")
-                End If
-
-                sayMessageTask.Text = If(String.IsNullOrEmpty(textValue), "", textValue)
-                compiledTask = sayMessageTask
-
-            Case TaskTypes.DataRequest
-                Dim getDataTask As New CompiledTaskGetData()
-                ' DDT verrà caricato dal TaskExecutor usando LoadDDTInstanceFromValue
-                ' Per ora lasciamo Nothing, il TaskExecutor lo caricherà da task.Value("ddt")
-                compiledTask = getDataTask
-
-            Case TaskTypes.ClassifyProblem
-                Dim classifyTask As New CompiledTaskClassifyProblem()
-                ' Estrai intents da value
-                If task.Value IsNot Nothing AndAlso task.Value.ContainsKey("intents") Then
-                    Dim intentsValue = task.Value("intents")
-                    If TypeOf intentsValue Is List(Of String) Then
-                        classifyTask.Intents = CType(intentsValue, List(Of String))
-                    ElseIf TypeOf intentsValue Is String() Then
-                        classifyTask.Intents = New List(Of String)(CType(intentsValue, String()))
-                    End If
-                End If
-                compiledTask = classifyTask
-
-            Case TaskTypes.BackendCall
-                Dim backendTask As New CompiledTaskBackendCall()
-                If task.Value IsNot Nothing Then
-                    If task.Value.ContainsKey("endpoint") Then
-                        backendTask.Endpoint = If(task.Value("endpoint")?.ToString(), "")
-                    End If
-                    If task.Value.ContainsKey("method") Then
-                        backendTask.Method = If(task.Value("method")?.ToString(), "POST")
-                    End If
-                    ' Copia tutto il value come payload
-                    For Each kvp In task.Value
-                        backendTask.Payload(kvp.Key) = kvp.Value
-                    Next
-                End If
-                compiledTask = backendTask
-
-            Case TaskTypes.CloseSession
-                compiledTask = New CompiledTaskCloseSession()
-
-            Case TaskTypes.Transfer
-                Dim transferTask As New CompiledTaskTransfer()
-                If task.Value IsNot Nothing AndAlso task.Value.ContainsKey("target") Then
-                    transferTask.Target = If(task.Value("target")?.ToString(), "")
-                End If
-                compiledTask = transferTask
-
-            Case Else
-                ' Fallback: crea SayMessage
-                Console.WriteLine($"⚠️ [FlowCompiler] Unknown TaskType {taskType}, creating SayMessage fallback")
-                compiledTask = New CompiledTaskSayMessage()
-        End Select
-
-        ' Popola campi comuni
-        compiledTask.Id = row.Id
-        compiledTask.Condition = Nothing
-        compiledTask.State = TaskState.UnExecuted
-        compiledTask.Debug = New TaskDebugInfo() With {
-            .SourceType = TaskSourceType.Flowchart,
-            .NodeId = node.Id,
-            .RowId = row.Id,
-            .OriginalTaskId = taskId
-        }
-
-        Return compiledTask
+    Private Function CreateTypedCompiledTask(taskType As TaskTypes, task As Task, row As RowData, node As FlowNode, taskId As String, flow As Flow) As CompiledTask
+        ' Usa il factory per ottenere il compiler appropriato
+        Dim compiler = TaskCompilerFactory.GetCompiler(taskType)
+        Return compiler.Compile(task, row, node, taskId, flow)
     End Function
 
     ''' <summary>
@@ -257,7 +181,7 @@ Public Class FlowCompiler
 
                 ' ✅ REFACTORED: Crea task type-safe in base al tipo
                 Dim taskType = ConvertTemplateIdToEnum(task.TemplateId)
-                Dim compiledTask As CompiledTask = CreateTypedCompiledTask(taskType, task, row, node, taskId)
+                Dim compiledTask As CompiledTask = CreateTypedCompiledTask(taskType, task, row, node, taskId, flow)
 
                 Console.WriteLine($"✅ [FlowCompiler] Created CompiledTask: Id={compiledTask.Id}, TaskType={compiledTask.TaskType}")
 

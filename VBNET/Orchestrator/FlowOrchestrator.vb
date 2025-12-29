@@ -97,7 +97,7 @@ Public Class FlowOrchestrator
                 Dim result = _taskExecutor.ExecuteTask(nextTask, _state)
 
                 If Not result.Success Then
-                    Throw New Exception($"Task execution failed: {result.Error}")
+                    Throw New Exception($"Task execution failed: {result.Err}")
                 End If
 
                 _state.ExecutedTaskIds.Add(nextTask.Id)

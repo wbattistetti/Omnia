@@ -259,6 +259,16 @@ export class DDTTemplateMatcherService {
         return null;
       }
 
+      // Log dei match trovati
+      if (matches.length > 0) {
+        console.log(`[DDTTemplateMatcherService] 📋 Match trovati:`, matches.map(m => ({
+          templateId: m.templateId,
+          label: m.labelUsed,
+          matchType: m.matchType,
+          normalizedLength: m.normalizedLabelLength
+        })));
+      }
+
       // Ordina: prima per tipo (exact > keywords), poi per lunghezza label decrescente
       matches.sort((a, b) => {
         // Priorità ai match esatti

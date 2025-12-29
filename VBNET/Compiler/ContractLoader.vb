@@ -13,11 +13,19 @@ Imports DDTEngine
 Public Class ContractLoader
     ''' <summary>
     ''' Carica nlpContract per un nodo
+    ''' Ritorna NLPContract base (verrà compilato da DDTCompiler)
     ''' </summary>
     Public Function LoadContract(node As DDTNode) As NLPContract
         ' PRIORITÀ 1: Contract già presente nel nodo (caricato da JSON)
+        ' Se è già CompiledNlpContract, ritorna la base
         If node.NlpContract IsNot Nothing Then
-            Return node.NlpContract
+            If TypeOf node.NlpContract Is CompiledNlpContract Then
+                ' Già compilato, ritorna la base (ma non dovrebbe accadere qui)
+                Return CType(node.NlpContract, CompiledNlpContract)
+            Else
+                ' Base contract, ritorna direttamente
+                Return node.NlpContract
+            End If
         End If
 
         ' PRIORITÀ 2: Carica da database/template (TODO: implementare)

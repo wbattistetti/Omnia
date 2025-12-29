@@ -530,15 +530,42 @@ export const AppContent: React.FC<AppContentProps> = ({
   // Listen for ActEditor open events (open as docking tab)
   React.useEffect(() => {
     const h = async (e: any) => {
+      console.log('📥 [AppContent] Evento actEditor:open ricevuto', {
+        hasDetail: !!e?.detail,
+        detail: e?.detail,
+        timestamp: new Date().toISOString()
+      });
       try {
         const d = (e && e.detail) || {};
-        if (!d || !d.id || !d.type) return;
+        if (!d || !d.id || !d.type) {
+          console.warn('⚠️ [AppContent] Evento actEditor:open ignorato - dettagli mancanti', {
+            hasD: !!d,
+            hasId: !!d?.id,
+            hasType: !!d?.type
+          });
+          return;
+        }
 
         // Get instanceId from event
         const instanceId = d.instanceId || d.id;
 
+        console.log('✅ [AppContent] Processando evento actEditor:open', {
+          id: d.id,
+          type: d.type,
+          label: d.label,
+          instanceId,
+          hasDDT: !!d.ddt,
+          ddtMainDataLength: d.ddt?.mainData?.length || 0,
+          templateId: d.templateId
+        });
+
         // Determine editor kind based on act type
         const editorKind = resolveEditorKind({ type: d.type, id: d.id, label: d.label || d.name });
+
+        console.log('🔍 [AppContent] Editor kind determinato', {
+          editorKind,
+          type: d.type
+        });
 
         // Open as docking tab in bottom split (1/3 height)
         const tabId = `act_${d.id}`;

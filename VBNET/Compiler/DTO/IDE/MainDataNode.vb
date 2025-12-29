@@ -30,8 +30,8 @@ Public Class MainDataNode
         Public Property Condition As String
 
         <JsonProperty("steps")>
-        <JsonConverter(GetType(StepGroupListConverter))>
-        Public Property Steps As List(Of Compiler.StepGroup)
+        <JsonConverter(GetType(DialogueStepListConverter))>
+        Public Property Steps As List(Of Compiler.DialogueStep)
 
         <JsonProperty("subData")>
         Public Property SubData As List(Of Compiler.MainDataNode)
@@ -43,7 +43,7 @@ Public Class MainDataNode
         Public Property Constraints As List(Of Object)
 
         Public Sub New()
-            Steps = New List(Of StepGroup)()
+            Steps = New List(Of DialogueStep)()
             SubData = New List(Of MainDataNode)()
             Synonyms = New List(Of String)()
             Constraints = New List(Of Object)()

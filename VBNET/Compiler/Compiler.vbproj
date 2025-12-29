@@ -29,6 +29,12 @@
     <Compile Include="DDTAssembler.vb" />
     <Compile Include="ContractLoader.vb" />
 
+    <!-- Task Compiler (Polymorphic) -->
+    <Compile Include="TaskCompiler\TaskCompilerBase.vb" />
+    <Compile Include="TaskCompiler\DataRequestTaskCompiler.vb" />
+    <Compile Include="TaskCompiler\SimpleTaskCompiler.vb" />
+    <Compile Include="TaskCompiler\TaskCompilerFactory.vb" />
+
     <!-- Flow Compiler -->
     <Compile Include="FlowCompiler.vb" />
     <Compile Include="ConditionBuilder.vb" />
@@ -42,14 +48,14 @@
     <Compile Include="DTO\IDE\RowData.vb" />
     <Compile Include="DTO\IDE\EdgeData.vb" />
     <Compile Include="DTO\IDE\Task.vb" />
-    <!-- ActionTypeConverter.vb removed - Task now uses templateId (string) directly -->
+    <!-- TaskTypeConverter.vb (renamed from ActionTypeConverter) - kept for backward compatibility, not actively used -->
 
     <!-- IDE Types (Input from React/TypeScript) - DDT -->
-    <Compile Include="DTO\IDE\ActionParameter.vb" />
-    <Compile Include="DTO\IDE\Action.vb" />
+    <Compile Include="DTO\IDE\TaskParameter.vb" />
+    <!-- Action.vb removed - using Task.vb instead -->
     <Compile Include="DTO\IDE\Escalation.vb" />
-    <Compile Include="DTO\IDE\StepGroup.vb" />
-    <Compile Include="DTO\IDE\StepGroupListConverter.vb" />
+    <Compile Include="DTO\IDE\DialogueStep.vb" />
+    <Compile Include="DTO\IDE\DialogueStepListConverter.vb" />
     <Compile Include="DTO\IDE\MainDataNode.vb" />
     <Compile Include="DTO\IDE\MainDataNodeListConverter.vb" />
     <Compile Include="DTO\IDE\AssembledDDT.vb" />

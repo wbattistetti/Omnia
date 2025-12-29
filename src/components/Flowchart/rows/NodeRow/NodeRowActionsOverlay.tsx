@@ -240,7 +240,23 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
             e.preventDefault();
             e.stopPropagation();
             if (!gearDisabled && onOpenDDT) {
-              onOpenDDT();
+              console.log('🔧 [GEAR] Click su ingranaggio - apertura ResponseEditor', {
+                rowId: (e.currentTarget as any).closest('[data-row-id]')?.getAttribute('data-row-id'),
+                hasDDT
+              });
+              try {
+                onOpenDDT();
+              } catch (error) {
+                console.error('❌ [GEAR] Errore chiamando onOpenDDT', {
+                  error,
+                  errorMessage: error instanceof Error ? error.message : String(error)
+                });
+              }
+            } else {
+              console.warn('⚠️ [GEAR] Ingranaggio disabilitato o onOpenDDT non disponibile', {
+                gearDisabled,
+                hasOnOpenDDT: !!onOpenDDT
+              });
             }
           }}
           disabled={gearDisabled} // ✅ Disabilita se tipo UNDEFINED e nessun template match

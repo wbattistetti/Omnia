@@ -35,8 +35,32 @@ Public Class Task
     <JsonProperty("value")>
     Public Property Value As Dictionary(Of String, Object)
 
+    ''' <summary>
+    ''' DDT fields (for DataRequest tasks) - direct properties from frontend
+    ''' These are sent directly on the task when templateId is DataRequest
+    ''' </summary>
+    <JsonProperty("label")>
+    Public Property Label As String
+
+    <JsonProperty("mainData")>
+    <JsonConverter(GetType(MainDataNodeListConverter))>
+    Public Property MainData As List(Of MainDataNode)
+
+    <JsonProperty("stepPrompts")>
+    Public Property StepPrompts As Dictionary(Of String, Object)
+
+    <JsonProperty("constraints")>
+    Public Property Constraints As List(Of Object)
+
+    <JsonProperty("examples")>
+    Public Property Examples As List(Of Object)
+
     Public Sub New()
         Value = New Dictionary(Of String, Object)()
+        MainData = New List(Of MainDataNode)()
+        StepPrompts = New Dictionary(Of String, Object)()
+        Constraints = New List(Of Object)()
+        Examples = New List(Of Object)()
     End Sub
 End Class
 

@@ -60,7 +60,7 @@ Public Class CompiledTaskConverter
         Select Case taskType
             Case TaskTypes.SayMessage
                 task = New CompiledTaskSayMessage()
-            Case TaskTypes.GetData
+            Case TaskTypes.DataRequest
                 task = New CompiledTaskGetData()
             Case TaskTypes.ClassifyProblem
                 task = New CompiledTaskClassifyProblem()
@@ -103,7 +103,7 @@ Public Class CompiledTaskConverter
             Case "transfer"
                 Return TaskTypes.Transfer
             Case "getdata", "datarequest", "askquestion"
-                Return TaskTypes.GetData
+                Return TaskTypes.DataRequest
             Case "backendcall", "callbackend", "readfrombackend", "writetobackend"
                 Return TaskTypes.BackendCall
             Case "classifyproblem", "problemclassification"

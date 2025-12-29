@@ -10,7 +10,7 @@ Imports DDTEngine
 ''' Responsabilità:
 ''' - Mappare campi uno a uno
 ''' - Normalizzare cardinalità (mainData singolo → MainDataList)
-''' - Convertire tipi (StepGroup → DialogueStep)
+''' - Convertire tipi (DialogueStep IDE → DialogueStep Runtime)
 ''' - Gestire default e validazioni
 ''' </summary>
 Public Class DDTAssembler
@@ -23,9 +23,9 @@ Public Class DDTAssembler
             Throw New ArgumentNullException(NameOf(assembled), "AssembledDDT cannot be Nothing")
         End If
 
+        ' ❌ REMOVED: .Label = assembled.Label, (label non serve a runtime, solo per UI)
         Dim instance As New DDTInstance() With {
             .Id = assembled.Id,
-            ' ❌ REMOVED: .Label = assembled.Label, (label non serve a runtime, solo per UI)
             .Translations = If(assembled.Translations, New Dictionary(Of String, String)()),
             .MainDataList = New List(Of DDTNode)(),
             .IsAggregate = (assembled.Introduction IsNot Nothing)
@@ -42,9 +42,9 @@ Public Class DDTAssembler
             Next
         End If
 
-        ' Converti Introduction (StepGroup → Response)
+        ' Converti Introduction (DialogueStep → Response)
         If assembled.Introduction IsNot Nothing Then
-            instance.Introduction = ConvertStepGroupToResponse(assembled.Introduction)
+            instance.Introduction = ConvertDialogueStepToResponse(assembled.Introduction)
         End If
 
         ' Calcola FullLabel per tutti i nodi (compile-time)
@@ -57,26 +57,26 @@ Public Class DDTAssembler
     ''' Converte MainDataNode (IDE) in DDTNode (Runtime)
     ''' </summary>
     Private Function ConvertNode(ideNode As Compiler.MainDataNode, parentNode As DDTNode) As DDTNode
+        ' ❌ REMOVED: .Label = ideNode.Label, (label non serve a runtime, solo per UI)
         Dim runtimeNode As New DDTNode() With {
             .Id = ideNode.Id,
             .Name = ideNode.Name,
-            ' ❌ REMOVED: .Label = ideNode.Label, (label non serve a runtime, solo per UI)
             .Type = ideNode.Type,
             .Required = ideNode.Required,
             .Condition = ideNode.Condition,
             .Synonyms = If(ideNode.Synonyms, New List(Of String)()),
             .Constraints = If(ideNode.Constraints, New List(Of Object)()),
-            .Steps = New List(Of DialogueStep)(),
+            .Steps = New List(Of DDTEngine.DialogueStep)(),
             .SubData = New List(Of DDTNode)(),
             .State = DialogueState.Start,
             .Value = Nothing,
             .ParentData = parentNode
         }
 
-        ' Converti Steps (StepGroup[] → DialogueStep[])
+        ' Converti Steps (DialogueStep[] → DialogueStep[])
         If ideNode.Steps IsNot Nothing Then
-            For Each stepGroup As Compiler.StepGroup In ideNode.Steps
-                runtimeNode.Steps.Add(ConvertStepGroup(stepGroup))
+            For Each ideStep As Compiler.DialogueStep In ideNode.Steps
+                runtimeNode.Steps.Add(ConvertDialogueStep(ideStep))
             Next
         End If
 
@@ -91,22 +91,21 @@ Public Class DDTAssembler
     End Function
 
     ''' <summary>
-    ''' Converte StepGroup (IDE) in DialogueStep (Runtime)
+    ''' Converte DialogueStep (IDE) in DialogueStep (Runtime)
     ''' </summary>
-    Private Function ConvertStepGroup(stepGroup As Compiler.StepGroup) As DialogueStep
-        Dim dialogueStep As New DialogueStep() With {
-            .Type = ConvertStepType(stepGroup.Type),
+    Private Function ConvertDialogueStep(ideStep As Compiler.DialogueStep) As DDTEngine.DialogueStep
+        Dim runtimeStep As New DDTEngine.DialogueStep() With {
+            .Type = ConvertStepType(ideStep.Type),
             .Escalations = New List(Of DDTEngine.Escalation)()
         }
 
-        ' Converti Escalations (IDE.Escalation → DDTEngine.Escalation)
-        If stepGroup.Escalations IsNot Nothing Then
-            For Each ideEscalation As Compiler.Escalation In stepGroup.Escalations
-                dialogueStep.Escalations.Add(ConvertEscalation(ideEscalation))
+        If ideStep.Escalations IsNot Nothing Then
+            For Each ideEscalation As Compiler.Escalation In ideStep.Escalations
+                runtimeStep.Escalations.Add(ConvertEscalation(ideEscalation))
             Next
         End If
 
-        Return dialogueStep
+        Return runtimeStep
     End Function
 
     ''' <summary>
@@ -144,12 +143,12 @@ Public Class DDTAssembler
             .Tasks = New List(Of ITask)()
         }
 
-        ' Converti Tasks (Action[] → ITask[])
+        ' Converti Tasks (Task[] → ITask[])
         If ideEscalation.Tasks IsNot Nothing Then
-            For Each ideTask As Compiler.Action In ideEscalation.Tasks
-                Dim runtimeAction = ConvertTask(ideTask)
-                If runtimeAction IsNot Nothing Then
-                    runtimeEscalation.Tasks.Add(runtimeAction)
+            For Each ideTask As Compiler.Task In ideEscalation.Tasks
+                Dim runtimeTask = ConvertTask(ideTask)
+                If runtimeTask IsNot Nothing Then
+                    runtimeEscalation.Tasks.Add(runtimeTask)
                 End If
             Next
         End If
@@ -160,7 +159,7 @@ Public Class DDTAssembler
     ''' <summary>
     ''' Converte Task (IDE) in ITask (Runtime)
     ''' </summary>
-    Private Function ConvertTask(ideTask As Compiler.Action) As ITask
+    Private Function ConvertTask(ideTask As Compiler.Task) As ITask
         Dim templateId = ideTask.TemplateId
 
         ' Mapping: templateId (frontend) → Task type (runtime)
@@ -169,21 +168,33 @@ Public Class DDTAssembler
         End If
 
         Select Case templateId.ToLower()
-            Case "saymessage", "askquestion"
-                Dim textParam = ideTask.Parameters?.FirstOrDefault(Function(p) p.ParameterId = "text")
-                If textParam IsNot Nothing Then
-                    Return New MessageTask(textParam.Value)
+            Case "saymessage", "askquestion", "message"
+                ' ✅ Nuovo modello: text come proprietà diretta
+                If Not String.IsNullOrEmpty(ideTask.Text) Then
+                    Return New MessageTask(ideTask.Text)
+                End If
+                ' ✅ Vecchio modello: text in parameters (backward compatibility)
+                If ideTask.Value IsNot Nothing AndAlso ideTask.Value.ContainsKey("parameters") Then
+                    Dim parameters = ideTask.Value("parameters")
+                    If TypeOf parameters Is List(Of Object) Then
+                        Dim paramsList = CType(parameters, List(Of Object))
+                        Dim textParam = paramsList.FirstOrDefault(Function(p) TypeOf p Is Dictionary(Of String, Object) AndAlso CType(p, Dictionary(Of String, Object)).ContainsKey("parameterId") AndAlso CType(p, Dictionary(Of String, Object))("parameterId")?.ToString() = "text")
+                        If textParam IsNot Nothing Then
+                            Dim textValue = CType(textParam, Dictionary(Of String, Object))("value")?.ToString()
+                            If Not String.IsNullOrEmpty(textValue) Then
+                                Return New MessageTask(textValue)
+                            End If
+                        End If
+                    End If
                 End If
             Case "closesession"
                 Return New CloseSessionTask()
             Case "transfer"
-                ' TODO: Implement TransferTask
-                Return Nothing
+                Return New TransferTask()
             Case Else
                 ' Fallback: se templateId non riconosciuto, prova come MessageTask
-                Dim textParam = ideTask.Parameters?.FirstOrDefault(Function(p) p.ParameterId = "text")
-                If textParam IsNot Nothing Then
-                    Return New MessageTask(textParam.Value)
+                If Not String.IsNullOrEmpty(ideTask.Text) Then
+                    Return New MessageTask(ideTask.Text)
                 End If
         End Select
 
@@ -191,19 +202,19 @@ Public Class DDTAssembler
     End Function
 
     ''' <summary>
-    ''' Converte StepGroup in Response (per Introduction)
+    ''' Converte DialogueStep in Response (per Introduction)
     ''' </summary>
-    Private Function ConvertStepGroupToResponse(stepGroup As Compiler.StepGroup) As Response
+    Private Function ConvertDialogueStepToResponse(ideStep As Compiler.DialogueStep) As Response
         Dim response As New Response()
 
         ' Prendi la prima escalation del primo step
-        If stepGroup.Escalations IsNot Nothing AndAlso stepGroup.Escalations.Count > 0 Then
-            Dim firstEscalation = stepGroup.Escalations(0)
+        If ideStep.Escalations IsNot Nothing AndAlso ideStep.Escalations.Count > 0 Then
+            Dim firstEscalation = ideStep.Escalations(0)
             If firstEscalation.Tasks IsNot Nothing Then
-                For Each ideTask As Compiler.Action In firstEscalation.Tasks
-                    Dim runtimeAction = ConvertTask(ideTask)
-                    If runtimeAction IsNot Nothing Then
-                        response.Tasks.Add(runtimeAction)
+                For Each ideTask As Compiler.Task In firstEscalation.Tasks
+                    Dim runtimeTask = ConvertTask(ideTask)
+                    If runtimeTask IsNot Nothing Then
+                        response.Tasks.Add(runtimeTask)
                     End If
                 Next
             End If

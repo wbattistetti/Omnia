@@ -532,25 +532,69 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       }
       // ✅ FLUSSO SEMPLIFICATO: Euristica 1 → Euristica 2 → Crea Task
       try {
+        console.log('🔍 [EURISTICA] START - Creazione riga', {
+          text: q,
+          rowId: row.id,
+          hasTaskId: !!row.taskId,
+          timestamp: new Date().toISOString()
+        });
+
         // 1️⃣ EURISTICA 1: interpreta la label e decide il TaskType
+        console.log('🔍 [EURISTICA 1] Chiamando inferActType...', { text: q });
         const inf = await inferActType(q, { languageOrder: ['IT', 'EN', 'PT'] as any });
         let taskType = inf.type; // ✅ Ora è TaskType enum (TaskType.SayMessage, TaskType.DataRequest, TaskType.UNDEFINED, ecc.)
+
+        console.log('✅ [EURISTICA 1] Risultato', {
+          text: q,
+          taskType: taskType,
+          taskTypeName: TaskType[taskType],
+          confidence: inf.confidence,
+          reasoning: inf.reasoning || 'N/A'
+        });
 
         // 2️⃣ EURISTICA 2: cerca template DDT
         const DDTTemplateMatcherService = (await import('../../../../services/DDTTemplateMatcherService')).default;
         // ✅ Converti TaskType enum → string per euristica 2
         const typeForMatch = taskTypeToHeuristicString(taskType);
 
+        console.log('🔍 [EURISTICA 2] Preparazione ricerca template', {
+          text: q,
+          taskType: taskType,
+          taskTypeName: TaskType[taskType],
+          typeForMatch: typeForMatch,
+          willSearch: !!typeForMatch
+        });
+
         let matchedTemplate = null;
         if (typeForMatch) {
+          console.log('🔍 [EURISTICA 2] Cercando template DDT...', { text: q, typeForMatch });
           matchedTemplate = await DDTTemplateMatcherService.findDDTTemplate(q, typeForMatch);
+
+          console.log('✅ [EURISTICA 2] Risultato ricerca template', {
+            text: q,
+            found: !!matchedTemplate,
+            templateId: matchedTemplate?.templateId || null,
+            templateLabel: matchedTemplate?.label || null,
+            matchType: matchedTemplate?.matchType || null,
+            language: matchedTemplate?.language || null
+          });
+        } else {
+          console.log('⚠️ [EURISTICA 2] Saltata - typeForMatch è null/undefined', { taskType, typeForMatch });
         }
 
         // 3️⃣ Se Euristica 2 trova match:
         // - E Euristica 1 era UNDEFINED → override tipo con DataRequest
         // - E Euristica 1 era SayMessage → override tipo con DataRequest (es. "chiedi data nascita" → trova template data)
+        const taskTypeBeforeOverride = taskType;
         if (matchedTemplate && (taskType === TaskType.UNDEFINED || taskType === TaskType.SayMessage)) {
           taskType = TaskType.DataRequest;
+          console.log('🔄 [EURISTICA] Override taskType per match template', {
+            before: taskTypeBeforeOverride,
+            beforeName: TaskType[taskTypeBeforeOverride],
+            after: taskType,
+            afterName: TaskType[taskType],
+            templateId: matchedTemplate.templateId
+          });
         }
 
         // 4️⃣ CREA TASK
@@ -559,26 +603,86 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         const templateId = taskTypeToTemplateId(taskType);
         const action = templateId || 'UNDEFINED';
 
+        console.log('🔧 [TASK CREATION] Preparazione creazione task', {
+          rowId: row.id,
+          hasExistingTaskId: !!row.taskId,
+          taskType: taskType,
+          taskTypeName: TaskType[taskType],
+          templateId: templateId,
+          action: action,
+          projectId: projectId
+        });
+
         if (!row.taskId) {
+          console.log('🆕 [TASK CREATION] Creando nuovo task...', { rowId: row.id, action, text: q });
           const task = createRowWithTask(row.id, action, q, projectId);
           (row as any).taskId = task.id;
 
+          console.log('✅ [TASK CREATION] Task creato', {
+            taskId: task.id,
+            rowId: row.id,
+            templateId: task.templateId || 'N/A',
+            hasMainData: !!(task.mainData && task.mainData.length > 0),
+            mainDataLength: task.mainData?.length || 0
+          });
+
           // Se c'è template matchato, salva SOLO il templateId (mainData sarà costruito da buildDDTFromTemplate)
           if (matchedTemplate) {
+            console.log('🔗 [TASK UPDATE] Aggiornando task con templateId dal match', {
+              taskId: task.id,
+              matchedTemplateId: matchedTemplate.templateId,
+              matchedTemplateLabel: matchedTemplate.label,
+              willSetMainDataEmpty: true
+            });
+
             taskRepository.updateTask(task.id, {
               label: q,
               templateId: matchedTemplate.templateId,  // ✅ Solo reference al template
               mainData: []  // ✅ Esplicitamente vuoto per indicare che la struttura viene dal template
             }, projectId);
+
+            // Verifica che l'aggiornamento sia andato a buon fine
+            const updatedTask = taskRepository.getTask(task.id);
+            console.log('✅ [TASK UPDATE] Task aggiornato', {
+              taskId: task.id,
+              templateId: updatedTask?.templateId || null,
+              hasMainData: !!(updatedTask?.mainData && updatedTask.mainData.length > 0),
+              mainDataLength: updatedTask?.mainData?.length || 0
+            });
+          } else {
+            console.log('ℹ️ [TASK UPDATE] Nessun template matchato - task standalone', {
+              taskId: task.id,
+              templateId: task.templateId || null
+            });
           }
         } else {
+          console.log('🔄 [TASK UPDATE] Aggiornando task esistente', { taskId: row.taskId });
           // Aggiorna task esistente
           if (matchedTemplate) {
+            console.log('🔗 [TASK UPDATE] Aggiornando task esistente con templateId dal match', {
+              taskId: row.taskId,
+              matchedTemplateId: matchedTemplate.templateId,
+              matchedTemplateLabel: matchedTemplate.label
+            });
+
             taskRepository.updateTask(row.taskId, {
               label: q,
               templateId: matchedTemplate.templateId,
               mainData: []  // ✅ Esplicitamente vuoto per indicare che la struttura viene dal template
             }, projectId);
+
+            // Verifica che l'aggiornamento sia andato a buon fine
+            const updatedTask = taskRepository.getTask(row.taskId);
+            console.log('✅ [TASK UPDATE] Task esistente aggiornato', {
+              taskId: row.taskId,
+              templateId: updatedTask?.templateId || null,
+              hasMainData: !!(updatedTask?.mainData && updatedTask.mainData.length > 0),
+              mainDataLength: updatedTask?.mainData?.length || 0
+            });
+          } else {
+            console.log('ℹ️ [TASK UPDATE] Nessun template matchato - task esistente rimane standalone', {
+              taskId: row.taskId
+            });
           }
         }
 
@@ -597,10 +701,38 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           isUndefined: taskType === TaskType.UNDEFINED && !matchedTemplate // ✅ Solo se UNDEFINED E nessun match
         };
 
+        console.log('📝 [ROW UPDATE] Aggiornamento riga', {
+          rowId: row.id,
+          text: q,
+          type: rowType,
+          mode: rowType,
+          isUndefined: updatedRow.isUndefined,
+          taskId: (row as any).taskId
+        });
+
         onUpdate(updatedRow as any, q);
         setIsEditing(false);
+
+        console.log('✅ [EURISTICA] COMPLETE - Riga creata/aggiornata', {
+          rowId: row.id,
+          text: q,
+          finalTaskType: taskType,
+          finalTaskTypeName: TaskType[taskType],
+          hasMatchedTemplate: !!matchedTemplate,
+          matchedTemplateId: matchedTemplate?.templateId || null,
+          timestamp: new Date().toISOString()
+        });
+
         return;
       } catch (err) {
+        console.error('❌ [EURISTICA] ERRORE durante creazione riga', {
+          text: q,
+          rowId: row.id,
+          error: err,
+          errorMessage: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined,
+          timestamp: new Date().toISOString()
+        });
         try { console.warn('[Heuristics] failed, fallback to picker', err); } catch { }
         setIntellisenseQuery(q);
         setShowIntellisense(false);
@@ -1530,60 +1662,180 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             hasDDT={isUndefined ? false : hasTaskDDT(row)} // ✅ Usa hasTaskDDT senza actFound
             gearColor={isUndefined ? '#94a3b8' : labelTextColor} // Se undefined, gear grigio
             // ✅ Disabilita ingranaggio se tipo UNDEFINED e non c'è template match (nessun DDT salvato)
-            gearDisabled={isUndefined && !hasTaskDDT(row)} // Disabilitato se undefined e nessun DDT
-            onOpenDDT={isUndefined && !hasTaskDDT(row) ? undefined : async () => {
-              try {
-                // ✅ Deriva il tipo dal task invece di usare resolveActType con actFound
-                const taskIdForType = (row as any)?.taskId || row.id;
-                const taskForType = taskIdForType ? taskRepository.getTask(taskIdForType) : null;
-
-                const type = taskForType
-                  ? resolveTaskType({ taskId: taskIdForType, ...row })
-                  : 'Message';
-
-                actEditorCtx.open({ id: String(taskIdForType), type: type as any, label: row.text, instanceId: row.id });
-
-                // ✅ Ottieni DDT dal task con merge dal template (se templateId esiste e non è UNDEFINED)
-                let ddt: any = null;
-                // UNDEFINED is a placeholder, not a real template - treat as standalone
-                if (taskForType?.templateId && taskForType.templateId !== 'UNDEFINED') {
-                  // ✅ Use buildDDTFromTemplate to build DDT from template reference
-                  const { buildDDTFromTemplate } = await import('../../../../utils/ddtMergeUtils');
-                  ddt = await buildDDTFromTemplate(taskForType);
-                  if (!ddt) {
-                    // Fallback: create empty DDT
-                    ddt = { label: taskForType.label || row.text || 'New DDT', mainData: [] };
-                  }
-                } else if (taskForType?.mainData && taskForType.mainData.length > 0) {
-                  // Fallback: task senza templateId ma con mainData (vecchio formato o standalone)
-                  ddt = {
-                    label: taskForType.label || row.text || 'New DDT',
-                    mainData: taskForType.mainData,
-                    stepPrompts: taskForType.stepPrompts,
-                    constraints: taskForType.constraints,
-                    examples: taskForType.examples
-                  };
-                } else {
-                  ddt = { label: row.text || 'New DDT', mainData: [] };
-                }
-
-                // Emit event with DDT data so AppContent can open it as docking tab
-                const event = new CustomEvent('actEditor:open', {
-                  detail: {
-                    id: String(taskIdForType),
-                    type,
-                    label: row.text,
-                    ddt: ddt,
-                    instanceId: row.id, // Pass instanceId from row
-                    templateId: taskForType?.templateId || undefined
-                  },
-                  bubbles: true
-                });
-                document.dispatchEvent(event);
-              } catch (e) {
-                console.error('[NodeRow][onOpenDDT] Failed to open editor', e);
+            // ✅ Per DataRequest, sempre abilitato (può essere creato un DDT vuoto)
+            gearDisabled={(() => {
+              const taskType = resolveTaskType(row);
+              if (taskType === 'DataRequest') {
+                return false; // ✅ Sempre abilitato per DataRequest
               }
-            }}
+              return isUndefined && !hasTaskDDT(row); // Disabilitato se undefined e nessun DDT
+            })()}
+            onOpenDDT={(() => {
+              // ✅ Permetti sempre l'apertura per DataRequest (può essere creato un DDT vuoto)
+              const taskType = resolveTaskType(row);
+              if (taskType === 'DataRequest') {
+                // ✅ Sempre permesso per DataRequest, anche se isUndefined o !hasTaskDDT
+                return async () => {
+                  console.log('🚀 [GEAR] Apertura ResponseEditor per DataRequest', {
+                    rowId: row.id,
+                    rowText: row.text,
+                    timestamp: new Date().toISOString()
+                  });
+                  try {
+                    // ✅ Deriva il tipo dal task invece di usare resolveActType con actFound
+                    const taskIdForType = (row as any)?.taskId || row.id;
+                    const taskForType = taskIdForType ? taskRepository.getTask(taskIdForType) : null;
+
+                    const type = taskForType
+                      ? resolveTaskType({ taskId: taskIdForType, ...row })
+                      : 'DataRequest'; // ✅ Default a DataRequest per questo caso
+
+                    console.log('📝 [GEAR] Chiamando actEditorCtx.open', {
+                      id: String(taskIdForType),
+                      type,
+                      label: row.text,
+                      instanceId: row.id,
+                      taskTemplateId: taskForType?.templateId || null
+                    });
+
+                    actEditorCtx.open({ id: String(taskIdForType), type: type as any, label: row.text, instanceId: row.id });
+                    console.log('✅ [GEAR] actEditorCtx.open chiamato');
+
+                    // ✅ Ottieni DDT dal task con merge dal template (se templateId esiste e non è UNDEFINED)
+                    let ddt: any = null;
+                    // UNDEFINED is a placeholder, not a real template - treat as standalone
+                    if (taskForType?.templateId && taskForType.templateId !== 'UNDEFINED') {
+                      console.log('🔍 [GEAR] Costruendo DDT dal template', {
+                        templateId: taskForType.templateId
+                      });
+                      // ✅ Use buildDDTFromTemplate to build DDT from template reference
+                      const { buildDDTFromTemplate } = await import('../../../../utils/ddtMergeUtils');
+                      ddt = await buildDDTFromTemplate(taskForType);
+                      console.log('✅ [GEAR] DDT costruito dal template', {
+                        hasDDT: !!ddt,
+                        ddtMainDataLength: ddt?.mainData?.length || 0
+                      });
+                      if (!ddt) {
+                        // Fallback: create empty DDT
+                        console.log('⚠️ [GEAR] DDT null, creando DDT vuoto');
+                        ddt = { label: taskForType.label || row.text || 'New DDT', mainData: [] };
+                      }
+                    } else if (taskForType?.mainData && taskForType.mainData.length > 0) {
+                      console.log('🔍 [GEAR] Usando mainData esistente');
+                      // Fallback: task senza templateId ma con mainData (vecchio formato o standalone)
+                      ddt = {
+                        label: taskForType.label || row.text || 'New DDT',
+                        mainData: taskForType.mainData,
+                        stepPrompts: taskForType.stepPrompts,
+                        constraints: taskForType.constraints,
+                        examples: taskForType.examples
+                      };
+                    } else {
+                      console.log('🔍 [GEAR] Creando DDT vuoto');
+                      ddt = { label: row.text || 'New DDT', mainData: [] };
+                    }
+
+                    // Emit event with DDT data so AppContent can open it as docking tab
+                    console.log('📤 [GEAR] Emettendo evento actEditor:open', {
+                      id: String(taskIdForType),
+                      type,
+                      hasDDT: !!ddt,
+                      ddtMainDataLength: ddt?.mainData?.length || 0
+                    });
+
+                    const event = new CustomEvent('actEditor:open', {
+                      detail: {
+                        id: String(taskIdForType),
+                        type,
+                        label: row.text,
+                        ddt: ddt,
+                        instanceId: row.id, // Pass instanceId from row
+                        templateId: taskForType?.templateId || undefined
+                      },
+                      bubbles: true
+                    });
+                    document.dispatchEvent(event);
+
+                    console.log('✅ [GEAR] Evento actEditor:open emesso', {
+                      id: String(taskIdForType),
+                      type,
+                      hasDDT: !!ddt,
+                      ddtMainDataLength: ddt?.mainData?.length || 0,
+                      templateId: taskForType?.templateId || undefined
+                    });
+                  } catch (e) {
+                    console.error('❌ [GEAR] ERRORE durante apertura editor', {
+                      error: e,
+                      errorMessage: e instanceof Error ? e.message : String(e),
+                      stack: e instanceof Error ? e.stack : undefined,
+                      rowId: row.id
+                    });
+                  }
+                };
+              }
+              // ✅ Per altri tipi, disabilita solo se undefined e nessun DDT
+              if (isUndefined && !hasTaskDDT(row)) {
+                return undefined;
+              }
+              return async () => {
+                console.log('🚀 [GEAR] Apertura ResponseEditor per altri tipi', {
+                  rowId: row.id,
+                  rowText: row.text,
+                  taskType
+                });
+                try {
+                  // ✅ Deriva il tipo dal task invece di usare resolveActType con actFound
+                  const taskIdForType = (row as any)?.taskId || row.id;
+                  const taskForType = taskIdForType ? taskRepository.getTask(taskIdForType) : null;
+
+                  const type = taskForType
+                    ? resolveTaskType({ taskId: taskIdForType, ...row })
+                    : 'Message';
+
+                  actEditorCtx.open({ id: String(taskIdForType), type: type as any, label: row.text, instanceId: row.id });
+
+                  // ✅ Ottieni DDT dal task con merge dal template (se templateId esiste e non è UNDEFINED)
+                  let ddt: any = null;
+                  // UNDEFINED is a placeholder, not a real template - treat as standalone
+                  if (taskForType?.templateId && taskForType.templateId !== 'UNDEFINED') {
+                    // ✅ Use buildDDTFromTemplate to build DDT from template reference
+                    const { buildDDTFromTemplate } = await import('../../../../utils/ddtMergeUtils');
+                    ddt = await buildDDTFromTemplate(taskForType);
+                    if (!ddt) {
+                      // Fallback: create empty DDT
+                      ddt = { label: taskForType.label || row.text || 'New DDT', mainData: [] };
+                    }
+                  } else if (taskForType?.mainData && taskForType.mainData.length > 0) {
+                    // Fallback: task senza templateId ma con mainData (vecchio formato o standalone)
+                    ddt = {
+                      label: taskForType.label || row.text || 'New DDT',
+                      mainData: taskForType.mainData,
+                      stepPrompts: taskForType.stepPrompts,
+                      constraints: taskForType.constraints,
+                      examples: taskForType.examples
+                    };
+                  } else {
+                    ddt = { label: row.text || 'New DDT', mainData: [] };
+                  }
+
+                  // Emit event with DDT data so AppContent can open it as docking tab
+                  const event = new CustomEvent('actEditor:open', {
+                    detail: {
+                      id: String(taskIdForType),
+                      type,
+                      label: row.text,
+                      ddt: ddt,
+                      instanceId: row.id, // Pass instanceId from row
+                      templateId: taskForType?.templateId || undefined
+                    },
+                    bubbles: true
+                  });
+                  document.dispatchEvent(event);
+                } catch (e) {
+                  console.error('[NodeRow][onOpenDDT] Failed to open editor', e);
+                }
+              };
+            })()}
             onDoubleClick={handleDoubleClick}
             onIconsHoverChange={(v: boolean) => { v ? toolbarSM.overlay.onEnter() : toolbarSM.overlay.onLeave(); }}
             onLabelHoverChange={(v: boolean) => { v ? toolbarSM.row.onEnter() : toolbarSM.row.onLeave({ relatedTarget: null } as any); }}

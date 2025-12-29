@@ -6,10 +6,12 @@ Imports Newtonsoft.Json.Converters
 Imports DDTEngine
 
 ''' <summary>
-''' Custom JSON converter for Task.Action property
-''' Converts string action names (e.g., "SayMessage") to Integer (ActionType enum values)
+''' Custom JSON converter for TaskType conversion (legacy support)
+''' Converts string task names (e.g., "SayMessage", "DataRequest") to Integer (TaskTypes enum values)
+''' NOTE: Task now uses templateId (string) directly, but this converter is kept for backward compatibility
+''' TODO: Consider removing this converter if no longer needed
 ''' </summary>
-Public Class ActionTypeConverter
+Public Class TaskTypeConverter
     Inherits JsonConverter(Of Integer)
 
     Public Overrides Function ReadJson(reader As JsonReader, objectType As Type, existingValue As Integer, hasExistingValue As Boolean, serializer As JsonSerializer) As Integer
@@ -22,7 +24,7 @@ Public Class ActionTypeConverter
             Return Convert.ToInt32(reader.Value)
         End If
 
-        ' If it's a string, convert it to the corresponding ActionType enum value
+        ' If it's a string, convert it to the corresponding TaskTypes enum value
         If reader.TokenType = JsonToken.String Then
             Dim actionString As String = reader.Value.ToString()
             Return ConvertActionStringToInteger(actionString)
@@ -49,7 +51,7 @@ Public Class ActionTypeConverter
     End Sub
 
     ''' <summary>
-    ''' Converts action string (e.g., "SayMessage") to ActionType enum integer value
+    ''' Converts task string (e.g., "SayMessage", "DataRequest") to TaskTypes enum integer value
     ''' </summary>
     Private Function ConvertActionStringToInteger(actionString As String) As Integer
         If String.IsNullOrEmpty(actionString) Then
@@ -59,7 +61,7 @@ Public Class ActionTypeConverter
         ' Normalize the string (remove spaces, case-insensitive)
         Dim normalized = actionString.Trim()
 
-        ' Map string to ActionType enum value
+        ' Map string to TaskTypes enum value
         Select Case normalized.ToLower()
             Case "saymessage", "message"
                 Return CInt(TaskTypes.SayMessage)
@@ -80,7 +82,7 @@ Public Class ActionTypeConverter
                     Return intValue
                 End If
                 ' Default to SayMessage if unknown
-                Console.WriteLine($"⚠️ [ActionTypeConverter] Unknown action string: '{actionString}', defaulting to SayMessage (1)")
+                Console.WriteLine($"⚠️ [TaskTypeConverter] Unknown task string: '{actionString}', defaulting to SayMessage (1)")
                 Return CInt(TaskTypes.SayMessage)
         End Select
     End Function
