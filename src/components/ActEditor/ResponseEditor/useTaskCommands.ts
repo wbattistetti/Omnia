@@ -2,7 +2,7 @@ import React from 'react';
 import { info } from '../../../utils/logger';
 import type { Task } from '../../../types/taskTypes';
 import { TaskType, templateIdToTaskType } from '../../../types/taskTypes';
-import { normalizeTaskFromViewer } from './utils/normalize';
+import { createTask } from './utils/normalize';
 
 export type Position = 'before' | 'after';
 
@@ -238,7 +238,7 @@ export default function useTaskCommands(
         }
       }
 
-      const normalized = normalizeTaskFromViewer(incoming);
+      const normalized = createTask(incoming);
       const targetEsc = escalations[to.escalationIdx];
       const tasks = getTasks(targetEsc);
 

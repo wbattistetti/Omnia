@@ -500,7 +500,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
 
         const baseTask = {
           type: taskType, // ✅ Aggiunto campo type (enum numerico)
-          templateId: templateIdForTask,  // ✅ Renamed from actionId
+          templateId: null,  // ✅ null = standalone task (non deriva da altri Task)
           taskId: actionInstanceId,  // ✅ Renamed from actionInstanceId
           parameters: [{ parameterId: 'text', value: actionInstanceId }]
         };

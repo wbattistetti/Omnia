@@ -92,12 +92,13 @@ export function normalizeTask(task: Task): TaskInstance {
  * @param row - NodeRowData row
  * @returns Task ID
  */
-export function getTaskIdFromRow(row: NodeRowData): string {
+export function getTaskIdFromRow(row: NodeRowData): string | null {
   if (row.taskId) {
     return row.taskId;
   }
 
-  // Auto-create Task if missing (migration helper)
+  // ✅ NON creare automaticamente il task - restituisci null se non esiste
+  // LOGICA: Il task viene creato solo quando si apre ResponseEditor, dopo aver determinato il tipo con l'euristica
   const task = taskRepository.getTask(row.id);
   if (task) {
     // Task exists, just add taskId to row
@@ -105,11 +106,8 @@ export function getTaskIdFromRow(row: NodeRowData): string {
     return task.id;
   }
 
-  // Create Task for row without taskId
-  // ✅ Use UNDEFINED instead of Message as default - will be updated by Euristica 1 when user types
-  const newTask = taskRepository.createTask(TaskType.UNDEFINED, null, row.text ? { text: row.text } : undefined, row.id);
-  (row as any).taskId = newTask.id;
-  return newTask.id;
+  // ✅ Task non esiste - restituisci null (verrà creato quando si apre ResponseEditor)
+  return null;
 }
 
 /**
@@ -245,6 +243,12 @@ export function updateRowTaskAction(
 ): void {
   const taskId = getTaskIdFromRow(row);
 
+  // ✅ Se il task non esiste, non fare nulla (verrà creato quando si apre ResponseEditor)
+  if (!taskId) {
+    console.warn('[updateRowTaskAction] Task non esiste ancora - verrà creato quando si apre ResponseEditor');
+    return;
+  }
+
   // Map actId to templateId if needed
   const templateId = mapActIdToTemplateId(newAction);
 
@@ -311,6 +315,12 @@ export function updateRowData(
   projectId?: string
 ): void {
   const taskId = getTaskIdFromRow(row);
+
+  // ✅ Se il task non esiste, non fare nulla (verrà creato quando si apre ResponseEditor)
+  if (!taskId) {
+    console.warn('[updateRowData] Task non esiste ancora - verrà creato quando si apre ResponseEditor');
+    return;
+  }
 
   // ✅ Update task con campi direttamente (niente wrapper value)
   const taskUpdates: Record<string, any> = {};

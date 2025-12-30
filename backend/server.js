@@ -129,17 +129,17 @@ async function loadTaskHeuristicsFromDB() {
   }
 
   try {
-    console.log('[TASK_HEURISTICS_CACHE] Caricando pattern da Task_Types...');
+    console.log('[TASK_HEURISTICS_CACHE] Caricando pattern da Heuristics...');
     const client = new MongoClient(uri);
     await client.connect();
     const db = client.db(dbFactory);
-    // Pattern sono ora in Task_Types, non più in task_heuristics
-    const collection = db.collection('Task_Types');
+    // Pattern sono ora in Heuristics (rinominata da Task_Types)
+    const collection = db.collection('Heuristics');
 
     const taskTypes = await collection.find({ patterns: { $exists: true, $ne: null } }).toArray();
     await client.close();
 
-    // Mapping da Task_Types._id a HeuristicType (per compatibilità con frontend)
+    // Mapping da Heuristics._id a HeuristicType (per compatibilità con frontend)
     const typeMapping = {
       'AIAgent': 'AI_AGENT',
       'Message': 'MESSAGE',
@@ -161,7 +161,7 @@ async function loadTaskHeuristicsFromDB() {
         return; // Skip se non c'è mapping o non ci sono pattern
       }
 
-      // I pattern in Task_Types sono strutturati come: { IT: [...], EN: [...], PT: [...] }
+      // I pattern in Heuristics sono strutturati come: { IT: [...], EN: [...], PT: [...] }
       Object.keys(taskType.patterns).forEach(lang => {
         const langUpper = lang.toUpperCase();
 
@@ -210,7 +210,7 @@ async function loadTaskHeuristicsFromDB() {
 
     taskHeuristicsCache = rulesByLang;
     taskHeuristicsCacheLoaded = true;
-    console.log(`[TASK_HEURISTICS_CACHE] Caricati pattern da Task_Types per lingue: ${Object.keys(rulesByLang).join(', ')}`);
+    console.log(`[TASK_HEURISTICS_CACHE] Caricati pattern da Heuristics per lingue: ${Object.keys(rulesByLang).join(', ')}`);
     return taskHeuristicsCache;
 
   } catch (error) {
@@ -230,7 +230,7 @@ async function loadTemplatesFromDB() {
     await client.connect();
     const db = client.db('factory');
 
-    // ✅ FIX: Carica da Task_Templates (dialogue templates), non da Task_Types (data types)
+    // ✅ FIX: Carica da Task_Templates (dialogue templates), non da Heuristics (pattern euristiche)
     // Cerca in entrambe le collection per backward compatibility
     const query = {
       $or: [
@@ -241,15 +241,13 @@ async function loadTemplatesFromDB() {
       ]
     };
 
-    const [templates1, templates2] = await Promise.all([
-      db.collection('Task_Templates').find(query).toArray(),
-      db.collection('task_templates').find(query).toArray()
-    ]);
+    // ✅ MIGRATO: Usa Tasks (migrazione completa, Task_Templates rimosso)
+    const templates1 = await db.collection('Tasks').find(query).toArray();  // ✅ Nuova collection
 
     await client.close();
 
-    // Unisci i risultati e converti in oggetto per accesso rapido
-    const allTemplates = [...templates1, ...templates2];
+    // Converti in oggetto per accesso rapido
+    const allTemplates = [...templates1];
     templateCache = {};
     allTemplates.forEach(template => {
       const key = template.name || template.label || template.id || template._id?.toString();
@@ -539,39 +537,67 @@ app.delete('/api/projects/catalog/:id', async (req, res) => {
     const db = client.db(dbProjects);
     const coll = db.collection('projects_catalog');
 
-    // Trova il progetto prima di cancellarlo per ottenere il nome del database
+    // ✅ Trova il progetto PRIMA di cancellarlo per ottenere il nome del database
     const project = await coll.findOne({ $or: [{ _id: id }, { projectId: id }] });
 
-    // Elimina dal catalogo
-    const result = await coll.deleteOne({ $or: [{ _id: id }, { projectId: id }] });
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
 
-    // ✅ NUOVO: Elimina anche il database MongoDB del progetto
-    if (result?.deletedCount > 0 && project) {
-      // Il database può essere: project_{id} o t_{tenant}__p_{project}__{hash}
-      // Prova entrambi i pattern
+    // ✅ Elimina anche il database MongoDB del progetto PRIMA di eliminare dal catalogo
+    // LOGICA: Elimina database prima del catalogo per evitare database orfani
+    let databaseDeleted = false;
+    if (project.dbName) {
+      try {
+        const projectDb = client.db(project.dbName);
+        // Verifica che il database esista e abbia collezioni
+        const collections = await projectDb.listCollections().toArray();
+        if (collections.length > 0) {
+          await projectDb.dropDatabase();
+          databaseDeleted = true;
+          logInfo('Projects.delete', { projectId: id, dbName: project.dbName, deleted: true });
+        } else {
+          logInfo('Projects.delete', { projectId: id, dbName: project.dbName, skipped: 'empty database' });
+        }
+      } catch (dbError) {
+        // Database non esiste o errore - logga ma continua (non bloccare la cancellazione)
+        logWarn('Projects.delete', { projectId: id, dbName: project.dbName, error: dbError.message });
+      }
+    } else {
+      // Se dbName non è presente, prova pattern legacy come fallback
       const possibleDbNames = [
         `project_${id}`,
-        `project_${project.projectId || id}`,
-        project.dbName // Se esiste un campo dbName nel progetto
+        `project_${project.projectId || id}`
       ].filter(Boolean);
 
       for (const dbName of possibleDbNames) {
         try {
           const projectDb = client.db(dbName);
-          // Verifica che il database esista
           const collections = await projectDb.listCollections().toArray();
           if (collections.length > 0) {
             await projectDb.dropDatabase();
-            logInfo('Projects.delete', { projectId: id, dbName, deleted: true });
+            databaseDeleted = true;
+            logInfo('Projects.delete', { projectId: id, dbName, deleted: true, fallback: true });
           }
         } catch (dbError) {
           // Database non esiste o errore - continua
-          logWarn('Projects.delete', { projectId: id, dbName, error: dbError.message });
+          logWarn('Projects.delete', { projectId: id, dbName, error: dbError.message, fallback: true });
         }
       }
     }
 
-    res.json({ ok: true, deleted: result?.deletedCount || 0 });
+    // ✅ Elimina dal catalogo (dopo aver eliminato il database)
+    const result = await coll.deleteOne({ $or: [{ _id: id }, { projectId: id }] });
+
+    if (result?.deletedCount === 0) {
+      return res.status(404).json({ error: 'Project not found in catalog' });
+    }
+
+    res.json({
+      ok: true,
+      catalogDeleted: result?.deletedCount || 0,
+      databaseDeleted
+    });
   } catch (e) {
     logError('Projects.delete', e, { projectId: id });
     res.status(500).json({ error: String(e?.message || e) });
@@ -587,9 +613,48 @@ app.delete('/api/projects/catalog', async (req, res) => {
     await client.connect();
     const db = client.db(dbProjects);
     const coll = db.collection('projects_catalog');
+
+    // ✅ Leggi tutti i progetti PRIMA di eliminarli per ottenere i dbName
+    const allProjects = await coll.find({}).toArray();
+
+    // ✅ Elimina i database di tutti i progetti
+    let databasesDeleted = 0;
+    let databasesErrors = 0;
+
+    for (const project of allProjects) {
+      if (project.dbName) {
+        try {
+          const projectDb = client.db(project.dbName);
+          const collections = await projectDb.listCollections().toArray();
+          if (collections.length > 0) {
+            await projectDb.dropDatabase();
+            databasesDeleted++;
+            logInfo('Projects.deleteAll', { dbName: project.dbName, deleted: true });
+          }
+        } catch (dbError) {
+          databasesErrors++;
+          logWarn('Projects.deleteAll', { dbName: project.dbName, error: dbError.message });
+        }
+      }
+    }
+
+    // ✅ Elimina dal catalogo (dopo aver eliminato i database)
     const result = await coll.deleteMany({});
-    res.json({ ok: true, deleted: result?.deletedCount || 0 });
+
+    logInfo('Projects.deleteAll', {
+      catalogDeleted: result.deletedCount,
+      databasesDeleted,
+      databasesErrors
+    });
+
+    res.json({
+      ok: true,
+      catalogDeleted: result.deletedCount || 0,
+      databasesDeleted,
+      databasesErrors
+    });
   } catch (e) {
+    logError('Projects.deleteAll', e);
     res.status(500).json({ error: String(e?.message || e) });
   } finally {
     await client.close();
@@ -597,22 +662,7 @@ app.delete('/api/projects/catalog', async (req, res) => {
 });
 
 // -----------------------------
-// Factory: list AgentActs (for draft/new projects intellisense)
-// -----------------------------
-app.get('/api/factory/agent-acts', async (req, res) => {
-  const client = new MongoClient(uri);
-  try {
-    await client.connect();
-    const db = client.db(dbFactory);
-    const coll = db.collection('AgentActs');
-    const items = await coll.find({}, { projection: { _id: 0, id: 1, name: 1, label: 1, mode: 1, ddt: 1, ddtSnapshot: 1, userActs: 1, category: 1 } }).toArray();
-    res.json({ items });
-  } catch (e) {
-    res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
-  }
-});
+// DEPRECATED: AgentActs endpoints removed - use /api/factory/task-templates-v2 instead
 
 // -----------------------------
 // Endpoint: Bootstrap progetto (crea DB e clona acts)
@@ -695,9 +745,9 @@ app.post('/api/projects/bootstrap', async (req, res) => {
       { upsert: true }
     );
 
-    // 4) Clona Task_Templates dalla factory al progetto
+    // 4) Clona Tasks dalla factory al progetto (migrato da Task_Templates)
     const factoryDb = client.db(dbFactory);
-    const templatesColl = factoryDb.collection('Task_Templates');
+    const templatesColl = factoryDb.collection('Tasks');  // ✅ MIGRATO: Usa Tasks invece di Task_Templates
 
     // Scope filtering: global + industry-specific
     let templatesQuery = {};
@@ -734,10 +784,10 @@ app.post('/api/projects/bootstrap', async (req, res) => {
 
       if (mappedTemplates.length > 0) {
         try {
-          const result = await projDb.collection('Task_Templates').insertMany(mappedTemplates, { ordered: false });
+          const result = await projDb.collection('tasks').insertMany(mappedTemplates, { ordered: false });  // ✅ MIGRATO: Usa tasks invece di Task_Templates
           templatesInserted = result.insertedCount || Object.keys(result.insertedIds || {}).length || 0;
         } catch (insertError) {
-          console.error('[Bootstrap] Error inserting task_templates:', insertError);
+          console.error('[Bootstrap] Error inserting tasks:', insertError);
           // Continue even if insert fails (collection might already exist or have duplicates)
           templatesInserted = 0;
         }
@@ -812,7 +862,7 @@ app.get('/api/projects/:pid/task-templates', async (req, res) => {
   try {
     await client.connect();
     const projDb = await getProjectDb(client, projectId);
-    const coll = projDb.collection('Task_Templates');
+    const coll = projDb.collection('tasks');  // ✅ MIGRATO: Usa tasks invece di Task_Templates
     const templates = await coll.find({}).toArray();
     logInfo('TaskTemplates.get', { projectId, count: templates.length });
     res.json({ items: templates });
@@ -835,7 +885,7 @@ app.post('/api/projects/:pid/task-templates', async (req, res) => {
   try {
     await client.connect();
     const projDb = await getProjectDb(client, projectId);
-    const coll = projDb.collection('Task_Templates');
+    const coll = projDb.collection('tasks');  // ✅ MIGRATO: Usa tasks invece di Task_Templates
     const now = new Date();
     const doc = {
       _id: payload.id,
@@ -877,19 +927,19 @@ app.get('/api/projects/:pid/task-heuristics', async (req, res) => {
   try {
     await client.connect();
     const projDb = await getProjectDb(client, projectId);
-    // Pattern sono ora in Task_Types, non più in task_heuristics
-    const coll = projDb.collection('Task_Types');
+    // Pattern sono ora in Heuristics (rinominata da Task_Types)
+    const coll = projDb.collection('Heuristics');
     const taskTypes = await coll.find({ patterns: { $exists: true, $ne: null } }).toArray();
 
-    // Se il progetto non ha Task_Types con pattern, usa quelli di factory
+    // Se il progetto non ha Heuristics con pattern, usa quelli di factory
     if (taskTypes.length === 0) {
-      console.log(`[TaskHeuristics] Project ${projectId} has no Task_Types with patterns, using factory patterns`);
+      console.log(`[TaskHeuristics] Project ${projectId} has no Heuristics with patterns, using factory patterns`);
       const factoryPatterns = await loadTaskHeuristicsFromDB();
       logInfo('TaskHeuristics.get', { projectId, source: 'factory', languages: Object.keys(factoryPatterns) });
       return res.json(factoryPatterns);
     }
 
-    // Mapping da Task_Types._id a HeuristicType (per compatibilità con frontend)
+    // Mapping da Heuristics._id a HeuristicType (per compatibilità con frontend)
     const typeMapping = {
       'AIAgent': 'AI_AGENT',
       'Message': 'MESSAGE',
@@ -910,7 +960,7 @@ app.get('/api/projects/:pid/task-heuristics', async (req, res) => {
         return;
       }
 
-      // I pattern in Task_Types sono strutturati come: { IT: [...], EN: [...], PT: [...] }
+      // I pattern in Heuristics sono strutturati come: { IT: [...], EN: [...], PT: [...] }
       Object.keys(taskType.patterns).forEach(lang => {
         const langUpper = lang.toUpperCase();
 
@@ -1691,15 +1741,52 @@ app.get('/api/projects/:pid/tasks', async (req, res) => {
   }
 });
 
+// ✅ Helper: Validate GUID format
+function isValidGuid(str) {
+  if (!str || typeof str !== 'string') return false;
+  const guidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return guidRegex.test(str);
+}
+
+// ✅ Helper: Validate TaskType enum (0-19 or -1 for UNDEFINED)
+function isValidTaskType(type) {
+  return typeof type === 'number' && type >= -1 && type <= 19;
+}
+
 // POST /api/projects/:pid/tasks - Create or update task (upsert)
 app.post('/api/projects/:pid/tasks', async (req, res) => {
   const projectId = req.params.pid;
   const payload = req.body || {};
   const templateId = payload.templateId;
-  // ✅ Accept null as valid value for templateId (indicates standalone task)
-  if (!payload.id || (templateId !== null && !templateId)) {
-    return res.status(400).json({ error: 'id_required_and_templateId_must_be_string_or_null' });
+  const type = payload.type;
+
+  // ✅ Validate id is present
+  if (!payload.id) {
+    return res.status(400).json({ error: 'id_required' });
   }
+
+  // ✅ Validate type is present and valid
+  if (type === undefined || type === null) {
+    return res.status(400).json({ error: 'type_required', message: 'Task type (enum 0-19) is required' });
+  }
+  if (!isValidTaskType(type)) {
+    return res.status(400).json({ error: 'invalid_type', message: `Task type must be a number between -1 and 19, got: ${type}` });
+  }
+
+  // ✅ Validate templateId: must be null (standalone) or a valid GUID (reference)
+  if (templateId !== null && templateId !== undefined) {
+    if (typeof templateId !== 'string') {
+      return res.status(400).json({ error: 'invalid_templateId', message: 'templateId must be null (standalone) or a GUID string (reference)' });
+    }
+    if (!isValidGuid(templateId)) {
+      // ✅ Reject semantic strings like "GetData", "SayMessage", "UNDEFINED"
+      return res.status(400).json({
+        error: 'invalid_templateId',
+        message: `templateId must be null (standalone) or a valid GUID (reference). Got semantic string: "${templateId}". Use type field for task behavior.`
+      });
+    }
+  }
+
   const client = new MongoClient(uri);
   try {
     await client.connect();
@@ -1713,7 +1800,8 @@ app.post('/api/projects/:pid/tasks', async (req, res) => {
     const task = {
       projectId,
       id: payload.id,
-      templateId: templateId,
+      type: type,              // ✅ type: enum numerico (0-19) - REQUIRED
+      templateId: templateId ?? null,  // ✅ templateId: null (standalone) or GUID (reference)
       ...fields,  // ✅ Save all fields directly (mainData, label, stepPrompts, ecc.)
       updatedAt: now
     };
@@ -1763,6 +1851,26 @@ app.put('/api/projects/:pid/tasks/:taskId', async (req, res) => {
       return res.status(404).json({ error: 'task_not_found' });
     }
 
+    // ✅ Validate type if provided
+    if (payload.type !== undefined && payload.type !== null) {
+      if (!isValidTaskType(payload.type)) {
+        return res.status(400).json({ error: 'invalid_type', message: `Task type must be a number between -1 and 19, got: ${payload.type}` });
+      }
+    }
+
+    // ✅ Validate templateId if provided
+    if (payload.templateId !== undefined && payload.templateId !== null) {
+      if (typeof payload.templateId !== 'string') {
+        return res.status(400).json({ error: 'invalid_templateId', message: 'templateId must be null (standalone) or a GUID string (reference)' });
+      }
+      if (!isValidGuid(payload.templateId)) {
+        return res.status(400).json({
+          error: 'invalid_templateId',
+          message: `templateId must be null (standalone) or a valid GUID (reference). Got semantic string: "${payload.templateId}". Use type field for task behavior.`
+        });
+      }
+    }
+
     // ✅ Extract all fields except id, createdAt, updatedAt
     // ✅ Update fields directly (no value wrapper)
     const { id, createdAt, updatedAt, ...fields } = payload;
@@ -1771,6 +1879,11 @@ app.put('/api/projects/:pid/tasks/:taskId', async (req, res) => {
       ...fields,  // ✅ Update all fields directly (mainData, label, stepPrompts, ecc.)
       updatedAt: new Date()
     };
+
+    // ✅ Normalize templateId: if provided, ensure it's null or valid GUID
+    if (payload.templateId !== undefined) {
+      update.templateId = payload.templateId ?? null;
+    }
 
     await projDb.collection('tasks').updateOne(
       { projectId, id: taskId },
@@ -1829,7 +1942,26 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
     // ✅ OPTIMIZATION: Use bulkWrite instead of sequential findOne + updateOne/insertOne
     // This reduces 2*N database calls to just 1 bulk operation!
     const bulkOps = items
-      .filter(item => item.id && item.templateId)
+      .filter(item => {
+        // ✅ Validate: id is required
+        if (!item.id) {
+          logWarn('Tasks.bulk', { error: 'missing_id', item });
+          return false;
+        }
+        // ✅ Validate: type is required and valid
+        if (item.type === undefined || item.type === null || !isValidTaskType(item.type)) {
+          logWarn('Tasks.bulk', { error: 'missing_or_invalid_type', itemId: item.id, type: item.type });
+          return false;
+        }
+        // ✅ Validate: templateId must be null or valid GUID (reject semantic strings)
+        if (item.templateId !== null && item.templateId !== undefined) {
+          if (typeof item.templateId !== 'string' || !isValidGuid(item.templateId)) {
+            logWarn('Tasks.bulk', { error: 'invalid_templateId', itemId: item.id, templateId: item.templateId });
+            return false;
+          }
+        }
+        return true;
+      })
       .map(item => {
         // ✅ Extract all fields except id, templateId, createdAt, updatedAt
         // ✅ Save fields directly (no value wrapper)
@@ -1838,7 +1970,8 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
         const task = {
           projectId,
           id: item.id,
-          templateId: item.templateId,
+          type: item.type,              // ✅ type: enum numerico (0-19) - REQUIRED
+          templateId: item.templateId ?? null,  // ✅ templateId: null (standalone) or GUID (reference)
           ...fields,  // ✅ Save all fields directly (mainData, label, stepPrompts, ecc.)
           updatedAt: now
         };
@@ -2020,8 +2153,9 @@ app.get('/api/factory/task-templates-v2', async (req, res) => {
       scopeArray.push(`industry:${industry}`);
     }
 
-    // Query per task_templates
+    // ✅ MIGRATO: Query per Tasks (invece di task_templates)
     // IMPORTANTE: Include anche template senza campo contexts (backward compatibility)
+    let query = {};
     if (context) {
       // Se context è fornito, cerca template con scope corretto E (contexts match O contexts mancante)
       query = {
@@ -2041,8 +2175,8 @@ app.get('/api/factory/task-templates-v2', async (req, res) => {
 
     console.log(`[TaskTemplatesV2] Query:`, JSON.stringify(query, null, 2));
 
-    // Carica task templates
-    const templates = await db.collection('task_templates')
+    // ✅ MIGRATO: Carica da Tasks invece di task_templates
+    const templates = await db.collection('Tasks')
       .find(query)
       .toArray();
 
@@ -2097,203 +2231,11 @@ function mapModeToBuiltIn(mode) {
   return mapping[normalized] || 'SayMessage';
 }
 
-// -----------------------------
-// ✅ STEP 4: DDT Library V2 (NEW)
-// Endpoint per caricare DDT da ddt_library con scope filtering
-// -----------------------------
-app.get('/api/factory/ddt-library-v2', async (req, res) => {
-  const client = new MongoClient(uri);
-  try {
-    await client.connect();
-    const db = client.db(dbFactory);
+// ❌ RIMOSSO: DDT Library V2 endpoints (collection eliminata, non usata)
+// I DDT sono ora gestiti direttamente nei Tasks con type: DataRequest
 
-    // Parametri query per scope filtering
-    const { scopes, ddtId, projectId, industry } = req.query;
-
-    // Se ddtId è fornito, carica quel DDT specifico
-    if (ddtId) {
-      const ddt = await db.collection('ddt_library').findOne({ id: ddtId });
-      if (!ddt) {
-        return res.status(404).json({ error: 'DDT not found' });
-      }
-      return res.json(ddt);
-    }
-
-    // Costruisci array di scope da cercare
-    const scopeArray = [];
-    if (scopes) {
-      const scopesList = typeof scopes === 'string' ? scopes.split(',') : scopes;
-      scopeArray.push(...scopesList);
-    } else {
-      scopeArray.push('general');
-    }
-
-    // Aggiungi scope client se projectId è fornito
-    if (projectId) {
-      scopeArray.push(`client:${projectId}`);
-    }
-
-    // Aggiungi scope industry se industry è fornito
-    if (industry) {
-      scopeArray.push(`industry:${industry}`);
-    }
-
-    // Query per ddt_library
-    const query = {
-      scope: { $in: scopeArray }
-    };
-
-    console.log(`[DDTLibraryV2] Query:`, JSON.stringify(query, null, 2));
-
-    // Carica DDT
-    const ddts = await db.collection('ddt_library')
-      .find(query)
-      .toArray();
-
-    console.log(`[DDTLibraryV2] Found ${ddts.length} DDTs`);
-
-    res.json(ddts);
-
-  } catch (error) {
-    console.error('[DDTLibraryV2] Error:', error);
-    res.status(500).json({ error: 'Failed to fetch DDT library' });
-  } finally {
-    await client.close();
-  }
-});
-
-// -----------------------------
-// ✅ STEP 4: Resolve DDT (NEW)
-// Risolve un DDT composito ricorsivamente
-// -----------------------------
-app.post('/api/factory/ddt-resolve', async (req, res) => {
-  const client = new MongoClient(uri);
-  try {
-    await client.connect();
-    const db = client.db(dbFactory);
-
-    const { ddtId } = req.body;
-
-    if (!ddtId) {
-      return res.status(400).json({ error: 'ddtId is required' });
-    }
-
-    // Funzione ricorsiva per risolvere DDT composito
-    async function resolveDDT(id) {
-      const ddtDef = await db.collection('ddt_library').findOne({ id });
-
-      if (!ddtDef) {
-        throw new Error(`DDT not found: ${id}`);
-      }
-
-      // Se non è composito, ritorna direttamente
-      if (!ddtDef.composition) {
-        return ddtDef.ddt;
-      }
-
-      // Risolvi ricorsivamente gli includes
-      const resolved = {
-        mainData: [],
-        steps: []
-      };
-
-      for (const includedId of ddtDef.composition.includes || []) {
-        const included = await resolveDDT(includedId);
-        if (included.mainData) {
-          resolved.mainData.push(...included.mainData);
-        }
-        if (included.steps) {
-          resolved.steps.push(...included.steps);
-        }
-      }
-
-      // Aggiungi extends (campi custom)
-      if (ddtDef.composition.extends) {
-        if (ddtDef.composition.extends.mainData) {
-          resolved.mainData.push(...ddtDef.composition.extends.mainData);
-        }
-        if (ddtDef.composition.extends.steps) {
-          resolved.steps.push(...ddtDef.composition.extends.steps);
-        }
-      }
-
-      return resolved;
-    }
-
-    const resolvedDDT = await resolveDDT(ddtId);
-
-    res.json({ ddtId, ddt: resolvedDDT });
-
-  } catch (error) {
-    console.error('[DDTResolve] Error:', error);
-    res.status(500).json({ error: error.message || 'Failed to resolve DDT' });
-  } finally {
-    await client.close();
-  }
-});
-
-// Backend Calls - GET (legacy)
-app.get('/api/factory/backend-calls', async (req, res) => {
-  const client = new MongoClient(uri);
-  try {
-    await client.connect();
-    const db = client.db(dbFactory);
-    const coll = db.collection('BackendCalls');
-    const docs = await coll.find({}).toArray();
-    console.log(`>>> Found ${docs.length} BackendCalls`);
-    res.json(docs);
-  } catch (error) {
-    console.error('Error fetching backend calls:', error);
-    res.status(500).json({ error: 'Failed to fetch backend calls' });
-  } finally {
-    await client.close();
-  }
-});
-
-// Backend Calls - POST (with scope filtering)
-app.post('/api/factory/backend-calls', async (req, res) => {
-  const client = new MongoClient(uri);
-  try {
-    await client.connect();
-    const db = client.db(dbFactory);
-    const coll = db.collection('BackendCalls');
-
-    const { industry, scope } = req.body;
-
-    // Build query based on scope filtering
-    const query = {};
-
-    if (scope && Array.isArray(scope)) {
-      const scopeConditions = [];
-
-      if (scope.includes('global')) {
-        scopeConditions.push({ scope: 'global' });
-      }
-
-      if (scope.includes('industry') && industry) {
-        scopeConditions.push({
-          scope: 'industry',
-          industry: industry
-        });
-      }
-
-      if (scopeConditions.length > 0) {
-        query.$or = scopeConditions;
-      }
-    }
-
-    console.log('>>> BackendCalls query:', JSON.stringify(query, null, 2));
-
-    const docs = await coll.find(query).toArray();
-    console.log(`>>> Found ${docs.length} BackendCalls with scope filtering`);
-    res.json(docs);
-  } catch (error) {
-    console.error('Error fetching backend calls with scope filtering:', error);
-    res.status(500).json({ error: 'Failed to fetch backend calls' });
-  } finally {
-    await client.close();
-  }
-});
+// ❌ RIMOSSO: Backend Calls endpoints (collection eliminata, migrata a Tasks type: 4)
+// Usa /api/factory/task-templates-v2?taskType=Action invece
 
 // Conditions - GET (legacy)
 app.get('/api/factory/conditions', async (req, res) => {
@@ -2602,78 +2544,16 @@ app.post('/api/factory/macro-tasks', async (req, res) => {
   }
 });
 
-// DEPRECATED: Legacy AgentActs PUT endpoint removed - use /api/factory/task-templates-v2/:id instead
-app.put('/api/factory/agent-acts/:id', async (req, res) => {
-  res.status(410).json({ error: 'This endpoint is deprecated. Use /api/factory/task-templates-v2/:id instead' });
-  const id = req.params.id;
-  const payload = req.body || {};
-  const client = new MongoClient(uri);
-  try {
-    await client.connect();
-    const db = client.db(dbFactory);
-    payload.updatedAt = new Date();
-    await db.collection('AgentActs').updateOne(
-      { _id: id },
-      { $set: payload, $setOnInsert: { createdAt: new Date() } },
-      { upsert: true }
-    );
-    const saved = await db.collection('AgentActs').findOne({ _id: id });
-    res.json(saved);
-  } catch (err) {
-    res.status(500).json({ error: err.message, stack: err.stack });
-  } finally {
-    await client.close();
-  }
-});
-
-// Bulk-replace Agent Acts: delete all then insert the provided list
-app.post('/api/factory/agent-acts/bulk-replace', async (req, res) => {
-  const payload = Array.isArray(req.body) ? req.body : [];
-  const client = new MongoClient(uri);
-  try {
-    await client.connect();
-    const db = client.db(dbFactory);
-    const coll = db.collection('AgentActs');
-    await coll.deleteMany({});
-    let inserted = 0;
-    if (payload.length > 0) {
-      const docs = payload.map((it) => ({
-        _id: it._id || it.id,
-        type: 'agent_act',
-        label: it.label || it.name || 'Unnamed',
-        description: it.description || '',
-        category: it.category || 'Uncategorized',
-        tags: it.tags || [],
-        isInteractive: Boolean(it.isInteractive),
-        data: it.data || {},
-        ddt: it.ddt || null,
-        prompts: it.prompts || {},
-        createdAt: it.createdAt || new Date(),
-        updatedAt: new Date(),
-      }));
-      const result = await coll.insertMany(docs, { ordered: false });
-      inserted = (result && result.insertedCount) || 0;
-    }
-    res.json({ success: true, inserted });
-  } catch (err) {
-    res.status(500).json({ error: err.message, stack: err.stack });
-  } finally {
-    await client.close();
-  }
-});
+// DEPRECATED: AgentActs endpoints removed - use /api/factory/task-templates-v2 instead
 
 app.get('/api/factory/actions', async (req, res) => {
   const client = new MongoClient(uri);
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    // ✅ CASE-INSENSITIVE: Actions sono ora in Task_Templates con taskType='Action', non più in Actions
-    const actions = await db.collection('Task_Templates').find({
-      $or: [
-        { taskType: { $regex: /^action$/i } },
-        { type: { $regex: /^action$/i } },
-        { name: { $regex: /^action$/i } }
-      ]
+    // ✅ Actions sono in Tasks con type enum 6-19 (SendSMS=6, SendEmail=7, EscalateToHuman=8, ecc.)
+    const actions = await db.collection('Tasks').find({  // ✅ MIGRATO: Usa Tasks invece di Task_Templates
+      type: { $gte: 6, $lte: 19 }  // ✅ Action types: enum 6-19
     }).toArray();
     // Convert to old format for backward compatibility
     const formattedActions = actions.map(action => ({
@@ -2698,19 +2578,16 @@ app.get('/api/factory/dialogue-templates', async (req, res) => {
     await client.connect();
     const db = client.db(dbFactory);
 
-    // ✅ Carica TUTTI i template dalla collection Task_Templates
+    // ✅ Carica TUTTI i template dalla collection Tasks (migrato da Task_Templates)
     // Non filtrare per tipo - serve tutta la cache per risolvere i reference (subDataIds)
     const query = {}; // ✅ Query vuota = carica tutto
 
-    // ✅ Cerca in entrambe le collection (Task_Templates e task_templates)
-    const [ddt1, ddt2] = await Promise.all([
-      db.collection('Task_Templates').find(query).toArray(),
-      db.collection('task_templates').find(query).toArray()
-    ]);
+    // ✅ MIGRATO: Usa Tasks (migrazione completa, Task_Templates rimosso)
+    const ddt1 = await db.collection('Tasks').find(query).toArray();  // ✅ MIGRATO: Usa Tasks invece di Task_Templates
 
-    // Unisci i risultati, evitando duplicati per ID
+    // Converti in oggetto per accesso rapido
     const templateMap = new Map();
-    [...ddt1, ...ddt2].forEach(t => {
+    ddt1.forEach(t => {
       const id = t.id || t._id?.toString();
       if (id && !templateMap.has(id)) {
         templateMap.set(id, t);
@@ -2734,29 +2611,6 @@ app.get('/api/factory/ide-translations', async (req, res) => {
     await client.connect();
     const db = client.db(dbFactory);
     const coll = db.collection('IDETranslations');
-    const docs = await coll.find({}).toArray();
-    const merged = {};
-    for (const d of docs) {
-      if (d && typeof d === 'object') {
-        const source = d.data || d.translations || {};
-        Object.assign(merged, source);
-      }
-    }
-    res.json(merged);
-  } catch (err) {
-    res.status(500).json({ error: err.message, stack: err.stack });
-  } finally {
-    await client.close();
-  }
-});
-
-// DataDialogue translations (dynamic, editable)
-app.get('/api/factory/data-dialogue-translations', async (req, res) => {
-  const client = new MongoClient(uri);
-  try {
-    await client.connect();
-    const db = client.db(dbFactory);
-    const coll = db.collection('DataDialogueTranslations');
     const docs = await coll.find({}).toArray();
     const merged = {};
     for (const d of docs) {
@@ -2844,26 +2698,6 @@ app.post('/api/factory/template-translations', async (req, res) => {
     res.json(merged);
   } catch (err) {
     console.error('[TEMPLATE_TRANSLATIONS] Error:', err);
-    res.status(500).json({ error: err.message, stack: err.stack });
-  } finally {
-    await client.close();
-  }
-});
-
-app.post('/api/factory/data-dialogue-translations', async (req, res) => {
-  const payload = req.body || {};
-  if (typeof payload !== 'object' || Array.isArray(payload)) {
-    return res.status(400).json({ error: 'Payload must be an object of translationKey: text' });
-  }
-  const client = new MongoClient(uri);
-  try {
-    await client.connect();
-    const db = client.db(dbFactory);
-    const coll = db.collection('DataDialogueTranslations');
-    await coll.deleteMany({});
-    await coll.insertOne({ data: payload, updatedAt: new Date() });
-    res.json({ success: true, count: Object.keys(payload).length });
-  } catch (err) {
     res.status(500).json({ error: err.message, stack: err.stack });
   } finally {
     await client.close();
@@ -3135,7 +2969,7 @@ app.post('/api/factory/dialogue-templates', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const coll = db.collection('Task_Templates');
+    const coll = db.collection('Tasks');  // ✅ MIGRATO: Usa Tasks invece di Task_Templates
     const now = new Date();
 
     // Handle single template or array of templates
@@ -3176,7 +3010,7 @@ app.delete('/api/factory/dialogue-templates/:id', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const coll = db.collection('Task_Templates');
+    const coll = db.collection('Tasks');  // ✅ MIGRATO: Usa Tasks invece di Task_Templates
     // Delete by name or _id
     let filter;
     if (/^[a-fA-F0-9]{24}$/.test(id)) {
@@ -3298,14 +3132,14 @@ app.get('/api/factory/task-heuristics', async (req, res) => {
 });
 
 // POST /api/factory/task-heuristics - Save heuristics
-// Ora salva i pattern in Task_Types invece di task_heuristics
+// Ora salva i pattern in Heuristics (rinominata da Task_Types)
 app.post('/api/factory/task-heuristics', async (req, res) => {
   const client = new MongoClient(uri);
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    // Pattern sono ora in Task_Types, non più in task_heuristics
-    const coll = db.collection('Task_Types');
+    // Pattern sono ora in Heuristics (rinominata da Task_Types)
+    const coll = db.collection('Heuristics');
 
     const payload = req.body || {};
     const { type, patterns, language } = payload;
@@ -3314,7 +3148,7 @@ app.post('/api/factory/task-heuristics', async (req, res) => {
       return res.status(400).json({ error: 'type, patterns (array), and language are required' });
     }
 
-    // Mapping da HeuristicType a Task_Types._id
+    // Mapping da HeuristicType a Heuristics._id
     const typeMapping = {
       'AI_AGENT': 'AIAgent',
       'MESSAGE': 'Message',
@@ -3335,7 +3169,7 @@ app.post('/api/factory/task-heuristics', async (req, res) => {
     const langUpper = language.toUpperCase();
     const now = new Date();
 
-    // Carica il Task_Types esistente per preservare i pattern di altre lingue
+    // Carica il Heuristics esistente per preservare i pattern di altre lingue
     const existing = await coll.findOne({ _id: taskTypeId });
     const existingPatterns = existing?.patterns || {};
 
@@ -3345,7 +3179,7 @@ app.post('/api/factory/task-heuristics', async (req, res) => {
       [langUpper]: patterns
     };
 
-    // Aggiorna Task_Types
+    // Aggiorna Heuristics
     const result = await coll.updateOne(
       { _id: taskTypeId },
       {
@@ -3358,7 +3192,7 @@ app.post('/api/factory/task-heuristics', async (req, res) => {
     );
 
     if (result.matchedCount === 0) {
-      return res.status(404).json({ error: `Task_Types._id '${taskTypeId}' not found` });
+      return res.status(404).json({ error: `Heuristics._id '${taskTypeId}' not found` });
     }
 
     // Invalidate cache
@@ -3386,10 +3220,9 @@ app.get('/api/factory/task-templates', async (req, res) => {
     await client.connect();
     const db = client.db(dbFactory);
 
-    // ✅ FIX: Cerca in entrambe le collection (Task_Templates e task_templates)
-    //    per backward compatibility durante la migration
-    const coll1 = db.collection('Task_Templates');
-    const coll2 = db.collection('task_templates');
+    // ✅ MIGRATO: Usa Tasks (migrazione completa, Task_Templates rimosso)
+    const coll1 = db.collection('Tasks');  // ✅ MIGRATO: Usa Tasks invece di Task_Templates
+    const coll2 = null;  // ✅ Task_Templates rimosso
 
     const { industry, scope, taskType } = req.query;
 
@@ -3407,16 +3240,24 @@ app.get('/api/factory/task-templates', async (req, res) => {
       });
     }
 
-    // ✅ CASE-INSENSITIVE: Filter by taskType if provided (e.g., 'Action' for actions palette)
+    // ✅ Filter by taskType if provided (e.g., 'Action' for actions palette)
+    // Se taskType='Action', cerca type enum 6-19 (Action types: SendSMS, SendEmail, ecc.)
     if (taskType) {
-      const taskTypeRegex = new RegExp(`^${taskType}$`, 'i');
-      conditions.push({
-        $or: [
-          { taskType: taskTypeRegex },
-          { type: taskTypeRegex },
-          { name: taskTypeRegex }
-        ]
-      });
+      const taskTypeLower = taskType.toLowerCase();
+      if (taskTypeLower === 'action') {
+        conditions.push({
+          type: { $gte: 6, $lte: 19 }  // ✅ Action types: enum 6-19
+        });
+      } else {
+        // Per altri tipi, cerca per type enum o name
+        const taskTypeRegex = new RegExp(`^${taskType}$`, 'i');
+        conditions.push({
+          $or: [
+            { type: taskTypeRegex },
+            { name: taskTypeRegex }
+          ]
+        });
+      }
     }
 
     // Combina tutte le condizioni con $and
@@ -3424,11 +3265,9 @@ app.get('/api/factory/task-templates', async (req, res) => {
       query.$and = conditions;
     }
 
-    // ✅ Cerca in entrambe le collection e unisci i risultati
-    const [templates1, templates2] = await Promise.all([
-      coll1.find(query).toArray(),
-      coll2.find(query).toArray()
-    ]);
+    // ✅ MIGRATO: Usa Tasks (migrazione completa, Task_Templates rimosso)
+    const templates1 = await coll1.find(query).toArray();
+    const templates2 = [];  // ✅ Task_Templates rimosso
 
     // Unisci i risultati, evitando duplicati per ID
     const templateMap = new Map();
@@ -3440,7 +3279,7 @@ app.get('/api/factory/task-templates', async (req, res) => {
     });
 
     const templates = Array.from(templateMap.values());
-    logInfo('TaskTemplates.get', { count: templates.length, industry, scope, taskType, fromTask_Templates: templates1.length, fromtask_templates: templates2.length });
+    logInfo('TaskTemplates.get', { count: templates.length, industry, scope, taskType, fromTasks: templates1.length });
     res.json(templates);
   } catch (e) {
     logError('TaskTemplates.get', e);
@@ -3456,7 +3295,7 @@ app.post('/api/factory/task-templates', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const coll = db.collection('Task_Templates');
+    const coll = db.collection('Tasks');  // ✅ MIGRATO: Usa Tasks invece di Task_Templates
 
     const payload = req.body || {};
     if (!payload.id || !payload.label || !payload.valueSchema) {
@@ -3467,6 +3306,8 @@ app.post('/api/factory/task-templates', async (req, res) => {
     const doc = {
       _id: payload.id,
       id: payload.id,
+      type: payload.type !== undefined ? payload.type : 3,  // ✅ Default DataRequest se non specificato
+      templateId: payload.templateId || null,  // ✅ templateId: null (standalone) o GUID (reference)
       label: payload.label,
       description: payload.description || '',
       icon: payload.icon || 'Circle',
@@ -3503,7 +3344,7 @@ app.put('/api/factory/task-templates/:id', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const coll = db.collection('Task_Templates');
+    const coll = db.collection('Tasks');  // ✅ MIGRATO: Usa Tasks invece di Task_Templates
 
     const payload = req.body || {};
     const now = new Date();
@@ -3543,7 +3384,7 @@ app.delete('/api/factory/task-templates/:id', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const coll = db.collection('Task_Templates');
+    const coll = db.collection('Tasks');  // ✅ MIGRATO: Usa Tasks invece di Task_Templates
 
     const result = await coll.deleteOne({ _id: id });
     if (result.deletedCount === 0) {
@@ -3576,7 +3417,7 @@ app.post('/api/factory/type-templates', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const coll = db.collection('Task_Types');
+    const coll = db.collection('Heuristics');
 
     const payload = req.body || {};
     if (!payload.name) {
@@ -3629,7 +3470,7 @@ app.post('/api/projects/:pid/type-templates', async (req, res) => {
   try {
     await client.connect();
     const projDb = await getProjectDb(client, projectId);
-    const coll = projDb.collection('Task_Types');
+    const coll = projDb.collection('Heuristics');
 
     const payload = req.body || {};
     if (!payload.name) {
@@ -5544,13 +5385,10 @@ app.get('/api/factory/template-label-translations', async (req, res) => {
       ]
     };
 
-    const [templates1, templates2] = await Promise.all([
-      db.collection('Task_Templates').find(templatesQuery).toArray(),
-      db.collection('task_templates').find(templatesQuery).toArray()
-    ]);
+    const templates1 = await db.collection('Tasks').find(templatesQuery).toArray();  // ✅ MIGRATO: Usa Tasks (migrazione completa, Task_Templates rimosso)
 
     const templateMap = new Map();
-    [...templates1, ...templates2].forEach(t => {
+    templates1.forEach(t => {
       const id = t.id || t._id?.toString();
       if (id && !templateMap.has(id)) {
         templateMap.set(id, t);

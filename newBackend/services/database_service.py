@@ -1,6 +1,7 @@
 import sys
 import os
 import pymongo
+from datetime import datetime
 from newBackend.services.svc_nlp import NLPConfigDB, FactoryType
 
 # Import the existing MongoDB connection from old backend
@@ -50,44 +51,163 @@ class DatabaseService:
             return False
 
     async def saveFactoryType(self, factory_type: FactoryType) -> bool:
-        """Save a factory type to database"""
+        """
+        Save a factory type to Tasks collection (migrated from factory_types)
+
+        LOGICA:
+        - Cerca task esistente in Tasks con type: 3 e name/id corrispondente
+        - Se trovato: aggiorna nlpContract con dati FactoryType
+        - Se non trovato: crea nuovo task elementare con nlpContract
+        """
         try:
-            print(f"[DEBUG][DB] Saving factory type: {factory_type.name}")
-            collection = self.db["factory_types"]
-            data = factory_type.dict()
-            print(f"[DEBUG][DB] Data to save: {data}")
-            result = collection.update_one(
-                {"name": factory_type.name},
-                {"$set": data},
-                upsert=True
-            )
-            print(f"[DEBUG][DB] MongoDB result: {result.acknowledged}")
-            return result.acknowledged
+            print(f"[DEBUG][DB] Saving factory type: {factory_type.name} (migrated to Tasks)")
+            collection = self.db["Tasks"]
+
+            # Cerca task esistente
+            existing_task = collection.find_one({
+                "type": 3,  # DataRequest
+                "$or": [
+                    {"id": factory_type.id},
+                    {"name": factory_type.name},
+                    {"label": factory_type.name}
+                ]
+            })
+
+            # Converti FactoryType in nlpContract
+            nlp_contract = self._convertFactoryTypeToNlpContract(factory_type)
+
+            if existing_task:
+                # Aggiorna task esistente
+                result = collection.update_one(
+                    {"_id": existing_task["_id"]},
+                    {"$set": {
+                        "nlpContract": nlp_contract,
+                        "updatedAt": datetime.utcnow()
+                    }}
+                )
+                print(f"[DEBUG][DB] Updated existing task {existing_task.get('id', 'unknown')}")
+            else:
+                # Crea nuovo task elementare
+                import uuid
+                new_task = {
+                    "id": factory_type.id,
+                    "type": 3,  # DataRequest
+                    "templateId": None,
+                    "name": factory_type.name,
+                    "label": factory_type.name,
+                    "nlpContract": nlp_contract,
+                    "mainData": [{
+                        "id": str(uuid.uuid4()),
+                        "label": factory_type.name,
+                        "type": factory_type.name,
+                        "nlpContract": nlp_contract,
+                        "subData": []
+                    }],
+                    "metadata": factory_type.metadata,
+                    "permissions": factory_type.permissions,
+                    "auditLog": factory_type.auditLog,
+                    "createdAt": datetime.utcnow(),
+                    "updatedAt": datetime.utcnow()
+                }
+                result = collection.insert_one(new_task)
+                print(f"[DEBUG][DB] Created new task {factory_type.name}")
+
+            print(f"[DEBUG][DB] MongoDB result: {result.acknowledged if hasattr(result, 'acknowledged') else 'inserted'}")
+            return result.acknowledged if hasattr(result, 'acknowledged') else result.inserted_id is not None
         except Exception as e:
             print(f"[DB ERROR] saveFactoryType: {e}")
             import traceback
             traceback.print_exc()
             return False
 
+    def _convertFactoryTypeToNlpContract(self, factory_type: FactoryType) -> dict:
+        """
+        Converti FactoryType in nlpContract structure
+
+        LOGICA:
+        - Mappa FactoryType fields a nlpContract structure
+        """
+        import json
+
+        # Converti nerRules da stringa a dict se presente
+        ner = None
+        if factory_type.nerRules:
+            try:
+                ner = json.loads(factory_type.nerRules)
+            except:
+                ner = {"entityTypes": [factory_type.name], "confidence": 0.8, "enabled": True}
+
+        return {
+            "templateName": factory_type.name,
+            "templateId": factory_type.id,
+            "subDataMapping": {},
+            "regex": {
+                "patterns": factory_type.regexPatterns,
+                "examples": factory_type.examples,
+                "testCases": []
+            },
+            "rules": {
+                "extractorCode": factory_type.extractorCode,
+                "validators": factory_type.validators,
+                "testCases": []
+            },
+            "llm": {
+                "systemPrompt": factory_type.llmPrompt,
+                "userPromptTemplate": "",
+                "responseSchema": {},
+                "enabled": bool(factory_type.llmPrompt)
+            },
+            "ner": ner
+        }
+
     async def getFactoryTypes(self) -> list[FactoryType]:
-        """Get all factory types from database"""
+        """
+        Get all factory types from Tasks collection (migrated from factory_types)
+
+        LOGICA:
+        - Query Tasks con type: 3 (DataRequest)
+        - Filtra solo task elementari con nlpContract (estrattori NLP)
+        - Converte nlpContract in FactoryType per compatibilità
+        """
         try:
-            print("[DEBUG][DB] getFactoryTypes called")
-            collection = self.db["factory_types"]
-            types = list(collection.find())
-            print(f"[DEBUG][DB] Found {len(types)} raw documents")
+            print("[DEBUG][DB] getFactoryTypes called (migrated to Tasks)")
+            collection = self.db["Tasks"]
+
+            # Query Tasks con type: 3 (DataRequest) che hanno nlpContract
+            # Task elementari hanno nlpContract a root o in mainData[0]
+            tasks = list(collection.find({
+                "type": 3,  # DataRequest
+                "$or": [
+                    {"nlpContract": {"$exists": True, "$ne": None}},
+                    {"mainData.0.nlpContract": {"$exists": True, "$ne": None}}
+                ]
+            }))
+
+            print(f"[DEBUG][DB] Found {len(tasks)} tasks with nlpContract")
 
             result = []
-            for t in types:
-                # Remove MongoDB _id field that causes Pydantic validation errors
-                if '_id' in t:
-                    del t['_id']
-                print(f"[DEBUG][DB] Processing: {t.get('name', 'unknown')}")
+            for task in tasks:
+                # Remove MongoDB _id field
+                if '_id' in task:
+                    del task['_id']
+
+                # Estrai nlpContract (root o mainData[0])
+                nlp_contract = task.get('nlpContract')
+                if not nlp_contract and task.get('mainData') and len(task['mainData']) > 0:
+                    nlp_contract = task['mainData'][0].get('nlpContract')
+
+                if not nlp_contract:
+                    print(f"[DEBUG][DB] Task {task.get('id', 'unknown')} has no nlpContract - skipping")
+                    continue
+
+                # Converti nlpContract in FactoryType
                 try:
-                    result.append(FactoryType(**t))
+                    factory_type = self._convertTaskToFactoryType(task, nlp_contract)
+                    result.append(factory_type)
+                    print(f"[DEBUG][DB] Converted task {task.get('name') or task.get('label', 'unknown')} to FactoryType")
                 except Exception as e:
-                    print(f"[DEBUG][DB] Failed to convert document: {e}")
-                    print(f"[DEBUG][DB] Document keys: {list(t.keys())}")
+                    print(f"[DEBUG][DB] Failed to convert task {task.get('id', 'unknown')}: {e}")
+                    print(f"[DEBUG][DB] Task keys: {list(task.keys())}")
                     continue
 
             print(f"[DEBUG][DB] Successfully converted {len(result)} types")
@@ -97,5 +217,44 @@ class DatabaseService:
             import traceback
             traceback.print_exc()
             return []
+
+    def _convertTaskToFactoryType(self, task: dict, nlp_contract: dict) -> FactoryType:
+        """
+        Converti un task con nlpContract in FactoryType
+
+        LOGICA:
+        - Mappa nlpContract structure a FactoryType fields
+        - Usa valori di default per campi mancanti (metadata, permissions, auditLog)
+        """
+        # Estrai dati da nlpContract
+        regex = nlp_contract.get('regex', {})
+        rules = nlp_contract.get('rules', {})
+        llm = nlp_contract.get('llm', {})
+        ner = nlp_contract.get('ner')
+
+        # Converti ner in stringa se presente
+        ner_rules = ""
+        if ner:
+            import json
+            ner_rules = json.dumps(ner)
+
+        # Usa task.id come FactoryType.id (per compatibilità con extract_with_factory)
+        # Se extract_with_factory cerca per id, usa task.id o task.name
+        factory_id = task.get('id') or task.get('name') or task.get('label', 'unknown')
+        factory_name = task.get('name') or task.get('label') or factory_id
+
+        return FactoryType(
+            id=factory_id,
+            name=factory_name,
+            extractorCode=rules.get('extractorCode', ''),
+            regexPatterns=regex.get('patterns', []),
+            llmPrompt=llm.get('systemPrompt', ''),
+            nerRules=ner_rules,
+            validators=rules.get('validators', []),
+            examples=regex.get('examples', []),
+            metadata=task.get('metadata', {}),
+            permissions=task.get('permissions', {}),
+            auditLog=task.get('auditLog', False)
+        )
 
 databaseService = DatabaseService()

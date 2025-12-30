@@ -137,8 +137,9 @@ function determineTaskType(task) {
     return TaskType.SayMessage;
   }
 
-  // 8. Default: UNDEFINED
-  return TaskType.UNDEFINED;
+  // 8. Default: SayMessage (non UNDEFINED, perché UNDEFINED non è valido per il runtime)
+  // I task con templateId="UNDEFINED" e nessun altro campo sono probabilmente SayMessage incompleti
+  return TaskType.SayMessage;
 }
 
 /**

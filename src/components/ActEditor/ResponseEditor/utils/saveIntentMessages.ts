@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { IntentMessages } from '../components/IntentMessagesBuilder';
-import { TaskType, templateIdToTaskType } from '../../../types/taskTypes';
+import { TaskType, templateIdToTaskType } from '../../../../types/taskTypes';
 
 /**
  * Converte IntentMessages in formato DDT steps e li salva nel DDT

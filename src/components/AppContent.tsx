@@ -44,6 +44,7 @@ import ResponseEditor from './ActEditor/ResponseEditor';
 import NonInteractiveResponseEditor from './ActEditor/ResponseEditor/NonInteractiveResponseEditor';
 import { taskRepository } from '../services/TaskRepository';
 import { getTemplateId } from '../utils/taskHelpers';
+import { extractModifiedDDTFields } from '../utils/ddtMergeUtils';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -853,27 +854,24 @@ export const AppContent: React.FC<AppContentProps> = ({
                     task = taskRepository.createTask(action, undefined, key);
                   }
 
+                  // ✅ Estrai solo campi modificati rispetto al template (override)
+                  //
+                  // LOGICA CONCETTUALE DEL SALVATAGGIO:
+                  // - Template: contiene struttura condivisa (constraints, examples, nlpContract)
+                  // - Istanza: contiene SOLO override (modifiche rispetto al template)
+                  // - extractModifiedDDTFields confronta istanza con template e salva solo differenze
+                  // - A runtime: se mancante nell'istanza → risoluzione lazy dal template (backend VB.NET)
+                  const modifiedFields = await extractModifiedDDTFields(task, ddtToSave);
+
                   const currentTemplateId = getTemplateId(task);
 
                   if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'getdata') {
                     await taskRepository.updateTask(key, {
                       templateId: 'GetData',
-                      label: ddtToSave.label,
-                      mainData: ddtToSave.mainData,
-                      constraints: ddtToSave.constraints,
-                      examples: ddtToSave.examples,
-                      nlpContract: ddtToSave.nlpContract,
-                      introduction: ddtToSave.introduction
+                      ...modifiedFields  // ✅ Salva solo override, non tutto
                     }, pdUpdate?.getCurrentProjectId());
                   } else {
-                    await taskRepository.updateTask(key, {
-                      label: ddtToSave.label,
-                      mainData: ddtToSave.mainData,
-                      constraints: ddtToSave.constraints,
-                      examples: ddtToSave.examples,
-                      nlpContract: ddtToSave.nlpContract,
-                      introduction: ddtToSave.introduction
-                    }, pdUpdate?.getCurrentProjectId());
+                    await taskRepository.updateTask(key, modifiedFields, pdUpdate?.getCurrentProjectId());
                   }
 
                   console.log('[DOCK_CLOSE] ✅ Save completed - repository is now up to date', {

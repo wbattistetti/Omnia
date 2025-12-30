@@ -26,11 +26,18 @@ class TaskRepository {
 
   /**
    * Get Task by ID
+   * If task is missing 'type' field, it's invalid and should be reloaded from database
    */
   getTask(taskId: string): Task | null {
     // Check internal storage first
     const cachedTask = this.tasks.get(taskId);
     if (cachedTask) {
+      // ✅ CRITICAL: If task is missing 'type', it's invalid (loaded before type was added)
+      if (cachedTask.type === undefined || cachedTask.type === null) {
+        console.warn(`[TaskRepository] Task ${taskId} in memory is missing 'type' field - this task needs to be reloaded from database`);
+        // Return null to force reload from database
+        return null;
+      }
       return cachedTask;
     }
     return null;
@@ -187,12 +194,31 @@ class TaskRepository {
           continue;
         }
 
+        // ✅ DEBUG: Log all keys in item to see what fields are present
+        const itemKeys = Object.keys(item);
+        const hasTypeLower = 'type' in item;
+        const hasTypeUpper = 'Type' in item;
+        if (!hasTypeLower && !hasTypeUpper) {
+          console.error(`[TaskRepository] Task ${item.id} loaded from database without type/Type field. Available keys:`, itemKeys);
+          console.error(`[TaskRepository] Task ${item.id} full object:`, JSON.stringify(item, null, 2));
+        }
+
         // ✅ Load task with fields directly (no value wrapper)
         // ✅ If item has value wrapper (old format), flatten it for backward compatibility
         // ✅ Otherwise, use fields directly
-        const { id, templateId, createdAt, updatedAt, projectId: _projectId, value, ...directFields } = item;
+        // ✅ Try both 'type' (lowercase) and 'Type' (uppercase) for backward compatibility
+        const { id, templateId, createdAt, updatedAt, projectId: _projectId, value, type, Type, ...directFields } = item;
+        const taskType = type !== undefined && type !== null ? type : (Type !== undefined && Type !== null ? Type : undefined);
+
+        // ✅ CRITICAL: type is required - if missing, task is invalid
+        if (taskType === undefined || taskType === null) {
+          console.error(`[TaskRepository] Task ${item.id} loaded from database without type field (checked both 'type' and 'Type') - this is invalid. Task will be skipped.`);
+          continue;
+        }
+
         const task: Task = {
           id: item.id,
+          type: taskType,                // ✅ Enum numerico (0-19) - REQUIRED (from 'type' or 'Type')
           templateId: item.templateId ?? null,
           ...(value || {}),  // ✅ Backward compatibility: flatten value if present
           ...directFields,   // ✅ Use direct fields (mainData, label, stepPrompts, ecc.)
@@ -252,14 +278,21 @@ class TaskRepository {
 
       // ✅ Prepare items for bulk save (fields directly, no value wrapper)
       const items = allTasks.map(task => {
+        // ✅ CRITICAL: type is required - skip tasks without type
+        if (task.type === undefined || task.type === null) {
+          console.error(`[TaskRepository] Task ${task.id} has no type field - skipping from bulk save. This task is invalid.`);
+          return null;
+        }
+
         // Extract all fields except id, templateId, createdAt, updatedAt
         const { id, templateId, createdAt, updatedAt, ...fields } = task;
         return {
           id: task.id,
+          type: task.type,          // ✅ Enum numerico (0-19) - REQUIRED
           templateId: task.templateId ?? null,
           ...fields  // ✅ Save fields directly
         };
-      });
+      }).filter(item => item !== null);
 
       const response = await fetch(`/api/projects/${finalProjectId}/tasks/bulk`, {
         method: 'POST',
@@ -285,6 +318,12 @@ class TaskRepository {
    */
   private async saveTaskToDatabase(task: Task, projectId: string): Promise<boolean> {
     try {
+      // ✅ CRITICAL: type is required - cannot save task without type
+      if (task.type === undefined || task.type === null) {
+        console.error(`[TaskRepository] Cannot save task ${task.id} - missing type field. This task is invalid.`);
+        return false;
+      }
+
       // ✅ Extract all fields except id, templateId, createdAt, updatedAt
       const { id, templateId, createdAt, updatedAt, ...fields } = task;
 
@@ -293,6 +332,7 @@ class TaskRepository {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: task.id,
+          type: task.type,          // ✅ Enum numerico (0-19) - REQUIRED
           templateId: task.templateId ?? null,
           ...fields  // ✅ Save fields directly (no value wrapper)
         })

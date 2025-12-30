@@ -1,7 +1,7 @@
 import React from 'react';
 import { useDrop } from 'react-dnd';
 import { DND_TYPE_VIEWER } from './TaskRowDnDWrapper';
-import { normalizeTaskFromViewer } from './utils/normalize';
+import { createTask } from './utils/normalize';
 import { TaskReference } from './types';
 
 interface PanelEmptyDropZoneProps {
@@ -16,7 +16,7 @@ const PanelEmptyDropZone: React.FC<PanelEmptyDropZoneProps> = ({ onDropTask, onD
   const [, drop] = useDrop(() => ({
     accept: [DND_TYPE_VIEWER],
     drop: (item: any) => {
-      const normalized = normalizeTaskFromViewer(item);
+      const normalized = createTask(item);
       handleDrop?.(normalized);
     },
     collect: () => ({}) // No visual feedback

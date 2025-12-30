@@ -38,6 +38,7 @@ import { useDDTTranslations } from '../../../hooks/useDDTTranslations';
 import { ToolbarButton } from '../../../dock/types';
 import { taskTemplateService } from '../../../services/TaskTemplateService';
 import { mapNode } from '../../../dock/ops';
+import { extractModifiedDDTFields } from '../../../utils/ddtMergeUtils';
 
 function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, onToolbarUpdate, tabId, setDockTree }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string; instanceId?: string }, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void }) {
 
@@ -78,8 +79,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
   // Value: { ddt, _templateTranslations }
   const preAssembledDDTCache = React.useRef<Map<string, { ddt: any; _templateTranslations: Record<string, { en: string; it: string; pt: string }> }>>(new Map());
 
-  const { ideTranslations, dataDialogueTranslations, replaceSelectedDDT } = useDDTManager();
-  const mergedBase = useMemo(() => ({ ...(ideTranslations || {}), ...(dataDialogueTranslations || {}) }), [ideTranslations, dataDialogueTranslations]);
+  const { ideTranslations, replaceSelectedDDT } = useDDTManager();
+  const mergedBase = useMemo(() => (ideTranslations || {}), [ideTranslations]);
 
   // Node selection management (must be before useDDTInitialization for callback)
   const {
@@ -182,6 +183,12 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
 
   // ✅ Salva modifiche quando si clicca "Salva" nel progetto (senza chiudere l'editor)
   // Usa ddtRef.current che è sempre sincronizzato con dockTree (fonte di verità)
+  //
+  // LOGICA CONCETTUALE DEL SALVATAGGIO:
+  // - Template: contiene struttura condivisa (constraints, examples, nlpContract)
+  // - Istanza: contiene SOLO override (modifiche rispetto al template)
+  // - extractModifiedDDTFields confronta istanza con template e salva solo differenze
+  // - A runtime: se mancante nell'istanza → risoluzione lazy dal template (backend VB.NET)
   React.useEffect(() => {
     const handleProjectSave = async () => {
       if (act?.id || (act as any)?.instanceId) {
@@ -191,6 +198,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
         const hasDDT = currentDDT && Object.keys(currentDDT).length > 0 && currentDDT.mainData && currentDDT.mainData.length > 0;
 
         if (hasDDT && task) {
+          // ✅ Estrai solo campi modificati rispetto al template (override)
+          // Questo evita duplicazione: constraints/examples/nlpContract vengono salvati
+          // solo se sono stati modificati rispetto al template
+          const modifiedFields = await extractModifiedDDTFields(task, currentDDT);
+
           const currentTemplateId = getTemplateId(task);
 
           // ✅ CASE-INSENSITIVE
@@ -198,22 +210,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
             await taskRepository.updateTask(key, {
               type: TaskType.DataRequest,  // ✅ type: enum numerico
               templateId: null,            // ✅ templateId: null (standalone)
-              label: currentDDT.label,
-              mainData: currentDDT.mainData,
-              constraints: currentDDT.constraints,
-              examples: currentDDT.examples,
-              nlpContract: currentDDT.nlpContract,
-              introduction: currentDDT.introduction
+              ...modifiedFields  // ✅ Salva solo override, non tutto
             }, currentProjectId || undefined);
           } else {
-            await taskRepository.updateTask(key, {
-              label: currentDDT.label,
-              mainData: currentDDT.mainData,
-              constraints: currentDDT.constraints,
-              examples: currentDDT.examples,
-              nlpContract: currentDDT.nlpContract,
-              introduction: currentDDT.introduction
-            }, currentProjectId || undefined);
+            await taskRepository.updateTask(key, modifiedFields, currentProjectId || undefined);
           }
         } else if (currentDDT) {
           await taskRepository.updateTask(key, currentDDT, currentProjectId || undefined);
@@ -562,20 +562,21 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
 
             // ✅ Se Euristica 1 ha trovato UNDEFINED (nessun match), Euristica 2 inferisce il tipo dal template DDT
 
-            if (act?.instanceId && act.type === 'UNDEFINED') {
+            // ✅ LOGICA: Se tipo è UNDEFINED, l'euristica ha trovato un match → aggiorna il task con tipo corretto
+            if (act?.instanceId && act.type === 'UNDEFINED' && localMatch) {
               try {
                 const instanceKey = act.instanceId;
                 let task = taskRepository.getTask(instanceKey);
 
-                if (task) {
-                }
+                // ✅ Se il match è un template DDT, il tipo è DataRequest
+                const determinedType = TaskType.DataRequest; // ✅ Euristica 2 trova sempre template DDT → DataRequest
 
                 if (task) {
-                  // Aggiorna il task per impostare type = DataRequest e templateId = null
+                  // ✅ Aggiorna il task esistente con tipo corretto
                   const currentTemplateId = getTemplateId(task);
                   if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
                     taskRepository.updateTask(instanceKey, {
-                      type: TaskType.DataRequest,  // ✅ type: enum numerico
+                      type: determinedType,  // ✅ type: enum numerico (DataRequest)
                       templateId: null,            // ✅ templateId: null (standalone)
                       // ✅ Fields directly on task (no value wrapper) - copy all fields except id, type, templateId, createdAt, updatedAt
                       ...Object.fromEntries(
@@ -584,22 +585,14 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                         )
                       )
                     }, currentProjectId || undefined);
-
-                    // Verifica aggiornamento
-                    const updatedTask = taskRepository.getTask(instanceKey);
-                  } else {
                   }
                 } else {
-                  // Crea nuovo task con DataRequest
-                  taskRepository.createTask(TaskType.DataRequest, null, undefined, instanceKey, currentProjectId || undefined);
-
-                  // Verifica creazione
-                  const newTask = taskRepository.getTask(instanceKey);
+                  // ✅ Crea nuovo task con tipo corretto determinato dall'euristica
+                  taskRepository.createTask(determinedType, null, undefined, instanceKey, currentProjectId || undefined);
                 }
               } catch (err) {
                 console.error('[ResponseEditor] Errore aggiornamento task:', err);
               }
-            } else {
             }
 
 
@@ -811,11 +804,13 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
           });
 
           // ✅ Get or create task
+          // ✅ LOGICA: Il task viene creato solo quando si apre ResponseEditor, dopo aver determinato il tipo
           let task = taskRepository.getTask(key);
           if (!task) {
-            // Convert act.type (string) to TaskType enum
+            // ✅ Convert act.type (string) to TaskType enum
+            // ✅ Se act.type è UNDEFINED, l'euristica dovrebbe aver già determinato il tipo (DataRequest se match trovato)
             const taskType = act?.type ? actIdToTaskType(act.type) : TaskType.DataRequest;
-            task = taskRepository.createTask(taskType, null, undefined, key);
+            task = taskRepository.createTask(taskType, null, undefined, key, currentProjectId || undefined);
           }
 
           const currentTemplateId = getTemplateId(task);
@@ -849,7 +844,15 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
             finalStartTasks
           });
         } else if (finalDDT) {
-          // No DDT structure, but save other fields - AWAIT per garantire completamento
+          // ✅ No DDT structure, but save other fields (e.g., Message text)
+          // ✅ Get or create task
+          let task = taskRepository.getTask(key);
+          if (!task) {
+            // ✅ Convert act.type (string) to TaskType enum
+            const taskType = act?.type ? actIdToTaskType(act.type) : TaskType.SayMessage;
+            task = taskRepository.createTask(taskType, null, undefined, key, currentProjectId || undefined);
+          }
+          // ✅ AWAIT per garantire completamento
           await taskRepository.updateTask(key, finalDDT, currentProjectId || undefined);
           console.log('[handleEditorClose] ✅ Save completed (no mainData)', { key });
         }
@@ -1211,36 +1214,39 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
               });
 
               // Salva in modo asincrono (non bloccare l'UI)
+              //
+              // LOGICA CONCETTUALE DEL SALVATAGGIO:
+              // - Template: contiene struttura condivisa (constraints, examples, nlpContract)
+              // - Istanza: contiene SOLO override (modifiche rispetto al template)
+              // - extractModifiedDDTFields confronta istanza con template e salva solo differenze
+              // - A runtime: se mancante nell'istanza → risoluzione lazy dal template (backend VB.NET)
               void (async () => {
                 try {
                   const task = taskRepository.getTask(key);
+
+                  // ✅ Estrai solo campi modificati rispetto al template (override)
+                  // Questo evita duplicazione: constraints/examples/nlpContract vengono salvati
+                  // solo se sono stati modificati rispetto al template
+                  const modifiedFields = await extractModifiedDDTFields(task, updatedDDT);
+
                   const currentTemplateId = getTemplateId(task);
 
                   if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
                     await taskRepository.updateTask(key, {
                       type: TaskType.DataRequest,  // ✅ type: enum numerico
                       templateId: null,            // ✅ templateId: null (standalone)
-                      label: updatedDDT.label,
-                      mainData: updatedDDT.mainData,
-                      constraints: updatedDDT.constraints,
-                      examples: updatedDDT.examples,
-                      nlpContract: updatedDDT.nlpContract,
-                      introduction: updatedDDT.introduction
+                      ...modifiedFields  // ✅ Salva solo override, non tutto
                     }, currentProjectId || undefined);
                   } else {
-                    await taskRepository.updateTask(key, {
-                      label: updatedDDT.label,
-                      mainData: updatedDDT.mainData,
-                      constraints: updatedDDT.constraints,
-                      examples: updatedDDT.examples,
-                      nlpContract: updatedDDT.nlpContract,
-                      introduction: updatedDDT.introduction
-                    }, currentProjectId || undefined);
+                    await taskRepository.updateTask(key, modifiedFields, currentProjectId || undefined);
                   }
 
-                  console.log('[DOCK_SAVE] ✅ taskRepository updated (async, overlay mode)', {
+                  console.log('[DOCK_SAVE] ✅ taskRepository updated (async, overlay mode) - saved only overrides', {
                     key,
-                    startStepTasksCount: updatedDDT?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0
+                    startStepTasksCount: updatedDDT?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0,
+                    hasConstraints: !!modifiedFields.constraints,
+                    hasExamples: !!modifiedFields.examples,
+                    hasNlpContract: !!modifiedFields.nlpContract
                   });
                 } catch (err) {
                   console.error('[DOCK_SAVE] ❌ Failed to save to taskRepository', err);

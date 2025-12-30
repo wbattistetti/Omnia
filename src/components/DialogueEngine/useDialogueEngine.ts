@@ -105,7 +105,15 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       // Collect only referenced tasks from repository
       const allTasks = Array.from(referencedTaskIds)
         .map(taskId => taskRepository.getTask(taskId))
-        .filter(task => task !== undefined);
+        .filter(task => {
+          if (!task) return false;
+          // ✅ CRITICAL: type is required - skip tasks without type
+          if (task.type === undefined || task.type === null) {
+            console.error(`[useDialogueEngine] Task ${task.id} has no type field - skipping from compilation. This task is invalid.`);
+            return false;
+          }
+          return true;
+        });
 
       // Extract DDTs only from referenced GetData tasks
       // ✅ MIGRATION: Use getTemplateId() helper
@@ -126,6 +134,21 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       });
 
       const totalTasksInRepository = taskRepository.getAllTasks().length;
+
+      // ✅ DEBUG: Log tasks to verify type field
+      if (allTasks.length > 0) {
+        console.log('[FRONTEND] Tasks being sent to backend:');
+        allTasks.slice(0, 5).forEach((task, idx) => {
+          console.log(`  Task[${idx}]:`, {
+            id: task.id,
+            type: task.type,
+            typeName: task.type !== undefined && task.type !== null ? `TaskType[${task.type}]` : 'MISSING',
+            templateId: task.templateId,
+            hasMainData: !!(task.mainData && task.mainData.length > 0)
+          });
+        });
+      }
+
       console.log('[FRONTEND] Preparing compilation request:', {
         nodesCount: enrichedNodes.length,
         edgesCount: options.edges.length,
@@ -197,19 +220,44 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       });
       console.log('═══════════════════════════════════════════════════════════════════════════');
 
+      // ✅ DEBUG: Log tasks before serialization to verify type field
+      const requestBody = {
+        nodes: simplifiedNodes,  // ✅ Use simplified structure (rows directly, no data wrapper)
+        edges: options.edges,
+        tasks: allTasks,
+        ddts: allDDTs,
+        projectId: localStorage.getItem('currentProjectId') || undefined
+      };
+
+      // Log first few tasks to verify type field is present
+      if (allTasks.length > 0) {
+        console.log('[FRONTEND] Tasks in request body (before JSON.stringify):');
+        allTasks.slice(0, 3).forEach((task, idx) => {
+          console.log(`  Task[${idx}]:`, {
+            id: task.id,
+            type: task.type,
+            typeName: task.type !== undefined && task.type !== null ? `TaskType[${task.type}]` : 'MISSING',
+            templateId: task.templateId,
+            hasMainData: !!(task.mainData && task.mainData.length > 0)
+          });
+        });
+
+        // Log serialized JSON preview to verify type is in JSON
+        const jsonPreview = JSON.stringify(requestBody).substring(0, 2000);
+        console.log('[FRONTEND] Request body JSON preview (first 2000 chars):', jsonPreview);
+
+        // Check if type is in JSON string
+        const hasTypeInJson = jsonPreview.includes('"type"');
+        console.log(`[FRONTEND] Does JSON contain "type" field? ${hasTypeInJson}`);
+      }
+
       // Call backend API (NO FALLBACK - backend only)
       const compileResponse = await fetch(`${baseUrl}/api/runtime/compile`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          nodes: simplifiedNodes,  // ✅ Use simplified structure (rows directly, no data wrapper)
-          edges: options.edges,
-          tasks: allTasks,
-          ddts: allDDTs,
-          projectId: localStorage.getItem('currentProjectId') || undefined
-        })
+        body: JSON.stringify(requestBody)
       });
 
       console.log(`[FRONTEND] Response status: ${compileResponse.status} ${compileResponse.statusText}`);

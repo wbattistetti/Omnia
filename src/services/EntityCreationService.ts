@@ -199,9 +199,10 @@ export class EntityCreationService {
     const config = ENTITY_CONFIGS[entityType];
 
     // Mappa i tipi di entità agli endpoint
+    // ✅ MIGRATO: backendActions → task-templates-v2?taskType=Action (Tasks type: 4)
     const endpointMap: { [key: string]: string } = {
       'taskTemplates': '/api/factory/task-templates-v2',
-      'backendActions': '/api/factory/backend-calls',
+      'backendActions': '/api/factory/task-templates-v2?taskType=Action',
       'macrotasks': '/api/factory/macrotasks'
     };
 

@@ -5,7 +5,6 @@ import EntityAccordion from './EntityAccordion';
 import { useSidebarState } from './SidebarState';
 import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
 import { useDDTManager } from '../../context/DDTManagerContext';
-import { saveDataDialogueTranslations } from '../../services/ProjectDataService';
 import { TemplateTranslationsService } from '../../services/TemplateTranslationsService';
 import { EntityType } from '../../types/project';
 import { sidebarTheme } from './sidebarTheme';
@@ -209,56 +208,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
     setSaveError(null);
     try {
       const startedAt = Date.now();
-      // 1) Save DataDialogueTranslations (merge existing dynamic translations with current DDT texts)
-      const mergedFromDDTs: Record<string, string> = (ddtList || []).reduce((acc: Record<string, string>, ddt: any) => {
-        const tr = (ddt?.translations && (ddt.translations.en || ddt.translations)) || {};
-        return { ...acc, ...tr };
-      }, {});
-
-      // ✅ Extract node labels from DDT structure and add to translations
-      const nodeLabels: Record<string, string> = {};
-      (ddtList || []).forEach((ddt: any) => {
-        // Process mainData nodes
-        if (ddt?.mainData && Array.isArray(ddt.mainData)) {
-          ddt.mainData.forEach((main: any) => {
-            if (main.id && main.label) {
-              nodeLabels[main.id] = main.label;
-            }
-            // Process subData nodes
-            if (main.subData && Array.isArray(main.subData)) {
-              main.subData.forEach((sub: any) => {
-                if (sub.id && sub.label) {
-                  nodeLabels[sub.id] = sub.label;
-                }
-              });
-            }
-          });
-        } else if (ddt?.mainData && typeof ddt.mainData === 'object' && !Array.isArray(ddt.mainData)) {
-          // Handle single mainData object
-          if (ddt.mainData.id && ddt.mainData.label) {
-            nodeLabels[ddt.mainData.id] = ddt.mainData.label;
-          }
-          if (ddt.mainData.subData && Array.isArray(ddt.mainData.subData)) {
-            ddt.mainData.subData.forEach((sub: any) => {
-              if (sub.id && sub.label) {
-                nodeLabels[sub.id] = sub.label;
-              }
-            });
-          }
-        }
-        // Also check DDT root label
-        if (ddt.id && ddt.label) {
-          nodeLabels[ddt.id] = ddt.label;
-        }
-      });
-
-      const translationsPayload = { ...mergedFromDDTs, ...nodeLabels };
-      try {
-        await saveDataDialogueTranslations(translationsPayload);
-      } catch (e) {
-      }
-
-      // 2) Save DDTs (strip heavy fields not needed by factory DB)
+      // Save DDTs (strip heavy fields not needed by factory DB)
       const payload = (ddtList || []).map((d: any) => {
         const { translations, ...rest } = d || {};
         return rest; // translations are saved separately

@@ -260,11 +260,32 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
 
     // Gestione eliminazione riga
     const handleDeleteRow = useCallback(async (rowId: string) => {
+        // ✅ Find the row being deleted to get its taskId
+        const rowToDelete = nodeRows.find(row => row.id === rowId);
+        const taskId = rowToDelete?.taskId || getTaskIdFromRow(rowToDelete || { id: rowId } as NodeRowData);
+
         const updatedRows = nodeRows.filter(row => row.id !== rowId);
         setNodeRows(updatedRows);
         // ✅ Aggiorna isEmpty: se tutte le righe sono vuote dopo la cancellazione, torna isEmpty=true
         setIsEmpty(computeIsEmpty(updatedRows));
         normalizedData.onUpdate?.({ rows: updatedRows });
+
+        // ✅ NEW: Delete task from database when row is deleted
+        if (taskId) {
+            try {
+                let projectId: string | undefined = undefined;
+                try {
+                    projectId = ((require('../../state/runtime') as any).getCurrentProjectId?.() || undefined);
+                } catch {}
+
+                if (projectId) {
+                    await taskRepository.deleteTask(taskId, projectId);
+                    console.log(`[useNodeRowManagement] Deleted task ${taskId} for row ${rowId}`);
+                }
+            } catch (e) {
+                console.warn('[useNodeRowManagement] Failed to delete task', e);
+            }
+        }
 
         // ✅ NEW: Delete variables when row is deleted
         try {

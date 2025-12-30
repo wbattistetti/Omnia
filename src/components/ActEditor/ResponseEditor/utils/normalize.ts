@@ -1,15 +1,15 @@
-import type { Task } from '../../../types/taskTypes';
+import type { Task } from '../../../../types/taskTypes';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
- * Normalize task from viewer/catalog to unified Task format.
+ * Create a Task from viewer/catalog item to unified Task format.
  *
  * Model:
  * - Each escalation has its own dedicated Task (not shared)
  * - Task is complete (not lightweight reference)
  * - If task derives from template, templateId points to template Task
  */
-export const normalizeTaskFromViewer = (item: any): Task => {
+export const createTask = (item: any): Task => {
   // Handle task objects from catalog entries
   const task = item?.task ?? item;
 

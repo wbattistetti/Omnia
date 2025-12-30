@@ -27,7 +27,7 @@ import { useRowRegistry } from './hooks/useRowRegistry';
 import { isInsideWithPadding, getToolbarRect } from './utils/geometry';
 import { getTaskVisualsByType, resolveTaskType, hasTaskDDT } from '../../utils/taskVisuals';
 import { inferActType } from '../../../../nlp/actType';
-import { TaskType, taskTypeToTemplateId, taskTypeToHeuristicString } from '../../../../types/taskTypes';
+import { TaskType, taskTypeToTemplateId, taskTypeToHeuristicString, actIdToTaskType } from '../../../../types/taskTypes';
 import { modeToType, typeToMode } from '../../../../utils/normalizers';
 import { idMappingService } from '../../../../services/IdMappingService';
 import { generateId } from '../../../../utils/idGenerator';
@@ -389,8 +389,11 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           });
 
           // FASE 4: Update Task (TaskRepository internally updates InstanceRepository)
+          // ✅ Task viene creato solo quando si apre ResponseEditor, non qui
           const taskId = getTaskIdFromRow(row);
-          taskRepository.updateTask(taskId, { text: label }, getProjectId?.() ?? undefined);
+          if (taskId) {
+            taskRepository.updateTask(taskId, { text: label }, getProjectId?.() ?? undefined);
+          }
         }
 
         // FASE 4: Verifica dopo l'aggiornamento
@@ -837,6 +840,110 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         rowId: row.id,
         timestamp: Date.now()
       });
+
+      // ✅ NUOVO: Dopo aver aggiornato il tipo, apri automaticamente il ResponseEditor
+      try {
+        // Converti il tipo selezionato in TaskType enum
+        const taskTypeEnum = actIdToTaskType(key);
+        console.log('🚀 [CHANGE_TYPE] Preparazione apertura ResponseEditor', {
+          key,
+          taskTypeEnum,
+          rowId: row.id,
+          rowText: row.text
+        });
+
+        // ✅ Usa sempre row.id come taskId (la riga e il task condividono lo stesso ID)
+        const taskId = row.id;
+        let task = taskRepository.getTask(taskId);
+
+        console.log('🚀 [CHANGE_TYPE] Task esistente?', {
+          taskId,
+          taskExists: !!task,
+          existingTaskType: task?.type,
+          newTaskType: taskTypeEnum
+        });
+
+        if (!task) {
+          // Crea il task se non esiste
+          console.log('🚀 [CHANGE_TYPE] Creando nuovo task...', {
+            taskTypeEnum,
+            rowId: row.id,
+            text: key === 'Message' ? row.text : undefined
+          });
+          task = taskRepository.createTask(
+            taskTypeEnum,
+            null,
+            key === 'Message' ? { text: row.text || '' } : undefined,
+            row.id,
+            getProjectId?.() ?? undefined
+          );
+          console.log('✅ [CHANGE_TYPE] Task creato', {
+            taskId: task.id,
+            taskType: task.type
+          });
+        } else {
+          // Aggiorna il tipo del task esistente se necessario
+          if (task.type !== taskTypeEnum) {
+            console.log('🔄 [CHANGE_TYPE] Aggiornando tipo task esistente', {
+              oldType: task.type,
+              newType: taskTypeEnum
+            });
+            taskRepository.updateTask(taskId, { type: taskTypeEnum }, getProjectId?.() ?? undefined);
+            // Ricarica il task dopo l'aggiornamento
+            task = taskRepository.getTask(taskId);
+          }
+        }
+
+        // Verifica che il task esista prima di aprire l'editor
+        if (!task) {
+          console.error('❌ [CHANGE_TYPE] Task non trovato dopo creazione/aggiornamento', { taskId });
+          return;
+        }
+
+        // Apri il ResponseEditor
+        console.log('🚀 [CHANGE_TYPE] Chiamando actEditorCtx.open', {
+          id: String(taskId),
+          type: key,
+          label: row.text,
+          instanceId: row.id,
+          taskType: task.type
+        });
+
+        actEditorCtx.open({
+          id: String(taskId),
+          type: key as any,
+          label: row.text,
+          instanceId: row.id
+        });
+
+        // ✅ CRITICAL: Emetti evento per aprire il dock tab (come fa onOpenDDT)
+        // AppContent.tsx ascolta questo evento per aprire l'editor in un dock tab
+        console.log('📤 [CHANGE_TYPE] Emettendo evento actEditor:open per aprire dock tab', {
+          id: String(taskId),
+          type: key,
+          label: row.text,
+          instanceId: row.id
+        });
+
+        const event = new CustomEvent('actEditor:open', {
+          detail: {
+            id: String(taskId),
+            type: key,
+            label: row.text,
+            instanceId: row.id,
+            templateId: task.templateId || undefined
+          },
+          bubbles: true
+        });
+        document.dispatchEvent(event);
+
+        console.log('✅ [CHANGE_TYPE] Evento actEditor:open emesso con successo');
+      } catch (error) {
+        console.error('❌ [CHANGE_TYPE] Errore aprendo ResponseEditor dopo selezione tipo', error);
+        if (error instanceof Error) {
+          console.error('❌ [CHANGE_TYPE] Stack trace:', error.stack);
+        }
+      }
 
       // Chiudi il picker e aggiorna lo stato del toolbar
       toolbarSM.picker.close();
@@ -1471,8 +1578,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   conditionalStyles = { ...conditionalStyles, ...getVisualStyles() };
 
   // ✅ EXECUTION HIGHLIGHT: Get execution highlight styles for row
+  // ✅ Task può non esistere ancora (viene creato solo quando si apre ResponseEditor)
   const taskId = getTaskIdFromRow(row);
-  const rowHighlight = useRowExecutionHighlight(row.id, taskId);
+  const rowHighlight = useRowExecutionHighlight(row.id, taskId || undefined);
 
   // ✅ Applica bordo invece di background
   const rowBorderStyle = rowHighlight.border !== 'transparent'
@@ -1527,7 +1635,11 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         if (taskType) {
           const has = hasTaskDDT(row);
           const visuals = getTaskVisualsByType(taskType, has);
-          currentTypeForPicker = taskType;
+          // ✅ Se il tipo è UNDEFINED, non impostare currentTypeForPicker (nessuna opzione pre-selezionata)
+          // ✅ Questo permette all'utente di cliccare su qualsiasi opzione nel dropdown
+          if (!isUndefined && taskType !== 'UNDEFINED') {
+            currentTypeForPicker = taskType;
+          }
           // Se è undefined, usa icona punto interrogativo invece dell'icona normale
           Icon = isUndefined ? HelpCircle : visuals.Icon;
           labelTextColor = isUndefined ? '#94a3b8' : visuals.labelColor;
@@ -1784,13 +1896,30 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                   taskType
                 });
                 try {
-                  // ✅ Deriva il tipo dal task invece di usare resolveActType con actFound
-                  const taskIdForType = (row as any)?.taskId || row.id;
-                  const taskForType = taskIdForType ? taskRepository.getTask(taskIdForType) : null;
+                  // ✅ LOGICA: Il task viene creato solo quando si apre ResponseEditor, dopo aver determinato il tipo
+                  // ✅ Se il task non esiste, determiniamo il tipo usando l'euristica e poi creiamo il task
+                  let taskIdForType = (row as any)?.taskId || getTaskIdFromRow(row);
+                  let taskForType = taskIdForType ? taskRepository.getTask(taskIdForType) : null;
 
-                  const type = taskForType
+                  // ✅ Se il task non esiste, determiniamo il tipo usando resolveTaskType (che usa l'euristica)
+                  let type = taskForType
                     ? resolveTaskType({ taskId: taskIdForType, ...row })
-                    : 'Message';
+                    : resolveTaskType(row) || 'Message';
+
+                  // ✅ Se il task non esiste, crealo con il tipo determinato
+                  if (!taskForType) {
+                    const taskTypeEnum = actIdToTaskType(type);
+                    taskForType = taskRepository.createTask(
+                      taskTypeEnum,
+                      null,
+                      type === 'Message' ? { text: row.text || '' } : undefined,
+                      row.id,
+                      getProjectId?.() ?? undefined
+                    );
+                    taskIdForType = taskForType.id;
+                    // Aggiorna row con taskId
+                    (row as any).taskId = taskIdForType;
+                  }
 
                   actEditorCtx.open({ id: String(taskIdForType), type: type as any, label: row.text, instanceId: row.id });
 

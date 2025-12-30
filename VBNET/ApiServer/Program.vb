@@ -237,12 +237,13 @@ Module Program
                 })
                 Console.WriteLine($"✅ [HandleCompileFlow] JSON deserialization completed")
 
-                ' ✅ DEBUG: Log deserialized tasks to verify templateId
+                ' ✅ DEBUG: Log deserialized tasks to verify type and templateId
                 If request.Tasks IsNot Nothing AndAlso request.Tasks.Count > 0 Then
                     Console.WriteLine($"🔍 [HandleCompileFlow] Deserialized {request.Tasks.Count} tasks:")
                     For i = 0 To Math.Min(4, request.Tasks.Count - 1)
                         Dim t = request.Tasks(i)
-                        Console.WriteLine($"   Task[{i}]: Id={t.Id}, TemplateId={If(String.IsNullOrEmpty(t.TemplateId), "NULL/EMPTY", t.TemplateId)}, Value keys={If(t.Value IsNot Nothing, String.Join(", ", t.Value.Keys), "NULL")}")
+                        Console.WriteLine($"   Task[{i}]: Id={t.Id}, Type={If(t.Type.HasValue, t.Type.Value.ToString(), "NULL")}, TemplateId={If(String.IsNullOrEmpty(t.TemplateId), "NULL/EMPTY", t.TemplateId)}, Value keys={If(t.Value IsNot Nothing, String.Join(", ", t.Value.Keys), "NULL")}")
+                        System.Diagnostics.Debug.WriteLine($"   Task[{i}]: Id={t.Id}, Type={If(t.Type.HasValue, t.Type.Value.ToString(), "NULL")}, TemplateId={If(String.IsNullOrEmpty(t.TemplateId), "NULL/EMPTY", t.TemplateId)}")
                     Next
                 Else
                     Console.WriteLine($"⚠️ [HandleCompileFlow] No tasks in request (Tasks is Nothing or empty)")

@@ -40,11 +40,23 @@ export default function DDTHostAdapter({ act, onClose }: EditorProps) {
       });
 
       if (!task) {
-        const actId = act.id || '';
-        // Convert actId to TaskType enum
-        const taskType = actId ? actIdToTaskType(actId) : TaskType.DataRequest;
+        // ✅ LOGICA: Il task viene creato solo quando si apre ResponseEditor, dopo aver determinato il tipo
+        // ✅ Se act.type è UNDEFINED, l'euristica determinerà il tipo e poi creerà/aggiornerà il task
+        // ✅ Per ora, crea con il tipo da act.type (se non è UNDEFINED) o aspetta che l'euristica lo determini
+        const actType = act.type || 'UNDEFINED';
+        let taskType = TaskType.UNDEFINED;
+
+        if (actType !== 'UNDEFINED') {
+          // ✅ Tipo già determinato (non UNDEFINED) - crea task con tipo corretto
+          taskType = actIdToTaskType(actType);
+        } else {
+          // ✅ Tipo UNDEFINED - l'euristica determinerà il tipo e creerà/aggiornerà il task
+          // ✅ Per ora, crea con UNDEFINED (verrà aggiornato dall'euristica)
+          taskType = TaskType.UNDEFINED;
+        }
+
         task = taskRepository.createTask(taskType, null, undefined, instanceKey);
-        console.log('🔧 [DDTHostAdapter] Created new task:', task.id);
+        console.log('🔧 [DDTHostAdapter] Created new task:', { taskId: task.id, taskType, actType });
       }
 
       // ✅ VB.NET style: se il task ha mainData salvato, usalo direttamente (non ricostruire dal template)

@@ -31,53 +31,6 @@ Public Class FlowCompiler
         Return result
     End Function
 
-    ''' <summary>
-    ''' Converte templateId string (es. "SayMessage", "DataRequest") in TaskTypes enum
-    ''' </summary>
-    Private Function ConvertTemplateIdToEnum(templateId As String) As TaskTypes
-        Console.WriteLine($"🔍 [FlowCompiler] ConvertTemplateIdToEnum called: templateId='{templateId}'")
-        System.Diagnostics.Debug.WriteLine($"🔍 [FlowCompiler] ConvertTemplateIdToEnum called: templateId='{templateId}'")
-        If String.IsNullOrEmpty(templateId) Then
-            Console.WriteLine($"⚠️ [FlowCompiler] templateId is empty, defaulting to SayMessage")
-            System.Diagnostics.Debug.WriteLine($"⚠️ [FlowCompiler] templateId is empty, defaulting to SayMessage")
-            Return TaskTypes.SayMessage ' Default
-        End If
-
-        Dim normalized = templateId.Trim().ToLower()
-        Console.WriteLine($"🔍 [FlowCompiler] Normalized templateId: '{templateId}' → '{normalized}'")
-        System.Diagnostics.Debug.WriteLine($"🔍 [FlowCompiler] Normalized templateId: '{templateId}' → '{normalized}'")
-
-        Select Case normalized
-            Case "saymessage", "message"
-                Console.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.SayMessage")
-                System.Diagnostics.Debug.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.SayMessage")
-                Return TaskTypes.SayMessage
-            Case "closesession", "closesessionaction"
-                Console.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.CloseSession")
-                System.Diagnostics.Debug.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.CloseSession")
-                Return TaskTypes.CloseSession
-            Case "transfer"
-                Console.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.Transfer")
-                System.Diagnostics.Debug.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.Transfer")
-                Return TaskTypes.Transfer
-            Case "getdata", "datarequest", "askquestion"
-                Console.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.DataRequest")
-                System.Diagnostics.Debug.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.DataRequest")
-                Return TaskTypes.DataRequest  ' ✅ Rinominato da GetData (backward compatibility: 'getdata' → DataRequest)
-            Case "backendcall", "callbackend", "readfrombackend", "writetobackend"
-                Console.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.BackendCall")
-                System.Diagnostics.Debug.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.BackendCall")
-                Return TaskTypes.BackendCall
-            Case "classifyproblem", "problemclassification"
-                Console.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.ClassifyProblem")
-                System.Diagnostics.Debug.WriteLine($"✅ [FlowCompiler] Matched: '{normalized}' → TaskTypes.ClassifyProblem")
-                Return TaskTypes.ClassifyProblem
-            Case Else
-                Console.WriteLine($"⚠️ [FlowCompiler] Unknown templateId: '{templateId}' (normalized: '{normalized}'), defaulting to SayMessage")
-                System.Diagnostics.Debug.WriteLine($"⚠️ [FlowCompiler] Unknown templateId: '{templateId}' (normalized: '{normalized}'), defaulting to SayMessage")
-                Return TaskTypes.SayMessage
-        End Select
-    End Function
     Private ReadOnly _conditionBuilder As ConditionBuilder
 
     Public Sub New()
@@ -197,21 +150,35 @@ Public Class FlowCompiler
                     Throw New Exception($"Task not found: {taskId} in node {node.Id}, row {row.Id}. Task must exist.")
                 End If
 
-                ' ✅ SIMPLIFIED: Usa templateId (string) direttamente, nessuna conversione
-                Console.WriteLine($"🔍 [FlowCompiler] Processing task: Id={task.Id}, TemplateId={If(String.IsNullOrEmpty(task.TemplateId), "NULL/EMPTY", task.TemplateId)}, Node={node.Id}, Row={row.Id}")
+                ' ✅ USA SOLO task.Type (enum numerico) - templateId è SOLO un GUID per riferimenti
+                Console.WriteLine($"🔍 [FlowCompiler] Processing task: Id={task.Id}, Type={If(task.Type.HasValue, task.Type.Value.ToString(), "NULL")}, TemplateId={If(String.IsNullOrEmpty(task.TemplateId), "NULL/EMPTY", task.TemplateId)}, Node={node.Id}, Row={row.Id}")
+                System.Diagnostics.Debug.WriteLine($"🔍 [FlowCompiler] Processing task: Id={task.Id}, Type={If(task.Type.HasValue, task.Type.Value.ToString(), "NULL")}, TemplateId={If(String.IsNullOrEmpty(task.TemplateId), "NULL/EMPTY", task.TemplateId)}, Node={node.Id}, Row={row.Id}")
 
-                If String.IsNullOrEmpty(task.TemplateId) Then
-                    Console.WriteLine($"❌ [FlowCompiler] Task {taskId} has no templateId!")
-                    Throw New Exception($"Task {taskId} (node {node.Id}, row {row.Id}) has no templateId. TemplateId is required.")
+                If Not task.Type.HasValue Then
+                    Console.WriteLine($"❌ [FlowCompiler] Task {taskId} has no Type!")
+                    Console.WriteLine($"❌ [FlowCompiler] Task structure:")
+                    Console.WriteLine($"   - Id: {task.Id}")
+                    Console.WriteLine($"   - Type: NULL (REQUIRED)")
+                    Console.WriteLine($"   - TemplateId: {If(String.IsNullOrEmpty(task.TemplateId), "EMPTY", task.TemplateId)} (GUID reference, not used for type)")
+                    System.Diagnostics.Debug.WriteLine($"❌ [FlowCompiler] Task {taskId} has no Type!")
+                    Throw New Exception($"Task {taskId} (node {node.Id}, row {row.Id}) has no Type. Type is required.")
                 End If
 
-                Console.WriteLine($"✅ [FlowCompiler] Task {taskId} has valid templateId: {task.TemplateId}")
-                System.Diagnostics.Debug.WriteLine($"✅ [FlowCompiler] Task {taskId} has valid templateId: {task.TemplateId}")
+                Dim typeValue = task.Type.Value
+                If Not [Enum].IsDefined(GetType(TaskTypes), typeValue) Then
+                    Console.WriteLine($"❌ [FlowCompiler] Task {taskId} has invalid Type: {typeValue}")
+                    Console.WriteLine($"❌ [FlowCompiler] Task structure:")
+                    Console.WriteLine($"   - Id: {task.Id}")
+                    Console.WriteLine($"   - Type: {typeValue} (INVALID)")
+                    Console.WriteLine($"   - TemplateId: {If(String.IsNullOrEmpty(task.TemplateId), "EMPTY", task.TemplateId)}")
+                    System.Diagnostics.Debug.WriteLine($"❌ [FlowCompiler] Task {taskId} has invalid Type: {typeValue}")
+                    Throw New Exception($"Task {taskId} (node {node.Id}, row {row.Id}) has invalid Type: {typeValue}")
+                End If
 
-                ' ✅ REFACTORED: Crea task type-safe in base al tipo
-                Dim taskType = ConvertTemplateIdToEnum(task.TemplateId)
-                Console.WriteLine($"🔍 [FlowCompiler] Converted templateId '{task.TemplateId}' to taskType={taskType}")
-                System.Diagnostics.Debug.WriteLine($"🔍 [FlowCompiler] Converted templateId '{task.TemplateId}' to taskType={taskType}")
+                Dim taskType = CType(typeValue, TaskTypes)
+                Console.WriteLine($"✅ [FlowCompiler] Using task.Type: {taskType} (value={typeValue})")
+                System.Diagnostics.Debug.WriteLine($"✅ [FlowCompiler] Using task.Type: {taskType} (value={typeValue})")
+
                 Dim compiledTask As CompiledTask = CreateTypedCompiledTask(taskType, task, row, node, taskId, flow)
 
                 Console.WriteLine($"✅ [FlowCompiler] Created CompiledTask: Id={compiledTask.Id}, TaskType={compiledTask.TaskType}")

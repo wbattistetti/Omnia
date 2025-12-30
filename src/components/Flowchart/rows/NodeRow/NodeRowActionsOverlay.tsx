@@ -212,7 +212,7 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
       )}
       {/* Gear (DDT) */}
       <SmartTooltip
-        text="Manually define this task's behavior using the rule editor."
+        text={gearDisabled ? "You must first choose the task type" : "Manually define this task's behavior using the rule editor."}
         tutorId="gear_tooltip_help"
         placement="bottom"
       >
@@ -224,22 +224,53 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
             padding: 2,
             background: 'none',
             border: 'none',
-            cursor: 'pointer',
+            cursor: 'pointer', // ✅ Sempre pointer, anche quando disabilitato (cliccabile per aprire picker)
             width: size,
             height: size,
-            opacity: 0.9,
+            opacity: gearDisabled ? 0.5 : 0.9,
             transition: 'opacity 120ms linear, transform 120ms ease'
           }}
           className="hover:opacity-100 hover:scale-110 nodrag"
           onMouseEnter={() => onRequestClosePicker && onRequestClosePicker()}
           onMouseDown={(e) => {
-            e.preventDefault();
+            // ✅ NON fare preventDefault qui - potrebbe interferire con il click
             e.stopPropagation();
           }}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            if (!gearDisabled && onOpenDDT) {
+            console.log('🔧 [GEAR] Click ricevuto su ingranaggio', {
+              gearDisabled,
+              hasOnTypeChangeRequest: !!onTypeChangeRequest,
+              hasOnOpenDDT: !!onOpenDDT,
+              rowId: (e.currentTarget as any).closest('[data-row-id]')?.getAttribute('data-row-id')
+            });
+            // ✅ Se gearDisabled è true (tipo UNDEFINED), apri il picker del tipo
+            // ✅ Gestisci anche il caso in cui gearDisabled è undefined ma onOpenDDT non è disponibile
+            const isDisabled = gearDisabled === true;
+            const hasOpenDDT = typeof onOpenDDT === 'function';
+            const shouldOpenPicker = isDisabled || (!hasOpenDDT && onTypeChangeRequest);
+
+            if (shouldOpenPicker && onTypeChangeRequest) {
+              // ✅ Se tipo UNDEFINED o se onOpenDDT non disponibile, apri il picker del tipo (come se cliccassi sul primo pulsante)
+              console.log('🔧 [GEAR] Click su ingranaggio - apertura picker tipo (come primo pulsante)', {
+                rowId: (e.currentTarget as any).closest('[data-row-id]')?.getAttribute('data-row-id'),
+                isDisabled,
+                shouldOpenPicker
+              });
+              // ✅ Usa la posizione del pulsante ingranaggio stesso per aprire il picker
+              const gearRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              console.log('🔧 [GEAR] Posizione ingranaggio:', gearRect);
+              if (gearRect && onTypeChangeRequest) {
+                console.log('🔧 [GEAR] Chiamando onTypeChangeRequest con rect:', gearRect);
+                onTypeChangeRequest(gearRect);
+              } else {
+                console.warn('⚠️ [GEAR] Impossibile ottenere posizione o onTypeChangeRequest non disponibile', {
+                  hasGearRect: !!gearRect,
+                  hasOnTypeChangeRequest: !!onTypeChangeRequest
+                });
+              }
+            } else if (onOpenDDT) {
               console.log('🔧 [GEAR] Click su ingranaggio - apertura ResponseEditor', {
                 rowId: (e.currentTarget as any).closest('[data-row-id]')?.getAttribute('data-row-id'),
                 hasDDT
@@ -253,18 +284,14 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
                 });
               }
             } else {
-              console.warn('⚠️ [GEAR] Ingranaggio disabilitato o onOpenDDT non disponibile', {
+              console.warn('⚠️ [GEAR] Nessuna azione disponibile', {
                 gearDisabled,
-                hasOnOpenDDT: !!onOpenDDT
+                hasOnOpenDDT: !!onOpenDDT,
+                hasOnTypeChangeRequest: !!onTypeChangeRequest
               });
             }
           }}
-          disabled={gearDisabled} // ✅ Disabilita se tipo UNDEFINED e nessun template match
-          style={{
-            opacity: gearDisabled ? 0.5 : 1,
-            cursor: gearDisabled ? 'not-allowed' : 'pointer',
-            pointerEvents: gearDisabled ? 'none' : 'auto'
-          }}
+          // ✅ NON usare disabled - vogliamo che il click funzioni anche quando è "disabilitato" per aprire il picker
         >
           <Settings style={{ width: size, height: size, color: hasDDT ? (gearColor || '#fbbf24') : '#9ca3af', filter: hasDDT ? 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' : undefined }} />
         </button>

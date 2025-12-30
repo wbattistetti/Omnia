@@ -308,12 +308,12 @@ export const ProjectDataService = {
       };
 
       // Load from each collection separately
+      // ✅ MIGRATO: backend-calls → task-templates-v2?taskType=Action (Tasks type: 4)
       const [taskTemplatesRes, backendCallsRes, conditionsRes, tasksRes, macroTasksRes] = await Promise.all([
         fetch(`/api/factory/task-templates-v2?scopes=general${projectIndustry && projectIndustry !== 'undefined' ? `,industry:${projectIndustry}` : ''}`),
-        fetch('/api/factory/backend-calls', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(scopeQuery)
+        fetch(`/api/factory/task-templates-v2?scopes=general${projectIndustry && projectIndustry !== 'undefined' ? `,industry:${projectIndustry}` : ''}&taskType=Action`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
         }),
         fetch('/api/factory/conditions', {
           method: 'POST',
@@ -878,12 +878,6 @@ export async function getIDETranslations() {
   return res.json();
 }
 
-export async function getDataDialogueTranslations() {
-  const res = await fetch('/api/factory/data-dialogue-translations');
-  if (!res.ok) throw new Error('Errore nel recupero di DataDialogueTranslations');
-  return res.json();
-}
-
 export async function getTemplateTranslations(keys: string[]): Promise<Record<string, { en: string; it: string; pt: string }>> {
   if (!keys || keys.length === 0) return {};
   const res = await fetch('/api/factory/template-translations', {
@@ -955,19 +949,6 @@ export async function loadAllProjectTranslations(
   return result;
 }
 
-export async function saveDataDialogueTranslations(payload: Record<string, string>) {
-  const res = await fetch('/api/factory/data-dialogue-translations', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  if (res.status === 404) {
-    // Backend not ready for dynamic translations: no-op to allow saving DDTs
-    return { skipped: true };
-  }
-  if (!res.ok) throw new Error('Errore nel salvataggio di DataDialogueTranslations');
-  return res.json();
-}
 
 /**
  * Prepare intellisense data from project data

@@ -139,41 +139,9 @@ class TaskTemplateServiceV2 {
   }
 
   /**
-   * Carica DDT library con scope filtering
+   * ❌ RIMOSSO: loadDDTLibrary (endpoint legacy, collection eliminata)
+   * I DDT sono ora gestiti direttamente nei Tasks con type: DataRequest
    */
-  async loadDDTLibrary(
-    scopes?: string[],
-    projectId?: string,
-    industry?: string
-  ): Promise<any[]> {
-    try {
-      const params = new URLSearchParams();
-      if (scopes && scopes.length > 0) {
-        params.append('scopes', scopes.join(','));
-      }
-      if (projectId) {
-        params.append('projectId', projectId);
-      }
-      if (industry) {
-        params.append('industry', industry);
-      }
-
-      // Usa path relativo per sfruttare il proxy Vite
-      const url = `/api/factory/ddt-library-v2${params.toString() ? '?' + params.toString() : ''}`;
-
-      const res = await fetch(url);
-
-      if (!res.ok) {
-        throw new Error(`Failed to load DDT library: ${res.status}`);
-      }
-
-      return await res.json();
-
-    } catch (error) {
-      console.error('[TaskTemplateServiceV2] Error loading DDT library:', error);
-      return [];
-    }
-  }
 
   /**
    * Risolve un DDT composito

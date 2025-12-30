@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import { getAllDialogueTemplates, getIDETranslations, getDataDialogueTranslations } from '../services/ProjectDataService';
+import { getAllDialogueTemplates, getIDETranslations } from '../services/ProjectDataService';
 
 interface DDTManagerContextType {
   ddtList: any[];
@@ -7,8 +7,6 @@ interface DDTManagerContextType {
   isLoadingDDT: boolean;
   loadDDTError: string | null;
   ideTranslations: Record<string, string>;
-  dataDialogueTranslations: Record<string, string>;
-  setDataDialogueTranslations: (t: Record<string, string>) => void;
   createDDT: (ddt: any) => void;
   openDDT: (ddt: any) => void;
   closeDDT: () => void;
@@ -38,7 +36,6 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
   const [isLoadingDDT, setIsLoadingDDT] = useState(false);
   const [loadDDTError, setLoadDDTError] = useState<string | null>(null);
   const [ideTranslations, setIdeTranslations] = useState<Record<string, string>>({});
-  const [dataDialogueTranslations, setDataDialogueTranslations] = useState<Record<string, string>>({});
 
   const createDDT = (ddt: any) => {
     // ensure has id for future lookups
@@ -118,19 +115,12 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
     setIsLoadingDDT(true);
     setLoadDDTError(null);
     try {
-      const [ddtTemplates, ide, ddtTr] = await Promise.all([
+      const [ddtTemplates, ide] = await Promise.all([
         getAllDialogueTemplates(),
-        getIDETranslations().catch(() => ({})),
-        getDataDialogueTranslations().catch(() => ({}))
+        getIDETranslations().catch(() => ({}))
       ]);
       setDDTList(ddtTemplates);
       setIdeTranslations(ide || {});
-      setDataDialogueTranslations(ddtTr || {});
-      try {
-        const ideCount = ide ? Object.keys(ide).length : 0;
-        const ddtCount = ddtTr ? Object.keys(ddtTr).length : 0;
-        // RIMOSSO: console.log che causava loop infinito
-      } catch { }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Errore nel caricamento DDT';
       setLoadDDTError(errorMessage);
@@ -161,8 +151,6 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
     isLoadingDDT,
     loadDDTError,
     ideTranslations,
-    dataDialogueTranslations,
-    setDataDialogueTranslations,
     createDDT,
     openDDT,
     closeDDT,
