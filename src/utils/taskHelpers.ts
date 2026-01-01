@@ -1,6 +1,6 @@
 import type { NodeRowData } from '../types/project';
 import type { Task, TaskInstance } from '../types/taskTypes';
-import { TaskType, actIdToTaskType } from '../types/taskTypes';
+import { TaskType, taskIdToTaskType } from '../types/taskTypes'; // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
 import { taskRepository } from '../services/TaskRepository';
 // FASE 4: InstanceRepository import removed - TaskRepository handles synchronization internally
 import { generateId } from './idGenerator';
@@ -135,19 +135,10 @@ export function getInstanceIdFromRow(row: NodeRowData): string {
 /**
  * ✅ DEPRECATED: Map actId to templateId (legacy - non più usato)
  * Ora usiamo type: TaskType enum invece di templateId semantico
- * @deprecated Usa actIdToTaskType() da taskTypes.ts
+ * @deprecated Usa taskIdToTaskType() da taskTypes.ts
  */
-function mapActIdToTemplateId(actId: string): string {
-  // Legacy mapping - mantenuto per backward compatibility temporanea
-  const mapping: Record<string, string> = {
-    'DataRequest': 'DataRequest',
-    'Message': 'SayMessage',
-    'UNDEFINED': 'UNDEFINED',
-    'ProblemClassification': 'ClassifyProblem',
-    'BackendCall': 'callBackend'
-  };
-  return mapping[actId] || actId;
-}
+// ❌ RIMOSSO: mapActIdToTemplateId() - non più necessario
+// templateId deve essere null o GUID, non stringhe semantiche
 
 /**
  * Deriva il tipo di task dal templateId
@@ -174,21 +165,18 @@ export function deriveTaskTypeFromTemplateId(templateId: string | undefined | nu
  * This is the new way to create rows - creates both Task and InstanceRepository entry
  *
  * @param rowId - Topological ID for the row (if not provided, generates one)
- * @param action - actId dall'UI/Intellisense (es. "Message", "DataRequest", "ProblemClassification") - defaults to 'Message'
+ * @param taskType - TaskType enum (defaults to SayMessage)
  * @param initialText - Initial text for the row
  * @param projectId - Optional project ID
  * @returns NodeRowData with taskId set
  */
 export function createRowWithTask(
   rowId?: string,
-  action: string = 'Message',
+  taskType: TaskType = TaskType.SayMessage, // ✅ TaskType enum invece di stringa action
   initialText: string = '',
   projectId?: string
 ): NodeRowData {
   const finalRowId = rowId || generateId();
-
-  // ✅ Convert actId (UI string) to TaskType enum
-  const taskType = actIdToTaskType(action);
 
   // Check if Task already exists (shouldn't happen, but safety check)
   if (taskRepository.hasTask(finalRowId)) {
@@ -229,34 +217,31 @@ export function createRowWithTask(
 }
 
 /**
- * Update row's Task when action changes (e.g., from Intellisense selection)
- * ✅ MIGRATION: Uses templateId instead of action
+ * Update row's Task type
+ * ✅ RINOMINATO: updateRowTaskAction → updateRowTaskType
  *
  * @param row - NodeRowData row to update
- * @param newAction - New action ID (can be actId like "DataRequest" or templateId like "DataRequest")
+ * @param taskType - TaskType enum (comportamento del task)
  * @param projectId - Optional project ID
  */
-export function updateRowTaskAction(
+export function updateRowTaskType( // ✅ RINOMINATO: updateRowTaskAction → updateRowTaskType
   row: NodeRowData,
-  newAction: string,
+  taskType: TaskType, // ✅ TaskType enum invece di stringa
   projectId?: string
 ): void {
   const taskId = getTaskIdFromRow(row);
 
   // ✅ Se il task non esiste, non fare nulla (verrà creato quando si apre ResponseEditor)
   if (!taskId) {
-    console.warn('[updateRowTaskAction] Task non esiste ancora - verrà creato quando si apre ResponseEditor');
+    console.warn('[updateRowTaskType] Task non esiste ancora - verrà creato quando si apre ResponseEditor');
     return;
   }
 
-  // Map actId to templateId if needed
-  const templateId = mapActIdToTemplateId(newAction);
-
-  // ✅ MIGRATION: Update Task's templateId (TaskRepository will sync action automatically)
-  taskRepository.updateTask(taskId, { templateId }, projectId);
-
-  // FASE 4: TaskRepository.updateTask already updates InstanceRepository internally
-  // No need to update it separately - TaskRepository handles synchronization
+  // ✅ Aggiorna direttamente il type (enum) e templateId (null = standalone)
+  taskRepository.updateTask(taskId, {
+    type: taskType,
+    templateId: null // ✅ Standalone task, no template reference
+  }, projectId);
 }
 
 /**
@@ -271,14 +256,12 @@ export function getRowData(row: NodeRowData): {
   message?: { text: string };
   ddt?: any;
   intents?: any[];
-  action?: string;  // ✅ Legacy field name, contains templateId
+  // ❌ RIMOSSO: action field (legacy, non più necessario)
 } {
   const taskId = getTaskIdFromRow(row);
   const task = taskRepository.getTask(taskId);
 
   if (task) {
-    // ✅ MIGRATION: Use getTemplateId() helper
-    const templateId = getTemplateId(task);
     return {
       message: task.text ? { text: task.text } : undefined,
       ddt: (task.mainData && task.mainData.length > 0) ? {
@@ -288,8 +271,8 @@ export function getRowData(row: NodeRowData): {
         constraints: task.constraints,
         examples: task.examples
       } : undefined,
-      intents: task.intents,
-      action: templateId  // ✅ Returns templateId (legacy field name maintained for compatibility)
+      intents: task.intents
+      // ❌ RIMOSSO: action field (legacy)
     };
   }
 

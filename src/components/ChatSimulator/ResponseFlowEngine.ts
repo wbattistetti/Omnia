@@ -1,5 +1,5 @@
 import { extractTranslations, getEscalationActions, resolveActionText } from './DDTAdapter';
-import { getMainDataList, getSubDataList, getNodeSteps } from '../ActEditor/ResponseEditor/ddtSelectors';
+import { getMainDataList, getSubDataList, getNodeSteps } from '../TaskEditor/ResponseEditor/ddtSelectors';
 import { inferExpectedKind, validateByKind, ExpectedKind } from './validators';
 export interface FlowState {
   currentStep: 'start' | 'noInput' | 'noMatch' | 'confirmation' | 'success';

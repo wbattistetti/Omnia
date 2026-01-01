@@ -18,7 +18,7 @@ export interface FlowNode {
   onDelete?: () => void;
   onUpdate?: (updates: any) => void;
   onPlayNode?: () => void;
-  onCreateAgentAct?: (name: string, scope?: 'global' | 'industry') => void;
+  onCreateFactoryTask?: (name: string, scope?: 'global' | 'industry') => void; // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
   onCreateBackendCall?: (name: string, scope?: 'global' | 'industry') => void;
   onCreateTask?: (name: string, scope?: 'global' | 'industry') => void;
   onCreateCondition?: (name: string, scope?: 'global' | 'industry') => void;

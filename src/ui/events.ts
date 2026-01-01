@@ -39,9 +39,9 @@ export function emitNonInteractiveEditorOpen(detail: { title?: string; template:
   try { document.dispatchEvent(new CustomEvent('nonInteractiveEditor:open', { detail, bubbles: true })); } catch {}
 }
 
-// Act Editor Host events
-export function emitActEditorOpen(detail: { id: string; type: string; label?: string }) {
-  try { document.dispatchEvent(new CustomEvent('actEditor:open', { detail, bubbles: true })); } catch {}
+// Task Editor Host events
+export function emitTaskEditorOpen(detail: { id: string; type: number; label?: string }) { // ✅ RINOMINATO: emitActEditorOpen → emitTaskEditorOpen, type: string → type: number (TaskType enum)
+  try { document.dispatchEvent(new CustomEvent('taskEditor:open', { detail, bubbles: true })); } catch {} // ✅ RINOMINATO: actEditor:open → taskEditor:open
 }
 
 // Tutor events

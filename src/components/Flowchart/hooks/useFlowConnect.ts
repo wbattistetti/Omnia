@@ -13,7 +13,7 @@ export function useFlowConnect(
   onDeleteEdge: (edgeId?: string) => void,
   deleteNodeWithLog: (nodeId: string) => void,
   updateNode: (nodeId: string, updates: Partial<FlowNode>) => void,
-  createAgentAct: () => void,
+  createFactoryTask: () => void, // ✅ RINOMINATO: createAgentAct → createFactoryTask
   createBackendCall: () => void,
   createTask: () => void,
   nodeIdCounter: React.MutableRefObject<number>
@@ -89,7 +89,7 @@ export function useFlowConnect(
         rows: [],
         onDelete: () => deleteNodeWithLog(newNodeId),
         onUpdate: (updates: any) => updateNode(newNodeId, updates),
-        onCreateAgentAct: createAgentAct,
+        onCreateFactoryTask: createFactoryTask, // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
         onCreateBackendCall: createBackendCall,
         onCreateTask: createTask,
       },
@@ -115,7 +115,7 @@ export function useFlowConnect(
   }, [
     reactFlowInstance, connectionMenuRef, setNodes, setEdges,
     closeMenu, onDeleteEdge, deleteNodeWithLog, updateNode,
-    createAgentAct, createBackendCall, createTask, nodeIdCounter
+    createFactoryTask, createBackendCall, createTask, nodeIdCounter // ✅ RINOMINATO: createAgentAct → createFactoryTask
   ]);
 
   return {

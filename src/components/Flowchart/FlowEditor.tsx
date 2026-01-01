@@ -41,6 +41,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { useIntellisense } from '../../context/IntellisenseContext';
 import { FlowchartWrapper } from './FlowchartWrapper';
 import { ExecutionStateProvider } from './executionHighlight/ExecutionStateContext';
+import { taskRepository } from '../../services/TaskRepository';
+import { getTaskIdFromRow } from '../../utils/taskHelpers';
 
 // Definizione stabile di nodeTypes and edgeTypes per evitare warning React Flow
 const nodeTypes = { custom: CustomNode, task: TaskNode };
@@ -250,11 +252,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // ✅ Spostare PRIMA la definizione di deleteNode
   const { deleteNode, updateNode, addNodeAtPosition: originalAddNodeAtPosition } = useNodeManager(setNodesWithLog, setNodeIdCounter);
 
-  // ✅ Poi definire deleteNodeWithLog (CORREGGERE il nome)
-  const deleteNodeWithLog = useCallback((id: string) => {
-    deleteNode(id);
-  }, [deleteNode]);
-
   // ✅ Definire addNodeAtPosition wrapper
   const addNodeAtPosition = useCallback((node: Node<FlowNode>, x: number, y: number) => {
     originalAddNodeAtPosition(node, x, y);
@@ -262,12 +259,12 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
 
   // Hook centralizzato per la creazione di entità (solo se il context è pronto)
   const entityCreation = useEntityCreation();
-  const { createAgentAct, createBackendCall, createMacrotask, createTask, createCondition } = entityCreation;
+  const { createFactoryTask, createBackendCall, createMacrotask, createTask, createCondition } = entityCreation; // ✅ RINOMINATO: createAgentAct → createFactoryTask
 
   // Adapter functions per matchare le signature expected da useFlowConnect
-  const createAgentActAdapter = useCallback(() => {
-    createAgentAct(''); // Solo name, scope opzionale
-  }, [createAgentAct]);
+  const createFactoryTaskAdapter = useCallback(() => {
+    createFactoryTask(''); // Solo name, scope opzionale
+  }, [createFactoryTask]); // ✅ RINOMINATO: createAgentActAdapter → createFactoryTaskAdapter
 
   const createBackendCallAdapter = useCallback(() => {
     createBackendCall(''); // Solo name, scope opzionale
@@ -277,7 +274,47 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     createMacrotask(''); // Solo name, scope opzionale
   }, [createMacrotask]);
 
-  // Sostituisco onConnect
+  // RIMOSSO: useEffect inutile che causava loop infinito
+
+  // Aggiungi gli hook per ProjectData (per la creazione di condizioni)
+  // ✅ RIMOSSO: addItem e addCategory - ora usati direttamente in useConditionCreation
+  const { data: projectData } = useProjectData();
+
+  // ✅ Definisci deleteNodeWithLog dopo projectData
+  const deleteNodeWithLog = useCallback(async (id: string) => {
+    // ✅ NUOVO: Cancella tutti i task delle righe del nodo prima di cancellare il nodo
+    try {
+      // Trova il nodo prima di cancellarlo
+      const nodeToDelete = nodes.find(n => n.id === id);
+      if (nodeToDelete && nodeToDelete.data?.rows) {
+        const rows = nodeToDelete.data.rows as any[];
+        // ✅ Ottieni projectId da useProjectData
+        const projectId = projectData?.projectId || undefined;
+
+        console.log(`🗑️ [deleteNodeWithLog] Cancellando nodo ${id} con ${rows.length} righe`);
+
+        // Cancella tutti i task delle righe
+        for (const row of rows) {
+          const taskId = row?.taskId || getTaskIdFromRow(row) || row?.id; // row.id è anche il taskId
+          if (taskId) {
+            try {
+              await taskRepository.deleteTask(taskId, projectId);
+              console.log(`✅ [deleteNodeWithLog] Task ${taskId} cancellato per riga ${row.id}`);
+            } catch (e) {
+              console.warn(`⚠️ [deleteNodeWithLog] Errore cancellando task ${taskId}:`, e);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error('❌ [deleteNodeWithLog] Errore durante cancellazione task:', e);
+    }
+
+    // Cancella il nodo
+    deleteNode(id);
+  }, [deleteNode, nodes, projectData]);
+
+  // Sostituisco onConnect (dopo deleteNodeWithLog)
   const { onConnect, onConnectStart } = useFlowConnect(
     reactFlowInstance,
     connectionMenuRef,
@@ -288,18 +325,11 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     onDeleteEdge,
     deleteNodeWithLog,
     updateNode,
-    createAgentActAdapter,
+    createFactoryTaskAdapter, // ✅ RINOMINATO: createAgentActAdapter → createFactoryTaskAdapter
     createBackendCallAdapter,
     createTaskAdapter,
     nodeIdCounterRef
   );
-
-  // RIMOSSO: useEffect inutile che causava loop infinito
-
-  // Aggiungi gli hook per ProjectData (per la creazione di condizioni)
-  // ✅ RIMOSSO: addItem e addCategory - ora usati direttamente in useConditionCreation
-  const { data: projectData } = useProjectData();
-
 
   // ✅ RIMOSSO: problemIntentSeedItems - ora calcolato manualmente in openIntellisense
 
@@ -343,7 +373,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     setNodes,
     deleteNodeWithLog,
     updateNode,
-    createAgentAct,
+    createFactoryTask, // ✅ RINOMINATO: createAgentAct → createFactoryTask
     createBackendCall,
     createTask,
     createCondition,
@@ -375,7 +405,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
             onDelete: () => deleteNodeWithLog(node.id),
             onUpdate: (updates: any) => updateNode(node.id, updates),
             onPlayNode: onPlayNode ? () => onPlayNode(node.id, node.data.rows) : undefined,
-            onCreateAgentAct: createAgentAct,
+            onCreateFactoryTask: createFactoryTask, // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
             onCreateBackendCall: createBackendCall,
             onCreateTask: createTask,
             onCreateCondition: createCondition,
@@ -383,7 +413,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
         }));
       });
     }
-  }, [deleteNodeWithLog, updateNode, setNodes, onPlayNode, createAgentAct, createBackendCall, createTask, nodes.length]);
+  }, [deleteNodeWithLog, updateNode, setNodes, onPlayNode, createFactoryTask, createBackendCall, createTask, nodes.length]); // ✅ RINOMINATO: createAgentAct → createFactoryTask
 
   // Aggiorna edges con onUpdate per ogni edge custom
   useEffect(() => {

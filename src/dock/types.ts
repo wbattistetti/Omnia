@@ -1,4 +1,5 @@
 import React from 'react';
+import type { TaskMeta } from '../components/TaskEditor/EditorHost/types';
 
 // Base properties for all tabs
 type DockTabBase = {
@@ -27,7 +28,7 @@ export type ToolbarButton = {
 export type DockTabResponseEditor = DockTabBase & {
   type: 'responseEditor';
   ddt: any;
-  act?: { id: string; type: string; label?: string; instanceId?: string };
+  task?: TaskMeta; // ✅ RINOMINATO: act → task, usa TaskMeta con TaskType enum
   headerColor?: string; // Color of the ResponseEditor header (e.g., '#9a4f00' for orange)
   toolbarButtons?: ToolbarButton[]; // Toolbar buttons from ResponseEditor
   onClose?: (tab: DockTabResponseEditor) => void | Promise<void>; // Callback called before closing the tab (for saving), receives the tab to read current ddt
@@ -50,16 +51,16 @@ export type DockTabConditionEditor = DockTabBase & {
   label?: string;
 };
 
-// Act Editor tab - for generic act editors (BackendCall, etc.)
-export type DockTabActEditor = DockTabBase & {
-  type: 'actEditor';
-  act: { id: string; type: string; label?: string; instanceId?: string };
+// Task Editor tab - for generic task editors (BackendCall, etc.)
+export type DockTabTaskEditor = DockTabBase & { // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
+  type: 'taskEditor'; // ✅ RINOMINATO: 'actEditor' → 'taskEditor'
+  task: TaskMeta; // ✅ RINOMINATO: act → task, usa TaskMeta con TaskType enum
   headerColor?: string;
   toolbarButtons?: ToolbarButton[];
 };
 
 // Union type for all tab types
-export type DockTab = DockTabFlow | DockTabResponseEditor | DockTabNonInteractive | DockTabConditionEditor | DockTabActEditor;
+export type DockTab = DockTabFlow | DockTabResponseEditor | DockTabNonInteractive | DockTabConditionEditor | DockTabTaskEditor; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
 
 export type SplitNode = {
   kind: 'split';

@@ -22,17 +22,17 @@ import { FlowEditor } from './Flowchart/FlowEditor';
 import { FlowWorkspace } from './FlowWorkspace/FlowWorkspace';
 import { DockWorkspace } from './FlowWorkspace/DockWorkspace';
 import { DockManager } from './Dock/DockManager';
-import { DockNode, DockTab, DockTabResponseEditor, DockTabActEditor, ToolbarButton } from '../dock/types';
+import { DockNode, DockTab, DockTabResponseEditor, DockTabTaskEditor, ToolbarButton } from '../dock/types'; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
 import { FlowCanvasHost } from './FlowWorkspace/FlowCanvasHost';
 import { FlowWorkspaceProvider } from '../flows/FlowStore.tsx';
 import { useFlowActions } from '../flows/FlowStore.tsx';
 import { upsertAddNextTo, closeTab, activateTab, splitWithTab } from '../dock/ops';
-import { resolveEditorKind } from './ActEditor/EditorHost/resolveKind';
+import { resolveEditorKind } from './TaskEditor/EditorHost/resolveKind'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
-import ResizableResponseEditor from './ActEditor/ResponseEditor/ResizableResponseEditor';
-import ResizableNonInteractiveEditor from './ActEditor/ResponseEditor/ResizableNonInteractiveEditor';
-import ResizableActEditorHost from './ActEditor/EditorHost/ResizableActEditorHost';
-import { useActEditor } from './ActEditor/EditorHost/ActEditorContext';
+import ResizableResponseEditor from './TaskEditor/ResponseEditor/ResizableResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
+import ResizableNonInteractiveEditor from './TaskEditor/ResponseEditor/ResizableNonInteractiveEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
+import ResizableTaskEditorHost from './TaskEditor/EditorHost/ResizableTaskEditorHost'; // ✅ RINOMINATO: ActEditor → TaskEditor, ResizableActEditorHost → ResizableTaskEditorHost
+import { useTaskEditor } from './TaskEditor/EditorHost/TaskEditorContext'; // ✅ RINOMINATO: ActEditor → TaskEditor, useActEditor → useTaskEditor
 import ConditionEditor from './conditions/ConditionEditor';
 import DDEBubbleChat from './ChatSimulator/DDEBubbleChat';
 import { useDDTContext } from '../context/DDTContext';
@@ -40,11 +40,13 @@ import { SIDEBAR_TYPE_COLORS, SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS } from
 // FASE 2: InstanceRepository import removed - using TaskRepository instead
 // TaskRepository automatically syncs with InstanceRepository for backward compatibility
 import { flowchartVariablesService } from '../services/FlowchartVariablesService';
-import ResponseEditor from './ActEditor/ResponseEditor';
-import NonInteractiveResponseEditor from './ActEditor/ResponseEditor/NonInteractiveResponseEditor';
+import ResponseEditor from './TaskEditor/ResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
+import NonInteractiveResponseEditor from './TaskEditor/ResponseEditor/NonInteractiveResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import { taskRepository } from '../services/TaskRepository';
 import { getTemplateId } from '../utils/taskHelpers';
 import { extractModifiedDDTFields } from '../utils/ddtMergeUtils';
+import { TaskType } from '../types/taskTypes'; // ✅ RIMOSSO: taskIdToTaskType - non più necessario, le fonti emettono direttamente TaskType enum
+import type { TaskMeta } from './TaskEditor/EditorHost/types'; // ✅ RINOMINATO: ActEditor → TaskEditor
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -142,27 +144,22 @@ export const AppContent: React.FC<AppContentProps> = ({
       if (tab.type === 'responseEditor') {
         // ✅ Stabilizza key, act, ddt, onToolbarUpdate per evitare re-mount
         const editorKey = useMemo(() => {
-          const instanceKey = tab.act?.instanceId || tab.act?.id || tab.id;
+          const instanceKey = tab.task?.instanceId || tab.task?.id || tab.id;
           const key = `response-editor-${instanceKey}`;
           console.log('[DEBUG_MEMO] editorKey calculated', {
             instanceKey,
             key,
             tabId: tab.id,
-            actInstanceId: tab.act?.instanceId,
-            actId: tab.act?.id
+            taskInstanceId: tab.task?.instanceId,
+            taskId: tab.task?.id
           });
           return key;
-        }, [tab.act?.instanceId, tab.act?.id, tab.id]);
+        }, [tab.task?.instanceId, tab.task?.id, tab.id]);
 
         const stableAct = useMemo(() => {
-          if (!tab.act) return undefined;
-          return {
-            id: tab.act.id,
-            type: tab.act.type,
-            label: tab.act.label,
-            instanceId: tab.act.instanceId
-          };
-        }, [tab.act?.id, tab.act?.type, tab.act?.label, tab.act?.instanceId]);
+          if (!tab.task) return undefined; // ✅ RINOMINATO: act → task
+          return tab.task; // ✅ Restituisce direttamente TaskMeta (già con TaskType enum)
+        }, [tab.task?.id, tab.task?.type, tab.task?.label, tab.task?.instanceId]); // ✅ RINOMINATO: act → task
 
         const stableDDT = useMemo(() => {
           const startStepTasksCount = (tab as any).ddt?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
@@ -338,18 +335,13 @@ export const AppContent: React.FC<AppContentProps> = ({
         );
       }
 
-      // Act Editor tab (BackendCall, etc.)
-      if (tab.type === 'actEditor') {
-        const actEditorTab = tab as DockTabActEditor;
+      // Task Editor tab (BackendCall, etc.)
+      if (tab.type === 'taskEditor') { // ✅ RINOMINATO: 'actEditor' → 'taskEditor'
+        const taskEditorTab = tab as DockTabTaskEditor; // ✅ RINOMINATO: actEditorTab → taskEditorTab, DockTabActEditor → DockTabTaskEditor
         return (
           <div style={{ width: '100%', height: '100%', backgroundColor: '#0b1220' }}>
-            <ResizableActEditorHost
-              act={tab.act ? {
-                id: tab.act.id,
-                type: tab.act.type,
-                label: tab.act.label,
-                instanceId: tab.act.instanceId
-              } : { id: '', type: 'Message', label: '' }}
+            <ResizableTaskEditorHost // ✅ RINOMINATO: ResizableActEditorHost → ResizableTaskEditorHost
+              task={tab.task || { id: '', type: TaskType.SayMessage, label: '' }} // ✅ RINOMINATO: act → task, usa TaskMeta con TaskType enum
               onClose={() => {
                 setDockTree(prev => closeTab(prev, tab.id));
               }}
@@ -359,8 +351,8 @@ export const AppContent: React.FC<AppContentProps> = ({
                   return mapNode(prev, n => {
                     if (n.kind === 'tabset') {
                       const idx = n.tabs.findIndex(t => t.id === tab.id);
-                      if (idx !== -1 && n.tabs[idx].type === 'actEditor') {
-                        const updatedTab = { ...n.tabs[idx], toolbarButtons: toolbar, headerColor: color } as DockTabActEditor;
+                      if (idx !== -1 && n.tabs[idx].type === 'taskEditor') { // ✅ RINOMINATO: 'actEditor' → 'taskEditor'
+                        const updatedTab = { ...n.tabs[idx], toolbarButtons: toolbar, headerColor: color } as DockTabTaskEditor; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
                         return { ...n, tabs: [...n.tabs.slice(0, idx), updatedTab, ...n.tabs.slice(idx + 1)] };
                       }
                     }
@@ -403,10 +395,10 @@ export const AppContent: React.FC<AppContentProps> = ({
         prevDDTRef: prevTab.ddt,
         nextDDTRef: nextTab.ddt,
         ddtRefChanged: prevTab.ddt !== nextTab.ddt,
-        prevActId: prevTab.act?.id,
-        nextActId: nextTab.act?.id,
-        prevInstanceId: prevTab.act?.instanceId,
-        nextInstanceId: nextTab.act?.instanceId,
+        prevTaskId: prevTab.task?.id,
+        nextTaskId: nextTab.task?.id,
+        prevInstanceId: prevTab.task?.instanceId,
+        nextInstanceId: nextTab.task?.instanceId,
         prevDDTMainDataLength: prevTab.ddt?.mainData?.length,
         nextDDTMainDataLength: nextTab.ddt?.mainData?.length,
         prevDDTMainDataFirstLabel: prevTab.ddt?.mainData?.[0]?.label,
@@ -433,12 +425,12 @@ export const AppContent: React.FC<AppContentProps> = ({
           return false; // Re-render (ddt cambiato dal dockTree)
         }
 
-        // Se cambia act (id o instanceId), re-render
+        // Se cambia task (id o instanceId), re-render
         if (
-          prevTab.act?.id !== nextTab.act?.id ||
-          prevTab.act?.instanceId !== nextTab.act?.instanceId
+          prevTab.task?.id !== nextTab.task?.id ||
+          prevTab.task?.instanceId !== nextTab.task?.instanceId
         ) {
-          console.log('[DEBUG_MEMO] DECISIONE: re-render (act changed)');
+          console.log('[DEBUG_MEMO] DECISIONE: re-render (task changed)');
           return false; // Re-render
         }
 
@@ -481,7 +473,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   // const setTranslationsForDDT = ddtContext.setTranslationsForDDT;
 
   // Usa ActEditor context invece di selectedDDT per unificare l'apertura editor
-  const actEditorCtx = useActEditor();
+  const taskEditorCtx = useTaskEditor(); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx, useActEditor → useTaskEditor
 
   // Listen to open event for non-interactive acts (open as docking tab)
   React.useEffect(() => {
@@ -528,10 +520,10 @@ export const AppContent: React.FC<AppContentProps> = ({
     return () => document.removeEventListener('nonInteractiveEditor:open', handler as any);
   }, []);
 
-  // Listen for ActEditor open events (open as docking tab)
+  // Listen for TaskEditor open events (open as docking tab)
   React.useEffect(() => {
     const h = async (e: any) => {
-      console.log('📥 [AppContent] Evento actEditor:open ricevuto', {
+      console.log('📥 [AppContent] Evento taskEditor:open ricevuto', {
         hasDetail: !!e?.detail,
         detail: e?.detail,
         timestamp: new Date().toISOString()
@@ -539,7 +531,7 @@ export const AppContent: React.FC<AppContentProps> = ({
       try {
         const d = (e && e.detail) || {};
         if (!d || !d.id || !d.type) {
-          console.warn('⚠️ [AppContent] Evento actEditor:open ignorato - dettagli mancanti', {
+          console.warn('⚠️ [AppContent] Evento taskEditor:open ignorato - dettagli mancanti', { // ✅ RINOMINATO: actEditor:open → taskEditor:open
             hasD: !!d,
             hasId: !!d?.id,
             hasType: !!d?.type
@@ -550,7 +542,7 @@ export const AppContent: React.FC<AppContentProps> = ({
         // Get instanceId from event
         const instanceId = d.instanceId || d.id;
 
-        console.log('✅ [AppContent] Processando evento actEditor:open', {
+        console.log('✅ [AppContent] Processando evento taskEditor:open', { // ✅ RINOMINATO: actEditor:open → taskEditor:open
           id: d.id,
           type: d.type,
           label: d.label,
@@ -560,13 +552,22 @@ export const AppContent: React.FC<AppContentProps> = ({
           templateId: d.templateId
         });
 
-        // Determine editor kind based on act type
+        // Determine editor kind based on task type
         const editorKind = resolveEditorKind({ type: d.type, id: d.id, label: d.label || d.name });
 
         console.log('🔍 [AppContent] Editor kind determinato', {
           editorKind,
           type: d.type
         });
+
+        // ✅ Build taskMeta from event detail
+        const taskType = d.type as TaskType; // d.type is already TaskType enum
+        const taskMeta: TaskMeta = {
+          id: d.id,
+          type: taskType,
+          label: d.label || d.name || 'Task',
+          instanceId: d.instanceId || d.id
+        };
 
         // Open as docking tab in bottom split (1/3 height)
         const tabId = `act_${d.id}`;
@@ -584,11 +585,8 @@ export const AppContent: React.FC<AppContentProps> = ({
             // Assicurati che il task esista
             let task = taskRepository.getTask(instanceId);
             if (!task) {
-              const action = d.type === 'DataRequest' ? 'GetData' :
-                d.type === 'Message' ? 'SayMessage' :
-                  d.type === 'ProblemClassification' ? 'ClassifyProblem' :
-                    d.type === 'BackendCall' ? 'callBackend' : 'SayMessage';
-              task = taskRepository.createTask(action, undefined, instanceId);
+              // ✅ Usa taskType da taskMeta
+              task = taskRepository.createTask(taskMeta.type, null, undefined, instanceId);
             }
             // ✅ Salva DDT nel task (campi diretti, niente wrapper)
             taskRepository.updateTask(instanceId, {
@@ -602,12 +600,9 @@ export const AppContent: React.FC<AppContentProps> = ({
 
             if (!task) {
               // Task doesn't exist, create it with empty DDT
-              const action = d.type === 'DataRequest' ? 'GetData' :
-                d.type === 'Message' ? 'SayMessage' :
-                  d.type === 'ProblemClassification' ? 'ClassifyProblem' :
-                    d.type === 'BackendCall' ? 'callBackend' : 'SayMessage';
+              // ✅ Usa taskType da taskMeta
               // ✅ Crea task con DDT vuoto (campi diretti, niente wrapper)
-              task = taskRepository.createTask(action, {
+              task = taskRepository.createTask(taskMeta.type, null, {
                 label: d.label || 'New DDT',
                 mainData: []
               }, instanceId);
@@ -693,7 +688,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                     const existingTab = n.tabs[idx] as DockTabResponseEditor;
                     // ✅ Create/update onClose callback - will read tab.ddt when called (which is updated during editing)
                     const handleTabClose = async (tab: DockTabResponseEditor) => {
-                      const key = tab.act?.instanceId || tab.act?.id;
+                      const key = tab.task?.instanceId || tab.task?.id;
                       if (!key) return;
 
                       // ✅ Read DDT from tab (which is updated by updateSelectedNode during editing)
@@ -711,11 +706,9 @@ export const AppContent: React.FC<AppContentProps> = ({
                         try {
                           let task = taskRepository.getTask(key);
                           if (!task) {
-                            const action = tab.act?.type === 'DataRequest' ? 'GetData' :
-                              tab.act?.type === 'Message' ? 'SayMessage' :
-                                tab.act?.type === 'ProblemClassification' ? 'ClassifyProblem' :
-                                  tab.act?.type === 'BackendCall' ? 'callBackend' : 'GetData';
-                            task = taskRepository.createTask(action, undefined, key);
+                            // ✅ Usa direttamente tab.task.type (TaskType enum)
+                            const taskType = tab.task?.type ?? TaskType.DataRequest;
+                            task = taskRepository.createTask(taskType, null, undefined, key);
                           }
 
                           const currentTemplateId = getTemplateId(task);
@@ -829,7 +822,7 @@ export const AppContent: React.FC<AppContentProps> = ({
             // ✅ Create onClose callback for saving before closing
             // NOTE: DockManager will pass the tab to onClose, so we can read tab.ddt (which is updated during editing)
             const handleTabClose = async (tab: DockTabResponseEditor) => {
-              const key = tab.act?.instanceId || tab.act?.id;
+              const key = tab.task?.instanceId || tab.task?.id;
               if (!key) return;
 
               // ✅ Read DDT from tab (which is updated by updateSelectedNode during editing)
@@ -847,11 +840,9 @@ export const AppContent: React.FC<AppContentProps> = ({
                 try {
                   let task = taskRepository.getTask(key);
                   if (!task) {
-                    const action = tab.act?.type === 'DataRequest' ? 'GetData' :
-                      tab.act?.type === 'Message' ? 'SayMessage' :
-                        tab.act?.type === 'ProblemClassification' ? 'ClassifyProblem' :
-                          tab.act?.type === 'BackendCall' ? 'callBackend' : 'GetData';
-                    task = taskRepository.createTask(action, undefined, key);
+                    // ✅ Usa direttamente tab.task.type (TaskType enum) invece di convertire da stringa
+                    const taskType = tab.task?.type ?? TaskType.DataRequest; // ✅ Usa direttamente TaskType enum
+                    task = taskRepository.createTask(taskType, null, undefined, key);
                   }
 
                   // ✅ Estrai solo campi modificati rispetto al template (override)
@@ -889,12 +880,7 @@ export const AppContent: React.FC<AppContentProps> = ({
               title: d.label || d.name || 'Response Editor',
               type: 'responseEditor',
               ddt: preparedDDT,
-              act: {
-                id: String(d.id),
-                type: d.type,
-                label: d.label || d.name,
-                instanceId: d.instanceId || d.id
-              },
+              task: taskMeta, // ✅ RINOMINATO: act → task, usa TaskMeta con TaskType enum
               headerColor: '#9a4f00', // Orange color from ResponseEditor header
               toolbarButtons: [], // Will be updated via callback
               onClose: handleTabClose // ✅ Callback for saving before closing
@@ -904,28 +890,23 @@ export const AppContent: React.FC<AppContentProps> = ({
             return splitWithTab(prev, rootTabsetId, 'bottom', {
               id: tabId,
               title: d.label || d.name || 'Backend Call',
-              type: 'actEditor',
-              act: {
-                id: String(d.id),
-                type: d.type,
-                label: d.label || d.name,
-                instanceId: d.instanceId || d.id
-              },
+              type: 'taskEditor', // ✅ RINOMINATO: 'actEditor' → 'taskEditor'
+              task: taskMeta, // ✅ RINOMINATO: act → task, usa TaskMeta con TaskType enum
               headerColor: '#94a3b8', // Gray color for BackendCall
               toolbarButtons: []
-            } as DockTabActEditor);
+            } as DockTabTaskEditor); // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
           } else {
             // For other types, don't open editor if not supported
             return prev;
           }
         });
       } catch (err) {
-        console.error('[ActEditor] Failed to open', err);
+        console.error('[TaskEditor] Failed to open', err);
       }
     };
-    document.addEventListener('actEditor:open', h as any);
-    return () => document.removeEventListener('actEditor:open', h as any);
-  }, [actEditorCtx, getTranslationsForDDT]);
+    document.addEventListener('taskEditor:open', h as any); // ✅ RINOMINATO: actEditor:open → taskEditor:open
+    return () => document.removeEventListener('taskEditor:open', h as any); // ✅ RINOMINATO: actEditor:open → taskEditor:open
+  }, [taskEditorCtx, getTranslationsForDDT]); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx
 
   // Note: nodes/edges are read directly from window.__flowNodes by DDEBubbleChat in flow mode
   // No local state needed to avoid flickering and synchronization issues

@@ -22,6 +22,7 @@ export async function loadPatternsFromDatabase(): Promise<Map<Lang, RuleSet>> {
 
   cacheLoadingPromise = (async () => {
     try {
+      console.log('📥 [PATTERN_LOADER] Caricando pattern dal database...');
       const res = await fetch('/api/factory/task-heuristics');
 
       if (!res.ok) {
@@ -29,6 +30,10 @@ export async function loadPatternsFromDatabase(): Promise<Map<Lang, RuleSet>> {
       }
 
       const rulesByLang = await res.json();
+      console.log('📥 [PATTERN_LOADER] Pattern ricevuti dal backend', {
+        languages: Object.keys(rulesByLang),
+        rulesByLang
+      });
 
       // Verifica che ci siano pattern nel database
       if (!rulesByLang || Object.keys(rulesByLang).length === 0) {
@@ -38,10 +43,26 @@ export async function loadPatternsFromDatabase(): Promise<Map<Lang, RuleSet>> {
       // Converti stringhe regex in RegExp per ogni lingua
       Object.keys(rulesByLang).forEach(lang => {
         const rules = rulesByLang[lang];
+        console.log(`🔍 [PATTERN_LOADER] Processando lingua ${lang}`, {
+          REQUEST_DATA_count: rules.REQUEST_DATA?.length || 0,
+          REQUEST_DATA_patterns: rules.REQUEST_DATA || [],
+          MESSAGE_count: rules.MESSAGE?.length || 0,
+          BACKEND_CALL_count: rules.BACKEND_CALL?.length || 0
+        });
+
         const ruleSet: RuleSet = {
           AI_AGENT: rules.AI_AGENT?.map((s: string) => new RegExp(s, 'i')) || [],
           MESSAGE: rules.MESSAGE?.map((s: string) => new RegExp(s, 'i')) || [],
-          REQUEST_DATA: rules.REQUEST_DATA?.map((s: string) => new RegExp(s, 'i')) || [],
+          REQUEST_DATA: rules.REQUEST_DATA?.map((s: string) => {
+            try {
+              const regex = new RegExp(s, 'i');
+              console.log(`  ✅ Pattern REQUEST_DATA compilato: ${s} → ${regex.toString()}`);
+              return regex;
+            } catch (err) {
+              console.error(`  ❌ Errore compilazione pattern: ${s}`, err);
+              return null;
+            }
+          }).filter((r: RegExp | null) => r !== null) || [],
           // PROBLEM: solo se esiste un pattern valido, altrimenti null (non usare fallback che matcha sempre)
           PROBLEM: rules.PROBLEM && rules.PROBLEM.trim() ? new RegExp(rules.PROBLEM, 'i') : null as any,
           PROBLEM_SPEC_DIRECT: rules.PROBLEM_SPEC_DIRECT?.map((s: string) => new RegExp(s, 'i')) || [],
@@ -52,6 +73,15 @@ export async function loadPatternsFromDatabase(): Promise<Map<Lang, RuleSet>> {
         };
 
         patternCache.set(lang as Lang, ruleSet);
+        console.log(`✅ [PATTERN_LOADER] Lingua ${lang} processata`, {
+          REQUEST_DATA_compiled: ruleSet.REQUEST_DATA.length
+        });
+      });
+
+      cacheLoaded = true;
+      console.log('✅ [PATTERN_LOADER] Cache caricata completamente', {
+        languages: Array.from(patternCache.keys()),
+        totalPatterns: Array.from(patternCache.values()).reduce((sum, rs) => sum + (rs.REQUEST_DATA?.length || 0), 0)
       });
 
       cacheLoaded = true;

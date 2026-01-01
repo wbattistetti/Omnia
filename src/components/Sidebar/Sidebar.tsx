@@ -11,8 +11,10 @@ import { sidebarTheme } from './sidebarTheme';
 import { Bot, User, Database, GitBranch, CheckSquare, Layers } from 'lucide-react';
 import { usePanelZoom } from '../../hooks/usePanelZoom';
 import { classifyActInteractivity } from '../../nlp/actInteractivity';
-import { useActEditor } from '../ActEditor/EditorHost/ActEditorContext';
-import { ddtToAct } from '../../utils/ddtToAct';
+import { useTaskEditor } from '../TaskEditor/EditorHost/TaskEditorContext'; // ✅ RINOMINATO: ActEditor → TaskEditor, useActEditor → useTaskEditor
+import { taskToTaskMeta } from '../../utils/taskToTaskMeta';
+import { TaskType } from '../../types/taskTypes';
+import type { TaskMeta } from '../TaskEditor/EditorHost/types';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   bot: <Bot className="w-5 h-5" />,
@@ -48,7 +50,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
 
   // Usa il nuovo hook per DDT
   const { ddtList, loadDDTError } = useDDTManager();
-  const actEditorCtx = useActEditor();
+  const taskEditorCtx = useTaskEditor(); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx, useActEditor → useTaskEditor
   const [search, setSearch] = useState('');
   const [industryFilter, setIndustryFilter] = useState<string>('all');
 
@@ -113,8 +115,14 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
         })),
         translations: snapshot.translations || { en: {} }
       } as any;
-      // Usa ctx.act invece di openDDT per unificare l'apertura editor
-      actEditorCtx.open(ddtToAct(transient));
+      // ✅ Transient DDT object (no type field) → assume DataRequest
+      const taskMeta: TaskMeta = {
+        id: transient.id,
+        type: TaskType.DataRequest, // ✅ Transient DDT objects are always DataRequest
+        label: transient.label,
+        instanceId: transient.id,
+      };
+      taskEditorCtx.open(taskMeta);
     } catch (e) { }
   };
 
@@ -137,8 +145,14 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       translations: ddtSnap.translations || { en: {} }
     } as any;
     try {
-      // Usa ctx.act invece di openDDT per unificare l'apertura editor
-      actEditorCtx.open(ddtToAct(transient));
+      // ✅ Transient DDT object (no type field) → assume DataRequest
+      const taskMeta: TaskMeta = {
+        id: transient.id,
+        type: TaskType.DataRequest, // ✅ Transient DDT objects are always DataRequest
+        label: transient.label,
+        instanceId: transient.id,
+      };
+      taskEditorCtx.open(taskMeta);
     } catch (e) { }
   };
 
@@ -149,24 +163,24 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   // Open Response Editor from DDT id (clicking gear icon in DDT list)
   const handleOpenEditor = (id: string) => {
     try {
-      // Find DDT from list
-      const ddt = ddtList.find(dt => dt.id === id || dt._id === id);
-      if (!ddt) {
-        console.warn('[Sidebar][handleOpenEditor] DDT not found', { id, ddtListLength: ddtList.length });
+      // Find Task from list (ddtList contains full Task objects)
+      const task = ddtList.find(dt => dt.id === id || dt._id === id);
+      if (!task) {
+        console.warn('[Sidebar][handleOpenEditor] Task not found', { id, ddtListLength: ddtList.length });
         return;
       }
 
-      // Convert DDT to ActMeta and open via context
-      const actMeta = ddtToAct(ddt);
-      actEditorCtx.open(actMeta);
+      // ✅ Convert Task to TaskMeta using its actual type field
+      const taskMeta = taskToTaskMeta(task);
+      taskEditorCtx.open(taskMeta);
 
       // Emit event with DDT data so AppContent can open it as docking tab
-      const event = new CustomEvent('actEditor:open', {
+      const event = new CustomEvent('taskEditor:open', { // ✅ RINOMINATO: actEditor:open → taskEditor:open
         detail: {
-          id: actMeta.id,
-          type: actMeta.type,
-          label: actMeta.label,
-          ddt: ddt // Pass full DDT in event detail
+          id: taskMeta.id,
+          type: taskMeta.type, // ✅ TaskType enum invece di stringa
+          label: taskMeta.label,
+          task: task // Pass full Task in event detail
         },
         bubbles: true
       });

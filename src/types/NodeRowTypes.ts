@@ -24,7 +24,7 @@ export interface NodeRowProps {
   bgColor?: string;
   textColor?: string;
   onEditingEnd?: () => void;
-  onCreateAgentAct?: (name: string, onRowUpdate?: (item: any) => void) => void;
+  onCreateFactoryTask?: (name: string, onRowUpdate?: (item: any) => void) => void; // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
   onCreateBackendCall?: (name: string, onRowUpdate?: (item: any) => void) => void;
   onCreateTask?: (name: string, onRowUpdate?: (item: any) => void) => void;
   getProjectId?: () => string | null;

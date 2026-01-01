@@ -4,14 +4,14 @@ import { resolveEditorKind } from './resolveKind';
 import type { EditorProps } from './types';
 // ✅ RIMOSSO: getAgentActVisualsByType - non più usato in questo file
 
-export default function ActEditorHost({ act, onClose, onToolbarUpdate, hideHeader }: EditorProps) {
-  const kind = resolveEditorKind(act);
+export default function TaskEditorHost({ task, onClose, onToolbarUpdate, hideHeader }: EditorProps) {
+  const kind = resolveEditorKind(task);
 
   const Comp = registry[kind];
 
   if (!Comp) {
-    console.error('❌ [ActEditorHost] No component registered for kind:', kind, {
-      actType: act?.type,
+    console.error('❌ [TaskEditorHost] No component registered for kind:', kind, {
+      taskType: task?.type,
       availableKinds: Object.keys(registry)
     });
     return <div>No editor registered for {kind}</div>;
@@ -27,7 +27,7 @@ export default function ActEditorHost({ act, onClose, onToolbarUpdate, hideHeade
       <div className="h-full w-full bg-slate-900 flex flex-col">
         <div className="min-h-0 flex-1">
           {/* @ts-expect-error registry type */}
-          <Comp act={act} onClose={onClose} onToolbarUpdate={onToolbarUpdate} hideHeader={hideHeader} />
+          <Comp task={task} onClose={onClose} onToolbarUpdate={onToolbarUpdate} hideHeader={hideHeader} />
         </div>
       </div>
     );
@@ -45,7 +45,7 @@ export default function ActEditorHost({ act, onClose, onToolbarUpdate, hideHeade
           </div>
         }>
           {/* @ts-expect-error lazy component */}
-          <Comp act={act} onClose={onClose} onToolbarUpdate={onToolbarUpdate} hideHeader={hideHeader} />
+          <Comp task={task} onClose={onClose} onToolbarUpdate={onToolbarUpdate} hideHeader={hideHeader} />
         </Suspense>
       </div>
     </div>

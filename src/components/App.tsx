@@ -12,7 +12,7 @@ import { DDTProvider } from '../context/DDTContext';
 import { DDTManagerProvider } from '../context/DDTManagerContext';
 import { ProjectTranslationsProvider } from '../context/ProjectTranslationsContext';
 import { ThemeProvider } from '../theme/components/ThemeProvider';
-import { ActEditorProvider } from './ActEditor/EditorHost/ActEditorContext';
+import { TaskEditorProvider } from './TaskEditor/EditorHost/TaskEditorContext'; // ✅ RINOMINATO: ActEditor → TaskEditor, ActEditorProvider → TaskEditorProvider
 import { SpeechRecognitionProvider } from '../context/SpeechRecognitionContext';
 import { AIProviderProvider } from '../context/AIProviderContext';
 import { InMemoryConditionsProvider } from '../context/InMemoryConditionsContext';
@@ -86,7 +86,7 @@ function AppInner() {
 
   // Load act type patterns from database at startup
   React.useEffect(() => {
-    import('../nlp/actType/registry').then(module => {
+    import('../nlp/taskType/registry').then(module => { // ✅ RINOMINATO: actType → taskType
       module.initializeRegistry().catch(err => {
         console.warn('[App] Failed to load act type patterns from database, using fallback:', err);
       });
@@ -188,13 +188,13 @@ export default function App() {
               <SpeechRecognitionProvider>
                 <DDTProvider>
                   <DDTManagerProvider>
-                    <ActEditorProvider>
+                    <TaskEditorProvider> {/* ✅ RINOMINATO: ActEditorProvider → TaskEditorProvider */}
                       <InMemoryConditionsProvider>
                         <BackendTypeProvider>
                           <AppInner />
                         </BackendTypeProvider>
                       </InMemoryConditionsProvider>
-                    </ActEditorProvider>
+                    </TaskEditorProvider> {/* ✅ RINOMINATO: ActEditorProvider → TaskEditorProvider */}
                   </DDTManagerProvider>
                 </DDTProvider>
               </SpeechRecognitionProvider>

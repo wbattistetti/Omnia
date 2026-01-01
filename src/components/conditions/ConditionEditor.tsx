@@ -1,5 +1,5 @@
 import React from 'react';
-import { getDDTIcon as getDDTIconFromRE } from '../ActEditor/ResponseEditor/ddtUtils';
+import { getDDTIcon as getDDTIconFromRE } from '../TaskEditor/ResponseEditor/ddtUtils';
 import { generateConditionWithAI, suggestConditionCases, normalizePseudoCode, repairCondition } from '../../services/ai/groq';
 import ConditionTester, { CaseRow } from './ConditionTester';
 import CodeEditor, { CodeEditorRef } from '../CodeEditor/CodeEditor';

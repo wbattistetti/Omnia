@@ -3,6 +3,7 @@ import { taskRepository } from '../../../services/TaskRepository';
 import { useProjectData, useProjectDataUpdate } from '../../../context/ProjectDataContext';
 // ✅ RIMOSSO: findAgentAct - non esiste più il concetto di Act
 import { createRowWithTask } from '../../../utils/taskHelpers';
+import { taskIdToTaskType } from '../../../types/taskTypes'; // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType - Per convertire stringa semantica legacy a TaskType enum
 
 export function useIntellisenseHandlers(
   nodeIntellisenseTarget: string | null,
@@ -55,7 +56,9 @@ export function useIntellisenseHandlers(
       const projectId = pdUpdate?.getCurrentProjectId() || undefined;
       // Genera un ID temporaneo per la row (sarà sostituito quando la row viene creata definitivamente)
       const tempRowId = `${nodeIntellisenseTarget}-${Date.now()}`;
-      const rowWithTask = createRowWithTask(tempRowId, actId, '', projectId);
+      // ✅ Converti actId (stringa da Intellisense) a TaskType enum
+      const taskType = taskIdToTaskType(actId); // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
+      const rowWithTask = createRowWithTask(tempRowId, taskType, '', projectId); // ✅ TaskType enum invece di stringa
       instanceId = rowWithTask.taskId;
 
       // Se ci sono intents iniziali, aggiorna il Task

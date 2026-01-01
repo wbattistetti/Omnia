@@ -72,8 +72,8 @@ const DEFAULT_CONFIG: BackendCallConfig = {
   outputs: []
 };
 
-export default function BackendCallEditor({ act, onClose, onToolbarUpdate, hideHeader }: EditorProps) {
-  const instanceId = act.instanceId || act.id;
+export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hideHeader }: EditorProps) { // ✅ RINOMINATO: act → task
+  const instanceId = task.instanceId || task.id; // ✅ RINOMINATO: act → task
   const pdUpdate = useProjectDataUpdate();
   const { data: projectData } = useProjectData();
   const projectId = pdUpdate?.getCurrentProjectId() || undefined;

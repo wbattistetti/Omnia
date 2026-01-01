@@ -3,8 +3,10 @@ import { EntityCreationService, EntityCreationOptions } from '../services/Entity
 import { useProjectData } from '../context/ProjectDataContext';
 import { useProjectDataUpdate } from '../context/ProjectDataContext';
 
+import { TaskType } from '../types/taskTypes'; // ✅ Import TaskType enum
+
 export interface UseEntityCreationReturn {
-  createAgentAct: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string, type?: string) => void;
+  createFactoryTask: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string, type?: TaskType) => void; // ✅ RINOMINATO: createAgentAct → createFactoryTask
   createBackendCall: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
   createMacrotask: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
   createCondition: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
@@ -13,7 +15,7 @@ export interface UseEntityCreationReturn {
 }
 
 /**
- * Hook personalizzato per la creazione di entità (Agent Acts, Backend Calls, Tasks)
+ * Hook personalizzato per la creazione di entità (Factory Tasks, Backend Calls, Tasks)
  * Centralizza la logica di creazione e fornisce un'interfaccia pulita
  */
 export const useEntityCreation = (): UseEntityCreationReturn => {
@@ -76,8 +78,10 @@ export const useEntityCreation = (): UseEntityCreationReturn => {
     }
   }, [projectData, updateDataDirectly]);
 
-  const createAgentAct = useCallback((name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string, type?: string) => {
-    createEntity('taskTemplates', name, onRowUpdate, scope, categoryName, type);
+  const createFactoryTask = useCallback((name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string, type?: TaskType) => {
+    // ✅ Converti TaskType enum → string per backward compatibility temporanea con EntityCreationService
+    const typeString = type !== undefined ? TaskType[type] : undefined;
+    createEntity('taskTemplates', name, onRowUpdate, scope, categoryName, typeString);
   }, [createEntity]);
 
   const createBackendCall = useCallback((name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => {
@@ -94,7 +98,7 @@ export const useEntityCreation = (): UseEntityCreationReturn => {
   }, [createMacrotask]);
 
   return {
-    createAgentAct,
+    createFactoryTask, // ✅ RINOMINATO: createAgentAct → createFactoryTask
     createBackendCall,
     createMacrotask,
     createCondition: useCallback((name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => {

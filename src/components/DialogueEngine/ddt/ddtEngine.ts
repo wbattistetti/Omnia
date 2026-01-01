@@ -528,7 +528,7 @@ async function processUserInput(
 
   try {
     const { loadContract } = await import('../../DialogueDataEngine/contracts/contractLoader');
-    const { findOriginalNode } = await import('../../ActEditor/ResponseEditor/ChatSimulator/messageResolvers');
+    const { findOriginalNode } = await import('../../TaskEditor/ResponseEditor/ChatSimulator/messageResolvers');
 
     // Cerca l'originalNode nel DDT (come fa useNewFlowOrchestrator)
     if ((state as any).__ddtInstance) {

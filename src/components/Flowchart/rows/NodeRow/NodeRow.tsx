@@ -5,7 +5,7 @@ import { useDDTContext } from '../../../../context/DDTContext';
 import { ProjectDataService } from '../../../../services/ProjectDataService';
 import { EntityCreationService } from '../../../../services/EntityCreationService';
 import { createAndAttachAct } from '../../../../services/ActFactory';
-import { useActEditor } from '../../../ActEditor/EditorHost/ActEditorContext';
+import { useTaskEditor } from '../../../TaskEditor/EditorHost/TaskEditorContext'; // ✅ RINOMINATO: ActEditor → TaskEditor, useActEditor → useTaskEditor
 import { emitSidebarRefresh } from '../../../../ui/events';
 import { createPortal } from 'react-dom';
 import { useReactFlow } from 'reactflow';
@@ -26,14 +26,14 @@ import { useIntellisensePosition } from './hooks/useIntellisensePosition';
 import { useRowRegistry } from './hooks/useRowRegistry';
 import { isInsideWithPadding, getToolbarRect } from './utils/geometry';
 import { getTaskVisualsByType, resolveTaskType, hasTaskDDT } from '../../utils/taskVisuals';
-import { inferActType } from '../../../../nlp/actType';
-import { TaskType, taskTypeToTemplateId, taskTypeToHeuristicString, actIdToTaskType } from '../../../../types/taskTypes';
+import { inferTaskType } from '../../../../nlp/taskType'; // ✅ RINOMINATO: actType → taskType
+import { TaskType, taskTypeToTemplateId, taskTypeToHeuristicString, taskIdToTaskType } from '../../../../types/taskTypes'; // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
 import { modeToType, typeToMode } from '../../../../utils/normalizers';
 import { idMappingService } from '../../../../services/IdMappingService';
 import { generateId } from '../../../../utils/idGenerator';
 import { taskRepository } from '../../../../services/TaskRepository';
 import { useRowExecutionHighlight } from '../../executionHighlight/useExecutionHighlight';
-import { getTaskIdFromRow, updateRowTaskAction, createRowWithTask, getTemplateId } from '../../../../utils/taskHelpers';
+import { getTaskIdFromRow, updateRowTaskType, createRowWithTask, getTemplateId } from '../../../../utils/taskHelpers'; // ✅ RINOMINATO: updateRowTaskAction → updateRowTaskType
 
 const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps> = (
   {
@@ -61,7 +61,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     bgColor: propBgColor,
     textColor: propTextColor,
     onEditingEnd,
-    onCreateAgentAct,
+    onCreateFactoryTask, // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
     onCreateBackendCall,
     onCreateTask,
     getProjectId
@@ -131,6 +131,10 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
   // Visual states for drag & drop feedback
   const [visualState, setVisualState] = useState<'normal' | 'fade' | 'highlight'>('normal');
+
+  // Type picker state (moved here to be accessible in handleKeyDownInternal)
+  const [pickerCurrentType, setPickerCurrentType] = useState<TaskType | undefined>(undefined);
+  const [pickerPosition, setPickerPosition] = useState<{ left: number; top: number } | null>(null);
 
 
   // Registry for external access
@@ -367,7 +371,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           // FASE 4: Create Task if row doesn't have taskId
           if (!row.taskId) {
             // Create Task for this row (default to Message type)
-            const newTask = createRowWithTask(instanceId, 'Message', label, projectId);
+            const newTask = createRowWithTask(instanceId, TaskType.SayMessage, label, projectId); // ✅ TaskType enum invece di stringa
             // Update row to include taskId (will be persisted via onUpdate)
             (row as any).taskId = newTask.taskId;
           } else {
@@ -543,8 +547,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         });
 
         // 1️⃣ EURISTICA 1: interpreta la label e decide il TaskType
-        console.log('🔍 [EURISTICA 1] Chiamando inferActType...', { text: q });
-        const inf = await inferActType(q, { languageOrder: ['IT', 'EN', 'PT'] as any });
+        console.log('🔍 [EURISTICA 1] Chiamando inferTaskType...', { text: q });
+        const inf = await inferTaskType(q, { languageOrder: ['IT', 'EN', 'PT'] as any }); // ✅ RINOMINATO: inferActType → inferTaskType
         let taskType = inf.type; // ✅ Ora è TaskType enum (TaskType.SayMessage, TaskType.DataRequest, TaskType.UNDEFINED, ecc.)
 
         console.log('✅ [EURISTICA 1] Risultato', {
@@ -558,7 +562,11 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         // 2️⃣ EURISTICA 2: cerca template DDT
         const DDTTemplateMatcherService = (await import('../../../../services/DDTTemplateMatcherService')).default;
         // ✅ Converti TaskType enum → string per euristica 2
-        const typeForMatch = taskTypeToHeuristicString(taskType);
+        // ✅ FALLBACK: se taskType è UNDEFINED, prova comunque a cercare template DataRequest
+        // Questo è uno dei pochi fallback da mantenere (come richiesto)
+        const typeForMatch = taskType === TaskType.UNDEFINED
+          ? 'DataRequest'  // ✅ FALLBACK: cerca template anche se euristica 1 è UNDEFINED
+          : taskTypeToHeuristicString(taskType);
 
         console.log('🔍 [EURISTICA 2] Preparazione ricerca template', {
           text: q,
@@ -600,108 +608,55 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           });
         }
 
-        // 4️⃣ CREA TASK
-        const projectId = getProjectId?.() || undefined;
-        // ✅ Converti TaskType enum → templateId string
-        const templateId = taskTypeToTemplateId(taskType);
-        const action = templateId || 'UNDEFINED';
-
-        console.log('🔧 [TASK CREATION] Preparazione creazione task', {
+        // 4️⃣ LAZY APPROACH: Memorizza metadati nella riga invece di creare task subito
+        // ✅ Il task verrà creato solo quando si apre l'editor (lazy creation)
+        console.log('💾 [METADATA] Memorizzando metadati nella riga (lazy task creation)', {
           rowId: row.id,
           hasExistingTaskId: !!row.taskId,
           taskType: taskType,
           taskTypeName: TaskType[taskType],
-          templateId: templateId,
-          action: action,
-          projectId: projectId
+          templateId: matchedTemplate?.templateId || null
         });
 
-        if (!row.taskId) {
-          console.log('🆕 [TASK CREATION] Creando nuovo task...', { rowId: row.id, action, text: q });
-          const task = createRowWithTask(row.id, action, q, projectId);
-          (row as any).taskId = task.id;
+        // ✅ Se il task esiste già, aggiornalo con i nuovi metadati
+        if (row.taskId) {
+          console.log('🔄 [TASK UPDATE] Aggiornando task esistente con nuovi metadati', { taskId: row.taskId });
+          const projectId = getProjectId?.() || undefined;
 
-          console.log('✅ [TASK CREATION] Task creato', {
-            taskId: task.id,
-            rowId: row.id,
-            templateId: task.templateId || 'N/A',
-            hasMainData: !!(task.mainData && task.mainData.length > 0),
-            mainDataLength: task.mainData?.length || 0
-          });
-
-          // Se c'è template matchato, salva SOLO il templateId (mainData sarà costruito da buildDDTFromTemplate)
           if (matchedTemplate) {
-            console.log('🔗 [TASK UPDATE] Aggiornando task con templateId dal match', {
-              taskId: task.id,
-              matchedTemplateId: matchedTemplate.templateId,
-              matchedTemplateLabel: matchedTemplate.label,
-              willSetMainDataEmpty: true
-            });
-
-            taskRepository.updateTask(task.id, {
-              label: q,
-              templateId: matchedTemplate.templateId,  // ✅ Solo reference al template
-              mainData: []  // ✅ Esplicitamente vuoto per indicare che la struttura viene dal template
-            }, projectId);
-
-            // Verifica che l'aggiornamento sia andato a buon fine
-            const updatedTask = taskRepository.getTask(task.id);
-            console.log('✅ [TASK UPDATE] Task aggiornato', {
-              taskId: task.id,
-              templateId: updatedTask?.templateId || null,
-              hasMainData: !!(updatedTask?.mainData && updatedTask.mainData.length > 0),
-              mainDataLength: updatedTask?.mainData?.length || 0
-            });
-          } else {
-            console.log('ℹ️ [TASK UPDATE] Nessun template matchato - task standalone', {
-              taskId: task.id,
-              templateId: task.templateId || null
-            });
-          }
-        } else {
-          console.log('🔄 [TASK UPDATE] Aggiornando task esistente', { taskId: row.taskId });
-          // Aggiorna task esistente
-          if (matchedTemplate) {
-            console.log('🔗 [TASK UPDATE] Aggiornando task esistente con templateId dal match', {
-              taskId: row.taskId,
-              matchedTemplateId: matchedTemplate.templateId,
-              matchedTemplateLabel: matchedTemplate.label
-            });
-
             taskRepository.updateTask(row.taskId, {
+              type: taskType,  // ✅ CRITICAL: Aggiorna anche il type, non solo templateId
               label: q,
-              templateId: matchedTemplate.templateId,
-              mainData: []  // ✅ Esplicitamente vuoto per indicare che la struttura viene dal template
+              templateId: matchedTemplate.templateId
             }, projectId);
-
-            // Verifica che l'aggiornamento sia andato a buon fine
-            const updatedTask = taskRepository.getTask(row.taskId);
-            console.log('✅ [TASK UPDATE] Task esistente aggiornato', {
-              taskId: row.taskId,
-              templateId: updatedTask?.templateId || null,
-              hasMainData: !!(updatedTask?.mainData && updatedTask.mainData.length > 0),
-              mainDataLength: updatedTask?.mainData?.length || 0
-            });
           } else {
-            console.log('ℹ️ [TASK UPDATE] Nessun template matchato - task esistente rimane standalone', {
-              taskId: row.taskId
-            });
+            taskRepository.updateTask(row.taskId, {
+              type: taskType,  // ✅ CRITICAL: Aggiorna il type determinato dall'euristica
+              label: q
+            }, projectId);
           }
         }
+        // ✅ Se il task NON esiste, memorizziamo solo i metadati nella riga (task verrà creato lazy quando si apre l'editor)
 
-        // 5️⃣ AGGIORNA RIGA
+        // 5️⃣ AGGIORNA RIGA con metadati
         // ✅ Converti TaskType enum → string per row.type (compatibilità con codice esistente)
         const rowType = taskType === TaskType.DataRequest ? 'DataRequest' :
                        taskType === TaskType.SayMessage ? 'Message' :
                        taskType === TaskType.ClassifyProblem ? 'ProblemClassification' :
                        taskType === TaskType.BackendCall ? 'BackendCall' : undefined;
 
+        // ✅ Memorizza metadati nella riga per lazy task creation
         const updatedRow = {
           ...row,
           text: q,
           type: rowType as any,
           mode: rowType as any,
-          isUndefined: taskType === TaskType.UNDEFINED && !matchedTemplate // ✅ Solo se UNDEFINED E nessun match
+          isUndefined: taskType === TaskType.UNDEFINED && !matchedTemplate, // ✅ Solo se UNDEFINED E nessun match
+          // ✅ LAZY: Memorizza metadati per creazione task quando si apre l'editor
+          meta: {
+            type: taskType,  // TaskType enum
+            templateId: matchedTemplate?.templateId || null  // GUID del template se trovato
+          }
         };
 
         console.log('📝 [ROW UPDATE] Aggiornamento riga', {
@@ -723,6 +678,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           finalTaskTypeName: TaskType[taskType],
           hasMatchedTemplate: !!matchedTemplate,
           matchedTemplateId: matchedTemplate?.templateId || null,
+          isUndefined: updatedRow.isUndefined,
           timestamp: new Date().toISOString()
         });
 
@@ -771,9 +727,10 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   };
 
   // Common handler invoked by keyboard or mouse pick
-  const handlePickType = async (key: string) => {
+  const handlePickType = async (selectedTaskType: TaskType) => { // ✅ Riceve direttamente TaskType enum
     console.log('🎯 [HANDLE_PICK_TYPE][START]', {
-      key,
+      taskType: selectedTaskType,
+      taskTypeName: TaskType[selectedTaskType],
       currentText,
       rowId: row.id,
       rowText: row.text,
@@ -805,20 +762,26 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     // ✅ CAMBIO TIPO: Se non siamo in editing, stiamo cambiando il tipo di una riga esistente
     // In questo caso aggiorniamo solo il tipo senza creare un nuovo agent act
     if (!isEditing && onUpdateWithCategory) {
+      // ✅ Converti TaskType enum a stringa per backward compatibility con onUpdateWithCategory
+      const typeString = taskType === TaskType.SayMessage ? 'Message' :
+                        taskType === TaskType.DataRequest ? 'DataRequest' :
+                        taskType === TaskType.BackendCall ? 'BackendCall' :
+                        taskType === TaskType.ClassifyProblem ? 'ProblemClassification' : 'Message';
+
       console.log('🎯 [CHANGE_TYPE][EXISTING_ROW]', {
         rowId: row.id,
         oldType: row.categoryType,
-        newType: key,
+        newType: taskType,
+        newTypeString: typeString,
         wasUndefined: (row as any)?.isUndefined,
         timestamp: Date.now()
       });
 
-      const finalType = key;
-      const finalMode = typeToMode(key as any);
+      const finalMode = typeToMode(typeString as any);
 
       const updateMeta = {
         id: row.id,
-        type: finalType,
+        type: typeString,
         mode: finalMode,
         factoryId: (row as any).factoryId,
         instanceId: (row as any).instanceId,
@@ -843,11 +806,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
       // ✅ NUOVO: Dopo aver aggiornato il tipo, apri automaticamente il ResponseEditor
       try {
-        // Converti il tipo selezionato in TaskType enum
-        const taskTypeEnum = actIdToTaskType(key);
         console.log('🚀 [CHANGE_TYPE] Preparazione apertura ResponseEditor', {
-          key,
-          taskTypeEnum,
+          taskType: selectedTaskType,
+          taskTypeName: TaskType[selectedTaskType],
           rowId: row.id,
           rowText: row.text
         });
@@ -860,20 +821,20 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           taskId,
           taskExists: !!task,
           existingTaskType: task?.type,
-          newTaskType: taskTypeEnum
+          newTaskType: selectedTaskType
         });
 
         if (!task) {
           // Crea il task se non esiste
           console.log('🚀 [CHANGE_TYPE] Creando nuovo task...', {
-            taskTypeEnum,
+            taskType: selectedTaskType,
             rowId: row.id,
-            text: key === 'Message' ? row.text : undefined
+            text: selectedTaskType === TaskType.SayMessage ? row.text : undefined
           });
           task = taskRepository.createTask(
-            taskTypeEnum,
+            selectedTaskType, // ✅ Usa direttamente TaskType enum
             null,
-            key === 'Message' ? { text: row.text || '' } : undefined,
+            selectedTaskType === TaskType.SayMessage ? { text: row.text || '' } : undefined,
             row.id,
             getProjectId?.() ?? undefined
           );
@@ -883,12 +844,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           });
         } else {
           // Aggiorna il tipo del task esistente se necessario
-          if (task.type !== taskTypeEnum) {
+          if (task.type !== selectedTaskType) {
             console.log('🔄 [CHANGE_TYPE] Aggiornando tipo task esistente', {
               oldType: task.type,
-              newType: taskTypeEnum
+              newType: selectedTaskType
             });
-            taskRepository.updateTask(taskId, { type: taskTypeEnum }, getProjectId?.() ?? undefined);
+            taskRepository.updateTask(taskId, { type: selectedTaskType }, getProjectId?.() ?? undefined);
             // Ricarica il task dopo l'aggiornamento
             task = taskRepository.getTask(taskId);
           }
@@ -901,34 +862,34 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         }
 
         // Apri il ResponseEditor
-        console.log('🚀 [CHANGE_TYPE] Chiamando actEditorCtx.open', {
+        console.log('🚀 [CHANGE_TYPE] Chiamando taskEditorCtx.open', {
           id: String(taskId),
-          type: key,
+          type: selectedTaskType,
           label: row.text,
           instanceId: row.id,
           taskType: task.type
         });
 
-        actEditorCtx.open({
+        taskEditorCtx.open({
           id: String(taskId),
-          type: key as any,
+          type: selectedTaskType,
           label: row.text,
           instanceId: row.id
         });
 
         // ✅ CRITICAL: Emetti evento per aprire il dock tab (come fa onOpenDDT)
         // AppContent.tsx ascolta questo evento per aprire l'editor in un dock tab
-        console.log('📤 [CHANGE_TYPE] Emettendo evento actEditor:open per aprire dock tab', {
+        console.log('📤 [CHANGE_TYPE] Emettendo evento taskEditor:open per aprire dock tab', {
           id: String(taskId),
-          type: key,
+          type: selectedTaskType,
           label: row.text,
           instanceId: row.id
         });
 
-        const event = new CustomEvent('actEditor:open', {
+        const event = new CustomEvent('taskEditor:open', {
           detail: {
             id: String(taskId),
-            type: key,
+            type: selectedTaskType,
             label: row.text,
             instanceId: row.id,
             templateId: task.templateId || undefined
@@ -937,7 +898,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         });
         document.dispatchEvent(event);
 
-        console.log('✅ [CHANGE_TYPE] Evento actEditor:open emesso con successo');
+        console.log('✅ [CHANGE_TYPE] Evento taskEditor:open emesso con successo');
       } catch (error) {
         console.error('❌ [CHANGE_TYPE] Errore aprendo ResponseEditor dopo selezione tipo', error);
         if (error instanceof Error) {
@@ -952,19 +913,19 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
     // ❌ NON chiudere la riga qui: aspetta che il testo sia salvato nel callback
 
-    // ✅ NUOVO: Crea il template agent act se onCreateAgentAct è disponibile
+    // ✅ NUOVO: Crea il factory task se onCreateFactoryTask è disponibile
     // Questo permette di ritrovare la riga nell'Intellisense quando viene riutilizzata
-    if (onCreateAgentAct) {
-      console.log('🎯 [HANDLE_PICK_TYPE][CALLING_CREATE_AGENT_ACT]', {
+    if (onCreateFactoryTask) { // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
+      console.log('🎯 [HANDLE_PICK_TYPE][CALLING_CREATE_FACTORY_TASK]', {
         label,
         key,
         timestamp: Date.now()
       });
 
       try {
-        // Crea il template agent act con il nome della riga e il tipo inferito
+        // Crea il factory task con il nome della riga e il tipo inferito
         // Il callback onRowUpdate viene chiamato immediatamente da EntityCreationService
-        onCreateAgentAct(label, (createdItem: any) => {
+        onCreateFactoryTask(label, (createdItem: any) => { // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
           console.log('🎯 [TEMPLATE_CREATION][CALLBACK_START]', {
             label,
             createdItem,
@@ -977,7 +938,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
           // Callback che riceve l'item creato
           const createdItemId = createdItem?.id;
-          console.log('🎯 [TEMPLATE_CREATION] Agent act template created:', {
+          console.log('🎯 [TEMPLATE_CREATION] Factory task created:', { // ✅ RINOMINATO: Agent act → Factory task
             label,
             id: createdItemId,
             type: createdItem?.type,
@@ -989,13 +950,15 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           const projectId = getProjectId?.() || undefined;
 
           // Migration: Create or update Task
+          // ✅ Converti key (stringa da Intellisense) a TaskType enum
+          const taskType = taskIdToTaskType(key); // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
           if (!row.taskId) {
             // Create Task for this row
-            const task = createRowWithTask(instanceId, key, '', projectId);
+            const task = createRowWithTask(instanceId, taskType, '', projectId); // ✅ TaskType enum
             (row as any).taskId = task.id;  // NodeRowData.taskId = Task.id
           } else {
-            // Update Task action
-            updateRowTaskAction(row, key, projectId);
+            // Update Task type
+            updateRowTaskType(row, taskType, projectId); // ✅ RINOMINATO: updateRowTaskAction → updateRowTaskType
           }
 
           const finalType = createdItem?.type ?? key;
@@ -1085,7 +1048,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       }
     }
 
-    // ✅ Fallback: comportamento originale se onCreateAgentAct non è disponibile
+    // ✅ Fallback: comportamento originale se onCreateFactoryTask non è disponibile
     const immediate = (patch: any) => {
       if (onUpdateWithCategory) {
         (onUpdateWithCategory as any)(row, label, 'taskTemplates', patch);
@@ -1103,13 +1066,15 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     const projectId = getProjectId?.() || undefined;
 
     // Migration: Create or update Task
+    // ✅ Converti key (stringa da Intellisense) a TaskType enum
+    const taskType = taskIdToTaskType(key); // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
     if (!row.taskId) {
       // Create Task for this row
-      const task = createRowWithTask(instanceId, key, row.text || '', projectId);
+      const task = createRowWithTask(instanceId, taskType, row.text || '', projectId); // ✅ TaskType enum
       (row as any).taskId = task.id;  // NodeRowData.taskId = Task.id
     } else {
-      // Update Task action
-      updateRowTaskAction(row, key, projectId);
+      // Update Task type
+      updateRowTaskType(row, taskType, projectId); // ✅ RINOMINATO: updateRowTaskAction → updateRowTaskType
     }
     console.log('🎯 [INSTANCE_CREATION] Instance/Task created successfully', {
       projectId: projectId || 'N/A',
@@ -1291,17 +1256,19 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         const projectId = getProjectId?.() ?? undefined;
 
         // Migration: Create or update Task
+        // ✅ Converti taskTypeToUse (stringa) a TaskType enum
+        const taskTypeEnum = typeof taskTypeToUse === 'string' ? taskIdToTaskType(taskTypeToUse) : taskTypeToUse; // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
         if (!row.taskId) {
           // Create Task for this row (dual mode)
-          const task = createRowWithTask(instanceId, taskTypeToUse, row.text ?? '', projectId);
+          const task = createRowWithTask(instanceId, taskTypeEnum, row.text ?? '', projectId); // ✅ TaskType enum
           // FASE 4: Update Task with intents if ProblemClassification
           if (initialIntents.length > 0) {
             taskRepository.updateTask(task.id, { intents: initialIntents }, projectId);
           }
           (row as any).taskId = task.id;
         } else {
-          // Update Task action
-          updateRowTaskAction(row, taskTypeToUse, projectId);
+          // Update Task type
+          updateRowTaskType(row, taskTypeEnum, projectId); // ✅ RINOMINATO: updateRowTaskAction → updateRowTaskType
         }
 
         console.log('[✅ INTELLISENSE] Instance/Task created in repository', {
@@ -1354,10 +1321,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   };
 
   // Open type picker when clicking the label icon (outside editing)
-  const [pickerCurrentType, setPickerCurrentType] = useState<string | undefined>(undefined);
-  const [pickerPosition, setPickerPosition] = useState<{ left: number; top: number } | null>(null);
+  // Note: pickerCurrentType and pickerPosition are declared above for use in handleKeyDownInternal
 
-  const openTypePickerFromIcon = (anchor?: DOMRect, currentType?: string) => {
+  const openTypePickerFromIcon = (anchor?: DOMRect, currentType?: TaskType) => { // ✅ TaskType enum invece di stringa
     const rect = anchor || labelRef.current?.getBoundingClientRect();
     if (!rect) { return; }
     // Position menu directly under icon with small negative offset to eliminate dead zone
@@ -1621,7 +1587,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   // ✅ NUOVO: Usa solo TaskRepository, non più AgentAct
 
   let Icon: React.ComponentType<any> | null = null;
-  let currentTypeForPicker: string | undefined = undefined;
+  let currentTypeForPicker: TaskType | undefined = undefined; // ✅ TaskType enum invece di stringa
 
   // Check if this is an undefined node (no heuristic match found)
   const isUndefined = (row as any)?.isUndefined === true;
@@ -1631,23 +1597,50 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     try {
       const task = taskRepository.getTask(taskId);
       if (task) {
-        const taskType = resolveTaskType(row);
-        if (taskType) {
+        // ✅ Usa direttamente task.type (TaskType enum) se disponibile
+        if (task.type !== undefined && task.type !== null && task.type !== TaskType.UNDEFINED) {
+          const taskTypeString = resolveTaskType(row); // Per visuals
           const has = hasTaskDDT(row);
-          const visuals = getTaskVisualsByType(taskType, has);
-          // ✅ Se il tipo è UNDEFINED, non impostare currentTypeForPicker (nessuna opzione pre-selezionata)
-          // ✅ Questo permette all'utente di cliccare su qualsiasi opzione nel dropdown
-          if (!isUndefined && taskType !== 'UNDEFINED') {
-            currentTypeForPicker = taskType;
+          const visuals = getTaskVisualsByType(taskTypeString, has);
+
+          // ✅ Imposta currentTypeForPicker con TaskType enum
+          if (!isUndefined) {
+            currentTypeForPicker = task.type; // ✅ Usa direttamente task.type (enum)
           }
           // Se è undefined, usa icona punto interrogativo invece dell'icona normale
           Icon = isUndefined ? HelpCircle : visuals.Icon;
           labelTextColor = isUndefined ? '#94a3b8' : visuals.labelColor;
           iconColor = isUndefined ? '#94a3b8' : visuals.iconColor;
+        } else {
+          // ✅ Task con tipo UNDEFINED - stato valido (euristica non ha determinato tipo)
+          // L'utente deve selezionare manualmente il tipo tramite type picker
+          // NON è un errore, quindi non loggare
+          Icon = HelpCircle;
+          labelTextColor = '#94a3b8';
+          iconColor = '#94a3b8';
+          // ✅ Se il task ha un label, potrebbe essere un DataRequest - usa fallback visivo
+          if (task.label && task.label.trim().length > 0) {
+            // Potrebbe essere un DataRequest non ancora tipizzato
+            const visuals = getTaskVisualsByType('DataRequest', hasTaskDDT(row));
+            Icon = visuals.Icon;
+            labelTextColor = visuals.labelColor;
+            iconColor = visuals.iconColor;
+          }
+        }
+      } else {
+        // Task non trovato - questo è un problema reale, ma logga solo se necessario
+        // (es. se il taskId esiste ma il task non è nel repository)
+        if (row.taskId && process.env.NODE_ENV === 'development') {
+          // Solo in dev e solo se c'è un taskId che dovrebbe esistere
+          console.debug('[🎨 NODEROW] Task not found in repository', {
+            taskId,
+            rowId: row.id,
+            hasTaskId: !!row.taskId
+          });
         }
       }
     } catch (err) {
-      console.error('[NodeRow] Errore recupero task:', err);
+      console.error('[🎨 NODEROW] Error', { taskId, rowId: row.id, error: err });
     }
   }
 
@@ -1698,7 +1691,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   });
 
   // Editor host context (for opening the right editor per ActType) - host is always present
-  const actEditorCtx = useActEditor();
+  const taskEditorCtx = useTaskEditor(); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx, useActEditor → useTaskEditor
 
 
   // Icon già determinata sopra
@@ -1794,24 +1787,76 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     timestamp: new Date().toISOString()
                   });
                   try {
-                    // ✅ Deriva il tipo dal task invece di usare resolveActType con actFound
-                    const taskIdForType = (row as any)?.taskId || row.id;
-                    const taskForType = taskIdForType ? taskRepository.getTask(taskIdForType) : null;
+                    // ✅ LAZY: Crea task se non esiste usando metadati della riga
+                    let taskIdForType = (row as any)?.taskId || row.id;
+                    let taskForType = taskIdForType ? taskRepository.getTask(taskIdForType) : null;
 
-                    const type = taskForType
-                      ? resolveTaskType({ taskId: taskIdForType, ...row })
-                      : 'DataRequest'; // ✅ Default a DataRequest per questo caso
+                    // ✅ Se task non esiste, crealo usando metadati della riga
+                    if (!taskForType) {
+                      const rowMeta = (row as any)?.meta;
+                      const metaTaskType = rowMeta?.type || TaskType.DataRequest;
+                      const metaTemplateId = rowMeta?.templateId || null;
+                      const projectId = getProjectId?.() || undefined;
 
-                    console.log('📝 [GEAR] Chiamando actEditorCtx.open', {
+                      console.log('🆕 [LAZY] Creando task usando metadati riga', {
+                        rowId: row.id,
+                        metaTaskType,
+                        metaTaskTypeName: TaskType[metaTaskType],
+                        metaTemplateId
+                      });
+
+                      // ✅ Crea task base
+                      taskForType = taskRepository.createTask(
+                        metaTaskType,
+                        metaTemplateId,
+                        { label: row.text || '' },
+                        row.id,
+                        projectId
+                      );
+                      taskIdForType = taskForType.id;
+                      (row as any).taskId = taskIdForType;
+
+                      // ✅ Se c'è templateId, copia steps (escalations) dal template
+                      if (metaTemplateId) {
+                        console.log('📋 [LAZY] Copiando steps dal template', { templateId: metaTemplateId });
+                        const DialogueTaskService = (await import('../../../../services/DialogueTaskService')).default;
+                        const template = DialogueTaskService.getTemplate(metaTemplateId);
+
+                        if (template) {
+                          const { buildMainDataFromTemplate } = await import('../../../../utils/ddtMergeUtils');
+                          const { mainData } = buildMainDataFromTemplate(template);
+
+                          // ✅ Copia solo mainData con steps (escalations), non constraints/examples/nlpContract
+                          taskRepository.updateTask(taskIdForType, {
+                            mainData: mainData
+                          }, projectId);
+
+                          console.log('✅ [LAZY] Steps copiati dal template', {
+                            mainDataLength: mainData.length,
+                            hasSteps: mainData.some((n: any) => n.steps)
+                          });
+                        } else {
+                          console.warn('⚠️ [LAZY] Template non trovato', { templateId: metaTemplateId });
+                        }
+                      }
+                    }
+
+                    // ✅ Usa TaskType dal task o dai metadati
+                    const finalTaskType = taskForType
+                      ? (taskForType.type as TaskType)
+                      : ((row as any)?.meta?.type || TaskType.DataRequest);
+
+                    console.log('📝 [GEAR] Chiamando taskEditorCtx.open', {
                       id: String(taskIdForType),
-                      type,
+                      type: finalTaskType,
+                      typeName: TaskType[finalTaskType],
                       label: row.text,
                       instanceId: row.id,
                       taskTemplateId: taskForType?.templateId || null
                     });
 
-                    actEditorCtx.open({ id: String(taskIdForType), type: type as any, label: row.text, instanceId: row.id });
-                    console.log('✅ [GEAR] actEditorCtx.open chiamato');
+                    taskEditorCtx.open({ id: String(taskIdForType), type: finalTaskType, label: row.text, instanceId: row.id }); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx, type → taskType (enum)
+                    console.log('✅ [GEAR] taskEditorCtx.open chiamato');
 
                     // ✅ Ottieni DDT dal task con merge dal template (se templateId esiste e non è UNDEFINED)
                     let ddt: any = null;
@@ -1848,17 +1893,18 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     }
 
                     // Emit event with DDT data so AppContent can open it as docking tab
-                    console.log('📤 [GEAR] Emettendo evento actEditor:open', {
+                    console.log('📤 [GEAR] Emettendo evento taskEditor:open', {
                       id: String(taskIdForType),
-                      type,
+                      type: taskType,
+                      typeName: TaskType[taskType],
                       hasDDT: !!ddt,
                       ddtMainDataLength: ddt?.mainData?.length || 0
                     });
 
-                    const event = new CustomEvent('actEditor:open', {
+                    const event = new CustomEvent('taskEditor:open', { // ✅ RINOMINATO: actEditor:open → taskEditor:open
                       detail: {
                         id: String(taskIdForType),
-                        type,
+                        type: taskType, // ✅ TaskType enum invece di stringa
                         label: row.text,
                         ddt: ddt,
                         instanceId: row.id, // Pass instanceId from row
@@ -1868,9 +1914,10 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     });
                     document.dispatchEvent(event);
 
-                    console.log('✅ [GEAR] Evento actEditor:open emesso', {
+                    console.log('✅ [GEAR] Evento taskEditor:open emesso', {
                       id: String(taskIdForType),
-                      type,
+                      type: taskType,
+                      typeName: TaskType[taskType],
                       hasDDT: !!ddt,
                       ddtMainDataLength: ddt?.mainData?.length || 0,
                       templateId: taskForType?.templateId || undefined
@@ -1896,32 +1943,66 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                   taskType
                 });
                 try {
-                  // ✅ LOGICA: Il task viene creato solo quando si apre ResponseEditor, dopo aver determinato il tipo
-                  // ✅ Se il task non esiste, determiniamo il tipo usando l'euristica e poi creiamo il task
+                  // ✅ LAZY: Crea task se non esiste usando metadati della riga
                   let taskIdForType = (row as any)?.taskId || getTaskIdFromRow(row);
                   let taskForType = taskIdForType ? taskRepository.getTask(taskIdForType) : null;
 
-                  // ✅ Se il task non esiste, determiniamo il tipo usando resolveTaskType (che usa l'euristica)
-                  let type = taskForType
-                    ? resolveTaskType({ taskId: taskIdForType, ...row })
-                    : resolveTaskType(row) || 'Message';
-
-                  // ✅ Se il task non esiste, crealo con il tipo determinato
+                  // ✅ Se task non esiste, crealo usando metadati della riga
                   if (!taskForType) {
-                    const taskTypeEnum = actIdToTaskType(type);
+                    const rowMeta = (row as any)?.meta;
+                    const metaTaskType = rowMeta?.type || resolveTaskType(row) || TaskType.SayMessage;
+                    const metaTemplateId = rowMeta?.templateId || null;
+                    const projectId = getProjectId?.() || undefined;
+
+                    console.log('🆕 [LAZY] Creando task usando metadati riga', {
+                      rowId: row.id,
+                      metaTaskType,
+                      metaTaskTypeName: TaskType[metaTaskType],
+                      metaTemplateId
+                    });
+
+                    // ✅ Crea task base
                     taskForType = taskRepository.createTask(
-                      taskTypeEnum,
-                      null,
-                      type === 'Message' ? { text: row.text || '' } : undefined,
+                      metaTaskType,
+                      metaTemplateId,
+                      metaTaskType === TaskType.SayMessage ? { text: row.text || '' } : undefined,
                       row.id,
-                      getProjectId?.() ?? undefined
+                      projectId
                     );
                     taskIdForType = taskForType.id;
-                    // Aggiorna row con taskId
                     (row as any).taskId = taskIdForType;
+
+                    // ✅ Se c'è templateId, copia steps (escalations) dal template
+                    if (metaTemplateId) {
+                      console.log('📋 [LAZY] Copiando steps dal template', { templateId: metaTemplateId });
+                      const DialogueTaskService = (await import('../../../../services/DialogueTaskService')).default;
+                      const template = DialogueTaskService.getTemplate(metaTemplateId);
+
+                      if (template) {
+                        const { buildMainDataFromTemplate } = await import('../../../../utils/ddtMergeUtils');
+                        const { mainData } = buildMainDataFromTemplate(template);
+
+                        // ✅ Copia solo mainData con steps (escalations), non constraints/examples/nlpContract
+                        taskRepository.updateTask(taskIdForType, {
+                          mainData: mainData
+                        }, projectId);
+
+                        console.log('✅ [LAZY] Steps copiati dal template', {
+                          mainDataLength: mainData.length,
+                          hasSteps: mainData.some((n: any) => n.steps)
+                        });
+                      } else {
+                        console.warn('⚠️ [LAZY] Template non trovato', { templateId: metaTemplateId });
+                      }
+                    }
                   }
 
-                  actEditorCtx.open({ id: String(taskIdForType), type: type as any, label: row.text, instanceId: row.id });
+                  // ✅ Usa TaskType dal task o dai metadati
+                  const taskType = taskForType
+                    ? (taskForType.type as TaskType)
+                    : ((row as any)?.meta?.type || resolveTaskType(row) || TaskType.SayMessage);
+
+                  taskEditorCtx.open({ id: String(taskIdForType), type: taskType, label: row.text, instanceId: row.id }); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx, type → taskType (enum)
 
                   // ✅ Ottieni DDT dal task con merge dal template (se templateId esiste e non è UNDEFINED)
                   let ddt: any = null;
@@ -1948,10 +2029,10 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                   }
 
                   // Emit event with DDT data so AppContent can open it as docking tab
-                  const event = new CustomEvent('actEditor:open', {
+                  const event = new CustomEvent('taskEditor:open', { // ✅ RINOMINATO: actEditor:open → taskEditor:open
                     detail: {
                       id: String(taskIdForType),
-                      type,
+                      type: taskType, // ✅ TaskType enum invece di stringa
                       label: row.text,
                       ddt: ddt,
                       instanceId: row.id, // Pass instanceId from row
@@ -1991,7 +2072,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         handleIntellisenseSelect={handleIntellisenseSelect}
         handleIntellisenseClose={handleIntellisenseClose}
         allowCreatePicker={false}
-        onCreateAgentAct={onCreateAgentAct}
+        onCreateFactoryTask={onCreateFactoryTask} // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
         onCreateBackendCall={onCreateBackendCall}
         onCreateTask={onCreateTask}
       />

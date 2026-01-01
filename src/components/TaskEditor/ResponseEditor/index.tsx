@@ -6,7 +6,7 @@ import { useDDTManager } from '../../../context/DDTManagerContext';
 import { taskRepository } from '../../../services/TaskRepository';
 import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
 import { getTemplateId } from '../../../utils/taskHelpers';
-import { TaskType, actIdToTaskType } from '../../../types/taskTypes';
+import { TaskType } from '../../../types/taskTypes'; // ✅ RIMOSSO: taskIdToTaskType - non più necessario, task.type è già TaskType enum
 import Sidebar from './Sidebar';
 import BehaviourEditor from './BehaviourEditor';
 import RightPanel, { useRightPanelWidth, RightPanelMode } from './RightPanel';
@@ -40,20 +40,22 @@ import { taskTemplateService } from '../../../services/TaskTemplateService';
 import { mapNode } from '../../../dock/ops';
 import { extractModifiedDDTFields } from '../../../utils/ddtMergeUtils';
 
-function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, onToolbarUpdate, tabId, setDockTree }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string; instanceId?: string }, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void }) {
+import type { TaskMeta } from '../EditorHost/types'; // ✅ Import TaskMeta
+
+function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader, onToolbarUpdate, tabId, setDockTree }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, task?: TaskMeta, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void }) { // ✅ RINOMINATO: act → task, type: string → TaskMeta
 
   // 🔴 LOG: Verifica se il componente viene rimontato
   useEffect(() => {
     console.log('🟢 [MOUNT] ResponseEditorInner mounted', {
-      actId: act?.id,
-      instanceId: (act as any)?.instanceId,
+      taskId: task?.id, // ✅ RINOMINATO: actId → taskId, act → task
+      instanceId: task?.instanceId, // ✅ RINOMINATO: act → task
       ddtLabel: ddt?.label,
       ddtMainDataLength: ddt?.mainData?.length
     });
     return () => {
       console.log('🔴 [UNMOUNT] ResponseEditorInner unmounting', {
-        actId: act?.id,
-        instanceId: (act as any)?.instanceId
+        taskId: task?.id, // ✅ RINOMINATO: actId → taskId, act → task
+        instanceId: task?.instanceId // ✅ RINOMINATO: act → task
       });
     };
   }, []);
@@ -72,7 +74,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
   const wizardOwnsDataRef = useRef(false); // Flag: wizard has control over data lifecycle
   const [isInferring, setIsInferring] = React.useState(false);
   const [inferenceResult, setInferenceResult] = React.useState<any>(null);
-  const inferenceAttemptedRef = React.useRef<string | null>(null); // Track which act.label we've already tried
+  const inferenceAttemptedRef = React.useRef<string | null>(null); // Track which task.label we've already tried // ✅ RINOMINATO: act → task
 
   // ✅ Cache globale per DDT pre-assemblati (per templateId)
   // Key: templateId (es. "723a1aa9-a904-4b55-82f3-a501dfbe0351")
@@ -105,7 +107,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
   // ✅ Sincronizza ddtRef.current con ddt prop (fonte di verità dal dockTree)
   // Quando ddt prop cambia (dal dockTree), aggiorna il buffer locale
   useEffect(() => {
-    const instance = (act as any)?.instanceId || act?.id;
+    const instance = task?.instanceId || task?.id; // ✅ RINOMINATO: act → task
     const isNewInstance = prevInstanceRef.current !== instance;
 
     if (isNewInstance) {
@@ -125,7 +127,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
       });
       ddtRef.current = ddt;
     }
-  }, [ddt, (act as any)?.instanceId, act?.id]);
+  }, [ddt, (task as any)?.instanceId, task?.id]);
 
   // Debug logger gated by localStorage flag: set localStorage.setItem('debug.responseEditor','1') to enable
   const log = (...args: any[]) => {
@@ -191,8 +193,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
   // - A runtime: se mancante nell'istanza → risoluzione lazy dal template (backend VB.NET)
   React.useEffect(() => {
     const handleProjectSave = async () => {
-      if (act?.id || (act as any)?.instanceId) {
-        const key = ((act as any)?.instanceId || act?.id) as string;
+      if (task?.id || task?.instanceId) { // ✅ RINOMINATO: act → task
+        const key = (task?.instanceId || task?.id) as string; // ✅ RINOMINATO: act → task
         const task = taskRepository.getTask(key);
         const currentDDT = { ...ddtRef.current };
         const hasDDT = currentDDT && Object.keys(currentDDT).length > 0 && currentDDT.mainData && currentDDT.mainData.length > 0;
@@ -225,7 +227,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     return () => {
       window.removeEventListener('project:save', handleProjectSave);
     };
-  }, [act?.id, (act as any)?.instanceId, currentProjectId]);
+  }, [task?.id, (task as any)?.instanceId, currentProjectId]);
 
 
   // ✅ Usa ddtRef.current per mainList (contiene già le modifiche)
@@ -261,14 +263,14 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
   const [selectedIntentIdForTraining, setSelectedIntentIdForTraining] = useState<string | null>(null);
 
   // Header: icon, title, and toolbar
-  const actType = (act?.type || 'DataRequest') as any;
+  const taskType = task?.type ?? TaskType.DataRequest; // ✅ RINOMINATO: actType → taskType, usa TaskType enum
 
   // ✅ Verifica se kind === "intent" e non ha messaggi (mostra IntentMessagesBuilder se non ci sono)
   const needsIntentMessages = useMemo(() => {
     const firstMain = mainList[0];
     const hasMessages = hasIntentMessages(ddt);
     return firstMain?.kind === 'intent' && !hasMessages;
-  }, [mainList, ddt, act?.id, act?.type]);
+  }, [mainList, ddt, task?.id, task?.type]); // ✅ RINOMINATO: act → task
 
   // Wizard/general layout flags
   // ✅ Se kind === "intent" non ha bisogno di wizard (nessuna struttura dati)
@@ -281,11 +283,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     // Il wizard verrà aperto dall'useEffect dopo il match locale o l'inferenza
     return false;
   });
-  const { Icon, color: iconColor } = getTaskVisualsByType(actType, !!ddt);
-  // Priority: _sourceAct.label (preserved act info) > act.label (direct prop) > localDDT._userLabel (legacy) > generic fallback
+  const { Icon, color: iconColor } = getTaskVisualsByType(taskType, !!ddt); // ✅ RINOMINATO: actType → taskType
+  // Priority: _sourceTask.label (preserved task info) > task.label (direct prop) > localDDT._userLabel (legacy) > generic fallback
   // NOTE: Do NOT use localDDT.label here - that's the DDT root label (e.g. "Age") which belongs in the TreeView, not the header
-  const sourceAct = (ddt as any)?._sourceAct;
-  const headerTitle = sourceAct?.label || act?.label || (ddt as any)?._userLabel || 'Response Editor';
+  const sourceTask = (ddt as any)?._sourceTask || (ddt as any)?._sourceAct; // ✅ RINOMINATO: sourceAct → sourceTask (backward compatibility con _sourceAct)
+  const headerTitle = sourceTask?.label || task?.label || (ddt as any)?._userLabel || 'Response Editor'; // ✅ RINOMINATO: act → task
 
   // ✅ Handler per il pannello sinistro (Behaviour/Personality/Recognition)
   const saveLeftPanelMode = (m: RightPanelMode) => {
@@ -361,17 +363,17 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     // ✅ IMPORTANTE: Non aprire wizard se è già aperto (showWizard === true)
     const conditionsMet = empty && !wizardOwnsDataRef.current && !isInferring && !showWizard;
 
-    // Prevenire esecuzioni multiple per lo stesso act.label
-    const actLabel = act?.label?.trim();
-    const inferenceKey = `${actLabel || ''}_${empty}`;
+    // Prevenire esecuzioni multiple per lo stesso task.label
+    const taskLabel = task?.label?.trim(); // ✅ RINOMINATO: actLabel → taskLabel, act → task
+    const inferenceKey = `${taskLabel || ''}_${empty}`;
     if (!conditionsMet || inferenceStartedRef.current === inferenceKey) {
       return;
     }
 
     if (conditionsMet) {
-      // ✅ Se c'è act.label, PRIMA prova euristica, POI inferenza AI
-      const actLabel = act?.label?.trim();
-      const shouldInfer = actLabel && actLabel.length >= 3 && inferenceAttemptedRef.current !== actLabel;
+      // ✅ Se c'è task.label, PRIMA prova euristica, POI inferenza AI
+      const taskLabel = task?.label?.trim(); // ✅ RINOMINATO: actLabel → taskLabel, act → task
+      const shouldInfer = taskLabel && taskLabel.length >= 3 && inferenceAttemptedRef.current !== taskLabel;
 
       // ✅ PRIMA: Se è in corso l'inferenza, aspetta (NON aprire il wizard ancora)
       if (isInferring) {
@@ -381,7 +383,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
 
       // ✅ SECONDO: Se deve inferire E non sta già inferendo E non abbiamo ancora risultato
       if (shouldInfer && !inferenceResult) {
-        inferenceAttemptedRef.current = actLabel;
+        inferenceAttemptedRef.current = taskLabel; // ✅ RINOMINATO: actLabel → taskLabel
 
         /**
          * ============================================================
@@ -399,7 +401,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
         const findDDTTemplate = async (text: string): Promise<any | null> => {
           try {
             // ✅ Usa il servizio centralizzato per trovare il match
-            const currentTaskType = act?.type || 'UNDEFINED';
+            const currentTaskType = task?.type ?? TaskType.UNDEFINED; // ✅ RINOMINATO: act → task, usa TaskType enum
             const match = await DDTTemplateMatcherService.findDDTTemplate(text, currentTaskType);
 
             if (!match) {
@@ -556,17 +558,17 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
         // ✅ Wrappare in IIFE async perché useEffect non può essere async
         (async () => {
           inferenceStartedRef.current = inferenceKey;
-          const localMatch = await findDDTTemplate(actLabel);
+          const localMatch = await findDDTTemplate(taskLabel); // ✅ RINOMINATO: actLabel → taskLabel
           if (localMatch) {
             // ✅ Euristica trovata ISTANTANEAMENTE → apri wizard subito (NON avviare inferenza AI)
 
             // ✅ Se Euristica 1 ha trovato UNDEFINED (nessun match), Euristica 2 inferisce il tipo dal template DDT
 
             // ✅ LOGICA: Se tipo è UNDEFINED, l'euristica ha trovato un match → aggiorna il task con tipo corretto
-            if (act?.instanceId && act.type === 'UNDEFINED' && localMatch) {
+            if (task?.instanceId && task.type === TaskType.UNDEFINED && localMatch) {
               try {
-                const instanceKey = act.instanceId;
-                let task = taskRepository.getTask(instanceKey);
+                const instanceKey = task.instanceId; // ✅ RINOMINATO: act → task
+                let taskInstance = taskRepository.getTask(instanceKey);
 
                 // ✅ Se il match è un template DDT, il tipo è DataRequest
                 const determinedType = TaskType.DataRequest; // ✅ Euristica 2 trova sempre template DDT → DataRequest
@@ -687,7 +689,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
-                    userDesc: actLabel,
+                    userDesc: taskLabel, // ✅ RINOMINATO: actLabel → taskLabel
                     provider: selectedProvider.toLowerCase(),
                     model: selectedModel
                   }),
@@ -737,7 +739,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
       setShowWizard(false);
       inferenceStartedRef.current = null; // Reset quando il wizard viene chiuso
     }
-  }, [ddt, act, isInferring, inferenceResult, selectedProvider, selectedModel, showWizard]); // ✅ Rimosso mainList dalle dipendenze
+  }, [ddt, task, isInferring, inferenceResult, selectedProvider, selectedModel, showWizard]); // ✅ Rimosso mainList dalle dipendenze
 
   // Track introduction separately - usa ddtRef.current
   const introduction = useMemo(() => ddtRef.current?.introduction, [ddtVersion, ddt?.introduction]);
@@ -786,9 +788,9 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
     const finalDDT = { ...ddtRef.current };
 
     try {
-      // Se abbiamo un instanceId o act.id (caso DDTHostAdapter), salva nell'istanza
-      if (act?.id || (act as any)?.instanceId) {
-        const key = ((act as any)?.instanceId || act?.id) as string;
+      // Se abbiamo un instanceId o task.id (caso DDTHostAdapter), salva nell'istanza // ✅ RINOMINATO: act → task
+      if (task?.id || task?.instanceId) { // ✅ RINOMINATO: act → task
+        const key = (task?.instanceId || task?.id) as string; // ✅ RINOMINATO: act → task
         const hasDDT = finalDDT && Object.keys(finalDDT).length > 0 && finalDDT.mainData && finalDDT.mainData.length > 0;
 
         if (hasDDT) {
@@ -805,12 +807,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
 
           // ✅ Get or create task
           // ✅ LOGICA: Il task viene creato solo quando si apre ResponseEditor, dopo aver determinato il tipo
-          let task = taskRepository.getTask(key);
-          if (!task) {
-            // ✅ Convert act.type (string) to TaskType enum
-            // ✅ Se act.type è UNDEFINED, l'euristica dovrebbe aver già determinato il tipo (DataRequest se match trovato)
-            const taskType = act?.type ? actIdToTaskType(act.type) : TaskType.DataRequest;
-            task = taskRepository.createTask(taskType, null, undefined, key, currentProjectId || undefined);
+          let taskInstance = taskRepository.getTask(key);
+          if (!taskInstance) {
+            // ✅ Usa direttamente task.type (TaskType enum) invece di convertire da stringa
+            const taskType = task?.type ?? TaskType.DataRequest; // ✅ Usa direttamente task.type (TaskType enum)
+            taskInstance = taskRepository.createTask(taskType, null, undefined, key, currentProjectId || undefined);
           }
 
           const currentTemplateId = getTemplateId(task);
@@ -846,11 +847,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
         } else if (finalDDT) {
           // ✅ No DDT structure, but save other fields (e.g., Message text)
           // ✅ Get or create task
-          let task = taskRepository.getTask(key);
-          if (!task) {
-            // ✅ Convert act.type (string) to TaskType enum
-            const taskType = act?.type ? actIdToTaskType(act.type) : TaskType.SayMessage;
-            task = taskRepository.createTask(taskType, null, undefined, key, currentProjectId || undefined);
+          let taskInstance = taskRepository.getTask(key);
+          if (!taskInstance) {
+            // ✅ Usa direttamente task.type (TaskType enum) invece di convertire da stringa
+            const taskType = task?.type ?? TaskType.SayMessage; // ✅ Usa direttamente task.type (TaskType enum)
+            taskInstance = taskRepository.createTask(taskType, null, undefined, key, currentProjectId || undefined);
           }
           // ✅ AWAIT per garantire completamento
           await taskRepository.updateTask(key, finalDDT, currentProjectId || undefined);
@@ -859,21 +860,21 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
 
       }
 
-      // NON chiamare replaceSelectedDDT se abbiamo act prop (siamo in ActEditorOverlay)
-      // Questo previene l'apertura di ResizableResponseEditor in AppContent mentre si chiude ActEditorOverlay
-      if (!act) {
-        // Modalità diretta (senza act): aggiorna selectedDDT per compatibilità legacy
+      // NON chiamare replaceSelectedDDT se abbiamo task prop (siamo in TaskEditorOverlay)
+      // Questo previene l'apertura di ResizableResponseEditor in AppContent mentre si chiude TaskEditorOverlay
+      if (!task) {
+        // Modalità diretta (senza task): aggiorna selectedDDT per compatibilità legacy
         replaceSelectedDDT(finalDDT);
       }
     } catch (e) {
       console.error('[ResponseEditor][handleEditorClose] Persist error', {
-        actId: act?.id,
+        taskId: task?.id,
         error: e
       });
     }
 
     try { onClose && onClose(); } catch { }
-  }, [replaceSelectedDDT, onClose, act?.id, (act as any)?.instanceId, currentProjectId]);
+  }, [replaceSelectedDDT, onClose, task?.id, (task as any)?.instanceId, currentProjectId]);
 
   // ✅ NON serve più tracciare sincronizzazioni - selectedNode è l'unica fonte di verità
   // Helper per convertire steps (oggetto o array) in array
@@ -1200,9 +1201,9 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
           //
           // Nota: Il salvataggio asincrono durante il drop è utile solo in modalità overlay
           // (senza tabId), dove non c'è handleEditorClose che salva alla chiusura
-          if (!tabId && (act?.id || (act as any)?.instanceId)) {
+          if (!tabId && (task?.id || (task as any)?.instanceId)) {
             // Modalità overlay: salva asincrono durante il drop (non c'è chiusura garantita)
-            const key = ((act as any)?.instanceId || act?.id) as string;
+            const key = ((task as any)?.instanceId || task?.id) as string;
             const hasDDT = updatedDDT && Object.keys(updatedDDT).length > 0 && updatedDDT.mainData && updatedDDT.mainData.length > 0;
 
             if (hasDDT) {
@@ -1258,7 +1259,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
             // Il salvataggio definitivo avviene in handleEditorClose (sincrono)
             console.log('[DOCK_SAVE] ⏭️ Skipping async save during drop (docking mode - will save on close)', {
               tabId,
-              hasAct: !!(act?.id || (act as any)?.instanceId)
+              hasTask: !!(task?.id || (task as any)?.instanceId)
             });
           }
         }
@@ -1398,7 +1399,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
         return null;
       })()}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, maxHeight: '100%' }}>
-        {act?.type === 'Summarizer' && isDDTEmpty(ddt) ? (
+        {task?.type === TaskType.Summarizer && isDDTEmpty(ddt) ? (
           /* Placeholder for Summarizer when DDT is empty */
           <div className={combinedClass} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '24px', color: '#e2e8f0', lineHeight: 1.6 }}>
             <div style={{ maxWidth: '800px', margin: '0 auto' }}>
@@ -1422,7 +1423,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
               </div>
             </div>
           </div>
-        ) : act?.type === 'Negotiation' && isDDTEmpty(ddt) ? (
+        ) : task?.type === TaskType.Negotiation && isDDTEmpty(ddt) ? (
           /* Placeholder for Negotiation when DDT is empty */
           <div className={combinedClass} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '24px', color: '#e2e8f0', lineHeight: 1.6 }}>
             <div style={{ maxWidth: '800px', margin: '0 auto' }}>
@@ -1469,11 +1470,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
           /* Full-screen wizard without RightPanel */
           /* ✅ FIX: Non montare wizard se dovrebbe avere inferenceResult ma non ce l'ha ancora */
           (() => {
-            // Se abbiamo act.label e dovremmo aver fatto inferenza, aspetta inferenceResult
+            // Se abbiamo task.label e dovremmo aver fatto inferenza, aspetta inferenceResult // ✅ RINOMINATO: act → task
             // ✅ MA solo se l'inferenza è ancora in corso (isInferring === true)
             // ✅ Se l'inferenza è finita ma non c'è risultato, apri comunque il wizard
-            const actLabel = act?.label?.trim();
-            const shouldHaveInference = actLabel && actLabel.length >= 3;
+            const taskLabel = task?.label?.trim(); // ✅ RINOMINATO: actLabel → taskLabel, act → task
+            const shouldHaveInference = taskLabel && taskLabel.length >= 3;
 
             // ✅ Mostra loading solo se l'inferenza è ancora in corso
             if (shouldHaveInference && !inferenceResult && isInferring) {
@@ -1493,11 +1494,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
             return (
               <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
                 <DDTWizard
-                  taskType={act?.type} // ✅ Passa tipo task per filtrare template nello step 1
+                  taskType={task?.type} // ✅ Passa tipo task per filtrare template nello step 1
                   initialDDT={inferenceResult?.ai?.schema ? {
                     // ✅ Pre-compila con il risultato dell'inferenza
-                    id: ddt?.id || `temp_ddt_${act?.id}`,
-                    label: inferenceResult.ai.schema.label || act?.label || 'Data',
+                    id: ddt?.id || `temp_ddt_${task?.id}`,
+                    label: inferenceResult.ai.schema.label || task?.label || 'Data',
                     mainData: inferenceResult.ai.schema.mainData || [],
                     _inferenceResult: inferenceResult // Passa anche il risultato completo per riferimento (con traduzioni se disponibili)
                   } : ddt}
@@ -1544,14 +1545,14 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
           /* Build Messages UI for ProblemClassification without messages */
           <div style={{ flex: 1, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start', padding: '16px 20px' }}>
             <IntentMessagesBuilder
-              intentLabel={act?.label || ddt?.label || 'chiedi il problema'}
+              intentLabel={task?.label || ddt?.label || 'chiedi il problema'}
               onComplete={(messages) => {
                 const updatedDDT = saveIntentMessagesToDDT(ddt, messages);
 
                 // ✅ CRITICO: Salva il DDT nell'istanza IMMEDIATAMENTE quando si completano i messaggi
                 // Questo assicura che quando si fa "Save" globale, l'istanza abbia il DDT aggiornato
-                if (act?.id || (act as any)?.instanceId) {
-                  const key = ((act as any)?.instanceId || act?.id) as string;
+                if (task?.id || (task as any)?.instanceId) {
+                  const key = ((task as any)?.instanceId || task?.id) as string;
                   // ✅ MIGRATION: Use getTemplateId() helper
                   // ✅ FIX: Se c'è un DDT, assicurati che il templateId sia 'DataRequest'
                   const task = taskRepository.getTask(key);
@@ -1599,9 +1600,9 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
           /* Normal editor layout with 3 panels (no header, already shown above) */
           <>
             {/* ✅ Left navigation - IntentListEditor quando kind === "intent", Sidebar altrimenti */}
-            {mainList[0]?.kind === 'intent' && act && (
+            {mainList[0]?.kind === 'intent' && task && (
               <IntentListEditorWrapper
-                act={act}
+                task={task}
                 onIntentSelect={(intentId) => {
                   // Store selected intent ID in state to pass to EmbeddingEditor
                   setSelectedIntentIdForTraining(intentId);
@@ -1733,10 +1734,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
                           <div style={{ padding: 6, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                             <NLPExtractorProfileEditor
                               node={selectedNode}
-                              actType={actType}
+                              taskType={taskType}
                               locale={'it-IT'}
                               intentSelected={mainList[0]?.kind === 'intent' ? selectedIntentIdForTraining || undefined : undefined}
-                              act={act}
+                              task={task}
                               onChange={(profile) => {
                                 // Only log if debug flag is set to avoid console spam
                                 try {
@@ -1876,10 +1877,12 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, act, hideHeader, 
   );
 }
 
-export default function ResponseEditor({ ddt, onClose, onWizardComplete, act, hideHeader, onToolbarUpdate, tabId, setDockTree }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, act?: { id: string; type: string; label?: string; instanceId?: string }, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void }) {
+import type { TaskMeta } from '../EditorHost/types'; // ✅ Import TaskMeta
+
+export default function ResponseEditor({ ddt, onClose, onWizardComplete, task, hideHeader, onToolbarUpdate, tabId, setDockTree }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, task?: TaskMeta, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void }) { // ✅ RINOMINATO: act → task, type: string → TaskMeta
   return (
     <FontProvider>
-      <ResponseEditorInner ddt={ddt} onClose={onClose} onWizardComplete={onWizardComplete} act={act} hideHeader={hideHeader} onToolbarUpdate={onToolbarUpdate} tabId={tabId} setDockTree={setDockTree} />
+      <ResponseEditorInner ddt={ddt} onClose={onClose} onWizardComplete={onWizardComplete} task={task} hideHeader={hideHeader} onToolbarUpdate={onToolbarUpdate} tabId={tabId} setDockTree={setDockTree} /> {/* ✅ RINOMINATO: act → task */}
     </FontProvider>
   );
 }

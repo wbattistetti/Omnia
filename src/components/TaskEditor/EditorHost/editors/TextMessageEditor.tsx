@@ -5,23 +5,22 @@ import { getTaskVisualsByType } from '../../../Flowchart/utils/taskVisuals';
 import { taskRepository } from '../../../../services/TaskRepository';
 import { useProjectDataUpdate } from '../../../../context/ProjectDataContext';
 
-export default function TextMessageEditor({ act, onClose }: EditorProps) {
-  const instanceId = act.instanceId || act.id;
+export default function TextMessageEditor({ task: taskMeta, onClose }: EditorProps) { // ✅ RINOMINATO: act → taskMeta
+  const instanceId = taskMeta.instanceId || taskMeta.id; // ✅ RINOMINATO: act → taskMeta
   const pdUpdate = useProjectDataUpdate();
 
   // FASE 3: Read initial text from Task (create if doesn't exist, like DDTHostAdapter)
   // Use useState initializer function to compute once on mount only
   const [text, setText] = useState(() => {
     if (!instanceId) return '';
-    let task = taskRepository.getTask(instanceId);
-    if (!task) {
-      const actId = act.id || '';
-      // Map actId to action (e.g., 'Message' -> 'SayMessage')
-      const action = actId === 'Message' ? 'SayMessage' : actId;
+    let taskInstance = taskRepository.getTask(instanceId);
+    if (!taskInstance) {
+      // ✅ Usa direttamente taskMeta.type (TaskType enum) invece di convertire da stringa
+      const taskType = taskMeta.type ?? TaskType.SayMessage; // ✅ Usa direttamente taskMeta.type (TaskType enum)
       const projectId = pdUpdate?.getCurrentProjectId() || undefined;
-      task = taskRepository.createTask(action, undefined, instanceId, projectId);
+      taskInstance = taskRepository.createTask(taskType, null, undefined, instanceId, projectId);
     }
-    return task?.text || '';
+    return taskInstance?.text || '';
   });
 
   // FIX: Reload text from Task when instanceId changes or when Task is updated
@@ -101,12 +100,12 @@ export default function TextMessageEditor({ act, onClose }: EditorProps) {
   return (
     <div className="h-full bg-white flex flex-col min-h-0">
       {(() => {
-        const type = String(act?.type || 'Message') as any;
-        const { Icon, color } = getTaskVisualsByType(type, false);
+        // ✅ Usa direttamente taskMeta.type (TaskType enum) invece di convertire da stringa
+        const { Icon, color } = getTaskVisualsByType(taskMeta.type ?? TaskType.SayMessage, false); // ✅ RINOMINATO: act → taskMeta
         return (
           <EditorHeader
             icon={<Icon size={18} style={{ color }} />}
-            title={String(act?.label || 'Message')}
+            title={String(taskMeta?.label || 'Message')} // ✅ RINOMINATO: act → taskMeta
             color="orange"
             onClose={handleClose}
           />

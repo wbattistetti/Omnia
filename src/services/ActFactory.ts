@@ -27,7 +27,7 @@ export async function createAndAttachAct(opts: CreateAndAttachOpts) {
   const mode = typeToMode(type as any);
 
   // 1) Create act in-memory synchronously with explicit type/mode, suppress UI editors
-  const created = EntityCreationService.createAgentAct({
+  const created = EntityCreationService.createTaskTemplate({ // ✅ RINOMINATO: createAgentAct → createTaskTemplate (metodo interno)
     name,
     projectData,
     projectIndustry,

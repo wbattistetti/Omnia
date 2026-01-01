@@ -57,14 +57,27 @@ class TaskRepository {
     const finalTaskId = taskId || generateId();
     const finalProjectId = projectId || this.getCurrentProjectId();
 
+    // ✅ CRITICAL: type is REQUIRED - must be provided
+    if (type === undefined || type === null) {
+      throw new Error(`[TaskRepository] Cannot create task - type field is required`);
+    }
+
     const task: Task = {
       id: finalTaskId,
-      type: type,                // ✅ Enum numerico (0-19) - COMPORTAMENTO
-      templateId: templateId,     // ✅ null = standalone, GUID = referenzia un altro Task
+      type: type,                // ✅ Enum numerico (0-19) - REQUIRED - COMPORTAMENTO
+      templateId: templateId,   // ✅ GUID reference to another Task (or null) - NOT related to type
       ...(fields || {}),          // ✅ Campi diretti (niente wrapper value)
       createdAt: new Date(),
       updatedAt: new Date()
     };
+
+    console.log('[📝 CREATE_TASK]', {
+      taskId: task.id,
+      type: task.type,
+      typeName: TaskType[task.type],
+      templateId: task.templateId,
+      hasText: !!task.text
+    });
 
     // Save to internal storage
     this.tasks.set(finalTaskId, task);
@@ -72,7 +85,7 @@ class TaskRepository {
     // Save to database if projectId is available
     if (finalProjectId) {
       this.saveTaskToDatabase(task, finalProjectId).catch(err => {
-        console.error('[TaskRepository] Failed to save task to database:', err);
+        console.error('[📝 CREATE_TASK] Failed to save:', err);
       });
     }
 
@@ -90,16 +103,35 @@ class TaskRepository {
       return false;
     }
 
+    // ✅ CRITICAL: Preserve type field - never allow it to be removed
+    const { type, ...updatesWithoutType } = updates;
+
+    // ✅ If type is explicitly provided and different, update it
+    // ✅ If type is not provided, preserve existing type
+    const finalType = type !== undefined ? type : existingTask.type;
+
+    // ✅ CRITICAL: Ensure type is always present
+    if (finalType === undefined || finalType === null) {
+      console.error(`[TaskRepository] Cannot update task ${taskId} - type field is missing. This task is invalid.`);
+      return false;
+    }
+
     // Update in internal storage (merge fields directly, no value wrapper)
     const updatedTask: Task = {
       ...existingTask,
-      ...updates,
+      ...updatesWithoutType,
+      type: finalType,  // ✅ Always preserve/update type - REQUIRED
       updatedAt: updates.updatedAt || new Date()
     };
     this.tasks.set(taskId, updatedTask);
 
-    // ✅ NO automatic save to database - user must click "Save" explicitly
-    // The save will happen when user clicks the Save button in the UI
+    // ✅ Save to database if projectId is available
+    const finalProjectId = projectId || this.getCurrentProjectId();
+    if (finalProjectId) {
+      this.saveTaskToDatabase(updatedTask, finalProjectId).catch(err => {
+        console.error('[TaskRepository] Failed to save updated task to database:', err);
+      });
+    }
 
     return true;
   }
@@ -152,104 +184,77 @@ class TaskRepository {
    * @returns True if loaded successfully
    */
   async loadAllTasksFromDatabase(projectId?: string): Promise<boolean> {
-    const startTime = performance.now();
     const finalProjectId = projectId || this.getCurrentProjectId();
-    console.log(`[PERF][${new Date().toISOString()}] 📋 START loadAllTasksFromDatabase`, { projectId: finalProjectId });
 
     try {
       if (!finalProjectId) {
-        console.warn('[TaskRepository] No project ID available for loading tasks');
+        console.warn('[📥 LOAD_TASKS] No project ID available');
         return false;
       }
 
-      const fetchStart = performance.now();
       const response = await fetch(`/api/projects/${finalProjectId}/tasks`);
       if (!response.ok) {
-        const duration = performance.now() - startTime;
-        console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR loadAllTasksFromDatabase`, {
-          duration: `${duration.toFixed(2)}ms`,
-          projectId: finalProjectId,
-          status: response.status
-        });
+        console.error('[📥 LOAD_TASKS] Failed to fetch', { projectId: finalProjectId, status: response.status });
         return false;
       }
 
-      const jsonStart = performance.now();
       const data = await response.json();
       const items: Task[] = data.items || [];
-      console.log(`[PERF][${new Date().toISOString()}] ✅ END fetch tasks`, {
-        fetchDuration: `${(performance.now() - fetchStart).toFixed(2)}ms`,
-        jsonParseDuration: `${(performance.now() - jsonStart).toFixed(2)}ms`,
-        itemsCount: items.length
-      });
+      console.log('[📥 LOAD_TASKS] Fetched', { count: items.length });
 
       // Clear and populate internal storage
-      const processStart = performance.now();
       this.tasks.clear();
       for (const item of items) {
-        // Map database document to Task
-        // templateId is required - no fallback on action
-        if (!item.templateId) {
-          console.warn('[TaskRepository] Task without templateId (skipping):', item.id);
-          continue;
-        }
-
-        // ✅ DEBUG: Log all keys in item to see what fields are present
-        const itemKeys = Object.keys(item);
-        const hasTypeLower = 'type' in item;
-        const hasTypeUpper = 'Type' in item;
-        if (!hasTypeLower && !hasTypeUpper) {
-          console.error(`[TaskRepository] Task ${item.id} loaded from database without type/Type field. Available keys:`, itemKeys);
-          console.error(`[TaskRepository] Task ${item.id} full object:`, JSON.stringify(item, null, 2));
-        }
-
         // ✅ Load task with fields directly (no value wrapper)
-        // ✅ If item has value wrapper (old format), flatten it for backward compatibility
-        // ✅ Otherwise, use fields directly
-        // ✅ Try both 'type' (lowercase) and 'Type' (uppercase) for backward compatibility
         const { id, templateId, createdAt, updatedAt, projectId: _projectId, value, type, Type, ...directFields } = item;
         const taskType = type !== undefined && type !== null ? type : (Type !== undefined && Type !== null ? Type : undefined);
 
-        // ✅ CRITICAL: type is required - if missing, task is invalid
+        console.log('[📥 LOAD_TASKS] Processing', {
+          taskId: id,
+          type: taskType,
+          typeName: taskType !== undefined ? TaskType[taskType] : 'undefined',
+          templateId
+        });
+
+        // ✅ CRITICAL: type is REQUIRED - must be saved correctly in database
         if (taskType === undefined || taskType === null) {
-          console.error(`[TaskRepository] Task ${item.id} loaded from database without type field (checked both 'type' and 'Type') - this is invalid. Task will be skipped.`);
+          console.error('[📥 LOAD_TASKS] Task without type - SKIPPED', {
+            taskId: id,
+            availableFields: Object.keys(item)
+          });
           continue;
         }
 
         const task: Task = {
           id: item.id,
-          type: taskType,                // ✅ Enum numerico (0-19) - REQUIRED (from 'type' or 'Type')
+          type: taskType,                // ✅ Enum numerico (0-19) - REQUIRED
           templateId: item.templateId ?? null,
           ...(value || {}),  // ✅ Backward compatibility: flatten value if present
           ...directFields,   // ✅ Use direct fields (mainData, label, stepPrompts, ecc.)
           createdAt: item.createdAt ? new Date(item.createdAt) : undefined,
           updatedAt: item.updatedAt ? new Date(item.updatedAt) : undefined
         };
+
+        console.log('[📥 LOAD_TASKS] Loaded', {
+          taskId: task.id,
+          type: task.type,
+          typeName: TaskType[task.type],
+          templateId: task.templateId,
+          hasText: !!task.text
+        });
+
         this.tasks.set(task.id, task);
       }
-      console.log(`[PERF][${new Date().toISOString()}] ✅ END process tasks`, {
-        processDuration: `${(performance.now() - processStart).toFixed(2)}ms`,
-        tasksCount: this.tasks.size
-      });
 
       // Emit event to notify components that tasks have been loaded
       window.dispatchEvent(new CustomEvent('tasks:loaded', {
         detail: { projectId: finalProjectId, tasksCount: this.tasks.size }
       }));
 
-      const totalDuration = performance.now() - startTime;
-      console.log(`[PERF][${new Date().toISOString()}] 🎉 COMPLETE loadAllTasksFromDatabase`, {
-        projectId: finalProjectId,
-        totalDuration: `${totalDuration.toFixed(2)}ms`,
-        totalDurationSeconds: `${(totalDuration / 1000).toFixed(2)}s`,
-        tasksCount: this.tasks.size
-      });
-
+      console.log('[📥 LOAD_TASKS] Complete', { totalTasks: this.tasks.size });
       return true;
     } catch (error) {
-      const totalDuration = performance.now() - startTime;
-      console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR loadAllTasksFromDatabase`, {
-        duration: `${totalDuration.toFixed(2)}ms`,
+      console.error('[📥 LOAD_TASKS] Error', {
         projectId: finalProjectId,
         error: error instanceof Error ? error.message : error
       });
@@ -280,19 +285,53 @@ class TaskRepository {
       const items = allTasks.map(task => {
         // ✅ CRITICAL: type is required - skip tasks without type
         if (task.type === undefined || task.type === null) {
-          console.error(`[TaskRepository] Task ${task.id} has no type field - skipping from bulk save. This task is invalid.`);
+          console.error('[💾 SAVE_ALL] Task without type - SKIPPED', { taskId: task.id });
           return null;
         }
 
         // Extract all fields except id, templateId, createdAt, updatedAt
         const { id, templateId, createdAt, updatedAt, ...fields } = task;
+
+        // ✅ Validate templateId: must be null or valid GUID (not semantic string)
+        const finalTemplateId = templateId === null || templateId === undefined ? null : templateId;
+
+        // ✅ Check if templateId is a semantic string (should be null or GUID)
+        if (finalTemplateId !== null && typeof finalTemplateId === 'string') {
+          const isSemanticString = ['SayMessage', 'Message', 'DataRequest', 'GetData', 'BackendCall', 'UNDEFINED'].includes(finalTemplateId);
+          if (isSemanticString) {
+            console.warn('[💾 SAVE_ALL] Task has semantic templateId - converting to null', {
+              taskId: task.id,
+              templateId: finalTemplateId,
+              type: task.type,
+              typeName: TaskType[task.type]
+            });
+            return {
+              id: task.id,
+              type: task.type,
+              templateId: null,  // ✅ Convert semantic string to null
+              ...fields
+            };
+          }
+        }
+
         return {
           id: task.id,
           type: task.type,          // ✅ Enum numerico (0-19) - REQUIRED
-          templateId: task.templateId ?? null,
+          templateId: finalTemplateId,
           ...fields  // ✅ Save fields directly
         };
       }).filter(item => item !== null);
+
+      console.log('[💾 SAVE_ALL] Sending', {
+        projectId: finalProjectId,
+        itemsCount: items.length,
+        itemsPreview: items.slice(0, 3).map(i => ({
+          id: i.id,
+          type: i.type,
+          typeName: TaskType[i.type],
+          templateId: i.templateId
+        }))
+      });
 
       const response = await fetch(`/api/projects/${finalProjectId}/tasks/bulk`, {
         method: 'POST',
@@ -301,7 +340,12 @@ class TaskRepository {
       });
 
       if (!response.ok) {
-        console.error('[TaskRepository] Failed to save tasks to database');
+        const errorText = await response.text();
+        console.error('[💾 SAVE_ALL] Failed', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText
+        });
         return false;
       }
 
@@ -320,32 +364,43 @@ class TaskRepository {
     try {
       // ✅ CRITICAL: type is required - cannot save task without type
       if (task.type === undefined || task.type === null) {
-        console.error(`[TaskRepository] Cannot save task ${task.id} - missing type field. This task is invalid.`);
+        console.error('[💾 SAVE_TASK] Missing type - ABORT', { taskId: task.id });
         return false;
       }
 
       // ✅ Extract all fields except id, templateId, createdAt, updatedAt
       const { id, templateId, createdAt, updatedAt, ...fields } = task;
 
+      const payload = {
+        id: task.id,
+        type: task.type,          // ✅ Enum numerico (0-19) - REQUIRED
+        templateId: task.templateId ?? null,
+        ...fields  // ✅ Save fields directly (no value wrapper)
+      };
+
+      console.log('[💾 SAVE_TASK] Saving', {
+        taskId: task.id,
+        type: task.type,
+        typeName: TaskType[task.type],
+        templateId: task.templateId,
+        hasText: !!task.text
+      });
+
       const response = await fetch(`/api/projects/${projectId}/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: task.id,
-          type: task.type,          // ✅ Enum numerico (0-19) - REQUIRED
-          templateId: task.templateId ?? null,
-          ...fields  // ✅ Save fields directly (no value wrapper)
-        })
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
-        console.error('[TaskRepository] Failed to save task to database');
+        console.error('[💾 SAVE_TASK] Failed', { taskId: task.id, status: response.status });
         return false;
       }
 
+      console.log('[💾 SAVE_TASK] Success', { taskId: task.id });
       return true;
     } catch (error) {
-      console.error('[TaskRepository] Error saving task to database:', error);
+      console.error('[💾 SAVE_TASK] Error', { taskId: task.id, error });
       return false;
     }
   }

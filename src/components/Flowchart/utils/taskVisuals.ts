@@ -1,17 +1,29 @@
 import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server, Bot } from 'lucide-react';
 import { SIDEBAR_TYPE_COLORS } from '../../Sidebar/sidebarTheme';
-import type { ActType } from '../../types/project';
 import { taskRepository } from '../../../services/TaskRepository';
-import { getTemplateId, deriveTaskTypeFromTemplateId } from '../../../utils/taskHelpers';
+import { TaskType } from '../../../types/taskTypes';
 
 /**
  * ✅ NUOVO: Risolve il tipo di task dalla riga usando solo TaskRepository
- * ❌ RIMOSSO: parametro act (non esiste più il concetto di Act)
+ * ✅ Restituisce TaskType enum invece di stringa semantica
  */
-export function resolveTaskType(row: any): ActType {
-  // 1) Fonte primaria: row.type
-  if (row?.type) {
-    return row.type as ActType;
+export function resolveTaskType(row: any): TaskType {
+  // 1) Fonte primaria: row.type (se è già TaskType enum)
+  if (row?.type !== undefined && row?.type !== null) {
+    // Se è un numero (TaskType enum), restituiscilo direttamente
+    if (typeof row.type === 'number') {
+      return row.type as TaskType;
+    }
+    // Se è una stringa legacy, convertila (backward compatibility temporanea)
+    if (typeof row.type === 'string') {
+      const typeMap: Record<string, TaskType> = {
+        'Message': TaskType.SayMessage,
+        'DataRequest': TaskType.DataRequest,
+        'BackendCall': TaskType.BackendCall,
+        'ProblemClassification': TaskType.ClassifyProblem
+      };
+      return typeMap[row.type] || TaskType.SayMessage;
+    }
   }
 
   // 2) Deriva dal task usando TaskRepository (NodeRowData.taskId is separate field)
@@ -20,22 +32,27 @@ export function resolveTaskType(row: any): ActType {
     try {
       const task = taskRepository.getTask(taskId);
       if (task) {
-        const templateId = getTemplateId(task);
-        const taskType = deriveTaskTypeFromTemplateId(templateId);
-        if (taskType) {
-          return taskType as ActType;
+        // ✅ Usa direttamente task.type (TaskType enum) invece di convertire
+        if (task.type !== undefined && task.type !== null) {
+          return task.type as TaskType;
         }
+
+        // ✅ Log solo se il task esiste ma non ha type
+        console.warn('[🔍 RESOLVE_TYPE] Task has no type', { taskId });
+      } else {
+        // ✅ Log solo se il task non viene trovato
+        console.warn('[🔍 RESOLVE_TYPE] Task not found', { taskId, rowId: row?.id });
       }
     } catch (err) {
-      // Ignore
+      console.error('[🔍 RESOLVE_TYPE] Error', { taskId, error: err });
     }
   }
 
-  // 3) Fallback: row.mode
-  if (row?.mode === 'DataRequest') return 'DataRequest';
-  if (row?.mode === 'DataConfirmation') return 'Summarizer';
+  // 3) Fallback: row.mode (backward compatibility)
+  if (row?.mode === 'DataRequest') return TaskType.DataRequest;
+  if (row?.mode === 'DataConfirmation') return TaskType.Summarizer;
 
-  return 'Message'; // Default
+  return TaskType.SayMessage; // Default
 }
 
 /**
@@ -59,20 +76,20 @@ export function hasTaskDDT(row: any): boolean {
     const taskType = resolveTaskType(row);
 
     // Per Message: controlla se c'è un messaggio
-    if (taskType === 'Message') {
+    if (taskType === TaskType.SayMessage) {
       const hasMessage = Boolean(task?.text && task.text.trim().length > 0);
       return hasMessage;
     }
 
     // Per DataRequest/ProblemClassification: controlla se c'è templateId o mainData
     // ✅ Per DataRequest, permettere sempre l'apertura (può essere creato un DDT vuoto)
-    if (taskType === 'DataRequest' || taskType === 'ProblemClassification') {
+    if (taskType === TaskType.DataRequest || taskType === TaskType.ClassifyProblem) {
       // ✅ Controlla templateId (riferimento a template) o mainData (struttura diretta)
       // ✅ Per DataRequest, ritorna true anche se templateId è null (può essere creato un DDT vuoto)
       const hasTemplateId = task?.templateId && task.templateId !== 'UNDEFINED' && task.templateId !== null;
       const hasMainData = task?.mainData && task.mainData.length > 0;
       // ✅ Per DataRequest, permettere sempre l'apertura (anche con DDT vuoto)
-      if (taskType === 'DataRequest') {
+      if (taskType === TaskType.DataRequest) {
         return true; // ✅ Sempre permesso per DataRequest (può essere creato un DDT vuoto)
       }
       // Per ProblemClassification, richiedi templateId o mainData
@@ -89,8 +106,9 @@ export function hasTaskDDT(row: any): boolean {
 /**
  * ✅ RINOMINATO: getTaskVisualsByType (era getAgentActVisualsByType)
  * Restituisce icona e colori per un tipo di task
+ * ✅ Accetta TaskType enum invece di ActType stringa
  */
-export function getTaskVisualsByType(type: ActType, hasDDT: boolean) {
+export function getTaskVisualsByType(type: TaskType, hasDDT: boolean) {
   const green = '#22c55e';
   const blue = '#3b82f6';
   const indigo = '#6366f1';
@@ -104,37 +122,37 @@ export function getTaskVisualsByType(type: ActType, hasDDT: boolean) {
   let iconColor = gray;
 
   switch (type) {
-    case 'AIAgent':
+    case TaskType.AIAgent:
       Icon = Bot;
       labelColor = purple;
       iconColor = hasDDT ? purple : gray;
       break;
-    case 'DataRequest':
+    case TaskType.DataRequest:
       Icon = Ear;
       labelColor = blue;
       iconColor = hasDDT ? blue : gray;
       break;
-    case 'ProblemClassification':
+    case TaskType.ClassifyProblem:
       Icon = GitBranch;
       labelColor = amber;
       iconColor = hasDDT ? amber : gray;
       break;
-    case 'Summarizer':
+    case TaskType.Summarizer:
       Icon = FileText;
       labelColor = cyan;
       iconColor = hasDDT ? cyan : gray;
       break;
-    case 'Negotiation':
+    case TaskType.Negotiation:
       Icon = CheckCircle2;
       labelColor = indigo;
       iconColor = hasDDT ? indigo : gray;
       break;
-    case 'BackendCall':
+    case TaskType.BackendCall:
       Icon = Server;
       labelColor = green;
       iconColor = hasDDT ? green : gray;
       break;
-    case 'Message':
+    case TaskType.SayMessage:
     default:
       Icon = Megaphone;
       labelColor = green;

@@ -1934,82 +1934,130 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
   if (!items.length) return res.json({ ok: true, inserted: 0, updated: 0 });
 
   const tStart = Date.now();
-  await withMongoClient(async (client) => {
-    const projDb = await getProjectDb(client, projectId);
-    const coll = projDb.collection('tasks');
-    const now = new Date();
+  try {
+    await withMongoClient(async (client) => {
+      const projDb = await getProjectDb(client, projectId);
+      const coll = projDb.collection('tasks');
+      const now = new Date();
 
-    // ✅ OPTIMIZATION: Use bulkWrite instead of sequential findOne + updateOne/insertOne
-    // This reduces 2*N database calls to just 1 bulk operation!
-    const bulkOps = items
-      .filter(item => {
-        // ✅ Validate: id is required
-        if (!item.id) {
-          logWarn('Tasks.bulk', { error: 'missing_id', item });
-          return false;
-        }
-        // ✅ Validate: type is required and valid
-        if (item.type === undefined || item.type === null || !isValidTaskType(item.type)) {
-          logWarn('Tasks.bulk', { error: 'missing_or_invalid_type', itemId: item.id, type: item.type });
-          return false;
-        }
-        // ✅ Validate: templateId must be null or valid GUID (reject semantic strings)
-        if (item.templateId !== null && item.templateId !== undefined) {
-          if (typeof item.templateId !== 'string' || !isValidGuid(item.templateId)) {
-            logWarn('Tasks.bulk', { error: 'invalid_templateId', itemId: item.id, templateId: item.templateId });
+      // ✅ OPTIMIZATION: Use bulkWrite instead of sequential findOne + updateOne/insertOne
+      // This reduces 2*N database calls to just 1 bulk operation!
+      const bulkOps = items
+        .filter(item => {
+          // ✅ Validate: id is required
+          if (!item.id) {
+            console.error('[💾 BACKEND_BULK] Missing id', { item: JSON.stringify(item).substring(0, 200) });
+            logWarn('Tasks.bulk', { error: 'missing_id', item });
             return false;
           }
-        }
-        return true;
-      })
-      .map(item => {
-        // ✅ Extract all fields except id, templateId, createdAt, updatedAt
-        // ✅ Save fields directly (no value wrapper)
-        const { id, templateId, createdAt, updatedAt, ...fields } = item;
-
-        const task = {
-          projectId,
-          id: item.id,
-          type: item.type,              // ✅ type: enum numerico (0-19) - REQUIRED
-          templateId: item.templateId ?? null,  // ✅ templateId: null (standalone) or GUID (reference)
-          ...fields,  // ✅ Save all fields directly (mainData, label, stepPrompts, ecc.)
-          updatedAt: now
-        };
-
-        return {
-          updateOne: {
-            filter: { projectId, id: item.id },
-            update: {
-              $set: task,
-              $setOnInsert: { createdAt: now }
-            },
-            upsert: true
+          // ✅ Validate: type is required and valid
+          if (item.type === undefined || item.type === null || !isValidTaskType(item.type)) {
+            console.error('[💾 BACKEND_BULK] Invalid type', {
+              itemId: item.id,
+              type: item.type,
+              typeOf: typeof item.type
+            });
+            logWarn('Tasks.bulk', { error: 'missing_or_invalid_type', itemId: item.id, type: item.type });
+            return false;
           }
-        };
+          // ✅ Validate: templateId must be null or valid GUID (reject semantic strings)
+          if (item.templateId !== null && item.templateId !== undefined) {
+            if (typeof item.templateId !== 'string' || !isValidGuid(item.templateId)) {
+              console.error('[💾 BACKEND_BULK] Invalid templateId', {
+                itemId: item.id,
+                templateId: item.templateId,
+                type: item.type,
+                isGuid: isValidGuid(item.templateId)
+              });
+              logWarn('Tasks.bulk', { error: 'invalid_templateId', itemId: item.id, templateId: item.templateId });
+              return false;
+            }
+          }
+          return true;
+        })
+        .map(item => {
+          // ✅ Extract all fields except id, templateId, createdAt, updatedAt
+          // ✅ Save fields directly (no value wrapper)
+          const { id, templateId, createdAt, updatedAt, ...fields } = item;
+
+          const task = {
+            projectId,
+            id: item.id,
+            type: item.type,              // ✅ type: enum numerico (0-19) - REQUIRED
+            templateId: item.templateId ?? null,  // ✅ templateId: null (standalone) or GUID (reference)
+            ...fields,  // ✅ Save all fields directly (mainData, label, stepPrompts, ecc.)
+            updatedAt: now
+          };
+
+          return {
+            updateOne: {
+              filter: { projectId, id: item.id },
+              update: {
+                $set: task,
+                $setOnInsert: { createdAt: now }
+              },
+              upsert: true
+            }
+          };
+        });
+
+      let inserted = 0;
+      let updated = 0;
+
+      if (bulkOps.length > 0) {
+        console.log('[💾 BACKEND_BULK] Executing bulkWrite', {
+          opsCount: bulkOps.length,
+          totalItems: items.length,
+          filteredOut: items.length - bulkOps.length
+        });
+
+        const tBulk = Date.now();
+        try {
+          const result = await coll.bulkWrite(bulkOps, { ordered: false });
+          const tBulkEnd = Date.now();
+          console.log('[💾 BACKEND_BULK] bulkWrite success', {
+            duration: `${tBulkEnd - tBulk}ms`,
+            inserted: result.upsertedCount,
+            updated: result.modifiedCount,
+            matched: result.matchedCount
+          });
+          inserted = result.upsertedCount;
+          updated = result.modifiedCount;
+        } catch (bulkError) {
+          console.error('[💾 BACKEND_BULK] bulkWrite failed', {
+            error: bulkError?.message || bulkError,
+            opsCount: bulkOps.length
+          });
+          throw bulkError;
+        }
+      } else {
+        console.warn('[💾 BACKEND_BULK] No valid operations after filtering', {
+          totalItems: items.length
+        });
+      }
+
+      const tEnd = Date.now();
+      console.log('[💾 BACKEND_BULK] Complete', {
+        duration: `${tEnd - tStart}ms`,
+        inserted,
+        updated,
+        total: items.length
       });
-
-    let inserted = 0;
-    let updated = 0;
-
-    if (bulkOps.length > 0) {
-      const tBulk = Date.now();
-      const result = await coll.bulkWrite(bulkOps, { ordered: false });
-      const tBulkEnd = Date.now();
-      console.log(`[Tasks.bulk][PERF] bulkWrite: ${tBulkEnd - tBulk}ms (${bulkOps.length} ops)`);
-      inserted = result.upsertedCount;
-      updated = result.modifiedCount;
-    }
-
+      logInfo('Tasks.bulk', { projectId, inserted, updated, total: items.length });
+      res.json({ ok: true, inserted, updated });
+    });
+  } catch (e) {
     const tEnd = Date.now();
-    console.log(`[Tasks.bulk][PERF] Total: ${tEnd - tStart}ms`);
-    logInfo('Tasks.bulk', { projectId, inserted, updated, total: items.length });
-    res.json({ ok: true, inserted, updated });
-  }).catch((e) => {
-    const tEnd = Date.now();
-    console.error(`[Tasks.bulk][PERF] ERROR after ${tEnd - tStart}ms`);
+    console.error('[💾 BACKEND_BULK] ERROR', {
+      duration: `${tEnd - tStart}ms`,
+      error: e?.message || e,
+      stack: e?.stack,
+      projectId,
+      itemsCount: items.length
+    });
     logError('Tasks.bulk', e, { projectId, itemsCount: items.length });
     res.status(500).json({ error: String(e?.message || e) });
-  });
+  }
 });
 
 // GET /api/projects/:pid/variable-mappings - Get variable mappings for project
@@ -3179,21 +3227,20 @@ app.post('/api/factory/task-heuristics', async (req, res) => {
       [langUpper]: patterns
     };
 
-    // Aggiorna Heuristics
+    // Aggiorna Heuristics (crea se non esiste)
     const result = await coll.updateOne(
       { _id: taskTypeId },
       {
         $set: {
           patterns: updatedPatterns,
           updatedAt: now
+        },
+        $setOnInsert: {
+          createdAt: now
         }
       },
-      { upsert: false } // Non creare se non esiste
+      { upsert: true } // ✅ Crea se non esiste
     );
-
-    if (result.matchedCount === 0) {
-      return res.status(404).json({ error: `Heuristics._id '${taskTypeId}' not found` });
-    }
 
     // Invalidate cache
     taskHeuristicsCacheLoaded = false;

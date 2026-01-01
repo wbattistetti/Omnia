@@ -242,7 +242,7 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
  * Checks if template has mainData with steps, otherwise builds from subDataIds
  * Returns both mainData and guidMapping for translation copying
  */
-function buildMainDataFromTemplate(template: any): { mainData: any[]; guidMapping: Map<string, string> } {
+export function buildMainDataFromTemplate(template: any): { mainData: any[]; guidMapping: Map<string, string> } {
   const allGuidMappings = new Map<string, string>();
 
   // ✅ Check if template has mainData with steps already assembled

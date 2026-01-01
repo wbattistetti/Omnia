@@ -1,25 +1,26 @@
 import React from 'react';
 import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server, Check, Bot } from 'lucide-react';
 import { useFontContext } from '../../../../context/FontContext';
+import { TaskType } from '../../../../types/taskTypes';
 
 // Keyboard navigable type picker toolbar
+// ✅ Restituisce direttamente TaskType enum invece di stringhe semantiche
 // ORDINATI ALFABETICAMENTE
 const TYPE_OPTIONS = [
-    { key: 'AIAgent', label: 'AI Agent', Icon: Bot, color: '#a855f7' },
-    { key: 'BackendCall', label: 'BackendCall', Icon: Server, color: '#94a3b8' },
-    { key: 'DataRequest', label: 'Data', Icon: Ear, color: '#3b82f6' },
-    { key: 'Message', label: 'Message', Icon: Megaphone, color: '#34d399' },
-    { key: 'Negotiation', label: 'Negotiation', Icon: CheckCircle2, color: '#6366f1' },
-    { key: 'ProblemClassification', label: 'Problem', Icon: GitBranch, color: '#f59e0b' },
-    { key: 'Summarizer', label: 'Summarizer', Icon: FileText, color: '#06b6d4' }
+    { value: TaskType.SayMessage, label: 'Message', Icon: Megaphone, color: '#34d399' },
+    { value: TaskType.DataRequest, label: 'Data', Icon: Ear, color: '#3b82f6' },
+    { value: TaskType.BackendCall, label: 'BackendCall', Icon: Server, color: '#94a3b8' },
+    { value: TaskType.ClassifyProblem, label: 'Problem', Icon: GitBranch, color: '#f59e0b' }
+    // Note: AIAgent, Negotiation, Summarizer non sono ancora nel TaskType enum
+    // Aggiungerli quando saranno definiti
 ];
 
 interface RowTypePickerToolbarProps {
     left: number;
     top: number;
-    onPick: (k: string) => void;
+    onPick: (taskType: TaskType) => void; // ✅ Restituisce TaskType enum
     rootRef?: React.RefObject<HTMLDivElement>;
-    currentType?: string;
+    currentType?: TaskType; // ✅ TaskType enum invece di stringa
     onRequestClose?: () => void;
     buttonCloseTimeoutRef?: React.MutableRefObject<NodeJS.Timeout | null>;
 }
@@ -69,26 +70,23 @@ export function RowTypePickerToolbar({
         const block = ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'];
         if (block.includes(key)) { e.preventDefault(); e.stopPropagation(); }
 
-        // Keyboard shortcuts
+        // Keyboard shortcuts - ✅ Restituisce TaskType enum
         if (lower.length === 1 && /[a-z]/.test(lower)) {
-            const map: Record<string, string> = {
-                a: 'AIAgent',
-                m: 'Message',
-                d: 'DataRequest',
-                n: 'Negotiation',
-                p: 'ProblemClassification',
-                s: 'Summarizer',
-                b: 'BackendCall'
+            const map: Record<string, TaskType> = {
+                m: TaskType.SayMessage,
+                d: TaskType.DataRequest,
+                p: TaskType.ClassifyProblem,
+                b: TaskType.BackendCall
             };
             const match = map[lower];
-            if (match && match !== currentType) { onPick(match); return; }
+            if (match !== undefined && match !== currentType) { onPick(match); return; }
         }
 
         if (key === 'ArrowDown') setFocusIdx(i => Math.min(TYPE_OPTIONS.length - 1, i + 1));
         else if (key === 'ArrowUp') setFocusIdx(i => Math.max(0, i - 1));
         else if (key === 'Enter') {
             const opt = TYPE_OPTIONS[focusIdx];
-            if (opt && opt.key !== currentType) onPick(opt.key);
+            if (opt && opt.value !== currentType) onPick(opt.value);
         } else if (key === 'Escape') {
             onRequestClose && onRequestClose();
         }
@@ -152,10 +150,10 @@ export function RowTypePickerToolbar({
                 style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
             >
                 {TYPE_OPTIONS.map((opt, i) => {
-                    const isCurrent = currentType === opt.key;
+                    const isCurrent = currentType === opt.value; // ✅ Confronta con TaskType enum
                     return (
                         <button
-                            key={opt.key}
+                            key={opt.value} // ✅ Usa TaskType enum come key
                             ref={el => (btnRefs.current[i] = el)}
                             disabled={isCurrent}
                             style={{
@@ -177,7 +175,7 @@ export function RowTypePickerToolbar({
                             aria-selected={i === focusIdx}
                             onMouseEnter={() => setFocusIdx(i)}
                             onFocus={() => setFocusIdx(i)}
-                            onMouseDown={(e) => { if (isCurrent) return; e.preventDefault(); e.stopPropagation(); onPick(opt.key); }}
+                            onMouseDown={(e) => { if (isCurrent) return; e.preventDefault(); e.stopPropagation(); onPick(opt.value); }} // ✅ Restituisce TaskType enum
                             onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
                         >
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>

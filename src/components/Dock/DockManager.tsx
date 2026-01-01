@@ -1,5 +1,5 @@
 import React from 'react';
-import { DockNode, DockRegion, DockTab, DockTabFlow, DockTabResponseEditor, DockTabNonInteractive, DockTabConditionEditor, DockTabActEditor } from '../../dock/types';
+import { DockNode, DockRegion, DockTab, DockTabFlow, DockTabResponseEditor, DockTabNonInteractive, DockTabConditionEditor, DockTabTaskEditor } from '../../dock/types'; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
 import { splitWithTab, addTabCenter, closeTab, activateTab, moveTab, getTab, removeTab } from '../../dock/ops';
 import { Workflow, FileText, Code2, GitBranch } from 'lucide-react';
 import SmartTooltip from '../SmartTooltip';
@@ -28,7 +28,7 @@ function getTabIcon(tab: DockTab) {
   switch (tab.type) {
     case 'flow': return <Workflow size={14} color="#0c4a6e" />;
     case 'responseEditor': return <FileText size={14} color="#7c3aed" />;
-    case 'actEditor': return <FileText size={14} color="#94a3b8" />;
+    case 'taskEditor': return <FileText size={14} color="#94a3b8" />; // ✅ RINOMINATO: 'actEditor' → 'taskEditor'
     case 'nonInteractive': return <FileText size={14} color="#059669" />;
     case 'conditionEditor': return <Code2 size={14} color="#dc2626" />;
     default: return <GitBranch size={14} color="#0c4a6e" />;
@@ -302,18 +302,18 @@ function TabSet(props: {
         {props.tabs.map((t, i) => {
           const isActive = props.active === i;
           const isResponseEditor = t.type === 'responseEditor';
-          const isActEditor = t.type === 'actEditor';
+          const isTaskEditor = t.type === 'taskEditor'; // ✅ RINOMINATO: isActEditor → isTaskEditor, 'actEditor' → 'taskEditor'
           const responseEditorTab = isResponseEditor ? (t as DockTabResponseEditor) : null;
-          const actEditorTab = isActEditor ? (t as DockTabActEditor) : null;
-          // Get color from either responseEditor or actEditor
-          const tabColor = isActive && (responseEditorTab?.headerColor || actEditorTab?.headerColor)
-            ? (responseEditorTab?.headerColor || actEditorTab?.headerColor)
+          const taskEditorTab = isTaskEditor ? (t as DockTabTaskEditor) : null; // ✅ RINOMINATO: actEditorTab → taskEditorTab, DockTabActEditor → DockTabTaskEditor
+          // Get color from either responseEditor or taskEditor
+          const tabColor = isActive && (responseEditorTab?.headerColor || taskEditorTab?.headerColor) // ✅ RINOMINATO: actEditorTab → taskEditorTab
+            ? (responseEditorTab?.headerColor || taskEditorTab?.headerColor) // ✅ RINOMINATO: actEditorTab → taskEditorTab
             : undefined;
-          // Get toolbar buttons from either responseEditor or actEditor
-          const toolbarButtons = isActive && (responseEditorTab?.toolbarButtons || actEditorTab?.toolbarButtons)
-            ? (responseEditorTab?.toolbarButtons || actEditorTab?.toolbarButtons || [])
+          // Get toolbar buttons from either responseEditor or taskEditor
+          const toolbarButtons = isActive && (responseEditorTab?.toolbarButtons || taskEditorTab?.toolbarButtons) // ✅ RINOMINATO: actEditorTab → taskEditorTab
+            ? (responseEditorTab?.toolbarButtons || taskEditorTab?.toolbarButtons || []) // ✅ RINOMINATO: actEditorTab → taskEditorTab
             : [];
-          const showToolbar = isActive && (isResponseEditor || isActEditor) && toolbarButtons.length > 0;
+          const showToolbar = isActive && (isResponseEditor || isTaskEditor) && toolbarButtons.length > 0; // ✅ RINOMINATO: isActEditor → isTaskEditor
 
           return (
             <div key={t.id}

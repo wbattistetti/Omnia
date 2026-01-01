@@ -31,4 +31,3 @@ export type InferOptions = {
   languageOrder?: Lang[];
 };
 
-

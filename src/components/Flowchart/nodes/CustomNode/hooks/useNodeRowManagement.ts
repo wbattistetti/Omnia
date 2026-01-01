@@ -4,6 +4,7 @@ import { typeToMode } from '../../../../../utils/normalizers';
 import { createRowWithTask, getTaskIdFromRow, updateRowData, deriveTaskTypeFromTemplateId } from '../../../../../utils/taskHelpers';
 import { flowchartVariablesService } from '../../../../../services/FlowchartVariablesService';
 import { taskRepository } from '../../../../../services/TaskRepository';
+import { TaskType } from '../../../../../types/taskTypes'; // ✅ Per TaskType enum
 import DDTTemplateMatcherService from '../../../../../services/DDTTemplateMatcherService';
 
 // ✅ Traccia il contenuto originale quando inizi a editare una riga esistente
@@ -61,7 +62,7 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         const newRowId = makeRowId();
         // Create row with Task (dual mode: Task + InstanceRepository)
         // ✅ Use UNDEFINED instead of Message as default - will be updated by Euristica 1 when user types
-        const newRow = createRowWithTask(newRowId, 'UNDEFINED', '');
+        const newRow = createRowWithTask(newRowId, TaskType.UNDEFINED, ''); // ✅ TaskType enum invece di stringa
         return { nextRows: [...rows, newRow], newRowId };
     }, [makeRowId]);
 
@@ -372,7 +373,7 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         const newRowId = makeRowId();
         // Create row with Task (dual mode: Task + InstanceRepository)
         // ✅ Use UNDEFINED instead of Message as default - will be updated by Euristica 1 when user types
-        const newRow = createRowWithTask(newRowId, 'UNDEFINED', '');
+        const newRow = createRowWithTask(newRowId, TaskType.UNDEFINED, ''); // ✅ TaskType enum invece di stringa
         (newRow as any).isNew = true; // Preserve isNew flag
 
         updatedRows.splice(adjustedIndex, 0, newRow);

@@ -11,7 +11,7 @@ import { ImportDropdown } from '../../../../features/intent-editor/ui/common/Imp
 
 export interface IntentListEditorProps {
   instanceId: string;
-  actId: string;
+  taskId: string;
   selectedIntentId?: string | null;
   onIntentChange?: (intents: ProblemIntent[]) => void;
   onIntentSelect?: (intentId: string | null) => void;
@@ -19,12 +19,12 @@ export interface IntentListEditorProps {
 
 /**
  * Common SSOT component for editing intent list in ResponseEditor
- * Used when act.type === 'ProblemClassification' and kind === 'intent'
+ * Used when task.type === TaskType.ClassifyProblem and kind === 'intent'
  * FASE 3: Manages intents in Task and syncs with useIntentStore for training
  */
 export default function IntentListEditor({
   instanceId,
-  actId,
+  taskId,
   selectedIntentId,
   onIntentChange,
   onIntentSelect,

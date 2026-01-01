@@ -1,14 +1,9 @@
+import { TaskType } from './taskTypes'; // ✅ Import TaskType enum
+
 export type EntityType = 'taskTemplates' | 'userActs' | 'backendActions' | 'conditions' | 'macrotasks';
 
-// New explicit Agent Act types (authoritative)
-export type ActType =
-  | 'AIAgent'
-  | 'Message'
-  | 'DataRequest'
-  | 'ProblemClassification'
-  | 'Summarizer'
-  | 'BackendCall'
-  | 'Negotiation';
+// ❌ RIMOSSO: ActType - sostituito con TaskType enum da taskTypes.ts
+// ✅ Usa TaskType enum invece di stringhe semantiche
 
 /**
  * Rappresenta un'entità generica di progetto (es. task, backend action, ecc.)

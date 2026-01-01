@@ -67,20 +67,22 @@ if (typeof document !== 'undefined' && !document.getElementById('nlp-spinner-ani
   document.head.appendChild(style);
 }
 
+import { TaskMeta } from '../../EditorHost/types';
+
 export default function NLPExtractorProfileEditor({
   node,
-  actType,
+  taskType,
   locale = 'it-IT',
   onChange,
   intentSelected,
-  act,
+  task,
 }: {
   node: any;
-  actType?: string; // ✅ Type dell'act per determinare classification vs extraction mode
+  taskType?: TaskType; // ✅ Type del task per determinare classification vs extraction mode
   locale?: string;
   onChange?: (profile: NLPProfile) => void;
   intentSelected?: string; // Intent ID selected from IntentListEditor (when kind === 'intent')
-  act?: { id: string; type: string; label?: string; instanceId?: string }; // Act info for syncing intents
+  task?: TaskMeta; // Task info for syncing intents
 }) {
   // Profile state management (extracted to hook)
   const {
@@ -233,25 +235,25 @@ export default function NLPExtractorProfileEditor({
   // ✅ Aggiorna examplesList in base alla modalità selezionata (solo per kind === 'intent')
   const updateExamplesList = React.useCallback(() => {
     // Solo per kind === 'intent'
-    if (nodeKind !== 'intent' || !act?.instanceId) {
+    if (nodeKind !== 'intent' || !task?.instanceId) {
       return;
     }
 
     // Read intents from Task
-    const task = taskRepository.getTask(act.instanceId);
-    if (!task?.value?.intents) return;
+    const taskInstance = taskRepository.getTask(task.instanceId);
+    if (!taskInstance?.value?.intents) return;
 
     let phrases: string[] = [];
 
     if (testPhraseMode === 'all-training') {
       // Tutte le frasi di training di tutti gli intenti
-      phrases = task.intents?.flatMap((pi: ProblemIntent) =>
+      phrases = taskInstance.intents?.flatMap((pi: ProblemIntent) =>
         (pi.phrases?.matching || []).map((p: any) => p.text)
       ) || [];
     } else if (testPhraseMode === 'selected-training') {
       // Solo frasi dell'intento selezionato
       if (intentSelected) {
-        const intent = task.intents?.find(
+        const intent = taskInstance.intents?.find(
           (pi: ProblemIntent) => pi.id === intentSelected || pi.name === intentSelected
         );
         phrases = (intent?.phrases?.matching || []).map((p: any) => p.text);
@@ -260,7 +262,7 @@ export default function NLPExtractorProfileEditor({
       // Frasi di test (da ProblemPayload.editor.tests)
       try {
         const pid = localStorage.getItem('current.projectId') || '';
-        const key = `problem.${pid}.${act.id}`;
+        const key = `problem.${pid}.${task.id}`;
         const raw = localStorage.getItem(key);
         if (raw) {
           const payload = JSON.parse(raw);
@@ -274,7 +276,7 @@ export default function NLPExtractorProfileEditor({
     // Rimuovi duplicati e ordina alfabeticamente
     const uniquePhrases = Array.from(new Set(phrases)).sort();
     setExamplesList(uniquePhrases);
-  }, [testPhraseMode, intentSelected, act?.instanceId, act?.id, nodeKind, setExamplesList]);
+  }, [testPhraseMode, intentSelected, task?.instanceId, task?.id, nodeKind, setExamplesList]);
 
   React.useEffect(() => {
     updateExamplesList();
@@ -282,13 +284,13 @@ export default function NLPExtractorProfileEditor({
 
   // ✅ Ascolta gli aggiornamenti di instanceRepository per aggiornare le frasi quando vengono generate
   React.useEffect(() => {
-    if (nodeKind !== 'intent' || !act?.instanceId) {
+    if (nodeKind !== 'intent' || !task?.instanceId) {
       return;
     }
 
     const handleInstanceUpdate = (event: any) => {
       const { instanceId } = event.detail || {};
-      if (instanceId === act.instanceId) {
+      if (instanceId === task.instanceId) {
         updateExamplesList();
       }
     };
@@ -297,7 +299,7 @@ export default function NLPExtractorProfileEditor({
     return () => {
       window.removeEventListener('instanceRepository:updated', handleInstanceUpdate);
     };
-  }, [act?.instanceId, nodeKind, updateExamplesList]);
+  }, [task?.instanceId, nodeKind, updateExamplesList]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', minHeight: 0 }}>
@@ -660,7 +662,7 @@ export default function NLPExtractorProfileEditor({
               onChange?.(updatedProfile);
             }}
             intentSelected={intentSelected}
-            act={act}
+            task={task}
           />
         </div>
       )}

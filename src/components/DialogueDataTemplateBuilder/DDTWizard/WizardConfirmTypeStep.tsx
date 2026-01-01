@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Edit3, X, Check, MapPin, Tag, Globe, Mail, MessageCircle } from 'lucide-react';
 import DataTypeLabel from './DataTypeLabel';
-import getIcon from '../../ActEditor/ResponseEditor/icons';
+import getIcon from '../../TaskEditor/ResponseEditor/icons';
 
 interface Props {
   detectedType: string | null;

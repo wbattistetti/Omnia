@@ -24,7 +24,7 @@ interface NodeRowListProps {
   draggedItem: NodeRowData | null;
   draggedRowStyle: React.CSSProperties;
   onEditingEnd?: (rowId?: string) => void;
-  onCreateAgentAct?: (name: string, onRowUpdate?: (item: any) => void) => void;
+  onCreateFactoryTask?: (name: string, onRowUpdate?: (item: any) => void) => void; // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
   onCreateBackendCall?: (name: string, onRowUpdate?: (item: any) => void) => void;
   onCreateTask?: (name: string, onRowUpdate?: (item: any) => void) => void;
   getProjectId?: () => string | null;
@@ -51,7 +51,7 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
   draggedItem,
   draggedRowStyle,
   onEditingEnd,
-  onCreateAgentAct,
+  onCreateFactoryTask, // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
   onCreateBackendCall,
   onCreateTask,
   getProjectId
@@ -134,7 +134,7 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
               else if (type === 'bottom') setHoveredInserter(i + 1);
             }}
             onMouseLeave={() => setHoveredInserter(null)}
-            onCreateAgentAct={onCreateAgentAct}
+            onCreateFactoryTask={onCreateFactoryTask} // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
             onCreateBackendCall={onCreateBackendCall}
             onCreateTask={onCreateTask}
             getProjectId={getProjectId}

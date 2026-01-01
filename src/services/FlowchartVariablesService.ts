@@ -3,7 +3,7 @@
 // - Incremental updates (merge/diff instead of delete+recreate)
 // - Database persistence (saved when project is saved, loaded when project is opened)
 
-import { getMainDataList, getSubDataList, hasMultipleMains, getLabel } from '../components/ActEditor/ResponseEditor/ddtSelectors';
+import { getMainDataList, getSubDataList, hasMultipleMains, getLabel } from '../components/TaskEditor/ResponseEditor/ddtSelectors';
 
 interface VariableMapping {
   readableName: string; // e.g., "data di nascita", "data di nascita.giorno", "dati personali.Nominativo.Nome"

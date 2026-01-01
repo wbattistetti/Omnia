@@ -28,7 +28,7 @@ export default function IntentListEditorWrapper({
     <div style={{ width: 300, minWidth: 250, maxWidth: 400, flexShrink: 0 }}>
       <IntentListEditor
         instanceId={instanceId}
-        actId={act.id}
+        taskId={task.id}
         selectedIntentId={selectedIntentId}
         onIntentSelect={handleSelect}
         onIntentChange={(intents) => {

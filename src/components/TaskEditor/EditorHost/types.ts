@@ -1,14 +1,18 @@
+import { TaskType } from '../../../types/taskTypes'; // ✅ Import TaskType enum
+
 export type EditorKind = 'message' | 'ddt' | 'intent' | 'backend';
 
-export type ActMeta = {
+// ✅ RINOMINATO: ActMeta → TaskMeta
+// ✅ CAMBIATO: type: string → type: TaskType (enum)
+export type TaskMeta = {
   id: string;
-  type: string;
+  type: TaskType; // ✅ TaskType enum invece di stringa semantica
   label?: string;
   instanceId?: string;
 };
 
 export type EditorProps = {
-  act: ActMeta;
+  task: TaskMeta; // ✅ RINOMINATO: act → task
   onClose?: () => void;
   onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void;
   hideHeader?: boolean;

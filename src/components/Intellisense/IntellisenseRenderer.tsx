@@ -16,7 +16,7 @@ interface IntellisenseRendererProps {
   onItemHover: (index: number) => void;
   onItemDelete?: (item: any) => void; // ✅ Callback per cancellazione
   onCreateNew?: (name: string, scope?: 'global' | 'industry') => void;
-  onCreateAgentAct?: (name: string, scope?: 'global' | 'industry', categoryName?: string) => void;
+  onCreateFactoryTask?: (name: string, scope?: 'global' | 'industry', categoryName?: string) => void; // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
   onCreateBackendCall?: (name: string, scope?: 'global' | 'industry', categoryName?: string) => void;
   onCreateTask?: (name: string, scope?: 'global' | 'industry', categoryName?: string) => void;
   query?: string;
@@ -42,7 +42,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
   onItemHover,
   onItemDelete,
   onCreateNew,
-  onCreateAgentAct,
+  onCreateFactoryTask, // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
   onCreateBackendCall,
   onCreateTask,
   query = '',
@@ -114,7 +114,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
     setIsCreating(true);
     setCreatingScope(scope);
     try {
-      onCreateAgentAct?.(name, scope, categoryName);
+      onCreateFactoryTask?.(name, scope, categoryName); // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
     } finally {
       // Reset immediato per creazione sincrona
       setTimeout(() => {

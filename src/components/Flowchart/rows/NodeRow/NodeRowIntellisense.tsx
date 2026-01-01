@@ -11,7 +11,7 @@ interface NodeRowIntellisenseProps {
   handleIntellisenseSelect: (item: any) => void;
   handleIntellisenseClose: () => void;
   allowCreatePicker?: boolean;
-  onCreateAgentAct?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
+  onCreateFactoryTask?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void; // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
   onCreateBackendCall?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
   onCreateTask?: (name: string, onRowUpdate?: (item: any) => void, scope?: 'global' | 'industry', categoryName?: string) => void;
 }
@@ -25,7 +25,7 @@ export const NodeRowIntellisense: React.FC<NodeRowIntellisenseProps> = ({
   handleIntellisenseSelect,
   handleIntellisenseClose,
   allowCreatePicker,
-  onCreateAgentAct,
+  onCreateFactoryTask, // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
   onCreateBackendCall,
   onCreateTask
 }) => {
@@ -51,8 +51,8 @@ export const NodeRowIntellisense: React.FC<NodeRowIntellisenseProps> = ({
             }}
             allowCreatePicker={!!allowCreatePicker}
             filterCategoryTypes={['taskTemplates', 'backendActions', 'macrotasks']}
-            onCreateAgentAct={onCreateAgentAct ? (name: string, scope?: 'global' | 'industry', categoryName?: string) => {
-              return onCreateAgentAct(name, createRowUpdateCallback, scope, categoryName);
+            onCreateFactoryTask={onCreateFactoryTask ? (name: string, scope?: 'global' | 'industry', categoryName?: string) => {
+              return onCreateFactoryTask(name, createRowUpdateCallback, scope, categoryName); // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
             } : undefined}
             onCreateBackendCall={onCreateBackendCall ? (name: string, scope?: 'global' | 'industry', categoryName?: string) => onCreateBackendCall(name, createRowUpdateCallback, scope, categoryName) : undefined}
             onCreateTask={onCreateTask ? (name: string, scope?: 'global' | 'industry', categoryName?: string) => onCreateTask(name, createRowUpdateCallback, scope, categoryName) : undefined}

@@ -60,13 +60,14 @@ export function templateIdToTaskType(templateId: string | null | undefined): Tas
 }
 
 /**
- * ✅ Helper: Converte actId/stringa semantica (da UI/Intellisense) → TaskType enum
- * Usato quando l'utente seleziona un tipo dall'Intellisense o quando si crea un task
+ * ✅ Helper: Converte stringa semantica legacy (da UI/Intellisense/database) → TaskType enum
+ * ⚠️ TEMPORANEO: Usato per backward compatibility durante la migrazione
+ * TODO: Eliminare quando tutti i punti che passano stringhe semantiche saranno aggiornati a TaskType enum
  *
- * @param actId - Stringa semantica da UI (es. "Message", "DataRequest", "ProblemClassification")
+ * @param taskId - Stringa semantica legacy (es. "Message", "DataRequest", "ProblemClassification")
  * @returns TaskType enum corrispondente
  */
-export function actIdToTaskType(actId: string): TaskType {
+export function taskIdToTaskType(taskId: string): TaskType { // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
   const normalized = actId.toLowerCase().trim();
 
   // Mapping actId (UI) → TaskType enum
@@ -88,7 +89,7 @@ export function actIdToTaskType(actId: string): TaskType {
 /**
  * ✅ Helper: Converte HeuristicType string (legacy) → TaskType enum
  * Usato durante la migrazione per compatibilità
- * @deprecated Usa actIdToTaskType() invece
+ * @deprecated Usa taskIdToTaskType() invece
  */
 export function heuristicStringToTaskType(heuristic: string): TaskType {
   const normalized = heuristic.toUpperCase().trim();

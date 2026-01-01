@@ -30,7 +30,7 @@ interface IntellisenseMenuProps {
   onClose: () => void;
   filterCategoryTypes?: string[];
   onCreateNew?: (name: string, scope?: 'global' | 'industry') => void;
-  onCreateAgentAct?: (name: string, scope?: 'global' | 'industry', categoryName?: string) => void;
+  onCreateFactoryTask?: (name: string, scope?: 'global' | 'industry', categoryName?: string) => void; // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
   onCreateBackendCall?: (name: string, scope?: 'global' | 'industry', categoryName?: string) => void;
   onCreateTask?: (name: string, scope?: 'global' | 'industry', categoryName?: string) => void;
   allowCreatePicker?: boolean;
@@ -51,7 +51,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
   onClose,
   filterCategoryTypes,
   onCreateNew,
-  onCreateAgentAct,
+  onCreateFactoryTask, // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
   onCreateBackendCall,
   onCreateTask,
   allowCreatePicker = false,
@@ -601,7 +601,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
     const isForNodes = filterCategoryTypes?.includes('taskTemplates') || filterCategoryTypes?.includes('backendActions');
     const hasCreateButtons = allowCreatePicker && query.trim() && (
       (isForNodes) || // Per nodi mostra sempre i pulsanti se c'è query
-      (!isForNodes && (onCreateNew || onCreateAgentAct || onCreateBackendCall || onCreateTask)) // Per condizioni mostra se ci sono callback
+      (!isForNodes && (onCreateNew || onCreateFactoryTask || onCreateBackendCall || onCreateTask)) // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
     );
 
     if (!hasCreateButtons) {
@@ -647,7 +647,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
             onItemHover={(index) => setSelectedIndex(index)}
             onItemDelete={handleDelete} // ✅ Callback per cancellazione
             onCreateNew={onCreateNew}
-            onCreateAgentAct={onCreateAgentAct}
+            onCreateFactoryTask={onCreateFactoryTask} // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
             onCreateBackendCall={onCreateBackendCall}
             onCreateTask={onCreateTask}
             allowCreatePicker={allowCreatePicker}
@@ -672,7 +672,7 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
             onItemHover={(index) => setSelectedIndex(index)}
             onItemDelete={handleDelete} // ✅ Callback per cancellazione
             onCreateNew={onCreateNew}
-            onCreateAgentAct={onCreateAgentAct}
+            onCreateFactoryTask={onCreateFactoryTask} // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
             onCreateBackendCall={onCreateBackendCall}
             onCreateTask={onCreateTask}
             allowCreatePicker={allowCreatePicker}

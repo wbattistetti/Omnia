@@ -1,6 +1,6 @@
 import React from 'react';
 import { PlayCircle, MicOff, HelpCircle, CheckCircle2, CheckSquare, AlertCircle, Wine } from 'lucide-react';
-import { stepMeta } from '../ActEditor/ResponseEditor/ddtUtils';
+import { stepMeta } from '../TaskEditor/ResponseEditor/ddtUtils';
 
 // Helper function to get icon for step type with color
 export function getStepIcon(stepType?: string, color?: string) {
