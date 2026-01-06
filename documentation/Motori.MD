@@ -186,7 +186,7 @@ FUNZIONE GetNextData(DDTInstance):
 
     quindi devi mettere delle funzioni MainData.isEmpty
 
-    PER OGNI mainData IN DDTInstance.mainData.where(stato <> AcqusitonFailed):
+    PER OGNI mainData IN DDTInstance.mainData.  where(stato <> AcqusitonFailed):
         mainState = getDataState(mainData.id)
 
 

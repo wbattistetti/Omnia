@@ -17,7 +17,7 @@ import { isCacheLoaded, getPatternCache, waitForCache } from './patternLoader';
  */
 export async function classify(label: string, opts?: InferOptions): Promise<Inference> {
   const txt = (label || '').trim();
-  if (!txt) return { type: TaskType.SayMessage, reason: 'empty' };
+  if (!txt) return { type: TaskType.UNDEFINED, reason: 'empty' };
 
   console.log('🔍 [CLASSIFY] START', {
     label: txt,

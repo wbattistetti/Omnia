@@ -1,11 +1,10 @@
 import { useState, useCallback, useRef } from 'react';
 import { NodeRowData, EntityType } from '../../../../../types/project';
 import { typeToMode } from '../../../../../utils/normalizers';
-import { createRowWithTask, getTaskIdFromRow, updateRowData, deriveTaskTypeFromTemplateId } from '../../../../../utils/taskHelpers';
+import { getTaskIdFromRow } from '../../../../../utils/taskHelpers';
 import { flowchartVariablesService } from '../../../../../services/FlowchartVariablesService';
 import { taskRepository } from '../../../../../services/TaskRepository';
 import { TaskType } from '../../../../../types/taskTypes'; // ✅ Per TaskType enum
-import DDTTemplateMatcherService from '../../../../../services/DDTTemplateMatcherService';
 
 // ✅ Traccia il contenuto originale quando inizi a editare una riga esistente
 interface RowOriginalContent {
@@ -57,12 +56,23 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
     }, []);
 
     // Funzione per aggiungere una riga vuota
-    // Migration: Now creates Task in TaskRepository (dual mode)
+    // ✅ LAZY: Crea solo la riga, SENZA task (il task verrà creato solo quando si apre l'editor)
     const appendEmptyRow = useCallback((rows: NodeRowData[]) => {
         const newRowId = makeRowId();
-        // Create row with Task (dual mode: Task + InstanceRepository)
-        // ✅ Use UNDEFINED instead of Message as default - will be updated by Euristica 1 when user types
-        const newRow = createRowWithTask(newRowId, TaskType.UNDEFINED, ''); // ✅ TaskType enum invece di stringa
+        // ✅ LAZY: Crea solo la riga, SENZA task (il task verrà creato solo quando si apre l'editor)
+        const newRow: NodeRowData = {
+            id: newRowId,
+            text: '',
+            included: true,
+            // ✅ NO taskId - il task verrà creato lazy quando si apre l'editor
+            // ✅ Metadati iniziali: UNDEFINED (verrà aggiornato dall'euristica quando l'utente digita)
+            meta: {
+                type: TaskType.UNDEFINED,
+                templateId: null
+            } as any,
+            isUndefined: true,
+            mode: undefined as any
+        };
         return { nextRows: [...rows, newRow], newRowId };
     }, [makeRowId]);
 
@@ -138,7 +148,11 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
                         ? (meta as any).categoryType
                         : (categoryType ?? row.categoryType),
                 // Preserva flag isUndefined
-                isUndefined: preserveIsUndefined
+                isUndefined: preserveIsUndefined,
+                // ✅ FIX: Preserva meta esplicitamente (contiene type e templateId dall'euristica)
+                meta: (incoming as any)?.meta !== undefined
+                    ? (incoming as any).meta
+                    : ((row as any)?.meta || undefined)
             } as any;
 
             return updatedRow;
@@ -192,71 +206,9 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         // setIsEmpty viene aggiornato solo quando esci dall'editing (ESC, click fuori, blur esterno)
         normalizedData.onUpdate?.({ rows: updatedRows, isTemporary: normalizedData.isTemporary });
 
-        // ✅ EURISTICA 2: Se la riga è stata riempita, cerca template DDT
-        // Esegui anche se il tipo è Message (default), perché potrebbe essere un DataRequest
-        if (nowFilled && newText.trim().length >= 3) {
-            const taskId = getTaskIdFromRow(finalRow);
-            if (taskId) {
-                const task = taskRepository.getTask(taskId);
-                // ✅ Deriva il tipo dal templateId (Task non ha campo type, solo templateId)
-                const currentType = deriveTaskTypeFromTemplateId(task?.templateId) || (finalRow as any)?.type;
-
-                // ✅ Esegui Euristica 2 se:
-                // 1. Tipo è UNDEFINED (nessun match da Euristica 1)
-                // 2. Tipo è Message (default, potrebbe essere sovrascritto se troviamo un DataRequest)
-                // 3. Tipo non è già DataRequest (evita loop)
-                const shouldRunHeuristic2 =
-                    !currentType ||
-                    currentType === 'UNDEFINED' ||
-                    currentType === 'Message';
-
-                if (shouldRunHeuristic2) {
-                    (async () => {
-                        try {
-                            // ✅ Passa 'UNDEFINED' o 'Message' al servizio (entrambi sono modificabili)
-                            const typeForMatch = currentType === 'Message' ? 'UNDEFINED' : currentType;
-                            const match = await DDTTemplateMatcherService.findDDTTemplate(newText.trim(), typeForMatch);
-                            if (match) {
-                                // Ottieni projectId
-                                let projectId: string | undefined = undefined;
-                                try {
-                                    projectId = ((require('../../state/runtime') as any).getCurrentProjectId?.() || undefined);
-                                } catch { }
-
-                                // Aggiorna task con GetData (campi diretti, niente wrapper value)
-                                if (task) {
-                                    taskRepository.updateTask(taskId, {
-                                        templateId: 'GetData'
-                                    }, projectId);
-                                } else {
-                                    // Crea nuovo task con GetData
-                                    taskRepository.createTask('GetData', undefined, taskId, projectId);
-                                }
-
-                                // Aggiorna anche la riga con il tipo corretto
-                                const updatedMeta = {
-                                    ...meta,
-                                    type: 'DataRequest',
-                                    mode: 'GetData'
-                                };
-
-                                // Aggiorna le righe con il nuovo tipo
-                                const rowsWithUpdatedType = updatedRows.map(r =>
-                                    r.id === rowId ? { ...r, ...updatedMeta, type: 'DataRequest', mode: 'GetData' } : r
-                                );
-
-                                normalizedData.onUpdate?.({
-                                    rows: rowsWithUpdatedType,
-                                    isTemporary: normalizedData.isTemporary
-                                });
-                            }
-                        } catch (err) {
-                            console.error('[useNodeRowManagement] Errore Euristica 2:', err);
-                        }
-                    })();
-                }
-            }
-        }
+        // ✅ LAZY: NON aggiorniamo/creiamo task qui - solo memorizziamo metadati nella riga
+        // ✅ Il task verrà creato solo quando si apre l'editor (cliccando sul gear)
+        // ✅ L'euristica 2 viene eseguita in NodeRow.tsx quando l'utente preme Enter
     }, [nodeRows, isEmpty, nodeId, appendEmptyRow, normalizedData, saveOriginalContent]);
 
     // Gestione eliminazione riga
@@ -371,9 +323,20 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         if (!lastValid && updatedRows.length > 0) return;
 
         const newRowId = makeRowId();
-        // Create row with Task (dual mode: Task + InstanceRepository)
-        // ✅ Use UNDEFINED instead of Message as default - will be updated by Euristica 1 when user types
-        const newRow = createRowWithTask(newRowId, TaskType.UNDEFINED, ''); // ✅ TaskType enum invece di stringa
+        // ✅ LAZY: Crea solo la riga, SENZA task (il task verrà creato solo quando si apre l'editor)
+        const newRow: NodeRowData = {
+            id: newRowId,
+            text: '',
+            included: true,
+            // ✅ NO taskId - il task verrà creato lazy quando si apre l'editor
+            // ✅ Metadati iniziali: UNDEFINED (verrà aggiornato dall'euristica quando l'utente digita)
+            meta: {
+                type: TaskType.UNDEFINED,
+                templateId: null
+            } as any,
+            isUndefined: true,
+            mode: undefined as any
+        };
         (newRow as any).isNew = true; // Preserve isNew flag
 
         updatedRows.splice(adjustedIndex, 0, newRow);

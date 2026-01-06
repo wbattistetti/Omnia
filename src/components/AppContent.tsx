@@ -611,8 +611,8 @@ export const AppContent: React.FC<AppContentProps> = ({
             // ✅ Load DDT async (if task has templateId, build from template)
             if (task && task.templateId) {
               try {
-                const { buildDDTFromTemplate } = await import('../utils/ddtMergeUtils');
-                ddt = await buildDDTFromTemplate(task);
+                const { loadDDTFromTemplate } = await import('../utils/ddtMergeUtils');
+                ddt = await loadDDTFromTemplate(task);
               } catch (err) {
                 console.error('[AppContent] Error loading DDT from template:', err);
               }

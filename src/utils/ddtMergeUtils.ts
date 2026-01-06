@@ -3,18 +3,22 @@ import { DialogueTaskService } from '../services/DialogueTaskService';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
- * Build complete DDT from template (reference) and instance (steps + overrides)
+ * Load DDT from template (reference) and instance (steps + overrides)
+ *
+ * This function loads the DDT structure for the editor by combining:
+ * - Template structure (mainData, constraints, examples, nlpContract) - source of truth
+ * - Instance overrides (steps with cloned task IDs, modified constraints/examples)
  *
  * Rules:
  * - label, steps: Always from instance (always editable)
- * - mainData structure: Replicated in instance (for allowing additions), but contracts/constraints come from template (reference)
+ * - mainData structure: From template (reference), but allows instance additions
  * - constraints, examples, nlpContract: From template (reference), unless overridden in instance
  *
  * Structure:
  * - Nodes with templateId !== null: Structure from template, steps cloned with new task IDs, contracts from template
  * - Nodes with templateId === null: Complete structure from instance (added nodes)
  */
-export async function buildDDTFromTemplate(instance: Task | null): Promise<any | null> {
+export async function loadDDTFromTemplate(instance: Task | null): Promise<any | null> {
   if (!instance) return null;
 
   // If no templateId or templateId is "UNDEFINED", this is a standalone instance (has full structure)
@@ -445,12 +449,12 @@ async function copyTranslationsForClonedSteps(_ddt: any, _templateId: string, gu
         let projectId: string | null = null;
         try {
           projectId = localStorage.getItem('currentProjectId');
-        } catch {}
+        } catch { }
         if (!projectId) {
           try {
             const runtime = await import('../state/runtime');
             projectId = runtime.getCurrentProjectId();
-          } catch {}
+          } catch { }
         }
         if (!projectId) {
           projectId = (window as any).currentProjectId || (window as any).__currentProjectId || null;

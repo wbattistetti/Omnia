@@ -26,8 +26,8 @@ import { useIntellisensePosition } from './hooks/useIntellisensePosition';
 import { useRowRegistry } from './hooks/useRowRegistry';
 import { isInsideWithPadding, getToolbarRect } from './utils/geometry';
 import { getTaskVisualsByType, resolveTaskType, hasTaskDDT } from '../../utils/taskVisuals';
-import { inferTaskType } from '../../../../nlp/taskType'; // ✅ RINOMINATO: actType → taskType
 import { TaskType, taskTypeToTemplateId, taskTypeToHeuristicString, taskIdToTaskType } from '../../../../types/taskTypes'; // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
+import { RowHeuristicsService } from '../../../../services/RowHeuristicsService'; // ✅ Service centralizzato per euristiche
 import { modeToType, typeToMode } from '../../../../utils/normalizers';
 import { idMappingService } from '../../../../services/IdMappingService';
 import { generateId } from '../../../../utils/idGenerator';
@@ -537,7 +537,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         try { inputRef.current?.blur(); } catch { }
         return;
       }
-      // ✅ FLUSSO SEMPLIFICATO: Euristica 1 → Euristica 2 → Crea Task
+      // ✅ FLUSSO CENTRALIZZATO: Usa RowHeuristicsService per analisi euristica
       try {
         console.log('🔍 [EURISTICA] START - Creazione riga', {
           text: q,
@@ -546,99 +546,33 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           timestamp: new Date().toISOString()
         });
 
-        // 1️⃣ EURISTICA 1: interpreta la label e decide il TaskType
-        console.log('🔍 [EURISTICA 1] Chiamando inferTaskType...', { text: q });
-        const inf = await inferTaskType(q, { languageOrder: ['IT', 'EN', 'PT'] as any }); // ✅ RINOMINATO: inferActType → inferTaskType
-        let taskType = inf.type; // ✅ Ora è TaskType enum (TaskType.SayMessage, TaskType.DataRequest, TaskType.UNDEFINED, ecc.)
+        // ✅ Usa servizio centralizzato per analisi euristica
+        const heuristicsResult = await RowHeuristicsService.analyzeRowLabel(q);
+        const { taskType, templateId, isUndefined } = heuristicsResult;
 
-        console.log('✅ [EURISTICA 1] Risultato', {
+        console.log('✅ [EURISTICA] Risultato analisi', {
+          rowId: row.id,
           text: q,
-          taskType: taskType,
+          taskType,
           taskTypeName: TaskType[taskType],
-          confidence: inf.confidence,
-          reasoning: inf.reasoning || 'N/A'
+          templateId,
+          isUndefined
         });
 
-        // 2️⃣ EURISTICA 2: cerca template DDT
-        const DDTTemplateMatcherService = (await import('../../../../services/DDTTemplateMatcherService')).default;
-        // ✅ Converti TaskType enum → string per euristica 2
-        // ✅ FALLBACK: se taskType è UNDEFINED, prova comunque a cercare template DataRequest
-        // Questo è uno dei pochi fallback da mantenere (come richiesto)
-        const typeForMatch = taskType === TaskType.UNDEFINED
-          ? 'DataRequest'  // ✅ FALLBACK: cerca template anche se euristica 1 è UNDEFINED
-          : taskTypeToHeuristicString(taskType);
-
-        console.log('🔍 [EURISTICA 2] Preparazione ricerca template', {
-          text: q,
-          taskType: taskType,
-          taskTypeName: TaskType[taskType],
-          typeForMatch: typeForMatch,
-          willSearch: !!typeForMatch
-        });
-
-        let matchedTemplate = null;
-        if (typeForMatch) {
-          console.log('🔍 [EURISTICA 2] Cercando template DDT...', { text: q, typeForMatch });
-          matchedTemplate = await DDTTemplateMatcherService.findDDTTemplate(q, typeForMatch);
-
-          console.log('✅ [EURISTICA 2] Risultato ricerca template', {
-            text: q,
-            found: !!matchedTemplate,
-            templateId: matchedTemplate?.templateId || null,
-            templateLabel: matchedTemplate?.label || null,
-            matchType: matchedTemplate?.matchType || null,
-            language: matchedTemplate?.language || null
-          });
-        } else {
-          console.log('⚠️ [EURISTICA 2] Saltata - typeForMatch è null/undefined', { taskType, typeForMatch });
-        }
-
-        // 3️⃣ Se Euristica 2 trova match:
-        // - E Euristica 1 era UNDEFINED → override tipo con DataRequest
-        // - E Euristica 1 era SayMessage → override tipo con DataRequest (es. "chiedi data nascita" → trova template data)
-        const taskTypeBeforeOverride = taskType;
-        if (matchedTemplate && (taskType === TaskType.UNDEFINED || taskType === TaskType.SayMessage)) {
-          taskType = TaskType.DataRequest;
-          console.log('🔄 [EURISTICA] Override taskType per match template', {
-            before: taskTypeBeforeOverride,
-            beforeName: TaskType[taskTypeBeforeOverride],
-            after: taskType,
-            afterName: TaskType[taskType],
-            templateId: matchedTemplate.templateId
-          });
-        }
-
-        // 4️⃣ LAZY APPROACH: Memorizza metadati nella riga invece di creare task subito
+        // ✅ LAZY APPROACH: Memorizza metadati nella riga invece di creare task subito
         // ✅ Il task verrà creato solo quando si apre l'editor (lazy creation)
         console.log('💾 [METADATA] Memorizzando metadati nella riga (lazy task creation)', {
           rowId: row.id,
           hasExistingTaskId: !!row.taskId,
           taskType: taskType,
           taskTypeName: TaskType[taskType],
-          templateId: matchedTemplate?.templateId || null
+          templateId: templateId
         });
 
-        // ✅ Se il task esiste già, aggiornalo con i nuovi metadati
-        if (row.taskId) {
-          console.log('🔄 [TASK UPDATE] Aggiornando task esistente con nuovi metadati', { taskId: row.taskId });
-          const projectId = getProjectId?.() || undefined;
+        // ✅ LAZY: NON creiamo/aggiorniamo il task qui - solo memorizziamo metadati nella riga
+        // ✅ Il task verrà creato solo quando si apre l'editor (cliccando sul gear)
 
-          if (matchedTemplate) {
-            taskRepository.updateTask(row.taskId, {
-              type: taskType,  // ✅ CRITICAL: Aggiorna anche il type, non solo templateId
-              label: q,
-              templateId: matchedTemplate.templateId
-            }, projectId);
-          } else {
-            taskRepository.updateTask(row.taskId, {
-              type: taskType,  // ✅ CRITICAL: Aggiorna il type determinato dall'euristica
-              label: q
-            }, projectId);
-          }
-        }
-        // ✅ Se il task NON esiste, memorizziamo solo i metadati nella riga (task verrà creato lazy quando si apre l'editor)
-
-        // 5️⃣ AGGIORNA RIGA con metadati
+        // ✅ AGGIORNA RIGA con metadati
         // ✅ Converti TaskType enum → string per row.type (compatibilità con codice esistente)
         const rowType = taskType === TaskType.DataRequest ? 'DataRequest' :
                        taskType === TaskType.SayMessage ? 'Message' :
@@ -646,16 +580,17 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                        taskType === TaskType.BackendCall ? 'BackendCall' : undefined;
 
         // ✅ Memorizza metadati nella riga per lazy task creation
+        // ✅ LAZY: NON impostiamo taskId - il task verrà creato solo quando si apre l'editor
         const updatedRow = {
           ...row,
           text: q,
           type: rowType as any,
           mode: rowType as any,
-          isUndefined: taskType === TaskType.UNDEFINED && !matchedTemplate, // ✅ Solo se UNDEFINED E nessun match
+          isUndefined: isUndefined, // ✅ Usa isUndefined dal servizio
           // ✅ LAZY: Memorizza metadati per creazione task quando si apre l'editor
           meta: {
             type: taskType,  // TaskType enum
-            templateId: matchedTemplate?.templateId || null  // GUID del template se trovato
+            templateId: templateId  // GUID del template se trovato
           }
         };
 
@@ -665,7 +600,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           type: rowType,
           mode: rowType,
           isUndefined: updatedRow.isUndefined,
-          taskId: (row as any).taskId
+          meta: updatedRow.meta
         });
 
         onUpdate(updatedRow as any, q);
@@ -676,8 +611,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           text: q,
           finalTaskType: taskType,
           finalTaskTypeName: TaskType[taskType],
-          hasMatchedTemplate: !!matchedTemplate,
-          matchedTemplateId: matchedTemplate?.templateId || null,
+          templateId: templateId,
           isUndefined: updatedRow.isUndefined,
           timestamp: new Date().toISOString()
         });
@@ -1615,17 +1549,10 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           // ✅ Task con tipo UNDEFINED - stato valido (euristica non ha determinato tipo)
           // L'utente deve selezionare manualmente il tipo tramite type picker
           // NON è un errore, quindi non loggare
+          // ❌ RIMOSSO: Fallback visivo - se UNDEFINED, resta UNDEFINED (punto interrogativo)
           Icon = HelpCircle;
           labelTextColor = '#94a3b8';
           iconColor = '#94a3b8';
-          // ✅ Se il task ha un label, potrebbe essere un DataRequest - usa fallback visivo
-          if (task.label && task.label.trim().length > 0) {
-            // Potrebbe essere un DataRequest non ancora tipizzato
-            const visuals = getTaskVisualsByType('DataRequest', hasTaskDDT(row));
-            Icon = visuals.Icon;
-            labelTextColor = visuals.labelColor;
-            iconColor = visuals.iconColor;
-          }
         }
       } else {
         // Task non trovato - questo è un problema reale, ma logga solo se necessario
@@ -1645,20 +1572,23 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   }
 
   // ✅ Se non c'è task o non è stato possibile determinare il tipo
+  // ✅ FIX: Usa sempre resolveTaskType per leggere row.meta.type (lazy creation)
   if (!Icon) {
-    // Since we removed categoryType and userActs from NodeRowData, use defaults
-    labelTextColor = (typeof propTextColor === 'string' ? propTextColor : '#111');
-    if (!labelTextColor) {
-      const colorObj = getLabelColor('', []);
-      labelTextColor = colorObj.text;
-    }
-    // Se è undefined, mostra icona punto interrogativo
-    if (isUndefined) {
-      Icon = HelpCircle;
-      labelTextColor = '#94a3b8'; // Grigio per undefined
-      iconColor = '#94a3b8';
+    const resolvedType = resolveTaskType(row);
+
+    // ✅ Se il tipo è stato risolto dai metadati, usa i visuals corretti
+    if (resolvedType !== TaskType.UNDEFINED) {
+      const has = hasTaskDDT(row);
+      const visuals = getTaskVisualsByType(resolvedType, has);
+      Icon = visuals.Icon;
+      labelTextColor = visuals.labelColor;
+      iconColor = visuals.iconColor;
+      currentTypeForPicker = resolvedType;
     } else {
-      Icon = null;
+      // ✅ Se UNDEFINED, mostra punto interrogativo (nessun fallback)
+      Icon = HelpCircle;
+      labelTextColor = '#94a3b8';
+      iconColor = '#94a3b8';
     }
   }
 
@@ -1770,7 +1700,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             // ✅ Per DataRequest, sempre abilitato (può essere creato un DDT vuoto)
             gearDisabled={(() => {
               const taskType = resolveTaskType(row);
-              if (taskType === 'DataRequest') {
+              if (taskType === TaskType.DataRequest) {
                 return false; // ✅ Sempre abilitato per DataRequest
               }
               return isUndefined && !hasTaskDDT(row); // Disabilitato se undefined e nessun DDT
@@ -1778,7 +1708,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             onOpenDDT={(() => {
               // ✅ Permetti sempre l'apertura per DataRequest (può essere creato un DDT vuoto)
               const taskType = resolveTaskType(row);
-              if (taskType === 'DataRequest') {
+              if (taskType === TaskType.DataRequest) {
                 // ✅ Sempre permesso per DataRequest, anche se isUndefined o !hasTaskDDT
                 return async () => {
                   console.log('🚀 [GEAR] Apertura ResponseEditor per DataRequest', {
@@ -1794,7 +1724,10 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     // ✅ Se task non esiste, crealo usando metadati della riga
                     if (!taskForType) {
                       const rowMeta = (row as any)?.meta;
-                      const metaTaskType = rowMeta?.type || TaskType.DataRequest;
+                      // ✅ Se rowMeta non esiste o type è undefined, usa UNDEFINED (non DataRequest)
+                      const metaTaskType = (rowMeta?.type !== undefined && rowMeta?.type !== null)
+                        ? rowMeta.type
+                        : TaskType.UNDEFINED;
                       const metaTemplateId = rowMeta?.templateId || null;
                       const projectId = getProjectId?.() || undefined;
 
@@ -1865,9 +1798,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       console.log('🔍 [GEAR] Costruendo DDT dal template', {
                         templateId: taskForType.templateId
                       });
-                      // ✅ Use buildDDTFromTemplate to build DDT from template reference
-                      const { buildDDTFromTemplate } = await import('../../../../utils/ddtMergeUtils');
-                      ddt = await buildDDTFromTemplate(taskForType);
+                      // ✅ Use loadDDTFromTemplate to load DDT from template reference
+                      const { loadDDTFromTemplate } = await import('../../../../utils/ddtMergeUtils');
+                      ddt = await loadDDTFromTemplate(taskForType);
                       console.log('✅ [GEAR] DDT costruito dal template', {
                         hasDDT: !!ddt,
                         ddtMainDataLength: ddt?.mainData?.length || 0
@@ -2008,9 +1941,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                   let ddt: any = null;
                   // UNDEFINED is a placeholder, not a real template - treat as standalone
                   if (taskForType?.templateId && taskForType.templateId !== 'UNDEFINED') {
-                    // ✅ Use buildDDTFromTemplate to build DDT from template reference
-                    const { buildDDTFromTemplate } = await import('../../../../utils/ddtMergeUtils');
-                    ddt = await buildDDTFromTemplate(taskForType);
+                    // ✅ Use loadDDTFromTemplate to load DDT from template reference
+                    const { loadDDTFromTemplate } = await import('../../../../utils/ddtMergeUtils');
+                    ddt = await loadDDTFromTemplate(taskForType);
                     if (!ddt) {
                       // Fallback: create empty DDT
                       ddt = { label: taskForType.label || row.text || 'New DDT', mainData: [] };

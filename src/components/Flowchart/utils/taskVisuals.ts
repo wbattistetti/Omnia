@@ -8,7 +8,16 @@ import { TaskType } from '../../../types/taskTypes';
  * ✅ Restituisce TaskType enum invece di stringa semantica
  */
 export function resolveTaskType(row: any): TaskType {
-  // 1) Fonte primaria: row.type (se è già TaskType enum)
+  // 1) Fonte primaria: row.meta.type (metadati dall'euristica - lazy task creation)
+  const rowMeta = (row as any)?.meta;
+  if (rowMeta?.type !== undefined && rowMeta?.type !== null) {
+    // Se è un numero (TaskType enum), restituiscilo direttamente
+    if (typeof rowMeta.type === 'number') {
+      return rowMeta.type as TaskType;
+    }
+  }
+
+  // 2) Fonte secondaria: row.type (se è già TaskType enum)
   if (row?.type !== undefined && row?.type !== null) {
     // Se è un numero (TaskType enum), restituiscilo direttamente
     if (typeof row.type === 'number') {
@@ -22,11 +31,12 @@ export function resolveTaskType(row: any): TaskType {
         'BackendCall': TaskType.BackendCall,
         'ProblemClassification': TaskType.ClassifyProblem
       };
-      return typeMap[row.type] || TaskType.SayMessage;
+      // ❌ RIMOSSO FALLBACK: se non è nel map, restituisci UNDEFINED (nessun fallback automatico)
+      return typeMap[row.type] ?? TaskType.UNDEFINED;
     }
   }
 
-  // 2) Deriva dal task usando TaskRepository (NodeRowData.taskId is separate field)
+  // 3) Deriva dal task usando TaskRepository (NodeRowData.taskId is separate field)
   const taskId = row?.taskId || row?.id;
   if (taskId) {
     try {
@@ -40,19 +50,18 @@ export function resolveTaskType(row: any): TaskType {
         // ✅ Log solo se il task esiste ma non ha type
         console.warn('[🔍 RESOLVE_TYPE] Task has no type', { taskId });
       } else {
-        // ✅ Log solo se il task non viene trovato
-        console.warn('[🔍 RESOLVE_TYPE] Task not found', { taskId, rowId: row?.id });
+        // ✅ Task non trovato è normale per lazy creation - non loggare
       }
     } catch (err) {
       console.error('[🔍 RESOLVE_TYPE] Error', { taskId, error: err });
     }
   }
 
-  // 3) Fallback: row.mode (backward compatibility)
-  if (row?.mode === 'DataRequest') return TaskType.DataRequest;
-  if (row?.mode === 'DataConfirmation') return TaskType.Summarizer;
+  // ❌ RIMOSSO: Fallback da row.mode - se l'euristica non ha trovato niente, resta UNDEFINED
+  // L'utente deve scegliere manualmente il tipo
 
-  return TaskType.SayMessage; // Default
+  // 5) Default: UNDEFINED (mostra punto interrogativo)
+  return TaskType.UNDEFINED;
 }
 
 /**

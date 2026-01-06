@@ -78,7 +78,7 @@ export function useNodeRendering({
         editingRowId,
         handleInsertRow: handleInsertRow,
         onUpdate: (row: any, newText: string) => {
-          // Estrai tutti i campi importanti dalla row per preservarli (incluso isUndefined)
+          // Estrai tutti i campi importanti dalla row per preservarli (incluso isUndefined e meta)
           const meta = {
             included: (row as any).included,
             type: (row as any).type,
@@ -86,7 +86,9 @@ export function useNodeRendering({
             isUndefined: (row as any).isUndefined, // ✅ Preserva flag isUndefined
             factoryId: (row as any).factoryId,
             instanceId: (row as any).instanceId,
-            taskId: (row as any).taskId
+            taskId: (row as any).taskId,
+            // ✅ FIX: Preserva row.meta esplicitamente (contiene type e templateId dall'euristica)
+            meta: (row as any).meta || undefined
           };
           return handleUpdateRow(row.id, newText, row.categoryType, meta);
         },
@@ -95,6 +97,8 @@ export function useNodeRendering({
           const mergedMeta = {
             included: (row as any).included,
             isUndefined: (row as any).isUndefined, // ✅ Preserva flag isUndefined
+            // ✅ FIX: Preserva row.meta se non è già presente nel meta passato
+            meta: (meta && (meta as any).meta !== undefined) ? (meta as any).meta : ((row as any).meta || undefined),
             ...(meta || {})
           };
           return handleUpdateRow(row.id, newText, categoryType, mergedMeta);

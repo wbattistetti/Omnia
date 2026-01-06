@@ -54,7 +54,6 @@
     <Compile Include="DTO\IDE\TaskParameter.vb" />
     <!-- Action.vb removed - using Task.vb instead -->
     <Compile Include="DTO\IDE\Escalation.vb" />
-    <Compile Include="DTO\IDE\DialogueStep.vb" />
     <Compile Include="DTO\IDE\DialogueStepListConverter.vb" />
     <Compile Include="DTO\IDE\MainDataNode.vb" />
     <Compile Include="DTO\IDE\MainDataNodeListConverter.vb" />

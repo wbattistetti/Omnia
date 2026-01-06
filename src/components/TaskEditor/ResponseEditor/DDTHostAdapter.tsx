@@ -5,7 +5,7 @@ import { taskRepository } from '../../../services/TaskRepository';
 import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
 import { flowchartVariablesService } from '../../../services/FlowchartVariablesService';
 import { getTemplateId } from '../../../utils/taskHelpers';
-import { buildDDTFromTemplate } from '../../../utils/ddtMergeUtils';
+import { loadDDTFromTemplate } from '../../../utils/ddtMergeUtils';
 import { TaskType, taskIdToTaskType } from '../../../types/taskTypes'; // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
 
 export default function DDTHostAdapter({ task, onClose }: EditorProps) { // ✅ RINOMINATO: act → task
@@ -66,7 +66,7 @@ export default function DDTHostAdapter({ task, onClose }: EditorProps) { // ✅ 
       } else if (taskInstance?.templateId) {
         // ✅ Solo se NON c'è mainData salvato, ricostruisci dal template
         console.log('🔧 [DDTHostAdapter] No saved mainData, building DDT from template:', taskInstance.templateId);
-        const merged = await buildDDTFromTemplate(taskInstance);
+        const merged = await loadDDTFromTemplate(taskInstance);
         console.log('🔧 [DDTHostAdapter] Merged DDT:', {
           hasDDT: !!merged,
           label: merged?.label,
@@ -108,7 +108,7 @@ export default function DDTHostAdapter({ task, onClose }: EditorProps) { // ✅ 
         });
       } else if (taskInstance?.templateId) {
         // ✅ Solo se NON c'è mainData salvato, ricostruisci dal template
-        const merged = await buildDDTFromTemplate(taskInstance);
+        const merged = await loadDDTFromTemplate(taskInstance);
         if (merged) {
           setCurrentDDT(merged);
         }

@@ -348,8 +348,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
   const inferenceStartedRef = useRef<string | null>(null);
 
   useEffect(() => {
+    // ✅ Usa ddtRef.current invece di ddt per evitare problemi con array di dipendenze
+    const currentDDT = ddtRef.current || ddt;
+
     // ✅ Se kind === "intent" non deve mostrare il wizard
-    const currentMainList = getMainDataList(ddt);
+    const currentMainList = getMainDataList(currentDDT);
     const firstMain = currentMainList[0];
     if (firstMain?.kind === 'intent') {
       setShowWizard(false);
@@ -357,7 +360,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
       return;
     }
 
-    const empty = isDDTEmpty(ddt);
+    const empty = isDDTEmpty(currentDDT);
 
     // ✅ IMPORTANTE: Non aprire wizard se l'inferenza è in corso
     // ✅ IMPORTANTE: Non aprire wizard se è già aperto (showWizard === true)
@@ -739,7 +742,19 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
       setShowWizard(false);
       inferenceStartedRef.current = null; // Reset quando il wizard viene chiuso
     }
-  }, [ddt, task, isInferring, inferenceResult, selectedProvider, selectedModel, showWizard]); // ✅ Rimosso mainList dalle dipendenze
+  }, [
+    ddt?.label ?? null,
+    ddt?.mainData?.length ?? 0,
+    task?.id ?? null,
+    task?.instanceId ?? null,
+    task?.type ?? TaskType.UNDEFINED,
+    task?.label ?? null,
+    isInferring ?? false,
+    inferenceResult?.ai?.schema?.label ?? null,
+    selectedProvider ?? null,
+    selectedModel ?? null,
+    showWizard ?? false
+  ]); // ✅ Tutti i valori hanno default per mantenere dimensione costante dell'array
 
   // Track introduction separately - usa ddtRef.current
   const introduction = useMemo(() => ddtRef.current?.introduction, [ddtVersion, ddt?.introduction]);
@@ -1079,7 +1094,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
 
     // ✅ Carica il nodo quando cambiano gli indici O quando ddt prop cambia (dal dockTree)
     // ddtRef.current è già sincronizzato con ddt prop dal useEffect precedente
-  }, [selectedMainIndex, selectedSubIndex, selectedRoot, introduction, ddt]);
+  }, [selectedMainIndex, selectedSubIndex, selectedRoot, introduction, ddt?.label, ddt?.mainData?.length]);
 
   // ✅ NON serve più sincronizzare selectedNode con localDDT
   // selectedNode è l'unica fonte di verità durante l'editing
@@ -1286,7 +1301,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
 
       return updated;
     });
-  }, [selectedNodePath, selectedRoot, tabId, setDockTree, ddt]);
+  }, [selectedNodePath, selectedRoot, tabId, setDockTree, ddt?.label, ddt?.mainData?.length]);
 
   // ✅ NON serve più persistenza asincrona
   // Quando chiudi l'editor, costruisci il DDT da selectedNode e salva
