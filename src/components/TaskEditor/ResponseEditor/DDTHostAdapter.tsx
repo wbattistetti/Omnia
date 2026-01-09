@@ -6,30 +6,58 @@ import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
 import { flowchartVariablesService } from '../../../services/FlowchartVariablesService';
 import { getTemplateId } from '../../../utils/taskHelpers';
 import { loadDDTFromTemplate } from '../../../utils/ddtMergeUtils';
-import { TaskType, taskIdToTaskType } from '../../../types/taskTypes'; // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
+import { TaskType, taskIdToTaskType, getEditorFromTaskType } from '../../../types/taskTypes'; // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
+import { useTaskInstance } from './hooks/useTaskInstance';
 
-export default function DDTHostAdapter({ task, onClose }: EditorProps) { // ✅ RINOMINATO: act → task
+export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, onToolbarUpdate }: EditorProps) { // ✅ PATTERN CENTRALIZZATO: Accetta hideHeader e onToolbarUpdate
+  // ✅ ARCHITETTURA ESPERTO: Verifica che questo componente sia usato solo per DDT
+  // Se il task è di tipo Message, questo componente NON dovrebbe essere montato
+  if (taskMeta?.type !== undefined && taskMeta.type !== null) {
+    const editorKind = getEditorFromTaskType(taskMeta.type);
+    if (editorKind === 'message') {
+      console.error('❌ [DDTHostAdapter] ERRORE CRITICO: Questo componente è stato montato per un task Message!', {
+        taskId: taskMeta.id,
+        taskType: taskMeta.type,
+        taskTypeName: TaskType[taskMeta.type],
+        editorKind,
+        taskLabel: taskMeta.label
+      });
+      return (
+        <div className="h-full w-full bg-red-900 text-white p-4 flex items-center justify-center">
+          <div className="text-center">
+            <h2 className="text-xl font-bold mb-2">Errore Architetturale</h2>
+            <p>DDTHostAdapter montato per task Message</p>
+            <p className="text-sm mt-2">Task Type: {TaskType[taskMeta.type]} ({taskMeta.type})</p>
+            <p className="text-sm">Dovrebbe usare TextMessageEditor invece</p>
+          </div>
+        </div>
+      );
+    }
+  }
   // Ottieni projectId corrente per salvare le istanze nel progetto corretto
   const pdUpdate = useProjectDataUpdate();
   const currentProjectId = pdUpdate?.getCurrentProjectId() || null;
-  const instanceKey = React.useMemo(() => task.instanceId || task.id, [task.instanceId, task.id]); // ✅ RINOMINATO: act → task
+  const instanceKey = React.useMemo(() => taskMeta.instanceId || taskMeta.id, [taskMeta.instanceId, taskMeta.id]); // ✅ RINOMINATO: act → taskMeta
 
+  // ✅ ARCHITETTURA ESPERTO: Carica Task completo usando hook dedicato
+  const { task: fullTask, loading: taskLoading } = useTaskInstance(instanceKey);
 
-  // FASE 3: Cerca DDT nel Task, crea il Task se non esiste
-  // USO useMemo sincrono per evitare che il primo render mostri DDT vuoto
-  // getTask() è O(1) Map lookup, quindi veloce e sicuro durante il render
-  // FIX: Aggiungiamo un refresh trigger per forzare il ricalcolo quando necessario
+  // ✅ ARCHITETTURA ESPERTO: Stato per DDT loading
+  const [ddt, setDdt] = React.useState<any | null>(null);
+  const [ddtLoading, setDdtLoading] = React.useState(true);
   const [refreshTrigger, setRefreshTrigger] = React.useState(0);
-  const [existingDDT, setExistingDDT] = React.useState<any | null>(null);
 
-  // ✅ Carica DDT con merge dal template (async)
+  // ✅ ARCHITETTURA ESPERTO: Carica DDT quando Task completo è disponibile
   React.useEffect(() => {
     const loadDDT = async () => {
+      if (!fullTask) {
+        setDdtLoading(false);
+        return;
+      }
+
       console.log('🔧 [DDTHostAdapter] Loading DDT for instance:', instanceKey);
 
-      // ✅ Usa direttamente task.type (TaskType enum) invece di convertire da stringa
-      const taskType = task.type; // ✅ Usa direttamente task.type (TaskType enum)
-      let taskInstance = taskRepository.getTask(instanceKey, taskType);
+      let taskInstance = fullTask;
 
       console.log('🔧 [DDTHostAdapter] Task found:', {
         taskExists: !!taskInstance,
@@ -41,63 +69,33 @@ export default function DDTHostAdapter({ task, onClose }: EditorProps) { // ✅ 
 
       if (!taskInstance) {
         // ✅ LOGICA: Il task viene creato solo quando si apre ResponseEditor, dopo aver determinato il tipo
-        // ✅ Usa direttamente task.type (TaskType enum) invece di convertire da stringa
-        const finalTaskType = taskType !== undefined && taskType !== null ? taskType : TaskType.UNDEFINED;
+        const finalTaskType = taskMeta.type !== undefined && taskMeta.type !== null ? taskMeta.type : TaskType.UNDEFINED;
         taskInstance = taskRepository.createTask(finalTaskType, null, undefined, instanceKey);
         console.log('🔧 [DDTHostAdapter] Created new task:', { taskId: taskInstance.id, taskType: finalTaskType });
       }
 
-      // ✅ VB.NET style: se il task ha mainData salvato, usalo direttamente (non ricostruire dal template)
-      if (taskInstance?.mainData && taskInstance.mainData.length > 0) {
-        // ✅ Usa direttamente il DDT salvato nel task (come VB.NET: modifichi in memoria, salvi tutto)
-        console.log('🔧 [DDTHostAdapter] Using saved mainData directly (VB.NET style):', {
-          mainDataLength: taskInstance.mainData.length,
-          hasSteps: taskInstance.mainData.some((m: any) => m.steps)
-        });
-        setExistingDDT({
-          label: taskInstance.label,
-          mainData: taskInstance.mainData,
-          stepPrompts: taskInstance.stepPrompts,
-          constraints: taskInstance.constraints,
-          examples: taskInstance.examples,
-          nlpContract: taskInstance.nlpContract,
-          introduction: taskInstance.introduction
-        });
-      } else if (taskInstance?.templateId) {
-        // ✅ Solo se NON c'è mainData salvato, ricostruisci dal template
-        console.log('🔧 [DDTHostAdapter] No saved mainData, building DDT from template:', taskInstance.templateId);
+      setDdtLoading(true);
+
+      // ✅ Se c'è templateId → SEMPRE chiama loadDDTFromTemplate (gestisce merge template + override)
+      // loadDDTFromTemplate gestisce:
+      // - Se mainData è vuoto → costruisce dal template
+      // - Se mainData esiste → merge: struttura dal template + override dall'instance
+      if (taskInstance?.templateId && taskInstance.templateId !== 'UNDEFINED') {
+        console.log('🔧 [DDTHostAdapter] Building DDT from template (with merge):', taskInstance.templateId);
         const merged = await loadDDTFromTemplate(taskInstance);
         console.log('🔧 [DDTHostAdapter] Merged DDT:', {
           hasDDT: !!merged,
           label: merged?.label,
           mainDataLength: merged?.mainData?.length || 0
         });
-        setExistingDDT(merged);
-      } else {
-        console.log('🔧 [DDTHostAdapter] No DDT found, setting null');
-        setExistingDDT(null);
-      }
-    };
-
-    loadDDT();
-  }, [instanceKey, task.id, task.type, refreshTrigger]); // ✅ RINOMINATO: act → task
-
-  // 2. STATE per mantenere il DDT corrente (aggiornato dopo salvataggio)
-  // Questo risolve il problema: useMemo non ricalcola quando il Task viene aggiornato
-  const [currentDDT, setCurrentDDT] = React.useState<any>(() => {
-    // FASE 3: Inizializza placeholder (verrà sostituito da existingDDT quando caricato)
-    return null;
-  });
-
-  // ✅ Carica DDT iniziale (VB.NET style: usa mainData salvato se disponibile)
-  React.useEffect(() => {
-    const loadInitialDDT = async () => {
-      const taskType = task.type; // ✅ Usa direttamente task.type (TaskType enum)
-      const taskInstance = taskRepository.getTask(instanceKey, taskType);
-
-      // ✅ VB.NET style: se il task ha mainData salvato, usalo direttamente
-      if (taskInstance?.mainData && taskInstance.mainData.length > 0) {
-        setCurrentDDT({
+        setDdt(merged);
+      } else if (taskInstance?.mainData && taskInstance.mainData.length > 0) {
+        // ✅ Solo se NON c'è templateId: usa mainData direttamente (DDT standalone, non da template)
+        console.log('🔧 [DDTHostAdapter] Using saved mainData directly (standalone DDT):', {
+          mainDataLength: taskInstance.mainData.length,
+          hasSteps: taskInstance.mainData.some((m: any) => m.steps)
+        });
+        setDdt({
           label: taskInstance.label,
           mainData: taskInstance.mainData,
           stepPrompts: taskInstance.stepPrompts,
@@ -106,122 +104,22 @@ export default function DDTHostAdapter({ task, onClose }: EditorProps) { // ✅ 
           nlpContract: taskInstance.nlpContract,
           introduction: taskInstance.introduction
         });
-      } else if (taskInstance?.templateId) {
-        // ✅ Solo se NON c'è mainData salvato, ricostruisci dal template
-        const merged = await loadDDTFromTemplate(taskInstance);
-        if (merged) {
-          setCurrentDDT(merged);
-        }
+      } else {
+        console.log('🔧 [DDTHostAdapter] No DDT found, setting null');
+        setDdt(null);
       }
+
+      setDdtLoading(false);
     };
 
-    loadInitialDDT();
-  }, [instanceKey, task.type]); // ✅ RINOMINATO: act → task
+    loadDDT();
+  }, [fullTask, instanceKey, refreshTrigger]); // ✅ Dipende da fullTask invece di taskMeta
 
-  // ✅ Gestione ProblemClassification: verifica che il DDT abbia kind === "intent"
-  React.useEffect(() => {
-    if (task.type === TaskType.ClassifyProblem && currentDDT) { // ✅ Usa TaskType enum invece di stringa
-      const firstMain = currentDDT?.mainData?.[0];
-      const hasCorrectKind = firstMain?.kind === 'intent';
-
-      // Se il DDT ha kind sbagliato, correggilo
-      if (!hasCorrectKind) {
-        const taskType = task.type; // ✅ Usa direttamente task.type (TaskType enum)
-        const taskInstance = taskRepository.getTask(instanceKey, taskType);
-
-        const newDDT = {
-          id: `temp_ddt_${task.id}`,
-          label: task.label || 'Data',
-          _userLabel: task.label,
-          _sourceTask: { id: task.id, label: task.label, type: task.type }, // ✅ RINOMINATO: _sourceAct → _sourceTask
-          mainData: [{
-            label: task.label || 'Intent',
-            kind: 'intent', // ✅ FISSO per ProblemClassification
-            steps: {},
-            subData: []
-          }]
-        };
-
-        if (taskInstance) {
-          taskRepository.updateTask(instanceKey, {
-            type: TaskType.DataRequest,  // ✅ type: enum numerico
-            templateId: null,            // ✅ templateId: null (standalone)
-            ...newDDT
-          }, currentProjectId || undefined);
-        }
-
-        setCurrentDDT(newDDT);
-      }
-    } else if (task.type !== TaskType.ClassifyProblem && !currentDDT) { // ✅ Usa TaskType enum invece di stringa
-      // Default: placeholder vuoto per altri tipi
-      setCurrentDDT({
-        id: `temp_ddt_${task.id}`,
-        label: task.label || 'Data',
-        _userLabel: task.label,
-        _sourceTask: { id: task.id, label: task.label, type: task.type }, // ✅ RINOMINATO: _sourceAct → _sourceTask
-        mainData: []
-      });
-    }
-  }, [task.type, task.id, task.label, instanceKey, currentDDT, currentProjectId]); // ✅ RINOMINATO: act → task
-
-  // FIX: Listener per aggiornare quando i Task vengono caricati dal database
-  React.useEffect(() => {
-    const handleTaskLoaded = () => {
-      // Forza il ricalcolo di existingDDT quando i Task vengono caricati
-      setRefreshTrigger(prev => prev + 1);
-    };
-
-    // Ascolta eventi di caricamento Task
-    window.addEventListener('tasks:loaded', handleTaskLoaded);
-
-    // Polling: controlla periodicamente se il Task è stato caricato (fallback, solo se non c'è DDT)
-    // Si ferma dopo 5 secondi o quando trova il DDT
-    let pollCount = 0;
-    const maxPolls = 10; // 5 secondi totali (500ms * 10)
-    const pollInterval = setInterval(() => {
-      pollCount++;
-      const task = taskRepository.getTask(instanceKey);
-      if (task?.mainData && task.mainData.length > 0 && !existingDDT) {
-        console.log('[DDTHostAdapter][POLLING] Task loaded, refreshing DDT', {
-          instanceKey,
-          hasDDT: !!task.mainData,
-          ddtId: task.label,
-          pollCount
-        });
-        setRefreshTrigger(prev => prev + 1);
-        clearInterval(pollInterval);
-      } else if (pollCount >= maxPolls) {
-        clearInterval(pollInterval);
-      }
-    }, 500); // Controlla ogni 500ms
-
-    return () => {
-      window.removeEventListener('tasks:loaded', handleTaskLoaded);
-      clearInterval(pollInterval);
-    };
-  }, [instanceKey, existingDDT]);
-
-  // Aggiorna currentDDT quando existingDDT cambia (al primo load se c'è un DDT salvato)
-  React.useEffect(() => {
-    // ✅ Se esiste existingDDT, usalo SEMPRE (è quello salvato dall'utente)
-    if (existingDDT) {
-      // FIX: Aggiorna sempre se existingDDT è diverso da currentDDT (non solo se è placeholder)
-      // Questo risolve il problema quando si riapre l'editor: existingDDT viene ricaricato dal Task
-      const currentIsPlaceholder = currentDDT.id?.startsWith('temp_ddt_');
-      const ddtHasChanged = JSON.stringify(currentDDT) !== JSON.stringify(existingDDT);
-
-      if (currentIsPlaceholder || ddtHasChanged) {
-        setCurrentDDT(existingDDT);
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [existingDDT]); // currentDDT intenzionalmente non incluso: controlliamo solo quando existingDDT cambia
+  // ✅ ARCHITETTURA ESPERTO: Loading combinato (task + ddt)
+  const loading = taskLoading || ddtLoading;
 
   // 3. Quando completi il wizard, salva nel Task E aggiorna lo state
   const handleComplete = React.useCallback(async (finalDDT: any) => {
-    // ✅ MIGRATION: Use getTemplateId() helper
-    // ✅ FIX: Se c'è un DDT, assicurati che il templateId sia 'DataRequest'
-    const task = taskRepository.getTask(instanceKey);
     // ✅ Salva DDT nel Task con campi direttamente (niente wrapper value)
     const hasDDT = finalDDT && Object.keys(finalDDT).length > 0 && finalDDT.mainData && finalDDT.mainData.length > 0;
     if (hasDDT) {
@@ -239,7 +137,7 @@ export default function DDTHostAdapter({ task, onClose }: EditorProps) { // ✅ 
 
         // Get row text from task (this is the label of the row)
         const taskInstance = taskRepository.getTask(instanceKey);
-        const rowText = taskInstance?.text || task.label || 'Task'; // ✅ RINOMINATO: act → task
+        const rowText = taskInstance?.text || taskMeta.label || 'Task';
 
         // Extract variables from DDT using row text and DDT labels
         const varNames = await flowchartVariablesService.extractVariablesFromDDT(
@@ -268,42 +166,39 @@ export default function DDTHostAdapter({ task, onClose }: EditorProps) { // ✅ 
       console.warn('[DDTHostAdapter] Failed to extract variables from DDT', e);
     }
 
-    // CRITICO: Aggiorna immediatamente currentDDT per aggiornare il prop ddt
-    // Questo evita che useDDTInitialization sincronizzi localDDT con il placeholder vuoto
-    setCurrentDDT(finalDDT);
+    // ✅ ARCHITETTURA ESPERTO: Aggiorna immediatamente ddt per aggiornare il prop
+    setDdt(finalDDT);
 
-    // FIX: Forza il ricalcolo di existingDDT per sincronizzare
+    // FIX: Forza il ricalcolo quando necessario
     setRefreshTrigger(prev => prev + 1);
-  }, [instanceKey, currentProjectId, task.label]); // ✅ RINOMINATO: act → task
+  }, [instanceKey, currentProjectId, taskMeta.label]);
 
-
-
-  // ✅ Ensure mainData is always an array before passing to ResponseEditor
+  // ✅ ARCHITETTURA ESPERTO: Ensure mainData is always an array before passing to ResponseEditor
   const safeDDT = React.useMemo(() => {
-    if (!currentDDT) return null;
-    return {
-      ...currentDDT,
-      mainData: Array.isArray(currentDDT.mainData) ? currentDDT.mainData : []
+    if (!ddt) {
+      console.log('[DDTHostAdapter] safeDDT is null', { ddt, loading, taskLoading, ddtLoading });
+      return null;
+    }
+    const safe = {
+      ...ddt,
+      mainData: Array.isArray(ddt.mainData) ? ddt.mainData : []
     };
-  }, [currentDDT]);
+    console.log('[DDTHostAdapter] safeDDT calculated', {
+      hasDdt: !!ddt,
+      mainDataLength: safe.mainData.length,
+      label: safe.label,
+      loading
+    });
+    return safe;
+  }, [ddt, loading]);
 
   // ✅ Stable key per impedire re-mount durante l'editing
   const editorKey = React.useMemo(() => {
-    const instanceKey = task.instanceId || task.id || 'unknown';
+    const instanceKey = taskMeta.instanceId || taskMeta.id || 'unknown';
     return `response-editor-${instanceKey}`;
-  }, [task.instanceId, task.id]); // ✅ RINOMINATO: act → task
+  }, [taskMeta.instanceId, taskMeta.id]);
 
-  // ✅ Stable task prop (solo i campi necessari, memoizzato)
-  const stableTask = React.useMemo(() => {
-    if (!task) return undefined;
-    return {
-      id: task.id,
-      type: task.type,
-      label: task.label,
-      instanceId: task.instanceId
-    };
-  }, [task.id, task.type, task.label, task.instanceId]); // ✅ RINOMINATO: act → task, stableAct → stableTask
-
+  // ✅ ARCHITETTURA ESPERTO: Passa Task completo invece di TaskMeta
   // ✅ Stable callbacks per evitare re-render
   const stableOnClose = React.useCallback(() => {
     try {
@@ -321,7 +216,10 @@ export default function DDTHostAdapter({ task, onClose }: EditorProps) { // ✅ 
       ddt={safeDDT}
       onClose={stableOnClose}
       onWizardComplete={stableOnWizardComplete}
-      task={stableTask} // ✅ RINOMINATO: act → task
+      task={fullTask} // ✅ ARCHITETTURA ESPERTO: Task completo, non TaskMeta
+      isDdtLoading={loading} // ✅ ARCHITETTURA ESPERTO: Stato di loading
+      hideHeader={hideHeader} // ✅ PATTERN CENTRALIZZATO: Passa hideHeader al wrapper
+      onToolbarUpdate={onToolbarUpdate} // ✅ PATTERN CENTRALIZZATO: Passa onToolbarUpdate per ereditare header
     />
   );
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import EditorHeader from '../../components/common/EditorHeader';
 import { getTaskVisualsByType } from '../../components/Flowchart/utils/taskVisuals';
 import EmbeddingEditorShell, { EmbeddingEditorShellRef } from './EmbeddingEditorShell';
@@ -8,6 +8,8 @@ import type { ProblemPayload, ProblemIntent, ProblemEditorState } from '../../ty
 import { ProjectDataService } from '../../services/ProjectDataService';
 import { taskRepository } from '../../services/TaskRepository';
 import { Brain, Loader2 } from 'lucide-react';
+import type { EditorProps } from '../../components/TaskEditor/EditorHost/types'; // ✅ ARCHITETTURA ESPERTO: Usa EditorProps invece di props custom
+import type { ToolbarButton } from '../../dock/types'; // ✅ PATTERN CENTRALIZZATO: Import per toolbar
 
 function toEditorState(payload?: ProblemPayload) {
   const intents = (payload?.intents || []).map((pi: ProblemIntent) => ({
@@ -44,13 +46,31 @@ function fromEditorState(): ProblemPayload {
   return { version: 1, intents: outIntents, editor };
 }
 
-export default function IntentHostAdapter(props: { act: { id: string; type: string; label?: string; problem?: ProblemPayload }, onClose?: () => void }) {
-  // console.log('IntentHostAdapter props:', props); // RIMOSSO - causa spam
-  // Hydrate from act.problem (if available) or from local shadow
+export default function IntentHostAdapter({ task, onClose, hideHeader, onToolbarUpdate }: EditorProps) { // ✅ PATTERN CENTRALIZZATO: Accetta hideHeader e onToolbarUpdate
+  // ✅ ARCHITETTURA ESPERTO: Gestisci task undefined/null
+  if (!task) {
+    console.error('❌ [IntentHostAdapter] Task is undefined/null', { task });
+    return (
+      <div className="h-full w-full bg-red-900 text-white p-4 flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-xl font-bold mb-2">Errore</h2>
+          <p>Task non disponibile</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ ARCHITETTURA ESPERTO: Usa task invece di act
+  const instanceId = task.instanceId || task.id;
+
+  // Hydrate from task (load problem payload from TaskRepository or localStorage)
   useEffect(() => {
     const pid = (() => { try { return localStorage.getItem('current.projectId') || ''; } catch { return ''; } })();
-    const key = `problem.${pid}.${props.act.id}`;
-    const payload: ProblemPayload | undefined = props.act.problem || ((): any => {
+    const key = `problem.${pid}.${instanceId}`;
+
+    // ✅ ARCHITETTURA ESPERTO: Carica problem payload dal Task se disponibile
+    const taskInstance = taskRepository.getTask(instanceId);
+    const payload: ProblemPayload | undefined = (taskInstance as any)?.problem || ((): any => {
       try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : undefined; } catch { return undefined; }
     })();
     const { intents, tests } = toEditorState(payload);
@@ -59,7 +79,6 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
 
     // FASE 6D: Update TaskRepository with current intents
     try {
-      const instanceId = (props.act as any)?.instanceId;
       if (instanceId) {
         const pid = (() => { try { return localStorage.getItem('current.projectId') || ''; } catch { return ''; } })();
         const problemIntents = fromEditorState().intents.map(it => ({
@@ -74,7 +93,7 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
       console.warn('[IntentEditor] Could not update TaskRepository:', err);
     }
 
-    // Debounced persist back to act shadow (local only; actual write to act model should be done by host when available)
+    // Debounced persist back to task shadow (local only; actual write to task model should be done by host when available)
     let t: any;
     const unsubA = useIntentStore.subscribe(() => {
       clearTimeout(t); t = setTimeout(() => {
@@ -82,14 +101,13 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
           const next = fromEditorState();
           localStorage.setItem(key, JSON.stringify(next));
           // Also reflect into in-memory project graph so explicit Save includes it
-          try { ProjectDataService.setAgentActProblemById(props.act.id, next); } catch { }
+          try { ProjectDataService.setTaskTemplateProblemById(task.id, next); } catch { } // ✅ ARCHITETTURA ESPERTO: Usa task.id invece di props.act.id
 
           // FASE 6D: Update TaskRepository when intents change
           try {
-            const instanceId = (props.act as any)?.instanceId;
             const pid = (() => { try { return localStorage.getItem('current.projectId') || ''; } catch { return ''; } })();
             console.log('[IntentEditor][SAVE][DEBOUNCED]', {
-              actId: props.act.id,
+              taskId: task.id, // ✅ ARCHITETTURA ESPERTO: Usa task.id
               instanceId: instanceId || 'NOT_FOUND',
               intentsCount: next.intents.length,
               intents: next.intents.map(it => ({
@@ -129,14 +147,14 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
               });
             } else {
               console.warn('[IntentEditor][UPDATE_TASK_REPO][SKIP]', {
-                actId: props.act.id,
-                reason: 'instanceId not found in act',
-                actKeys: Object.keys(props.act)
+                taskId: task.id, // ✅ ARCHITETTURA ESPERTO: Usa task.id
+                reason: 'instanceId not found in task',
+                taskKeys: Object.keys(task)
               });
             }
           } catch (err) {
             console.error('[IntentEditor][UPDATE_TASK_REPO][ERROR]', {
-              actId: props.act.id,
+              taskId: task.id, // ✅ ARCHITETTURA ESPERTO: Usa task.id
               error: String(err),
               stack: err?.stack?.substring(0, 200)
             });
@@ -149,11 +167,10 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
         try {
           const next = fromEditorState();
           localStorage.setItem(key, JSON.stringify(next));
-          try { ProjectDataService.setAgentActProblemById(props.act.id, next); } catch { }
+          try { ProjectDataService.setTaskTemplateProblemById(task.id, next); } catch { } // ✅ ARCHITETTURA ESPERTO: Usa task.id
 
           // FASE 6D: Update TaskRepository when tests change (which might affect intents)
           try {
-            const instanceId = (props.act as any)?.instanceId;
             if (instanceId) {
               const pid = (() => { try { return localStorage.getItem('current.projectId') || ''; } catch { return ''; } })();
               const problemIntents = next.intents.map(it => ({
@@ -171,59 +188,58 @@ export default function IntentHostAdapter(props: { act: { id: string; type: stri
       }, 700);
     });
     return () => { unsubA(); unsubB(); clearTimeout(t); };
-  }, [props.act?.id]);
-  const type = String(props.act?.type || 'ProblemClassification') as any;
-  const { Icon, color } = getTaskVisualsByType(type, true);
+  }, [instanceId, task.id]); // ✅ ARCHITETTURA ESPERTO: Usa instanceId e task.id invece di props.act?.id
+  // ✅ ARCHITETTURA ESPERTO: Usa task.type invece di props.act?.type
+  const taskType = task.type ?? 5; // Default a ClassifyProblem se type non è definito
+  const { Icon, color } = getTaskVisualsByType(taskType, true);
 
   const editorRef = useRef<EmbeddingEditorShellRef>(null);
   const [trainState, setTrainState] = useState({ training: false, modelReady: false, canTrain: false });
 
+  // ✅ PATTERN CENTRALIZZATO: Toolbar buttons (come BackendCallEditor e ResponseEditor)
+  const toolbarButtons = useMemo<ToolbarButton[]>(() => {
+    return [
+      {
+        icon: trainState.training ? <Loader2 size={16} className="animate-spin" /> : <Brain size={16} />,
+        label: trainState.training ? 'Training...' : 'Train Model',
+        onClick: () => editorRef.current?.handleTrain(),
+        title: trainState.training ? 'Training in corso...' : trainState.modelReady ? 'Model ready - Click to retrain' : 'Train embeddings model',
+        disabled: !trainState.canTrain || trainState.training
+      }
+    ];
+  }, [trainState.training, trainState.modelReady, trainState.canTrain]);
+
+  // ✅ PATTERN CENTRALIZZATO: Update toolbar quando cambia (per docking mode)
+  const headerColor = '#f59e0b'; // Orange color for ClassifyProblem
+  React.useEffect(() => {
+    if (hideHeader && onToolbarUpdate) {
+      onToolbarUpdate(toolbarButtons, headerColor);
+    }
+  }, [hideHeader, toolbarButtons, onToolbarUpdate, headerColor]);
+
+  // ✅ SOLUZIONE ESPERTO: Rimuovere tutti i ResizeObserver e log di debug, usare solo flex-1 min-h-0
   return (
-    <div className="h-full w-full flex flex-col min-h-0">
-      <EditorHeader
-        icon={<Icon size={18} style={{ color }} />}
-        title={String(props.act?.label || 'Problem')}
-        color="orange"
-        onClose={props.onClose}
-        titleActions={
-          <button
-            onClick={() => editorRef.current?.handleTrain()}
-            disabled={!trainState.canTrain || trainState.training}
-            style={{
-              padding: '6px 12px',
-              border: '1px solid rgba(255,255,255,0.3)',
-              borderRadius: 8,
-              background: trainState.modelReady ? '#fef3c7' : 'transparent',
-              color: trainState.modelReady ? '#92400e' : '#ffffff',
-              cursor: trainState.canTrain && !trainState.training ? 'pointer' : 'not-allowed',
-              fontSize: 14,
-              fontWeight: 500,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              opacity: trainState.canTrain && !trainState.training ? 1 : 0.6
-            }}
-            title={trainState.training ? 'Training in corso...' : trainState.modelReady ? 'Model ready - Click to retrain' : 'Train embeddings model'}
-          >
-            {trainState.training ? (
-              <>
-                <Loader2 size={14} className="animate-spin" />
-                Training...
-              </>
-            ) : (
-              <>
-                <Brain size={14} />
-                Train Model
-              </>
-            )}
-          </button>
-        }
-      />
-      <div className="flex-1 min-h-0">
+    <div className="w-full flex flex-col flex-1 min-h-0">
+      {/* ✅ PATTERN CENTRALIZZATO: Mostra EditorHeader solo se hideHeader è false */}
+      {!hideHeader && (
+        <EditorHeader
+          icon={<Icon size={18} style={{ color }} />}
+          title={String(task?.label || 'Problem')} // ✅ ARCHITETTURA ESPERTO: Usa task.label
+          color="orange"
+          onClose={onClose} // ✅ ARCHITETTURA ESPERTO: Usa onClose da EditorProps
+          toolbarButtons={toolbarButtons} // ✅ PATTERN CENTRALIZZATO: Toolbar incorporata nell'header
+        />
+      )}
+      {/* ✅ SOLUZIONE ESPERTO: Usa flex-1 min-h-0 per propagare correttamente l'altezza */}
+      <div className="flex-1 min-h-0 overflow-hidden">
         <EmbeddingEditorShell
           ref={editorRef}
-          instanceId={(props.act as any)?.instanceId || props.act?.id}
+          instanceId={instanceId} // ✅ ARCHITETTURA ESPERTO: Usa instanceId già calcolato
           onTrainStateChange={setTrainState}
+          // ✅ FIX DOPPIO HEADER: Passa training state per mostrare Train Model button nei controlli
+          training={trainState.training}
+          modelReady={trainState.modelReady}
+          canTrain={trainState.canTrain}
         />
       </div>
     </div>

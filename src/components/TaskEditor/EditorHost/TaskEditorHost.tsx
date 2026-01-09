@@ -7,6 +7,14 @@ import type { EditorProps } from './types';
 export default function TaskEditorHost({ task, onClose, onToolbarUpdate, hideHeader }: EditorProps) {
   const kind = resolveEditorKind(task);
 
+  // ✅ LOG DISABILITATO - troppo rumoroso (si attiva ad ogni render)
+  // console.log('[TaskEditorHost] Resolving editor', {
+  //   taskId: task?.id,
+  //   taskType: task?.type,
+  //   taskLabel: task?.label,
+  //   editorKind: kind
+  // });
+
   const Comp = registry[kind];
 
   if (!Comp) {
@@ -17,14 +25,20 @@ export default function TaskEditorHost({ task, onClose, onToolbarUpdate, hideHea
     return <div>No editor registered for {kind}</div>;
   }
 
+  // ✅ LOG DISABILITATO - troppo rumoroso (si attiva ad ogni render)
+  // console.log('[TaskEditorHost] Rendering component', {
+  //   kind,
+  //   componentName: Comp.displayName || Comp.name || 'Unknown'
+  // });
+
   // DDTEditor, IntentEditor, TextMessageEditor e BackendCallEditor sono importati direttamente, quindi non hanno bisogno di Suspense
-  // Gli altri editori usano lazy loading, quindi hanno bisogno di Suspense
-  const isLazy = kind !== 'ddt' && kind !== 'intent' && kind !== 'message' && kind !== 'backend';
+  // Gli altri editori (problem, simple) usano lazy loading, quindi hanno bisogno di Suspense
+  const isLazy = kind !== 'ddt' && kind !== 'intent' && kind !== 'message' && kind !== 'backend' && kind !== 'problem';
 
   if (!isLazy) {
-    // Render diretto per DDTEditor e IntentEditor (più veloce, no lazy loading)
+    // ✅ SOLUZIONE ESPERTO: Rimuovere h-full, usare solo flex-1 min-h-0
     return (
-      <div className="h-full w-full bg-slate-900 flex flex-col">
+      <div className="w-full bg-slate-900 flex flex-col flex-1 min-h-0">
         <div className="min-h-0 flex-1">
           {/* @ts-expect-error registry type */}
           <Comp task={task} onClose={onClose} onToolbarUpdate={onToolbarUpdate} hideHeader={hideHeader} />
@@ -34,11 +48,12 @@ export default function TaskEditorHost({ task, onClose, onToolbarUpdate, hideHea
   }
 
   // Suspense per lazy components
+  // ✅ SOLUZIONE ESPERTO: Rimuovere h-full, usare solo flex-1 min-h-0
   return (
-    <div className="h-full w-full bg-slate-900 flex flex-col">
+    <div className="w-full bg-slate-900 flex flex-col flex-1 min-h-0">
       <div className="min-h-0 flex-1">
         <Suspense fallback={
-          <div className="h-full flex items-center justify-center bg-slate-900">
+          <div className="flex items-center justify-center bg-slate-900 flex-1 min-h-0">
             <div className="text-white text-sm">
               <div className="animate-pulse">Loading editor...</div>
             </div>

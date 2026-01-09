@@ -18,22 +18,31 @@ describe('Task Migration Helpers', () => {
       expect(getTemplateId(task)).toBe('SayMessage');
     });
 
-    it('should throw if templateId missing', () => {
+    it('should return null if templateId missing (standalone task)', () => {
       const task: any = { id: 'task_2', value: {} };
-      expect(() => getTemplateId(task)).toThrow('no templateId');
+      expect(getTemplateId(task)).toBeNull();
     });
 
-    it('should throw if task is null', () => {
-      expect(() => getTemplateId(null as any)).toThrow('null or undefined');
+    it('should return null if task is null', () => {
+      expect(getTemplateId(null as any)).toBeNull();
     });
 
-    it('should throw for empty string templateId', () => {
+    it('should return null for empty string templateId', () => {
       const task: any = {
         id: 'task_5',
         templateId: '',  // Empty string
         value: {}
       };
-      expect(() => getTemplateId(task)).toThrow('no templateId');
+      expect(getTemplateId(task)).toBeNull();
+    });
+
+    it('should return null for null templateId (standalone task)', () => {
+      const task: any = {
+        id: 'task_6',
+        templateId: null,  // Standalone task
+        value: {}
+      };
+      expect(getTemplateId(task)).toBeNull();
     });
   });
 
@@ -52,9 +61,9 @@ describe('Task Migration Helpers', () => {
       expect(() => validateTask(task)).toThrow('invalid id');
     });
 
-    it('should throw for invalid Task (missing templateId)', () => {
-      const task: any = { id: 'task_3', value: {} };
-      expect(() => validateTask(task)).toThrow('no templateId');
+    it('should pass for Task with null templateId (standalone task)', () => {
+      const task: any = { id: 'task_3', templateId: null, value: {} };
+      expect(() => validateTask(task)).not.toThrow();
     });
 
     it('should throw for null task', () => {

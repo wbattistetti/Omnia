@@ -2,7 +2,8 @@ import type { EditorKind, TaskMeta } from './types'; // ✅ RINOMINATO: ActMeta 
 import { TaskType, getEditorFromTaskType } from '../../../types/taskTypes';
 
 export function resolveEditorKind(task: TaskMeta): EditorKind { // ✅ RINOMINATO: act → task
-  const taskType = task?.type || TaskType.UNDEFINED; // ✅ Usa direttamente task.type (TaskType enum)
+  // ✅ FIX CRITICO: Usa ?? invece di || per gestire correttamente 0 (SayMessage è falsy ma valido)
+  const taskType = task?.type ?? TaskType.UNDEFINED; // ✅ Usa direttamente task.type (TaskType enum)
 
   // ✅ Se tipo è UNDEFINED ma c'è un label, apri ResponseEditor per permettere inferenza tipo da template DDT
   if (taskType === TaskType.UNDEFINED && task?.label && task.label.trim().length > 0) {
@@ -11,6 +12,16 @@ export function resolveEditorKind(task: TaskMeta): EditorKind { // ✅ RINOMINAT
 
   // ✅ Usa direttamente task.type (TaskType enum) invece di convertire da stringa
   const editorKind = getEditorFromTaskType(taskType);
+
+  // ✅ Mapping: 'problem' → 'intent' (IntentEditor gestisce ClassifyProblem)
+  if (editorKind === 'problem') {
+    return 'intent';
+  }
+
+  // ✅ Fallback: se editorKind non è nel tipo EditorKind, usa 'simple'
+  if (editorKind !== 'message' && editorKind !== 'ddt' && editorKind !== 'intent' && editorKind !== 'backend') {
+    return 'simple';
+  }
 
   return editorKind as EditorKind;
 }

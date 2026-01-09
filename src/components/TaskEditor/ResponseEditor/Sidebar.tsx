@@ -24,9 +24,11 @@ interface SidebarProps {
   onAddSub?: (mainIdx: number, label: string) => void;
   onRenameSub?: (mainIdx: number, subIdx: number, label: string) => void;
   onDeleteSub?: (mainIdx: number, subIdx: number) => void;
+  onWidthChange?: (width: number) => void; // ✅ Nuova prop per resize manuale
+  style?: React.CSSProperties; // ✅ Prop per larghezza manuale
 }
 
-const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ mainList, selectedMainIndex, onSelectMain, selectedSubIndex, onSelectSub, aggregated, rootLabel = 'Data', onSelectAggregator, onChangeSubRequired, onReorderSub, onAddMain, onRenameMain, onDeleteMain, onAddSub, onRenameSub, onDeleteSub }, ref) {
+const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ mainList, selectedMainIndex, onSelectMain, selectedSubIndex, onSelectSub, aggregated, rootLabel = 'Data', onSelectAggregator, onChangeSubRequired, onReorderSub, onAddMain, onRenameMain, onDeleteMain, onAddSub, onRenameSub, onDeleteSub, onWidthChange, style }, ref) {
   const { combinedClass } = useFontContext();
   const { translations } = useProjectTranslations(); // ✅ Get translations for node labels
   const dbg = (...args: any[]) => { try { if (localStorage.getItem('debug.sidebar') === '1') console.log(...args); } catch {} };
@@ -126,7 +128,8 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
   const dragStateRef = React.useRef<{ mainIdx: number | null; fromIdx: number | null }>({ mainIdx: null, fromIdx: null });
   const forwarded = ref as any;
   React.useEffect(() => { if (forwarded) forwarded.current = containerRef.current; }, [forwarded]);
-  const [measuredW, setMeasuredW] = React.useState<number>(280);
+  // ✅ FIX: Parti da null invece di 280 per evitare flash e misure sbagliate
+  const [measuredW, setMeasuredW] = React.useState<number | null>(null);
   const [hoverRoot, setHoverRoot] = React.useState<boolean>(false);
   const [hoverMainIdx, setHoverMainIdx] = React.useState<number | null>(null);
   const [hoverSub, setHoverSub] = React.useState<{ mainIdx: number; subIdx: number } | null>(null);
@@ -152,25 +155,178 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
       if (!overlayHoverRef.current && !stillHoveringItem) setOverlay(null);
     }, delay);
   };
+  // ✅ DEBUG: Abilita log con localStorage.setItem('debug.sidebarResize', '1')
+  const DEBUG_RESIZE = typeof localStorage !== 'undefined' && localStorage.getItem('debug.sidebarResize') === '1';
+
+  // ✅ FIX: Leggi manualWidth da style prop (se presente)
+  const manualWidth = React.useMemo(() => {
+    if (!style?.width) return null;
+    const w = typeof style.width === 'number' ? style.width : parseFloat(String(style.width));
+    const result = Number.isFinite(w) && w > 0 ? w : null;
+    if (DEBUG_RESIZE) console.log('📐 [SIDEBAR] manualWidth calcolato', {
+      styleWidth: style?.width,
+      parsed: w,
+      result,
+    });
+    return result;
+  }, [style?.width, DEBUG_RESIZE]);
+
+  // ✅ DEBUG: Log quando manualWidth o measuredW cambiano
   React.useEffect(() => {
-    const measure = () => {
-      const el = containerRef.current;
-      if (!el) return;
-      const items = Array.from(el.querySelectorAll('.sb-item')) as HTMLElement[];
-      let maxWidth = 0;
-      for (const it of items) {
-        const w = it.scrollWidth;
-        if (w > maxWidth) maxWidth = w;
-      }
-      const gutter = 45; // 35 + 10 extra pixels
-      const width = Math.ceil(maxWidth) + gutter;
-      const clamped = Math.min(Math.max(width, 200), 640);
-      setMeasuredW(clamped);
+    if (DEBUG_RESIZE) console.log('📏 [SIDEBAR] manualWidth/measuredW cambiato', {
+      manualWidth,
+      measuredW,
+      styleWidth: style?.width,
+      finalWidth: manualWidth ?? measuredW ?? 'auto',
+    });
+  }, [manualWidth, measuredW, style?.width, DEBUG_RESIZE]);
+
+  // ✅ FIX: useLayoutEffect per calcolare dopo il mount con font reale
+  React.useLayoutEffect(() => {
+    // Se c'è una larghezza manuale, NON calcolare autosize
+    if (manualWidth !== null && manualWidth > 0) {
+      if (DEBUG_RESIZE) console.log('⏸️ [SIDEBAR] manualWidth attivo, salto autosize', { manualWidth });
+      // Non aggiornare measuredW se c'è manualWidth attivo
+      return;
+    }
+
+    const el = containerRef.current;
+    if (!el) return;
+    if (!Array.isArray(mainList) || mainList.length === 0) {
+      setMeasuredW(280); // Fallback
+      return;
+    }
+
+    // ✅ FIX: Leggi il font reale dal container
+    const computedStyle = window.getComputedStyle(el);
+    const containerFont = computedStyle.font || `${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`;
+
+    // ✅ Funzione per misurare testo con font reale
+    const measureTextWidth = (text: string, fontWeight: number = 400): number => {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      if (!context) return text.length * 8;
+
+      // ✅ Usa il font del container, ma modifica il fontWeight
+      const fontParts = containerFont.split(' ');
+      const baseFontSize = computedStyle.fontSize || '14px';
+      const baseFontFamily = computedStyle.fontFamily || 'system-ui';
+      context.font = `${fontWeight} ${baseFontSize} ${baseFontFamily}`;
+
+      return context.measureText(text || '').width;
     };
-    const id = requestAnimationFrame(measure);
-    window.addEventListener('resize', measure);
-    return () => { cancelAnimationFrame(id); window.removeEventListener('resize', measure); };
-  }, [mainList]);
+
+    // ✅ FIX: Leggi costanti UI dal DOM invece di hardcoded
+    // Prova a leggere da elementi esistenti, altrimenti usa fallback
+    const getIconWidth = (): number => {
+      // Cerca un'icona nel DOM per misurare
+      const firstIcon = el.querySelector('svg, [class*="icon"]');
+      if (firstIcon) {
+        const rect = firstIcon.getBoundingClientRect();
+        if (rect.width > 0) return rect.width;
+      }
+      return 20; // Fallback
+    };
+
+    const getPadding = (): { horizontal: number; vertical: number } => {
+      const paddingLeft = parseFloat(computedStyle.paddingLeft) || 14;
+      const paddingRight = parseFloat(computedStyle.paddingRight) || 14;
+      const paddingTop = parseFloat(computedStyle.paddingTop) || 16;
+      const paddingBottom = parseFloat(computedStyle.paddingBottom) || 16;
+      return {
+        horizontal: paddingLeft + paddingRight,
+        vertical: paddingTop + paddingBottom
+      };
+    };
+
+    const iconWidth = getIconWidth();
+    const padding = getPadding();
+
+    // Costanti derivate dal codice (con fallback)
+    const CHECKBOX_WIDTH = 14 + 6; // Checkbox (14px) + marginRight (6px)
+    const CHEVRON_WIDTH = 10 + 6; // Chevron SVG (10px) + marginLeft (6px)
+    const BUTTON_PADDING_H = 10 + 10; // padding: '8px 10px' → left + right
+    const SUB_INDENT = 36; // marginLeft per sub-items
+    const MAIN_INDENT_AGGREGATED = 18; // marginLeft per main items quando aggregated
+    const GAP = 10; // gap tra icona e testo
+    const GUTTER = 15; // spazio extra
+
+    let maxWidth = 0;
+
+    // ✅ 1. Calcola larghezza massima dei main items
+    mainList.forEach((main, idx) => {
+      const label = getLabel(main, translations);
+      const labelWidth = measureTextWidth(label, selectedMainIndex === idx ? 700 : 400);
+      const subs = getSubDataList(main) || [];
+      const hasSubs = subs.length > 0;
+
+      let mainWidth = iconWidth + GAP + labelWidth;
+
+      if (aggregated) mainWidth += CHECKBOX_WIDTH;
+      if (hasSubs) mainWidth += CHEVRON_WIDTH;
+      mainWidth += BUTTON_PADDING_H;
+      if (aggregated) mainWidth += MAIN_INDENT_AGGREGATED;
+
+      if (mainWidth > maxWidth) maxWidth = mainWidth;
+
+      // ✅ 2. Se questo main è espanso, calcola anche i suoi sub-items
+      if (expandedMainIndex === idx && hasSubs) {
+        subs.forEach((sub: any, sidx: number) => {
+          const subLabel = getLabel(sub, translations);
+          const isSubActive = selectedMainIndex === idx && safeSelectedSubIndex === sidx;
+          const subLabelWidth = measureTextWidth(subLabel, isSubActive ? 700 : 400);
+
+          let subWidth = SUB_INDENT + iconWidth + GAP + subLabelWidth;
+          subWidth += CHECKBOX_WIDTH;
+          subWidth += BUTTON_PADDING_H;
+
+          if (subWidth > maxWidth) maxWidth = subWidth;
+        });
+      }
+    });
+
+    // ✅ 3. Considera anche il root label se aggregated
+    if (aggregated && rootLabel) {
+      const rootLabelWidth = measureTextWidth(rootLabel, 700);
+      const rootWidth = iconWidth + GAP + rootLabelWidth + BUTTON_PADDING_H;
+      if (rootWidth > maxWidth) maxWidth = rootWidth;
+    }
+
+    // ✅ 4. Aggiungi padding del container e gutter
+    maxWidth += padding.horizontal;
+    maxWidth += GUTTER;
+
+    // ✅ 5. Clamp tra min e max
+    const totalWidth = Math.ceil(maxWidth);
+    const clamped = Math.min(Math.max(totalWidth, 200), 640);
+
+    if (DEBUG_RESIZE) console.log('📊 [SIDEBAR] Calcolo autosize completato', {
+      maxWidth,
+      totalWidth,
+      clamped,
+      manualWidth,
+      willSet: manualWidth === null || manualWidth === 0,
+    });
+
+    if (manualWidth === null || manualWidth === 0) {
+      setMeasuredW(clamped);
+    }
+  }, [mainList, expandedMainIndex, aggregated, rootLabel, translations, selectedMainIndex, safeSelectedSubIndex, manualWidth, DEBUG_RESIZE]);
+
+  // ✅ DEBUG: Log quando finalWidth cambia
+  const finalWidth = manualWidth ?? measuredW ?? 'auto';
+  const hasFlex = !manualWidth; // ✅ CRITICO: Rimuovi flex: 1 quando c'è manualWidth
+  React.useEffect(() => {
+    if (DEBUG_RESIZE) console.log('🎨 [SIDEBAR] Render con width finale', {
+      manualWidth,
+      measuredW,
+      finalWidth,
+      styleWidth: style?.width,
+      hasFlex,
+      containerRefExists: !!containerRef.current,
+      actualWidth: containerRef.current?.getBoundingClientRect().width,
+    });
+  }, [finalWidth, manualWidth, measuredW, style?.width, hasFlex, DEBUG_RESIZE]);
 
   return (
     <div
@@ -178,7 +334,22 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
       tabIndex={0}
       onKeyDown={handleKeyDown}
       className={combinedClass}
-      style={{ width: measuredW, background: '#121621', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 8, borderRight: '1px solid #252a3e', outline: 'none', position: 'relative' }}
+      style={{
+        width: finalWidth, // ✅ FIX: usa 'auto' se measuredW è null
+        background: '#121621',
+        padding: '16px 14px',
+        display: 'flex',
+        flexDirection: 'column',
+        // ✅ CRITICO: Rimuovi flex: 1 quando c'è manualWidth, altrimenti il width fisso viene ignorato
+        ...(hasFlex ? { flex: 1 } : {}),
+        minHeight: 0,
+        gap: 8,
+        borderRight: '1px solid #252a3e',
+        outline: 'none',
+        position: 'relative',
+        flexShrink: 0,
+        ...(style || {}) // ✅ Spread style prop solo se presente (ma width viene sovrascritto da manualWidth/measuredW)
+      }}
     >
       {aggregated && (
         <button

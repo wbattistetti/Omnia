@@ -1,12 +1,22 @@
 import React, { useState, useImperativeHandle, forwardRef } from 'react';
 import { getModelStatus, trainIntent, TrainingPhrase } from './services/trainingService';
 import { useIntentStore } from './state/intentStore';
+// ✅ RIPRISTINO LAYOUT: Import dei componenti del layout completo
+import { LeftGrid } from './ui/LeftGrid';
+import { CenterPane } from './ui/CenterPane';
+import { TestConsole } from './ui/RightTest';
+// ✅ FIX DOPPIO HEADER: Import per Train Model button
+import { Brain, Loader2 } from 'lucide-react';
 
 interface EmbeddingEditorShellProps {
   inlineMode?: boolean;
   intentSelected?: string; // Not used anymore, but kept for backward compatibility
   instanceId?: string; // Not used anymore, but kept for backward compatibility
   onTrainStateChange?: (state: { training: boolean; modelReady: boolean; canTrain: boolean }) => void;
+  // ✅ FIX DOPPIO HEADER: Esponi training state per mostrare Train Model button
+  training?: boolean;
+  modelReady?: boolean;
+  canTrain?: boolean;
 }
 
 export interface EmbeddingEditorShellRef {
@@ -30,10 +40,15 @@ const BASE_MODELS = [
 ];
 
 const EmbeddingEditorShell = forwardRef<EmbeddingEditorShellRef, EmbeddingEditorShellProps>(
-  ({ inlineMode = false, onTrainStateChange }, ref) => {
+  ({ inlineMode = false, onTrainStateChange, training: externalTraining, modelReady: externalModelReady, canTrain: externalCanTrain }, ref) => {
     // Training state
     const [training, setTraining] = useState(false);
     const [modelReady, setModelReady] = useState(false);
+
+    // ✅ FIX DOPPIO HEADER: Usa stato esterno se fornito, altrimenti stato interno
+    const currentTraining = externalTraining !== undefined ? externalTraining : training;
+    const currentModelReady = externalModelReady !== undefined ? externalModelReady : modelReady;
+    const currentCanTrain = externalCanTrain !== undefined ? externalCanTrain : canTrain;
 
     // Training configuration parameters (not persisted yet)
     const [threshold, setThreshold] = useState<number>(0.6); // 0.0-1.0
@@ -43,7 +58,10 @@ const EmbeddingEditorShell = forwardRef<EmbeddingEditorShellRef, EmbeddingEditor
 
     // Get all intents from store for training
     const intents = useIntentStore(s => s.intents || []);
-    const canTrain = intents.length > 0 && !training;
+    const canTrain = intents.length > 0 && !currentTraining;
+
+    // ✅ RIPRISTINO LAYOUT: Ottieni l'intento selezionato dallo store
+    const selectedIntentId = useIntentStore(s => s.selectedId);
 
     // Handler for training (uses all intents from store)
     const handleTrain = async () => {
@@ -106,10 +124,10 @@ const EmbeddingEditorShell = forwardRef<EmbeddingEditorShellRef, EmbeddingEditor
     // Expose handleTrain via ref
     useImperativeHandle(ref, () => ({
       handleTrain,
-      training,
-      modelReady,
-      canTrain,
-    }), [training, modelReady, canTrain, intents.length]);
+      training: currentTraining,
+      modelReady: currentModelReady,
+      canTrain: currentCanTrain,
+    }), [currentTraining, currentModelReady, currentCanTrain, intents.length]);
 
     // Check model status on mount (for all intents)
     React.useEffect(() => {
@@ -118,27 +136,29 @@ const EmbeddingEditorShell = forwardRef<EmbeddingEditorShellRef, EmbeddingEditor
         if (firstIntentId) {
           getModelStatus(firstIntentId).then(status => {
             setModelReady(status.modelReady);
-            onTrainStateChange?.({ training, modelReady: status.modelReady, canTrain });
+            onTrainStateChange?.({ training: currentTraining, modelReady: status.modelReady, canTrain: currentCanTrain });
           }).catch(() => {
             setModelReady(false);
-            onTrainStateChange?.({ training, modelReady: false, canTrain });
+            onTrainStateChange?.({ training: currentTraining, modelReady: false, canTrain: false });
           });
         }
       } else {
         setModelReady(false);
-        onTrainStateChange?.({ training, modelReady: false, canTrain: false });
+        onTrainStateChange?.({ training: currentTraining, modelReady: false, canTrain: false });
       }
-    }, [intents.length]);
+    }, [intents.length, currentTraining, currentCanTrain]);
 
     // Notify parent of state changes
     React.useEffect(() => {
-      onTrainStateChange?.({ training, modelReady, canTrain });
-    }, [training, modelReady, canTrain]);
+      onTrainStateChange?.({ training: currentTraining, modelReady: currentModelReady, canTrain: currentCanTrain });
+    }, [currentTraining, currentModelReady, currentCanTrain]);
 
+    // ✅ SOLUZIONE ESPERTO: Rimuovere tutti i ResizeObserver e log di debug, usare solo flex-1 min-h-0
     return (
-      <div className="flex gap-0 h-full flex-1 min-w-0 overflow-hidden flex-col" style={{ maxWidth: '100%' }}>
+      <div className="flex gap-0 flex-1 min-w-0 min-h-0 overflow-hidden flex-col">
         {/* Riga parametri in alto - tutti sulla stessa riga */}
-        <div className="flex items-center gap-4 px-4 pt-4 pb-2" style={{ minHeight: '60px' }}>
+        {/* ✅ FIX ALTEZZA: Aggiungi flex-shrink-0 per evitare che i controlli vengano compressi */}
+        <div className="flex items-center gap-4 px-4 pt-4 pb-2 flex-shrink-0" style={{ minHeight: '60px' }}>
           {/* Threshold slider - compatto */}
           <div className="flex items-center gap-2 min-w-0">
             <label className="text-sm font-medium text-slate-700 whitespace-nowrap">
@@ -192,7 +212,7 @@ const EmbeddingEditorShell = forwardRef<EmbeddingEditorShellRef, EmbeddingEditor
           {/* Spacer per spingere Base Model a destra */}
           <div style={{ flex: 1 }} />
 
-          {/* Base model dropdown - alla fine a destra, largo per contenere l'opzione più lunga */}
+          {/* Base model dropdown */}
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-slate-700 whitespace-nowrap">
               Base Model:
@@ -210,7 +230,62 @@ const EmbeddingEditorShell = forwardRef<EmbeddingEditorShellRef, EmbeddingEditor
               ))}
             </select>
           </div>
+
+          {/* ✅ FIX DOPPIO HEADER: Train Model button spostato qui dalla toolbar */}
+          <div className="flex items-center gap-2 ml-4">
+            <button
+              onClick={handleTrain}
+              disabled={!currentCanTrain || currentTraining}
+              style={{
+                padding: '6px 12px',
+                border: '1px solid rgba(0,0,0,0.2)',
+                borderRadius: 8,
+                background: currentModelReady ? '#fef3c7' : 'transparent',
+                color: currentModelReady ? '#92400e' : '#1e293b',
+                cursor: currentCanTrain && !currentTraining ? 'pointer' : 'not-allowed',
+                fontSize: 14,
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                opacity: currentCanTrain && !currentTraining ? 1 : 0.6
+              }}
+              title={currentTraining ? 'Training in corso...' : currentModelReady ? 'Model ready - Click to retrain' : 'Train embeddings model'}
+            >
+              {currentTraining ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  Training...
+                </>
+              ) : (
+                <>
+                  <Brain size={14} />
+                  Train Model
+                </>
+              )}
+            </button>
+          </div>
         </div>
+
+        {/* ✅ SOLUZIONE ESPERTO: Layout completo a 3 colonne - usa solo flex-1 min-h-0 */}
+        {!inlineMode && (
+          <div className="flex-1 min-h-0 flex gap-2 px-2 pb-2" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'row', alignItems: 'stretch' }}>
+            {/* Sinistra: Lista Intent - aggiungi height: 100% per forzare espansione verticale in flex row */}
+            <div className="w-64 flex-shrink-0 flex flex-col min-h-0" style={{ height: '100%' }}>
+              <LeftGrid />
+            </div>
+
+            {/* Centro: Frasi Matching/Not Matching - flex-1 per espansione orizzontale, height: 100% per verticale */}
+            <div className="flex-1 min-w-0 flex flex-col min-h-0" style={{ height: '100%' }}>
+              <CenterPane intentId={selectedIntentId} />
+            </div>
+
+            {/* Destra: Test Console - aggiungi height: 100% per forzare espansione verticale in flex row */}
+            <div className="w-80 flex-shrink-0 flex flex-col min-h-0" style={{ height: '100%' }}>
+              <TestConsole />
+            </div>
+          </div>
+        )}
       </div>
     );
   }

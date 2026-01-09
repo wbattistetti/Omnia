@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { NodeRowData, EntityType } from '../../../../../types/project';
-import { typeToMode } from '../../../../../utils/normalizers';
+// ❌ RIMOSSO: typeToMode - usa TaskType enum direttamente
 import { getTaskIdFromRow } from '../../../../../utils/taskHelpers';
 import { flowchartVariablesService } from '../../../../../services/FlowchartVariablesService';
 import { taskRepository } from '../../../../../services/TaskRepository';
@@ -70,8 +70,8 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
                 type: TaskType.UNDEFINED,
                 templateId: null
             } as any,
-            isUndefined: true,
-            mode: undefined as any
+            isUndefined: true
+            // ✅ mode removed - use type (TaskType enum) only
         };
         return { nextRows: [...rows, newRow], newRowId };
     }, [makeRowId]);
@@ -127,7 +127,7 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
             const existingType: any = (row as any).type;
             const finalType: any = (typeof incoming.type !== 'undefined') ? incoming.type : existingType;
             const existingMode: any = (row as any).mode;
-            const finalMode: any = (typeof incoming.mode !== 'undefined') ? incoming.mode : (existingMode || (finalType ? typeToMode(finalType as any) : undefined));
+            // ✅ mode removed - use type (TaskType enum) only
 
             // Preserva flag isUndefined se presente (per nodi undefined con punto interrogativo)
             const preserveIsUndefined = (incoming as any)?.isUndefined !== undefined
@@ -141,7 +141,7 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
                 ...row,
                 ...incoming,
                 type: finalType,
-                mode: finalMode,
+                // ✅ mode removed - use type (TaskType enum) only
                 text: newText, // ✅ Questo è il testo che viene salvato
                 categoryType:
                     (meta && (meta as any).categoryType)
@@ -319,7 +319,7 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
         // Inserisci una riga solo se l'ultima riga è valida (non vuota e con tipo)
         // ✅ Questo controllo ora è dopo l'eliminazione della riga vuota
         const last = updatedRows[updatedRows.length - 1];
-        const lastValid = last ? Boolean((last.text || '').trim().length > 0 && ((last as any).type || (last as any).mode)) : true;
+        const lastValid = last ? Boolean((last.text || '').trim().length > 0 && (last as any).type) : true; // ✅ type (TaskType enum) only, no mode
         if (!lastValid && updatedRows.length > 0) return;
 
         const newRowId = makeRowId();
@@ -334,8 +334,8 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
                 type: TaskType.UNDEFINED,
                 templateId: null
             } as any,
-            isUndefined: true,
-            mode: undefined as any
+            isUndefined: true
+            // ✅ mode removed - use type (TaskType enum) only
         };
         (newRow as any).isNew = true; // Preserve isNew flag
 

@@ -8,8 +8,9 @@ import { actionRunAllTests } from '../../actions/runAllTests';
 export function CenterPane({ intentId, tab: externalTab, setTab: externalSetTab }: { intentId?: string; tab?: 'pos'|'neg'|'key'; setTab?: (tab: 'pos'|'neg'|'key') => void }){
   const it = useIntentStore(s=> s.intents.find(x=>x.id===intentId));
   if(!it) return <div className="border rounded-2xl p-4 bg-white">Select a problem</div>;
+  // ✅ SOLUZIONE ESPERTO: Rimuovere h-full, usare solo flex-1 min-h-0
   return (
-    <div className="h-full flex flex-col min-h-0">
+    <div className="flex flex-col flex-1 min-h-0">
       {/* titolo/soglia nascosti per semplificare: sono già nel pannello a sinistra */}
       <div className="hidden"><h2 className="font-semibold">{it.name}</h2><ThresholdControl id={it.id} value={it.threshold}/></div>
       <PhrasesPanel

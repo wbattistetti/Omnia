@@ -118,8 +118,9 @@ export default function PhrasesPanel({
   const existsIn = (label: string, list: { id: string; label: string }[]) => list.find(i=>norm(i.label)===norm(label));
 
 
+  // ✅ SOLUZIONE ESPERTO: Rimuovere h-full, usare solo flex-1 min-h-0
   return (
-    <div className="mt-2 flex flex-col min-h-0 h-full overflow-hidden">
+    <div className="mt-2 flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* List area - ListGrid gestisce internamente input fisso e lista scrollabile */}
       <div className="flex-1 min-h-0 overflow-hidden">
         {tab==='pos' && (

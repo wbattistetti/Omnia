@@ -68,9 +68,9 @@ export function templateIdToTaskType(templateId: string | null | undefined): Tas
  * @returns TaskType enum corrispondente
  */
 export function taskIdToTaskType(taskId: string): TaskType { // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
-  const normalized = actId.toLowerCase().trim();
+  const normalized = taskId.toLowerCase().trim(); // ✅ FIX: actId → taskId
 
-  // Mapping actId (UI) → TaskType enum
+  // Mapping taskId (UI) → TaskType enum
   switch (normalized) {
     case 'message': return TaskType.SayMessage;
     case 'datarequest': return TaskType.DataRequest;
@@ -264,4 +264,6 @@ export interface FlowRow {
   included?: boolean;            // If included in flow
   order?: number;                 // Execution order in node (for sequence)
 }
+
+// ❌ RIMOSSO: taskTypeToModeString e modeStringToTaskType - non servono più, backend usa solo type (TaskType enum)
 

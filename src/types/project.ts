@@ -29,17 +29,16 @@ export interface Category<T = ProjectEntityItem> {
  */
 export interface TaskTemplateItem extends ProjectEntityItem {
   // Authoritative type for visuals/behavior
-  type?: ActType;
+  type?: TaskType; // ✅ FIX: ActType → TaskType (enum numerico)
   // Optional category name; undefined means shown at root in the sidebar
   category?: string;
-  // List of user acts for interactive acts (kept for compatibility)
-  userActs?: string[];
-  // ProblemClassification payload (template-owned). Present only when type === 'ProblemClassification'
+  // List of user tasks for interactive tasks
+  userTasks?: string[]; // ✅ RINOMINATO: userActs → userTasks
+  // ProblemClassification payload (template-owned). Present only when type === TaskType.ClassifyProblem
   problem?: ProblemPayload;
 }
 
-// Backward compatibility alias (deprecated)
-export type AgentActItem = TaskTemplateItem;
+// ❌ RIMOSSO: AgentActItem - non più necessario, usa TaskTemplateItem
 
 export type ProjectData = {
   id?: string;
@@ -49,7 +48,7 @@ export type ProjectData = {
   ownerCompany?: string; // Owner del progetto lato azienda (chi lo costruisce)
   ownerClient?: string; // Owner del progetto lato cliente (chi lo commissiona)
   taskTemplates?: { id?: string; name?: string; items: TaskTemplateItem[] }[];
-  userActs?: any[];
+  userTasks?: any[]; // ✅ RINOMINATO: userActs → userTasks
   backendActions?: any[];
   conditions?: any[];
   tasks?: any[]; // Deprecated: kept for compatibility, new data goes to macrotasks

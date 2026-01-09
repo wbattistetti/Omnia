@@ -155,7 +155,7 @@ export default function RightPanel({ mode, width, onWidthChange, onStartResize, 
   const useNewEngine = true;
 
   return (
-    <div className={combinedClass} style={{ display: 'flex', flex: 'none', minWidth: minWidth, width, maxWidth: width, borderLeft: hideSplitter ? 'none' : '1px solid #e5e7eb', background: '#fafaff', position: 'relative' }}>
+    <div className={combinedClass} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, minWidth: minWidth, width, maxWidth: width, borderLeft: hideSplitter ? 'none' : '1px solid #e5e7eb', background: '#fafaff', position: 'relative' }}>
       {/* Splitter handle sinistro - evidenziato solo su hover o quando questo specifico pannello sta ridimensionando */}
       {!hideSplitter && (
         <div
@@ -173,9 +173,9 @@ export default function RightPanel({ mode, width, onWidthChange, onStartResize, 
           role="separator"
         />
       )}
-      <div style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, minWidth: 0 }}>
         {mode === 'actions' && (
-          <div style={{ padding: 12 }}>
+          <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 12 }}>
             <TaskList />
           </div>
         )}
@@ -183,7 +183,7 @@ export default function RightPanel({ mode, width, onWidthChange, onStartResize, 
           if (mode === 'chat') {
 
             return (
-              <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 8, borderBottom: '1px solid #e5e7eb' }}>
                   <div style={{ fontWeight: 700, color: '#0b1220' }}>Chat Simulator</div>
                 </div>

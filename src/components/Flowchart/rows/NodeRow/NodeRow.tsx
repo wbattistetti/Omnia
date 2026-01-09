@@ -4,7 +4,7 @@ import { useDDTManager } from '../../../../context/DDTManagerContext';
 import { useDDTContext } from '../../../../context/DDTContext';
 import { ProjectDataService } from '../../../../services/ProjectDataService';
 import { EntityCreationService } from '../../../../services/EntityCreationService';
-import { createAndAttachAct } from '../../../../services/ActFactory';
+import { createAndAttachTask } from '../../../../services/ActFactory'; // ✅ RINOMINATO: createAndAttachAct → createAndAttachTask
 import { useTaskEditor } from '../../../TaskEditor/EditorHost/TaskEditorContext'; // ✅ RINOMINATO: ActEditor → TaskEditor, useActEditor → useTaskEditor
 import { emitSidebarRefresh } from '../../../../ui/events';
 import { createPortal } from 'react-dom';
@@ -28,7 +28,7 @@ import { isInsideWithPadding, getToolbarRect } from './utils/geometry';
 import { getTaskVisualsByType, resolveTaskType, hasTaskDDT } from '../../utils/taskVisuals';
 import { TaskType, taskTypeToTemplateId, taskTypeToHeuristicString, taskIdToTaskType } from '../../../../types/taskTypes'; // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
 import { RowHeuristicsService } from '../../../../services/RowHeuristicsService'; // ✅ Service centralizzato per euristiche
-import { modeToType, typeToMode } from '../../../../utils/normalizers';
+// ❌ RIMOSSO: modeToType, typeToMode - usa TaskType enum direttamente
 import { idMappingService } from '../../../../services/IdMappingService';
 import { generateId } from '../../../../utils/idGenerator';
 import { taskRepository } from '../../../../services/TaskRepository';
@@ -711,12 +711,11 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         timestamp: Date.now()
       });
 
-      const finalMode = typeToMode(typeString as any);
+      // ✅ mode removed - use type (TaskType enum) only
 
       const updateMeta = {
         id: row.id,
-        type: typeString,
-        mode: finalMode,
+        type: typeString, // ✅ TaskType enum only, no mode
         factoryId: (row as any).factoryId,
         instanceId: (row as any).instanceId,
         // ✅ Rimuovi flag isUndefined quando viene selezionato un tipo
@@ -896,12 +895,11 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           }
 
           const finalType = createdItem?.type ?? key;
-          const finalMode = createdItem?.mode ?? typeToMode(key as any);
+          // ✅ mode removed - use type (TaskType enum) only
 
           const updateMeta = {
             id: instanceId,
-            type: finalType,
-            mode: finalMode,
+            type: finalType, // ✅ TaskType enum only, no mode
             factoryId: createdItem?.factoryId,
             // ✅ Rimuovi flag isUndefined quando viene selezionato un tipo
             isUndefined: false
@@ -1018,11 +1016,10 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     console.log('🎯 [INSTANCE_CREATION] Row will be updated with ID:', instanceId);
 
     // ✅ Simple row update without createAndAttachAct - ELIMINATED!
-    const mode = typeToMode(key as any);
+    // ✅ mode removed - use type (TaskType enum) only
     console.log('🎯 [DIRECT_UPDATE] Updating row directly:', {
       id: instanceId,
-      type: key,
-      mode
+      type: key // ✅ TaskType enum only, no mode
     });
 
     immediate({
@@ -1088,9 +1085,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       let backendInstanceId: string | undefined = undefined;
       if (pid && item.id && item.categoryType === 'taskTemplates') {
         // Avoid require in browser; import mapping helpers at top-level
-        const chosenType = (item as any)?.type ?? modeToType((item as any)?.mode);
-        const modeFromType = typeToMode(chosenType);
-        const inst = await ProjectDataService.createInstance(pid, { mode: (item as any)?.mode ?? (modeFromType as any) });
+        const chosenType = (item as any)?.type ?? TaskType.UNDEFINED; // ✅ TaskType enum only, no mode
+        const inst = await ProjectDataService.createInstance(pid, { type: chosenType }); // ✅ type (TaskType enum) required, no mode
 
         console.log('[🔍 INTELLISENSE] ProjectDataService.createInstance result', {
           success: !!inst,
@@ -1791,28 +1787,54 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     taskEditorCtx.open({ id: String(taskIdForType), type: finalTaskType, label: row.text, instanceId: row.id }); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx, type → taskType (enum)
                     console.log('✅ [GEAR] taskEditorCtx.open chiamato');
 
-                    // ✅ Ottieni DDT dal task con merge dal template (se templateId esiste e non è UNDEFINED)
+                    // ✅ SOLO per DataRequest: costruisci DDT solo se:
+                    // 1. C'è templateId E il template è di tipo DataRequest
+                    // 2. OPPURE c'è mainData esistente (DDT già salvato, standalone o con override)
                     let ddt: any = null;
-                    // UNDEFINED is a placeholder, not a real template - treat as standalone
+
                     if (taskForType?.templateId && taskForType.templateId !== 'UNDEFINED') {
-                      console.log('🔍 [GEAR] Costruendo DDT dal template', {
-                        templateId: taskForType.templateId
-                      });
-                      // ✅ Use loadDDTFromTemplate to load DDT from template reference
-                      const { loadDDTFromTemplate } = await import('../../../../utils/ddtMergeUtils');
-                      ddt = await loadDDTFromTemplate(taskForType);
-                      console.log('✅ [GEAR] DDT costruito dal template', {
-                        hasDDT: !!ddt,
-                        ddtMainDataLength: ddt?.mainData?.length || 0
-                      });
-                      if (!ddt) {
-                        // Fallback: create empty DDT
-                        console.log('⚠️ [GEAR] DDT null, creando DDT vuoto');
-                        ddt = { label: taskForType.label || row.text || 'New DDT', mainData: [] };
+                      // ✅ Verifica se il template è di tipo DataRequest prima di costruire DDT
+                      const DialogueTaskService = (await import('../../../../services/DialogueTaskService')).default;
+                      const template = DialogueTaskService.getTemplate(taskForType.templateId);
+
+                      if (template) {
+                        // ✅ Usa RowHeuristicsService per determinare il tipo del template
+                        const { RowHeuristicsService } = await import('../../../../services/RowHeuristicsService');
+                        const templateType = RowHeuristicsService.getTemplateType(template);
+
+                        // ✅ Costruisci DDT SOLO se il template è di tipo DataRequest
+                        if (templateType === TaskType.DataRequest) {
+                          console.log('🔍 [GEAR] Costruendo DDT dal template DataRequest', {
+                            templateId: taskForType.templateId,
+                            templateType: TaskType[templateType]
+                          });
+                          // ✅ loadDDTFromTemplate gestisce merge: template come base + override da instance.mainData
+                          const { loadDDTFromTemplate } = await import('../../../../utils/ddtMergeUtils');
+                          ddt = await loadDDTFromTemplate(taskForType);
+                          console.log('✅ [GEAR] DDT costruito dal template', {
+                            hasDDT: !!ddt,
+                            ddtMainDataLength: ddt?.mainData?.length || 0
+                          });
+                          if (!ddt) {
+                            // Fallback: create empty DDT solo se template è DataRequest ma loadDDTFromTemplate fallisce
+                            console.log('⚠️ [GEAR] DDT null dal template, creando DDT vuoto');
+                            ddt = { label: taskForType.label || row.text || 'New DDT', mainData: [] };
+                          }
+                        } else {
+                          console.log('ℹ️ [GEAR] Template non è DataRequest, non costruisco DDT', {
+                            templateId: taskForType.templateId,
+                            templateType: TaskType[templateType]
+                          });
+                          // ✅ NON costruire DDT se template non è DataRequest
+                          ddt = null;
+                        }
+                      } else {
+                        console.warn('⚠️ [GEAR] Template non trovato', { templateId: taskForType.templateId });
+                        ddt = null;
                       }
                     } else if (taskForType?.mainData && taskForType.mainData.length > 0) {
-                      console.log('🔍 [GEAR] Usando mainData esistente');
-                      // Fallback: task senza templateId ma con mainData (vecchio formato o standalone)
+                      // ✅ Usa mainData esistente (DDT standalone, non da template)
+                      console.log('🔍 [GEAR] Usando mainData esistente (standalone DDT)');
                       ddt = {
                         label: taskForType.label || row.text || 'New DDT',
                         mainData: taskForType.mainData,
@@ -1820,10 +1842,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         constraints: taskForType.constraints,
                         examples: taskForType.examples
                       };
-                    } else {
-                      console.log('🔍 [GEAR] Creando DDT vuoto');
-                      ddt = { label: row.text || 'New DDT', mainData: [] };
                     }
+                    // ✅ NON creare DDT vuoto se non c'è né templateId DataRequest né mainData
+                    // ResponseEditor gestirà il caso di ddt === null aprendo il wizard (AI genererà DDT)
 
                     // Emit event with DDT data so AppContent can open it as docking tab
                     console.log('📤 [GEAR] Emettendo evento taskEditor:open', {
@@ -1935,45 +1956,119 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     ? (taskForType.type as TaskType)
                     : ((row as any)?.meta?.type || resolveTaskType(row) || TaskType.SayMessage);
 
+                  // ✅ Determina quale editor aprire in base al tipo
+                  const { getEditorFromTaskType } = await import('../../../../types/taskTypes');
+                  const editorKind = getEditorFromTaskType(taskType);
+
+                  console.log('📝 [GEAR] Apertura editor', {
+                    id: String(taskIdForType),
+                    type: taskType,
+                    typeName: TaskType[taskType],
+                    editorKind,
+                    label: row.text
+                  });
+
+                  // ✅ Apri editor tramite context (gestisce automaticamente il tipo corretto)
                   taskEditorCtx.open({ id: String(taskIdForType), type: taskType, label: row.text, instanceId: row.id }); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx, type → taskType (enum)
 
-                  // ✅ Ottieni DDT dal task con merge dal template (se templateId esiste e non è UNDEFINED)
-                  let ddt: any = null;
-                  // UNDEFINED is a placeholder, not a real template - treat as standalone
-                  if (taskForType?.templateId && taskForType.templateId !== 'UNDEFINED') {
-                    // ✅ Use loadDDTFromTemplate to load DDT from template reference
-                    const { loadDDTFromTemplate } = await import('../../../../utils/ddtMergeUtils');
-                    ddt = await loadDDTFromTemplate(taskForType);
-                    if (!ddt) {
-                      // Fallback: create empty DDT
-                      ddt = { label: taskForType.label || row.text || 'New DDT', mainData: [] };
-                    }
-                  } else if (taskForType?.mainData && taskForType.mainData.length > 0) {
-                    // Fallback: task senza templateId ma con mainData (vecchio formato o standalone)
-                    ddt = {
-                      label: taskForType.label || row.text || 'New DDT',
-                      mainData: taskForType.mainData,
-                      stepPrompts: taskForType.stepPrompts,
-                      constraints: taskForType.constraints,
-                      examples: taskForType.examples
-                    };
-                  } else {
-                    ddt = { label: row.text || 'New DDT', mainData: [] };
-                  }
+                  // ✅ Solo per DataRequest (editorKind === 'ddt'), prepara DDT ed emetti evento
+                  // ✅ Per altri tipi (SayMessage, BackendCall, ecc.), taskEditorCtx.open() è sufficiente
+                  if (editorKind === 'ddt') {
+                    // ✅ SOLO per DataRequest: costruisci DDT solo se:
+                    // 1. C'è templateId E il template è di tipo DataRequest
+                    // 2. OPPURE c'è mainData esistente (DDT già salvato, standalone o con override)
+                    let ddt: any = null;
 
-                  // Emit event with DDT data so AppContent can open it as docking tab
-                  const event = new CustomEvent('taskEditor:open', { // ✅ RINOMINATO: actEditor:open → taskEditor:open
-                    detail: {
+                    if (taskForType?.templateId && taskForType.templateId !== 'UNDEFINED') {
+                      // ✅ Verifica se il template è di tipo DataRequest prima di costruire DDT
+                      const DialogueTaskService = (await import('../../../../services/DialogueTaskService')).default;
+                      const template = DialogueTaskService.getTemplate(taskForType.templateId);
+
+                      if (template) {
+                        // ✅ Usa RowHeuristicsService per determinare il tipo del template
+                        const { RowHeuristicsService } = await import('../../../../services/RowHeuristicsService');
+                        const templateType = RowHeuristicsService.getTemplateType(template);
+
+                        // ✅ Costruisci DDT SOLO se il template è di tipo DataRequest
+                        if (templateType === TaskType.DataRequest) {
+                          console.log('🔍 [GEAR] Costruendo DDT dal template DataRequest', {
+                            templateId: taskForType.templateId,
+                            templateType: TaskType[templateType]
+                          });
+                          // ✅ loadDDTFromTemplate gestisce merge: template come base + override da instance.mainData
+                          const { loadDDTFromTemplate } = await import('../../../../utils/ddtMergeUtils');
+                          ddt = await loadDDTFromTemplate(taskForType);
+                          if (!ddt) {
+                            // Fallback: create empty DDT solo se template è DataRequest ma loadDDTFromTemplate fallisce
+                            ddt = { label: taskForType.label || row.text || 'New DDT', mainData: [] };
+                          }
+                        } else {
+                          console.log('ℹ️ [GEAR] Template non è DataRequest, non costruisco DDT', {
+                            templateId: taskForType.templateId,
+                            templateType: TaskType[templateType]
+                          });
+                          // ✅ NON costruire DDT se template non è DataRequest
+                          ddt = null;
+                        }
+                      } else {
+                        console.warn('⚠️ [GEAR] Template non trovato', { templateId: taskForType.templateId });
+                        ddt = null;
+                      }
+                    } else if (taskForType?.mainData && taskForType.mainData.length > 0) {
+                      // ✅ Usa mainData esistente (DDT standalone, non da template)
+                      console.log('🔍 [GEAR] Usando mainData esistente (standalone DDT)');
+                      ddt = {
+                        label: taskForType.label || row.text || 'New DDT',
+                        mainData: taskForType.mainData,
+                        stepPrompts: taskForType.stepPrompts,
+                        constraints: taskForType.constraints,
+                        examples: taskForType.examples
+                      };
+                    }
+                    // ✅ NON creare DDT vuoto se non c'è né templateId DataRequest né mainData
+                    // ResponseEditor gestirà il caso di ddt === null aprendo il wizard (AI genererà DDT)
+
+                    // ✅ Emit event with DDT data so AppContent can open it as docking tab (solo per DataRequest)
+                    const event = new CustomEvent('taskEditor:open', { // ✅ RINOMINATO: actEditor:open → taskEditor:open
+                      detail: {
+                        id: String(taskIdForType),
+                        type: taskType, // ✅ TaskType enum invece di stringa
+                        label: row.text,
+                        ddt: ddt,
+                        instanceId: row.id, // Pass instanceId from row
+                        templateId: taskForType?.templateId || undefined
+                      },
+                      bubbles: true
+                    });
+                    document.dispatchEvent(event);
+
+                    console.log('✅ [GEAR] Evento taskEditor:open emesso (DataRequest)', {
                       id: String(taskIdForType),
-                      type: taskType, // ✅ TaskType enum invece di stringa
-                      label: row.text,
-                      ddt: ddt,
-                      instanceId: row.id, // Pass instanceId from row
-                      templateId: taskForType?.templateId || undefined
-                    },
-                    bubbles: true
-                  });
-                  document.dispatchEvent(event);
+                      type: taskType,
+                      typeName: TaskType[taskType],
+                      hasDDT: !!ddt,
+                      ddtMainDataLength: ddt?.mainData?.length || 0
+                    });
+                  } else {
+                    // ✅ Per altri tipi (SayMessage, BackendCall, ecc.), emetti evento senza DDT
+                    const event = new CustomEvent('taskEditor:open', {
+                      detail: {
+                        id: String(taskIdForType),
+                        type: taskType,
+                        label: row.text,
+                        instanceId: row.id
+                      },
+                      bubbles: true
+                    });
+                    document.dispatchEvent(event);
+
+                    console.log('✅ [GEAR] Evento taskEditor:open emesso (non-DataRequest)', {
+                      id: String(taskIdForType),
+                      type: taskType,
+                      typeName: TaskType[taskType],
+                      editorKind
+                    });
+                  }
                 } catch (e) {
                   console.error('[NodeRow][onOpenDDT] Failed to open editor', e);
                 }

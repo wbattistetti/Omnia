@@ -431,7 +431,7 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
             }
           }}
           ActIcon={Icon}
-          actColor={iconColor || labelTextColor}
+          taskColor={iconColor || labelTextColor} // ✅ RINOMINATO: actColor → taskColor
           onTypeChangeRequest={onTypeChangeRequest}
           onRequestClosePicker={onRequestClosePicker}
           buttonCloseTimeoutRef={buttonCloseTimeoutRef}

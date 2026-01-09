@@ -21,20 +21,20 @@ import { generateId } from './idGenerator';
  * Priority: templateId (new) > action (legacy)
  *
  * @param task - Task or TaskInstance
- * @returns Template ID (string)
- * @throws Error if neither templateId nor action is present
+ * @returns Template ID (string | null) - null per task standalone
  */
-export function getTemplateId(task: Task | TaskInstance | null | undefined): string {
+export function getTemplateId(task: Task | TaskInstance | null | undefined): string | null {
   if (!task) {
-    throw new Error('Task is null or undefined');
+    return null;
   }
 
-  // ✅ templateId is now required (action removed)
-  if ('templateId' in task && task.templateId) {
-    return task.templateId;
+  // ✅ templateId può essere null per task standalone
+  if ('templateId' in task) {
+    return task.templateId ?? null;
   }
 
-  throw new Error(`Task ${task.id} has no templateId`);
+  // Se non ha templateId, restituisci null (task standalone)
+  return null;
 }
 
 /**
@@ -52,18 +52,16 @@ export function validateTask(task: Task | TaskInstance | null | undefined): void
     throw new Error('Task has invalid id');
   }
 
-  const templateId = getTemplateId(task);
-  if (!templateId || templateId.trim() === '') {
-    throw new Error(`Task ${task.id} has invalid templateId: "${templateId}"`);
-  }
+  // ✅ templateId può essere null per task standalone - non è un errore
+  // validateTask verifica solo che il task abbia un id valido
 }
 
 /**
  * ✅ HELPER: Normalizza Task a TaskInstance
- * Assicura che templateId sia presente
+ * Assicura che templateId sia presente (può essere null per task standalone)
  *
  * @param task - Task to normalize
- * @returns TaskInstance with templateId
+ * @returns TaskInstance with templateId (null se standalone)
  */
 export function normalizeTask(task: Task): TaskInstance {
   validateTask(task);
@@ -72,7 +70,7 @@ export function normalizeTask(task: Task): TaskInstance {
 
   return {
     id: task.id,
-    templateId: templateId,
+    templateId: templateId ?? null, // ✅ null è valido per task standalone
     // ✅ Campi diretti (niente wrapper value) - copia tutti i campi tranne id, templateId, createdAt, updatedAt
     ...Object.fromEntries(
       Object.entries(task).filter(([key]) =>

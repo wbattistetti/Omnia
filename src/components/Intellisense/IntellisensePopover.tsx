@@ -151,7 +151,7 @@ export const IntellisensePopover: React.FC = () => {
             } else if (item) {
                 // Condizione dall'Intellisense
                 label = item.label;
-                conditionId = item.actId || item.id;
+                conditionId = item.taskId || item.id; // ✅ taskId required
             } else {
                 // Testo digitato (Enter senza selezione) - CREA CONDIZIONE
                 const customText = (state.query || "Condition").trim();

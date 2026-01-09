@@ -1,18 +1,18 @@
 import { ProjectDataService } from './ProjectDataService';
 import { EntityCreationService } from './EntityCreationService';
-import { typeToMode } from '../utils/normalizers';
+import { TaskType } from '../types/taskTypes';
 
-type CreateAndAttachOpts = {
+type CreateAndAttachTaskOpts = {
   name: string;
-  type: string; // ActType
+  type: TaskType; // ✅ TaskType enum invece di string
   scope?: 'global' | 'industry';
   projectData: any;
-  onImmediateRowUpdate: (patch: Record<string, any>) => void; // actId/type/mode/... patch for row
+  onImmediateRowUpdate: (patch: Record<string, any>) => void; // taskId/type/mode/... patch for row
   onInstanceCreated?: (instanceId: string) => void;
   getProjectId?: () => string | undefined;
 };
 
-export async function createAndAttachAct(opts: CreateAndAttachOpts) {
+export async function createAndAttachTask(opts: CreateAndAttachTaskOpts) { // ✅ RINOMINATO: createAndAttachAct → createAndAttachTask
   const {
     name,
     type,
@@ -24,16 +24,14 @@ export async function createAndAttachAct(opts: CreateAndAttachOpts) {
   } = opts;
 
   const projectIndustry = (projectData as any)?.industry;
-  const mode = typeToMode(type as any);
 
-  // 1) Create act in-memory synchronously with explicit type/mode, suppress UI editors
-  const created = EntityCreationService.createTaskTemplate({ // ✅ RINOMINATO: createAgentAct → createTaskTemplate (metodo interno)
+  // 1) Create task in-memory synchronously with explicit type, suppress UI editors
+  const created = EntityCreationService.createTaskTemplate({
     name,
     projectData,
     projectIndustry,
     scope,
-    type: type as any,
-    mode: mode as any,
+    type: type, // ✅ TaskType enum (required)
     suppressUI: true,
   } as any);
 
@@ -43,21 +41,20 @@ export async function createAndAttachAct(opts: CreateAndAttachOpts) {
   onImmediateRowUpdate({
     factoryId,
     type,
-    mode,
   });
 
   // 3) Async instance creation and patch instanceId
   try {
-           const pid = getProjectId?.();
+    const pid = getProjectId?.();
     if (!pid) return;
-    const inst = await ProjectDataService.createInstance(pid, { mode });
+    const inst = await ProjectDataService.createInstance(pid, { type });
     if ((inst as any)?._id) {
-      // Re-assert type/mode on async patch to avoid accidental resets from other updates
-      onImmediateRowUpdate({ instanceId: (inst as any)._id, type, mode });
+      // Re-assert type on async patch to avoid accidental resets from other updates
+      onImmediateRowUpdate({ instanceId: (inst as any)._id, type });
       onInstanceCreated?.((inst as any)._id);
     }
   } catch (err) {
-    try { console.warn('[ActFactory] instance create failed', err); } catch {}
+    try { console.warn('[TaskFactory] instance create failed', err); } catch {}
   }
 }
 

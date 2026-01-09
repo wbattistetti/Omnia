@@ -98,8 +98,9 @@ export default function ListGrid({
     setEditingId(null);
   };
 
+  // ✅ SOLUZIONE ESPERTO: Rimuovere h-full, usare solo flex-1 min-h-0
   return (
-  <div className="bg-white border rounded-2xl shadow-sm p-0 flex flex-col flex-1 min-h-0 h-full">
+  <div className="bg-white border rounded-2xl shadow-sm p-0 flex flex-col flex-1 min-h-0">
       {/* ✅ INPUT FISSO IN ALTO - fuori dall'area scrollabile */}
       <div className="flex items-center gap-2 p-3 flex-shrink-0 border-b">
         <div className="flex items-center gap-2 flex-1 rounded-lg border px-2 py-1.5">

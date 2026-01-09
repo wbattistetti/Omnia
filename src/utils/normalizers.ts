@@ -1,46 +1,29 @@
-export type AgentActType =
-  | 'Message'
-  | 'DataRequest'
-  | 'ProblemClassification'
-  | 'Summarizer'
-  | 'BackendCall'
-  | 'Negotiation';
+// ❌ RIMOSSO: AgentActType - usa TaskType enum da src/types/taskTypes.ts
+// ❌ RIMOSSO: modeToType/typeToMode - usa taskTypeToModeString/modeStringToTaskType da src/types/taskTypes.ts
 
-export const modeToType = (mode?: string): AgentActType => {
-  switch (mode) {
-    case 'DataRequest': return 'DataRequest';
-    case 'DataConfirmation': return 'Summarizer'; // DataConfirmation → Summarizer (confirmation è proprietà opzionale)
-    case 'ProblemClassification': return 'ProblemClassification';
-    case 'Summarizer': return 'Summarizer';
-    case 'BackendCall': return 'BackendCall';
-    case 'Negotiation': return 'Negotiation';
-    default: return 'Message';
-  }
-};
+import { TaskType } from '../types/taskTypes';
 
-export const typeToMode = (type?: AgentActType): string => {
-  switch (type) {
-    case 'DataRequest': return 'DataRequest';
-    case 'Summarizer': return 'Summarizer'; // Summarizer mantiene il suo mode (non più DataConfirmation)
-    case 'ProblemClassification': return 'ProblemClassification';
-    case 'BackendCall': return 'BackendCall';
-    case 'Negotiation': return 'Negotiation';
-    default: return 'Message';
-  }
-};
-
+/**
+ * Normalizes project data - NO backward compatibility, expects taskTemplates and userTasks
+ * Ensures type consistency using TaskType enum.
+ */
 export function normalizeProjectData(pd: any) {
   const out = typeof structuredClone === 'function' ? structuredClone(pd) : JSON.parse(JSON.stringify(pd || {}));
-  (out.agentActs || []).forEach((cat: any) => {
+
+  // ✅ Normalize taskTemplates - type must be TaskType enum
+  (out.taskTemplates || []).forEach((cat: any) => {
     (cat.items || []).forEach((item: any) => {
-      if (!item?.type && item?.mode) item.type = modeToType(item.mode);
-      if (!item?.mode && item?.type) item.mode = typeToMode(item.type);
-      if (!item?.type && !item?.mode) {
-        item.mode = 'Message';
-        item.type = 'Message';
+      // Ensure type is TaskType enum (required)
+      if (item?.type === undefined || item?.type === null) {
+        item.type = TaskType.UNDEFINED;
+      }
+      // Remove mode if present (not needed, use type only)
+      if (item?.mode !== undefined) {
+        delete item.mode;
       }
     });
   });
+
   return out;
 }
 

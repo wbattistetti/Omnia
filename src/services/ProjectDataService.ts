@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { IntellisenseItem } from '../components/Intellisense/IntellisenseTypes';
 // import { getLabelColor } from '../utils/labelColor';
 import { SIDEBAR_TYPE_ICONS, SIDEBAR_TYPE_COLORS } from '../components/Sidebar/sidebarTheme';
-import { modeToType } from '../utils/normalizers';
+import { modeStringToTaskType } from '../types/taskTypes'; // ✅ RINOMINATO: modeToType → modeStringToTaskType
 import { generateId } from '../utils/idGenerator';
 
 // Import template data
@@ -33,7 +33,7 @@ let projectData: ProjectData = {
   name: '',
   industry: '',
   taskTemplates: [],
-  userActs: [],
+  userTasks: [], // ✅ RINOMINATO: userActs → userTasks
   backendActions: [],
   conditions: [],
   tasks: [],
@@ -61,10 +61,10 @@ const convertTaskTemplatesToCategories = <T extends TaskTemplateItem>(templateAr
       id: item.id || uuidv4(),
       name: item.label || item.shortLabel || item.name || 'Unnamed Item',
       description: item.description || item.label || item.shortLabel || item.name || '',
-      userActs: item.userActs,
+      userTasks: item.userTasks, // ✅ userTasks required
       // Preserve fields needed for UI badges/icons
       type: item.type,
-      mode: item.mode || 'Message',
+      // ✅ mode removed - use type (TaskType enum) only
       shortLabel: item.shortLabel,
       data: item.data,
       categoryType: 'taskTemplates'
@@ -173,7 +173,7 @@ export const ProjectDataService = {
       name: projectData.name || '',
       industry: projectData.industry || '',
       taskTemplates: this.convertToCategories(items, 'taskTemplates'),
-      userActs: [],
+      userTasks: [], // ✅ RINOMINATO: userActs → userTasks
       backendActions: [],
       conditions: this.convertToCategories(conditions, 'conditions'),
       tasks: [],
@@ -229,7 +229,7 @@ export const ProjectDataService = {
           id: intellisenseItems[0].id,
           label: intellisenseItems[0].label,
           type: intellisenseItems[0].type,
-          mode: intellisenseItems[0].mode,
+          // ✅ mode removed - use type (TaskType enum) only
           templateId: intellisenseItems[0].templateId
         });
       }
@@ -238,7 +238,7 @@ export const ProjectDataService = {
         name: projectData.name || '',
         industry: projectData.industry || '',
         taskTemplates: this.convertToCategories(intellisenseItems, 'taskTemplates'),
-        userActs: [],
+        userTasks: [], // ✅ RINOMINATO: userActs → userTasks
         backendActions: [],
         conditions: [],
         tasks: [],
@@ -258,7 +258,7 @@ export const ProjectDataService = {
   },
 
   // --- Instances API helpers ---
-  async createInstance(projectId: string, payload: { mode: 'Message' | 'DataRequest' | 'DataConfirmation'; message?: any; overrides?: any }): Promise<any> {
+  async createInstance(projectId: string, payload: { type: number; message?: any; overrides?: any }): Promise<any> { // ✅ type (TaskType enum) required, no mode
     const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -283,7 +283,7 @@ export const ProjectDataService = {
     return res.json();
   },
 
-  async bulkCreateInstances(projectId: string, items: Array<{ mode: 'Message' | 'DataRequest' | 'DataConfirmation'; message?: any; overrides?: any }>): Promise<any> {
+  async bulkCreateInstances(projectId: string, items: Array<{ type: number; message?: any; overrides?: any }>): Promise<any> { // ✅ type (TaskType enum) required, no mode
     if (!items || items.length === 0) return { ok: true, inserted: 0 };
     const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances/bulk`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items })
@@ -362,7 +362,7 @@ export const ProjectDataService = {
 
         const groupedData = {
           taskTemplates: this.convertToCategories(taskTemplatesItems, 'taskTemplates'),
-          userActs: [],
+          userTasks: [], // ✅ RINOMINATO: userActs → userTasks
           backendActions: this.convertToCategories(backendCalls, 'backendActions'),
           conditions: this.convertToCategories(conditions, 'conditions'),
           tasks: [], // Deprecated: kept empty for compatibility
@@ -390,7 +390,7 @@ export const ProjectDataService = {
         name: '',
         industry: projectIndustry || templateName,
         taskTemplates: [],
-        userActs: [],
+        userTasks: [], // ✅ RINOMINATO: userActs → userTasks
         backendActions: [],
         conditions: [],
         tasks: [],
@@ -406,7 +406,7 @@ export const ProjectDataService = {
         name: '',
         industry: projectIndustry || templateName,
         taskTemplates: [],
-        userActs: [],
+        userTasks: [], // ✅ RINOMINATO: userActs → userTasks
         backendActions: [],
         conditions: [],
         tasks: [],
@@ -419,8 +419,8 @@ export const ProjectDataService = {
     projectData = {
       name: '',
       industry: projectIndustry || templateName,
-      taskTemplates: convertTaskTemplatesToCategories<TaskTemplateItem>(languageData.agentActs),
-      userActs: convertTemplateDataToCategories(languageData.userActs),
+      taskTemplates: convertTaskTemplatesToCategories<TaskTemplateItem>(languageData.taskTemplates), // ✅ taskTemplates required
+      userTasks: convertTemplateDataToCategories(languageData.userTasks), // ✅ userTasks required
       backendActions: convertTemplateDataToCategories(languageData.backendActions),
       conditions: convertTemplateDataToCategories(languageData.conditions),
       tasks: [], // Deprecated: tasks migrated to macrotasks
@@ -435,7 +435,7 @@ export const ProjectDataService = {
   groupCatalogItemsByType(catalogItems: any[]): { [key: string]: Category[] } {
     const result = {
       taskTemplates: [] as Category[],
-      userActs: [] as Category[],
+      userTasks: [] as Category[], // ✅ RINOMINATO: userActs → userTasks
       backendActions: [] as Category[],
       conditions: [] as Category[],
       tasks: [] as Category[],
@@ -471,7 +471,7 @@ export const ProjectDataService = {
           name: item.name?.it || item.name?.en || item.label || 'Unnamed',
           description: item.description?.it || item.description?.en || item.description || '',
           type: (item as any)?.type,
-          mode: item.mode || 'Message',
+          // ✅ mode removed - use type (TaskType enum) only
           shortLabel: item.shortLabel,
           data: item.data,
           ddt: item.ddt,
@@ -521,7 +521,7 @@ export const ProjectDataService = {
         name: item.name || item.label || 'Unnamed',
         description: item.description || '',
         type: (item as any)?.type,
-        mode: item.mode || 'Message',
+        // ✅ mode removed - use type (TaskType enum) only
         shortLabel: item.shortLabel,
         data: item.data,
         ddt: item.ddt,
@@ -668,7 +668,7 @@ export const ProjectDataService = {
       // If we updated an agent act with embedded DDT, try saving to factory DB (best-effort)
       if (type === 'taskTemplates') {
         try {
-          const payload = { _id: item._id || item.id, label: (item as any).name, description: (item as any).description, category: (category as any)?.name, type: (item as any)?.type, mode: (item as any)?.mode || 'Message', shortLabel: (item as any)?.shortLabel, data: (item as any)?.data, ddt: (item as any)?.ddt, prompts: (item as any)?.prompts || {} };
+          const payload = { _id: item._id || item.id, label: (item as any).name, description: (item as any).description, category: (category as any)?.name, type: (item as any)?.type, shortLabel: (item as any)?.shortLabel, data: (item as any)?.data, ddt: (item as any)?.ddt, prompts: (item as any)?.prompts || {} }; // ✅ mode removed
           await fetch(`/api/factory/task-templates-v2/${encodeURIComponent(payload._id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         } catch (e) { console.warn('[ProjectDataService] save task template failed', e); }
       }
@@ -686,7 +686,7 @@ export const ProjectDataService = {
       for (const c of cats) {
         const items: any[] = c?.items || [];
         for (const it of items) {
-          if (String(it?.id || it?._id) === String(actId)) {
+          if (String(it?.id || it?._id) === String(templateId)) { // ✅ FIX: actId → templateId
             (it as any).problem = problem || null;
             return;
           }
@@ -713,7 +713,7 @@ export const ProjectDataService = {
             label: it.label || it.name,
             description: it.description || '',
             type: it.type,
-            mode: it.mode || 'Message',
+            // ✅ mode removed - use type (TaskType enum) only
             category: cat.name || null,
             scope: it.scope || 'industry',
             industry: it.industry || pd?.industry || null,
@@ -967,14 +967,13 @@ export function prepareIntellisenseData(
     const typedCategories: Category[] = (data as ProjectData)[typedEntityType] || [];
     typedCategories.forEach((category: Category) => {
       category.items.forEach((item: any) => {
-        // Usa il mode deterministico dal DB Factory; niente euristiche a runtime
-        const mode = ((item as any)?.mode) || 'Message';
-        // Use shared normalizer mapping
-        const type = (item as any)?.type || modeToType(mode as any);
-        // try { console.log('[CreateFlow] intellisense.item', { label: item?.name || item?.label, mode, type }); } catch {}
+        // ✅ type must be TaskType enum (required, no mode fallback)
+        const type = (item as any)?.type;
+        if (type === undefined || type === null) return; // Skip items without type
+        // try { console.log('[CreateFlow] intellisense.item', { label: item?.name || item?.label, type }); } catch {}
         intellisenseItems.push({
           id: `${entityType}-${category.id}-${item.id}`,
-          actId: item.id,
+          taskId: item.id, // ✅ RINOMINATO: actId → taskId
           factoryId: item._id,
           label: item.label || item.name || item.discursive || item.shortLabel || 'Unnamed',
           shortLabel: item.shortLabel || item.label || item.name || item.discursive || '',
@@ -984,9 +983,9 @@ export function prepareIntellisenseData(
           categoryType: typedEntityType,
           iconComponent: undefined, // solo riferimento al componente
           color,
-          mode,
+          // ✅ mode removed - use type (TaskType enum) only
           type,
-          userActs: item.userActs,
+          userTasks: item.userTasks, // ✅ userTasks required
           uiColor: undefined // o la tua logica per il colore di sfondo
         });
       });

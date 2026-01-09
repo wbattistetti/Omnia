@@ -1,6 +1,6 @@
 import { TaskType } from '../../../types/taskTypes'; // ✅ Import TaskType enum
 
-export type EditorKind = 'message' | 'ddt' | 'intent' | 'backend';
+export type EditorKind = 'message' | 'ddt' | 'intent' | 'backend' | 'problem' | 'simple';
 
 // ✅ RINOMINATO: ActMeta → TaskMeta
 // ✅ CAMBIATO: type: string → type: TaskType (enum)

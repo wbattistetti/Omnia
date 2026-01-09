@@ -357,12 +357,12 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
       } else {
         // Cancella condizione dal database
         // Trova categoryId cercando nella struttura data.conditions
-        if (data?.conditions && item.actId) {
+        if (data?.conditions && item.taskId) { // ✅ taskId required
           let categoryId: string | null = null;
 
           // Cerca la categoria che contiene l'item
           for (const category of data.conditions) {
-            const foundItem = category.items.find((i: any) => i.id === item.actId);
+            const foundItem = category.items.find((i: any) => i.id === item.taskId); // ✅ taskId required
             if (foundItem) {
               categoryId = category.id;
               break;
@@ -370,10 +370,10 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
           }
 
           if (categoryId) {
-            await deleteItem('conditions', categoryId, item.actId);
-            console.log('[IntellisenseMenu] ✅ Condizione dal database cancellata:', { categoryId, itemId: item.actId });
+            await deleteItem('conditions', categoryId, item.taskId); // ✅ taskId required
+            console.log('[IntellisenseMenu] ✅ Condizione dal database cancellata:', { categoryId, itemId: item.taskId });
           } else {
-            console.warn('[IntellisenseMenu] ⚠️ Categoria non trovata per item:', item.actId);
+            console.warn('[IntellisenseMenu] ⚠️ Categoria non trovata per item:', item.taskId);
           }
         }
       }

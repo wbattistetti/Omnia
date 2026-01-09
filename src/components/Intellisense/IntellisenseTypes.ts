@@ -5,17 +5,16 @@ export interface IntellisenseItem {
   name: string;
   description: string;
   category: string;
-  categoryType: 'taskTemplates' | 'userActs' | 'backendActions' | 'conditions' | 'macrotasks';
+  categoryType: 'taskTemplates' | 'userTasks' | 'backendActions' | 'conditions' | 'macrotasks';
   // Underlying entity identifiers
   factoryId?: string; // optional backend _id
+  taskId: string; // ✅ REQUIRED: taskId (no backward compatibility)
   icon?: React.ReactNode;
   iconComponent?: React.ComponentType<any>;
   color?: string;
-  // Interaction mode for agent acts (used for icons/colors)
-  mode?: 'DataRequest' | 'DataConfirmation' | 'Message';
-  // New: explicit act type propagated to rows
-  type?: 'AIAgent' | 'Message' | 'DataRequest' | 'ProblemClassification' | 'Summarizer' | 'BackendCall' | 'Negotiation';
-  userActs?: string[];
+  // Task type (TaskType enum) - REQUIRED
+  type: number; // ✅ TaskType enum (0-19)
+  userTasks?: string[];
   uiColor?: string;
   bgColor?: string; // colore di sfondo personalizzato
   textColor?: string; // colore del testo personalizzato

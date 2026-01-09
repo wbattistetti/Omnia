@@ -122,8 +122,9 @@ export default function TestGrid({
     setEditValue('');
   };
 
+  // ✅ SOLUZIONE ESPERTO: Rimuovere h-full, usare solo flex-1 min-h-0
   return (
-    <div className="bg-white border rounded-2xl shadow-sm p-3 flex flex-col h-full">
+    <div className="bg-white border rounded-2xl shadow-sm p-3 flex flex-col flex-1 min-h-0">
 
       {/* ✅ Input solo per new phrases */}
       {mode === 'new' && (

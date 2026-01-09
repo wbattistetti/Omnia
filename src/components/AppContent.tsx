@@ -104,13 +104,13 @@ export const AppContent: React.FC<AppContentProps> = ({
   // ✅ Unified tab content renderer - Memoizzato con comparatore per evitare re-render inutili
   const UnifiedTabContent: React.FC<{ tab: DockTab }> = React.memo(
     ({ tab }) => {
-      // 🔴 LOG CHIRURGICO 3: UnifiedTabContent render
-      console.log('[DEBUG_UNIFIED_RENDER]', {
-        tabId: tab.id,
-        type: tab.type,
-        toolbarButtons: tab.toolbarButtons,
-        headerColor: tab.headerColor
-      });
+      // 🔴 LOG CHIRURGICO 3: UnifiedTabContent render (DISABILITATO - troppo rumoroso)
+      // console.log('[DEBUG_UNIFIED_RENDER]', {
+      //   tabId: tab.id,
+      //   type: tab.type,
+      //   toolbarButtons: tab.toolbarButtons,
+      //   headerColor: tab.headerColor
+      // });
 
       const { upsertFlow, openFlowBackground } = useFlowActions();
 
@@ -142,7 +142,7 @@ export const AppContent: React.FC<AppContentProps> = ({
 
       // Response Editor tab
       if (tab.type === 'responseEditor') {
-        // ✅ Stabilizza key, act, ddt, onToolbarUpdate per evitare re-mount
+        // ✅ Stabilizza key, task, ddt, onToolbarUpdate per evitare re-mount
         const editorKey = useMemo(() => {
           const instanceKey = tab.task?.instanceId || tab.task?.id || tab.id;
           const key = `response-editor-${instanceKey}`;
@@ -156,7 +156,7 @@ export const AppContent: React.FC<AppContentProps> = ({
           return key;
         }, [tab.task?.instanceId, tab.task?.id, tab.id]);
 
-        const stableAct = useMemo(() => {
+        const stableTask = useMemo(() => {
           if (!tab.task) return undefined; // ✅ RINOMINATO: act → task
           return tab.task; // ✅ Restituisce direttamente TaskMeta (già con TaskType enum)
         }, [tab.task?.id, tab.task?.type, tab.task?.label, tab.task?.instanceId]); // ✅ RINOMINATO: act → task
@@ -204,15 +204,15 @@ export const AppContent: React.FC<AppContentProps> = ({
           editorKey,
           tabId: tab.id,
           stableDDTMainDataLength: stableDDT?.mainData?.length,
-          stableActInstanceId: stableAct?.instanceId
+          stableTaskInstanceId: stableTask?.instanceId
         });
 
         return (
-          <div style={{ width: '100%', height: '100%', backgroundColor: '#0b1220' }}>
+          <div style={{ width: '100%', flex: 1, minHeight: 0, backgroundColor: '#0b1220', display: 'flex', flexDirection: 'column' }}>
             <ResponseEditor
               key={editorKey}
               ddt={stableDDT}
-              act={stableAct}
+              task={stableTask} // ✅ RINOMINATO: act → task (ResponseEditor si aspetta task, non act)
               tabId={tab.id}
               setDockTree={setDockTree}
               hideHeader={true}
@@ -230,7 +230,7 @@ export const AppContent: React.FC<AppContentProps> = ({
       // Non-Interactive Editor tab
       if (tab.type === 'nonInteractive') {
         return (
-          <div style={{ width: '100%', height: '100%', backgroundColor: '#0b1220' }}>
+          <div style={{ width: '100%', flex: 1, minHeight: 0, backgroundColor: '#0b1220', display: 'flex', flexDirection: 'column' }}>
             <NonInteractiveResponseEditor
               title={tab.title}
               value={tab.value}
@@ -281,7 +281,7 @@ export const AppContent: React.FC<AppContentProps> = ({
       // Condition Editor tab
       if (tab.type === 'conditionEditor') {
         return (
-          <div style={{ width: '100%', height: '100%', backgroundColor: '#1e1e1e' }}>
+          <div style={{ width: '100%', flex: 1, minHeight: 0, backgroundColor: '#1e1e1e', display: 'flex', flexDirection: 'column' }}>
             <ConditionEditor
               open={true}
               onClose={() => {
@@ -339,7 +339,7 @@ export const AppContent: React.FC<AppContentProps> = ({
       if (tab.type === 'taskEditor') { // ✅ RINOMINATO: 'actEditor' → 'taskEditor'
         const taskEditorTab = tab as DockTabTaskEditor; // ✅ RINOMINATO: actEditorTab → taskEditorTab, DockTabActEditor → DockTabTaskEditor
         return (
-          <div style={{ width: '100%', height: '100%', backgroundColor: '#0b1220' }}>
+          <div style={{ width: '100%', flex: 1, minHeight: 0, backgroundColor: '#0b1220', display: 'flex', flexDirection: 'column' }}>
             <ResizableTaskEditorHost // ✅ RINOMINATO: ResizableActEditorHost → ResizableTaskEditorHost
               task={tab.task || { id: '', type: TaskType.SayMessage, label: '' }} // ✅ RINOMINATO: act → task, usa TaskMeta con TaskType enum
               onClose={() => {
@@ -370,44 +370,44 @@ export const AppContent: React.FC<AppContentProps> = ({
     },
     // ✅ Comparatore personalizzato: ignora toolbarButtons e headerColor per responseEditor
     (prev, next) => {
-      // 🔴 LOG CHIRURGICO CRITICO: Comparatore
-      console.log('[DEBUG_MEMO] UnifiedTabContent compare', {
-        prevId: prev.tab.id,
-        nextId: next.tab.id,
-        prevToolbar: prev.tab.toolbarButtons,
-        nextToolbar: next.tab.toolbarButtons,
-        prevHeader: prev.tab.headerColor,
-        nextHeader: next.tab.headerColor,
-        prevDDT: prev.tab.ddt,
-        nextDDT: next.tab.ddt,
-        sameTabObject: prev.tab === next.tab
-      });
+      // 🔴 LOG CHIRURGICO CRITICO: Comparatore (DISABILITATO - troppo rumoroso)
+      // console.log('[DEBUG_MEMO] UnifiedTabContent compare', {
+      //   prevId: prev.tab.id,
+      //   nextId: next.tab.id,
+      //   prevToolbar: prev.tab.toolbarButtons,
+      //   nextToolbar: next.tab.toolbarButtons,
+      //   prevHeader: prev.tab.headerColor,
+      //   nextHeader: next.tab.headerColor,
+      //   prevDDT: prev.tab.ddt,
+      //   nextDDT: next.tab.ddt,
+      //   sameTabObject: prev.tab === next.tab
+      // });
 
       const prevTab = prev.tab;
       const nextTab = next.tab;
 
-      // 🔴 LOG CHIRURGICO 1: Comparatore (dettagli)
-      console.log('[DEBUG_MEMO] Comparatore chiamato', {
-        prevId: prevTab.id,
-        nextId: nextTab.id,
-        prevType: prevTab.type,
-        nextType: nextTab.type,
-        prevDDTRef: prevTab.ddt,
-        nextDDTRef: nextTab.ddt,
-        ddtRefChanged: prevTab.ddt !== nextTab.ddt,
-        prevTaskId: prevTab.task?.id,
-        nextTaskId: nextTab.task?.id,
-        prevInstanceId: prevTab.task?.instanceId,
-        nextInstanceId: nextTab.task?.instanceId,
-        prevDDTMainDataLength: prevTab.ddt?.mainData?.length,
-        nextDDTMainDataLength: nextTab.ddt?.mainData?.length,
-        prevDDTMainDataFirstLabel: prevTab.ddt?.mainData?.[0]?.label,
-        nextDDTMainDataFirstLabel: nextTab.ddt?.mainData?.[0]?.label
-      });
+      // 🔴 LOG CHIRURGICO 1: Comparatore (dettagli) (DISABILITATO - troppo rumoroso)
+      // console.log('[DEBUG_MEMO] Comparatore chiamato', {
+      //   prevId: prevTab.id,
+      //   nextId: nextTab.id,
+      //   prevType: prevTab.type,
+      //   nextType: nextTab.type,
+      //   prevDDTRef: prevTab.ddt,
+      //   nextDDTRef: nextTab.ddt,
+      //   ddtRefChanged: prevTab.ddt !== nextTab.ddt,
+      //   prevTaskId: prevTab.task?.id,
+      //   nextTaskId: nextTab.task?.id,
+      //   prevInstanceId: prevTab.task?.instanceId,
+      //   nextInstanceId: nextTab.task?.instanceId,
+      //   prevDDTMainDataLength: prevTab.ddt?.mainData?.length,
+      //   nextDDTMainDataLength: nextTab.ddt?.mainData?.length,
+      //   prevDDTMainDataFirstLabel: prevTab.ddt?.mainData?.[0]?.label,
+      //   nextDDTMainDataFirstLabel: nextTab.ddt?.mainData?.[0]?.label
+      // });
 
       // Se cambia id o type, re-render sempre
       if (prevTab.id !== nextTab.id || prevTab.type !== nextTab.type) {
-        console.log('[DEBUG_MEMO] DECISIONE: re-render (id/type changed)');
+        // console.log('[DEBUG_MEMO] DECISIONE: re-render (id/type changed)');
         return false; // Re-render
       }
 
@@ -417,11 +417,11 @@ export const AppContent: React.FC<AppContentProps> = ({
         if (prevTab.ddt !== nextTab.ddt) {
           const prevStartTasksCount = prevTab.ddt?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
           const nextStartTasksCount = nextTab.ddt?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
-          console.log('[DEBUG_MEMO] DECISIONE: re-render (ddt changed from dockTree)', {
-            prevStartTasksCount,
-            nextStartTasksCount,
-            ddtRefChanged: true
-          });
+          // console.log('[DEBUG_MEMO] DECISIONE: re-render (ddt changed from dockTree)', {
+          //   prevStartTasksCount,
+          //   nextStartTasksCount,
+          //   ddtRefChanged: true
+          // });
           return false; // Re-render (ddt cambiato dal dockTree)
         }
 
@@ -430,12 +430,12 @@ export const AppContent: React.FC<AppContentProps> = ({
           prevTab.task?.id !== nextTab.task?.id ||
           prevTab.task?.instanceId !== nextTab.task?.instanceId
         ) {
-          console.log('[DEBUG_MEMO] DECISIONE: re-render (task changed)');
+          // console.log('[DEBUG_MEMO] DECISIONE: re-render (task changed)');
           return false; // Re-render
         }
 
         // ✅ Ignora toolbarButtons e headerColor - non causano re-render
-        console.log('[DEBUG_MEMO] DECISIONE: SKIP re-render (only toolbar/color changed or no significant change)');
+        // console.log('[DEBUG_MEMO] DECISIONE: SKIP re-render (only toolbar/color changed or no significant change)');
         return true; // NO re-render
       }
 
@@ -446,12 +446,12 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   // ✅ Memoize renderTabContent - senza dipendere da setDockTree
   const renderTabContent = React.useCallback((tab: DockTab) => {
-    // 🔴 LOG CHIRURGICO 2: renderTabContent
-    console.log('[DEBUG_RENDER_TAB_CONTENT]', {
-      tabId: tab.id,
-      tabType: tab.type,
-      renderTabContentCalled: true
-    });
+    // 🔴 LOG CHIRURGICO 2: renderTabContent (DISABILITATO - troppo rumoroso)
+    // console.log('[DEBUG_RENDER_TAB_CONTENT]', {
+    //   tabId: tab.id,
+    //   tabType: tab.type,
+    //   renderTabContentCalled: true
+    // });
     return <UnifiedTabContent tab={tab} />;
   }, [currentPid]); // ✅ Rimossa dipendenza da setDockTree
   // Safe access: avoid calling context hook if provider not mounted (e.g., during hot reload glitches)
@@ -530,11 +530,13 @@ export const AppContent: React.FC<AppContentProps> = ({
       });
       try {
         const d = (e && e.detail) || {};
-        if (!d || !d.id || !d.type) {
+        // ✅ FIX: Verifica esplicitamente undefined/null invece di falsy (0 è falsy ma valido per TaskType.SayMessage)
+        if (!d || !d.id || (d.type === undefined || d.type === null)) {
           console.warn('⚠️ [AppContent] Evento taskEditor:open ignorato - dettagli mancanti', { // ✅ RINOMINATO: actEditor:open → taskEditor:open
             hasD: !!d,
             hasId: !!d?.id,
-            hasType: !!d?.type
+            hasType: d.type !== undefined && d.type !== null,
+            typeValue: d.type
           });
           return;
         }
@@ -557,7 +559,10 @@ export const AppContent: React.FC<AppContentProps> = ({
 
         console.log('🔍 [AppContent] Editor kind determinato', {
           editorKind,
-          type: d.type
+          type: d.type,
+          taskTypeName: d.type !== undefined && d.type !== null ? TaskType[d.type] : 'undefined',
+          taskId: d.id,
+          taskLabel: d.label
         });
 
         // ✅ Build taskMeta from event detail
@@ -654,121 +659,26 @@ export const AppContent: React.FC<AppContentProps> = ({
           })(prev);
 
           if (existing) {
-            // Tab already open: ALWAYS update DDT if editorKind is 'ddt' and preparedDDT is available
-            // This synchronizes dockTree with taskRepository when reopening the editor
+            // Tab already open: per 'ddt', salva DDT nel taskRepository e attiva il tab
+            // TaskEditorHost leggerà il DDT dal taskRepository
             if (editorKind === 'ddt' && preparedDDT) {
-              // Get current DDT from existing tab for comparison
-              let currentTabDDT: any = null;
-              mapNode(prev, n => {
-                if (n.kind === 'tabset') {
-                  const tab = n.tabs.find(t => t.id === tabId);
-                  if (tab && tab.type === 'responseEditor') {
-                    currentTabDDT = (tab as any).ddt;
-                  }
-                }
-                return n;
-              });
-
-              const currentStartStepTasksCount = currentTabDDT?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
-              const newStartStepTasksCount = preparedDDT?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
-
-              console.log('[DOCK_SYNC] 🔄 Updating existing tab DDT from taskRepository', {
+              console.log('[DOCK_SYNC] 🔄 Updating taskRepository with DDT for existing tab', {
                 tabId,
-                currentStartStepTasksCount,
-                newStartStepTasksCount,
-                mainDataLength: preparedDDT?.mainData?.length,
-                willUpdate: currentStartStepTasksCount !== newStartStepTasksCount || JSON.stringify(currentTabDDT) !== JSON.stringify(preparedDDT)
+                instanceId,
+                mainDataLength: preparedDDT?.mainData?.length
               });
 
-              // Update tab.ddt with preparedDDT, then activate
-              const updated = mapNode(prev, n => {
-                if (n.kind === 'tabset') {
-                  const idx = n.tabs.findIndex(t => t.id === tabId);
-                  if (idx !== -1 && n.tabs[idx].type === 'responseEditor') {
-                    const existingTab = n.tabs[idx] as DockTabResponseEditor;
-                    // ✅ Create/update onClose callback - will read tab.ddt when called (which is updated during editing)
-                    const handleTabClose = async (tab: DockTabResponseEditor) => {
-                      const key = tab.task?.instanceId || tab.task?.id;
-                      if (!key) return;
-
-                      // ✅ Read DDT from tab (which is updated by updateSelectedNode during editing)
-                      const ddtToSave = tab.ddt;
-                      const hasDDT = ddtToSave && Object.keys(ddtToSave).length > 0 && ddtToSave.mainData && ddtToSave.mainData.length > 0;
-
-                      if (hasDDT) {
-                        const startStepTasksCount = ddtToSave?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
-                        console.log('[DOCK_CLOSE] 💾 Saving DDT to taskRepository (SYNC - blocking close)', {
-                          key,
-                          startStepTasksCount,
-                          mainDataLength: ddtToSave?.mainData?.length
-                        });
-
-                        try {
-                          let task = taskRepository.getTask(key);
-                          if (!task) {
-                            // ✅ Usa direttamente tab.task.type (TaskType enum)
-                            const taskType = tab.task?.type ?? TaskType.DataRequest;
-                            task = taskRepository.createTask(taskType, null, undefined, key);
-                          }
-
-                          const currentTemplateId = getTemplateId(task);
-
-                          if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'getdata') {
-                            await taskRepository.updateTask(key, {
-                              templateId: 'GetData',
-                              label: ddtToSave.label,
-                              mainData: ddtToSave.mainData,
-                              constraints: ddtToSave.constraints,
-                              examples: ddtToSave.examples,
-                              nlpContract: ddtToSave.nlpContract,
-                              introduction: ddtToSave.introduction
-                            }, pdUpdate?.getCurrentProjectId());
-                          } else {
-                            await taskRepository.updateTask(key, {
-                              label: ddtToSave.label,
-                              mainData: ddtToSave.mainData,
-                              constraints: ddtToSave.constraints,
-                              examples: ddtToSave.examples,
-                              nlpContract: ddtToSave.nlpContract,
-                              introduction: ddtToSave.introduction
-                            }, pdUpdate?.getCurrentProjectId());
-                          }
-
-                          console.log('[DOCK_CLOSE] ✅ Save completed - repository is now up to date', {
-                            key,
-                            startStepTasksCount
-                          });
-                        } catch (err) {
-                          console.error('[DOCK_CLOSE] ❌ Failed to save to taskRepository', err);
-                        }
-                      }
-                    };
-
-                    const updatedTab = { ...existingTab, ddt: preparedDDT, onClose: handleTabClose };
-                    console.log('[DOCK_SYNC] ✅ Tab DDT synchronized', {
-                      tabId,
-                      updatedStartStepTasksCount: updatedTab.ddt?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0
-                    });
-                    return {
-                      ...n,
-                      tabs: [
-                        ...n.tabs.slice(0, idx),
-                        updatedTab,
-                        ...n.tabs.slice(idx + 1)
-                      ]
-                    };
-                  }
-                }
-                return n;
-              });
-              return activateTab(updated, tabId);
+              // ✅ Salva DDT nel taskRepository (TaskEditorHost lo leggerà)
+              let task = taskRepository.getTask(instanceId);
+              if (!task) {
+                task = taskRepository.createTask(taskMeta.type, null, undefined, instanceId);
+              }
+              taskRepository.updateTask(instanceId, {
+                ...preparedDDT,
+                templateId: d.templateId || task.templateId
+              }, pdUpdate?.getCurrentProjectId());
             }
-            // Tab already open, just activate it (for non-DDT editors or when preparedDDT is not available)
-            console.log('[DOCK_SYNC] ⚠️ Tab exists but preparedDDT not available or not DDT editor', {
-              tabId,
-              editorKind,
-              hasPreparedDDT: !!preparedDDT
-            });
+            // Tab already open, just activate it
             return activateTab(prev, tabId);
           }
 
@@ -789,29 +699,21 @@ export const AppContent: React.FC<AppContentProps> = ({
 
           // Open correct editor based on editorKind
           if (editorKind === 'message') {
-            // Open NonInteractiveResponseEditor for Message type
-            const task = taskRepository.getTask(instanceId);
-
-            if (!task) {
-              // Task doesn't exist, don't open editor
-              return prev;
-            }
-
-            // Load message text from task value
-            const messageText = task.text || '';
-
+            // ✅ Open TextMessageEditor via TaskEditorHost for Message type (SayMessage, CloseSession, Transfer)
             return splitWithTab(prev, rootTabsetId, 'bottom', {
               id: tabId,
               title: d.label || d.name || 'Message',
-              type: 'nonInteractive',
-              instanceId: instanceId,
-              value: { template: messageText },
-              accentColor: '#059669'
-            });
+              type: 'taskEditor', // ✅ Usa TaskEditorHost che aprirà TextMessageEditor
+              task: taskMeta, // ✅ Passa TaskMeta con TaskType enum
+              headerColor: '#059669', // Green color for SayMessage
+              toolbarButtons: []
+            } as DockTabTaskEditor);
           } else if (editorKind === 'ddt') {
-            // ✅ Use prepared DDT (all async work done above)
+            // ✅ UNIFICATO: Usa TaskEditorHost anche per 'ddt' (come per 'message' e 'backend')
+            // TaskEditorHost → DDTHostAdapter → ResponseEditor gestirà il DDT
+            // Il DDT viene preparato e salvato nel taskRepository prima di aprire l'editor
             const startStepTasksCount = preparedDDT?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
-            console.log('[DOCK_CREATE] 🆕 Creating new tab with DDT from taskRepository', {
+            console.log('[DOCK_CREATE] 🆕 Creating new tab with DDT via TaskEditorHost', {
               tabId,
               instanceId,
               mainDataLength: preparedDDT?.mainData?.length,
@@ -819,72 +721,27 @@ export const AppContent: React.FC<AppContentProps> = ({
               hasPreparedDDT: !!preparedDDT
             });
 
-            // ✅ Create onClose callback for saving before closing
-            // NOTE: DockManager will pass the tab to onClose, so we can read tab.ddt (which is updated during editing)
-            const handleTabClose = async (tab: DockTabResponseEditor) => {
-              const key = tab.task?.instanceId || tab.task?.id;
-              if (!key) return;
-
-              // ✅ Read DDT from tab (which is updated by updateSelectedNode during editing)
-              const ddtToSave = tab.ddt;
-              const hasDDT = ddtToSave && Object.keys(ddtToSave).length > 0 && ddtToSave.mainData && ddtToSave.mainData.length > 0;
-
-              if (hasDDT) {
-                const startStepTasksCount = ddtToSave?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
-                console.log('[DOCK_CLOSE] 💾 Saving DDT to taskRepository (SYNC - blocking close)', {
-                  key,
-                  startStepTasksCount,
-                  mainDataLength: ddtToSave?.mainData?.length
-                });
-
-                try {
-                  let task = taskRepository.getTask(key);
-                  if (!task) {
-                    // ✅ Usa direttamente tab.task.type (TaskType enum) invece di convertire da stringa
-                    const taskType = tab.task?.type ?? TaskType.DataRequest; // ✅ Usa direttamente TaskType enum
-                    task = taskRepository.createTask(taskType, null, undefined, key);
-                  }
-
-                  // ✅ Estrai solo campi modificati rispetto al template (override)
-                  //
-                  // LOGICA CONCETTUALE DEL SALVATAGGIO:
-                  // - Template: contiene struttura condivisa (constraints, examples, nlpContract)
-                  // - Istanza: contiene SOLO override (modifiche rispetto al template)
-                  // - extractModifiedDDTFields confronta istanza con template e salva solo differenze
-                  // - A runtime: se mancante nell'istanza → risoluzione lazy dal template (backend VB.NET)
-                  const modifiedFields = await extractModifiedDDTFields(task, ddtToSave);
-
-                  const currentTemplateId = getTemplateId(task);
-
-                  if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'getdata') {
-                    await taskRepository.updateTask(key, {
-                      templateId: 'GetData',
-                      ...modifiedFields  // ✅ Salva solo override, non tutto
-                    }, pdUpdate?.getCurrentProjectId());
-                  } else {
-                    await taskRepository.updateTask(key, modifiedFields, pdUpdate?.getCurrentProjectId());
-                  }
-
-                  console.log('[DOCK_CLOSE] ✅ Save completed - repository is now up to date', {
-                    key,
-                    startStepTasksCount
-                  });
-                } catch (err) {
-                  console.error('[DOCK_CLOSE] ❌ Failed to save to taskRepository', err);
-                }
+            // ✅ Salva DDT nel taskRepository prima di aprire l'editor (TaskEditorHost lo leggerà)
+            if (preparedDDT) {
+              let task = taskRepository.getTask(instanceId);
+              if (!task) {
+                task = taskRepository.createTask(taskMeta.type, null, undefined, instanceId);
               }
-            };
+              // ✅ Salva DDT nel task (campi diretti, niente wrapper)
+              taskRepository.updateTask(instanceId, {
+                ...preparedDDT,  // Spread: label, mainData, stepPrompts, ecc.
+                templateId: d.templateId || task.templateId  // Mantieni templateId se presente
+              }, pdUpdate?.getCurrentProjectId());
+            }
 
             return splitWithTab(prev, rootTabsetId, 'bottom', {
               id: tabId,
               title: d.label || d.name || 'Response Editor',
-              type: 'responseEditor',
-              ddt: preparedDDT,
-              task: taskMeta, // ✅ RINOMINATO: act → task, usa TaskMeta con TaskType enum
+              type: 'taskEditor', // ✅ UNIFICATO: Usa TaskEditorHost invece di responseEditor diretto
+              task: taskMeta, // ✅ Passa TaskMeta con TaskType enum
               headerColor: '#9a4f00', // Orange color from ResponseEditor header
-              toolbarButtons: [], // Will be updated via callback
-              onClose: handleTabClose // ✅ Callback for saving before closing
-            });
+              toolbarButtons: []
+            } as DockTabTaskEditor);
           } else if (editorKind === 'backend') {
             // Open BackendCallEditor for BackendCall type
             return splitWithTab(prev, rootTabsetId, 'bottom', {
@@ -895,6 +752,16 @@ export const AppContent: React.FC<AppContentProps> = ({
               headerColor: '#94a3b8', // Gray color for BackendCall
               toolbarButtons: []
             } as DockTabTaskEditor); // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
+          } else if (editorKind === 'intent') {
+            // ✅ Open IntentEditor via TaskEditorHost for ClassifyProblem type
+            return splitWithTab(prev, rootTabsetId, 'bottom', {
+              id: tabId,
+              title: d.label || d.name || 'Problem Classification',
+              type: 'taskEditor', // ✅ Usa TaskEditorHost che aprirà IntentEditor
+              task: taskMeta, // ✅ Passa TaskMeta con TaskType enum
+              headerColor: '#f59e0b', // Orange color for ClassifyProblem
+              toolbarButtons: []
+            } as DockTabTaskEditor);
           } else {
             // For other types, don't open editor if not supported
             return prev;
@@ -974,8 +841,8 @@ export const AppContent: React.FC<AppContentProps> = ({
         for (const cat of categories) {
           const items: any[] = (cat?.items || []) as any[];
           for (const it of items) {
-            const actName: string = String(it?.name || it?.label || '').trim();
-            if (!actName) continue;
+            const taskName: string = String(it?.name || it?.label || '').trim(); // ✅ RINOMINATO: actName → taskName
+            if (!taskName) continue;
             const ddt: any = it?.ddt;
             if (!ddt) continue;
             // Support assembled shape (mainData) and snapshot shape (mains)
@@ -984,12 +851,12 @@ export const AppContent: React.FC<AppContentProps> = ({
               : (ddt?.mainData ? [ddt.mainData] : (Array.isArray(ddt?.mains) ? ddt.mains : []));
             for (const m of (mains || [])) {
               const mainLabel: string = String(m?.labelKey || m?.label || m?.name || 'Data').trim();
-              const mainKey = `${actName}.${mainLabel}`;
+              const mainKey = `${taskName}.${mainLabel}`; // ✅ RINOMINATO: actName → taskName
               vars[mainKey] = vars[mainKey] ?? '';
               const subsArr: any[] = Array.isArray(m?.subData) ? m.subData : (Array.isArray(m?.subs) ? m.subs : []);
               for (const s of (subsArr || [])) {
                 const subLabel: string = String(s?.labelKey || s?.label || s?.name || 'Field').trim();
-                const subKey = `${actName}.${mainLabel}.${subLabel}`;
+                const subKey = `${taskName}.${mainLabel}.${subLabel}`; // ✅ RINOMINATO: actName → taskName
                 vars[subKey] = vars[subKey] ?? '';
               }
             }
@@ -1001,18 +868,18 @@ export const AppContent: React.FC<AppContentProps> = ({
 
     // Helper: build a hierarchical tree with icons/colors for Intellisense
     const buildVarsTree = (): any[] => {
-      const acts: any[] = [];
+      const tasks: any[] = []; // ✅ RINOMINATO: acts → tasks
       const data = projectData as any;
       try {
         const categories: any[] = (data?.taskTemplates || []) as any[];
-        const actColor = (SIDEBAR_TYPE_COLORS as any)?.taskTemplates?.color || '#34d399';
+        const taskColor = (SIDEBAR_TYPE_COLORS as any)?.taskTemplates?.color || '#34d399'; // ✅ RINOMINATO: actColor → taskColor
         const iconKey = (SIDEBAR_TYPE_ICONS as any)?.taskTemplates;
         const Icon = (SIDEBAR_ICON_COMPONENTS as any)?.[iconKey];
         for (const cat of categories) {
           const items: any[] = (cat?.items || []) as any[];
           for (const it of items) {
-            const actName: string = String(it?.name || it?.label || '').trim();
-            if (!actName) continue;
+            const taskName: string = String(it?.name || it?.label || '').trim(); // ✅ RINOMINATO: actName → taskName
+            if (!taskName) continue;
             const ddt: any = it?.ddt;
             if (!ddt) continue;
             const mains: any[] = Array.isArray(ddt?.mainData)
@@ -1025,11 +892,11 @@ export const AppContent: React.FC<AppContentProps> = ({
               const subsOut = (subsArr || []).map((s: any) => ({ label: String(s?.labelKey || s?.label || s?.name || 'Field').trim(), kind: String(s?.kind || s?.type || '') }));
               mainsOut.push({ label: mainLabel, kind: String(m?.kind || m?.type || ''), subs: subsOut });
             }
-            acts.push({ label: actName, color: actColor, Icon, mains: mainsOut });
+            tasks.push({ label: taskName, color: taskColor, Icon, mains: mainsOut }); // ✅ RINOMINATO: acts → tasks, actName → taskName, actColor → taskColor
           }
         }
       } catch { }
-      return acts;
+      return tasks; // ✅ RINOMINATO: acts → tasks
     };
 
     // ✅ NEW: Build flowchart variables

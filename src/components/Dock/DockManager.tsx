@@ -417,13 +417,14 @@ function TabSet(props: {
       {/* ✅ Key stabile sul contenuto del tab per preservare lo stato quando si cambia tab */}
       {(() => {
         const activeTab = props.tabs[props.active];
-        console.log('[DEBUG_MEMO] TabSet rendering content', {
-          activeTabId: activeTab?.id,
-          activeTabType: activeTab?.type,
-          activeIndex: props.active,
-          tabsCount: props.tabs.length,
-          willRender: !!activeTab
-        });
+        // ✅ LOG DISABILITATO - troppo rumoroso
+        // console.log('[DEBUG_MEMO] TabSet rendering content', {
+        //   activeTabId: activeTab?.id,
+        //   activeTabType: activeTab?.type,
+        //   activeIndex: props.active,
+        //   tabsCount: props.tabs.length,
+        //   willRender: !!activeTab
+        // });
         if (!activeTab) return null;
 
         // ✅ Per responseEditor, usa una key stabile basata su instanceId per preservare lo stato
@@ -431,12 +432,13 @@ function TabSet(props: {
           ? `response-editor-${(activeTab as any).act.instanceId}`
           : activeTab.id;
 
-        console.log('[DEBUG_DOCK_KEY] TabSet stableKey calculated', {
-          activeTabId: activeTab.id,
-          activeTabType: activeTab.type,
-          stableKey,
-          instanceId: (activeTab as any).act?.instanceId
-        });
+        // ✅ LOG DISABILITATO - troppo rumoroso
+        // console.log('[DEBUG_DOCK_KEY] TabSet stableKey calculated', {
+        //   activeTabId: activeTab.id,
+        //   activeTabType: activeTab.type,
+        //   stableKey,
+        //   instanceId: (activeTab as any).act?.instanceId
+        // });
 
         return (
           <div

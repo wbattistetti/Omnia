@@ -1,6 +1,5 @@
 import { ProjectDataService } from './ProjectDataService';
-import { classifyActMode } from '../nlp/actInteractivity';
-import { modeToType, typeToMode } from '../utils/normalizers';
+import { TaskType } from '../types/taskTypes'; // ✅ TaskType enum instead of modeToType/typeToMode
 import { classifyScopeFromLabel, Scope, Industry } from './ScopeClassificationService';
 
 export interface EntityCreationConfig {
@@ -14,9 +13,9 @@ export interface CreatedEntity {
   id: string;
   name: string;
   categoryType: string;
-  actId: string;
+  taskId: string; // ✅ RINOMINATO: actId → taskId
   factoryId: string | null;
-  mode?: string;
+  type?: TaskType; // ✅ TaskType enum instead of mode
   ddtId?: string | undefined;
   testPassed?: boolean;
 }
@@ -29,8 +28,7 @@ export interface EntityCreationOptions {
   scope?: 'global' | 'industry';
   categoryName?: string; // Nome della categoria (opzionale, default: "Categorize Later")
   // New explicit typing to avoid window flags
-  type?: string; // ActType
-  mode?: string; // mapped from type
+  type?: TaskType; // ✅ TaskType enum (no mode)
   suppressUI?: boolean;
 }
 
@@ -130,14 +128,16 @@ export class EntityCreationService {
         isInMemory: true,
         factoryId: null,
         ...(entityType === 'taskTemplates' && (() => {
-          const providedType = (options as any)?.type as any;
-          const providedMode = (options as any)?.mode as any;
-          const inferredMode = providedMode || classifyActMode(options.name);
-          const finalType = providedType || modeToType(inferredMode);
-          const finalMode = providedMode || typeToMode(finalType as any);
+          const providedType = (options as any)?.type as TaskType | undefined;
+          // ✅ Convert mode string to TaskType enum if needed
+          const finalType = providedType || (() => {
+            const mode = classifyActMode(options.name);
+            if (mode === 'DataRequest') return TaskType.DataRequest;
+            if (mode === 'DataConfirmation') return TaskType.DataRequest; // DataConfirmation → DataRequest
+            return TaskType.SayMessage; // Message → SayMessage
+          })();
           return {
-            type: finalType,
-            mode: finalMode,
+            type: finalType, // ✅ TaskType enum only, no mode
             ddtId: undefined,
             testPassed: false,
             __suppressEditorOnce: Boolean((options as any)?.suppressUI)
@@ -152,14 +152,12 @@ export class EntityCreationService {
       id: newItem.id,
       name: options.name,
       categoryType: config.entityType,
-      actId: newItem.id,
+      taskId: newItem.id, // ✅ RINOMINATO: actId → taskId
       factoryId: null, // Nessun ID factory ancora
       ...(entityType === 'taskTemplates' && (() => {
-        const t = (newItem as any)?.type as any;
-        const m = (newItem as any)?.mode as any;
-        const finalType = t || modeToType(m) || 'Message';
-        const finalMode = typeToMode(finalType);
-        return { type: finalType, mode: finalMode, ddtId: undefined, testPassed: false };
+        const t = (newItem as any)?.type as TaskType | undefined;
+        const finalType = t || TaskType.SayMessage; // ✅ TaskType enum only, no mode
+        return { type: finalType, ddtId: undefined, testPassed: false };
       })())
     };
 
@@ -229,7 +227,12 @@ export class EntityCreationService {
       createdAt: new Date(),
       updatedAt: new Date(),
       ...(entityType === 'taskTemplates' && {
-        mode: classifyActMode(name),
+        type: (() => {
+          const mode = classifyActMode(name);
+          if (mode === 'DataRequest') return TaskType.DataRequest;
+          if (mode === 'DataConfirmation') return TaskType.DataRequest; // DataConfirmation → DataRequest
+          return TaskType.SayMessage; // Message → SayMessage
+        })(), // ✅ TaskType enum instead of mode
         data: {},
         prompts: {},
         ddtId: undefined, // Nessun DDT associato inizialmente
@@ -343,9 +346,12 @@ export class EntityCreationService {
     originalEntityType: string,
     projectData: any
   ): any {
-    const inferredMode = classifyActMode(name);
-    const finalType = originalEntityType === 'taskTemplates' ? modeToType(inferredMode) : undefined;
-    const finalMode = originalEntityType === 'taskTemplates' ? typeToMode((finalType as any) || 'Message') : undefined;
+    const finalType = originalEntityType === 'taskTemplates' ? (() => {
+      const mode = classifyActMode(name);
+      if (mode === 'DataRequest') return TaskType.DataRequest;
+      if (mode === 'DataConfirmation') return TaskType.DataRequest; // DataConfirmation → DataRequest
+      return TaskType.SayMessage; // Message → SayMessage
+    })() : undefined;
     const newItemId = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const newItem = {
       id: newItemId,
@@ -358,7 +364,7 @@ export class EntityCreationService {
       version: '1.0.0',
       isInMemory: true,
       factoryId: null,
-      ...(originalEntityType === 'taskTemplates' && { type: finalType, mode: finalMode, ddtId: undefined, testPassed: false })
+      ...(originalEntityType === 'taskTemplates' && { type: finalType, ddtId: undefined, testPassed: false }) // ✅ TaskType enum only, no mode
     };
 
     // Aggiungi l'elemento alla categoria nel projectData
@@ -406,7 +412,7 @@ export class EntityCreationService {
       if (itemRef) {
         const safeUpdates = { ...updates } as any;
         if (typeof safeUpdates.type === 'undefined') delete safeUpdates.type;
-        if (typeof safeUpdates.mode === 'undefined') delete safeUpdates.mode;
+        // ✅ mode removed - use type (TaskType enum) only
         Object.assign(itemRef, safeUpdates);
       } else {
         // No direct reference found; the returned newItem already has updated fields

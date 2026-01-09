@@ -100,7 +100,7 @@ export default function BehaviourEditor({
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       {/* StepsStrip in alto */}
       <div style={{ borderBottom: '1px solid #1f2340', background: '#0f1422' }}>
         <StepsStrip

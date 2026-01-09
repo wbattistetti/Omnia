@@ -1384,11 +1384,13 @@ app.get('/api/projects/:pid/conditions', async (req, res) => {
 // -----------------------------
 // Endpoints: Act Instances (create/update/get)
 // -----------------------------
+// ⚠️ LEGACY ENDPOINT: Prefer using /api/projects/:pid/tasks instead
+// This endpoint uses TaskType enum (type field) - NO backward compatibility
 app.post('/api/projects/:pid/instances', async (req, res) => {
   const projectId = req.params.pid;
   const payload = req.body || {};
-  if (!payload.baseActId || !payload.mode) {
-    return res.status(400).json({ error: 'baseActId_and_mode_required' });
+  if (!payload.baseActId || payload.type === undefined || payload.type === null) {
+    return res.status(400).json({ error: 'baseActId_and_type_required', message: 'baseActId and type (TaskType enum 0-19) are required' });
   }
   const client = new MongoClient(uri);
   try {
@@ -1403,19 +1405,19 @@ app.post('/api/projects/:pid/instances', async (req, res) => {
       projectId,
       baseActId: payload.baseActId,
       ddtRefId: payload.baseActId,
-      mode: payload.mode,
+      type: payload.type, // ✅ TaskType enum (0-19) - REQUIRED
       message: payload.message || null,
       overrides: payload.overrides || null,
       baseVersion: base?.updatedAt || null,
       baseHash: null,
-      ddtSnapshot: payload.ddtSnapshot || null, // Supporto per ddtSnapshot nel POST
-      rowId: payload.rowId || null, // ID originale della riga (instance.instanceId)
+      ddtSnapshot: payload.ddtSnapshot || null,
+      rowId: payload.rowId || null,
       createdAt: now,
       updatedAt: now
     };
     const r = await projDb.collection('act_instances').insertOne(instance);
     const saved = await projDb.collection('act_instances').findOne({ _id: r.insertedId });
-    logInfo('Instances.post', { projectId, baseActId: payload.baseActId, mode: payload.mode, instanceId: String(r?.insertedId || '') });
+    logInfo('Instances.post', { projectId, baseActId: payload.baseActId, type: payload.type, instanceId: String(r?.insertedId || '') });
     res.json(saved);
   } catch (e) {
     logError('Instances.post', e, { projectId, baseActId: payload?.baseActId });
@@ -1438,14 +1440,14 @@ app.post('/api/projects/:pid/instances/bulk', async (req, res) => {
     const now = new Date();
     const docs = [];
     for (const it of items) {
-      if (!it?.baseActId || !it?.mode) continue;
+      if (!it?.baseActId || it.type === undefined || it.type === null) continue;
       let base = null;
       try { base = await projDb.collection('project_acts').findOne({ _id: it.baseActId }); } catch { }
       docs.push({
         projectId,
         baseActId: it.baseActId,
         ddtRefId: it.baseActId,
-        mode: it.mode,
+        type: it.type, // ✅ TaskType enum (0-19) - REQUIRED
         message: it.message || null,
         overrides: it.overrides || null,
         baseVersion: base?.updatedAt || null,

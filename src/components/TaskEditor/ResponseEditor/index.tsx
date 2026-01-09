@@ -30,19 +30,41 @@ import { useResponseEditorToolbar } from './ResponseEditorToolbar';
 import IntentListEditorWrapper from './components/IntentListEditorWrapper';
 import { FontProvider, useFontContext } from '../../../context/FontContext';
 import { useAIProvider } from '../../../context/AIProviderContext';
-import { DialogueTaskService, type DialogueTask } from '../../../services/DialogueTaskService';
 import { TemplateTranslationsService } from '../../../services/TemplateTranslationsService';
-import DDTTemplateMatcherService from '../../../services/DDTTemplateMatcherService';
 import { useProjectTranslations } from '../../../context/ProjectTranslationsContext';
 import { useDDTTranslations } from '../../../hooks/useDDTTranslations';
 import { ToolbarButton } from '../../../dock/types';
 import { taskTemplateService } from '../../../services/TaskTemplateService';
 import { mapNode } from '../../../dock/ops';
 import { extractModifiedDDTFields } from '../../../utils/ddtMergeUtils';
+import { useWizardInference } from './hooks/useWizardInference';
 
-import type { TaskMeta } from '../EditorHost/types'; // ✅ Import TaskMeta
+import type { TaskMeta } from '../EditorHost/types';
+import type { Task } from '../../../types/taskTypes';
 
-function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader, onToolbarUpdate, tabId, setDockTree }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, task?: TaskMeta, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void }) { // ✅ RINOMINATO: act → task, type: string → TaskMeta
+// Helper: enforce phone kind by label when missing/mis-set
+function coercePhoneKind(src: any) {
+  if (!src) return src;
+  try {
+    const clone = JSON.parse(JSON.stringify(src));
+    const mains = Array.isArray(clone?.mainData) ? clone.mainData : [];
+    for (const m of mains) {
+      const label = String(m?.label || '').toLowerCase();
+      if (/phone|telephone|tel|cellulare|mobile/.test(label)) {
+        if ((m?.kind || '').toLowerCase() !== 'phone') {
+          m.kind = 'phone';
+          (m as any)._kindManual = 'phone';
+        }
+      }
+    }
+    return clone;
+  } catch (err) {
+    console.warn('[coercePhoneKind] Failed to clone, returning original:', err);
+    return src;
+  }
+}
+
+function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoading, hideHeader, onToolbarUpdate, tabId, setDockTree }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, task?: TaskMeta | Task, isDdtLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void }) { // ✅ ARCHITETTURA ESPERTO: task può essere TaskMeta o Task completo
 
   // 🔴 LOG: Verifica se il componente viene rimontato
   useEffect(() => {
@@ -72,9 +94,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
   const { provider: selectedProvider, model: selectedModel } = useAIProvider();
   const rootRef = useRef<HTMLDivElement>(null);
   const wizardOwnsDataRef = useRef(false); // Flag: wizard has control over data lifecycle
-  const [isInferring, setIsInferring] = React.useState(false);
-  const [inferenceResult, setInferenceResult] = React.useState<any>(null);
-  const inferenceAttemptedRef = React.useRef<string | null>(null); // Track which task.label we've already tried // ✅ RINOMINATO: act → task
 
   // ✅ Cache globale per DDT pre-assemblati (per templateId)
   // Key: templateId (es. "723a1aa9-a904-4b55-82f3-a501dfbe0351")
@@ -114,18 +133,30 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
       // Nuova istanza → inizializza dal prop ddt (fonte di verità)
       console.log('[REF_INIT] New instance - initializing from dockTree', {
         instance,
-        propDDTStartStepTasksCount: ddt?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0
+        propDDTStartStepTasksCount: ddt?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0,
+        hasMainData: !!ddt?.mainData,
+        mainDataLength: ddt?.mainData?.length || 0
       });
       ddtRef.current = ddt;
       prevInstanceRef.current = instance;
+      // ✅ ARCHITETTURA ESPERTO: Forza aggiornamento mainList quando DDT viene caricato
+      if (ddt?.mainData && ddt.mainData.length > 0) {
+        setDDTVersion(v => v + 1);
+      }
     } else if (ddt && JSON.stringify(ddt) !== JSON.stringify(ddtRef.current)) {
       // Stessa istanza ma ddt prop è cambiato → sincronizza (dockTree è stato aggiornato esternamente)
       console.log('[REF_INIT] Same instance - syncing from dockTree', {
         instance,
         propDDTStartStepTasksCount: ddt?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0,
-        refDDTStartStepTasksCount: ddtRef.current?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0
+        refDDTStartStepTasksCount: ddtRef.current?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0,
+        hasMainData: !!ddt?.mainData,
+        mainDataLength: ddt?.mainData?.length || 0
       });
       ddtRef.current = ddt;
+      // ✅ ARCHITETTURA ESPERTO: Forza aggiornamento mainList quando DDT viene caricato
+      if (ddt?.mainData && ddt.mainData.length > 0) {
+        setDDTVersion(v => v + 1);
+      }
     }
   }, [ddt, (task as any)?.instanceId, task?.id]);
 
@@ -195,17 +226,17 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
     const handleProjectSave = async () => {
       if (task?.id || task?.instanceId) { // ✅ RINOMINATO: act → task
         const key = (task?.instanceId || task?.id) as string; // ✅ RINOMINATO: act → task
-        const task = taskRepository.getTask(key);
+        const taskInstance = taskRepository.getTask(key);
         const currentDDT = { ...ddtRef.current };
         const hasDDT = currentDDT && Object.keys(currentDDT).length > 0 && currentDDT.mainData && currentDDT.mainData.length > 0;
 
-        if (hasDDT && task) {
+        if (hasDDT && taskInstance) {
           // ✅ Estrai solo campi modificati rispetto al template (override)
           // Questo evita duplicazione: constraints/examples/nlpContract vengono salvati
           // solo se sono stati modificati rispetto al template
-          const modifiedFields = await extractModifiedDDTFields(task, currentDDT);
+          const modifiedFields = await extractModifiedDDTFields(taskInstance, currentDDT);
 
-          const currentTemplateId = getTemplateId(task);
+          const currentTemplateId = getTemplateId(taskInstance);
 
           // ✅ CASE-INSENSITIVE
           if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
@@ -233,9 +264,23 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
   // ✅ Usa ddtRef.current per mainList (contiene già le modifiche)
   // Forza re-render quando ddtRef cambia usando uno stato trigger
   const [ddtVersion, setDDTVersion] = useState(0);
+  // ✅ ARCHITETTURA ESPERTO: Stabilizza isDdtLoading per evitare problemi con dipendenze undefined
+  const stableIsDdtLoading = isDdtLoading ?? false;
   const mainList = useMemo(() => {
-    return getMainDataList(ddtRef.current);
-  }, [ddt, ddtVersion]); // Include ddtVersion per forzare aggiornamento
+    // ✅ ARCHITETTURA ESPERTO: Usa ddt prop se disponibile, altrimenti ddtRef.current
+    // Questo garantisce che mainList sia aggiornato quando DDTHostAdapter carica il DDT
+    const currentDDT = ddt ?? ddtRef.current;
+    const list = getMainDataList(currentDDT);
+    console.log('[mainList] Calculated mainList', {
+      hasDdtProp: !!ddt,
+      hasDdtRef: !!ddtRef.current,
+      ddtMainDataLength: ddt?.mainData?.length || 0,
+      ddtRefMainDataLength: ddtRef.current?.mainData?.length || 0,
+      mainListLength: list.length,
+      isDdtLoading: stableIsDdtLoading
+    });
+    return list;
+  }, [(ddt ?? null), (ddtVersion ?? 0), stableIsDdtLoading]); // ✅ ARCHITETTURA ESPERTO: Usa valore stabilizzato
   // Aggregated view: show a group header when there are multiple mains
   const isAggregatedAtomic = useMemo(() => (
     Array.isArray(mainList) && mainList.length > 1
@@ -254,10 +299,123 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
   // ✅ Larghezza separata per il pannello Tasks (indipendente)
   const { width: tasksPanelWidth, setWidth: setTasksPanelWidth } = useRightPanelWidth(360, 'responseEditor.tasksPanelWidth');
 
+  // ✅ REFACTOR: Sidebar resize manuale solo durante la sessione (senza persistenza)
+  // L'autosize prevale sempre all'apertura
+  const [sidebarManualWidth, setSidebarManualWidth] = React.useState<number | null>(null);
+  const [isDraggingSidebar, setIsDraggingSidebar] = React.useState(false);
+  const sidebarStartWidthRef = React.useRef<number>(0);
+  const sidebarStartXRef = React.useRef<number>(0);
+
+  // ✅ DEBUG: Abilita log con localStorage.setItem('debug.sidebarResize', '1')
+  const DEBUG_RESIZE = typeof localStorage !== 'undefined' && localStorage.getItem('debug.sidebarResize') === '1';
+
+  // ✅ Pulisci localStorage all'avvio per garantire che autosize prevalga
+  React.useEffect(() => {
+    try {
+      localStorage.removeItem('responseEditor.sidebarWidth');
+    } catch { }
+  }, []);
+
+  const handleSidebarResizeStart = React.useCallback((e: React.MouseEvent) => {
+    if (DEBUG_RESIZE) console.log('🔵 [SIDEBAR_RESIZE] handleSidebarResizeStart chiamato', {
+      clientX: e.clientX,
+      button: e.button,
+      buttons: e.buttons,
+      target: e.target,
+      currentTarget: e.currentTarget,
+      sidebarRefExists: !!sidebarRef,
+      sidebarRefCurrent: !!sidebarRef?.current,
+    });
+
+    e.preventDefault();
+    e.stopPropagation(); // ✅ CRITICO: previeni che altri handler interferiscano
+
+    const sidebarEl = sidebarRef?.current;
+    if (!sidebarEl) {
+      if (DEBUG_RESIZE) console.error('❌ [SIDEBAR_RESIZE] sidebarRef.current è null!');
+      return;
+    }
+
+    const rect = sidebarEl.getBoundingClientRect();
+    sidebarStartWidthRef.current = rect.width;
+    sidebarStartXRef.current = e.clientX;
+
+    if (DEBUG_RESIZE) console.log('✅ [SIDEBAR_RESIZE] Impostando isDraggingSidebar = true', {
+      startWidth: sidebarStartWidthRef.current,
+      startX: sidebarStartXRef.current,
+      sidebarRect: { width: rect.width, left: rect.left, right: rect.right },
+    });
+
+    setIsDraggingSidebar(true);
+  }, [sidebarRef, DEBUG_RESIZE]);
+
+  React.useEffect(() => {
+    if (DEBUG_RESIZE) console.log('🟡 [SIDEBAR_RESIZE] useEffect isDraggingSidebar cambiato', {
+      isDraggingSidebar,
+      sidebarManualWidth,
+    });
+
+    if (!isDraggingSidebar) {
+      if (DEBUG_RESIZE) console.log('⏸️ [SIDEBAR_RESIZE] isDraggingSidebar è false, esco');
+      return;
+    }
+
+    if (DEBUG_RESIZE) console.log('▶️ [SIDEBAR_RESIZE] Aggiungendo listener mousemove/mouseup');
+
+    const handleMove = (e: MouseEvent) => {
+      const deltaX = e.clientX - sidebarStartXRef.current;
+      // ✅ FIX: Aumenta maxWidth a 1000px per permettere sidebar più larghe
+      // Il minWidth rimane 160px, ma il maxWidth deve essere sufficientemente alto
+      const MIN_WIDTH = 160;
+      const MAX_WIDTH = 1000;
+      const calculatedWidth = sidebarStartWidthRef.current + deltaX;
+      const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, calculatedWidth));
+
+      if (DEBUG_RESIZE) console.log('🔄 [SIDEBAR_RESIZE] handleMove', {
+        clientX: e.clientX,
+        startX: sidebarStartXRef.current,
+        deltaX,
+        startWidth: sidebarStartWidthRef.current,
+        calculatedWidth,
+        newWidth,
+        clamped: newWidth !== calculatedWidth,
+        clampedMin: newWidth === MIN_WIDTH,
+        clampedMax: newWidth === MAX_WIDTH,
+      });
+
+      setSidebarManualWidth(newWidth);
+      // ✅ NON salvare in localStorage - solo durante la sessione
+    };
+
+    const handleUp = () => {
+      if (DEBUG_RESIZE) console.log('🛑 [SIDEBAR_RESIZE] handleUp - fine drag');
+      setIsDraggingSidebar(false);
+    };
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+
+    if (DEBUG_RESIZE) console.log('✅ [SIDEBAR_RESIZE] Listener aggiunti');
+
+    return () => {
+      if (DEBUG_RESIZE) console.log('🧹 [SIDEBAR_RESIZE] Cleanup - rimuovendo listener');
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+  }, [isDraggingSidebar, DEBUG_RESIZE]);
+
+  // ✅ DEBUG: Log quando sidebarManualWidth cambia
+  React.useEffect(() => {
+    if (DEBUG_RESIZE) console.log('📏 [SIDEBAR_RESIZE] sidebarManualWidth cambiato', {
+      sidebarManualWidth,
+      isDraggingSidebar,
+    });
+  }, [sidebarManualWidth, isDraggingSidebar, DEBUG_RESIZE]);
+
   // ✅ Mantieni rightMode per compatibilità (combinazione di leftPanelMode e testPanelMode)
   const rightMode: RightPanelMode = testPanelMode === 'chat' ? 'chat' : leftPanelMode;
   // ✅ Stati di dragging separati per ogni pannello
-  const [draggingPanel, setDraggingPanel] = useState<'left' | 'test' | 'tasks' | null>(null);
+  const [draggingPanel, setDraggingPanel] = useState<'left' | 'test' | 'tasks' | 'shared' | null>(null);
   const [showSynonyms, setShowSynonyms] = useState(false);
   const [showMessageReview, setShowMessageReview] = useState(false);
   const [selectedIntentIdForTraining, setSelectedIntentIdForTraining] = useState<string | null>(null);
@@ -272,16 +430,24 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
     return firstMain?.kind === 'intent' && !hasMessages;
   }, [mainList, ddt, task?.id, task?.type]); // ✅ RINOMINATO: act → task
 
-  // Wizard/general layout flags
-  // ✅ Se kind === "intent" non ha bisogno di wizard (nessuna struttura dati)
-  const [showWizard, setShowWizard] = useState<boolean>(() => {
-    const firstMain = mainList[0];
-    if (firstMain?.kind === 'intent') {
-      return false;
-    }
-    // ✅ NON aprire il wizard subito - aspetta che il match locale venga eseguito
-    // Il wizard verrà aperto dall'useEffect dopo il match locale o l'inferenza
-    return false;
+  // ✅ Usa hook custom per gestire wizard e inferenza (estratto per migliorare manutenibilità)
+  const {
+    showWizard,
+    setShowWizard,
+    isInferring,
+    setIsInferring,
+    inferenceResult,
+    setInferenceResult,
+  } = useWizardInference({
+    ddt,
+    ddtRef,
+    task: task && 'templateId' in task ? task : null, // ✅ ARCHITETTURA ESPERTO: Cast a Task completo (se ha templateId) o null
+    isDdtLoading: isDdtLoading ?? false, // ✅ ARCHITETTURA ESPERTO: Passa stato di loading
+    currentProjectId,
+    selectedProvider,
+    selectedModel,
+    preAssembledDDTCache,
+    wizardOwnsDataRef,
   });
   const { Icon, color: iconColor } = getTaskVisualsByType(taskType, !!ddt); // ✅ RINOMINATO: actType → taskType
   // Priority: _sourceTask.label (preserved task info) > task.label (direct prop) > localDDT._userLabel (legacy) > generic fallback
@@ -344,420 +510,14 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
     onTasksPanelWidthChange: setTasksPanelWidth,
   });
 
-  // Ref per prevenire esecuzioni multiple dello stesso processo
-  const inferenceStartedRef = useRef<string | null>(null);
+  // Track introduction separately - usa ddtRef.current con dipendenze stabilizzate
+  // Stabilizza i valori primitivi per evitare problemi con array di dipendenze
+  const stableDdtVersion = ddtVersion ?? 0;
+  const stableIntroduction = ddt?.introduction ?? null; // ✅ Sempre null, mai undefined
 
-  useEffect(() => {
-    // ✅ Usa ddtRef.current invece di ddt per evitare problemi con array di dipendenze
-    const currentDDT = ddtRef.current || ddt;
-
-    // ✅ Se kind === "intent" non deve mostrare il wizard
-    const currentMainList = getMainDataList(currentDDT);
-    const firstMain = currentMainList[0];
-    if (firstMain?.kind === 'intent') {
-      setShowWizard(false);
-      wizardOwnsDataRef.current = false;
-      return;
-    }
-
-    const empty = isDDTEmpty(currentDDT);
-
-    // ✅ IMPORTANTE: Non aprire wizard se l'inferenza è in corso
-    // ✅ IMPORTANTE: Non aprire wizard se è già aperto (showWizard === true)
-    const conditionsMet = empty && !wizardOwnsDataRef.current && !isInferring && !showWizard;
-
-    // Prevenire esecuzioni multiple per lo stesso task.label
-    const taskLabel = task?.label?.trim(); // ✅ RINOMINATO: actLabel → taskLabel, act → task
-    const inferenceKey = `${taskLabel || ''}_${empty}`;
-    if (!conditionsMet || inferenceStartedRef.current === inferenceKey) {
-      return;
-    }
-
-    if (conditionsMet) {
-      // ✅ Se c'è task.label, PRIMA prova euristica, POI inferenza AI
-      const taskLabel = task?.label?.trim(); // ✅ RINOMINATO: actLabel → taskLabel, act → task
-      const shouldInfer = taskLabel && taskLabel.length >= 3 && inferenceAttemptedRef.current !== taskLabel;
-
-      // ✅ PRIMA: Se è in corso l'inferenza, aspetta (NON aprire il wizard ancora)
-      if (isInferring) {
-        // Non fare nulla, aspetta che l'inferenza finisca
-        return; // ✅ IMPORTANTE: esci dall'useEffect, non continuare
-      }
-
-      // ✅ SECONDO: Se deve inferire E non sta già inferendo E non abbiamo ancora risultato
-      if (shouldInfer && !inferenceResult) {
-        inferenceAttemptedRef.current = taskLabel; // ✅ RINOMINATO: actLabel → taskLabel
-
-        /**
-         * ============================================================
-         * EURISTICA 2: DETERMINAZIONE TEMPLATE DDT SPECIFICO
-         * ============================================================
-         * Funzione: findDDTTemplate
-         * Scopo: Determina il template DDT specifico dalla label di riga di nodo
-         *        usando match fuzzy sulle label dei template
-         * Usata in: ResponseEditor quando si apre il wizard DDT
-         * Output: Template DDT completo con mainData/subData già strutturato
-         * Nota: Questa euristica viene eseguita PRIMA dell'inferenza AI
-         * ============================================================
-         */
-
-        const findDDTTemplate = async (text: string): Promise<any | null> => {
-          try {
-            // ✅ Usa il servizio centralizzato per trovare il match
-            const currentTaskType = task?.type ?? TaskType.UNDEFINED; // ✅ RINOMINATO: act → task, usa TaskType enum
-            const match = await DDTTemplateMatcherService.findDDTTemplate(text, currentTaskType);
-
-            if (!match) {
-              return null;
-            }
-
-            const template = match.template;
-
-            // ✅ FASE 2: Costruisci istanza DDT dal template
-            // NOTA: Un template alla radice non sa se sarà usato come sottodato o come main,
-            // quindi può avere tutti i 6 tipi di stepPrompts (start, noMatch, noInput, confirmation, notConfirmed, success).
-            // Quando lo usiamo come sottodato, filtriamo e prendiamo solo start, noInput, noMatch.
-            // Ignoriamo confirmation, notConfirmed, success anche se presenti nel template sottodato.
-            const subDataIds = template.subDataIds || [];
-
-            let mainData: any[] = [];
-
-            if (subDataIds.length > 0) {
-              // ✅ Template composito: crea UN SOLO mainData con subData[] popolato
-
-              // ✅ PRIMA: Costruisci array di subData instances
-              // Per ogni ID in subDataIds, cerca il template corrispondente e crea una sotto-istanza
-              const subDataInstances: any[] = [];
-
-              for (const subId of subDataIds) {
-                // ✅ Cerca template per ID (può essere _id, id, name, o label)
-                const subTemplate = DialogueTaskService.getTemplate(subId);
-                if (subTemplate) {
-                  // ✅ Filtra stepPrompts: solo start, noInput, noMatch per sottodati
-                  // Ignora confirmation, notConfirmed, success anche se presenti nel template sottodato
-                  const filteredStepPrompts: any = {};
-                  if (subTemplate.stepPrompts) {
-                    if (subTemplate.stepPrompts.start) {
-                      filteredStepPrompts.start = subTemplate.stepPrompts.start;
-                    }
-                    if (subTemplate.stepPrompts.noInput) {
-                      filteredStepPrompts.noInput = subTemplate.stepPrompts.noInput;
-                    }
-                    if (subTemplate.stepPrompts.noMatch) {
-                      filteredStepPrompts.noMatch = subTemplate.stepPrompts.noMatch;
-                    }
-                    // ❌ Ignoriamo: confirmation, notConfirmed, success
-                  }
-
-                  // ✅ Usa la label del template trovato (non l'ID!)
-                  subDataInstances.push({
-                    label: subTemplate.label || subTemplate.name || 'Sub',
-                    type: subTemplate.type,
-                    icon: subTemplate.icon || 'FileText',
-                    stepPrompts: Object.keys(filteredStepPrompts).length > 0 ? filteredStepPrompts : undefined,
-                    constraints: subTemplate.dataContracts || subTemplate.constraints || [],
-                    examples: subTemplate.examples || [],
-                    subData: [],
-                    // ✅ Copia anche nlpContract, templateId e kind dal sub-template (saranno adattati in assembleFinal)
-                    nlpContract: subTemplate.nlpContract || undefined,
-                    templateId: subTemplate.id || subTemplate._id, // ✅ GUID del template per lookup
-                    kind: subTemplate.name || subTemplate.type || 'generic'
-                  });
-                }
-              }
-
-              // ✅ POI: Crea UN SOLO mainData con subData[] popolato (non elementi separati!)
-              // L'istanza principale copia TUTTI i stepPrompts dal template (tutti e 6 i tipi)
-              const mainInstance = {
-                label: template.label || template.name || 'Data',
-                type: template.type,
-                icon: template.icon || 'Calendar',
-                stepPrompts: template.stepPrompts || undefined, // ✅ Tutti e 6 i tipi per main
-                constraints: template.dataContracts || template.constraints || [],
-                examples: template.examples || [],
-                subData: subDataInstances, // ✅ Sottodati QUI dentro subData[], non in mainData[]
-                // ✅ Copia anche nlpContract, templateId e kind dal template (saranno adattati in assembleFinal)
-                nlpContract: template.nlpContract || undefined,
-                templateId: template.id || template._id, // ✅ GUID del template per lookup
-                kind: template.name || template.type || 'generic'
-              };
-
-              mainData.push(mainInstance); // ✅ UN SOLO elemento in mainData
-            } else {
-              // ✅ Template semplice: crea istanza dal template root
-              const mainInstance = {
-                label: template.label || template.name || 'Data',
-                type: template.type,
-                icon: template.icon || 'Calendar',
-                stepPrompts: template.stepPrompts || undefined,
-                constraints: template.dataContracts || template.constraints || [],
-                examples: template.examples || [],
-                subData: [],
-                // ✅ Copia anche nlpContract, templateId e kind dal template (saranno adattati in assembleFinal)
-                nlpContract: template.nlpContract || undefined,
-                templateId: template.id || template._id, // ✅ GUID del template per lookup
-                kind: template.name || template.type || 'generic'
-              };
-              mainData.push(mainInstance);
-            }
-
-            // ✅ Estrai tutti i GUID dai stepPrompts (ma NON caricare le traduzioni ancora!)
-            const allGuids: string[] = [];
-            mainData.forEach((m: any) => {
-              if (m.stepPrompts) {
-                Object.values(m.stepPrompts).forEach((guids: any) => {
-                  if (Array.isArray(guids)) {
-                    guids.forEach((guid: string) => {
-                      if (typeof guid === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
-                        allGuids.push(guid);
-                      }
-                    });
-                  }
-                });
-              }
-              if (m.subData) {
-                m.subData.forEach((s: any) => {
-                  if (s.stepPrompts) {
-                    Object.values(s.stepPrompts).forEach((guids: any) => {
-                      if (Array.isArray(guids)) {
-                        guids.forEach((guid: string) => {
-                          if (typeof guid === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
-                            allGuids.push(guid);
-                          }
-                        });
-                      }
-                    });
-                  }
-                });
-              }
-            });
-
-            // ✅ Ritorna schema + lista GUID (senza caricare traduzioni ancora)
-            // Le traduzioni saranno caricate in background dopo l'apertura del wizard
-            return {
-              ai: {
-                schema: {
-                  label: template.label || template.name || 'Data',
-                  mainData: mainData,
-                  // Include stepPrompts a livello schema se presente
-                  stepPrompts: template.stepPrompts || undefined
-                },
-                icon: template.icon || 'Calendar',
-                // ✅ Includi solo i GUID, le traduzioni saranno caricate in background
-                translationGuids: [...new Set(allGuids)]
-              }
-            };
-          } catch (error) {
-            console.error('[ResponseEditor] ❌ [EURISTICA] Errore in findDDTTemplate:', error);
-            return null;
-          }
-        };
-
-        // ✅ PRIMA: Prova euristica locale (ISTANTANEO, cache già caricata)
-
-        // ✅ Controlla cache traduzioni
-        const projectLang = (localStorage.getItem('project.lang') || 'it') as 'it' | 'en' | 'pt';
-
-        // ✅ Wrappare in IIFE async perché useEffect non può essere async
-        (async () => {
-          inferenceStartedRef.current = inferenceKey;
-          const localMatch = await findDDTTemplate(taskLabel); // ✅ RINOMINATO: actLabel → taskLabel
-          if (localMatch) {
-            // ✅ Euristica trovata ISTANTANEAMENTE → apri wizard subito (NON avviare inferenza AI)
-
-            // ✅ Se Euristica 1 ha trovato UNDEFINED (nessun match), Euristica 2 inferisce il tipo dal template DDT
-
-            // ✅ LOGICA: Se tipo è UNDEFINED, l'euristica ha trovato un match → aggiorna il task con tipo corretto
-            if (task?.instanceId && task.type === TaskType.UNDEFINED && localMatch) {
-              try {
-                const instanceKey = task.instanceId; // ✅ RINOMINATO: act → task
-                let taskInstance = taskRepository.getTask(instanceKey);
-
-                // ✅ Se il match è un template DDT, il tipo è DataRequest
-                const determinedType = TaskType.DataRequest; // ✅ Euristica 2 trova sempre template DDT → DataRequest
-
-                if (task) {
-                  // ✅ Aggiorna il task esistente con tipo corretto
-                  const currentTemplateId = getTemplateId(task);
-                  if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
-                    taskRepository.updateTask(instanceKey, {
-                      type: determinedType,  // ✅ type: enum numerico (DataRequest)
-                      templateId: null,            // ✅ templateId: null (standalone)
-                      // ✅ Fields directly on task (no value wrapper) - copy all fields except id, type, templateId, createdAt, updatedAt
-                      ...Object.fromEntries(
-                        Object.entries(task).filter(([key]) =>
-                          !['id', 'type', 'templateId', 'createdAt', 'updatedAt'].includes(key)
-                        )
-                      )
-                    }, currentProjectId || undefined);
-                  }
-                } else {
-                  // ✅ Crea nuovo task con tipo corretto determinato dall'euristica
-                  taskRepository.createTask(determinedType, null, undefined, instanceKey, currentProjectId || undefined);
-                }
-              } catch (err) {
-                console.error('[ResponseEditor] Errore aggiornamento task:', err);
-              }
-            }
-
-
-            setInferenceResult(localMatch);
-            setShowWizard(true);
-            wizardOwnsDataRef.current = true;
-
-            // ✅ Carica traduzioni + PRE-ASSEMBLY IN BACKGROUND (mentre wizard mostra Yes/No)
-            const translationGuids = localMatch?.ai?.translationGuids || [];
-            const schema = localMatch?.ai?.schema;
-            const templateId = schema?.mainData?.[0]?.templateId; // ✅ ID del template per cache
-
-            if (translationGuids.length > 0 && schema) {
-              // ✅ CONTROLLA CACHE PRIMA!
-              if (templateId && preAssembledDDTCache.current.has(templateId)) {
-                const cached = preAssembledDDTCache.current.get(templateId)!;
-                setInferenceResult((prev: any) => ({
-                  ...prev,
-                  ai: {
-                    ...prev?.ai,
-                    templateTranslations: cached._templateTranslations,
-                    preAssembledDDT: cached.ddt
-                  }
-                }));
-              } else {
-                // ✅ Pre-assembly solo se NON in cache
-                (async () => {
-                  try {
-                    // 1. Carica traduzioni
-                    const { getTemplateTranslations } = await import('../../../services/ProjectDataService');
-                    const templateTranslations = await getTemplateTranslations(translationGuids);
-
-                    // 2. PRE-ASSEMBLY del DDT (in background!)
-                    const { assembleFinalDDT } = await import('../../DialogueDataTemplateBuilder/DDTWizard/assembleFinal');
-                    const { buildArtifactStore } = await import('../../DialogueDataTemplateBuilder/DDTWizard/artifactStore');
-
-                    const emptyStore = buildArtifactStore([]);
-                    const projectLang = (localStorage.getItem('project.lang') || 'pt') as 'en' | 'it' | 'pt';
-
-                    const preAssembledDDT = await assembleFinalDDT(
-                      schema.label || 'Data',
-                      schema.mainData || [],
-                      emptyStore,
-                      {
-                        escalationCounts: { noMatch: 2, noInput: 2, confirmation: 2 },
-                        templateTranslations: templateTranslations,
-                        projectLocale: projectLang,
-                        addTranslations: () => { } // Idempotente
-                      }
-                    );
-
-                    // ✅ SALVA IN CACHE!
-                    if (templateId) {
-                      preAssembledDDTCache.current.set(templateId, {
-                        ddt: preAssembledDDT,
-                        _templateTranslations: templateTranslations
-                      });
-                    }
-
-                    // ✅ Aggiorna inferenceResult con traduzioni + DDT pre-assemblato
-                    setInferenceResult((prev: any) => ({
-                      ...prev,
-                      ai: {
-                        ...prev?.ai,
-                        templateTranslations: templateTranslations,
-                        preAssembledDDT: preAssembledDDT
-                      }
-                    }));
-                  } catch (err) {
-                    console.error('[ResponseEditor] Errore pre-assemblaggio:', err);
-                  }
-                })();
-              }
-            }
-
-            return; // ✅ Euristica trovata, non chiamare API
-          }
-
-          // ✅ SECONDO: Se euristica non trova nulla, allora avvia inferenza AI
-          setIsInferring(true); // ✅ Mostra messaggio "Sto cercando..." solo durante inferenza AI
-
-          // ✅ IIFE async per gestire inferenza AI
-          (async () => {
-            // ✅ Chiama API con timeout
-            const performAPICall = async () => {
-              try {
-                const timeoutPromise = new Promise((_, reject) => {
-                  setTimeout(() => reject(new Error('Inference timeout')), 10000); // 10 secondi
-                });
-
-                const fetchPromise = fetch('/step2-with-provider', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    userDesc: taskLabel, // ✅ RINOMINATO: actLabel → taskLabel
-                    provider: selectedProvider.toLowerCase(),
-                    model: selectedModel
-                  }),
-                });
-
-                const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
-
-                if (response.ok) {
-                  const result = await response.json();
-                  // ✅ API success → apri wizard con risultato (step 'heuristic-confirm')
-                  setInferenceResult(result);
-                  setShowWizard(true);
-                  wizardOwnsDataRef.current = true;
-                } else {
-                  // ✅ API fallita → apri wizard con step 'input' ("Describe in detail...")
-                  setInferenceResult(null);
-                  setShowWizard(true);
-                  wizardOwnsDataRef.current = true;
-                }
-              } catch (error) {
-                console.error('[ResponseEditor] Errore inferenza API:', error);
-                // ✅ API fallita → apri wizard con step 'input' ("Describe in detail...")
-                setInferenceResult(null);
-                setShowWizard(true);
-                wizardOwnsDataRef.current = true;
-              } finally {
-                setIsInferring(false);
-              }
-            };
-
-            performAPICall();
-          })(); // ✅ Fine IIFE async per inferenza AI
-        })(); // ✅ Fine IIFE esterna per euristica
-        return; // ✅ IMPORTANTE: esci dall'useEffect dopo aver avviato l'inferenza
-      }
-
-      // ✅ QUARTO: Se non era necessaria l'inferenza (testo troppo corto o già tentato), apri il wizard
-      if (!shouldInfer) {
-        inferenceStartedRef.current = inferenceKey;
-        setShowWizard(true);
-        wizardOwnsDataRef.current = true;
-      }
-    }
-
-    if (!empty && wizardOwnsDataRef.current && showWizard) {
-      // DDT is complete and wizard had ownership → close wizard
-      setShowWizard(false);
-      inferenceStartedRef.current = null; // Reset quando il wizard viene chiuso
-    }
-  }, [
-    ddt?.label ?? null,
-    ddt?.mainData?.length ?? 0,
-    task?.id ?? null,
-    task?.instanceId ?? null,
-    task?.type ?? TaskType.UNDEFINED,
-    task?.label ?? null,
-    isInferring ?? false,
-    inferenceResult?.ai?.schema?.label ?? null,
-    selectedProvider ?? null,
-    selectedModel ?? null,
-    showWizard ?? false
-  ]); // ✅ Tutti i valori hanno default per mantenere dimensione costante dell'array
-
-  // Track introduction separately - usa ddtRef.current
-  const introduction = useMemo(() => ddtRef.current?.introduction, [ddtVersion, ddt?.introduction]);
+  const introduction = useMemo(() => {
+    return ddtRef.current?.introduction ?? null;
+  }, [stableDdtVersion, stableIntroduction ?? null]); // ✅ Assicura che stableIntroduction sia sempre definito
 
   // Persist explicitly on close only (avoid side-effects/flicker on unmount)
   const handleEditorClose = React.useCallback(async () => {
@@ -829,7 +589,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
             taskInstance = taskRepository.createTask(taskType, null, undefined, key, currentProjectId || undefined);
           }
 
-          const currentTemplateId = getTemplateId(task);
+          const currentTemplateId = getTemplateId(taskInstance);
 
           // ✅ CASE-INSENSITIVE - AWAIT OBBLIGATORIO: non chiudere finché non è salvato
           if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
@@ -921,27 +681,27 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
       currentMainListLength: currentMainList.length
     });
 
-      if (currentMainList.length === 0) {
-        console.log('[DEBUG_NODE_LOAD] SKIP: currentMainList is empty');
-        return;
+    if (currentMainList.length === 0) {
+      console.log('[DEBUG_NODE_LOAD] SKIP: currentMainList is empty');
+      return;
+    }
+
+    try {
+      if (localStorage.getItem('debug.nodeSync') === '1') {
+        console.log('[NODE_SYNC][LOAD] 🔄 Loading node from ddt', {
+          selectedMainIndex,
+          selectedSubIndex,
+          selectedRoot,
+          mainListLength: currentMainList.length
+        });
       }
+    } catch { }
 
-      try {
-        if (localStorage.getItem('debug.nodeSync') === '1') {
-          console.log('[NODE_SYNC][LOAD] 🔄 Loading node from ddt', {
-            selectedMainIndex,
-            selectedSubIndex,
-            selectedRoot,
-            mainListLength: currentMainList.length
-          });
-        }
-      } catch {}
-
-      if (selectedRoot) {
-        const introStep = ddtRef.current?.introduction
-          ? { type: 'introduction', escalations: ddtRef.current.introduction.escalations }
-          : { type: 'introduction', escalations: [] };
-        const newNode = { ...ddtRef.current, steps: [introStep] };
+    if (selectedRoot) {
+      const introStep = ddtRef.current?.introduction
+        ? { type: 'introduction', escalations: ddtRef.current.introduction.escalations }
+        : { type: 'introduction', escalations: [] };
+      const newNode = { ...ddtRef.current, steps: [introStep] };
 
       try {
         if (localStorage.getItem('debug.nodeSync') === '1') {
@@ -952,15 +712,15 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
             tasksCount
           });
         }
-      } catch {}
+      } catch { }
 
       setSelectedNode(newNode);
-        setSelectedNodePath(null);
-      } else {
-        // Usa currentMainList invece di mainList per leggere sempre l'ultima versione
-        const node = selectedSubIndex == null
-          ? currentMainList[selectedMainIndex]
-          : getSubDataList(currentMainList[selectedMainIndex])?.[selectedSubIndex];
+      setSelectedNodePath(null);
+    } else {
+      // Usa currentMainList invece di mainList per leggere sempre l'ultima versione
+      const node = selectedSubIndex == null
+        ? currentMainList[selectedMainIndex]
+        : getSubDataList(currentMainList[selectedMainIndex])?.[selectedSubIndex];
 
       if (node) {
         // 🔴 LOG CHIRURGICO 3 (continuazione): Dettagli del nodo caricato
@@ -1130,7 +890,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
           selectedNodePath
         });
       }
-    } catch {}
+    } catch { }
 
     setSelectedNode((prev: any) => {
       if (!prev || !selectedNodePath) return prev;
@@ -1243,9 +1003,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
                   // ✅ Estrai solo campi modificati rispetto al template (override)
                   // Questo evita duplicazione: constraints/examples/nlpContract vengono salvati
                   // solo se sono stati modificati rispetto al template
-                  const modifiedFields = await extractModifiedDDTFields(task, updatedDDT);
+                  const taskInstance = taskRepository.getTask(key);
+                  const modifiedFields = await extractModifiedDDTFields(taskInstance, updatedDDT);
 
-                  const currentTemplateId = getTemplateId(task);
+                  const currentTemplateId = getTemplateId(taskInstance);
 
                   if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
                     await taskRepository.updateTask(key, {
@@ -1297,7 +1058,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
             tasksCount
           });
         }
-      } catch {}
+      } catch { }
 
       return updated;
     });
@@ -1396,7 +1157,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
 
   // Layout
   return (
-    <div ref={rootRef} className={combinedClass} style={{ height: '100%', maxHeight: '100%', background: '#0b0f17', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div ref={rootRef} className={combinedClass} style={{ background: '#0b0f17', display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1, minHeight: 0 }}>
 
       {/* Header sempre visibile (minimale durante wizard, completo dopo) - nascosto quando in docking mode */}
       {!hideHeader && (
@@ -1413,8 +1174,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
       {(() => {
         return null;
       })()}
-      <div style={{ display: 'flex', flex: 1, minHeight: 0, maxHeight: '100%' }}>
-        {task?.type === TaskType.Summarizer && isDDTEmpty(ddt) ? (
+      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+        {false && isDDTEmpty(ddt) ? ( // Summarizer not yet implemented
           /* Placeholder for Summarizer when DDT is empty */
           <div className={combinedClass} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '24px', color: '#e2e8f0', lineHeight: 1.6 }}>
             <div style={{ maxWidth: '800px', margin: '0 auto' }}>
@@ -1438,7 +1199,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
               </div>
             </div>
           </div>
-        ) : task?.type === TaskType.Negotiation && isDDTEmpty(ddt) ? (
+        ) : false && isDDTEmpty(ddt) ? ( // Negotiation not yet implemented
           /* Placeholder for Negotiation when DDT is empty */
           <div className={combinedClass} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '24px', color: '#e2e8f0', lineHeight: 1.6 }}>
             <div style={{ maxWidth: '800px', margin: '0 auto' }}>
@@ -1509,7 +1270,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
             return (
               <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
                 <DDTWizard
-                  taskType={task?.type} // ✅ Passa tipo task per filtrare template nello step 1
+                  taskType={task?.type ? String(task.type) : undefined} // ✅ Convert TaskType enum to string
                   initialDDT={inferenceResult?.ai?.schema ? {
                     // ✅ Pre-compila con il risultato dell'inferenza
                     id: ddt?.id || `temp_ddt_${task?.id}`,
@@ -1540,7 +1301,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
                     // Il wizard ha già assemblato il DDT, quindi non deve riaprirsi
                     // Non controllare isEmpty qui perché potrebbe causare race conditions
                     setShowWizard(false);
-                    inferenceStartedRef.current = null; // Reset quando il wizard viene completato
+                    // ✅ NOTE: inferenceStartedRef è gestito internamente da useWizardInference
 
                     setLeftPanelMode('actions'); // Force show TaskList (now in Tasks panel)
                     // ✅ selectedStepKey è ora gestito internamente da BehaviourEditor
@@ -1570,10 +1331,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
                   const key = ((task as any)?.instanceId || task?.id) as string;
                   // ✅ MIGRATION: Use getTemplateId() helper
                   // ✅ FIX: Se c'è un DDT, assicurati che il templateId sia 'DataRequest'
-                  const task = taskRepository.getTask(key);
+                  const taskInstance = taskRepository.getTask(key);
                   const hasDDT = updatedDDT && Object.keys(updatedDDT).length > 0 && updatedDDT.mainData && updatedDDT.mainData.length > 0;
-                  if (hasDDT && task) {
-                    const currentTemplateId = getTemplateId(task);
+                  if (hasDDT && taskInstance) {
+                    const currentTemplateId = getTemplateId(taskInstance);
                     // ✅ CASE-INSENSITIVE
                     // ✅ Update task con campi DDT direttamente (niente wrapper value)
                     if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
@@ -1615,129 +1376,167 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
           /* Normal editor layout with 3 panels (no header, already shown above) */
           <>
             {/* ✅ Left navigation - IntentListEditor quando kind === "intent", Sidebar altrimenti */}
+            {/* ✅ ARCHITETTURA ESPERTO: Mostra Sidebar anche se mainList è vuoto inizialmente (DDT in loading) */}
             {mainList[0]?.kind === 'intent' && task && (
               <IntentListEditorWrapper
-                task={task}
+                act={task as any}
                 onIntentSelect={(intentId) => {
                   // Store selected intent ID in state to pass to EmbeddingEditor
                   setSelectedIntentIdForTraining(intentId);
                 }}
               />
             )}
+            {/* ✅ ARCHITETTURA ESPERTO: Mostra Sidebar anche durante loading (mostrerà placeholder se mainList vuoto) */}
             {mainList[0]?.kind !== 'intent' && (
-              <Sidebar
-                ref={sidebarRef}
-                mainList={mainList}
-                selectedMainIndex={selectedMainIndex}
-                onSelectMain={handleSelectMain}
-                selectedSubIndex={selectedSubIndex}
-                onSelectSub={handleSelectSub}
-                aggregated={isAggregatedAtomic}
-                rootLabel={ddt?.label || 'Data'}
-                onChangeSubRequired={(mIdx: number, sIdx: number, required: boolean) => {
-                  // Persist required flag on the exact sub (by indices), independent of current selection
-                  const next = JSON.parse(JSON.stringify(ddt));
-                  const mains = getMainDataList(next);
-                  const main = mains[mIdx];
-                  if (!main) return;
-                  const subList = Array.isArray(main.subData) ? main.subData : [];
-                  if (sIdx < 0 || sIdx >= subList.length) return;
-                  subList[sIdx] = { ...subList[sIdx], required };
-                  main.subData = subList;
-                  mains[mIdx] = main;
-                  next.mainData = mains;
-                  try {
-                    const subs = getSubDataList(main) || [];
-                    const target = subs[sIdx];
-                    if (localStorage.getItem('debug.responseEditor') === '1') console.log('[DDT][subRequiredToggle][persist]', { main: main?.label, label: target?.label, required });
-                  } catch { }
-                  try { replaceSelectedDDT(next); } catch { }
-                }}
-                onReorderSub={(mIdx: number, fromIdx: number, toIdx: number) => {
-                  const next = JSON.parse(JSON.stringify(ddt));
-                  const mains = getMainDataList(next);
-                  const main = mains[mIdx];
-                  if (!main) return;
-                  const subList = Array.isArray(main.subData) ? main.subData : [];
-                  if (fromIdx < 0 || fromIdx >= subList.length || toIdx < 0 || toIdx >= subList.length) return;
-                  const [moved] = subList.splice(fromIdx, 1);
-                  subList.splice(toIdx, 0, moved);
-                  main.subData = subList;
-                  mains[mIdx] = main;
-                  next.mainData = mains;
-                  try { if (localStorage.getItem('debug.responseEditor') === '1') console.log('[DDT][subReorder][persist]', { main: main?.label, fromIdx, toIdx }); } catch { }
-                  try { replaceSelectedDDT(next); } catch { }
-                }}
-                onAddMain={(label: string) => {
-                  const next = JSON.parse(JSON.stringify(ddt));
-                  const mains = getMainDataList(next);
-                  mains.push({ label, subData: [] });
-                  next.mainData = mains;
-                  try { replaceSelectedDDT(next); } catch { }
-                }}
-                onRenameMain={(mIdx: number, label: string) => {
-                  const next = JSON.parse(JSON.stringify(ddt));
-                  const mains = getMainDataList(next);
-                  if (!mains[mIdx]) return;
-                  mains[mIdx].label = label;
-                  next.mainData = mains;
-                  try { replaceSelectedDDT(next); } catch { }
-                }}
-                onDeleteMain={(mIdx: number) => {
-                  const next = JSON.parse(JSON.stringify(ddt));
-                  const mains = getMainDataList(next);
-                  if (mIdx < 0 || mIdx >= mains.length) return;
-                  mains.splice(mIdx, 1);
-                  next.mainData = mains;
-                  try { replaceSelectedDDT(next); } catch { }
-                }}
-                onAddSub={(mIdx: number, label: string) => {
-                  const next = JSON.parse(JSON.stringify(ddt));
-                  const mains = getMainDataList(next);
-                  const main = mains[mIdx];
-                  if (!main) return;
-                  const list = Array.isArray(main.subData) ? main.subData : [];
-                  list.push({ label, required: true });
-                  main.subData = list;
-                  mains[mIdx] = main;
-                  next.mainData = mains;
-                  try { replaceSelectedDDT(next); } catch { }
-                }}
-                onRenameSub={(mIdx: number, sIdx: number, label: string) => {
-                  const next = JSON.parse(JSON.stringify(ddt));
-                  const mains = getMainDataList(next);
-                  const main = mains[mIdx];
-                  if (!main) return;
-                  const list = Array.isArray(main.subData) ? main.subData : [];
-                  if (sIdx < 0 || sIdx >= list.length) return;
-                  list[sIdx] = { ...(list[sIdx] || {}), label };
-                  main.subData = list;
-                  mains[mIdx] = main;
-                  next.mainData = mains;
-                  try { replaceSelectedDDT(next); } catch { }
-                }}
-                onDeleteSub={(mIdx: number, sIdx: number) => {
-                  const next = JSON.parse(JSON.stringify(ddt));
-                  const mains = getMainDataList(next);
-                  const main = mains[mIdx];
-                  if (!main) return;
-                  const list = Array.isArray(main.subData) ? main.subData : [];
-                  if (sIdx < 0 || sIdx >= list.length) return;
-                  list.splice(sIdx, 1);
-                  main.subData = list;
-                  mains[mIdx] = main;
-                  next.mainData = mains;
-                  try { replaceSelectedDDT(next); } catch { }
-                }}
-                onSelectAggregator={handleSelectAggregator}
-              />
+              <>
+                <Sidebar
+                  ref={sidebarRef}
+                  mainList={mainList} // ✅ mainList viene calcolato da ddt prop quando disponibile
+                  selectedMainIndex={selectedMainIndex}
+                  onSelectMain={handleSelectMain}
+                  selectedSubIndex={selectedSubIndex}
+                  onSelectSub={handleSelectSub}
+                  aggregated={isAggregatedAtomic}
+                  rootLabel={ddt?.label || 'Data'}
+                  style={sidebarManualWidth ? { width: sidebarManualWidth, flexShrink: 0 } : { flexShrink: 0 }} // ✅ FIX: passa sempre style, ma width solo se c'è manualWidth
+                  onChangeSubRequired={(mIdx: number, sIdx: number, required: boolean) => {
+                    // Persist required flag on the exact sub (by indices), independent of current selection
+                    const next = JSON.parse(JSON.stringify(ddt));
+                    const mains = getMainDataList(next);
+                    const main = mains[mIdx];
+                    if (!main) return;
+                    const subList = Array.isArray(main.subData) ? main.subData : [];
+                    if (sIdx < 0 || sIdx >= subList.length) return;
+                    subList[sIdx] = { ...subList[sIdx], required };
+                    main.subData = subList;
+                    mains[mIdx] = main;
+                    next.mainData = mains;
+                    try {
+                      const subs = getSubDataList(main) || [];
+                      const target = subs[sIdx];
+                      if (localStorage.getItem('debug.responseEditor') === '1') console.log('[DDT][subRequiredToggle][persist]', { main: main?.label, label: target?.label, required });
+                    } catch { }
+                    try { replaceSelectedDDT(next); } catch { }
+                  }}
+                  onReorderSub={(mIdx: number, fromIdx: number, toIdx: number) => {
+                    const next = JSON.parse(JSON.stringify(ddt));
+                    const mains = getMainDataList(next);
+                    const main = mains[mIdx];
+                    if (!main) return;
+                    const subList = Array.isArray(main.subData) ? main.subData : [];
+                    if (fromIdx < 0 || fromIdx >= subList.length || toIdx < 0 || toIdx >= subList.length) return;
+                    const [moved] = subList.splice(fromIdx, 1);
+                    subList.splice(toIdx, 0, moved);
+                    main.subData = subList;
+                    mains[mIdx] = main;
+                    next.mainData = mains;
+                    try { if (localStorage.getItem('debug.responseEditor') === '1') console.log('[DDT][subReorder][persist]', { main: main?.label, fromIdx, toIdx }); } catch { }
+                    try { replaceSelectedDDT(next); } catch { }
+                  }}
+                  onAddMain={(label: string) => {
+                    const next = JSON.parse(JSON.stringify(ddt));
+                    const mains = getMainDataList(next);
+                    mains.push({ label, subData: [] });
+                    next.mainData = mains;
+                    try { replaceSelectedDDT(next); } catch { }
+                  }}
+                  onRenameMain={(mIdx: number, label: string) => {
+                    const next = JSON.parse(JSON.stringify(ddt));
+                    const mains = getMainDataList(next);
+                    if (!mains[mIdx]) return;
+                    mains[mIdx].label = label;
+                    next.mainData = mains;
+                    try { replaceSelectedDDT(next); } catch { }
+                  }}
+                  onDeleteMain={(mIdx: number) => {
+                    const next = JSON.parse(JSON.stringify(ddt));
+                    const mains = getMainDataList(next);
+                    if (mIdx < 0 || mIdx >= mains.length) return;
+                    mains.splice(mIdx, 1);
+                    next.mainData = mains;
+                    try { replaceSelectedDDT(next); } catch { }
+                  }}
+                  onAddSub={(mIdx: number, label: string) => {
+                    const next = JSON.parse(JSON.stringify(ddt));
+                    const mains = getMainDataList(next);
+                    const main = mains[mIdx];
+                    if (!main) return;
+                    const list = Array.isArray(main.subData) ? main.subData : [];
+                    list.push({ label, required: true });
+                    main.subData = list;
+                    mains[mIdx] = main;
+                    next.mainData = mains;
+                    try { replaceSelectedDDT(next); } catch { }
+                  }}
+                  onRenameSub={(mIdx: number, sIdx: number, label: string) => {
+                    const next = JSON.parse(JSON.stringify(ddt));
+                    const mains = getMainDataList(next);
+                    const main = mains[mIdx];
+                    if (!main) return;
+                    const list = Array.isArray(main.subData) ? main.subData : [];
+                    if (sIdx < 0 || sIdx >= list.length) return;
+                    list[sIdx] = { ...(list[sIdx] || {}), label };
+                    main.subData = list;
+                    mains[mIdx] = main;
+                    next.mainData = mains;
+                    try { replaceSelectedDDT(next); } catch { }
+                  }}
+                  onDeleteSub={(mIdx: number, sIdx: number) => {
+                    const next = JSON.parse(JSON.stringify(ddt));
+                    const mains = getMainDataList(next);
+                    const main = mains[mIdx];
+                    if (!main) return;
+                    const list = Array.isArray(main.subData) ? main.subData : [];
+                    if (sIdx < 0 || sIdx >= list.length) return;
+                    list.splice(sIdx, 1);
+                    main.subData = list;
+                    mains[mIdx] = main;
+                    next.mainData = mains;
+                    try { replaceSelectedDDT(next); } catch { }
+                  }}
+                  onSelectAggregator={handleSelectAggregator}
+                />
+                {/* ✅ REFACTOR: Resizer verticale tra Sidebar e contenuto principale - sempre visibile */}
+                <div
+                  onMouseDown={(e) => {
+                    if (DEBUG_RESIZE) console.log('🖱️ [SIDEBAR_RESIZE] onMouseDown sul resizer', {
+                      clientX: e.clientX,
+                      button: e.button,
+                      buttons: e.buttons,
+                      target: e.target,
+                      currentTarget: e.currentTarget,
+                    });
+                    handleSidebarResizeStart(e);
+                  }}
+                  onMouseEnter={() => {
+                    if (DEBUG_RESIZE) console.log('👆 [SIDEBAR_RESIZE] Mouse enter resizer');
+                  }}
+                  onMouseLeave={() => {
+                    if (DEBUG_RESIZE) console.log('👋 [SIDEBAR_RESIZE] Mouse leave resizer');
+                  }}
+                  style={{
+                    width: 8,
+                    cursor: 'col-resize',
+                    background: isDraggingSidebar ? '#fb923c' : '#fb923c22',
+                    transition: 'background 0.15s ease',
+                    flexShrink: 0,
+                    position: 'relative',
+                    zIndex: isDraggingSidebar ? 100 : 10, // ✅ z-index più alto
+                    userSelect: 'none',
+                    WebkitUserSelect: 'none',
+                    touchAction: 'none',
+                  }}
+                  aria-label="Resize sidebar"
+                  role="separator"
+                />
+              </>
             )}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
               {/* Content */}
-              <div style={{ display: 'flex', minHeight: 0, flex: 1, maxHeight: '100%' }}>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, maxHeight: '100%', padding: showMessageReview ? '8px' : '8px 8px 0 8px' }}>
+              <div style={{ display: 'flex', minHeight: 0, flex: 1 }}>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, padding: showMessageReview ? '8px' : '8px 8px 0 8px' }}>
                   {showMessageReview ? (
-                    <div style={{ flex: 1, minHeight: 0, maxHeight: '100%', background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #e0d7f7', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+                    <div style={{ flex: 1, minHeight: 0, background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #e0d7f7', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
                         <MessageReviewView node={selectedNode} translations={localTranslations} updateSelectedNode={updateSelectedNode} />
                       </div>
@@ -1824,11 +1623,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
                       translations={localTranslations}
                       selectedNode={selectedNode}
                       onUpdateDDT={(updater) => {
-                        setLocalDDT((prev: any) => {
-                          const updated = updater(prev);
-                          try { replaceSelectedDDT(updated); } catch { }
-                          return updated;
-                        });
+                        const updated = updater(ddt);
+                        try { replaceSelectedDDT(updated); } catch { }
                       }}
                     />
                     {/* ✅ Splitter condiviso tra Test e Tasks - ridimensiona entrambi i pannelli */}
@@ -1892,12 +1688,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, hideHeader,
   );
 }
 
-import type { TaskMeta } from '../EditorHost/types'; // ✅ Import TaskMeta
-
-export default function ResponseEditor({ ddt, onClose, onWizardComplete, task, hideHeader, onToolbarUpdate, tabId, setDockTree }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, task?: TaskMeta, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void }) { // ✅ RINOMINATO: act → task, type: string → TaskMeta
+export default function ResponseEditor({ ddt, onClose, onWizardComplete, task, isDdtLoading, hideHeader, onToolbarUpdate, tabId, setDockTree }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, task?: TaskMeta | Task, isDdtLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void }) {
   return (
     <FontProvider>
-      <ResponseEditorInner ddt={ddt} onClose={onClose} onWizardComplete={onWizardComplete} task={task} hideHeader={hideHeader} onToolbarUpdate={onToolbarUpdate} tabId={tabId} setDockTree={setDockTree} /> {/* ✅ RINOMINATO: act → task */}
+      <ResponseEditorInner ddt={ddt} onClose={onClose} onWizardComplete={onWizardComplete} task={task} isDdtLoading={isDdtLoading} hideHeader={hideHeader} onToolbarUpdate={onToolbarUpdate} tabId={tabId} setDockTree={setDockTree} /> {/* ✅ ARCHITETTURA ESPERTO: Passa isDdtLoading */}
     </FontProvider>
   );
 }

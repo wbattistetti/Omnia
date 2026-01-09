@@ -302,7 +302,7 @@ export default function NLPExtractorProfileEditor({
   }, [task?.instanceId, nodeKind, updateExamplesList]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', minHeight: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0 }}>
       {/* ✅ Toolbar per kind === 'intent' - spostata sopra RecognitionEditor */}
       {isIntentKind && (
         <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>

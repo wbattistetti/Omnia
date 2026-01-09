@@ -20,9 +20,9 @@ interface NodeRowActionsOverlayProps {
   isCondition?: boolean;
   onWrenchClick?: () => void;
   onOpenDDT?: () => void;
-  // NEW: act type icon and handler to open inline picker
-  ActIcon?: React.ComponentType<any> | null;
-  actColor?: string; // iconColor della riga (grigio se no DDT/messaggio, colorato se ha DDT/messaggio)
+  // NEW: task type icon and handler to open inline picker
+  TaskIcon?: React.ComponentType<any> | null; // ✅ RINOMINATO: ActIcon → TaskIcon
+  taskColor?: string; // ✅ RINOMINATO: actColor → taskColor - iconColor della riga (grigio se no DDT/messaggio, colorato se ha DDT/messaggio)
   onTypeChangeRequest?: (anchor: DOMRect) => void;
   onRequestClosePicker?: () => void;
   buttonCloseTimeoutRef?: React.MutableRefObject<NodeJS.Timeout | null>;
@@ -49,8 +49,8 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
   isCondition,
   onWrenchClick,
   onOpenDDT,
-  ActIcon,
-  actColor,
+  TaskIcon, // ✅ RINOMINATO: ActIcon → TaskIcon
+  taskColor, // ✅ RINOMINATO: actColor → taskColor
   onTypeChangeRequest,
   onRequestClosePicker,
   buttonCloseTimeoutRef,
@@ -90,9 +90,9 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
       onMouseEnter={() => { onHoverChange && onHoverChange(true); }}
       onMouseLeave={() => { onHoverChange && onHoverChange(false); }}
     >
-      {/* Current ActType icon → opens inline type picker below */}
-      {ActIcon && (
-        <SmartTooltip text="Change act type" tutorId="act_type_help" placement="top">
+      {/* Current TaskType icon → opens inline type picker below */}
+      {TaskIcon && ( // ✅ RINOMINATO: ActIcon → TaskIcon
+        <SmartTooltip text="Change task type" tutorId="task_type_help" placement="top">
           <button
             onMouseDown={(e) => {
               e.preventDefault();
@@ -137,11 +137,11 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
             }}
             className="hover:opacity-100 hover:scale-110"
           >
-            <ActIcon style={{
+            <TaskIcon style={{ // ✅ RINOMINATO: ActIcon → TaskIcon
               width: size,
               height: size,
-              color: (!included) ? '#9ca3af' : (actColor || '#94a3b8'), // Grigio se unchecked
-              filter: (included && actColor && actColor !== '#94a3b8') ? 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' : undefined
+              color: (!included) ? '#9ca3af' : (taskColor || '#94a3b8'), // ✅ RINOMINATO: actColor → taskColor - Grigio se unchecked
+              filter: (included && taskColor && taskColor !== '#94a3b8') ? 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' : undefined // ✅ RINOMINATO: actColor → taskColor
             }} />
           </button>
         </SmartTooltip>

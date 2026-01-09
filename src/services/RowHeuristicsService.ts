@@ -142,8 +142,9 @@ export class RowHeuristicsService {
   /**
    * Deduce TaskType dal template DialogueTask
    * I template hanno type come numero (enum) o stringa
+   * ✅ PUBLIC: Usato anche in NodeRow per verificare se template è DataRequest
    */
-  private static getTemplateType(template: any): TaskType {
+  public static getTemplateType(template: any): TaskType {
     // Template.type può essere:
     // - numero (enum): 1 = SayMessage, 3 = DataRequest, ecc.
     // - stringa: 'DataRequest', 'Message', ecc.

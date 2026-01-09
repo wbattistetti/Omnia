@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { NodeRowData, EntityType } from '../../../../../types/project';
-import { typeToMode } from '../../../../../utils/normalizers';
+// ❌ RIMOSSO: typeToMode - usa TaskType enum direttamente
 
 interface UseInternalRowManagerProps {
     nodeId: string;
@@ -53,7 +53,7 @@ export function useInternalRowManager({ nodeId, normalizedData, displayRows }: U
             id: newRowId,
             text: '',
             included: true,
-            mode: 'Message' as const
+            type: TaskType.SayMessage // ✅ TaskType enum instead of mode
         };
         return { nextRows: [...rows, newRow], newRowId };
     }, [makeRowId]);
@@ -124,13 +124,13 @@ export function useInternalRowManager({ nodeId, normalizedData, displayRows }: U
             const existingType: any = (r as any).type;
             const finalType: any = (typeof incoming.type !== 'undefined') ? incoming.type : existingType;
             const existingMode: any = (r as any).mode;
-            const finalMode: any = (typeof incoming.mode !== 'undefined') ? incoming.mode : (existingMode || (finalType ? typeToMode(finalType as any) : undefined));
+            // ✅ mode removed - use type (TaskType enum) only
 
             return {
                 ...r,
                 ...incoming,
                 type: finalType,
-                mode: finalMode,
+                // ✅ mode removed - use type (TaskType enum) only
                 text: newText,
                 categoryType: (meta && (meta as any).categoryType) ? (meta as any).categoryType : (categoryType ?? r.categoryType)
             } as any;
