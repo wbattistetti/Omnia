@@ -56,6 +56,9 @@ export function extractTranslationGuids(mainData: any[]): string[] {
 /**
  * Crea un'istanza subData da un template
  * Filtra stepPrompts: solo start, noInput, noMatch per sottodati
+ *
+ * ✅ Design-time: referenceId viene dal template.mainData[0].id
+ * Questo referenceId sarà scritto nell'istanza e usato a runtime
  */
 export function createSubDataInstance(subTemplate: any): any {
   const filteredStepPrompts: any = {};
@@ -71,6 +74,16 @@ export function createSubDataInstance(subTemplate: any): any {
     }
   }
 
+  // ✅ Get referenceId from the referenced template's mainData[0].id
+  // This is the dataId that will be used in memory at runtime
+  let referenceId: string | undefined;
+  if (subTemplate.mainData && Array.isArray(subTemplate.mainData) && subTemplate.mainData.length > 0) {
+    referenceId = subTemplate.mainData[0].id;
+  } else {
+    // Fallback: use template id if mainData structure not available
+    referenceId = subTemplate.id || subTemplate._id;
+  }
+
   return {
     label: subTemplate.label || subTemplate.name || 'Sub',
     type: subTemplate.type,
@@ -80,7 +93,8 @@ export function createSubDataInstance(subTemplate: any): any {
     examples: subTemplate.examples || [],
     subData: [],
     nlpContract: subTemplate.nlpContract || undefined,
-    templateId: subTemplate.id || subTemplate._id,
+    templateId: subTemplate.id || subTemplate._id, // ✅ GUID del task referenziato
+    referenceId: referenceId, // ✅ dataId del mainData[0] del template referenziato
     kind: subTemplate.name || subTemplate.type || 'generic'
   };
 }

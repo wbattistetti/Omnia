@@ -163,19 +163,26 @@ export default function RightPanel({ mode, width, onWidthChange, onStartResize, 
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
           style={{
-            width: 6,
+            width: 8,
             cursor: 'col-resize',
-            background: dragging || isHovered ? '#fb923c55' : 'transparent',
-            transition: 'background 0.1s ease',
-            zIndex: dragging ? 10 : 1, // ✅ Quando dragging, questo splitter è sopra gli altri
+            background: dragging || isHovered ? '#fb923c' : '#fb923c22',
+            transition: 'background 0.15s ease',
+            zIndex: dragging ? 100 : 10,
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            bottom: 0,
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+            touchAction: 'none',
           }}
           aria-label="Resize right panel"
           role="separator"
         />
       )}
-      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, minWidth: 0 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
         {mode === 'actions' && (
-          <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 12 }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: 12 }}>
             <TaskList />
           </div>
         )}

@@ -82,11 +82,31 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
       // - Se mainData esiste → merge: struttura dal template + override dall'instance
       if (taskInstance?.templateId && taskInstance.templateId !== 'UNDEFINED') {
         console.log('🔧 [DDTHostAdapter] Building DDT from template (with merge):', taskInstance.templateId);
+        console.log('🔧 [DDTHostAdapter] Task instance before merge:', {
+          taskId: taskInstance.id,
+          templateId: taskInstance.templateId,
+          hasMainData: !!taskInstance.mainData,
+          mainDataLength: taskInstance.mainData?.length || 0,
+          firstMainDataOverride: taskInstance.mainData?.[0] ? {
+            templateId: taskInstance.mainData[0].templateId,
+            label: taskInstance.mainData[0].label,
+            hasSteps: !!taskInstance.mainData[0].steps,
+            stepsType: typeof taskInstance.mainData[0].steps,
+            stepsKeys: typeof taskInstance.mainData[0].steps === 'object' ? Object.keys(taskInstance.mainData[0].steps || {}) : [],
+            stepsLength: Array.isArray(taskInstance.mainData[0].steps) ? taskInstance.mainData[0].steps.length : 0
+          } : null
+        });
         const merged = await loadDDTFromTemplate(taskInstance);
         console.log('🔧 [DDTHostAdapter] Merged DDT:', {
           hasDDT: !!merged,
           label: merged?.label,
-          mainDataLength: merged?.mainData?.length || 0
+          mainDataLength: merged?.mainData?.length || 0,
+          firstMainDataSteps: merged?.mainData?.[0]?.steps ? {
+            type: typeof merged.mainData[0].steps,
+            isArray: Array.isArray(merged.mainData[0].steps),
+            keys: typeof merged.mainData[0].steps === 'object' ? Object.keys(merged.mainData[0].steps || {}) : [],
+            length: Array.isArray(merged.mainData[0].steps) ? merged.mainData[0].steps.length : 0
+          } : null
         });
         setDdt(merged);
       } else if (taskInstance?.mainData && taskInstance.mainData.length > 0) {

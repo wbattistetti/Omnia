@@ -9,6 +9,32 @@ import type { AssembledDDT, MainDataNode, DDTNavigatorCallbacks } from './types'
 import { getStep, getEscalationRecovery, executeStep } from './ddtSteps';
 import { loadContract, findOriginalNode, getSubIdForCanonicalKey } from './utils';
 
+// ✅ Import taskSemantics helper (shared between frontend and backend)
+// Note: This assumes the backend can import from src/utils. If not, create a copy in backend/runtime/utils/
+// For now, we'll create a local version to avoid path issues
+function getTaskSemantics(ddt: any): 'Atomic' | 'CompositeData' | 'Collection' {
+  const mainDataList = Array.isArray(ddt.mainData)
+    ? ddt.mainData
+    : ddt.mainData
+    ? [ddt.mainData]
+    : [];
+
+  if (mainDataList.length === 1 && !mainDataList[0].subData?.length) {
+    return 'Atomic';
+  }
+  if (mainDataList.length === 1 && mainDataList[0].subData?.length > 0) {
+    return 'CompositeData';
+  }
+  if (mainDataList.length > 1) {
+    const hasSubData = mainDataList.some(m => m.subData?.length > 0);
+    if (hasSubData) {
+      throw new Error('Collection cannot have mainData with subData');
+    }
+    return 'Collection';
+  }
+  return 'Atomic';
+}
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -266,7 +292,7 @@ export async function runDDT(
           confirmed: state.memory[key]?.confirmed
         }))
       });
-      
+
       // Ottieni la risposta per Confirmation
       const confirmationResponse = getResponse(
         currData,
@@ -274,16 +300,16 @@ export async function runDDT(
         counters,
         limits
       );
-      
+
       console.log('[DDTEngine][runDDT] 📋 Confirmation response prepared', {
         stepType: confirmationResponse.stepType,
         hasStepOrEscalation: !!confirmationResponse.stepOrEscalation,
         message: confirmationResponse.message
       });
-      
+
       // Esegui il messaggio di conferma
       await executeResponse(confirmationResponse, callbacks, currData, state);
-      
+
       console.log('[DDTEngine][runDDT] ✅ Confirmation message sent, continuing loop to wait for user input');
       continue; // Continua ciclo per attendere input utente (conferma o negazione)
     }
@@ -331,6 +357,11 @@ export async function runDDT(
 // 🔎 GetNextData - Trova il prossimo dato vuoto
 // ============================================================================
 
+/**
+ * Finds the next empty data to collect
+ * ✅ Handles Atomic, CompositeData, and Collection
+ * ✅ Uses referenceId from instance (not recalculated from template)
+ */
 function getNextData(
   ddtInstance: AssembledDDT,
   state: DDTEngineState
@@ -342,10 +373,15 @@ function getNextData(
     ? [ddtInstance.mainData]
     : [];
 
-  // Itera su tutti i mainData
+  // ✅ Deduce semantics from structure
+  const semantics = getTaskSemantics(ddtInstance);
+
+  // ✅ For Collection: iterate over all mainData[] (each is independent)
+  // ✅ For Atomic/CompositeData: iterate over mainData[0] and its subData
   for (const mainData of mainDataList) {
-    // Controlla se mainData è vuoto
-    const mainMemory = state.memory[mainData.id];
+    // ✅ Runtime: use referenceId from instance (not recalculated from template)
+    const mainDataId = (mainData as any).referenceId || mainData.id;
+    const mainMemory = state.memory[mainDataId];
     const mainValue = mainMemory?.value;
     const isMainEmpty =
       !mainValue ||
@@ -358,7 +394,7 @@ function getNextData(
     if (isMainEmpty) {
       return {
         mainData,
-        nodeId: mainData.id,
+        nodeId: mainDataId,
         isMain: true
       };
     }
@@ -370,21 +406,29 @@ function getNextData(
       if (!isMainConfirmed) {
         return {
           mainData,
-          nodeId: mainData.id,
+          nodeId: mainDataId,
           isMain: true
         };
       }
       // Se è confirmed, continua al prossimo mainData o controlla subData
     }
 
-    // Se mainData ha subData, controlla se qualche sub è vuoto
+    // ✅ For Collection: skip subData check (Collection cannot have subData)
+    if (semantics === 'Collection') {
+      // Collection: all mainData[] are independent, continue to next mainData
+      continue;
+    }
+
+    // ✅ For CompositeData: check if any subData is empty
     if (mainData.subData && Array.isArray(mainData.subData)) {
       const requiredSubs = mainData.subData.filter(
         (sub) => sub.required !== false
       );
 
       for (const subData of requiredSubs) {
-        const subValue = state.memory[subData.id]?.value;
+        // ✅ Runtime: use referenceId from instance (not recalculated from template)
+        const subDataId = (subData as any).referenceId || subData.id;
+        const subValue = state.memory[subDataId]?.value;
         const isSubEmpty =
           !subValue ||
           subValue === null ||
@@ -396,7 +440,7 @@ function getNextData(
           return {
             mainData,
             subData,
-            nodeId: subData.id,
+            nodeId: subDataId,
             isMain: false
           };
         }
@@ -558,7 +602,9 @@ async function executeResponse(
     if (mainData.subData && Array.isArray(mainData.subData) && mainData.subData.length > 0) {
       const values: string[] = [];
       for (const subData of mainData.subData) {
-        const subValue = state.memory[subData.id]?.value;
+        // ✅ Runtime: use referenceId from instance (not recalculated from template)
+        const subDataId = (subData as any).referenceId || subData.id;
+        const subValue = state.memory[subDataId]?.value;
         if (subValue !== undefined && subValue !== null) {
           values.push(String(subValue));
         }
@@ -570,16 +616,18 @@ async function executeResponse(
       });
     } else {
       // MainData atomico
-      const mainValue = state.memory[mainData.id]?.value;
+      // ✅ Runtime: use referenceId from instance (not recalculated from template)
+      const mainDataId = (mainData as any).referenceId || mainData.id;
+      const mainValue = state.memory[mainDataId]?.value;
       if (mainValue !== undefined && mainValue !== null) {
         inputValue = mainValue;
         console.log('[DDTEngine][executeResponse] ✅ Got input value from mainData', {
           inputValue,
-          mainDataId: mainData.id
+          mainDataId
         });
       } else {
         console.warn('[DDTEngine][executeResponse] ⚠️ No value found in memory for confirmation', {
-          mainDataId: mainData.id,
+          mainDataId,
           memoryKeys: Object.keys(state.memory || {})
         });
       }
@@ -763,18 +811,22 @@ async function processUserInput(
             // Fallback: prova a mappare usando id, label, name direttamente
             if (mappedCount === 0) {
               for (const subData of mainData.subData) {
+                // ✅ Runtime: use referenceId from instance (not recalculated from template)
+                const subDataId = (subData as any).referenceId || subData.id;
                 const subValue = recognitionResult.value[subData.id] ||
                                 recognitionResult.value[subData.label] ||
                                 recognitionResult.value[subData.name];
                 if (subValue !== undefined && subValue !== null) {
-                  updateMemory(state, subData.id, subValue);
+                  updateMemory(state, subDataId, subValue);
                   mappedCount++;
                 }
               }
             }
 
-            // Salva anche l'oggetto completo sotto mainData.id per riferimento
-            updateMemory(state, currData.nodeId, recognitionResult.value);
+            // Salva anche l'oggetto completo sotto mainData.referenceId per riferimento
+            // ✅ Runtime: use referenceId from instance (not recalculated from template)
+            const mainDataId = (currData.mainData as any).referenceId || currData.nodeId;
+            updateMemory(state, mainDataId, recognitionResult.value);
           } else {
             // MainData atomico, salva direttamente
             updateMemory(state, currData.nodeId, recognitionResult.value);
@@ -799,18 +851,26 @@ async function processUserInput(
         const mainData = currData.mainData;
         if (mainData.subData && Array.isArray(mainData.subData)) {
           for (const subData of mainData.subData) {
+            // ✅ Runtime: use referenceId from instance (not recalculated from template)
+            const subDataId = (subData as any).referenceId || subData.id;
             const subValue = recognitionResult.value[subData.id] ||
                             recognitionResult.value[subData.label] ||
                             recognitionResult.value[subData.name];
             if (subValue !== undefined && subValue !== null) {
-              updateMemory(state, subData.id, subValue);
+              updateMemory(state, subDataId, subValue);
             }
           }
-          updateMemory(state, currData.nodeId, recognitionResult.value);
+          // ✅ Runtime: use referenceId from instance (not recalculated from template)
+          const mainDataId = (mainData as any).referenceId || currData.nodeId;
+          updateMemory(state, mainDataId, recognitionResult.value);
         } else {
-          updateMemory(state, currData.nodeId, recognitionResult.value);
+          // ✅ Runtime: use referenceId from instance (not recalculated from template)
+          const mainDataId = (mainData as any).referenceId || currData.nodeId;
+          updateMemory(state, mainDataId, recognitionResult.value);
         }
       } else {
+        // ✅ Runtime: use referenceId from instance (not recalculated from template)
+        // currData.nodeId should already be referenceId if set correctly in getNextData
         updateMemory(state, currData.nodeId, recognitionResult.value);
       }
       return 'Match';
@@ -877,11 +937,15 @@ function getState(
             totalSubs: mainData.subData.length,
             missingCount: missingSubs.length,
             memoryKeys: Object.keys(state.memory),
-            subDataCheck: mainData.subData.map(s => ({
-              id: s.id.substring(0, 20) + '...',
-              inMemory: !!state.memory[s.id],
-              value: state.memory[s.id]?.value
-            }))
+            subDataCheck: mainData.subData.map(s => {
+              // ✅ Runtime: use referenceId from instance (not recalculated from template)
+              const subDataId = (s as any).referenceId || s.id;
+              return {
+                id: subDataId.substring(0, 20) + '...',
+                inMemory: !!state.memory[subDataId],
+                value: state.memory[subDataId]?.value
+              };
+            })
           });
 
           if (missingSubs.length > 0) {
@@ -1073,6 +1137,11 @@ function markAsConfirmed(state: DDTEngineState, nodeId: string): void {
   }
 }
 
+/**
+ * Finds missing required subData for a mainData node
+ * ✅ Uses referenceId from instance (not recalculated from template)
+ * ✅ Handles CompositeData: checks all subData
+ */
 function findMissingRequiredSubs(
   mainData: MainDataNode,
   memory: Record<string, { value: any; confirmed: boolean }>
@@ -1085,7 +1154,9 @@ function findMissingRequiredSubs(
 
   for (const subData of mainData.subData) {
     if (subData.required !== false) {
-      const subValue = memory[subData.id]?.value;
+      // ✅ Runtime: use referenceId from instance (not recalculated from template)
+      const dataId = (subData as any).referenceId || subData.id;
+      const subValue = memory[dataId]?.value;
       const isSubEmpty =
         !subValue ||
         subValue === null ||
@@ -1099,6 +1170,35 @@ function findMissingRequiredSubs(
   }
 
   return missingSubs;
+}
+
+/**
+ * Checks if a mainData node is saturated
+ * ✅ Uses referenceId from instance (not recalculated from template)
+ */
+function isMainDataSaturated(
+  mainData: MainDataNode,
+  memory: Record<string, { value: any; confirmed: boolean }>
+): boolean {
+  // ✅ Runtime: use referenceId from instance (not recalculated from template)
+  const dataId = (mainData as any).referenceId || mainData.id;
+  const mainValue = memory[dataId]?.value;
+  const isMainEmpty =
+    !mainValue ||
+    (typeof mainValue === 'object' && Object.keys(mainValue).length === 0) ||
+    mainValue === null ||
+    mainValue === undefined;
+
+  if (isMainEmpty) {
+    return false;
+  }
+
+  // If has subData, check all are saturated
+  if (mainData.subData && Array.isArray(mainData.subData) && mainData.subData.length > 0) {
+    return findMissingRequiredSubs(mainData, memory).length === 0;
+  }
+
+  return true;
 }
 
 function peekNextData(

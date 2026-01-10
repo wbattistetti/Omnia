@@ -114,6 +114,18 @@ export async function loadDDTFromTemplate(instance: Task | null): Promise<any | 
         // ✅ Clone steps from template with new task IDs, or use steps from instance if modified
         const steps = instanceNode.steps ?? (templateNode.steps ? cloneStepsWithNewTaskIds(templateNode.steps) : undefined);
 
+        console.log('[loadDDTFromTemplate] 🔍 Merging node from template', {
+          instanceNodeTemplateId: instanceNode.templateId,
+          instanceNodeHasSteps: !!instanceNode.steps,
+          instanceNodeStepsType: typeof instanceNode.steps,
+          instanceNodeStepsKeys: typeof instanceNode.steps === 'object' ? Object.keys(instanceNode.steps || {}) : [],
+          instanceNodeStepsLength: Array.isArray(instanceNode.steps) ? instanceNode.steps.length : 0,
+          templateNodeHasSteps: !!templateNode.steps,
+          finalStepsType: typeof steps,
+          finalStepsKeys: typeof steps === 'object' ? Object.keys(steps || {}) : [],
+          finalStepsLength: Array.isArray(steps) ? steps.length : 0
+        });
+
         return {
           ...templateNode,  // ✅ Structure from template (includes contracts/constraints)
           steps: steps,  // ✅ Clone steps with new task IDs
@@ -122,6 +134,9 @@ export async function loadDDTFromTemplate(instance: Task | null): Promise<any | 
         };
       } else {
         // Template node not found, use instance node as-is (fallback)
+        console.warn('[loadDDTFromTemplate] ⚠️ Template node not found, using instance node as-is', {
+          instanceNodeTemplateId: instanceNode.templateId
+        });
         return instanceNode;
       }
     } else {
@@ -308,6 +323,19 @@ export function buildMainDataFromTemplate(template: any): { mainData: any[]; gui
           clonedSubSteps = cloned;
         }
 
+        // ✅ Get referenceId from the referenced template's mainData[0].id
+        // This is the dataId that will be used in memory at runtime
+        let referenceId: string | undefined;
+        if (subTemplate.mainData && Array.isArray(subTemplate.mainData) && subTemplate.mainData.length > 0) {
+          referenceId = subTemplate.mainData[0].id;
+        } else {
+          // Fallback: use template id if mainData structure not available
+          referenceId = subTemplate.id || subTemplate._id;
+        }
+
+        // ✅ Validate: templateId must point to existing template (already checked above)
+        // ✅ Validate: referenceId must be a valid dataId (checked above)
+
         subDataInstances.push({
           id: subTemplate.id || subTemplate._id,
           label: subTemplate.label || subTemplate.name || 'Sub',
@@ -318,7 +346,8 @@ export function buildMainDataFromTemplate(template: any): { mainData: any[]; gui
           examples: subTemplate.examples || [],
           nlpContract: subTemplate.nlpContract || undefined,
           subData: [],
-          templateId: subTemplate.id || subTemplate._id,
+          templateId: subTemplate.id || subTemplate._id, // ✅ GUID del task referenziato
+          referenceId: referenceId, // ✅ dataId del mainData[0] del template referenziato
           kind: subTemplate.name || subTemplate.type || 'generic'
         });
       }
@@ -579,19 +608,72 @@ export function hasDataContractOverrides(instance: Task | null): boolean {
 }
 
 /**
- * Extract only modified fields from DDT (compared to template)
- * Returns DDT with only fields that differ from template (label, steps always included)
- * constraints/examples/nlpContract/introduction only included if they differ from template
+ * Compare only data structure (without logic/overrides)
+ * Returns true if structure is identical, false if different
  *
- * LOGICA CONCETTUALE:
- * - Template: contiene struttura condivisa (constraints, examples, nlpContract, introduction)
- * - Istanza: contiene SOLO override (modifiche rispetto al template)
- * - A runtime: se mancante nell'istanza → risoluzione lazy dal template (backend VB.NET)
- * - NO fallback: se template non trovato → salva tutto (non può risolvere lazy)
+ * Structure includes:
+ * - mainData[].id, label, type
+ * - mainData[].subData[] (array of referenceId/templateId)
+ * - Semantics (Atomic/Composite/Collection)
+ *
+ * Structure does NOT include:
+ * - steps, escalations (logic)
+ * - constraints, examples, nlpContract (overrides)
+ */
+function compareDataStructure(localMainData: any[], templateMainData: any[]): boolean {
+  if (localMainData.length !== templateMainData.length) {
+    return false; // Different number of mainData nodes
+  }
+
+  for (let i = 0; i < localMainData.length; i++) {
+    const localNode = localMainData[i];
+    const templateNode = templateMainData[i] || templateMainData[0]; // Fallback to first
+
+    // Compare main node structure (id, label, type, templateId, referenceId)
+    if (localNode.id !== templateNode.id ||
+        localNode.label !== templateNode.label ||
+        localNode.type !== templateNode.type ||
+        localNode.templateId !== templateNode.templateId ||
+        (localNode.referenceId || localNode.id) !== (templateNode.referenceId || templateNode.id)) {
+      return false; // Structure changed
+    }
+
+    // Compare subData structure (only referenceId/templateId, not logic)
+    const localSubData = localMainData[i].subData || [];
+    const templateSubData = templateNode.subData || [];
+
+    if (localSubData.length !== templateSubData.length) {
+      return false; // Different number of subData
+    }
+
+    for (let j = 0; j < localSubData.length; j++) {
+      const localSub = localSubData[j];
+      const templateSub = templateSubData[j];
+
+      // Compare subData structure (templateId, referenceId, label)
+      if (localSub.templateId !== templateSub.templateId ||
+          (localSub.referenceId || localSub.id) !== (templateSub.referenceId || templateSub.id) ||
+          localSub.label !== templateSub.label) {
+        return false; // Structure changed
+      }
+    }
+  }
+
+  return true; // Structure is identical
+}
+
+/**
+ * Extract only modified fields from DDT (compared to template)
+ *
+ * LOGICA CORRETTA:
+ * - Il template definisce SOLO la struttura dei dati (mainData, subData, dataId, semantica)
+ * - L'istanza definisce la logica (step, escalation, constraints, examples, nlpContract)
+ * - Se la struttura è identica → salva solo override (logica)
+ * - Se la struttura è diversa → salva tutto (derivazione rotta, diventa standalone)
  *
  * VANTAGGI:
- * - Elimina duplicazione: stesso contract salvato N volte per N istanze
- * - Aggiornamenti centralizzati: cambi template → tutte istanze usano nuovo contract
+ * - Elimina duplicazione: stessa struttura salvata N volte per N istanze
+ * - Override legittimi: step/escalation possono divergere senza rompere derivazione
  * - Performance: meno dati nel database, lookup template in memoria (O(1))
  */
 export async function extractModifiedDDTFields(instance: Task | null, localDDT: any): Promise<Partial<Task>> {
@@ -600,7 +682,6 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
   }
 
   // ✅ Se no templateId, questo è un template o istanza standalone → salva tutto
-  // (non c'è template da cui risolvere lazy)
   if (!instance.templateId) {
     return {
       label: localDDT.label,
@@ -616,7 +697,6 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
   const template = DialogueTaskService.getTemplate(instance.templateId);
   if (!template) {
     // ❌ Template non trovato → salva tutto (non può risolvere lazy)
-    // NO fallback: questo è un errore che deve essere visibile
     console.warn(`[extractModifiedDDTFields] Template ${instance.templateId} not found - saving everything (cannot resolve lazy)`);
     return {
       label: localDDT.label,
@@ -629,46 +709,163 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
   }
 
   // ✅ Salva sempre label (sempre modificabile)
-  // ✅ mainData: salva solo se contiene override (steps, constraints, examples, nlpContract)
-  // Struttura (label, type, icon) viene dal template (referenza via templateId)
   const result: Partial<Task> = {
     label: localDDT.label
   };
 
-  // ✅ Build template structure to compare
-  const { mainData: templateMainDataArray } = buildMainDataFromTemplate(template);
+  // ✅ Confronta SOLO la struttura dei dati (senza step, constraints, etc.)
+  // Usa template.mainData direttamente (non buildMainDataFromTemplate che clona già gli step)
+  // Oppure costruisci struttura base da subDataIds se template composito
+  let templateStructureForCompare: any[] = [];
 
-  // ✅ Save mainData only if it contains overrides (stepPrompts, constraints, examples, nlpContract)
-  // Structure is not saved, only overrides
-  if (localDDT.mainData && Array.isArray(localDDT.mainData) && templateMainDataArray.length > 0) {
+  if (template.mainData && Array.isArray(template.mainData) && template.mainData.length > 0) {
+    // Template ha mainData: usa direttamente (senza step, constraints, etc.)
+    templateStructureForCompare = template.mainData.map((main: any) => ({
+      id: main.id,
+      label: main.label,
+      type: main.type,
+      templateId: main.templateId,
+      referenceId: main.referenceId || main.id,
+      subData: (main.subData || []).map((sub: any) => ({
+        templateId: sub.templateId,
+        referenceId: sub.referenceId || sub.id,
+        label: sub.label
+      }))
+    }));
+  } else if (template.subDataIds && Array.isArray(template.subDataIds) && template.subDataIds.length > 0) {
+    // Template composito: costruisci struttura base (solo id, label, type, subData con templateId/referenceId)
+    templateStructureForCompare = [{
+      id: template.id || template._id,
+      label: template.label || template.name || 'Data',
+      type: template.type,
+      templateId: template.id || template._id,
+      referenceId: template.id || template._id,
+      subData: template.subDataIds.map((subId: string) => {
+        const subTemplate = DialogueTaskService.getTemplate(subId);
+        if (subTemplate) {
+          return {
+            templateId: subTemplate.id || subTemplate._id,
+            referenceId: subTemplate.mainData?.[0]?.id || subTemplate.id || subTemplate._id,
+            label: subTemplate.label || subTemplate.name || 'Sub'
+          };
+        }
+        return { templateId: subId, referenceId: subId, label: 'Sub' };
+      })
+    }];
+  }
+
+  // ✅ Normalizza localDDT.mainData per confronto (solo struttura, senza step, constraints, etc.)
+  const localStructureForCompare = (localDDT.mainData || []).map((main: any) => ({
+    id: main.id,
+    label: main.label,
+    type: main.type,
+    templateId: main.templateId,
+    referenceId: main.referenceId || main.id,
+    subData: (main.subData || []).map((sub: any) => ({
+      templateId: sub.templateId,
+      referenceId: sub.referenceId || sub.id,
+      label: sub.label
+    }))
+  }));
+
+  console.log('[extractModifiedDDTFields] 🔍 Comparing structure', {
+    localMainDataLength: localDDT.mainData?.length || 0,
+    templateMainDataLength: templateStructureForCompare.length,
+    localStructure: JSON.stringify(localStructureForCompare, null, 2).substring(0, 500),
+    templateStructure: JSON.stringify(templateStructureForCompare, null, 2).substring(0, 500)
+  });
+
+  const structureIdentical = compareDataStructure(
+    localStructureForCompare,
+    templateStructureForCompare
+  );
+
+  console.log('[extractModifiedDDTFields] ✅ Structure comparison result', {
+    structureIdentical,
+    localMainDataLength: localDDT.mainData?.length || 0
+  });
+
+  if (!structureIdentical) {
+    // ✅ Struttura diversa → derivazione rotta → salva tutto (diventa standalone)
+    console.log('[extractModifiedDDTFields] ⚠️ Structure changed - saving full mainData (derivation broken)', {
+      localMainDataLength: localDDT.mainData?.length || 0,
+      templateMainDataLength: templateStructureForCompare.length
+    });
+    return {
+      label: localDDT.label,
+      mainData: localDDT.mainData, // ✅ Salva struttura completa
+      constraints: localDDT.constraints,
+      examples: localDDT.examples,
+      nlpContract: localDDT.nlpContract,
+      introduction: localDDT.introduction
+    };
+  }
+
+  // ✅ Struttura identica → salva solo override (logica: steps, constraints, examples, nlpContract)
+  // Usa buildMainDataFromTemplate per ottenere templateNode con constraints/examples per confronto override
+  const { mainData: templateMainDataForOverride } = buildMainDataFromTemplate(template);
+
+  console.log('[extractModifiedDDTFields] ✅ Structure identical - extracting overrides only', {
+    localMainDataLength: localDDT.mainData?.length || 0,
+    templateMainDataForOverrideLength: templateMainDataForOverride.length
+  });
+
+  if (localDDT.mainData && Array.isArray(localDDT.mainData) && templateMainDataForOverride.length > 0) {
     const mainDataOverrides: any[] = [];
 
     for (let i = 0; i < localDDT.mainData.length; i++) {
       const mainNode = localDDT.mainData[i];
-      const templateNode = templateMainDataArray[i] || templateMainDataArray[0]; // Fallback to first
+      const templateNode = templateMainDataForOverride[i] || templateMainDataForOverride[0]; // Fallback to first
 
       const templateNodeConstraints = templateNode?.dataContracts || templateNode?.constraints || [];
       const templateNodeExamples = templateNode?.examples || [];
       const templateNodeNlpContract = templateNode?.nlpContract;
 
-      // Check if node has any overrides
-      const hasStepsOverride = mainNode.steps && JSON.stringify(mainNode.steps) !== JSON.stringify(templateNode?.steps);
+      // ✅ Check override di logica (non struttura)
+      // Steps sono sempre override legittimi (non confrontiamo con template)
+      const hasSteps = mainNode.steps && (
+        (Array.isArray(mainNode.steps) && mainNode.steps.length > 0) ||
+        (typeof mainNode.steps === 'object' && Object.keys(mainNode.steps).length > 0)
+      );
       const hasConstraintsOverride = JSON.stringify(mainNode.constraints || []) !== JSON.stringify(templateNodeConstraints);
       const hasExamplesOverride = JSON.stringify(mainNode.examples || []) !== JSON.stringify(templateNodeExamples);
       const hasNlpContractOverride = JSON.stringify(mainNode.nlpContract) !== JSON.stringify(templateNodeNlpContract);
 
-      if (hasStepsOverride || hasConstraintsOverride || hasExamplesOverride || hasNlpContractOverride) {
+      console.log('[extractModifiedDDTFields] 🔍 Checking overrides for mainNode', {
+        mainNodeIndex: i,
+        mainNodeId: mainNode.id,
+        hasSteps,
+        hasConstraintsOverride,
+        hasExamplesOverride,
+        hasNlpContractOverride,
+        stepsType: typeof mainNode.steps,
+        stepsIsArray: Array.isArray(mainNode.steps),
+        stepsKeys: typeof mainNode.steps === 'object' ? Object.keys(mainNode.steps || {}) : [],
+        stepsLength: Array.isArray(mainNode.steps) ? mainNode.steps.length : 0
+      });
+
+      if (hasSteps || hasConstraintsOverride || hasExamplesOverride || hasNlpContractOverride) {
         const overrideNode: any = {
           templateId: mainNode.templateId || templateNode.templateId,
           label: mainNode.label
         };
 
-        if (hasStepsOverride) overrideNode.steps = mainNode.steps;
+        // ✅ Salva sempre steps se presenti (override legittimo, non confrontiamo)
+        if (hasSteps) {
+          overrideNode.steps = mainNode.steps;
+          console.log('[extractModifiedDDTFields] ✅ Including steps in override', {
+            mainNodeIndex: i,
+            stepsType: typeof mainNode.steps,
+            stepsIsArray: Array.isArray(mainNode.steps),
+            stepsKeys: typeof mainNode.steps === 'object' ? Object.keys(mainNode.steps || {}) : [],
+            stepsLength: Array.isArray(mainNode.steps) ? mainNode.steps.length : 0
+          });
+        }
         if (hasConstraintsOverride) overrideNode.constraints = mainNode.constraints;
         if (hasExamplesOverride) overrideNode.examples = mainNode.examples;
         if (hasNlpContractOverride) overrideNode.nlpContract = mainNode.nlpContract;
 
-        // Check subData overrides
+        // Check subData overrides (solo logica, non struttura)
         if (mainNode.subData && Array.isArray(mainNode.subData) && templateNode.subData && Array.isArray(templateNode.subData)) {
           const subDataOverrides: any[] = [];
           for (const subNode of mainNode.subData) {
@@ -681,18 +878,23 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
               const templateSubExamples = templateSubNode.examples || [];
               const templateSubNlpContract = templateSubNode.nlpContract;
 
-              const hasSubStepsOverride = subNode.steps && JSON.stringify(subNode.steps) !== JSON.stringify(templateSubNode.steps);
+              // ✅ Check override di logica (non struttura)
+              const hasSubSteps = subNode.steps && (
+                (Array.isArray(subNode.steps) && subNode.steps.length > 0) ||
+                (typeof subNode.steps === 'object' && Object.keys(subNode.steps).length > 0)
+              );
               const hasSubConstraintsOverride = JSON.stringify(subNode.constraints || []) !== JSON.stringify(templateSubConstraints);
               const hasSubExamplesOverride = JSON.stringify(subNode.examples || []) !== JSON.stringify(templateSubExamples);
               const hasSubNlpContractOverride = JSON.stringify(subNode.nlpContract) !== JSON.stringify(templateSubNlpContract);
 
-              if (hasSubStepsOverride || hasSubConstraintsOverride || hasSubExamplesOverride || hasSubNlpContractOverride) {
+              if (hasSubSteps || hasSubConstraintsOverride || hasSubExamplesOverride || hasSubNlpContractOverride) {
                 const overrideSubNode: any = {
                   templateId: subNode.templateId || templateSubNode.templateId,
                   label: subNode.label
                 };
 
-                if (hasSubStepsOverride) overrideSubNode.steps = subNode.steps;
+                // ✅ Salva sempre steps se presenti (override legittimo)
+                if (hasSubSteps) overrideSubNode.steps = subNode.steps;
                 if (hasSubConstraintsOverride) overrideSubNode.constraints = subNode.constraints;
                 if (hasSubExamplesOverride) overrideSubNode.examples = subNode.examples;
                 if (hasSubNlpContractOverride) overrideSubNode.nlpContract = subNode.nlpContract;
@@ -712,6 +914,18 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
 
     if (mainDataOverrides.length > 0) {
       result.mainData = mainDataOverrides;
+      console.log('[extractModifiedDDTFields] ✅ Saving mainData overrides', {
+        mainDataOverridesLength: mainDataOverrides.length,
+        firstOverride: mainDataOverrides[0] ? {
+          templateId: mainDataOverrides[0].templateId,
+          label: mainDataOverrides[0].label,
+          hasSteps: !!mainDataOverrides[0].steps,
+          stepsType: typeof mainDataOverrides[0].steps,
+          stepsKeys: typeof mainDataOverrides[0].steps === 'object' ? Object.keys(mainDataOverrides[0].steps || {}) : []
+        } : null
+      });
+    } else {
+      console.log('[extractModifiedDDTFields] ⚠️ No mainData overrides found - saving empty mainData array');
     }
   }
 
@@ -737,6 +951,17 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
   if (localDDT.introduction !== templateIntroduction) {
     result.introduction = localDDT.introduction;
   }
+
+  console.log('[extractModifiedDDTFields] ✅ Final result', {
+    hasLabel: !!result.label,
+    hasMainData: !!result.mainData,
+    mainDataLength: result.mainData?.length || 0,
+    hasConstraints: !!result.constraints,
+    hasExamples: !!result.examples,
+    hasNlpContract: !!result.nlpContract,
+    hasIntroduction: !!result.introduction,
+    resultKeys: Object.keys(result)
+  });
 
   return result;
 }

@@ -1826,11 +1826,23 @@ app.post('/api/projects/:pid/tasks', async (req, res) => {
       upserted: result.upsertedCount > 0,
       modified: result.modifiedCount > 0,
       hasMainData: !!saved?.mainData,
-      mainDataLength: saved?.mainData?.length || 0
+      mainDataLength: saved?.mainData?.length || 0,
+      payloadKeys: Object.keys(payload),
+      hasMainDataInPayload: !!payload.mainData,
+      mainDataLengthInPayload: payload.mainData?.length || 0
     });
     res.json(saved);
   } catch (e) {
-    logError('Tasks.post', e, { projectId, taskId: payload?.id });
+    logError('Tasks.post', e, {
+      projectId,
+      taskId: payload?.id,
+      errorMessage: e?.message,
+      errorStack: e?.stack?.substring(0, 500),
+      payloadKeys: payload ? Object.keys(payload) : [],
+      hasMainData: !!payload?.mainData,
+      mainDataType: typeof payload?.mainData,
+      mainDataLength: Array.isArray(payload?.mainData) ? payload.mainData.length : 'not array'
+    });
     res.status(500).json({ error: String(e?.message || e) });
   } finally {
     await client.close();

@@ -222,10 +222,10 @@ export default function IntentHostAdapter({ task, onClose, hideHeader, onToolbar
     <div className="w-full flex flex-col flex-1 min-h-0">
       {/* ✅ PATTERN CENTRALIZZATO: Mostra EditorHeader solo se hideHeader è false */}
       {!hideHeader && (
-        <EditorHeader
-          icon={<Icon size={18} style={{ color }} />}
+      <EditorHeader
+        icon={<Icon size={18} style={{ color }} />}
           title={String(task?.label || 'Problem')} // ✅ ARCHITETTURA ESPERTO: Usa task.label
-          color="orange"
+        color="orange"
           onClose={onClose} // ✅ ARCHITETTURA ESPERTO: Usa onClose da EditorProps
           toolbarButtons={toolbarButtons} // ✅ PATTERN CENTRALIZZATO: Toolbar incorporata nell'header
         />

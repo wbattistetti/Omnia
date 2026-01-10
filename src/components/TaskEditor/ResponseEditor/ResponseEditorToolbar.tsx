@@ -49,6 +49,30 @@ export function useResponseEditorToolbar({
   tasksPanelWidth = 360,
   onTasksPanelWidthChange,
 }: ResponseEditorToolbarProps) {
+  // ✅ CRITICAL: Hooks devono essere chiamati PRIMA di qualsiasi return condizionale
+  // ✅ Test è un toggle indipendente per mostrare/nascondere il pannello debugger
+  // Salva la larghezza precedente per ripristinarla quando riapri
+  const previousTestWidthRef = React.useRef<number>(testPanelWidth);
+  const COLLAPSED_WIDTH = 1; // Larghezza minima per collassare (quasi invisibile)
+
+  // ✅ Aggiorna previousTestWidthRef quando testPanelWidth cambia (ma solo se non è il collasso)
+  React.useEffect(() => {
+    if (testPanelWidth > COLLAPSED_WIDTH) {
+      previousTestWidthRef.current = testPanelWidth;
+    }
+  }, [testPanelWidth]);
+
+  // ✅ Tasks è un toggle indipendente per mostrare/nascondere il pannello dei task
+  const previousTasksWidthRef = React.useRef<number>(tasksPanelWidth);
+  const COLLAPSED_WIDTH_TASKS = 1;
+
+  React.useEffect(() => {
+    if (tasksPanelWidth > COLLAPSED_WIDTH_TASKS) {
+      previousTasksWidthRef.current = tasksPanelWidth;
+    }
+  }, [tasksPanelWidth]);
+
+  // ✅ Early return DOPO gli hooks (non viola le regole di React)
   if (showWizard) {
     return []; // Empty during wizard
   }
@@ -102,18 +126,6 @@ export function useResponseEditorToolbar({
     }
   };
 
-  // ✅ Test è un toggle indipendente per mostrare/nascondere il pannello debugger
-  // Salva la larghezza precedente per ripristinarla quando riapri
-  const previousTestWidthRef = React.useRef<number>(testPanelWidth);
-  const COLLAPSED_WIDTH = 1; // Larghezza minima per collassare (quasi invisibile)
-
-  // ✅ Aggiorna previousTestWidthRef quando testPanelWidth cambia (ma solo se non è il collasso)
-  React.useEffect(() => {
-    if (testPanelWidth > COLLAPSED_WIDTH) {
-      previousTestWidthRef.current = testPanelWidth;
-    }
-  }, [testPanelWidth]);
-
   const handleTestClick = () => {
     console.log('[Toolbar] 🧪 handleTestClick - testPanelMode:', testPanelMode, 'testPanelWidth:', testPanelWidth);
 
@@ -151,16 +163,6 @@ export function useResponseEditorToolbar({
     }
     // Non toccare gli altri pannelli (Behaviour, Personality, Recognition)
   };
-
-  // ✅ Tasks è un toggle indipendente per mostrare/nascondere il pannello dei task
-  const previousTasksWidthRef = React.useRef<number>(tasksPanelWidth);
-  const COLLAPSED_WIDTH_TASKS = 1;
-
-  React.useEffect(() => {
-    if (tasksPanelWidth > COLLAPSED_WIDTH_TASKS) {
-      previousTasksWidthRef.current = tasksPanelWidth;
-    }
-  }, [tasksPanelWidth]);
 
   const handleTasksClick = () => {
     // Toggle: se è aperto, chiudi e collassa; se è chiuso, apri e espandi

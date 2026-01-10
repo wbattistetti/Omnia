@@ -38,6 +38,7 @@ import { taskTemplateService } from '../../../services/TaskTemplateService';
 import { mapNode } from '../../../dock/ops';
 import { extractModifiedDDTFields } from '../../../utils/ddtMergeUtils';
 import { useWizardInference } from './hooks/useWizardInference';
+import { validateTaskStructure, getTaskSemantics } from '../../../utils/taskSemantics';
 
 import type { TaskMeta } from '../EditorHost/types';
 import type { Task } from '../../../types/taskTypes';
@@ -280,7 +281,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
       isDdtLoading: stableIsDdtLoading
     });
     return list;
-  }, [(ddt ?? null), (ddtVersion ?? 0), stableIsDdtLoading]); // ✅ ARCHITETTURA ESPERTO: Usa valore stabilizzato
+  }, [ddt?.label ?? '', ddt?.mainData?.length ?? 0, ddtVersion ?? 0, stableIsDdtLoading]); // ✅ Usa valori primitivi sempre definiti
   // Aggregated view: show a group header when there are multiple mains
   const isAggregatedAtomic = useMemo(() => (
     Array.isArray(mainList) && mainList.length > 1
@@ -305,6 +306,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
   const [isDraggingSidebar, setIsDraggingSidebar] = React.useState(false);
   const sidebarStartWidthRef = React.useRef<number>(0);
   const sidebarStartXRef = React.useRef<number>(0);
+
+  // ✅ Ref per il resize del pannello Tasks
+  const tasksStartWidthRef = React.useRef<number>(0);
+  const tasksStartXRef = React.useRef<number>(0);
 
   // ✅ DEBUG: Abilita log con localStorage.setItem('debug.sidebarResize', '1')
   const DEBUG_RESIZE = typeof localStorage !== 'undefined' && localStorage.getItem('debug.sidebarResize') === '1';
@@ -513,11 +518,13 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
   // Track introduction separately - usa ddtRef.current con dipendenze stabilizzate
   // Stabilizza i valori primitivi per evitare problemi con array di dipendenze
   const stableDdtVersion = ddtVersion ?? 0;
-  const stableIntroduction = ddt?.introduction ?? null; // ✅ Sempre null, mai undefined
+  // ✅ Serializza introduction per confronto stabile (evita problemi con oggetti)
+  // Usa sempre stringa (non null) per evitare problemi con React
+  const stableIntroductionKey = ddt?.introduction ? JSON.stringify(ddt.introduction) : '';
 
   const introduction = useMemo(() => {
     return ddtRef.current?.introduction ?? null;
-  }, [stableDdtVersion, stableIntroduction ?? null]); // ✅ Assicura che stableIntroduction sia sempre definito
+  }, [stableDdtVersion, stableIntroductionKey]); // ✅ Usa chiave serializzata sempre stringa
 
   // Persist explicitly on close only (avoid side-effects/flicker on unmount)
   const handleEditorClose = React.useCallback(async () => {
@@ -887,13 +894,24 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
       if (localStorage.getItem('debug.nodeSync') === '1') {
         console.log('[NODE_SYNC][UPDATE] 🎯 updateSelectedNode called', {
           hasSelectedNode: !!selectedNode,
-          selectedNodePath
+          selectedNodePath,
+          hasTask: !!task,
+          taskId: task?.id,
+          instanceId: (task as any)?.instanceId,
+          hasTabId: !!tabId,
+          hasSetDockTree: !!setDockTree
         });
       }
     } catch { }
 
     setSelectedNode((prev: any) => {
-      if (!prev || !selectedNodePath) return prev;
+      if (!prev || !selectedNodePath) {
+        console.log('[DOCK_SAVE] ⚠️ Skipping update - no prev or selectedNodePath', {
+          hasPrev: !!prev,
+          hasSelectedNodePath: !!selectedNodePath
+        });
+        return prev;
+      }
 
       const updated = updater(prev) || prev;
       const { mainIndex, subIndex } = selectedNodePath;
@@ -934,10 +952,19 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
           }
         }
 
-        // ✅ STEP 2: Aggiorna ddtRef.current (buffer locale)
+        // ✅ STEP 2: Valida struttura DDT
+        const validation = validateTaskStructure(updatedDDT);
+        if (!validation.valid) {
+          console.error('[ResponseEditor] Invalid DDT structure:', validation.error);
+          // Mostra errore all'utente (puoi aggiungere un toast/alert qui)
+          alert(`Invalid structure: ${validation.error}`);
+          return prev; // Non aggiornare se struttura invalida
+        }
+
+        // ✅ STEP 3: Aggiorna ddtRef.current (buffer locale)
         ddtRef.current = updatedDDT;
 
-        // ✅ STEP 3: Aggiorna IMMEDIATAMENTE tab.ddt nel dockTree (FONTE DI VERITÀ)
+        // ✅ STEP 4: Aggiorna IMMEDIATAMENTE tab.ddt nel dockTree (FONTE DI VERITÀ) - solo se disponibili
         if (tabId && setDockTree) {
           const startStepTasksCount = updatedDDT?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
           console.log('[DOCK_SAVE] ⚡ Updating dockTree (single source of truth)', {
@@ -969,80 +996,175 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
               return n;
             })
           );
-
-          // ✅ STEP 4: In modalità docking (con tabId), NON salvare asincrono durante il drop
-          // Il salvataggio definitivo avviene in handleEditorClose (sincrono, garantito)
-          // Questo evita race conditions e garantisce coerenza quando riapri l'editor
-          //
-          // Nota: Il salvataggio asincrono durante il drop è utile solo in modalità overlay
-          // (senza tabId), dove non c'è handleEditorClose che salva alla chiusura
-          if (!tabId && (task?.id || (task as any)?.instanceId)) {
-            // Modalità overlay: salva asincrono durante il drop (non c'è chiusura garantita)
-            const key = ((task as any)?.instanceId || task?.id) as string;
-            const hasDDT = updatedDDT && Object.keys(updatedDDT).length > 0 && updatedDDT.mainData && updatedDDT.mainData.length > 0;
-
-            if (hasDDT) {
-              const startStepTasksCount = updatedDDT?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
-              console.log('[DOCK_SAVE] 🚀 Starting immediate save to taskRepository (async, overlay mode)', {
-                key,
-                startStepTasksCount,
-                mainDataLength: updatedDDT?.mainData?.length
-              });
-
-              // Salva in modo asincrono (non bloccare l'UI)
-              //
-              // LOGICA CONCETTUALE DEL SALVATAGGIO:
-              // - Template: contiene struttura condivisa (constraints, examples, nlpContract)
-              // - Istanza: contiene SOLO override (modifiche rispetto al template)
-              // - extractModifiedDDTFields confronta istanza con template e salva solo differenze
-              // - A runtime: se mancante nell'istanza → risoluzione lazy dal template (backend VB.NET)
-              void (async () => {
-                try {
-                  const task = taskRepository.getTask(key);
-
-                  // ✅ Estrai solo campi modificati rispetto al template (override)
-                  // Questo evita duplicazione: constraints/examples/nlpContract vengono salvati
-                  // solo se sono stati modificati rispetto al template
-                  const taskInstance = taskRepository.getTask(key);
-                  const modifiedFields = await extractModifiedDDTFields(taskInstance, updatedDDT);
-
-                  const currentTemplateId = getTemplateId(taskInstance);
-
-                  if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
-                    await taskRepository.updateTask(key, {
-                      type: TaskType.DataRequest,  // ✅ type: enum numerico
-                      templateId: null,            // ✅ templateId: null (standalone)
-                      ...modifiedFields  // ✅ Salva solo override, non tutto
-                    }, currentProjectId || undefined);
-                  } else {
-                    await taskRepository.updateTask(key, modifiedFields, currentProjectId || undefined);
-                  }
-
-                  console.log('[DOCK_SAVE] ✅ taskRepository updated (async, overlay mode) - saved only overrides', {
-                    key,
-                    startStepTasksCount: updatedDDT?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0,
-                    hasConstraints: !!modifiedFields.constraints,
-                    hasExamples: !!modifiedFields.examples,
-                    hasNlpContract: !!modifiedFields.nlpContract
-                  });
-                } catch (err) {
-                  console.error('[DOCK_SAVE] ❌ Failed to save to taskRepository', err);
-                }
-              })();
-            }
-          } else if (tabId) {
-            // Modalità docking: salvataggio asincrono disabilitato durante il drop
-            // Il salvataggio definitivo avviene in handleEditorClose (sincrono)
-            console.log('[DOCK_SAVE] ⏭️ Skipping async save during drop (docking mode - will save on close)', {
-              tabId,
-              hasTask: !!(task?.id || (task as any)?.instanceId)
-            });
-          }
         }
 
-        // ✅ Solo invalidatore interno (non notificare provider per evitare re-mount)
-        setDDTVersion(v => v + 1);
+        // ✅ STEP 5: Salvataggio implicito e immediato (SEMPRE, anche senza tabId/setDockTree)
+        // Ogni modifica viene salvata immediatamente nel taskRepository per garantire persistenza
+        // NOTA: task viene letto dal closure del useCallback, quindi è disponibile
+        const taskToSave = task; // Cattura task dal closure
+        const projectIdToSave = currentProjectId; // Cattura currentProjectId dal closure
+
+        console.log('[DOCK_SAVE] 🔍 Checking if save should happen', {
+          hasTask: !!taskToSave,
+          taskId: taskToSave?.id,
+          instanceId: (taskToSave as any)?.instanceId,
+          hasTabId: !!tabId,
+          hasSetDockTree: !!setDockTree,
+          hasProjectId: !!projectIdToSave
+        });
+
+        if (taskToSave?.id || (taskToSave as any)?.instanceId) {
+          const key = ((taskToSave as any)?.instanceId || taskToSave?.id) as string;
+          const hasDDT = updatedDDT && Object.keys(updatedDDT).length > 0 && updatedDDT.mainData && updatedDDT.mainData.length > 0;
+
+          console.log('[DOCK_SAVE] 🔍 DDT validation', {
+            key,
+            hasDDT,
+            hasUpdatedDDT: !!updatedDDT,
+            updatedDDTKeys: updatedDDT ? Object.keys(updatedDDT) : [],
+            mainDataLength: updatedDDT?.mainData?.length || 0
+          });
+
+          if (hasDDT) {
+            const startStepTasksCount = updatedDDT?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
+            const allTasksCount = updatedDDT?.mainData?.reduce((acc: number, main: any) => {
+              const steps = main?.steps || (Array.isArray(main?.steps) ? main.steps : []);
+              const stepsArray = Array.isArray(steps) ? steps : Object.values(steps || {});
+              return acc + stepsArray.reduce((stepAcc: number, step: any) => {
+                return stepAcc + (step?.escalations || []).reduce((escAcc: number, esc: any) => {
+                  return escAcc + (esc?.tasks?.length || 0);
+                }, 0);
+              }, 0);
+            }, 0) || 0;
+
+            console.log('[DOCK_SAVE] 💾 Saving immediately (implicit, async)', {
+              key,
+              tabId: tabId || 'overlay',
+              startStepTasksCount,
+              allTasksCount,
+              mainDataLength: updatedDDT?.mainData?.length,
+              hasMainData: !!updatedDDT?.mainData?.[0]
+            });
+
+            // Salva in modo asincrono (non bloccare l'UI)
+            void (async () => {
+              try {
+                const taskInstance = taskRepository.getTask(key);
+                const currentTemplateId = getTemplateId(taskInstance);
+
+                console.log('[DOCK_SAVE] 📋 Task instance info', {
+                  key,
+                  hasTaskInstance: !!taskInstance,
+                  currentTemplateId,
+                  instanceMainDataLength: taskInstance?.mainData?.length || 0
+                });
+
+                // ✅ Se standalone (no templateId), salva tutto mainData completo
+                // Se ha templateId, usa extractModifiedDDTFields per salvare solo override
+                let fieldsToSave: any;
+                if (!currentTemplateId || currentTemplateId === 'UNDEFINED') {
+                  // Standalone: salva tutto mainData completo (include tutti i task)
+                  fieldsToSave = {
+                    label: updatedDDT.label,
+                    mainData: updatedDDT.mainData, // ✅ Salva tutto, incluso tutti i task
+                    constraints: updatedDDT.constraints,
+                    examples: updatedDDT.examples,
+                    nlpContract: updatedDDT.nlpContract,
+                    introduction: updatedDDT.introduction
+                  };
+                  console.log('[DOCK_SAVE] 📦 Standalone task - saving full mainData', {
+                    key,
+                    mainDataLength: fieldsToSave.mainData?.length,
+                    tasksInMainData: allTasksCount
+                  });
+                } else {
+                  // Con templateId: salva solo override
+                  console.log('[DOCK_SAVE] 🔍 Before extractModifiedDDTFields', {
+                    key,
+                    templateId: currentTemplateId,
+                    updatedDDTMainDataLength: updatedDDT?.mainData?.length || 0,
+                    updatedDDTFirstMainSteps: updatedDDT?.mainData?.[0]?.steps ? {
+                      type: typeof updatedDDT.mainData[0].steps,
+                      isArray: Array.isArray(updatedDDT.mainData[0].steps),
+                      keys: typeof updatedDDT.mainData[0].steps === 'object' ? Object.keys(updatedDDT.mainData[0].steps || {}) : [],
+                      length: Array.isArray(updatedDDT.mainData[0].steps) ? updatedDDT.mainData[0].steps.length : 0
+                    } : null
+                  });
+                  fieldsToSave = await extractModifiedDDTFields(taskInstance, updatedDDT);
+                  console.log('[DOCK_SAVE] 📦 Template-based task - saving overrides only', {
+                    key,
+                    templateId: currentTemplateId,
+                    hasMainDataInFields: !!fieldsToSave.mainData,
+                    mainDataLength: fieldsToSave.mainData?.length || 0,
+                    firstMainDataOverride: fieldsToSave.mainData?.[0] ? {
+                      templateId: fieldsToSave.mainData[0].templateId,
+                      label: fieldsToSave.mainData[0].label,
+                      hasSteps: !!fieldsToSave.mainData[0].steps,
+                      stepsType: typeof fieldsToSave.mainData[0].steps,
+                      stepsKeys: typeof fieldsToSave.mainData[0].steps === 'object' ? Object.keys(fieldsToSave.mainData[0].steps || {}) : [],
+                      stepsLength: Array.isArray(fieldsToSave.mainData[0].steps) ? fieldsToSave.mainData[0].steps.length : 0
+                    } : null,
+                    fieldsToSaveKeys: Object.keys(fieldsToSave)
+                  });
+                }
+
+                if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
+                  await taskRepository.updateTask(key, {
+                    type: TaskType.DataRequest,  // ✅ type: enum numerico
+                    templateId: null,            // ✅ templateId: null (standalone)
+                    ...fieldsToSave
+                  }, projectIdToSave || undefined);
+                } else {
+                  await taskRepository.updateTask(key, fieldsToSave, projectIdToSave || undefined);
+                }
+
+                // ✅ Verifica che il salvataggio sia andato a buon fine
+                const savedTask = taskRepository.getTask(key);
+                const savedTasksCount = savedTask?.mainData?.reduce((acc: number, main: any) => {
+                  const steps = main?.steps || (Array.isArray(main?.steps) ? main.steps : []);
+                  const stepsArray = Array.isArray(steps) ? steps : Object.values(steps || {});
+                  return acc + stepsArray.reduce((stepAcc: number, step: any) => {
+                    return stepAcc + (step?.escalations || []).reduce((escAcc: number, esc: any) => {
+                      return escAcc + (esc?.tasks?.length || 0);
+                    }, 0);
+                  }, 0);
+                }, 0) || 0;
+
+                console.log('[DOCK_SAVE] ✅ taskRepository updated (implicit save completed)', {
+                  key,
+                  startStepTasksCount,
+                  allTasksCount,
+                  savedTasksCount,
+                  tasksMatch: allTasksCount === savedTasksCount,
+                  hasMainData: !!savedTask?.mainData,
+                  mainDataLength: savedTask?.mainData?.length || 0
+                });
+              } catch (err) {
+                console.error('[DOCK_SAVE] ❌ Failed to save to taskRepository', {
+                  key,
+                  error: err,
+                  errorMessage: err instanceof Error ? err.message : String(err)
+                });
+              }
+            })();
+          } else {
+            console.log('[DOCK_SAVE] ⚠️ Skipping save - no DDT or empty mainData', {
+              key,
+              hasUpdatedDDT: !!updatedDDT,
+              hasMainData: !!updatedDDT?.mainData,
+              mainDataLength: updatedDDT?.mainData?.length || 0
+            });
+          }
+        } else {
+          console.log('[DOCK_SAVE] ⚠️ Skipping save - no task id', {
+            taskId: taskToSave?.id,
+            instanceId: (taskToSave as any)?.instanceId
+          });
+        }
       }
+
+      // ✅ Solo invalidatore interno (non notificare provider per evitare re-mount)
+      setDDTVersion(v => v + 1);
 
       try {
         if (localStorage.getItem('debug.nodeSync') === '1') {
@@ -1062,7 +1184,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
       return updated;
     });
-  }, [selectedNodePath, selectedRoot, tabId, setDockTree, ddt?.label, ddt?.mainData?.length]);
+  }, [selectedNodePath, selectedRoot, tabId, setDockTree, ddt?.label, ddt?.mainData?.length ?? 0, task, currentProjectId]);
 
   // ✅ NON serve più persistenza asincrona
   // Quando chiudi l'editor, costruisci il DDT da selectedNode e salva
@@ -1104,21 +1226,23 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
           setTestPanelWidth(newWidth);
         }
       } else if (draggingPanel === 'tasks') {
-        // Pannello Tasks: calcola dalla posizione del mouse (da destra)
-        // Quando ridimensiono Tasks, Test viene spinto a sinistra (flexbox gestisce automaticamente)
+        // Pannello Tasks: calcola dal delta del mouse rispetto alla posizione iniziale
+        const deltaX = tasksStartXRef.current - e.clientX; // Negativo quando si trascina a destra (allarga)
+        const newWidth = tasksStartWidthRef.current + deltaX;
+
         if (testPanelMode === 'chat' && testPanelWidth > 1) {
           // Tasks inizia dove finisce Test
-          // La larghezza di Tasks = totale - posizione mouse
-          // Ma devo rispettare la larghezza minima di Test
+          // Devo rispettare la larghezza minima di Test
           const contentLeft = total - (rightWidth || 360);
           const maxTasksWidth = total - contentLeft - testPanelWidth; // Massima larghezza Tasks (rispetta Test)
-          const newTasksWidth = Math.max(minWidth, Math.min(maxTasksWidth, total - e.clientX));
-          setTasksPanelWidth(newTasksWidth);
+          const clampedWidth = Math.max(minWidth, Math.min(maxTasksWidth, newWidth));
+          setTasksPanelWidth(clampedWidth);
           // Test mantiene la sua larghezza, si sposta solo a sinistra (gestito da flexbox)
         } else {
           // Tasks è l'unico pannello a destra
-          const newWidth = Math.max(minWidth, total - e.clientX);
-          setTasksPanelWidth(newWidth);
+          const maxTasksWidth = total - (rightWidth || 360) - 320; // Lascia spazio minimo per il contenuto principale
+          const clampedWidth = Math.max(minWidth, Math.min(maxTasksWidth, newWidth));
+          setTasksPanelWidth(clampedWidth);
         }
       }
     };
@@ -1658,23 +1782,48 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                   </>
                 )}
 
-                {/* ✅ Pannello Tasks: sempre presente a destra, collassato quando non attivo */}
+                {/* ✅ Splitter esterno tra contenuto principale e pannello Tasks - sempre visibile quando Tasks è attivo */}
                 {tasksPanelMode === 'actions' && tasksPanelWidth > 1 && (
-                  <RightPanel
-                    mode="actions"
-                    width={tasksPanelWidth}
-                    onWidthChange={setTasksPanelWidth}
-                    onStartResize={() => setDraggingPanel('tasks')}
-                    dragging={draggingPanel === 'tasks'}
-                    hideSplitter={testPanelMode === 'chat' && testPanelWidth > 1} // ✅ Nascondi splitter se Test è visibile (usiamo quello condiviso)
-                    ddt={ddt}
-                    translations={localTranslations}
-                    selectedNode={selectedNode}
-                    onUpdateDDT={(updater) => {
-                      const updated = updater(ddt);
-                      try { replaceSelectedDDT(updated); } catch { }
-                    }}
-                  />
+                  <>
+                    <div
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        tasksStartWidthRef.current = tasksPanelWidth;
+                        tasksStartXRef.current = e.clientX;
+                        setDraggingPanel('tasks');
+                      }}
+                      style={{
+                        width: 8,
+                        cursor: 'col-resize',
+                        background: draggingPanel === 'tasks' ? '#fb923c' : '#fb923c22',
+                        transition: 'background 0.15s ease',
+                        flexShrink: 0,
+                        position: 'relative',
+                        zIndex: draggingPanel === 'tasks' ? 100 : 10,
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        touchAction: 'none',
+                      }}
+                      aria-label="Resize tasks panel"
+                      role="separator"
+                    />
+                    <RightPanel
+                      mode="actions"
+                      width={tasksPanelWidth}
+                      onWidthChange={setTasksPanelWidth}
+                      onStartResize={() => setDraggingPanel('tasks')}
+                      dragging={draggingPanel === 'tasks'}
+                      hideSplitter={true} // ✅ Nascondi splitter interno, usiamo quello esterno
+                      ddt={ddt}
+                      translations={localTranslations}
+                      selectedNode={selectedNode}
+                      onUpdateDDT={(updater) => {
+                        const updated = updater(ddt);
+                        try { replaceSelectedDDT(updated); } catch { }
+                      }}
+                    />
+                  </>
                 )}
               </div>
             </div>

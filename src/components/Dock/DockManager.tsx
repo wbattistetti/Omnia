@@ -275,7 +275,7 @@ function TabSet(props: {
   return (
     <div
       ref={hostRef}
-      className="relative w-full h-full rounded min-h-0"
+      className="relative w-full h-full rounded min-h-0 flex flex-col"
       style={{ border: '1px solid #38bdf8', backgroundColor: '#e0f2fe' }}
       onDragOver={(e) => {
         e.preventDefault();
@@ -297,7 +297,7 @@ function TabSet(props: {
         setRegion(null);
       }}
     >
-      <div className="flex items-center gap-1 px-2 border-b"
+      <div className="flex items-center gap-1 px-2 border-b flex-shrink-0"
         style={{ backgroundColor: '#e0f2fe', borderColor: '#38bdf8', height: 40 }}>
         {props.tabs.map((t, i) => {
           const isActive = props.active === i;
@@ -443,8 +443,8 @@ function TabSet(props: {
         return (
           <div
             key={stableKey}
-            className="w-full min-h-0"
-            style={{ height: 'calc(100% - 40px)', backgroundColor: '#ffffff' }}
+            className="w-full min-h-0 flex-1"
+            style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, backgroundColor: '#ffffff', overflow: 'hidden' }}
           >
             {props.renderTabContent(activeTab)}
           </div>

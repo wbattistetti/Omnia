@@ -5,6 +5,7 @@
 import type { AssembledDDT, MainDataNode } from '../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
 import type { DDTNavigatorCallbacks } from './ddtTypes';
 import { getStep, getEscalationRecovery, executeStep } from './ddtSteps';
+import { getTaskSemantics } from '../../../utils/taskSemantics';
 
 // ============================================================================
 // TYPES
@@ -258,6 +259,11 @@ export async function runDDT(
 // 🔎 GetNextData - Trova il prossimo dato vuoto
 // ============================================================================
 
+/**
+ * Finds the next empty data to collect
+ * ✅ Handles Atomic, CompositeData, and Collection
+ * ✅ Uses referenceId from instance (not recalculated from template)
+ */
 function getNextData(
   ddtInstance: AssembledDDT,
   state: DDTEngineState
@@ -269,10 +275,15 @@ function getNextData(
     ? [ddtInstance.mainData]
     : [];
 
-  // Itera su tutti i mainData
+  // ✅ Deduce semantics from structure
+  const semantics = getTaskSemantics(ddtInstance);
+
+  // ✅ For Collection: iterate over all mainData[] (each is independent)
+  // ✅ For Atomic/CompositeData: iterate over mainData[0] and its subData
   for (const mainData of mainDataList) {
-    // Controlla se mainData è vuoto
-    const mainMemory = state.memory[mainData.id];
+    // ✅ Runtime: use referenceId from instance (not recalculated from template)
+    const mainDataId = (mainData as any).referenceId || mainData.id;
+    const mainMemory = state.memory[mainDataId];
     const mainValue = mainMemory?.value;
     const isMainEmpty =
       !mainValue ||
@@ -285,7 +296,7 @@ function getNextData(
     if (isMainEmpty) {
       return {
         mainData,
-        nodeId: mainData.id,
+        nodeId: mainDataId,
         isMain: true
       };
     }
@@ -297,21 +308,29 @@ function getNextData(
       if (!isMainConfirmed) {
         return {
           mainData,
-          nodeId: mainData.id,
+          nodeId: mainDataId,
           isMain: true
         };
       }
       // Se è confirmed, continua al prossimo mainData o controlla subData
     }
 
-    // Se mainData ha subData, controlla se qualche sub è vuoto
+    // ✅ For Collection: skip subData check (Collection cannot have subData)
+    if (semantics === 'Collection') {
+      // Collection: all mainData[] are independent, continue to next mainData
+      continue;
+    }
+
+    // ✅ For CompositeData: check if any subData is empty
     if (mainData.subData && Array.isArray(mainData.subData)) {
       const requiredSubs = mainData.subData.filter(
         (sub) => sub.required !== false
       );
 
       for (const subData of requiredSubs) {
-        const subValue = state.memory[subData.id]?.value;
+        // ✅ Runtime: use referenceId from instance (not recalculated from template)
+        const subDataId = (subData as any).referenceId || subData.id;
+        const subValue = state.memory[subDataId]?.value;
         const isSubEmpty =
           !subValue ||
           subValue === null ||
@@ -323,7 +342,7 @@ function getNextData(
           return {
             mainData,
             subData,
-            nodeId: subData.id,
+            nodeId: subDataId,
             isMain: false
           };
         }
@@ -938,6 +957,11 @@ function markAsConfirmed(state: DDTEngineState, nodeId: string): void {
   }
 }
 
+/**
+ * Finds missing required subData for a mainData node
+ * ✅ Uses referenceId from instance (not recalculated from template)
+ * ✅ Handles CompositeData: checks all subData
+ */
 function findMissingRequiredSubs(
   mainData: MainDataNode,
   memory: Record<string, { value: any; confirmed: boolean }>
@@ -950,7 +974,9 @@ function findMissingRequiredSubs(
 
   for (const subData of mainData.subData) {
     if (subData.required !== false) {
-      const subValue = memory[subData.id]?.value;
+      // ✅ Runtime: use referenceId from instance (not recalculated from template)
+      const dataId = (subData as any).referenceId || subData.id;
+      const subValue = memory[dataId]?.value;
       const isSubEmpty =
         !subValue ||
         subValue === null ||
@@ -964,6 +990,35 @@ function findMissingRequiredSubs(
   }
 
   return missingSubs;
+}
+
+/**
+ * Checks if a mainData node is saturated
+ * ✅ Uses referenceId from instance (not recalculated from template)
+ */
+function isMainDataSaturated(
+  mainData: MainDataNode,
+  memory: Record<string, { value: any; confirmed: boolean }>
+): boolean {
+  // ✅ Runtime: use referenceId from instance (not recalculated from template)
+  const dataId = (mainData as any).referenceId || mainData.id;
+  const mainValue = memory[dataId]?.value;
+  const isMainEmpty =
+    !mainValue ||
+    (typeof mainValue === 'object' && Object.keys(mainValue).length === 0) ||
+    mainValue === null ||
+    mainValue === undefined;
+
+  if (isMainEmpty) {
+    return false;
+  }
+
+  // If has subData, check all are saturated
+  if (mainData.subData && Array.isArray(mainData.subData) && mainData.subData.length > 0) {
+    return findMissingRequiredSubs(mainData, memory).length === 0;
+  }
+
+  return true;
 }
 
 function peekNextData(

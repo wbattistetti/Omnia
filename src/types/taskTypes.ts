@@ -228,7 +228,8 @@ export interface Task {
   // ✅ Campi diretti (niente wrapper value):
   // Per DataRequest/DDT:
   label?: string;                // Label del DDT (solo per UI, non usato a runtime)
-  mainData?: any[];              // Main data array
+  mainData?: any[];              // Main data array (senza steps - steps sono in dialogueSteps)
+  dialogueSteps?: any[];         // ✅ Flat dialogue steps array (replaces nested mainData[].steps)
   stepPrompts?: any;             // Step prompts
   constraints?: any[];           // Constraints
   examples?: any[];              // Examples

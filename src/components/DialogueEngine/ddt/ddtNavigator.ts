@@ -128,11 +128,13 @@ async function executeGetDataHierarchicalOld(
   }
 
   // Update state with main result
+  // ✅ Runtime: use referenceId from instance (not recalculated from template)
+  const mainDataId = (mainData as any).referenceId || mainData.id;
   state = {
     ...state,
     memory: {
       ...state.memory,
-      [mainData.id]: { value: mainResult.value, confirmed: true }
+      [mainDataId]: { value: mainResult.value, confirmed: true }
     }
   };
 
@@ -143,8 +145,10 @@ async function executeGetDataHierarchicalOld(
   // Removed verbose logging
 
   for (const subData of requiredSubs) {
+    // ✅ Runtime: use referenceId from instance (not recalculated from template)
+    const subDataId = (subData as any).referenceId || subData.id;
     // Check if sub is already filled
-    const isFilled = state.memory[subData.id]?.value !== undefined;
+    const isFilled = state.memory[subDataId]?.value !== undefined;
 
     if (!isFilled) {
       // Removed verbose logging
@@ -169,19 +173,22 @@ async function executeGetDataHierarchicalOld(
         ...state,
         memory: {
           ...state.memory,
-          [subData.id]: { value: subResult.value, confirmed: true }
+          [subDataId]: { value: subResult.value, confirmed: true }
         }
       };
     }
   }
 
   // Composite mainData value from sub values
-  const composedValue = compositeMainValue(mainData, state);
+  // ✅ Pass ddt for Collection semantics
+  const composedValue = compositeMainValue(mainData, state, ddt);
+  // ✅ Runtime: use referenceId from instance (not recalculated from template)
+  const mainDataId = (mainData as any).referenceId || mainData.id;
   state = {
     ...state,
     memory: {
       ...state.memory,
-      [mainData.id]: { value: composedValue, confirmed: true }
+      [mainDataId]: { value: composedValue, confirmed: true }
     }
   };
 

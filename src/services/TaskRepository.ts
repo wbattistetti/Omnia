@@ -383,17 +383,38 @@ class TaskRepository {
         type: task.type,
         typeName: TaskType[task.type],
         templateId: task.templateId,
-        hasText: !!task.text
+        hasText: !!task.text,
+        hasMainData: !!task.mainData,
+        mainDataLength: task.mainData?.length || 0,
+        firstMainDataSteps: task.mainData?.[0]?.steps ? {
+          type: typeof task.mainData[0].steps,
+          isArray: Array.isArray(task.mainData[0].steps),
+          keys: typeof task.mainData[0].steps === 'object' ? Object.keys(task.mainData[0].steps || {}) : [],
+          length: Array.isArray(task.mainData[0].steps) ? task.mainData[0].steps.length : 0
+        } : null
+      });
+
+      const payloadString = JSON.stringify(payload);
+      console.log('[💾 SAVE_TASK] Payload size', {
+        taskId: task.id,
+        payloadSize: payloadString.length,
+        payloadPreview: payloadString.substring(0, 1000)
       });
 
       const response = await fetch(`/api/projects/${projectId}/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: payloadString
       });
 
       if (!response.ok) {
-        console.error('[💾 SAVE_TASK] Failed', { taskId: task.id, status: response.status });
+        const errorText = await response.text();
+        console.error('[💾 SAVE_TASK] Failed', {
+          taskId: task.id,
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText.substring(0, 500)
+        });
         return false;
       }
 

@@ -46,7 +46,7 @@ const TaskList: React.FC = () => {
   }, []);
 
   return (
-    <div className={`action-list-grid ${combinedClass}`} style={{ width: '100%' }}>
+    <div className={`action-list-grid ${combinedClass}`} style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {/* Se vuoi permettere la selezione lingua, aggiungi qui un select */}
       {/* <select value={lang} onChange={e => setLang(e.target.value)}>
         <option value="it">Italiano</option>
@@ -61,6 +61,7 @@ const TaskList: React.FC = () => {
           gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
           gap: 16,
           width: '100%',
+          minHeight: 0,
         }}
       >
         {actionsCatalog.map((task, index) => {
