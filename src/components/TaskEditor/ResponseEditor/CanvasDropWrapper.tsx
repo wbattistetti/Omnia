@@ -14,28 +14,17 @@ interface CanvasDropWrapperProps {
 
 const CanvasDropWrapper: React.FC<CanvasDropWrapperProps> = ({ onDropTask, onDropAction, children }) => {
   const handleDrop = onDropTask ?? onDropAction;
-  const debugDrop = () => {
-    try { return localStorage.getItem('debug.drop') === '1'; } catch { return false; }
-  };
 
   const [, drop] = useDrop(() => ({
     accept: [DND_TYPE_VIEWER],
     drop: (item: any, monitor) => {
-      // Only handle drop if it wasn't handled by a child (TaskRowDnDWrapper)
-      const didDrop = monitor.didDrop();
-      if (debugDrop()) {
-        console.log('[DROP_DEBUG][CanvasDropWrapper] Drop received', { didDrop, itemType: item?.type });
-      }
-      if (didDrop) {
-        // A child handled the drop, don't process it here
-        if (debugDrop()) console.log('[DROP_DEBUG][CanvasDropWrapper] ⏭️ Skipping - child handled drop');
-        return;
-      }
-      if (debugDrop()) {
-        console.log('[DROP_DEBUG][CanvasDropWrapper] ✅ Processing drop (no child handled it)');
+      // ✅ CRITICAL: Check if a child (TaskRowDnDWrapper or PanelEmptyDropZone) handled the drop
+      if (monitor.didDrop()) {
+        return undefined; // Child already handled it
       }
       const normalized = createTask(item);
       handleDrop?.(normalized);
+      return { handled: true };
     },
     collect: () => ({}) // No visual feedback - completely invisible
   }), [handleDrop]);
