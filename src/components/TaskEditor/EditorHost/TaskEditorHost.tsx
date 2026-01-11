@@ -38,8 +38,8 @@ export default function TaskEditorHost({ task, onClose, onToolbarUpdate, hideHea
   if (!isLazy) {
     // ✅ SOLUZIONE ESPERTO: Rimuovere h-full, usare solo flex-1 min-h-0
     return (
-      <div className="w-full bg-slate-900 flex flex-col flex-1 min-h-0">
-        <div className="min-h-0 flex-1">
+      <div className="w-full bg-slate-900 flex flex-col flex-1 min-h-0 h-full">
+        <div className="min-h-0 flex-1 h-full">
           {/* @ts-expect-error registry type */}
           <Comp task={task} onClose={onClose} onToolbarUpdate={onToolbarUpdate} hideHeader={hideHeader} />
         </div>
@@ -50,8 +50,8 @@ export default function TaskEditorHost({ task, onClose, onToolbarUpdate, hideHea
   // Suspense per lazy components
   // ✅ SOLUZIONE ESPERTO: Rimuovere h-full, usare solo flex-1 min-h-0
   return (
-    <div className="w-full bg-slate-900 flex flex-col flex-1 min-h-0">
-      <div className="min-h-0 flex-1">
+    <div className="w-full bg-slate-900 flex flex-col flex-1 min-h-0 h-full">
+      <div className="min-h-0 flex-1 h-full">
         <Suspense fallback={
           <div className="flex items-center justify-center bg-slate-900 flex-1 min-h-0">
             <div className="text-white text-sm">

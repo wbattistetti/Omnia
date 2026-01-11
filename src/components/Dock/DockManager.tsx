@@ -276,7 +276,7 @@ function TabSet(props: {
     <div
       ref={hostRef}
       className="relative w-full h-full rounded min-h-0 flex flex-col"
-      style={{ border: '1px solid #38bdf8', backgroundColor: '#e0f2fe' }}
+      style={{ border: '1px solid #38bdf8', backgroundColor: '#e0f2fe', height: '100%', display: 'flex', flexDirection: 'column' }}
       onDragOver={(e) => {
         e.preventDefault();
         // Only show overlay when dragging dock tabs, not other elements like tasks
@@ -444,7 +444,7 @@ function TabSet(props: {
           <div
             key={stableKey}
             className="w-full min-h-0 flex-1"
-            style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, backgroundColor: '#ffffff', overflow: 'hidden' }}
+            style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%', backgroundColor: '#ffffff', overflow: 'hidden' }}
           >
             {props.renderTabContent(activeTab)}
           </div>

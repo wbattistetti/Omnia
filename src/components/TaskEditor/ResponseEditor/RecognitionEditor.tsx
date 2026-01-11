@@ -135,7 +135,7 @@ export default function RecognitionEditor({
   lastStats,
 }: RecognitionEditorProps) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
       {/* ✅ Top bar: Kind, Confidence, Waiting Messages - sempre visibile */}
       <div style={{ padding: 6, flexShrink: 0 }}>
         {isIntentKind ? (
@@ -194,7 +194,7 @@ export default function RecognitionEditor({
       </div>
 
       {/* ✅ TesterGrid - sempre visibile, l'editor si sovrappone quando attivo */}
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         <TesterGrid
           examplesList={examplesList}
           rowResults={rowResults}

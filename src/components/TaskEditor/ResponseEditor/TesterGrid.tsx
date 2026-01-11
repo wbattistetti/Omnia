@@ -286,6 +286,8 @@ export default function TesterGrid({
         minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
+        height: '100%',
+        overflow: 'hidden',
       }}>
         <div
           className="tester-grid-scroll"
@@ -294,7 +296,6 @@ export default function TesterGrid({
             minHeight: 0,
             overflowY: 'auto',
             overflowX: 'hidden',
-            maxHeight: '100%',
           }}>
         <table ref={tableRef} style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' as any }}>
           <TesterGridHeader

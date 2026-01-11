@@ -208,7 +208,7 @@ export const AppContent: React.FC<AppContentProps> = ({
         });
 
         return (
-          <div style={{ width: '100%', flex: 1, minHeight: 0, backgroundColor: '#0b1220', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ width: '100%', flex: 1, minHeight: 0, backgroundColor: '#0b1220', display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100%' }}>
             <ResponseEditor
               key={editorKey}
               ddt={stableDDT}

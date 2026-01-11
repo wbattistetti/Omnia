@@ -1085,7 +1085,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
   // Layout
   return (
-    <div ref={rootRef} className={combinedClass} style={{ background: '#0b0f17', display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1, minHeight: 0 }}>
+    <div ref={rootRef} className={combinedClass} style={{ background: '#0b0f17', display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1, minHeight: 0, height: '100%' }}>
 
       {/* Header sempre visibile (minimale durante wizard, completo dopo) - nascosto quando in docking mode */}
       {!hideHeader && (
@@ -1102,7 +1102,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
       {(() => {
         return null;
       })()}
-      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
         {false && isDDTEmpty(ddt) ? ( // Summarizer not yet implemented
           /* Placeholder for Summarizer when DDT is empty */
           <div className={combinedClass} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '24px', color: '#e2e8f0', lineHeight: 1.6 }}>
@@ -1459,10 +1459,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                 />
               </>
             )}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100%', overflow: 'hidden' }}>
               {/* Content */}
-              <div style={{ display: 'flex', minHeight: 0, flex: 1 }}>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, padding: showMessageReview ? '8px' : '8px 8px 0 8px' }}>
+              <div style={{ display: 'flex', minHeight: 0, flex: 1, height: '100%', overflow: 'hidden' }}>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, padding: showMessageReview ? '8px' : '8px 8px 0 8px', height: '100%', overflow: 'hidden' }}>
                   {showMessageReview ? (
                     <div style={{ flex: 1, minHeight: 0, background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #e0d7f7', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
@@ -1470,50 +1470,48 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                       </div>
                     </div>
                   ) : (
-                    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                        {showSynonyms ? (
-                          <div style={{ padding: 6, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                            <NLPExtractorProfileEditor
-                              node={selectedNode}
-                              taskType={taskType}
-                              locale={'it-IT'}
-                              intentSelected={mainList[0]?.kind === 'intent' ? selectedIntentIdForTraining || undefined : undefined}
-                              task={task}
-                              onChange={(profile) => {
-                                // Only log if debug flag is set to avoid console spam
-                                try {
-                                  if (localStorage.getItem('debug.responseEditor') === '1') {
-                                    console.log('[KindChange][onChange]', {
-                                      nodeLabel: (selectedNode as any)?.label,
-                                      profileKind: profile?.kind,
-                                      examples: (profile?.examples || []).length,
-                                      testCases: (profile?.testCases || []).length,
-                                    });
-                                  }
-                                } catch { }
-
-
-                                // ✅ Usa handleProfileUpdate invece di updateSelectedNode
-                                handleProfileUpdate({
-                                  ...profile,
-                                  // Assicura che kind e synonyms siano aggiornati anche in node root
-                                  ...(profile.kind && profile.kind !== 'auto' ? { _kindManual: profile.kind } : {}),
-                                });
-                              }}
-                            />
-                          </div>
-                        ) : (
-                          // ✅ Nuovo componente BehaviourEditor che contiene StepsStrip + StepEditor
-                          <BehaviourEditor
+                    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
+                      {showSynonyms ? (
+                        <div style={{ padding: 6, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+                          <NLPExtractorProfileEditor
                             node={selectedNode}
-                            translations={localTranslations}
-                            updateSelectedNode={updateSelectedNode}
-                            selectedRoot={selectedRoot}
-                            selectedSubIndex={selectedSubIndex}
+                            taskType={taskType}
+                            locale={'it-IT'}
+                            intentSelected={mainList[0]?.kind === 'intent' ? selectedIntentIdForTraining || undefined : undefined}
+                            task={task}
+                            onChange={(profile) => {
+                              // Only log if debug flag is set to avoid console spam
+                              try {
+                                if (localStorage.getItem('debug.responseEditor') === '1') {
+                                  console.log('[KindChange][onChange]', {
+                                    nodeLabel: (selectedNode as any)?.label,
+                                    profileKind: profile?.kind,
+                                    examples: (profile?.examples || []).length,
+                                    testCases: (profile?.testCases || []).length,
+                                  });
+                                }
+                              } catch { }
+
+
+                              // ✅ Usa handleProfileUpdate invece di updateSelectedNode
+                              handleProfileUpdate({
+                                ...profile,
+                                // Assicura che kind e synonyms siano aggiornati anche in node root
+                                ...(profile.kind && profile.kind !== 'auto' ? { _kindManual: profile.kind } : {}),
+                              });
+                            }}
                           />
-                        )}
-                      </div>
+                        </div>
+                      ) : (
+                        // ✅ Nuovo componente BehaviourEditor che contiene StepsStrip + StepEditor
+                        <BehaviourEditor
+                          node={selectedNode}
+                          translations={localTranslations}
+                          updateSelectedNode={updateSelectedNode}
+                          selectedRoot={selectedRoot}
+                          selectedSubIndex={selectedSubIndex}
+                        />
+                      )}
                     </div>
                   )}
                 </div>
@@ -1646,8 +1644,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
 export default function ResponseEditor({ ddt, onClose, onWizardComplete, task, isDdtLoading, hideHeader, onToolbarUpdate, tabId, setDockTree }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, task?: TaskMeta | Task, isDdtLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void }) {
   return (
-    <FontProvider>
-      <ResponseEditorInner ddt={ddt} onClose={onClose} onWizardComplete={onWizardComplete} task={task} isDdtLoading={isDdtLoading} hideHeader={hideHeader} onToolbarUpdate={onToolbarUpdate} tabId={tabId} setDockTree={setDockTree} /> {/* ✅ ARCHITETTURA ESPERTO: Passa isDdtLoading */}
-    </FontProvider>
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <FontProvider>
+        <ResponseEditorInner ddt={ddt} onClose={onClose} onWizardComplete={onWizardComplete} task={task} isDdtLoading={isDdtLoading} hideHeader={hideHeader} onToolbarUpdate={onToolbarUpdate} tabId={tabId} setDockTree={setDockTree} /> {/* ✅ ARCHITETTURA ESPERTO: Passa isDdtLoading */}
+      </FontProvider>
+    </div>
   );
 }

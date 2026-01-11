@@ -37,7 +37,7 @@ export default function ResizableTaskEditorHost({ task, onClose, onToolbarUpdate
         persistKey="task-editor-height"
         inverted={true}
       />
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div style={{ flex: 1, minHeight: 0, height: '100%' }}>
         <TaskEditorHost task={task} onClose={onClose} onToolbarUpdate={onToolbarUpdate} hideHeader={hideHeader} />
       </div>
     </div>
