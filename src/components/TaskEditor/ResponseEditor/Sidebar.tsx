@@ -1,5 +1,6 @@
 import React, { forwardRef } from 'react';
 import { createPortal } from 'react-dom';
+import * as ReactDOM from 'react-dom/client';
 import { Check, Plus, Pencil, Trash2 } from 'lucide-react';
 import { getLabel, getSubDataList } from './ddtSelectors';
 import getIconComponent from './icons';
@@ -128,8 +129,80 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
   const dragStateRef = React.useRef<{ mainIdx: number | null; fromIdx: number | null }>({ mainIdx: null, fromIdx: null });
   const forwarded = ref as any;
   React.useEffect(() => { if (forwarded) forwarded.current = containerRef.current; }, [forwarded]);
-  // ✅ FIX: Parti da null invece di 280 per evitare flash e misure sbagliate
-  const [measuredW, setMeasuredW] = React.useState<number | null>(null);
+  // ✅ FIX: Calcola larghezza iniziale PRECISA in modo sincrono - deve essere identica al ghost
+  // Questo elimina completamente il flash perché la larghezza è già corretta al primo render
+  const calculateInitialWidth = React.useMemo(() => {
+    if (!Array.isArray(mainList) || mainList.length === 0) return 280;
+
+    // ✅ Usa canvas per misurare il testo in modo preciso (sincrono)
+    // IMPORTANTE: Usa gli stessi parametri che userà il ghost container
+    const measureTextWidth = (text: string, fontWeight: number = 400): number => {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      if (!context) return text.length * 8;
+
+      // ✅ Usa font di sistema standard (stesso che userà il ghost)
+      // Il font reale verrà applicato dal CSS, ma questa è una buona approssimazione
+      context.font = `${fontWeight} 14px system-ui, -apple-system, sans-serif`;
+      return context.measureText(text || '').width;
+    };
+
+    // ✅ Costanti UI IDENTICHE a quelle del ghost container
+    const ICON_WIDTH = 20;
+    const GAP = 10;
+    const CHECKBOX_WIDTH = 14 + 6; // Checkbox (14px) + marginRight (6px)
+    const CHEVRON_WIDTH = 10 + 6; // Chevron SVG (10px) + marginLeft (6px)
+    const BUTTON_PADDING_H = 10 + 10; // padding: '8px 10px' → left + right
+    const SUB_INDENT = 36; // marginLeft per sub-items
+    const MAIN_INDENT_AGGREGATED = 18; // marginLeft per main items quando aggregated
+    const CONTAINER_PADDING = 14 + 14; // paddingLeft + paddingRight
+    const GUTTER = 10;
+    const EXTRA_PADDING = 10;
+
+    let maxWidth = 0;
+
+    // ✅ Calcola per tutti i main items e sub-items (IDENTICO al ghost container)
+    mainList.forEach((main) => {
+      const label = getLabel(main, translations);
+      const subs = getSubDataList(main) || [];
+      const hasSubs = subs.length > 0;
+
+      // Main item width (stesso calcolo del ghost)
+      let mainWidth = ICON_WIDTH + GAP + measureTextWidth(label, 400);
+      if (aggregated) mainWidth += CHECKBOX_WIDTH;
+      if (hasSubs) mainWidth += CHEVRON_WIDTH;
+      mainWidth += BUTTON_PADDING_H;
+      if (aggregated) mainWidth += MAIN_INDENT_AGGREGATED;
+
+      if (mainWidth > maxWidth) maxWidth = mainWidth;
+
+      // ✅ Sub items (sempre considerati, anche se collassati - IDENTICO al ghost)
+      subs.forEach((sub: any) => {
+        const subLabel = getLabel(sub, translations);
+        const subLabelWidth = measureTextWidth(subLabel, 400);
+        let subWidth = SUB_INDENT + ICON_WIDTH + GAP + subLabelWidth;
+        subWidth += CHECKBOX_WIDTH;
+        subWidth += BUTTON_PADDING_H;
+
+        if (subWidth > maxWidth) maxWidth = subWidth;
+      });
+    });
+
+    // ✅ Root label se aggregated (IDENTICO al ghost)
+    if (aggregated && rootLabel) {
+      const rootLabelWidth = measureTextWidth(rootLabel, 700);
+      const rootWidth = ICON_WIDTH + GAP + rootLabelWidth + BUTTON_PADDING_H;
+      if (rootWidth > maxWidth) maxWidth = rootWidth;
+    }
+
+    // ✅ Aggiungi padding del container + gutter + padding extra (IDENTICO al ghost)
+    const totalWidth = maxWidth + CONTAINER_PADDING + GUTTER + EXTRA_PADDING;
+    const clamped = Math.min(Math.max(Math.ceil(totalWidth), 200), 640);
+
+    return clamped;
+  }, [mainList, translations, aggregated, rootLabel]);
+
+  const [measuredW, setMeasuredW] = React.useState<number | null>(calculateInitialWidth);
   const [hoverRoot, setHoverRoot] = React.useState<boolean>(false);
   const [hoverMainIdx, setHoverMainIdx] = React.useState<number | null>(null);
   const [hoverSub, setHoverSub] = React.useState<{ mainIdx: number; subIdx: number } | null>(null);
@@ -181,12 +254,15 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
     });
   }, [manualWidth, measuredW, style?.width, DEBUG_RESIZE]);
 
-  // ✅ FIX: useLayoutEffect per calcolare dopo il mount con font reale
+  // ✅ GHOST METHOD: Ref per il container ghost
+  const ghostContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const ghostRootRef = React.useRef<ReturnType<typeof ReactDOM.createRoot> | null>(null);
+
+  // ✅ GHOST METHOD: useLayoutEffect per calcolare larghezza usando ghost container
   React.useLayoutEffect(() => {
     // Se c'è una larghezza manuale, NON calcolare autosize
     if (manualWidth !== null && manualWidth > 0) {
       if (DEBUG_RESIZE) console.log('⏸️ [SIDEBAR] manualWidth attivo, salto autosize', { manualWidth });
-      // Non aggiornare measuredW se c'è manualWidth attivo
       return;
     }
 
@@ -197,125 +273,282 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
       return;
     }
 
-    // ✅ FIX: Leggi il font reale dal container
-    const computedStyle = window.getComputedStyle(el);
-    const containerFont = computedStyle.font || `${computedStyle.fontWeight} ${computedStyle.fontSize} ${computedStyle.fontFamily}`;
+    // ✅ IMPORTANTE: Mantieni la larghezza iniziale approssimativa già calcolata
+    // Il ghost container la raffinera' dopo, ma almeno partiamo con una larghezza ragionevole
+    // Questo evita il flash iniziale
 
-    // ✅ Funzione per misurare testo con font reale
-    const measureTextWidth = (text: string, fontWeight: number = 400): number => {
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      if (!context) return text.length * 8;
+    // ✅ Crea ghost container se non esiste
+    if (!ghostContainerRef.current) {
+      const ghostContainer = document.createElement('div');
+      ghostContainer.style.cssText = `
+        position: absolute;
+        visibility: hidden;
+        top: -9999px;
+        left: -9999px;
+        width: auto;
+        height: auto;
+        padding: 16px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        font-family: ${window.getComputedStyle(el).fontFamily};
+        font-size: ${window.getComputedStyle(el).fontSize};
+        white-space: nowrap;
+        background: #121621;
+      `;
+      document.body.appendChild(ghostContainer);
+      ghostContainerRef.current = ghostContainer;
 
-      // ✅ Usa il font del container, ma modifica il fontWeight
-      const fontParts = containerFont.split(' ');
-      const baseFontSize = computedStyle.fontSize || '14px';
-      const baseFontFamily = computedStyle.fontFamily || 'system-ui';
-      context.font = `${fontWeight} ${baseFontSize} ${baseFontFamily}`;
-
-      return context.measureText(text || '').width;
-    };
-
-    // ✅ FIX: Leggi costanti UI dal DOM invece di hardcoded
-    // Prova a leggere da elementi esistenti, altrimenti usa fallback
-    const getIconWidth = (): number => {
-      // Cerca un'icona nel DOM per misurare
-      const firstIcon = el.querySelector('svg, [class*="icon"]');
-      if (firstIcon) {
-        const rect = firstIcon.getBoundingClientRect();
-        if (rect.width > 0) return rect.width;
+      // ✅ Crea React root per il ghost container
+      if (typeof ReactDOM !== 'undefined' && ReactDOM.createRoot) {
+        ghostRootRef.current = ReactDOM.createRoot(ghostContainer);
       }
-      return 20; // Fallback
+    }
+
+    const ghostContainer = ghostContainerRef.current;
+    if (!ghostContainer) return;
+
+    // ✅ Renderizza ghost content con React (tutti i nodi espansi)
+    const renderGhostContent = () => {
+      if (!ghostRootRef.current) {
+        // Se React root non disponibile, crealo
+        ghostRootRef.current = ReactDOM.createRoot(ghostContainer);
+      }
+
+      // ✅ Usa React per renderizzare (più preciso, mantiene stili esatti)
+      const GhostContent = () => (
+        <div className={combinedClass} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {aggregated && rootLabel && (
+            <button style={itemStyle(false, false)}>
+              <span style={{ marginRight: 6 }}>{getIconComponent('Folder')}</span>
+              <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{rootLabel || 'Data'}</span>
+            </button>
+          )}
+          {mainList.map((main, idx) => {
+            const subs = getSubDataList(main) || [];
+            const hasSubs = subs.length > 0;
+            const MainIcon = getIconComponent(main?.icon || 'FileText');
+            return (
+              <React.Fragment key={idx}>
+                <button style={{ ...itemStyle(false, false), ...(aggregated ? { marginLeft: 18 } : {}) }}>
+                  {aggregated && (
+                    <span style={{ width: 14, height: 14, marginRight: 6, display: 'inline-block', border: '1px solid #9ca3af', borderRadius: 3 }} />
+                  )}
+                  <span style={{ display: 'inline-flex', alignItems: 'center' }}>{MainIcon}</span>
+                  <span style={{ whiteSpace: 'nowrap' }}>{getLabel(main, translations)}</span>
+                  {hasSubs && (
+                    <span style={{ marginLeft: 6, width: 10, height: 10, display: 'inline-block' }}>▼</span>
+                  )}
+                </button>
+                {/* Sub items sempre renderizzati (anche se collassati nella UI reale) */}
+                {subs.map((sub: any, sidx: number) => {
+                  const SubIcon = getIconComponent(sub?.icon || 'FileText');
+                  return (
+                    <button key={sidx} style={{ ...itemStyle(false, true), marginLeft: 36 }}>
+                      <span style={{ width: 14, height: 14, marginRight: 6, display: 'inline-block', border: '1px solid #9ca3af', borderRadius: 3 }} />
+                      <span style={{ display: 'inline-flex', alignItems: 'center' }}>{SubIcon}</span>
+                      <span style={{ whiteSpace: 'nowrap' }}>{getLabel(sub, translations)}</span>
+                    </button>
+                  );
+                })}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      );
+
+      ghostRootRef.current.render(<GhostContent />);
     };
 
-    const getPadding = (): { horizontal: number; vertical: number } => {
-      const paddingLeft = parseFloat(computedStyle.paddingLeft) || 14;
-      const paddingRight = parseFloat(computedStyle.paddingRight) || 14;
-      const paddingTop = parseFloat(computedStyle.paddingTop) || 16;
-      const paddingBottom = parseFloat(computedStyle.paddingBottom) || 16;
-      return {
-        horizontal: paddingLeft + paddingRight,
-        vertical: paddingTop + paddingBottom
+    // ✅ Renderizza ghost content
+    renderGhostContent();
+
+    // ✅ Funzione di misurazione
+    const measure = () => {
+      if (!ghostContainerRef.current) {
+        if (DEBUG_RESIZE) console.warn('👻 [GHOST] ghostContainerRef.current è null');
+        return;
+      }
+
+      // ✅ Trova l'elemento più largo (cerca ricorsivamente tutti i button)
+      const findAllButtons = (element: HTMLElement): HTMLElement[] => {
+        const buttons: HTMLElement[] = [];
+        if (element.tagName === 'BUTTON') {
+          buttons.push(element);
+        }
+        for (let i = 0; i < element.children.length; i++) {
+          buttons.push(...findAllButtons(element.children[i] as HTMLElement));
+        }
+        return buttons;
       };
+
+      const allButtons = findAllButtons(ghostContainerRef.current);
+
+      if (allButtons.length === 0) {
+        if (DEBUG_RESIZE) console.warn('👻 [GHOST] Nessun button trovato, riprovo...');
+        // Riprova dopo un breve delay
+        setTimeout(() => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(measure);
+          });
+        }, 50);
+        return;
+      }
+
+      let maxWidth = 0;
+
+      for (const button of allButtons) {
+        const rect = button.getBoundingClientRect();
+        if (rect.width > 0 && rect.width > maxWidth) {
+          maxWidth = rect.width;
+        }
+      }
+
+      // ✅ Se non trovato, prova a misurare il container stesso
+      if (maxWidth === 0) {
+        const containerRect = ghostContainerRef.current.getBoundingClientRect();
+        if (containerRect.width > 0) {
+          maxWidth = containerRect.width;
+        } else {
+          if (DEBUG_RESIZE) console.warn('👻 [GHOST] Impossibile misurare, uso fallback');
+          setMeasuredW(280); // Fallback
+          return;
+        }
+      }
+
+      // ✅ IMPORTANTE: maxWidth è la larghezza del button (che include il suo padding interno)
+      // Dobbiamo aggiungere solo:
+      // - padding del container (14px left + 14px right)
+      // - gutter per sicurezza
+      // - padding extra configurabile
+      const containerPadding = 14 + 14; // paddingLeft + paddingRight del container
+      const GUTTER = 10; // Spazio extra per sicurezza
+      const EXTRA_PADDING = 10; // ✅ PADDING EXTRA CONFIGURABILE (ridotto per precisione)
+
+      const totalWidth = maxWidth + containerPadding + GUTTER + EXTRA_PADDING;
+      const clamped = Math.min(Math.max(Math.ceil(totalWidth), 200), 640);
+
+      // ✅ LOGICA: Il calcolo iniziale è già preciso, quindi NON aggiornare se la differenza è minima
+      // Questo elimina completamente il flash perché la larghezza è già corretta
+      const currentWidth = measuredW || calculateInitialWidth;
+      const difference = Math.abs(clamped - currentWidth);
+
+      // ✅ Aggiorna SOLO se la differenza è significativa (> 3px)
+      // Se il calcolo iniziale è corretto (differenza < 3px), NON aggiornare = ZERO flash
+      if (difference > 3) {
+        setMeasuredW(clamped);
+      } else {
+        // ✅ Calcolo iniziale era già corretto, nessun aggiornamento necessario
+        // Questo elimina il flash perché non c'è cambio di stato
+      }
+
+      // ✅ Log sempre (non solo in DEBUG) per vedere cosa succede
+      console.log('👻 [GHOST] Misurazione completata', {
+        buttonsFound: allButtons.length,
+        maxNodeWidth: maxWidth,
+        containerPadding,
+        gutter: GUTTER,
+        extraPadding: EXTRA_PADDING,
+        totalWidth,
+        clamped,
+        currentWidth,
+        difference,
+        willUpdate: difference > 15 || currentWidth === calculateInitialWidth,
+        ghostContainerWidth: ghostContainerRef.current.getBoundingClientRect().width,
+      });
     };
 
-    const iconWidth = getIconWidth();
-    const padding = getPadding();
+    // ✅ Usa MutationObserver per aspettare che React abbia renderizzato
+    let observer: MutationObserver | null = null;
+    let measureTimeout: number | null = null;
 
-    // Costanti derivate dal codice (con fallback)
-    const CHECKBOX_WIDTH = 14 + 6; // Checkbox (14px) + marginRight (6px)
-    const CHEVRON_WIDTH = 10 + 6; // Chevron SVG (10px) + marginLeft (6px)
-    const BUTTON_PADDING_H = 10 + 10; // padding: '8px 10px' → left + right
-    const SUB_INDENT = 36; // marginLeft per sub-items
-    const MAIN_INDENT_AGGREGATED = 18; // marginLeft per main items quando aggregated
-    const GAP = 10; // gap tra icona e testo
-    const GUTTER = 15; // spazio extra
-
-    let maxWidth = 0;
-
-    // ✅ 1. Calcola larghezza massima dei main items
-    mainList.forEach((main, idx) => {
-      const label = getLabel(main, translations);
-      const labelWidth = measureTextWidth(label, selectedMainIndex === idx ? 700 : 400);
-      const subs = getSubDataList(main) || [];
-      const hasSubs = subs.length > 0;
-
-      let mainWidth = iconWidth + GAP + labelWidth;
-
-      if (aggregated) mainWidth += CHECKBOX_WIDTH;
-      if (hasSubs) mainWidth += CHEVRON_WIDTH;
-      mainWidth += BUTTON_PADDING_H;
-      if (aggregated) mainWidth += MAIN_INDENT_AGGREGATED;
-
-      if (mainWidth > maxWidth) maxWidth = mainWidth;
-
-      // ✅ 2. Se questo main è espanso, calcola anche i suoi sub-items
-      if (expandedMainIndex === idx && hasSubs) {
-        subs.forEach((sub: any, sidx: number) => {
-          const subLabel = getLabel(sub, translations);
-          const isSubActive = selectedMainIndex === idx && safeSelectedSubIndex === sidx;
-          const subLabelWidth = measureTextWidth(subLabel, isSubActive ? 700 : 400);
-
-          let subWidth = SUB_INDENT + iconWidth + GAP + subLabelWidth;
-          subWidth += CHECKBOX_WIDTH;
-          subWidth += BUTTON_PADDING_H;
-
-          if (subWidth > maxWidth) maxWidth = subWidth;
-        });
+    const startMeasurement = () => {
+      // ✅ Pulisci timeout precedente
+      if (measureTimeout) {
+        clearTimeout(measureTimeout);
       }
+
+      // ✅ Verifica se ci sono elementi
+      if (ghostContainerRef.current && ghostContainerRef.current.children.length > 0) {
+        // ✅ Disconnetti observer se presente
+        if (observer) {
+          observer.disconnect();
+          observer = null;
+        }
+        // ✅ Misura dopo che il layout è completo
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setTimeout(measure, 10);
+          });
+        });
+      } else {
+        // ✅ Aspetta che gli elementi vengano aggiunti
+        if (!observer && ghostContainerRef.current) {
+          observer = new MutationObserver(() => {
+            if (ghostContainerRef.current && ghostContainerRef.current.children.length > 0) {
+              observer?.disconnect();
+              observer = null;
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  setTimeout(measure, 10);
+                });
+              });
+            }
+          });
+          observer.observe(ghostContainerRef.current, {
+            childList: true,
+            subtree: true
+          });
+        }
+      }
+    };
+
+    // ✅ Avvia la misurazione
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        startMeasurement();
+        // ✅ Fallback: misura dopo 100ms anche se MutationObserver non ha funzionato
+        measureTimeout = window.setTimeout(() => {
+          if (ghostContainerRef.current && ghostContainerRef.current.children.length > 0) {
+            measure();
+          }
+        }, 100);
+      });
     });
 
-    // ✅ 3. Considera anche il root label se aggregated
-    if (aggregated && rootLabel) {
-      const rootLabelWidth = measureTextWidth(rootLabel, 700);
-      const rootWidth = iconWidth + GAP + rootLabelWidth + BUTTON_PADDING_H;
-      if (rootWidth > maxWidth) maxWidth = rootWidth;
-    }
+    // ✅ Cleanup
+    return () => {
+      if (observer) {
+        observer.disconnect();
+      }
+      if (measureTimeout) {
+        clearTimeout(measureTimeout);
+      }
+    };
+  }, [mainList, aggregated, rootLabel, translations, manualWidth, DEBUG_RESIZE, combinedClass, bgBase, textBase, borderColor, itemStyle]);
 
-    // ✅ 4. Aggiungi padding del container e gutter
-    maxWidth += padding.horizontal;
-    maxWidth += GUTTER;
-
-    // ✅ 5. Clamp tra min e max
-    const totalWidth = Math.ceil(maxWidth);
-    const clamped = Math.min(Math.max(totalWidth, 200), 640);
-
-    if (DEBUG_RESIZE) console.log('📊 [SIDEBAR] Calcolo autosize completato', {
-      maxWidth,
-      totalWidth,
-      clamped,
-      manualWidth,
-      willSet: manualWidth === null || manualWidth === 0,
-    });
-
-    if (manualWidth === null || manualWidth === 0) {
-      setMeasuredW(clamped);
-    }
-  }, [mainList, expandedMainIndex, aggregated, rootLabel, translations, selectedMainIndex, safeSelectedSubIndex, manualWidth, DEBUG_RESIZE]);
+  // ✅ Cleanup: rimuovi ghost container quando il componente si smonta
+  React.useEffect(() => {
+    return () => {
+      if (ghostRootRef.current) {
+        try {
+          ghostRootRef.current.unmount();
+        } catch {}
+        ghostRootRef.current = null;
+      }
+      if (ghostContainerRef.current) {
+        try {
+          document.body.removeChild(ghostContainerRef.current);
+        } catch {}
+        ghostContainerRef.current = null;
+      }
+    };
+  }, []);
 
   // ✅ DEBUG: Log quando finalWidth cambia
-  const finalWidth = manualWidth ?? measuredW ?? 'auto';
-  const hasFlex = !manualWidth; // ✅ CRITICO: Rimuovi flex: 1 quando c'è manualWidth
+  // ✅ IMPORTANTE: Se measuredW è null, usa un fallback invece di 'auto' per evitare sidebar troppo larga
+  const finalWidth = manualWidth ?? measuredW ?? 280; // Fallback a 280 invece di 'auto'
+  const hasFlex = !manualWidth && measuredW === null; // ✅ CRITICO: Solo flex se non c'è manualWidth E measuredW è null
   React.useEffect(() => {
     if (DEBUG_RESIZE) console.log('🎨 [SIDEBAR] Render con width finale', {
       manualWidth,
@@ -335,12 +568,12 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
       onKeyDown={handleKeyDown}
       className={combinedClass}
       style={{
-        width: finalWidth, // ✅ FIX: usa 'auto' se measuredW è null
+        width: typeof finalWidth === 'number' ? `${finalWidth}px` : finalWidth, // ✅ Assicura che sia una stringa con px
         background: '#121621',
         padding: '16px 14px',
         display: 'flex',
         flexDirection: 'column',
-        // ✅ CRITICO: Rimuovi flex: 1 quando c'è manualWidth, altrimenti il width fisso viene ignorato
+        // ✅ CRITICO: Rimuovi flex: 1 quando c'è width calcolata, altrimenti il width fisso viene ignorato
         ...(hasFlex ? { flex: 1 } : {}),
         minHeight: 0,
         gap: 8,
@@ -348,7 +581,8 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
         outline: 'none',
         position: 'relative',
         flexShrink: 0,
-        ...(style || {}) // ✅ Spread style prop solo se presente (ma width viene sovrascritto da manualWidth/measuredW)
+        // ✅ IMPORTANTE: Spread style prop DOPO, ma escludi width per evitare sovrascritture
+        ...(style ? Object.fromEntries(Object.entries(style).filter(([key]) => key !== 'width')) : {})
       }}
     >
       {aggregated && (
