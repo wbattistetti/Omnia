@@ -239,12 +239,6 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            console.log('🔧 [GEAR] Click ricevuto su ingranaggio', {
-              gearDisabled,
-              hasOnTypeChangeRequest: !!onTypeChangeRequest,
-              hasOnOpenDDT: !!onOpenDDT,
-              rowId: (e.currentTarget as any).closest('[data-row-id]')?.getAttribute('data-row-id')
-            });
             // ✅ Se gearDisabled è true (tipo UNDEFINED), apri il picker del tipo
             // ✅ Gestisci anche il caso in cui gearDisabled è undefined ma onOpenDDT non è disponibile
             const isDisabled = gearDisabled === true;
@@ -253,38 +247,19 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
 
             if (shouldOpenPicker && onTypeChangeRequest) {
               // ✅ Se tipo UNDEFINED o se onOpenDDT non disponibile, apri il picker del tipo (come se cliccassi sul primo pulsante)
-              console.log('🔧 [GEAR] Click su ingranaggio - apertura picker tipo (come primo pulsante)', {
-                rowId: (e.currentTarget as any).closest('[data-row-id]')?.getAttribute('data-row-id'),
-                isDisabled,
-                shouldOpenPicker
-              });
               // ✅ Usa la posizione del pulsante ingranaggio stesso per aprire il picker
               const gearRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-              console.log('🔧 [GEAR] Posizione ingranaggio:', gearRect);
               if (gearRect && onTypeChangeRequest) {
-                console.log('🔧 [GEAR] Chiamando onTypeChangeRequest con rect:', gearRect);
                 onTypeChangeRequest(gearRect);
-              } else {
-                console.warn('⚠️ [GEAR] Impossibile ottenere posizione o onTypeChangeRequest non disponibile', {
-                  hasGearRect: !!gearRect,
-                  hasOnTypeChangeRequest: !!onTypeChangeRequest
-                });
               }
             } else if (onOpenDDT) {
-              console.log('🔧 [GEAR] Click su ingranaggio - apertura ResponseEditor', {
-                rowId: (e.currentTarget as any).closest('[data-row-id]')?.getAttribute('data-row-id'),
-                hasDDT
-              });
               try {
                 onOpenDDT();
               } catch (error) {
-                console.error('❌ [GEAR] Errore chiamando onOpenDDT', {
-                  error,
-                  errorMessage: error instanceof Error ? error.message : String(error)
-                });
+                console.error('[NodeRowActionsOverlay] Error calling onOpenDDT:', error);
               }
             } else {
-              console.warn('⚠️ [GEAR] Nessuna azione disponibile', {
+              console.warn('[NodeRowActionsOverlay] No action available', {
                 gearDisabled,
                 hasOnOpenDDT: !!onOpenDDT,
                 hasOnTypeChangeRequest: !!onTypeChangeRequest

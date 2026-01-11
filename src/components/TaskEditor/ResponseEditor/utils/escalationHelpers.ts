@@ -47,14 +47,6 @@ export function getTaskText(
       if (task.label && typeof task.label === 'string' && task.label.trim().length > 0) {
         return task.label;
       }
-      // 🔍 DEBUG: Log temporaneo per capire il problema
-      console.warn('[getTaskText] GUID senza traduzione né label:', {
-        textKey,
-        templateId: task.templateId,
-        taskLabel: task.label,
-        taskId: task.id,
-        taskKeys: Object.keys(task)
-      });
       return textKey;
     }
     // Altrimenti usa direttamente il textKey (non è un GUID)
@@ -78,15 +70,6 @@ export function getTaskText(
     return task.label;
   }
 
-  // 🔍 DEBUG: Log temporaneo per capire il problema
-  console.warn('[getTaskText] Nessun testo trovato:', {
-    templateId: task.templateId,
-    taskLabel: task.label,
-    taskId: task.id,
-    hasTextKey: !!textKey,
-    taskKeys: Object.keys(task)
-  });
-
   return '';
 }
 
@@ -105,16 +88,6 @@ export function normalizeTaskForEscalation(
   // Se task.id è un GUID, non usarlo come templateId (probabilmente è l'id del DDT, non del task template)
   const templateId = taskTemplateId || (isTaskIdGuid ? null : taskId) || 'sayMessage';
 
-  // 🔍 DEBUG: Log temporaneo per capire il problema
-  if (isTaskIdGuid && !taskTemplateId) {
-    console.warn('[normalizeTaskForEscalation] Task ha id GUID ma non templateId:', {
-      taskId,
-      taskTemplateId,
-      taskLabel: task?.label,
-      taskKeys: Object.keys(task || {}),
-      inferredTemplateId: templateId
-    });
-  }
 
   return {
     templateId,

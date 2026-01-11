@@ -523,47 +523,18 @@ export const AppContent: React.FC<AppContentProps> = ({
   // Listen for TaskEditor open events (open as docking tab)
   React.useEffect(() => {
     const h = async (e: any) => {
-      console.log('📥 [AppContent] Evento taskEditor:open ricevuto', {
-        hasDetail: !!e?.detail,
-        detail: e?.detail,
-        timestamp: new Date().toISOString()
-      });
       try {
         const d = (e && e.detail) || {};
         // ✅ FIX: Verifica esplicitamente undefined/null invece di falsy (0 è falsy ma valido per TaskType.SayMessage)
         if (!d || !d.id || (d.type === undefined || d.type === null)) {
-          console.warn('⚠️ [AppContent] Evento taskEditor:open ignorato - dettagli mancanti', { // ✅ RINOMINATO: actEditor:open → taskEditor:open
-            hasD: !!d,
-            hasId: !!d?.id,
-            hasType: d.type !== undefined && d.type !== null,
-            typeValue: d.type
-          });
           return;
         }
 
         // Get instanceId from event
         const instanceId = d.instanceId || d.id;
 
-        console.log('✅ [AppContent] Processando evento taskEditor:open', { // ✅ RINOMINATO: actEditor:open → taskEditor:open
-          id: d.id,
-          type: d.type,
-          label: d.label,
-          instanceId,
-          hasDDT: !!d.ddt,
-          ddtMainDataLength: d.ddt?.mainData?.length || 0,
-          templateId: d.templateId
-        });
-
         // Determine editor kind based on task type
         const editorKind = resolveEditorKind({ type: d.type, id: d.id, label: d.label || d.name });
-
-        console.log('🔍 [AppContent] Editor kind determinato', {
-          editorKind,
-          type: d.type,
-          taskTypeName: d.type !== undefined && d.type !== null ? TaskType[d.type] : 'undefined',
-          taskId: d.id,
-          taskLabel: d.label
-        });
 
         // ✅ Build taskMeta from event detail
         const taskType = d.type as TaskType; // d.type is already TaskType enum
@@ -713,14 +684,7 @@ export const AppContent: React.FC<AppContentProps> = ({
             // TaskEditorHost → DDTHostAdapter → ResponseEditor gestirà il DDT
             // Il DDT viene preparato e salvato nel taskRepository prima di aprire l'editor
             const startStepTasksCount = preparedDDT?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
-            console.log('[DOCK_CREATE] 🆕 Creating new tab with DDT via TaskEditorHost', {
-              tabId,
-              instanceId,
-              mainDataLength: preparedDDT?.mainData?.length,
-              startStepTasksCount,
-              hasPreparedDDT: !!preparedDDT
-            });
-
+            // Creating new tab with DDT via TaskEditorHost
             // ✅ Salva DDT nel taskRepository prima di aprire l'editor (TaskEditorHost lo leggerà)
             if (preparedDDT) {
               let task = taskRepository.getTask(instanceId);

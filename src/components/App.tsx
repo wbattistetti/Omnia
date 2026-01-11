@@ -5,7 +5,7 @@ import { ChatPanel } from './TestEngine/ChatPanel';
 import { ProjectDataProvider } from '../context/ProjectDataContext';
 import { ProjectData } from '../types/project';
 import { AppContent } from './AppContent';
-import { ActionsCatalogProvider, useSetActionsCatalog } from '../context/ActionsCatalogContext';
+// ✅ REMOVED: ActionsCatalogContext - tasks are now loaded directly in ResponseEditor
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { DDTProvider } from '../context/DDTContext';
@@ -38,42 +38,8 @@ function AppInner() {
   const [userReplies, setUserReplies] = useState<(string | undefined)[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [showChat, setShowChat] = useState(true); // nuovo stato
-  const { setActionsCatalog } = useSetActionsCatalog();
 
-  // Tasks are loaded when a project is opened (in AppContent.tsx)
-
-  React.useEffect(() => {
-    // Load actions from Task_Templates with taskType='Action' instead of static JSON
-    fetch('/api/factory/task-templates?taskType=Action')
-      .then(res => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then(templates => {
-        // Convert Task_Templates format to actionsCatalog format for backward compatibility
-        const actionsCatalog = templates.map((template: any) => ({
-          id: template.id || template._id,
-          label: template.label || '',
-          description: template.description || '',
-          icon: template.icon || 'Circle',
-          color: template.color || 'text-gray-500',
-          params: template.structure || template.params || {}
-        }));
-        setActionsCatalog(actionsCatalog);
-        try { (window as any).__actionsCatalog = actionsCatalog; } catch { }
-      })
-      .catch(err => {
-        console.warn('[App] Failed to load actions from Task_Templates, falling back to actionsCatalog.json', err);
-        // Fallback to static JSON if database fails
-        fetch('/data/actionsCatalog.json')
-          .then(res => res.json())
-          .then(data => { setActionsCatalog(data); try { (window as any).__actionsCatalog = data; } catch { } })
-          .catch(fallbackErr => {
-            setActionsCatalog([]);
-            console.error('[App][ERROR] fetch actionsCatalog fallback', fallbackErr);
-          });
-      });
-  }, [setActionsCatalog]);
+  // ✅ REMOVED: Tasks are now loaded directly in ResponseEditor, not in App.tsx
 
   // Enable central logger globally for this session
   React.useEffect(() => {
@@ -183,7 +149,6 @@ export default function App() {
       <ProjectDataProvider>
         <ProjectTranslationsProvider>
           <AIProviderProvider>
-            <ActionsCatalogProvider>
             <DndProvider backend={HTML5Backend}>
               <SpeechRecognitionProvider>
                 <DDTProvider>
@@ -199,7 +164,6 @@ export default function App() {
                 </DDTProvider>
               </SpeechRecognitionProvider>
             </DndProvider>
-          </ActionsCatalogProvider>
         </AIProviderProvider>
         </ProjectTranslationsProvider>
       </ProjectDataProvider>

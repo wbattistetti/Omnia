@@ -1,5 +1,5 @@
 import React from 'react';
-import TaskList from '../ActionViewer/TaskList';
+import TaskList from '../TaskPalette/TaskList';
 import ResponseSimulator from '../../ChatSimulator/ResponseSimulator';
 import DDEBubbleChat from '../../ChatSimulator/DDEBubbleChat';
 import { stepMeta } from './ddtUtils';
@@ -19,6 +19,8 @@ type Props = {
   selectedNode: any;
   onUpdateDDT?: (updater: (ddt: any) => any) => void;
   hideSplitter?: boolean; // ✅ Nascondi lo splitter quando c'è un altro pannello a sinistra
+  tasks?: any[]; // ✅ Tasks for escalation palette
+  stepKey?: string; // ✅ Current step key for filtering tasks
 };
 
 const localStorageKey = 'responseEditor.rightWidth';
@@ -142,7 +144,7 @@ function StylesView() {
   );
 }
 
-export default function RightPanel({ mode, width, onWidthChange, onStartResize, dragging, ddt, translations, selectedNode, onUpdateDDT, hideSplitter = false }: Props) {
+export default function RightPanel({ mode, width, onWidthChange, onStartResize, dragging, ddt, translations, selectedNode, onUpdateDDT, hideSplitter = false, tasks = [], stepKey }: Props) {
   const { combinedClass } = useFontContext();
   const minWidth = 160;
   const [isHovered, setIsHovered] = React.useState(false);
@@ -183,7 +185,7 @@ export default function RightPanel({ mode, width, onWidthChange, onStartResize, 
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
         {mode === 'actions' && (
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: 12 }}>
-            <TaskList />
+            <TaskList tasks={tasks} stepKey={stepKey} />
           </div>
         )}
         {(() => {

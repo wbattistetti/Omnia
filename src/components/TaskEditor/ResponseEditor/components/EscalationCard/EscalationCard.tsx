@@ -32,6 +32,7 @@ export function EscalationCard({
   stepKey
 }: EscalationCardProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
 
   return (
     <div
@@ -51,20 +52,24 @@ export function EscalationCard({
         name={escalationName}
         color={color}
         isHovered={isHovered}
+        isExpanded={isExpanded}
+        onToggleExpand={() => setIsExpanded(!isExpanded)}
         onDelete={onDeleteEscalation}
       />
-      <EscalationTasksList
-        escalation={escalation}
-        escalationIdx={escalationIdx}
-        color={color}
-        translations={translations}
-        allowedActions={allowedActions}
-        updateEscalation={updateEscalation}
-        updateSelectedNode={updateSelectedNode}
-        autoEditTarget={autoEditTarget}
-        onAutoEditTargetChange={onAutoEditTargetChange}
-        stepKey={stepKey}
-      />
+      {isExpanded && (
+        <EscalationTasksList
+          escalation={escalation}
+          escalationIdx={escalationIdx}
+          color={color}
+          translations={translations}
+          allowedActions={allowedActions}
+          updateEscalation={updateEscalation}
+          updateSelectedNode={updateSelectedNode}
+          autoEditTarget={autoEditTarget}
+          onAutoEditTargetChange={onAutoEditTargetChange}
+          stepKey={stepKey}
+        />
+      )}
     </div>
   );
 }

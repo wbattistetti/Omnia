@@ -200,7 +200,6 @@ class TaskRepository {
 
       const data = await response.json();
       const items: Task[] = data.items || [];
-      console.log('[📥 LOAD_TASKS] Fetched', { count: items.length });
 
       // Clear and populate internal storage
       this.tasks.clear();
@@ -209,16 +208,9 @@ class TaskRepository {
         const { id, templateId, createdAt, updatedAt, projectId: _projectId, value, type, Type, ...directFields } = item;
         const taskType = type !== undefined && type !== null ? type : (Type !== undefined && Type !== null ? Type : undefined);
 
-        console.log('[📥 LOAD_TASKS] Processing', {
-          taskId: id,
-          type: taskType,
-          typeName: taskType !== undefined ? TaskType[taskType] : 'undefined',
-          templateId
-        });
-
         // ✅ CRITICAL: type is REQUIRED - must be saved correctly in database
         if (taskType === undefined || taskType === null) {
-          console.error('[📥 LOAD_TASKS] Task without type - SKIPPED', {
+          console.error('[TaskRepository] Task without type - SKIPPED', {
             taskId: id,
             availableFields: Object.keys(item)
           });
@@ -235,14 +227,6 @@ class TaskRepository {
           updatedAt: item.updatedAt ? new Date(item.updatedAt) : undefined
         };
 
-        console.log('[📥 LOAD_TASKS] Loaded', {
-          taskId: task.id,
-          type: task.type,
-          typeName: TaskType[task.type],
-          templateId: task.templateId,
-          hasText: !!task.text
-        });
-
         this.tasks.set(task.id, task);
       }
 
@@ -250,11 +234,9 @@ class TaskRepository {
       window.dispatchEvent(new CustomEvent('tasks:loaded', {
         detail: { projectId: finalProjectId, tasksCount: this.tasks.size }
       }));
-
-      console.log('[📥 LOAD_TASKS] Complete', { totalTasks: this.tasks.size });
       return true;
     } catch (error) {
-      console.error('[📥 LOAD_TASKS] Error', {
+      console.error('[TaskRepository] Error loading tasks', {
         projectId: finalProjectId,
         error: error instanceof Error ? error.message : error
       });
@@ -378,28 +360,7 @@ class TaskRepository {
         ...fields  // ✅ Save fields directly (no value wrapper)
       };
 
-      console.log('[💾 SAVE_TASK] Saving', {
-        taskId: task.id,
-        type: task.type,
-        typeName: TaskType[task.type],
-        templateId: task.templateId,
-        hasText: !!task.text,
-        hasMainData: !!task.mainData,
-        mainDataLength: task.mainData?.length || 0,
-        firstMainDataSteps: task.mainData?.[0]?.steps ? {
-          type: typeof task.mainData[0].steps,
-          isArray: Array.isArray(task.mainData[0].steps),
-          keys: typeof task.mainData[0].steps === 'object' ? Object.keys(task.mainData[0].steps || {}) : [],
-          length: Array.isArray(task.mainData[0].steps) ? task.mainData[0].steps.length : 0
-        } : null
-      });
-
       const payloadString = JSON.stringify(payload);
-      console.log('[💾 SAVE_TASK] Payload size', {
-        taskId: task.id,
-        payloadSize: payloadString.length,
-        payloadPreview: payloadString.substring(0, 1000)
-      });
 
       const response = await fetch(`/api/projects/${projectId}/tasks`, {
         method: 'POST',
@@ -409,19 +370,17 @@ class TaskRepository {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('[💾 SAVE_TASK] Failed', {
+        console.error('[TaskRepository] Failed to save task:', {
           taskId: task.id,
           status: response.status,
-          statusText: response.statusText,
           error: errorText.substring(0, 500)
         });
         return false;
       }
 
-      console.log('[💾 SAVE_TASK] Success', { taskId: task.id });
       return true;
     } catch (error) {
-      console.error('[💾 SAVE_TASK] Error', { taskId: task.id, error });
+      console.error('[TaskRepository] Error saving task:', { taskId: task.id, error });
       return false;
     }
   }

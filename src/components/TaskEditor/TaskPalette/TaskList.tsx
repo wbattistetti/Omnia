@@ -1,9 +1,10 @@
 // Executive summary: Renders a responsive grid of available tasks for drag & drop.
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import TaskItem from './TaskItem';
 import { MessageCircle, HelpCircle, Headphones, Shield, PhoneOff, Database, Mail, MessageSquare, FunctionSquare as Function, Music, Eraser, ArrowRight, Tag, Clock, ServerCog } from 'lucide-react';
-import { useActionsCatalog } from '../../../context/ActionsCatalogContext';
 import { useFontContext } from '../../../context/FontContext';
+import { TaskContext, EscalationStepType } from '../../../types/taskContext';
+import { filterTasksByContext } from '../../../utils/taskContextHelpers';
 
 const MIN_THUMBNAIL_WIDTH = 100;
 
@@ -14,19 +15,49 @@ const iconMap: Record<string, React.ReactNode> = {
 
 const DEFAULT_LANG = 'it';
 
-const TaskList: React.FC = () => {
+type TaskListProps = {
+  tasks: any[];
+  stepKey?: string; // Optional step key for filtering (e.g., 'start', 'noMatch')
+};
+
+const TaskList: React.FC<TaskListProps> = ({ tasks, stepKey }) => {
   const { combinedClass } = useFontContext();
-  const { actionsCatalog } = useActionsCatalog();
   const [columns, setColumns] = useState(4);
   const containerRef = useRef<HTMLDivElement>(null);
   const [lang, setLang] = useState(DEFAULT_LANG);
+
+  // Filter tasks by context (escalation) and optionally by step type
+  const filteredTasks = useMemo(() => {
+    if (!stepKey) {
+      // If no stepKey, show all tasks allowed in escalation
+      return filterTasksByContext(tasks, TaskContext.ESCALATION);
+    }
+
+    // Map stepKey string to EscalationStepType enum
+    const stepTypeMap: Record<string, EscalationStepType> = {
+      'start': EscalationStepType.START,
+      'noMatch': EscalationStepType.NO_MATCH,
+      'noInput': EscalationStepType.NO_INPUT,
+      'confirmation': EscalationStepType.CONFIRMATION,
+      'success': EscalationStepType.SUCCESS,
+      'introduction': EscalationStepType.INTRODUCTION,
+    };
+
+    const stepType = stepTypeMap[stepKey];
+    if (stepType) {
+      return filterTasksByContext(tasks, TaskContext.ESCALATION, stepType);
+    }
+
+    // Fallback: show all escalation tasks if stepKey doesn't match
+    return filterTasksByContext(tasks, TaskContext.ESCALATION);
+  }, [tasks, stepKey]);
 
   useEffect(() => {
     const updateColumns = () => {
       if (containerRef.current) {
         const containerWidth = containerRef.current.offsetWidth;
         const possibleColumns = Math.floor(containerWidth / MIN_THUMBNAIL_WIDTH);
-        const newColumns = Math.max(1, Math.min(possibleColumns, actionsCatalog.length));
+        const newColumns = Math.max(1, Math.min(possibleColumns, filteredTasks.length));
         setColumns(newColumns);
       }
     };
@@ -37,7 +68,7 @@ const TaskList: React.FC = () => {
     }
 
     return () => resizeObserver.disconnect();
-  }, [actionsCatalog.length]);
+  }, [filteredTasks.length]);
 
   useEffect(() => {
     // fetch('/data/actionsCatalog.json') // This line is removed as per the new_code
@@ -64,7 +95,7 @@ const TaskList: React.FC = () => {
           minHeight: 0,
         }}
       >
-        {actionsCatalog.map((task, index) => {
+        {filteredTasks.map((task, index) => {
           if (!task) {
             return null;
           }

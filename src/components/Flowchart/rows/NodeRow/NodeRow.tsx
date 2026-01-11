@@ -1707,11 +1707,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
               if (taskType === TaskType.DataRequest) {
                 // ✅ Sempre permesso per DataRequest, anche se isUndefined o !hasTaskDDT
                 return async () => {
-                  console.log('🚀 [GEAR] Apertura ResponseEditor per DataRequest', {
-                    rowId: row.id,
-                    rowText: row.text,
-                    timestamp: new Date().toISOString()
-                  });
                   try {
                     // ✅ LAZY: Crea task se non esiste usando metadati della riga
                     let taskIdForType = (row as any)?.taskId || row.id;
@@ -1775,17 +1770,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       ? (taskForType.type as TaskType)
                       : ((row as any)?.meta?.type || TaskType.DataRequest);
 
-                    console.log('📝 [GEAR] Chiamando taskEditorCtx.open', {
-                      id: String(taskIdForType),
-                      type: finalTaskType,
-                      typeName: TaskType[finalTaskType],
-                      label: row.text,
-                      instanceId: row.id,
-                      taskTemplateId: taskForType?.templateId || null
-                    });
-
                     taskEditorCtx.open({ id: String(taskIdForType), type: finalTaskType, label: row.text, instanceId: row.id }); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx, type → taskType (enum)
-                    console.log('✅ [GEAR] taskEditorCtx.open chiamato');
 
                     // ✅ SOLO per DataRequest: costruisci DDT solo se:
                     // 1. C'è templateId E il template è di tipo DataRequest
@@ -1804,37 +1789,22 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                         // ✅ Costruisci DDT SOLO se il template è di tipo DataRequest
                         if (templateType === TaskType.DataRequest) {
-                          console.log('🔍 [GEAR] Costruendo DDT dal template DataRequest', {
-                            templateId: taskForType.templateId,
-                            templateType: TaskType[templateType]
-                          });
                           // ✅ loadDDTFromTemplate gestisce merge: template come base + override da instance.mainData
                           const { loadDDTFromTemplate } = await import('../../../../utils/ddtMergeUtils');
                           ddt = await loadDDTFromTemplate(taskForType);
-                          console.log('✅ [GEAR] DDT costruito dal template', {
-                            hasDDT: !!ddt,
-                            ddtMainDataLength: ddt?.mainData?.length || 0
-                          });
                           if (!ddt) {
                             // Fallback: create empty DDT solo se template è DataRequest ma loadDDTFromTemplate fallisce
-                            console.log('⚠️ [GEAR] DDT null dal template, creando DDT vuoto');
                             ddt = { label: taskForType.label || row.text || 'New DDT', mainData: [] };
                           }
                         } else {
-                          console.log('ℹ️ [GEAR] Template non è DataRequest, non costruisco DDT', {
-                            templateId: taskForType.templateId,
-                            templateType: TaskType[templateType]
-                          });
                           // ✅ NON costruire DDT se template non è DataRequest
                           ddt = null;
                         }
                       } else {
-                        console.warn('⚠️ [GEAR] Template non trovato', { templateId: taskForType.templateId });
                         ddt = null;
                       }
                     } else if (taskForType?.mainData && taskForType.mainData.length > 0) {
                       // ✅ Usa mainData esistente (DDT standalone, non da template)
-                      console.log('🔍 [GEAR] Usando mainData esistente (standalone DDT)');
                       ddt = {
                         label: taskForType.label || row.text || 'New DDT',
                         mainData: taskForType.mainData,
@@ -1847,14 +1817,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     // ResponseEditor gestirà il caso di ddt === null aprendo il wizard (AI genererà DDT)
 
                     // Emit event with DDT data so AppContent can open it as docking tab
-                    console.log('📤 [GEAR] Emettendo evento taskEditor:open', {
-                      id: String(taskIdForType),
-                      type: taskType,
-                      typeName: TaskType[taskType],
-                      hasDDT: !!ddt,
-                      ddtMainDataLength: ddt?.mainData?.length || 0
-                    });
-
                     const event = new CustomEvent('taskEditor:open', { // ✅ RINOMINATO: actEditor:open → taskEditor:open
                       detail: {
                         id: String(taskIdForType),
@@ -1867,22 +1829,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       bubbles: true
                     });
                     document.dispatchEvent(event);
-
-                    console.log('✅ [GEAR] Evento taskEditor:open emesso', {
-                      id: String(taskIdForType),
-                      type: taskType,
-                      typeName: TaskType[taskType],
-                      hasDDT: !!ddt,
-                      ddtMainDataLength: ddt?.mainData?.length || 0,
-                      templateId: taskForType?.templateId || undefined
-                    });
                   } catch (e) {
-                    console.error('❌ [GEAR] ERRORE durante apertura editor', {
-                      error: e,
-                      errorMessage: e instanceof Error ? e.message : String(e),
-                      stack: e instanceof Error ? e.stack : undefined,
-                      rowId: row.id
-                    });
+                    console.error('[NodeRow] Error opening editor:', e);
                   }
                 };
               }
@@ -1891,11 +1839,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                 return undefined;
               }
               return async () => {
-                console.log('🚀 [GEAR] Apertura ResponseEditor per altri tipi', {
-                  rowId: row.id,
-                  rowText: row.text,
-                  taskType
-                });
                 try {
                   // ✅ LAZY: Crea task se non esiste usando metadati della riga
                   let taskIdForType = (row as any)?.taskId || getTaskIdFromRow(row);
@@ -1960,13 +1903,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                   const { getEditorFromTaskType } = await import('../../../../types/taskTypes');
                   const editorKind = getEditorFromTaskType(taskType);
 
-                  console.log('📝 [GEAR] Apertura editor', {
-                    id: String(taskIdForType),
-                    type: taskType,
-                    typeName: TaskType[taskType],
-                    editorKind,
-                    label: row.text
-                  });
 
                   // ✅ Apri editor tramite context (gestisce automaticamente il tipo corretto)
                   taskEditorCtx.open({ id: String(taskIdForType), type: taskType, label: row.text, instanceId: row.id }); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx, type → taskType (enum)
@@ -1991,10 +1927,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                         // ✅ Costruisci DDT SOLO se il template è di tipo DataRequest
                         if (templateType === TaskType.DataRequest) {
-                          console.log('🔍 [GEAR] Costruendo DDT dal template DataRequest', {
-                            templateId: taskForType.templateId,
-                            templateType: TaskType[templateType]
-                          });
                           // ✅ loadDDTFromTemplate gestisce merge: template come base + override da instance.mainData
                           const { loadDDTFromTemplate } = await import('../../../../utils/ddtMergeUtils');
                           ddt = await loadDDTFromTemplate(taskForType);
@@ -2003,20 +1935,14 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                             ddt = { label: taskForType.label || row.text || 'New DDT', mainData: [] };
                           }
                         } else {
-                          console.log('ℹ️ [GEAR] Template non è DataRequest, non costruisco DDT', {
-                            templateId: taskForType.templateId,
-                            templateType: TaskType[templateType]
-                          });
                           // ✅ NON costruire DDT se template non è DataRequest
                           ddt = null;
                         }
                       } else {
-                        console.warn('⚠️ [GEAR] Template non trovato', { templateId: taskForType.templateId });
                         ddt = null;
                       }
                     } else if (taskForType?.mainData && taskForType.mainData.length > 0) {
                       // ✅ Usa mainData esistente (DDT standalone, non da template)
-                      console.log('🔍 [GEAR] Usando mainData esistente (standalone DDT)');
                       ddt = {
                         label: taskForType.label || row.text || 'New DDT',
                         mainData: taskForType.mainData,
@@ -2042,13 +1968,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     });
                     document.dispatchEvent(event);
 
-                    console.log('✅ [GEAR] Evento taskEditor:open emesso (DataRequest)', {
-                      id: String(taskIdForType),
-                      type: taskType,
-                      typeName: TaskType[taskType],
-                      hasDDT: !!ddt,
-                      ddtMainDataLength: ddt?.mainData?.length || 0
-                    });
                   } else {
                     // ✅ Per altri tipi (SayMessage, BackendCall, ecc.), emetti evento senza DDT
                     const event = new CustomEvent('taskEditor:open', {
@@ -2061,13 +1980,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       bubbles: true
                     });
                     document.dispatchEvent(event);
-
-                    console.log('✅ [GEAR] Evento taskEditor:open emesso (non-DataRequest)', {
-                      id: String(taskIdForType),
-                      type: taskType,
-                      typeName: TaskType[taskType],
-                      editorKind
-                    });
                   }
                 } catch (e) {
                   console.error('[NodeRow][onOpenDDT] Failed to open editor', e);

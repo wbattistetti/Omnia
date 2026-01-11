@@ -1755,6 +1755,45 @@ function isValidTaskType(type) {
   return typeof type === 'number' && type >= -1 && type <= 19;
 }
 
+/**
+ * Determina gli allowedContexts di un task in base al suo type
+ * @param {number} type - TaskType enum (0-19 o -1)
+ * @returns {string[]} - Array di contesti dove il task può essere usato (es. ['escalation'])
+ */
+function getAllowedContexts(type) {
+  if (typeof type !== 'number') return [];
+
+  // Task types che possono essere in escalation
+  const ESCALATION_TYPES = [
+    0,  // SayMessage
+    1,  // CloseSession
+    2,  // Transfer
+    4,  // BackendCall
+    6,  // SendSMS
+    7,  // SendEmail
+    8,  // EscalateToHuman
+    9,  // EscalateToGuardVR
+    10, // ReadFromBackend
+    11, // WriteToBackend
+    12, // LogData
+    13, // LogLabel
+    14, // PlayJingle
+    15, // Jump
+    16, // HangUp
+    17, // Assign
+    18, // Clear
+    19  // WaitForAgent
+  ];
+
+  // Se il type è in ESCALATION_TYPES, può essere usato in escalation
+  if (ESCALATION_TYPES.includes(type)) {
+    return ['escalation'];
+  }
+
+  // Altrimenti, nessun contesto (default safe)
+  return [];
+}
+
 // POST /api/projects/:pid/tasks - Create or update task (upsert)
 app.post('/api/projects/:pid/tasks', async (req, res) => {
   const projectId = req.params.pid;
@@ -1799,11 +1838,17 @@ app.post('/api/projects/:pid/tasks', async (req, res) => {
     // ✅ Save fields directly (no value wrapper)
     const { id, templateId: _templateId, createdAt, updatedAt, ...fields } = payload;
 
+    // ✅ Determina allowedContexts in base al type (se non è già specificato nel payload)
+    const allowedContextsValue = payload.allowedContexts !== undefined
+      ? payload.allowedContexts
+      : getAllowedContexts(type);
+
     const task = {
       projectId,
       id: payload.id,
       type: type,              // ✅ type: enum numerico (0-19) - REQUIRED
       templateId: templateId ?? null,  // ✅ templateId: null (standalone) or GUID (reference)
+      allowedContexts: allowedContextsValue,  // ✅ Imposta automaticamente in base al type
       ...fields,  // ✅ Save all fields directly (mainData, label, stepPrompts, ecc.)
       updatedAt: now
     };
@@ -3302,12 +3347,13 @@ app.get('/api/factory/task-templates', async (req, res) => {
     }
 
     // ✅ Filter by taskType if provided (e.g., 'Action' for actions palette)
-    // Se taskType='Action', cerca type enum 6-19 (Action types: SendSMS, SendEmail, ecc.)
+    // Se taskType='Action', usa allowedContexts che include 'escalation' invece di enumerare i tipi
     if (taskType) {
       const taskTypeLower = taskType.toLowerCase();
       if (taskTypeLower === 'action') {
+        // ✅ IMPORTANTE: allowedContexts deve includere 'escalation'
         conditions.push({
-          type: { $gte: 6, $lte: 19 }  // ✅ Action types: enum 6-19
+          allowedContexts: { $in: ['escalation'] }  // ✅ Solo task che possono essere in escalation
         });
       } else {
         // Per altri tipi, cerca per type enum o name
@@ -3321,14 +3367,29 @@ app.get('/api/factory/task-templates', async (req, res) => {
       }
     }
 
-    // Combina tutte le condizioni con $and
+    // Combina tutte le condizioni con $and (o usa direttamente la condizione se è una sola)
     if (conditions.length > 0) {
-      query.$and = conditions;
+      if (conditions.length === 1) {
+        // Se c'è solo una condizione, usala direttamente (più efficiente)
+        Object.assign(query, conditions[0]);
+      } else {
+        // Se ci sono più condizioni, combinale con $and
+        query.$and = conditions;
+      }
     }
 
     // ✅ MIGRATO: Usa Tasks (migrazione completa, Task_Templates rimosso)
     const templates1 = await coll1.find(query).toArray();
     const templates2 = [];  // ✅ Task_Templates rimosso
+
+    // ✅ DEBUG: Log per verificare il filtro
+    if (taskType && taskType.toLowerCase() === 'action') {
+      console.log('[TaskTemplates.get] Action query:', JSON.stringify(query, null, 2));
+      console.log('[TaskTemplates.get] Found tasks:', templates1.length);
+      templates1.forEach((t, idx) => {
+        console.log(`  ${idx + 1}. ID: ${t.id || t._id}, Label: ${t.label || 'N/A'}, Type: ${t.type}, allowedContexts: ${JSON.stringify(t.allowedContexts)}`);
+      });
+    }
 
     // Unisci i risultati, evitando duplicati per ID
     const templateMap = new Map();
@@ -3364,11 +3425,19 @@ app.post('/api/factory/task-templates', async (req, res) => {
     }
 
     const now = new Date();
+    const taskType = payload.type !== undefined ? payload.type : 3;  // ✅ Default DataRequest se non specificato
+
+    // ✅ Determina allowedContexts in base al type (se non è già specificato nel payload)
+    const allowedContextsValue = payload.allowedContexts !== undefined
+      ? payload.allowedContexts
+      : getAllowedContexts(taskType);
+
     const doc = {
       _id: payload.id,
       id: payload.id,
-      type: payload.type !== undefined ? payload.type : 3,  // ✅ Default DataRequest se non specificato
+      type: taskType,
       templateId: payload.templateId || null,  // ✅ templateId: null (standalone) o GUID (reference)
+      allowedContexts: allowedContextsValue,  // ✅ Imposta automaticamente in base al type
       label: payload.label,
       description: payload.description || '',
       icon: payload.icon || 'Circle',

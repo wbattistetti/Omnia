@@ -67,21 +67,6 @@ function coercePhoneKind(src: any) {
 
 function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoading, hideHeader, onToolbarUpdate, tabId, setDockTree }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, task?: TaskMeta | Task, isDdtLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void }) { // ✅ ARCHITETTURA ESPERTO: task può essere TaskMeta o Task completo
 
-  // 🔴 LOG: Verifica se il componente viene rimontato
-  useEffect(() => {
-    console.log('🟢 [MOUNT] ResponseEditorInner mounted', {
-      taskId: task?.id, // ✅ RINOMINATO: actId → taskId, act → task
-      instanceId: task?.instanceId, // ✅ RINOMINATO: act → task
-      ddtLabel: ddt?.label,
-      ddtMainDataLength: ddt?.mainData?.length
-    });
-    return () => {
-      console.log('🔴 [UNMOUNT] ResponseEditorInner unmounting', {
-        taskId: task?.id, // ✅ RINOMINATO: actId → taskId, act → task
-        instanceId: task?.instanceId // ✅ RINOMINATO: act → task
-      });
-    };
-  }, []);
 
   // Ottieni projectId corrente per salvare le istanze nel progetto corretto
   const pdUpdate = useProjectDataUpdate();
@@ -93,6 +78,31 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
   const { combinedClass } = useFontContext();
   // ✅ AI Provider per inferenza pre-wizard
   const { provider: selectedProvider, model: selectedModel } = useAIProvider();
+
+  // ✅ Load tasks for escalation palette
+  const [escalationTasks, setEscalationTasks] = React.useState<any[]>([]);
+  React.useEffect(() => {
+    fetch('/api/factory/task-templates?taskType=Action')
+      .then(res => res.json())
+      .then(templates => {
+        const tasks = templates.map((template: any) => ({
+          id: template.id || template._id,
+          label: template.label || '',
+          description: template.description || '',
+          icon: template.icon || 'Circle',
+          color: template.color || 'text-gray-500',
+          params: template.structure || template.params || {},
+          type: template.type,
+          allowedContexts: template.allowedContexts || []
+        }));
+
+        setEscalationTasks(tasks);
+      })
+      .catch(err => {
+        console.error('[ResponseEditor] Failed to load escalation tasks', err);
+        setEscalationTasks([]);
+      });
+  }, []);
   const rootRef = useRef<HTMLDivElement>(null);
   const wizardOwnsDataRef = useRef(false); // Flag: wizard has control over data lifecycle
 
@@ -132,12 +142,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
     if (isNewInstance) {
       // Nuova istanza → inizializza dal prop ddt (fonte di verità)
-      console.log('[REF_INIT] New instance - initializing from dockTree', {
-        instance,
-        propDDTStartStepTasksCount: ddt?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0,
-        hasMainData: !!ddt?.mainData,
-        mainDataLength: ddt?.mainData?.length || 0
-      });
       ddtRef.current = ddt;
       prevInstanceRef.current = instance;
       // ✅ ARCHITETTURA ESPERTO: Forza aggiornamento mainList quando DDT viene caricato
@@ -146,13 +150,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
       }
     } else if (ddt && JSON.stringify(ddt) !== JSON.stringify(ddtRef.current)) {
       // Stessa istanza ma ddt prop è cambiato → sincronizza (dockTree è stato aggiornato esternamente)
-      console.log('[REF_INIT] Same instance - syncing from dockTree', {
-        instance,
-        propDDTStartStepTasksCount: ddt?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0,
-        refDDTStartStepTasksCount: ddtRef.current?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0,
-        hasMainData: !!ddt?.mainData,
-        mainDataLength: ddt?.mainData?.length || 0
-      });
       ddtRef.current = ddt;
       // ✅ ARCHITETTURA ESPERTO: Forza aggiornamento mainList quando DDT viene caricato
       if (ddt?.mainData && ddt.mainData.length > 0) {
@@ -272,14 +269,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
     // Questo garantisce che mainList sia aggiornato quando DDTHostAdapter carica il DDT
     const currentDDT = ddt ?? ddtRef.current;
     const list = getMainDataList(currentDDT);
-    console.log('[mainList] Calculated mainList', {
-      hasDdtProp: !!ddt,
-      hasDdtRef: !!ddtRef.current,
-      ddtMainDataLength: ddt?.mainData?.length || 0,
-      ddtRefMainDataLength: ddtRef.current?.mainData?.length || 0,
-      mainListLength: list.length,
-      isDdtLoading: stableIsDdtLoading
-    });
     return list;
   }, [ddt?.label ?? '', ddt?.mainData?.length ?? 0, ddtVersion ?? 0, stableIsDdtLoading]); // ✅ Usa valori primitivi sempre definiti
   // Aggregated view: show a group header when there are multiple mains
@@ -678,18 +667,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
     // 🔴 LOG CHIRURGICO 3: Caricamento nodo
     const currentMainList = getMainDataList(ddtRef.current); // ✅ Leggi dal ref, non dal prop
 
-    console.log('[DEBUG_NODE_LOAD] useEffect triggered', {
-      selectedMainIndex,
-      selectedSubIndex,
-      selectedRoot,
-      mainListLength: currentMainList.length,
-      ddtRefMainDataLength: ddtRef.current?.mainData?.length,
-      ddtPropMainDataLength: ddt?.mainData?.length,
-      currentMainListLength: currentMainList.length
-    });
-
     if (currentMainList.length === 0) {
-      console.log('[DEBUG_NODE_LOAD] SKIP: currentMainList is empty');
       return;
     }
 
@@ -734,26 +712,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
         const steps = getStepsAsArray(node?.steps);
         const startStepTasksCount = steps.find((s: any) => s?.type === 'start')?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0;
 
-        console.log('[DEBUG_NODE_LOAD] Node loaded from ddtRef.current', {
-          mainIndex: selectedMainIndex,
-          subIndex: selectedSubIndex,
-          nodeLabel: node?.label,
-          hasNode: !!node,
-          startStepTasksCount,
-          allStepsTasksCount: steps.reduce((acc: number, step: any) =>
-            acc + (step?.escalations?.reduce((a: number, esc: any) =>
-              a + (esc?.tasks?.length || 0), 0) || 0), 0),
-          ddtRefMainDataLength: ddtRef.current?.mainData?.length,
-          ddtPropMainDataLength: ddt?.mainData?.length
-        });
-
-        // Log SEMPRE visibile per debug
-        console.log('[NODE_SYNC][LOAD] 🔍 DEBUG - About to log node details', {
-          mainIndex: selectedMainIndex,
-          subIndex: selectedSubIndex,
-          nodeLabel: node?.label,
-          hasNode: !!node
-        });
 
         try {
           if (localStorage.getItem('debug.nodeSync') === '1') {
@@ -792,62 +750,9 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
             });
           }
         } catch (e) {
-          console.error('[NODE_SYNC][LOAD] ❌ Error logging details:', e);
+          // Error logging details (gated by debug flag)
         }
 
-        // Log COMPLETO con tutti i dettagli espansi
-        const allStepsArray = getStepsAsArray(node?.steps);
-        const allTasksCount = allStepsArray.reduce((acc: number, step: any) =>
-          acc + (step?.escalations?.reduce((a: number, esc: any) =>
-            a + (esc?.tasks?.length || 0), 0) || 0), 0);
-
-        // Log dettagliato per TUTTI gli step
-        const allStepsDetails: any = {};
-        if (!Array.isArray(node?.steps)) {
-          Object.keys(node?.steps || {}).forEach(stepKey => {
-            const step = node?.steps?.[stepKey];
-            const stepTasksCount = step?.escalations?.reduce((acc: number, esc: any) =>
-              acc + (esc?.tasks?.length || 0), 0) || 0;
-            allStepsDetails[stepKey] = {
-              tasksCount: stepTasksCount,
-              escalationsCount: step?.escalations?.length || 0,
-              tasks: step?.escalations?.flatMap((esc: any) => esc?.tasks || []).map((t: any) => ({
-                id: t?.id,
-                label: t?.label
-              })) || [],
-              fullStep: JSON.parse(JSON.stringify(step))
-            };
-          });
-        } else {
-          allStepsArray.forEach((step: any) => {
-            const stepKey = step?.type;
-            const stepTasksCount = step?.escalations?.reduce((acc: number, esc: any) =>
-              acc + (esc?.tasks?.length || 0), 0) || 0;
-            allStepsDetails[stepKey] = {
-              tasksCount: stepTasksCount,
-              escalationsCount: step?.escalations?.length || 0,
-              tasks: step?.escalations?.flatMap((esc: any) => esc?.tasks || []).map((t: any) => ({
-                id: t?.id,
-                label: t?.label
-              })) || [],
-              fullStep: JSON.parse(JSON.stringify(step))
-            };
-          });
-        }
-
-        // Log COMPLETO con tutti i dettagli espansi - multipli log per evitare {…}
-        console.log('[NODE_SYNC][LOAD] ✅ COMPLETE LOAD DETAILS - node.steps', node?.steps);
-        console.log('[NODE_SYNC][LOAD] ✅ COMPLETE LOAD DETAILS - allStepsDetails', allStepsDetails);
-
-        // Log per ogni step individualmente
-        Object.keys(allStepsDetails).forEach(stepKey => {
-          const detail = allStepsDetails[stepKey];
-          console.log(`[NODE_SYNC][LOAD] ✅ STEP ${stepKey}`, {
-            tasksCount: detail.tasksCount,
-            escalationsCount: detail.escalationsCount,
-            tasks: detail.tasks
-          });
-        });
 
         setSelectedNode(node);
         const newPath = {
@@ -906,10 +811,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
     setSelectedNode((prev: any) => {
       if (!prev || !selectedNodePath) {
-        console.log('[DOCK_SAVE] ⚠️ Skipping update - no prev or selectedNodePath', {
-          hasPrev: !!prev,
-          hasSelectedNodePath: !!selectedNodePath
-        });
         return prev;
       }
 
@@ -966,23 +867,12 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
         // ✅ STEP 4: Aggiorna IMMEDIATAMENTE tab.ddt nel dockTree (FONTE DI VERITÀ) - solo se disponibili
         if (tabId && setDockTree) {
-          const startStepTasksCount = updatedDDT?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
-          console.log('[DOCK_SAVE] ⚡ Updating dockTree (single source of truth)', {
-            tabId,
-            mainDataLength: updatedDDT?.mainData?.length,
-            startStepTasksCount
-          });
-
           setDockTree(prev =>
             mapNode(prev, n => {
               if (n.kind === 'tabset') {
                 const idx = n.tabs.findIndex(t => t.id === tabId);
                 if (idx !== -1 && n.tabs[idx].type === 'responseEditor') {
                   const updatedTab = { ...n.tabs[idx], ddt: updatedDDT };
-                  console.log('[DOCK_SAVE] ✅ dockTree updated', {
-                    tabId,
-                    updatedStartStepTasksCount: updatedTab.ddt?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0
-                  });
                   return {
                     ...n,
                     tabs: [
@@ -1004,60 +894,16 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
         const taskToSave = task; // Cattura task dal closure
         const projectIdToSave = currentProjectId; // Cattura currentProjectId dal closure
 
-        console.log('[DOCK_SAVE] 🔍 Checking if save should happen', {
-          hasTask: !!taskToSave,
-          taskId: taskToSave?.id,
-          instanceId: (taskToSave as any)?.instanceId,
-          hasTabId: !!tabId,
-          hasSetDockTree: !!setDockTree,
-          hasProjectId: !!projectIdToSave
-        });
-
         if (taskToSave?.id || (taskToSave as any)?.instanceId) {
           const key = ((taskToSave as any)?.instanceId || taskToSave?.id) as string;
           const hasDDT = updatedDDT && Object.keys(updatedDDT).length > 0 && updatedDDT.mainData && updatedDDT.mainData.length > 0;
 
-          console.log('[DOCK_SAVE] 🔍 DDT validation', {
-            key,
-            hasDDT,
-            hasUpdatedDDT: !!updatedDDT,
-            updatedDDTKeys: updatedDDT ? Object.keys(updatedDDT) : [],
-            mainDataLength: updatedDDT?.mainData?.length || 0
-          });
-
           if (hasDDT) {
-            const startStepTasksCount = updatedDDT?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
-            const allTasksCount = updatedDDT?.mainData?.reduce((acc: number, main: any) => {
-              const steps = main?.steps || (Array.isArray(main?.steps) ? main.steps : []);
-              const stepsArray = Array.isArray(steps) ? steps : Object.values(steps || {});
-              return acc + stepsArray.reduce((stepAcc: number, step: any) => {
-                return stepAcc + (step?.escalations || []).reduce((escAcc: number, esc: any) => {
-                  return escAcc + (esc?.tasks?.length || 0);
-                }, 0);
-              }, 0);
-            }, 0) || 0;
-
-            console.log('[DOCK_SAVE] 💾 Saving immediately (implicit, async)', {
-              key,
-              tabId: tabId || 'overlay',
-              startStepTasksCount,
-              allTasksCount,
-              mainDataLength: updatedDDT?.mainData?.length,
-              hasMainData: !!updatedDDT?.mainData?.[0]
-            });
-
             // Salva in modo asincrono (non bloccare l'UI)
             void (async () => {
               try {
                 const taskInstance = taskRepository.getTask(key);
                 const currentTemplateId = getTemplateId(taskInstance);
-
-                console.log('[DOCK_SAVE] 📋 Task instance info', {
-                  key,
-                  hasTaskInstance: !!taskInstance,
-                  currentTemplateId,
-                  instanceMainDataLength: taskInstance?.mainData?.length || 0
-                });
 
                 // ✅ Se standalone (no templateId), salva tutto mainData completo
                 // Se ha templateId, usa extractModifiedDDTFields per salvare solo override
@@ -1072,40 +918,9 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                     nlpContract: updatedDDT.nlpContract,
                     introduction: updatedDDT.introduction
                   };
-                  console.log('[DOCK_SAVE] 📦 Standalone task - saving full mainData', {
-                    key,
-                    mainDataLength: fieldsToSave.mainData?.length,
-                    tasksInMainData: allTasksCount
-                  });
                 } else {
                   // Con templateId: salva solo override
-                  console.log('[DOCK_SAVE] 🔍 Before extractModifiedDDTFields', {
-                    key,
-                    templateId: currentTemplateId,
-                    updatedDDTMainDataLength: updatedDDT?.mainData?.length || 0,
-                    updatedDDTFirstMainSteps: updatedDDT?.mainData?.[0]?.steps ? {
-                      type: typeof updatedDDT.mainData[0].steps,
-                      isArray: Array.isArray(updatedDDT.mainData[0].steps),
-                      keys: typeof updatedDDT.mainData[0].steps === 'object' ? Object.keys(updatedDDT.mainData[0].steps || {}) : [],
-                      length: Array.isArray(updatedDDT.mainData[0].steps) ? updatedDDT.mainData[0].steps.length : 0
-                    } : null
-                  });
                   fieldsToSave = await extractModifiedDDTFields(taskInstance, updatedDDT);
-                  console.log('[DOCK_SAVE] 📦 Template-based task - saving overrides only', {
-                    key,
-                    templateId: currentTemplateId,
-                    hasMainDataInFields: !!fieldsToSave.mainData,
-                    mainDataLength: fieldsToSave.mainData?.length || 0,
-                    firstMainDataOverride: fieldsToSave.mainData?.[0] ? {
-                      templateId: fieldsToSave.mainData[0].templateId,
-                      label: fieldsToSave.mainData[0].label,
-                      hasSteps: !!fieldsToSave.mainData[0].steps,
-                      stepsType: typeof fieldsToSave.mainData[0].steps,
-                      stepsKeys: typeof fieldsToSave.mainData[0].steps === 'object' ? Object.keys(fieldsToSave.mainData[0].steps || {}) : [],
-                      stepsLength: Array.isArray(fieldsToSave.mainData[0].steps) ? fieldsToSave.mainData[0].steps.length : 0
-                    } : null,
-                    fieldsToSaveKeys: Object.keys(fieldsToSave)
-                  });
                 }
 
                 if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
@@ -1117,49 +932,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                 } else {
                   await taskRepository.updateTask(key, fieldsToSave, projectIdToSave || undefined);
                 }
-
-                // ✅ Verifica che il salvataggio sia andato a buon fine
-                const savedTask = taskRepository.getTask(key);
-                const savedTasksCount = savedTask?.mainData?.reduce((acc: number, main: any) => {
-                  const steps = main?.steps || (Array.isArray(main?.steps) ? main.steps : []);
-                  const stepsArray = Array.isArray(steps) ? steps : Object.values(steps || {});
-                  return acc + stepsArray.reduce((stepAcc: number, step: any) => {
-                    return stepAcc + (step?.escalations || []).reduce((escAcc: number, esc: any) => {
-                      return escAcc + (esc?.tasks?.length || 0);
-                    }, 0);
-                  }, 0);
-                }, 0) || 0;
-
-                console.log('[DOCK_SAVE] ✅ taskRepository updated (implicit save completed)', {
-                  key,
-                  startStepTasksCount,
-                  allTasksCount,
-                  savedTasksCount,
-                  tasksMatch: allTasksCount === savedTasksCount,
-                  hasMainData: !!savedTask?.mainData,
-                  mainDataLength: savedTask?.mainData?.length || 0
-                });
               } catch (err) {
-                console.error('[DOCK_SAVE] ❌ Failed to save to taskRepository', {
-                  key,
-                  error: err,
-                  errorMessage: err instanceof Error ? err.message : String(err)
-                });
+                console.error('[ResponseEditor] Failed to save task:', err);
               }
             })();
-          } else {
-            console.log('[DOCK_SAVE] ⚠️ Skipping save - no DDT or empty mainData', {
-              key,
-              hasUpdatedDDT: !!updatedDDT,
-              hasMainData: !!updatedDDT?.mainData,
-              mainDataLength: updatedDDT?.mainData?.length || 0
-            });
           }
-        } else {
-          console.log('[DOCK_SAVE] ⚠️ Skipping save - no task id', {
-            taskId: taskToSave?.id,
-            instanceId: (taskToSave as any)?.instanceId
-          });
         }
       }
 
@@ -1730,6 +1507,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                       const updated = updater(ddt);
                       try { replaceSelectedDDT(updated); } catch { }
                     }}
+                    tasks={escalationTasks}
                   />
                 )}
 
@@ -1750,6 +1528,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                         const updated = updater(ddt);
                         try { replaceSelectedDDT(updated); } catch { }
                       }}
+                      tasks={escalationTasks}
                     />
                     {/* ✅ Splitter condiviso tra Test e Tasks - ridimensiona entrambi i pannelli */}
                     {tasksPanelMode === 'actions' && tasksPanelWidth > 1 && (
@@ -1816,6 +1595,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                       dragging={draggingPanel === 'tasks'}
                       hideSplitter={true} // ✅ Nascondi splitter interno, usiamo quello esterno
                       ddt={ddt}
+                      tasks={escalationTasks}
                       translations={localTranslations}
                       selectedNode={selectedNode}
                       onUpdateDDT={(updater) => {

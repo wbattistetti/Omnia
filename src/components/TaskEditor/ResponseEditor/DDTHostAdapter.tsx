@@ -55,23 +55,12 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
         return;
       }
 
-      console.log('🔧 [DDTHostAdapter] Loading DDT for instance:', instanceKey);
-
       let taskInstance = fullTask;
-
-      console.log('🔧 [DDTHostAdapter] Task found:', {
-        taskExists: !!taskInstance,
-        taskId: taskInstance?.id,
-        templateId: taskInstance?.templateId,
-        hasMainData: !!taskInstance?.mainData,
-        mainDataLength: taskInstance?.mainData?.length || 0
-      });
 
       if (!taskInstance) {
         // ✅ LOGICA: Il task viene creato solo quando si apre ResponseEditor, dopo aver determinato il tipo
         const finalTaskType = taskMeta.type !== undefined && taskMeta.type !== null ? taskMeta.type : TaskType.UNDEFINED;
         taskInstance = taskRepository.createTask(finalTaskType, null, undefined, instanceKey);
-        console.log('🔧 [DDTHostAdapter] Created new task:', { taskId: taskInstance.id, taskType: finalTaskType });
       }
 
       setDdtLoading(true);
@@ -81,40 +70,10 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
       // - Se mainData è vuoto → costruisce dal template
       // - Se mainData esiste → merge: struttura dal template + override dall'instance
       if (taskInstance?.templateId && taskInstance.templateId !== 'UNDEFINED') {
-        console.log('🔧 [DDTHostAdapter] Building DDT from template (with merge):', taskInstance.templateId);
-        console.log('🔧 [DDTHostAdapter] Task instance before merge:', {
-          taskId: taskInstance.id,
-          templateId: taskInstance.templateId,
-          hasMainData: !!taskInstance.mainData,
-          mainDataLength: taskInstance.mainData?.length || 0,
-          firstMainDataOverride: taskInstance.mainData?.[0] ? {
-            templateId: taskInstance.mainData[0].templateId,
-            label: taskInstance.mainData[0].label,
-            hasSteps: !!taskInstance.mainData[0].steps,
-            stepsType: typeof taskInstance.mainData[0].steps,
-            stepsKeys: typeof taskInstance.mainData[0].steps === 'object' ? Object.keys(taskInstance.mainData[0].steps || {}) : [],
-            stepsLength: Array.isArray(taskInstance.mainData[0].steps) ? taskInstance.mainData[0].steps.length : 0
-          } : null
-        });
         const merged = await loadDDTFromTemplate(taskInstance);
-        console.log('🔧 [DDTHostAdapter] Merged DDT:', {
-          hasDDT: !!merged,
-          label: merged?.label,
-          mainDataLength: merged?.mainData?.length || 0,
-          firstMainDataSteps: merged?.mainData?.[0]?.steps ? {
-            type: typeof merged.mainData[0].steps,
-            isArray: Array.isArray(merged.mainData[0].steps),
-            keys: typeof merged.mainData[0].steps === 'object' ? Object.keys(merged.mainData[0].steps || {}) : [],
-            length: Array.isArray(merged.mainData[0].steps) ? merged.mainData[0].steps.length : 0
-          } : null
-        });
         setDdt(merged);
       } else if (taskInstance?.mainData && taskInstance.mainData.length > 0) {
         // ✅ Solo se NON c'è templateId: usa mainData direttamente (DDT standalone, non da template)
-        console.log('🔧 [DDTHostAdapter] Using saved mainData directly (standalone DDT):', {
-          mainDataLength: taskInstance.mainData.length,
-          hasSteps: taskInstance.mainData.some((m: any) => m.steps)
-        });
         setDdt({
           label: taskInstance.label,
           mainData: taskInstance.mainData,
@@ -125,7 +84,6 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
           introduction: taskInstance.introduction
         });
       } else {
-        console.log('🔧 [DDTHostAdapter] No DDT found, setting null');
         setDdt(null);
       }
 
@@ -168,12 +126,6 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
           undefined // nodeId (not available here)
         );
 
-        console.log('[DDTHostAdapter] Extracted variables from DDT', {
-          taskId: instanceKey,
-          rowText,
-          varCount: varNames.length,
-          varNames: varNames.slice(0, 10) // Log first 10
-        });
 
         // Emit event to refresh ConditionEditor variables
         try {
@@ -183,7 +135,7 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
         } catch {}
       }
     } catch (e) {
-      console.warn('[DDTHostAdapter] Failed to extract variables from DDT', e);
+      // Failed to extract variables from DDT
     }
 
     // ✅ ARCHITETTURA ESPERTO: Aggiorna immediatamente ddt per aggiornare il prop
@@ -196,19 +148,12 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
   // ✅ ARCHITETTURA ESPERTO: Ensure mainData is always an array before passing to ResponseEditor
   const safeDDT = React.useMemo(() => {
     if (!ddt) {
-      console.log('[DDTHostAdapter] safeDDT is null', { ddt, loading, taskLoading, ddtLoading });
       return null;
     }
     const safe = {
       ...ddt,
       mainData: Array.isArray(ddt.mainData) ? ddt.mainData : []
     };
-    console.log('[DDTHostAdapter] safeDDT calculated', {
-      hasDdt: !!ddt,
-      mainDataLength: safe.mainData.length,
-      label: safe.label,
-      loading
-    });
     return safe;
   }, [ddt, loading]);
 
