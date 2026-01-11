@@ -61,3 +61,18 @@ export const stepMeta: Record<string, {
   notConfirmed: { icon: <AlertCircle size={17} />, label: 'Non Confermato', border: '#ef4444', bg: 'rgba(239,68,68,0.08)', color: '#ef4444', bgActive: 'rgba(239,68,68,0.18)' },
   introduction: { icon: <Wine size={17} />, label: 'Introduzione', border: '#a855f7', bg: 'rgba(168,85,247,0.08)', color: '#a855f7', bgActive: 'rgba(168,85,247,0.18)' },
 };
+
+/**
+ * Steps that should not display escalation cards (no border, no header, no "Add escalation" button).
+ * These steps display only the task list, taking up the full screen space.
+ */
+export const STEPS_WITHOUT_ESCALATION_CARD: string[] = ['start', 'success'];
+
+/**
+ * Checks if a step should display escalation cards (with border, header, and "Add escalation" button).
+ * @param stepKey - The step key (e.g., 'start', 'noMatch', 'success')
+ * @returns true if the step should display escalation cards, false otherwise
+ */
+export function hasEscalationCard(stepKey: string): boolean {
+  return !STEPS_WITHOUT_ESCALATION_CARD.includes(stepKey);
+}

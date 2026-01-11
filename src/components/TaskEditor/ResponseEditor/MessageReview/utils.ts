@@ -1,4 +1,5 @@
 import { ReviewItem, StepGroup, RecoveryGroup } from './types';
+import { getTaskText } from '../utils/escalationHelpers';
 
 const STEP_ORDER = ['start', 'confirmation', 'noInput', 'noMatch', 'notConfirmed', 'notAcquired', 'success'];
 
@@ -111,75 +112,62 @@ export function collectNodeMessages(
     // Track which textKeys we've already collected to avoid duplicates
     const collectedTextKeys = new Set<string>();
 
-    Object.keys(steps).forEach((stepKey) => {
-        const stepData = steps[stepKey];
+    // Handle both array format (new) and object format (legacy)
+    let stepsToProcess: Array<{ stepKey: string; escalations: any[] }> = [];
 
+    if (Array.isArray(steps)) {
+        // New format: steps is an array of step objects
+        stepsToProcess = steps.map((step: any) => ({
+            stepKey: step?.type || 'start',
+            escalations: Array.isArray(step?.escalations) ? step.escalations : []
+        }));
+    } else {
+        // Legacy format: steps is an object with stepKey as keys
+        stepsToProcess = Object.keys(steps).map((stepKey) => {
+            const stepData = steps[stepKey];
+            if (Array.isArray(stepData)) {
+                // Array format: stepData is array of escalations
+                return { stepKey, escalations: stepData };
+            } else if (stepData?.escalations) {
+                // Object format: stepData has escalations property
+                return { stepKey, escalations: Array.isArray(stepData.escalations) ? stepData.escalations : [] };
+            }
+            return { stepKey, escalations: [] };
+        });
+    }
+
+    stepsToProcess.forEach(({ stepKey, escalations }) => {
         // Priority 1: Check escalations (preferred source)
         let hasEscalations = false;
 
-        if (Array.isArray(stepData)) {
-            // Array format: stepData is array of escalations
+        if (escalations.length > 0) {
             hasEscalations = true;
-            stepData.forEach((esc: any, escIdx: number) => {
-                const actions = Array.isArray(esc?.actions) ? esc.actions : [];
-                actions.forEach((a: any, actIdx: number) => {
-                    const key = extractActionTextKey(a);
-                    const actionId = a.actionId || 'sayMessage';
+            escalations.forEach((esc: any, escIdx: number) => {
+                // ✅ CAMBIATO: usa tasks invece di actions
+                const tasks = Array.isArray(esc?.tasks) ? esc.tasks : [];
+                tasks.forEach((task: any, taskIdx: number) => {
+                    // ✅ CAMBIATO: estrai textKey dalle task (funziona anche per task perché hanno parameters)
+                    const key = extractActionTextKey(task);
+                    const templateId = task?.templateId || 'sayMessage';
 
                     // Include messages with or without textKey (to show newly added messages)
                     const shouldInclude = !key || !collectedTextKeys.has(key);
                     if (shouldInclude) {
                         if (key) collectedTextKeys.add(key);
 
-                        // Priority: a.text (edited text) > translations[key] (persisted translation)
-                        const text = (typeof a.text === 'string' && a.text.length > 0)
-                            ? a.text
-                            : (typeof key === 'string' ? (translations[key] || key) : a.text || '');
+                        // ✅ USA getTaskText per applicare la stessa logica di fallback (traduzione → label template → task.label)
+                        const text = getTaskText(task, translations);
 
                         out.push({
-                            id: `${pathLabel}|${stepKey}|${escIdx}|${actIdx}`,
+                            id: `${pathLabel}|${stepKey}|${escIdx}|${taskIdx}`,
                             stepKey,
                             escIndex: escIdx,
-                            actionIndex: actIdx,
+                            actionIndex: taskIdx, // Manteniamo actionIndex per compatibilità con il tipo ReviewItem
                             textKey: key,
                             text: text,
                             pathLabel,
-                            actionId: actionId,
-                            color: a.color,
-                        });
-                    }
-                });
-            });
-        } else if (stepData?.escalations) {
-            // Object format: stepData has escalations property
-            hasEscalations = true;
-            const escs = Array.isArray(stepData.escalations) ? stepData.escalations : [];
-            escs.forEach((esc: any, escIdx: number) => {
-                const actions = Array.isArray(esc?.actions) ? esc.actions : [];
-                actions.forEach((a: any, actIdx: number) => {
-                    const key = extractActionTextKey(a);
-                    const actionId = a.actionId || 'sayMessage';
-
-                    // Include messages with or without textKey (to show newly added messages)
-                    const shouldInclude = !key || !collectedTextKeys.has(key);
-                    if (shouldInclude) {
-                        if (key) collectedTextKeys.add(key);
-
-                        // Priority: a.text (edited text) > translations[key] (persisted translation)
-                        const text = (typeof a.text === 'string' && a.text.length > 0)
-                            ? a.text
-                            : (typeof key === 'string' ? (translations[key] || key) : a.text || '');
-
-                        out.push({
-                            id: `${pathLabel}|${stepKey}|${escIdx}|${actIdx}`,
-                            stepKey,
-                            escIndex: escIdx,
-                            actionIndex: actIdx,
-                            textKey: key,
-                            text: text,
-                            pathLabel,
-                            actionId: actionId,
-                            color: a.color,
+                            actionId: templateId, // ✅ CAMBIATO: usa templateId invece di actionId
+                            color: task.color,
                         });
                     }
                 });

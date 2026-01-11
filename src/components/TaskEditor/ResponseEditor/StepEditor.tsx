@@ -1,7 +1,7 @@
 import React from 'react';
 import EscalationEditor from './EscalationEditor';
 import { Plus } from 'lucide-react';
-import { stepMeta } from './ddtUtils';
+import { stepMeta, hasEscalationCard } from './ddtUtils';
 import { updateStepEscalations } from './utils/stepHelpers';
 
 type Props = {
@@ -43,14 +43,16 @@ export default function StepEditor({
     });
   }, [updateSelectedNode, stepKey]);
 
+  const showEscalationCard = hasEscalationCard(stepKey);
+
   return (
-    <div className="step-editor" style={{ padding: '1rem' }}>
+    <div className="step-editor" style={{ padding: showEscalationCard ? '1rem' : '0' }}>
       {escalations.length === 0 ? (
         <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
           No escalations
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: showEscalationCard ? '1rem' : '0' }}>
           {escalations.map((esc, idx) => (
             <EscalationEditor
               key={idx}
@@ -70,36 +72,38 @@ export default function StepEditor({
         </div>
       )}
 
-      {/* ✅ Pulsante "+" per aggiungere escalation */}
-      <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'center' }}>
-        <button
-          onClick={handleAddEscalation}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            padding: '0.5rem 1rem',
-            backgroundColor: 'transparent',
-            border: `1px dashed ${color}`,
-            borderRadius: '8px',
-            color: color,
-            cursor: 'pointer',
-            fontSize: '0.875rem',
-            transition: 'all 0.2s',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = `${color}15`;
-            e.currentTarget.style.borderColor = color;
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'transparent';
-            e.currentTarget.style.borderColor = color;
-          }}
-        >
-          <Plus size={16} />
-          <span>Aggiungi escalation</span>
-        </button>
-      </div>
+      {/* ✅ Pulsante "+" per aggiungere escalation - mostrato solo se lo step supporta escalation multiple */}
+      {showEscalationCard && (
+        <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'center' }}>
+          <button
+            onClick={handleAddEscalation}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.5rem 1rem',
+              backgroundColor: 'transparent',
+              border: `1px dashed ${color}`,
+              borderRadius: '8px',
+              color: color,
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = `${color}15`;
+              e.currentTarget.style.borderColor = color;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.borderColor = color;
+            }}
+          >
+            <Plus size={16} />
+            <span>Aggiungi escalation</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

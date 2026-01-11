@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { EscalationHeader } from './EscalationHeader';
 import { EscalationTasksList } from './EscalationTasksList';
+import { hasEscalationCard } from '../../ddtUtils';
 
 type EscalationCardProps = {
   escalation: any;
@@ -33,17 +34,37 @@ export function EscalationCard({
 }: EscalationCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
+  const showCard = hasEscalationCard(stepKey);
 
+  // Per step senza escalation card (start, success), renderizza solo la lista task
+  if (!showCard) {
+    return (
+      <EscalationTasksList
+        escalation={escalation}
+        escalationIdx={escalationIdx}
+        color={color}
+        translations={translations}
+        allowedActions={allowedActions}
+        updateEscalation={updateEscalation}
+        updateSelectedNode={updateSelectedNode}
+        autoEditTarget={autoEditTarget}
+        onAutoEditTargetChange={onAutoEditTargetChange}
+        stepKey={stepKey}
+      />
+    );
+  }
+
+  // Per step con escalation card (noMatch, noInput, confirmation, ecc.), renderizza la card completa
   return (
     <div
       style={{
-        border: `1px solid ${color}40`,
+        borderWidth: isHovered ? '2px' : '1px',
+        borderStyle: 'solid',
+        borderColor: isHovered ? color : `${color}40`,
         borderRadius: '12px',
         padding: '1rem',
         backgroundColor: `${color}08`,
         transition: 'all 0.2s',
-        borderWidth: isHovered ? `2px` : '1px',
-        borderColor: isHovered ? color : `${color}40`,
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
