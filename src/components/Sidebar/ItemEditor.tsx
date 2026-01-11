@@ -53,8 +53,8 @@ const ItemEditor: React.FC<ItemEditorProps> = ({
           if (e.key === 'Enter') {
             (async () => {
               try {
-                const mod = await import('../../nlp/actInteractivity');
-                const inferred = mod.classifyActInteractivity(inputValue);
+                const mod = await import('../../nlp/taskInteractivity');
+                const inferred = mod.classifyTaskInteractivity(inputValue);
                 console.log('[Interactivity][enter]', { title: inputValue, inferred });
               } catch (err) {
                 console.warn('[Interactivity][enter][error]', err);

@@ -13,8 +13,8 @@ type EscalationCardProps = {
   updateEscalation: (updater: (esc: any) => any) => void;
   updateSelectedNode: (updater: (node: any) => any, notifyProvider?: boolean) => void;
   onDeleteEscalation?: () => void;
-  autoEditTarget: { escIdx: number; actIdx: number } | null;
-  onAutoEditTargetChange: (target: { escIdx: number; actIdx: number } | null) => void;
+  autoEditTarget: { escIdx: number; taskIdx: number } | null;
+  onAutoEditTargetChange: (target: { escIdx: number; taskIdx: number } | null) => void;
   stepKey: string;
 };
 

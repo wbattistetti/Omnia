@@ -52,7 +52,7 @@ export default function MessageReviewMessage({ item, onSave, updateSelectedNode 
 
         // Always update the node to persist the edited text
         // This ensures the text is saved even when switching steps or refreshing
-        if (updateSelectedNode && item.stepKey && (item.escIndex !== null && item.escIndex !== undefined) && (item.actionIndex !== null && item.actionIndex !== undefined)) {
+        if (updateSelectedNode && item.stepKey && (item.escIndex !== null && item.escIndex !== undefined) && (item.taskIndex !== null && item.taskIndex !== undefined)) {
             updateSelectedNode((node: any) => {
                 const steps = node?.steps || {};
                 let stepData = steps[item.stepKey];
@@ -62,11 +62,11 @@ export default function MessageReviewMessage({ item, onSave, updateSelectedNode 
                 // Handle array format: steps[stepKey] is an array of escalations
                 if (Array.isArray(stepData)) {
                     const esc = stepData[item.escIndex!];
-                    if (esc && Array.isArray(esc.actions) && esc.actions[item.actionIndex!]) {
-                        const action = esc.actions[item.actionIndex!];
-                        // Update the action text, preserving textKey and other properties
-                        esc.actions[item.actionIndex!] = {
-                            ...action,
+                    if (esc && Array.isArray(esc.tasks) && esc.tasks[item.taskIndex!]) {
+                        const task = esc.tasks[item.taskIndex!];
+                        // Update the task text, preserving textKey and other properties
+                        esc.tasks[item.taskIndex!] = {
+                            ...task,
                             text: newText.length > 0 ? newText : undefined,
                         };
                         return node;
@@ -75,11 +75,11 @@ export default function MessageReviewMessage({ item, onSave, updateSelectedNode 
                 // Handle object format: steps[stepKey].escalations is an array
                 else if (stepData?.escalations && Array.isArray(stepData.escalations)) {
                     const esc = stepData.escalations[item.escIndex!];
-                    if (esc && Array.isArray(esc.actions) && esc.actions[item.actionIndex!]) {
-                        const action = esc.actions[item.actionIndex!];
-                        // Update the action text, preserving textKey and other properties
-                        esc.actions[item.actionIndex!] = {
-                            ...action,
+                    if (esc && Array.isArray(esc.tasks) && esc.tasks[item.taskIndex!]) {
+                        const task = esc.tasks[item.taskIndex!];
+                        // Update the task text, preserving textKey and other properties
+                        esc.tasks[item.taskIndex!] = {
+                            ...task,
                             text: newText.length > 0 ? newText : undefined,
                         };
                         return node;
@@ -100,24 +100,24 @@ export default function MessageReviewMessage({ item, onSave, updateSelectedNode 
     };
 
     const handleEdit = () => {
-        if (item.textKey || item.actionId === 'sayMessage') {
+        if (item.textKey || item.taskId === 'sayMessage') {
             setEditValue(item.text);
             setEditing(true);
             setTimeout(() => inputRef.current?.focus(), 0);
         }
     };
 
-    // Use centralized action icon system with action color (not step color)
-    const actionId = item.actionId || 'sayMessage';
+    // Use centralized task icon system with task color (not step color)
+    const taskId = item.taskId || 'sayMessage';
     // If no color in item, get it from catalog
-    let actionColor = item.color ? ensureHexColor(item.color) : undefined;
-    if (!actionColor) {
-        const meta = getTaskMeta(actionId);
+    let taskColor = item.color ? ensureHexColor(item.color) : undefined;
+    if (!taskColor) {
+        const meta = getTaskMeta(taskId);
         if (meta.color) {
-            actionColor = tailwindToHex(meta.color) || ensureHexColor(meta.color);
+            taskColor = tailwindToHex(meta.color) || ensureHexColor(meta.color);
         }
     }
-    const iconNode = getTaskIconNode(actionId, actionColor);
+    const iconNode = getTaskIconNode(taskId, taskColor);
 
     return (
         <div
@@ -130,7 +130,7 @@ export default function MessageReviewMessage({ item, onSave, updateSelectedNode 
                 transition: 'background 0.2s',
             }}
             onMouseEnter={(e) => {
-                if (!editing && (item.textKey || item.actionId === 'sayMessage')) {
+                if (!editing && (item.textKey || item.taskId === 'sayMessage')) {
                     e.currentTarget.style.background = '#f9fafb';
                 }
             }}
@@ -151,7 +151,7 @@ export default function MessageReviewMessage({ item, onSave, updateSelectedNode 
                 </span>
             )}
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
-                {editing && (item.textKey || item.actionId === 'sayMessage') ? (
+                {editing && (item.textKey || item.taskId === 'sayMessage') ? (
                     <>
                         <ActionText
                             text={item.text}
@@ -199,11 +199,11 @@ export default function MessageReviewMessage({ item, onSave, updateSelectedNode 
                     </>
                 ) : (
                     <div
-                        title={(item.textKey || item.actionId === 'sayMessage') ? 'Click to edit' : undefined}
+                        title={(item.textKey || item.taskId === 'sayMessage') ? 'Click to edit' : undefined}
                         onClick={handleEdit}
                         className={combinedClass}
                         style={{
-                            cursor: (item.textKey || item.actionId === 'sayMessage') ? 'pointer' : 'default',
+                            cursor: (item.textKey || item.taskId === 'sayMessage') ? 'pointer' : 'default',
                             flex: 1,
                             wordBreak: 'break-word',
                             lineHeight: '1.5',

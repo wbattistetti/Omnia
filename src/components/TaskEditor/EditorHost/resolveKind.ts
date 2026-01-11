@@ -19,7 +19,7 @@ export function resolveEditorKind(task: TaskMeta): EditorKind { // ✅ RINOMINAT
   }
 
   // ✅ Fallback: se editorKind non è nel tipo EditorKind, usa 'simple'
-  if (editorKind !== 'message' && editorKind !== 'ddt' && editorKind !== 'intent' && editorKind !== 'backend') {
+  if (editorKind !== 'message' && editorKind !== 'ddt' && editorKind !== 'intent' && editorKind !== 'backend' && editorKind !== 'aiagent' && editorKind !== 'summarizer' && editorKind !== 'negotiation') {
     return 'simple';
   }
 

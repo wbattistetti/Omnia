@@ -12,7 +12,7 @@ type CreateAndAttachTaskOpts = {
   getProjectId?: () => string | undefined;
 };
 
-export async function createAndAttachTask(opts: CreateAndAttachTaskOpts) { // ✅ RINOMINATO: createAndAttachAct → createAndAttachTask
+export async function createAndAttachTask(opts: CreateAndAttachTaskOpts) {
   const {
     name,
     type,

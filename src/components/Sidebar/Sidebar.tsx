@@ -10,7 +10,7 @@ import { EntityType } from '../../types/project';
 import { sidebarTheme } from './sidebarTheme';
 import { Bot, User, Database, GitBranch, CheckSquare, Layers } from 'lucide-react';
 import { usePanelZoom } from '../../hooks/usePanelZoom';
-import { classifyActInteractivity } from '../../nlp/actInteractivity';
+import { classifyTaskInteractivity } from '../../nlp/taskInteractivity';
 import { useTaskEditor } from '../TaskEditor/EditorHost/TaskEditorContext'; // ✅ RINOMINATO: ActEditor → TaskEditor, useActEditor → useTaskEditor
 import { taskToTaskMeta } from '../../utils/taskToTaskMeta';
 import { TaskType } from '../../types/taskTypes';

@@ -430,7 +430,7 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
               console.warn('[NodeRowLabel] Error opening condition editor:', err);
             }
           }}
-          ActIcon={Icon}
+          TaskIcon={Icon}
           taskColor={iconColor || labelTextColor} // ✅ RINOMINATO: actColor → taskColor
           onTypeChangeRequest={onTypeChangeRequest}
           onRequestClosePicker={onRequestClosePicker}

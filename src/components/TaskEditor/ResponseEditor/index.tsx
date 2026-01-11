@@ -15,7 +15,7 @@ import MessageReviewView from './MessageReview/MessageReviewView';
 import NLPExtractorProfileEditor from './NLPExtractorProfileEditor';
 import EditorHeader from '../../common/EditorHeader';
 import { getTaskVisualsByType } from '../../Flowchart/utils/taskVisuals';
-import ActionDragLayer from './ActionDragLayer';
+import TaskDragLayer from './TaskDragLayer';
 import {
   getMainDataList,
   getSubDataList
@@ -1612,7 +1612,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
       </div>
 
       {/* Drag layer for visual feedback when dragging tasks */}
-      <ActionDragLayer />
+      <TaskDragLayer />
     </div>
   );
 }

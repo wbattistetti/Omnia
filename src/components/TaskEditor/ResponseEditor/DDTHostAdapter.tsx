@@ -7,7 +7,6 @@ import { flowchartVariablesService } from '../../../services/FlowchartVariablesS
 import { getTemplateId } from '../../../utils/taskHelpers';
 import { loadDDTFromTemplate } from '../../../utils/ddtMergeUtils';
 import { TaskType, taskIdToTaskType, getEditorFromTaskType } from '../../../types/taskTypes'; // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
-import { useTaskInstance } from './hooks/useTaskInstance';
 
 export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, onToolbarUpdate }: EditorProps) { // ✅ PATTERN CENTRALIZZATO: Accetta hideHeader e onToolbarUpdate
   // ✅ ARCHITETTURA ESPERTO: Verifica che questo componente sia usato solo per DDT
@@ -39,15 +38,55 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
   const currentProjectId = pdUpdate?.getCurrentProjectId() || null;
   const instanceKey = React.useMemo(() => taskMeta.instanceId || taskMeta.id, [taskMeta.instanceId, taskMeta.id]); // ✅ RINOMINATO: act → taskMeta
 
-  // ✅ ARCHITETTURA ESPERTO: Carica Task completo usando hook dedicato
-  const { task: fullTask, loading: taskLoading } = useTaskInstance(instanceKey);
+  // ✅ FIX: Carica task in modo sincrono nel render iniziale (getTask è sincrono)
+  // Non usare useTaskInstance che introduce delay inutile con useEffect
+  const fullTask = React.useMemo(() => {
+    if (!instanceKey) return null;
+    try {
+      return taskRepository.getTask(instanceKey);
+    } catch (error) {
+      console.error('[DDTHostAdapter] Error loading task:', error);
+      return null;
+    }
+  }, [instanceKey]);
 
-  // ✅ ARCHITETTURA ESPERTO: Stato per DDT loading
-  const [ddt, setDdt] = React.useState<any | null>(null);
-  const [ddtLoading, setDdtLoading] = React.useState(true);
+  // ✅ FIX: Costruisci DDT in modo sincrono se possibile (non serve async)
+  const initialDdt = React.useMemo(() => {
+    // ✅ Carica DDT in modo sincrono nel render iniziale se il task esiste e non ha templateId
+    if (fullTask) {
+      if (fullTask.templateId && fullTask.templateId !== 'UNDEFINED') {
+        // Ha templateId → serve async loadDDTFromTemplate, ritorna null per ora
+        return null;
+      } else if (fullTask.mainData && fullTask.mainData.length > 0) {
+        // ✅ NON ha templateId ma ha mainData → costruisci DDT in modo sincrono
+        return {
+          label: fullTask.label,
+          mainData: fullTask.mainData,
+          stepPrompts: fullTask.stepPrompts,
+          constraints: fullTask.constraints,
+          examples: fullTask.examples,
+          nlpContract: fullTask.nlpContract,
+          introduction: fullTask.introduction
+        };
+      }
+    }
+    return null;
+  }, [fullTask]);
+
+  const [ddt, setDdt] = React.useState<any | null>(initialDdt);
+
+  const [ddtLoading, setDdtLoading] = React.useState(() => {
+    // ✅ Se il task ha templateId, serve async loading
+    if (fullTask?.templateId && fullTask.templateId !== 'UNDEFINED') return true;
+    // ✅ Se il DDT è già stato caricato in modo sincrono, non c'è loading
+    if (initialDdt !== null) return false;
+    // ✅ Altrimenti, non c'è loading (DDT vuoto o task non esiste)
+    return false;
+  });
+
   const [refreshTrigger, setRefreshTrigger] = React.useState(0);
 
-  // ✅ ARCHITETTURA ESPERTO: Carica DDT quando Task completo è disponibile
+  // ✅ ARCHITETTURA ESPERTO: Carica DDT async solo se serve (ha templateId)
   React.useEffect(() => {
     const loadDDT = async () => {
       if (!fullTask) {
@@ -55,46 +94,29 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
         return;
       }
 
-      let taskInstance = fullTask;
-
-      if (!taskInstance) {
-        // ✅ LOGICA: Il task viene creato solo quando si apre ResponseEditor, dopo aver determinato il tipo
-        const finalTaskType = taskMeta.type !== undefined && taskMeta.type !== null ? taskMeta.type : TaskType.UNDEFINED;
-        taskInstance = taskRepository.createTask(finalTaskType, null, undefined, instanceKey);
+      // ✅ Se il DDT è già stato caricato in modo sincrono, non fare nulla
+      if (initialDdt !== null && (!fullTask.templateId || fullTask.templateId === 'UNDEFINED')) {
+        return;
       }
 
-      setDdtLoading(true);
-
-      // ✅ Se c'è templateId → SEMPRE chiama loadDDTFromTemplate (gestisce merge template + override)
-      // loadDDTFromTemplate gestisce:
-      // - Se mainData è vuoto → costruisce dal template
-      // - Se mainData esiste → merge: struttura dal template + override dall'instance
-      if (taskInstance?.templateId && taskInstance.templateId !== 'UNDEFINED') {
-        const merged = await loadDDTFromTemplate(taskInstance);
+      // ✅ Solo se ha templateId, carica in modo async
+      if (fullTask.templateId && fullTask.templateId !== 'UNDEFINED') {
+        setDdtLoading(true);
+        const merged = await loadDDTFromTemplate(fullTask);
         setDdt(merged);
-      } else if (taskInstance?.mainData && taskInstance.mainData.length > 0) {
-        // ✅ Solo se NON c'è templateId: usa mainData direttamente (DDT standalone, non da template)
-        setDdt({
-          label: taskInstance.label,
-          mainData: taskInstance.mainData,
-          stepPrompts: taskInstance.stepPrompts,
-          constraints: taskInstance.constraints,
-          examples: taskInstance.examples,
-          nlpContract: taskInstance.nlpContract,
-          introduction: taskInstance.introduction
-        });
-      } else {
+        setDdtLoading(false);
+      } else if (!fullTask.mainData || fullTask.mainData.length === 0) {
+        // ✅ Non ha templateId e non ha mainData → DDT vuoto
         setDdt(null);
+        setDdtLoading(false);
       }
-
-      setDdtLoading(false);
     };
 
     loadDDT();
-  }, [fullTask, instanceKey, refreshTrigger]); // ✅ Dipende da fullTask invece di taskMeta
+  }, [fullTask, instanceKey, refreshTrigger, initialDdt]); // ✅ Aggiungi initialDdt per controllare se è già stato caricato
 
-  // ✅ ARCHITETTURA ESPERTO: Loading combinato (task + ddt)
-  const loading = taskLoading || ddtLoading;
+  // ✅ ARCHITETTURA ESPERTO: Loading solo se serve async
+  const loading = ddtLoading;
 
   // 3. Quando completi il wizard, salva nel Task E aggiorna lo state
   const handleComplete = React.useCallback(async (finalDDT: any) => {

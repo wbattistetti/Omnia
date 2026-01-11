@@ -21,7 +21,10 @@ export enum TaskType {
   Transfer = 2,        // TaskTypes.Transfer
   DataRequest = 3,     // TaskTypes.DataRequest (rinominato da GetData)
   BackendCall = 4,     // TaskTypes.BackendCall
-  ClassifyProblem = 5  // TaskTypes.ClassifyProblem
+  ClassifyProblem = 5, // TaskTypes.ClassifyProblem
+  AIAgent = 6,         // ✅ AI Agent task
+  Summarizer = 7,      // ✅ Summarizer task
+  Negotiation = 8      // ✅ Negotiation task
 }
 
 /**
@@ -35,6 +38,9 @@ export function taskTypeToTemplateId(type: TaskType): string | null {
     case TaskType.BackendCall: return 'BackendCall';
     case TaskType.CloseSession: return 'CloseSession';
     case TaskType.Transfer: return 'Transfer';
+    case TaskType.AIAgent: return 'AIAgent';
+    case TaskType.Summarizer: return 'Summarizer';
+    case TaskType.Negotiation: return 'Negotiation';
     case TaskType.UNDEFINED: return 'UNDEFINED';
     default: return null;
   }
@@ -54,6 +60,9 @@ export function templateIdToTaskType(templateId: string | null | undefined): Tas
     case 'backendcall': return TaskType.BackendCall;
     case 'closesession': return TaskType.CloseSession;
     case 'transfer': return TaskType.Transfer;
+    case 'aiagent': return TaskType.AIAgent;
+    case 'summarizer': return TaskType.Summarizer;
+    case 'negotiation': return TaskType.Negotiation;
     case 'undefined': return TaskType.UNDEFINED;
     default: return TaskType.UNDEFINED;
   }
@@ -81,6 +90,9 @@ export function taskIdToTaskType(taskId: string): TaskType { // ✅ RINOMINATO: 
     case 'callbackend': return TaskType.BackendCall;
     case 'closesession': return TaskType.CloseSession;
     case 'transfer': return TaskType.Transfer;
+    case 'aiagent': return TaskType.AIAgent;
+    case 'summarizer': return TaskType.Summarizer;
+    case 'negotiation': return TaskType.Negotiation;
     case 'undefined': return TaskType.UNDEFINED;
     default: return TaskType.UNDEFINED;
   }
@@ -121,7 +133,7 @@ export function taskTypeToHeuristicString(type: TaskType): string | null {
 /**
  * Helper: Deriva il tipo di editor da TaskType
  */
-export function getEditorFromTaskType(type: TaskType): 'message' | 'ddt' | 'problem' | 'backend' | 'simple' {
+export function getEditorFromTaskType(type: TaskType): 'message' | 'ddt' | 'problem' | 'backend' | 'simple' | 'aiagent' | 'summarizer' | 'negotiation' {
   switch (type) {
     case TaskType.SayMessage:
     case TaskType.CloseSession:
@@ -129,6 +141,12 @@ export function getEditorFromTaskType(type: TaskType): 'message' | 'ddt' | 'prob
       return 'message';
     case TaskType.DataRequest:
       return 'ddt';
+    case TaskType.AIAgent:
+      return 'aiagent';
+    case TaskType.Summarizer:
+      return 'summarizer';
+    case TaskType.Negotiation:
+      return 'negotiation';
     case TaskType.ClassifyProblem:
       return 'problem';
     case TaskType.BackendCall:

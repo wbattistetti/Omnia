@@ -77,7 +77,7 @@ export function groupMessagesByStep(items: ReviewItem[]): StepGroup[] {
                 const escIndex = escKey === 'no_esc' ? null : parseInt(escKey.replace('esc_', ''), 10);
                 return {
                     escIndex,
-                    items: recoveryGroups[escKey].sort((a, b) => (a.actionIndex ?? 0) - (b.actionIndex ?? 0))
+                    items: recoveryGroups[escKey].sort((a, b) => (a.taskIndex ?? 0) - (b.taskIndex ?? 0))
                 };
             })
             .sort((a, b) => {
@@ -96,8 +96,8 @@ export function groupMessagesByStep(items: ReviewItem[]): StepGroup[] {
     return stepGroups.filter(group => group.recoveries.length > 0);
 }
 
-export function extractActionTextKey(action: any): string | undefined {
-    const params = Array.isArray(action?.parameters) ? action.parameters : [];
+export function extractTaskTextKey(task: any): string | undefined {
+    const params = Array.isArray(task?.parameters) ? task.parameters : [];
     const p = params.find((x: any) => x?.parameterId === 'text');
     return typeof p?.value === 'string' ? p.value : undefined;
 }
@@ -147,7 +147,7 @@ export function collectNodeMessages(
                 const tasks = Array.isArray(esc?.tasks) ? esc.tasks : [];
                 tasks.forEach((task: any, taskIdx: number) => {
                     // ✅ CAMBIATO: estrai textKey dalle task (funziona anche per task perché hanno parameters)
-                    const key = extractActionTextKey(task);
+                    const key = extractTaskTextKey(task);
                     const templateId = task?.templateId || 'sayMessage';
 
                     // Include messages with or without textKey (to show newly added messages)
@@ -162,11 +162,11 @@ export function collectNodeMessages(
                             id: `${pathLabel}|${stepKey}|${escIdx}|${taskIdx}`,
                             stepKey,
                             escIndex: escIdx,
-                            actionIndex: taskIdx, // Manteniamo actionIndex per compatibilità con il tipo ReviewItem
+                            taskIndex: taskIdx,
                             textKey: key,
                             text: text,
                             pathLabel,
-                            actionId: templateId, // ✅ CAMBIATO: usa templateId invece di actionId
+                            taskId: templateId, // ✅ CAMBIATO: usa templateId invece di actionId
                             color: task.color,
                         });
                     }
@@ -185,11 +185,11 @@ export function collectNodeMessages(
                     id: `${pathLabel}|${stepKey}|-1|-1`,
                     stepKey,
                     escIndex: null,
-                    actionIndex: null,
+                    taskIndex: null,
                     textKey: key,
                     text: translations[key] || key,
                     pathLabel,
-                    actionId: 'sayMessage', // Default for legacy messages
+                    taskId: 'sayMessage', // Default for legacy messages
                     color: undefined,
                 });
             }
@@ -215,7 +215,7 @@ export function collectAllMessages(
         if (d !== 0) return d;
         const e = (a.escIndex ?? 0) - (b.escIndex ?? 0);
         if (e !== 0) return e;
-        return (a.actionIndex ?? 0) - (b.actionIndex ?? 0);
+        return (a.taskIndex ?? 0) - (b.taskIndex ?? 0);
     });
 }
 

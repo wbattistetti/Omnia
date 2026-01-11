@@ -21,7 +21,7 @@ export default function StepEditor({
   updateSelectedNode,
   stepKey
 }: Props) {
-  const [autoEditTarget, setAutoEditTarget] = React.useState<{ escIdx: number; actIdx: number } | null>(null);
+  const [autoEditTarget, setAutoEditTarget] = React.useState<{ escIdx: number; taskIdx: number } | null>(null);
   const stepLabel = stepMeta[stepKey]?.label || 'Escalation';
 
   const handleAddEscalation = React.useCallback(() => {

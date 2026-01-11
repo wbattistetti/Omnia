@@ -13,8 +13,8 @@ type EscalationEditorProps = {
   stepKey: string;
   stepLabel: string; // ✅ Label dello step (es. "Non capisco", "Non sento")
   onDeleteEscalation?: (escalationIdx: number) => void; // ✅ Handler per cancellare escalation
-  autoEditTarget: { escIdx: number; actIdx: number } | null;
-  onAutoEditTargetChange: (target: { escIdx: number; actIdx: number } | null) => void;
+  autoEditTarget: { escIdx: number; taskIdx: number } | null;
+  onAutoEditTargetChange: (target: { escIdx: number; taskIdx: number } | null) => void;
 };
 
 export default function EscalationEditor({

@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { ProjectEntityItem, EntityType } from '../../types/project';
 import { Megaphone, Ear, CheckCircle2 } from 'lucide-react';
 import ItemEditor from './ItemEditor';
-import { classifyActInteractivity } from '../../nlp/actInteractivity';
+import { classifyTaskInteractivity } from '../../nlp/taskInteractivity';
 // import DeleteConfirmation from './DeleteConfirmation';
 import { Pencil, Trash2, Wrench, Settings } from 'lucide-react';
-import { getAgentActIconColor } from '../../utils/agentActIconColor';
+import { getTaskIconColor } from '../../utils/taskIconColor';
 import { useProjectData } from '../../context/ProjectDataContext';
 
 interface SidebarItemProps {
@@ -29,7 +29,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
   const mode: 'DataRequest' | 'DataConfirmation' | 'Message' = (isAgentAct ? ((item as any)?.mode || 'Message') : 'Message');
   const isInteractive = mode === 'DataRequest' || mode === 'DataConfirmation'; // Keep for backward compatibility
   const nameColor = isAgentAct
-    ? (mode === 'DataRequest' ? getAgentActIconColor(item as any) : mode === 'DataConfirmation' ? '#f59e0b' : '#22c55e')
+    ? (mode === 'DataRequest' ? getTaskIconColor(item as any) : mode === 'DataConfirmation' ? '#f59e0b' : '#22c55e')
     : 'var(--sidebar-content-text)';
 
   // Debug logging removed to prevent excessive console output

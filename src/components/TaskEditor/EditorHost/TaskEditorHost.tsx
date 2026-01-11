@@ -32,8 +32,8 @@ export default function TaskEditorHost({ task, onClose, onToolbarUpdate, hideHea
   // });
 
   // DDTEditor, IntentEditor, TextMessageEditor e BackendCallEditor sono importati direttamente, quindi non hanno bisogno di Suspense
-  // Gli altri editori (problem, simple) usano lazy loading, quindi hanno bisogno di Suspense
-  const isLazy = kind !== 'ddt' && kind !== 'intent' && kind !== 'message' && kind !== 'backend' && kind !== 'problem';
+  // Gli altri editori (problem, simple, aiagent, summarizer, negotiation) usano lazy loading, quindi hanno bisogno di Suspense
+  const isLazy = kind !== 'ddt' && kind !== 'intent' && kind !== 'message' && kind !== 'backend' && kind !== 'problem' && kind !== 'aiagent' && kind !== 'summarizer' && kind !== 'negotiation';
 
   if (!isLazy) {
     // ✅ SOLUZIONE ESPERTO: Rimuovere h-full, usare solo flex-1 min-h-0

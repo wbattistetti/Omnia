@@ -2,12 +2,12 @@ export type ReviewItem = {
     id: string;
     stepKey: string;
     escIndex: number | null;
-    actionIndex: number | null;
+    taskIndex: number | null;
     textKey?: string;
     text: string;
     pathLabel: string;
-    actionId?: string; // For centralized icon/label system
-    color?: string; // Action color (not step color)
+    taskId?: string; // For centralized icon/label system
+    color?: string; // Task color (not step color)
 };
 
 export type RecoveryGroup = {

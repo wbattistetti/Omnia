@@ -1,8 +1,8 @@
-// Simple multilingual, rule-based classifier for Agent Act interactivity
+// Simple multilingual, rule-based classifier for Task interactivity
 // Returns true if the title implies the agent asks/requests user data; false if it's purely emissive;
 // undefined if no strong signal.
 
-export function classifyActInteractivity(title?: string): boolean | undefined {
+export function classifyTaskInteractivity(title?: string): boolean | undefined {
   const t = String(title || '').toLowerCase();
   if (!t.trim()) return undefined;
 
@@ -26,23 +26,23 @@ export function classifyActInteractivity(title?: string): boolean | undefined {
 }
 
 // Extended classifier that determines the specific mode (DataRequest, DataConfirmation, Message)
-export function classifyActMode(title?: string): 'DataRequest' | 'DataConfirmation' | 'Message' {
+export function classifyTaskMode(title?: string): 'DataRequest' | 'DataConfirmation' | 'Message' {
   const t = String(title || '').toLowerCase();
   if (!t.trim()) return 'Message';
 
   // DataConfirmation cues - agent confirms/verifies user data
   const confirmationRe = /(confirm(s|ed|ing)?|verify(ing|ies|ied)?|check(s|ed|ing)?|validate(s|d|ing)?|check.*correct|verify.*correct|conferma|verifica|controlla|valida|ask.*confirm|ask.*verification|ask.*check|request.*confirm|request.*verification|request.*check)/i;
-  
+
   // DataRequest cues - agent asks for user data (più robusto)
   const requestRe = /(ask(s)?.*for|request(s|ed)?|require(s|d)?|collect(s|ed)?|prompt(s|ed)?|solicit(s|ed)?|chiede.*per|richiede|domanda.*per|raccoglie|sollecita|pregunta.*por|solicita|pide.*por|get(s|ting)?|need(s|ing)?|obtain(s|ing)?|acquire(s|ing)?|gather(s|ing)?|fetch(es|ing)?)/i;
-  
+
   // Message cues - agent provides information
   const messageRe = /(say(s|ing)?|inform(s|ed|ing)?|notify(ing|ies|ied)?|communicat(e|es|ed|ing)|announce(s|d|ing)?|explain(s|ed)?|dice|informa|notifica|comunica|annuncia|spiega)/i;
 
   const hasConfirmation = confirmationRe.test(t);
-  
+
   // Semplice e robusto: cerca parole chiave + qualsiasi cosa dopo, ma escludi confirmation
-  const hasRequest = requestRe.test(t) || 
+  const hasRequest = requestRe.test(t) ||
     // Pattern "ask" + qualsiasi cosa (ma non "ask confirmation")
     (/\b(ask|asks)\b.*\w+/i.test(t) && !/\b(ask|asks)\b.*\b(confirm|confirmation|verify|verification|check|validate|validation)\b/i.test(t)) ||
     // Pattern "ask for" + qualsiasi cosa (ma non "ask for confirmation")
@@ -61,22 +61,22 @@ export function classifyActMode(title?: string): 'DataRequest' | 'DataConfirmati
     /\b(require|requires|requiring)\b.*\w+/i.test(t) ||
     // Pattern "prompt" + qualsiasi cosa
     /\b(prompt|prompts|prompting)\b.*\w+/i.test(t);
-    
+
   const hasMessage = messageRe.test(t);
 
   // Priority order: DataConfirmation > DataRequest > Message
   if (hasConfirmation && !hasRequest) return 'DataConfirmation';
   if (hasRequest && !hasConfirmation) return 'DataRequest';
   if (hasMessage && !hasRequest && !hasConfirmation) return 'Message';
-  
+
   // Ambiguous cases - use heuristics
   if (hasConfirmation && hasRequest) return 'DataConfirmation'; // prefer confirmation if both
   if (hasRequest && hasMessage) return 'DataRequest'; // prefer request if both
-  
+
   // Fallback heuristics for common patterns
   if (/\b(ask|asks|request|requests)\b.*\b(user|utente|usuario)(?:'s)?\b/i.test(t)) return 'DataRequest';
   if (/personal data|user data|dati personali|datos personales/i.test(t) && /ask|asks|request|requests|chiede|richiede|solicita/i.test(t)) return 'DataRequest';
-  
+
   // Default fallback
   return 'Message';
 }

@@ -1,6 +1,7 @@
 import { ProjectDataService } from './ProjectDataService';
 import { TaskType } from '../types/taskTypes'; // ✅ TaskType enum instead of modeToType/typeToMode
 import { classifyScopeFromLabel, Scope, Industry } from './ScopeClassificationService';
+import { classifyTaskMode } from '../nlp/taskInteractivity';
 
 export interface EntityCreationConfig {
   entityType: 'taskTemplates' | 'backendActions' | 'macrotasks' | 'conditions';
@@ -131,7 +132,7 @@ export class EntityCreationService {
           const providedType = (options as any)?.type as TaskType | undefined;
           // ✅ Convert mode string to TaskType enum if needed
           const finalType = providedType || (() => {
-            const mode = classifyActMode(options.name);
+            const mode = classifyTaskMode(options.name);
             if (mode === 'DataRequest') return TaskType.DataRequest;
             if (mode === 'DataConfirmation') return TaskType.DataRequest; // DataConfirmation → DataRequest
             return TaskType.SayMessage; // Message → SayMessage
@@ -228,7 +229,7 @@ export class EntityCreationService {
       updatedAt: new Date(),
       ...(entityType === 'taskTemplates' && {
         type: (() => {
-          const mode = classifyActMode(name);
+          const mode = classifyTaskMode(name);
           if (mode === 'DataRequest') return TaskType.DataRequest;
           if (mode === 'DataConfirmation') return TaskType.DataRequest; // DataConfirmation → DataRequest
           return TaskType.SayMessage; // Message → SayMessage
@@ -347,7 +348,7 @@ export class EntityCreationService {
     projectData: any
   ): any {
     const finalType = originalEntityType === 'taskTemplates' ? (() => {
-      const mode = classifyActMode(name);
+      const mode = classifyTaskMode(name);
       if (mode === 'DataRequest') return TaskType.DataRequest;
       if (mode === 'DataConfirmation') return TaskType.DataRequest; // DataConfirmation → DataRequest
       return TaskType.SayMessage; // Message → SayMessage

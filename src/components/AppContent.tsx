@@ -726,6 +726,36 @@ export const AppContent: React.FC<AppContentProps> = ({
               headerColor: '#f59e0b', // Orange color for ClassifyProblem
               toolbarButtons: []
             } as DockTabTaskEditor);
+          } else if (editorKind === 'aiagent') {
+            // ✅ Open AIAgentEditor via TaskEditorHost for AIAgent type
+            return splitWithTab(prev, rootTabsetId, 'bottom', {
+              id: tabId,
+              title: d.label || d.name || 'AI Agent',
+              type: 'taskEditor', // ✅ Usa TaskEditorHost che aprirà AIAgentEditor
+              task: taskMeta, // ✅ Passa TaskMeta con TaskType enum
+              headerColor: '#a855f7', // Purple color for AIAgent
+              toolbarButtons: []
+            } as DockTabTaskEditor);
+          } else if (editorKind === 'summarizer') {
+            // ✅ Open SummarizerEditor via TaskEditorHost for Summarizer type
+            return splitWithTab(prev, rootTabsetId, 'bottom', {
+              id: tabId,
+              title: d.label || d.name || 'Summarizer',
+              type: 'taskEditor', // ✅ Usa TaskEditorHost che aprirà SummarizerEditor
+              task: taskMeta, // ✅ Passa TaskMeta con TaskType enum
+              headerColor: '#06b6d4', // Cyan color for Summarizer
+              toolbarButtons: []
+            } as DockTabTaskEditor);
+          } else if (editorKind === 'negotiation') {
+            // ✅ Open NegotiationEditor via TaskEditorHost for Negotiation type
+            return splitWithTab(prev, rootTabsetId, 'bottom', {
+              id: tabId,
+              title: d.label || d.name || 'Negotiation',
+              type: 'taskEditor', // ✅ Usa TaskEditorHost che aprirà NegotiationEditor
+              task: taskMeta, // ✅ Passa TaskMeta con TaskType enum
+              headerColor: '#6366f1', // Indigo color for Negotiation
+              toolbarButtons: []
+            } as DockTabTaskEditor);
           } else {
             // For other types, don't open editor if not supported
             return prev;

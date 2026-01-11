@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import ItemEditor from './ItemEditor';
-import { classifyActInteractivity } from '../../nlp/actInteractivity';
+import { classifyTaskInteractivity } from '../../nlp/taskInteractivity';
 import SidebarItem from './SidebarItem';
 import { Pencil, Trash2 } from 'lucide-react';
 import { Category, ProjectEntityItem, EntityType } from '../../types/project';
@@ -151,7 +151,7 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
               // Infer interactivity when creating a new Agent Act
               if (entityType === 'taskTemplates') {
                 try {
-                  const inferred = classifyActInteractivity(trimmed);
+                  const inferred = classifyTaskInteractivity(trimmed);
                   if (typeof inferred === 'boolean') {
                     onAddItem(trimmed);
                   } else {

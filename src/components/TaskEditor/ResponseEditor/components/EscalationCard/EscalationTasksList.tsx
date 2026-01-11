@@ -18,8 +18,8 @@ type EscalationTasksListProps = {
   allowedActions?: string[];
   updateEscalation: (updater: (esc: any) => any) => void;
   updateSelectedNode: (updater: (node: any) => any, notifyProvider?: boolean) => void;
-  autoEditTarget: { escIdx: number; actIdx: number } | null;
-  onAutoEditTargetChange: (target: { escIdx: number; actIdx: number } | null) => void;
+  autoEditTarget: { escIdx: number; taskIdx: number } | null;
+  onAutoEditTargetChange: (target: { escIdx: number; taskIdx: number } | null) => void;
   stepKey: string;
 };
 
@@ -52,7 +52,7 @@ export function EscalationTasksList({
       const newTasks = [...(esc.tasks || []), taskRef];
       const newTaskIdx = newTasks.length - 1;
       setTimeout(() => {
-        onAutoEditTargetChange({ escIdx: escalationIdx, actIdx: newTaskIdx });
+        onAutoEditTargetChange({ escIdx: escalationIdx, taskIdx: newTaskIdx });
       }, 0);
       return { ...esc, tasks: newTasks };
     });
@@ -66,7 +66,7 @@ export function EscalationTasksList({
       return { ...esc, tasks };
     });
 
-    if (autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.actIdx === taskIdx) {
+    if (autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.taskIdx === taskIdx) {
       onAutoEditTargetChange(null);
     }
   }, [updateEscalation, escalationIdx, autoEditTarget, onAutoEditTargetChange]);
@@ -78,7 +78,7 @@ export function EscalationTasksList({
       return { ...esc, tasks };
     });
 
-    if (autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.actIdx === taskIdx) {
+    if (autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.taskIdx === taskIdx) {
       onAutoEditTargetChange(null);
     }
   }, [updateEscalation, escalationIdx, autoEditTarget, onAutoEditTargetChange]);
@@ -115,7 +115,7 @@ export function EscalationTasksList({
 
     const targetIdx = position === 'after' ? to.taskIdx + 1 : to.taskIdx;
     if (templateId === 'sayMessage') {
-      onAutoEditTargetChange({ escIdx: escalationIdx, actIdx: targetIdx });
+      onAutoEditTargetChange({ escIdx: escalationIdx, taskIdx: targetIdx });
     }
   }, [updateEscalation, escalationIdx, allowedActions, onAutoEditTargetChange]);
 
@@ -189,10 +189,10 @@ export function EscalationTasksList({
                 label={task.label || getTaskLabel(templateId)}
                 onEdit={templateId === 'sayMessage' ? (newText) => handleEdit(j, newText) : undefined}
                 onDelete={() => handleDelete(j)}
-                autoEdit={Boolean(autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.actIdx === j)}
+                autoEdit={Boolean(autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.taskIdx === j)}
                 onEditingChange={(isEditing) => {
                   handleEditingChange(j)(isEditing);
-                  if (!isEditing && autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.actIdx === j) {
+                  if (!isEditing && autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.taskIdx === j) {
                     onAutoEditTargetChange(null);
                   }
                 }}

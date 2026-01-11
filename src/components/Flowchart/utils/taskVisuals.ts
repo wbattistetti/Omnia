@@ -29,7 +29,10 @@ export function resolveTaskType(row: any): TaskType {
         'Message': TaskType.SayMessage,
         'DataRequest': TaskType.DataRequest,
         'BackendCall': TaskType.BackendCall,
-        'ProblemClassification': TaskType.ClassifyProblem
+        'ProblemClassification': TaskType.ClassifyProblem,
+        'AIAgent': TaskType.AIAgent,
+        'Summarizer': TaskType.Summarizer,
+        'Negotiation': TaskType.Negotiation
       };
       // ❌ RIMOSSO FALLBACK: se non è nel map, restituisci UNDEFINED (nessun fallback automatico)
       return typeMap[row.type] ?? TaskType.UNDEFINED;

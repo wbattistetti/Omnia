@@ -4,7 +4,7 @@ import { useDDTManager } from '../../../../context/DDTManagerContext';
 import { useDDTContext } from '../../../../context/DDTContext';
 import { ProjectDataService } from '../../../../services/ProjectDataService';
 import { EntityCreationService } from '../../../../services/EntityCreationService';
-import { createAndAttachTask } from '../../../../services/ActFactory'; // ✅ RINOMINATO: createAndAttachAct → createAndAttachTask
+import { createAndAttachTask } from '../../../../services/TaskFactory';
 import { useTaskEditor } from '../../../TaskEditor/EditorHost/TaskEditorContext'; // ✅ RINOMINATO: ActEditor → TaskEditor, useActEditor → useTaskEditor
 import { emitSidebarRefresh } from '../../../../ui/events';
 import { createPortal } from 'react-dom';
@@ -27,6 +27,8 @@ import { useRowRegistry } from './hooks/useRowRegistry';
 import { isInsideWithPadding, getToolbarRect } from './utils/geometry';
 import { getTaskVisualsByType, resolveTaskType, hasTaskDDT } from '../../utils/taskVisuals';
 import { TaskType, taskTypeToTemplateId, taskTypeToHeuristicString, taskIdToTaskType } from '../../../../types/taskTypes'; // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
+import getIconComponent from '../../../TaskEditor/ResponseEditor/icons';
+import { ensureHexColor } from '../../../TaskEditor/ResponseEditor/utils/color';
 import { RowHeuristicsService } from '../../../../services/RowHeuristicsService'; // ✅ Service centralizzato per euristiche
 // ❌ RIMOSSO: modeToType, typeToMode - usa TaskType enum direttamente
 import { idMappingService } from '../../../../services/IdMappingService';
@@ -661,15 +663,23 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   };
 
   // Common handler invoked by keyboard or mouse pick
-  const handlePickType = async (selectedTaskType: TaskType) => { // ✅ Riceve direttamente TaskType enum
+  const handlePickType = async (selectedTaskTypeOrTask: TaskType | { task: any }) => { // ✅ Riceve TaskType enum o task object per "Other"
+    // ✅ Determina se è un TaskType enum o un task object
+    const isTaskObject = typeof selectedTaskTypeOrTask === 'object' && 'task' in selectedTaskTypeOrTask;
+    const selectedTaskType: TaskType | null = isTaskObject ? null : (selectedTaskTypeOrTask as TaskType);
+    const selectedTask = isTaskObject ? (selectedTaskTypeOrTask as { task: any }).task : null;
+
     console.log('🎯 [HANDLE_PICK_TYPE][START]', {
+      isTaskObject,
       taskType: selectedTaskType,
-      taskTypeName: TaskType[selectedTaskType],
+      taskTypeName: selectedTaskType ? TaskType[selectedTaskType] : 'Other',
+      taskId: selectedTask?.id,
+      taskTemplateId: selectedTask?.templateId,
       currentText,
       rowId: row.id,
       rowText: row.text,
       isEditing,
-      hasOnCreateAgentAct: !!onCreateAgentAct,
+      hasOnCreateFactoryTask: !!onCreateFactoryTask,
       timestamp: Date.now()
     });
 
@@ -694,28 +704,102 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     }
 
     // ✅ CAMBIO TIPO: Se non siamo in editing, stiamo cambiando il tipo di una riga esistente
-    // In questo caso aggiorniamo solo il tipo senza creare un nuovo agent act
+    // In questo caso aggiorniamo solo il tipo senza aprire il ResponseEditor (si apre solo con l'ingranaggio)
     if (!isEditing && onUpdateWithCategory) {
-      // ✅ Converti TaskType enum a stringa per backward compatibility con onUpdateWithCategory
-      const typeString = taskType === TaskType.SayMessage ? 'Message' :
-                        taskType === TaskType.DataRequest ? 'DataRequest' :
-                        taskType === TaskType.BackendCall ? 'BackendCall' :
-                        taskType === TaskType.ClassifyProblem ? 'ProblemClassification' : 'Message';
+      const taskId = row.id;
+      let finalTaskType: TaskType;
+      let typeString: string;
+      let templateId: string | null = null;
+
+      if (isTaskObject && selectedTask) {
+        // ✅ Task "Other": usa il templateId, icon e color del task selezionato
+        templateId = selectedTask.id || selectedTask.templateId || null;
+        finalTaskType = selectedTask.type !== undefined ? selectedTask.type : TaskType.UNDEFINED;
+        typeString = 'Other'; // Per backward compatibility
+
+        // ✅ Salva icon e color nel task per usarli nei visuals
+        const updateDataWithVisuals: any = {
+          type: finalTaskType,
+          icon: selectedTask.icon || selectedTask.iconName || null,
+          color: selectedTask.color || null
+        };
+        if (templateId) {
+          updateDataWithVisuals.templateId = templateId;
+        }
+
+        const existingTask = taskRepository.getTask(taskId);
+        if (existingTask) {
+          taskRepository.updateTask(taskId, updateDataWithVisuals, getProjectId?.() ?? undefined);
+        } else {
+          taskRepository.createTask(
+            finalTaskType,
+            templateId,
+            {
+              ...(finalTaskType === TaskType.SayMessage ? { text: row.text || '' } : {}),
+              icon: selectedTask.icon || selectedTask.iconName || null,
+              color: selectedTask.color || null
+            },
+            taskId,
+            getProjectId?.() ?? undefined
+          );
+        }
+      } else if (selectedTaskType !== null) {
+        // ✅ TaskType enum: usa direttamente
+        finalTaskType = selectedTaskType;
+        typeString = finalTaskType === TaskType.SayMessage ? 'Message' :
+                    finalTaskType === TaskType.DataRequest ? 'DataRequest' :
+                    finalTaskType === TaskType.BackendCall ? 'BackendCall' :
+                    finalTaskType === TaskType.ClassifyProblem ? 'ProblemClassification' :
+                    finalTaskType === TaskType.AIAgent ? 'AIAgent' :
+                    finalTaskType === TaskType.Summarizer ? 'Summarizer' :
+                    finalTaskType === TaskType.Negotiation ? 'Negotiation' : 'Message';
+      } else {
+        console.error('❌ [CHANGE_TYPE] Nessun tipo valido fornito');
+        toolbarSM.picker.close();
+        return;
+      }
 
       console.log('🎯 [CHANGE_TYPE][EXISTING_ROW]', {
         rowId: row.id,
         oldType: row.categoryType,
-        newType: taskType,
+        newType: finalTaskType,
         newTypeString: typeString,
+        templateId,
+        isTaskObject,
         wasUndefined: (row as any)?.isUndefined,
         timestamp: Date.now()
       });
 
-      // ✅ mode removed - use type (TaskType enum) only
+      // ✅ Aggiorna il task nel repository PRIMA di aggiornare la riga (solo se non è già stato fatto per task "Other")
+      if (!isTaskObject || !selectedTask) {
+        const existingTask = taskRepository.getTask(taskId);
+        if (existingTask) {
+          const updateData: any = { type: finalTaskType };
+          if (templateId) {
+            updateData.templateId = templateId;
+          }
+          taskRepository.updateTask(taskId, updateData, getProjectId?.() ?? undefined);
+        } else {
+          // Crea il task se non esiste
+          taskRepository.createTask(
+            finalTaskType,
+            templateId,
+            finalTaskType === TaskType.SayMessage ? { text: row.text || '' } : undefined,
+            taskId,
+            getProjectId?.() ?? undefined
+          );
+        }
+      }
 
+      // ✅ mode removed - use type (TaskType enum) only
+      // ✅ Aggiorna anche row.meta.type con il TaskType enum (numero) per resolveTaskType
       const updateMeta = {
         id: row.id,
-        type: typeString, // ✅ TaskType enum only, no mode
+        type: typeString, // ✅ Stringa per backward compatibility
+        meta: {
+          ...((row as any)?.meta || {}),
+          type: finalTaskType // ✅ TaskType enum (numero) per resolveTaskType
+        },
         factoryId: (row as any).factoryId,
         instanceId: (row as any).instanceId,
         // ✅ Rimuovi flag isUndefined quando viene selezionato un tipo
@@ -737,108 +821,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         timestamp: Date.now()
       });
 
-      // ✅ NUOVO: Dopo aver aggiornato il tipo, apri automaticamente il ResponseEditor
-      try {
-        console.log('🚀 [CHANGE_TYPE] Preparazione apertura ResponseEditor', {
-          taskType: selectedTaskType,
-          taskTypeName: TaskType[selectedTaskType],
-          rowId: row.id,
-          rowText: row.text
-        });
-
-        // ✅ Usa sempre row.id come taskId (la riga e il task condividono lo stesso ID)
-        const taskId = row.id;
-        let task = taskRepository.getTask(taskId);
-
-        console.log('🚀 [CHANGE_TYPE] Task esistente?', {
-          taskId,
-          taskExists: !!task,
-          existingTaskType: task?.type,
-          newTaskType: selectedTaskType
-        });
-
-        if (!task) {
-          // Crea il task se non esiste
-          console.log('🚀 [CHANGE_TYPE] Creando nuovo task...', {
-            taskType: selectedTaskType,
-            rowId: row.id,
-            text: selectedTaskType === TaskType.SayMessage ? row.text : undefined
-          });
-          task = taskRepository.createTask(
-            selectedTaskType, // ✅ Usa direttamente TaskType enum
-            null,
-            selectedTaskType === TaskType.SayMessage ? { text: row.text || '' } : undefined,
-            row.id,
-            getProjectId?.() ?? undefined
-          );
-          console.log('✅ [CHANGE_TYPE] Task creato', {
-            taskId: task.id,
-            taskType: task.type
-          });
-        } else {
-          // Aggiorna il tipo del task esistente se necessario
-          if (task.type !== selectedTaskType) {
-            console.log('🔄 [CHANGE_TYPE] Aggiornando tipo task esistente', {
-              oldType: task.type,
-              newType: selectedTaskType
-            });
-            taskRepository.updateTask(taskId, { type: selectedTaskType }, getProjectId?.() ?? undefined);
-            // Ricarica il task dopo l'aggiornamento
-            task = taskRepository.getTask(taskId);
-          }
-        }
-
-        // Verifica che il task esista prima di aprire l'editor
-        if (!task) {
-          console.error('❌ [CHANGE_TYPE] Task non trovato dopo creazione/aggiornamento', { taskId });
-          return;
-        }
-
-        // Apri il ResponseEditor
-        console.log('🚀 [CHANGE_TYPE] Chiamando taskEditorCtx.open', {
-          id: String(taskId),
-          type: selectedTaskType,
-          label: row.text,
-          instanceId: row.id,
-          taskType: task.type
-        });
-
-        taskEditorCtx.open({
-          id: String(taskId),
-          type: selectedTaskType,
-          label: row.text,
-          instanceId: row.id
-        });
-
-        // ✅ CRITICAL: Emetti evento per aprire il dock tab (come fa onOpenDDT)
-        // AppContent.tsx ascolta questo evento per aprire l'editor in un dock tab
-        console.log('📤 [CHANGE_TYPE] Emettendo evento taskEditor:open per aprire dock tab', {
-          id: String(taskId),
-          type: selectedTaskType,
-          label: row.text,
-          instanceId: row.id
-        });
-
-        const event = new CustomEvent('taskEditor:open', {
-          detail: {
-            id: String(taskId),
-            type: selectedTaskType,
-            label: row.text,
-            instanceId: row.id,
-            templateId: task.templateId || undefined
-          },
-          bubbles: true
-        });
-        document.dispatchEvent(event);
-
-        console.log('✅ [CHANGE_TYPE] Evento taskEditor:open emesso con successo');
-      } catch (error) {
-        console.error('❌ [CHANGE_TYPE] Errore aprendo ResponseEditor dopo selezione tipo', error);
-        if (error instanceof Error) {
-          console.error('❌ [CHANGE_TYPE] Stack trace:', error.stack);
-        }
-      }
-
+      // ✅ NON aprire automaticamente il ResponseEditor - si apre solo con l'ingranaggio
       // Chiudi il picker e aggiorna lo stato del toolbar
       toolbarSM.picker.close();
       return;
@@ -848,14 +831,72 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
     // ✅ NUOVO: Crea il factory task se onCreateFactoryTask è disponibile
     // Questo permette di ritrovare la riga nell'Intellisense quando viene riutilizzata
-    if (onCreateFactoryTask) { // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
+    // NOTA: Questo branch viene usato solo quando si crea una nuova riga (isEditing = true)
+    // Quando si cambia il tipo di una riga esistente (isEditing = false), usiamo il branch sopra
+    if (onCreateFactoryTask && isEditing) { // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
+      // ✅ Se è un task "Other", non usiamo onCreateFactoryTask (non ha senso per task esistenti)
+      if (isTaskObject && selectedTask) {
+        console.log('🎯 [HANDLE_PICK_TYPE][OTHER_TASK_IN_EDITING]', {
+          label,
+          taskId: selectedTask.id,
+          taskTemplateId: selectedTask.templateId,
+          timestamp: Date.now()
+        });
+        // Per task "Other" in editing, creiamo direttamente il task con templateId
+        const taskId = row.id;
+        const projectId = getProjectId?.() || undefined;
+        const taskType = selectedTask.type !== undefined ? selectedTask.type : TaskType.UNDEFINED;
+        const templateId = selectedTask.id || selectedTask.templateId || null;
+
+        if (!row.taskId) {
+          taskRepository.createTask(
+            taskType,
+            templateId,
+            taskType === TaskType.SayMessage ? { text: label } : undefined,
+            taskId,
+            projectId
+          );
+        } else {
+          taskRepository.updateTask(taskId, { type: taskType, templateId }, projectId);
+        }
+
+        // Aggiorna la riga
+        const updateMeta = {
+          id: taskId,
+          type: 'Other',
+          meta: {
+            ...((row as any)?.meta || {}),
+            type: taskType
+          },
+          isUndefined: false
+        };
+
+        if (onUpdateWithCategory) {
+          (onUpdateWithCategory as any)(row, label, 'taskTemplates', updateMeta);
+        } else {
+          onUpdate({ ...row, isUndefined: false } as any, label);
+        }
+
+        setIsEditing(false);
+        setShowIntellisense(false);
+        setIntellisenseQuery('');
+        toolbarSM.picker.close();
+        return;
+      }
+
+      // ✅ Per TaskType enum, usa la logica esistente con key (da Intellisense)
+      // NOTA: key non è definita quando si chiama dal picker, quindi questo branch
+      // viene usato solo quando si seleziona da Intellisense, non dal picker
       console.log('🎯 [HANDLE_PICK_TYPE][CALLING_CREATE_FACTORY_TASK]', {
         label,
-        key,
+        taskType: selectedTaskType,
         timestamp: Date.now()
       });
 
       try {
+        // ✅ Per TaskType enum, determina la key da usare
+        const key = selectedTaskType !== null ? taskTypeToTemplateId(selectedTaskType) || '' : '';
+
         // Crea il factory task con il nome della riga e il tipo inferito
         // Il callback onRowUpdate viene chiamato immediatamente da EntityCreationService
         onCreateFactoryTask(label, (createdItem: any) => { // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
@@ -1529,18 +1570,35 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       if (task) {
         // ✅ Usa direttamente task.type (TaskType enum) se disponibile
         if (task.type !== undefined && task.type !== null && task.type !== TaskType.UNDEFINED) {
-          const taskTypeString = resolveTaskType(row); // Per visuals
-          const has = hasTaskDDT(row);
-          const visuals = getTaskVisualsByType(taskTypeString, has);
+          // ✅ Se il task ha icon e color personalizzati (task "Other"), usali invece di getTaskVisualsByType
+          if (task.icon || task.color) {
+            const iconName = task.icon || task.iconName || 'Tag';
+            const taskColor = task.color ? ensureHexColor(task.color) : '#94a3b8';
+
+            // ✅ Crea un componente wrapper che renderizza l'icona usando getIconComponent
+            Icon = isUndefined ? HelpCircle : (({ className, style, size, ...props }: any) => {
+              const iconEl = getIconComponent(iconName, taskColor);
+              return <span className={className} style={style} {...props}>{iconEl}</span>;
+            }) as React.ComponentType<any>;
+            labelTextColor = isUndefined ? '#94a3b8' : (taskColor || '#94a3b8');
+            iconColor = isUndefined ? '#94a3b8' : (taskColor || '#94a3b8');
+          } else {
+            // ✅ Usa direttamente task.type (enum) per visuals invece di resolveTaskType
+            // Questo garantisce che i visuals siano sempre aggiornati con il tipo corretto
+            const taskTypeEnum = task.type;
+            const has = hasTaskDDT(row);
+            const visuals = getTaskVisualsByType(taskTypeEnum, has);
+
+            // Se è undefined, usa icona punto interrogativo invece dell'icona normale
+            Icon = isUndefined ? HelpCircle : visuals.Icon;
+            labelTextColor = isUndefined ? '#94a3b8' : visuals.labelColor;
+            iconColor = isUndefined ? '#94a3b8' : visuals.iconColor;
+          }
 
           // ✅ Imposta currentTypeForPicker con TaskType enum
           if (!isUndefined) {
             currentTypeForPicker = task.type; // ✅ Usa direttamente task.type (enum)
           }
-          // Se è undefined, usa icona punto interrogativo invece dell'icona normale
-          Icon = isUndefined ? HelpCircle : visuals.Icon;
-          labelTextColor = isUndefined ? '#94a3b8' : visuals.labelColor;
-          iconColor = isUndefined ? '#94a3b8' : visuals.iconColor;
         } else {
           // ✅ Task con tipo UNDEFINED - stato valido (euristica non ha determinato tipo)
           // L'utente deve selezionare manualmente il tipo tramite type picker
@@ -1908,8 +1966,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                   taskEditorCtx.open({ id: String(taskIdForType), type: taskType, label: row.text, instanceId: row.id }); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx, type → taskType (enum)
 
                   // ✅ Solo per DataRequest (editorKind === 'ddt'), prepara DDT ed emetti evento
-                  // ✅ Per altri tipi (SayMessage, BackendCall, ecc.), taskEditorCtx.open() è sufficiente
-                  if (editorKind === 'ddt') {
+                  // ✅ Per altri tipi (SayMessage, BackendCall, AIAgent, Summarizer, Negotiation, ecc.), emetti evento senza DDT
+                  if (editorKind === 'ddt' && taskType === TaskType.DataRequest) {
                     // ✅ SOLO per DataRequest: costruisci DDT solo se:
                     // 1. C'è templateId E il template è di tipo DataRequest
                     // 2. OPPURE c'è mainData esistente (DDT già salvato, standalone o con override)
@@ -1969,7 +2027,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     document.dispatchEvent(event);
 
                   } else {
-                    // ✅ Per altri tipi (SayMessage, BackendCall, ecc.), emetti evento senza DDT
+                    // ✅ Per altri tipi (SayMessage, BackendCall, AIAgent, Summarizer, Negotiation, ecc.), emetti evento senza DDT
                     const event = new CustomEvent('taskEditor:open', {
                       detail: {
                         id: String(taskIdForType),
