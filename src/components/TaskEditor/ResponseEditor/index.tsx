@@ -773,21 +773,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
   // Quando chiudi l'editor, costruisci il DDT da selectedNode e salva
 
 
-  // ✅ handleProfileUpdate: aggiorna selectedNode (UI immediata)
-  const handleProfileUpdate = useCallback((partialProfile: any) => {
-    // Aggiorna selectedNode (unica fonte di verità)
-    setSelectedNode((prev: any) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        nlpProfile: {
-          ...(prev.nlpProfile || {}),
-          ...partialProfile
-        }
-      };
-    });
-  }, []);
-
   // ✅ Step keys e selectedStepKey sono ora gestiti internamente da BehaviourEditor
 
   // ✅ updateSelectedNode: SINGOLA FONTE DI VERITÀ = dockTree
@@ -1034,6 +1019,48 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
       window.removeEventListener('mouseup', onUp);
     };
   }, [draggingPanel, setRightWidth, setTestPanelWidth, setTasksPanelWidth, rightWidth, tasksPanelWidth, tasksPanelMode, testPanelMode, testPanelWidth]);
+
+  // ✅ handleProfileUpdate: aggiorna selectedNode (UI immediata) e salva override
+  const handleProfileUpdate = useCallback((partialProfile: any) => {
+    // ✅ Usa updateSelectedNode per aggiornare il node e salvare l'override
+    updateSelectedNode((prev: any) => {
+      if (!prev) {
+        return prev;
+      }
+
+      const updated = {
+        ...prev,
+        nlpProfile: {
+          ...(prev.nlpProfile || {}),
+          ...partialProfile
+        }
+      };
+
+      // ✅ Aggiorna anche nlpContract per salvare l'override
+      if (!updated.nlpContract) {
+        updated.nlpContract = {};
+      }
+
+      // ✅ Salva tutte le proprietà del profile nel nlpContract come override
+      updated.nlpContract = {
+        ...updated.nlpContract,
+        ...partialProfile,
+        // ✅ Assicura che regex, synonyms, ecc. siano salvati
+        regex: partialProfile.regex !== undefined ? partialProfile.regex : updated.nlpContract.regex,
+        synonyms: partialProfile.synonyms !== undefined ? partialProfile.synonyms : updated.nlpContract.synonyms,
+        kind: partialProfile.kind !== undefined ? partialProfile.kind : updated.nlpContract.kind,
+        examples: partialProfile.examples !== undefined ? partialProfile.examples : updated.nlpContract.examples,
+        testCases: partialProfile.testCases !== undefined ? partialProfile.testCases : updated.nlpContract.testCases,
+        formatHints: partialProfile.formatHints !== undefined ? partialProfile.formatHints : updated.nlpContract.formatHints,
+        minConfidence: partialProfile.minConfidence !== undefined ? partialProfile.minConfidence : updated.nlpContract.minConfidence,
+        postProcess: partialProfile.postProcess !== undefined ? partialProfile.postProcess : updated.nlpContract.postProcess,
+        waitingEsc1: partialProfile.waitingEsc1 !== undefined ? partialProfile.waitingEsc1 : updated.nlpContract.waitingEsc1,
+        waitingEsc2: partialProfile.waitingEsc2 !== undefined ? partialProfile.waitingEsc2 : updated.nlpContract.waitingEsc2,
+      };
+
+      return updated;
+    }, true);
+  }, [selectedNode, selectedNodePath, updateSelectedNode]);
 
   // Funzione per capire se c'├¿ editing attivo (input, textarea, select)
   function isEditingActive() {

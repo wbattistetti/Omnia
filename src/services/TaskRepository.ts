@@ -350,14 +350,14 @@ class TaskRepository {
         return false;
       }
 
-      // ✅ Extract all fields except id, templateId, createdAt, updatedAt
-      const { id, templateId, createdAt, updatedAt, ...fields } = task;
+      // ✅ Extract all fields except id, _id (MongoDB immutable), templateId, createdAt, updatedAt
+      const { id, _id, templateId, createdAt, updatedAt, ...fields } = task;
 
       const payload = {
         id: task.id,
         type: task.type,          // ✅ Enum numerico (0-19) - REQUIRED
         templateId: task.templateId ?? null,
-        ...fields  // ✅ Save fields directly (no value wrapper)
+        ...fields  // ✅ Save fields directly (no value wrapper, excluding _id)
       };
 
       const payloadString = JSON.stringify(payload);

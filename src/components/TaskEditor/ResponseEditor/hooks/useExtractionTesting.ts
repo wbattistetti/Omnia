@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import { extractField } from '../../../../nlp/pipeline';
 import { nerExtract } from '../../../../nlp/services/nerClient';
 import nlpTypesConfig from '../../../../../config/nlp-types.json';
+import { mapLabelToStandardKey } from './useRegexValidation';
 
 export interface RowResult {
   regex?: string;
@@ -29,6 +30,7 @@ interface UseExtractionTestingProps {
   formatText: string;
   profile: { regex?: string };
   onStatsUpdate?: (stats: { matched: number; falseAccept: number; totalGt: number }) => void;
+  node?: any; // Node with subData/subSlots for group mapping
 }
 
 // Helper functions
@@ -47,7 +49,9 @@ function summarizeVars(vars?: Record<string, any>, fallbackValue?: string): stri
   if (!vars || typeof vars !== 'object') return fallbackValue ? `value=${fallbackValue}` : '—';
   const entries = Object.entries(vars).filter(([, v]) => v != null && v !== '');
   if (!entries.length && fallbackValue) return `value=${fallbackValue}`;
-  return entries.map(([k, v]) => `${k}=${v}`).join(', ');
+  // If fallbackValue is provided, include it at the beginning
+  const varsStr = entries.map(([k, v]) => `${k}=${v}`).join(', ');
+  return fallbackValue ? `value=${fallbackValue}, ${varsStr}` : varsStr;
 }
 
 const findAllOccurrences = (text: string, sub: string): Array<{ start: number; end: number }> => {
@@ -123,6 +127,7 @@ export function useExtractionTesting({
   formatText,
   profile,
   onStatsUpdate,
+  node,
 }: UseExtractionTestingProps) {
   // State
   const [rowResults, setRowResults] = useState<RowResult[]>([]);
@@ -145,28 +150,17 @@ export function useExtractionTesting({
 
   // Map kind to field name
   const mapKindToField = useCallback((k: string): string => {
-    console.log('[NLP_TESTER] mapKindToField called with:', k);
     const s = (k || '').toLowerCase();
-    console.log('[NLP_TESTER] s value after lowercase:', s);
 
     // Special mapping: number → age (per estrazione età)
     if (s === 'number') {
-      console.log('[NLP_TESTER] Entering number special mapping block');
       const synonyms = toCommaList(fromCommaList(synonymsText)).toLowerCase();
       const examplesText = (examplesList || []).join(' ').toLowerCase();
 
       const hasAgeWords = /(età|age|anni|vecchio|giovane)/i.test(synonyms);
       const hasAgeExamples = /(18|21|30|40|50|60|70|80|90|100)/.test(examplesText);
 
-      console.log('[NLP_TESTER] Age detection debug:', {
-        synonyms: synonymsText,
-        examples: examplesList,
-        hasAgeWords,
-        hasAgeExamples
-      });
-
       if (hasAgeWords || hasAgeExamples) {
-        console.log('[NLP_TESTER] auto-map number → age (age context detected)');
         return 'age';
       }
     }
@@ -200,19 +194,64 @@ export function useExtractionTesting({
   const extractRegexOnly = useCallback((text: string) => {
     const spans: Array<{ start: number; end: number }> = [];
     let value = '';
+    const extractedGroups: Record<string, any> = {};
+
     if (profile.regex) {
       try {
         const re = new RegExp(profile.regex, 'g');
         let m: RegExpExecArray | null;
+        let matchCount = 0;
         // eslint-disable-next-line no-cond-assign
         while ((m = re.exec(text)) !== null) {
+          matchCount++;
           spans.push({ start: m.index, end: m.index + m[0].length });
-          if (!value) value = m[0];
+          if (!value) {
+            value = m[0];
+
+            // Extract capture groups and map them to sub-data
+            if (m.length > 1 && node) {
+              const allSubs = [...(node.subSlots || []), ...(node.subData || [])];
+
+              // Iterate through capture groups (m[1], m[2], m[3], ...)
+              for (let i = 1; i < m.length; i++) {
+                const groupValue = m[i];
+                if (groupValue !== undefined && groupValue !== null) {
+                  const trimmedValue = String(groupValue).trim();
+                  if (trimmedValue !== '') {
+                    // Map group to corresponding sub-data index
+                    const subIndex = i - 1; // Group 1 -> subIndex 0, Group 2 -> subIndex 1, etc.
+                    if (subIndex < allSubs.length) {
+                      const sub = allSubs[subIndex];
+                      const subLabel = String(sub.label || sub.name || '');
+                      const standardKey = mapLabelToStandardKey(subLabel);
+
+                      if (standardKey) {
+                        extractedGroups[standardKey] = trimmedValue;
+                      } else if (subLabel) {
+                        // Fallback: use original label
+                        extractedGroups[subLabel] = trimmedValue;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
-      } catch {}
+
+      } catch (e) {
+        // Regex error - silently fail
+      }
     }
-    return { value, spans, summary: value ? `value=${value}` : '—' };
-  }, [profile.regex]);
+
+    // Use summarizeVars if groups were extracted, otherwise fallback
+    // Always include value= when groups are extracted so the full match is visible
+    const summary = Object.keys(extractedGroups).length > 0
+      ? summarizeVars(extractedGroups, value)
+      : (value ? `value=${value}` : '—');
+
+    return { value, spans, summary, extractedGroups };
+  }, [profile.regex, node]);
 
   // Summarize extraction result
   const summarizeResult = useCallback((result: any, currentField: string): string => {
@@ -271,13 +310,6 @@ export function useExtractionTesting({
 
     const field = mapKindToField(kind);
 
-    console.log('[NLP_TESTER] Field mapping:', {
-      originalKind: kind,
-      mappedField: field,
-      profileKind: profile.kind || kind,
-      synonyms: synonymsText,
-      examples: examplesList
-    });
 
     // Deterministic async task
     const detTask = enabledMethods.deterministic ? (async () => {
@@ -288,12 +320,6 @@ export function useExtractionTesting({
         const detSummary = finalResult.allResults?.deterministic ? summarizeResult(finalResult.allResults.deterministic, field) : "—";
         const nerSummary = finalResult.allResults?.ner ? summarizeResult(finalResult.allResults.ner, field) : "—";
         const llmSummary = finalResult.allResults?.llm ? summarizeResult(finalResult.allResults.llm, field) : "—";
-
-        console.log('[NLP_TESTER] Extraction results:', {
-          deterministic: finalResult.allResults?.deterministic,
-          ner: finalResult.allResults?.ner,
-          llm: finalResult.allResults?.llm
-        });
 
         update({
           deterministic: detSummary,

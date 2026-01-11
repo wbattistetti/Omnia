@@ -201,6 +201,7 @@ export default function NLPExtractorProfileEditor({
     synonymsText,
     formatText,
     profile,
+    node,
     onStatsUpdate: (stats) => {
       setLastStats(stats);
       if (!baselineStats) setBaselineStats(stats);

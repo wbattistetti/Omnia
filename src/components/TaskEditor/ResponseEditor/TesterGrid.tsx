@@ -1,53 +1,23 @@
 import React from 'react';
-import { Play, Wand2, TypeIcon, Plus, X, ChevronsRight, BarChart2 } from 'lucide-react';
-import { RowResult } from './hooks/useExtractionTesting';
-import NoteButton from './CellNote/NoteButton';
-import NoteEditor from './CellNote/NoteEditor';
-import NoteDisplay from './CellNote/NoteDisplay';
-import NoteSeparator from './CellNote/NoteSeparator';
-import SmartTooltip from '../../SmartTooltip';
+import { Wand2, X, ChevronsRight, BarChart2 } from 'lucide-react';
 // Inline editors
 import RegexInlineEditor from './InlineEditors/RegexInlineEditor';
 import ExtractorInlineEditor from './InlineEditors/ExtractorInlineEditor';
 import NERInlineEditor from './InlineEditors/NERInlineEditor';
 import LLMInlineEditor from './InlineEditors/LLMInlineEditor';
+// Modular components
+import TesterGridHeader from './TesterGrid/components/TesterGridHeader';
+import TesterGridRow from './TesterGrid/components/TesterGridRow';
+import { useColumnResize } from './TesterGrid/hooks/useColumnResize';
+import { useEditorOverlay } from './TesterGrid/hooks/useEditorOverlay';
 
-// 🎨 Colori centralizzati per extractors
+// 🎨 Colori centralizzati per extractors (usati solo per editor overlay)
 const EXTRACTOR_COLORS = {
-  regex: '#93c5fd',        // Azzurro cobalto chiaro
-  deterministic: '#e5e7eb', // Grigio
-  ner: '#fef3c7',          // Giallo pallido
-  llm: '#fed7aa',          // Arancione pallido
-  embeddings: '#e0e7ff',   // Viola chiaro
-};
-
-// 📊 Etichette colonne con tooltip
-const COLUMN_LABELS = {
-  regex: {
-    main: "Espressione",
-    tech: "Regex",
-    tooltip: "Cerca pattern di testo con espressioni regolari"
-  },
-  deterministic: {
-    main: "Logica",
-    tech: "Extractor",
-    tooltip: "Parsing semantico con regole programmate specifiche per tipo"
-  },
-  ner: {
-    main: "AI Rapida",
-    tech: "NER",
-    tooltip: "Riconoscimento entità con intelligenza artificiale veloce"
-  },
-  llm: {
-    main: "AI Completa",
-    tech: "LLM",
-    tooltip: "Comprensione linguistica profonda con modello AI avanzato"
-  },
-  embeddings: {
-    main: "Classificazione",
-    tech: "Embeddings",
-    tooltip: "Classificazione intenti basata su embeddings semantici"
-  }
+  regex: '#93c5fd',
+  deterministic: '#e5e7eb',
+  ner: '#fef3c7',
+  llm: '#fed7aa',
+  embeddings: '#e0e7ff',
 };
 
 interface TesterGridProps {
@@ -112,199 +82,6 @@ interface TesterGridProps {
   lastStats?: { matched: number; falseAccept: number; totalGt: number } | null;
 }
 
-// Helper to format summary into stacked key: value lines showing expected keys; missing keys grey, present black
-function renderStackedSummary(
-  summary: string | undefined,
-  rowIdx: number | undefined,
-  col: 'det' | 'ner' | 'llm' | undefined,
-  kind: string,
-  expectedKeysForKind: (k?: string) => string[],
-  cellOverrides: Record<string, string>,
-  editingCell: { row: number; col: 'det' | 'ner' | 'llm'; key: string } | null,
-  editingText: string,
-  setEditingCell: React.Dispatch<React.SetStateAction<{ row: number; col: 'det' | 'ner' | 'llm'; key: string } | null>>,
-  setEditingText: React.Dispatch<React.SetStateAction<string>>,
-  setCellOverrides: React.Dispatch<React.SetStateAction<Record<string, string>>>
-) {
-  const text = (summary || '—').toString();
-  const kv: Record<string, string | undefined> = {};
-  if (text !== '—') {
-    text.split(',').forEach(part => {
-      const sp = part.split('=');
-      const k = sp[0] && sp[0].trim();
-      const v = typeof sp[1] !== 'undefined' ? String(sp[1]).trim() : undefined;
-      if (k) kv[k] = v;
-    });
-  }
-  const keys = expectedKeysForKind(kind);
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
-      {keys.map((k) => {
-        const overrideKey = typeof rowIdx === 'number' && col ? `${rowIdx}:${col}:${k}` : '';
-        const overridden = overrideKey ? cellOverrides[overrideKey] : undefined;
-        const baseVal = kv[k];
-        const value = typeof overridden !== 'undefined' ? overridden : baseVal;
-        const present = typeof value !== 'undefined' && value !== '';
-        const isEditing = !!editingCell && editingCell.row === rowIdx && editingCell.col === col && editingCell.key === k;
-        return (
-          <span key={k} style={{ color: present ? '#0b0f17' : '#9ca3af', display: 'grid', gridTemplateColumns: 'auto minmax(0,1fr)', alignItems: 'start', gap: 6 }}>
-            <span>{k}:</span>
-            {!isEditing ? (
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (typeof rowIdx !== 'number' || !col) return;
-                  setEditingCell({ row: rowIdx, col, key: k });
-                  setEditingText(value || '');
-                }}
-                title="Clicca per modificare"
-                style={{ cursor: 'text', whiteSpace: 'pre-wrap', wordBreak: 'break-word', display: 'block', minWidth: 0, maxWidth: '100%' }}
-              >
-                {present ? value : '—'}
-              </span>
-            ) : (
-              <span style={{ display: 'block', minWidth: 0, maxWidth: '100%', overflow: 'hidden' }}>
-                <textarea
-                  defaultValue={editingText}
-                  onChange={(e) => setEditingText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      if (typeof rowIdx === 'number' && col) {
-                        const k2 = `${rowIdx}:${col}:${k}`;
-                        setCellOverrides((prev) => ({ ...prev, [k2]: editingText }));
-                      }
-                      setEditingCell(null);
-                    } else if (e.key === 'Escape') {
-                      setEditingCell(null);
-                    }
-                  }}
-                  onBlur={() => {
-                    if (typeof rowIdx === 'number' && col) {
-                      const k2 = `${rowIdx}:${col}:${k}`;
-                      setCellOverrides((prev) => ({ ...prev, [k2]: editingText }));
-                    }
-                    setEditingCell(null);
-                  }}
-                  ref={(el) => {
-                    if (!el) return;
-                    const resize = () => {
-                      // fixed, compact height (don't change row height)
-                      const cs = getComputedStyle(el);
-                      const lhStr = cs.lineHeight || '16px';
-                      const lh = parseFloat(lhStr) || 16;
-                      const baseH = Math.max(16, Math.ceil(lh));
-                      el.style.height = `${baseH}px`;
-                      // width autosize to content up to cell width (no column growth)
-                      const canvas = document.createElement('canvas');
-                      const ctx = canvas.getContext('2d');
-                      let w = 40; // min
-                      if (ctx) {
-                        const font = cs.font || `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
-                        ctx.font = font;
-                        w = Math.ceil(ctx.measureText(el.value || '—').width) + 10; // padding
-                      }
-                      const parent = el.parentElement as HTMLElement | null;
-                      const max = parent ? parent.clientWidth : w;
-                      // enforce max and hide overflow
-                      el.style.maxWidth = `${max}px`;
-                      el.style.width = `${Math.min(w, max)}px`;
-                    };
-                    resize();
-                    el.focus();
-                    try { el.selectionStart = el.value.length; } catch {}
-                    el.addEventListener('input', resize);
-                    // Cleanup on detach
-                    setTimeout(() => { if (el) el.removeEventListener('input', resize); }, 0);
-                  }}
-                  style={{
-                    display: 'inline-block',
-                    width: 'auto',
-                    maxWidth: '100%',
-                    minWidth: 40,
-                    minHeight: 16,
-                    padding: '0 2px',
-                    borderRadius: 2,
-                    border: '1px solid #94a3b8',
-                    background: '#fff',
-                    color: '#111827',
-                    lineHeight: 1.1,
-                    resize: 'none',
-                    overflow: 'hidden',
-                    whiteSpace: 'nowrap',
-                    wordBreak: 'keep-all',
-                    outline: 'none',
-                    boxShadow: 'none',
-                  }}
-                />
-              </span>
-            )}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
-// Unified color time bar with thresholds: >200ms yellow, >1000ms red
-function renderTimeBar(ms?: number, maxMs?: number) {
-  const m = typeof ms === 'number' && ms > 0 ? ms : 0;
-  const max = Math.max(1, typeof maxMs === 'number' && maxMs > 0 ? maxMs : 1);
-  let remaining = Math.min(m, max);
-  const seg1Ms = Math.min(200, remaining); remaining -= seg1Ms;
-  const seg2Ms = Math.min(800, Math.max(0, remaining)); remaining -= seg2Ms;
-  const seg3Ms = Math.max(0, remaining);
-  const seg1Pct = (seg1Ms / max) * 100;
-  const seg2Pct = (seg2Ms / max) * 100;
-  const seg3Pct = (seg3Ms / max) * 100;
-  return (
-    <div style={{ marginTop: 6 }}>
-      <div style={{ height: 4, width: '100%', background: '#e5e7eb', borderRadius: 999, overflow: 'hidden', display: 'flex' }}>
-        {seg1Pct > 0 && <div style={{ height: 4, width: `${seg1Pct}%`, background: '#64748b' }} />}
-        {seg2Pct > 0 && <div style={{ height: 4, width: `${seg2Pct}%`, background: '#fbbf24' }} />}
-        {seg3Pct > 0 && <div style={{ height: 4, width: `${seg3Pct}%`, background: '#ef4444' }} />}
-      </div>
-      <div style={{ opacity: 0.75, marginTop: 2 }}>{m ? `${m} ms` : ''}</div>
-    </div>
-  );
-}
-
-// Helper to render phrase with highlighting based on spans
-function renderPhraseWithSpans(phrase: string, spans?: Array<{ start: number; end: number }>) {
-  if (!spans || spans.length === 0) {
-    return phrase;
-  }
-
-  const sortedSpans = [...spans].sort((a, b) => a.start - b.start);
-  const parts: Array<{ t: string; hit: boolean }> = [];
-  let j = 0;
-  for (const s of sortedSpans) {
-    if (s.start > j) {
-      parts.push({ t: phrase.slice(j, s.start), hit: false });
-    }
-    parts.push({ t: phrase.slice(s.start, s.end), hit: true });
-    j = s.end;
-  }
-  if (j < phrase.length) {
-    parts.push({ t: phrase.slice(j), hit: false });
-  }
-
-  return (
-    <span>
-      {parts.map((p, k) => (
-        <span
-          key={k}
-          style={p.hit
-            ? { background: 'rgba(251, 191, 36, 0.25)', border: '1px solid rgba(251, 191, 36, 0.55)', borderRadius: 6, padding: '0 3px', margin: '0 1px', fontWeight: 700 }
-            : { background: 'transparent' }
-          }
-        >
-          {p.t}
-        </span>
-      ))}
-    </span>
-  );
-}
 
 export default function TesterGrid({
   examplesList,
@@ -380,69 +157,15 @@ export default function TesterGrid({
     setNewExample('');
   }, [newExample, setExamplesList, setSelectedRow, runRowTest]);
 
-  // Refs per calcolare le posizioni delle colonne
-  const tableRef = React.useRef<HTMLTableElement>(null);
-  const headerRowRef = React.useRef<HTMLTableRowElement>(null);
-  const firstDataRowRef = React.useRef<HTMLTableRowElement>(null);
-  const [editorOverlayStyle, setEditorOverlayStyle] = React.useState<React.CSSProperties>({});
-
-  // ✅ NUOVO: Stato per la larghezza della colonna delle frasi (dichiarato prima dell'useEffect)
-  const [phraseColumnWidth, setPhraseColumnWidth] = React.useState<number>(280);
-  const [isResizing, setIsResizing] = React.useState(false);
-
-  // Calcola le posizioni dell'overlay quando l'editor è attivo
-  React.useEffect(() => {
-    if (!activeEditor || !['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) || !tableRef.current || !headerRowRef.current) {
-      setEditorOverlayStyle({});
-      return;
-    }
-
-    // Usa setTimeout per assicurarsi che il DOM sia completamente renderizzato
-    const timeoutId = setTimeout(() => {
-      const table = tableRef.current;
-      const headerRow = headerRowRef.current;
-      if (!table || !headerRow) return;
-
-      const firstHeaderCell = headerRow.querySelector('th:first-child') as HTMLElement;
-      if (!firstHeaderCell) return;
-
-      // Trova le colonne 2-5 (Regex, Extractor, NER, LLM)
-      const headerCells = Array.from(headerRow.querySelectorAll('th'));
-      const firstColIndex = headerCells.findIndex(cell => cell === firstHeaderCell);
-      if (firstColIndex === -1) return;
-
-      // Colonna 1 è "Frase", colonna 2 è pulsanti, colonne 3-6 sono gli estrattori
-      // Calcola l'indice dell'ultima colonna estrattore (LLM è sempre presente)
-      // Le colonne estrattori iniziano da firstColIndex + 2 (dopo Frase e pulsanti)
-      let lastExtractorIndex = firstColIndex + 2; // Regex (dopo Frase e pulsanti)
-      if (showDeterministic) lastExtractorIndex++; // Extractor
-      if (showNER) lastExtractorIndex++; // NER
-      lastExtractorIndex++; // LLM (sempre presente)
-
-      const extractorStartCell = headerCells[firstColIndex + 2]; // Dopo Frase e pulsanti
-      const extractorEndCell = headerCells[lastExtractorIndex];
-      if (!extractorStartCell || !extractorEndCell) return;
-      if (!extractorStartCell || !extractorEndCell) return;
-
-      const tableRect = table.getBoundingClientRect();
-      const startCellRect = extractorStartCell.getBoundingClientRect();
-      const endCellRect = extractorEndCell.getBoundingClientRect();
-
-      const left = startCellRect.left - tableRect.left;
-      const width = endCellRect.right - startCellRect.left;
-
-      setEditorOverlayStyle({
-        position: 'absolute',
-        left: `${left}px`,
-        top: '0px',
-        width: `${width}px`,
-        height: '100%',
-        zIndex: 1000,
-      });
-    }, 0);
-
-    return () => clearTimeout(timeoutId);
-  }, [activeEditor, showDeterministic, showNER, examplesList.length, phraseColumnWidth]);
+  // Use modular hooks
+  const { phraseColumnWidth, isResizing, handleResizeStart } = useColumnResize(280);
+  const { editorOverlayStyle, tableRef, headerRowRef } = useEditorOverlay({
+    activeEditor,
+    showDeterministic,
+    showNER,
+    examplesListLength: examplesList.length,
+    phraseColumnWidth,
+  });
 
   // ✅ Stato per il pulsante dell'editor da mostrare nell'header
   const [editorButton, setEditorButton] = React.useState<React.ReactNode>(null);
@@ -453,35 +176,6 @@ export default function TesterGrid({
       setEditorButton(null);
     }
   }, [activeEditor]);
-
-  // Handler per il resize
-  const handleResizeStart = React.useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsResizing(true);
-    const startX = e.clientX;
-    const startWidth = phraseColumnWidth;
-
-    const handleMouseMove = (ev: MouseEvent) => {
-      ev.preventDefault();
-      const delta = ev.clientX - startX;
-      const newWidth = Math.max(150, Math.min(600, startWidth + delta));
-      setPhraseColumnWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      setIsResizing(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-  }, [phraseColumnWidth]);
 
   // Determina quale editor renderizzare
   const renderEditor = () => {
@@ -603,667 +297,66 @@ export default function TesterGrid({
             maxHeight: '100%',
           }}>
         <table ref={tableRef} style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' as any }}>
-        <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
-          <tr ref={headerRowRef}>
-            <th style={{
-              textAlign: 'left',
-              padding: 8,
-              background: '#f9fafb',
-              width: `${phraseColumnWidth}px`,
-              position: 'relative'
-            }}>
-              <input
-                type="text"
-                value={newExample}
-                onChange={(e) => setNewExample(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && newExample.trim()) {
-                    e.preventDefault();
-                    handleAddExample();
-                  }
-                }}
-                placeholder="Aggiungi frase di test..."
-                style={{
-                  width: '100%',
-                  padding: '6px 8px',
-                  border: '1px solid #334155',
-                  borderRadius: 4,
-                  background: '#fff',
-                  color: '#111827',
-                }}
+          <TesterGridHeader
+            newExample={newExample}
+            setNewExample={setNewExample}
+            onAddExample={handleAddExample}
+            phraseColumnWidth={phraseColumnWidth}
+            isResizing={isResizing}
+            onResizeStart={handleResizeStart}
+            enabledMethods={enabledMethods}
+            toggleMethod={toggleMethod}
+            activeEditor={activeEditor}
+            toggleEditor={toggleEditor}
+            showDeterministic={showDeterministic}
+            showNER={showNER}
+            showEmbeddings={showEmbeddings}
+            headerRowRef={headerRowRef}
+          />
+          <tbody>
+            {examplesList.map((ex, i) => (
+              <TesterGridRow
+                key={i}
+                rowIndex={i}
+                phrase={ex}
+                rowResult={rowResults[i] || {}}
+                phraseColumnWidth={phraseColumnWidth}
+                isResizing={isResizing}
+                onResizeStart={handleResizeStart}
+                selectedRow={selectedRow}
+                onSelectRow={setSelectedRow}
+                kind={kind}
+                expectedKeysForKind={expectedKeysForKind}
+                enabledMethods={enabledMethods}
+                showDeterministic={showDeterministic}
+                showNER={showNER}
+                showEmbeddings={showEmbeddings}
+                activeEditor={activeEditor}
+                cellOverrides={cellOverrides}
+                setCellOverrides={setCellOverrides}
+                editingCell={editingCell}
+                setEditingCell={setEditingCell}
+                editingText={editingText}
+                setEditingText={setEditingText}
+                hasNote={hasNote}
+                getNote={getNote}
+                addNote={addNote}
+                deleteNote={deleteNote}
+                isEditing={isEditing}
+                startEditing={startEditing}
+                stopEditing={stopEditing}
+                isHovered={isHovered}
+                setHovered={setHovered}
+                runRowTest={runRowTest}
+                runAllRows={runAllRows}
+                testing={testing}
+                examplesListLength={examplesList.length}
+                reportOpen={reportOpen}
+                setReportOpen={setReportOpen}
+                baselineStats={baselineStats}
+                lastStats={lastStats}
               />
-              {/* Splitter - linea verticale draggable */}
-              <div
-                onMouseDown={handleResizeStart}
-                style={{
-                  position: 'absolute',
-                  right: '-3px',
-                  top: 0,
-                  bottom: 0,
-                  width: '6px',
-                  cursor: 'col-resize',
-                  backgroundColor: isResizing ? '#3b82f6' : 'rgba(107, 114, 128, 0.4)',
-                  zIndex: 20,
-                  transition: isResizing ? 'none' : 'background-color 0.2s',
-                  borderLeft: '1px solid rgba(107, 114, 128, 0.6)',
-                  borderRight: '1px solid rgba(107, 114, 128, 0.6)'
-                }}
-                onMouseEnter={(e) => {
-                  if (!isResizing) {
-                    (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(59, 130, 246, 0.6)';
-                    (e.currentTarget as HTMLElement).style.borderLeftColor = '#3b82f6';
-                    (e.currentTarget as HTMLElement).style.borderRightColor = '#3b82f6';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isResizing) {
-                    (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(107, 114, 128, 0.4)';
-                    (e.currentTarget as HTMLElement).style.borderLeftColor = 'rgba(107, 114, 128, 0.6)';
-                    (e.currentTarget as HTMLElement).style.borderRightColor = 'rgba(107, 114, 128, 0.6)';
-                  }
-                }}
-              />
-            </th>
-            {/* Colonna pulsanti - seconda colonna, tra "Frase" e "Espressione" */}
-            <th style={{ width: 46, background: '#f9fafb', padding: 8, textAlign: 'center' }}>
-              <button
-                onClick={handleAddExample}
-                disabled={!newExample.trim()}
-                style={{
-                  padding: '4px 8px',
-                  border: '1px solid #334155',
-                  borderRadius: 4,
-                  background: newExample.trim() ? '#10b981' : '#9ca3af',
-                  color: '#fff',
-                  cursor: newExample.trim() ? 'pointer' : 'not-allowed',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '100%',
-                }}
-                title="Aggiungi frase di test"
-              >
-                <Plus size={14} />
-              </button>
-            </th>
-            <th style={{
-              textAlign: 'left',
-              padding: 8,
-              background: EXTRACTOR_COLORS.regex,
-              opacity: enabledMethods.regex ? 1 : 0.4,
-              visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
-            }} title={COLUMN_LABELS.regex.tooltip}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input
-                    type="checkbox"
-                    checked={enabledMethods.regex}
-                    onChange={() => toggleMethod('regex')}
-                    style={{ cursor: 'pointer' }}
-                  />
-                  <div>
-                    <span style={{ fontWeight: 600, color: enabledMethods.regex ? '#0b0f17' : '#9ca3af' }}>{COLUMN_LABELS.regex.main}</span>
-                    <span style={{ opacity: 0.7, marginLeft: 4, color: enabledMethods.regex ? '#0b0f17' : '#9ca3af' }}>({COLUMN_LABELS.regex.tech})</span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => toggleEditor('regex')}
-                  title="Configure Regex"
-                  style={{
-                    background: activeEditor === 'regex' ? '#3b82f6' : 'rgba(255,255,255,0.3)',
-                    border: 'none',
-                    borderRadius: 4,
-                    padding: '4px 6px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    transition: 'all 0.2s'
-                  }}
-                >
-                  <Wand2 size={14} color={activeEditor === 'regex' ? '#fff' : '#666'} />
-                </button>
-              </div>
-            </th>
-            {showDeterministic && (
-              <th style={{
-                textAlign: 'left',
-                padding: 8,
-                background: EXTRACTOR_COLORS.deterministic,
-                opacity: enabledMethods.deterministic ? 1 : 0.4,
-                visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
-              }} title={COLUMN_LABELS.deterministic.tooltip}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input
-                    type="checkbox"
-                    checked={enabledMethods.deterministic}
-                    onChange={() => toggleMethod('deterministic')}
-                    style={{ cursor: 'pointer' }}
-                  />
-                  <div>
-                    <span style={{ fontWeight: 600, color: enabledMethods.deterministic ? '#0b0f17' : '#9ca3af' }}>{COLUMN_LABELS.deterministic.main}</span>
-                    <span style={{ opacity: 0.7, marginLeft: 4, color: enabledMethods.deterministic ? '#0b0f17' : '#9ca3af' }}>({COLUMN_LABELS.deterministic.tech})</span>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <SmartTooltip text="Configure Extractor" tutorId="configure_extractor_help" placement="bottom">
-                    <button
-                      onClick={() => toggleEditor('extractor')}
-                      style={{
-                        background: activeEditor === 'extractor' ? '#3b82f6' : 'rgba(255,255,255,0.3)',
-                        border: 'none',
-                        borderRadius: 4,
-                        padding: '4px 6px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        transition: 'all 0.2s'
-                      }}
-                    >
-                      <Wand2 size={14} color={activeEditor === 'extractor' ? '#fff' : '#666'} />
-                    </button>
-                  </SmartTooltip>
-                  <SmartTooltip text="Configure Post Process" tutorId="configure_post_help" placement="bottom">
-                    <button
-                      onClick={() => toggleEditor('post')}
-                      style={{
-                        background: activeEditor === 'post' ? '#10b981' : 'rgba(255,255,255,0.3)',
-                        border: 'none',
-                        borderRadius: 4,
-                        padding: '4px 6px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        transition: 'all 0.2s'
-                      }}
-                    >
-                      <TypeIcon size={14} color={activeEditor === 'post' ? '#fff' : '#666'} />
-                    </button>
-                  </SmartTooltip>
-                </div>
-              </div>
-            </th>
-            )}
-            {showNER && (
-              <th style={{
-                textAlign: 'left',
-                padding: 8,
-                background: EXTRACTOR_COLORS.ner,
-                opacity: enabledMethods.ner ? 1 : 0.4,
-                visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
-              }} title={COLUMN_LABELS.ner.tooltip}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input
-                    type="checkbox"
-                    checked={enabledMethods.ner}
-                    onChange={() => toggleMethod('ner')}
-                    style={{ cursor: 'pointer' }}
-                  />
-                  <div>
-                    <span style={{ fontWeight: 600, color: enabledMethods.ner ? '#0b0f17' : '#9ca3af' }}>{COLUMN_LABELS.ner.main}</span>
-                    <span style={{ opacity: 0.7, marginLeft: 4, color: enabledMethods.ner ? '#0b0f17' : '#9ca3af' }}>({COLUMN_LABELS.ner.tech})</span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => toggleEditor('ner')}
-                  title="Configure NER"
-                  style={{
-                    background: activeEditor === 'ner' ? '#3b82f6' : 'rgba(255,255,255,0.3)',
-                    border: 'none',
-                    borderRadius: 4,
-                    padding: '4px 6px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    transition: 'all 0.2s'
-                  }}
-                >
-                  <Wand2 size={14} color={activeEditor === 'ner' ? '#fff' : '#666'} />
-                </button>
-              </div>
-            </th>
-            )}
-            {showEmbeddings && (
-              <th style={{ textAlign: 'left', padding: 8, background: EXTRACTOR_COLORS.embeddings, opacity: enabledMethods.regex ? 1 : 0.4 }} title={COLUMN_LABELS.embeddings.tooltip}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <input
-                      type="checkbox"
-                      checked={enabledMethods.regex}
-                      onChange={() => toggleMethod('regex')}
-                      style={{ cursor: 'pointer' }}
-                      disabled
-                    />
-                    <div>
-                      <span style={{ fontWeight: 600, color: enabledMethods.regex ? '#0b0f17' : '#9ca3af' }}>{COLUMN_LABELS.embeddings.main}</span>
-                      <span style={{ opacity: 0.7, marginLeft: 4, color: enabledMethods.regex ? '#0b0f17' : '#9ca3af' }}>({COLUMN_LABELS.embeddings.tech})</span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => toggleEditor('embeddings' as any)}
-                    title="Configure Embeddings"
-                    style={{
-                      background: activeEditor === 'embeddings' ? '#3b82f6' : 'rgba(255,255,255,0.3)',
-                      border: 'none',
-                      borderRadius: 4,
-                      padding: '4px 6px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    <Wand2 size={14} color={activeEditor === 'embeddings' ? '#fff' : '#666'} />
-                  </button>
-                </div>
-              </th>
-            )}
-            <th style={{
-              textAlign: 'left',
-              padding: 8,
-              background: EXTRACTOR_COLORS.llm,
-              opacity: enabledMethods.llm ? 1 : 0.4,
-              visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
-            }} title={COLUMN_LABELS.llm.tooltip}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input
-                    type="checkbox"
-                    checked={enabledMethods.llm}
-                    onChange={() => toggleMethod('llm')}
-                    style={{ cursor: 'pointer' }}
-                  />
-                  <div>
-                    <span style={{ fontWeight: 600, color: enabledMethods.llm ? '#0b0f17' : '#9ca3af' }}>{COLUMN_LABELS.llm.main}</span>
-                    <span style={{ opacity: 0.7, marginLeft: 4, color: enabledMethods.llm ? '#0b0f17' : '#9ca3af' }}>({COLUMN_LABELS.llm.tech})</span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => toggleEditor('llm')}
-                  title="Configure LLM"
-                  style={{
-                    background: activeEditor === 'llm' ? '#3b82f6' : 'rgba(255,255,255,0.3)',
-                    border: 'none',
-                    borderRadius: 4,
-                    padding: '4px 6px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    transition: 'all 0.2s'
-                  }}
-                >
-                  <Wand2 size={14} color={activeEditor === 'llm' ? '#fff' : '#666'} />
-                </button>
-              </div>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {examplesList.map((ex, i) => {
-            const rr = rowResults[i] || {};
-            const leading = rr.running ? (
-              <span title="Analisi in corso" style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid #94a3b8', borderTopColor: 'transparent', borderRadius: '50%', marginRight: 6, animation: 'spin 0.8s linear infinite' }} />
-            ) : null;
-            const ms = (v?: number) => (typeof v === 'number' ? ` (${v} ms)` : '');
-            const maxMs = Math.max(rr.detMs || 0, rr.nerMs || 0, rr.llmMs || 0);
-            return (
-              <tr key={i} style={{ borderTop: '1px solid #e5e7eb', cursor: 'pointer', background: selectedRow === i ? '#fff7ed' : '#fff' }} onClick={() => { setSelectedRow(i); }}>
-                <td style={{
-                  padding: 8,
-                  wordBreak: 'break-word',
-                  width: `${phraseColumnWidth}px`,
-                  position: 'relative'
-                }}>
-                  {leading}
-                  {renderPhraseWithSpans(ex, rr.spans)}
-                  {/* Splitter anche nelle righe per visibilità */}
-                  <div
-                    onMouseDown={handleResizeStart}
-                    style={{
-                      position: 'absolute',
-                      right: '-3px',
-                      top: 0,
-                      bottom: 0,
-                      width: '6px',
-                      cursor: 'col-resize',
-                      backgroundColor: isResizing ? '#3b82f6' : 'rgba(107, 114, 128, 0.4)',
-                      zIndex: 20,
-                      transition: isResizing ? 'none' : 'background-color 0.2s',
-                      borderLeft: '1px solid rgba(107, 114, 128, 0.6)',
-                      borderRight: '1px solid rgba(107, 114, 128, 0.6)',
-                      pointerEvents: 'auto'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isResizing) {
-                        (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(59, 130, 246, 0.6)';
-                        (e.currentTarget as HTMLElement).style.borderLeftColor = '#3b82f6';
-                        (e.currentTarget as HTMLElement).style.borderRightColor = '#3b82f6';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isResizing) {
-                        (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(107, 114, 128, 0.4)';
-                        (e.currentTarget as HTMLElement).style.borderLeftColor = 'rgba(107, 114, 128, 0.6)';
-                        (e.currentTarget as HTMLElement).style.borderRightColor = 'rgba(107, 114, 128, 0.6)';
-                      }
-                    }}
-                  />
-                </td>
-                {/* Colonna pulsanti - seconda colonna, auto-size */}
-                <td style={{
-                  padding: 4,
-                  textAlign: 'center',
-                  verticalAlign: 'middle',
-                  background: '#f9fafb',
-                  width: 46
-                }}>
-                  {i === 0 && runAllRows ? (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void runAllRows();
-                      }}
-                      disabled={testing || examplesList.length === 0}
-                      title="Prova tutte"
-                      style={{
-                        border: '1px solid #22c55e',
-                        background: testing ? '#eab308' : '#14532d',
-                        color: '#dcfce7',
-                        borderRadius: 8,
-                        padding: '8px 10px',
-                        cursor: testing || examplesList.length === 0 ? 'not-allowed' : 'pointer',
-                        width: '100%',
-                        opacity: testing || examplesList.length === 0 ? 0.5 : 1,
-                      }}
-                    >
-                      <ChevronsRight size={16} />
-                    </button>
-                  ) : i === 1 && setReportOpen ? (
-                    <div style={{ position: 'relative', width: '100%' }}>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setReportOpen(!reportOpen);
-                        }}
-                        title="Report"
-                        style={{
-                          border: '1px solid #60a5fa',
-                          background: '#0c4a6e',
-                          color: '#dbeafe',
-                          borderRadius: 8,
-                          padding: '8px 10px',
-                          cursor: 'pointer',
-                          width: '100%',
-                        }}
-                      >
-                        <BarChart2 size={16} />
-                      </button>
-                      {reportOpen && (
-                        <div style={{
-                          position: 'absolute',
-                          right: 0,
-                          top: '100%',
-                          marginTop: 6,
-                          background: '#111827',
-                          color: '#e5e7eb',
-                          border: '1px solid #374151',
-                          borderRadius: 8,
-                          padding: 10,
-                          minWidth: 260,
-                          zIndex: 30,
-                        }}>
-                          {(() => {
-                            const base = baselineStats || { matched: 0, falseAccept: 0, totalGt: 0 };
-                            const last = lastStats || base;
-                            const pct = (n: number, d: number) => d > 0 ? Math.round((n / d) * 100) : 0;
-                            const gainedMatched = pct(last.matched, last.totalGt) - pct(base.matched, base.totalGt);
-                            const removedFA = pct(base.falseAccept, base.totalGt) - pct(last.falseAccept, last.totalGt);
-                            const stillUnmatch = Math.max(0, (last.totalGt - last.matched - last.falseAccept));
-                            const stillFA = last.falseAccept;
-                            const sign = (v: number) => (v > 0 ? `+${v}` : `${v}`);
-                            return (
-                              <div style={{ display: 'grid', gap: 6 }}>
-                                <div><strong>Gained Matched:</strong> {sign(gainedMatched)}%</div>
-                                <div><strong>Removed False acceptance:</strong> {sign(removedFA)}%</div>
-                                <div><strong>Still UnMatching:</strong> {stillUnmatch}</div>
-                                <div><strong>Still False acceptance:</strong> {stillFA} ({sign(pct(last.falseAccept, last.totalGt) - pct(base.falseAccept, base.totalGt))}%)</div>
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <button title="Prova riga" onClick={(e) => { e.stopPropagation(); void runRowTest(i); }} style={{ background: '#fff', border: '1px solid #ddd', borderRadius: 8, padding: 6, cursor: 'pointer', width: '100%' }}>
-                      <Play size={14} />
-                    </button>
-                  )}
-                </td>
-                <td
-                  style={{
-                    padding: 8,
-                    color: enabledMethods.regex ? '#374151' : '#9ca3af',
-                    overflow: 'visible',
-                    background: EXTRACTOR_COLORS.regex,
-                    position: 'relative',
-                    verticalAlign: 'top',
-                    opacity: enabledMethods.regex ? 1 : 0.6,
-                    visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
-                  }}
-                  onMouseEnter={() => setHovered(i, 'regex')}
-                  onMouseLeave={() => setHovered(null, null)}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                    <div style={{ flex: 1 }}>
-                      {enabledMethods.regex ? (rr.regex || '—') + ms(rr.regexMs) : '—'}
-                    </div>
-                    {(isHovered(i, 'regex') || hasNote(i, 'regex')) && enabledMethods.regex && (
-                      <NoteButton
-                        hasNote={hasNote(i, 'regex')}
-                        onClick={() => isEditing(i, 'regex') ? stopEditing() : startEditing(i, 'regex')}
-                      />
-                    )}
-                  </div>
-                  {(getNote(i, 'regex') || isEditing(i, 'regex')) && enabledMethods.regex && (
-                    <>
-                      <NoteSeparator />
-                      {isEditing(i, 'regex') ? (
-                        <NoteEditor
-                          value={getNote(i, 'regex')}
-                          onSave={(text) => { addNote(i, 'regex', text); stopEditing(); }}
-                          onDelete={() => { deleteNote(i, 'regex'); stopEditing(); }}
-                          onCancel={stopEditing}
-                        />
-                      ) : (
-                        <NoteDisplay text={getNote(i, 'regex')} />
-                      )}
-                    </>
-                  )}
-                </td>
-                {showDeterministic && (
-                  <td
-                    style={{
-                      padding: 8,
-                      color: enabledMethods.deterministic ? '#374151' : '#9ca3af',
-                      overflow: 'visible',
-                      background: EXTRACTOR_COLORS.deterministic,
-                      position: 'relative',
-                      verticalAlign: 'top',
-                      opacity: enabledMethods.deterministic ? 1 : 0.6,
-                      visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
-                    }}
-                    onMouseEnter={() => setHovered(i, 'deterministic')}
-                    onMouseLeave={() => setHovered(null, null)}
-                  >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                    <div style={{ flex: 1 }}>
-                      {enabledMethods.deterministic ? (
-                        <>
-                          {rr.detRunning && <span title="Deterministic" style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #60a5fa', borderTopColor: 'transparent', borderRadius: '50%', marginRight: 6, animation: 'spin 0.8s linear infinite' }} />}
-                          {renderStackedSummary(rr.deterministic, i, 'det', kind, expectedKeysForKind, cellOverrides, editingCell, editingText, setEditingCell, setEditingText, setCellOverrides)}
-                          {renderTimeBar(rr.detMs, maxMs)}
-                        </>
-                      ) : '—'}
-                    </div>
-                    {(isHovered(i, 'deterministic') || hasNote(i, 'deterministic')) && enabledMethods.deterministic && (
-                      <NoteButton
-                        hasNote={hasNote(i, 'deterministic')}
-                        onClick={() => isEditing(i, 'deterministic') ? stopEditing() : startEditing(i, 'deterministic')}
-                      />
-                    )}
-                  </div>
-                  {(getNote(i, 'deterministic') || isEditing(i, 'deterministic')) && enabledMethods.deterministic && (
-                    <>
-                      <NoteSeparator />
-                      {isEditing(i, 'deterministic') ? (
-                        <NoteEditor
-                          value={getNote(i, 'deterministic')}
-                          onSave={(text) => { addNote(i, 'deterministic', text); stopEditing(); }}
-                          onDelete={() => { deleteNote(i, 'deterministic'); stopEditing(); }}
-                          onCancel={stopEditing}
-                        />
-                      ) : (
-                        <NoteDisplay text={getNote(i, 'deterministic')} />
-                      )}
-                    </>
-                  )}
-                  </td>
-                )}
-                {showNER && (
-                  <td
-                    style={{
-                      padding: 8,
-                      color: enabledMethods.ner ? '#374151' : '#9ca3af',
-                      overflow: 'visible',
-                      background: EXTRACTOR_COLORS.ner,
-                      position: 'relative',
-                      verticalAlign: 'top',
-                      opacity: enabledMethods.ner ? 1 : 0.6,
-                      visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
-                    }}
-                    onMouseEnter={() => setHovered(i, 'ner')}
-                    onMouseLeave={() => setHovered(null, null)}
-                  >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                    <div style={{ flex: 1 }}>
-                      {enabledMethods.ner ? (
-                        <>
-                          {rr.nerRunning && <span title="NER" style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #34d399', borderTopColor: 'transparent', borderRadius: '50%', marginRight: 6, animation: 'spin 0.8s linear infinite' }} />}
-                          {renderStackedSummary(rr.ner, i, 'ner', kind, expectedKeysForKind, cellOverrides, editingCell, editingText, setEditingCell, setEditingText, setCellOverrides)}
-                          {renderTimeBar(rr.nerMs, maxMs)}
-                        </>
-                      ) : '—'}
-                    </div>
-                    {(isHovered(i, 'ner') || hasNote(i, 'ner')) && enabledMethods.ner && (
-                      <NoteButton
-                        hasNote={hasNote(i, 'ner')}
-                        onClick={() => isEditing(i, 'ner') ? stopEditing() : startEditing(i, 'ner')}
-                      />
-                    )}
-                  </div>
-                  {(getNote(i, 'ner') || isEditing(i, 'ner')) && enabledMethods.ner && (
-                    <>
-                      <NoteSeparator />
-                      {isEditing(i, 'ner') ? (
-                        <NoteEditor
-                          value={getNote(i, 'ner')}
-                          onSave={(text) => { addNote(i, 'ner', text); stopEditing(); }}
-                          onDelete={() => { deleteNote(i, 'ner'); stopEditing(); }}
-                          onCancel={stopEditing}
-                        />
-                      ) : (
-                        <NoteDisplay text={getNote(i, 'ner')} />
-                      )}
-                    </>
-                  )}
-                  </td>
-                )}
-                {showEmbeddings && (
-                  <td
-                    style={{ padding: 8, color: '#374151', overflow: 'visible', background: EXTRACTOR_COLORS.embeddings, position: 'relative', verticalAlign: 'top', opacity: 1 }}
-                    onMouseEnter={() => setHovered(i, 'embeddings')}
-                    onMouseLeave={() => setHovered(null, null)}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                      <div style={{ flex: 1 }}>
-                        {/* TODO: Show classification results here in Fase 9 */}
-                        {'—'}
-                      </div>
-                      {(isHovered(i, 'embeddings') || hasNote(i, 'embeddings')) && (
-                        <NoteButton
-                          hasNote={hasNote(i, 'embeddings')}
-                          onClick={() => isEditing(i, 'embeddings') ? stopEditing() : startEditing(i, 'embeddings')}
-                        />
-                      )}
-                    </div>
-                    {(getNote(i, 'embeddings') || isEditing(i, 'embeddings')) && (
-                      <>
-                        <NoteSeparator />
-                        {isEditing(i, 'embeddings') ? (
-                          <NoteEditor
-                            value={getNote(i, 'embeddings')}
-                            onSave={(text) => { addNote(i, 'embeddings', text); stopEditing(); }}
-                            onDelete={() => { deleteNote(i, 'embeddings'); stopEditing(); }}
-                            onCancel={stopEditing}
-                          />
-                        ) : (
-                          <NoteDisplay text={getNote(i, 'embeddings')} />
-                        )}
-                      </>
-                    )}
-                  </td>
-                )}
-                <td
-                  style={{
-                    padding: 8,
-                    color: enabledMethods.llm ? '#374151' : '#9ca3af',
-                    overflow: 'visible',
-                    background: EXTRACTOR_COLORS.llm,
-                    position: 'relative',
-                    verticalAlign: 'top',
-                    opacity: enabledMethods.llm ? 1 : 0.6,
-                    visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
-                  }}
-                  onMouseEnter={() => setHovered(i, 'llm')}
-                  onMouseLeave={() => setHovered(null, null)}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                    <div style={{ flex: 1 }}>
-                      {enabledMethods.llm ? (
-                        <>
-                          {rr.llmRunning && <span title="LLM" style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid #fbbf24', borderTopColor: 'transparent', borderRadius: '50%', marginRight: 6, animation: 'spin 0.8s linear infinite' }} />}
-                          {renderStackedSummary(rr.llm, i, 'llm', kind, expectedKeysForKind, cellOverrides, editingCell, editingText, setEditingCell, setEditingText, setCellOverrides)}
-                          {renderTimeBar(rr.llmMs, maxMs)}
-                        </>
-                      ) : '—'}
-                    </div>
-                    {(isHovered(i, 'llm') || hasNote(i, 'llm')) && enabledMethods.llm && (
-                      <NoteButton
-                        hasNote={hasNote(i, 'llm')}
-                        onClick={() => isEditing(i, 'llm') ? stopEditing() : startEditing(i, 'llm')}
-                      />
-                    )}
-                  </div>
-                  {(getNote(i, 'llm') || isEditing(i, 'llm')) && enabledMethods.llm && (
-                    <>
-                      <NoteSeparator />
-                      {isEditing(i, 'llm') ? (
-                        <NoteEditor
-                          value={getNote(i, 'llm')}
-                          onSave={(text) => { addNote(i, 'llm', text); stopEditing(); }}
-                          onDelete={() => { deleteNote(i, 'llm'); stopEditing(); }}
-                          onCancel={stopEditing}
-                        />
-                      ) : (
-                        <NoteDisplay text={getNote(i, 'llm')} />
-                      )}
-                    </>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
+            ))}
           {examplesList.length === 0 && (
             <>
               <tr>

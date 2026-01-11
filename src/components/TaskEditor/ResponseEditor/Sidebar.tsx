@@ -33,7 +33,9 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
   const { combinedClass } = useFontContext();
   const { translations } = useProjectTranslations(); // ✅ Get translations for node labels
   const dbg = (...args: any[]) => { try { if (localStorage.getItem('debug.sidebar') === '1') console.log(...args); } catch {} };
-  if (!Array.isArray(mainList) || mainList.length === 0) return null;
+
+  // ✅ IMPORTANT: All hooks must be called before any early returns
+  // Early return moved to render section to comply with React Hooks rules
   // Pastel/silver palette
   const borderColor = 'rgba(156,163,175,0.65)';
   const bgBase = 'rgba(156,163,175,0.10)';
@@ -442,20 +444,7 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
         // Questo elimina il flash perché non c'è cambio di stato
       }
 
-      // ✅ Log sempre (non solo in DEBUG) per vedere cosa succede
-      console.log('👻 [GHOST] Misurazione completata', {
-        buttonsFound: allButtons.length,
-        maxNodeWidth: maxWidth,
-        containerPadding,
-        gutter: GUTTER,
-        extraPadding: EXTRA_PADDING,
-        totalWidth,
-        clamped,
-        currentWidth,
-        difference,
-        willUpdate: difference > 15 || currentWidth === calculateInitialWidth,
-        ghostContainerWidth: ghostContainerRef.current.getBoundingClientRect().width,
-      });
+      // ✅ Calcolo completato (log rimosso per pulizia console)
     };
 
     // ✅ Usa MutationObserver per aspettare che React abbia renderizzato
@@ -532,15 +521,25 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
     return () => {
       if (ghostRootRef.current) {
         try {
-          ghostRootRef.current.unmount();
+          // ✅ Use setTimeout to avoid unmounting during render
+          setTimeout(() => {
+            if (ghostRootRef.current) {
+              ghostRootRef.current.unmount();
+              ghostRootRef.current = null;
+            }
+          }, 0);
         } catch {}
-        ghostRootRef.current = null;
       }
       if (ghostContainerRef.current) {
         try {
-          document.body.removeChild(ghostContainerRef.current);
+          // ✅ Use setTimeout to avoid removing DOM during render
+          setTimeout(() => {
+            if (ghostContainerRef.current && document.body.contains(ghostContainerRef.current)) {
+              document.body.removeChild(ghostContainerRef.current);
+              ghostContainerRef.current = null;
+            }
+          }, 0);
         } catch {}
-        ghostContainerRef.current = null;
       }
     };
   }, []);
@@ -560,6 +559,9 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
       actualWidth: containerRef.current?.getBoundingClientRect().width,
     });
   }, [finalWidth, manualWidth, measuredW, style?.width, hasFlex, DEBUG_RESIZE]);
+
+  // ✅ Early return check moved here (after all hooks) to comply with React Hooks rules
+  if (!Array.isArray(mainList) || mainList.length === 0) return null;
 
   return (
     <div
