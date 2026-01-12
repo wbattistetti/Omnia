@@ -10,6 +10,7 @@ import TesterGridHeader from './TesterGrid/components/TesterGridHeader';
 import TesterGridRow from './TesterGrid/components/TesterGridRow';
 import { useColumnResize } from './TesterGrid/hooks/useColumnResize';
 import { useEditorOverlay } from './TesterGrid/hooks/useEditorOverlay';
+import { RowResult } from './hooks/useExtractionTesting';
 
 // 🎨 Colori centralizzati per extractors (usati solo per editor overlay)
 const EXTRACTOR_COLORS = {
@@ -19,6 +20,36 @@ const EXTRACTOR_COLORS = {
   llm: '#fed7aa',
   embeddings: '#e0e7ff',
 };
+
+// ✅ Memorizza il componente "Running tests..." fuori dal componente per evitare re-render
+const RunningTestsScreen = React.memo(() => (
+  <div style={{
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    minHeight: 0,
+    background: '#f9fafb',
+    color: '#6b7280',
+    fontSize: 14,
+    fontWeight: 500,
+  }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <span style={{
+        display: 'inline-block',
+        width: 16,
+        height: 16,
+        border: '2px solid #94a3b8',
+        borderTopColor: 'transparent',
+        borderRadius: '50%',
+        animation: 'spin 0.8s linear infinite',
+      }} />
+      <span>Running tests...</span>
+    </div>
+  </div>
+));
+
+RunningTestsScreen.displayName = 'RunningTestsScreen';
 
 interface TesterGridProps {
   examplesList: string[];
@@ -54,7 +85,7 @@ interface TesterGridProps {
   setHovered: (row: number | null, col: string | null) => void;
   // Editor toggle
   activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings' | null;
-  toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings') => void;
+  toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings') => void;
   // Mode: extraction (default) or classification
   mode?: 'extraction' | 'classification';
   // Input for adding new phrases
@@ -83,7 +114,7 @@ interface TesterGridProps {
 }
 
 
-export default function TesterGrid({
+function TesterGridComponent({
   examplesList,
   rowResults,
   selectedRow,
@@ -132,30 +163,35 @@ export default function TesterGrid({
   const colSpanEmpty = 1 + 1 + (showDeterministic ? 1 : 0) + (showNER ? 1 : 0) + (showEmbeddings ? 1 : 0) + 1 + 1;
 
   // Handler for adding new example
+  // ✅ SIMPLIFIED: Catena lineare - usa ref per evitare dipendenze che causano re-render
+  const newExampleRef = React.useRef<string>(newExample);
+  React.useEffect(() => {
+    newExampleRef.current = newExample;
+  }, [newExample]);
+
   const handleAddExample = React.useCallback(() => {
-    const t = (newExample || '').trim();
+    const t = (newExampleRef.current || '').trim();
     if (!t) return;
 
-    // Usa la versione funzionale di setExamplesList per avere sempre lo stato più recente
+    // ✅ SIMPLIFIED: Solo aggiungi la frase, senza lanciare test automatico
+    // Il test automatico causava re-render che bloccavano l'input
     setExamplesList((prevList) => {
       const existIdx = prevList.findIndex((p) => p === t);
       if (existIdx !== -1) {
-        // Frase già esistente: seleziona e testa
+        // Frase già esistente: seleziona ma NON testare
         setSelectedRow(existIdx);
-        setTimeout(() => { void runRowTest(existIdx); }, 0);
-        return prevList; // Non modificare la lista
+        setNewExample('');
+        return prevList;
       } else {
         // Nuova frase: aggiungi alla lista
         const next = Array.from(new Set([...prevList, t]));
-        const newIdx = next.length - 1;
-        setSelectedRow(newIdx);
-        // Esegui il test dopo che lo stato è stato aggiornato
-        setTimeout(() => { void runRowTest(newIdx); }, 100);
-        return next; // Ritorna la nuova lista
+        setNewExample('');
+        // ✅ Seleziona l'ultima riga aggiunta
+        setSelectedRow(next.length - 1);
+        return next;
       }
     });
-    setNewExample('');
-  }, [newExample, setExamplesList, setSelectedRow, runRowTest]);
+  }, [setExamplesList, setSelectedRow, setNewExample]);
 
   // Use modular hooks
   const { phraseColumnWidth, isResizing, handleResizeStart } = useColumnResize(280);
@@ -169,11 +205,14 @@ export default function TesterGrid({
 
   // ✅ Stato per il pulsante dell'editor da mostrare nell'header
   const [editorButton, setEditorButton] = React.useState<React.ReactNode>(null);
+  // ✅ Stato per il messaggio di errore da mostrare nell'header
+  const [editorErrorMessage, setEditorErrorMessage] = React.useState<React.ReactNode>(null);
 
-  // ✅ Reset del pulsante quando l'editor cambia o viene chiuso
+  // ✅ Reset del pulsante e del messaggio di errore quando l'editor cambia o viene chiuso
   React.useEffect(() => {
     if (!activeEditor) {
       setEditorButton(null);
+      setEditorErrorMessage(null);
     }
   }, [activeEditor]);
 
@@ -198,9 +237,10 @@ export default function TesterGrid({
         return (
           <RegexInlineEditor
             regex={editorProps.regex || ''}
-            setRegex={editorProps.setRegex || (() => {})}
+            setRegex={editorProps.setRegex || (() => { })}
             kind={editorProps.kind}
             {...commonProps}
+            onErrorRender={setEditorErrorMessage} // ✅ Espone il messaggio di errore all'overlay
           />
         );
       case 'extractor':
@@ -297,243 +337,282 @@ export default function TesterGrid({
             overflowY: 'auto',
             overflowX: 'hidden',
           }}>
-        <table ref={tableRef} style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' as any }}>
-          <TesterGridHeader
-            newExample={newExample}
-            setNewExample={setNewExample}
-            onAddExample={handleAddExample}
-            phraseColumnWidth={phraseColumnWidth}
-            isResizing={isResizing}
-            onResizeStart={handleResizeStart}
-            enabledMethods={enabledMethods}
-            toggleMethod={toggleMethod}
-            activeEditor={activeEditor}
-            toggleEditor={toggleEditor}
-            showDeterministic={showDeterministic}
-            showNER={showNER}
-            showEmbeddings={showEmbeddings}
-            headerRowRef={headerRowRef}
-          />
-          <tbody>
-            {examplesList.map((ex, i) => (
-              <TesterGridRow
-                key={i}
-                rowIndex={i}
-                phrase={ex}
-                rowResult={rowResults[i] || {}}
-                phraseColumnWidth={phraseColumnWidth}
-                isResizing={isResizing}
-                onResizeStart={handleResizeStart}
-                selectedRow={selectedRow}
-                onSelectRow={setSelectedRow}
-                kind={kind}
-                expectedKeysForKind={expectedKeysForKind}
-                enabledMethods={enabledMethods}
-                showDeterministic={showDeterministic}
-                showNER={showNER}
-                showEmbeddings={showEmbeddings}
-                activeEditor={activeEditor}
-                cellOverrides={cellOverrides}
-                setCellOverrides={setCellOverrides}
-                editingCell={editingCell}
-                setEditingCell={setEditingCell}
-                editingText={editingText}
-                setEditingText={setEditingText}
-                hasNote={hasNote}
-                getNote={getNote}
-                addNote={addNote}
-                deleteNote={deleteNote}
-                isEditing={isEditing}
-                startEditing={startEditing}
-                stopEditing={stopEditing}
-                isHovered={isHovered}
-                setHovered={setHovered}
-                runRowTest={runRowTest}
-                runAllRows={runAllRows}
-                testing={testing}
-                examplesListLength={examplesList.length}
-                reportOpen={reportOpen}
-                setReportOpen={setReportOpen}
-                baselineStats={baselineStats}
-                lastStats={lastStats}
-              />
-            ))}
-          {examplesList.length === 0 && (
-            <>
-              <tr>
-                <td style={{ padding: 10, opacity: 0.7 }}>— nessuna frase —</td>
-                <td style={{ padding: 4, textAlign: 'center', verticalAlign: 'middle', background: '#f9fafb' }}>
-                  {runAllRows && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void runAllRows();
-                      }}
-                      disabled={testing || examplesList.length === 0}
-                      title="Prova tutte"
-                      style={{
-                        border: '1px solid #22c55e',
-                        background: testing ? '#eab308' : '#14532d',
-                        color: '#dcfce7',
-                        borderRadius: 8,
-                        padding: '8px 10px',
-                        cursor: testing || examplesList.length === 0 ? 'not-allowed' : 'pointer',
-                        width: '100%',
-                        opacity: testing || examplesList.length === 0 ? 0.5 : 1,
-                      }}
-                    >
-                      <ChevronsRight size={16} />
-                    </button>
-                  )}
-                </td>
-                <td colSpan={colSpanEmpty - 2} style={{ padding: 10, opacity: 0.7 }}></td>
-              </tr>
-              {setReportOpen && (
-                <tr>
-                  <td style={{ padding: 10, opacity: 0.7 }}></td>
-                  <td style={{ padding: 4, textAlign: 'center', verticalAlign: 'middle', background: '#f9fafb' }}>
-                    <div style={{ position: 'relative', width: '100%' }}>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setReportOpen(!reportOpen);
-                        }}
-                        title="Report"
-                        style={{
-                          border: '1px solid #60a5fa',
-                          background: '#0c4a6e',
-                          color: '#dbeafe',
-                          borderRadius: 8,
-                          padding: '8px 10px',
-                          cursor: 'pointer',
-                          width: '100%',
-                        }}
-                      >
-                        <BarChart2 size={16} />
-                      </button>
-                      {reportOpen && (
-                        <div style={{
-                          position: 'absolute',
-                          right: 0,
-                          top: '100%',
-                          marginTop: 6,
-                          background: '#111827',
-                          color: '#e5e7eb',
-                          border: '1px solid #374151',
-                          borderRadius: 8,
-                          padding: 10,
-                          minWidth: 260,
-                          zIndex: 30,
-                        }}>
-                          {(() => {
-                            const base = baselineStats || { matched: 0, falseAccept: 0, totalGt: 0 };
-                            const last = lastStats || base;
-                            const pct = (n: number, d: number) => d > 0 ? Math.round((n / d) * 100) : 0;
-                            const gainedMatched = pct(last.matched, last.totalGt) - pct(base.matched, base.totalGt);
-                            const removedFA = pct(base.falseAccept, base.totalGt) - pct(last.falseAccept, last.totalGt);
-                            const stillUnmatch = Math.max(0, (last.totalGt - last.matched - last.falseAccept));
-                            const stillFA = last.falseAccept;
-                            const sign = (v: number) => (v > 0 ? `+${v}` : `${v}`);
-                            return (
-                              <div style={{ display: 'grid', gap: 6 }}>
-                                <div><strong>Gained Matched:</strong> {sign(gainedMatched)}%</div>
-                                <div><strong>Removed False acceptance:</strong> {sign(removedFA)}%</div>
-                                <div><strong>Still UnMatching:</strong> {stillUnmatch}</div>
-                                <div><strong>Still False acceptance:</strong> {stillFA} ({sign(pct(last.falseAccept, last.totalGt) - pct(base.falseAccept, base.totalGt))}%)</div>
-                              </div>
-                            );
-                          })()}
-                        </div>
+          <table ref={tableRef} style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' as any }}>
+            <TesterGridHeader
+              newExample={newExample}
+              setNewExample={setNewExample}
+              onAddExample={handleAddExample}
+              phraseColumnWidth={phraseColumnWidth}
+              isResizing={isResizing}
+              onResizeStart={handleResizeStart}
+              enabledMethods={enabledMethods}
+              toggleMethod={toggleMethod}
+              activeEditor={activeEditor}
+              toggleEditor={toggleEditor}
+              showDeterministic={showDeterministic}
+              showNER={showNER}
+              showEmbeddings={showEmbeddings}
+              headerRowRef={headerRowRef}
+            />
+            <tbody>
+              {examplesList.map((ex, i) => (
+                <TesterGridRow
+                  key={i}
+                  rowIndex={i}
+                  phrase={ex}
+                  rowResult={rowResults[i] || {}}
+                  phraseColumnWidth={phraseColumnWidth}
+                  isResizing={isResizing}
+                  onResizeStart={handleResizeStart}
+                  selectedRow={selectedRow}
+                  onSelectRow={setSelectedRow}
+                  kind={kind}
+                  expectedKeysForKind={expectedKeysForKind}
+                  enabledMethods={enabledMethods}
+                  showDeterministic={showDeterministic}
+                  showNER={showNER}
+                  showEmbeddings={showEmbeddings}
+                  activeEditor={activeEditor}
+                  cellOverrides={cellOverrides}
+                  setCellOverrides={setCellOverrides}
+                  editingCell={editingCell}
+                  setEditingCell={setEditingCell}
+                  editingText={editingText}
+                  setEditingText={setEditingText}
+                  hasNote={hasNote}
+                  getNote={getNote}
+                  addNote={addNote}
+                  deleteNote={deleteNote}
+                  isEditing={isEditing}
+                  startEditing={startEditing}
+                  stopEditing={stopEditing}
+                  isHovered={isHovered}
+                  setHovered={setHovered}
+                  runRowTest={runRowTest}
+                  runAllRows={runAllRows}
+                  testing={testing}
+                  examplesListLength={examplesList.length}
+                  reportOpen={reportOpen}
+                  setReportOpen={setReportOpen}
+                  baselineStats={baselineStats}
+                  lastStats={lastStats}
+                />
+              ))}
+              {examplesList.length === 0 && (
+                <>
+                  <tr>
+                    <td style={{ padding: 10, opacity: 0.7 }}>— nessuna frase —</td>
+                    <td style={{ padding: 4, textAlign: 'center', verticalAlign: 'middle', background: '#f9fafb' }}>
+                      {runAllRows && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void runAllRows();
+                          }}
+                          disabled={testing || examplesList.length === 0}
+                          title="Prova tutte"
+                          style={{
+                            border: '1px solid #22c55e',
+                            background: testing ? '#eab308' : '#14532d',
+                            color: '#dcfce7',
+                            borderRadius: 8,
+                            padding: '8px 10px',
+                            cursor: testing || examplesList.length === 0 ? 'not-allowed' : 'pointer',
+                            width: '100%',
+                            opacity: testing || examplesList.length === 0 ? 0.5 : 1,
+                          }}
+                        >
+                          <ChevronsRight size={16} />
+                        </button>
                       )}
-                    </div>
-                  </td>
-                </tr>
+                    </td>
+                    <td colSpan={colSpanEmpty - 2} style={{ padding: 10, opacity: 0.7 }}></td>
+                  </tr>
+                  {setReportOpen && (
+                    <tr>
+                      <td style={{ padding: 10, opacity: 0.7 }}></td>
+                      <td style={{ padding: 4, textAlign: 'center', verticalAlign: 'middle', background: '#f9fafb' }}>
+                        <div style={{ position: 'relative', width: '100%' }}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setReportOpen(!reportOpen);
+                            }}
+                            title="Report"
+                            style={{
+                              border: '1px solid #60a5fa',
+                              background: '#0c4a6e',
+                              color: '#dbeafe',
+                              borderRadius: 8,
+                              padding: '8px 10px',
+                              cursor: 'pointer',
+                              width: '100%',
+                            }}
+                          >
+                            <BarChart2 size={16} />
+                          </button>
+                          {reportOpen && (
+                            <div style={{
+                              position: 'absolute',
+                              right: 0,
+                              top: '100%',
+                              marginTop: 6,
+                              background: '#111827',
+                              color: '#e5e7eb',
+                              border: '1px solid #374151',
+                              borderRadius: 8,
+                              padding: 10,
+                              minWidth: 260,
+                              zIndex: 30,
+                            }}>
+                              {(() => {
+                                const base = baselineStats || { matched: 0, falseAccept: 0, totalGt: 0 };
+                                const last = lastStats || base;
+                                const pct = (n: number, d: number) => d > 0 ? Math.round((n / d) * 100) : 0;
+                                const gainedMatched = pct(last.matched, last.totalGt) - pct(base.matched, base.totalGt);
+                                const removedFA = pct(base.falseAccept, base.totalGt) - pct(last.falseAccept, last.totalGt);
+                                const stillUnmatch = Math.max(0, (last.totalGt - last.matched - last.falseAccept));
+                                const stillFA = last.falseAccept;
+                                const sign = (v: number) => (v > 0 ? `+${v}` : `${v}`);
+                                return (
+                                  <div style={{ display: 'grid', gap: 6 }}>
+                                    <div><strong>Gained Matched:</strong> {sign(gainedMatched)}%</div>
+                                    <div><strong>Removed False acceptance:</strong> {sign(removedFA)}%</div>
+                                    <div><strong>Still UnMatching:</strong> {stillUnmatch}</div>
+                                    <div><strong>Still False acceptance:</strong> {stillFA} ({sign(pct(last.falseAccept, last.totalGt) - pct(base.falseAccept, base.totalGt))}%)</div>
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
               )}
-            </>
-          )}
-        </tbody>
-      </table>
+            </tbody>
+          </table>
         </div>
 
-      {/* Overlay dell'editor quando attivo */}
-      {activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) && Object.keys(editorOverlayStyle).length > 0 && (
-        <div
-          style={{
-            ...editorOverlayStyle,
-            background: '#fff',
-            border: '1px solid #e5e7eb',
-            borderRadius: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-          }}
-        >
-          {/* Header dell'editor (colore dinamico basato sulla colonna) */}
+        {/* Overlay dell'editor quando attivo */}
+        {/* ✅ Don't render editor during batch testing to prevent Monaco unmount errors */}
+        {activeEditor && !testing && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) && Object.keys(editorOverlayStyle).length > 0 && (
           <div
             style={{
-              background: getActiveEditorColor(),
-              padding: '8px 12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexShrink: 0,
+              ...editorOverlayStyle,
+              background: '#fff',
+              border: '1px solid #e5e7eb',
               borderRadius: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+              pointerEvents: 'auto', // ✅ Permetti interazioni con l'overlay
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input type="checkbox" checked={true} readOnly style={{ cursor: 'default' }} />
-              <span style={{ fontWeight: 600, color: getTextColor(getActiveEditorColor()) }}>{getActiveEditorTitle()}</span>
+            {/* Header dell'editor (colore dinamico basato sulla colonna) */}
+            <div
+              style={{
+                background: getActiveEditorColor(),
+                padding: '8px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexShrink: 0,
+                borderRadius: 0,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="checkbox" checked={true} readOnly style={{ cursor: 'default' }} />
+                <span style={{ fontWeight: 600, color: getTextColor(getActiveEditorColor()) }}>{getActiveEditorTitle()}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1, justifyContent: 'flex-end' }}>
+                {editorErrorMessage && (
+                  <div style={{ marginLeft: 'auto', marginRight: 0 }}>
+                    {editorErrorMessage}
+                  </div>
+                )}
+                {editorButton && (
+                  <div style={{ marginRight: 0 }}>
+                    {editorButton}
+                  </div>
+                )}
+                <button
+                  onClick={() => toggleEditor(activeEditor)}
+                  style={{
+                    background: 'rgba(0,0,0,0.1)',
+                    border: 'none',
+                    borderRadius: 4,
+                    padding: '4px 6px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    transition: 'all 0.2s',
+                  }}
+                  title="Configure"
+                >
+                  <Wand2 size={14} color={getTextColor(getActiveEditorColor())} />
+                </button>
+                <button
+                  onClick={onCloseEditor || (() => toggleEditor(activeEditor))}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: 4,
+                    padding: '4px 6px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: getTextColor(getActiveEditorColor()),
+                  }}
+                  title="Close Editor"
+                >
+                  <X size={16} />
+                </button>
+              </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              {editorButton && (
-                <div style={{ marginRight: 0 }}>
-                  {editorButton}
-                </div>
-              )}
-              <button
-                onClick={() => toggleEditor(activeEditor)}
-                style={{
-                  background: 'rgba(0,0,0,0.1)',
-                  border: 'none',
-                  borderRadius: 4,
-                  padding: '4px 6px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  transition: 'all 0.2s',
-                }}
-                title="Configure"
-              >
-                <Wand2 size={14} color={getTextColor(getActiveEditorColor())} />
-              </button>
-              <button
-                onClick={onCloseEditor || (() => toggleEditor(activeEditor))}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  borderRadius: 4,
-                  padding: '4px 6px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  color: getTextColor(getActiveEditorColor()),
-                }}
-                title="Close Editor"
-              >
-                <X size={16} />
-              </button>
-            </div>
-          </div>
 
-          {/* Corpo dell'editor */}
-          <div style={{ flex: 1, overflow: 'auto', padding: 6, minHeight: 0 }}>
-            {renderEditor()}
+            {/* Corpo dell'editor */}
+            <div style={{ flex: 1, overflow: 'auto', padding: 6, minHeight: 0 }}>
+              {renderEditor()}
+            </div>
           </div>
-        </div>
-      )}
+        )}
       </div>
     </>
   );
 }
 
+// ✅ CRITICAL: Memo con comparatore personalizzato per prevenire re-render durante batch
+// Confronta solo gli elementi di rowResults che sono effettivamente cambiati
+const TesterGrid = React.memo(TesterGridComponent, (prev, next) => {
+  // ✅ Se rowResults ha la stessa lunghezza e gli stessi riferimenti agli oggetti, non re-renderizzare
+  if (prev.rowResults.length !== next.rowResults.length) {
+    return false; // Re-render se la lunghezza è cambiata
+  }
+
+  // ✅ Confronta ogni elemento di rowResults
+  // Se anche solo un elemento è cambiato, re-renderizza (ma React.memo dei figli gestirà il resto)
+  for (let i = 0; i < prev.rowResults.length; i++) {
+    if (prev.rowResults[i] !== next.rowResults[i]) {
+      // ✅ Elemento cambiato - re-renderizza (ma TesterGridRow memoizzato gestirà il confronto granulare)
+      return false;
+    }
+  }
+
+  // ✅ Altri props critici
+  if (prev.testing !== next.testing) return false;
+  if (prev.selectedRow !== next.selectedRow) return false;
+  if (prev.examplesList !== next.examplesList) return false;
+  if (prev.activeEditor !== next.activeEditor) return false;
+  if (prev.newExample !== next.newExample) return false; // ✅ CRITICAL: newExample deve triggerare re-render!
+
+  // ✅ Tutti gli altri props sono funzioni o oggetti che non cambiano durante batch
+  // Le righe memoizzate gestiranno i loro confronti interni
+  return true; // Skip re-render
+});
+
+TesterGrid.displayName = 'TesterGrid';
+
+export default TesterGrid;

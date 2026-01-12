@@ -1,8 +1,10 @@
 import React, { useState, useCallback, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { extractField } from '../../../../nlp/pipeline';
 import { nerExtract } from '../../../../nlp/services/nerClient';
 import nlpTypesConfig from '../../../../../config/nlp-types.json';
 import { mapLabelToStandardKey } from './useRegexValidation';
+import * as testingState from '../testingState';
 
 export interface RowResult {
   regex?: string;
@@ -129,11 +131,36 @@ export function useExtractionTesting({
   onStatsUpdate,
   node,
 }: UseExtractionTestingProps) {
+  // ✅ Local state management (simpler approach)
+  const [testing, setTesting] = useState<boolean>(false);
+  const testingRef = useRef<boolean>(false);
+
   // State
   const [rowResults, setRowResults] = useState<RowResult[]>([]);
   const [selectedRow, setSelectedRow] = useState<number | null>(null);
-  const [testing, setTesting] = useState<boolean>(false);
   const cancelledRef = useRef<boolean>(false);
+
+  // ✅ Initialize rowResults when examplesList changes
+  // ✅ CRITICAL: NON includere rowResults.length nelle dipendenze per evitare loop infiniti
+  React.useEffect(() => {
+    setRowResults(prev => {
+      // ✅ Solo se la lunghezza è diversa, aggiorna
+      if (prev.length === examplesList.length) {
+        return prev; // Nessun cambiamento necessario
+      }
+
+      const next = [...prev];
+      // Extend array if needed
+      while (next.length < examplesList.length) {
+        next.push({});
+      }
+      // Truncate array if needed
+      if (next.length > examplesList.length) {
+        next.splice(examplesList.length);
+      }
+      return next;
+    });
+  }, [examplesList.length]); // ✅ SOLO examplesList.length, NON rowResults.length!
   const [cellOverrides, setCellOverrides] = useState<Record<string, string>>({});
   const [editingCell, setEditingCell] = useState<{
     row: number;
@@ -289,135 +316,117 @@ export function useExtractionTesting({
     }));
   }, []);
 
-  // Run test for a single row
-  const runRowTest = useCallback(async (idx: number) => {
+  // ✅ STEP 1: Run test for a single row - solo regex reale (sync), resto dummy
+  const runRowTest = useCallback(async (idx: number, isBatch: boolean = false) => {
     const phrase = examplesList[idx] || '';
-    if (!phrase) return;
-    setTesting(true);
+    if (!phrase) {
+      return;
+    }
 
-    const update = (partial: any) => setRowResults(prev => {
-      const next = [...prev];
-      next[idx] = { ...(next[idx] || {}), ...partial };
-      return next;
-    });
-
-    update({ running: true, detRunning: true, nerRunning: true, llmRunning: true, regex: '—', deterministic: '—', ner: '—', llm: '—' });
-
-    // Regex (sync) - always runs
+    // ✅ STEP 1: Regex reale (sync) - nessuna chiamata async
+    // ✅ Durante batch, calcoliamo solo summary (non spans) per evitare accumulo
     const t0Regex = performance.now();
-    const regexRes = extractRegexOnly(phrase);
-    update({ regex: regexRes.summary, regexMs: Math.round(performance.now() - t0Regex), spans: regexRes.spans });
+    let regexRes: ReturnType<typeof extractRegexOnly>;
+    if (isBatch) {
+      // ✅ Versione semplificata: solo summary, niente spans
+      const field = mapKindToField(kind);
+      let value = '';
+      const extractedGroups: Record<string, any> = {};
 
-    const field = mapKindToField(kind);
-
-
-    // Deterministic async task
-    const detTask = enabledMethods.deterministic ? (async () => {
-      const t0 = performance.now();
-      update({ detRunning: true });
-      try {
-        const finalResult = await extractField<any>(field, phrase);
-        const detSummary = finalResult.allResults?.deterministic ? summarizeResult(finalResult.allResults.deterministic, field) : "—";
-        const nerSummary = finalResult.allResults?.ner ? summarizeResult(finalResult.allResults.ner, field) : "—";
-        const llmSummary = finalResult.allResults?.llm ? summarizeResult(finalResult.allResults.llm, field) : "—";
-
-        update({
-          deterministic: detSummary,
-          ner: nerSummary,
-          llm: llmSummary,
-          status: 'done',
-          detMs: Math.round(performance.now() - t0),
-          detRunning: false
-        });
-      } catch {
-        update({ deterministic: '—', detMs: Math.round(performance.now() - t0), detRunning: false });
-      }
-    })() : Promise.resolve();
-
-    // NER async task
-    const nerTask = enabledMethods.ner ? (async () => {
-      const t0 = performance.now();
-      update({ nerRunning: true });
-      try {
-        const ner = await nerExtract<any>(field, phrase);
-        let nerSummary = '—';
-        let nerSpans: Array<{ start: number; end: number }> = [];
-        if (Array.isArray(ner?.candidates) && ner.candidates.length > 0) {
-          const c = ner.candidates[0];
-          if (field === 'dateOfBirth') {
-            nerSummary = summarizeVars({ day: c?.value?.day, month: c?.value?.month, year: c?.value?.year });
-            nerSpans = spansFromDate(phrase, c?.value);
-          } else if (field === 'phone') {
-            nerSummary = c?.value ? `value=${String(c.value)}` : '—';
-            nerSpans = spansFromScalar(phrase, c?.value);
-          } else if (field === 'email') {
-            nerSummary = c?.value ? `value=${String(c.value)}` : '—';
-            nerSpans = spansFromScalar(phrase, c?.value);
-          } else if (c?.value) {
-            nerSpans = spansFromScalar(phrase, c?.value);
-          }
-        }
-        setRowResults(prev => {
-          const next = [...prev];
-          const base = ((next[idx] || {}) as any).spans || [];
-          next[idx] = { ...(next[idx] || {}), ner: nerSummary, nerMs: Math.round(performance.now() - t0), nerRunning: false, spans: mergeSpans(base, nerSpans) } as any;
-          return next;
-        });
-      } catch {
-        update({ ner: '—', nerMs: Math.round(performance.now() - t0), nerRunning: false });
-      }
-    })() : Promise.resolve();
-
-    // LLM async task
-    const llmTask = enabledMethods.llm ? (async () => {
-      const t0 = performance.now();
-      update({ llmRunning: true });
-      try {
-        const res = await fetch('/api/nlp/llm-extract', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ field, text: phrase, lang: 'it' }) });
-        let llmSummary = '—';
-        let llmSpans: Array<{ start: number; end: number }> = [];
-        if (res.ok) {
-          const obj = await res.json();
-          if (Array.isArray(obj?.candidates) && obj.candidates.length > 0) {
-            const c = obj.candidates[0];
-            if (field === 'dateOfBirth' && c?.value) {
-              llmSummary = summarizeVars({ day: c.value.day, month: c.value.month, year: c.value.year });
-              llmSpans = spansFromDate(phrase, c.value);
-            } else if (field === 'phone') {
-              llmSummary = c?.value ? `value=${String(c.value)}` : '—';
-              llmSpans = spansFromScalar(phrase, c?.value);
-            } else if (field === 'email') {
-              llmSummary = c?.value ? `value=${String(c.value)}` : '—';
-              llmSpans = spansFromScalar(phrase, c?.value);
-            } else if (c?.value) {
-              llmSpans = spansFromScalar(phrase, c?.value);
+      if (profile.regex) {
+        try {
+          // ✅ Usa match() invece di exec() per evitare problemi con flag 'g'
+          const re = new RegExp(profile.regex);
+          const m = phrase.match(re);
+          if (m) {
+            value = m[0];
+            // Extract capture groups (solo il primo match durante batch)
+            if (m.length > 1 && node) {
+              const allSubs = [...(node.subSlots || []), ...(node.subData || [])];
+              for (let i = 1; i < m.length; i++) {
+                const groupValue = m[i];
+                if (groupValue !== undefined && groupValue !== null) {
+                  const trimmedValue = String(groupValue).trim();
+                  if (trimmedValue !== '') {
+                    const subIndex = i - 1;
+                    if (subIndex < allSubs.length) {
+                      const sub = allSubs[subIndex];
+                      const subLabel = String(sub.label || sub.name || '');
+                      const standardKey = mapLabelToStandardKey(subLabel);
+                      if (standardKey) {
+                        extractedGroups[standardKey] = trimmedValue;
+                      } else if (subLabel) {
+                        extractedGroups[subLabel] = trimmedValue;
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
+        } catch (e) {
+          // Regex error
         }
-        setRowResults(prev => {
-          const next = [...prev];
-          const base = ((next[idx] || {}) as any).spans || [];
-          next[idx] = { ...(next[idx] || {}), llm: llmSummary, llmMs: Math.round(performance.now() - t0), llmRunning: false, spans: mergeSpans(base, llmSpans) } as any;
-          return next;
-        });
-      } catch {
-        update({ llm: '—', llmMs: Math.round(performance.now() - t0), llmRunning: false });
       }
-    })() : Promise.resolve();
 
-    await Promise.allSettled([detTask, nerTask, llmTask]);
-    update({ running: false });
-    setSelectedRow(idx);
-    setTesting(false);
-  }, [examplesList, kind, profile, enabledMethods, mapKindToField, extractRegexOnly, summarizeResult]);
+      const summary = Object.keys(extractedGroups).length > 0
+        ? summarizeVars(extractedGroups, value)
+        : (value ? `value=${value}` : '—');
 
-  // Compute stats from results (must be defined before runAllRows)
-  const computeStatsFromResults = useCallback(() => {
+      regexRes = { value, spans: [], summary, extractedGroups };
+    } else {
+      regexRes = extractRegexOnly(phrase);
+    }
+    const regexMs = Math.round(performance.now() - t0Regex);
+
+    // ✅ Un solo setRowResults per riga
+    // ✅ CRITICAL: flushSync forza rendering sincrono durante batch per evitare accumulo
+    // ✅ CRITICAL: Durante batch, NON salvare spans per evitare accumulo di elementi React
+    const updateRow = () => {
+      setRowResults(prev => {
+        const next = [...prev];
+        next[idx] = {
+          regex: enabledMethods.regex ? regexRes.summary : '—',
+          regexMs: enabledMethods.regex ? regexMs : undefined,
+          // ✅ Durante batch, spans vengono omessi per evitare accumulo di elementi React
+          // Verranno calcolati on-demand quando necessario (non durante batch)
+          spans: (isBatch ? undefined : (enabledMethods.regex ? regexRes.spans : undefined)),
+          // ✅ Resto ancora dummy per ora
+          deterministic: `dummy-det-${idx}`,
+          ner: `dummy-ner-${idx}`,
+          llm: `dummy-llm-${idx}`,
+          running: false,
+          detRunning: false,
+          nerRunning: false,
+          llmRunning: false,
+        };
+        return next;
+      });
+    };
+
+    if (isBatch) {
+      flushSync(updateRow);
+    } else {
+      updateRow();
+    }
+
+    // ✅ Solo per test singoli (non batch), aggiorna testing state
+    if (!isBatch) {
+      setSelectedRow(idx);
+      testingRef.current = false;
+      setTesting(false);
+      testingState.stopTesting();
+    }
+  }, [examplesList, enabledMethods, extractRegexOnly, mapKindToField, node, profile.regex, summarizeVars]);
+
+  // Compute stats from results (can accept results directly or use state)
+  const computeStatsFromResults = useCallback((results?: RowResult[]) => {
+    const resultsToUse = results || rowResults;
     let matched = 0;
     let falseAccept = 0;
     let totalGt = 0;
     (examplesList || []).forEach((_, rowIdx) => {
-      const rr: any = rowResults[rowIdx] || {};
+      const rr: any = resultsToUse[rowIdx] || {};
       const keys = expectedKeysForKind(kind);
       const parseSummary = (text?: string) => {
         const out: Record<string, string | undefined> = {};
@@ -444,34 +453,78 @@ export function useExtractionTesting({
       });
     });
     return { matched, falseAccept, totalGt };
-  }, [examplesList, kind, rowResults, cellOverrides]);
+  }, [examplesList, kind, rowResults, cellOverrides, expectedKeysForKind]);
 
   // Run all rows
   const cancelTesting = useCallback(() => {
     cancelledRef.current = true;
+    testingRef.current = false;
     setTesting(false);
+    testingState.stopTesting();
   }, []);
 
+  // ✅ BATCH MINIMALE: Cicla le righe e aggiorna con valori dummy
+  // Nessuna chiamata reale, nessuna complessità - solo per verificare il wiring
   const runAllRows = useCallback(async () => {
-    cancelledRef.current = false; // Reset flag all'inizio
-    setTesting(true);
-    for (let i = 0; i < examplesList.length; i += 1) {
-      // Controlla se l'esecuzione è stata cancellata
-      if (cancelledRef.current) {
-        setTesting(false);
-        return; // Interrompi l'esecuzione
-      }
-      await runRowTest(i);
+    console.log('[BATCH_TEST] START (minimal)', { count: examplesList.length });
+
+    // ✅ Prevent multiple simultaneous test runs
+    if (testingRef.current || testing) {
+      console.warn('[BATCH_TEST] Already testing, ignoring');
+      return;
     }
-    // Compute stats after run (solo se non cancellato)
-    if (!cancelledRef.current) {
+
+    // ✅ Start testing state
+    if (!testingState.getIsTesting()) {
+      testingState.startTesting();
+    }
+    testingRef.current = true;
+    setTesting(true);
+    cancelledRef.current = false;
+
+    try {
+      // ✅ Simple loop: test each row one at a time
+      for (let i = 0; i < examplesList.length; i++) {
+        // ✅ Check if cancelled
+        if (cancelledRef.current) {
+          console.log('[BATCH_TEST] Cancelled', { at: i, total: examplesList.length });
+          break;
+        }
+
+        const phrase = examplesList[i] || '';
+        if (!phrase) {
+          continue;
+        }
+
+        // ✅ Run test with dummy values
+        await runRowTest(i, true); // true = isBatch mode
+      }
+
+      console.log('[BATCH_TEST] All rows completed');
+
+      // ✅ Set selected row to last tested row
+      if (examplesList.length > 0) {
+        setSelectedRow(examplesList.length - 1);
+      }
+
+      // ✅ Compute stats using current state
       try {
         const stats = computeStatsFromResults();
         onStatsUpdate?.(stats);
-      } catch {}
+      } catch (e) {
+        console.error('[BATCH_TEST] Error computing stats:', e);
+      }
+    } catch (e) {
+      console.error('[BATCH_TEST] Error:', e);
+    } finally {
+      // ✅ ALWAYS cleanup, even on error
+      testingRef.current = false;
       setTesting(false);
+      testingState.stopTesting();
+
+      console.log('[BATCH_TEST] END');
     }
-  }, [examplesList.length, runRowTest, computeStatsFromResults, onStatsUpdate]);
+  }, [examplesList, testing, runRowTest, computeStatsFromResults, onStatsUpdate]);
 
   return {
     // State

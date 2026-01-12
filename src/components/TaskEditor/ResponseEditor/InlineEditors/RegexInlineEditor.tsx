@@ -1,4 +1,5 @@
 import React from 'react';
+import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 import EditorPanel, { type CustomLanguage } from '../../../CodeEditor/EditorPanel';
 import EditorHeader from './shared/EditorHeader';
 import { useEditorMode } from '../hooks/useEditorMode';
@@ -7,6 +8,7 @@ import { useRegexButtonMode } from '../hooks/useRegexButtonMode';
 import { usePlaceholderSelection } from '../hooks/usePlaceholderSelection';
 import { useRegexAIGeneration } from '../hooks/useRegexAIGeneration';
 import { NLPProfile } from '../NLPExtractorProfileEditor';
+import { getIsTesting } from '../testingState';
 
 interface RegexInlineEditorProps {
   regex: string;
@@ -19,6 +21,7 @@ interface RegexInlineEditorProps {
   setTestCases?: (cases: string[]) => void; // ✅ Setter passed directly from useProfileState
   onProfileUpdate?: (profile: NLPProfile) => void; // Callback to update profile
   onButtonRender?: (button: React.ReactNode) => void; // ✅ Callback to render button in overlay header
+  onErrorRender?: (errorMessage: React.ReactNode | null) => void; // ✅ Callback to render error message in overlay header
 }
 
 /**
@@ -36,6 +39,7 @@ export default function RegexInlineEditor({
   setTestCases: setTestCasesProp,
   onProfileUpdate,
   onButtonRender,
+  onErrorRender,
 }: RegexInlineEditorProps) {
   const [hasUserEdited, setHasUserEdited] = React.useState(false);
 
@@ -78,6 +82,18 @@ export default function RegexInlineEditor({
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
+      }
+
+      // ✅ Cleanup debounced regex timeout
+      if (debouncedRegexTimeoutRef.current) {
+        clearTimeout(debouncedRegexTimeoutRef.current);
+        debouncedRegexTimeoutRef.current = null;
+      }
+
+      // ✅ Cleanup error render timeout
+      if (errorRenderTimeoutRef.current) {
+        clearTimeout(errorRenderTimeoutRef.current);
+        errorRenderTimeoutRef.current = null;
       }
 
       // ✅ Cleanup editor reference (EditorPanel will handle actual disposal)
@@ -138,13 +154,44 @@ export default function RegexInlineEditor({
     },
   });
 
+  // ✅ Debounced value for validation (prevents flickering)
+  const debouncedRegexRef = React.useRef<string>(currentRegexValue);
+  const debouncedRegexTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [debouncedRegex, setDebouncedRegex] = React.useState<string>(currentRegexValue);
+
+  // ✅ Update debounced value after user stops typing (300ms delay)
+  React.useEffect(() => {
+    if (debouncedRegexTimeoutRef.current) {
+      clearTimeout(debouncedRegexTimeoutRef.current);
+    }
+
+    debouncedRegexTimeoutRef.current = setTimeout(() => {
+      // ✅ Check testing state when timeout fires, not when effect runs
+      if (getIsTesting()) {
+        debouncedRegexTimeoutRef.current = null;
+        return;
+      }
+      debouncedRegexRef.current = currentRegexValue;
+      setDebouncedRegex(currentRegexValue);
+      debouncedRegexTimeoutRef.current = null;
+    }, 300);
+
+    return () => {
+      if (debouncedRegexTimeoutRef.current) {
+        clearTimeout(debouncedRegexTimeoutRef.current);
+        debouncedRegexTimeoutRef.current = null;
+      }
+    };
+  }, [currentRegexValue]);
+
   // ✅ Regex validation hook (validates on manual changes AND when AI finishes)
+  // ✅ Use debounced value to prevent flickering
   const {
     validationResult,
     shouldShowValidation,
     setShouldShowValidation,
   } = useRegexValidation({
-    regex: currentRegexValue,
+    regex: debouncedRegex,
     node,
     shouldValidateOnChange: true, // ✅ NEW: Validate also on manual changes
     shouldValidateOnAIFinish: true,
@@ -262,6 +309,81 @@ export default function RegexInlineEditor({
     await generateRegex(currentRegexValue, validationResult);
   }, [currentRegexValue, validationResult, generateRegex, getButtonLabel]);
 
+  // ✅ Debounce timer for error message updates to prevent flickering
+  const errorRenderTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ✅ Passa il messaggio di validazione (errore o successo) all'overlay header
+  // ✅ DEBOUNCED per evitare flickering - aggiorna solo quando la validazione è stabile
+  React.useEffect(() => {
+    if (errorRenderTimeoutRef.current) {
+      clearTimeout(errorRenderTimeoutRef.current);
+    }
+
+    if (!onErrorRender) return;
+
+    // Debounce the error message update to prevent flickering
+    errorRenderTimeoutRef.current = setTimeout(() => {
+      // ✅ Check testing state when timeout fires
+      if (getIsTesting()) {
+        errorRenderTimeoutRef.current = null;
+        return;
+      }
+
+      if (shouldShowValidation && validationResult) {
+        if (validationResult.valid) {
+          // Messaggio di successo con bordino verde
+          onErrorRender(
+            <span style={{
+              color: '#10b981',
+              fontWeight: 600,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '4px 10px',
+              border: '1px solid #10b981',
+              borderRadius: 4,
+              background: 'transparent',
+              whiteSpace: 'nowrap'
+            }}>
+              <CheckCircle2 size={16} />
+              <span>Gruppi corretti</span>
+            </span>
+          );
+        } else {
+          // Messaggio di errore con bordino rosso
+          const groupsText = `${validationResult.groupsFound}/${validationResult.groupsExpected} gruppi`;
+          const errorsText = validationResult.errors.length > 0 ? validationResult.errors.join('. ') : '';
+          const errorMsg = errorsText ? `${groupsText}. ${errorsText}` : groupsText;
+          onErrorRender(
+            <span style={{
+              color: '#ef4444',
+              fontWeight: 600,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '4px 10px',
+              border: '1px solid #ef4444',
+              borderRadius: 4,
+              background: 'transparent',
+              whiteSpace: 'nowrap'
+            }}>
+              <AlertTriangle size={16} />
+              <span>{errorMsg}</span>
+            </span>
+          );
+        }
+      } else {
+        onErrorRender(null);
+      }
+    }, 100); // Small delay to batch updates
+
+    return () => {
+      if (errorRenderTimeoutRef.current) {
+        clearTimeout(errorRenderTimeoutRef.current);
+        errorRenderTimeoutRef.current = null;
+      }
+    };
+  }, [shouldShowValidation, validationResult, onErrorRender]);
 
   return (
     <div
@@ -288,44 +410,8 @@ export default function RegexInlineEditor({
         onClose={onClose}
         hideButton={true}
         onButtonRender={onButtonRender}
-        validationBadge={
-          (hasRealContent || hasTestValues) && shouldShowValidation && validationResult ? (
-            <div
-              style={{
-                padding: '4px 12px',
-                borderRadius: 6,
-                fontWeight: 500,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                background: validationResult.valid ? '#10b981' : '#ef4444',
-                color: '#fff',
-                border: '1px solid',
-                borderColor: validationResult.valid ? '#059669' : '#dc2626',
-                flexShrink: 0,
-              }}
-            >
-              {validationResult.valid ? (
-                <>
-                  <span>✓</span>
-                  <span>Gruppi corretti</span>
-                </>
-              ) : (
-                <>
-                  <span>⚠</span>
-                  <span>
-                    {validationResult.groupsFound}/{validationResult.groupsExpected} gruppi
-                  </span>
-                </>
-              )}
-            </div>
-          ) : undefined
-        }
-        errorMessage={
-          shouldShowValidation && validationResult && !validationResult.valid && validationResult.errors.length > 0
-            ? validationResult.errors.join('. ')
-            : undefined
-        }
+        validationBadge={undefined} // ✅ Non mostrare più il validationBadge nell'EditorHeader, lo mostriamo nell'overlay header
+        errorMessage={undefined} // ✅ Non mostrare più l'errorMessage nell'EditorHeader, lo mostriamo nell'overlay header
       />
 
       <div style={{

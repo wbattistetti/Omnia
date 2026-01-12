@@ -222,16 +222,18 @@ export default function NLPExtractorProfileEditor({
   }, []);
 
 
-  // Auto-run parsing when a new phrase is appended
-  const prevExamplesCountRef = React.useRef<number>(examplesList.length);
-  React.useEffect(() => {
-    if (examplesList.length > prevExamplesCountRef.current) {
-      const newIdx = examplesList.length - 1;
-      setSelectedRow(newIdx);
-      setTimeout(() => { void runRowTest(newIdx); }, 0);
-    }
-    prevExamplesCountRef.current = examplesList.length;
-  }, [examplesList.length, runRowTest, setSelectedRow]);
+  // ✅ DISABLED: Auto-run parsing when a new phrase is appended
+  // This was causing input freezing issues because runRowTest triggers re-renders
+  // User can manually run tests after adding phrases
+  // const prevExamplesCountRef = React.useRef<number>(examplesList.length);
+  // React.useEffect(() => {
+  //   if (examplesList.length > prevExamplesCountRef.current) {
+  //     const newIdx = examplesList.length - 1;
+  //     setSelectedRow(newIdx);
+  //     void runRowTest(newIdx);
+  //   }
+  //   prevExamplesCountRef.current = examplesList.length;
+  // }, [examplesList.length, runRowTest, setSelectedRow]);
 
   // ✅ Aggiorna examplesList in base alla modalità selezionata (solo per kind === 'intent')
   const updateExamplesList = React.useCallback(() => {
@@ -443,205 +445,205 @@ export default function NLPExtractorProfileEditor({
 
       {/* OLD tab editors - now replaced by inline editors */}
       <div style={{ marginTop: 10, display: 'none' }}>
-          {activeTab === 'regex' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <label style={{ opacity: 0.8 }}>Regex</label>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <input
-                  ref={regexInputRef}
-                  value={
-                    generatingRegex
-                      ? "⏳ Creating regex..."
-                      : (regexAiMode ? regexAiPrompt : regex)
+        {activeTab === 'regex' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <label style={{ opacity: 0.8 }}>Regex</label>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                ref={regexInputRef}
+                value={
+                  generatingRegex
+                    ? "⏳ Creating regex..."
+                    : (regexAiMode ? regexAiPrompt : regex)
+                }
+                onChange={(e) => {
+                  if (regexAiMode && !generatingRegex) {
+                    setRegexAiPrompt(e.target.value);
+                  } else if (!generatingRegex) {
+                    setRegex(e.target.value);
                   }
-                  onChange={(e) => {
-                    if (regexAiMode && !generatingRegex) {
-                      setRegexAiPrompt(e.target.value);
-                    } else if (!generatingRegex) {
-                      setRegex(e.target.value);
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    // ESC key: exit AI mode and restore original regex
-                    if (e.key === 'Escape' && regexAiMode) {
-                      setRegexAiMode(false);
-                      // Keep regexAiPrompt in memory for future iterations
-                      // Restore the original regex (even if it was empty!)
-                      setRegex(regexBackup);
-                      e.preventDefault();
-                      console.log('[AI Regex] Cancelled via ESC - restored:', regexBackup, '- prompt kept in memory');
-                    }
-                  }}
-                  placeholder={
-                    regexAiMode && !generatingRegex
-                      ? "Describe here what the regex should match (in English)"
-                      : "es. \\b\\d{5}\\b"
+                }}
+                onKeyDown={(e) => {
+                  // ESC key: exit AI mode and restore original regex
+                  if (e.key === 'Escape' && regexAiMode) {
+                    setRegexAiMode(false);
+                    // Keep regexAiPrompt in memory for future iterations
+                    // Restore the original regex (even if it was empty!)
+                    setRegex(regexBackup);
+                    e.preventDefault();
+                    console.log('[AI Regex] Cancelled via ESC - restored:', regexBackup, '- prompt kept in memory');
                   }
+                }}
+                placeholder={
+                  regexAiMode && !generatingRegex
+                    ? "Describe here what the regex should match (in English)"
+                    : "es. \\b\\d{5}\\b"
+                }
+                disabled={generatingRegex}
+                style={{
+                  flex: 1,
+                  padding: 10,
+                  border: regexAiMode ? '2px solid #3b82f6' : '1px solid #ddd',
+                  borderRadius: 8,
+                  fontFamily: regexAiMode ? 'inherit' : 'monospace',
+                  backgroundColor: generatingRegex ? '#f9fafb' : (regexAiMode ? '#eff6ff' : '#fff'),
+                  transition: 'all 0.2s ease'
+                }}
+              />
+
+              {/* Show WAND ONLY in normal mode (NOT in AI mode) */}
+              {!regexAiMode && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Save current regex before entering AI mode (even if empty!)
+                    setRegexBackup(regex);
+                    setRegexAiMode(true);
+                    // Keep regexAiPrompt in memory - don't reset it!
+                    // Give focus to input after state update
+                    setTimeout(() => {
+                      regexInputRef.current?.focus();
+                    }, 0);
+                  }}
                   disabled={generatingRegex}
+                  title="Generate regex with AI"
                   style={{
-                    flex: 1,
                     padding: 10,
-                    border: regexAiMode ? '2px solid #3b82f6' : '1px solid #ddd',
+                    border: '1px solid #ddd',
                     borderRadius: 8,
-                    fontFamily: regexAiMode ? 'inherit' : 'monospace',
-                    backgroundColor: generatingRegex ? '#f9fafb' : (regexAiMode ? '#eff6ff' : '#fff'),
+                    background: '#fff',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minWidth: 40,
                     transition: 'all 0.2s ease'
                   }}
-                />
+                >
+                  <Wand2 size={16} color='#666' />
+                </button>
+              )}
 
-                {/* Show WAND ONLY in normal mode (NOT in AI mode) */}
-                {!regexAiMode && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      // Save current regex before entering AI mode (even if empty!)
-                      setRegexBackup(regex);
-                      setRegexAiMode(true);
-                      // Keep regexAiPrompt in memory - don't reset it!
-                      // Give focus to input after state update
-                      setTimeout(() => {
-                        regexInputRef.current?.focus();
-                      }, 0);
-                    }}
-                    disabled={generatingRegex}
-                    title="Generate regex with AI"
-                    style={{
-                      padding: 10,
-                      border: '1px solid #ddd',
-                      borderRadius: 8,
-                      background: '#fff',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      minWidth: 40,
-                      transition: 'all 0.2s ease'
-                    }}
-                  >
-                    <Wand2 size={16} color='#666' />
-                  </button>
-                )}
+              {/* Show CREATE BUTTON when: AI mode AND at least 5 characters */}
+              {regexAiMode && regexAiPrompt.trim().length >= 5 && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!regexAiPrompt.trim()) return;
 
-                {/* Show CREATE BUTTON when: AI mode AND at least 5 characters */}
-                {regexAiMode && regexAiPrompt.trim().length >= 5 && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (!regexAiPrompt.trim()) return;
+                    setGeneratingRegex(true);
+                    try {
+                      console.log('[AI Regex] Generating regex for:', regexAiPrompt);
 
-                      setGeneratingRegex(true);
-                      try {
-                        console.log('[AI Regex] Generating regex for:', regexAiPrompt);
+                      // Extract sub-data from node if available
+                      const subData = (node?.subData || node?.subSlots || []) as any[];
+                      const subDataInfo = subData.map((sub: any, index: number) => ({
+                        id: sub.id || `sub-${index}`,
+                        label: sub.label || sub.name || '',
+                        index: index + 1 // Position in capture groups (1, 2, 3...)
+                      }));
 
-                        // Extract sub-data from node if available
-                        const subData = (node?.subData || node?.subSlots || []) as any[];
-                        const subDataInfo = subData.map((sub: any, index: number) => ({
-                          id: sub.id || `sub-${index}`,
-                          label: sub.label || sub.name || '',
-                          index: index + 1 // Position in capture groups (1, 2, 3...)
-                        }));
+                      console.log('[AI Regex] Sub-data info:', {
+                        hasSubData: subDataInfo.length > 0,
+                        subDataInfo,
+                        kind
+                      });
 
-                        console.log('[AI Regex] Sub-data info:', {
-                          hasSubData: subDataInfo.length > 0,
-                          subDataInfo,
-                          kind
-                        });
+                      const response = await fetch('/api/nlp/generate-regex', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          description: regexAiPrompt,
+                          subData: subDataInfo.length > 0 ? subDataInfo : undefined,
+                          kind: kind || undefined
+                        })
+                      });
 
-                        const response = await fetch('/api/nlp/generate-regex', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            description: regexAiPrompt,
-                            subData: subDataInfo.length > 0 ? subDataInfo : undefined,
-                            kind: kind || undefined
-                          })
-                        });
-
-                        if (!response.ok) {
-                          const error = await response.json();
-                          throw new Error(error.detail || 'Failed to generate regex');
-                        }
-
-                        const data = await response.json();
-                        console.log('[AI Regex] Response:', data);
-
-                        if (data.success && data.regex) {
-                          setRegex(data.regex);
-                          console.log('[AI Regex] Regex generated successfully:', data.regex);
-
-                          if (data.explanation) {
-                            console.log('[AI Regex] Explanation:', data.explanation);
-                            console.log('[AI Regex] Examples:', data.examples);
-                          }
-
-                          // Exit AI mode and return to normal
-                          // Keep regexAiPrompt in memory for future iterations
-                          setRegexAiMode(false);
-                        } else {
-                          throw new Error('No regex returned from API');
-                        }
-                      } catch (error) {
-                        console.error('[AI Regex] Error:', error);
-                        alert(`Error generating regex: ${error instanceof Error ? error.message : 'Unknown error'}`);
-                      } finally {
-                        setGeneratingRegex(false);
+                      if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.detail || 'Failed to generate regex');
                       }
-                    }}
-                    disabled={generatingRegex}
-                    title="Generate regex from description"
-                    style={{
-                      padding: '10px 16px',
-                      border: '2px solid #3b82f6',
-                      borderRadius: 8,
-                      background: generatingRegex ? '#f3f4f6' : '#3b82f6',
-                      color: '#fff',
-                      cursor: generatingRegex ? 'default' : 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      fontWeight: 500,
-                      minWidth: 120,
-                      justifyContent: 'center',
-                      transition: 'all 0.2s ease',
-                      animation: 'fadeIn 0.2s ease-in'
-                    }}
-                  >
-                    {generatingRegex ? (
-                      <>
-                        <span style={{
-                          display: 'inline-block',
-                          width: 14,
-                          height: 14,
-                          border: '2px solid #fff',
-                          borderTopColor: 'transparent',
-                          borderRadius: '50%',
-                          animation: 'spin 0.8s linear infinite'
-                        }} />
-                        <span>Creating...</span>
-                      </>
-                    ) : (
-                      'Create Regex'
-                    )}
-                  </button>
-                )}
-              </div>
+
+                      const data = await response.json();
+                      console.log('[AI Regex] Response:', data);
+
+                      if (data.success && data.regex) {
+                        setRegex(data.regex);
+                        console.log('[AI Regex] Regex generated successfully:', data.regex);
+
+                        if (data.explanation) {
+                          console.log('[AI Regex] Explanation:', data.explanation);
+                          console.log('[AI Regex] Examples:', data.examples);
+                        }
+
+                        // Exit AI mode and return to normal
+                        // Keep regexAiPrompt in memory for future iterations
+                        setRegexAiMode(false);
+                      } else {
+                        throw new Error('No regex returned from API');
+                      }
+                    } catch (error) {
+                      console.error('[AI Regex] Error:', error);
+                      alert(`Error generating regex: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                    } finally {
+                      setGeneratingRegex(false);
+                    }
+                  }}
+                  disabled={generatingRegex}
+                  title="Generate regex from description"
+                  style={{
+                    padding: '10px 16px',
+                    border: '2px solid #3b82f6',
+                    borderRadius: 8,
+                    background: generatingRegex ? '#f3f4f6' : '#3b82f6',
+                    color: '#fff',
+                    cursor: generatingRegex ? 'default' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    fontWeight: 500,
+                    minWidth: 120,
+                    justifyContent: 'center',
+                    transition: 'all 0.2s ease',
+                    animation: 'fadeIn 0.2s ease-in'
+                  }}
+                >
+                  {generatingRegex ? (
+                    <>
+                      <span style={{
+                        display: 'inline-block',
+                        width: 14,
+                        height: 14,
+                        border: '2px solid #fff',
+                        borderTopColor: 'transparent',
+                        borderRadius: '50%',
+                        animation: 'spin 0.8s linear infinite'
+                      }} />
+                      <span>Creating...</span>
+                    </>
+                  ) : (
+                    'Create Regex'
+                  )}
+                </button>
+              )}
             </div>
-          )}
-          {activeTab === 'extractor' && (
-            <NLPCompactEditor
-              synonymsText={synonymsText}
-              setSynonymsText={setSynonymsText}
-              formatText={formatText}
-              setFormatText={setFormatText}
-            />
-          )}
-          {activeTab === 'post' && (
-            <PostProcessEditor value={postProcessText} onChange={setPostProcessText} />
-          )}
-          {jsonError && (
-            <div style={{ color: '#b91c1c', marginTop: 6 }}>JSON non valido: {jsonError}</div>
-          )}
-        </div>
+          </div>
+        )}
+        {activeTab === 'extractor' && (
+          <NLPCompactEditor
+            synonymsText={synonymsText}
+            setSynonymsText={setSynonymsText}
+            formatText={formatText}
+            setFormatText={setFormatText}
+          />
+        )}
+        {activeTab === 'post' && (
+          <PostProcessEditor value={postProcessText} onChange={setPostProcessText} />
+        )}
+        {jsonError && (
+          <div style={{ color: '#b91c1c', marginTop: 6 }}>JSON non valido: {jsonError}</div>
+        )}
+      </div>
 
       {/* Editor senza Test Values: embeddings, post */}
       {activeEditor === 'embeddings' && (

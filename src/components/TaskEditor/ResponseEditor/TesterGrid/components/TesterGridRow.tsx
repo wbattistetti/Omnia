@@ -59,8 +59,11 @@ interface TesterGridRowProps {
 
 /**
  * Row component for displaying a single test phrase and its results
+ *
+ * ✅ ENTERPRISE-READY: Memoized with granular comparison
+ * Re-renders ONLY when rowResult changes, enabling per-cell updates
  */
-export default function TesterGridRow({
+function TesterGridRowComponent({
   rowIndex,
   phrase,
   rowResult,
@@ -155,6 +158,7 @@ export default function TesterGridRow({
           kind={kind}
           expectedKeysForKind={expectedKeysForKind}
           enabled={enabledMethods.regex}
+          isRunning={rowResult.running}
           cellOverrides={cellOverrides}
           editingCell={editingCell}
           editingText={editingText}
@@ -349,3 +353,43 @@ export default function TesterGridRow({
     </tr>
   );
 }
+
+/**
+ * ✅ ENTERPRISE-READY: Memoized row component with granular comparison
+ *
+ * Re-renders ONLY when:
+ * - rowResult changes (the actual test results)
+ * - selectedRow changes (highlight state)
+ * - Other critical props change
+ *
+ * This enables per-cell updates without re-rendering the entire row.
+ */
+const TesterGridRow = React.memo(TesterGridRowComponent, (prev, next) => {
+  // ✅ Critical props that trigger re-render
+  if (prev.rowResult !== next.rowResult) return false; // Re-render if results changed
+  if (prev.selectedRow !== next.selectedRow) {
+    // Only re-render if THIS row's selection state changed
+    const prevSelected = prev.selectedRow === prev.rowIndex;
+    const nextSelected = next.selectedRow === next.rowIndex;
+    if (prevSelected !== nextSelected) return false;
+  }
+  if (prev.phrase !== next.phrase) return false; // Re-render if phrase changed
+  if (prev.kind !== next.kind) return false; // Re-render if kind changed
+  if (prev.enabledMethods !== next.enabledMethods) return false; // Re-render if methods changed
+
+  // ✅ UI state props (compare by reference for performance)
+  if (prev.activeEditor !== next.activeEditor) return false;
+  if (prev.editingCell !== next.editingCell) {
+    // Only re-render if THIS row is being edited
+    const prevIsEditing = prev.editingCell?.row === prev.rowIndex;
+    const nextIsEditing = next.editingCell?.row === next.rowIndex;
+    if (prevIsEditing !== nextIsEditing) return false;
+  }
+
+  // ✅ All other props unchanged - skip re-render
+  return true;
+});
+
+TesterGridRow.displayName = 'TesterGridRow';
+
+export default TesterGridRow;

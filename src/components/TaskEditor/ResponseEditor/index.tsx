@@ -39,6 +39,7 @@ import { mapNode } from '../../../dock/ops';
 import { extractModifiedDDTFields } from '../../../utils/ddtMergeUtils';
 import { useWizardInference } from './hooks/useWizardInference';
 import { validateTaskStructure, getTaskSemantics } from '../../../utils/taskSemantics';
+import { getIsTesting } from './testingState';
 
 import type { TaskMeta } from '../EditorHost/types';
 import type { Task } from '../../../types/taskTypes';
@@ -83,8 +84,21 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
   const [escalationTasks, setEscalationTasks] = React.useState<any[]>([]);
   React.useEffect(() => {
     fetch('/api/factory/task-templates?taskType=Action')
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) {
+          console.warn('[ResponseEditor] Failed to load escalation tasks: HTTP', res.status);
+          return [];
+        }
+        return res.json();
+      })
       .then(templates => {
+        // ✅ CRITICAL: Verifica che templates sia un array
+        if (!Array.isArray(templates)) {
+          console.warn('[ResponseEditor] Invalid response format, expected array, got:', typeof templates, templates);
+          setEscalationTasks([]);
+          return;
+        }
+
         const tasks = templates.map((template: any) => ({
           id: template.id || template._id,
           label: template.label || '',
@@ -779,7 +793,16 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
   // 1. Modifica ddtRef.current (buffer locale per editing)
   // 2. Aggiorna IMMEDIATAMENTE tab.ddt nel dockTree (fonte di verità)
   // 3. React re-renderizza con tab.ddt aggiornato
+  //
+  // ✅ BATCH TESTING: During batch testing, node structure is IMMUTABLE
+  // This prevents feedback loops: updateSelectedNode → re-render → onChange → handleProfileUpdate → ...
   const updateSelectedNode = useCallback((updater: (node: any) => any, notifyProvider: boolean = true) => {
+    // ✅ CRITICAL: Block structural mutations during batch testing
+    if (getIsTesting()) {
+      console.log('[updateSelectedNode] Blocked: batch testing active');
+      return;
+    }
+
     try {
       if (localStorage.getItem('debug.nodeSync') === '1') {
         console.log('[NODE_SYNC][UPDATE] 🎯 updateSelectedNode called', {
@@ -1022,6 +1045,12 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
   // ✅ handleProfileUpdate: aggiorna selectedNode (UI immediata) e salva override
   const handleProfileUpdate = useCallback((partialProfile: any) => {
+    // ✅ CRITICAL: Blocca aggiornamenti durante batch testing per prevenire re-render infiniti
+    if (getIsTesting()) {
+      console.log('[handleProfileUpdate] Blocked: batch testing active');
+      return;
+    }
+
     // ✅ Usa updateSelectedNode per aggiornare il node e salvare l'override
     updateSelectedNode((prev: any) => {
       if (!prev) {
@@ -1473,6 +1502,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
                       {showSynonyms ? (
                         <div style={{ padding: 6, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+                          {/* ✅ TesterGrid deve rimanere visibile durante batch per mostrare risultati e permettere input */}
                           <NLPExtractorProfileEditor
                             node={selectedNode}
                             taskType={taskType}
@@ -1480,19 +1510,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                             intentSelected={mainList[0]?.kind === 'intent' ? selectedIntentIdForTraining || undefined : undefined}
                             task={task}
                             onChange={(profile) => {
-                              // Only log if debug flag is set to avoid console spam
-                              try {
-                                if (localStorage.getItem('debug.responseEditor') === '1') {
-                                  console.log('[KindChange][onChange]', {
-                                    nodeLabel: (selectedNode as any)?.label,
-                                    profileKind: profile?.kind,
-                                    examples: (profile?.examples || []).length,
-                                    testCases: (profile?.testCases || []).length,
-                                  });
-                                }
-                              } catch { }
-
-
+                              // ✅ CRITICAL: Block onChange during batch testing per prevenire feedback loop
+                              if (getIsTesting()) {
+                                return;
+                              }
                               // ✅ Usa handleProfileUpdate invece di updateSelectedNode
                               handleProfileUpdate({
                                 ...profile,

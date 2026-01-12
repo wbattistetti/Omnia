@@ -5,6 +5,17 @@ import './index.css';
 // Import status checker for TaskTemplatesV2
 import './utils/showTaskTemplatesV2Status';
 
+// ✅ Silence Monaco Editor "Canceled" errors during cleanup (harmless in dev mode)
+const originalConsoleError = console.error;
+console.error = (...args: any[]) => {
+  // Filter out Monaco "Canceled" errors - they're harmless cleanup warnings
+  const message = args[0]?.toString() || '';
+  if (message.includes('Canceled: Canceled') || message.includes('Delayer.cancel')) {
+    return; // Silently ignore
+  }
+  originalConsoleError.apply(console, args);
+};
+
 // 🚀 ENTERPRISE LOGGING SYSTEM
 import { logger } from './utils/logger';
 

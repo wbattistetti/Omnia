@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import nlpTypesConfig from '../../../../config/nlp-types.json';
+import { getIsTesting } from '../testingState';
 
 // Validate regex capture groups against expected sub-data
 export interface ValidationResult {
@@ -163,22 +165,50 @@ export function useRegexValidation({
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [shouldShowValidation, setShouldShowValidation] = useState(false);
   const prevGeneratingRegex = useRef(generatingRegex);
+  const validationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ✅ Validate when regex changes (manual edits)
+  // ✅ Validate when regex changes (manual edits) - DEBOUNCED per evitare flickering
   useEffect(() => {
+    // Clear previous timeout
+    if (validationTimeoutRef.current) {
+      clearTimeout(validationTimeoutRef.current);
+    }
+
     if (shouldValidateOnChange && regex && regex.trim().length > 0) {
-      const validation = validateRegexGroups(regex, node);
-      setValidationResult(validation);
-      setShouldShowValidation(true);
+      // Debounce validation: wait 300ms after user stops typing
+      validationTimeoutRef.current = setTimeout(() => {
+        // ✅ Check testing state when timeout fires, not when effect runs
+        if (getIsTesting()) {
+          validationTimeoutRef.current = null;
+          return;
+        }
+        const validation = validateRegexGroups(regex, node);
+        setValidationResult(validation);
+        setShouldShowValidation(true);
+        validationTimeoutRef.current = null;
+      }, 300);
     } else if (!regex || regex.trim().length === 0) {
-      // Clear validation when regex is empty
+      // Clear validation immediately when regex is empty
       setValidationResult(null);
       setShouldShowValidation(false);
     }
+
+    // Cleanup timeout on unmount or when dependencies change
+    return () => {
+      if (validationTimeoutRef.current) {
+        clearTimeout(validationTimeoutRef.current);
+        validationTimeoutRef.current = null;
+      }
+    };
   }, [regex, node, shouldValidateOnChange]);
 
   // ✅ Validate when AI finishes generating
   useEffect(() => {
+    // ✅ Check testing state when effect runs
+    if (getIsTesting()) {
+      return;
+    }
+
     if (shouldValidateOnAIFinish && prevGeneratingRegex.current && !generatingRegex && regex && regex.trim().length > 0) {
       const validation = validateRegexGroups(regex, node);
       setValidationResult(validation);

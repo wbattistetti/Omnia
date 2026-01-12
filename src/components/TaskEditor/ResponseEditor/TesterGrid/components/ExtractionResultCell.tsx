@@ -39,8 +39,12 @@ interface ExtractionResultCellProps {
 /**
  * Cell component for displaying extraction results
  * Shows main value and expandable group details
+ *
+ * ✅ ENTERPRISE-READY: Memoized with granular comparison
+ * Re-renders ONLY when summary, isRunning, or processingTime change
+ * This enables per-cell updates without re-rendering the entire row
  */
-export default function ExtractionResultCell({
+function ExtractionResultCellComponent({
   summary,
   processingTime,
   maxMs,
@@ -192,3 +196,51 @@ export default function ExtractionResultCell({
     </>
   );
 }
+
+/**
+ * ✅ ENTERPRISE-READY: Memoized cell component with granular comparison
+ *
+ * Re-renders ONLY when:
+ * - summary changes (the actual result value)
+ * - isRunning changes (loading state)
+ * - processingTime changes (performance metric)
+ *
+ * All other props (editing state, notes, hover) are compared by reference
+ * to prevent unnecessary re-renders during batch testing.
+ */
+const ExtractionResultCell = React.memo(ExtractionResultCellComponent, (prev, next) => {
+  // ✅ Critical props that trigger re-render
+  if (prev.summary !== next.summary) return false; // Re-render if summary changed
+  if (prev.isRunning !== next.isRunning) return false; // Re-render if loading state changed
+  if (prev.processingTime !== next.processingTime) return false; // Re-render if timing changed
+  if (prev.enabled !== next.enabled) return false; // Re-render if enabled state changed
+
+  // ✅ Editing-related props (compare by reference for performance)
+  if (prev.editingCell !== next.editingCell) {
+    // Only re-render if THIS cell is being edited
+    const prevIsEditing = prev.editingCell?.row === prev.rowIdx && prev.editingCell?.col === prev.col;
+    const nextIsEditing = next.editingCell?.row === next.rowIdx && next.editingCell?.col === next.col;
+    if (prevIsEditing !== nextIsEditing) return false;
+  }
+  if (prev.editingText !== next.editingText) {
+    // Only re-render if THIS cell is being edited
+    const isEditing = prev.editingCell?.row === prev.rowIdx && prev.editingCell?.col === prev.col;
+    if (isEditing) return false;
+  }
+
+  // ✅ Notes and hover (compare by reference)
+  const prevHasNote = prev.hasNote(prev.rowIdx, prev.col);
+  const nextHasNote = next.hasNote(next.rowIdx, next.col);
+  if (prevHasNote !== nextHasNote) return false;
+
+  const prevIsHovered = prev.isHovered(prev.rowIdx, prev.col);
+  const nextIsHovered = next.isHovered(next.rowIdx, next.col);
+  if (prevIsHovered !== nextIsHovered) return false;
+
+  // ✅ All other props unchanged - skip re-render
+  return true;
+});
+
+ExtractionResultCell.displayName = 'ExtractionResultCell';
+
+export default ExtractionResultCell;

@@ -20,7 +20,13 @@ export default function TesterGridInput({
     <input
       type="text"
       value={value}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(e) => {
+        // ✅ CRITICAL: Permetti sempre l'input, anche durante batch
+        // setNewExample non modifica la struttura del nodo, quindi è sicuro
+        const newValue = e.target.value;
+        console.log('[TesterGridInput] onChange', { newValue, value });
+        onChange(newValue);
+      }}
       onKeyDown={(e) => {
         if (e.key === 'Enter' && !e.shiftKey && value.trim()) {
           e.preventDefault();
@@ -35,6 +41,8 @@ export default function TesterGridInput({
         borderRadius: 4,
         background: '#fff',
         color: '#111827',
+        position: 'relative',
+        zIndex: 1001, // ✅ CRITICAL: zIndex più alto dell'overlay (1000) per garantire che l'input sia sempre cliccabile
       }}
     />
   );

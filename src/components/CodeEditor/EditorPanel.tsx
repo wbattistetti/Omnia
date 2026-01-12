@@ -183,54 +183,16 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
   }, [customLanguage?.id]); // Only run when language ID changes
 
   // Force tokenization whenever code/content changes (for custom languages)
+  // ✅ DISABLED: Forced tokenization causes flickering and onChange loops
+  // Monaco automatically handles tokenization for registered languages
+  /*
+  const tokenizationTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevSafeCodeRef = React.useRef<string>(safeCode);
+
   React.useEffect(() => {
-    if (!customLanguage || !editorRef.current || !monacoRef.current) return;
-
-    const editor = editorRef.current;
-    const monaco = monacoRef.current;
-    const langId = customLanguage.id;
-    const model = editor?.getModel();
-
-    if (!model) return;
-
-    // Force language update
-    monaco.editor.setModelLanguage(model, langId);
-
-    // Force tokenization by triggering a model change
-    const currentValue = model.getValue();
-    if (currentValue && currentValue.trim().length > 0) {
-      // Use multiple strategies to ensure tokenization
-      const forceTokenization = () => {
-        try {
-          // Strategy 1: Force model update
-          const fullRange = model.getFullModelRange();
-          model.pushEditOperations(
-            [],
-            [{
-              range: fullRange,
-              text: currentValue
-            }],
-            () => null
-          );
-
-          // Strategy 2: Force render
-          editor.render(true);
-
-          // Strategy 3: Trigger tokenization via deltaDecorations
-          editor.deltaDecorations([], []);
-
-          console.log('[EditorPanel] 🔄 Forced re-tokenization on content change');
-        } catch (e) {
-          console.warn('[EditorPanel] ⚠️ Error in useEffect tokenization:', e);
-        }
-      };
-
-      // Execute immediately
-      requestAnimationFrame(() => {
-        requestAnimationFrame(forceTokenization);
-      });
-    }
-  }, [safeCode, customLanguage?.id]); // Re-run when content or language changes
+    ... DISABLED ...
+  }, [safeCode, customLanguage?.id]);
+  */
 
   return (
     <div className="w-full h-full">

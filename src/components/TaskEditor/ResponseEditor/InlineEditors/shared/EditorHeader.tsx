@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertTriangle } from 'lucide-react';
 import { ExtractorType } from '../../hooks/useEditorMode';
 
 interface EditorHeaderProps {
@@ -117,7 +117,10 @@ export default function EditorHeader({
           <span
             style={{
               color: '#ef4444',
-              fontStyle: 'italic',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
               flex: 1,
               minWidth: 0,
               whiteSpace: 'normal',
@@ -125,7 +128,8 @@ export default function EditorHeader({
               lineHeight: 1.4,
             }}
           >
-            {errorMessage}
+            <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+            <span>{errorMessage}</span>
           </span>
         )}
       </div>

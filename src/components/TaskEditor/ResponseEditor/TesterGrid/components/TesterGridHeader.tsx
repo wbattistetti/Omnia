@@ -90,7 +90,8 @@ export default function TesterGridHeader({
           padding: 8,
           background: '#f9fafb',
           width: `${phraseColumnWidth}px`,
-          position: 'relative'
+          position: 'relative',
+          zIndex: 1002, // ✅ CRITICAL: zIndex più alto per garantire che l'input sia sempre cliccabile
         }}>
           <TesterGridInput
             value={newExample}

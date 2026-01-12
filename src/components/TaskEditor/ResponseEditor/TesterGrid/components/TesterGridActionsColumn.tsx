@@ -1,5 +1,7 @@
 import React from 'react';
+import { flushSync } from 'react-dom';
 import { Plus, ChevronsRight, BarChart2, Play } from 'lucide-react';
+import * as testingState from '../../testingState';
 
 interface TesterGridActionsColumnProps {
   rowIndex: number;
@@ -69,6 +71,14 @@ export default function TesterGridActionsColumn({
         <button
           onClick={(e) => {
             e.stopPropagation();
+            // ✅ CRITICAL: Attiva testing state PRIMA di qualsiasi operazione
+            // Usa flushSync per forzare React a processare il cambio IMMEDIATAMENTE
+            // Questo previene il feedback loop che parte prima che runAllRows venga eseguito
+            testingState.startTesting();
+            flushSync(() => {
+              // Forza React a processare il cambio di getIsTesting() immediatamente
+              // Questo assicura che NLPExtractorProfileEditor venga smontato PRIMA che runAllRows() venga chiamato
+            });
             void runAllRows();
           }}
           disabled={testing || examplesListLength === 0}

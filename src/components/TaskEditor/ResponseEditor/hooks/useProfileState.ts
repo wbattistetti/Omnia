@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { NLPProfile } from '../NLPExtractorProfileEditor';
+import { getIsTesting } from '../testingState';
 
 // Helper functions
 function toCommaList(list?: string[] | null): string {
@@ -314,14 +315,41 @@ export function useProfileState(
 
   // Emit onChange when profile changes
   // ✅ SEMPLIFICATO: onChange viene chiamato direttamente quando cambia il profile
+  // ✅ BATCH TESTING: Block onChange during batch testing to prevent feedback loops
   const lastSentJsonRef = useRef<string>('');
+  const isTestingRef = useRef<boolean>(false);
+
+  // ✅ Keep testing state ref in sync
   useEffect(() => {
-    const json = JSON.stringify(profile);
+    isTestingRef.current = getIsTesting();
+  });
+
+  useEffect(() => {
+    // ✅ CRITICAL: Block onChange during batch testing - CHECK FIRST
+    if (getIsTesting() || isTestingRef.current) {
+      return;
+    }
+
+    // ✅ CRITICAL: Exclude examples and autoSubSlots from profile comparison
+    // These are only for testing/UI and should not trigger onChange
+    const { examples, subSlots, testCases, ...profileCore } = profile;
+    const json = JSON.stringify(profileCore);
+
+    // ✅ DOUBLE CHECK: Se siamo entrati in testing mode durante la serializzazione
+    if (getIsTesting() || isTestingRef.current) {
+      return;
+    }
 
     if (json !== lastSentJsonRef.current) {
       lastSentJsonRef.current = json;
 
-      // Emit onChange with current profile
+      // ✅ TRIPLE CHECK: Prima di emettere onChange, verifica ancora
+      if (getIsTesting() || isTestingRef.current) {
+        return;
+      }
+
+      // ✅ Emit onChange with FULL profile (for saving), but only when CORE fields change
+      // This prevents onChange from being triggered when only examples/subSlots/testCases change
       onChangeRef.current?.(profile);
     }
   }, [profile]);
