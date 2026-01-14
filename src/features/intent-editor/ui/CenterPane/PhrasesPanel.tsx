@@ -105,6 +105,76 @@ export default function PhrasesPanel({
     }
   };
 
+  // ✅ ENTERPRISE: Handler to toggle phrase exclusion status
+  const handleToggleExclusion = (phraseId: string, phraseText: string, currentIsExcluded: boolean) => {
+    try {
+      if (currentIsExcluded) {
+        // Rimuovere da not-matching e aggiungere a matching
+        // Trova tutti gli intenti dove la frase è stata esclusa
+        const allIntents = useIntentStore.getState().intents;
+        for (const intent of allIntents) {
+          const hardNegPhrase = intent.variants?.hardNeg?.find(n => n.text === phraseText);
+          if (hardNegPhrase) {
+            useIntentStore.getState().removeHardNeg(intent.id, hardNegPhrase.id);
+            console.log('[PhrasesPanel] Removed phrase from not-matching', {
+              phraseText,
+              intentId: intent.id,
+              intentName: intent.name
+            });
+          }
+        }
+        // Aggiungere come matching all'intento corrente se non esiste già
+        const currentPhrase = positive.find(p => p.text === phraseText);
+        if (!currentPhrase) {
+          useIntentStore.getState().addCurated(intentId, phraseText, lang);
+          console.log('[PhrasesPanel] Added phrase as matching', {
+            phraseText,
+            intentId,
+            intentName
+          });
+        }
+      } else {
+        // Escludere la frase: aggiungere come not-matching
+        const classificationResult = classificationResults.get(phraseId);
+
+        // Determina l'intento target per l'esclusione
+        let targetIntentId: string | undefined;
+        if (classificationResult?.intentId && !classificationResult.isCorrect) {
+          // Se la classificazione è sbagliata, escludi dall'intento sbagliato
+          targetIntentId = classificationResult.intentId;
+        } else {
+          // Altrimenti, escludi dall'intento corrente (prevenzione)
+          targetIntentId = intentId;
+        }
+
+        if (targetIntentId) {
+          const targetIntent = useIntentStore.getState().intents.find(i => i.id === targetIntentId);
+          if (targetIntent) {
+            // Verifica se non è già presente
+            const alreadyExcluded = targetIntent.variants?.hardNeg?.some(n => n.text === phraseText);
+            if (!alreadyExcluded) {
+              useIntentStore.getState().addHardNeg(targetIntentId, {
+                id: crypto.randomUUID(),
+                text: phraseText,
+                lang: lang as any
+              });
+              console.log('[PhrasesPanel] Added phrase as not-matching via toggle', {
+                phraseText,
+                targetIntentId,
+                targetIntentName: targetIntent.name,
+                reason: classificationResult?.intentId && !classificationResult.isCorrect
+                  ? 'wrong_classification'
+                  : 'preventive_exclusion'
+              });
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[PhrasesPanel] Failed to toggle exclusion:', err);
+    }
+  };
+
   // ✅ Funzione per className delle righe (solo selected, niente colorazione)
   const getRowClassName = (item: { id: string; label: string }, selected: boolean): string => {
     return selected ? 'bg-amber-50' : 'hover:bg-gray-50';
@@ -123,6 +193,21 @@ export default function PhrasesPanel({
     const classificationResult = classificationResults.get(item.id);
     const testResult = testResults.get(item.id);
 
+    // ✅ Check if phrase is excluded (added as not-matching to any intent)
+    const isExcluded = (() => {
+      // Check if phrase is in hardNeg list of current intent
+      const currentIntent = useIntentStore.getState().intents.find(i => i.id === intentId);
+      if (currentIntent?.variants?.hardNeg?.some(n => n.text === phrase.text)) {
+        return true;
+      }
+      // Check if phrase is in hardNeg list of wrong intent (if classification is wrong)
+      if (classificationResult?.intentId && !classificationResult.isCorrect) {
+        const wrongIntent = useIntentStore.getState().intents.find(i => i.id === classificationResult.intentId);
+        return wrongIntent?.variants?.hardNeg?.some(n => n.text === phrase.text) ?? false;
+      }
+      return false;
+    })();
+
     return (
       <PhraseRow
         phrase={phrase}
@@ -132,9 +217,11 @@ export default function PhrasesPanel({
         classificationResult={classificationResult}
         modelReady={modelReady}
         testResult={testResult}
+        isExcluded={isExcluded}
         onAddAsNotMatching={(wrongIntentId) => {
           handleAddAsNotMatching(wrongIntentId, phrase.text);
         }}
+        onToggleExclusion={handleToggleExclusion}
       />
     );
   };

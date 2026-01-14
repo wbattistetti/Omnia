@@ -1,5 +1,5 @@
 import React from 'react';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Ban } from 'lucide-react';
 import ClassificationBadge, { ClassificationResult } from './ClassificationBadge';
 
 interface PhraseRowProps {
@@ -10,7 +10,9 @@ interface PhraseRowProps {
   classificationResult?: ClassificationResult;
   modelReady: boolean;
   testResult?: 'correct' | 'wrong';
+  isExcluded?: boolean;
   onAddAsNotMatching?: (wrongIntentId: string, phraseText: string) => void;
+  onToggleExclusion?: (phraseId: string, phraseText: string, currentIsExcluded: boolean) => void;
 }
 
 /**
@@ -25,7 +27,9 @@ export default function PhraseRow({
   classificationResult,
   modelReady,
   testResult,
-  onAddAsNotMatching
+  isExcluded = false,
+  onAddAsNotMatching,
+  onToggleExclusion
 }: PhraseRowProps) {
   // Render test result badge if available
   const renderTestBadge = () => {
@@ -47,14 +51,31 @@ export default function PhraseRow({
 
   return (
     <div className="flex items-center gap-2 w-full min-w-0">
-      {/* Icon based on phrase type */}
-      <MessageSquare
-        size={14}
-        className={phraseType === 'matching' ? 'text-emerald-600 shrink-0' : 'text-rose-600 shrink-0'}
-      />
+      {/* Icon based on phrase type or exclusion status - clickable to toggle */}
+      {isExcluded ? (
+        <Ban
+          size={14}
+          className="text-red-600 shrink-0 cursor-pointer hover:text-red-700 transition-colors"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleExclusion?.(phrase.id, phrase.text, true);
+          }}
+          title="Clicca per riammettere la frase"
+        />
+      ) : (
+        <MessageSquare
+          size={14}
+          className={`${phraseType === 'matching' ? 'text-emerald-600' : 'text-rose-600'} shrink-0 cursor-pointer hover:opacity-80 transition-opacity`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleExclusion?.(phrase.id, phrase.text, false);
+          }}
+          title="Clicca per escludere la frase"
+        />
+      )}
 
-      {/* Text with test result badge if available */}
-      <span className="truncate flex-1 min-w-0">
+      {/* Text with test result badge if available, red if excluded */}
+      <span className={`truncate flex-1 min-w-0 ${isExcluded ? 'text-red-600' : ''}`}>
         {renderTestBadge()}
       </span>
 
