@@ -36,7 +36,10 @@ export class TemplateTranslationsService {
       this.labelsByLang.set(lang, labelsMap);
       this.cacheLoaded = true;
 
-      console.log(`[TemplateTranslationsService] ✅ Caricate ${labelsMap.size} traduzioni label per lingua ${lang}`);
+      // Log only in development mode
+      if (import.meta.env.DEV) {
+        console.log(`[TemplateTranslationsService] ✅ Caricate ${labelsMap.size} traduzioni label per lingua ${lang}`);
+      }
     } catch (error) {
       console.error('[TemplateTranslationsService] Errore nel caricamento:', error);
     }

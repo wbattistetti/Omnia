@@ -48,7 +48,6 @@ const EmbeddingEditorShell = forwardRef<EmbeddingEditorShellRef, EmbeddingEditor
     // ✅ FIX DOPPIO HEADER: Usa stato esterno se fornito, altrimenti stato interno
     const currentTraining = externalTraining !== undefined ? externalTraining : training;
     const currentModelReady = externalModelReady !== undefined ? externalModelReady : modelReady;
-    const currentCanTrain = externalCanTrain !== undefined ? externalCanTrain : canTrain;
 
     // Training configuration parameters (not persisted yet)
     const [threshold, setThreshold] = useState<number>(0.6); // 0.0-1.0
@@ -58,17 +57,45 @@ const EmbeddingEditorShell = forwardRef<EmbeddingEditorShellRef, EmbeddingEditor
 
     // Get all intents from store for training
     const intents = useIntentStore(s => s.intents || []);
-    const canTrain = intents.length > 0 && !currentTraining;
+
+    // ✅ FIX: Calcola canTrain localmente basandosi sugli intenti disponibili
+    // Verifica anche che ci siano frasi di training (matching o not-matching)
+    const hasTrainingPhrases = intents.some(intent => {
+      const positive = intent.variants?.curated || [];
+      const negative = intent.variants?.hardNeg || [];
+      return positive.length > 0 || negative.length > 0;
+    });
+    const canTrain = intents.length > 0 && hasTrainingPhrases && !currentTraining;
+
+    // ✅ FIX: Usa sempre il calcolo locale, non lo stato esterno (che può essere obsoleto)
+    const currentCanTrain = canTrain;
 
     // ✅ RIPRISTINO LAYOUT: Ottieni l'intento selezionato dallo store
     const selectedIntentId = useIntentStore(s => s.selectedId);
 
     // Handler for training (uses all intents from store)
     const handleTrain = async () => {
+      console.log('[EmbeddingEditorShell][TRAIN][INIT] Training button clicked');
+      console.log('[EmbeddingEditorShell][TRAIN][INIT] Current state:', {
+        intentsCount: intents.length,
+        currentTraining,
+        modelReady: currentModelReady,
+        canTrain: currentCanTrain
+      });
+
       if (intents.length === 0) {
+        console.warn('[EmbeddingEditorShell][TRAIN][VALIDATION] No intents available');
         alert('Aggiungi almeno un intento per fare training');
         return;
       }
+
+      console.log('[EmbeddingEditorShell][TRAIN][COLLECT] Collecting phrases from intents...');
+      console.log('[EmbeddingEditorShell][TRAIN][COLLECT] Intents:', intents.map(i => ({
+        id: i.id,
+        name: i.name,
+        curatedCount: i.variants?.curated?.length || 0,
+        hardNegCount: i.variants?.hardNeg?.length || 0
+      })));
 
       // Collect all training phrases from all intents
       const allPhrases: TrainingPhrase[] = [];
@@ -76,27 +103,68 @@ const EmbeddingEditorShell = forwardRef<EmbeddingEditorShellRef, EmbeddingEditor
         const positive = intent.variants?.curated || [];
         const negative = intent.variants?.hardNeg || [];
 
+        console.log('[EmbeddingEditorShell][TRAIN][COLLECT] Intent:', {
+          id: intent.id,
+          name: intent.name,
+          positiveCount: positive.length,
+          negativeCount: negative.length,
+          positivePhrases: positive.map(p => ({ id: p.id, text: p.text?.substring(0, 50) })),
+          negativePhrases: negative.map(p => ({ id: p.id, text: p.text?.substring(0, 50) }))
+        });
+
         allPhrases.push(
           ...positive.map(p => ({ id: p.id, text: p.text, type: 'matching' as const })),
           ...negative.map(p => ({ id: p.id, text: p.text, type: 'not-matching' as const }))
         );
       }
 
+      console.log('[EmbeddingEditorShell][TRAIN][COLLECT] Total phrases collected:', {
+        total: allPhrases.length,
+        matching: allPhrases.filter(p => p.type === 'matching').length,
+        notMatching: allPhrases.filter(p => p.type === 'not-matching').length,
+        phrases: allPhrases.map(p => ({ id: p.id, type: p.type, text: p.text?.substring(0, 50) }))
+      });
+
       if (allPhrases.length === 0) {
+        console.warn('[EmbeddingEditorShell][TRAIN][VALIDATION] No phrases available for training');
         alert('Aggiungi almeno una frase matching o not-matching per fare training');
         return;
       }
 
+      const startTime = Date.now();
       try {
+        console.log('[EmbeddingEditorShell][TRAIN][STATE] Setting training state to true');
         setTraining(true);
         onTrainStateChange?.({ training: true, modelReady, canTrain: false });
+
+        console.log('[EmbeddingEditorShell][TRAIN][START] Starting training process', {
+          timestamp: new Date().toISOString(),
+          intentsCount: intents.length,
+          phrasesCount: allPhrases.length,
+          matchingCount: allPhrases.filter(p => p.type === 'matching').length,
+          notMatchingCount: allPhrases.filter(p => p.type === 'not-matching').length,
+          config: { threshold, topK, baseModel, alpha }
+        });
 
         // TODO: Pass configuration parameters to trainIntent when backend supports it
         // For now, train with first intent ID (legacy behavior)
         const firstIntentId = intents[0]?.id;
+        console.log('[EmbeddingEditorShell][TRAIN][PREPARE] Using first intent ID:', firstIntentId);
+
         if (!firstIntentId) {
+          console.error('[EmbeddingEditorShell][TRAIN][ERROR] No intent ID found');
           throw new Error('No intent found');
         }
+
+        console.log('[EmbeddingEditorShell][TRAIN][CALL] Calling trainIntent service...', {
+          intentId: firstIntentId,
+          phrasesCount: allPhrases.length,
+          requestBody: {
+            intentId: firstIntentId,
+            phrasesCount: allPhrases.length,
+            samplePhrases: allPhrases.slice(0, 3).map(p => ({ id: p.id, type: p.type, text: p.text?.substring(0, 30) }))
+          }
+        });
 
         const result = await trainIntent({
           intentId: firstIntentId,
@@ -104,20 +172,91 @@ const EmbeddingEditorShell = forwardRef<EmbeddingEditorShellRef, EmbeddingEditor
           // Future: config: { threshold, topK, baseModel, alpha }
         });
 
+        const elapsedTime = Date.now() - startTime;
+        console.log('[EmbeddingEditorShell][TRAIN][RESULT] Training completed successfully', {
+          timestamp: new Date().toISOString(),
+          elapsedMs: elapsedTime,
+          elapsedSeconds: (elapsedTime / 1000).toFixed(2),
+          result: result
+        });
+
         setModelReady(result.modelReady);
-        console.log('[EmbeddingEditorShell][TRAIN][COMPLETE]', {
+        console.log('[EmbeddingEditorShell][TRAIN][COMPLETE] Training process finished', {
           intentsCount: intents.length,
           phrasesCount: allPhrases.length,
           modelReady: result.modelReady,
-          config: { threshold, topK, baseModel, alpha }
+          stats: result.stats,
+          config: { threshold, topK, baseModel, alpha },
+          totalTimeMs: elapsedTime
         });
+
+        // ✅ ENTERPRISE: Emit event to notify components that training is complete
+        window.dispatchEvent(new CustomEvent('trainingCompleted', {
+          detail: {
+            intentId: firstIntentId,
+            modelReady: result.modelReady,
+            stats: result.stats
+          }
+        }));
+
+        // ✅ Mostra messaggio di successo con statistiche
+        const stats = result.stats;
+        const successMsg = `Training completato con successo!\n\n` +
+          `Statistiche:\n` +
+          `- Frasi matching: ${stats.matching}\n` +
+          `- Frasi not-matching: ${stats.notMatching}\n` +
+          `- Totale processate: ${stats.processed}\n` +
+          `- Fallite: ${stats.failed}\n` +
+          `- Modello pronto: ${result.modelReady ? 'Sì' : 'No'}\n` +
+          `- Tempo impiegato: ${(elapsedTime / 1000).toFixed(2)} secondi`;
+        alert(successMsg);
       } catch (err) {
+        const elapsedTime = Date.now() - startTime;
         const errorMsg = err instanceof Error ? err.message : 'Training failed';
-        console.error('[EmbeddingEditorShell][TRAIN][ERROR]', err);
-        alert(`Training failed: ${errorMsg}`);
+        const errorDetails = {
+          timestamp: new Date().toISOString(),
+          elapsedMs: elapsedTime,
+          error: err,
+          message: errorMsg,
+          name: err instanceof Error ? err.name : 'Unknown',
+          stack: err instanceof Error ? err.stack : undefined,
+          intentsCount: intents.length,
+          phrasesCount: allPhrases.length
+        };
+
+        console.error('[EmbeddingEditorShell][TRAIN][ERROR] Training failed', errorDetails);
+        console.error('[EmbeddingEditorShell][TRAIN][ERROR] Full error object:', err);
+
+        if (err instanceof Error) {
+          console.error('[EmbeddingEditorShell][TRAIN][ERROR] Error name:', err.name);
+          console.error('[EmbeddingEditorShell][TRAIN][ERROR] Error message:', err.message);
+          console.error('[EmbeddingEditorShell][TRAIN][ERROR] Error stack:', err.stack);
+        }
+
+        alert(`Training failed: ${errorMsg}\n\nTempo trascorso: ${(elapsedTime / 1000).toFixed(2)} secondi\n\nCheck the browser console and backend logs for details.`);
       } finally {
+        const elapsedTime = Date.now() - startTime;
+        // ✅ FIX: Assicurati che il training venga sempre resettato, anche in caso di errore
+        console.log('[EmbeddingEditorShell][TRAIN][FINALLY] Resetting training state', {
+          timestamp: new Date().toISOString(),
+          totalTimeMs: elapsedTime,
+          wasTraining: currentTraining
+        });
         setTraining(false);
-        onTrainStateChange?.({ training: false, modelReady, canTrain: intents.length > 0 });
+        const hasTrainingPhrases = intents.some(intent => {
+          const positive = intent.variants?.curated || [];
+          const negative = intent.variants?.hardNeg || [];
+          return positive.length > 0 || negative.length > 0;
+        });
+        const newCanTrain = intents.length > 0 && hasTrainingPhrases;
+        console.log('[EmbeddingEditorShell][TRAIN][FINALLY] New state:', {
+          training: false,
+          modelReady,
+          canTrain: newCanTrain,
+          hasTrainingPhrases
+        });
+        onTrainStateChange?.({ training: false, modelReady, canTrain: newCanTrain });
+        console.log('[EmbeddingEditorShell][TRAIN][FINALLY] State reset complete');
       }
     };
 
@@ -129,29 +268,92 @@ const EmbeddingEditorShell = forwardRef<EmbeddingEditorShellRef, EmbeddingEditor
       canTrain: currentCanTrain,
     }), [currentTraining, currentModelReady, currentCanTrain, intents.length]);
 
+    // ✅ FIX: Aggiorna canTrain quando cambiano gli intenti o lo stato di training
+    React.useEffect(() => {
+      const hasTrainingPhrases = intents.some(intent => {
+        const positive = intent.variants?.curated || [];
+        const negative = intent.variants?.hardNeg || [];
+        return positive.length > 0 || negative.length > 0;
+      });
+      const newCanTrain = intents.length > 0 && hasTrainingPhrases && !currentTraining;
+      onTrainStateChange?.({
+        training: currentTraining,
+        modelReady: currentModelReady,
+        canTrain: newCanTrain
+      });
+    }, [intents.length, intents, currentTraining, currentModelReady, onTrainStateChange]);
+
     // Check model status on mount (for all intents)
     React.useEffect(() => {
+      console.log('[EmbeddingEditorShell][STATUS] Checking model status on mount', {
+        intentsCount: intents.length,
+        intents: intents.map(i => ({ id: i.id, name: i.name }))
+      });
+
       if (intents.length > 0) {
         const firstIntentId = intents[0]?.id;
         if (firstIntentId) {
-          getModelStatus(firstIntentId).then(status => {
-            setModelReady(status.modelReady);
-            onTrainStateChange?.({ training: currentTraining, modelReady: status.modelReady, canTrain: currentCanTrain });
-          }).catch(() => {
-            setModelReady(false);
-            onTrainStateChange?.({ training: currentTraining, modelReady: false, canTrain: false });
+          console.log('[EmbeddingEditorShell][STATUS] Getting model status for intent:', firstIntentId);
+          getModelStatus(firstIntentId)
+            .then(status => {
+              console.log('[EmbeddingEditorShell][STATUS] Model status received:', status);
+              setModelReady(status.modelReady);
+              const hasTrainingPhrases = intents.some(intent => {
+                const positive = intent.variants?.curated || [];
+                const negative = intent.variants?.hardNeg || [];
+                return positive.length > 0 || negative.length > 0;
+              });
+              const newCanTrain = intents.length > 0 && hasTrainingPhrases && !currentTraining;
+              console.log('[EmbeddingEditorShell][STATUS] Updating state:', {
+                modelReady: status.modelReady,
+                hasTrainingPhrases,
+                canTrain: newCanTrain
+              });
+              onTrainStateChange?.({
+                training: currentTraining,
+                modelReady: status.modelReady,
+                canTrain: newCanTrain
+              });
+            })
+            .catch((err) => {
+              console.warn('[EmbeddingEditorShell][STATUS] Failed to get model status (non-critical):', {
+                error: err,
+                errorMessage: err instanceof Error ? err.message : String(err),
+                intentId: firstIntentId
+              });
+              // ✅ FIX: Non bloccare l'UI se il controllo di stato fallisce
+              setModelReady(false);
+              const hasTrainingPhrases = intents.some(intent => {
+                const positive = intent.variants?.curated || [];
+                const negative = intent.variants?.hardNeg || [];
+                return positive.length > 0 || negative.length > 0;
+              });
+              const newCanTrain = intents.length > 0 && hasTrainingPhrases && !currentTraining;
+              onTrainStateChange?.({
+                training: currentTraining,
+                modelReady: false,
+                canTrain: newCanTrain
+              });
+            });
+        } else {
+          console.warn('[EmbeddingEditorShell][STATUS] No intent ID found');
+          setModelReady(false);
+          onTrainStateChange?.({
+            training: currentTraining,
+            modelReady: false,
+            canTrain: false
           });
         }
       } else {
+        console.log('[EmbeddingEditorShell][STATUS] No intents available');
         setModelReady(false);
-        onTrainStateChange?.({ training: currentTraining, modelReady: false, canTrain: false });
+        onTrainStateChange?.({
+          training: currentTraining,
+          modelReady: false,
+          canTrain: false
+        });
       }
-    }, [intents.length, currentTraining, currentCanTrain]);
-
-    // Notify parent of state changes
-    React.useEffect(() => {
-      onTrainStateChange?.({ training: currentTraining, modelReady: currentModelReady, canTrain: currentCanTrain });
-    }, [currentTraining, currentModelReady, currentCanTrain]);
+    }, [intents.length, currentTraining, onTrainStateChange]);
 
     // ✅ SOLUZIONE ESPERTO: Rimuovere tutti i ResizeObserver e log di debug, usare solo flex-1 min-h-0
     return (

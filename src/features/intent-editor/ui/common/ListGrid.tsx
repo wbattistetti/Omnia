@@ -161,7 +161,7 @@ export default function ListGrid({
                 )}
 
                 {LeftIcon ? <LeftIcon size={14} /> : null}
-                <div className="flex-1 truncate flex items-center gap-2">
+                <div className="flex-1 truncate flex items-center gap-2 min-w-0">
                   {editingId === it.id ? (
                     <input
                       autoFocus

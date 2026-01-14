@@ -64,34 +64,16 @@ class TaskTemplateService {
               const nameKey = template.name.toLowerCase();
               this.templates.set(nameKey, mapped);
 
-              // Log when saving with name key for debugging
-              if (template.nlpContract) {
-                console.log('✅ [TaskTemplateService] Template salvato anche con name key', {
-                  nameKey: nameKey,
-                  templateId: templateId,
-                  hasContract: !!(mapped as any).nlpContract,
-                  contractTemplateName: template.nlpContract.templateName
-                });
-              }
-            }
-
-            // Log contract loading for debugging
-            if (template.nlpContract) {
-              console.log('✅ [TaskTemplateService] Contract caricato per template', {
-                templateId: templateId,
-                templateName: template.name || 'N/A',
-                templateLabel: mapped.label,
-                hasContract: !!template.nlpContract,
-                contractTemplateName: template.nlpContract.templateName,
-                savedWithNameKey: template.name ? template.name.toLowerCase() : 'N/A'
-              });
             }
           });
 
-          console.log(`✅ [TaskTemplateService] Caricati ${this.templates.size} template dal database`, {
-            templateIds: Array.from(this.templates.keys()),
-            contractsCount: Array.from(this.templates.values()).filter(t => (t as any).nlpContract).length
-          });
+          // Log only in development mode
+          if (import.meta.env.DEV) {
+            console.log(`✅ [TaskTemplateService] Caricati ${this.templates.size} template dal database`, {
+              templateIds: Array.from(this.templates.keys()),
+              contractsCount: Array.from(this.templates.values()).filter(t => (t as any).nlpContract).length
+            });
+          }
 
           this.initialized = true;
           return;

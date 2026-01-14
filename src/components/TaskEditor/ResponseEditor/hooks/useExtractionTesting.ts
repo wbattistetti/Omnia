@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { flushSync } from 'react-dom';
 import { extractField } from '../../../../nlp/pipeline';
 import { nerExtract } from '../../../../nlp/services/nerClient';
 import nlpTypesConfig from '../../../../../config/nlp-types.json';
@@ -335,24 +334,57 @@ export function useExtractionTesting({
 
       if (profile.regex) {
         try {
-          // ✅ Usa match() invece di exec() per evitare problemi con flag 'g'
-          const re = new RegExp(profile.regex);
-          const m = phrase.match(re);
-          if (m) {
-            value = m[0];
-            // Extract capture groups (solo il primo match durante batch)
-            if (m.length > 1 && node) {
+          // ✅ Usa exec() con flag 'g' per trovare TUTTI i match possibili
+          // Il regex potrebbe matchare solo una parte della stringa (es. solo '12' invece di '12 3 1980')
+          // Quindi cerchiamo TUTTI i match e prendiamo il più lungo che contiene tutti i gruppi
+          const re = new RegExp(profile.regex, 'g');
+          let bestMatch: RegExpExecArray | null = null;
+          let longestMatch = '';
+          let match: RegExpExecArray | null;
+
+          // Reset lastIndex per assicurarsi di iniziare dall'inizio
+          re.lastIndex = 0;
+
+          // Trova tutti i match e prendi il più lungo
+          while ((match = re.exec(phrase)) !== null) {
+            if (match[0].length > longestMatch.length) {
+              longestMatch = match[0];
+              bestMatch = match;
+            }
+          }
+
+          // Se non abbiamo trovato match con flag 'g', prova senza flag (match globale)
+          if (!bestMatch) {
+            const reNoG = new RegExp(profile.regex);
+            const m = phrase.match(reNoG);
+            if (m && m[0].length > longestMatch.length) {
+              bestMatch = m as RegExpExecArray;
+              longestMatch = m[0];
+            }
+          }
+
+          if (bestMatch) {
+            value = bestMatch[0]; // ✅ Usa il match completo
+
+            // Extract capture groups - processa TUTTI i gruppi in base alla posizione
+            if (bestMatch.length > 1 && node) {
               const allSubs = [...(node.subSlots || []), ...(node.subData || [])];
-              for (let i = 1; i < m.length; i++) {
-                const groupValue = m[i];
-                if (groupValue !== undefined && groupValue !== null) {
-                  const trimmedValue = String(groupValue).trim();
-                  if (trimmedValue !== '') {
-                    const subIndex = i - 1;
-                    if (subIndex < allSubs.length) {
-                      const sub = allSubs[subIndex];
-                      const subLabel = String(sub.label || sub.name || '');
-                      const standardKey = mapLabelToStandardKey(subLabel);
+
+              // ✅ Processa TUTTI i gruppi in base alla loro posizione (1, 2, 3, ...)
+              // Anche se alcuni sono undefined, li mappiamo ai subData corrispondenti
+              for (let i = 1; i < bestMatch.length; i++) {
+                const groupValue = bestMatch[i];
+                const subIndex = i - 1; // Group 1 -> subIndex 0 (Day), Group 2 -> subIndex 1 (Month), Group 3 -> subIndex 2 (Year)
+
+                if (subIndex < allSubs.length) {
+                  const sub = allSubs[subIndex];
+                  const subLabel = String(sub.label || sub.name || '');
+                  const standardKey = mapLabelToStandardKey(subLabel);
+
+                  // ✅ Solo se il gruppo ha un valore, aggiungilo
+                  if (groupValue !== undefined && groupValue !== null) {
+                    const trimmedValue = String(groupValue).trim();
+                    if (trimmedValue !== '') {
                       if (standardKey) {
                         extractedGroups[standardKey] = trimmedValue;
                       } else if (subLabel) {
@@ -365,7 +397,7 @@ export function useExtractionTesting({
             }
           }
         } catch (e) {
-          // Regex error
+          // Regex error - silently fail
         }
       }
 
@@ -380,35 +412,27 @@ export function useExtractionTesting({
     const regexMs = Math.round(performance.now() - t0Regex);
 
     // ✅ Un solo setRowResults per riga
-    // ✅ CRITICAL: flushSync forza rendering sincrono durante batch per evitare accumulo
-    // ✅ CRITICAL: Durante batch, NON salvare spans per evitare accumulo di elementi React
-    const updateRow = () => {
-      setRowResults(prev => {
-        const next = [...prev];
-        next[idx] = {
-          regex: enabledMethods.regex ? regexRes.summary : '—',
-          regexMs: enabledMethods.regex ? regexMs : undefined,
-          // ✅ Durante batch, spans vengono omessi per evitare accumulo di elementi React
-          // Verranno calcolati on-demand quando necessario (non durante batch)
-          spans: (isBatch ? undefined : (enabledMethods.regex ? regexRes.spans : undefined)),
-          // ✅ Resto ancora dummy per ora
-          deterministic: `dummy-det-${idx}`,
-          ner: `dummy-ner-${idx}`,
-          llm: `dummy-llm-${idx}`,
-          running: false,
-          detRunning: false,
-          nerRunning: false,
-          llmRunning: false,
-        };
-        return next;
-      });
-    };
-
-    if (isBatch) {
-      flushSync(updateRow);
-    } else {
-      updateRow();
-    }
+    // ✅ Durante batch, NON salvare spans per evitare accumulo di elementi React
+    // ✅ React batching automatico gestisce gli aggiornamenti senza bloccare l'UI
+    setRowResults(prev => {
+      const next = [...prev];
+      next[idx] = {
+        regex: enabledMethods.regex ? regexRes.summary : '—',
+        regexMs: enabledMethods.regex ? regexMs : undefined,
+        // ✅ Durante batch, spans vengono omessi per evitare accumulo di elementi React
+        // Verranno calcolati on-demand quando necessario (non durante batch)
+        spans: (isBatch ? undefined : (enabledMethods.regex ? regexRes.spans : undefined)),
+        // ✅ Resto ancora dummy per ora
+        deterministic: `dummy-det-${idx}`,
+        ner: `dummy-ner-${idx}`,
+        llm: `dummy-llm-${idx}`,
+        running: false,
+        detRunning: false,
+        nerRunning: false,
+        llmRunning: false,
+      };
+      return next;
+    });
 
     // ✅ Solo per test singoli (non batch), aggiorna testing state
     if (!isBatch) {

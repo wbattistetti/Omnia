@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ListGrid from '../common/ListGrid';
-import { MessageSquare } from 'lucide-react';
 import { useIntentStore } from '../../state/intentStore';
+import { usePhraseClassification } from '../../hooks/usePhraseClassification';
+import PhraseRow from './PhraseRow';
 
 type Phrase = { id: string; text: string };
 
@@ -65,28 +66,77 @@ export default function PhrasesPanel({
     };
   }, []);
 
+  // ✅ ENTERPRISE: Classification hook for training phrases
+  const allTrainingPhrases = useMemo(() => [
+    ...positive.map(p => ({ id: p.id, text: p.text, type: 'matching' as const })),
+    ...negative.map(p => ({ id: p.id, text: p.text, type: 'not-matching' as const }))
+  ], [positive, negative]);
+
+  const { results: classificationResults, modelReady } = usePhraseClassification(
+    intentId,
+    allTrainingPhrases,
+    true // enabled
+  );
+
+  // ✅ ENTERPRISE: Handler to add phrase as not-matching for wrong intent
+  const handleAddAsNotMatching = (wrongIntentId: string, phraseText: string) => {
+    try {
+      const wrongIntent = useIntentStore.getState().intents.find(i => i.id === wrongIntentId);
+      if (!wrongIntent) {
+        console.error('[PhrasesPanel] Intent not found:', wrongIntentId);
+        return;
+      }
+
+      // Add phrase as not-matching for the wrong intent
+      const variant = {
+        id: crypto.randomUUID(),
+        text: phraseText,
+        lang: lang as any
+      };
+      useIntentStore.getState().addHardNeg(wrongIntentId, variant);
+
+      console.log('[PhrasesPanel] Added phrase as not-matching', {
+        phraseText,
+        wrongIntentId,
+        wrongIntentName: wrongIntent.name
+      });
+    } catch (err) {
+      console.error('[PhrasesPanel] Failed to add as not-matching:', err);
+    }
+  };
+
   // ✅ Funzione per className delle righe (solo selected, niente colorazione)
   const getRowClassName = (item: { id: string; label: string }, selected: boolean): string => {
     return selected ? 'bg-amber-50' : 'hover:bg-gray-50';
   };
 
-  // ✅ Funzione per renderizzare il label con badge colorato quando c'è un risultato test
-  const renderLabelWithBadge = (item: { id: string; label: string }) => {
-    const result = testResults.get(item.id);
-    if (result === 'correct') {
-      return (
-        <span className="px-2 py-0.5 rounded-md border border-green-500 bg-green-50/70 text-green-700">
-          {item.label}
-        </span>
-      );
-    } else if (result === 'wrong') {
-      return (
-        <span className="px-2 py-0.5 rounded-md border border-red-500 bg-red-50/70 text-red-700">
-          {item.label}
-        </span>
-      );
+  // ✅ ENTERPRISE: Smart label renderer using PhraseRow component
+  const renderPhraseRow = (item: { id: string; label: string }, phraseType: 'matching' | 'not-matching') => {
+    const phrase = phraseType === 'matching'
+      ? positive.find(p => p.id === item.id)
+      : negative.find(p => p.id === item.id);
+
+    if (!phrase) {
+      return item.label; // Fallback
     }
-    return item.label;
+
+    const classificationResult = classificationResults.get(item.id);
+    const testResult = testResults.get(item.id);
+
+    return (
+      <PhraseRow
+        phrase={phrase}
+        phraseType={phraseType}
+        intentId={intentId}
+        intentName={intentName}
+        classificationResult={classificationResult}
+        modelReady={modelReady}
+        testResult={testResult}
+        onAddAsNotMatching={(wrongIntentId) => {
+          handleAddAsNotMatching(wrongIntentId, phrase.text);
+        }}
+      />
+    );
   };
 
   const posItems = useMemo(()=> positive.map(p=>({ id: p.id, label: p.text })), [positive]);
@@ -148,10 +198,9 @@ export default function PhrasesPanel({
               if (existsIn(text, negItems)) { setTab('neg'); return; }
               onAddPositive(text);
             }}
-            LeftIcon={()=>(<MessageSquare size={14} className="text-emerald-600" />)}
             sort="alpha"
             rowClassName={getRowClassName}
-            labelRenderer={renderLabelWithBadge}
+            labelRenderer={(item) => renderPhraseRow(item, 'matching')}
           />
         )}
         {tab==='neg' && (
@@ -171,10 +220,9 @@ export default function PhrasesPanel({
               if (existsIn(text, posItems)) { setTab('pos'); return; }
               onAddNegative(text);
             }}
-            LeftIcon={()=>(<MessageSquare size={14} className="text-rose-600" />)}
             sort="alpha"
             rowClassName={getRowClassName}
-            labelRenderer={renderLabelWithBadge}
+            labelRenderer={(item) => renderPhraseRow(item, 'not-matching')}
           />
         )}
         {tab==='key' && (

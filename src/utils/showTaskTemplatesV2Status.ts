@@ -4,6 +4,12 @@
  */
 
 export function showTaskTemplatesV2StatusOnLoad(): void {
+  // Only show in development mode or if explicitly enabled
+  const showStatus = import.meta.env.DEV || localStorage.getItem('SHOW_TASK_TEMPLATES_V2_STATUS') === 'true';
+  if (!showStatus) {
+    return;
+  }
+
   const featureFlag = localStorage.getItem('USE_TASK_TEMPLATES_V2') === 'true';
 
   console.log('═══════════════════════════════════════════════════════════════════════════');

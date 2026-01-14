@@ -87,15 +87,61 @@ async def train_intent(intent_id: str, body: TrainBody):
     Usa sempre sentence-transformers locale (zero costi, multilingua).
     Salva embeddings in cache e marca il modello come ready.
     """
+    import time
+    import datetime
+    start_time = time.time()
+    timestamp = datetime.datetime.now().isoformat()
+
     print(f"[IntentTrain][START] ========== TRAINING STARTED ==========", flush=True)
+    print(f"[IntentTrain][START] Timestamp: {timestamp}", flush=True)
     print(f"[IntentTrain][START] Intent ID: {intent_id}", flush=True)
     print(f"[IntentTrain][START] Body received: {len(body.phrases) if body.phrases else 0} phrases", flush=True)
+    print(f"[IntentTrain][START] Request body keys: {list(body.dict().keys())}", flush=True)
 
     if not body.phrases:
         print(f"[IntentTrain][ERROR] No phrases provided", flush=True)
         raise HTTPException(
             status_code=400,
             detail="No phrases provided for training"
+        )
+
+    print(f"[IntentTrain][VALIDATE] Validating phrases...", flush=True)
+    matching_count = sum(1 for p in body.phrases if p.get('type') == 'matching')
+    not_matching_count = sum(1 for p in body.phrases if p.get('type') == 'not-matching')
+    print(f"[IntentTrain][VALIDATE] Phrases breakdown: {matching_count} matching, {not_matching_count} not-matching, {len(body.phrases)} total", flush=True)
+
+    # Log sample phrases
+    sample_phrases = body.phrases[:3]
+    print(f"[IntentTrain][VALIDATE] Sample phrases:", flush=True)
+    for i, p in enumerate(sample_phrases):
+        print(f"[IntentTrain][VALIDATE]   [{i+1}] id={p.get('id', 'N/A')}, type={p.get('type', 'N/A')}, text={p.get('text', '')[:50]}...", flush=True)
+
+    # ✅ FIX: Verifica che sentence-transformers sia disponibile PRIMA di iniziare
+    print(f"[IntentTrain][CHECK] Checking sentence-transformers availability...", flush=True)
+    if not _sentence_transformer_available:
+        print(f"[IntentTrain][ERROR] sentence-transformers not installed", flush=True)
+        raise HTTPException(
+            status_code=500,
+            detail="sentence-transformers library is not installed. Please install it with: pip install sentence-transformers"
+        )
+    print(f"[IntentTrain][CHECK] sentence-transformers is available", flush=True)
+
+    # ✅ FIX: Carica il modello PRIMA di iniziare il loop (evita timeout durante il training)
+    model_load_start = time.time()
+    try:
+        print(f"[IntentTrain][MODEL] Loading model {LOCAL_MODEL_NAME}...", flush=True)
+        print(f"[IntentTrain][MODEL] Current model state: {_local_model is not None}", flush=True)
+        model = _get_local_model()
+        model_load_time = time.time() - model_load_start
+        print(f"[IntentTrain][MODEL] Model loaded successfully in {model_load_time:.2f} seconds", flush=True)
+    except Exception as e:
+        model_load_time = time.time() - model_load_start
+        print(f"[IntentTrain][ERROR] Failed to load model after {model_load_time:.2f} seconds: {str(e)}", flush=True)
+        import traceback
+        print(f"[IntentTrain][ERROR] Traceback: {traceback.format_exc()}", flush=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to load embedding model: {str(e)}. Make sure sentence-transformers is installed and the model can be downloaded."
         )
 
     print(f"[IntentTrain][DEBUG] Starting training for intent {intent_id}", flush=True)
@@ -109,25 +155,30 @@ async def train_intent(intent_id: str, body: TrainBody):
     processed_count = 0
     failed_count = 0
 
+    loop_start_time = time.time()
     print(f"[IntentTrain][LOOP] Starting phrase processing loop...", flush=True)
+    print(f"[IntentTrain][LOOP] Total phrases to process: {len(body.phrases)}", flush=True)
 
     # Calcola embeddings per ogni frase
     for i, phrase in enumerate(body.phrases):
+        phrase_start_time = time.time()
         try:
             phrase_id = phrase.get('id', f'phrase_{i}')
             phrase_text = phrase.get('text', '')
             phrase_type = phrase.get('type', 'matching')
 
-            print(f"[IntentTrain][PHRASE {i+1}/{len(body.phrases)}] Processing: id={phrase_id}, type={phrase_type}, text={phrase_text[:50]}...", flush=True)
+            print(f"[IntentTrain][PHRASE {i+1}/{len(body.phrases)}] Processing: id={phrase_id}, type={phrase_type}, text_length={len(phrase_text)}, text={phrase_text[:50]}...", flush=True)
 
             if not phrase_text:
                 print(f"[IntentTrain][PHRASE {i+1}] Skipping - empty text", flush=True)
                 continue
 
-            # Usa sempre modello locale
-            print(f"[IntentTrain][PHRASE {i+1}] Computing with local model...", flush=True)
-            embedding = compute_embedding_local(phrase_text)
-            print(f"[IntentTrain][PHRASE {i+1}] Local embedding computed, length={len(embedding)}", flush=True)
+            # ✅ FIX: Usa il modello già caricato invece di chiamare compute_embedding_local (che ricarica il modello)
+            encode_start = time.time()
+            print(f"[IntentTrain][PHRASE {i+1}] Computing embedding with model...", flush=True)
+            embedding = model.encode(phrase_text, normalize_embeddings=True).tolist()
+            encode_time = time.time() - encode_start
+            print(f"[IntentTrain][PHRASE {i+1}] Embedding computed in {encode_time:.3f}s, length={len(embedding)}", flush=True)
 
             embeddings_data[phrase_type].append({
                 'id': phrase_id,
@@ -136,41 +187,58 @@ async def train_intent(intent_id: str, body: TrainBody):
             })
 
             processed_count += 1
-            print(f"[IntentTrain][PHRASE {i+1}] Added to embeddings_data[{phrase_type}], count={len(embeddings_data[phrase_type])}", flush=True)
+            phrase_time = time.time() - phrase_start_time
+            print(f"[IntentTrain][PHRASE {i+1}] Added to embeddings_data[{phrase_type}], count={len(embeddings_data[phrase_type])}, time={phrase_time:.3f}s", flush=True)
 
             # Progress log ogni 10 frasi
             if (i + 1) % 10 == 0:
-                print(f"[IntentTrain][PROGRESS] Processed {i + 1}/{len(body.phrases)} phrases", flush=True)
+                elapsed = time.time() - loop_start_time
+                avg_time = elapsed / (i + 1)
+                remaining = (len(body.phrases) - (i + 1)) * avg_time
+                print(f"[IntentTrain][PROGRESS] Processed {i + 1}/{len(body.phrases)} phrases ({100*(i+1)/len(body.phrases):.1f}%), elapsed={elapsed:.2f}s, avg={avg_time:.3f}s/phrase, est_remaining={remaining:.1f}s", flush=True)
 
         except Exception as e:
             failed_count += 1
-            print(f"[IntentTrain][ERROR] Failed to compute embedding for phrase {i+1}: {str(e)}", flush=True)
+            phrase_time = time.time() - phrase_start_time
+            print(f"[IntentTrain][ERROR] Failed to compute embedding for phrase {i+1} after {phrase_time:.3f}s: {str(e)}", flush=True)
             import traceback
             print(f"[IntentTrain][ERROR] Traceback: {traceback.format_exc()}", flush=True)
             continue
 
+    loop_time = time.time() - loop_start_time
+    print(f"[IntentTrain][LOOP] Loop completed in {loop_time:.2f} seconds", flush=True)
+    print(f"[IntentTrain][LOOP] Processed: {processed_count}, Failed: {failed_count}, Total: {len(body.phrases)}", flush=True)
+
     # Verifica che almeno una frase sia stata processata
     if processed_count == 0:
-        print(f"[IntentTrain][ERROR] No phrases processed successfully", flush=True)
+        total_time = time.time() - start_time
+        print(f"[IntentTrain][ERROR] No phrases processed successfully after {total_time:.2f} seconds", flush=True)
+        print(f"[IntentTrain][ERROR] Failed: {failed_count}, Total: {len(body.phrases)}", flush=True)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to process any phrases. {failed_count} failed, {len(body.phrases)} total."
         )
 
+    save_start_time = time.time()
     print(f"[IntentTrain][SAVE] Saving embeddings to cache...", flush=True)
     print(f"[IntentTrain][SAVE] Matching phrases: {len(embeddings_data['matching'])}, Not-matching: {len(embeddings_data['not-matching'])}", flush=True)
+    print(f"[IntentTrain][SAVE] Cache size before: {len(_embeddings_cache)} intents", flush=True)
 
     # Salva in cache
     _embeddings_cache[intent_id] = embeddings_data
     _model_ready[intent_id] = True
 
-    print(f"[IntentTrain][SAVE] Cache saved, model marked as ready", flush=True)
+    save_time = time.time() - save_start_time
+    print(f"[IntentTrain][SAVE] Cache saved in {save_time:.3f}s, model marked as ready", flush=True)
+    print(f"[IntentTrain][SAVE] Cache size after: {len(_embeddings_cache)} intents", flush=True)
 
     matching_count = len(embeddings_data['matching'])
     not_matching_count = len(embeddings_data['not-matching'])
+    total_time = time.time() - start_time
 
     print(f"[IntentTrain][SUCCESS] Training completed for intent {intent_id}", flush=True)
     print(f"[IntentTrain][STATS] Matching: {matching_count}, Not-matching: {not_matching_count}, Processed: {processed_count}, Failed: {failed_count}", flush=True)
+    print(f"[IntentTrain][STATS] Total time: {total_time:.2f}s (model load: {model_load_time:.2f}s, processing: {loop_time:.2f}s, save: {save_time:.3f}s)", flush=True)
 
     result = {
         'intentId': intent_id,
@@ -186,6 +254,8 @@ async def train_intent(intent_id: str, body: TrainBody):
     }
 
     print(f"[IntentTrain][END] ========== TRAINING COMPLETED ==========", flush=True)
+    print(f"[IntentTrain][END] Timestamp: {datetime.datetime.now().isoformat()}", flush=True)
+    print(f"[IntentTrain][END] Total duration: {total_time:.2f} seconds", flush=True)
     print(f"[IntentTrain][END] Returning result: {result}", flush=True)
 
     return result
@@ -193,11 +263,83 @@ async def train_intent(intent_id: str, body: TrainBody):
 @router.get('/api/intents/{intent_id}/model-status')
 async def get_model_status(intent_id: str):
     """Verifica se il modello è pronto per un intent"""
-    return {
-        'intentId': intent_id,
-        'modelReady': _model_ready.get(intent_id, False),
-        'hasEmbeddings': intent_id in _embeddings_cache
-    }
+    import datetime
+    import traceback
+
+    timestamp = datetime.datetime.now().isoformat()
+    print(f"[IntentStatus][GET] ========== STATUS CHECK STARTED ==========", flush=True)
+    print(f"[IntentStatus][GET] Checking model status for intent: {intent_id}", flush=True)
+    print(f"[IntentStatus][GET] Timestamp: {timestamp}", flush=True)
+
+    try:
+        # ✅ FIX: Verifica che le variabili globali siano inizializzate
+        print(f"[IntentStatus][GET] Checking global state...", flush=True)
+        print(f"[IntentStatus][GET] _model_ready type: {type(_model_ready)}, keys: {list(_model_ready.keys()) if isinstance(_model_ready, dict) else 'N/A'}", flush=True)
+        print(f"[IntentStatus][GET] _embeddings_cache type: {type(_embeddings_cache)}, keys: {list(_embeddings_cache.keys()) if isinstance(_embeddings_cache, dict) else 'N/A'}", flush=True)
+
+        # ✅ FIX: Usa get con default per evitare KeyError
+        model_ready = False
+        has_embeddings = False
+
+        try:
+            if isinstance(_model_ready, dict):
+                model_ready = _model_ready.get(intent_id, False)
+            else:
+                print(f"[IntentStatus][GET] WARNING: _model_ready is not a dict: {type(_model_ready)}", flush=True)
+                model_ready = False
+        except Exception as e:
+            print(f"[IntentStatus][GET] ERROR getting model_ready: {str(e)}", flush=True)
+            import traceback
+            print(f"[IntentStatus][GET] Traceback: {traceback.format_exc()}", flush=True)
+            model_ready = False
+
+        try:
+            if isinstance(_embeddings_cache, dict):
+                has_embeddings = intent_id in _embeddings_cache
+            else:
+                print(f"[IntentStatus][GET] WARNING: _embeddings_cache is not a dict: {type(_embeddings_cache)}", flush=True)
+                has_embeddings = False
+        except Exception as e:
+            print(f"[IntentStatus][GET] ERROR checking embeddings_cache: {str(e)}", flush=True)
+            import traceback
+            print(f"[IntentStatus][GET] Traceback: {traceback.format_exc()}", flush=True)
+            has_embeddings = False
+
+        if has_embeddings:
+            try:
+                cache_data = _embeddings_cache.get(intent_id, {})
+                matching_count = len(cache_data.get('matching', [])) if isinstance(cache_data, dict) else 0
+                not_matching_count = len(cache_data.get('not-matching', [])) if isinstance(cache_data, dict) else 0
+                print(f"[IntentStatus][GET] Cache found: {matching_count} matching, {not_matching_count} not-matching", flush=True)
+            except Exception as e:
+                print(f"[IntentStatus][GET] ERROR reading cache data: {str(e)}", flush=True)
+                import traceback
+                print(f"[IntentStatus][GET] Traceback: {traceback.format_exc()}", flush=True)
+        else:
+            print(f"[IntentStatus][GET] No cache found for intent {intent_id}", flush=True)
+
+        result = {
+            'intentId': intent_id,
+            'modelReady': model_ready,
+            'hasEmbeddings': has_embeddings
+        }
+
+        print(f"[IntentStatus][GET] Result: modelReady={model_ready}, hasEmbeddings={has_embeddings}", flush=True)
+        print(f"[IntentStatus][GET] ========== STATUS CHECK COMPLETED ==========", flush=True)
+
+        return result
+
+    except Exception as e:
+        print(f"[IntentStatus][GET][ERROR] Exception in get_model_status: {str(e)}", flush=True)
+        import traceback
+        print(f"[IntentStatus][GET][ERROR] Traceback: {traceback.format_exc()}", flush=True)
+        # ✅ FIX: Ritorna un risultato di default invece di lanciare errore
+        return {
+            'intentId': intent_id,
+            'modelReady': False,
+            'hasEmbeddings': False,
+            'error': str(e)
+        }
 
 @router.post('/api/intents/classify-embedding')
 async def classify_with_embeddings(body: ClassifyBody):
