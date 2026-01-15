@@ -17,21 +17,77 @@ export interface NLPContract {
             patternIndex?: number;  // ✅ Context-aware: quale pattern usare per questo sub
         };
     };
-    regex: {
-        patterns: string[];
-        patternModes?: string[];  // ✅ Context-aware: ['main', 'day', 'month', 'year', ...]
-        ambiguityPattern?: string;  // ✅ Regex per rilevare valori ambigui (es. numeri 1-12 per date)
-        ambiguity?: {  // ✅ Configurazione ambiguità
-            ambiguousValues: {
-                pattern: string;  // Regex che matcha i valori ambigui
-                description: string;  // Descrizione umana (es: "Numbers 1-12 can be interpreted as day or month")
+
+    // ✅ NEW: Contract methods structure (flexible, designer chooses)
+    methods?: {
+        regex?: {
+            enabled: boolean;
+            patterns: string[];
+            patternModes?: string[];
+            ambiguityPattern?: string;
+            ambiguity?: {
+                ambiguousValues: {
+                    pattern: string;
+                    description: string;
+                };
+                ambiguousCanonicalKeys: string[];
             };
-            ambiguousCanonicalKeys: string[];  // Lista di canonicalKey che possono essere ambigui (es: ['day', 'month'])
+            examples: string[];
+            testCases: string[];
+        };
+        rules?: {
+            enabled: boolean;
+            extractorCode: string;
+            validators: any[];
+            testCases: string[];
+        };
+        ner?: {
+            enabled: boolean;
+            entityTypes: string[];
+            confidence: number;
+        };
+        llm?: {
+            enabled: boolean;
+            systemPrompt: string;
+            userPromptTemplate: string;
+            responseSchema: object;
+        };
+        embeddings?: {
+            enabled: boolean;
+            intents?: Array<{
+                id: string;
+                name: string;
+                variants: {
+                    curated: Array<{id: string; text: string; lang: string}>;
+                    hardNeg: Array<{id: string; text: string; lang: string}>;
+                    test?: Array<{id: string; text: string; lang: string}>;
+                };
+                threshold?: number;
+            }>;
+            modelReady?: boolean;
+            threshold?: number;
+        };
+    };
+
+    // ✅ NEW: Escalation order (configurable by designer)
+    escalationOrder?: ('regex' | 'rules' | 'ner' | 'llm' | 'embeddings')[];
+
+    // ✅ LEGACY: Backward compatibility (maintained for transition)
+    regex?: {
+        patterns: string[];
+        patternModes?: string[];
+        ambiguityPattern?: string;
+        ambiguity?: {
+            ambiguousValues: {
+                pattern: string;
+                description: string;
+            };
+            ambiguousCanonicalKeys: string[];
         };
         examples: string[];
         testCases: string[];
     };
-    rules: {
+    rules?: {
         extractorCode: string;
         validators: any[];
         testCases: string[];
@@ -41,7 +97,7 @@ export interface NLPContract {
         confidence: number;
         enabled: boolean;
     };
-    llm: {
+    llm?: {
         systemPrompt: string;
         userPromptTemplate: string;
         responseSchema: object;

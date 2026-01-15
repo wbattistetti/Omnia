@@ -11,6 +11,7 @@ import TesterGridRow from './TesterGrid/components/TesterGridRow';
 import { useColumnResize } from './TesterGrid/hooks/useColumnResize';
 import { useEditorOverlay } from './TesterGrid/hooks/useEditorOverlay';
 import { RowResult } from './hooks/useExtractionTesting';
+import type { NLPContract } from '../../DialogueDataEngine/contracts/contractLoader';
 
 // 🎨 Colori centralizzati per extractors (usati solo per editor overlay)
 const EXTRACTOR_COLORS = {
@@ -52,6 +53,7 @@ const RunningTestsScreen = React.memo(() => (
 RunningTestsScreen.displayName = 'RunningTestsScreen';
 
 interface TesterGridProps {
+  contract?: NLPContract | null; // ✅ STEP 4: Contract prop
   examplesList: string[];
   rowResults: RowResult[];
   selectedRow: number | null;
@@ -115,6 +117,7 @@ interface TesterGridProps {
 
 
 function TesterGridComponent({
+  contract, // ✅ STEP 4: Contract prop
   examplesList,
   rowResults,
   selectedRow,
@@ -339,6 +342,7 @@ function TesterGridComponent({
           }}>
           <table ref={tableRef} style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' as any }}>
             <TesterGridHeader
+              contract={contract} // ✅ STEP 4: Pass contract to header
               newExample={newExample}
               setNewExample={setNewExample}
               onAddExample={handleAddExample}

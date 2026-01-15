@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { MessageCircle } from 'lucide-react';
 import KindSelector from './Config/KindSelector';
 import ConfidenceInput from './Config/ConfidenceInput';
 import WaitingMessagesConfig from './Config/WaitingMessagesConfig';
 import TesterGrid from './TesterGrid';
 import { RowResult } from './hooks/useExtractionTesting';
+import { loadContractFromNode } from './ContractSelector/contractHelpers';
+import type { NLPContract } from '../../DialogueDataEngine/contracts/contractLoader';
 
 interface RecognitionEditorProps {
   // Config props (Kind, Confidence, Waiting Messages)
@@ -134,6 +136,13 @@ export default function RecognitionEditor({
   baselineStats,
   lastStats,
 }: RecognitionEditorProps) {
+  // ✅ STEP 3: Load contract from node
+  const contract = useMemo<NLPContract | null>(() => {
+    const node = editorProps?.node;
+    if (!node) return null;
+    return loadContractFromNode(node);
+  }, [editorProps?.node]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
       {/* ✅ Top bar: Kind, Confidence, Waiting Messages - sempre visibile */}
@@ -196,6 +205,7 @@ export default function RecognitionEditor({
       {/* ✅ TesterGrid - sempre visibile, l'editor si sovrappone quando attivo */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         <TesterGrid
+          contract={contract}
           examplesList={examplesList}
           rowResults={rowResults}
           selectedRow={selectedRow}

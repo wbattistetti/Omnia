@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import TesterGridInput from './TesterGridInput';
 import TesterGridActionsColumn from './TesterGridActionsColumn';
 import TesterGridHeaderColumn from './TesterGridHeaderColumn';
+import type { NLPContract } from '../../../../DialogueDataEngine/contracts/contractLoader';
 
 // 🎨 Colori centralizzati per extractors
 const EXTRACTOR_COLORS = {
@@ -42,6 +43,7 @@ const COLUMN_LABELS = {
 };
 
 interface TesterGridHeaderProps {
+  contract?: NLPContract | null; // ✅ STEP 5: Contract prop
   newExample: string;
   setNewExample: (value: string) => void;
   onAddExample: () => void;
@@ -67,6 +69,7 @@ interface TesterGridHeaderProps {
  * Header component for the tester grid
  */
 export default function TesterGridHeader({
+  contract, // ✅ STEP 5: Contract prop
   newExample,
   setNewExample,
   onAddExample,
@@ -82,6 +85,14 @@ export default function TesterGridHeader({
   showEmbeddings,
   headerRowRef,
 }: TesterGridHeaderProps) {
+  // ✅ STEP 5: Read escalationOrder from contract (simplified, no legacy fallback)
+  const escalationOrder = useMemo<Array<'regex' | 'rules' | 'ner' | 'llm' | 'embeddings'> | null>(() => {
+    if (contract?.methods && contract.escalationOrder) {
+      return contract.escalationOrder;
+    }
+    return null; // No contract or no escalationOrder → will show "Add contract" button
+  }, [contract]);
+
   return (
     <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
       <tr ref={headerRowRef}>
