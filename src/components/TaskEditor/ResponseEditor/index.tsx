@@ -44,11 +44,27 @@ import { getIsTesting } from './testingState';
 import type { TaskMeta } from '../EditorHost/types';
 import type { Task } from '../../../types/taskTypes';
 
+// Helper: safe deep clone that handles circular references
+function safeDeepClone<T>(obj: T): T {
+  if (!obj) return obj;
+  try {
+    // Use structuredClone if available (handles circular refs)
+    if (typeof structuredClone !== 'undefined') {
+      return structuredClone(obj);
+    }
+    // Fallback to JSON (may fail on circular refs)
+    return JSON.parse(JSON.stringify(obj));
+  } catch (err) {
+    console.warn('[safeDeepClone] Failed to clone, returning original:', err);
+    return obj;
+  }
+}
+
 // Helper: enforce phone kind by label when missing/mis-set
 function coercePhoneKind(src: any) {
   if (!src) return src;
   try {
-    const clone = JSON.parse(JSON.stringify(src));
+    const clone = safeDeepClone(src);
     const mains = Array.isArray(clone?.mainData) ? clone.mainData : [];
     for (const m of mains) {
       const label = String(m?.label || '').toLowerCase();
@@ -162,12 +178,18 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
       if (ddt?.mainData && ddt.mainData.length > 0) {
         setDDTVersion(v => v + 1);
       }
-    } else if (ddt && JSON.stringify(ddt) !== JSON.stringify(ddtRef.current)) {
-      // Stessa istanza ma ddt prop è cambiato → sincronizza (dockTree è stato aggiornato esternamente)
-      ddtRef.current = ddt;
-      // ✅ ARCHITETTURA ESPERTO: Forza aggiornamento mainList quando DDT viene caricato
-      if (ddt?.mainData && ddt.mainData.length > 0) {
-        setDDTVersion(v => v + 1);
+    } else if (ddt && ddt !== ddtRef.current) {
+      // ✅ Safe comparison: check reference and mainData length instead of JSON.stringify
+      // (JSON.stringify can fail on circular references)
+      const ddtChanged = ddt !== ddtRef.current ||
+        (ddt?.mainData?.length !== ddtRef.current?.mainData?.length);
+      if (ddtChanged) {
+        // Stessa istanza ma ddt prop è cambiato → sincronizza (dockTree è stato aggiornato esternamente)
+        ddtRef.current = ddt;
+        // ✅ ARCHITETTURA ESPERTO: Forza aggiornamento mainList quando DDT viene caricato
+        if (ddt?.mainData && ddt.mainData.length > 0) {
+          setDDTVersion(v => v + 1);
+        }
       }
     }
   }, [ddt, (task as any)?.instanceId, task?.id]);

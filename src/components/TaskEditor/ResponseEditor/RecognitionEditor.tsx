@@ -1,11 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useCallback, useState, useEffect } from 'react';
 import { MessageCircle } from 'lucide-react';
 import KindSelector from './Config/KindSelector';
 import ConfidenceInput from './Config/ConfidenceInput';
 import WaitingMessagesConfig from './Config/WaitingMessagesConfig';
 import TesterGrid from './TesterGrid';
 import { RowResult } from './hooks/useExtractionTesting';
-import { loadContractFromNode } from './ContractSelector/contractHelpers';
+import { loadContractFromNode, saveContractToNode } from './ContractSelector/contractHelpers';
 import type { NLPContract } from '../../DialogueDataEngine/contracts/contractLoader';
 
 interface RecognitionEditorProps {
@@ -137,11 +137,73 @@ export default function RecognitionEditor({
   lastStats,
 }: RecognitionEditorProps) {
   // ✅ STEP 3: Load contract from node
-  const contract = useMemo<NLPContract | null>(() => {
+  // ✅ FIX: Usa stato locale per mantenere il contract aggiornato
+  const [localContract, setLocalContract] = useState<NLPContract | null>(() => {
     const node = editorProps?.node;
     if (!node) return null;
     return loadContractFromNode(node);
+  });
+
+  // ✅ Sincronizza localContract con node quando node cambia
+  useEffect(() => {
+    const node = editorProps?.node;
+    if (!node) {
+      setLocalContract(null);
+      return;
+    }
+    const loadedContract = loadContractFromNode(node);
+    setLocalContract(loadedContract);
   }, [editorProps?.node]);
+
+  // ✅ CRITICAL FIX: Crea sempre un nuovo riferimento per forzare re-render
+  const contract = useMemo<NLPContract | null>(() => {
+    if (!localContract) return null;
+
+    // ✅ Crea sempre un nuovo oggetto per forzare il cambio di riferimento
+    const newContractRef: NLPContract = {
+      ...localContract,
+      methods: localContract.methods ? { ...localContract.methods } : undefined,
+      escalationOrder: localContract.escalationOrder ? [...localContract.escalationOrder] : undefined,
+      subDataMapping: { ...localContract.subDataMapping },
+    };
+
+    console.log('[RecognitionEditor][useMemo] Creating new contract reference', {
+      escalationOrder: newContractRef.escalationOrder,
+      methods: newContractRef.methods ? Object.keys(newContractRef.methods) : [],
+    });
+
+    return newContractRef;
+  }, [localContract?.escalationOrder?.join(','), localContract?.methods ? Object.keys(localContract.methods).join(',') : '']); // ✅ Dipende da escalationOrder e methods
+
+  // ✅ STEP 10: Handle contract changes and save to node
+  const handleContractChange = useCallback((updatedContract: NLPContract | null) => {
+    const node = editorProps?.node;
+    if (!node) {
+      console.warn('[RecognitionEditor][handleContractChange] No node available');
+      return;
+    }
+
+    console.log('[RecognitionEditor][handleContractChange] Saving contract', {
+      hasContract: !!updatedContract,
+      escalationOrder: updatedContract?.escalationOrder,
+      methods: updatedContract?.methods ? Object.keys(updatedContract.methods) : [],
+    });
+
+    // ✅ FIX: Crea un nuovo oggetto per forzare il cambio di riferimento
+    const contractToSave = updatedContract ? { ...updatedContract } : null;
+
+    // Save contract to node
+    saveContractToNode(node, contractToSave);
+
+    // ✅ CRITICAL FIX: Aggiorna lo stato locale IMMEDIATAMENTE per forzare re-render
+    setLocalContract(contractToSave);
+
+    // ✅ Notify parent component of the change (if onProfileUpdate exists, use it)
+    if (editorProps?.onProfileUpdate) {
+      // Trigger a profile update to ensure the change is persisted
+      editorProps.onProfileUpdate(editorProps.profile || {});
+    }
+  }, [editorProps?.node, editorProps?.onProfileUpdate, editorProps?.profile]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
@@ -206,6 +268,7 @@ export default function RecognitionEditor({
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         <TesterGrid
           contract={contract}
+          onContractChange={handleContractChange}
           examplesList={examplesList}
           rowResults={rowResults}
           selectedRow={selectedRow}

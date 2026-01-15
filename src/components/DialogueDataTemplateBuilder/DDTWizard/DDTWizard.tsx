@@ -1046,7 +1046,21 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       throw new Error('Schema non valido');
     } catch (err: any) {
       console.error('[DDT][Wizard][error]', err);
-      const msg = (err && (err.name === 'AbortError' || err.message === 'The operation was aborted.')) ? 'Timeout step2' : (err.message || '');
+
+      // ✅ Enhanced error message with reason
+      let msg = '';
+      if (err && (err.name === 'AbortError' || err.message === 'The operation was aborted.')) {
+        msg = 'Timeout: La richiesta ha impiegato più di 60 secondi. Il backend potrebbe essere lento o il modello AI potrebbe non rispondere.';
+      } else if (err.message && err.message.includes('model_not_found')) {
+        msg = 'Modello non trovato: Il modello richiesto non esiste o non è accessibile. Verifica la configurazione del provider AI.';
+      } else if (err.message && err.message.includes('model_decommissioned')) {
+        msg = 'Modello dismesso: Il modello richiesto è stato dismesso. Usa un modello valido.';
+      } else if (err.message && err.message.includes('API error')) {
+        msg = 'Errore API provider: Verifica la chiave API e la configurazione del provider AI.';
+      } else {
+        msg = err.message || 'Errore sconosciuto';
+      }
+
       setErrorMsg('Errore IA: ' + msg);
       setStep('error');
       try { dlog('[DDT][UI] step → error'); } catch { }

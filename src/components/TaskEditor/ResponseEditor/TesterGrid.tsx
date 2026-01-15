@@ -54,6 +54,7 @@ RunningTestsScreen.displayName = 'RunningTestsScreen';
 
 interface TesterGridProps {
   contract?: NLPContract | null; // ✅ STEP 4: Contract prop
+  onContractChange?: (contract: NLPContract | null) => void; // ✅ STEP 10: Callback per modificare contract
   examplesList: string[];
   rowResults: RowResult[];
   selectedRow: number | null;
@@ -118,6 +119,7 @@ interface TesterGridProps {
 
 function TesterGridComponent({
   contract, // ✅ STEP 4: Contract prop
+  onContractChange, // ✅ STEP 10: Callback per modificare contract
   examplesList,
   rowResults,
   selectedRow,
@@ -343,6 +345,7 @@ function TesterGridComponent({
           <table ref={tableRef} style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' as any }}>
             <TesterGridHeader
               contract={contract} // ✅ STEP 4: Pass contract to header
+              onContractChange={onContractChange} // ✅ STEP 10: Pass callback
               newExample={newExample}
               setNewExample={setNewExample}
               onAddExample={handleAddExample}
@@ -591,8 +594,19 @@ function TesterGridComponent({
 // ✅ CRITICAL: Memo con comparatore personalizzato per prevenire re-render durante batch
 // Confronta solo gli elementi di rowResults che sono effettivamente cambiati
 const TesterGrid = React.memo(TesterGridComponent, (prev, next) => {
+  // ✅ DEBUG: Log sempre per vedere se il comparatore viene chiamato
+  console.log('[TesterGrid][memo] Comparing props', {
+    contractChanged: prev.contract !== next.contract,
+    escalationOrderChanged: prev.contract?.escalationOrder?.join(',') !== next.contract?.escalationOrder?.join(','),
+    prevEscalationOrder: prev.contract?.escalationOrder,
+    nextEscalationOrder: next.contract?.escalationOrder,
+    prevContractId: prev.contract ? Object.keys(prev.contract).join(',') : 'null',
+    nextContractId: next.contract ? Object.keys(next.contract).join(',') : 'null',
+  });
+
   // ✅ Se rowResults ha la stessa lunghezza e gli stessi riferimenti agli oggetti, non re-renderizzare
   if (prev.rowResults.length !== next.rowResults.length) {
+    console.log('[TesterGrid][memo] rowResults length changed - re-rendering');
     return false; // Re-render se la lunghezza è cambiata
   }
 
@@ -601,19 +615,52 @@ const TesterGrid = React.memo(TesterGridComponent, (prev, next) => {
   for (let i = 0; i < prev.rowResults.length; i++) {
     if (prev.rowResults[i] !== next.rowResults[i]) {
       // ✅ Elemento cambiato - re-renderizza (ma TesterGridRow memoizzato gestirà il confronto granulare)
+      console.log('[TesterGrid][memo] rowResults element changed - re-rendering');
       return false;
     }
   }
 
+  // ✅ CRITICAL FIX: Confronta contract per forzare re-render quando cambia
+  if (prev.contract !== next.contract) {
+    console.log('[TesterGrid][memo] contract reference changed - re-rendering', {
+      prevContract: prev.contract,
+      nextContract: next.contract,
+    });
+    return false;
+  }
+  if (prev.contract?.escalationOrder?.join(',') !== next.contract?.escalationOrder?.join(',')) {
+    console.log('[TesterGrid][memo] escalationOrder changed - re-rendering', {
+      prev: prev.contract?.escalationOrder,
+      next: next.contract?.escalationOrder,
+    });
+    return false;
+  }
+
   // ✅ Altri props critici
-  if (prev.testing !== next.testing) return false;
-  if (prev.selectedRow !== next.selectedRow) return false;
-  if (prev.examplesList !== next.examplesList) return false;
-  if (prev.activeEditor !== next.activeEditor) return false;
-  if (prev.newExample !== next.newExample) return false; // ✅ CRITICAL: newExample deve triggerare re-render!
+  if (prev.testing !== next.testing) {
+    console.log('[TesterGrid][memo] testing changed - re-rendering');
+    return false;
+  }
+  if (prev.selectedRow !== next.selectedRow) {
+    console.log('[TesterGrid][memo] selectedRow changed - re-rendering');
+    return false;
+  }
+  if (prev.examplesList !== next.examplesList) {
+    console.log('[TesterGrid][memo] examplesList changed - re-rendering');
+    return false;
+  }
+  if (prev.activeEditor !== next.activeEditor) {
+    console.log('[TesterGrid][memo] activeEditor changed - re-rendering');
+    return false;
+  }
+  if (prev.newExample !== next.newExample) {
+    console.log('[TesterGrid][memo] newExample changed - re-rendering');
+    return false; // ✅ CRITICAL: newExample deve triggerare re-render!
+  }
 
   // ✅ Tutti gli altri props sono funzioni o oggetti che non cambiano durante batch
   // Le righe memoizzate gestiranno i loro confronti interni
+  console.log('[TesterGrid][memo] No changes detected - skipping re-render');
   return true; // Skip re-render
 });
 

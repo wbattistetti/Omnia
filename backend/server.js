@@ -3860,7 +3860,18 @@ async function analyzeUserRequestWithAI(userDesc, templates, provider = 'groq', 
     return result;
   } catch (error) {
     console.error(`[AI_ANALYSIS] ❌ AI analysis failed:`, error.message);
-    throw new Error(`AI analysis failed: ${error.message}`);
+
+    // ✅ Enhanced error message with reason
+    let errorMessage = error.message;
+    if (error.message && error.message.includes('model_not_found')) {
+      errorMessage = `Model not found or not accessible. The requested model may have been decommissioned or you don't have access to it. Please use a valid model. Original error: ${error.message}`;
+    } else if (error.message && error.message.includes('model_decommissioned')) {
+      errorMessage = `Model has been decommissioned. Please use a valid model. Original error: ${error.message}`;
+    } else if (error.message && error.message.includes('API error')) {
+      errorMessage = `AI provider API error: ${error.message}. Please check your API key and provider configuration.`;
+    }
+
+    throw new Error(`AI analysis failed: ${errorMessage}`);
   }
 }
 
