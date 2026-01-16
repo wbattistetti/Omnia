@@ -7,6 +7,7 @@ import NoteEditor from '../../CellNote/NoteEditor';
 import NoteDisplay from '../../CellNote/NoteDisplay';
 import NoteSeparator from '../../CellNote/NoteSeparator';
 import { RowResult } from '../../hooks/useExtractionTesting';
+import type { NLPContract } from '../../../DialogueDataEngine/contracts/contractLoader';
 
 interface TesterGridRowProps {
   rowIndex: number;
@@ -29,6 +30,7 @@ interface TesterGridRowProps {
   showNER: boolean;
   showEmbeddings: boolean;
   activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings' | null;
+  contract?: NLPContract | null; // ✅ FIX: Contract per colonne dinamiche
   // Cell editing
   cellOverrides: Record<string, string>;
   setCellOverrides: React.Dispatch<React.SetStateAction<Record<string, string>>>;
@@ -79,6 +81,7 @@ function TesterGridRowComponent({
   showNER,
   showEmbeddings,
   activeEditor,
+  contract, // ✅ FIX: Contract per colonne dinamiche
   cellOverrides,
   setCellOverrides,
   editingCell,
@@ -137,222 +140,362 @@ function TesterGridRowComponent({
         phraseColumnWidth={phraseColumnWidth}
         rowBackground={selectedRow === rowIndex ? '#fff7ed' : '#fff'} // ✅ FIX: Passa il background della riga
       />
-      {/* Regex column */}
-      <td
-        style={{
-          padding: 8,
-          color: enabledMethods.regex ? '#374151' : '#9ca3af',
-          overflow: 'visible',
-          background: '#93c5fd',
-          position: 'relative',
-          verticalAlign: 'top',
-          opacity: enabledMethods.regex ? 1 : 0.6,
-          visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
-        }}
-        onMouseEnter={() => setHovered(rowIndex, 'regex')}
-        onMouseLeave={() => setHovered(null, null)}
-      >
-        <ExtractionResultCell
-          summary={rowResult.regex}
-          processingTime={rowResult.regexMs}
-          maxMs={maxMs}
-          rowIdx={rowIndex}
-          col="regex"
-          kind={kind}
-          expectedKeysForKind={expectedKeysForKind}
-          enabled={enabledMethods.regex}
-          isRunning={rowResult.running}
-          cellOverrides={cellOverrides}
-          editingCell={editingCell}
-          editingText={editingText}
-          setEditingCell={setEditingCell}
-          setEditingText={setEditingText}
-          setCellOverrides={setCellOverrides}
-          hasNote={hasNote}
-          getNote={getNote}
-          isEditing={isEditing}
-          startEditing={startEditing}
-          stopEditing={stopEditing}
-          addNote={addNote}
-          deleteNote={deleteNote}
-          isHovered={isHovered}
-          setHovered={setHovered}
-        />
-      </td>
-      {/* Deterministic column */}
-      {showDeterministic && (
-        <td
-          style={{
-            padding: 8,
-            color: enabledMethods.deterministic ? '#374151' : '#9ca3af',
-            overflow: 'visible',
-            background: '#e5e7eb',
-            position: 'relative',
-            verticalAlign: 'top',
-            opacity: enabledMethods.deterministic ? 1 : 0.6,
-            visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
-          }}
-          onMouseEnter={() => setHovered(rowIndex, 'deterministic')}
-          onMouseLeave={() => setHovered(null, null)}
-        >
-          <ExtractionResultCell
-            summary={rowResult.deterministic}
-            processingTime={rowResult.detMs}
-            maxMs={maxMs}
-            rowIdx={rowIndex}
-            col="det"
-            kind={kind}
-            expectedKeysForKind={expectedKeysForKind}
-            enabled={enabledMethods.deterministic}
-            isRunning={rowResult.detRunning}
-            cellOverrides={cellOverrides}
-            editingCell={editingCell}
-            editingText={editingText}
-            setEditingCell={setEditingCell}
-            setEditingText={setEditingText}
-            setCellOverrides={setCellOverrides}
-            hasNote={hasNote}
-            getNote={getNote}
-            isEditing={isEditing}
-            startEditing={startEditing}
-            stopEditing={stopEditing}
-            addNote={(row, col, text) => addNote(row, col, text)}
-            deleteNote={(row, col) => deleteNote(row, col)}
-            isHovered={isHovered}
-            setHovered={setHovered}
-          />
-        </td>
-      )}
-      {/* NER column */}
-      {showNER && (
-        <td
-          style={{
-            padding: 8,
-            color: enabledMethods.ner ? '#374151' : '#9ca3af',
-            overflow: 'visible',
-            background: '#fef3c7',
-            position: 'relative',
-            verticalAlign: 'top',
-            opacity: enabledMethods.ner ? 1 : 0.6,
-            visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
-          }}
-          onMouseEnter={() => setHovered(rowIndex, 'ner')}
-          onMouseLeave={() => setHovered(null, null)}
-        >
-          <ExtractionResultCell
-            summary={rowResult.ner}
-            processingTime={rowResult.nerMs}
-            maxMs={maxMs}
-            rowIdx={rowIndex}
-            col="ner"
-            kind={kind}
-            expectedKeysForKind={expectedKeysForKind}
-            enabled={enabledMethods.ner}
-            isRunning={rowResult.nerRunning}
-            cellOverrides={cellOverrides}
-            editingCell={editingCell}
-            editingText={editingText}
-            setEditingCell={setEditingCell}
-            setEditingText={setEditingText}
-            setCellOverrides={setCellOverrides}
-            hasNote={hasNote}
-            getNote={getNote}
-            isEditing={isEditing}
-            startEditing={startEditing}
-            stopEditing={stopEditing}
-            addNote={(row, col, text) => addNote(row, col, text)}
-            deleteNote={(row, col) => deleteNote(row, col)}
-            isHovered={isHovered}
-            setHovered={setHovered}
-          />
-        </td>
-      )}
-      {/* Embeddings column */}
-      {showEmbeddings && (
-        <td
-          style={{
-            padding: 8,
-            color: '#374151',
-            overflow: 'visible',
-            background: '#e0e7ff',
-            position: 'relative',
-            verticalAlign: 'top',
-            opacity: 1
-          }}
-          onMouseEnter={() => setHovered(rowIndex, 'embeddings')}
-          onMouseLeave={() => setHovered(null, null)}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-            <div style={{ flex: 1 }}>
-              {/* TODO: Show classification results here in Fase 9 */}
-              {'—'}
-            </div>
-            {(isHovered(rowIndex, 'embeddings') || hasNote(rowIndex, 'embeddings')) && (
-              <NoteButton
-                hasNote={hasNote(rowIndex, 'embeddings')}
-                onClick={() => isEditing(rowIndex, 'embeddings') ? stopEditing() : startEditing(rowIndex, 'embeddings')}
+      {/* ✅ FIX: Render colonne dinamiche basate su contract.escalationOrder */}
+      {contract?.escalationOrder && contract.escalationOrder.length > 0 ? (
+        contract.escalationOrder.map((method) => {
+          const componentType = method === 'rules' ? 'deterministic' : method;
+          const color = {
+            regex: '#93c5fd',
+            deterministic: '#e5e7eb',
+            ner: '#fef3c7',
+            llm: '#fed7aa',
+            embeddings: '#e0e7ff',
+          }[componentType] || '#93c5fd';
+
+          const result = {
+            regex: rowResult.regex,
+            deterministic: rowResult.deterministic,
+            ner: rowResult.ner,
+            llm: rowResult.llm,
+            embeddings: undefined,
+          }[componentType] || null;
+
+          const processingTime = (() => {
+            const msMap: Record<string, keyof RowResult> = {
+              regex: 'regexMs',
+              deterministic: 'detMs',
+              ner: 'nerMs',
+              llm: 'llmMs',
+            };
+            return (rowResult[msMap[componentType] || 'regexMs'] as number) || 0;
+          })();
+
+          const isRunning = {
+            regex: rowResult.running,
+            deterministic: rowResult.detRunning,
+            ner: rowResult.nerRunning,
+            llm: rowResult.llmRunning,
+            embeddings: false,
+          }[componentType] || false;
+
+          const enabled = enabledMethods[componentType as keyof typeof enabledMethods] ?? false;
+
+          // Special handling for embeddings
+          if (componentType === 'embeddings') {
+            return (
+              <td
+                key={method}
+                style={{
+                  padding: 8,
+                  color: '#374151',
+                  overflow: 'visible',
+                  background: color,
+                  position: 'relative',
+                  verticalAlign: 'top',
+                  opacity: 1,
+                  visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm', 'embeddings'].includes(activeEditor) && activeEditor !== componentType ? 'hidden' : 'visible'
+                }}
+                onMouseEnter={() => setHovered(rowIndex, 'embeddings')}
+                onMouseLeave={() => setHovered(null, null)}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                  <div style={{ flex: 1 }}>
+                    {/* TODO: Show classification results here in Fase 9 */}
+                    {'—'}
+                  </div>
+                  {(isHovered(rowIndex, 'embeddings') || hasNote(rowIndex, 'embeddings')) && (
+                    <NoteButton
+                      hasNote={hasNote(rowIndex, 'embeddings')}
+                      onClick={() => isEditing(rowIndex, 'embeddings') ? stopEditing() : startEditing(rowIndex, 'embeddings')}
+                    />
+                  )}
+                </div>
+                {(getNote(rowIndex, 'embeddings') || isEditing(rowIndex, 'embeddings')) && (
+                  <>
+                    <NoteSeparator />
+                    {isEditing(rowIndex, 'embeddings') ? (
+                      <NoteEditor
+                        value={getNote(rowIndex, 'embeddings')}
+                        onSave={(text) => { addNote(rowIndex, 'embeddings', text); stopEditing(); }}
+                        onDelete={() => { deleteNote(rowIndex, 'embeddings'); stopEditing(); }}
+                        onCancel={stopEditing}
+                      />
+                    ) : (
+                      <NoteDisplay text={getNote(rowIndex, 'embeddings')} />
+                    )}
+                  </>
+                )}
+              </td>
+            );
+          }
+
+          // Regular extraction columns
+          return (
+            <td
+              key={method}
+              style={{
+                padding: 8,
+                color: enabled ? '#374151' : '#9ca3af',
+                overflow: 'visible',
+                background: color,
+                position: 'relative',
+                verticalAlign: 'top',
+                opacity: enabled ? 1 : 0.6,
+                visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm', 'embeddings'].includes(activeEditor) && activeEditor !== componentType ? 'hidden' : 'visible'
+              }}
+              onMouseEnter={() => setHovered(rowIndex, componentType)}
+              onMouseLeave={() => setHovered(null, null)}
+            >
+              <ExtractionResultCell
+                summary={result || undefined}
+                processingTime={processingTime}
+                maxMs={maxMs}
+                rowIdx={rowIndex}
+                col={componentType as any}
+                kind={kind}
+                expectedKeysForKind={expectedKeysForKind}
+                enabled={enabled}
+                isRunning={isRunning}
+                cellOverrides={cellOverrides}
+                editingCell={editingCell}
+                editingText={editingText}
+                setEditingCell={setEditingCell}
+                setEditingText={setEditingText}
+                setCellOverrides={setCellOverrides}
+                hasNote={hasNote}
+                getNote={getNote}
+                isEditing={isEditing}
+                startEditing={startEditing}
+                stopEditing={stopEditing}
+                addNote={addNote}
+                deleteNote={deleteNote}
+                isHovered={isHovered}
+                setHovered={setHovered}
               />
-            )}
-          </div>
-          {(getNote(rowIndex, 'embeddings') || isEditing(rowIndex, 'embeddings')) && (
-            <>
-              <NoteSeparator />
-              {isEditing(rowIndex, 'embeddings') ? (
-                <NoteEditor
-                  value={getNote(rowIndex, 'embeddings')}
-                  onSave={(text) => { addNote(rowIndex, 'embeddings', text); stopEditing(); }}
-                  onDelete={() => { deleteNote(rowIndex, 'embeddings'); stopEditing(); }}
-                  onCancel={stopEditing}
-                />
-              ) : (
-                <NoteDisplay text={getNote(rowIndex, 'embeddings')} />
-              )}
-            </>
+            </td>
+          );
+        })
+      ) : (
+        // ✅ Fallback legacy: mostra colonne hardcoded se contract non è presente
+        <>
+          {/* Regex column */}
+          <td
+            style={{
+              padding: 8,
+              color: enabledMethods.regex ? '#374151' : '#9ca3af',
+              overflow: 'visible',
+              background: '#93c5fd',
+              position: 'relative',
+              verticalAlign: 'top',
+              opacity: enabledMethods.regex ? 1 : 0.6,
+              visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
+            }}
+            onMouseEnter={() => setHovered(rowIndex, 'regex')}
+            onMouseLeave={() => setHovered(null, null)}
+          >
+            <ExtractionResultCell
+              summary={rowResult.regex}
+              processingTime={rowResult.regexMs}
+              maxMs={maxMs}
+              rowIdx={rowIndex}
+              col="regex"
+              kind={kind}
+              expectedKeysForKind={expectedKeysForKind}
+              enabled={enabledMethods.regex}
+              isRunning={rowResult.running}
+              cellOverrides={cellOverrides}
+              editingCell={editingCell}
+              editingText={editingText}
+              setEditingCell={setEditingCell}
+              setEditingText={setEditingText}
+              setCellOverrides={setCellOverrides}
+              hasNote={hasNote}
+              getNote={getNote}
+              isEditing={isEditing}
+              startEditing={startEditing}
+              stopEditing={stopEditing}
+              addNote={addNote}
+              deleteNote={deleteNote}
+              isHovered={isHovered}
+              setHovered={setHovered}
+            />
+          </td>
+          {/* Deterministic column */}
+          {showDeterministic && (
+            <td
+              style={{
+                padding: 8,
+                color: enabledMethods.deterministic ? '#374151' : '#9ca3af',
+                overflow: 'visible',
+                background: '#e5e7eb',
+                position: 'relative',
+                verticalAlign: 'top',
+                opacity: enabledMethods.deterministic ? 1 : 0.6,
+                visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
+              }}
+              onMouseEnter={() => setHovered(rowIndex, 'deterministic')}
+              onMouseLeave={() => setHovered(null, null)}
+            >
+              <ExtractionResultCell
+                summary={rowResult.deterministic}
+                processingTime={rowResult.detMs}
+                maxMs={maxMs}
+                rowIdx={rowIndex}
+                col="det"
+                kind={kind}
+                expectedKeysForKind={expectedKeysForKind}
+                enabled={enabledMethods.deterministic}
+                isRunning={rowResult.detRunning}
+                cellOverrides={cellOverrides}
+                editingCell={editingCell}
+                editingText={editingText}
+                setEditingCell={setEditingCell}
+                setEditingText={setEditingText}
+                setCellOverrides={setCellOverrides}
+                hasNote={hasNote}
+                getNote={getNote}
+                isEditing={isEditing}
+                startEditing={startEditing}
+                stopEditing={stopEditing}
+                addNote={(row, col, text) => addNote(row, col, text)}
+                deleteNote={(row, col) => deleteNote(row, col)}
+                isHovered={isHovered}
+                setHovered={setHovered}
+              />
+            </td>
           )}
-        </td>
+          {/* NER column */}
+          {showNER && (
+            <td
+              style={{
+                padding: 8,
+                color: enabledMethods.ner ? '#374151' : '#9ca3af',
+                overflow: 'visible',
+                background: '#fef3c7',
+                position: 'relative',
+                verticalAlign: 'top',
+                opacity: enabledMethods.ner ? 1 : 0.6,
+                visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
+              }}
+              onMouseEnter={() => setHovered(rowIndex, 'ner')}
+              onMouseLeave={() => setHovered(null, null)}
+            >
+              <ExtractionResultCell
+                summary={rowResult.ner}
+                processingTime={rowResult.nerMs}
+                maxMs={maxMs}
+                rowIdx={rowIndex}
+                col="ner"
+                kind={kind}
+                expectedKeysForKind={expectedKeysForKind}
+                enabled={enabledMethods.ner}
+                isRunning={rowResult.nerRunning}
+                cellOverrides={cellOverrides}
+                editingCell={editingCell}
+                editingText={editingText}
+                setEditingCell={setEditingCell}
+                setEditingText={setEditingText}
+                setCellOverrides={setCellOverrides}
+                hasNote={hasNote}
+                getNote={getNote}
+                isEditing={isEditing}
+                startEditing={startEditing}
+                stopEditing={stopEditing}
+                addNote={(row, col, text) => addNote(row, col, text)}
+                deleteNote={(row, col) => deleteNote(row, col)}
+                isHovered={isHovered}
+                setHovered={setHovered}
+              />
+            </td>
+          )}
+          {/* Embeddings column */}
+          {showEmbeddings && (
+            <td
+              style={{
+                padding: 8,
+                color: '#374151',
+                overflow: 'visible',
+                background: '#e0e7ff',
+                position: 'relative',
+                verticalAlign: 'top',
+                opacity: 1
+              }}
+              onMouseEnter={() => setHovered(rowIndex, 'embeddings')}
+              onMouseLeave={() => setHovered(null, null)}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                <div style={{ flex: 1 }}>
+                  {/* TODO: Show classification results here in Fase 9 */}
+                  {'—'}
+                </div>
+                {(isHovered(rowIndex, 'embeddings') || hasNote(rowIndex, 'embeddings')) && (
+                  <NoteButton
+                    hasNote={hasNote(rowIndex, 'embeddings')}
+                    onClick={() => isEditing(rowIndex, 'embeddings') ? stopEditing() : startEditing(rowIndex, 'embeddings')}
+                  />
+                )}
+              </div>
+              {(getNote(rowIndex, 'embeddings') || isEditing(rowIndex, 'embeddings')) && (
+                <>
+                  <NoteSeparator />
+                  {isEditing(rowIndex, 'embeddings') ? (
+                    <NoteEditor
+                      value={getNote(rowIndex, 'embeddings')}
+                      onSave={(text) => { addNote(rowIndex, 'embeddings', text); stopEditing(); }}
+                      onDelete={() => { deleteNote(rowIndex, 'embeddings'); stopEditing(); }}
+                      onCancel={stopEditing}
+                    />
+                  ) : (
+                    <NoteDisplay text={getNote(rowIndex, 'embeddings')} />
+                  )}
+                </>
+              )}
+            </td>
+          )}
+          {/* LLM column */}
+          <td
+            style={{
+              padding: 8,
+              color: enabledMethods.llm ? '#374151' : '#9ca3af',
+              overflow: 'visible',
+              background: '#fed7aa',
+              position: 'relative',
+              verticalAlign: 'top',
+              opacity: enabledMethods.llm ? 1 : 0.6,
+              visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
+            }}
+            onMouseEnter={() => setHovered(rowIndex, 'llm')}
+            onMouseLeave={() => setHovered(null, null)}
+          >
+            <ExtractionResultCell
+              summary={rowResult.llm}
+              processingTime={rowResult.llmMs}
+              maxMs={maxMs}
+              rowIdx={rowIndex}
+              col="llm"
+              kind={kind}
+              expectedKeysForKind={expectedKeysForKind}
+              enabled={enabledMethods.llm}
+              isRunning={rowResult.llmRunning}
+              cellOverrides={cellOverrides}
+              editingCell={editingCell}
+              editingText={editingText}
+              setEditingCell={setEditingCell}
+              setEditingText={setEditingText}
+              setCellOverrides={setCellOverrides}
+              hasNote={hasNote}
+              getNote={getNote}
+              isEditing={isEditing}
+              startEditing={startEditing}
+              stopEditing={stopEditing}
+              addNote={(row, col, text) => addNote(row, col, text)}
+              deleteNote={(row, col) => deleteNote(row, col)}
+              isHovered={isHovered}
+              setHovered={setHovered}
+            />
+          </td>
+        </>
       )}
-      {/* LLM column */}
-      <td
-        style={{
-          padding: 8,
-          color: enabledMethods.llm ? '#374151' : '#9ca3af',
-          overflow: 'visible',
-          background: '#fed7aa',
-          position: 'relative',
-          verticalAlign: 'top',
-          opacity: enabledMethods.llm ? 1 : 0.6,
-          visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
-        }}
-        onMouseEnter={() => setHovered(rowIndex, 'llm')}
-        onMouseLeave={() => setHovered(null, null)}
-      >
-        <ExtractionResultCell
-          summary={rowResult.llm}
-          processingTime={rowResult.llmMs}
-          maxMs={maxMs}
-          rowIdx={rowIndex}
-          col="llm"
-          kind={kind}
-          expectedKeysForKind={expectedKeysForKind}
-          enabled={enabledMethods.llm}
-          isRunning={rowResult.llmRunning}
-          cellOverrides={cellOverrides}
-          editingCell={editingCell}
-          editingText={editingText}
-          setEditingCell={setEditingCell}
-          setEditingText={setEditingText}
-          setCellOverrides={setCellOverrides}
-          hasNote={hasNote}
-          getNote={getNote}
-          isEditing={isEditing}
-          startEditing={startEditing}
-          stopEditing={stopEditing}
-          addNote={(row, col, text) => addNote(row, col, text)}
-          deleteNote={(row, col) => deleteNote(row, col)}
-          isHovered={isHovered}
-          setHovered={setHovered}
-        />
-      </td>
     </tr>
   );
 }
