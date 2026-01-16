@@ -13,6 +13,8 @@ interface TesterGridActionsColumnProps {
   reportOpen?: boolean;
   setReportOpen?: (open: boolean) => void;
   runRowTest?: (idx: number) => Promise<void>;
+  phraseColumnWidth?: number; // ✅ FIX: Necessario per calcolare left per sticky
+  rowBackground?: string; // ✅ FIX: Background della riga per mantenere coerenza
 }
 
 /**
@@ -28,11 +30,21 @@ export default function TesterGridActionsColumn({
   reportOpen,
   setReportOpen,
   runRowTest,
+  phraseColumnWidth = 280, // ✅ FIX: Default per calcolare left
+  rowBackground = '#f9fafb', // ✅ FIX: Default background
 }: TesterGridActionsColumnProps) {
   // Header: Add button
   if (rowIndex === -1) {
     return (
-      <th style={{ width: 46, background: '#f9fafb', padding: 8, textAlign: 'center' }}>
+      <th style={{
+        width: 46,
+        background: '#f9fafb',
+        padding: 8,
+        textAlign: 'center',
+        position: 'sticky', // ✅ FIX: Sticky per rimanere fissa
+        left: phraseColumnWidth, // ✅ FIX: Posizionata subito dopo la colonna Frase
+        zIndex: 1001, // ✅ FIX: zIndex alto ma inferiore alla colonna Frase
+      }}>
         {onAddExample && (
           <button
             onClick={onAddExample}
@@ -65,8 +77,11 @@ export default function TesterGridActionsColumn({
         padding: 4,
         textAlign: 'center',
         verticalAlign: 'middle',
-        background: '#f9fafb',
-        width: 46
+        background: rowBackground, // ✅ FIX: Usa il background della riga
+        width: 46,
+        position: 'sticky', // ✅ FIX: Sticky per rimanere fissa
+        left: phraseColumnWidth, // ✅ FIX: Posizionata subito dopo la colonna Frase
+        zIndex: 9, // ✅ FIX: zIndex per rimanere sopra le colonne scrollabili
       }}>
         <button
           onClick={(e) => {
@@ -107,8 +122,11 @@ export default function TesterGridActionsColumn({
         padding: 4,
         textAlign: 'center',
         verticalAlign: 'middle',
-        background: '#f9fafb',
-        width: 46
+        background: rowBackground, // ✅ FIX: Usa il background della riga
+        width: 46,
+        position: 'sticky', // ✅ FIX: Sticky per rimanere fissa
+        left: phraseColumnWidth, // ✅ FIX: Posizionata subito dopo la colonna Frase
+        zIndex: 9, // ✅ FIX: zIndex per rimanere sopra le colonne scrollabili
       }}>
         <div style={{ position: 'relative', width: '100%' }}>
           <button
@@ -140,8 +158,11 @@ export default function TesterGridActionsColumn({
       padding: 4,
       textAlign: 'center',
       verticalAlign: 'middle',
-      background: '#f9fafb',
-      width: 46
+      background: rowBackground, // ✅ FIX: Usa il background della riga
+      width: 46,
+      position: 'sticky', // ✅ FIX: Sticky per rimanere fissa
+      left: phraseColumnWidth, // ✅ FIX: Posizionata subito dopo la colonna Frase
+      zIndex: 9, // ✅ FIX: zIndex per rimanere sopra le colonne scrollabili
     }}>
       {runRowTest && (
         <button

@@ -8,6 +8,7 @@ interface TesterGridPhraseColumnProps {
   isResizing: boolean;
   onResizeStart: (e: React.MouseEvent) => void;
   leading?: React.ReactNode;
+  rowBackground?: string; // ✅ FIX: Background della riga per mantenere coerenza
 }
 
 /**
@@ -20,6 +21,7 @@ export default function TesterGridPhraseColumn({
   isResizing,
   onResizeStart,
   leading,
+  rowBackground = '#fff', // ✅ FIX: Default background
 }: TesterGridPhraseColumnProps) {
   return (
     <td
@@ -27,7 +29,10 @@ export default function TesterGridPhraseColumn({
         padding: 8,
         wordBreak: 'break-word',
         width: `${width}px`,
-        position: 'relative'
+        position: 'sticky', // ✅ FIX: Cambiato da 'relative' a 'sticky'
+        left: 0, // ✅ FIX: Fissa a sinistra
+        background: rowBackground, // ✅ FIX: Background dinamico per mantenere coerenza con la riga
+        zIndex: 10, // ✅ FIX: zIndex per rimanere sopra le colonne scrollabili
       }}
     >
       {leading}

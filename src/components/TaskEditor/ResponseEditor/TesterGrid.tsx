@@ -5,6 +5,7 @@ import RegexInlineEditor from './InlineEditors/RegexInlineEditor';
 import ExtractorInlineEditor from './InlineEditors/ExtractorInlineEditor';
 import NERInlineEditor from './InlineEditors/NERInlineEditor';
 import LLMInlineEditor from './InlineEditors/LLMInlineEditor';
+import IntentEditorInlineEditor from './InlineEditors/IntentEditorInlineEditor';
 // Modular components
 import TesterGridHeader from './TesterGrid/components/TesterGridHeader';
 import TesterGridRow from './TesterGrid/components/TesterGridRow';
@@ -164,8 +165,9 @@ function TesterGridComponent({
   const showNER = mode !== 'classification';
   const showEmbeddings = mode === 'classification';
 
-  // Calculate colSpan for empty state (1 for Frase + Regex + conditionals + LLM + buttons column)
-  const colSpanEmpty = 1 + 1 + (showDeterministic ? 1 : 0) + (showNER ? 1 : 0) + (showEmbeddings ? 1 : 0) + 1 + 1;
+  // ✅ FIX: Calculate colSpan for empty state based on dynamic contract columns
+  const dynamicColumnsCount = contract?.escalationOrder?.length || 0;
+  const colSpanEmpty = 1 + 1 + dynamicColumnsCount + 1; // Frase + Actions + Dynamic columns + Buttons
 
   // Handler for adding new example
   // ✅ SIMPLIFIED: Catena lineare - usa ref per evitare dipendenze che causano re-render
@@ -223,7 +225,7 @@ function TesterGridComponent({
 
   // Determina quale editor renderizzare
   const renderEditor = () => {
-    if (!activeEditor || !['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) || !editorProps) {
+    if (!activeEditor || !['regex', 'extractor', 'ner', 'llm', 'embeddings'].includes(activeEditor) || !editorProps) {
       return null;
     }
 
@@ -254,6 +256,29 @@ function TesterGridComponent({
         return <NERInlineEditor {...commonProps} />;
       case 'llm':
         return <LLMInlineEditor {...commonProps} />;
+      case 'embeddings':
+        const actForEmbeddings = editorProps.node?.task ? {
+          id: editorProps.node.task.id || editorProps.node.task.instanceId || '',
+          type: editorProps.node.task.type || '',
+          label: editorProps.node.task.label,
+          instanceId: editorProps.node.task.instanceId,
+        } : undefined;
+
+        // ✅ DEBUG: Log solo se act è undefined per diagnosticare
+        if (!actForEmbeddings) {
+          console.warn('[TesterGrid][embeddings] act is undefined', {
+            hasNode: !!editorProps.node,
+            hasTask: !!editorProps.node?.task,
+            nodeTask: editorProps.node?.task,
+          });
+        }
+
+        return (
+          <IntentEditorInlineEditor
+            {...commonProps}
+            act={actForEmbeddings}
+          />
+        );
       default:
         return null;
     }
@@ -271,6 +296,8 @@ function TesterGridComponent({
         return 'AI Rapida (NER)';
       case 'llm':
         return 'AI Completa (LLM)';
+      case 'embeddings':
+        return 'Classificazione (Embeddings)';
       default:
         return '';
     }
@@ -288,6 +315,8 @@ function TesterGridComponent({
         return EXTRACTOR_COLORS.ner;
       case 'llm':
         return EXTRACTOR_COLORS.llm;
+      case 'embeddings':
+        return EXTRACTOR_COLORS.embeddings;
       default:
         return '#10b981';
     }
@@ -309,6 +338,7 @@ function TesterGridComponent({
       <style>{`
         .tester-grid-scroll::-webkit-scrollbar {
           width: 12px;
+          height: 12px; /* ✅ AGGIUNTO: Altezza per scrollbar orizzontale */
         }
         .tester-grid-scroll::-webkit-scrollbar-track {
           background: #f9fafb;
@@ -340,9 +370,14 @@ function TesterGridComponent({
             flex: 1,
             minHeight: 0,
             overflowY: 'auto',
-            overflowX: 'hidden',
+            overflowX: 'auto', // ✅ FIX: Cambiato da 'hidden' a 'auto' per permettere scroll orizzontale
           }}>
-          <table ref={tableRef} style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' as any }}>
+          <table ref={tableRef} style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            tableLayout: 'fixed' as any,
+            minWidth: 'max-content', // ✅ FIX: Assicura che la tabella abbia larghezza minima per tutte le colonne
+          }}>
             <TesterGridHeader
               contract={contract} // ✅ STEP 4: Pass contract to header
               onContractChange={onContractChange} // ✅ STEP 10: Pass callback
@@ -594,19 +629,8 @@ function TesterGridComponent({
 // ✅ CRITICAL: Memo con comparatore personalizzato per prevenire re-render durante batch
 // Confronta solo gli elementi di rowResults che sono effettivamente cambiati
 const TesterGrid = React.memo(TesterGridComponent, (prev, next) => {
-  // ✅ DEBUG: Log sempre per vedere se il comparatore viene chiamato
-  console.log('[TesterGrid][memo] Comparing props', {
-    contractChanged: prev.contract !== next.contract,
-    escalationOrderChanged: prev.contract?.escalationOrder?.join(',') !== next.contract?.escalationOrder?.join(','),
-    prevEscalationOrder: prev.contract?.escalationOrder,
-    nextEscalationOrder: next.contract?.escalationOrder,
-    prevContractId: prev.contract ? Object.keys(prev.contract).join(',') : 'null',
-    nextContractId: next.contract ? Object.keys(next.contract).join(',') : 'null',
-  });
-
   // ✅ Se rowResults ha la stessa lunghezza e gli stessi riferimenti agli oggetti, non re-renderizzare
   if (prev.rowResults.length !== next.rowResults.length) {
-    console.log('[TesterGrid][memo] rowResults length changed - re-rendering');
     return false; // Re-render se la lunghezza è cambiata
   }
 
@@ -615,52 +639,37 @@ const TesterGrid = React.memo(TesterGridComponent, (prev, next) => {
   for (let i = 0; i < prev.rowResults.length; i++) {
     if (prev.rowResults[i] !== next.rowResults[i]) {
       // ✅ Elemento cambiato - re-renderizza (ma TesterGridRow memoizzato gestirà il confronto granulare)
-      console.log('[TesterGrid][memo] rowResults element changed - re-rendering');
       return false;
     }
   }
 
   // ✅ CRITICAL FIX: Confronta contract per forzare re-render quando cambia
   if (prev.contract !== next.contract) {
-    console.log('[TesterGrid][memo] contract reference changed - re-rendering', {
-      prevContract: prev.contract,
-      nextContract: next.contract,
-    });
     return false;
   }
   if (prev.contract?.escalationOrder?.join(',') !== next.contract?.escalationOrder?.join(',')) {
-    console.log('[TesterGrid][memo] escalationOrder changed - re-rendering', {
-      prev: prev.contract?.escalationOrder,
-      next: next.contract?.escalationOrder,
-    });
     return false;
   }
 
   // ✅ Altri props critici
   if (prev.testing !== next.testing) {
-    console.log('[TesterGrid][memo] testing changed - re-rendering');
     return false;
   }
   if (prev.selectedRow !== next.selectedRow) {
-    console.log('[TesterGrid][memo] selectedRow changed - re-rendering');
     return false;
   }
   if (prev.examplesList !== next.examplesList) {
-    console.log('[TesterGrid][memo] examplesList changed - re-rendering');
     return false;
   }
   if (prev.activeEditor !== next.activeEditor) {
-    console.log('[TesterGrid][memo] activeEditor changed - re-rendering');
     return false;
   }
   if (prev.newExample !== next.newExample) {
-    console.log('[TesterGrid][memo] newExample changed - re-rendering');
     return false; // ✅ CRITICAL: newExample deve triggerare re-render!
   }
 
   // ✅ Tutti gli altri props sono funzioni o oggetti che non cambiano durante batch
   // Le righe memoizzate gestiranno i loro confronti interni
-  console.log('[TesterGrid][memo] No changes detected - skipping re-render');
   return true; // Skip re-render
 });
 

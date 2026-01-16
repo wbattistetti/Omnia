@@ -124,6 +124,7 @@ function TesterGridRowComponent({
         isResizing={isResizing}
         onResizeStart={onResizeStart}
         leading={leading}
+        rowBackground={selectedRow === rowIndex ? '#fff7ed' : '#fff'} // ✅ FIX: Passa il background della riga
       />
       <TesterGridActionsColumn
         rowIndex={rowIndex}
@@ -133,6 +134,8 @@ function TesterGridRowComponent({
         examplesListLength={examplesListLength}
         reportOpen={rowIndex === 1 ? reportOpen : undefined}
         setReportOpen={rowIndex === 1 ? setReportOpen : undefined}
+        phraseColumnWidth={phraseColumnWidth}
+        rowBackground={selectedRow === rowIndex ? '#fff7ed' : '#fff'} // ✅ FIX: Passa il background della riga
       />
       {/* Regex column */}
       <td

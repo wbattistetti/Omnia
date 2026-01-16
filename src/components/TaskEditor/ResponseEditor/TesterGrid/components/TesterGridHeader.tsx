@@ -222,12 +222,52 @@ export default function TesterGridHeader({
     onContractChange(newContract);
   };
 
+  // ✅ NUOVO: Handle removing a contract
+  const handleRemoveContract = (methodToRemove: 'regex' | 'rules' | 'ner' | 'llm' | 'embeddings') => {
+    if (!contract || !onContractChange) return;
+
+    const newEscalationOrder = escalationOrder?.filter(m => m !== methodToRemove) || [];
+
+    if (newEscalationOrder.length === 0) {
+      // Se non ci sono più contratti, rimuovi tutto
+      onContractChange(null);
+      return;
+    }
+
+    // Rimuovi il metodo dal contract
+    const newMethods = { ...contract.methods };
+    delete newMethods[methodToRemove];
+
+    const newContract: NLPContract = {
+      ...contract,
+      escalationOrder: newEscalationOrder,
+      methods: newMethods,
+    };
+
+    onContractChange(newContract);
+  };
+
+  // ✅ FIX: Calculate column width for dynamic columns
+  // Assume: phraseColumnWidth (280px) + Actions (80px) + Buttons (80px) = 440px fixed
+  // Remaining width is distributed among dynamic columns
+  const calculateColumnWidth = (totalColumns: number): number => {
+    if (totalColumns === 0) return 200; // Default width if no columns
+    // Estimate: 100% - 440px fixed = available width
+    // Distribute evenly among dynamic columns (min 220px per column per contenere "Espressione (Regex)" + icone)
+    const minColumnWidth = 220; // ✅ AUMENTATO da 150 a 220 per evitare tagli
+    const estimatedTotalWidth = 1200; // Approximate table width
+    const fixedWidth = 440; // phraseColumnWidth (280) + Actions (80) + Buttons (80)
+    const availableWidth = estimatedTotalWidth - fixedWidth;
+    const calculatedWidth = Math.max(minColumnWidth, Math.floor(availableWidth / totalColumns));
+    return calculatedWidth;
+  };
+
   // ✅ STEP 6: Render dynamic columns based on escalationOrder
   const renderDynamicColumns = () => {
     if (!escalationOrder || escalationOrder.length === 0) {
       // STEP 11: Show "Add contract" dropdown when no contract
       return (
-        <th colSpan={1} style={{ padding: 8, background: '#f9fafb', textAlign: 'center' }}>
+        <th colSpan={1} style={{ padding: 8, background: '#f9fafb', textAlign: 'center', width: '200px' }}>
           <AddContractDropdown
             onSelect={handleAddFirstContract}
             availableMethods={getAvailableMethods()}
@@ -236,6 +276,8 @@ export default function TesterGridHeader({
         </th>
       );
     }
+
+    const columnWidth = calculateColumnWidth(escalationOrder.length);
 
     return escalationOrder.map((method, index) => {
       const componentType = mapMethodTypeToComponentType(method);
@@ -274,6 +316,8 @@ export default function TesterGridHeader({
             handleAddContractAfter(method)(selectedMethod);
             setOpenDropdownAfter(null);
           } : undefined}
+          columnWidth={columnWidth}
+          onRemoveContract={onContractChange && escalationOrder.length > 1 ? () => handleRemoveContract(method) : undefined}
         />
       );
     });
@@ -287,7 +331,8 @@ export default function TesterGridHeader({
           padding: 8,
           background: '#f9fafb',
           width: `${phraseColumnWidth}px`,
-          position: 'relative',
+          position: 'sticky', // ✅ FIX: Cambiato da 'relative' a 'sticky'
+          left: 0, // ✅ FIX: Fissa a sinistra
           zIndex: 1002, // ✅ CRITICAL: zIndex più alto per garantire che l'input sia sempre cliccabile
         }}>
           <TesterGridInput
@@ -327,7 +372,7 @@ export default function TesterGridHeader({
             }}
           />
         </th>
-        <TesterGridActionsColumn rowIndex={-1} newExample={newExample} onAddExample={onAddExample} />
+        <TesterGridActionsColumn rowIndex={-1} newExample={newExample} onAddExample={onAddExample} phraseColumnWidth={phraseColumnWidth} />
         {/* ✅ STEP 6: Render dynamic columns based on escalationOrder */}
         {escalationOrder ? (
           renderDynamicColumns()

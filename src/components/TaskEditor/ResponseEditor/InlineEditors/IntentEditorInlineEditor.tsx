@@ -166,13 +166,22 @@ export default function IntentEditorInlineEditor({
 
       {/* EmbeddingEditorShell with inlineMode prop and intentSelected */}
       <div style={{ flex: 1, overflow: 'auto' }}>
-        <EmbeddingEditorShell
-          ref={editorRef}
-          inlineMode={true}
-          intentSelected={intentSelected}
-          instanceId={act ? ((act as any)?.instanceId || act.id) : undefined}
-          onTrainStateChange={setTrainState}
-        />
+        {act ? (
+          <EmbeddingEditorShell
+            ref={editorRef}
+            inlineMode={true}
+            intentSelected={intentSelected}
+            instanceId={(act as any)?.instanceId || act.id}
+            onTrainStateChange={setTrainState}
+          />
+        ) : (
+          <div style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>
+            <p>No task available. Please select a task node first.</p>
+            <p style={{ fontSize: 12, marginTop: 8, opacity: 0.7 }}>
+              The embeddings editor requires a task node to be selected.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

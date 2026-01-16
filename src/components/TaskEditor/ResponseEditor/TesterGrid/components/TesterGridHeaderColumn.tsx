@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Wand2, TypeIcon, Plus } from 'lucide-react';
+import { Wand2, TypeIcon, Plus, X } from 'lucide-react';
 import SmartTooltip from '../../../../SmartTooltip';
 
 interface TesterGridHeaderColumnProps {
@@ -17,6 +17,8 @@ interface TesterGridHeaderColumnProps {
   availableMethods?: Array<'regex' | 'rules' | 'ner' | 'llm' | 'embeddings'>; // ✅ STEP 8: Methods disponibili
   isDropdownOpen?: boolean; // ✅ STEP 8: Se il dropdown è aperto
   onSelectMethod?: (method: 'regex' | 'rules' | 'ner' | 'llm' | 'embeddings') => void; // ✅ STEP 8: Callback per selezionare method
+  columnWidth?: number; // ✅ FIX: Explicit column width to prevent overlapping
+  onRemoveContract?: () => void; // ✅ NUOVO: Callback per rimuovere contract
 }
 
 /**
@@ -37,6 +39,8 @@ export default function TesterGridHeaderColumn({
   availableMethods = [], // ✅ STEP 8: Destructure new props
   isDropdownOpen = false,
   onSelectMethod,
+  columnWidth, // ✅ FIX: Explicit column width
+  onRemoveContract, // ✅ NUOVO: Destructure remove prop
 }: TesterGridHeaderColumnProps) {
   const isEditorActive = activeEditor === type || (type === 'deterministic' && activeEditor === 'extractor') || (type === 'deterministic' && activeEditor === 'post');
   const shouldHide = activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) && !isEditorActive;
@@ -75,24 +79,31 @@ export default function TesterGridHeaderColumn({
         opacity: enabled ? 1 : 0.4,
         visibility: shouldHide ? 'hidden' : 'visible',
         position: 'relative', // ✅ STEP 8: Per posizionare dropdown
+        width: columnWidth ? `${columnWidth}px` : 'auto', // ✅ FIX: Explicit width to prevent overlapping
+        minWidth: columnWidth ? `${columnWidth}px` : '200px', // ✅ FIX: Minimum width aumentato per evitare tagli
+        maxWidth: columnWidth ? `${columnWidth}px` : 'none', // ✅ FIX: Maximum width
+        wordWrap: 'break-word', // ✅ FIX: Permette wrapping del testo
+        overflowWrap: 'break-word', // ✅ FIX: Wrapping moderno
+        whiteSpace: 'normal', // ✅ FIX: Permette wrapping invece di ellipsis
       }}
       title={tooltip}
     >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
           <input
             type="checkbox"
             checked={enabled}
             onChange={onToggleMethod}
-            style={{ cursor: 'pointer' }}
+            style={{ cursor: 'pointer', flexShrink: 0 }}
             disabled={type === 'embeddings'}
           />
-          <div>
-            <span style={{ fontWeight: 600, color: enabled ? '#0b0f17' : '#9ca3af' }}>{mainLabel}</span>
-            <span style={{ opacity: 0.7, marginLeft: 4, color: enabled ? '#0b0f17' : '#9ca3af' }}>({techLabel})</span>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <span style={{ fontWeight: 600, color: enabled ? '#0b0f17' : '#9ca3af', wordBreak: 'break-word' }}>{mainLabel}</span>
+            <span style={{ opacity: 0.7, marginLeft: 4, color: enabled ? '#0b0f17' : '#9ca3af', wordBreak: 'break-word' }}>({techLabel})</span>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+          {/* ✅ FIX: Matita sempre visibile per tutte le colonne */}
           {type === 'deterministic' && showPostProcess ? (
             <>
               <SmartTooltip text="Configure Extractor" tutorId="configure_extractor_help" placement="bottom">
@@ -106,7 +117,8 @@ export default function TesterGridHeaderColumn({
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    transition: 'all 0.2s'
+                    transition: 'all 0.2s',
+                    flexShrink: 0,
                   }}
                 >
                   <Wand2 size={14} color={activeEditor === 'extractor' ? '#fff' : '#666'} />
@@ -123,43 +135,16 @@ export default function TesterGridHeaderColumn({
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    transition: 'all 0.2s'
+                    transition: 'all 0.2s',
+                    flexShrink: 0,
                   }}
                 >
                   <TypeIcon size={14} color={activeEditor === 'post' ? '#fff' : '#666'} />
                 </button>
               </SmartTooltip>
-              {/* ✅ STEP 7: Pulsante + per aggiungere contract a destra */}
-              {onAddContract && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onAddContract();
-                  }}
-                  title="Aggiungi contract a destra"
-                  style={{
-                    background: 'rgba(255,255,255,0.3)',
-                    border: 'none',
-                    borderRadius: 4,
-                    padding: '4px 6px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(59, 130, 246, 0.3)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.3)';
-                  }}
-                >
-                  <Plus size={14} color="#666" />
-                </button>
-              )}
             </>
           ) : (
-            <>
+            <SmartTooltip text={`Configure ${techLabel}`} tutorId={`configure_${type}_help`} placement="bottom">
               <button
                 onClick={() => onToggleEditor(type === 'deterministic' ? 'extractor' : type)}
                 title={`Configure ${techLabel}`}
@@ -171,40 +156,75 @@ export default function TesterGridHeaderColumn({
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  transition: 'all 0.2s'
+                  transition: 'all 0.2s',
+                  flexShrink: 0,
                 }}
               >
                 <Wand2 size={14} color={isEditorActive ? '#fff' : '#666'} />
               </button>
-              {/* ✅ STEP 7: Pulsante + per aggiungere contract a destra */}
-              {onAddContract && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onAddContract();
-                  }}
-                  title="Aggiungi contract a destra"
-                  style={{
-                    background: 'rgba(255,255,255,0.3)',
-                    border: 'none',
-                    borderRadius: 4,
-                    padding: '4px 6px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(59, 130, 246, 0.3)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.3)';
-                  }}
-                >
-                  <Plus size={14} color="#666" />
-                </button>
-              )}
-            </>
+            </SmartTooltip>
+          )}
+
+          {/* ✅ FIX: Pulsante + sempre visibile se ci sono metodi disponibili */}
+          {onAddContract && availableMethods.length > 0 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddContract();
+              }}
+              title="Aggiungi contract a destra"
+              style={{
+                background: 'rgba(255,255,255,0.3)',
+                border: 'none',
+                borderRadius: 4,
+                padding: '4px 6px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                transition: 'all 0.2s',
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(59, 130, 246, 0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.3)';
+              }}
+            >
+              <Plus size={14} color="#666" />
+            </button>
+          )}
+
+          {/* ✅ NUOVO: Pulsante X per rimuovere colonna */}
+          {onRemoveContract && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (window.confirm(`Rimuovere il contratto "${mainLabel} (${techLabel})"?`)) {
+                  onRemoveContract();
+                }
+              }}
+              title="Rimuovi contract"
+              style={{
+                background: 'rgba(239, 68, 68, 0.2)',
+                border: 'none',
+                borderRadius: 4,
+                padding: '4px 6px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                transition: 'all 0.2s',
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.4)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+              }}
+            >
+              <X size={14} color="#ef4444" />
+            </button>
           )}
         </div>
       </div>

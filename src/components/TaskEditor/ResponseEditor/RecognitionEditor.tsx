@@ -144,18 +144,25 @@ export default function RecognitionEditor({
     return loadContractFromNode(node);
   });
 
-  // ✅ Sincronizza localContract con node quando node cambia
+  // ✅ Sincronizza localContract con node SOLO quando cambia il node (non quando cambia il contract)
+  const prevNodeRef = React.useRef(editorProps?.node);
   useEffect(() => {
     const node = editorProps?.node;
-    if (!node) {
-      setLocalContract(null);
-      return;
+    // ✅ Solo se il node è cambiato (nuovo node), non se è lo stesso node con contract modificato
+    if (node !== prevNodeRef.current) {
+      prevNodeRef.current = node;
+      if (!node) {
+        setLocalContract(null);
+        return;
+      }
+      const loadedContract = loadContractFromNode(node);
+      setLocalContract(loadedContract);
     }
-    const loadedContract = loadContractFromNode(node);
-    setLocalContract(loadedContract);
   }, [editorProps?.node]);
 
   // ✅ CRITICAL FIX: Crea sempre un nuovo riferimento per forzare re-render
+  // ✅ Usa una key basata su escalationOrder per forzare nuovo riferimento quando cambia
+  const contractKey = localContract?.escalationOrder?.join(',') || '';
   const contract = useMemo<NLPContract | null>(() => {
     if (!localContract) return null;
 
@@ -168,12 +175,13 @@ export default function RecognitionEditor({
     };
 
     console.log('[RecognitionEditor][useMemo] Creating new contract reference', {
+      contractKey,
       escalationOrder: newContractRef.escalationOrder,
       methods: newContractRef.methods ? Object.keys(newContractRef.methods) : [],
     });
 
     return newContractRef;
-  }, [localContract?.escalationOrder?.join(','), localContract?.methods ? Object.keys(localContract.methods).join(',') : '']); // ✅ Dipende da escalationOrder e methods
+  }, [localContract, contractKey]); // ✅ Dipende da localContract e contractKey per forzare nuovo riferimento
 
   // ✅ STEP 10: Handle contract changes and save to node
   const handleContractChange = useCallback((updatedContract: NLPContract | null) => {
@@ -190,13 +198,23 @@ export default function RecognitionEditor({
     });
 
     // ✅ FIX: Crea un nuovo oggetto per forzare il cambio di riferimento
-    const contractToSave = updatedContract ? { ...updatedContract } : null;
+    const contractToSave = updatedContract ? {
+      ...updatedContract,
+      methods: updatedContract.methods ? { ...updatedContract.methods } : undefined,
+      escalationOrder: updatedContract.escalationOrder ? [...updatedContract.escalationOrder] : undefined,
+      subDataMapping: { ...updatedContract.subDataMapping },
+    } : null;
 
     // Save contract to node
     saveContractToNode(node, contractToSave);
 
-    // ✅ CRITICAL FIX: Aggiorna lo stato locale IMMEDIATAMENTE per forzare re-render
+    // ✅ CRITICAL FIX: Aggiorna lo stato locale IMMEDIATAMENTE con un nuovo oggetto per forzare re-render
     setLocalContract(contractToSave);
+
+    console.log('[RecognitionEditor][handleContractChange] Updated localContract', {
+      escalationOrder: contractToSave?.escalationOrder,
+      methods: contractToSave?.methods ? Object.keys(contractToSave.methods) : [],
+    });
 
     // ✅ Notify parent component of the change (if onProfileUpdate exists, use it)
     if (editorProps?.onProfileUpdate) {
