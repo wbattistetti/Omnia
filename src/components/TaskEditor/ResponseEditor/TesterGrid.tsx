@@ -9,6 +9,12 @@ import IntentEditorInlineEditor from './InlineEditors/IntentEditorInlineEditor';
 // Modular components
 import TesterGridHeader from './TesterGrid/components/TesterGridHeader';
 import TesterGridRow from './TesterGrid/components/TesterGridRow';
+import TesterGridHeaderColumn from './TesterGrid/components/TesterGridHeaderColumn';
+import TesterGridInput from './TesterGrid/components/TesterGridInput';
+import TesterGridPhraseColumn from './TesterGrid/components/TesterGridPhraseColumn';
+import TesterGridActionsColumn from './TesterGrid/components/TesterGridActionsColumn';
+import AddContractDropdown from './TesterGrid/components/AddContractDropdown';
+import ExtractionResultCell from './TesterGrid/components/ExtractionResultCell';
 import { useColumnResize } from './TesterGrid/hooks/useColumnResize';
 import { useEditorOverlay } from './TesterGrid/hooks/useEditorOverlay';
 import { RowResult } from './hooks/useExtractionTesting';
@@ -364,177 +370,365 @@ function TesterGridComponent({
         height: '100%',
         overflow: 'hidden',
       }}>
-        <div
-          className="tester-grid-scroll"
-          style={{
-            flex: 1,
-            minHeight: 0,
+        {/* ✅ FIX: Struttura con due parti: sinistra fissa, destra scrollabile */}
+        <div style={{
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'row',
+          overflow: 'hidden',
+        }}>
+          {/* Parte sinistra fissa: Frase + Actions (non scrolla) */}
+          <div style={{
+            flexShrink: 0,
+            width: `${phraseColumnWidth + 46}px`, // Frase + Actions
+            display: 'flex',
+            flexDirection: 'column',
+            borderRight: '2px solid #cbd5e1',
             overflowY: 'auto',
-            overflowX: 'auto', // ✅ FIX: Cambiato da 'hidden' a 'auto' per permettere scroll orizzontale
+            overflowX: 'hidden',
+            background: '#fff',
           }}>
-          <table ref={tableRef} style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            tableLayout: 'fixed' as any,
-            minWidth: 'max-content', // ✅ FIX: Assicura che la tabella abbia larghezza minima per tutte le colonne
-          }}>
-            <TesterGridHeader
-              contract={contract} // ✅ STEP 4: Pass contract to header
-              onContractChange={onContractChange} // ✅ STEP 10: Pass callback
-              newExample={newExample}
-              setNewExample={setNewExample}
-              onAddExample={handleAddExample}
-              phraseColumnWidth={phraseColumnWidth}
-              isResizing={isResizing}
-              onResizeStart={handleResizeStart}
-              enabledMethods={enabledMethods}
-              toggleMethod={toggleMethod}
-              activeEditor={activeEditor}
-              toggleEditor={toggleEditor}
-              showDeterministic={showDeterministic}
-              showNER={showNER}
-              showEmbeddings={showEmbeddings}
-              headerRowRef={headerRowRef}
-            />
-            <tbody>
-              {examplesList.map((ex, i) => (
-                <TesterGridRow
-                  key={i}
-                  rowIndex={i}
-                  phrase={ex}
-                  rowResult={rowResults[i] || {}}
-                  phraseColumnWidth={phraseColumnWidth}
-                  isResizing={isResizing}
-                  onResizeStart={handleResizeStart}
-                  selectedRow={selectedRow}
-                  onSelectRow={setSelectedRow}
-                  kind={kind}
-                  expectedKeysForKind={expectedKeysForKind}
-                  enabledMethods={enabledMethods}
-                  showDeterministic={showDeterministic}
-                  showNER={showNER}
-                  showEmbeddings={showEmbeddings}
-                  activeEditor={activeEditor}
-                  cellOverrides={cellOverrides}
-                  setCellOverrides={setCellOverrides}
-                  editingCell={editingCell}
-                  setEditingCell={setEditingCell}
-                  editingText={editingText}
-                  setEditingText={setEditingText}
-                  hasNote={hasNote}
-                  getNote={getNote}
-                  addNote={addNote}
-                  deleteNote={deleteNote}
-                  isEditing={isEditing}
-                  startEditing={startEditing}
-                  stopEditing={stopEditing}
-                  isHovered={isHovered}
-                  setHovered={setHovered}
-                  runRowTest={runRowTest}
-                  runAllRows={runAllRows}
-                  testing={testing}
-                  examplesListLength={examplesList.length}
-                  reportOpen={reportOpen}
-                  setReportOpen={setReportOpen}
-                  baselineStats={baselineStats}
-                  lastStats={lastStats}
-                />
-              ))}
-              {examplesList.length === 0 && (
-                <>
+            <div
+              className="tester-grid-scroll"
+              style={{
+                flex: 1,
+                minHeight: 0,
+                overflowY: 'auto',
+                overflowX: 'hidden', // ✅ FIX: Nessuno scroll orizzontale nella parte fissa
+              }}>
+              <table style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                tableLayout: 'fixed' as any,
+              }}>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                   <tr>
-                    <td style={{ padding: 10, opacity: 0.7 }}>— nessuna frase —</td>
-                    <td style={{ padding: 4, textAlign: 'center', verticalAlign: 'middle', background: '#f9fafb' }}>
-                      {runAllRows && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void runAllRows();
-                          }}
-                          disabled={testing || examplesList.length === 0}
-                          title="Prova tutte"
+                    <th style={{
+                      textAlign: 'left',
+                      padding: 8,
+                      background: '#f9fafb',
+                      width: `${phraseColumnWidth}px`,
+                      position: 'relative',
+                      zIndex: 1002,
+                    }}>
+                      <TesterGridInput
+                        value={newExample}
+                        onChange={setNewExample}
+                        onAdd={handleAddExample}
+                      />
+                      {/* Splitter - linea verticale draggable */}
+                      <div
+                        onMouseDown={handleResizeStart}
+                        style={{
+                          position: 'absolute',
+                          right: '-3px',
+                          top: 0,
+                          bottom: 0,
+                          width: '6px',
+                          cursor: 'col-resize',
+                          backgroundColor: isResizing ? '#3b82f6' : 'rgba(107, 114, 128, 0.4)',
+                          zIndex: 20,
+                          transition: isResizing ? 'none' : 'background-color 0.2s',
+                          borderLeft: '1px solid rgba(107, 114, 128, 0.6)',
+                          borderRight: '1px solid rgba(107, 114, 128, 0.6)'
+                        }}
+                      />
+                    </th>
+                    <TesterGridActionsColumn rowIndex={-1} newExample={newExample} onAddExample={handleAddExample} phraseColumnWidth={phraseColumnWidth} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {examplesList.map((ex, i) => (
+                    <tr
+                      key={i}
+                      style={{
+                        borderTop: '1px solid #e5e7eb',
+                        cursor: 'pointer',
+                        background: selectedRow === i ? '#fff7ed' : '#fff'
+                      }}
+                      onClick={() => setSelectedRow(i)}
+                    >
+                      <TesterGridPhraseColumn
+                        phrase={ex}
+                        spans={rowResults[i]?.spans}
+                        width={phraseColumnWidth}
+                        isResizing={isResizing}
+                        onResizeStart={handleResizeStart}
+                        rowBackground={selectedRow === i ? '#fff7ed' : '#fff'}
+                      />
+                      <TesterGridActionsColumn
+                        rowIndex={i}
+                        runRowTest={runRowTest}
+                        runAllRows={i === 0 ? runAllRows : undefined}
+                        testing={testing}
+                        examplesListLength={examplesList.length}
+                        reportOpen={i === 1 ? reportOpen : undefined}
+                        setReportOpen={i === 1 ? setReportOpen : undefined}
+                        phraseColumnWidth={phraseColumnWidth}
+                        rowBackground={selectedRow === i ? '#fff7ed' : '#fff'}
+                      />
+                    </tr>
+                  ))}
+                  {examplesList.length === 0 && (
+                    <>
+                      <tr>
+                        <td style={{ padding: 10, opacity: 0.7 }}>— nessuna frase —</td>
+                        <td style={{ padding: 4, textAlign: 'center', verticalAlign: 'middle', background: '#f9fafb' }}>
+                          {runAllRows && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void runAllRows();
+                              }}
+                              disabled={testing || examplesList.length === 0}
+                              title="Prova tutte"
+                              style={{
+                                border: '1px solid #22c55e',
+                                background: testing ? '#eab308' : '#14532d',
+                                color: '#dcfce7',
+                                borderRadius: 8,
+                                padding: '8px 10px',
+                                cursor: testing || examplesList.length === 0 ? 'not-allowed' : 'pointer',
+                                width: '100%',
+                                opacity: testing || examplesList.length === 0 ? 0.5 : 1,
+                              }}
+                            >
+                              <ChevronsRight size={16} />
+                            </button>
+                          )}
+                        </td>
+                        <td colSpan={colSpanEmpty - 2} style={{ padding: 10, opacity: 0.7 }}></td>
+                      </tr>
+                      {setReportOpen && (
+                        <tr>
+                          <td style={{ padding: 10, opacity: 0.7 }}></td>
+                          <td style={{ padding: 4, textAlign: 'center', verticalAlign: 'middle', background: '#f9fafb' }}>
+                            <div style={{ position: 'relative', width: '100%' }}>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setReportOpen(!reportOpen);
+                                }}
+                                title="Report"
+                                style={{
+                                  border: '1px solid #60a5fa',
+                                  background: '#0c4a6e',
+                                  color: '#dbeafe',
+                                  borderRadius: 8,
+                                  padding: '8px 10px',
+                                  cursor: 'pointer',
+                                  width: '100%',
+                                }}
+                              >
+                                <BarChart2 size={16} />
+                              </button>
+                              {reportOpen && (
+                                <div style={{
+                                  position: 'absolute',
+                                  right: 0,
+                                  top: '100%',
+                                  marginTop: 6,
+                                  background: '#111827',
+                                  color: '#e5e7eb',
+                                  border: '1px solid #374151',
+                                  borderRadius: 8,
+                                  padding: 10,
+                                  minWidth: 260,
+                                  zIndex: 30,
+                                }}>
+                                  {(() => {
+                                    const base = baselineStats || { matched: 0, falseAccept: 0, totalGt: 0 };
+                                    const last = lastStats || base;
+                                    const pct = (n: number, d: number) => d > 0 ? Math.round((n / d) * 100) : 0;
+                                    const gainedMatched = pct(last.matched, last.totalGt) - pct(base.matched, base.totalGt);
+                                    const removedFA = pct(base.falseAccept, base.totalGt) - pct(last.falseAccept, last.totalGt);
+                                    const stillUnmatch = Math.max(0, (last.totalGt - last.matched - last.falseAccept));
+                                    const stillFA = last.falseAccept;
+                                    const sign = (v: number) => (v > 0 ? `+${v}` : `${v}`);
+                                    return (
+                                      <div style={{ display: 'grid', gap: 6 }}>
+                                        <div><strong>Gained Matched:</strong> {sign(gainedMatched)}%</div>
+                                        <div><strong>Removed False acceptance:</strong> {sign(removedFA)}%</div>
+                                        <div><strong>Still UnMatching:</strong> {stillUnmatch}</div>
+                                        <div><strong>Still False acceptance:</strong> {stillFA} ({sign(pct(last.falseAccept, last.totalGt) - pct(base.falseAccept, base.totalGt))}%)</div>
+                                      </div>
+                                    );
+                                  })()}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Parte destra scrollabile: solo colonne contratti */}
+          <div
+            className="tester-grid-scroll"
+            style={{
+              flex: 1,
+              minHeight: 0,
+              overflowY: 'auto',
+              overflowX: 'auto', // ✅ FIX: Scroll orizzontale solo per le colonne contratti
+            }}>
+            <table style={{
+              width: '100%',
+              borderCollapse: 'collapse',
+              tableLayout: 'fixed' as any,
+              minWidth: 'max-content',
+            }}>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+                <tr>
+                  {/* ✅ FIX: Render solo colonne contratti nell'header */}
+                  {contract?.escalationOrder && contract.escalationOrder.length > 0 ? (
+                    contract.escalationOrder.map((method) => {
+                      const componentType = method === 'rules' ? 'deterministic' : method;
+                      const labels = {
+                        regex: { main: 'Espressione (Regex)', tech: 'Regex' },
+                        deterministic: { main: 'Logica (Extractor)', tech: 'Extractor' },
+                        ner: { main: 'AI Rapida (NER)', tech: 'NER' },
+                        llm: { main: 'AI Completa (LLM)', tech: 'LLM' },
+                        embeddings: { main: 'Classificazione (Embeddings)', tech: 'Embeddings' },
+                      }[componentType] || { main: method, tech: method };
+                      const color = {
+                        regex: '#93c5fd',
+                        deterministic: '#e5e7eb',
+                        ner: '#fef3c7',
+                        llm: '#fed7aa',
+                        embeddings: '#e0e7ff',
+                      }[componentType] || '#93c5fd';
+
+                      return (
+                        <TesterGridHeaderColumn
+                          key={method}
+                          type={componentType as any}
+                          mainLabel={labels.main}
+                          techLabel={labels.tech}
+                          tooltip={`${labels.main} - ${labels.tech}`}
+                          backgroundColor={color}
+                          enabled={enabledMethods[componentType as keyof typeof enabledMethods] ?? false}
+                          activeEditor={activeEditor}
+                          onToggleMethod={() => toggleMethod(componentType as keyof typeof enabledMethods)}
+                          onToggleEditor={() => toggleEditor(componentType as any)}
+                          columnWidth={220}
+                          onRemoveContract={contract.escalationOrder && contract.escalationOrder.length > 1 ? () => {
+                            const newOrder = contract.escalationOrder!.filter(m => m !== method);
+                            const newMethods = { ...contract.methods };
+                            delete newMethods[method];
+                            onContractChange?.({ ...contract, escalationOrder: newOrder, methods: newMethods });
+                          } : undefined}
+                        />
+                      );
+                    })
+                  ) : (
+                    <th colSpan={1} style={{ padding: 8, background: '#f9fafb', textAlign: 'center' }}>
+                      <AddContractDropdown
+                        onSelect={(method) => {
+                          const newOrder = [method];
+                          const newMethods = { [method]: contract?.methods?.[method] || {} };
+                          if (contract && onContractChange) {
+                            onContractChange({ ...contract, escalationOrder: newOrder, methods: newMethods });
+                          }
+                        }}
+                        availableMethods={['regex', 'rules', 'ner', 'llm', 'embeddings']}
+                        label="Aggiungi contract"
+                      />
+                    </th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {examplesList.map((_, i) => (
+                  <tr
+                    key={i}
+                    style={{
+                      borderTop: '1px solid #e5e7eb',
+                      cursor: 'pointer',
+                      background: selectedRow === i ? '#fff7ed' : '#fff'
+                    }}
+                    onClick={() => setSelectedRow(i)}
+                  >
+                    {/* ✅ FIX: Render solo colonne contratti nelle righe */}
+                    {contract?.escalationOrder && contract.escalationOrder.map((method) => {
+                      const componentType = method === 'rules' ? 'deterministic' : method;
+                      const color = {
+                        regex: '#93c5fd',
+                        deterministic: '#e5e7eb',
+                        ner: '#fef3c7',
+                        llm: '#fed7aa',
+                        embeddings: '#e0e7ff',
+                      }[componentType] || '#93c5fd';
+
+                      const result = {
+                        regex: rowResults[i]?.regex,
+                        deterministic: rowResults[i]?.deterministic,
+                        ner: rowResults[i]?.ner,
+                        llm: rowResults[i]?.llm,
+                        embeddings: undefined, // ✅ FIX: embeddings non esiste in RowResult
+                      }[componentType] || null;
+
+                      return (
+                        <td
+                          key={method}
                           style={{
-                            border: '1px solid #22c55e',
-                            background: testing ? '#eab308' : '#14532d',
-                            color: '#dcfce7',
-                            borderRadius: 8,
-                            padding: '8px 10px',
-                            cursor: testing || examplesList.length === 0 ? 'not-allowed' : 'pointer',
-                            width: '100%',
-                            opacity: testing || examplesList.length === 0 ? 0.5 : 1,
+                            padding: 8,
+                            color: enabledMethods[componentType as keyof typeof enabledMethods] ? '#374151' : '#9ca3af',
+                            overflow: 'visible',
+                            background: color,
+                            position: 'relative',
+                            verticalAlign: 'top',
+                            opacity: enabledMethods[componentType as keyof typeof enabledMethods] ? 1 : 0.6,
+                            visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm', 'embeddings'].includes(activeEditor) && activeEditor !== componentType ? 'hidden' : 'visible'
                           }}
                         >
-                          <ChevronsRight size={16} />
-                        </button>
-                      )}
-                    </td>
-                    <td colSpan={colSpanEmpty - 2} style={{ padding: 10, opacity: 0.7 }}></td>
+                          <ExtractionResultCell
+                            summary={result || undefined}
+                            processingTime={(() => {
+                              const msMap: Record<string, keyof RowResult> = {
+                                regex: 'regexMs',
+                                deterministic: 'detMs',
+                                ner: 'nerMs',
+                                llm: 'llmMs',
+                              };
+                              return (rowResults[i]?.[msMap[componentType] || 'regexMs'] as number) || 0;
+                            })()}
+                            maxMs={Math.max(rowResults[i]?.detMs || 0, rowResults[i]?.nerMs || 0, rowResults[i]?.llmMs || 0)}
+                            rowIdx={i}
+                            col={componentType as any}
+                            kind={kind}
+                            expectedKeysForKind={expectedKeysForKind}
+                            enabled={enabledMethods[componentType as keyof typeof enabledMethods] ?? false}
+                            isRunning={rowResults[i]?.running}
+                            cellOverrides={cellOverrides}
+                            editingCell={editingCell}
+                            editingText={editingText}
+                            setEditingCell={setEditingCell}
+                            setEditingText={setEditingText}
+                            setCellOverrides={setCellOverrides}
+                            hasNote={hasNote}
+                            getNote={getNote}
+                            isEditing={isEditing}
+                            startEditing={startEditing}
+                            stopEditing={stopEditing}
+                            addNote={addNote}
+                            deleteNote={deleteNote}
+                            isHovered={isHovered}
+                            setHovered={setHovered}
+                          />
+                        </td>
+                      );
+                    })}
                   </tr>
-                  {setReportOpen && (
-                    <tr>
-                      <td style={{ padding: 10, opacity: 0.7 }}></td>
-                      <td style={{ padding: 4, textAlign: 'center', verticalAlign: 'middle', background: '#f9fafb' }}>
-                        <div style={{ position: 'relative', width: '100%' }}>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setReportOpen(!reportOpen);
-                            }}
-                            title="Report"
-                            style={{
-                              border: '1px solid #60a5fa',
-                              background: '#0c4a6e',
-                              color: '#dbeafe',
-                              borderRadius: 8,
-                              padding: '8px 10px',
-                              cursor: 'pointer',
-                              width: '100%',
-                            }}
-                          >
-                            <BarChart2 size={16} />
-                          </button>
-                          {reportOpen && (
-                            <div style={{
-                              position: 'absolute',
-                              right: 0,
-                              top: '100%',
-                              marginTop: 6,
-                              background: '#111827',
-                              color: '#e5e7eb',
-                              border: '1px solid #374151',
-                              borderRadius: 8,
-                              padding: 10,
-                              minWidth: 260,
-                              zIndex: 30,
-                            }}>
-                              {(() => {
-                                const base = baselineStats || { matched: 0, falseAccept: 0, totalGt: 0 };
-                                const last = lastStats || base;
-                                const pct = (n: number, d: number) => d > 0 ? Math.round((n / d) * 100) : 0;
-                                const gainedMatched = pct(last.matched, last.totalGt) - pct(base.matched, base.totalGt);
-                                const removedFA = pct(base.falseAccept, base.totalGt) - pct(last.falseAccept, last.totalGt);
-                                const stillUnmatch = Math.max(0, (last.totalGt - last.matched - last.falseAccept));
-                                const stillFA = last.falseAccept;
-                                const sign = (v: number) => (v > 0 ? `+${v}` : `${v}`);
-                                return (
-                                  <div style={{ display: 'grid', gap: 6 }}>
-                                    <div><strong>Gained Matched:</strong> {sign(gainedMatched)}%</div>
-                                    <div><strong>Removed False acceptance:</strong> {sign(removedFA)}%</div>
-                                    <div><strong>Still UnMatching:</strong> {stillUnmatch}</div>
-                                    <div><strong>Still False acceptance:</strong> {stillFA} ({sign(pct(last.falseAccept, last.totalGt) - pct(base.falseAccept, base.totalGt))}%)</div>
-                                  </div>
-                                );
-                              })()}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </>
-              )}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* Overlay dell'editor quando attivo */}
