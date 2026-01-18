@@ -1,22 +1,23 @@
 // Helper function to check if a DDT has messages for ProblemClassification
-// For ProblemClassification, messages are stored in mainData[0].steps when kind === "intent"
+// ✅ AGGIORNATO: Usa steps a root level (non più mainData[0].steps)
+// ✅ AGGIORNATO: Non controlla più kind === "intent" - tutto è DataRequest
 
 export function hasIntentMessages(ddt: any): boolean {
   if (!ddt) {
     return false;
   }
 
-  // ✅ Leggi kind da mainData[0].kind
+  // ✅ Verifica che ci sia mainData[0] con id
   const mainList = Array.isArray(ddt.mainData) ? ddt.mainData : [];
   const firstMain = mainList[0];
 
-  // Verifica che il primo mainData abbia kind === "intent"
-  if (!firstMain || firstMain.kind !== 'intent') {
+  if (!firstMain || !firstMain.id) {
     return false;
   }
 
-  // ✅ Leggi steps da mainData[0].steps
-  const steps = firstMain.steps || {};
+  // ✅ Leggi steps da root level (keyed by nodeId)
+  const firstMainId = firstMain.id;
+  const steps = (ddt.steps && ddt.steps[firstMainId]) || {};
 
   // Required steps for intent classification
   const requiredSteps = ['start', 'noInput', 'noMatch', 'confirmation'];

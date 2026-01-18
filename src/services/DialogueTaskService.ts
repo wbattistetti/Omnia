@@ -9,7 +9,9 @@ export interface DialogueTask {
   type?: string;
   icon?: string;
   subDataIds?: string[]; // ✅ Reference ai Task sottodati (nuova struttura)
-  stepPrompts?: any; // ✅ stepPrompts a root level (nuova struttura)
+  steps?: Record<string, any>; // ✅ Steps a root level: { "nodeId": { start: {...}, noMatch: {...} } }
+  // ❌ DEPRECATED: stepPrompts - use steps instead
+  stepPrompts?: any; // @deprecated Use steps instead
   dataContracts?: any[]; // Constraints
   constraints?: any[]; // Constraints (alias)
   examples?: any[];

@@ -632,6 +632,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
               templateId: null,            // ✅ templateId: null (standalone)
               label: finalDDT.label,
               mainData: finalDDT.mainData,
+              steps: finalDDT.steps, // ✅ CRITICAL: Salva steps a root level per evitare riapertura wizard
               constraints: finalDDT.constraints,
               examples: finalDDT.examples,
               nlpContract: finalDDT.nlpContract,
@@ -641,6 +642,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
             await taskRepository.updateTask(key, {
               label: finalDDT.label,
               mainData: finalDDT.mainData,
+              steps: finalDDT.steps, // ✅ CRITICAL: Salva steps a root level per evitare riapertura wizard
               constraints: finalDDT.constraints,
               examples: finalDDT.examples,
               nlpContract: finalDDT.nlpContract,
@@ -651,7 +653,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
           console.log('[handleEditorClose] ✅ Save completed - repository is now up to date', {
             key,
             mainDataLength: finalDDT.mainData?.length || 0,
-            finalStartTasks
+            finalStartTasks,
+            // ✅ DEBUG: Verifica steps a root level
+            hasSteps: !!finalDDT.steps,
+            stepsCount: finalDDT.steps ? Object.keys(finalDDT.steps).length : 0,
+            stepsKeys: finalDDT.steps ? Object.keys(finalDDT.steps) : []
           });
         } else if (finalDDT) {
           // ✅ No DDT structure, but save other fields (e.g., Message text)
@@ -1265,7 +1271,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                     id: ddt?.id || `temp_ddt_${task?.id}`,
                     label: ddt?.label || task?.label || 'Data',
                     mainData: ddt.mainData,
-                    stepPrompts: ddt.stepPrompts,
+                    steps: ddt.steps,  // ✅ Steps a root level
                     constraints: ddt.constraints,
                     examples: ddt.examples
                   } : ddt)}
@@ -1280,6 +1286,45 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
                     // Set flag to prevent auto-reopen IMMEDIATELY (before any state updates)
                     wizardOwnsDataRef.current = true;
+
+                    // ✅ CRITICAL: Salva immediatamente il task con steps per evitare perdita dati
+                    // Questo assicura che quando si riapre l'editor, i steps siano già salvati
+                    if (task?.id || task?.instanceId) {
+                      const key = (task?.instanceId || task?.id) as string;
+                      const hasDDT = coerced && Object.keys(coerced).length > 0 && coerced.mainData && coerced.mainData.length > 0;
+
+                      if (hasDDT) {
+                        let taskInstance = taskRepository.getTask(key);
+                        if (!taskInstance) {
+                          const taskType = task?.type ?? TaskType.DataRequest;
+                          taskInstance = taskRepository.createTask(taskType, null, undefined, key, currentProjectId || undefined);
+                        }
+
+                        const currentTemplateId = getTemplateId(taskInstance);
+                        const updateData: Partial<Task> = {
+                          label: coerced.label,
+                          mainData: coerced.mainData,
+                          steps: coerced.steps, // ✅ Salva steps a root level immediatamente
+                          constraints: coerced.constraints,
+                          examples: coerced.examples,
+                          nlpContract: coerced.nlpContract,
+                          introduction: coerced.introduction
+                        };
+
+                        if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
+                          updateData.type = TaskType.DataRequest;
+                          updateData.templateId = null;
+                        }
+
+                        taskRepository.updateTask(key, updateData, currentProjectId || undefined);
+                        console.log('[ResponseEditor][onComplete] ✅ Task saved with steps', {
+                          key,
+                          hasSteps: !!coerced.steps,
+                          stepsCount: coerced.steps ? Object.keys(coerced.steps).length : 0,
+                          mainDataLength: coerced.mainData?.length || 0
+                        });
+                      }
+                    }
 
                     // Update DDT state
                     try {
@@ -1332,11 +1377,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                       taskRepository.updateTask(key, {
                         type: TaskType.DataRequest,  // ✅ type: enum numerico
                         templateId: null,            // ✅ templateId: null (standalone)
-                        ...updatedDDT  // ✅ Spread: label, mainData, stepPrompts, ecc.
+                        ...updatedDDT  // ✅ Spread: label, mainData, steps, ecc.
                       }, currentProjectId || undefined);
                     } else {
                       taskRepository.updateTask(key, {
-                        ...updatedDDT  // ✅ Spread: label, mainData, stepPrompts, ecc.
+                        ...updatedDDT  // ✅ Spread: label, mainData, steps, ecc.
                       }, currentProjectId || undefined);
                     }
                   } else if (hasDDT) {

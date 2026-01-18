@@ -126,7 +126,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
           allDDTs.push({
             label: task.label,
             mainData: task.mainData,
-            stepPrompts: task.stepPrompts,
+            steps: task.steps,  // ✅ Steps a root level
             constraints: task.constraints,
             examples: task.examples
           });

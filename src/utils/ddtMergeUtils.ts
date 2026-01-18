@@ -27,6 +27,7 @@ export async function loadDDTFromTemplate(instance: Task | null): Promise<any | 
     return {
       label: instance.label,
       mainData: instance.mainData || [],
+      steps: instance.steps,  // ✅ Steps a root level (già nel formato corretto)
       constraints: instance.constraints,
       examples: instance.examples
     };
@@ -40,6 +41,7 @@ export async function loadDDTFromTemplate(instance: Task | null): Promise<any | 
     return {
       label: instance.label,
       mainData: instance.mainData || [],
+      steps: instance.steps,  // ✅ Steps a root level (già nel formato corretto)
       constraints: instance.constraints,
       examples: instance.examples
     };
@@ -55,37 +57,47 @@ export async function loadDDTFromTemplate(instance: Task | null): Promise<any | 
   if (instanceMainData.length === 0) {
     const allGuidMappings = new Map<string, string>(templateGuidMapping);
     const enrichedMainData = templateMainData.map((templateNode: any) => {
-      // Clone main node steps (if not already cloned by buildMainDataFromTemplate)
-      let clonedMainSteps = templateNode.steps;
-      if (templateNode.steps) {
-        const { cloned, guidMapping } = cloneStepsWithNewTaskIds(templateNode.steps);
-        guidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
-        clonedMainSteps = cloned;
-      }
-
-      // Clone sub-data steps (if not already cloned by buildMainDataFromTemplate)
+      // ✅ Process subData (no steps in nodes anymore)
       const enrichedSubData = (templateNode.subData || []).map((subNode: any) => {
-        if (subNode.steps) {
-          const { cloned, guidMapping: subGuidMapping } = cloneStepsWithNewTaskIds(subNode.steps);
-          subGuidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
-          return {
-            ...subNode,
-            steps: cloned
-          };
-        }
-        return subNode;
+        return subNode; // ✅ No steps in nodes
       });
 
       return {
         ...templateNode,
-        steps: clonedMainSteps,
+        // ❌ REMOVED: steps - steps are now at root level
         subData: enrichedSubData
       };
     });
 
+    // ✅ Clone steps from template.steps[nodeId] directly to rootSteps
+    const rootSteps: Record<string, any> = {};
+    const cloneStepsForNode = (node: any, nodeId: string) => {
+      if (!nodeId) return;
+
+      // ✅ Get steps from template.steps[nodeId] (root level)
+      if (template.steps && template.steps[nodeId]) {
+        const templateSteps = template.steps[nodeId];
+        const { cloned, guidMapping } = cloneStepsWithNewTaskIds(templateSteps);
+        guidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
+        rootSteps[nodeId] = cloned;
+      }
+
+      // ✅ Process subData recursively
+      if (node.subData && Array.isArray(node.subData)) {
+        node.subData.forEach((sub: any) => {
+          if (sub.id) cloneStepsForNode(sub, sub.id);
+        });
+      }
+    };
+
+    enrichedMainData.forEach((main: any) => {
+      if (main.id) cloneStepsForNode(main, main.id);
+    });
+
     const result = {
       label: instance.label ?? template.label,
-      mainData: enrichedMainData,
+      mainData: enrichedMainData,  // ✅ mainData ora senza steps
+      steps: Object.keys(rootSteps).length > 0 ? rootSteps : undefined,  // ✅ Steps a root level
       constraints: instance.constraints ?? template.dataContracts ?? template.constraints ?? undefined,
       examples: instance.examples ?? template.examples ?? undefined,
       nlpContract: instance.nlpContract ?? template.nlpContract ?? undefined
@@ -111,24 +123,17 @@ export async function loadDDTFromTemplate(instance: Task | null): Promise<any | 
 
       if (templateNode) {
         // ✅ Use structure from template (label, type, icon, constraints, examples, nlpContract)
-        // ✅ Clone steps from template with new task IDs, or use steps from instance if modified
-        const steps = instanceNode.steps ?? (templateNode.steps ? cloneStepsWithNewTaskIds(templateNode.steps) : undefined);
+        // ✅ Steps are handled at root level, not in nodes
 
         console.log('[loadDDTFromTemplate] 🔍 Merging node from template', {
           instanceNodeTemplateId: instanceNode.templateId,
-          instanceNodeHasSteps: !!instanceNode.steps,
-          instanceNodeStepsType: typeof instanceNode.steps,
-          instanceNodeStepsKeys: typeof instanceNode.steps === 'object' ? Object.keys(instanceNode.steps || {}) : [],
-          instanceNodeStepsLength: Array.isArray(instanceNode.steps) ? instanceNode.steps.length : 0,
-          templateNodeHasSteps: !!templateNode.steps,
-          finalStepsType: typeof steps,
-          finalStepsKeys: typeof steps === 'object' ? Object.keys(steps || {}) : [],
-          finalStepsLength: Array.isArray(steps) ? steps.length : 0
+          templateNodeId: templateNode.id,
+          templateHasSteps: !!(template.steps && template.steps[templateNode.id])
         });
 
         return {
           ...templateNode,  // ✅ Structure from template (includes contracts/constraints)
-          steps: steps,  // ✅ Clone steps with new task IDs
+          // ❌ REMOVED: steps - steps are now at root level
           // ✅ Enrich subData recursively
           subData: enrichSubDataFromInstance(instanceNode.subData || [], templateNode.subData || [])
         };
@@ -145,10 +150,32 @@ export async function loadDDTFromTemplate(instance: Task | null): Promise<any | 
     }
   });
 
+  // ✅ Usa direttamente steps a root level (già nel formato corretto)
+  let finalRootSteps: Record<string, any> | undefined = undefined;
+
+  if (instance.steps && typeof instance.steps === 'object' && Object.keys(instance.steps).length > 0) {
+    // Instance ha già steps a root level - usali
+    finalRootSteps = instance.steps;
+  } else if (template.steps && typeof template.steps === 'object' && Object.keys(template.steps).length > 0) {
+    // Template ha steps a root level - clonali per prima creazione
+    const isFirstTimeCreation = (!instance.mainData || instance.mainData.length === 0) && !instance.steps;
+    if (isFirstTimeCreation) {
+      // Clona steps dal template con nuovi task IDs
+      finalRootSteps = {};
+      for (const [nodeId, templateSteps] of Object.entries(template.steps)) {
+        if (templateSteps && typeof templateSteps === 'object') {
+          const { cloned } = cloneStepsWithNewTaskIds(templateSteps as any);
+          finalRootSteps[nodeId] = cloned;
+        }
+      }
+    }
+  }
+
   // Root level: use instance if present (override), otherwise template
   const result = {
     label: instance.label ?? template.label,
-    mainData: enrichedMainData,
+    mainData: enrichedMainData,  // ✅ mainData ora senza steps (solo struttura dati)
+    steps: finalRootSteps,  // ✅ Steps a root level
     constraints: instance.constraints ?? template.dataContracts ?? template.constraints ?? undefined,
     examples: instance.examples ?? template.examples ?? undefined,
     nlpContract: instance.nlpContract ?? template.nlpContract ?? undefined
@@ -258,39 +285,48 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
 
 /**
  * Build mainData structure from template (reference structure)
- * Checks if template has mainData with steps, otherwise builds from subDataIds
+ * ✅ AGGIORNATO: Usa solo template.steps[nodeId] (non più template.mainData[].steps)
  * Returns both mainData and guidMapping for translation copying
  */
 export function buildMainDataFromTemplate(template: any): { mainData: any[]; guidMapping: Map<string, string> } {
   const allGuidMappings = new Map<string, string>();
 
-  // ✅ Check if template has mainData with steps already assembled
+  // ✅ Check if template has mainData structure
   if (template.mainData && Array.isArray(template.mainData) && template.mainData.length > 0) {
-    // Template has mainData with steps - clone with new IDs and collect mappings
+    // Template has mainData - clone structure and steps from template.steps[nodeId]
     const mainData = template.mainData.map((mainNode: any) => {
-      let clonedMainSteps = mainNode.steps;
-      if (mainNode.steps) {
-        const { cloned, guidMapping } = cloneStepsWithNewTaskIds(mainNode.steps);
+      const templateNodeId = mainNode.id;
+      let clonedMainSteps = undefined;
+
+      // ✅ Get steps from template.steps[nodeId] (root level)
+      if (templateNodeId && template.steps && template.steps[templateNodeId]) {
+        const templateSteps = template.steps[templateNodeId];
+        const { cloned, guidMapping } = cloneStepsWithNewTaskIds(templateSteps);
         guidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
         clonedMainSteps = cloned;
       }
 
+      // ✅ Process subData - get steps from template.steps[subNodeId]
       const subData = (mainNode.subData || []).map((subNode: any) => {
-        let clonedSubSteps = subNode.steps;
-        if (subNode.steps) {
-          const { cloned, guidMapping: subGuidMapping } = cloneStepsWithNewTaskIds(subNode.steps);
+        const templateSubNodeId = subNode.id;
+        let clonedSubSteps = undefined;
+
+        if (templateSubNodeId && template.steps && template.steps[templateSubNodeId]) {
+          const templateSubSteps = template.steps[templateSubNodeId];
+          const { cloned, guidMapping: subGuidMapping } = cloneStepsWithNewTaskIds(templateSubSteps);
           subGuidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
           clonedSubSteps = cloned;
         }
+
         return {
           ...subNode,
-          steps: clonedSubSteps
+          // ❌ REMOVED: steps - steps are now at root level, not in nodes
         };
       });
 
       return {
         ...mainNode,
-        steps: clonedMainSteps,
+        // ❌ REMOVED: steps - steps are now at root level, not in nodes
         subData: subData
       };
     });
@@ -307,16 +343,17 @@ export function buildMainDataFromTemplate(template: any): { mainData: any[]; gui
     for (const subId of subDataIds) {
       const subTemplate = DialogueTaskService.getTemplate(subId);
       if (subTemplate) {
-        // ✅ Check if subTemplate has mainData with steps
+        // ✅ Get steps from subTemplate.steps[nodeId] (root level)
         let subSteps = undefined;
         if (subTemplate.mainData && Array.isArray(subTemplate.mainData) && subTemplate.mainData.length > 0) {
-          subSteps = subTemplate.mainData[0].steps;
-        } else if (subTemplate.steps) {
-          subSteps = subTemplate.steps;
+          const subTemplateNodeId = subTemplate.mainData[0].id;
+          if (subTemplateNodeId && subTemplate.steps && subTemplate.steps[subTemplateNodeId]) {
+            subSteps = subTemplate.steps[subTemplateNodeId];
+          }
         }
 
         // Clone sub steps and collect mappings
-        let clonedSubSteps = subSteps;
+        let clonedSubSteps = undefined;
         if (subSteps) {
           const { cloned, guidMapping: subGuidMapping } = cloneStepsWithNewTaskIds(subSteps);
           subGuidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
@@ -341,7 +378,7 @@ export function buildMainDataFromTemplate(template: any): { mainData: any[]; gui
           label: subTemplate.label || subTemplate.name || 'Sub',
           type: subTemplate.type,
           icon: subTemplate.icon || 'FileText',
-          steps: clonedSubSteps,
+          // ❌ REMOVED: steps - steps are now at root level, not in nodes
           constraints: subTemplate.dataContracts || subTemplate.constraints || [],
           examples: subTemplate.examples || [],
           nlpContract: subTemplate.nlpContract || undefined,
@@ -353,16 +390,17 @@ export function buildMainDataFromTemplate(template: any): { mainData: any[]; gui
       }
     }
 
-    // ✅ Check if template has steps at root level
+    // ✅ Get steps from template.steps[nodeId] (root level)
     let mainSteps = undefined;
     if (template.mainData && Array.isArray(template.mainData) && template.mainData.length > 0) {
-      mainSteps = template.mainData[0].steps;
-    } else if (template.steps) {
-      mainSteps = template.steps;
+      const templateNodeId = template.mainData[0].id;
+      if (templateNodeId && template.steps && template.steps[templateNodeId]) {
+        mainSteps = template.steps[templateNodeId];
+      }
     }
 
     // Clone main steps and collect mappings
-    let clonedMainSteps = mainSteps;
+    let clonedMainSteps = undefined;
     if (mainSteps) {
       const { cloned, guidMapping: mainGuidMapping } = cloneStepsWithNewTaskIds(mainSteps);
       mainGuidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
@@ -374,7 +412,7 @@ export function buildMainDataFromTemplate(template: any): { mainData: any[]; gui
       label: template.label || template.name || 'Data',
       type: template.type,
       icon: template.icon || 'Calendar',
-      steps: clonedMainSteps,
+      // ❌ REMOVED: steps - steps are now at root level, not in nodes
       constraints: template.dataContracts || template.constraints || [],
       examples: template.examples || [],
       nlpContract: template.nlpContract || undefined,
@@ -386,16 +424,17 @@ export function buildMainDataFromTemplate(template: any): { mainData: any[]; gui
     return { mainData: result, guidMapping: allGuidMappings };
   } else {
     // Template semplice
-    // ✅ Check if template has steps at root level
+    // ✅ Get steps from template.steps[nodeId] (root level)
     let mainSteps = undefined;
     if (template.mainData && Array.isArray(template.mainData) && template.mainData.length > 0) {
-      mainSteps = template.mainData[0].steps;
-    } else if (template.steps) {
-      mainSteps = template.steps;
+      const templateNodeId = template.mainData[0].id;
+      if (templateNodeId && template.steps && template.steps[templateNodeId]) {
+        mainSteps = template.steps[templateNodeId];
+      }
     }
 
     // Clone main steps and collect mappings
-    let clonedMainSteps = mainSteps;
+    let clonedMainSteps = undefined;
     if (mainSteps) {
       const { cloned, guidMapping: mainGuidMapping } = cloneStepsWithNewTaskIds(mainSteps);
       mainGuidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
@@ -408,7 +447,7 @@ export function buildMainDataFromTemplate(template: any): { mainData: any[]; gui
         label: template.label || template.name || 'Data',
         type: template.type,
         icon: template.icon || 'Calendar',
-        steps: clonedMainSteps,
+        // ❌ REMOVED: steps - steps are now at root level, not in nodes
         constraints: template.dataContracts || template.constraints || [],
         examples: template.examples || [],
         nlpContract: template.nlpContract || undefined,

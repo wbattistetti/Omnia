@@ -225,7 +225,7 @@ class TaskRepository {
           type: taskType,                // ✅ Enum numerico (0-19) - REQUIRED
           templateId: item.templateId ?? null,
           ...(value || {}),  // ✅ Backward compatibility: flatten value if present
-          ...directFields,   // ✅ Use direct fields (mainData, label, stepPrompts, ecc.)
+          ...directFields,   // ✅ Use direct fields (mainData, label, steps, ecc.)
           createdAt: item.createdAt ? new Date(item.createdAt) : undefined,
           updatedAt: item.updatedAt ? new Date(item.updatedAt) : undefined
         };

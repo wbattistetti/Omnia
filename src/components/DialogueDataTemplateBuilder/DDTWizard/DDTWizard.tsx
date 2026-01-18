@@ -205,14 +205,13 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     if (initialDDT?._inferenceResult?.ai?.schema && initialDDT.mainData?.length > 0) {
       return 'heuristic-confirm';
     }
-    // ✅ NUOVO: Se initialDDT ha mainData ma senza stepPrompts → vai direttamente a 'structure'
+    // ✅ NUOVO: Se initialDDT ha mainData ma senza steps → vai direttamente a 'structure'
     // Il bottone "Build Messages" sarà visibile e porterà a 'pipeline'
     if (initialDDT?.mainData && Array.isArray(initialDDT.mainData) && initialDDT.mainData.length > 0) {
-      const hasStepPrompts = initialDDT.mainData.some((m: any) =>
-        m.stepPrompts && typeof m.stepPrompts === 'object' && Object.keys(m.stepPrompts).length > 0
-      );
-      if (!hasStepPrompts) {
-        console.log('[DDTWizard] MainData presente ma senza stepPrompts, andando a structure per generare messaggi');
+      // ✅ Controlla solo steps a root level
+      const hasStepsAtRoot = initialDDT.steps && typeof initialDDT.steps === 'object' && Object.keys(initialDDT.steps).length > 0;
+      if (!hasStepsAtRoot) {
+        console.log('[DDTWizard] MainData presente ma senza steps, andando a structure per generare messaggi');
         return 'structure';
       }
     }
@@ -232,8 +231,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         type: m.type,
         icon: m.icon,
         constraints: m.constraints || [],
-        // ✅ Preserva stepPrompts per main
-        stepPrompts: m.stepPrompts || null,
+        // ✅ Steps non sono più dentro mainData, sono a root level
         // ✅ CRITICO: Preserva nlpContract, templateId, kind
         nlpContract: m.nlpContract || undefined,
         templateId: m.templateId || undefined,
@@ -243,8 +241,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           type: s.type,
           icon: s.icon,
           constraints: s.constraints || [],
-          // ✅ Preserva stepPrompts per subData (solo start, noInput, noMatch)
-          stepPrompts: s.stepPrompts || null,
+          // ✅ Steps non sono più dentro subData, sono a root level
           // ✅ CRITICO: Preserva nlpContract, templateId, kind anche per sub
           nlpContract: (s as any).nlpContract || undefined,
           templateId: (s as any).templateId || undefined,
@@ -274,8 +271,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         type: m.type,
         icon: m.icon,
         constraints: m.constraints || [],
-        // ✅ Preserva stepPrompts per main
-        stepPrompts: m.stepPrompts || null,
+        // ✅ Steps non sono più dentro mainData, sono a root level
         subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({
           label: s.label,
           type: s.type,
@@ -1704,194 +1700,50 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                           schemaKeys: schema ? Object.keys(schema) : []
                         });
 
-                        // ✅ FIX: Controlla stepPrompts sia a livello mainData che schema
-                        const hasMainStepPrompts = mains0.some((m: any) => m.stepPrompts && typeof m.stepPrompts === 'object' && Object.keys(m.stepPrompts).length > 0);
-                        const hasSubDataStepPrompts = mains0.some((m: any) =>
-                          m.subData && Array.isArray(m.subData) && m.subData.some((s: any) =>
-                            s.stepPrompts && typeof s.stepPrompts === 'object' && Object.keys(s.stepPrompts).length > 0
-                          )
-                        );
-                        const hasSchemaStepPrompts = !!(schema && schema.stepPrompts && typeof schema.stepPrompts === 'object' && Object.keys(schema.stepPrompts).length > 0);
-                        const hasStepPrompts = hasMainStepPrompts || hasSubDataStepPrompts || hasSchemaStepPrompts;
+                        // ✅ Controlla solo steps a root level (non più dentro mainData)
+                        // Nota: durante il wizard, steps vengono ancora creati dentro mainData temporaneamente
+                        // ma vengono estratti a root level da assembleFinalDDT
+                        // Qui controlliamo se il template ha già steps (dal database)
+                        const hasSteps = !!(schema && schema.steps && typeof schema.steps === 'object' && Object.keys(schema.steps).length > 0);
 
-                        console.log('🔵 [YES_BUTTON] hasStepPrompts check:', {
-                          hasMainStepPrompts,
-                          hasSubDataStepPrompts,
-                          hasSchemaStepPrompts,
-                          hasStepPrompts
+                        console.log('🔵 [YES_BUTTON] hasSteps check:', {
+                          hasSteps,
+                          schemaHasSteps: !!(schema?.steps)
                         });
 
-                        if (hasStepPrompts) {
-                          // If stepPrompts are present, go directly to Response Editor
-                          console.log('[DDT][Wizard][heuristicMatch] stepPrompts found, going directly to Response Editor');
+                        if (hasSteps) {
+                          // If steps are present, go directly to Response Editor
+                          console.log('[DDT][Wizard][heuristicMatch] steps found, going directly to Response Editor');
 
-                          try {
-                            // Extract all translation GUIDs from stepPrompts
-                            // stepPrompts structure: { start: ['guid-123'], noMatch: ['guid-456', 'guid-789'], ... }
-                            // Now contains GUIDs instead of template keys
-                            const translationGuids: string[] = [];
+                          // ✅ Steps vengono gestiti da assembleFinalDDT che estrae i GUID dalle traduzioni
+                          // Non serve più estrarre GUID da stepPrompts dentro mainData
+                          const t1 = performance.now();
+                          console.log(`⏱️ [YES_BUTTON] Tempo fino a assembly: ${(t1 - t0).toFixed(2)}ms`);
 
-                            // ✅ CRITICAL: Check if sub-data have stepPrompts BEFORE processing
-                            console.log('🔴 [CRITICAL] SUB-DATA STEPPROMPTS CHECK', {
-                              mainsCount: mains0.length,
-                              mains: mains0.map((m: any) => ({
-                                label: m.label,
-                                subDataCount: (m.subData || []).length,
-                                subData: (m.subData || []).map((s: any) => ({
-                                  label: s.label,
-                                  HAS_STEPPROMPTS: !!(s as any).stepPrompts,
-                                  stepPromptsKeys: (s as any).stepPrompts ? Object.keys((s as any).stepPrompts) : [],
-                                  stepPrompts: (s as any).stepPrompts
-                                }))
-                              }))
-                            });
+                          // ✅ SUPER-OTTIMIZZAZIONE: Usa DDT pre-assemblato se disponibile (ISTANTANEO!)
+                          const preAssembledDDT = (initialDDT as any)?._inferenceResult?.ai?.preAssembledDDT;
+                          if (preAssembledDDT) {
+                            const t2 = performance.now();
+                            console.log(`⏱️ [YES_BUTTON] ✅ DDT pre-assemblato trovato - ISTANTANEO! Tempo: ${(t2 - t0).toFixed(2)}ms`);
 
-                            mains0.forEach((m: any) => {
-
-                              // Process main data stepPrompts
-                              if (m.stepPrompts && typeof m.stepPrompts === 'object') {
-                                Object.entries(m.stepPrompts).forEach(([stepKey, stepPromptGuids]: [string, any]) => {
-                                  // stepPromptGuids is now an array of GUIDs
-                                  if (Array.isArray(stepPromptGuids) && stepPromptGuids.length > 0) {
-                                    console.log('[DDT][Wizard][heuristicMatch] Found stepPrompts for step', {
-                                      mainLabel: m.label,
-                                      stepKey,
-                                      guids: stepPromptGuids,
-                                      allAreGuids: stepPromptGuids.every((g: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(g))
-                                    });
-                                    // Filter only valid GUIDs (skip any legacy template keys)
-                                    stepPromptGuids.forEach((guid: string) => {
-                                      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
-                                        translationGuids.push(guid);
-                                      } else if (guid.startsWith('template.')) {
-                                        // Legacy template key - log warning but skip
-                                        console.warn('[DDT][Wizard][heuristicMatch] Found legacy template key in stepPrompts:', guid);
-                                      }
-                                    });
-                                  }
-                                });
-                              }
-
-                              // Process sub data stepPrompts
-                              if (m.subData && Array.isArray(m.subData) && m.subData.length > 0) {
-                                m.subData.forEach((sub: any, subIdx: number) => {
-                                  const hasSubStepPrompts = !!(sub as any).stepPrompts && typeof (sub as any).stepPrompts === 'object' && Object.keys((sub as any).stepPrompts).length > 0;
-
-                                  if (hasSubStepPrompts) {
-                                    Object.entries((sub as any).stepPrompts).forEach(([stepKey, stepPromptGuids]: [string, any]) => {
-                                      if (Array.isArray(stepPromptGuids) && stepPromptGuids.length > 0) {
-                                        stepPromptGuids.forEach((guid: string) => {
-                                          // Filter only valid GUIDs
-                                          if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)) {
-                                            translationGuids.push(guid);
-                                          } else if (guid.startsWith('template.')) {
-                                            console.warn('[DDT][Wizard][heuristicMatch] Found legacy template key in subData stepPrompts:', guid);
-                                          }
-                                        });
-                                      }
-                                    });
-                                  } else {
-                                    console.error('🔴 [CRITICAL] SUB-DATA MISSING STEPPROMPTS', {
-                                      mainLabel: m.label,
-                                      subLabel: sub.label,
-                                      subKeys: Object.keys(sub),
-                                      hasStepPromptsProp: 'stepPrompts' in sub
-                                    });
-                                  }
-                                });
-                              }
-                            });
-
-                            console.log('[DEBUG][WIZARD] Extracted translation GUIDs:', {
-                              totalGuids: translationGuids.length,
-                              uniqueGuids: [...new Set(translationGuids)].length,
-                              guids: translationGuids,
-                              validGuids: translationGuids.filter(g => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(g)).length,
-                              sampleStepPrompts: mains0.slice(0, 1).map(m => ({
-                                label: m.label,
-                                stepPrompts: m.stepPrompts,
-                                stepPromptsKeys: m.stepPrompts ? Object.keys(m.stepPrompts) : []
-                              }))
-                            });
-
-                            const t1 = performance.now();
-                            console.log(`⏱️ [YES_BUTTON] Tempo fino a caricamento traduzioni: ${(t1 - t0).toFixed(2)}ms`);
-
-                            // ✅ SUPER-OTTIMIZZAZIONE: Usa DDT pre-assemblato se disponibile (ISTANTANEO!)
-                            const preAssembledDDT = (initialDDT as any)?._inferenceResult?.ai?.preAssembledDDT;
-                            if (preAssembledDDT) {
-                              const t2 = performance.now();
-                              console.log(`⏱️ [YES_BUTTON] ✅ DDT pre-assemblato trovato - ISTANTANEO! Tempo: ${(t2 - t0).toFixed(2)}ms`);
-
-                              // Set schema for consistency
-                              setSchemaRootLabel(root);
-                              setSchemaMains(mains0);
-
-                              // ✅ Usa il DDT già assemblato in background!
-                              handleClose(preAssembledDDT, {});
-
-                              const tAfterClose = performance.now();
-                              console.log(`⏱️ [YES_BUTTON] 🏁 FINE TOTALE (pre-assembled) - Tempo: ${(tAfterClose - t0).toFixed(2)}ms`);
-                              return; // ✅ FATTO! Nessun assembly necessario
-                            }
-
-                            // ✅ Altrimenti: assembly normale con traduzioni pre-caricate
-                            // Se il match locale ha già caricato le traduzioni, usale direttamente
-                            // Altrimenti carica dal database (caso legacy o AI)
-                            let templateTranslations: Record<string, { en: string; it: string; pt: string }> = {};
-
-                            // ✅ Controlla se inferenceResult ha già le traduzioni pre-caricate
-                            const preloadedTranslations = (initialDDT as any)?._inferenceResult?.ai?.templateTranslations;
-                            if (preloadedTranslations && Object.keys(preloadedTranslations).length > 0) {
-                              templateTranslations = preloadedTranslations;
-                              const t2 = performance.now();
-                              console.log(`⏱️ [YES_BUTTON] ✅ Traduzioni pre-caricate ISTANTANEE - Tempo: ${(t2 - t0).toFixed(2)}ms`, {
-                                loadedGuids: Object.keys(templateTranslations).length
-                              });
-                            } else if (translationGuids.length > 0) {
-                              try {
-                                const uniqueGuids = [...new Set(translationGuids)];
-                                console.log(`⏱️ [YES_BUTTON] ⏳ Caricando traduzioni dal database (fallback)... ${uniqueGuids.length} GUIDs`);
-                                const tFetchStart = performance.now();
-                                templateTranslations = await getTemplateTranslations(uniqueGuids);
-                                const tFetchEnd = performance.now();
-                                console.log(`⏱️ [YES_BUTTON] ✅ Traduzioni caricate dal database - Tempo fetch: ${(tFetchEnd - tFetchStart).toFixed(2)}ms, Tempo totale: ${(tFetchEnd - t0).toFixed(2)}ms`, {
-                                  requestedGuids: uniqueGuids.length,
-                                  loadedGuids: Object.keys(templateTranslations).length
-                                });
-                              } catch (err) {
-                                console.error('[DEBUG][WIZARD] ❌ Errore caricamento traduzioni dal database:', err);
-                              }
-                            } else {
-                              console.warn('[DEBUG][WIZARD] No GUIDs extracted from stepPrompts!', {
-                                mainsCount: mains0.length,
-                                mainsWithStepPrompts: mains0.filter(m => m.stepPrompts).length,
-                                sampleMain: mains0[0] ? {
-                                  label: mains0[0].label,
-                                  hasStepPrompts: !!mains0[0].stepPrompts,
-                                  stepPrompts: mains0[0].stepPrompts
-                                } : null
-                              });
-                            }
-
-                            const t3 = performance.now();
-                            console.log(`⏱️ [YES_BUTTON] Prima di assembleFinalDDT - Tempo: ${(t3 - t0).toFixed(2)}ms`);
-
-                            // Set schema for assembly
+                            // Set schema for consistency
                             setSchemaRootLabel(root);
                             setSchemaMains(mains0);
 
-                            // ✅ CRITICAL: Verify sub-data stepPrompts are present BEFORE assembly
-                            console.log('🔴 [CRITICAL] BEFORE ASSEMBLY - SUB-DATA STEPPROMPTS', {
-                              mains: mains0.map((m: any) => ({
-                                label: m.label,
-                                subData: (m.subData || []).map((s: any) => ({
-                                  label: s.label,
-                                  HAS_STEPPROMPTS: !!(s as any).stepPrompts,
-                                  stepPrompts: (s as any).stepPrompts
-                                }))
-                              }))
-                            });
+                            // ✅ Usa il DDT già assemblato in background!
+                            handleClose(preAssembledDDT, {});
+
+                            const tAfterClose = performance.now();
+                            console.log(`⏱️ [YES_BUTTON] 🏁 FINE TOTALE (pre-assembled) - Tempo: ${(tAfterClose - t0).toFixed(2)}ms`);
+                            return; // ✅ FATTO! Nessun assembly necessario
+                          }
+
+                          const t3 = performance.now();
+                          console.log(`⏱️ [YES_BUTTON] Prima di assembleFinalDDT - Tempo: ${(t3 - t0).toFixed(2)}ms`);
+
+                          // Set schema for assembly
+                          setSchemaRootLabel(root);
+                          setSchemaMains(mains0);
 
                             const emptyStore = buildArtifactStore([]);
                             const projectLang = (localStorage.getItem('project.lang') || 'pt') as 'en' | 'it' | 'pt';
@@ -1932,12 +1784,16 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                               return;
                             }
 
-                            if (!finalDDT.mainData[0].steps || Object.keys(finalDDT.mainData[0].steps).length === 0) {
-                              console.error('[DDT][Wizard][heuristicMatch] ERROR: DDT mainData has no steps!', {
+                            // ✅ Check steps at root level (keyed by nodeId)
+                            const firstMainId = finalDDT.mainData[0]?.id;
+                            if (!firstMainId || !finalDDT.steps || !finalDDT.steps[firstMainId] || Object.keys(finalDDT.steps[firstMainId]).length === 0) {
+                              console.error('[DDT][Wizard][heuristicMatch] ERROR: DDT has no steps at root level!', {
                                 ddtId: finalDDT.id,
-                                mainData: finalDDT.mainData[0]
+                                firstMainId,
+                                hasSteps: !!finalDDT.steps,
+                                stepsKeys: finalDDT.steps ? Object.keys(finalDDT.steps) : []
                               });
-                              error('DDT_WIZARD', 'DDT mainData has no steps after assembly', new Error('DDT mainData has no steps'));
+                              error('DDT_WIZARD', 'DDT has no steps at root level after assembly', new Error('DDT has no steps at root level'));
                               return;
                             }
 
@@ -2188,13 +2044,19 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                             }
                           );
 
+                          // ✅ Get first main nodeId for steps lookup
+                          const firstMainId = finalDDT.mainData?.[0]?.id;
+                          const firstMainSteps = firstMainId && finalDDT.steps?.[firstMainId] ? Object.keys(finalDDT.steps[firstMainId]) : [];
+                          const firstMainMessages = finalDDT.mainData?.[0]?.messages ? Object.keys(finalDDT.mainData[0].messages) : [];
                           console.log('[DDT][Wizard][stepPrompts] ✅ DDT assembled, translations added to global table', {
                             ddtId: finalDDT.id,
                             label: finalDDT.label,
                             mainsCount: finalDDT.mainData?.length || 0,
                             templateTranslationsCount: Object.keys(templateTranslations).length,
-                            firstMainSteps: finalDDT.mainData?.[0]?.steps ? Object.keys(finalDDT.mainData[0].steps) : [],
-                            firstMainMessages: finalDDT.mainData?.[0]?.messages ? Object.keys(finalDDT.mainData[0].messages) : []
+                            firstMainId,
+                            firstMainSteps,
+                            firstMainMessages,
+                            allStepsKeys: finalDDT.steps ? Object.keys(finalDDT.steps) : []
                           });
 
                           // Verify DDT structure before passing to Response Editor
@@ -2204,12 +2066,16 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                             return;
                           }
 
-                          if (!finalDDT.mainData[0].steps || Object.keys(finalDDT.mainData[0].steps).length === 0) {
-                            console.error('[DDT][Wizard][stepPrompts] ERROR: DDT mainData has no steps!', {
+                          // ✅ Check steps at root level (keyed by nodeId)
+                          const firstMainId = finalDDT.mainData[0]?.id;
+                          if (!firstMainId || !finalDDT.steps || !finalDDT.steps[firstMainId] || Object.keys(finalDDT.steps[firstMainId]).length === 0) {
+                            console.error('[DDT][Wizard][stepPrompts] ERROR: DDT has no steps at root level!', {
                               ddtId: finalDDT.id,
-                              mainData: finalDDT.mainData[0]
+                              firstMainId,
+                              hasSteps: !!finalDDT.steps,
+                              stepsKeys: finalDDT.steps ? Object.keys(finalDDT.steps) : []
                             });
-                            error('DDT_WIZARD', 'DDT mainData has no steps after assembly', new Error('DDT mainData has no steps'));
+                            error('DDT_WIZARD', 'DDT has no steps at root level after assembly', new Error('DDT has no steps at root level'));
                             return;
                           }
 

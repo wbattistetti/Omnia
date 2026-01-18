@@ -246,9 +246,11 @@ export interface Task {
   // ✅ Campi diretti (niente wrapper value):
   // Per DataRequest/DDT:
   label?: string;                // Label del DDT (solo per UI, non usato a runtime)
-  mainData?: any[];              // Main data array (senza steps - steps sono in dialogueSteps)
-  dialogueSteps?: any[];         // ✅ Flat dialogue steps array (replaces nested mainData[].steps)
-  stepPrompts?: any;             // Step prompts
+  mainData?: any[];              // Main data array (solo struttura dati, senza steps)
+  dialogueSteps?: any[];         // ✅ Flat dialogue steps array (replaces nested mainData[].steps) - DEPRECATED
+  steps?: Record<string, any>;   // ✅ Steps a root level: { "nodeId": { start: {...}, noMatch: {...} } }
+  // ❌ DEPRECATED: stepPrompts - use steps instead
+  stepPrompts?: any;             // @deprecated Use steps instead
   constraints?: any[];           // Constraints
   examples?: any[];              // Examples
   // Per SayMessage:

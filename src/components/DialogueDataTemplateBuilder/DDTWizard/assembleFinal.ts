@@ -10,7 +10,8 @@ import { TaskType, templateIdToTaskType } from '../../../types/taskTypes';
 export interface AssembledDDT {
   id: string;
   label: string;
-  mainData: any[];
+  mainData: any[];  // ✅ Solo struttura dati (senza steps)
+  steps?: Record<string, any>;  // ✅ Steps a root level: { "nodeId": { start: {...}, noMatch: {...} } }
   // ❌ REMOVED: translations - translations are now stored in global ProjectTranslationsContext
   v2Draft?: any;
 }
@@ -69,8 +70,14 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
   // ✅ Collect translations for project locale only (flat dictionary: { guid: text })
   const projectTranslations: Record<string, string> = {};
 
+  // ✅ Create rootSteps at the beginning (before assembleNode) - steps will be added directly here
+  const rootSteps: Record<string, any> = {};
+
   const assembleNode = async (node: SchemaNode, nodePath: string[]): Promise<any> => {
     const nodeId = uuidv4();
+
+    // ✅ Initialize steps for this nodeId in rootSteps (not in assembled)
+    rootSteps[nodeId] = {};
     const path = pathFor(nodePath);
     const pathBucket = store.byPath[path];
     const isSub = nodePath.length > 1;
@@ -151,7 +158,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
       constraints: [] as any[],
       subData: [] as any[],
       messages: {} as Record<string, any>,
-      steps: {} as Record<string, any>,
+      // ❌ REMOVED: steps - steps are now created directly in rootSteps[nodeId]
       synonyms: [node.label, (node.label || '').toLowerCase()].filter(Boolean),
       // Contract will be set after sub-instances are created
       nlpContract: undefined,
@@ -205,8 +212,8 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
           // Also expose as node-level messages so the editor can render them
           assembled.messages[`constraint.${c.kind}.r1`] = { textKey: r1Key };
           assembled.messages[`constraint.${c.kind}.r2`] = { textKey: r2Key };
-          // And expose as virtual steps so they appear in the step strip
-          assembled.steps[`constraint.${c.kind}.r1`] = {
+          // ✅ Add constraint steps directly to rootSteps (not in assembled)
+          rootSteps[nodeId][`constraint.${c.kind}.r1`] = {
             type: `constraint.${c.kind}.r1`,
             escalations: [
               {
@@ -226,7 +233,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
               }
             ]
           };
-          assembled.steps[`constraint.${c.kind}.r2`] = {
+          rootSteps[nodeId][`constraint.${c.kind}.r2`] = {
             type: `constraint.${c.kind}.r2`,
             escalations: [
               {
@@ -256,7 +263,8 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
         constraintObj.messages = { r1: r1Key, r2: r2Key };
         assembled.messages[`constraint.${c.kind}.r1`] = { textKey: r1Key };
         assembled.messages[`constraint.${c.kind}.r2`] = { textKey: r2Key };
-        assembled.steps[`constraint.${c.kind}.r1`] = {
+        // ✅ Add constraint steps directly to rootSteps (not in assembled)
+        rootSteps[nodeId][`constraint.${c.kind}.r1`] = {
           type: `constraint.${c.kind}.r1`,
           escalations: [
             {
@@ -276,7 +284,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
             }
           ]
         };
-        assembled.steps[`constraint.${c.kind}.r2`] = {
+        rootSteps[nodeId][`constraint.${c.kind}.r2`] = {
           type: `constraint.${c.kind}.r2`,
           escalations: [
             {
@@ -559,7 +567,8 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
         });
       }
 
-      assembled.steps[stepKey] = {
+      // ✅ Add step directly to rootSteps (not in assembled)
+      rootSteps[nodeId][stepKey] = {
         type: stepKey,
         escalations
       };
@@ -605,15 +614,28 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
       });
     }
 
+    // ✅ Steps are already at root level (created directly in rootSteps during assembleNode)
+    console.log('[assembleFinalDDT] ✅ Steps created directly at root level', {
+      rootStepsCount: Object.keys(rootSteps).length,
+      rootStepsKeys: Object.keys(rootSteps)
+    });
+
     // ❌ REMOVED: translations from result - translations are now in global ProjectTranslationsContext
     const result: AssembledDDT = {
       id: ddtId,
       label: rootLabel || 'Data',
-      mainData: assembledMains,
+      mainData: assembledMains,  // ✅ mainData ora senza steps (solo struttura dati)
+      steps: Object.keys(rootSteps).length > 0 ? rootSteps : undefined,  // ✅ Steps a root level
       v2Draft: getAllV2Draft(),
     };
 
-    console.log('[assembleFinalDDT][RESULT]', { id: result.id, label: result.label, mainsCount: result.mainData.length });
+    console.log('[assembleFinalDDT][RESULT]', {
+      id: result.id,
+      label: result.label,
+      mainsCount: result.mainData.length,
+      hasSteps: !!result.steps,
+      stepsCount: result.steps ? Object.keys(result.steps).length : 0
+    });
     return result;
   } catch (err) {
     console.error('[assembleFinalDDT][FATAL_ERROR]', err);

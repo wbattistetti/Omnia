@@ -12,7 +12,8 @@ export function isDDTEmpty(ddt?: any): boolean {
 }
 
 /**
- * Verifica se il DDT ha mainData ma senza stepPrompts completi
+ * Verifica se il DDT ha mainData ma senza steps completi
+ * ✅ MODIFICATO: Controlla task.steps a root level (collegato tramite nodeId), non mainData[].stepPrompts
  * Questo indica che la struttura esiste ma i messaggi devono ancora essere generati
  */
 export function hasMainDataButNoStepPrompts(ddt?: any): boolean {
@@ -24,32 +25,43 @@ export function hasMainDataButNoStepPrompts(ddt?: any): boolean {
 
     if (mains.length === 0) return false;
 
-    // Verifica se almeno un mainData non ha stepPrompts completi
+    // ✅ MODIFICATO: Controlla steps a ROOT LEVEL, non dentro mainData
+    // steps è un oggetto con chiavi = nodeId (GUID del mainData/subData)
+    if (!ddt.steps || typeof ddt.steps !== 'object') {
+      return true; // Non ha steps a root level
+    }
+
+    const rootStepsKeys = Object.keys(ddt.steps);
+    if (rootStepsKeys.length === 0) {
+      return true; // steps è vuoto
+    }
+
+    // Verifica se almeno un mainData ha steps corrispondenti
+    // (collegati tramite nodeId come chiave)
     return mains.some((main: any) => {
-      // Se non ha stepPrompts, o ha stepPrompts ma sono vuoti
-      if (!main.stepPrompts || typeof main.stepPrompts !== 'object') {
-        return true;
+      const mainId = main.id;
+      if (!mainId) return true; // Main senza ID non può avere steps
+
+      const mainSteps = ddt.steps[mainId];
+      if (!mainSteps || typeof mainSteps !== 'object') {
+        return true; // Questo main non ha steps
       }
 
-      // Verifica se ha almeno un tipo di stepPrompts (start, noMatch, noInput, ecc.)
-      const stepPromptsKeys = Object.keys(main.stepPrompts);
-      if (stepPromptsKeys.length === 0) {
-        return true;
+      const stepKeys = Object.keys(mainSteps);
+      if (stepKeys.length === 0) {
+        return true; // steps per questo main è vuoto
       }
 
-      // Verifica se almeno un tipo di stepPrompts ha messaggi
-      const hasMessages = stepPromptsKeys.some((key: string) => {
-        const stepPrompt = main.stepPrompts[key];
-        // stepPrompt può essere array di stringhe o oggetto con keys/values
-        if (Array.isArray(stepPrompt)) {
-          return stepPrompt.length > 0;
+      // Verifica se almeno uno step ha escalations con tasks
+      const hasMessages = stepKeys.some((stepKey: string) => {
+        const step = mainSteps[stepKey];
+        if (!step || !step.escalations || !Array.isArray(step.escalations)) {
+          return false;
         }
-        if (stepPrompt && typeof stepPrompt === 'object') {
-          // Se è un oggetto con keys/values (formato nuovo)
-          return (stepPrompt.keys && Array.isArray(stepPrompt.keys) && stepPrompt.keys.length > 0) ||
-                 (stepPrompt.values && Array.isArray(stepPrompt.values) && stepPrompt.values.length > 0);
-        }
-        return false;
+        // Verifica se almeno una escalation ha tasks
+        return step.escalations.some((esc: any) =>
+          esc.tasks && Array.isArray(esc.tasks) && esc.tasks.length > 0
+        );
       });
 
       return !hasMessages;

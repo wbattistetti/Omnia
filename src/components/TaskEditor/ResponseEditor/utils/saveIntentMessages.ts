@@ -4,7 +4,8 @@ import { TaskType, templateIdToTaskType } from '../../../../types/taskTypes';
 
 /**
  * Converte IntentMessages in formato DDT steps e li salva nel DDT
- * Per ProblemClassification, i messaggi vanno in mainData[0].steps quando kind === "intent"
+ * ✅ AGGIORNATO: Usa steps a root level (non più mainData[0].steps)
+ * ✅ AGGIORNATO: Non crea più kind: 'intent' - tutto è DataRequest
  */
 export function saveIntentMessagesToDDT(ddt: any, messages: IntentMessages): any {
   if (!ddt || !messages) {
@@ -15,27 +16,29 @@ export function saveIntentMessagesToDDT(ddt: any, messages: IntentMessages): any
   // Crea una copia del DDT
   const updated = JSON.parse(JSON.stringify(ddt));
 
-  // ✅ Assicurati che mainData[0] esista e abbia kind === "intent"
+  // ✅ Assicurati che mainData[0] esista (per struttura dati)
   if (!Array.isArray(updated.mainData) || updated.mainData.length === 0) {
-    // Se non c'è mainData, crealo con kind: "intent"
+    const firstMainId = uuidv4();
     updated.mainData = [{
-      label: updated.label || 'Intent',
-      kind: 'intent',
-      steps: {},
+      id: firstMainId,
+      label: updated.label || 'Data',
+      type: 'text', // Default type
       subData: []
     }];
   }
 
   const firstMain = updated.mainData[0];
-
-  // ✅ Assicurati che kind === "intent"
-  if (firstMain.kind !== 'intent') {
-    firstMain.kind = 'intent';
+  const firstMainId = firstMain.id || uuidv4();
+  if (!firstMain.id) {
+    firstMain.id = firstMainId;
   }
 
-  // ✅ Inizializza steps in mainData[0] se non esiste
-  if (!firstMain.steps) {
-    firstMain.steps = {};
+  // ✅ Inizializza steps a root level (non più in mainData[0])
+  if (!updated.steps) {
+    updated.steps = {};
+  }
+  if (!updated.steps[firstMainId]) {
+    updated.steps[firstMainId] = {};
   }
 
   // Helper per creare una escalation con un messaggio
@@ -79,21 +82,21 @@ export function saveIntentMessagesToDDT(ddt: any, messages: IntentMessages): any
     escalations: messageList.map(msg => createEscalation(msg)),
   });
 
-  // ✅ Crea steps per ogni tipo di messaggio in mainData[0].steps
+  // ✅ Crea steps a root level (non più in mainData[0].steps)
   if (messages.start && messages.start.length > 0) {
-    firstMain.steps.start = createStep('start', messages.start);
+    updated.steps[firstMainId].start = createStep('start', messages.start);
   }
 
   if (messages.noInput && messages.noInput.length > 0) {
-    firstMain.steps.noInput = createStep('noInput', messages.noInput);
+    updated.steps[firstMainId].noInput = createStep('noInput', messages.noInput);
   }
 
   if (messages.noMatch && messages.noMatch.length > 0) {
-    firstMain.steps.noMatch = createStep('noMatch', messages.noMatch);
+    updated.steps[firstMainId].noMatch = createStep('noMatch', messages.noMatch);
   }
 
   if (messages.confirmation && messages.confirmation.length > 0) {
-    firstMain.steps.confirmation = createStep('confirmation', messages.confirmation);
+    updated.steps[firstMainId].confirmation = createStep('confirmation', messages.confirmation);
   }
 
   return updated;

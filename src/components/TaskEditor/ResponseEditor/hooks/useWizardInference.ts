@@ -110,6 +110,22 @@ export function useWizardInference({
     const empty = isDDTEmpty(currentDDT);
     const hasStructureButNoMessages = hasMainDataButNoStepPrompts(currentDDT);
 
+    // ✅ DEBUG: Log dettagliato per capire perché hasMainDataButNoStepPrompts ritorna true
+    if (!empty && currentDDT?.mainData && currentDDT.mainData.length > 0) {
+      const firstMain = currentDDT.mainData[0];
+      const firstMainId = firstMain?.id;
+      const hasSteps = !!(firstMainId && currentDDT?.steps && currentDDT.steps[firstMainId]);
+      console.log('[useWizardInference] DEBUG steps check', {
+        mainDataCount: currentDDT.mainData.length,
+        firstMainLabel: firstMain?.label,
+        firstMainId: firstMainId?.substring(0, 20) + '...',
+        hasSteps,
+        stepsType: typeof currentDDT?.steps,
+        stepsKeys: currentDDT?.steps ? Object.keys(currentDDT.steps) : [],
+        hasStructureButNoMessages
+      });
+    }
+
     // Se DDT non è vuoto e wizard aveva ownership → chiudi wizard
     // ✅ ECCEZIONE: Se ha struttura ma non ha messaggi, apri wizard per generare messaggi
     if (!empty && !hasStructureButNoMessages && wizardOwnsDataRef.current && showWizard) {
