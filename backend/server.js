@@ -6,7 +6,7 @@ const { MongoClient, ObjectId } = require('mongodb');
 
 // ✅ ENTERPRISE AI SERVICES
 const AIProviderService = require('./services/AIProviderService');
-const TemplateIntelligenceService = require('./services/TemplateIntelligenceService');
+const { TemplateIntelligenceOrchestrator } = require('./services/ddt-intelligence');
 
 // ✅ ENTERPRISE MIDDLEWARE
 const CircuitBreakerManager = require('./middleware/CircuitBreakerManager');
@@ -137,7 +137,11 @@ async function loadTaskHeuristicsFromDB() {
     const collection = db.collection('Heuristics');
 
     const taskTypes = await collection.find({ patterns: { $exists: true, $ne: null } }).toArray();
-    await client.close();
+    console.log(`[TASK_HEURISTICS_CACHE] Trovati ${taskTypes.length} documenti con pattern`);
+    taskTypes.forEach(doc => {
+      console.log(`[TASK_HEURISTICS_CACHE] Documento: ${doc._id}, pattern keys: ${Object.keys(doc.patterns || {}).join(', ')}`);
+    });
+    // ✅ NON chiudere la connessione qui - serve ancora per CategoryExtraction
 
     // Mapping da Heuristics._id a HeuristicType (per compatibilità con frontend)
     const typeMapping = {
@@ -193,28 +197,100 @@ async function loadTaskHeuristicsFromDB() {
 
       // Gestione speciale per ProblemClassification: può mappare a PROBLEM_SPEC_DIRECT, PROBLEM_REASON, o PROBLEM
       if (taskTypeId === 'ProblemClassification' && taskType.patterns) {
+        // Gestisci pattern normali (IT, EN, PT) → PROBLEM_SPEC_DIRECT
         Object.keys(taskType.patterns).forEach(lang => {
           const langUpper = lang.toUpperCase();
-          const patterns = taskType.patterns[lang];
 
-          if (Array.isArray(patterns) && patterns.length > 0) {
-            // Se ci sono pattern specifici per PROBLEM, usali
-            // Altrimenti usa PROBLEM_SPEC_DIRECT come default
-            if (!rulesByLang[langUpper].PROBLEM_SPEC_DIRECT || rulesByLang[langUpper].PROBLEM_SPEC_DIRECT.length === 0) {
-              rulesByLang[langUpper].PROBLEM_SPEC_DIRECT = [...patterns];
+          // Se è una lingua (IT, EN, PT), gestiscila come PROBLEM_SPEC_DIRECT
+          if (['IT', 'EN', 'PT'].includes(langUpper)) {
+            const patterns = taskType.patterns[lang];
+            if (Array.isArray(patterns) && patterns.length > 0) {
+              // Se ci sono pattern specifici per PROBLEM, usali
+              // Altrimenti usa PROBLEM_SPEC_DIRECT come default
+              if (!rulesByLang[langUpper].PROBLEM_SPEC_DIRECT || rulesByLang[langUpper].PROBLEM_SPEC_DIRECT.length === 0) {
+                rulesByLang[langUpper].PROBLEM_SPEC_DIRECT = [...patterns];
+              }
             }
+          }
+          // ✅ Gestisci PROBLEM_REASON come campo annidato
+          else if (lang === 'PROBLEM_REASON' && taskType.patterns.PROBLEM_REASON) {
+            Object.keys(taskType.patterns.PROBLEM_REASON).forEach(problemLang => {
+              const problemLangUpper = problemLang.toUpperCase();
+              if (!rulesByLang[problemLangUpper]) {
+                rulesByLang[problemLangUpper] = {
+                  AI_AGENT: [],
+                  MESSAGE: [],
+                  REQUEST_DATA: [],
+                  PROBLEM_SPEC_DIRECT: [],
+                  PROBLEM_REASON: [],
+                  PROBLEM: null,
+                  SUMMARY: [],
+                  BACKEND_CALL: [],
+                  NEGOTIATION: []
+                };
+              }
+              const problemReasonPatterns = taskType.patterns.PROBLEM_REASON[problemLang];
+              if (Array.isArray(problemReasonPatterns) && problemReasonPatterns.length > 0) {
+                rulesByLang[problemLangUpper].PROBLEM_REASON = [...problemReasonPatterns];
+              }
+            });
           }
         });
       }
     });
 
+    // ✅ Carica pattern per inferenza categoria (CategoryExtraction)
+    const categoryExtraction = await collection.findOne({ _id: 'CategoryExtraction' });
+    if (categoryExtraction && categoryExtraction.patterns) {
+      Object.keys(categoryExtraction.patterns).forEach(lang => {
+        const langUpper = lang.toUpperCase();
+        if (!rulesByLang[langUpper]) {
+          rulesByLang[langUpper] = {
+            AI_AGENT: [],
+            MESSAGE: [],
+            REQUEST_DATA: [],
+            PROBLEM_SPEC_DIRECT: [],
+            PROBLEM_REASON: [],
+            PROBLEM: null,
+            SUMMARY: [],
+            BACKEND_CALL: [],
+            NEGOTIATION: []
+          };
+        }
+        // Aggiungi CATEGORY_PATTERNS per inferenza categoria
+        rulesByLang[langUpper].CATEGORY_PATTERNS = categoryExtraction.patterns[lang] || [];
+      });
+      console.log(`[TASK_HEURISTICS_CACHE] Caricati pattern CategoryExtraction per lingue: ${Object.keys(categoryExtraction.patterns).join(', ')}`);
+    }
+
     taskHeuristicsCache = rulesByLang;
     taskHeuristicsCacheLoaded = true;
-    console.log(`[TASK_HEURISTICS_CACHE] Caricati pattern da Heuristics per lingue: ${Object.keys(rulesByLang).join(', ')}`);
+    const langCount = Object.keys(rulesByLang).length;
+    const totalPatterns = Object.values(rulesByLang).reduce((sum, lang) => {
+      return sum + Object.values(lang).reduce((langSum, patterns) => {
+        if (Array.isArray(patterns)) return langSum + patterns.length;
+        if (patterns !== null) return langSum + 1;
+        return langSum;
+      }, 0);
+    }, 0);
+    console.log(`[TASK_HEURISTICS_CACHE] ✅ Caricati pattern da Heuristics: ${langCount} lingue, ${totalPatterns} pattern totali`);
+    if (langCount === 0) {
+      console.warn('[TASK_HEURISTICS_CACHE] ⚠️ ATTENZIONE: Nessun pattern caricato! Verifica il database.');
+    }
+
+    // ✅ Chiudi la connessione DOPO aver caricato tutto (incluso CategoryExtraction)
+    await client.close();
+
     return taskHeuristicsCache;
 
   } catch (error) {
     console.error('[TASK_HEURISTICS_CACHE] Errore nel caricamento:', error);
+    // ✅ Assicurati di chiudere la connessione anche in caso di errore
+    try {
+      if (client) await client.close();
+    } catch (closeError) {
+      // Ignora errori di chiusura
+    }
     return {};
   }
 }
@@ -324,7 +400,7 @@ async function resolveTemplateRefsWithLevels(subData, templates) {
 
 // ✅ ENTERPRISE AI SERVICES INITIALIZATION
 const aiProviderService = new AIProviderService();
-const templateIntelligenceService = new TemplateIntelligenceService(aiProviderService);
+const templateIntelligenceOrchestrator = new TemplateIntelligenceOrchestrator(aiProviderService);
 
 // ✅ ENTERPRISE MIDDLEWARE INITIALIZATION
 const circuitBreakerManager = new CircuitBreakerManager();
@@ -3224,6 +3300,10 @@ app.post('/api/factory/industries', async (req, res) => {
 // -----------------------------
 app.get('/api/factory/task-heuristics', async (req, res) => {
   try {
+    // ✅ Invalida cache per forzare ricaricamento
+    taskHeuristicsCacheLoaded = false;
+    taskHeuristicsCache = null;
+
     const patterns = await loadTaskHeuristicsFromDB();
 
     logInfo('TaskHeuristics.get', {
@@ -3821,6 +3901,7 @@ app.get('/projects/:id', async (req, res) => {
 });
 
 // ✅ ENTERPRISE: Analizza la richiesta utente usando SOLO AI reale
+// Now uses the new modular TemplateIntelligenceOrchestrator
 async function analyzeUserRequestWithAI(userDesc, templates, provider = 'groq', model = null) {
   console.log(`[AI_ANALYSIS] Starting AI analysis for: "${userDesc}"`);
   console.log(`[AI_ANALYSIS] Using ${provider} provider`);
@@ -3828,7 +3909,14 @@ async function analyzeUserRequestWithAI(userDesc, templates, provider = 'groq', 
   console.log(`[AI_ANALYSIS] Available templates:`, Object.keys(templates).length);
 
   try {
-    const result = await templateIntelligenceService.analyzeUserRequest(userDesc, templates, provider, model);
+    // Use new modular orchestrator (with embedding-based retrieval)
+    const result = await templateIntelligenceOrchestrator.analyzeUserRequest(
+      userDesc,
+      templates,
+      provider,
+      model
+    );
+
     console.log(`[AI_ANALYSIS] ✅ AI analysis successful:`, result.action);
     console.log(`[AI_ANALYSIS] 📋 AI Response structure:`, {
       action: result.action,
@@ -3860,18 +3948,7 @@ async function analyzeUserRequestWithAI(userDesc, templates, provider = 'groq', 
     return result;
   } catch (error) {
     console.error(`[AI_ANALYSIS] ❌ AI analysis failed:`, error.message);
-
-    // ✅ Enhanced error message with reason
-    let errorMessage = error.message;
-    if (error.message && error.message.includes('model_not_found')) {
-      errorMessage = `Model not found or not accessible. The requested model may have been decommissioned or you don't have access to it. Please use a valid model. Original error: ${error.message}`;
-    } else if (error.message && error.message.includes('model_decommissioned')) {
-      errorMessage = `Model has been decommissioned. Please use a valid model. Original error: ${error.message}`;
-    } else if (error.message && error.message.includes('API error')) {
-      errorMessage = `AI provider API error: ${error.message}. Please check your API key and provider configuration.`;
-    }
-
-    throw new Error(`AI analysis failed: ${errorMessage}`);
+    throw error; // Error already enhanced by orchestrator
   }
 }
 
@@ -4194,6 +4271,15 @@ app.post('/step2-with-provider', async (req, res) => {
     // Load templates from database
     const templates = await loadTemplatesFromDB();
     console.log('[STEP2] Using', Object.keys(templates).length, 'templates from Factory DB cache');
+
+    // Initialize orchestrator with templates (lazy initialization)
+    // This pre-computes embeddings for faster retrieval
+    try {
+      await templateIntelligenceOrchestrator.initialize(templates);
+    } catch (initError) {
+      console.warn('[STEP2] Orchestrator initialization failed (will continue without embeddings):', initError.message);
+      // Continue without embeddings - will fallback to create_new
+    }
 
     // ✅ Load pattern memory for synonyms (default to 'it' for now, can be passed from request)
     const targetLang = req.body.language || 'it';

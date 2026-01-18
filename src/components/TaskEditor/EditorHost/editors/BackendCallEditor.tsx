@@ -541,6 +541,8 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
   }, [hideHeader, toolbarButtons, onToolbarUpdate, headerColor]);
 
   const type = String(act?.type || 'BackendCall') as any;
+  // ✅ TODO FUTURO: Category System (vedi documentation/TODO_NUOVO.md)
+  // Aggiornare per usare getTaskVisuals(type, task?.category, task?.categoryCustom, false)
   const { Icon, color } = getTaskVisualsByType(type, false);
 
   return (

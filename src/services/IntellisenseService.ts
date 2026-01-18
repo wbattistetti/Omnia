@@ -34,49 +34,86 @@ export class IntellisenseService {
         );
     }
 
-    private buildIntentItemsFromSourceNode(sourceNode: any): IntellisenseItem[] {
-        // Cerca direttamente nelle righe del nodo senza dipendere da utils complesse
+    /**
+     * ✅ NUOVO: Cerca valori predefiniti (values[]) invece di intents
+     * Cerca in tutti i task DataRequest del nodo sorgente
+     */
+    private buildValuesItemsFromSourceNode(sourceNode: any): IntellisenseItem[] {
+        // Cerca direttamente nelle righe del nodo
         const rows = [
             ...(sourceNode?.data?.rows || []),
             ...(sourceNode?.data?.tableRows || []),
             ...(sourceNode?.rows || []),
         ];
 
-        const isProblem = (r: any) => {
-            const t = String(r?.type || r?.kind || "").toLowerCase();
-            return t === "problemclassification" || t === "problem-classification";
-        };
+        const items: IntellisenseItem[] = [];
 
-        const problemRow = rows.find(isProblem);
-        if (!problemRow) {
-            return [];
+        // ✅ Cerca in tutte le rows (non solo ProblemClassification)
+        for (const row of rows) {
+            const taskId = row?.id;
+            if (!taskId) continue;
+
+            const task = taskRepository.getTask(taskId);
+            if (!task) continue;
+
+            // ✅ Cerca values[] in mainData (non più task.intents)
+            const values = this.getValuesFromTask(task);
+            if (values.length === 0) continue;
+
+            // ✅ Costruisci items per ogni valore
+            const dataLabel = task.label || 'dato';
+            const varName = dataLabel.replace(/\s+/g, '_').toLowerCase();
+
+            for (const value of values) {
+                const valueLabel = value.label || value.value || value.id;
+                const conditionName = `${varName} === '${valueLabel}'`; // ✅ Condizione completa
+
+                items.push({
+                    id: `value-${taskId}-${valueLabel}`,
+                    label: valueLabel,
+                    name: conditionName, // ✅ Nome completo della condizione
+                    value: valueLabel,
+                    category: `Valori: ${dataLabel}`,
+                    categoryType: 'values' as const,
+                    kind: 'value' as const, // ✅ Non più 'intent'
+                    payload: {
+                        taskId,
+                        dataLabel,
+                        varName,
+                        valueLabel,
+                        conditionName
+                    }
+                });
+            }
         }
 
-        // FASE 7A: L'ID della row è il taskId
-        const taskId = problemRow?.id;
+        return items;
+    }
 
-        // FASE 7A: Cerca il Task nel TaskRepository
-        const task = taskRepository.getTask(taskId);
+    /**
+     * ✅ NUOVO: Estrae values[] da un task
+     * Cerca nel primo mainData con values[] definiti
+     */
+    private getValuesFromTask(task: any): any[] {
+        if (!task?.mainData || !Array.isArray(task.mainData)) return [];
 
-        if (!task) {
-            // Il Task non esiste ancora - restituiamo array vuoto
-            return [];
+        // Cerca il primo mainData con values[]
+        for (const main of task.mainData) {
+            if (main.values && Array.isArray(main.values) && main.values.length > 0) {
+                return main.values;
+            }
         }
 
-        // FASE 7A: Prendi gli intent dal Task
-        // ✅ Fields directly on task (no value wrapper)
-        const intents = task.intents || [];
+        return [];
+    }
 
-        // Converti gli intent in IntellisenseItem
-        return intents.map((intent: any) => ({
-            id: intent.id || intent.name,
-            label: intent.name || intent.label,
-            name: intent.name || intent.label,
-            value: intent.id || intent.name,
-            category: "Problem Intents",
-            categoryType: "intents" as const,
-            kind: "intent" as const,
-        }));
+    /**
+     * @deprecated Usa buildValuesItemsFromSourceNode invece
+     * Mantenuto per backward compatibility temporanea
+     */
+    private buildIntentItemsFromSourceNode(sourceNode: any): IntellisenseItem[] {
+        // ✅ Legacy: mantiene compatibilità con vecchio sistema
+        return this.buildValuesItemsFromSourceNode(sourceNode);
     }
 
     /** API principale: items da mostrare quando il target è un EDGE */
@@ -152,19 +189,16 @@ export class IntellisenseService {
             }
         ];
 
-        let intents: IntellisenseItem[] = [...TEST_INTENTS]; // Start with test intents
+        let values: IntellisenseItem[] = [...TEST_INTENTS]; // Start with test intents (mantenuti per compatibilità)
 
+        // ✅ NUOVO: Cerca values da sourceNode (non più solo ProblemClassification)
         if (sourceNode) {
-            const problemRows = collectProblemRows(sourceNode);
-
-            if (problemRows.length > 0) {
-                const realIntents = this.buildIntentItemsFromSourceNode(sourceNode);
-                // Aggiungi intent reali oltre a quelli di test
-                intents = [...intents, ...realIntents];
-            }
+            const realValues = this.buildValuesItemsFromSourceNode(sourceNode);
+            // Aggiungi valori reali oltre a quelli di test
+            values = [...values, ...realValues];
         }
 
-        const merged = dedupeByKey([...conditions, ...intents]);
+        const merged = dedupeByKey([...conditions, ...values]);
         const result = sortItems(merged);
 
         return result;

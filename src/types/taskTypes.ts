@@ -148,7 +148,7 @@ export function getEditorFromTaskType(type: TaskType): 'message' | 'ddt' | 'prob
     case TaskType.Negotiation:
       return 'negotiation';
     case TaskType.ClassifyProblem:
-      return 'problem';
+      return 'ddt'; // ✅ UNIFICATO: ClassifyProblem ora usa ResponseEditor (DDT) come DataRequest
     case TaskType.BackendCall:
       return 'backend';
     default:
@@ -259,6 +259,11 @@ export interface Task {
   endpoint?: string;             // API endpoint
   method?: string;              // HTTP method
   params?: Record<string, any>;  // Parameters
+
+  // ✅ TODO FUTURO: Category System (vedi documentation/TODO_NUOVO.md)
+  // category?: string;              // ID categoria (preset o custom)
+  // categoryCustom?: CustomCategory; // Se custom, dettagli completi
+
   // Generic fields:
   [key: string]: any;           // Allow additional fields
   createdAt?: Date;

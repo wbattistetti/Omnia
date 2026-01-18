@@ -1,5 +1,8 @@
-import { Lang, RuleSet } from './types';
+import { Lang, RuleSet, CategoryPattern } from './types';
 import { getPatternCache, loadPatternsFromDatabase } from './patternLoader';
+
+// ✅ Esporta anche CategoryPattern per uso esterno
+export type { CategoryPattern };
 
 /**
  * Inizializza il registry caricando pattern dal database

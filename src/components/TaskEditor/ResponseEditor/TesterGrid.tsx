@@ -107,6 +107,7 @@ interface TesterGridProps {
     testCases?: string[];
     setTestCases?: (cases: string[]) => void;
     onProfileUpdate?: (profile: any) => void;
+    task?: any; // ✅ FIX: Task passed directly for embeddings editor
   };
   // Buttons props
   runAllRows?: () => Promise<void>;
@@ -201,12 +202,14 @@ function TesterGridComponent({
 
   // Use modular hooks
   const { phraseColumnWidth, isResizing, handleResizeStart } = useColumnResize(280);
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null); // ✅ FIX: Riferimento al contenitore scrollabile
   const { editorOverlayStyle, tableRef, headerRowRef } = useEditorOverlay({
     activeEditor,
     showDeterministic,
     showNER,
     examplesListLength: examplesList.length,
     phraseColumnWidth,
+    contractTableRef: scrollContainerRef, // ✅ FIX: Passa il riferimento
   });
 
   // ✅ Stato per il pulsante dell'editor da mostrare nell'header
@@ -256,19 +259,21 @@ function TesterGridComponent({
       case 'llm':
         return <LLMInlineEditor {...commonProps} />;
       case 'embeddings':
-        const actForEmbeddings = editorProps.node?.task ? {
-          id: editorProps.node.task.id || editorProps.node.task.instanceId || '',
-          type: editorProps.node.task.type || '',
-          label: editorProps.node.task.label,
-          instanceId: editorProps.node.task.instanceId,
+        // ✅ FIX: Use task from editorProps directly (not from node.task)
+        const taskForEmbeddings = editorProps.task;
+        const actForEmbeddings = taskForEmbeddings ? {
+          id: taskForEmbeddings.id || taskForEmbeddings.instanceId || '',
+          type: taskForEmbeddings.type || '',
+          label: taskForEmbeddings.label,
+          instanceId: taskForEmbeddings.instanceId,
         } : undefined;
 
         // ✅ DEBUG: Log solo se act è undefined per diagnosticare
         if (!actForEmbeddings) {
           console.warn('[TesterGrid][embeddings] act is undefined', {
             hasNode: !!editorProps.node,
-            hasTask: !!editorProps.node?.task,
-            nodeTask: editorProps.node?.task,
+            hasTaskProp: !!editorProps.task,
+            task: editorProps.task,
           });
         }
 
@@ -365,12 +370,14 @@ function TesterGridComponent({
       }}>
         {/* ✅ FIX: Tabella unica con position sticky - soluzione semplificata */}
         <div
+          ref={scrollContainerRef} // ✅ FIX: Aggiungi il riferimento
           className="tester-grid-scroll"
           style={{
             flex: 1,
             minHeight: 0,
             overflowY: 'auto',
             overflowX: 'auto', // ✅ Scroll orizzontale per tutte le colonne (scrollbar può estendersi per tutta la larghezza)
+            position: 'relative', // ✅ FIX: Necessario per position: absolute dell'overlay
           }}>
           <table ref={tableRef} style={{
             width: '100%',

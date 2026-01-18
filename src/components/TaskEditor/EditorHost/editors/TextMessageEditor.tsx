@@ -119,6 +119,8 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
     <div className="h-full bg-white flex flex-col min-h-0">
       {(() => {
         // ✅ Usa direttamente taskMeta.type (TaskType enum) invece di convertire da stringa
+        // ✅ TODO FUTURO: Category System (vedi documentation/TODO_NUOVO.md)
+        // Aggiornare per usare getTaskVisuals(taskMeta.type ?? TaskType.SayMessage, taskMeta?.category, taskMeta?.categoryCustom, false)
         const { Icon, color } = getTaskVisualsByType(taskMeta.type ?? TaskType.SayMessage, false); // ✅ RINOMINATO: act → taskMeta
         return (
           <EditorHeader

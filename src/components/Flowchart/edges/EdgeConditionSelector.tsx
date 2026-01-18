@@ -7,6 +7,7 @@ import { useProjectData } from '../../../context/ProjectDataContext';
 import { taskRepository } from '../../../services/TaskRepository';
 import { useDynamicFontSizes } from '../../../hooks/useDynamicFontSizes';
 import { calculateFontBasedSizes } from '../../../utils/fontSizeUtils';
+import { getValuesFromTask, buildConditionName } from '../../TaskEditor/ResponseEditor/utils/getNodeValues';
 
 /**
  * Props per EdgeConditionSelector
@@ -124,7 +125,16 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
   // Selezione da intellisense
   const handleIntellisenseSelect = (item: IntellisenseItem) => {
     try { console.log('[CondUI][select]', item); } catch { }
-    // If user picked an intent, materialize a new condition with the intent name
+    // ✅ NUOVO: Se è un valore predefinito, crea condizione completa
+    if ((item as any)?.kind === 'value') {
+      const conditionName = item.name || item.label; // ✅ Già formattato come "nomeDato === 'valore'"
+      if (onCreateCondition && conditionName) {
+        onCreateCondition(conditionName, 'industry'); // ✅ Condizione completa
+        setShowIntellisense(false);
+        return;
+      }
+    }
+    // ✅ Legacy: Mantiene compatibilità con vecchio sistema (kind === 'intent')
     if ((item as any)?.kind === 'intent') {
       const intentName = item.label || item.name;
       if (onCreateCondition && intentName) {
@@ -141,76 +151,99 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
     setShowIntellisense(false);
   };
 
-  // Build unified extraItems prioritizing intents from the source node's Problem act
+  // ✅ NUOVO: Build unified extraItems prioritizing values from source node tasks
   useEffect(() => {
     try {
       const out: IntellisenseItem[] = [];
-      const pid = (() => { try { return localStorage.getItem('current.projectId') || ''; } catch { return ''; } })();
       const rows = Array.isArray(sourceRows) ? sourceRows : [];
-      // 1) Prefer intents from the Problem act present in the source node rows
+
+      // ✅ NUOVO: 1) Cerca values da sourceNode (non più solo ProblemClassification)
       for (const r of rows) {
-        const isPC = String(r?.type || '').toLowerCase() === 'problemclassification';
-        if (!isPC) continue;
-        const actId = r?.factoryId ?? r?.id;
-        if (!actId) continue;
-        const key = `problem.${pid}.${actId}`;
-        let payload: any = null;
-        try { const raw = localStorage.getItem(key); payload = raw ? JSON.parse(raw) : null; } catch { }
-        let intentsSrc: any[] = Array.isArray(payload?.intents) ? payload.intents : [];
-        if (intentsSrc.length === 0) {
-          // ✅ RIMOSSO: findAgentAct - gli intents sono nel task.intents (campi diretti)
-          // ✅ Fallback: recupera intents dal task se esiste
-          try {
-            const taskId = r?.taskId || r?.id;
-            if (taskId) {
-              const task = taskRepository.getTask(taskId);
-              if (task?.intents && Array.isArray(task.intents)) {
-                intentsSrc = task.intents;
+        const taskId = r?.taskId || r?.id;
+        if (!taskId) continue;
+
+        try {
+          const task = taskRepository.getTask(taskId);
+          if (!task) continue;
+
+          // ✅ Cerca values[] in mainData (non più task.intents)
+          const values = getValuesFromTask(task);
+          if (values.length === 0) continue;
+
+          // ✅ Costruisci items per ogni valore
+          const dataLabel = task.label || 'dato';
+          const varName = dataLabel.replace(/\s+/g, '_').toLowerCase();
+
+          for (const value of values) {
+            const valueLabel = value.label || value.value || value.id;
+            const conditionName = buildConditionName(dataLabel, valueLabel);
+
+            out.push({
+              id: `value-${taskId}-${valueLabel}`,
+              label: valueLabel,
+              name: conditionName, // ✅ Condizione completa
+              value: valueLabel,
+              description: conditionName,
+              category: `Valori: ${dataLabel}`,
+              categoryType: 'values' as const,
+              kind: 'value' as const, // ✅ Non più 'intent'
+              payload: {
+                taskId,
+                dataLabel,
+                varName,
+                valueLabel,
+                conditionName
               }
-            }
-          } catch (err) {
-            // Ignore
+            });
           }
-        }
-        const actLabel = String(r?.text || r?.label || 'problem').trim();
-        const varName = `${actLabel.replace(/\s+/g, '_').toLowerCase()}.variable`;
-        for (const intent of intentsSrc) {
-          out.push({
-            id: `intent-${actId}-${intent.id || intent.name}`,
-            label: intent.name,
-            name: intent.name,
-            description: intent.name,
-            category: 'Problem Intents',
-            categoryType: 'conditions',
-            kind: 'intent',
-            payload: { actId, intentId: intent.id, intent, actVariable: varName }
-          });
+        } catch (err) {
+          // Ignore
         }
       }
-      // 2) If none found via source node, fallback to all projectData Problem acts
+
+      // ✅ Legacy: 2) Fallback a vecchio sistema (mantenuto per compatibilità)
       if (out.length === 0) {
-        const cats: any[] = (projectData as any)?.agentActs || [];
-        for (const c of cats) {
-          for (const it of (c.items || [])) {
-            if (String((it as any)?.type) === 'ProblemClassification' && Array.isArray((it as any)?.problem?.intents)) {
-              const actLabel = String((it as any)?.name || (it as any)?.label || 'problem').trim();
-              const varName = `${actLabel.replace(/\s+/g, '_').toLowerCase()}.variable`;
-              for (const intent of (it as any).problem.intents) {
-                out.push({
-                  id: `intent-${(it as any).id || (it as any)._id}-${intent.id || intent.name}`,
-                  label: intent.name,
-                  name: intent.name,
-                  description: intent.name,
-                  category: 'Problem Intents',
-                  categoryType: 'conditions',
-                  kind: 'intent',
-                  payload: { actId: (it as any).id || (it as any)._id, intentId: intent.id, intent, actVariable: varName }
-                });
+        const pid = (() => { try { return localStorage.getItem('current.projectId') || ''; } catch { return ''; } })();
+        // Cerca intents legacy da ProblemClassification
+        for (const r of rows) {
+          const isPC = String(r?.type || '').toLowerCase() === 'problemclassification';
+          if (!isPC) continue;
+          const actId = r?.factoryId ?? r?.id;
+          if (!actId) continue;
+          const key = `problem.${pid}.${actId}`;
+          let payload: any = null;
+          try { const raw = localStorage.getItem(key); payload = raw ? JSON.parse(raw) : null; } catch { }
+          let intentsSrc: any[] = Array.isArray(payload?.intents) ? payload.intents : [];
+          if (intentsSrc.length === 0) {
+            try {
+              const taskId = r?.taskId || r?.id;
+              if (taskId) {
+                const task = taskRepository.getTask(taskId);
+                if (task?.intents && Array.isArray(task.intents)) {
+                  intentsSrc = task.intents;
+                }
               }
+            } catch (err) {
+              // Ignore
             }
+          }
+          const actLabel = String(r?.text || r?.label || 'problem').trim();
+          const varName = `${actLabel.replace(/\s+/g, '_').toLowerCase()}.variable`;
+          for (const intent of intentsSrc) {
+            out.push({
+              id: `intent-${actId}-${intent.id || intent.name}`,
+              label: intent.name,
+              name: intent.name,
+              description: intent.name,
+              category: 'Problem Intents',
+              categoryType: 'conditions',
+              kind: 'intent',
+              payload: { actId, intentId: intent.id, intent, actVariable: varName }
+            });
           }
         }
       }
+
       setExtraItems(out);
       try {
         const labels = out.map(i => i.label);

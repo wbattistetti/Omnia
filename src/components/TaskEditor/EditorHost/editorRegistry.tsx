@@ -28,9 +28,9 @@ const SimpleEditor: React.FC<EditorProps> = ({ task, onClose }) => {
 export const registry: Record<EditorKind, LazyComp | DirectComp> = {
   message: TextMessageEditor, // Import diretto per aprire istantaneamente l'editor Message
   ddt: DDTEditor, // Import diretto per evitare lazy loading delay
-  intent: IntentEditor, // Import diretto per aprire istantaneamente l'editor ProblemClassification
+  intent: IntentEditor, // ✅ LEGACY: Mantenuto per retrocompatibilità, ma ClassifyProblem ora usa 'ddt'
   backend: BackendCallEditor, // ✅ Import diretto per aprire istantaneamente l'editor BackendCall
-  problem: IntentEditor, // ✅ Alias per 'intent' (ClassifyProblem usa IntentEditor)
+  problem: DDTEditor, // ✅ LEGACY: ClassifyProblem ora mappa a 'ddt', questo è solo per retrocompatibilità
   aiagent: AIAgentEditor, // ✅ Editor dedicato per AIAgent
   summarizer: SummarizerEditor, // ✅ Editor dedicato per Summarizer
   negotiation: NegotiationEditor, // ✅ Editor dedicato per Negotiation

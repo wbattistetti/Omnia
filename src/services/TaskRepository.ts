@@ -76,7 +76,10 @@ class TaskRepository {
       type: task.type,
       typeName: TaskType[task.type],
       templateId: task.templateId,
-      hasText: !!task.text
+      hasText: !!task.text,
+      category: (task as any).category || null, // ✅ Log categoria se presente
+      hasMainData: !!(task as any).mainData,
+      mainDataLength: Array.isArray((task as any).mainData) ? (task as any).mainData.length : 0
     });
 
     // Save to internal storage

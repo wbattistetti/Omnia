@@ -13,10 +13,8 @@ export function resolveEditorKind(task: TaskMeta): EditorKind { // ✅ RINOMINAT
   // ✅ Usa direttamente task.type (TaskType enum) invece di convertire da stringa
   const editorKind = getEditorFromTaskType(taskType);
 
-  // ✅ Mapping: 'problem' → 'intent' (IntentEditor gestisce ClassifyProblem)
-  if (editorKind === 'problem') {
-    return 'intent';
-  }
+  // ✅ RIMOSSO: ClassifyProblem ora mappa direttamente a 'ddt' in getEditorFromTaskType
+  // Non serve più il mapping 'problem' → 'intent' perché ClassifyProblem è unificato con DataRequest
 
   // ✅ Fallback: se editorKind non è nel tipo EditorKind, usa 'simple'
   if (editorKind !== 'message' && editorKind !== 'ddt' && editorKind !== 'intent' && editorKind !== 'backend' && editorKind !== 'aiagent' && editorKind !== 'summarizer' && editorKind !== 'negotiation') {

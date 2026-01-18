@@ -68,6 +68,62 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
   const editorRef = React.useRef<any>(null);
   const monacoRef = React.useRef<any>(null);
 
+  // ✅ FIX: Suppress Monaco "Canceled" errors during dispose
+  React.useEffect(() => {
+    const isCanceledError = (error: any): boolean => {
+      if (!error) return false;
+
+      // Check if error is a string containing "Canceled"
+      if (typeof error === 'string' && error.includes('Canceled')) {
+        return true;
+      }
+
+      // Check if error has a message property containing "Canceled"
+      if (typeof error === 'object' && 'message' in error) {
+        const message = (error as { message?: any }).message;
+        if (typeof message === 'string' && message.includes('Canceled')) {
+          return true;
+        }
+      }
+
+      // Check if error.toString() contains "Canceled"
+      try {
+        const errorStr = String(error);
+        if (errorStr.includes('Canceled')) {
+          return true;
+        }
+      } catch {
+        // Ignore
+      }
+
+      return false;
+    };
+
+    const errorHandler = (event: ErrorEvent) => {
+      // Suppress "Canceled" errors from Monaco during dispose
+      if (isCanceledError(event.error) || isCanceledError(event.message)) {
+        event.preventDefault();
+        return;
+      }
+    };
+
+    const unhandledRejectionHandler = (event: PromiseRejectionEvent) => {
+      // Suppress "Canceled" promise rejections from Monaco during dispose
+      if (isCanceledError(event.reason)) {
+        event.preventDefault();
+        return;
+      }
+    };
+
+    window.addEventListener('error', errorHandler);
+    window.addEventListener('unhandledrejection', unhandledRejectionHandler);
+
+    return () => {
+      window.removeEventListener('error', errorHandler);
+      window.removeEventListener('unhandledrejection', unhandledRejectionHandler);
+    };
+  }, []);
+
   // Expose format method via ref
   React.useImperativeHandle(ref, () => ({
     format: () => {

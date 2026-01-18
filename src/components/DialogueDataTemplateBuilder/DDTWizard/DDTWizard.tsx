@@ -175,7 +175,7 @@ class AutoMappingService {
 
 const autoMappingService = new AutoMappingService();
 
-const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, messages?: any) => void; initialDDT?: any; startOnStructure?: boolean; onSeePrompts?: () => void; taskType?: string }> = ({ onCancel, onComplete, initialDDT, startOnStructure, onSeePrompts, taskType }) => {
+const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, messages?: any) => void; initialDDT?: any; startOnStructure?: boolean; onSeePrompts?: () => void; taskType?: string; taskLabel?: string }> = ({ onCancel, onComplete, initialDDT, startOnStructure, onSeePrompts, taskType, taskLabel }) => {
   const API_BASE = '';
   // Ensure accent is inherited in nested components
   React.useEffect(() => {
@@ -204,6 +204,17 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const [step, setStep] = useState<string>(() => {
     if (initialDDT?._inferenceResult?.ai?.schema && initialDDT.mainData?.length > 0) {
       return 'heuristic-confirm';
+    }
+    // ✅ NUOVO: Se initialDDT ha mainData ma senza stepPrompts → vai direttamente a 'structure'
+    // Il bottone "Build Messages" sarà visibile e porterà a 'pipeline'
+    if (initialDDT?.mainData && Array.isArray(initialDDT.mainData) && initialDDT.mainData.length > 0) {
+      const hasStepPrompts = initialDDT.mainData.some((m: any) =>
+        m.stepPrompts && typeof m.stepPrompts === 'object' && Object.keys(m.stepPrompts).length > 0
+      );
+      if (!hasStepPrompts) {
+        console.log('[DDTWizard] MainData presente ma senza stepPrompts, andando a structure per generare messaggi');
+        return 'structure';
+      }
     }
     return startOnStructure ? 'structure' : 'input';
   });
@@ -436,7 +447,27 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const { provider: selectedProvider, model: selectedModel } = useAIProvider();
   const [detectTypeIcon, setDetectTypeIcon] = useState<string | null>(() => initialDDT?._inferenceResult?.ai?.icon || null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [dataNode] = useState<DataNode | null>(() => ({ name: initialDDT?.label || '' }));
+  // ✅ FIX: Assicura che name sia sempre una stringa, anche se initialDDT?.label è un oggetto
+  // ✅ Usa taskLabel come fallback se initialDDT?.label non è disponibile
+  const [dataNode, setDataNode] = useState<DataNode | null>(() => {
+    const label = initialDDT?.label || taskLabel || '';
+    return {
+      name: typeof label === 'string'
+        ? label
+        : String(label || '')
+    };
+  });
+
+  // ✅ FIX: Aggiorna dataNode.name quando taskLabel diventa disponibile
+  React.useEffect(() => {
+    if (taskLabel && (!dataNode?.name || dataNode.name.trim() === '')) {
+      const label = String(taskLabel || '').trim();
+      if (label) {
+        setDataNode({ name: label });
+        console.log('[DDTWizard] ✅ Aggiornato dataNode.name con taskLabel:', label);
+      }
+    }
+  }, [taskLabel, dataNode?.name]);
   const [closed, setClosed] = useState(false);
 
   // Auto-detect function for real-time heuristic matching
@@ -921,16 +952,37 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   }, [schemaMains, selectedIdx]);
 
   // Funzione per chiamare la detection AI
-  const handleDetectType = async () => {
+  const handleDetectType = async (textToUse?: string) => { // ✅ MODIFICATO: accetta parametro opzionale
     if (step === 'pipeline' || closed) return; // Blocca ogni setState durante la pipeline
     setShowRight(true);
     setStep('loading');
     try { dlog('[DDT][UI] step → loading'); } catch { }
     setErrorMsg(null);
     try {
-      const reqBody = userDesc.trim();
+      // ✅ Deterministico: usa textToUse se fornito, altrimenti userDesc dallo stato
+      // ✅ FIX: Converti a stringa per evitare errori se textToUse o userDesc sono oggetti/undefined/null
+      const textInput = textToUse || userDesc;
+      const reqBody = typeof textInput === 'string'
+        ? textInput.trim()
+        : String(textInput || '').trim();
+
+      // ✅ Validazione: se reqBody è vuoto o è "[object Object]", logga errore
+      if (!reqBody || reqBody === '[object Object]') {
+        console.error('[DDT][DetectType] ❌ Invalid input:', {
+          textToUse,
+          userDesc,
+          textInput,
+          reqBody,
+          textToUseType: typeof textToUse,
+          userDescType: typeof userDesc
+        });
+        setErrorMsg('Input non valido: il testo deve essere una stringa');
+        setStep('error');
+        return;
+      }
+
       console.log('[DDT][DetectType] 🚀 Starting detection for:', reqBody);
-      console.log('[DDT][DetectType] 📊 Current state:', { step, closed, userDesc: reqBody });
+      console.log('[DDT][DetectType] 📊 Current state:', { step, closed, userDesc: reqBody, textToUse });
 
       // Clean path via Vite proxy
       const urlPrimary = `/step2-with-provider`;
@@ -1558,7 +1610,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             dataNode={stableDataNode || undefined}
             onAutoDetect={initialDDT?._inferenceResult ? undefined : handleAutoDetect}
             onTemplateSelect={handleTemplateSelect}
-            taskType={taskType} // ✅ Passa tipo task per filtrare template
+            taskType={taskType}
+            taskLabel={taskLabel} // ✅ LOGICA CORRETTA: nello step 'input', dataNode è vuoto, quindi taskLabel è la fonte primaria
           />
         </div>
       )}
@@ -2049,7 +2102,22 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                       </button>
                     </>
                   )}
-                  <button onClick={handleClose} style={{ background: 'transparent', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}>Cancel</button>
+                  {/* ✅ FIX: Cancel nello step 'structure' torna al passo precedente (input) invece di chiudere */}
+                  <button
+                    onClick={() => {
+                      if (step === 'structure') {
+                        // Torna al passo input per permettere all'utente di aggiungere dettagli
+                        console.log('[DDT][Wizard] Cancel clicked in structure step, returning to input');
+                        setStep('input');
+                        setShowRight(false);
+                      } else {
+                        handleClose();
+                      }
+                    }}
+                    style={{ background: 'transparent', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}
+                  >
+                    Cancel
+                  </button>
                   {/* Only show "Build Messages" if no stepPrompts are present (new DDT structure) */}
                   {!schemaMains.some((m: any) => m.stepPrompts && Object.keys(m.stepPrompts).length > 0) && (
                     <button

@@ -7,12 +7,13 @@ import IconRenderer from './components/IconRenderer';
 interface Props {
   userDesc: string;
   setUserDesc: (v: string) => void;
-  onNext: () => void;
+  onNext: (text?: string) => void; // ✅ MODIFICATO: accetta parametro opzionale per testo combinato
   onCancel: () => void;
   dataNode?: { name?: string; subData?: string[] };
   onAutoDetect?: (userDesc: string) => void; // Nuovo prop per auto-rilevamento
   onTemplateSelect?: (template: any) => void; // Callback quando viene selezionato un template
   taskType?: string; // ✅ Tipo task per filtrare template (DataRequest, ProblemClassification, UNDEFINED)
+  taskLabel?: string; // ✅ LOGICA CORRETTA: nello step 'input', dataNode è vuoto, quindi taskLabel è la fonte primaria
 }
 
 const WizardInputStep: React.FC<Props> = ({
@@ -23,7 +24,8 @@ const WizardInputStep: React.FC<Props> = ({
   dataNode,
   onAutoDetect,
   onTemplateSelect,
-  taskType
+  taskType,
+  taskLabel
 }) => {
   const { combinedClass } = useFontContext();
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
@@ -113,7 +115,8 @@ const WizardInputStep: React.FC<Props> = ({
       return;
     }
 
-    const nodeLabel = dataNode.name.toLowerCase().trim();
+    // ✅ FIX: Converti a stringa per evitare errori se dataNode.name è un oggetto
+    const nodeLabel = String(dataNode.name || '').toLowerCase().trim();
     if (!nodeLabel) {
       console.log('[WIZARD_INPUT][PATTERN_MATCH] Empty nodeLabel after trim, skipping');
       return;
@@ -258,9 +261,10 @@ const WizardInputStep: React.FC<Props> = ({
     const handler = (e: any) => {
       const text = e?.detail?.text || '';
       console.log('[DDT][WizardInputStep][prefill received]', text);
-      try { setUserDesc(text); } catch { }
+      // ✅ FIX: Assicura che text sia sempre una stringa
+      try { setUserDesc(String(text || '')); } catch { }
       if (textareaRef.current) {
-        textareaRef.current.value = text;
+        textareaRef.current.value = String(text || '');
       }
     };
     document.addEventListener('ddtWizard:prefillDesc', handler as any);
@@ -270,40 +274,13 @@ const WizardInputStep: React.FC<Props> = ({
     };
   }, [setUserDesc, onAutoDetect, userDesc, dataNode?.name]);
 
-  // If empty, initialize the textarea with the act label (repeat header title inside textbox)
+  // ✅ FIX: NON inizializzare userDesc con dataNode?.name per evitare duplicazione
+  // La textarea deve rimanere vuota per dettagli opzionali
+  // La concatenazione avverrà solo quando l'utente clicca "Continua"
   React.useEffect(() => {
-    console.log('[WIZARD_INPUT][INIT] ════════════════════════════════════════');
-    console.log('[WIZARD_INPUT][INIT] 🎯 Inizializzazione textarea', {
-      timestamp: new Date().toISOString(),
-      dataNodeName: dataNode?.name,
-      currentUserDesc: userDesc,
-      userDescLength: userDesc?.length || 0
-    });
-
-    const initial = (dataNode?.name || '').trim();
-    if (!userDesc || userDesc.trim().length === 0) {
-      console.log('[WIZARD_INPUT][INIT] ✅ Impostando valore iniziale', {
-        initial,
-        initialLength: initial.length,
-        willTriggerAutoDetect: initial.length >= 3
-      });
-      try {
-        setUserDesc(initial);
-        console.log('[WIZARD_INPUT][INIT] ✅ setUserDesc chiamato');
-      } catch (err) {
-        console.error('[WIZARD_INPUT][INIT] ❌ Errore in setUserDesc:', err);
-      }
-      if (textareaRef.current) {
-        textareaRef.current.value = initial;
-        console.log('[WIZARD_INPUT][INIT] ✅ textareaRef.value impostato');
-      } else {
-        console.warn('[WIZARD_INPUT][INIT] ⚠️ textareaRef.current è null!');
-      }
-    } else {
-      console.log('[WIZARD_INPUT][INIT] ⏭️ Saltando inizializzazione (userDesc già presente)', {
-        userDesc,
-        userDescLength: userDesc.length
-      });
+    // ✅ Solo assicurarsi che textareaRef.current.value sia una stringa (non un oggetto)
+    if (textareaRef.current && typeof textareaRef.current.value !== 'string') {
+      textareaRef.current.value = '';
     }
     console.log('[WIZARD_INPUT][INIT] ════════════════════════════════════════');
   }, [dataNode?.name, userDesc]);
@@ -380,52 +357,11 @@ const WizardInputStep: React.FC<Props> = ({
         boxSizing: 'border-box',
       }}
     >
-      {/* Header: instruction line + Provider Selector + Bell sulla stessa riga */}
-      <div style={{
-        margin: '0 0 12px 0',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        gap: '16px',
-        flexWrap: 'wrap' // Responsive: wrap su riga successiva se necessario
-      }}>
-        <div className={combinedClass} style={{ fontWeight: 500, color: '#cbd5e1', flex: '1 1 auto' }}>
-          Describe in detail the data the virtual agent must ask to the user, specify all the pieces of data you need to retrieve:
-        </div>
-
-        {/* Provider Selector + Bell - Allineati a destra */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          flexShrink: 0
-        }}>
-
-          {/* Bell icon + text */}
-          <div className={combinedClass} style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            color: '#9ca3af',
-            whiteSpace: 'nowrap'
-          }}>
-            <Bell size={16} />
-            <span>Ring when completed</span>
-          </div>
-        </div>
-      </div>
+      {/* ✅ RIMOSSO: Header con didascalia sopra i campi */}
 
       {/* Template Selection Combobox */}
       <div style={{ marginBottom: 16 }}>
-        <label className={combinedClass} style={{
-          display: 'block',
-          marginBottom: 8,
-          color: '#cbd5e1',
-          fontWeight: 500,
-          fontSize: 14
-        }}>
-          Scegli il tipo di dato
-        </label>
+        {/* ✅ RIMOSSO: Label "Scegli il tipo di dato" */}
         <div ref={dropdownRef} style={{ position: 'relative', width: '100%' }}>
           {/* Custom dropdown button */}
           <button
@@ -464,9 +400,9 @@ const WizardInputStep: React.FC<Props> = ({
                     </>
                   );
                 }
-                return <span style={{ color: '#9ca3af' }}>combo box con i template disponibili</span>;
+                return <span style={{ color: '#9ca3af' }}>Scegli uno dei data template disponibili ...</span>;
               })() : (
-                <span style={{ color: '#9ca3af' }}>combo box con i template disponibili</span>
+                <span style={{ color: '#9ca3af' }}>Scegli uno dei data template disponibili ...</span>
               )}
             </div>
             <ChevronDown
@@ -570,10 +506,11 @@ const WizardInputStep: React.FC<Props> = ({
         onChange={e => {
           const newValue = e.target.value;
           console.log('[WIZARD_INPUT] 🔤 Text changed:', { newValue, length: newValue.length, trimmedLength: newValue.trim().length });
-          setUserDesc(newValue);
+          // ✅ FIX: Assicura che newValue sia sempre una stringa
+          setUserDesc(String(newValue || ''));
           // NO auto-detect on typing - only on mount or "Invia" button
         }}
-        placeholder={dataNode?.name || ''}
+        placeholder="(opzionale) puoi indicare altri dettagli di ciò che vuoi chiedere anche facendo degli esempi"
         rows={2}
         className={combinedClass}
         style={{
@@ -590,18 +527,27 @@ const WizardInputStep: React.FC<Props> = ({
           whiteSpace: 'pre-wrap',
           wordWrap: 'break-word',
         }}
-        onKeyDown={e => {
-          if (e.key === 'Enter' && !e.shiftKey && userDesc.trim()) {
-            e.preventDefault();
-            console.log('[WIZARD_INPUT] ⏎ Enter pressed with text:', userDesc.trim());
-            try { console.log('[DDT][WizardInputStep][submit][Enter]'); } catch { };
-            onNext();
-          }
-        }}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              // ✅ LOGICA CORRETTA: nello step 'input', dataNode è vuoto, quindi taskLabel è la fonte primaria
+              const nodeLabel = String(taskLabel || '').trim();
+              const userDetails = String(userDesc || '').trim();
+              const combinedText = nodeLabel && userDetails
+                ? `${nodeLabel} ${userDetails}`
+                : nodeLabel || userDetails;
+
+              if (combinedText && combinedText !== '[object Object]') {
+                console.log('[WIZARD_INPUT] ⏎ Enter pressed with combined text:', combinedText);
+                try { console.log('[DDT][WizardInputStep][submit][Enter]'); } catch { };
+                onNext(combinedText);
+              }
+            }
+          }}
         autoFocus
       />
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-        {/* 🎨 Pulsante Annulla: sfondo bianco, bordo nero, testo nero */}
+      {/* ✅ MODIFICATO: Layout pulsanti affiancati */}
+      <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: '12px', marginTop: 8 }}>
         <button
           onClick={onCancel}
           className={combinedClass}
@@ -618,14 +564,37 @@ const WizardInputStep: React.FC<Props> = ({
         >
           Annulla
         </button>
-        {/* 🎨 Pulsante Invia: sfondo verde, bordo verde, testo bianco */}
+        {/* ✅ MODIFICATO: Pulsante Continua (a sinistra accanto ad Annulla) */}
         <button
           onClick={() => {
-            console.log('[WIZARD_INPUT] 🖱️ Button clicked with text:', userDesc.trim());
-            try { console.log('[DDT][WizardInputStep][submit][Click]'); } catch { };
-            onNext();
+            // ✅ LOGICA CORRETTA: nello step 'input', dataNode è vuoto, quindi taskLabel è la fonte primaria
+            const nodeLabel = String(taskLabel || '').trim();
+            const userDetails = String(userDesc || '').trim();
+            const combinedText = nodeLabel && userDetails
+              ? `${nodeLabel} ${userDetails}`
+              : nodeLabel || userDetails;
+
+            console.log('[WIZARD_INPUT] 🖱️ Continua clicked', {
+              nodeLabel,
+              userDetails,
+              combinedText,
+              taskLabel,
+              hasTaskLabel: !!taskLabel
+            });
+
+            if (combinedText && combinedText !== '[object Object]') {
+              try { console.log('[DDT][WizardInputStep][submit][Click]'); } catch { };
+              onNext(combinedText);
+            } else {
+              console.error('[WIZARD_INPUT] ❌ Invalid combinedText:', {
+                combinedText,
+                nodeLabel,
+                userDetails,
+                taskLabel
+              });
+            }
           }}
-          disabled={!userDesc.trim()}
+          disabled={!(String(taskLabel || '').trim() || String(userDesc || '').trim())}
           className={combinedClass}
           style={{
             background: '#22c55e',
@@ -633,13 +602,13 @@ const WizardInputStep: React.FC<Props> = ({
             border: '1px solid #22c55e',
             borderRadius: 8,
             fontWeight: 600,
-            cursor: userDesc.trim() ? 'pointer' : 'not-allowed',
+            cursor: (String(taskLabel || '').trim() || String(userDesc || '').trim()) ? 'pointer' : 'not-allowed',
             padding: '8px 28px',
-            opacity: userDesc.trim() ? 1 : 0.6,
+            opacity: (String(taskLabel || '').trim() || String(userDesc || '').trim()) ? 1 : 0.6,
             transition: 'opacity 0.2s',
           }}
         >
-          Invia
+          Continua
         </button>
       </div>
     </div>

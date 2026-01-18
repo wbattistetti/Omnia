@@ -192,6 +192,12 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
+# Health check endpoint for embedding service
+@app.get("/api/ping")
+def ping():
+    """Health check endpoint for embedding service"""
+    return {"ok": True}
+
 # Include routers
 app.include_router(cond_router)
 app.include_router(nlp_router)

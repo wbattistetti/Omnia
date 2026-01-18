@@ -79,6 +79,41 @@ def cosine_similarity(a: List[float], b: List[float]) -> float:
     except Exception:
         return 0.0
 
+class ComputeEmbeddingBody(BaseModel):
+    text: str
+
+@router.post('/api/embeddings/compute')
+async def compute_embedding_endpoint(body: ComputeEmbeddingBody):
+    """
+    Compute embedding for a text using sentence-transformers.
+    Generic endpoint for template similarity search.
+
+    Returns:
+        {
+            "embedding": [float, ...],
+            "length": int,
+            "model": str
+        }
+    """
+    if not body.text or not body.text.strip():
+        raise HTTPException(status_code=400, detail="Text is required")
+
+    try:
+        embedding = compute_embedding_local(body.text)
+        return {
+            "embedding": embedding,
+            "length": len(embedding),
+            "model": LOCAL_MODEL_NAME
+        }
+    except Exception as e:
+        print(f"[Embeddings][COMPUTE][ERROR] Failed to compute embedding: {str(e)}", flush=True)
+        import traceback
+        print(f"[Embeddings][COMPUTE][ERROR] Traceback: {traceback.format_exc()}", flush=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to compute embedding: {str(e)}. Make sure sentence-transformers is installed."
+        )
+
 @router.post('/api/intents/{intent_id}/train')
 async def train_intent(intent_id: str, body: TrainBody):
     """

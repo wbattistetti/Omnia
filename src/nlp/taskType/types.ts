@@ -18,6 +18,21 @@ export type RuleSet = {
   SUMMARY: RegExp[];
   BACKEND_CALL: RegExp[];
   NEGOTIATION: RegExp[];
+  // ✅ Pattern per inferire la categoria semantica (compilati in RegExp)
+  CATEGORY_PATTERNS?: CompiledCategoryPattern[];
+};
+
+// ✅ Tipo per pattern di inferenza categoria (pattern originale)
+export type CategoryPattern = {
+  pattern: string; // Regex pattern come stringa
+  category: string; // ID categoria (es. 'problem-classification', 'choice', 'confirmation')
+};
+
+// ✅ Tipo per pattern compilato (usato in cache)
+export type CompiledCategoryPattern = {
+  pattern: RegExp; // Regex pattern compilato
+  category: string; // ID categoria
+  originalPattern: string; // Pattern originale (per logging/debug)
 };
 
 // ✅ Inference ora usa TaskType enum

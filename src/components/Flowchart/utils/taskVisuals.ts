@@ -1,7 +1,19 @@
-import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server, Bot } from 'lucide-react';
+import { Ear, CheckCircle2, Megaphone, GitBranch, FileText, Server, Bot, List, CheckCircle } from 'lucide-react';
 import { SIDEBAR_TYPE_COLORS } from '../../Sidebar/sidebarTheme';
 import { taskRepository } from '../../../services/TaskRepository';
 import { TaskType } from '../../../types/taskTypes';
+import { PRESET_CATEGORIES, getCurrentProjectLocale } from '../../../utils/categoryPresets';
+import getIconComponent from '../../TaskEditor/ResponseEditor/icons';
+
+// ✅ Tipo per custom category (da TODO_NUOVO.md)
+export interface CustomCategory {
+  id: string;
+  label: string;
+  icon: string; // Nome icona Lucide o custom
+  color: string;
+  description?: string;
+  scope: 'project' | 'global';
+}
 
 /**
  * ✅ NUOVO: Risolve il tipo di task dalla riga usando solo TaskRepository
@@ -119,6 +131,11 @@ export function hasTaskDDT(row: any): boolean {
  * ✅ RINOMINATO: getTaskVisualsByType (era getAgentActVisualsByType)
  * Restituisce icona e colori per un tipo di task
  * ✅ Accetta TaskType enum invece di ActType stringa
+ *
+ * ✅ TODO FUTURO: Category System (vedi documentation/TODO_NUOVO.md)
+ * Estendere questa funzione a getTaskVisuals(type, category?, customCategory?, hasDDT?)
+ * per supportare preset categories e custom categories.
+ * Priorità: customCategory > preset category > base type
  */
 export function getTaskVisualsByType(type: TaskType, hasDDT: boolean) {
   const green = '#22c55e';
@@ -179,3 +196,71 @@ export function getTaskVisualsByType(type: TaskType, hasDDT: boolean) {
   };
 }
 
+/**
+ * ✅ NUOVO: getTaskVisuals con supporto per categorie semantiche
+ * Restituisce icona e colori per un task considerando:
+ * 1. Custom category (priorità massima)
+ * 2. Preset category
+ * 3. Base type (fallback)
+ *
+ * @param type - TaskType enum
+ * @param category - ID categoria preset (opzionale)
+ * @param customCategory - Custom category object (opzionale)
+ * @param hasDDT - Se il task ha un DDT
+ * @returns Oggetto con Icon, labelColor, iconColor
+ */
+export function getTaskVisuals(
+  type: TaskType,
+  category?: string,
+  customCategory?: CustomCategory,
+  hasDDT?: boolean
+) {
+  // ✅ Priorità 1: Custom category (ha la precedenza)
+  if (customCategory) {
+    return {
+      Icon: getIconComponent(customCategory.icon) as any,
+      labelColor: customCategory.color,
+      iconColor: customCategory.color,
+      color: customCategory.color
+    };
+  }
+
+  // ✅ Priorità 2: Preset category
+  if (category && PRESET_CATEGORIES[category]) {
+    const preset = PRESET_CATEGORIES[category];
+    // Usa l'icona Lucide direttamente (non getIconComponent per icone standard)
+    let Icon: any;
+    switch (preset.icons.icon) {
+      case 'GitBranch':
+        Icon = GitBranch;
+        break;
+      case 'List':
+        Icon = List;
+        break;
+      case 'CheckCircle':
+        Icon = CheckCircle;
+        break;
+      case 'Sun':
+        Icon = Megaphone; // Fallback temporaneo
+        break;
+      case 'Wave':
+        Icon = Megaphone; // Fallback temporaneo
+        break;
+      case 'MessageSquare':
+        Icon = Megaphone; // Fallback temporaneo
+        break;
+      default:
+        // Prova con getIconComponent per icone custom
+        Icon = getIconComponent(preset.icons.icon) as any;
+    }
+    return {
+      Icon,
+      labelColor: preset.icons.color,
+      iconColor: preset.icons.color,
+      color: preset.icons.color
+    };
+  }
+
+  // ✅ Priorità 3: Base da type (senza categoria)
+  return getTaskVisualsByType(type, hasDDT ?? false);
+}

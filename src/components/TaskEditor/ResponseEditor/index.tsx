@@ -479,6 +479,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
     preAssembledDDTCache,
     wizardOwnsDataRef,
   });
+  // ✅ TODO FUTURO: Category System (vedi documentation/TODO_NUOVO.md)
+  // Aggiornare per usare getTaskVisuals(taskType, task?.category, task?.categoryCustom, !!ddt)
   const { Icon, color: iconColor } = getTaskVisualsByType(taskType, !!ddt); // ✅ RINOMINATO: actType → taskType
   // Priority: _sourceTask.label (preserved task info) > task.label (direct prop) > localDDT._userLabel (legacy) > generic fallback
   // NOTE: Do NOT use localDDT.label here - that's the DDT root label (e.g. "Age") which belongs in the TreeView, not the header
@@ -1250,13 +1252,23 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
               <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
                 <DDTWizard
                   taskType={task?.type ? String(task.type) : undefined} // ✅ Convert TaskType enum to string
+                  taskLabel={task?.label || ''} // ✅ Passa il label del task (testo della riga di nodo) come fallback
                   initialDDT={inferenceResult?.ai?.schema ? {
                     // ✅ Pre-compila con il risultato dell'inferenza
                     id: ddt?.id || `temp_ddt_${task?.id}`,
                     label: inferenceResult.ai.schema.label || task?.label || 'Data',
                     mainData: inferenceResult.ai.schema.mainData || [],
                     _inferenceResult: inferenceResult // Passa anche il risultato completo per riferimento (con traduzioni se disponibili)
-                  } : ddt}
+                  } : (ddt && ddt.mainData && ddt.mainData.length > 0 ? {
+                    // ✅ Se ddt ha mainData (creato da categoria), passalo come initialDDT
+                    // Il wizard andrà direttamente a 'structure' e mostrerà "Build Messages"
+                    id: ddt?.id || `temp_ddt_${task?.id}`,
+                    label: ddt?.label || task?.label || 'Data',
+                    mainData: ddt.mainData,
+                    stepPrompts: ddt.stepPrompts,
+                    constraints: ddt.constraints,
+                    examples: ddt.examples
+                  } : ddt)}
                   onCancel={onClose || (() => { })}
                   onComplete={(finalDDT, messages) => {
                     if (!finalDDT) {

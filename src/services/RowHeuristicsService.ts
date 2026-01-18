@@ -5,12 +5,17 @@
 import { inferTaskType } from '../nlp/taskType';
 import { TaskType, taskTypeToHeuristicString } from '../types/taskTypes';
 import DDTTemplateMatcherService, { type DDTTemplateMatch } from './DDTTemplateMatcherService';
+import { getRuleSet, getLanguageOrder } from '../nlp/taskType/registry';
+import type { CompiledCategoryPattern } from '../nlp/taskType/types';
+import { waitForCache } from '../nlp/taskType/patternLoader';
 
 export interface RowHeuristicsResult {
   taskType: TaskType;
   templateId: string | null;
   templateType: TaskType | null;
   isUndefined: boolean;
+  // ✅ Categoria semantica dedotta automaticamente
+  inferredCategory?: string | null;
 }
 
 /**
@@ -122,21 +127,135 @@ export class RowHeuristicsService {
 
     const isUndefined = taskType === TaskType.UNDEFINED;
 
+    // ✅ EURISTICA 3 - Inferenza categoria semantica (solo per DataRequest)
+    let inferredCategory: string | null = null;
+    if (taskType === TaskType.DataRequest) {
+      inferredCategory = await this.inferCategory(trimmedLabel, taskType, heuristic1Result.lang);
+      if (inferredCategory) {
+        console.log('✅ [RowHeuristics] Euristica 3 - Categoria dedotta', {
+          label: trimmedLabel,
+          inferredCategory
+        });
+      }
+    }
+
     console.log('✅ [RowHeuristics] Risultato finale', {
       label: trimmedLabel,
       finalTaskType: taskType,
       finalTaskTypeName: TaskType[taskType],
       templateId: matchedTemplate?.templateId || null,
       templateType: templateType ? TaskType[templateType] : null,
-      isUndefined
+      isUndefined,
+      inferredCategory: inferredCategory || null
     });
 
     return {
       taskType,
       templateId: matchedTemplate?.templateId || null,
       templateType,
-      isUndefined
+      isUndefined,
+      inferredCategory
     };
+  }
+
+  /**
+   * ✅ NUOVO: Infers category from label using pattern matching
+   * Pattern sono caricati dal database (Heuristics["CategoryExtraction"])
+   *
+   * @param label - Label della riga (es. "Chiedi il motivo della chiamata")
+   * @param taskType - Tipo di task (solo DataRequest)
+   * @param lang - Lingua rilevata dall'euristica 1 (opzionale)
+   * @returns Categoria dedotta o null se nessun pattern matcha
+   */
+  static async inferCategory(
+    label: string,
+    taskType: TaskType,
+    lang?: string
+  ): Promise<string | null> {
+    // Solo per DataRequest
+    if (taskType !== TaskType.DataRequest) {
+      return null;
+    }
+
+    try {
+      // Assicurati che i pattern siano caricati
+      await waitForCache();
+
+      // Determina lingua da usare (usa quella rilevata o default)
+      const languageOrder = lang ? [lang.toUpperCase() as any, 'IT', 'EN', 'PT'] : ['IT', 'EN', 'PT'];
+      const availableLangs = getLanguageOrder(languageOrder);
+
+      // ✅ MIGLIORATA: Normalizzazione testo più robusta
+      // Rimuove punteggiatura finale, normalizza spazi, apostrofi
+      const normalizedLabel = label
+        .toLowerCase()
+        .trim()
+        .replace(/[.,!?;:]+$/g, '') // Rimuovi punteggiatura finale
+        .replace(/\s+/g, ' ') // Normalizza spazi multipli
+        .replace(/[''""]/g, "'"); // Normalizza apostrofi tipografici
+
+      // ✅ Logging iniziale per debug
+      const totalPatterns = availableLangs.reduce((sum, l) => {
+        const rs = getRuleSet(l);
+        return sum + (rs?.CATEGORY_PATTERNS?.length || 0);
+      }, 0);
+
+      console.log('🔍 [RowHeuristics][inferCategory] Inizio analisi', {
+        label,
+        normalizedLabel,
+        taskType: TaskType[taskType],
+        lang: lang || 'default',
+        availableLangs,
+        totalPatterns
+      });
+
+      if (totalPatterns === 0) {
+        console.warn('[RowHeuristics][inferCategory] ⚠️ Nessun pattern CATEGORY_PATTERNS disponibile in nessuna lingua!');
+      }
+
+      // Prova ogni lingua nell'ordine di priorità
+      for (const currentLang of availableLangs) {
+        const ruleSet = getRuleSet(currentLang);
+        if (!ruleSet || !ruleSet.CATEGORY_PATTERNS || ruleSet.CATEGORY_PATTERNS.length === 0) {
+          console.debug(`[RowHeuristics][inferCategory] Nessun pattern disponibile per lingua ${currentLang}`);
+          continue;
+        }
+
+        console.log(`🔍 [RowHeuristics][inferCategory] Testando ${ruleSet.CATEGORY_PATTERNS.length} pattern per lingua ${currentLang}`);
+
+        // ✅ Testa ogni pattern (già compilato in cache)
+        for (const catPattern of ruleSet.CATEGORY_PATTERNS as CompiledCategoryPattern[]) {
+          try {
+            // ✅ Pattern già compilato, usa direttamente
+            if (catPattern.pattern.test(normalizedLabel)) {
+              console.log('✅ [RowHeuristics][inferCategory] Pattern matchato', {
+                label,
+                normalizedLabel,
+                pattern: catPattern.originalPattern,
+                category: catPattern.category,
+                lang: currentLang
+              });
+              return catPattern.category;
+            }
+          } catch (err) {
+            // ✅ Questo non dovrebbe mai accadere se i pattern sono validati durante il caricamento
+            console.error(`[RowHeuristics][inferCategory] Errore inaspettato durante test pattern: ${catPattern.originalPattern}`, err);
+            continue;
+          }
+        }
+      }
+
+      // Nessun pattern matchato
+      console.log('❌ [RowHeuristics][inferCategory] Nessun pattern matchato', {
+        label,
+        normalizedLabel,
+        testedLangs: availableLangs
+      });
+      return null;
+    } catch (error) {
+      console.error('[RowHeuristics][inferCategory] Errore durante inferenza categoria:', error);
+      return null;
+    }
   }
 
   /**

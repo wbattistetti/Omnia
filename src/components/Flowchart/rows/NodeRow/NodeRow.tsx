@@ -25,7 +25,7 @@ import { useRowState } from './hooks/useRowState';
 import { useIntellisensePosition } from './hooks/useIntellisensePosition';
 import { useRowRegistry } from './hooks/useRowRegistry';
 import { isInsideWithPadding, getToolbarRect } from './utils/geometry';
-import { getTaskVisualsByType, resolveTaskType, hasTaskDDT } from '../../utils/taskVisuals';
+import { getTaskVisualsByType, getTaskVisuals, resolveTaskType, hasTaskDDT } from '../../utils/taskVisuals';
 import { TaskType, taskTypeToTemplateId, taskTypeToHeuristicString, taskIdToTaskType } from '../../../../types/taskTypes'; // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
 import getIconComponent from '../../../TaskEditor/ResponseEditor/icons';
 import { ensureHexColor } from '../../../TaskEditor/ResponseEditor/utils/color';
@@ -550,7 +550,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
         // ✅ Usa servizio centralizzato per analisi euristica
         const heuristicsResult = await RowHeuristicsService.analyzeRowLabel(q);
-        const { taskType, templateId, isUndefined } = heuristicsResult;
+        const { taskType, templateId, isUndefined, inferredCategory } = heuristicsResult;
 
         console.log('✅ [EURISTICA] Risultato analisi', {
           rowId: row.id,
@@ -558,7 +558,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           taskType,
           taskTypeName: TaskType[taskType],
           templateId,
-          isUndefined
+          isUndefined,
+          inferredCategory: inferredCategory || null
         });
 
         // ✅ LAZY APPROACH: Memorizza metadati nella riga invece di creare task subito
@@ -592,7 +593,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           // ✅ LAZY: Memorizza metadati per creazione task quando si apre l'editor
           meta: {
             type: taskType,  // TaskType enum
-            templateId: templateId  // GUID del template se trovato
+            templateId: templateId,  // GUID del template se trovato
+            inferredCategory: inferredCategory || null  // ✅ Categoria semantica dedotta automaticamente
           }
         };
 
@@ -1587,7 +1589,15 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             // Questo garantisce che i visuals siano sempre aggiornati con il tipo corretto
             const taskTypeEnum = task.type;
             const has = hasTaskDDT(row);
-            const visuals = getTaskVisualsByType(taskTypeEnum, has);
+            // ✅ NUOVO: Usa getTaskVisuals con supporto per categorie
+            // ✅ Leggi categoria da task.category OPPURE da row.meta.inferredCategory (se task non esiste ancora)
+            const taskCategory = task.category || ((row as any)?.meta?.inferredCategory) || null;
+            const visuals = getTaskVisuals(
+              taskTypeEnum,
+              taskCategory, // Preset category (da task o da row.meta)
+              task.categoryCustom, // Custom category
+              has
+            );
 
             // Se è undefined, usa icona punto interrogativo invece dell'icona normale
             Icon = isUndefined ? HelpCircle : visuals.Icon;
@@ -1633,7 +1643,15 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     // ✅ Se il tipo è stato risolto dai metadati, usa i visuals corretti
     if (resolvedType !== TaskType.UNDEFINED) {
       const has = hasTaskDDT(row);
-      const visuals = getTaskVisualsByType(resolvedType, has);
+      // ✅ Leggi categoria da row.meta.inferredCategory (per lazy creation)
+      const rowCategory = (row as any)?.meta?.inferredCategory || null;
+      const visuals = getTaskVisuals(
+        resolvedType,
+        rowCategory, // Preset category da row.meta
+        null, // Custom category (non disponibile in row.meta)
+        has
+      );
+
       Icon = visuals.Icon;
       labelTextColor = visuals.labelColor;
       iconColor = visuals.iconColor;
@@ -1778,20 +1796,78 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         ? rowMeta.type
                         : TaskType.UNDEFINED;
                       const metaTemplateId = rowMeta?.templateId || null;
+                      const inferredCategory = rowMeta?.inferredCategory || null; // ✅ Categoria semantica dedotta
                       const projectId = getProjectId?.() || undefined;
 
                       console.log('🆕 [LAZY] Creando task usando metadati riga', {
                         rowId: row.id,
                         metaTaskType,
                         metaTaskTypeName: TaskType[metaTaskType],
-                        metaTemplateId
+                        metaTemplateId,
+                        inferredCategory: inferredCategory || null
                       });
 
-                      // ✅ Crea task base
+                      // ✅ Logica di creazione task:
+                      // 1. Se c'è inferredCategory → crea mainData dalla categoria, NON cercare template
+                      // 2. Se NON c'è categoria ma c'è templateId → usa template
+                      // 3. Se NON c'è né categoria né template → l'utente crea manualmente
+                      let initialTaskData: any = { label: row.text || '' };
+
+                      // ✅ CASO 1: Se c'è inferredCategory (problem-classification, choice, confirmation)
+                      if (inferredCategory && metaTaskType === TaskType.DataRequest) {
+                        const { v4: uuidv4 } = await import('uuid');
+                        const { getMainDataLabelForCategory, getDefaultValuesForCategory, getCurrentProjectLocale } = await import('../../../../utils/categoryPresets');
+
+                        initialTaskData.category = inferredCategory;
+                        initialTaskData.templateId = null; // ✅ FORZA null, non cercare template
+
+                        const projectLocale = getCurrentProjectLocale();
+                        const categoryMainDataLabel = getMainDataLabelForCategory(inferredCategory, projectLocale);
+
+                        if (categoryMainDataLabel) {
+                          const defaultValues = getDefaultValuesForCategory(inferredCategory, projectLocale);
+
+                          initialTaskData.mainData = [{
+                            id: uuidv4(),
+                            label: categoryMainDataLabel,
+                            kind: 'generic',
+                            ...(defaultValues ? { values: defaultValues } : {}), // ✅ Valori predefiniti se presenti
+                            subData: [],
+                            steps: {
+                              start: {
+                                escalations: [{
+                                  tasks: []
+                                }]
+                              }
+                            }
+                          }];
+
+                          console.log('✅ [LAZY] DDT creato automaticamente da inferredCategory', {
+                            category: inferredCategory,
+                            mainDataLabel: categoryMainDataLabel,
+                            hasDefaultValues: !!defaultValues
+                          });
+                        }
+                      }
+                      // ✅ CASO 2: Se NON c'è categoria ma c'è templateId → usa template (NON creare mainData qui)
+                      else if (metaTemplateId && metaTaskType === TaskType.DataRequest) {
+                        initialTaskData.templateId = metaTemplateId; // ✅ Usa template dall'euristica 2
+                        // mainData sarà caricato dal template quando si apre ResponseEditor
+                        console.log('✅ [LAZY] Task creato con templateId, mainData sarà caricato dal template', {
+                          templateId: metaTemplateId
+                        });
+                      }
+                      // ✅ CASO 3: Se NON c'è né categoria né template → l'utente crea manualmente
+                      else {
+                        // Nessun mainData, l'utente creerà manualmente
+                        console.log('✅ [LAZY] Task creato senza mainData, l\'utente creerà manualmente');
+                      }
+
+                      // ✅ Crea task base (con DDT se inferredMainData presente)
                       taskForType = taskRepository.createTask(
                         metaTaskType,
                         metaTemplateId,
-                        { label: row.text || '' },
+                        initialTaskData,
                         row.id,
                         projectId
                       );

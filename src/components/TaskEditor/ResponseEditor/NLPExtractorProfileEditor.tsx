@@ -434,6 +434,7 @@ export default function NLPExtractorProfileEditor({
           onProfileUpdate: (updatedProfile) => {
             onChange?.(updatedProfile);
           },
+          task, // ✅ FIX: Pass task directly in editorProps for embeddings editor
         }}
         runAllRows={runAllRows}
         testing={testing}

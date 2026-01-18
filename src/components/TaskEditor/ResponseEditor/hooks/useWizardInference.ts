@@ -10,7 +10,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { TaskType } from '../../../../types/taskTypes';
 import { taskRepository } from '../../../../services/TaskRepository';
 import { getTemplateId } from '../../../../utils/taskHelpers';
-import { isDDTEmpty } from '../../../../utils/ddt';
+import { isDDTEmpty, hasMainDataButNoStepPrompts } from '../../../../utils/ddt';
 import { getMainDataList } from '../ddtSelectors';
 import type { Task } from '../../../../types/taskTypes';
 import { findLocalTemplate } from './helpers/templateMatcher';
@@ -108,15 +108,44 @@ export function useWizardInference({
     }
 
     const empty = isDDTEmpty(currentDDT);
+    const hasStructureButNoMessages = hasMainDataButNoStepPrompts(currentDDT);
 
     // Se DDT non è vuoto e wizard aveva ownership → chiudi wizard
-    if (!empty && wizardOwnsDataRef.current && showWizard) {
+    // ✅ ECCEZIONE: Se ha struttura ma non ha messaggi, apri wizard per generare messaggi
+    if (!empty && !hasStructureButNoMessages && wizardOwnsDataRef.current && showWizard) {
       setShowWizard(false);
       inferenceStartedRef.current = null;
       return;
     }
 
-    // Se DDT non è vuoto → non aprire wizard
+    // ✅ NUOVO: Se DDT ha struttura ma non ha messaggi → apri wizard al passo pipeline
+    if (hasStructureButNoMessages) {
+      console.log('[useWizardInference] DDT ha struttura ma non ha messaggi, aprendo wizard al passo pipeline', {
+        mainDataCount: currentDDT?.mainData?.length || 0,
+        taskType: stableTaskType
+      });
+
+      // Apri wizard con initialDDT che contiene il mainData esistente
+      // Il wizard dovrebbe saltare automaticamente al passo 'pipeline'
+      const inferenceKey = `${stableTaskLabel || ''}_hasStructureButNoMessages`;
+      if (inferenceStartedRef.current !== inferenceKey) {
+        inferenceStartedRef.current = inferenceKey;
+        setShowWizard(true);
+        wizardOwnsDataRef.current = true;
+        // ✅ Imposta inferenceResult con il DDT esistente per passarlo come initialDDT
+        setInferenceResult({
+          ai: {
+            schema: {
+              label: currentDDT?.label || stableTaskLabel || 'Data',
+              mainData: currentDDT?.mainData || []
+            }
+          }
+        });
+      }
+      return;
+    }
+
+    // Se DDT non è vuoto e ha messaggi → non aprire wizard
     if (!empty) {
       return;
     }

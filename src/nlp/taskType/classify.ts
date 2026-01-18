@@ -31,9 +31,14 @@ export async function classify(label: string, opts?: InferOptions): Promise<Infe
     try {
       await waitForCache();
       console.log('✅ [CLASSIFY] Cache caricata');
+      // Verifica che la cache sia effettivamente caricata dopo waitForCache
+      if (!isCacheLoaded()) {
+        console.warn('[TASK_TYPE_CLASSIFY] Cache ancora non caricata dopo waitForCache, ritorno UNDEFINED');
+        return { type: TaskType.UNDEFINED, reason: 'cache_still_not_loaded' };
+      }
     } catch (error) {
       console.error('[TASK_TYPE_CLASSIFY] Failed to load cache:', error);
-      return { type: TaskType.SayMessage, reason: 'cache_load_failed' };
+      return { type: TaskType.UNDEFINED, reason: 'cache_load_failed' };
     }
   }
 
@@ -74,19 +79,16 @@ export async function classify(label: string, opts?: InferOptions): Promise<Infe
       return { type: TaskType.ClassifyProblem, lang: L, reason: 'PROBLEM_SPEC_DIRECT' };
     }
 
-    // 3. PROBLEM_REASON
-    if (RS.PROBLEM_REASON?.some(r => r.test(txt))) {
-      console.log(`✅ [CLASSIFY] Match PROBLEM_REASON in ${L}`);
-      return { type: TaskType.ClassifyProblem, lang: L, reason: 'PROBLEM_REASON' };
-    }
-
-    // 4. BACKEND_CALL
+    // 3. BACKEND_CALL
     if (RS.BACKEND_CALL?.some(r => r.test(txt))) {
       console.log(`✅ [CLASSIFY] Match BACKEND_CALL in ${L}`);
       return { type: TaskType.BackendCall, lang: L, reason: 'BACKEND_CALL' };
     }
 
-    // 5. REQUEST_DATA - LOG DETTAGLIATO
+    // 4. REQUEST_DATA - LOG DETTAGLIATO (priorità su PROBLEM_REASON)
+    // ✅ IMPORTANTE: REQUEST_DATA viene prima di PROBLEM_REASON perché:
+    // - "Chiedi il motivo della chiamata" deve essere DataRequest (non ClassifyProblem)
+    // - La categoria "problem-classification" viene inferita dopo, non dal taskType
     if (RS.REQUEST_DATA && RS.REQUEST_DATA.length > 0) {
       console.log(`🔍 [CLASSIFY] Testando ${RS.REQUEST_DATA.length} pattern REQUEST_DATA per ${L}`);
       for (let i = 0; i < RS.REQUEST_DATA.length; i++) {
@@ -101,6 +103,14 @@ export async function classify(label: string, opts?: InferOptions): Promise<Infe
       console.log(`❌ [CLASSIFY] Nessun pattern REQUEST_DATA ha matchato per ${L}`);
     } else {
       console.log(`⚠️ [CLASSIFY] Nessun pattern REQUEST_DATA disponibile per ${L}`);
+    }
+
+    // 5. PROBLEM_REASON (dopo REQUEST_DATA)
+    // ✅ IMPORTANTE: Viene dopo REQUEST_DATA perché "chiedi il motivo" deve essere DataRequest
+    // con categoria problem-classification, non ClassifyProblem
+    if (RS.PROBLEM_REASON?.some(r => r.test(txt))) {
+      console.log(`✅ [CLASSIFY] Match PROBLEM_REASON in ${L}`);
+      return { type: TaskType.ClassifyProblem, lang: L, reason: 'PROBLEM_REASON' };
     }
 
     // 6. SUMMARY

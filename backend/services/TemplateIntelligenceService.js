@@ -137,6 +137,12 @@ Return a complete JSON structure in a single response, including:
 - Auditing state
 - Intelligent hierarchical structure (1-3 levels as needed)
 
+// ✅ TODO FUTURO: Category System (vedi documentation/TODO_NUOVO.md)
+// Aggiungere sezione "CATEGORY SUGGESTION" al prompt per suggerire:
+// - Preset categories (preferito): 'greeting', 'farewell', 'problem-classification', etc.
+// - Custom categories (se preset non adatto): con icona e colore suggeriti
+// Includere 'category' e 'customCategory' nella risposta JSON
+
 🔍 SEMANTIC COHERENCE CHECK (MANDATORY):
 
 Before choosing use_existing for ANY template, you MUST follow this algorithm:

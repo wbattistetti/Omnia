@@ -6,6 +6,7 @@ interface UseEditorOverlayOptions {
   showNER: boolean;
   examplesListLength: number;
   phraseColumnWidth: number;
+  contractTableRef?: React.RefObject<HTMLDivElement>; // ✅ FIX: Riferimento al contenitore scrollabile
 }
 
 /**
@@ -17,6 +18,7 @@ export function useEditorOverlay({
   showNER,
   examplesListLength,
   phraseColumnWidth,
+  contractTableRef, // ✅ FIX: Riferimento al contenitore scrollabile
 }: UseEditorOverlayOptions) {
   const [editorOverlayStyle, setEditorOverlayStyle] = useState<React.CSSProperties>({});
   const tableRef = useRef<HTMLTableElement>(null);
@@ -32,7 +34,8 @@ export function useEditorOverlay({
     const timeoutId = setTimeout(() => {
       const table = tableRef.current;
       const headerRow = headerRowRef.current;
-      if (!table || !headerRow) return;
+      const scrollContainer = contractTableRef?.current; // ✅ FIX: Contenitore scrollabile
+      if (!table || !headerRow || !scrollContainer) return;
 
       const firstHeaderCell = headerRow.querySelector('th:first-child') as HTMLElement;
       if (!firstHeaderCell) return;
@@ -54,12 +57,21 @@ export function useEditorOverlay({
       const extractorEndCell = headerCells[lastExtractorIndex];
       if (!extractorStartCell || !extractorEndCell) return;
 
-      const tableRect = table.getBoundingClientRect();
+      const scrollContainerRect = scrollContainer.getBoundingClientRect(); // ✅ FIX: Usa il contenitore scrollabile
       const startCellRect = extractorStartCell.getBoundingClientRect();
       const endCellRect = extractorEndCell.getBoundingClientRect();
 
-      const left = startCellRect.left - tableRect.left;
-      const width = endCellRect.right - startCellRect.left;
+      const left = startCellRect.left - scrollContainerRect.left; // ✅ FIX: Posizione relativa al contenitore
+      const SCROLLBAR_WIDTH = 12; // ✅ FIX: Larghezza della scrollbar (da CSS)
+
+      // ✅ FIX: Verifica se la scrollbar è visibile (se il contenuto supera il contenitore)
+      const hasVerticalScrollbar = scrollContainer.scrollHeight > scrollContainer.clientHeight;
+      const scrollbarOffset = hasVerticalScrollbar ? SCROLLBAR_WIDTH : 0;
+
+      // ✅ FIX: Calcola la larghezza corretta lasciando spazio per la scrollbar
+      const naturalWidth = endCellRect.right - startCellRect.left;
+      const availableWidth = scrollContainerRect.width - left - scrollbarOffset;
+      const width = Math.min(naturalWidth, availableWidth);
 
       setEditorOverlayStyle({
         position: 'absolute',
@@ -72,7 +84,7 @@ export function useEditorOverlay({
     }, 0);
 
     return () => clearTimeout(timeoutId);
-  }, [activeEditor, showDeterministic, showNER, examplesListLength, phraseColumnWidth]);
+  }, [activeEditor, showDeterministic, showNER, examplesListLength, phraseColumnWidth, contractTableRef]);
 
   return {
     editorOverlayStyle,

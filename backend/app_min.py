@@ -18,11 +18,16 @@ try:
     from backend.ai_endpoints.intent_generation import router as intent_gen_router
 except Exception:
     from ai_endpoints.intent_generation import router as intent_gen_router
+try:
+    from backend.ai_endpoints.intent_embeddings import router as intent_embeddings_router
+except Exception:
+    from ai_endpoints.intent_embeddings import router as intent_embeddings_router
 
 app = FastAPI()
 app.include_router(ner_router)
 app.include_router(nlp_extract_router)
 app.include_router(intent_gen_router)
+app.include_router(intent_embeddings_router)
 
 
 @app.get("/api/ping")

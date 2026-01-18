@@ -191,6 +191,8 @@ export default function IntentHostAdapter({ task, onClose, hideHeader, onToolbar
   }, [instanceId, task.id]); // ✅ ARCHITETTURA ESPERTO: Usa instanceId e task.id invece di props.act?.id
   // ✅ ARCHITETTURA ESPERTO: Usa task.type invece di props.act?.type
   const taskType = task.type ?? 5; // Default a ClassifyProblem se type non è definito
+  // ✅ TODO FUTURO: Category System (vedi documentation/TODO_NUOVO.md)
+  // Aggiornare per usare getTaskVisuals(taskType, task?.category, task?.categoryCustom, true)
   const { Icon, color } = getTaskVisualsByType(taskType, true);
 
   const editorRef = useRef<EmbeddingEditorShellRef>(null);
