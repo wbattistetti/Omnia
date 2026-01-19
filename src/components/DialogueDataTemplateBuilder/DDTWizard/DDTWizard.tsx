@@ -145,10 +145,12 @@ class AutoMappingService {
     if (analysis.analysis.action === 'create_new' && analysis.analysis.mains?.[0]) {
       const main = analysis.analysis.mains[0];
       return {
+        id: main.id,  // ✅ CRITICAL: Preserve node ID (GUID from template)
         label: main.label,
         type: main.type,
         icon: main.icon,
         subData: main.subData.map(sub => ({
+          id: sub.id,  // ✅ CRITICAL: Preserve subData node ID (GUID from template)
           label: sub.label,
           type: sub.type,
           icon: sub.icon
@@ -227,6 +229,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   } | null>(() => {
     if (initialDDT?._inferenceResult?.ai?.schema && initialDDT.mainData?.length > 0) {
       const mains = (initialDDT.mainData as any[]).map((m: any) => ({
+        id: m.id,  // ✅ CRITICAL: Preserve node ID (GUID from template)
         label: m.label,
         type: m.type,
         icon: m.icon,
@@ -237,6 +240,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         templateId: m.templateId || undefined,
         kind: m.kind || undefined,
         subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({
+          id: s.id,  // ✅ CRITICAL: Preserve subData node ID (GUID from template)
           label: s.label,
           type: s.type,
           icon: s.icon,
@@ -267,16 +271,22 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const [schemaMains, setSchemaMains] = useState<SchemaNode[]>(() => {
     if (initialDDT?.mainData && Array.isArray(initialDDT.mainData) && initialDDT.mainData.length > 0) {
       const mains = (initialDDT.mainData as any[]).map((m: any) => ({
+        id: m.id,  // ✅ CRITICAL: Preserve node ID (GUID from template)
         label: m.label,
         type: m.type,
         icon: m.icon,
         constraints: m.constraints || [],
+        templateId: m.templateId,  // ✅ Preserve templateId (ID of template root)
+        nlpContract: m.nlpContract,  // ✅ Preserve contract
         // ✅ Steps non sono più dentro mainData, sono a root level
         subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({
+          id: s.id,  // ✅ CRITICAL: Preserve subData node ID (GUID from template)
           label: s.label,
           type: s.type,
           icon: s.icon,
           constraints: s.constraints || [],
+          templateId: s.templateId,  // ✅ Preserve templateId
+          nlpContract: s.nlpContract,  // ✅ Preserve contract
           // ✅ Preserva stepPrompts per subData (solo start, noInput, noMatch)
           stepPrompts: s.stepPrompts || null
         })) : []
@@ -1436,7 +1446,10 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           }
 
           // ✅ Usa la label del template trovato (non l'ID!)
+          // ✅ CRITICAL: Include node ID from template (preserve GUID)
+          const subTemplateNodeId = subTemplate.mainData?.[0]?.id || subTemplate.id || subTemplate._id;
           subDataInstances.push({
+            id: subTemplateNodeId,  // ✅ CRITICAL: Preserve node ID (GUID from template)
             label: subTemplate.label || subTemplate.name || 'Sub',
             type: subTemplate.type || subTemplate.name || 'generic',
             icon: subTemplate.icon || 'FileText',
@@ -1446,7 +1459,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             subData: [],
             // ✅ CRITICO: Preserva nlpContract, templateId, kind
             nlpContract: subTemplate.nlpContract || undefined,
-            templateId: subTemplate.id || subTemplate._id || undefined,
+            templateId: subTemplate.id || subTemplate._id || undefined,  // ✅ ID del template root
             kind: subTemplate.name || subTemplate.type || undefined
           });
         } else {
@@ -1466,7 +1479,10 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
       // ✅ POI: Crea UN SOLO mainData con subData[] popolato (non elementi separati!)
       // L'istanza principale copia TUTTI i stepPrompts dal template (tutti e 6 i tipi)
+      // ✅ CRITICAL: Include node ID from template (preserve GUID)
+      const mainTemplateNodeId = template.mainData?.[0]?.id || template.id || template._id;
       const mainInstance = {
+        id: mainTemplateNodeId,  // ✅ CRITICAL: Preserve node ID (GUID from template)
         label: template.label || template.name || 'Data',
         type: template.type,
         icon: template.icon || 'Calendar',
@@ -1476,14 +1492,17 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         subData: subDataInstances, // ✅ Sottodati QUI dentro subData[], non in mainData[]
         // ✅ CRITICO: Preserva nlpContract, templateId, kind
         nlpContract: template.nlpContract || undefined,
-        templateId: template.id || template._id || undefined,
+        templateId: template.id || template._id || undefined,  // ✅ ID del template root
         kind: template.name || template.type || undefined
       };
       mainData.push(mainInstance); // ✅ UN SOLO elemento in mainData
     } else {
       // ✅ Template semplice: crea istanza dal template root
       console.log('[DDT][Wizard][templateSelect] 📄 Template semplice, creando istanza root');
+      // ✅ CRITICAL: Include node ID from template (preserve GUID)
+      const mainTemplateNodeId = template.mainData?.[0]?.id || template.id || template._id;
       mainData.push({
+        id: mainTemplateNodeId,  // ✅ CRITICAL: Preserve node ID (GUID from template)
         label: template.label || template.name || 'Data',
         type: template.type,
         icon: template.icon || 'FileText',
@@ -1493,7 +1512,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         subData: [],
         // ✅ CRITICO: Preserva nlpContract, templateId, kind
         nlpContract: template.nlpContract || undefined,
-        templateId: template.id || template._id || undefined,
+        templateId: template.id || template._id || undefined,  // ✅ ID del template root
         kind: template.name || template.type || undefined
       });
     }
@@ -1506,12 +1525,14 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         if (/phone|telephone|tel|cellulare|mobile/.test(l)) type = 'phone' as any;
       }
       return {
+        id: m.id,  // ✅ CRITICAL: Preserve node ID (GUID from template)
         label,
         type,
         icon: m.icon,
         constraints: m.constraints || [],
         // ✅ Preserva subData con i loro stepPrompts filtrati
         subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({
+          id: s.id,  // ✅ CRITICAL: Preserve subData node ID (GUID from template)
           label: s.label || s.name || 'Field',
           type: s.type,
           icon: s.icon,
@@ -1745,6 +1766,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                           setSchemaRootLabel(root);
                           setSchemaMains(mains0);
 
+                          try {
                             const emptyStore = buildArtifactStore([]);
                             const projectLang = (localStorage.getItem('project.lang') || 'pt') as 'en' | 'it' | 'pt';
                             // ✅ assembleFinalDDT now adds translations to global table via addTranslations callback
@@ -1761,7 +1783,10 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                                 escalationCounts: { noMatch: 2, noInput: 2, confirmation: 2 },
                                 templateTranslations: templateTranslations,
                                 projectLocale: projectLang,
-                                addTranslations: addTranslationsToGlobal // ✅ Add translations to global table
+                                addTranslations: addTranslationsToGlobal, // ✅ Add translations to global table
+                                contextLabel: taskLabel || root || 'Data', // ✅ Context label for prompt adaptation (e.g., "Chiedi la data di nascita del paziente")
+                                templateLabel: root || 'Data', // ✅ Template label (e.g., "Date")
+                                aiProvider: selectedProvider.toLowerCase() as 'groq' | 'openai' // ✅ AI provider for adaptation
                               }
                             );
 
@@ -2066,8 +2091,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                             return;
                           }
 
-                          // ✅ Check steps at root level (keyed by nodeId)
-                          const firstMainId = finalDDT.mainData[0]?.id;
+                          // ✅ Check steps at root level (keyed by nodeId) - firstMainId already declared above
                           if (!firstMainId || !finalDDT.steps || !finalDDT.steps[firstMainId] || Object.keys(finalDDT.steps[firstMainId]).length === 0) {
                             console.error('[DDT][Wizard][stepPrompts] ERROR: DDT has no steps at root level!', {
                               ddtId: finalDDT.id,
@@ -2121,6 +2145,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                         onCancel={() => setStep('structure')}
                         skipDetectType
                         confirmedLabel={mainDataNode?.name || 'Data'}
+                        contextLabel={taskLabel || schemaRootLabel || 'Data'} // ✅ Passa taskLabel come contextLabel per adattare i prompt al contesto - REQUIRED
                         setFieldProcessingStates={setFieldProcessingStates}
                         progressByPath={taskProgress}
                         onProgress={(m) => {

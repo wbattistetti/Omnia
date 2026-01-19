@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { AgentActItem } from '../types/project';
-import { getAgentActPrompt } from '../utils/agentActUtils';
+import { TaskTemplateItem } from '../types/project';
+import { getTaskPrompt } from '../utils/agentActUtils';
 
 export interface ChatMessage {
   id: string;
@@ -9,23 +9,23 @@ export interface ChatMessage {
 }
 
 /**
- * Hook per simulare un dialogo lineare su una lista di Agent Acts.
+ * ✅ RINOMINATO: Hook per simulare un dialogo lineare su una lista di Tasks (rinominato da Agent Acts).
  */
-export function useTestEngine(agentActs: AgentActItem[]) {
+export function useTestEngine(tasks: TaskTemplateItem[]) {
   const [step, setStep] = useState(0);
   const [transcript, setTranscript] = useState<ChatMessage[]>([]);
   const [userInput, setUserInput] = useState('');
 
   // Mostra il messaggio dell'agente corrente
   function showCurrentAgentAct() {
-    const act = agentActs[step];
-    if (!act) return;
+    const task = tasks[step];
+    if (!task) return;
     setTranscript(prev => [
       ...prev,
       {
-        id: act.id,
+        id: task.id,
         sender: 'agent',
-        text: getAgentActPrompt(act),
+        text: getTaskPrompt(task),
       },
     ]);
   }
@@ -46,16 +46,16 @@ export function useTestEngine(agentActs: AgentActItem[]) {
     setStep(s => s + 1);
   }
 
-  // Quando lo step cambia, mostra il nuovo agent act
+  // Quando lo step cambia, mostra il nuovo task
   // (Effetto collaterale: solo se non già presente nel transcript)
   React.useEffect(() => {
-    if (step < agentActs.length) {
-      const act = agentActs[step];
-      if (act && !transcript.find(m => m.id === act.id && m.sender === 'agent')) {
+    if (step < tasks.length) {
+      const task = tasks[step];
+      if (task && !transcript.find(m => m.id === task.id && m.sender === 'agent')) {
         showCurrentAgentAct();
       }
     }
-  }, [step, agentActs]);
+  }, [step, tasks]);
 
   return {
     step,
@@ -63,7 +63,7 @@ export function useTestEngine(agentActs: AgentActItem[]) {
     userInput,
     setUserInput,
     sendUserMessage,
-    isFinished: step >= agentActs.length,
+    isFinished: step >= tasks.length,
     reset: () => {
       setStep(0);
       setTranscript([]);

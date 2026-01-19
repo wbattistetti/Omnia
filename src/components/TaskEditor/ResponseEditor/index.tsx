@@ -456,9 +456,9 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
   // ✅ Verifica se kind === "intent" e non ha messaggi (mostra IntentMessagesBuilder se non ci sono)
   const needsIntentMessages = useMemo(() => {
     const firstMain = mainList[0];
-    const hasMessages = hasIntentMessages(ddt);
+    const hasMessages = hasIntentMessages(ddt, task);
     return firstMain?.kind === 'intent' && !hasMessages;
-  }, [mainList, ddt, task?.id, task?.type]); // ✅ RINOMINATO: act → task
+  }, [mainList, ddt, task]); // ✅ CORRETTO: Passa task a hasIntentMessages
 
   // ✅ Usa hook custom per gestire wizard e inferenza (estratto per migliorare manutenibilità)
   const {
@@ -752,6 +752,12 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
         : getSubDataList(currentMainList[selectedMainIndex])?.[selectedSubIndex];
 
       if (node) {
+        // ✅ Copia gli steps da task.steps[nodeId] a node.steps (per compatibilità con codice che legge node.steps)
+        const nodeId = node.id;
+        if (nodeId && task?.steps?.[nodeId]) {
+          node.steps = task.steps[nodeId];
+        }
+
         // 🔴 LOG CHIRURGICO 3 (continuazione): Dettagli del nodo caricato
         const steps = getStepsAsArray(node?.steps);
         const startStepTasksCount = steps.find((s: any) => s?.type === 'start')?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0;
@@ -810,7 +816,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
     // ✅ Carica il nodo quando cambiano gli indici O quando ddt prop cambia (dal dockTree)
     // ddtRef.current è già sincronizzato con ddt prop dal useEffect precedente
-  }, [selectedMainIndex, selectedSubIndex, selectedRoot, introduction, ddt?.label, ddt?.mainData?.length]);
+  }, [selectedMainIndex, selectedSubIndex, selectedRoot, introduction, ddt?.label, ddt?.mainData?.length, task?.steps]);
 
   // ✅ NON serve più sincronizzare selectedNode con localDDT
   // selectedNode è l'unica fonte di verità durante l'editing
@@ -879,6 +885,15 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
           // Main node
           mains[mainIndex] = updated;
           updatedDDT.mainData = mains;
+
+          // ✅ CORRETTO: Salva updated.steps direttamente in task.steps[nodeId]
+          // NON salvare in updatedDDT.steps perché il DDT non contiene steps
+          const nodeId = updated.id;
+          if (nodeId && updated.steps && task) {
+            // Aggiorna task.steps immediatamente (unica fonte di verità)
+            if (!task.steps) task.steps = {};
+            task.steps[nodeId] = updated.steps;
+          }
         } else {
           // Sub node
           const subList = [...(main.subData || [])];
@@ -888,6 +903,15 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
             main.subData = subList;
             mains[mainIndex] = main;
             updatedDDT.mainData = mains;
+
+            // ✅ CORRETTO: Salva updated.steps direttamente in task.steps[nodeId]
+            // NON salvare in updatedDDT.steps perché il DDT non contiene steps
+            const nodeId = updated.id;
+            if (nodeId && updated.steps && task) {
+              // Aggiorna task.steps immediatamente (unica fonte di verità)
+              if (!task.steps) task.steps = {};
+              task.steps[nodeId] = updated.steps;
+            }
           }
         }
 
@@ -951,6 +975,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                   fieldsToSave = {
                     label: updatedDDT.label,
                     mainData: updatedDDT.mainData, // ✅ Salva tutto, incluso tutti i task
+                    steps: taskToSave?.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
                     constraints: updatedDDT.constraints,
                     examples: updatedDDT.examples,
                     nlpContract: updatedDDT.nlpContract,

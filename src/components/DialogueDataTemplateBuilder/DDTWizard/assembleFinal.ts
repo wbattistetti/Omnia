@@ -7,6 +7,107 @@ import { taskTemplateService } from '../../../services/TaskTemplateService';
 import { cloneAndAdaptContract, createSubIdMapping } from '../../../utils/contractUtils';
 import { TaskType, templateIdToTaskType } from '../../../types/taskTypes';
 
+/**
+ * Adapt start step prompts to a new context using AI.
+ * Only adapts 'start' step prompts; escalation prompts remain generic.
+ * @internal - Private function, only called from assembleFinalDDT
+ */
+async function adaptStartPromptsToContext(
+  rootSteps: Record<string, any>,
+  projectTranslations: Record<string, string>,
+  contextLabel: string,
+  templateLabel: string,
+  projectLocale: string,
+  provider: 'groq' | 'openai'
+): Promise<Record<string, string>> {
+  const adaptedTranslations: Record<string, string> = {};
+
+  // Collect all start step prompts that need adaptation
+  const promptsToAdapt: Array<{ guid: string; text: string }> = [];
+
+  // Iterate over all nodeIds
+  for (const [nodeId, nodeSteps] of Object.entries(rootSteps)) {
+    // ✅ Only adapt 'start' step
+    const startStep = nodeSteps?.start;
+    if (!startStep?.escalations || !Array.isArray(startStep.escalations)) continue;
+
+    // Extract all SayMessage task texts from start step escalations
+    for (const escalation of startStep.escalations) {
+      const tasks = escalation.tasks || escalation.actions || [];
+      for (const task of tasks) {
+        // Check if it's a SayMessage task
+        if (task.type === TaskType.SayMessage || task.type === 0 || !task.type) {
+          const textGuid = task.parameters?.find((p: any) => p.parameterId === 'text')?.value ||
+                          task.taskId ||
+                          task.id;
+
+          if (textGuid && projectTranslations[textGuid]) {
+            promptsToAdapt.push({
+              guid: textGuid,
+              text: projectTranslations[textGuid]
+            });
+          }
+        }
+      }
+    }
+  }
+
+  if (promptsToAdapt.length === 0) {
+    console.log('[adaptStartPromptsToContext] No prompts to adapt');
+    return adaptedTranslations;
+  }
+
+  // Extract original texts
+  const originalTexts = promptsToAdapt.map(p => p.text);
+
+  try {
+    console.log('[adaptStartPromptsToContext] Calling AI to adapt prompts', {
+      count: originalTexts.length,
+      contextLabel,
+      templateLabel,
+      locale: projectLocale,
+      provider
+    });
+
+    const res = await fetch('/api/ddt/adapt-prompts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        originalTexts,
+        contextLabel,
+        templateLabel,
+        locale: projectLocale,
+        provider
+      })
+    });
+
+    if (!res.ok) {
+      throw new Error(`API returned ${res.status}: ${res.statusText}`);
+    }
+
+    const data = await res.json();
+
+    if (data.adaptedTexts && Array.isArray(data.adaptedTexts) && data.adaptedTexts.length === promptsToAdapt.length) {
+      // Map adapted texts back to GUIDs
+      promptsToAdapt.forEach(({ guid }, idx) => {
+        adaptedTranslations[guid] = data.adaptedTexts[idx];
+      });
+
+      console.log('[adaptStartPromptsToContext] ✅ Successfully adapted prompts', {
+        count: Object.keys(adaptedTranslations).length
+      });
+    } else {
+      console.warn('[adaptStartPromptsToContext] ⚠️ AI returned unexpected format, using original texts');
+      // Return empty - will use original texts
+    }
+  } catch (err) {
+    console.error('[adaptStartPromptsToContext] ❌ Error adapting prompts', err);
+    // Return empty - will use original texts
+  }
+
+  return adaptedTranslations;
+}
+
 export interface AssembledDDT {
   id: string;
   label: string;
@@ -44,11 +145,184 @@ function extractBasePromptKeys(stepPayload: any): Record<string, string> {
   return out;
 }
 
+/**
+ * Find the corresponding node in a template by matching structure.
+ * Strategy:
+ * 1. For mainData nodes: return first mainData node from template
+ * 2. For subData nodes: find by templateId match (if available) or by position
+ */
+function findTemplateNodeByPosition(template: any, nodePath: string[], node?: SchemaNode): any | null {
+  if (!template || !template.mainData || !Array.isArray(template.mainData)) {
+    return null;
+  }
+
+  const isSub = nodePath.length > 1;
+
+  if (!isSub) {
+    // MainData node: return first mainData node from template
+    // (Most templates have a single mainData node)
+    return template.mainData[0] || null;
+  }
+
+  // SubData node: try to find by templateId match first, then fallback to position
+  const nodeTemplateId = node ? (node as any).templateId : null;
+
+  // Find parent mainData (assume first mainData for now)
+  const mainNode = template.mainData[0];
+  if (!mainNode || !mainNode.subData || !Array.isArray(mainNode.subData)) {
+    return null;
+  }
+
+  // Strategy 1: If node has templateId, try to find subData with matching templateId
+  // (This works when subData nodes reference their own templates)
+  if (nodeTemplateId) {
+    const matchedSub = mainNode.subData.find((sub: any) => sub.templateId === nodeTemplateId);
+    if (matchedSub) {
+      return matchedSub;
+    }
+  }
+
+  // Strategy 2: Fallback to position-based matching
+  // Find subData at the same position in the path
+  // nodePath format: ['main', 'sub0', 'sub1', ...]
+  const subDataIndex = nodePath.length > 1 ? parseInt(nodePath[1]) || 0 : 0;
+  if (subDataIndex < mainNode.subData.length) {
+    return mainNode.subData[subDataIndex];
+  }
+
+  // Strategy 3: Last resort - return first subData
+  return mainNode.subData[0] || null;
+}
+
+/**
+ * Find template node by ID (recursive search in mainData and subData)
+ */
+function findTemplateNodeById(template: any, nodeId: string): any | null {
+  if (!template || !template.mainData || !Array.isArray(template.mainData)) {
+    return null;
+  }
+
+  // Search in mainData
+  for (const mainNode of template.mainData) {
+    if (mainNode.id === nodeId) {
+      return mainNode;
+    }
+    // Search in subData
+    if (mainNode.subData && Array.isArray(mainNode.subData)) {
+      for (const subNode of mainNode.subData) {
+        if (subNode.id === nodeId) {
+          return subNode;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Resolve node ID: use existing ID if present, otherwise find in template or generate new.
+ * Priority:
+ * 1. Use node.id if present (already from template/instance - CORRECT)
+ * 2. Find in template by templateId if node derives from template (fallback - should be rare)
+ * 3. Generate new ID for standalone nodes
+ */
+function resolveNodeId(node: SchemaNode, sourceTemplate: any | null, nodePath: string[]): string {
+  // ✅ PRIORITY 1: Se il nodo ha già un ID, usalo direttamente (è già il GUID del template)
+  // Questo è il caso corretto: il nodo deriva dal template e ha già l'ID preservato
+  if ((node as any).id && typeof (node as any).id === 'string') {
+    console.log('[resolveNodeId] ✅ Using existing node ID (preserved from template/instance)', {
+      nodeLabel: node.label,
+      nodeId: (node as any).id,
+      hasTemplateId: !!(node as any).templateId
+    });
+    return (node as any).id;
+  }
+
+  // ✅ PRIORITY 2: Se deriva da template ma non ha ID, cerca nel template
+  // Questo caso dovrebbe essere RARO se i mapping preservano sempre l'id
+  // È un fallback per nodi creati senza preservare l'ID (bug da fixare)
+  if ((node as any).templateId && sourceTemplate) {
+    // Try to find by templateId match first (more reliable)
+    const templateNode = findTemplateNodeById(sourceTemplate, (node as any).templateId);
+    if (templateNode?.id) {
+      console.warn('[resolveNodeId] ⚠️ Node missing ID but has templateId - found in template (mapping bug?)', {
+        nodeLabel: node.label,
+        templateNodeId: templateNode.id,
+        templateId: (node as any).templateId,
+        nodePath: nodePath.join('/')
+      });
+      return templateNode.id;
+    }
+
+    // Fallback: try position-based matching (less reliable)
+    const templateNodeByPosition = findTemplateNodeByPosition(sourceTemplate, nodePath, node);
+    if (templateNodeByPosition?.id) {
+      console.warn('[resolveNodeId] ⚠️ Node missing ID - found by position (mapping bug?)', {
+        nodeLabel: node.label,
+        templateNodeId: templateNodeByPosition.id,
+        templateId: (node as any).templateId,
+        nodePath: nodePath.join('/')
+      });
+      return templateNodeByPosition.id;
+    }
+
+    console.warn('[resolveNodeId] ⚠️ Template node not found, generating new ID', {
+      nodeLabel: node.label,
+      templateId: (node as any).templateId,
+      nodePath: nodePath.join('/')
+    });
+  }
+
+  // ✅ PRIORITY 3: Standalone node - genera nuovo ID
+  const newNodeId = uuidv4();
+  console.log('[resolveNodeId] ✅ Generated new ID (standalone node)', {
+    nodeLabel: node.label,
+    newNodeId: newNodeId.substring(0, 20) + '...'
+  });
+  return newNodeId;
+}
+
+/**
+ * Resolve node label: if node derives from template, use template node label; otherwise use node label.
+ * This preserves structural labels (multilingual) from template.
+ */
+function resolveNodeLabel(node: SchemaNode, sourceTemplate: any | null, nodePath: string[]): string {
+  // If node derives from template, find corresponding template node and use its label
+  if ((node as any).templateId && sourceTemplate) {
+    const templateNode = findTemplateNodeByPosition(sourceTemplate, nodePath, node);
+    if (templateNode?.label) {
+      console.log('[resolveNodeLabel] ✅ Using template node label (structural)', {
+        nodeLabel: node.label,
+        templateLabel: templateNode.label,
+        templateId: (node as any).templateId,
+        isSub: nodePath.length > 1
+      });
+      return templateNode.label;
+    } else {
+      console.warn('[resolveNodeLabel] ⚠️ Template node not found, using node label', {
+        nodeLabel: node.label,
+        templateId: (node as any).templateId,
+        nodePath: nodePath.join('/')
+      });
+    }
+  }
+
+  // Standalone node or template node not found: use node label
+  console.log('[resolveNodeLabel] ✅ Using node label (standalone)', {
+    nodeLabel: node.label
+  });
+  return node.label;
+}
+
 type AssembleOptions = {
   escalationCounts?: Partial<Record<'noMatch' | 'noInput' | 'confirmation', number>>;
   templateTranslations?: Record<string, { en: string; it: string; pt: string }>; // Translations from template GUIDs
   projectLocale?: 'en' | 'it' | 'pt'; // Project language
   addTranslations?: (translations: Record<string, string>) => void; // ✅ Callback to add translations to global table
+  contextLabel?: string; // ✅ Context label for prompt adaptation (e.g., "Chiedi la data di nascita del paziente")
+  templateLabel?: string; // ✅ Template label (e.g., "Date") - used to identify the original template
+  aiProvider?: 'groq' | 'openai'; // ✅ AI provider for prompt adaptation
 };
 
 export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: ArtifactStore, options?: AssembleOptions): Promise<AssembledDDT> {
@@ -74,32 +348,11 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
   const rootSteps: Record<string, any> = {};
 
   const assembleNode = async (node: SchemaNode, nodePath: string[]): Promise<any> => {
-    const nodeId = uuidv4();
-
-    // ✅ Initialize steps for this nodeId in rootSteps (not in assembled)
-    rootSteps[nodeId] = {};
     const path = pathFor(nodePath);
     const pathBucket = store.byPath[path];
     const isSub = nodePath.length > 1;
 
-    // Base prompts → add to translations (best-effort)
-    if (pathBucket) {
-      const baseTypes: Array<keyof typeof pathBucket> = isSub
-        ? ['start', 'noMatch', 'noInput']
-        : ['start', 'noMatch', 'noInput', 'confirmation', 'success'];
-      for (const t of baseTypes) {
-        const payload = (pathBucket as any)[t];
-        if (payload) {
-          const pairs = extractBasePromptKeys(payload);
-          for (const [k, v] of Object.entries(pairs)) {
-            const key = `runtime.${ddtId}.${path}.${t}.${k}`;
-            pushTranslation(translations, key, String(v));
-          }
-        }
-      }
-    }
-
-    // Load source template and contract for cloning
+    // Load source template and contract for cloning (BEFORE resolving nodeId/label)
     let sourceTemplate = null;
     let sourceContract = (node as any).nlpContract;
 
@@ -150,29 +403,57 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
       }
     }
 
+    // ✅ RESOLVE NODE ID: preserve template node ID if deriving from template
+    const nodeId = resolveNodeId(node, sourceTemplate, nodePath);
+
+    // ✅ Initialize steps for this nodeId in rootSteps (not in assembled)
+    rootSteps[nodeId] = {};
+
+    // Base prompts → add to translations (best-effort)
+    if (pathBucket) {
+      const baseTypes: Array<keyof typeof pathBucket> = isSub
+        ? ['start', 'noMatch', 'noInput']
+        : ['start', 'noMatch', 'noInput', 'confirmation', 'success'];
+      for (const t of baseTypes) {
+        const payload = (pathBucket as any)[t];
+        if (payload) {
+          const pairs = extractBasePromptKeys(payload);
+          for (const [k, v] of Object.entries(pairs)) {
+            const key = `runtime.${ddtId}.${path}.${t}.${k}`;
+            pushTranslation(translations, key, String(v));
+          }
+        }
+      }
+    }
+
+    // ✅ RESOLVE NODE LABEL: preserve template node label if deriving from template
+    const nodeLabel = resolveNodeLabel(node, sourceTemplate, nodePath);
+
     const assembled: any = {
       id: nodeId,
-      label: node.label,
+      label: nodeLabel,
       type: node.type,
       icon: node.icon,
       constraints: [] as any[],
       subData: [] as any[],
       messages: {} as Record<string, any>,
       // ❌ REMOVED: steps - steps are now created directly in rootSteps[nodeId]
-      synonyms: [node.label, (node.label || '').toLowerCase()].filter(Boolean),
+      synonyms: [nodeLabel, (nodeLabel || '').toLowerCase()].filter(Boolean),
       // Contract will be set after sub-instances are created
       nlpContract: undefined,
     };
 
     // ✅ Save node label to Translations (for current project locale)
     // This will be saved to DB when the DDT is saved
-    if (node.label && nodeId) {
-      projectTranslations[nodeId] = node.label;
+    // Use resolved label (from template if deriving, otherwise from node)
+    if (nodeLabel && nodeId) {
+      projectTranslations[nodeId] = nodeLabel;
       console.log('[assembleFinalDDT] ✅ Saved node label to translations', {
         nodeId: nodeId.substring(0, 20) + '...',
-        label: node.label,
+        label: nodeLabel,
         locale: projectLocale,
-        isSub: isSub
+        isSub: isSub,
+        fromTemplate: !!(node as any).templateId && sourceTemplate
       });
     }
 
@@ -604,6 +885,65 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
       projectTranslationsCount: Object.keys(projectTranslations).length,
       projectLocale
     });
+
+    // ✅ ADAPT START PROMPTS TO CONTEXT (only when creating new DDT from template match)
+    // This adapts template prompts (e.g., "Qual è la data?") to the new context (e.g., "Qual è la data di nascita del paziente?")
+    // Only adapts 'start' step prompts; escalation prompts (noInput, noMatch, etc.) remain generic
+    // ⚠️ IMPORTANT: Only adapt when BOTH contextLabel AND templateLabel are provided (indicates template match scenario)
+    // When opening existing DDT, these are not provided, so adaptation is skipped
+    if (options?.contextLabel && options?.templateLabel && options?.aiProvider && Object.keys(rootSteps).length > 0) {
+      // Additional safety check: ensure we have translations to adapt
+      const hasTranslationsToAdapt = Object.keys(projectTranslations).length > 0;
+
+      if (hasTranslationsToAdapt) {
+        try {
+          console.log('[assembleFinalDDT] 🔄 Adapting start prompts to context', {
+            contextLabel: options.contextLabel,
+            templateLabel: options.templateLabel,
+            provider: options.aiProvider,
+            locale: projectLocale,
+            translationsCount: Object.keys(projectTranslations).length
+          });
+
+          const adaptedTranslations = await adaptStartPromptsToContext(
+            rootSteps,
+            projectTranslations,
+            options.contextLabel,
+            options.templateLabel,
+            projectLocale,
+            options.aiProvider
+          );
+
+          // Replace projectTranslations with adapted ones (only if we got results)
+          if (Object.keys(adaptedTranslations).length > 0) {
+            Object.keys(adaptedTranslations).forEach(guid => {
+              projectTranslations[guid] = adaptedTranslations[guid];
+            });
+
+            console.log('[assembleFinalDDT] ✅ Start prompts adapted to context', {
+              adaptedCount: Object.keys(adaptedTranslations).length
+            });
+          } else {
+            console.log('[assembleFinalDDT] ⚠️ No prompts adapted (empty result), using original');
+          }
+        } catch (err) {
+          console.warn('[assembleFinalDDT] ⚠️ Failed to adapt prompts, using original', err);
+          // Continue with original translations - don't break the flow
+        }
+      } else {
+        console.log('[assembleFinalDDT] ⚠️ No translations to adapt, skipping adaptation');
+      }
+    } else {
+      // Log why adaptation was skipped (for debugging)
+      if (options?.contextLabel || options?.templateLabel || options?.aiProvider) {
+        console.log('[assembleFinalDDT] ⚠️ Adaptation skipped', {
+          hasContextLabel: !!options?.contextLabel,
+          hasTemplateLabel: !!options?.templateLabel,
+          hasAiProvider: !!options?.aiProvider,
+          hasRootSteps: Object.keys(rootSteps).length > 0
+        });
+      }
+    }
 
     // ✅ Add translations to global table (in memory only, not saved to DB yet)
     if (addTranslations && Object.keys(projectTranslations).length > 0) {

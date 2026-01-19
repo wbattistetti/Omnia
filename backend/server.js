@@ -68,7 +68,15 @@ let mongoClientPoolPromise = null;
 
 async function getMongoClient() {
   if (mongoClientPool) {
-    return mongoClientPool;
+    // ✅ Verifica che il client sia ancora connesso
+    try {
+      await mongoClientPool.db('admin').admin().ping();
+      return mongoClientPool;
+    } catch (error) {
+      console.warn('[MongoDB] Pool client disconnected, resetting...', error);
+      mongoClientPool = null;
+      // Continua per ricreare il pool
+    }
   }
 
   if (mongoClientPoolPromise) {
@@ -80,7 +88,8 @@ async function getMongoClient() {
       maxPoolSize: 10, // Maximum number of connections in the pool
       minPoolSize: 2,  // Minimum number of connections in the pool
       maxIdleTimeMS: 30000, // Close connections after 30s of inactivity
-      serverSelectionTimeoutMS: 5000, // Timeout for server selection
+      serverSelectionTimeoutMS: 10000, // ✅ Aumentato a 10s per dare più tempo
+      connectTimeoutMS: 10000, // ✅ Aggiunto timeout esplicito
     });
 
     try {
@@ -1215,143 +1224,8 @@ app.get('/api/projects/:pid/flows', async (req, res) => {
   }
 });
 
-// -----------------------------
-// Endpoint: Lista atti del progetto
-// -----------------------------
-app.get('/api/projects/:pid/acts', async (req, res) => {
-  const projectId = req.params.pid;
-  const { limit, q } = req.query || {};
-  const startTime = Date.now();
-  const client = await getMongoClient();
-  try {
-    const projDb = await getProjectDb(client, projectId);
-    const coll = projDb.collection('project_acts');
-    const filter = q ? { name: { $regex: String(q), $options: 'i' } } : {};
-    const cursor = coll.find(filter).sort({ name: 1 });
-    const queryStart = Date.now();
-    const docs = await (limit ? cursor.limit(parseInt(String(limit), 10) || 50) : cursor).toArray();
-    // Optimization: Only count if limit is applied and we need total count
-    // Otherwise, docs.length is sufficient
-    const count = limit ? await coll.countDocuments(filter) : docs.length;
-    const queryDuration = Date.now() - queryStart;
-    const duration = Date.now() - startTime;
-    logInfo('Acts.get', { projectId, count, itemsReturned: docs.length, duration: `${duration}ms`, queryDuration: `${queryDuration}ms`, hasLimit: !!limit, hasQuery: !!q });
-    res.json({ count, items: docs });
-  } catch (e) {
-    const duration = Date.now() - startTime;
-    logError('Acts.get', e, { projectId, duration: `${duration}ms` });
-    res.status(500).json({ error: String(e?.message || e) });
-  }
-});
-
-// -----------------------------
-// Endpoints: Project Acts (create/upsert; list esiste già)
-// Persistiamo gli Agent Acts creati al volo solo su Save esplicito
-// -----------------------------
-app.post('/api/projects/:pid/acts', async (req, res) => {
-  const pid = req.params.pid;
-  const payload = req.body || {};
-  if (!payload || !payload._id || !payload.name) {
-    return res.status(400).json({ error: 'id_and_name_required' });
-  }
-  const client = new MongoClient(uri);
-  try {
-    await client.connect();
-    const db = await getProjectDb(client, pid);
-    const coll = db.collection('project_acts');
-    const now = new Date();
-    const doc = {
-      _id: payload._id,
-      name: payload.name,
-      label: payload.label || payload.name,
-      description: payload.description || '',
-      type: payload.type || null,
-      mode: payload.mode || null,
-      category: payload.category || null,
-      scope: payload.scope || 'industry',
-      industry: payload.industry || null,
-      ddtSnapshot: payload.ddtSnapshot || null,
-      // Persist ProblemClassification payload when provided
-      problem: payload.problem || null,
-      updatedAt: now,
-      createdAt: now
-    };
-    // Evita conflitto su 'createdAt' tra $set e $setOnInsert
-    const setDoc = { ...doc };
-    delete setDoc.createdAt;
-    setDoc.updatedAt = now;
-    await coll.updateOne(
-      { _id: doc._id },
-      { $set: setDoc, $setOnInsert: { createdAt: now } },
-      { upsert: true }
-    );
-    const saved = await coll.findOne({ _id: doc._id });
-    logInfo('Acts.post', { projectId: pid, id: doc._id, name: doc.name, type: doc.type, mode: doc.mode });
-    res.json(saved);
-  } catch (e) {
-    logError('Acts.post', e, { projectId: pid, id: payload?._id });
-    res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
-  }
-});
-
-// -----------------------------
-// Endpoint: Project Acts bulk upsert
-// -----------------------------
-app.post('/api/projects/:pid/acts/bulk', async (req, res) => {
-  const pid = req.params.pid;
-  const payload = req.body || {};
-  const items = Array.isArray(payload.items) ? payload.items : [];
-  if (!items.length) {
-    return res.json({ ok: true, upsertedCount: 0, modifiedCount: 0, matchedCount: 0 });
-  }
-  await withMongoClient(async (client) => {
-    const db = await getProjectDb(client, pid);
-    const coll = db.collection('project_acts');
-    const now = new Date();
-    const ops = items.map((it) => {
-      const doc = {
-        _id: it._id,
-        name: it.name,
-        label: it.label || it.name,
-        description: it.description || '',
-        type: it.type || null,
-        mode: it.mode || null,
-        category: it.category || null,
-        scope: it.scope || 'industry',
-        industry: it.industry || null,
-        ddtSnapshot: it.ddtSnapshot || null,
-        // Persist ProblemClassification payload when provided
-        problem: it.problem || null,
-        updatedAt: now,
-        createdAt: now
-      };
-      const setDoc = { ...doc };
-      delete setDoc.createdAt;
-      setDoc.updatedAt = now;
-      return {
-        updateOne: {
-          filter: { _id: doc._id },
-          update: { $set: setDoc, $setOnInsert: { createdAt: now } },
-          upsert: true
-        }
-      };
-    });
-    let result;
-    try {
-      result = await coll.bulkWrite(ops, { ordered: false });
-    } catch (e) {
-      logError('Acts.post.bulk.exec', e, { projectId: pid, count: items.length });
-      return res.status(500).json({ ok: false, error: String(e?.message || e) });
-    }
-    logInfo('Acts.post.bulk', { projectId: pid, count: items.length, matched: result.matchedCount, modified: result.modifiedCount, upserted: result.upsertedCount });
-    res.json({ ok: true, matchedCount: result.matchedCount, modifiedCount: result.modifiedCount, upsertedCount: result.upsertedCount });
-  }).catch((e) => {
-    logError('Acts.post.bulk', e, { projectId: pid, count: items.length });
-    res.status(500).json({ error: String(e?.message || e) });
-  });
-});
+// ✅ REMOVED: Endpoints /api/projects/:pid/acts (GET, POST, bulk) - acts migrati a tasks
+// ✅ Tasks sono caricati/salvati via /api/projects/:pid/tasks
 
 // -----------------------------
 // Endpoint: Project Conditions (create/upsert)
@@ -1457,338 +1331,8 @@ app.get('/api/projects/:pid/conditions', async (req, res) => {
   }
 });
 
-// -----------------------------
-// Endpoints: Act Instances (create/update/get)
-// -----------------------------
-// ⚠️ LEGACY ENDPOINT: Prefer using /api/projects/:pid/tasks instead
-// This endpoint uses TaskType enum (type field) - NO backward compatibility
-app.post('/api/projects/:pid/instances', async (req, res) => {
-  const projectId = req.params.pid;
-  const payload = req.body || {};
-  if (!payload.baseActId || payload.type === undefined || payload.type === null) {
-    return res.status(400).json({ error: 'baseActId_and_type_required', message: 'baseActId and type (TaskType enum 0-19) are required' });
-  }
-  const client = new MongoClient(uri);
-  try {
-    await client.connect();
-    const projDb = await getProjectDb(client, projectId);
-    const now = new Date();
-
-    // derive base ddt version/hash from project_acts when available
-    let base = null;
-    try { base = await projDb.collection('project_acts').findOne({ _id: payload.baseActId }); } catch { }
-    const instance = {
-      projectId,
-      baseActId: payload.baseActId,
-      ddtRefId: payload.baseActId,
-      type: payload.type, // ✅ TaskType enum (0-19) - REQUIRED
-      message: payload.message || null,
-      overrides: payload.overrides || null,
-      baseVersion: base?.updatedAt || null,
-      baseHash: null,
-      ddtSnapshot: payload.ddtSnapshot || null,
-      rowId: payload.rowId || null,
-      createdAt: now,
-      updatedAt: now
-    };
-    const r = await projDb.collection('act_instances').insertOne(instance);
-    const saved = await projDb.collection('act_instances').findOne({ _id: r.insertedId });
-    logInfo('Instances.post', { projectId, baseActId: payload.baseActId, type: payload.type, instanceId: String(r?.insertedId || '') });
-    res.json(saved);
-  } catch (e) {
-    logError('Instances.post', e, { projectId, baseActId: payload?.baseActId });
-    res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
-  }
-});
-
-// Bulk create instances
-app.post('/api/projects/:pid/instances/bulk', async (req, res) => {
-  const projectId = req.params.pid;
-  const payload = req.body || {};
-  const items = Array.isArray(payload?.items) ? payload.items : [];
-  if (!items.length) return res.json({ ok: true, inserted: 0 });
-  const client = new MongoClient(uri);
-  try {
-    await client.connect();
-    const projDb = await getProjectDb(client, projectId);
-    const now = new Date();
-    const docs = [];
-    for (const it of items) {
-      if (!it?.baseActId || it.type === undefined || it.type === null) continue;
-      let base = null;
-      try { base = await projDb.collection('project_acts').findOne({ _id: it.baseActId }); } catch { }
-      docs.push({
-        projectId,
-        baseActId: it.baseActId,
-        ddtRefId: it.baseActId,
-        type: it.type, // ✅ TaskType enum (0-19) - REQUIRED
-        message: it.message || null,
-        overrides: it.overrides || null,
-        baseVersion: base?.updatedAt || null,
-        baseHash: null,
-        ddtSnapshot: null,
-        createdAt: now,
-        updatedAt: now
-      });
-    }
-    const result = docs.length ? await projDb.collection('act_instances').insertMany(docs, { ordered: false }) : { insertedCount: 0 };
-    logInfo('Instances.post.bulk', { projectId, count: docs.length });
-    res.json({ ok: true, inserted: result?.insertedCount || docs.length });
-  } catch (e) {
-    logError('Instances.post.bulk', e, { projectId, count: items.length });
-    res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
-  }
-});
-
-app.put('/api/projects/:pid/instances/:iid', async (req, res) => {
-  const projectId = req.params.pid;
-  const iid = req.params.iid;
-  const payload = req.body || {};
-  const client = new MongoClient(uri);
-  try {
-    console.log('[Backend][INSTANCE_UPDATE][START]', {
-      projectId,
-      instanceId: iid,
-      payload: {
-        hasMessage: !!payload.message,
-        messageText: payload.message?.text?.substring(0, 50) || 'N/A',
-        mode: payload.mode,
-        baseActId: payload.baseActId,
-        hasOverrides: !!payload.overrides,
-        hasDdtSnapshot: !!payload.ddtSnapshot
-      }
-    });
-
-    await client.connect();
-    const projDb = await getProjectDb(client, projectId);
-
-    // Cerca prima per _id, poi per rowId se non trovato (per supportare ID righe)
-    let existing = await projDb.collection('act_instances').findOne({ _id: iid });
-    if (!existing) {
-      // Prova a cercare per rowId (ID originale della riga)
-      existing = await projDb.collection('act_instances').findOne({ rowId: iid });
-    }
-
-    console.log('[Backend][INSTANCE_UPDATE][FIND]', {
-      instanceId: iid,
-      foundById: !!await projDb.collection('act_instances').findOne({ _id: iid }),
-      foundByRowId: !!await projDb.collection('act_instances').findOne({ rowId: iid }),
-      existing: existing ? {
-        _id: existing._id,
-        rowId: existing.rowId,
-        mode: existing.mode,
-        baseActId: existing.baseActId,
-        hasMessage: !!existing.message,
-        messageText: existing.message?.text?.substring(0, 50) || 'N/A'
-      } : null
-    });
-
-    const update = { updatedAt: new Date() };
-    if (payload.message !== undefined) update['message'] = payload.message;
-    if (payload.overrides !== undefined) update['overrides'] = payload.overrides;
-    if (payload.ddtSnapshot !== undefined) {
-      // ✅ Log dettagliato del ddtSnapshot che viene salvato
-      const ddtSnapshot = payload.ddtSnapshot;
-      const firstMain = ddtSnapshot?.mainData?.[0];
-      const steps = firstMain?.steps || {};
-      const stepsKeys = Object.keys(steps);
-
-      console.log('[Backend][INSTANCE_UPDATE][DDT_SNAPSHOT]', {
-        instanceId: iid,
-        ddtId: ddtSnapshot?.id,
-        firstMainKind: firstMain?.kind,
-        stepsKeys,
-        stepsKeysCount: stepsKeys.length,
-        stepsContent: steps,
-        hasStart: !!steps.start,
-        hasNoInput: !!steps.noInput,
-        hasNoMatch: !!steps.noMatch,
-        hasConfirmation: !!steps.confirmation
-      });
-
-      update['ddtSnapshot'] = payload.ddtSnapshot;
-    }
-    // ✅ FIX: Aggiorna anche mode e baseActId quando vengono passati nel payload
-    if (payload.mode !== undefined) update['mode'] = payload.mode;
-    if (payload.baseActId !== undefined) update['baseActId'] = payload.baseActId;
-    // ✅ FIX: Salva anche problemIntents (frasi generate nell'IntentEditor)
-    if (payload.problemIntents !== undefined) update['problemIntents'] = payload.problemIntents;
-
-    console.log('[Backend][INSTANCE_UPDATE][UPDATE_OBJECT]', {
-      instanceId: iid,
-      updateFields: Object.keys(update),
-      mode: update.mode,
-      baseActId: update.baseActId,
-      hasProblemIntents: !!update.problemIntents,
-      problemIntentsCount: update.problemIntents?.length || 0,
-      messageInUpdate: update.message ? {
-        text: update.message.text?.substring(0, 50) || 'N/A',
-        full: JSON.stringify(update.message)
-      } : null
-    });
-
-    // optional: fork = true → copy current project_acts.ddtSnapshot into instance.ddtSnapshot
-    if (payload.fork === true) {
-      // Usa existing già trovato sopra, o cerca di nuovo se necessario
-      if (!existing) {
-        existing = await projDb.collection('act_instances').findOne({ _id: iid }) ||
-          await projDb.collection('act_instances').findOne({ rowId: iid });
-      }
-      const baseId = payload.baseActId || existing?.baseActId;
-      if (baseId) {
-        const base = await projDb.collection('project_acts').findOne({ _id: baseId });
-        if (base && base.ddtSnapshot) {
-          update['ddtSnapshot'] = base.ddtSnapshot;
-          update['baseVersion'] = base.updatedAt || new Date();
-        }
-      }
-    }
-
-    // Usa _id trovato o rowId per aggiornare
-    const filter = existing ? { _id: existing._id } : { rowId: iid };
-    console.log('[Backend][INSTANCE_UPDATE][FILTER]', {
-      instanceId: iid,
-      filter,
-      willCreate: !existing
-    });
-
-    const updateResult = await projDb.collection('act_instances').updateOne(filter, { $set: update });
-
-    console.log('[Backend][INSTANCE_UPDATE][UPDATE_RESULT]', {
-      instanceId: iid,
-      matchedCount: updateResult.matchedCount,
-      modifiedCount: updateResult.modifiedCount,
-      willCreate: updateResult.matchedCount === 0 && iid && !existing
-    });
-
-    // Se non esiste e abbiamo rowId, crea nuova istanza
-    if (updateResult.matchedCount === 0 && iid && !existing) {
-      // Crea nuova istanza con rowId
-      const newInstance = {
-        projectId,
-        baseActId: payload.baseActId || 'Unknown',
-        ddtRefId: payload.baseActId || 'Unknown',
-        mode: payload.mode || 'DataRequest',
-        message: payload.message || null,
-        overrides: payload.overrides || null,
-        ddtSnapshot: payload.ddtSnapshot || null,
-        problemIntents: payload.problemIntents || null, // ✅ Salva anche problemIntents quando si crea una nuova istanza
-        rowId: iid,
-        baseVersion: null,
-        baseHash: null,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-
-      console.log('[Backend][INSTANCE_UPDATE][CREATE_NEW]', {
-        instanceId: iid,
-        newInstance: {
-          rowId: newInstance.rowId,
-          mode: newInstance.mode,
-          baseActId: newInstance.baseActId,
-          hasMessage: !!newInstance.message,
-          messageText: newInstance.message?.text?.substring(0, 50) || 'N/A'
-        }
-      });
-
-      await projDb.collection('act_instances').insertOne(newInstance);
-      existing = newInstance;
-    }
-
-    const saved = await projDb.collection('act_instances').findOne(existing ? { _id: existing._id } : { rowId: iid });
-
-    // ✅ Log dettagliato del ddtSnapshot salvato nel database
-    if (saved?.ddtSnapshot) {
-      const savedDDT = saved.ddtSnapshot;
-      const savedFirstMain = savedDDT?.mainData?.[0];
-      const savedSteps = savedFirstMain?.steps || {};
-      const savedStepsKeys = Object.keys(savedSteps);
-
-      console.log('[Backend][INSTANCE_UPDATE][SAVED_DDT]', {
-        instanceId: iid,
-        ddtId: savedDDT?.id,
-        firstMainKind: savedFirstMain?.kind,
-        savedStepsKeys,
-        savedStepsKeysCount: savedStepsKeys.length,
-        savedStepsContent: savedSteps,
-        hasStart: !!savedSteps.start,
-        hasNoInput: !!savedSteps.noInput,
-        hasNoMatch: !!savedSteps.noMatch,
-        hasConfirmation: !!savedSteps.confirmation
-      });
-    }
-
-    console.log('[Backend][INSTANCE_UPDATE][SAVED]', {
-      instanceId: iid,
-      saved: saved ? {
-        _id: saved._id,
-        rowId: saved.rowId,
-        mode: saved.mode,
-        baseActId: saved.baseActId,
-        hasMessage: !!saved.message,
-        messageText: saved.message?.text?.substring(0, 50) || 'N/A',
-        messageFull: saved.message ? JSON.stringify(saved.message) : 'null'
-      } : null
-    });
-
-    res.json(saved);
-  } catch (e) {
-    console.error('[Backend][INSTANCE_UPDATE][ERROR]', {
-      projectId,
-      instanceId: iid,
-      error: String(e),
-      stack: e?.stack?.substring(0, 300)
-    });
-    logError('Instances.put', e, { projectId, instanceId: iid });
-    res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
-  }
-});
-
-app.get('/api/projects/:pid/instances', async (req, res) => {
-  const projectId = req.params.pid;
-  const ids = String(req.query.ids || '').split(',').map(s => s.trim()).filter(Boolean);
-  const client = new MongoClient(uri);
-  try {
-    console.log('[Backend][INSTANCE_GET][START]', { projectId, requestedIds: ids.length > 0 ? ids : 'all' });
-    await client.connect();
-    const projDb = await getProjectDb(client, projectId);
-    const coll = projDb.collection('act_instances');
-    const filter = ids.length ? { _id: { $in: ids } } : {};
-    const items = await coll.find(filter).sort({ updatedAt: -1 }).toArray();
-
-    console.log('[Backend][INSTANCE_GET][FOUND]', {
-      projectId,
-      count: items.length,
-      instances: items.map(inst => ({
-        _id: inst._id,
-        rowId: inst.rowId,
-        instanceId: inst.instanceId,
-        mode: inst.mode,
-        baseActId: inst.baseActId,
-        hasMessage: !!inst.message,
-        messageText: inst.message?.text?.substring(0, 50) || 'N/A',
-        messageFull: inst.message ? JSON.stringify(inst.message) : 'null'
-      }))
-    });
-
-    res.json({ count: items.length, items });
-  } catch (e) {
-    console.error('[Backend][INSTANCE_GET][ERROR]', {
-      projectId,
-      error: String(e),
-      stack: e?.stack?.substring(0, 300)
-    });
-    res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
-  }
-});
+// ✅ REMOVED: Endpoints /api/projects/:pid/instances (POST, PUT, GET, bulk) - legacy act_instances
+// ✅ Use /api/projects/:pid/tasks instead - unified model saves to tasks collection
 
 // -----------------------------
 // Endpoints: Tasks (new model)
@@ -2756,34 +2300,33 @@ app.get('/api/factory/actions', async (req, res) => {
 });
 
 app.get('/api/factory/dialogue-templates', async (req, res) => {
-  const client = new MongoClient(uri);
   try {
-    await client.connect();
-    const db = client.db(dbFactory);
+    await withMongoClient(async (client) => {
+      const db = client.db(dbFactory);
 
-    // ✅ Carica TUTTI i template dalla collection Tasks (migrato da Task_Templates)
-    // Non filtrare per tipo - serve tutta la cache per risolvere i reference (subDataIds)
-    const query = {}; // ✅ Query vuota = carica tutto
+      // ✅ Carica TUTTI i template dalla collection Tasks (migrato da Task_Templates)
+      // Non filtrare per tipo - serve tutta la cache per risolvere i reference (subDataIds)
+      const query = {}; // ✅ Query vuota = carica tutto
 
-    // ✅ MIGRATO: Usa Tasks (migrazione completa, Task_Templates rimosso)
-    const ddt1 = await db.collection('Tasks').find(query).toArray();  // ✅ MIGRATO: Usa Tasks invece di Task_Templates
+      // ✅ MIGRATO: Usa Tasks (migrazione completa, Task_Templates rimosso)
+      const ddt1 = await db.collection('Tasks').find(query).toArray();  // ✅ MIGRATO: Usa Tasks invece di Task_Templates
 
-    // Converti in oggetto per accesso rapido
-    const templateMap = new Map();
-    ddt1.forEach(t => {
-      const id = t.id || t._id?.toString();
-      if (id && !templateMap.has(id)) {
-        templateMap.set(id, t);
-      }
+      // Converti in oggetto per accesso rapido
+      const templateMap = new Map();
+      ddt1.forEach(t => {
+        const id = t.id || t._id?.toString();
+        if (id && !templateMap.has(id)) {
+          templateMap.set(id, t);
+        }
+      });
+
+      const ddt = Array.from(templateMap.values());
+      console.log('>>> LOAD /api/factory/dialogue-templates count =', ddt.length);
+      res.json(ddt);
     });
-
-    const ddt = Array.from(templateMap.values());
-    console.log('>>> LOAD /api/factory/dialogue-templates count =', ddt.length);
-    res.json(ddt);
   } catch (err) {
+    console.error('[dialogue-templates] Error:', err);
     res.status(500).json({ error: err.message, stack: err.stack });
-  } finally {
-    await client.close();
   }
 });
 
@@ -3401,16 +2944,15 @@ app.post('/api/factory/task-heuristics', async (req, res) => {
 // -----------------------------
 // GET /api/factory/task-templates - List all templates
 app.get('/api/factory/task-templates', async (req, res) => {
-  const client = new MongoClient(uri);
   try {
-    await client.connect();
-    const db = client.db(dbFactory);
+    await withMongoClient(async (client) => {
+      const db = client.db(dbFactory);
 
-    // ✅ MIGRATO: Usa Tasks (migrazione completa, Task_Templates rimosso)
-    const coll1 = db.collection('Tasks');  // ✅ MIGRATO: Usa Tasks invece di Task_Templates
-    const coll2 = null;  // ✅ Task_Templates rimosso
+      // ✅ MIGRATO: Usa Tasks (migrazione completa, Task_Templates rimosso)
+      const coll1 = db.collection('Tasks');  // ✅ MIGRATO: Usa Tasks invece di Task_Templates
+      const coll2 = null;  // ✅ Task_Templates rimosso
 
-    const { industry, scope, taskType } = req.query;
+      const { industry, scope, taskType } = req.query;
 
     // Build query based on scope filtering and taskType (CASE-INSENSITIVE)
     const query = {};
@@ -3480,14 +3022,13 @@ app.get('/api/factory/task-templates', async (req, res) => {
       }
     });
 
-    const templates = Array.from(templateMap.values());
-    logInfo('TaskTemplates.get', { count: templates.length, industry, scope, taskType, fromTasks: templates1.length });
-    res.json(templates);
+      const templates = Array.from(templateMap.values());
+      logInfo('TaskTemplates.get', { count: templates.length, industry, scope, taskType, fromTasks: templates1.length });
+      res.json(templates);
+    });
   } catch (e) {
     logError('TaskTemplates.get', e);
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
   }
 });
 
@@ -5649,7 +5190,28 @@ app.get('/api/factory/template-label-translations', async (req, res) => {
   }
 });
 
-app.listen(3100, () => {
-  console.log('Backend API pronta su http://localhost:3100');
+// ✅ Pre-inizializza il MongoDB connection pool all'avvio del server
+async function initializeMongoPool() {
+  try {
+    console.log('[MongoDB] 🔄 Pre-initializing connection pool...');
+    await getMongoClient();
+    console.log('[MongoDB] ✅ Connection pool pre-initialized successfully');
+  } catch (error) {
+    console.error('[MongoDB] ⚠️ Failed to pre-initialize pool (will retry on first request)', error);
+    // Non bloccare l'avvio del server, il pool verrà inizializzato alla prima richiesta
+  }
+}
+
+// Inizializza il pool prima di avviare il server
+initializeMongoPool().then(() => {
+  app.listen(3100, () => {
+    console.log('Backend API pronta su http://localhost:3100');
+  });
+}).catch((error) => {
+  console.error('[Server] ❌ Failed to start server:', error);
+  // Avvia comunque il server, il pool verrà inizializzato alla prima richiesta
+  app.listen(3100, () => {
+    console.log('Backend API pronta su http://localhost:3100 (MongoDB pool will initialize on first request)');
+  });
 });
 

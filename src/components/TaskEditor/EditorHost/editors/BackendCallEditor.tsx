@@ -230,18 +230,9 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
     }
   }, [config, instanceId, projectId]);
 
-  // Save to database on close
+  // ✅ REMOVED: updateInstance (legacy act_instances) - taskRepository.updateTask already saves to database
   const handleClose = async () => {
-    if (instanceId) {
-      try {
-        const { ProjectDataService } = await import('../../../../services/ProjectDataService');
-        const pid = pdUpdate?.getCurrentProjectId() || undefined;
-        if (pid) {
-          void ProjectDataService.updateInstance(pid, instanceId, { backendCall: config })
-            .catch((e: any) => { try { console.warn('[BackendCallEditor][close][PUT fail]', e); } catch { } });
-        }
-      } catch { }
-    }
+    // ✅ TaskRepository automatically syncs with database, no need for separate save
     onClose?.();
   };
 

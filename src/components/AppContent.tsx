@@ -257,15 +257,12 @@ export const AppContent: React.FC<AppContentProps> = ({
                   const pid = pdUpdate.getCurrentProjectId() || undefined;
                   if (pid && tab.instanceId) {
                     const text = tab.value?.template || '';
-                    void dataSvc.updateInstance(pid, tab.instanceId, { message: { text } })
-                      .then(() => {
-                        try {
-                          console.log('[NI][close][PUT ok]', { instanceId: tab.instanceId, text });
-                          taskRepository.updateTask(tab.instanceId, { text }, pid);
-                        } catch { }
-                      })
-                      .catch((e: any) => { try { console.warn('[NI][close][PUT fail]', e); } catch { } });
-                    try { document.dispatchEvent(new CustomEvent('rowMessage:update', { detail: { instanceId: tab.instanceId, text } })); } catch { }
+                    // ✅ REMOVED: updateInstance (legacy act_instances) - use taskRepository.updateTask instead
+                    try {
+                      console.log('[NI][close][PUT ok]', { instanceId: tab.instanceId, text });
+                      taskRepository.updateTask(tab.instanceId, { text }, pid);
+                      try { document.dispatchEvent(new CustomEvent('rowMessage:update', { detail: { instanceId: tab.instanceId, text } })); } catch { }
+                    } catch { }
                   }
                 } catch (e) { try { console.warn('[NI][close] background persist setup failed', e); } catch { } }
                 setDockTree(prev => closeTab(prev, tab.id));
@@ -1068,12 +1065,7 @@ export const AppContent: React.FC<AppContentProps> = ({
       const boot = await resp.json();
       const projectId = boot.projectId;
 
-      // Carica atti dal progetto appena creato
-      try {
-        await ProjectDataService.loadActsFromProject(projectId);
-      } catch (error) {
-      }
-
+      // ✅ REMOVED: loadActsFromProject - acts migrati a tasks, caricati via taskRepository
       const data = await ProjectDataService.loadProjectData();
 
       // Inizializza stato UI
@@ -1138,8 +1130,7 @@ export const AppContent: React.FC<AppContentProps> = ({
       const parallelStart = performance.now();
       console.log(`[PERF][${new Date().toISOString()}] 🔄 START parallel load (acts, tasks, flow, mappings)`);
 
-      const [actsResult, tasksResult, flowResult, mappingsResult] = await Promise.allSettled([
-        ProjectDataService.loadActsFromProject(id),
+      const [tasksResult, flowResult, mappingsResult] = await Promise.allSettled([
         (async () => {
           try {
             const { taskRepository } = await import('../services/TaskRepository');
@@ -1184,9 +1175,22 @@ export const AppContent: React.FC<AppContentProps> = ({
         duration: `${(performance.now() - parallelStart).toFixed(2)}ms`
       });
 
-      // Process results
-      if (actsResult.status === 'rejected') {
-        throw actsResult.reason;
+      // ✅ Raccogli tutti gli errori invece di lanciare subito
+      const errors: string[] = [];
+      if (tasksResult.status === 'rejected') {
+        errors.push(`Tasks: ${tasksResult.reason?.message || 'Failed to load'}`);
+      }
+      // flowResult e mappingsResult sono opzionali, quindi non li consideriamo critici
+
+      // ✅ Se ci sono errori critici, mostra un messaggio più chiaro
+      if (errors.length > 0) {
+        const errorMessage = `Alcuni dati non sono stati caricati:\n${errors.join('\n')}\n\nIl progetto potrebbe essere incompleto.`;
+        const shouldContinue = window.confirm(errorMessage + '\n\nVuoi continuare comunque?');
+        if (!shouldContinue) {
+          return; // ✅ NON aprire il progetto se l'utente sceglie di non continuare
+        }
+        // Se l'utente sceglie di continuare, logga gli errori ma procedi
+        console.warn('[AppContent] User chose to continue despite errors:', errors);
       }
 
       let loadedNodes: any[] = [];
@@ -1211,11 +1215,25 @@ export const AppContent: React.FC<AppContentProps> = ({
 
       const dataStart = performance.now();
       console.log(`[PERF][${new Date().toISOString()}] 📊 START loadProjectData`);
-      const data = await ProjectDataService.loadProjectData();
-      console.log(`[PERF][${new Date().toISOString()}] ✅ END loadProjectData`, {
-        duration: `${(performance.now() - dataStart).toFixed(2)}ms`
-      });
+      let data;
+      try {
+        data = await ProjectDataService.loadProjectData();
+        console.log(`[PERF][${new Date().toISOString()}] ✅ END loadProjectData`, {
+          duration: `${(performance.now() - dataStart).toFixed(2)}ms`
+        });
+      } catch (e) {
+        console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR loadProjectData`, e);
+        // Usa dati vuoti se loadProjectData fallisce
+        data = {
+          taskTemplates: [],
+          userActs: [],
+          backendActions: [],
+          conditions: [],
+          macrotasks: []
+        };
+      }
 
+      // ✅ Tasks sono già caricati via taskRepository.loadAllTasksFromDatabase
       const newProject: any = {
         id,
         name: meta.projectName || 'Project',
@@ -1224,12 +1242,12 @@ export const AppContent: React.FC<AppContentProps> = ({
         industry: meta.industry || 'utility_gas',
         ownerCompany: meta.ownerCompany || null,
         ownerClient: meta.ownerClient || null,
-        taskTemplates: data.taskTemplates,
-        userActs: data.userActs,
-        backendActions: data.backendActions,
-        conditions: data.conditions,
+        taskTemplates: data.taskTemplates || [],
+        userTasks: data.userTasks || [], // ✅ RINOMINATO: userActs → userTasks (acts migrati a tasks)
+        backendActions: data.backendActions || [],
+        conditions: data.conditions || [],
         tasks: [], // Deprecated: tasks migrated to macrotasks
-        macrotasks: data.macrotasks
+        macrotasks: data.macrotasks || []
       };
       setCurrentProject(newProject);
       try { if (meta && meta.language) localStorage.setItem('project.lang', String(meta.language)); } catch { }
@@ -1468,22 +1486,18 @@ export const AppContent: React.FC<AppContentProps> = ({
                     if (!pid || !projectData) return;
                     const tStart = performance.now();
                     try {
-                      console.log('[Save][5-acts-conditions] 🚀 START');
-                      const actsCount = projectData?.taskTemplates?.flatMap((cat: any) => cat.items || []).length || 0;
+                      console.log('[Save][5-conditions] 🚀 START');
                       const conditionsCount = projectData?.conditions?.flatMap((cat: any) => cat.items || []).length || 0;
-                      console.log('[Save][5-acts-conditions] 📊 Items to save', { actsCount, conditionsCount });
+                      console.log('[Save][5-conditions] 📊 Items to save', { conditionsCount });
 
-                      const tActs = performance.now();
-                      await (ProjectDataService as any).saveProjectActsToDb?.(pid, projectData);
-                      const tActsEnd = performance.now();
-                      console.log('[Save][5-acts] ✅ DONE', { ms: Math.round(tActsEnd - tActs), actsCount });
+                      // ✅ REMOVED: saveProjectActsToDb - acts migrati a tasks, salvati via taskRepository
 
                       const tCond = performance.now();
                       await (ProjectDataService as any).saveProjectConditionsToDb?.(pid, projectData);
                       const tCondEnd = performance.now();
                       console.log('[Save][5-conditions] ✅ DONE', { ms: Math.round(tCondEnd - tCond), conditionsCount });
 
-                      // Reload fresh project data so act.problem is populated from DB
+                      // Reload fresh project data so task.problem is populated from DB
                       const tReload = performance.now();
                       let tReloadEnd = tReload;
                       try {

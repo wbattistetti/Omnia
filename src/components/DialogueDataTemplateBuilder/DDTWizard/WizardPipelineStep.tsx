@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Calendar, Hourglass } from 'lucide-react';
 import { useOrchestrator } from '../orchestrator/useOrchestrator';
 import { buildDDT } from '../DDTAssembler/DDTBuilder';
@@ -29,6 +29,7 @@ interface Props {
   onComplete?: (finalDDT: any) => void;
   skipDetectType?: boolean;
   confirmedLabel?: string;
+  contextLabel: string; // ✅ Context label for prompt generation (e.g., "Chiedi la data di nascita del paziente") - REQUIRED
   onProgress?: (percentByPath: Record<string, number>) => void; // optional progress reporter
   headless?: boolean; // if true, orchestrate without rendering UI
   setFieldProcessingStates?: (updater: (prev: any) => any) => void;
@@ -44,9 +45,9 @@ function normalizeStructure(node: any) {
   return out;
 }
 
-const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCancel, onComplete, skipDetectType, confirmedLabel, onProgress, headless, setFieldProcessingStates, progressByPath }) => {
+const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCancel, onComplete, skipDetectType, confirmedLabel, contextLabel, onProgress, headless, setFieldProcessingStates, progressByPath }) => {
   const { provider: selectedProvider } = useAIProvider();
-  const orchestrator = useOrchestrator(dataNode, (data) => generateStepsSkipDetectType(data, !!skipDetectType, selectedProvider), headless);
+  const orchestrator = useOrchestrator(dataNode, (data) => generateStepsSkipDetectType(data, !!skipDetectType, selectedProvider, contextLabel), headless);
   const [finalDDT, setFinalDDT] = useState<any>(null);
   const [totalSteps, setTotalSteps] = useState(0);
   const [currentStep, setCurrentStep] = useState(1);
@@ -55,15 +56,46 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
   const [structurePreview, setStructurePreview] = useState<any>(null);
   const hadErrorRef = useRef(false);
 
-  useEffect(() => {
-    const total = calculateTotalSteps(dataNode);
-    setTotalSteps(total);
-  }, [dataNode]);
+  // ✅ SOLUZIONE PULITA: Stabilizza dataNode con useMemo basato sui valori primitivi
+  // Questo evita re-render quando dataNode cambia riferimento ma i valori sono identici
+  const stableDataNode = useMemo(() => {
+    return {
+      name: dataNode?.name || '',
+      label: dataNode?.label || '',
+      type: dataNode?.type,
+      icon: dataNode?.icon,
+      subData: dataNode?.subData || [],
+      // Preserva eventuali altre proprietà necessarie
+      variable: dataNode?.variable,
+      constraints: dataNode?.constraints,
+      nlpContract: dataNode?.nlpContract,
+      templateId: dataNode?.templateId,
+      kind: dataNode?.kind
+    };
+  }, [
+    dataNode?.name,
+    dataNode?.label,
+    dataNode?.type,
+    dataNode?.icon,
+    // ✅ Usa JSON.stringify per subData per confronto profondo (o usa una libreria di deep equal)
+    JSON.stringify(dataNode?.subData || []),
+    dataNode?.variable,
+    JSON.stringify(dataNode?.constraints),
+    dataNode?.nlpContract,
+    dataNode?.templateId,
+    dataNode?.kind
+  ]);
 
   useEffect(() => {
-    dlog('[DDT][UI][Pipeline][mount]', { headless, initialTotal: calculateTotalSteps(dataNode) });
+    const total = calculateTotalSteps(stableDataNode);
+    setTotalSteps(total);
+  }, [stableDataNode]);
+
+  useEffect(() => {
+    dlog('[DDT][UI][Pipeline][mount]', { headless, initialTotal: calculateTotalSteps(stableDataNode) });
     return () => dlog('[DDT][UI][Pipeline][unmount]');
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // ✅ Solo al mount, stableDataNode viene calcolato una volta
 
   useEffect(() => {
     setCurrentStep(orchestrator.state.currentStepIndex + 1);
@@ -82,7 +114,7 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
       const error = orchestrator.state.lastError;
       const stepInfo = (error as any).stepInfo;
       if (stepInfo) {
-        const mainLabel = (confirmedLabel || dataNode.name || dataNode.label || '').trim();
+        const mainLabel = (confirmedLabel || stableDataNode.name || stableDataNode.label || '').trim();
         const sub = stepInfo.subDataInfo;
         const subLabel = sub ? (sub.label || sub.name || '') : undefined;
         const fieldId = subLabel ? `${mainLabel}/${subLabel}` : mainLabel;
@@ -102,19 +134,12 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
         console.log('[WizardPipelineStep] Error captured for field:', fieldId, error.message);
       }
     }
-  }, [orchestrator.state.stepError, orchestrator.state.lastError, confirmedLabel, dataNode, setFieldProcessingStates, progressByPath]);
+  }, [orchestrator.state.stepError, orchestrator.state.lastError, confirmedLabel, stableDataNode, setFieldProcessingStates, progressByPath]);
 
-  useEffect(() => {
-    return () => {
-    };
-  }, []);
-
-  useEffect(() => {
-  });
 
   useEffect(() => {
     alreadyStartedRef.current = false;
-  }, [dataNode]);
+  }, [stableDataNode]);
 
   // ✅ FIX: Avvia pipeline solo al mount iniziale (una volta sola)
   const mountTriggeredRef = useRef(false);
@@ -185,13 +210,12 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
       }
       const stepMessages = buildSteps(stepResults);
 
-      // ✅ FIX: Use dataNode prop directly - it already has name, label, icon, subData from DDTWizard
-      // The structureResult.payload only has subData, losing name/label/icon!
-      const ddtId = dataNode.label || dataNode.name || 'ddt_unknown';
+      // ✅ SOLUZIONE PULITA: Usa stableDataNode che è memoizzato solo quando i valori cambiano
+      const ddtId = stableDataNode.label || stableDataNode.name || 'ddt_unknown';
 
       try {
-        // ✅ Pass dataNode directly - it has all the correct properties (name, label, icon, type, subData)!
-        const final = buildDDT(ddtId, dataNode, stepResults);
+        // ✅ Pass stableDataNode - ha tutte le proprietà necessarie e riferimento stabile
+        const final = buildDDT(ddtId, stableDataNode, stepResults);
         setFinalDDT(final);
         if (onComplete) {
           onComplete(final);
@@ -201,7 +225,15 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
         throw err;
       }
     }
-  }, [orchestrator.state.currentStepIndex, orchestrator.state.steps.length, orchestrator.state.stepResults, finalDDT, onComplete, confirmedLabel, dataNode]);
+  }, [
+    orchestrator.state.currentStepIndex,
+    orchestrator.state.steps.length,
+    orchestrator.state.stepResults,
+    finalDDT,
+    onComplete,
+    confirmedLabel,
+    stableDataNode // ✅ Ora è stabile e non causa loop
+  ]);
 
   const currentDescription = getStepDescription(currentStep, dataNode);
   const detectedType = orchestrator.state.detectedType;

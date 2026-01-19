@@ -22,12 +22,12 @@ export interface DataNode {
 }
 
 // Genera la sequenza di step per un dato (e subdata)
-export function generateSteps(data: DataNode, provider: 'openai' | 'groq' = 'groq'): Step[] {
-  return generateStepsSkipDetectType(data, false, provider);
+export function generateSteps(data: DataNode, provider: 'openai' | 'groq' = 'groq', contextLabel: string): Step[] {
+  return generateStepsSkipDetectType(data, false, provider, contextLabel);
 }
 
 // Nuova funzione: permette di saltare detectType
-export function generateStepsSkipDetectType(data: DataNode, skipDetectType: boolean, provider: 'openai' | 'groq' = 'groq'): Step[] {
+export function generateStepsSkipDetectType(data: DataNode, skipDetectType: boolean, provider: 'openai' | 'groq' = 'groq', contextLabel: string): Step[] {
   // Definisci la sequenza degli step in modo esplicito
   const stepPlan: Array<{
     key: string;
@@ -119,19 +119,18 @@ export function generateStepsSkipDetectType(data: DataNode, skipDetectType: bool
         if (stepDef.key === 'detectType') {
           body = JSON.stringify(data.name); // stringa pura
         } else if (stepDef.subDataInfo) {
-          // For subData, use main and sub labels explicitly, no hardcoded fallbacks
-          const mainDataName = data.label || data.name || '';
-          const subDataName = stepDef.subDataInfo.label || stepDef.subDataInfo.name || '';
+          // ✅ Use contextLabel directly - no fallback
           body = JSON.stringify({
-            meaning: subDataName || mainDataName,
-            desc: `Generate a concise, direct message for ${subDataName || mainDataName}.`,
+            meaning: contextLabel,
+            desc: `Generate a concise, direct message for ${contextLabel}.`,
             provider: provider.toLowerCase(),
             ...extraBody
           });
         } else {
+          // ✅ Use contextLabel directly - no fallback
           body = JSON.stringify({
-            meaning: data.label || data.name || '',
-            desc: '',
+            meaning: contextLabel,
+            desc: `Generate a concise, direct message for: ${contextLabel}.`,
             provider: provider.toLowerCase(),
             ...extraBody
           });

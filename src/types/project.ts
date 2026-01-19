@@ -1,6 +1,6 @@
 import { TaskType } from './taskTypes'; // ✅ Import TaskType enum
 
-export type EntityType = 'taskTemplates' | 'userActs' | 'backendActions' | 'conditions' | 'macrotasks';
+export type EntityType = 'taskTemplates' | 'userTasks' | 'backendActions' | 'conditions' | 'macrotasks'; // ✅ RINOMINATO: userActs → userTasks
 
 // ❌ RIMOSSO: ActType - sostituito con TaskType enum da taskTypes.ts
 // ✅ Usa TaskType enum invece di stringhe semantiche
@@ -56,7 +56,7 @@ export type ProjectData = {
   // ...other fields as needed
 };
 
-// ---- ProblemClassification (Intent Editor) Act-owned model ----
+// ---- ProblemClassification (Intent Editor) Task-owned model ---- // ✅ RINOMINATO: Act-owned → Task-owned
 export type Lang = 'it' | 'en' | 'pt';
 
 export type ProblemIntentPhrase = { id: string; text: string; lang: Lang };

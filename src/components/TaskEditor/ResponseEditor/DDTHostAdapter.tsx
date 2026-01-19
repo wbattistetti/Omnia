@@ -59,10 +59,11 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
         return null;
       } else if (fullTask.mainData && fullTask.mainData.length > 0) {
         // ✅ NON ha templateId ma ha mainData → costruisci DDT in modo sincrono
+        // ✅ CORRETTO: Il DDT contiene solo la struttura, NON gli steps
+        // Gli steps vivono solo in task.steps[nodeId], non nel DDT
         return {
           label: fullTask.label,
           mainData: fullTask.mainData,
-          stepPrompts: fullTask.stepPrompts,
           constraints: fullTask.constraints,
           examples: fullTask.examples,
           nlpContract: fullTask.nlpContract,

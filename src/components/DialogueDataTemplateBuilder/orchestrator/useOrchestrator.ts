@@ -8,9 +8,12 @@ export function useOrchestrator(
   customGenerateSteps?: (data: DataNode) => Step[],
   headless?: boolean // Se true, non mostra debug modal e avanza automaticamente
 ) {
-  // Usa la funzione custom se fornita, altrimenti generateSteps
+  // Usa la funzione custom se fornita - contextLabel è REQUIRED quindi customGenerateSteps deve essere sempre fornito
   const [steps, setSteps] = useState<Step[]>(() => {
-    return customGenerateSteps ? customGenerateSteps(data) : generateSteps(data);
+    if (!customGenerateSteps) {
+      throw new Error('[useOrchestrator] customGenerateSteps is REQUIRED. contextLabel must be provided via customGenerateSteps.');
+    }
+    return customGenerateSteps(data);
   });
 
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -27,7 +30,10 @@ export function useOrchestrator(
       ...structureData,
       label: structureData?.label || (data as any)?.label || (data as any)?.name || ''
     } as DataNode;
-    const newSteps = customGenerateSteps ? customGenerateSteps(enriched) : generateSteps(enriched);
+    if (!customGenerateSteps) {
+      throw new Error('[useOrchestrator] customGenerateSteps is REQUIRED. contextLabel must be provided via customGenerateSteps.');
+    }
+    const newSteps = customGenerateSteps(enriched);
     setSteps(newSteps);
     // Continue with the next step after regenerating
     setCurrentStepIndex(prev => {

@@ -108,20 +108,21 @@ export function useWizardInference({
     }
 
     const empty = isDDTEmpty(currentDDT);
-    const hasStructureButNoMessages = hasMainDataButNoStepPrompts(currentDDT);
+    const hasStructureButNoMessages = hasMainDataButNoStepPrompts(currentDDT, task);
 
-    // ✅ DEBUG: Log dettagliato per capire perché hasMainDataButNoStepPrompts ritorna true
+    // ✅ DEBUG: Leggi da task.steps[firstMainId], NON da currentDDT.steps[firstMainId]
+    // Gli steps vivono solo in task.steps, il DDT contiene solo la struttura
     if (!empty && currentDDT?.mainData && currentDDT.mainData.length > 0) {
       const firstMain = currentDDT.mainData[0];
       const firstMainId = firstMain?.id;
-      const hasSteps = !!(firstMainId && currentDDT?.steps && currentDDT.steps[firstMainId]);
+      const hasSteps = !!(firstMainId && task?.steps && task.steps[firstMainId]);
       console.log('[useWizardInference] DEBUG steps check', {
         mainDataCount: currentDDT.mainData.length,
         firstMainLabel: firstMain?.label,
         firstMainId: firstMainId?.substring(0, 20) + '...',
         hasSteps,
-        stepsType: typeof currentDDT?.steps,
-        stepsKeys: currentDDT?.steps ? Object.keys(currentDDT.steps) : [],
+        stepsType: typeof task?.steps,
+        stepsKeys: task?.steps ? Object.keys(task.steps) : [],
         hasStructureButNoMessages
       });
     }

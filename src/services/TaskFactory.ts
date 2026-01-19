@@ -1,6 +1,6 @@
-import { ProjectDataService } from './ProjectDataService';
 import { EntityCreationService } from './EntityCreationService';
 import { TaskType } from '../types/taskTypes';
+import { taskRepository } from './TaskRepository';
 
 type CreateAndAttachTaskOpts = {
   name: string;
@@ -43,19 +43,9 @@ export async function createAndAttachTask(opts: CreateAndAttachTaskOpts) {
     type,
   });
 
-  // 3) Async instance creation and patch instanceId
-  try {
-    const pid = getProjectId?.();
-    if (!pid) return;
-    const inst = await ProjectDataService.createInstance(pid, { type });
-    if ((inst as any)?._id) {
-      // Re-assert type on async patch to avoid accidental resets from other updates
-      onImmediateRowUpdate({ instanceId: (inst as any)._id, type });
-      onInstanceCreated?.((inst as any)._id);
-    }
-  } catch (err) {
-    try { console.warn('[TaskFactory] instance create failed', err); } catch {}
-  }
+  // 3) ✅ REMOVED: createInstance (legacy act_instances) - replaced with taskRepository.createTask
+  // ✅ Note: Task creation is now handled by createRowWithTask() in NodeRow.tsx
+  // ✅ This function is kept for backward compatibility but task creation happens elsewhere
 }
 
 

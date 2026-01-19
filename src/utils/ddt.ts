@@ -13,10 +13,11 @@ export function isDDTEmpty(ddt?: any): boolean {
 
 /**
  * Verifica se il DDT ha mainData ma senza steps completi
- * ✅ MODIFICATO: Controlla task.steps a root level (collegato tramite nodeId), non mainData[].stepPrompts
+ * ✅ CORRETTO: Legge da task.steps[nodeId] (unica fonte di verità), NON da ddt.steps[nodeId]
+ * Gli steps vivono solo in task.steps, il DDT contiene solo la struttura
  * Questo indica che la struttura esiste ma i messaggi devono ancora essere generati
  */
-export function hasMainDataButNoStepPrompts(ddt?: any): boolean {
+export function hasMainDataButNoStepPrompts(ddt?: any, task?: any): boolean {
   try {
     if (!ddt || typeof ddt !== 'object') return false;
     const mains: any[] = Array.isArray(ddt?.mainData)
@@ -25,24 +26,20 @@ export function hasMainDataButNoStepPrompts(ddt?: any): boolean {
 
     if (mains.length === 0) return false;
 
-    // ✅ MODIFICATO: Controlla steps a ROOT LEVEL, non dentro mainData
-    // steps è un oggetto con chiavi = nodeId (GUID del mainData/subData)
-    if (!ddt.steps || typeof ddt.steps !== 'object') {
-      return true; // Non ha steps a root level
-    }
-
-    const rootStepsKeys = Object.keys(ddt.steps);
-    if (rootStepsKeys.length === 0) {
-      return true; // steps è vuoto
+    // ✅ CORRETTO: Leggi da task.steps[nodeId], NON da ddt.steps[nodeId]
+    // Gli steps vivono solo in task.steps, il DDT contiene solo la struttura
+    if (!task?.steps || typeof task.steps !== 'object') {
+      return true; // Non ha steps nel task
     }
 
     // Verifica se almeno un mainData ha steps corrispondenti
-    // (collegati tramite nodeId come chiave)
+    // (collegati tramite nodeId come chiave in task.steps)
     return mains.some((main: any) => {
       const mainId = main.id;
       if (!mainId) return true; // Main senza ID non può avere steps
 
-      const mainSteps = ddt.steps[mainId];
+      // ✅ CORRETTO: Leggi da task.steps[mainId], NON da ddt.steps[mainId]
+      const mainSteps = task.steps[mainId];
       if (!mainSteps || typeof mainSteps !== 'object') {
         return true; // Questo main non ha steps
       }

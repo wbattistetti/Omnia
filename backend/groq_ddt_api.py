@@ -30,6 +30,7 @@ try:
     from backend.ai_steps.parse_address import router as parse_address_router
     from backend.ai_endpoints.intent_generation import router as intent_gen_router
     from backend.ai_steps.intentMessages import router as intentMessages_router
+    from backend.ai_steps.adapt_prompts import router as adapt_prompts_router
 except Exception:
     from ai_steps.step3_suggest_constraints import router as step3_router
     from ai_steps.constraint_messages import router as constraint_messages_router
@@ -46,6 +47,7 @@ except Exception:
     from ai_steps.parse_address import router as parse_address_router
     from ai_endpoints.intent_generation import router as intent_gen_router
     from ai_steps.intentMessages import router as intentMessages_router
+    from ai_steps.adapt_prompts import router as adapt_prompts_router
 
 GROQ_KEY = os.environ.get("Groq_key")
 
@@ -222,6 +224,7 @@ app.include_router(stepConfirmation_router)
 app.include_router(stepSuccess_router)
 app.include_router(startPrompt_router)
 app.include_router(stepNotConfirmed_router)
+app.include_router(adapt_prompts_router)
 
 # --- Condition: suggest minimal variables ---
 @app.post("/api/conditions/suggest-vars")

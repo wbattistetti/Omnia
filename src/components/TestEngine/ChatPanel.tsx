@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NodeRowData } from '../../types/project';
-import { getAgentActPrompt } from '../../utils/agentActUtils';
+import { getTaskPrompt } from '../../utils/agentActUtils'; // ✅ RINOMINATO: getAgentActPrompt → getTaskPrompt
 
 interface ChatPanelProps {
   // agentActs: AgentActItem[]; // rimosso
@@ -25,8 +25,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ testNodeId, userReplies, s
   let idx = 0;
   while (idx < agentRows.length) {
     shownIndices.push(idx);
-    // Se la row ha userActs, fermati dopo questa
-    if (agentRows[idx].userActs) break;
+      // Se la row ha userTasks, fermati dopo questa
+      if (agentRows[idx].userTasks) break; // ✅ RINOMINATO: userActs → userTasks
     idx++;
   }
   if (userReplies.length <= shownIndices.length - 1) {
@@ -34,7 +34,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ testNodeId, userReplies, s
     shownIndices = shownIndices.slice(0, userReplies.length + 1);
   }
   // L'indice del prompt corrente che aspetta risposta
-  const currentPromptIdx = shownIndices.find(i => agentRows[i].userActs && userReplies[i] === undefined);
+  const currentPromptIdx = shownIndices.find(i => agentRows[i].userTasks && userReplies[i] === undefined); // ✅ RINOMINATO: userActs → userTasks
 
   function handleSend() {
     onSend(currentPromptIdx);

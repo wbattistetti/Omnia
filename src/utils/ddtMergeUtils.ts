@@ -725,6 +725,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
     return {
       label: localDDT.label,
       mainData: localDDT.mainData,
+      steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
       constraints: localDDT.constraints,
       examples: localDDT.examples,
       nlpContract: localDDT.nlpContract,
@@ -740,6 +741,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
     return {
       label: localDDT.label,
       mainData: localDDT.mainData,
+      steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
       constraints: localDDT.constraints,
       examples: localDDT.examples,
       nlpContract: localDDT.nlpContract,
@@ -749,7 +751,8 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
 
   // ✅ Salva sempre label (sempre modificabile)
   const result: Partial<Task> = {
-    label: localDDT.label
+    label: localDDT.label,
+    steps: {} // ✅ CORRETTO: Inizializza steps a root level (unica fonte di verità)
   };
 
   // ✅ Confronta SOLO la struttura dei dati (senza step, constraints, etc.)
@@ -833,6 +836,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
     return {
       label: localDDT.label,
       mainData: localDDT.mainData, // ✅ Salva struttura completa
+      steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
       constraints: localDDT.constraints,
       examples: localDDT.examples,
       nlpContract: localDDT.nlpContract,
@@ -860,11 +864,13 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
       const templateNodeExamples = templateNode?.examples || [];
       const templateNodeNlpContract = templateNode?.nlpContract;
 
-      // ✅ Check override di logica (non struttura)
-      // Steps sono sempre override legittimi (non confrontiamo con template)
-      const hasSteps = mainNode.steps && (
-        (Array.isArray(mainNode.steps) && mainNode.steps.length > 0) ||
-        (typeof mainNode.steps === 'object' && Object.keys(mainNode.steps).length > 0)
+      // ✅ CORRETTO: Leggi steps da instance.steps[nodeId], NON da mainNode.steps
+      // Gli steps vivono solo in task.steps[nodeId], il DDT contiene solo la struttura
+      const nodeId = mainNode.id;
+      const nodeSteps = nodeId && instance.steps ? instance.steps[nodeId] : null;
+      const hasSteps = nodeSteps && (
+        (Array.isArray(nodeSteps) && nodeSteps.length > 0) ||
+        (typeof nodeSteps === 'object' && Object.keys(nodeSteps).length > 0)
       );
       const hasConstraintsOverride = JSON.stringify(mainNode.constraints || []) !== JSON.stringify(templateNodeConstraints);
       const hasExamplesOverride = JSON.stringify(mainNode.examples || []) !== JSON.stringify(templateNodeExamples);
@@ -872,15 +878,15 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
 
       console.log('[extractModifiedDDTFields] 🔍 Checking overrides for mainNode', {
         mainNodeIndex: i,
-        mainNodeId: mainNode.id,
+        mainNodeId: nodeId,
         hasSteps,
         hasConstraintsOverride,
         hasExamplesOverride,
         hasNlpContractOverride,
-        stepsType: typeof mainNode.steps,
-        stepsIsArray: Array.isArray(mainNode.steps),
-        stepsKeys: typeof mainNode.steps === 'object' ? Object.keys(mainNode.steps || {}) : [],
-        stepsLength: Array.isArray(mainNode.steps) ? mainNode.steps.length : 0
+        stepsType: typeof nodeSteps,
+        stepsIsArray: Array.isArray(nodeSteps),
+        stepsKeys: typeof nodeSteps === 'object' ? Object.keys(nodeSteps || {}) : [],
+        stepsLength: Array.isArray(nodeSteps) ? nodeSteps.length : 0
       });
 
       if (hasSteps || hasConstraintsOverride || hasExamplesOverride || hasNlpContractOverride) {
@@ -889,15 +895,18 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
           label: mainNode.label
         };
 
-        // ✅ Salva sempre steps se presenti (override legittimo, non confrontiamo)
-        if (hasSteps) {
-          overrideNode.steps = mainNode.steps;
+        // ✅ CORRETTO: Salva steps in result.steps[nodeId] a root level, NON in overrideNode.steps
+        // Gli steps vivono solo in task.steps[nodeId], non nel DDT
+        if (hasSteps && nodeId) {
+          if (!result.steps) result.steps = {};
+          result.steps[nodeId] = nodeSteps;
           console.log('[extractModifiedDDTFields] ✅ Including steps in override', {
             mainNodeIndex: i,
-            stepsType: typeof mainNode.steps,
-            stepsIsArray: Array.isArray(mainNode.steps),
-            stepsKeys: typeof mainNode.steps === 'object' ? Object.keys(mainNode.steps || {}) : [],
-            stepsLength: Array.isArray(mainNode.steps) ? mainNode.steps.length : 0
+            nodeId,
+            stepsType: typeof nodeSteps,
+            stepsIsArray: Array.isArray(nodeSteps),
+            stepsKeys: typeof nodeSteps === 'object' ? Object.keys(nodeSteps || {}) : [],
+            stepsLength: Array.isArray(nodeSteps) ? nodeSteps.length : 0
           });
         }
         if (hasConstraintsOverride) overrideNode.constraints = mainNode.constraints;
@@ -917,10 +926,12 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
               const templateSubExamples = templateSubNode.examples || [];
               const templateSubNlpContract = templateSubNode.nlpContract;
 
-              // ✅ Check override di logica (non struttura)
-              const hasSubSteps = subNode.steps && (
-                (Array.isArray(subNode.steps) && subNode.steps.length > 0) ||
-                (typeof subNode.steps === 'object' && Object.keys(subNode.steps).length > 0)
+              // ✅ CORRETTO: Leggi steps da instance.steps[subNodeId], NON da subNode.steps
+              const subNodeId = subNode.id;
+              const subNodeSteps = subNodeId && instance.steps ? instance.steps[subNodeId] : null;
+              const hasSubSteps = subNodeSteps && (
+                (Array.isArray(subNodeSteps) && subNodeSteps.length > 0) ||
+                (typeof subNodeSteps === 'object' && Object.keys(subNodeSteps).length > 0)
               );
               const hasSubConstraintsOverride = JSON.stringify(subNode.constraints || []) !== JSON.stringify(templateSubConstraints);
               const hasSubExamplesOverride = JSON.stringify(subNode.examples || []) !== JSON.stringify(templateSubExamples);
@@ -932,8 +943,11 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
                   label: subNode.label
                 };
 
-                // ✅ Salva sempre steps se presenti (override legittimo)
-                if (hasSubSteps) overrideSubNode.steps = subNode.steps;
+                // ✅ CORRETTO: Salva steps in result.steps[subNodeId] a root level, NON in overrideSubNode.steps
+                if (hasSubSteps && subNodeId) {
+                  if (!result.steps) result.steps = {};
+                  result.steps[subNodeId] = subNodeSteps;
+                }
                 if (hasSubConstraintsOverride) overrideSubNode.constraints = subNode.constraints;
                 if (hasSubExamplesOverride) overrideSubNode.examples = subNode.examples;
                 if (hasSubNlpContractOverride) overrideSubNode.nlpContract = subNode.nlpContract;

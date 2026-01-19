@@ -1127,35 +1127,40 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
       let backendInstanceId: string | undefined = undefined;
       if (pid && item.id && item.categoryType === 'taskTemplates') {
-        // Avoid require in browser; import mapping helpers at top-level
+        // ✅ REMOVED: createInstance (legacy act_instances) - replaced with taskRepository.createTask
+        // ✅ Create task using taskRepository (unified model)
         const chosenType = (item as any)?.type ?? TaskType.UNDEFINED; // ✅ TaskType enum only, no mode
-        const inst = await ProjectDataService.createInstance(pid, { type: chosenType }); // ✅ type (TaskType enum) required, no mode
 
-        console.log('[🔍 INTELLISENSE] ProjectDataService.createInstance result', {
-          success: !!inst,
-          instance: inst,
-          backendId: inst?._id,
+        // ✅ Use row.id as taskId (1:1 relationship)
+        const taskId = row.id || generateId();
+
+        // ✅ Create task in taskRepository (saves to tasks collection)
+        const task = taskRepository.createTask(chosenType, item.id || null, undefined, taskId, pid);
+
+        console.log('[🔍 INTELLISENSE] taskRepository.createTask result', {
+          success: !!task,
+          task: task,
+          taskId: task?.id,
+          templateId: task?.templateId,
           timestamp: Date.now()
         });
 
-        if (inst && (onUpdateWithCategory as any)) {
-          // Usa il mapping service per convertire l'ID backend in UUID frontend
-          const frontendInstanceId = idMappingService.mapBackendToFrontend(inst._id);
-          backendInstanceId = frontendInstanceId;
+        if (task && (onUpdateWithCategory as any)) {
+          backendInstanceId = task.id;
 
-          console.log('[🔍 INTELLISENSE] ID Mapping result', {
-            backendId: inst._id,
-            frontendId: frontendInstanceId,
+          console.log('[🔍 INTELLISENSE] Task created', {
+            taskId: task.id,
+            type: chosenType,
             timestamp: Date.now()
           });
 
           (onUpdateWithCategory as any)(row, item.name, item.categoryType, {
-            instanceId: frontendInstanceId,
+            instanceId: task.id,
             type: chosenType,
             mode: (item as any)?.mode ?? modeFromType
           });
         } else {
-          console.log('[⚠️ INTELLISENSE] createInstance failed or returned null', {
+          console.log('[⚠️ INTELLISENSE] taskRepository.createTask failed or returned null', {
             pid,
             itemId: item.id,
             itemCategoryType: item.categoryType,

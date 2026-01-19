@@ -53,15 +53,22 @@ export function normalizeDDTMainNodes(mains: Node[]): Node[] {
     } catch { }
 
     // ✅ NEW: Copy structure as-is from AI, no override!
-    // ✅ CRITICAL: Preserve nlpContract, templateId from original node
-    // IMPORTANTE: nlpContract e templateId DEVONO essere assegnati DOPO lo spread per non essere sovrascritti
+    // ✅ CRITICAL: Preserve nlpContract, templateId, id from original node
+    // IMPORTANTE: nlpContract, templateId e id DEVONO essere assegnati DOPO lo spread per non essere sovrascritti
     const out: Node = {
       ...main,
       kind,
       type: kind  // Ensure type matches kind
     };
 
-    // ✅ CRITICO: Assegna nlpContract e templateId DOPO lo spread per evitare sovrascrittura
+    // ✅ CRITICO: Assegna id, nlpContract e templateId DOPO lo spread per evitare sovrascrittura
+    if ((main as any).id) {
+      (out as any).id = (main as any).id;
+      console.log('✅ [normalizeKinds] Preserved node ID', {
+        label,
+        nodeId: (main as any).id
+      });
+    }
     if ((main as any).nlpContract) {
       out.nlpContract = (main as any).nlpContract;
       console.log('✅ [normalizeKinds] Preserved nlpContract', {
@@ -88,12 +95,17 @@ export function normalizeDDTMainNodes(mains: Node[]): Node[] {
 
       const subOut: any = {
         ...sub,
+        // ✅ CRITICAL: Preserve existing ID if present (from template), otherwise generate fallback
         id: sub.id || ensureId(subLabel, 'subfield'),
         type: subType || 'generic',  // Only fallback if missing
         label: subLabel
       };
 
-      // ✅ CRITICO: Assegna nlpContract e templateId DOPO lo spread per evitare sovrascrittura
+      // ✅ CRITICO: Assegna id, nlpContract e templateId DOPO lo spread per evitare sovrascrittura
+      // (id è già gestito sopra, ma assicuriamoci che non venga sovrascritto)
+      if ((sub as any).id) {
+        subOut.id = (sub as any).id;
+      }
       if ((sub as any).nlpContract) {
         subOut.nlpContract = (sub as any).nlpContract;
       }

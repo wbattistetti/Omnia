@@ -10,13 +10,15 @@ import type { Kind } from '../../DialogueDataEngine/model/ddt.v2.types';
  * Maps AI semantic types to frontend Kind values using the shared config.
  * Falls back to 'generic' for unknown types.
  *
- * @param aiType - The type returned by the AI (e.g., 'phone', 'taxCode', 'fiscalCode')
+ * @param aiType - The type returned by the AI (e.g., 'phone', 'taxCode', 'fiscalCode', or TaskType enum number)
  * @returns The corresponding frontend Kind or 'generic' as fallback
  */
-function mapAITypeToKind(aiType: string | undefined): Kind | undefined {
-  if (!aiType) return undefined;
+function mapAITypeToKind(aiType: string | number | undefined): Kind | undefined {
+  if (!aiType && aiType !== 0) return undefined;
 
-  const normalized = aiType.toLowerCase().trim();
+  // ✅ Convert to string if it's a number (TaskType enum) or other type
+  const typeString = typeof aiType === 'number' ? String(aiType) : String(aiType);
+  const normalized = typeString.toLowerCase().trim();
 
   // Step 1: Check if it's a supported kind directly
   const supportedKinds = nlpTypesConfig.supportedKinds as string[];

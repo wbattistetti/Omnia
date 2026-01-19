@@ -104,92 +104,36 @@ const convertTemplateDataToCategories = (templateArray: any[]): Category[] => {
 //   return (data as ProjectData)[type] || [];
 // }
 
-export const ProjectDataService = {
-  async loadActsFromProject(projectId: string): Promise<void> {
-    const startTime = performance.now();
-    console.log(`[PERF][${new Date().toISOString()}] 📦 START loadActsFromProject`, { projectId });
-
-    // ✅ OPTIMIZATION: Load acts, project conditions, and factory conditions in parallel
-    const parallelStart = performance.now();
-    const [actsRes, projectCondRes, factoryCondRes] = await Promise.all([
-      fetch(`/api/projects/${encodeURIComponent(projectId)}/acts`),
-      fetch(`/api/projects/${encodeURIComponent(projectId)}/conditions`),
-      fetch('/api/factory/conditions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ industry: projectData.industry || '', scope: ['global', 'industry'] })
-      })
-    ]);
-    console.log(`[PERF][${new Date().toISOString()}] ✅ END parallel fetch`, {
-      duration: `${(performance.now() - parallelStart).toFixed(2)}ms`
-    });
-
-    // Process acts
-    const actsStart = performance.now();
-    if (!actsRes.ok) throw new Error('Failed to load project acts');
-    const json = await actsRes.json();
-    const items = Array.isArray(json?.items) ? json.items : [];
-    console.log(`[PERF][${new Date().toISOString()}] ✅ END parse acts`, {
-      duration: `${(performance.now() - actsStart).toFixed(2)}ms`,
-      itemsCount: items.length
-    });
-
-    // Process conditions
-    const conditionsStart = performance.now();
-    let conditions: any[] = [];
+/**
+ * Fetch with automatic retry for 500 errors (handles MongoDB pool initialization delays)
+ */
+async function fetchWithRetry(url: string, options: RequestInit = {}, maxRetries = 3): Promise<Response> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      // Process project conditions
-      if (projectCondRes.ok) {
-        const projectJson = await projectCondRes.json();
-        const projectConditions = Array.isArray(projectJson?.items) ? projectJson.items : [];
-        conditions.push(...projectConditions);
-        console.log(`[PERF][${new Date().toISOString()}] ✅ END parse project conditions`, {
-          projectId,
-          count: projectConditions.length
-        });
+      const res = await fetch(url, options);
+      if (res.ok || attempt === maxRetries) {
+        return res;
       }
-
-      // Process factory conditions
-      if (factoryCondRes.ok) {
-        const globalConditions = await factoryCondRes.json();
-        conditions.push(...globalConditions);
-        console.log(`[PERF][${new Date().toISOString()}] ✅ END parse factory conditions`, {
-          count: globalConditions.length,
-          total: conditions.length
-        });
+      // Se è un 500 e non è l'ultimo tentativo, aspetta e riprova
+      if (res.status === 500 && attempt < maxRetries) {
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // Exponential backoff, max 5s
+        console.warn(`[Retry] Attempt ${attempt}/${maxRetries} failed for ${url} (${res.status}), retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
       }
-    } catch (e) {
-      console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR parse conditions`, {
-        error: e
-      });
+      return res;
+    } catch (error) {
+      if (attempt === maxRetries) throw error;
+      const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+      console.warn(`[Retry] Attempt ${attempt}/${maxRetries} failed for ${url}, retrying in ${delay}ms...`, error);
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
-    console.log(`[PERF][${new Date().toISOString()}] ✅ END load conditions`, {
-      duration: `${(performance.now() - conditionsStart).toFixed(2)}ms`,
-      totalConditions: conditions.length
-    });
+  }
+  throw new Error('Max retries exceeded');
+}
 
-    const convertStart = performance.now();
-    projectData = {
-      name: projectData.name || '',
-      industry: projectData.industry || '',
-      taskTemplates: this.convertToCategories(items, 'taskTemplates'),
-      userTasks: [], // ✅ RINOMINATO: userActs → userTasks
-      backendActions: [],
-      conditions: this.convertToCategories(conditions, 'conditions'),
-      tasks: [],
-      macrotasks: []
-    };
-    console.log(`[PERF][${new Date().toISOString()}] ✅ END convertToCategories`, {
-      duration: `${(performance.now() - convertStart).toFixed(2)}ms`
-    });
-
-    const totalDuration = performance.now() - startTime;
-    console.log(`[PERF][${new Date().toISOString()}] 🎉 COMPLETE loadActsFromProject`, {
-      projectId,
-      totalDuration: `${totalDuration.toFixed(2)}ms`,
-      totalDurationSeconds: `${(totalDuration / 1000).toFixed(2)}s`
-    });
-  },
+export const ProjectDataService = {
+  // ✅ REMOVED: loadActsFromProject - acts migrati a tasks, caricati via taskRepository.loadAllTasksFromDatabase
   async loadTaskTemplatesFromFactory(projectIndustry?: string, projectId?: string): Promise<void> {
     console.log('[ProjectDataService] loadTaskTemplatesFromFactory CALLED with industry:', projectIndustry, 'projectId:', projectId);
 
@@ -257,40 +201,8 @@ export const ProjectDataService = {
     }
   },
 
-  // --- Instances API helpers ---
-  async createInstance(projectId: string, payload: { type: number; message?: any; overrides?: any }): Promise<any> { // ✅ type (TaskType enum) required, no mode
-    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (!res.ok) throw new Error('createInstance_failed');
-    return res.json();
-  },
-  async updateInstance(projectId: string, instanceId: string, updates: any): Promise<any> {
-    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances/${encodeURIComponent(instanceId)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates)
-    });
-    if (!res.ok) throw new Error('updateInstance_failed');
-    return res.json();
-  },
-  async getInstances(projectId: string, ids?: string[]): Promise<any> {
-    const qs = ids && ids.length ? `?ids=${ids.map(encodeURIComponent).join(',')}` : '';
-    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances${qs}`);
-    if (!res.ok) throw new Error('getInstances_failed');
-    return res.json();
-  },
-
-  async bulkCreateInstances(projectId: string, items: Array<{ type: number; message?: any; overrides?: any }>): Promise<any> { // ✅ type (TaskType enum) required, no mode
-    if (!items || items.length === 0) return { ok: true, inserted: 0 };
-    const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/instances/bulk`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items })
-    });
-    if (!res.ok) throw new Error('bulkCreateInstances_failed');
-    return res.json();
-  },
+  // ✅ REMOVED: Instances API helpers (legacy act_instances)
+  // ✅ Use taskRepository.createTask() instead - saves to tasks collection (unified model)
   makeId(): string {
     return generateId();
   },

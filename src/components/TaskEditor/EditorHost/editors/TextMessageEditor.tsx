@@ -98,19 +98,12 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
     }
   }, [text, instanceId, pdUpdate]);
 
-  // Save to database on close
+  // ✅ REMOVED: updateInstance (legacy act_instances) - taskRepository.updateTask already saves to database
   const handleClose = async () => {
     if (instanceId) {
-      try {
-        const { ProjectDataService } = await import('../../../../services/ProjectDataService');
-        const pid = pdUpdate?.getCurrentProjectId() || undefined;
-        if (pid) {
-          void ProjectDataService.updateInstance(pid, instanceId, { message: { text } })
-            .catch((e: any) => { try { console.warn('[TextMessageEditor][close][PUT fail]', e); } catch { } });
-          // broadcast per aggiornare la riga
-          try { document.dispatchEvent(new CustomEvent('rowMessage:update', { detail: { instanceId, text } })); } catch { }
-        }
-      } catch { }
+      // ✅ TaskRepository automatically syncs with database, no need for separate save
+      // broadcast per aggiornare la riga
+      try { document.dispatchEvent(new CustomEvent('rowMessage:update', { detail: { instanceId, text } })); } catch { }
     }
     onClose?.();
   };
