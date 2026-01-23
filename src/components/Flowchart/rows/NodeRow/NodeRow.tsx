@@ -36,6 +36,7 @@ import { generateId } from '../../../../utils/idGenerator';
 import { taskRepository } from '../../../../services/TaskRepository';
 import { useRowExecutionHighlight } from '../../executionHighlight/useExecutionHighlight';
 import { getTaskIdFromRow, updateRowTaskType, createRowWithTask, getTemplateId } from '../../../../utils/taskHelpers'; // ✅ RINOMINATO: updateRowTaskAction → updateRowTaskType
+import TemplatePreviewDialog from '../../../DialogueDataTemplateBuilder/TemplatePreviewDialog';
 
 const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps> = (
   {
@@ -137,6 +138,16 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   // Type picker state (moved here to be accessible in handleKeyDownInternal)
   const [pickerCurrentType, setPickerCurrentType] = useState<TaskType | undefined>(undefined);
   const [pickerPosition, setPickerPosition] = useState<{ left: number; top: number } | null>(null);
+
+  // ✅ Stato per preview dialog (template candidato o struttura AI)
+  const [showPreviewDialog, setShowPreviewDialog] = useState(false);
+  const [previewData, setPreviewData] = useState<{
+    type: 'template' | 'ai';
+    templateId?: string;
+    templateLabel?: string;
+    dataTree: any[];
+    rootLabel: string;
+  } | null>(null);
 
 
   // Registry for external access
@@ -1753,11 +1764,152 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                 // ✅ Sempre permesso per DataRequest, anche se isUndefined o !hasTaskDDT
                 return async () => {
                   try {
-                    // ✅ LAZY: Crea task se non esiste usando metadati della riga
+                    console.log('[🔍 NodeRow][onOpenDDT] START', {
+                      rowId: row.id,
+                      rowText: row.text,
+                      hasTaskId: !!(row as any)?.taskId,
+                      taskId: (row as any)?.taskId || row.id,
+                      taskType: resolveTaskType(row)
+                    });
+
+                    // ✅ NUOVO FLUSSO MODULARE: Verifica se task esiste
                     let taskIdForType = (row as any)?.taskId || row.id;
                     let taskForType = taskIdForType ? taskRepository.getTask(taskIdForType) : null;
 
-                    // ✅ Se task non esiste, crealo usando metadati della riga
+                    console.log('[🔍 NodeRow][onOpenDDT] Task check', {
+                      taskId: taskIdForType,
+                      taskExists: !!taskForType,
+                      hasTemplateId: !!taskForType?.templateId
+                    });
+
+                    // ✅ CASO 1: Task esiste → apri direttamente (comportamento attuale)
+                    if (taskForType) {
+                      console.log('[🔍 NodeRow][onOpenDDT] ✅ CASO 1: Task esiste, aprendo direttamente ResponseEditor', {
+                        taskId: taskIdForType,
+                        taskType: taskForType.type,
+                        hasTemplateId: !!taskForType.templateId
+                      });
+
+                      // Task già esiste, apri direttamente ResponseEditor
+                      const finalTaskType = taskForType.type as TaskType;
+                      taskEditorCtx.open({ id: String(taskIdForType), type: finalTaskType, label: row.text, instanceId: row.id });
+
+                      // Costruisci DDT se necessario
+                      let ddt: any = null;
+                      if (taskForType?.templateId && taskForType.templateId !== 'UNDEFINED') {
+                        const DialogueTaskService = (await import('../../../../services/DialogueTaskService')).default;
+                        const template = DialogueTaskService.getTemplate(taskForType.templateId);
+                        if (template) {
+                          const { RowHeuristicsService } = await import('../../../../services/RowHeuristicsService');
+                          const templateType = RowHeuristicsService.getTemplateType(template);
+                          if (templateType === TaskType.DataRequest) {
+                            const { buildDDTFromTask } = await import('../../../../utils/taskUtils');
+                            ddt = await buildDDTFromTask(taskForType);
+                          }
+                        }
+                      } else if (taskForType?.data && taskForType.data.length > 0) {
+                        ddt = {
+                          label: taskForType.label || row.text || 'New DDT',
+                          data: taskForType.data,
+                          stepPrompts: taskForType.stepPrompts,
+                          constraints: taskForType.constraints,
+                          examples: taskForType.examples
+                        };
+                      }
+
+                      const event = new CustomEvent('taskEditor:open', {
+                        detail: {
+                          id: String(taskIdForType),
+                          type: finalTaskType,
+                          label: row.text,
+                          ddt: ddt,
+                          instanceId: row.id,
+                          templateId: taskForType?.templateId || undefined
+                        },
+                        bubbles: true
+                      });
+                      document.dispatchEvent(event);
+                      return;
+                    }
+
+                    // ✅ CASO 2: Task non esiste → mostra preview prima di creare
+                    const rowMeta = (row as any)?.meta;
+                    const metaTaskType = (rowMeta?.type !== undefined && rowMeta?.type !== null)
+                      ? rowMeta.type
+                      : TaskType.UNDEFINED;
+                    const metaTemplateId = rowMeta?.templateId || null;
+                    const projectId = getProjectId?.() || undefined;
+
+                    // ✅ Sotto-caso 2a: C'è templateId → mostra preview struttura template
+                    if (metaTemplateId && metaTaskType === TaskType.DataRequest) {
+                      try {
+                        console.log('[🔍 NodeRow][onOpenDDT] ✅ CASO 2a: Template candidato trovato, mostrando preview', {
+                          templateId: metaTemplateId,
+                          rowText: row.text
+                        });
+
+                        const DialogueTaskService = (await import('../../../../services/DialogueTaskService')).default;
+                        const template = DialogueTaskService.getTemplate(metaTemplateId);
+
+                        if (template) {
+                          const { buildDataTree } = await import('../../../../utils/taskUtils');
+                          const dataTree = buildDataTree(template);
+
+                          console.log('[🔍 NodeRow][onOpenDDT] 📋 Mostrando preview dialog (template)', {
+                            templateId: metaTemplateId,
+                            templateLabel: template.label || template.name,
+                            dataTreeLength: dataTree.length
+                          });
+
+                          // Mostra preview dialog
+                          setPreviewData({
+                            type: 'template',
+                            templateId: metaTemplateId,
+                            templateLabel: template.label || template.name || 'Template',
+                            dataTree: dataTree,
+                            rootLabel: template.label || row.text || 'Data'
+                          });
+                          setShowPreviewDialog(true);
+                          return;
+                        }
+                      } catch (err) {
+                        console.error('[🔍 NodeRow][onOpenDDT] ❌ Errore caricamento template per preview:', err);
+                      }
+                    }
+
+                    // ✅ Sotto-caso 2b: NON c'è templateId → genera struttura da AI, poi mostra preview
+                    if (!metaTemplateId && metaTaskType === TaskType.DataRequest && row.text && row.text.trim().length >= 3) {
+                      try {
+                        console.log('[🔍 NodeRow][onOpenDDT] ✅ CASO 2b: Nessun template, generando struttura da AI', {
+                          label: row.text,
+                          labelLength: row.text.trim().length
+                        });
+
+                        const { createDDTFromAI_GenerateStructure } = await import('../../../../utils/ddtOrchestrator');
+                        const provider = (localStorage.getItem('ai.provider') as 'groq' | 'openai') || 'groq';
+
+                        const dataTree = await createDDTFromAI_GenerateStructure(row.text, provider);
+
+                        console.log('[🔍 NodeRow][onOpenDDT] 📋 Mostrando preview dialog (AI)', {
+                          dataTreeLength: dataTree.length,
+                          rootLabel: row.text
+                        });
+
+                        // Mostra preview dialog
+                        setPreviewData({
+                          type: 'ai',
+                          dataTree: dataTree,
+                          rootLabel: row.text || 'Data'
+                        });
+                        setShowPreviewDialog(true);
+                        return;
+                      } catch (err) {
+                        console.error('[🔍 NodeRow][onOpenDDT] ❌ Errore generazione struttura AI:', err);
+                        // Fallback: crea task vuoto e apri wizard
+                      }
+                    }
+
+                    // ✅ Fallback: Crea task base senza preview (comportamento legacy)
                     if (!taskForType) {
                       const rowMeta = (row as any)?.meta;
                       // ✅ Se rowMeta non esiste o type è undefined, usa UNDEFINED (non DataRequest)
@@ -2153,6 +2305,203 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             />
           </FontProvider>
         </>, document.body
+      )}
+
+      {/* ✅ TemplatePreviewDialog - Preview e conferma struttura dati */}
+      {showPreviewDialog && previewData && createPortal(
+        (() => {
+          console.log('[🔍 NodeRow] Rendering TemplatePreviewDialog via Portal', {
+            showPreviewDialog,
+            hasPreviewData: !!previewData,
+            previewType: previewData?.type
+          });
+
+          return (
+            <FontProvider>
+              <div style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(0,0,0,0.7)',
+                zIndex: 10000,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <div style={{
+                  width: '90%',
+                  maxWidth: 800,
+                  maxHeight: '90vh',
+                  overflow: 'auto',
+                  background: '#0f172a',
+                  color: '#e2e8f0',
+                  borderRadius: 12,
+                  boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
+                  padding: 24
+                }}>
+                  <TemplatePreviewDialog
+                  open={showPreviewDialog}
+                  title={previewData.type === 'template'
+                    ? `Template trovato: "${previewData.templateLabel}"`
+                    : 'Struttura dati generata da AI'}
+                  message={previewData.type === 'template'
+                    ? 'Vuoi usare questo template?'
+                    : 'Vuoi usare questa struttura dati?'}
+                  rootLabel={previewData.rootLabel}
+                  dataTree={previewData.dataTree}
+                  onConfirm={async () => {
+                    try {
+                      console.log('[🔍 NodeRow][PreviewConfirm] ✅ CONFIRM - Utente ha confermato', {
+                        previewType: previewData?.type,
+                        templateId: previewData?.templateId,
+                        dataTreeLength: previewData?.dataTree?.length,
+                        rootLabel: previewData?.rootLabel
+                      });
+
+                      const rowMeta = (row as any)?.meta;
+                      const projectId = getProjectId?.() || undefined;
+
+                      if (previewData.type === 'template' && previewData.templateId) {
+                        console.log('[🔍 NodeRow][PreviewConfirm] ✅ CASO 1: Template confermato, clonando steps', {
+                          templateId: previewData.templateId,
+                          templateLabel: previewData.templateLabel
+                        });
+
+                        // ✅ CASO 1: Template candidato → clona steps e adatta prompt
+                        const { createDDTFromTemplate } = await import('../../../../utils/ddtOrchestrator');
+
+                        // Crea task base
+                        const task = taskRepository.createTask(
+                          TaskType.DataRequest,
+                          previewData.templateId,
+                          { label: row.text || '' },
+                          row.id,
+                          projectId
+                        );
+
+                        // Clona steps e adatta prompt
+                        await createDDTFromTemplate(previewData.templateId, task, row.text || '', false);
+
+                        // Salva task
+                        taskRepository.updateTask(task.id, {
+                          steps: task.steps,
+                          metadata: { promptsAdapted: true }
+                        }, projectId);
+
+                        // Apri ResponseEditor
+                        taskEditorCtx.open({ id: task.id, type: TaskType.DataRequest, label: row.text, instanceId: row.id });
+
+                        const { buildDDTFromTask } = await import('../../../../utils/taskUtils');
+                        const ddt = await buildDDTFromTask(task);
+
+                        const event = new CustomEvent('taskEditor:open', {
+                          detail: {
+                            id: task.id,
+                            type: TaskType.DataRequest,
+                            label: row.text,
+                            ddt: ddt,
+                            instanceId: row.id,
+                            templateId: previewData.templateId
+                          },
+                          bubbles: true
+                        });
+                        document.dispatchEvent(event);
+                      } else {
+                        console.log('[🔍 NodeRow][PreviewConfirm] ✅ CASO 2: Struttura AI confermata, generando steps', {
+                          dataTreeLength: previewData.dataTree.length,
+                          rootLabel: previewData.rootLabel
+                        });
+
+                        // ✅ CASO 2: Struttura AI → genera tutti gli steps
+                        const { createDDTFromAI_GenerateSteps } = await import('../../../../utils/ddtOrchestrator');
+                        const provider = (localStorage.getItem('ai.provider') as 'groq' | 'openai') || 'groq';
+
+                        // Crea task base (senza templateId = standalone)
+                        const task = taskRepository.createTask(
+                          TaskType.DataRequest,
+                          null, // ✅ Standalone, no templateId
+                          { label: row.text || '' },
+                          row.id,
+                          projectId
+                        );
+
+                        // Genera tutti gli steps da AI
+                        const ddt = await createDDTFromAI_GenerateSteps(
+                          previewData.dataTree,
+                          previewData.rootLabel,
+                          row.text || '',
+                          provider
+                        );
+
+                        // Salva task con steps
+                        taskRepository.updateTask(task.id, {
+                          steps: ddt.steps,
+                          data: ddt.data
+                        }, projectId);
+
+                        // Apri ResponseEditor
+                        taskEditorCtx.open({ id: task.id, type: TaskType.DataRequest, label: row.text, instanceId: row.id });
+
+                        const event = new CustomEvent('taskEditor:open', {
+                          detail: {
+                            id: task.id,
+                            type: TaskType.DataRequest,
+                            label: row.text,
+                            ddt: ddt,
+                            instanceId: row.id
+                          },
+                          bubbles: true
+                        });
+                        document.dispatchEvent(event);
+                      }
+
+                      setShowPreviewDialog(false);
+                      setPreviewData(null);
+                    } catch (err) {
+                      console.error('[NodeRow] Errore durante creazione task da preview:', err);
+                      setShowPreviewDialog(false);
+                      setPreviewData(null);
+                    }
+                  }}
+                  onReject={() => {
+                    console.log('[🔍 NodeRow][PreviewReject] ❌ REJECT - Utente ha rifiutato, aprendo wizard vuoto', {
+                      previewType: previewData?.type
+                    });
+
+                    // ✅ Se rifiutato, apri wizard vuoto per creazione manuale
+                    setShowPreviewDialog(false);
+                    setPreviewData(null);
+
+                    // Crea task vuoto e apri ResponseEditor (che aprirà wizard)
+                    const projectId = getProjectId?.() || undefined;
+                    const task = taskRepository.createTask(
+                      TaskType.DataRequest,
+                      null,
+                      { label: row.text || '' },
+                      row.id,
+                      projectId
+                    );
+
+                    taskEditorCtx.open({ id: task.id, type: TaskType.DataRequest, label: row.text, instanceId: row.id });
+
+                    const event = new CustomEvent('taskEditor:open', {
+                      detail: {
+                        id: task.id,
+                        type: TaskType.DataRequest,
+                        label: row.text,
+                        ddt: null, // ✅ null = ResponseEditor aprirà wizard
+                        instanceId: row.id
+                      },
+                      bubbles: true
+                    });
+                    document.dispatchEvent(event);
+                  }}
+                />
+                </div>
+              </div>
+            </FontProvider>
+          );
+        })(),
+        document.body
       )}
     </>
   );
