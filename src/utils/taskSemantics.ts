@@ -1,46 +1,46 @@
 /**
  * Task Semantics Helper
  *
- * Deduce la semantica del task dalla struttura mainData:
- * - Atomic: 1 mainData, nessun subData
- * - CompositeData: 1 mainData, con subData
- * - Collection: N mainData, nessun subData nei mainData
+ * Deduce la semantica del task dalla struttura data:
+ * - Atomic: 1 data, nessun subData
+ * - CompositeData: 1 data, con subData
+ * - Collection: N data, nessun subData nei data
  *
  * La semantica è dedotta dalla struttura, non da campi espliciti.
  * Questo garantisce coerenza e retrocompatibilità.
  */
 
 /**
- * Deduce la semantica del task dalla struttura mainData
+ * Deduce la semantica del task dalla struttura data
  *
- * @param ddt - DDT instance o template con mainData
+ * @param ddt - DDT instance o template con data
  * @returns 'Atomic' | 'CompositeData' | 'Collection'
  * @throws Error se la struttura è invalida (es. Collection con subData)
  */
 export function getTaskSemantics(ddt: any): 'Atomic' | 'CompositeData' | 'Collection' {
-  // Normalizza mainData a array
-  const mainDataList = Array.isArray(ddt.mainData)
-    ? ddt.mainData
-    : ddt.mainData
-    ? [ddt.mainData]
+  // Normalizza data a array
+  const dataList = Array.isArray(ddt.data)
+    ? ddt.data
+    : ddt.data
+    ? [ddt.data]
     : [];
 
-  // Atomic: 1 mainData, nessun subData
-  if (mainDataList.length === 1 && !mainDataList[0].subData?.length) {
+  // Atomic: 1 data, nessun subData
+  if (dataList.length === 1 && !dataList[0].subData?.length) {
     return 'Atomic';
   }
 
-  // CompositeData: 1 mainData, con subData
-  if (mainDataList.length === 1 && mainDataList[0].subData?.length > 0) {
+  // CompositeData: 1 data, con subData
+  if (dataList.length === 1 && dataList[0].subData?.length > 0) {
     return 'CompositeData';
   }
 
-  // Collection: N mainData, nessun subData nei mainData
-  if (mainDataList.length > 1) {
+  // Collection: N data, nessun subData nei data
+  if (dataList.length > 1) {
     // Validazione: Collection non può avere subData
-    const hasSubData = mainDataList.some(m => m.subData?.length > 0);
+    const hasSubData = dataList.some(m => m.subData?.length > 0);
     if (hasSubData) {
-      throw new Error('Collection cannot have mainData with subData');
+      throw new Error('Collection cannot have data with subData');
     }
     return 'Collection';
   }
@@ -52,26 +52,26 @@ export function getTaskSemantics(ddt: any): 'Atomic' | 'CompositeData' | 'Collec
 /**
  * Valida la struttura del task secondo le regole semantiche
  *
- * @param ddt - DDT instance o template con mainData
+ * @param ddt - DDT instance o template con data
  * @returns true se valida, false altrimenti
  */
 export function validateTaskStructure(ddt: any): { valid: boolean; error?: string } {
   try {
     const semantics = getTaskSemantics(ddt);
 
-    // Validazione: massimo 2 livelli (mainData → subData)
-    const mainDataList = Array.isArray(ddt.mainData)
-      ? ddt.mainData
-      : ddt.mainData ? [ddt.mainData] : [];
+    // Validazione: massimo 2 livelli (data → subData)
+    const dataList = Array.isArray(ddt.data)
+      ? ddt.data
+      : ddt.data ? [ddt.data] : [];
 
-    for (const main of mainDataList) {
+    for (const main of dataList) {
       if (main.subData && Array.isArray(main.subData)) {
         for (const sub of main.subData) {
           // Verifica che non ci siano sub-subData (terzo livello)
           if (sub.subData && Array.isArray(sub.subData) && sub.subData.length > 0) {
             return {
               valid: false,
-              error: 'Maximum 2 levels allowed (mainData → subData). Cannot have sub-subData.'
+              error: 'Maximum 2 levels allowed (data → subData). Cannot have sub-subData.'
             };
           }
         }

@@ -131,7 +131,7 @@ export default function useDDTOrchestrator() {
           label: recognized.label || userDesc,
           type: recognized.type,
           icon: recognized.icon,
-          mainData: [{
+          data: [{
             label: recognized.label || userDesc,
             type: recognized.type,
             icon: recognized.icon,

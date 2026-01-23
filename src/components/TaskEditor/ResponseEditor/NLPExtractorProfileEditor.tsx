@@ -123,7 +123,7 @@ export default function NLPExtractorProfileEditor({
   // ✅ State per modalità di visualizzazione frasi nel Tester (solo per kind === 'intent')
   const [testPhraseMode, setTestPhraseMode] = React.useState<'all-training' | 'selected-training' | 'test-phrases'>('all-training');
 
-  // ✅ Leggi kind da node.kind (mainData.kind) invece di actType
+  // ✅ Leggi kind da node.kind (data.kind) invece di actType
   const nodeKind = React.useMemo(() => {
     return node?.kind || 'generic';
   }, [node?.kind]);

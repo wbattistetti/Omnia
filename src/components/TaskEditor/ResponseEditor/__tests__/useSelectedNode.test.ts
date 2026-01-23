@@ -10,7 +10,7 @@ vi.mock('../treeFactories', () => ({
 describe('useSelectedNode', () => {
   const mockDispatch = vi.fn();
   const mockDDT = {
-    mainData: {
+    data: {
       steps: [
         { type: 'start', escalations: [] },
         { type: 'noMatch', escalations: [] },
@@ -37,7 +37,7 @@ describe('useSelectedNode', () => {
     );
 
     expect(result.current.selectedNodeIndex).toBe(null);
-    expect(result.current.selectedNode).toBe(mockDDT.mainData);
+    expect(result.current.selectedNode).toBe(mockDDT.data);
   });
 
   it('should handle selecting main node (index null)', () => {
@@ -50,7 +50,7 @@ describe('useSelectedNode', () => {
     });
 
     expect(result.current.selectedNodeIndex).toBe(null);
-    expect(result.current.selectedNode).toBe(mockDDT.mainData);
+    expect(result.current.selectedNode).toBe(mockDDT.data);
     expect(mockDispatch).toHaveBeenCalledWith({
       type: 'SET_STEP',
       step: 'start',
@@ -67,7 +67,7 @@ describe('useSelectedNode', () => {
     });
 
     expect(result.current.selectedNodeIndex).toBe(0);
-    expect(result.current.selectedNode).toBe(mockDDT.mainData.subData[0]);
+    expect(result.current.selectedNode).toBe(mockDDT.data.subData[0]);
     expect(mockDispatch).toHaveBeenCalledWith({
       type: 'SET_STEP',
       step: 'subStart',
@@ -76,7 +76,7 @@ describe('useSelectedNode', () => {
 
   it('should handle selecting node without steps', () => {
     const ddtWithoutSteps = {
-      mainData: {
+      data: {
         subData: [
           { noSteps: true },
         ],
@@ -99,7 +99,7 @@ describe('useSelectedNode', () => {
 
   it('should handle selecting node with empty steps array', () => {
     const ddtWithEmptySteps = {
-      mainData: {
+      data: {
         subData: [
           { steps: [] },
         ],
@@ -130,18 +130,18 @@ describe('useSelectedNode', () => {
     });
 
     expect(result.current.selectedNodeIndex).toBe(999);
-    expect(result.current.selectedNode).toBe(mockDDT.mainData); // Falls back to mainData
+    expect(result.current.selectedNode).toBe(mockDDT.data); // Falls back to data
     expect(mockDispatch).toHaveBeenCalledWith({
       type: 'SET_STEP',
-      step: 'start', // mainData has steps, so first step is selected
+      step: 'start', // data has steps, so first step is selected
     });
   });
 
-  it('should handle ddt without mainData', () => {
-    const ddtWithoutMainData = {};
+  it('should handle ddt without data', () => {
+    const ddtWithoutdata = {};
 
     const { result } = renderHook(() =>
-      useSelectedNode(ddtWithoutMainData, mockDispatch, mockLang, mockTranslations)
+      useSelectedNode(ddtWithoutdata, mockDispatch, mockLang, mockTranslations)
     );
 
     act(() => {
@@ -157,7 +157,7 @@ describe('useSelectedNode', () => {
 
   it('should handle ddt without subData', () => {
     const ddtWithoutSubData = {
-      mainData: {
+      data: {
         steps: [{ type: 'start' }],
       },
     };
@@ -170,7 +170,7 @@ describe('useSelectedNode', () => {
       result.current.handleSelectNode(0);
     });
 
-    expect(result.current.selectedNode).toBe(ddtWithoutSubData.mainData);
+    expect(result.current.selectedNode).toBe(ddtWithoutSubData.data);
     expect(mockDispatch).toHaveBeenCalledWith({
       type: 'SET_STEP',
       step: 'start',

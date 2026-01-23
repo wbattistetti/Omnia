@@ -4,12 +4,12 @@ export type StepMessages = Record<string, string[][]>;
 
 // Nuovo tipo per stepMessages con supporto subData
 export interface SubDataStepMessages {
-  mainData: StepMessages;
+  data: StepMessages;
   subData: Record<string, StepMessages>; // key: subData name, value: stepMessages
 }
 
 export function buildSteps(stepResults: StepResults): StepMessages {
-  return buildStepsWithSubData(stepResults).mainData;
+  return buildStepsWithSubData(stepResults).data;
 }
 
 export function buildStepsWithSubData(stepResults: StepResults): SubDataStepMessages {
@@ -23,7 +23,7 @@ export function buildStepsWithSubData(stepResults: StepResults): SubDataStepMess
     // Add more mappings as needed
   };
 
-  const mainDataStepMessages: StepMessages = {};
+  const dataStepMessages: StepMessages = {};
   const subDataStepMessages: Record<string, StepMessages> = {};
 
   for (const result of stepResults) {
@@ -40,7 +40,7 @@ export function buildStepsWithSubData(stepResults: StepResults): SubDataStepMess
           subDataStepMessages[subDataName] = {};
         }
         
-        // Use extractMessages like mainData
+        // Use extractMessages like data
         const messages = extractMessages(result.payload);
         if (Array.isArray(messages) && messages.length > 0) {
           // Map stepType to the correct key (e.g., startPrompt -> start)
@@ -50,7 +50,7 @@ export function buildStepsWithSubData(stepResults: StepResults): SubDataStepMess
             if (!subDataStepMessages[subDataName][mappedStepType]) {
               subDataStepMessages[subDataName][mappedStepType] = [];
             }
-            // Add each message in its own array (same format as mainData)
+            // Add each message in its own array (same format as data)
             for (const msg of messages) {
               subDataStepMessages[subDataName][mappedStepType].push([msg]);
             }
@@ -58,23 +58,23 @@ export function buildStepsWithSubData(stepResults: StepResults): SubDataStepMess
         }
       }
     } else {
-      // Handle mainData steps
+      // Handle data steps
       const mappedStep = stepKeyMap[result.stepKey];
       if (!mappedStep) continue;
       
       const messages = extractMessages(result.payload);
       if (!Array.isArray(messages) || messages.length === 0) continue;
       
-      if (!mainDataStepMessages[mappedStep]) mainDataStepMessages[mappedStep] = [];
+      if (!dataStepMessages[mappedStep]) dataStepMessages[mappedStep] = [];
       // PATCH: ogni messaggio in un array singolo
       for (const msg of messages) {
-        mainDataStepMessages[mappedStep].push([msg]);
+        dataStepMessages[mappedStep].push([msg]);
       }
     }
   }
   
   return {
-    mainData: mainDataStepMessages,
+    data: dataStepMessages,
     subData: subDataStepMessages
   };
 }

@@ -140,53 +140,32 @@ export class DDTTemplateMatcherService {
         const beforeFilter = templates.length;
         templates = templates.filter(t => t.type === 3);
         const afterFilter = templates.length;
-        console.log(`[DDTTemplateMatcherService] 🔍 FILTRO DataRequest: ${beforeFilter} → ${afterFilter} template (solo type === 3)`);
-
-        // Log sample dei template filtrati per debug
-        if (afterFilter > 0 && afterFilter <= 5) {
-          console.log(`[DDTTemplateMatcherService] 📋 Template filtrati:`, templates.map(t => ({
-            id: t.id || t._id,
-            name: t.name,
-            label: t.label,
-            type: t.type
-          })));
-        }
-
-        // ✅ DEBUG: Cerca template "Date" per vedere quale type ha
-        const dateTemplate = DialogueTaskService.getAllTemplates().find(t =>
-          (t.id || t._id?.toString()) === '723a1aa9-a904-4b55-82f3-a501dfbe0351' ||
-          t.label?.toLowerCase() === 'date'
-        );
-        if (dateTemplate) {
-          console.log(`[DDTTemplateMatcherService] 🔍 DEBUG Template "Date":`, {
-            id: dateTemplate.id || dateTemplate._id,
-            name: dateTemplate.name,
-            label: dateTemplate.label,
-            type: dateTemplate.type,
-            typeString: typeof dateTemplate.type,
-            hasType3: dateTemplate.type === 3,
-            taskType: (dateTemplate as any).taskType
-          });
-        }
+        // ❌ RIMOSSO: log verbosi di filtro e debug template
+        // console.log(`[DDTTemplateMatcherService] 🔍 FILTRO DataRequest: ${beforeFilter} → ${afterFilter} template (solo type === 3)`);
       } else if (currentTaskType === 'UNDEFINED' || !currentTaskType || currentTaskType === 'Message') {
         // Se Euristica 1 ha trovato UNDEFINED o Message → cerca TUTTI i template
-        console.log(`[DDTTemplateMatcherService] 🔍 Nessun filtro: cerca TUTTI i ${templates.length} template`);
+        // ❌ RIMOSSO: log verboso per ricerca senza filtro
+        // console.log(`[DDTTemplateMatcherService] 🔍 Nessun filtro: cerca TUTTI i ${templates.length} template`);
       } else {
         // Altri tipi (BackendCall, ProblemClassification, ecc.) → non cercare template DDT
-        console.log(`[DDTTemplateMatcherService] ⏭️ Skip: tipo ${currentTaskType} non supporta template DDT`);
+        // ❌ RIMOSSO: log verboso per skip
+        // console.log(`[DDTTemplateMatcherService] ⏭️ Skip: tipo ${currentTaskType} non supporta template DDT`);
         return null;
       }
 
       // ✅ STEP 5: Rileva lingua del testo
       const detectedLang = this.detectLanguage(text);
-      console.log(`[DDTTemplateMatcherService] 🌐 Lingua rilevata: ${detectedLang} per testo: "${text}"`);
+      // ❌ RIMOSSO: log verboso per lingua rilevata
+      // console.log(`[DDTTemplateMatcherService] 🌐 Lingua rilevata: ${detectedLang} per testo: "${text}"`);
 
       // ✅ STEP 6: Normalizza testo della riga nodo
       const textNormalized = this.normalizeForMatch(text);
-      console.log(`[DDTTemplateMatcherService] 📝 Testo normalizzato: "${text}" → "${textNormalized}"`);
+      // ❌ RIMOSSO: log verboso per normalizzazione
+      // console.log(`[DDTTemplateMatcherService] 📝 Testo normalizzato: "${text}" → "${textNormalized}"`);
 
       if (!textNormalized || textNormalized.length === 0) {
-        console.log(`[DDTTemplateMatcherService] ❌ Testo normalizzato vuoto, skip matching`);
+        // ❌ RIMOSSO: log verboso per testo vuoto
+        // console.log(`[DDTTemplateMatcherService] ❌ Testo normalizzato vuoto, skip matching`);
         return null;
       }
 
@@ -214,13 +193,14 @@ export class DDTTemplateMatcherService {
         const labelUsed = translatedLabel || originalLabel;
 
         if (!labelUsed) {
-          console.log(`[DDTTemplateMatcherService] ⚠️ Template ${templateId} senza label, skip`);
+          // ❌ RIMOSSO: log verboso per template senza label
+          // console.log(`[DDTTemplateMatcherService] ⚠️ Template ${templateId} senza label, skip`);
           continue;
         }
 
         // Normalizza la label
         const templateNormalized = this.normalizeForMatch(labelUsed);
-        console.log(`[DDTTemplateMatcherService] 🔎 Template "${templateId}": label="${labelUsed}" → normalizzata="${templateNormalized}"`);
+        // ❌ RIMOSSO: log verboso per ogni template testato
 
         // Match esatto dopo normalizzazione
         if (templateNormalized === textNormalized) {
@@ -246,28 +226,24 @@ export class DDTTemplateMatcherService {
             templateId,
             normalizedLabelLength: templateNormalized.length
           });
-        } else {
-          console.log(`[DDTTemplateMatcherService] ❌ No match: template="${templateNormalized}" vs testo="${textNormalized}"`);
         }
+        // ❌ RIMOSSO: log "No match" (troppo verboso, 53 template = 53 log)
       }
 
       // ✅ STEP 8: Scegli il match con la label più lunga (più specifica)
-      console.log(`[DDTTemplateMatcherService] 📊 Trovati ${matches.length} match totali`);
+      // ❌ RIMOSSO: log verboso per match totali
+      // console.log(`[DDTTemplateMatcherService] 📊 Trovati ${matches.length} match totali`);
 
       if (matches.length === 0) {
-        console.log(`[DDTTemplateMatcherService] ❌ Nessun match trovato per "${textNormalized}"`);
+        // ❌ RIMOSSO: log verboso per nessun match (normale, non è un errore)
+        // console.log(`[DDTTemplateMatcherService] ❌ Nessun match trovato per "${textNormalized}"`);
         return null;
       }
 
-      // Log dei match trovati
-      if (matches.length > 0) {
-        console.log(`[DDTTemplateMatcherService] 📋 Match trovati:`, matches.map(m => ({
-          templateId: m.templateId,
-          label: m.labelUsed,
-          matchType: m.matchType,
-          normalizedLength: m.normalizedLabelLength
-        })));
-      }
+      // ❌ RIMOSSO: log verboso per match trovati (manteniamo solo il miglior match)
+      // if (matches.length > 0) {
+      //   console.log(`[DDTTemplateMatcherService] 📋 Match trovati:`, matches.map(m => ({...})));
+      // }
 
       // Ordina: prima per tipo (exact > keywords), poi per lunghezza label decrescente
       matches.sort((a, b) => {

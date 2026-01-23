@@ -491,13 +491,18 @@ export const ProjectDataService = {
 
   async loadProjectData(): Promise<ProjectData> {
     const startTime = performance.now();
-    console.log(`[PERF][${new Date().toISOString()}] 📊 START loadProjectData`);
+    // ❌ RIDOTTO: log [PERF] solo in dev mode o con flag
+    if (import.meta.env.DEV && localStorage.getItem('SHOW_PERF_LOGS') === 'true') {
+      console.log(`[PERF][${new Date().toISOString()}] 📊 START loadProjectData`);
+    }
     await new Promise(resolve => setTimeout(resolve, 50));
     const result = { ...projectData };
     const duration = performance.now() - startTime;
-    console.log(`[PERF][${new Date().toISOString()}] ✅ END loadProjectData`, {
-      duration: `${duration.toFixed(2)}ms`
-    });
+    if (import.meta.env.DEV && localStorage.getItem('SHOW_PERF_LOGS') === 'true') {
+      console.log(`[PERF][${new Date().toISOString()}] ✅ END loadProjectData`, {
+        duration: `${duration.toFixed(2)}ms`
+      });
+    }
     return result;
   },
 
@@ -616,7 +621,7 @@ export const ProjectDataService = {
       for (const cat of categories) {
         const items: any[] = Array.isArray(cat?.items) ? cat.items : [];
         for (const it of items) {
-          // Persist when: newly created in-memory, local project acts (no factoryId), or when a Problem payload exists/changed
+          // Persist when: newly created in-memory, local project tasks (no factoryId), or when a Problem payload exists/changed
           const shouldPersist = Boolean(it?.problem) || (it?.isInMemory === true) || !it?.factoryId;
           if (!shouldPersist) continue;
           itemsToPersist.push({
@@ -636,8 +641,8 @@ export const ProjectDataService = {
         }
       }
       if (!itemsToPersist.length) return;
-      // Use bulk endpoint to minimize round-trips
-      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/acts/bulk`, {
+      // ✅ UPDATED: Use tasks/bulk endpoint (unified model) instead of legacy acts/bulk
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/tasks/bulk`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: itemsToPersist })
@@ -645,9 +650,9 @@ export const ProjectDataService = {
       if (!res.ok) {
         try {
           const txt = await res.text();
-          console.warn('[Acts][bulk][error]', { status: res.status, statusText: res.statusText, body: txt });
+          console.warn('[Tasks][bulk][error]', { status: res.status, statusText: res.statusText, body: txt });
         } catch (e) {
-          console.warn('[Acts][bulk][error.no-body]', { status: res.status, statusText: res.statusText });
+          console.warn('[Tasks][bulk][error.no-body]', { status: res.status, statusText: res.statusText });
         }
       } else {
       }
@@ -772,7 +777,7 @@ export async function getAllDialogueTemplates() {
   if (!res.ok) throw new Error('Errore nel recupero dei DataDialogueTemplates');
   const data = await res.json();
   try {
-    // ✅ NUOVA STRUTTURA: Usa subDataIds invece di mainData
+    // ✅ NUOVA STRUTTURA: Usa subDataIds invece di data
     const snap = Array.isArray(data) ? data.map((d: any) => ({
       label: d?.label,
       subDataIds: d?.subDataIds || [],
@@ -834,7 +839,10 @@ export async function loadAllProjectTranslations(
   locale: string = 'pt'
 ): Promise<Record<string, string>> {
   const startTime = performance.now();
-  console.log(`[PERF][${new Date().toISOString()}] 🌐 START loadAllProjectTranslations`, { projectId, locale });
+  // ❌ RIDOTTO: log [PERF] solo in dev mode o con flag
+  if (import.meta.env.DEV && localStorage.getItem('SHOW_PERF_LOGS') === 'true') {
+    console.log(`[PERF][${new Date().toISOString()}] 🌐 START loadAllProjectTranslations`, { projectId, locale });
+  }
 
   const res = await fetch(`/api/projects/${projectId}/translations/all?locale=${locale}`);
   if (!res.ok) {
@@ -852,11 +860,13 @@ export async function loadAllProjectTranslations(
   const jsonDuration = performance.now() - jsonStart;
   const totalDuration = performance.now() - startTime;
 
-  console.log(`[PERF][${new Date().toISOString()}] ✅ END loadAllProjectTranslations`, {
-    duration: `${totalDuration.toFixed(2)}ms`,
-    jsonParseDuration: `${jsonDuration.toFixed(2)}ms`,
-    translationsCount: Object.keys(result).length
-  });
+  if (import.meta.env.DEV && localStorage.getItem('SHOW_PERF_LOGS') === 'true') {
+    console.log(`[PERF][${new Date().toISOString()}] ✅ END loadAllProjectTranslations`, {
+      duration: `${totalDuration.toFixed(2)}ms`,
+      jsonParseDuration: `${jsonDuration.toFixed(2)}ms`,
+      translationsCount: Object.keys(result).length
+    });
+  }
 
   return result;
 }

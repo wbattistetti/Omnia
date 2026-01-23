@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { Pencil, Trash2, Plus, Link, Check, X, ChevronDown, ChevronRight, AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 import IconRenderer from './IconRenderer';
 import FieldStatusDisplay from './FieldStatusDisplay';
-import type { SchemaNode } from '../MainDataCollection';
+import type { SchemaNode } from '../dataCollection';
 import type { FieldErrorState } from '../hooks/useMainEditing';
 import type { FieldProcessingState } from '../hooks/useFieldProcessing';
 import { useFontContext } from '../../../../context/FontContext';

@@ -61,7 +61,7 @@ describe('stepCalculator', () => {
       expect(description).toBe('Detecting data type for email');
     });
 
-    it('should return correct description for mainData steps', () => {
+    it('should return correct description for data steps', () => {
       const dataNode = { name: 'email' };
       
       expect(getStepDescription(1, dataNode)).toBe('Detecting data type for email');
@@ -77,7 +77,7 @@ describe('stepCalculator', () => {
         subData: ['day', 'month', 'year'] 
       };
       
-      // MainData steps (1-5)
+      // data steps (1-5)
       expect(getStepDescription(1, dataNode)).toBe('Detecting data type for date of birth');
       expect(getStepDescription(5, dataNode)).toBe('Generating success prompts for date of birth');
       
@@ -94,7 +94,7 @@ describe('stepCalculator', () => {
         subData: ['street', 'city', 'postal_code', 'country'] 
       };
       
-      // MainData steps (1-5)
+      // data steps (1-5)
       expect(getStepDescription(1, dataNode)).toBe('Detecting data type for address');
       expect(getStepDescription(5, dataNode)).toBe('Generating success prompts for address');
       

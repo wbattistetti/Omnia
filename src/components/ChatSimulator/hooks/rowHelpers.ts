@@ -26,10 +26,10 @@ function getInstanceFromTask(taskId: string): { message?: { text?: string }; ddt
   }
 
   // ✅ Map task DDT fields → instance.ddt (for GetData/DataRequest actions)
-  if (task.mainData && task.mainData.length > 0) {
+  if (task.data && task.data.length > 0) {
     instance.ddt = {
       label: task.label,
-      mainData: task.mainData,
+      data: task.data,
       stepPrompts: task.stepPrompts,
       constraints: task.constraints,
       examples: task.examples
@@ -100,21 +100,21 @@ export function getDDTForRow(
         rawDDT: {
           id: instance.ddt?.id,
           label: instance.ddt?.label,
-          mainData: instance.ddt?.mainData ? (Array.isArray(instance.ddt.mainData) ? {
-            count: instance.ddt.mainData.length,
+          data: instance.ddt?.data ? (Array.isArray(instance.ddt.data) ? {
+            count: instance.ddt.data.length,
             firstMain: {
-              kind: instance.ddt.mainData[0]?.kind,
-              label: instance.ddt.mainData[0]?.label,
-              stepsKeys: instance.ddt.mainData[0]?.steps ? Object.keys(instance.ddt.mainData[0].steps) : [],
-              stepsType: Array.isArray(instance.ddt.mainData[0]?.steps) ? 'array' : typeof instance.ddt.mainData[0]?.steps,
-              stepsStart: instance.ddt.mainData[0]?.steps?.start
+              kind: instance.ddt.data[0]?.kind,
+              label: instance.ddt.data[0]?.label,
+              stepsKeys: instance.ddt.data[0]?.steps ? Object.keys(instance.ddt.data[0].steps) : [],
+              stepsType: Array.isArray(instance.ddt.data[0]?.steps) ? 'array' : typeof instance.ddt.data[0]?.steps,
+              stepsStart: instance.ddt.data[0]?.steps?.start
             }
           } : {
-            kind: instance.ddt.mainData?.kind,
-            label: instance.ddt.mainData?.label,
-            stepsKeys: instance.ddt.mainData?.steps ? Object.keys(instance.ddt.mainData.steps) : [],
-            stepsType: Array.isArray(instance.ddt.mainData?.steps) ? 'array' : typeof instance.ddt.mainData?.steps,
-            stepsStart: instance.ddt.mainData?.steps?.start
+            kind: instance.ddt.data?.kind,
+            label: instance.ddt.data?.label,
+            stepsKeys: instance.ddt.data?.steps ? Object.keys(instance.ddt.data.steps) : [],
+            stepsType: Array.isArray(instance.ddt.data?.steps) ? 'array' : typeof instance.ddt.data?.steps,
+            stepsStart: instance.ddt.data?.steps?.start
           }) : null
         }
       });
@@ -128,23 +128,23 @@ export function getDDTForRow(
         assembled: {
           id: assembled?.id,
           label: assembled?.label,
-          mainData: assembled?.mainData ? (Array.isArray(assembled.mainData) ? {
-            count: assembled.mainData.length,
+          data: assembled?.data ? (Array.isArray(assembled.data) ? {
+            count: assembled.data.length,
             firstMain: {
-              kind: assembled.mainData[0]?.kind,
-              label: assembled.mainData[0]?.label,
-              stepsKeys: assembled.mainData[0]?.steps ? Object.keys(assembled.mainData[0].steps) : [],
-              stepsType: Array.isArray(assembled.mainData[0]?.steps) ? 'array' : typeof assembled.mainData[0]?.steps,
-              stepsStart: assembled.mainData[0]?.steps?.start,
-              stepsFull: JSON.stringify(assembled.mainData[0]?.steps, null, 2).substring(0, 500)
+              kind: assembled.data[0]?.kind,
+              label: assembled.data[0]?.label,
+              stepsKeys: assembled.data[0]?.steps ? Object.keys(assembled.data[0].steps) : [],
+              stepsType: Array.isArray(assembled.data[0]?.steps) ? 'array' : typeof assembled.data[0]?.steps,
+              stepsStart: assembled.data[0]?.steps?.start,
+              stepsFull: JSON.stringify(assembled.data[0]?.steps, null, 2).substring(0, 500)
             }
           } : {
-            kind: (assembled.mainData as any)?.kind,
-            label: (assembled.mainData as any)?.label,
-            stepsKeys: (assembled.mainData as any)?.steps ? Object.keys((assembled.mainData as any).steps) : [],
-            stepsType: Array.isArray((assembled.mainData as any)?.steps) ? 'array' : typeof (assembled.mainData as any)?.steps,
-            stepsStart: (assembled.mainData as any)?.steps?.start,
-            stepsFull: JSON.stringify((assembled.mainData as any)?.steps, null, 2).substring(0, 500)
+            kind: (assembled.data as any)?.kind,
+            label: (assembled.data as any)?.label,
+            stepsKeys: (assembled.data as any)?.steps ? Object.keys((assembled.data as any).steps) : [],
+            stepsType: Array.isArray((assembled.data as any)?.steps) ? 'array' : typeof (assembled.data as any)?.steps,
+            stepsStart: (assembled.data as any)?.steps?.start,
+            stepsFull: JSON.stringify((assembled.data as any)?.steps, null, 2).substring(0, 500)
           }) : null
         }
       });
@@ -161,7 +161,7 @@ export function getDDTForRow(
  * Validates DDT structure and content
  * @param ddt - The DDT to validate
  * @param expectedKind - Optional expected kind ('intent' | 'data' | etc.) for context-specific validation
- * @param basicOnly - If true, only validates basic structure (mainData, label) without type-specific checks
+ * @param basicOnly - If true, only validates basic structure (data, label) without type-specific checks
  * @returns Validation result with reason if invalid
  */
 export function validateDDT(ddt: AssembledDDT | null, expectedKind?: 'intent' | 'data' | string, basicOnly: boolean = false): DDTValidationResult {
@@ -170,13 +170,13 @@ export function validateDDT(ddt: AssembledDDT | null, expectedKind?: 'intent' | 
     return { valid: false, reason: 'DDT_MISSING' };
   }
 
-  // Check mainData structure
-  const mainData = Array.isArray(ddt.mainData) ? ddt.mainData : (ddt.mainData ? [ddt.mainData] : []);
-  if (mainData.length === 0) {
+  // Check data structure
+  const data = Array.isArray(ddt.data) ? ddt.data : (ddt.data ? [ddt.data] : []);
+  if (data.length === 0) {
     return { valid: false, reason: 'DDT_EMPTY' };
   }
 
-  const firstMain = mainData[0];
+  const firstMain = data[0];
 
   // Check label presence (required for engine)
   if (!firstMain?.label || String(firstMain.label).trim().length === 0) {
@@ -331,12 +331,12 @@ export function isRowInteractive(
         hasAssembled: !!assembled,
         assembledId: assembled?.id,
         assembledLabel: assembled?.label,
-        mainDataKind: Array.isArray(assembled?.mainData)
-          ? assembled.mainData[0]?.kind
-          : (assembled?.mainData as any)?.kind,
-        hasStartStep: Array.isArray(assembled?.mainData)
-          ? !!assembled.mainData[0]?.steps?.start
-          : !!(assembled?.mainData as any)?.steps?.start
+        dataKind: Array.isArray(assembled?.data)
+          ? assembled.data[0]?.kind
+          : (assembled?.data as any)?.kind,
+        hasStartStep: Array.isArray(assembled?.data)
+          ? !!assembled.data[0]?.steps?.start
+          : !!(assembled?.data as any)?.steps?.start
       });
     }
 
@@ -352,7 +352,7 @@ export function isRowInteractive(
 
     // Unified validation: basic DDT structure validation only (no type-specific checks)
     // Type-specific validation (intent vs data messages) is done later when needed (e.g., when emitting messages)
-    // Here we only check: DDT exists, has mainData, has label
+    // Here we only check: DDT exists, has data, has label
     const validation = validateDDT(assembled, undefined, true); // basicOnly = true
 
     if (debugEnabled) {

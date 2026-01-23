@@ -38,7 +38,8 @@ export class TemplateTranslationsService {
 
       // Log only in development mode
       if (import.meta.env.DEV) {
-        console.log(`[TemplateTranslationsService] ✅ Caricate ${labelsMap.size} traduzioni label per lingua ${lang}`);
+        // ❌ RIMOSSO: log verboso di caricamento (non necessario all'avvio, si ripete 2 volte!)
+        // console.log(`[TemplateTranslationsService] ✅ Caricate ${labelsMap.size} traduzioni label per lingua ${lang}`);
       }
     } catch (error) {
       console.error('[TemplateTranslationsService] Errore nel caricamento:', error);

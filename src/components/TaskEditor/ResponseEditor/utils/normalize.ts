@@ -50,7 +50,7 @@ export const createTask = (item: any): Task => {
     color,
     params,
     // Copy other task properties if present
-    ...(task?.mainData && { mainData: task.mainData }),
+    ...(task?.data && { data: task.data }),
     ...(task?.stepPrompts && { stepPrompts: task.stepPrompts }),
     ...(task?.constraints && { constraints: task.constraints }),
     ...(task?.examples && { examples: task.examples }),

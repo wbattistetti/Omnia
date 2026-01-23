@@ -45,7 +45,7 @@ export async function preAssembleDDT(
 
     const preAssembledDDT = await assembleFinalDDT(
       schema.label || 'Data',
-      schema.mainData || [],
+      schema.data || [],
       emptyStore,
       {
         escalationCounts: { noMatch: 2, noInput: 2, confirmation: 2 },

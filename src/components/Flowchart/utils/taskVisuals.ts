@@ -105,19 +105,19 @@ export function hasTaskDDT(row: any): boolean {
       return hasMessage;
     }
 
-    // Per DataRequest/ProblemClassification: controlla se c'è templateId o mainData
+    // Per DataRequest/ProblemClassification: controlla se c'è templateId o data
     // ✅ Per DataRequest, permettere sempre l'apertura (può essere creato un DDT vuoto)
     if (taskType === TaskType.DataRequest || taskType === TaskType.ClassifyProblem) {
-      // ✅ Controlla templateId (riferimento a template) o mainData (struttura diretta)
+      // ✅ Controlla templateId (riferimento a template) o data (struttura diretta)
       // ✅ Per DataRequest, ritorna true anche se templateId è null (può essere creato un DDT vuoto)
       const hasTemplateId = task?.templateId && task.templateId !== 'UNDEFINED' && task.templateId !== null;
-      const hasMainData = task?.mainData && task.mainData.length > 0;
+      const hasdata = task?.data && task.data.length > 0;
       // ✅ Per DataRequest, permettere sempre l'apertura (anche con DDT vuoto)
       if (taskType === TaskType.DataRequest) {
         return true; // ✅ Sempre permesso per DataRequest (può essere creato un DDT vuoto)
       }
-      // Per ProblemClassification, richiedi templateId o mainData
-      return Boolean(hasTemplateId || hasMainData);
+      // Per ProblemClassification, richiedi templateId o data
+      return Boolean(hasTemplateId || hasdata);
     }
 
     // Per altri tipi: controlla se c'è contenuto rilevante

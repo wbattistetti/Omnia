@@ -39,8 +39,8 @@ export const EntityDropdown: React.FC<EntityDropdownProps> = ({
   const [localShowCategoryInput, setLocalShowCategoryInput] = useState(false);
 
   const handleEntityClick = (entityType: string) => {
-    if (entityType === 'agentAct' && onCategorySelectorShow) {
-      // Per Agent Acts, mostra il selettore categoria
+    if (entityType === 'taskTemplate' && onCategorySelectorShow) {
+      // Per Task Templates, mostra il selettore categoria
       onCategorySelectorShow(scope);
     } else {
       // Per altri tipi, crea direttamente
@@ -72,13 +72,13 @@ export const EntityDropdown: React.FC<EntityDropdownProps> = ({
                 {config.icon}
               </span>
               {config.label}
-              {entityType === 'agentAct' && (
+              {entityType === 'taskTemplate' && (
                 <span className="ml-auto text-gray-400 text-xs">▶</span>
               )}
             </button>
-            
-            {/* Submenu per categorie (solo per Agent Act) - Mostra direttamente le categorie */}
-            {entityType === 'agentAct' && hoveredEntity === entityType && (
+
+            {/* Submenu per categorie (solo per Task Template) - Mostra direttamente le categorie */}
+            {entityType === 'taskTemplate' && hoveredEntity === entityType && (
               <div className="absolute left-full top-0 ml-1 bg-white border border-gray-300 rounded-md shadow-lg z-60 min-w-[400px]">
                 {/* Categorize Later */}
                 <button
@@ -88,7 +88,7 @@ export const EntityDropdown: React.FC<EntityDropdownProps> = ({
                   <Bot className="w-3 h-3 text-gray-500" />
                   Categorize Later
                 </button>
-                
+
                 {/* Create New Category */}
                 {localShowCategoryInput ? (
                   <div className="flex gap-1 p-2 border-b border-gray-100">
@@ -129,10 +129,10 @@ export const EntityDropdown: React.FC<EntityDropdownProps> = ({
                     Create New Category...
                   </button>
                 )}
-                
+
                 {/* Separatore */}
                 <div className="border-t border-gray-200 my-1"></div>
-                
+
                 {/* Categorie esistenti con scrollbar - ordinate alfabeticamente */}
                 <div className="max-h-40 overflow-y-auto">
                   {existingCategories

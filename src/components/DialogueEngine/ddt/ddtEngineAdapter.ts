@@ -47,7 +47,7 @@ async function executeGetDataHierarchicalBackend(
   console.log('🚀 [DDT ENGINE] Frontend calling BACKEND DDT Engine via SSE');
   console.log('═══════════════════════════════════════════════════════════════════════════');
   console.log('[DDT ENGINE] DDT Instance:', {
-    mainDataCount: ddt.mainData?.length || 0,
+    dataCount: ddt.data?.length || 0,
     hasTranslations: !!callbacks.translations,
     translationsCount: callbacks.translations ? Object.keys(callbacks.translations).length : 0,
     timestamp: new Date().toISOString()

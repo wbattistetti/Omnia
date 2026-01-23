@@ -44,7 +44,8 @@ export class DDTPatternService {
       const data = await response.json();
       this.patterns = data;
       this.cacheLoaded = true;
-      console.log('[DDTPatternService] Pattern caricati:', Object.keys(data).length, 'template');
+      // ❌ RIMOSSO: log verboso di caricamento (non necessario all'avvio)
+      // console.log('[DDTPatternService] Pattern caricati:', Object.keys(data).length, 'template');
       return this.patterns;
     } catch (error) {
       console.error('[DDTPatternService] Errore nel caricamento dei pattern:', error);

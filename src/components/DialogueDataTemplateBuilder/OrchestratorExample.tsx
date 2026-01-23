@@ -11,7 +11,7 @@ async function fetchDataFieldFromAI(userDesc: string): Promise<DataField> {
     body: JSON.stringify({ meaning: userDesc, desc: '' })
   });
   const data = await res.json();
-  return data.ai.mainData;
+  return data.ai.data;
 }
 
 // Funzione per fetch reale messaggio per una runtimeKey

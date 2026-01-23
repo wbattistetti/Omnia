@@ -166,7 +166,7 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
           const task = taskRepository.getTask(taskId);
           if (!task) continue;
 
-          // ✅ Cerca values[] in mainData (non più task.intents)
+          // ✅ Cerca values[] in data (non più task.intents)
           const values = getValuesFromTask(task);
           if (values.length === 0) continue;
 

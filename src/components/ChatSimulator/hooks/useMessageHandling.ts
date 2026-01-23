@@ -63,9 +63,9 @@ export function useMessageHandling({
       // Determina quale node usare (legacy)
       let legacyNode: any = undefined;
       if (state.mode === 'ConfirmingMain') {
-        legacyNode = Array.isArray((currentDDT as any)?.mainData)
-          ? (currentDDT as any)?.mainData[0]
-          : (currentDDT as any)?.mainData;
+        legacyNode = Array.isArray((currentDDT as any)?.data)
+          ? (currentDDT as any)?.data[0]
+          : (currentDDT as any)?.data;
         const { text: escalationText, key, level: foundLevel } = resolveEscalation(legacyNode, 'noInput', escalationLevel, legacyDict, translations);
         if (escalationText) {
           const finalEscalationLevel = foundLevel;
@@ -98,9 +98,9 @@ export function useMessageHandling({
           return;
         }
       } else if (state.mode === 'CollectingSub') {
-        const legacyMain = Array.isArray((currentDDT as any)?.mainData)
-          ? (currentDDT as any)?.mainData[0]
-          : (currentDDT as any)?.mainData;
+        const legacyMain = Array.isArray((currentDDT as any)?.data)
+          ? (currentDDT as any)?.data[0]
+          : (currentDDT as any)?.data;
         const candidate = (legacyMain?.subData || []).find((s: any) => {
           const sub = getSub(state);
           return (s?.id === sub?.id) || (String(s?.label || '').toLowerCase() === String(sub?.label || '').toLowerCase());
@@ -138,9 +138,9 @@ export function useMessageHandling({
           return;
         }
       } else if (state.mode === 'CollectingMain') {
-        legacyNode = Array.isArray((currentDDT as any)?.mainData)
-          ? (currentDDT as any)?.mainData[0]
-          : (currentDDT as any)?.mainData;
+        legacyNode = Array.isArray((currentDDT as any)?.data)
+          ? (currentDDT as any)?.data[0]
+          : (currentDDT as any)?.data;
         const { text: escalationText, key, level: foundLevel } = resolveEscalation(legacyNode, 'noInput', escalationLevel, legacyDict, translations);
         if (escalationText) {
           const finalEscalationLevel = foundLevel;
@@ -273,19 +273,19 @@ export function useMessageHandling({
             // Determina quale node usare (legacy)
             let legacyNode: any = undefined;
             if (state.mode === 'CollectingSub') {
-              // currentDDT.mainData è un array!
-              const legacyMain = Array.isArray((currentDDT as any)?.mainData)
-                ? (currentDDT as any)?.mainData[0]
-                : (currentDDT as any)?.mainData;
+              // currentDDT.data è un array!
+              const legacyMain = Array.isArray((currentDDT as any)?.data)
+                ? (currentDDT as any)?.data[0]
+                : (currentDDT as any)?.data;
               const candidate = (legacyMain?.subData || []).find((s: any) => {
                 return (s?.id === sub?.id) || (String(s?.label || '').toLowerCase() === String(sub?.label || '').toLowerCase());
               });
               legacyNode = candidate || legacyMain;
             } else if (state.mode === 'CollectingMain') {
-              // currentDDT.mainData è un array!
-              legacyNode = Array.isArray((currentDDT as any)?.mainData)
-                ? (currentDDT as any)?.mainData[0]
-                : (currentDDT as any)?.mainData;
+              // currentDDT.data è un array!
+              legacyNode = Array.isArray((currentDDT as any)?.data)
+                ? (currentDDT as any)?.data[0]
+                : (currentDDT as any)?.data;
             }
 
             if (legacyNode) {
@@ -467,19 +467,19 @@ export function useMessageHandling({
 
           let legacyNode: any = undefined;
           if (state.mode === 'CollectingSub') {
-            // currentDDT.mainData è un array!
-            const legacyMain = Array.isArray((currentDDT as any)?.mainData)
-              ? (currentDDT as any)?.mainData[0]
-              : (currentDDT as any)?.mainData;
+            // currentDDT.data è un array!
+            const legacyMain = Array.isArray((currentDDT as any)?.data)
+              ? (currentDDT as any)?.data[0]
+              : (currentDDT as any)?.data;
             const candidate = (legacyMain?.subData || []).find((s: any) => {
               return (s?.id === sub?.id) || (String(s?.label || '').toLowerCase() === String(sub?.label || '').toLowerCase());
             });
             legacyNode = candidate || legacyMain;
           } else if (state.mode === 'CollectingMain') {
-            // currentDDT.mainData è un array!
-            legacyNode = Array.isArray((currentDDT as any)?.mainData)
-              ? (currentDDT as any)?.mainData[0]
-              : (currentDDT as any)?.mainData;
+            // currentDDT.data è un array!
+            legacyNode = Array.isArray((currentDDT as any)?.data)
+              ? (currentDDT as any)?.data[0]
+              : (currentDDT as any)?.data;
           }
 
           if (legacyNode) {

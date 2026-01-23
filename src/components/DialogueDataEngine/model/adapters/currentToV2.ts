@@ -1,4 +1,4 @@
-import type { AssembledDDT, MainDataNode } from '../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledDDT, dataNode } from '../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
 import type {
   DDTTemplateV2,
   DDTNode,
@@ -29,7 +29,7 @@ function getStepsArrayLocal(node: any): any[] {
   });
 }
 
-function getGroup(node: MainDataNode, type: string) {
+function getGroup(node: dataNode, type: string) {
   const groups = getStepsArrayLocal(node);
   return groups.find((g: any) => g?.type === type);
 }
@@ -53,7 +53,7 @@ function extractSingleKey(group: any): string {
   return keys[0] || '';
 }
 
-async function mapNode(current: MainDataNode, asType: 'main' | 'sub', projectLanguage: string): Promise<DDTNode> {
+async function mapNode(current: dataNode, asType: 'main' | 'sub', projectLanguage: string): Promise<DDTNode> {
   const startG = getGroup(current, 'start');
   const noInputG = getGroup(current, 'noInput');
   const noMatchG = getGroup(current, 'noMatch');
@@ -315,9 +315,9 @@ export async function adaptCurrentToV2(current: AssembledDDT, projectLanguage: s
   }
   const language = projectLanguage.toUpperCase();
 
-  const mains: any[] = Array.isArray((current as any).mainData)
-    ? ((current as any).mainData as any[])
-    : [(current as any).mainData];
+  const mains: any[] = Array.isArray((current as any).data)
+    ? ((current as any).data as any[])
+    : [(current as any).data];
   const nodes: DDTNode[] = [];
   for (const m of mains) {
     if (!m) continue;

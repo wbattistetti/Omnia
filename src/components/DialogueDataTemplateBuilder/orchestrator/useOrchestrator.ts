@@ -63,8 +63,8 @@ export function useOrchestrator(
       setStepResults(prev => [...prev, result]);
 
       // Se questo è il step suggestStructureAndConstraints, rigenera gli step con i subData
-      if (step.key === 'suggestStructureAndConstraints' && result.payload?.mainData) {
-        regenerateStepsWithSubData(result.payload.mainData);
+      if (step.key === 'suggestStructureAndConstraints' && result.payload?.data) {
+        regenerateStepsWithSubData(result.payload.data);
       }
 
       // Raccogli translations se presenti

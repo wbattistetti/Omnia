@@ -20,8 +20,8 @@ export interface CategoryPreset {
     EN: string;
     PT: string;
   };
-  // ✅ Mapping category → mainData label per ogni lingua
-  mainDataLabels: {
+  // ✅ Mapping category → data label per ogni lingua
+  dataLabels: {
     IT: string;
     EN: string;
     PT: string;
@@ -41,28 +41,28 @@ export const PRESET_CATEGORIES: Record<string, CategoryPreset> = {
     icons: { icon: 'Sun', color: '#fbbf24' },
     labels: { IT: 'Saluto', EN: 'Greeting', PT: 'Saudação' },
     description: { IT: 'Messaggi di benvenuto', EN: 'Welcome messages', PT: 'Mensagens de boas-vindas' },
-    mainDataLabels: { IT: '', EN: '', PT: '' } // Non applicabile per SayMessage
+    dataLabels: { IT: '', EN: '', PT: '' } // Non applicabile per SayMessage
   },
   'farewell': {
     id: 'farewell',
     icons: { icon: 'Wave', color: '#3b82f6' },
     labels: { IT: 'Congedo', EN: 'Farewell', PT: 'Despedida' },
     description: { IT: 'Messaggi di commiato', EN: 'Farewell messages', PT: 'Mensagens de despedida' },
-    mainDataLabels: { IT: '', EN: '', PT: '' }
+    dataLabels: { IT: '', EN: '', PT: '' }
   },
   'info-short': {
     id: 'info-short',
     icons: { icon: 'MessageSquare', color: '#10b981' },
     labels: { IT: 'Informazione Breve', EN: 'Short Information', PT: 'Informação Curta' },
     description: { IT: 'Messaggi informativi concisi', EN: 'Concise informational messages', PT: 'Mensagens informativas concisas' },
-    mainDataLabels: { IT: '', EN: '', PT: '' }
+    dataLabels: { IT: '', EN: '', PT: '' }
   },
   'info-long': {
     id: 'info-long',
     icons: { icon: 'FileText', color: '#06b6d4' },
     labels: { IT: 'Informazione Dettagliata', EN: 'Detailed Information', PT: 'Informação Detalhada' },
     description: { IT: 'Messaggi informativi estesi', EN: 'Extended informational messages', PT: 'Mensagens informativas estendidas' },
-    mainDataLabels: { IT: '', EN: '', PT: '' }
+    dataLabels: { IT: '', EN: '', PT: '' }
   },
 
   // DataRequest categories (SOLO queste 3 a livello di nodo)
@@ -75,7 +75,7 @@ export const PRESET_CATEGORIES: Record<string, CategoryPreset> = {
       EN: 'Intent/problem classification (e.g. call reason)',
       PT: 'Classificação de intenções/problemas (ex. motivo da chamada)'
     },
-    mainDataLabels: {
+    dataLabels: {
       IT: 'Motivo della chiamata',
       EN: 'Call reason',
       PT: 'Motivo da chamada'
@@ -90,7 +90,7 @@ export const PRESET_CATEGORIES: Record<string, CategoryPreset> = {
       EN: 'Choice among predefined options',
       PT: 'Escolha entre opções predefinidas'
     },
-    mainDataLabels: {
+    dataLabels: {
       IT: 'Scelta',
       EN: 'Choice',
       PT: 'Escolha'
@@ -105,7 +105,7 @@ export const PRESET_CATEGORIES: Record<string, CategoryPreset> = {
       EN: 'Yes/no confirmation',
       PT: 'Confirmação sim/não'
     },
-    mainDataLabels: {
+    dataLabels: {
       IT: 'Conferma',
       EN: 'Confirmation',
       PT: 'Confirmação'
@@ -119,16 +119,16 @@ export const PRESET_CATEGORIES: Record<string, CategoryPreset> = {
 };
 
 /**
- * Ottiene la label del mainData per una categoria nella lingua specificata
+ * Ottiene la label del data per una categoria nella lingua specificata
  */
-export function getMainDataLabelForCategory(
+export function getdataLabelForCategory(
   category: string,
   locale: 'it' | 'en' | 'pt' = 'it'
 ): string | null {
   const preset = PRESET_CATEGORIES[category];
   if (!preset) return null;
   const localeUpper = locale.toUpperCase() as 'IT' | 'EN' | 'PT';
-  return preset.mainDataLabels[localeUpper] || null;
+  return preset.dataLabels[localeUpper] || null;
 }
 
 /**

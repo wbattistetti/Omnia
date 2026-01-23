@@ -18,6 +18,9 @@ export function getTaskText(
   task: any,
   translations: Record<string, string>
 ): string {
+  // 🔍 DEBUG: Log per capire cosa succede
+  const debugEnabled = typeof localStorage !== 'undefined' && localStorage.getItem('debug.getTaskText') === '1';
+
   // Se ha text diretto, usalo
   if (task.text && typeof task.text === 'string' && task.text.trim().length > 0) {
     return task.text;
@@ -31,6 +34,18 @@ export function getTaskText(
     // Se è un GUID valido, cerca la traduzione
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textKey)) {
       const translation = translations[textKey];
+
+      // ❌ RIMOSSO: log verboso quando la traduzione viene trovata (non necessario)
+      // ✅ MANTENUTO: log solo quando la traduzione NON viene trovata (utile per debug)
+      if (debugEnabled && !translation) {
+        console.warn('[getTaskText] ⚠️ GUID found but translation missing', {
+          textKey,
+          translationsCount: Object.keys(translations).length,
+          taskId: task.id,
+          templateId: task.templateId
+        });
+      }
+
       // ✅ Se la traduzione esiste, usala; altrimenti usa il label del template come fallback
       if (translation) {
         return translation;

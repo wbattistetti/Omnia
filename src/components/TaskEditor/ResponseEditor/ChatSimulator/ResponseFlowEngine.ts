@@ -1,5 +1,5 @@
 import { extractTranslations, getEscalationActions, resolveActionText } from './DDTAdapter';
-import { getMainDataList, getSubDataList, getNodeSteps } from '../ddtSelectors';
+import { getdataList, getSubDataList, getNodeSteps } from '../ddtSelectors';
 import { inferExpectedKind, validateByKind, ExpectedKind } from './validators';
 export interface FlowState {
   currentStep: 'start' | 'noInput' | 'noMatch' | 'confirmation' | 'success';
@@ -137,7 +137,7 @@ export class ResponseFlowEngine {
         nodeLabel: node?.label
       });
     }
-    node = node || this.selectedNode || this.ddt?.mainData || this.ddt;
+    node = node || this.selectedNode || this.ddt?.data || this.ddt;
 
     console.log('[FlowEngine] getStepLeadText - final node', {
       hasNode: !!node,
@@ -146,8 +146,8 @@ export class ResponseFlowEngine {
       hasSteps: !!node?.steps,
       stepsKeys: node?.steps ? Object.keys(node.steps) : [],
       selectedNodeLabel: this.selectedNode?.label,
-      hasMainData: !!this.ddt?.mainData,
-      mainDataLength: Array.isArray(this.ddt?.mainData) ? this.ddt.mainData.length : 0
+      hasdata: !!this.ddt?.data,
+      dataLength: Array.isArray(this.ddt?.data) ? this.ddt.data.length : 0
     });
 
     const actions = getEscalationActions(node, stepType, level);
@@ -195,7 +195,7 @@ export class ResponseFlowEngine {
 
   private buildPlan(ddt: any): Array<{ mainIndex: number; subIndex: number | null; label: string; expectedKind: ExpectedKind }>{
     const plan: Array<{ mainIndex: number; subIndex: number | null; label: string; expectedKind: ExpectedKind }> = [];
-    const mains = getMainDataList(ddt);
+    const mains = getdataList(ddt);
     mains.forEach((main, mIdx) => {
       const mainLabel = (main?.label || main?.name || `main_${mIdx}`).toString();
       // Only consider nodes that actually have usable start/success (or any steps)
@@ -218,7 +218,7 @@ export class ResponseFlowEngine {
   private getNodeForPlanIndex(index: number): any {
     if (!this.ddt || !this.plan.length) return this.selectedNode || this.ddt;
     const target = this.plan[Math.min(Math.max(index, 0), this.plan.length - 1)];
-    const mains = getMainDataList(this.ddt);
+    const mains = getdataList(this.ddt);
     const main = mains[target.mainIndex];
     if (target.subIndex == null) return main;
     const subs = getSubDataList(main);

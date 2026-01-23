@@ -87,12 +87,12 @@ export function updateActionTextInDDT(
     return false;
   };
 
-  // Try to update in mainData nodes
+  // Try to update in data nodes
   // Create a deep clone to ensure React detects the change
-  const isArrayFormat = Array.isArray((ddt as any)?.mainData);
+  const isArrayFormat = Array.isArray((ddt as any)?.data);
   const mains = isArrayFormat
-    ? (ddt as any).mainData.map((m: any) => JSON.parse(JSON.stringify(m)))
-    : (ddt as any)?.mainData ? [JSON.parse(JSON.stringify((ddt as any).mainData))] : [];
+    ? (ddt as any).data.map((m: any) => JSON.parse(JSON.stringify(m)))
+    : (ddt as any)?.data ? [JSON.parse(JSON.stringify((ddt as any).data))] : [];
 
   let updated = false;
   for (let i = 0; i < mains.length; i++) {
@@ -119,7 +119,7 @@ export function updateActionTextInDDT(
   if (updated) {
     return {
       ...ddt,
-      mainData: isArrayFormat ? mains : (mains.length > 0 ? mains[0] : undefined)
+      data: isArrayFormat ? mains : (mains.length > 0 ? mains[0] : undefined)
     };
   }
 

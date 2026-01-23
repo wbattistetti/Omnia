@@ -2,17 +2,17 @@ import React from 'react';
 import { Bot, Database, CheckSquare } from 'lucide-react';
 
 export interface EntityTypeConfig {
-  type: 'agentAct' | 'backendCall' | 'task' | 'condition';
+  type: 'taskTemplate' | 'backendCall' | 'task' | 'condition';
   icon: React.ReactNode;
   label: string;
   color: string;
 }
 
 export const ENTITY_TYPE_CONFIGS: Record<string, EntityTypeConfig> = {
-  agentAct: {
-    type: 'agentAct',
+  taskTemplate: {
+    type: 'taskTemplate',
     icon: <Bot className="w-3 h-3" />,
-    label: 'Agent Act',
+    label: 'Task Template',
     color: 'text-green-500'
   },
   backendCall: {
@@ -37,9 +37,9 @@ export const ENTITY_TYPE_CONFIGS: Record<string, EntityTypeConfig> = {
 
 // Configurazioni per diversi contesti
 export const CONTEXT_CONFIGS = {
-  nodes: ['agentAct', 'backendCall', 'task'] as const,
+  nodes: ['taskTemplate', 'backendCall', 'task'] as const,
   conditions: ['condition'] as const,
-  sidebar: ['agentAct', 'backendCall', 'task', 'condition'] as const
+  sidebar: ['taskTemplate', 'backendCall', 'task', 'condition'] as const
 };
 
 export type ContextType = keyof typeof CONTEXT_CONFIGS;

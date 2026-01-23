@@ -8,27 +8,27 @@ import { getTaskSemantics } from '../../../utils/taskSemantics';
  * ✅ Handles Atomic, CompositeData, and Collection
  * ✅ Uses referenceId from instance (not recalculated from template)
  *
- * @param mainData - Single mainData node or array of mainData nodes (for Collection)
+ * @param data - Single data node or array of data nodes (for Collection)
  * @param state - DDT state with memory
  * @param ddtInstance - Optional full DDT instance (needed for Collection semantics)
  */
 export function compositeMainValue(
-  mainData: any,
+  data: any,
   state: DDTState,
   ddtInstance?: any
 ): any {
-  // ✅ For Collection: mainData is an array of mainData nodes
+  // ✅ For Collection: data is an array of data nodes
   // Check if we have ddtInstance to deduce semantics
   if (ddtInstance) {
     const semantics = getTaskSemantics(ddtInstance);
 
     if (semantics === 'Collection') {
       // ✅ Collection: return array of independent values (no composition)
-      const mainDataList = Array.isArray(ddtInstance.mainData)
-        ? ddtInstance.mainData
-        : ddtInstance.mainData ? [ddtInstance.mainData] : [];
+      const dataList = Array.isArray(ddtInstance.data)
+        ? ddtInstance.data
+        : ddtInstance.data ? [ddtInstance.data] : [];
 
-      return mainDataList.map((main: any) => {
+      return dataList.map((main: any) => {
         // ✅ Runtime: use referenceId from instance (not recalculated from template)
         const dataId = main.referenceId || main.id;
         return state.memory[dataId]?.value;
@@ -36,13 +36,13 @@ export function compositeMainValue(
     }
   }
 
-  // ✅ For Atomic/CompositeData: mainData is a single object
-  const subs = mainData.subData || [];
+  // ✅ For Atomic/CompositeData: data is a single object
+  const subs = data.subData || [];
 
   if (subs.length === 0) {
     // ✅ Atomic: return its own value
     // ✅ Runtime: use referenceId from instance (not recalculated from template)
-    const dataId = mainData.referenceId || mainData.id;
+    const dataId = data.referenceId || data.id;
     return state.memory[dataId]?.value;
   }
 

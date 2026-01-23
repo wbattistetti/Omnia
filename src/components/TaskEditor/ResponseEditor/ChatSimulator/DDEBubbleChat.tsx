@@ -175,9 +175,9 @@ export default function DDEBubbleChat({
     });
 
     // Find legacy nodes
-    const legacyMain = Array.isArray((currentDDT as any)?.mainData)
-      ? (currentDDT as any)?.mainData[0]
-      : (currentDDT as any)?.mainData;
+    const legacyMain = Array.isArray((currentDDT as any)?.data)
+      ? (currentDDT as any)?.data[0]
+      : (currentDDT as any)?.data;
     const legacySub = undefined;
 
     console.log('[DDEBubbleChat] useEffect - legacy nodes', {
@@ -319,18 +319,18 @@ export default function DDEBubbleChat({
         }
       }
       const sub = undefined;
-      const legacyMain = Array.isArray((currentDDT as any)?.mainData)
-        ? (currentDDT as any)?.mainData[0]
-        : (currentDDT as any)?.mainData;
+      const legacyMain = Array.isArray((currentDDT as any)?.data)
+        ? (currentDDT as any)?.data[0]
+        : (currentDDT as any)?.data;
       const legacySub = undefined;
       const { text, key: k } = resolveAsk(main, sub, translations, legacyDict, legacyMain, legacySub);
       setMessages((prev) => [...prev, { id: key || generateMessageId('bot'), type: 'bot', text, stepType: 'ask', textKey: k, color: getStepColor('ask') }]);
     } else if (state.mode === 'CollectingSub') {
       const sub = getSub(state);
       // find legacy sub by id label match
-      const legacyMain = Array.isArray((currentDDT as any)?.mainData)
-        ? (currentDDT as any)?.mainData[0]
-        : (currentDDT as any)?.mainData;
+      const legacyMain = Array.isArray((currentDDT as any)?.data)
+        ? (currentDDT as any)?.data[0]
+        : (currentDDT as any)?.data;
       const candidate = (legacyMain?.subData || []).find((s: any) => (s?.id === sub?.id) || (String(s?.label || '').toLowerCase() === String(sub?.label || '').toLowerCase()));
       const { text, key: k } = resolveAsk(main, sub, translations, legacyDict, candidate || legacyMain, candidate);
       setMessages((prev) => [...prev, { id: key, type: 'bot', text, stepType: 'ask', textKey: k, color: getStepColor('ask') }]);
@@ -345,18 +345,18 @@ export default function DDEBubbleChat({
         });
         if (firstMissingRequired) {
           const sub = state.plan?.byId?.[firstMissingRequired];
-          const legacyMain = Array.isArray((currentDDT as any)?.mainData)
-            ? (currentDDT as any)?.mainData[0]
-            : (currentDDT as any)?.mainData;
+          const legacyMain = Array.isArray((currentDDT as any)?.data)
+            ? (currentDDT as any)?.data[0]
+            : (currentDDT as any)?.data;
           const candidate = (legacyMain?.subData || []).find((s: any) => (s?.id === sub?.id) || (String(s?.label || '').toLowerCase() === String(sub?.label || '').toLowerCase()));
           const { text, key: k } = resolveAsk(main, sub, translations, legacyDict, candidate || legacyMain, candidate);
           setMessages((prev) => [...prev, { id: key || generateMessageId('bot'), type: 'bot', text, stepType: 'ask', textKey: k, color: getStepColor('ask') }]);
           return;
         }
       }
-      const legacyMain = Array.isArray((currentDDT as any)?.mainData)
-        ? (currentDDT as any)?.mainData[0]
-        : (currentDDT as any)?.mainData;
+      const legacyMain = Array.isArray((currentDDT as any)?.data)
+        ? (currentDDT as any)?.data[0]
+        : (currentDDT as any)?.data;
       const { text, key: k } = resolveConfirm(state, main, legacyDict, legacyMain, translations);
       console.log('[DDEBubbleChat][ConfirmingMain][EMITTING]', {
         text,
@@ -372,9 +372,9 @@ export default function DDEBubbleChat({
       const text = typeof tKey === 'string' ? (mergedTranslations[tKey] || tKey) : '';
       setMessages((prev) => [...prev, { id: key, type: 'bot', text, stepType: 'notConfirmed', textKey: tKey, color: getStepColor('notConfirmed') }]);
     } else if (state.mode === 'SuccessMain') {
-      const legacyMain = Array.isArray((currentDDT as any)?.mainData)
-        ? (currentDDT as any)?.mainData[0]
-        : (currentDDT as any)?.mainData;
+      const legacyMain = Array.isArray((currentDDT as any)?.data)
+        ? (currentDDT as any)?.data[0]
+        : (currentDDT as any)?.data;
       const { text, key: k } = resolveSuccess(main, translations, legacyDict, legacyMain);
       setMessages((prev) => [...prev, { id: key, type: 'bot', text, stepType: 'success', textKey: k, color: getStepColor('success') }]);
       // Auto-advance engine by sending an empty acknowledgment to move to next main

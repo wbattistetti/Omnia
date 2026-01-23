@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { SchemaNode } from '../MainDataCollection';
+import type { SchemaNode } from '../dataCollection';
 
 interface UseSubEditingProps {
   node: SchemaNode;

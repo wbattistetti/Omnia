@@ -4,8 +4,9 @@
  */
 
 export function showTaskTemplatesV2StatusOnLoad(): void {
-  // Only show in development mode or if explicitly enabled
-  const showStatus = import.meta.env.DEV || localStorage.getItem('SHOW_TASK_TEMPLATES_V2_STATUS') === 'true';
+  // ❌ RIMOSSO: log di status check all'avvio (non necessario per test)
+  // Mostra solo se esplicitamente richiesto
+  const showStatus = localStorage.getItem('SHOW_TASK_TEMPLATES_V2_STATUS') === 'true';
   if (!showStatus) {
     return;
   }

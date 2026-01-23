@@ -69,10 +69,11 @@ class TaskTemplateService {
 
           // Log only in development mode
           if (import.meta.env.DEV) {
-            console.log(`✅ [TaskTemplateService] Caricati ${this.templates.size} template dal database`, {
-              templateIds: Array.from(this.templates.keys()),
-              contractsCount: Array.from(this.templates.values()).filter(t => (t as any).nlpContract).length
-            });
+            // ❌ RIMOSSO: log verboso di caricamento (non necessario all'avvio)
+            // console.log(`✅ [TaskTemplateService] Caricati ${this.templates.size} template dal database`, {
+            //   templateIds: Array.from(this.templates.keys()),
+            //   contractsCount: Array.from(this.templates.values()).filter(t => (t as any).nlpContract).length
+            // });
           }
 
           this.initialized = true;
@@ -228,8 +229,8 @@ class TaskTemplateService {
         }
       };
     } else if (editorType === 'ddt') {
-      // GetData: mainData, label, stepPrompts, etc. (fields directly on task, no value wrapper)
-      keys.mainData = {
+      // GetData: data, label, stepPrompts, etc. (fields directly on task, no value wrapper)
+      keys.data = {
         type: 'ddt',
         required: true,
         ideMapping: {

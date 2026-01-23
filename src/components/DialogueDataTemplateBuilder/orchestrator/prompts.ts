@@ -4,7 +4,7 @@ export const structurePrompt = (meaning: string) => `You are an expert in design
 Generate a JSON DDT for acquiring a ${meaning}.
 
 Only include:
-- structure (mainData, variable)
+- structure (data, variable)
 - composite flag
 - subData if needed (like day, month, year)
 - steps: Normal, NoInput, NoMatch, Confirmation, Success (with 1–2 escalations each)
@@ -20,7 +20,7 @@ EXAMPLE OUTPUT (truncated):
   "ddt": {
     "label": "Date of Birth",
     "type": "composite",
-    "mainData": { "label": "", "description": "", "parameter": "dateOfBirth" },
+    "data": { "label": "", "description": "", "parameter": "dateOfBirth" },
     "variable": { "label": "", "name": "dateOfBirth" },
     "constraints": [
       {
@@ -34,7 +34,7 @@ EXAMPLE OUTPUT (truncated):
       {
         "label": "Day",
         "type": "primitive",
-        "mainData": { "label": "", "parameter": "birthDay" },
+        "data": { "label": "", "parameter": "birthDay" },
         "variable": { "label": "", "name": "birthDay" },
         "constraints": [
           { "label": "Day range", "summary": "1 to 31", "payoff": "Valid day of the month", "type": "range" }
@@ -116,7 +116,7 @@ Return only a JSON object mapping each key to its text.
 
 Example:
 {
-  "mainData.variable.label": "Date of birth",
+  "data.variable.label": "Date of birth",
   "steps.0.escalation.0.parameters.0.value": "Can you tell me your full date of birth?",
   "subData.0.label": "Day"
 }`; 

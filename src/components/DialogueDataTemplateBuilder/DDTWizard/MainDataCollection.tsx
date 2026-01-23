@@ -1,6 +1,6 @@
 import React from 'react';
 import { Folder, Plus } from 'lucide-react';
-import MainDataWizard from './MainDataWizard';
+import DataWizard from './MainDataWizard';
 import { useFontContext } from '../../../context/FontContext';
 
 export interface SchemaNode {
@@ -24,7 +24,7 @@ export interface Constraint {
   format?: string;
 }
 
-interface MainDataCollectionProps {
+interface dataCollectionProps {
   rootLabel: string;
   mains: SchemaNode[];
   onChangeMains: (next: SchemaNode[]) => void;
@@ -39,7 +39,7 @@ interface MainDataCollectionProps {
   compact?: boolean; // ✅ Modalità compatta per conferma
 }
 
-const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: Record<string, number>, autoEditIndex?: number | null, onChangeEvent?: (e: any) => void }> = ({ rootLabel, mains, onChangeMains, onAddMain, progressByPath, fieldProcessingStates, selectedIdx, onSelect, autoEditIndex, onChangeEvent, onAutoMap, onRetryField, onCreateManually, compact = false }) => {
+const DataCollection: React.FC<dataCollectionProps & { progressByPath?: Record<string, number>, autoEditIndex?: number | null, onChangeEvent?: (e: any) => void }> = ({ rootLabel, mains, onChangeMains, onAddMain, progressByPath, fieldProcessingStates, selectedIdx, onSelect, autoEditIndex, onChangeEvent, onAutoMap, onRetryField, onCreateManually, compact = false }) => {
   const { combinedClass } = useFontContext();
   const handleChangeAt = (idx: number, nextNode: SchemaNode) => {
     const next = mains.slice();
@@ -51,7 +51,7 @@ const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: 
     next.splice(idx, 1);
     onChangeMains(next);
   };
-  // handleAddSubAt removed (plus now inline in MainDataWizard)
+  // handleAddSubAt removed (plus now inline in dataWizard)
 
   // const showRootLabel = mains.length > 1;
   return (
@@ -161,7 +161,7 @@ const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: 
       <div>
         {mains.map((m, i) => (
           <div key={i} onClick={() => onSelect(i)}>
-            <MainDataWizard
+            <DataWizard
               node={m}
               onChange={(n) => handleChangeAt(i, n)}
               onRemove={() => handleRemoveAt(i)}
@@ -186,4 +186,4 @@ const MainDataCollection: React.FC<MainDataCollectionProps & { progressByPath?: 
   );
 };
 
-export default MainDataCollection;
+export default DataCollection;

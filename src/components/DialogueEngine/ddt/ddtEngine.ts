@@ -2,7 +2,7 @@
 // Implementazione parallela: NON tocca il codice esistente
 // Permette test side-by-side e switch graduale
 
-import type { AssembledDDT, MainDataNode } from '../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledDDT, dataNode } from '../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
 import type { DDTNavigatorCallbacks } from './ddtTypes';
 import { getStep, getEscalationRecovery, executeStep } from './ddtSteps';
 import { getTaskSemantics } from '../../../utils/taskSemantics';
@@ -31,8 +31,8 @@ export interface Response {
 }
 
 export interface CurrentData {
-  mainData: MainDataNode;
-  subData?: MainDataNode;
+  data: dataNode;
+  subData?: dataNode;
   nodeId: string;
   isMain: boolean;
 }
@@ -93,7 +93,7 @@ export async function runDDT(
   console.log('[DDTEngine][runDDT] Starting NEW engine', {
     ddtId: ddtInstance.id,
     ddtLabel: ddtInstance.label,
-    hasMainData: !!ddtInstance.mainData,
+    hasdata: !!ddtInstance.data,
     timestamp: new Date().toISOString()
   });
 
@@ -171,7 +171,7 @@ export async function runDDT(
       }
 
       // Mostra escalation
-      const targetNode = currData.isMain ? currData.mainData : currData.subData!;
+      const targetNode = currData.isMain ? currData.data : currData.subData!;
       const stepType = currTurnEvent === 'NoMatch' ? 'noMatch' : 'noInput';
       const step = getStep(targetNode, stepType);
       if (step) {
@@ -218,7 +218,7 @@ export async function runDDT(
 
     // 10. Se siamo andati a Success, esegui step Success prima di terminare
     if (turnStateDesc.turnState === 'Success') {
-      const targetNode = currData.isMain ? currData.mainData : currData.subData!;
+      const targetNode = currData.isMain ? currData.data : currData.subData!;
       const successStep = getStep(targetNode, 'success');
       if (successStep) {
         await executeStep(successStep, callbacks, 'success', 0);
@@ -268,22 +268,22 @@ function getNextData(
   ddtInstance: AssembledDDT,
   state: DDTEngineState
 ): CurrentData | null {
-  // Normalizza mainData (può essere array o singolo oggetto)
-  const mainDataList = Array.isArray(ddtInstance.mainData)
-    ? ddtInstance.mainData
-    : ddtInstance.mainData
-    ? [ddtInstance.mainData]
+  // Normalizza data (può essere array o singolo oggetto)
+  const dataList = Array.isArray(ddtInstance.data)
+    ? ddtInstance.data
+    : ddtInstance.data
+    ? [ddtInstance.data]
     : [];
 
   // ✅ Deduce semantics from structure
   const semantics = getTaskSemantics(ddtInstance);
 
-  // ✅ For Collection: iterate over all mainData[] (each is independent)
-  // ✅ For Atomic/CompositeData: iterate over mainData[0] and its subData
-  for (const mainData of mainDataList) {
+  // ✅ For Collection: iterate over all data[] (each is independent)
+  // ✅ For Atomic/CompositeData: iterate over data[0] and its subData
+  for (const data of dataList) {
     // ✅ Runtime: use referenceId from instance (not recalculated from template)
-    const mainDataId = (mainData as any).referenceId || mainData.id;
-    const mainMemory = state.memory[mainDataId];
+    const dataId = (data as any).referenceId || data.id;
+    const mainMemory = state.memory[dataId];
     const mainValue = mainMemory?.value;
     const isMainEmpty =
       !mainValue ||
@@ -292,38 +292,38 @@ function getNextData(
       mainValue === null ||
       mainValue === undefined;
 
-    // Se mainData è vuoto, ritorna mainData
+    // Se data è vuoto, ritorna data
     if (isMainEmpty) {
       return {
-        mainData,
-        nodeId: mainDataId,
+        data,
+        nodeId: dataId,
         isMain: true
       };
     }
 
-    // Se mainData richiede confirmation, controlla se è confirmed
-    if (requiresConfirmation(mainData)) {
+    // Se data richiede confirmation, controlla se è confirmed
+    if (requiresConfirmation(data)) {
       const isMainConfirmed = mainMemory?.confirmed === true;
-      // Se non è confirmed, ritorna mainData (per confirmation)
+      // Se non è confirmed, ritorna data (per confirmation)
       if (!isMainConfirmed) {
         return {
-          mainData,
-          nodeId: mainDataId,
+          data,
+          nodeId: dataId,
           isMain: true
         };
       }
-      // Se è confirmed, continua al prossimo mainData o controlla subData
+      // Se è confirmed, continua al prossimo data o controlla subData
     }
 
     // ✅ For Collection: skip subData check (Collection cannot have subData)
     if (semantics === 'Collection') {
-      // Collection: all mainData[] are independent, continue to next mainData
+      // Collection: all data[] are independent, continue to next data
       continue;
     }
 
     // ✅ For CompositeData: check if any subData is empty
-    if (mainData.subData && Array.isArray(mainData.subData)) {
-      const requiredSubs = mainData.subData.filter(
+    if (data.subData && Array.isArray(data.subData)) {
+      const requiredSubs = data.subData.filter(
         (sub) => sub.required !== false
       );
 
@@ -340,7 +340,7 @@ function getNextData(
         if (isSubEmpty) {
           // SubData vuoto → ritorna subData
           return {
-            mainData,
+            data,
             subData,
             nodeId: subDataId,
             isMain: false
@@ -349,7 +349,7 @@ function getNextData(
       }
     }
 
-    // MainData e tutti i suoi sub sono pieni → continua al prossimo main
+    // data e tutti i suoi sub sono pieni → continua al prossimo main
   }
 
   // Nessun dato vuoto trovato
@@ -367,7 +367,7 @@ function getResponse(
   limits: Limits
 ): Response {
   // Determina il nodo target (main o sub)
-  const targetNode = currData.isMain ? currData.mainData : currData.subData!;
+  const targetNode = currData.isMain ? currData.data : currData.subData!;
 
   if (!targetNode) {
     return {
@@ -491,12 +491,12 @@ async function executeResponse(
   // Se è confirmation, recupera i valori dalla memoria per sostituire {input}
   let inputValue: any = undefined;
   if (response.stepType === 'confirmation' && currData && state) {
-    const mainData = currData.mainData;
+    const data = currData.data;
 
-    // Se mainData ha subData, formatta tutti i valori
-    if (mainData.subData && Array.isArray(mainData.subData) && mainData.subData.length > 0) {
+    // Se data ha subData, formatta tutti i valori
+    if (data.subData && Array.isArray(data.subData) && data.subData.length > 0) {
       const values: string[] = [];
-      for (const subData of mainData.subData) {
+      for (const subData of data.subData) {
         const subValue = state.memory[subData.id]?.value;
         if (subValue !== undefined && subValue !== null) {
           values.push(String(subValue));
@@ -504,8 +504,8 @@ async function executeResponse(
       }
       inputValue = values.join(' ');
     } else {
-      // MainData atomico
-      const mainValue = state.memory[mainData.id]?.value;
+      // data atomico
+      const mainValue = state.memory[data.id]?.value;
       if (mainValue !== undefined && mainValue !== null) {
         inputValue = mainValue;
       }
@@ -539,7 +539,7 @@ async function processUserInput(
   }
 
   const nodeId = currData.nodeId;
-  const node = currData.isMain ? currData.mainData : currData.subData!;
+  const node = currData.isMain ? currData.data : currData.subData!;
 
   // ✅ Carica contract come fa il vecchio engine (per mapping canonicalKey → subId)
   // Il contract DEVE essere caricato dall'originalNode nel DDT (come fa useNewFlowOrchestrator)
@@ -631,12 +631,12 @@ async function processUserInput(
         return 'NoMatch';
       } else {
         // Salva valore in memory
-        // Se mainData ha subData e il valore è un oggetto, decomponi e salva ogni subData
+        // Se data ha subData e il valore è un oggetto, decomponi e salva ogni subData
         // Il contract estrae valori con chiavi canonicalKey ("day", "month", "year")
         // Devo mappare canonicalKey → subData.id usando getSubIdForCanonicalKey (come fa il vecchio engine)
         if (currData.isMain && recognitionResult.value && typeof recognitionResult.value === 'object') {
-          const mainData = currData.mainData;
-          if (mainData.subData && Array.isArray(mainData.subData)) {
+          const data = currData.data;
+          if (data.subData && Array.isArray(data.subData)) {
             // Log essenziale
 
             // ✅ USA LO STESSO METODO DEL VECCHIO ENGINE: getSubIdForCanonicalKey
@@ -661,7 +661,7 @@ async function processUserInput(
 
             // Fallback: prova a mappare usando id, label, name direttamente
             if (mappedCount === 0) {
-              for (const subData of mainData.subData) {
+              for (const subData of data.subData) {
                 const subValue = recognitionResult.value[subData.id] ||
                                 recognitionResult.value[subData.label] ||
                                 recognitionResult.value[subData.name];
@@ -672,10 +672,10 @@ async function processUserInput(
               }
             }
 
-            // Salva anche l'oggetto completo sotto mainData.id per riferimento
+            // Salva anche l'oggetto completo sotto data.id per riferimento
             updateMemory(state, currData.nodeId, recognitionResult.value);
           } else {
-            // MainData atomico, salva direttamente
+            // data atomico, salva direttamente
             updateMemory(state, currData.nodeId, recognitionResult.value);
           }
         } else {
@@ -695,9 +695,9 @@ async function processUserInput(
       // Match parziale: tratta come match
       // Stessa logica di decomposizione per partialMatch
       if (currData.isMain && recognitionResult.value && typeof recognitionResult.value === 'object') {
-        const mainData = currData.mainData;
-        if (mainData.subData && Array.isArray(mainData.subData)) {
-          for (const subData of mainData.subData) {
+        const data = currData.data;
+        if (data.subData && Array.isArray(data.subData)) {
+          for (const subData of data.subData) {
             const subValue = recognitionResult.value[subData.id] ||
                             recognitionResult.value[subData.label] ||
                             recognitionResult.value[subData.name];
@@ -737,8 +737,8 @@ function getState(
       // Match rilevante → aggiorna memory e determina prossimo stato
       if (!currData.isMain) {
         // Siamo in CollectingSub e il sub è stato riempito
-        const mainData = currData.mainData;
-        const missingSubs = findMissingRequiredSubs(mainData, state.memory);
+        const data = currData.data;
+        const missingSubs = findMissingRequiredSubs(data, state.memory);
 
         if (missingSubs.length > 0) {
           // Ci sono ancora sub mancanti → continua a raccogliere sub
@@ -750,7 +750,7 @@ function getState(
           };
         } else {
           // Tutti i sub sono pieni → controlla se serve confirmation
-          if (requiresConfirmation(mainData)) {
+          if (requiresConfirmation(data)) {
             return {
               turnState: 'Confirmation',
               context: 'CollectingMain',
@@ -766,17 +766,17 @@ function getState(
         }
       } else {
         // Siamo in CollectingMain
-        const mainData = currData.mainData;
+        const data = currData.data;
 
-        // Controlla se mainData ha subData e se sono tutti pieni
-        if (mainData.subData && mainData.subData.length > 0) {
-          const missingSubs = findMissingRequiredSubs(mainData, state.memory);
+        // Controlla se data ha subData e se sono tutti pieni
+        if (data.subData && data.subData.length > 0) {
+          const missingSubs = findMissingRequiredSubs(data, state.memory);
 
           console.log('[DDTEngine] 🔍 Match: checking subData', {
-            totalSubs: mainData.subData.length,
+            totalSubs: data.subData.length,
             missingCount: missingSubs.length,
             memoryKeys: Object.keys(state.memory),
-            subDataCheck: mainData.subData.map(s => ({
+            subDataCheck: data.subData.map(s => ({
               id: s.id.substring(0, 20) + '...',
               inMemory: !!state.memory[s.id],
               value: state.memory[s.id]?.value
@@ -793,7 +793,7 @@ function getState(
             };
           } else {
             // Tutti i sub sono pieni → confirmation o success
-            if (requiresConfirmation(mainData)) {
+            if (requiresConfirmation(data)) {
               console.log('[DDTEngine] ✅ All subs filled → Confirmation');
               return {
                 turnState: 'Confirmation',
@@ -809,9 +809,9 @@ function getState(
             }
           }
         } else {
-          // MainData atomico (senza sub) → confirmation o success
-          if (requiresConfirmation(mainData)) {
-            console.log('[DDTEngine] ✅ Atomic mainData → Confirmation');
+          // data atomico (senza sub) → confirmation o success
+          if (requiresConfirmation(data)) {
+            console.log('[DDTEngine] ✅ Atomic data → Confirmation');
             return {
               turnState: 'Confirmation',
               context: 'CollectingMain',
@@ -907,24 +907,24 @@ function initializeState(ddtInstance: AssembledDDT): DDTEngineState {
     context: 'CollectingMain'
   };
 
-  // Normalizza mainData
-  const mainDataList = Array.isArray(ddtInstance.mainData)
-    ? ddtInstance.mainData
-    : ddtInstance.mainData
-    ? [ddtInstance.mainData]
+  // Normalizza data
+  const dataList = Array.isArray(ddtInstance.data)
+    ? ddtInstance.data
+    : ddtInstance.data
+    ? [ddtInstance.data]
     : [];
 
   // Inizializza counters per tutti i nodi
-  for (const mainData of mainDataList) {
-    state.counters[mainData.id] = {
+  for (const data of dataList) {
+    state.counters[data.id] = {
       noMatch: 0,
       noInput: 0,
       notConfirmed: 0,
       confirmation: 0
     };
 
-    if (mainData.subData && Array.isArray(mainData.subData)) {
-      for (const subData of mainData.subData) {
+    if (data.subData && Array.isArray(data.subData)) {
+      for (const subData of data.subData) {
         state.counters[subData.id] = {
           noMatch: 0,
           noInput: 0,
@@ -958,21 +958,21 @@ function markAsConfirmed(state: DDTEngineState, nodeId: string): void {
 }
 
 /**
- * Finds missing required subData for a mainData node
+ * Finds missing required subData for a data node
  * ✅ Uses referenceId from instance (not recalculated from template)
  * ✅ Handles CompositeData: checks all subData
  */
 function findMissingRequiredSubs(
-  mainData: MainDataNode,
+  data: dataNode,
   memory: Record<string, { value: any; confirmed: boolean }>
-): MainDataNode[] {
-  const missingSubs: MainDataNode[] = [];
+): dataNode[] {
+  const missingSubs: dataNode[] = [];
 
-  if (!mainData.subData || !Array.isArray(mainData.subData)) {
+  if (!data.subData || !Array.isArray(data.subData)) {
     return missingSubs;
   }
 
-  for (const subData of mainData.subData) {
+  for (const subData of data.subData) {
     if (subData.required !== false) {
       // ✅ Runtime: use referenceId from instance (not recalculated from template)
       const dataId = (subData as any).referenceId || subData.id;
@@ -993,15 +993,15 @@ function findMissingRequiredSubs(
 }
 
 /**
- * Checks if a mainData node is saturated
+ * Checks if a data node is saturated
  * ✅ Uses referenceId from instance (not recalculated from template)
  */
-function isMainDataSaturated(
-  mainData: MainDataNode,
+function isdataSaturated(
+  data: dataNode,
   memory: Record<string, { value: any; confirmed: boolean }>
 ): boolean {
   // ✅ Runtime: use referenceId from instance (not recalculated from template)
-  const dataId = (mainData as any).referenceId || mainData.id;
+  const dataId = (data as any).referenceId || data.id;
   const mainValue = memory[dataId]?.value;
   const isMainEmpty =
     !mainValue ||
@@ -1014,8 +1014,8 @@ function isMainDataSaturated(
   }
 
   // If has subData, check all are saturated
-  if (mainData.subData && Array.isArray(mainData.subData) && mainData.subData.length > 0) {
-    return findMissingRequiredSubs(mainData, memory).length === 0;
+  if (data.subData && Array.isArray(data.subData) && data.subData.length > 0) {
+    return findMissingRequiredSubs(data, memory).length === 0;
   }
 
   return true;
@@ -1040,10 +1040,10 @@ function updateState(
 
   // Aggiorna currentMainId e currentSubId
   if (turnStateDesc.context === 'CollectingMain') {
-    state.currentMainId = currData.mainData.id;
+    state.currentMainId = currData.data.id;
     state.currentSubId = undefined;
   } else {
-    state.currentMainId = currData.mainData.id;
+    state.currentMainId = currData.data.id;
     state.currentSubId = turnStateDesc.nextDataId;
   }
 
@@ -1090,9 +1090,9 @@ function getNodeState(
   return { step, counters };
 }
 
-function requiresConfirmation(mainData: MainDataNode): boolean {
+function requiresConfirmation(data: dataNode): boolean {
   // Controlla se il nodo ha uno step di confirmation
-  return getStep(mainData, 'confirmation') !== null;
+  return getStep(data, 'confirmation') !== null;
 }
 
 function isYes(input: string): boolean {

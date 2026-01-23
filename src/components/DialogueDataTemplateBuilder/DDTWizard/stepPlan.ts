@@ -1,4 +1,4 @@
-import type { SchemaNode, Constraint } from './MainDataCollection';
+import type { SchemaNode, Constraint } from './dataCollection';
 
 export type PlanStepType =
   | 'start'

@@ -4,7 +4,7 @@ import { TaskType, templateIdToTaskType } from '../../../../types/taskTypes';
 
 /**
  * Converte IntentMessages in formato DDT steps e li salva nel DDT
- * ✅ AGGIORNATO: Usa steps a root level (non più mainData[0].steps)
+ * ✅ AGGIORNATO: Usa steps a root level (non più data[0].steps)
  * ✅ AGGIORNATO: Non crea più kind: 'intent' - tutto è DataRequest
  */
 export function saveIntentMessagesToDDT(ddt: any, messages: IntentMessages): any {
@@ -16,10 +16,10 @@ export function saveIntentMessagesToDDT(ddt: any, messages: IntentMessages): any
   // Crea una copia del DDT
   const updated = JSON.parse(JSON.stringify(ddt));
 
-  // ✅ Assicurati che mainData[0] esista (per struttura dati)
-  if (!Array.isArray(updated.mainData) || updated.mainData.length === 0) {
+  // ✅ Assicurati che data[0] esista (per struttura dati)
+  if (!Array.isArray(updated.data) || updated.data.length === 0) {
     const firstMainId = uuidv4();
-    updated.mainData = [{
+    updated.data = [{
       id: firstMainId,
       label: updated.label || 'Data',
       type: 'text', // Default type
@@ -27,13 +27,13 @@ export function saveIntentMessagesToDDT(ddt: any, messages: IntentMessages): any
     }];
   }
 
-  const firstMain = updated.mainData[0];
+  const firstMain = updated.data[0];
   const firstMainId = firstMain.id || uuidv4();
   if (!firstMain.id) {
     firstMain.id = firstMainId;
   }
 
-  // ✅ Inizializza steps a root level (non più in mainData[0])
+  // ✅ Inizializza steps a root level (non più in data[0])
   if (!updated.steps) {
     updated.steps = {};
   }
@@ -82,7 +82,7 @@ export function saveIntentMessagesToDDT(ddt: any, messages: IntentMessages): any
     escalations: messageList.map(msg => createEscalation(msg)),
   });
 
-  // ✅ Crea steps a root level (non più in mainData[0].steps)
+  // ✅ Crea steps a root level (non più in data[0].steps)
   if (messages.start && messages.start.length > 0) {
     updated.steps[firstMainId].start = createStep('start', messages.start);
   }

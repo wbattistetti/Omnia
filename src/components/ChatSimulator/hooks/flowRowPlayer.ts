@@ -78,7 +78,7 @@ export function playDDT(
     }
 
     // Extract legacyMain for resolveAsk
-    const legacyMain = Array.isArray(ddt.mainData) ? ddt.mainData[0] : ddt.mainData;
+    const legacyMain = Array.isArray(ddt.data) ? ddt.data[0] : ddt.data;
     const main = null; // Not needed for initial message emission - resolveAsk uses legacyMain
 
     if (debugEnabled) {

@@ -1,7 +1,7 @@
 // DDT Engine Types - New Clean Architecture
 // This file defines types for the new DDT engine implementation
 
-import type { AssembledDDT, MainDataNode } from '../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledDDT, dataNode } from '../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
 import type { DDTNavigatorCallbacks } from './ddtTypes';
 
 // ============================================================================
@@ -27,8 +27,8 @@ export interface Response {
 }
 
 export interface CurrentData {
-  mainData: MainDataNode;
-  subData?: MainDataNode;
+  data: dataNode;
+  subData?: dataNode;
   nodeId: string;
   isMain: boolean;
 }

@@ -10,8 +10,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { TaskType } from '../../../../types/taskTypes';
 import { taskRepository } from '../../../../services/TaskRepository';
 import { getTemplateId } from '../../../../utils/taskHelpers';
-import { isDDTEmpty, hasMainDataButNoStepPrompts } from '../../../../utils/ddt';
-import { getMainDataList } from '../ddtSelectors';
+import { isDDTEmpty, hasdataButNoStepPrompts } from '../../../../utils/ddt';
+import { getdataList } from '../ddtSelectors';
 import type { Task } from '../../../../types/taskTypes';
 import { findLocalTemplate } from './helpers/templateMatcher';
 import { callAIInference } from './helpers/aiInference';
@@ -72,7 +72,7 @@ export function useWizardInference({
 
   // Stabilizza valori primitivi
   const stableDdtLabel = ddt?.label ?? '';
-  const stableDdtMainDataLength = ddt?.mainData?.length ?? 0;
+  const stableDdtdataLength = ddt?.data?.length ?? 0;
   const stableTaskId = task?.id ?? '';
   const stableTaskType = task?.type ?? TaskType.UNDEFINED;
   const stableTaskLabel = task?.label ?? '';
@@ -99,7 +99,7 @@ export function useWizardInference({
     // ========================================================================
 
     // Se kind === "intent" non mostrare wizard
-    const currentMainList = getMainDataList(currentDDT);
+    const currentMainList = getdataList(currentDDT);
     const firstMain = currentMainList[0];
     if (firstMain?.kind === 'intent') {
       setShowWizard(false);
@@ -108,21 +108,53 @@ export function useWizardInference({
     }
 
     const empty = isDDTEmpty(currentDDT);
-    const hasStructureButNoMessages = hasMainDataButNoStepPrompts(currentDDT, task);
+    const hasStructureButNoMessages = hasdataButNoStepPrompts(currentDDT, task);
 
-    // ✅ DEBUG: Leggi da task.steps[firstMainId], NON da currentDDT.steps[firstMainId]
-    // Gli steps vivono solo in task.steps, il DDT contiene solo la struttura
-    if (!empty && currentDDT?.mainData && currentDDT.mainData.length > 0) {
-      const firstMain = currentDDT.mainData[0];
+    // ✅ CRITICAL: Leggi da task.steps usando templateId come chiave (non id)
+    // task.steps[node.templateId] = steps clonati
+    if (!empty && currentDDT?.data && currentDDT.data.length > 0) {
+      const firstMain = currentDDT.data[0];
       const firstMainId = firstMain?.id;
-      const hasSteps = !!(firstMainId && task?.steps && task.steps[firstMainId]);
-      console.log('[useWizardInference] DEBUG steps check', {
-        mainDataCount: currentDDT.mainData.length,
+      const firstMainTemplateId = firstMain?.templateId || firstMain?.id; // ✅ Fallback a id se templateId non presente
+      const hasSteps = !!(firstMainTemplateId && task?.steps && task.steps[firstMainTemplateId]);
+
+      const allTaskStepsKeys = task?.steps ? Object.keys(task.steps) : [];
+      // ✅ CRITICAL: Stampa chiavi come stringhe per debug
+      console.log('[🔍 useWizardInference] 🔑 CHIAVI IN task.steps:', allTaskStepsKeys);
+      console.log('[🔍 useWizardInference] 🔍 CERCHIAMO CHIAVE:', firstMainTemplateId);
+
+      console.log('[🔍 useWizardInference] CRITICAL steps check', {
+        dataCount: currentDDT.data.length,
         firstMainLabel: firstMain?.label,
-        firstMainId: firstMainId?.substring(0, 20) + '...',
+        firstMainId: firstMainId,
+        firstMainTemplateId: firstMainTemplateId,
         hasSteps,
         stepsType: typeof task?.steps,
-        stepsKeys: task?.steps ? Object.keys(task.steps) : [],
+        taskStepsKeys: allTaskStepsKeys,
+        taskStepsKeysAsStrings: allTaskStepsKeys.join(', '), // ✅ Stringa per vedere tutte le chiavi
+        taskStepsCount: allTaskStepsKeys.length,
+        lookingForKey: firstMainTemplateId,
+        keyExists: firstMainTemplateId ? !!(task?.steps?.[firstMainTemplateId]) : false,
+        keyMatchDetails: firstMainTemplateId && task?.steps ? {
+          exactMatch: task.steps[firstMainTemplateId] ? '✅ MATCH' : '❌ NO MATCH',
+          allKeys: allTaskStepsKeys,
+          keyComparison: allTaskStepsKeys.map(k => ({
+            key: k,
+            keyFull: k, // ✅ Mostra chiave completa
+            matches: k === firstMainTemplateId,
+            keyLength: k.length,
+            templateIdLength: firstMainTemplateId.length,
+            // ✅ Confronto carattere per carattere
+            charByChar: k.length === firstMainTemplateId.length ? Array.from(k).map((char, idx) => ({
+              pos: idx,
+              keyChar: char,
+              templateChar: firstMainTemplateId[idx],
+              matches: char === firstMainTemplateId[idx],
+              keyCode: char.charCodeAt(0),
+              templateCode: firstMainTemplateId[idx]?.charCodeAt(0)
+            })).filter(c => !c.matches).slice(0, 5) : 'LENGTH_MISMATCH'
+          }))
+        } : null,
         hasStructureButNoMessages
       });
     }
@@ -137,12 +169,16 @@ export function useWizardInference({
 
     // ✅ NUOVO: Se DDT ha struttura ma non ha messaggi → apri wizard al passo pipeline
     if (hasStructureButNoMessages) {
-      console.log('[useWizardInference] DDT ha struttura ma non ha messaggi, aprendo wizard al passo pipeline', {
-        mainDataCount: currentDDT?.mainData?.length || 0,
-        taskType: stableTaskType
+      console.log('[🔍 useWizardInference] ⚠️ DDT ha struttura ma non ha messaggi, aprendo wizard', {
+        dataCount: currentDDT?.data?.length || 0,
+        taskType: stableTaskType,
+        taskId: task?.id,
+        taskStepsCount: task?.steps ? Object.keys(task.steps).length : 0,
+        taskStepsKeys: task?.steps ? Object.keys(task.steps) : [],
+        firstMainTemplateId: currentDDT?.data?.[0]?.templateId || currentDDT?.data?.[0]?.id
       });
 
-      // Apri wizard con initialDDT che contiene il mainData esistente
+      // Apri wizard con initialDDT che contiene il data esistente
       // Il wizard dovrebbe saltare automaticamente al passo 'pipeline'
       const inferenceKey = `${stableTaskLabel || ''}_hasStructureButNoMessages`;
       if (inferenceStartedRef.current !== inferenceKey) {
@@ -154,7 +190,7 @@ export function useWizardInference({
           ai: {
             schema: {
               label: currentDDT?.label || stableTaskLabel || 'Data',
-              mainData: currentDDT?.mainData || []
+              data: currentDDT?.data || []
             }
           }
         });
@@ -175,14 +211,23 @@ export function useWizardInference({
     // ========================================================================
     // ✅ ARCHITETTURA ESPERTO: EARLY EXIT se templateId esiste (dal Task completo)
     // NON rifare euristica se template già trovato
+    // DDTHostAdapter gestisce tutto (caricamento + adattamento automatico)
     // ========================================================================
     if (isValidTemplateId(stableTemplateId)) {
-      console.log('[useWizardInference] Template già trovato, non chiamare AI', {
+      console.log('[useWizardInference] Template già trovato, DDTHostAdapter gestisce tutto', {
         templateId: stableTemplateId,
         taskType: stableTaskType
       });
-      // DDTHostAdapter caricherà il DDT dal template automaticamente
-      return;
+      return; // ✅ Early exit - non serve wizard
+    }
+
+    // ✅ EARLY EXIT: Se task ha già steps, non serve wizard
+    if (task?.steps && Object.keys(task.steps).length > 0) {
+      console.log('[useWizardInference] Task con steps, non serve wizard', {
+        taskId: task.id,
+        stepsCount: Object.keys(task.steps).length
+      });
+      return; // ✅ Early exit - non serve wizard
     }
 
     // ========================================================================
@@ -247,7 +292,7 @@ export function useWizardInference({
         if (localMatch) {
           // Euristica trovata → usa template
           console.log('[useWizardInference] Template trovato via euristica locale', {
-            templateId: localMatch.ai.schema.mainData?.[0]?.templateId
+            templateId: localMatch.ai.schema.data?.[0]?.templateId
           });
 
           // Aggiorna task se era UNDEFINED
@@ -267,7 +312,7 @@ export function useWizardInference({
           wizardOwnsDataRef.current = true;
 
           // Pre-assembly in background
-          const templateId = localMatch.ai.schema.mainData?.[0]?.templateId;
+          const templateId = localMatch.ai.schema.data?.[0]?.templateId;
           await preAssembleDDT(
             localMatch.ai.schema,
             localMatch.ai.translationGuids,
@@ -325,7 +370,7 @@ export function useWizardInference({
     })();
   }, [
     stableDdtLabel,
-    stableDdtMainDataLength,
+    stableDdtdataLength,
     stableTaskId,
     stableTaskType,
     stableTaskLabel,

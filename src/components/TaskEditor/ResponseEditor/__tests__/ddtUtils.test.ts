@@ -37,7 +37,7 @@ describe('ddtUtils', () => {
   });
 
   describe('getNodeByIndex', () => {
-    const mockMainData = {
+    const mockdata = {
       steps: [{ type: 'start' }],
       subData: [
         { steps: [{ type: 'sub1' }] },
@@ -45,30 +45,30 @@ describe('ddtUtils', () => {
       ],
     };
 
-    it('should return mainData when index is null', () => {
-      const result = getNodeByIndex(mockMainData, null);
-      expect(result).toBe(mockMainData);
+    it('should return data when index is null', () => {
+      const result = getNodeByIndex(mockdata, null);
+      expect(result).toBe(mockdata);
     });
 
-    it('should return mainData when index is undefined', () => {
-      const result = getNodeByIndex(mockMainData, undefined as any);
-      expect(result).toBe(mockMainData);
+    it('should return data when index is undefined', () => {
+      const result = getNodeByIndex(mockdata, undefined as any);
+      expect(result).toBe(mockdata);
     });
 
     it('should return subData element when index is valid', () => {
-      const result = getNodeByIndex(mockMainData, 0);
-      expect(result).toBe(mockMainData.subData[0]);
+      const result = getNodeByIndex(mockdata, 0);
+      expect(result).toBe(mockdata.subData[0]);
     });
 
-    it('should return mainData when index is out of bounds', () => {
-      const result = getNodeByIndex(mockMainData, 999);
-      expect(result).toBe(mockMainData);
+    it('should return data when index is out of bounds', () => {
+      const result = getNodeByIndex(mockdata, 999);
+      expect(result).toBe(mockdata);
     });
 
-    it('should return mainData when subData is undefined', () => {
-      const mainDataWithoutSubData = { steps: [{ type: 'start' }] };
-      const result = getNodeByIndex(mainDataWithoutSubData, 0);
-      expect(result).toBe(mainDataWithoutSubData);
+    it('should return data when subData is undefined', () => {
+      const dataWithoutSubData = { steps: [{ type: 'start' }] };
+      const result = getNodeByIndex(dataWithoutSubData, 0);
+      expect(result).toBe(dataWithoutSubData);
     });
   });
 

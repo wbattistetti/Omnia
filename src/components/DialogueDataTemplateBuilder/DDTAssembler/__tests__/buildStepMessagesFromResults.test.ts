@@ -3,7 +3,7 @@ import { buildSteps, buildStepsWithSubData, StepResults } from '../buildStepMess
 
 describe('buildStepMessagesFromResults', () => {
   describe('buildSteps (legacy)', () => {
-    it('should build mainData stepMessages correctly', () => {
+    it('should build data stepMessages correctly', () => {
       const stepResults: StepResults = [
         {
           stepKey: 'startPrompt',
@@ -31,7 +31,7 @@ describe('buildStepMessagesFromResults', () => {
   });
 
   describe('buildStepsWithSubData (new)', () => {
-    it('should build mainData and subData stepMessages correctly', () => {
+    it('should build data and subData stepMessages correctly', () => {
       const stepResults: StepResults = [
         {
           stepKey: 'startPrompt',
@@ -59,9 +59,9 @@ describe('buildStepMessagesFromResults', () => {
 
       const result = buildStepsWithSubData(stepResults);
 
-      // Check mainData
-      expect(result.mainData.start).toEqual([['What is your birth date?']]);
-      expect(result.mainData.noMatch).toBeUndefined();
+      // Check data
+      expect(result.data.start).toEqual([['What is your birth date?']]);
+      expect(result.data.noMatch).toBeUndefined();
 
       // Check subData
       expect(result.subData.day.start).toEqual([['What day were you born?']]);
@@ -86,7 +86,7 @@ describe('buildStepMessagesFromResults', () => {
 
       const result = buildStepsWithSubData(stepResults);
 
-      expect(result.mainData).toEqual({});
+      expect(result.data).toEqual({});
       expect(result.subData.day.scripts).toEqual([
         [JSON.stringify({
           ai: {
@@ -98,7 +98,7 @@ describe('buildStepMessagesFromResults', () => {
       ]);
     });
 
-    it('should handle mixed mainData and subData steps', () => {
+    it('should handle mixed data and subData steps', () => {
       const stepResults: StepResults = [
         {
           stepKey: 'startPrompt',
@@ -120,9 +120,9 @@ describe('buildStepMessagesFromResults', () => {
 
       const result = buildStepsWithSubData(stepResults);
 
-      // Check mainData
-      expect(result.mainData.start).toEqual([['What is your birth date?']]);
-      expect(result.mainData.noMatch).toEqual([['Sorry, I did not understand.']]);
+      // Check data
+      expect(result.data.start).toEqual([['What is your birth date?']]);
+      expect(result.data.noMatch).toEqual([['Sorry, I did not understand.']]);
 
       // Check subData
       expect(result.subData.day.start).toEqual([['What day were you born?']]);
@@ -138,7 +138,7 @@ describe('buildStepMessagesFromResults', () => {
 
       const result = buildStepsWithSubData(stepResults);
 
-      expect(result.mainData).toEqual({});
+      expect(result.data).toEqual({});
       expect(result.subData).toEqual({});
     });
 
@@ -147,7 +147,7 @@ describe('buildStepMessagesFromResults', () => {
 
       const result = buildStepsWithSubData(stepResults);
 
-      expect(result.mainData).toEqual({});
+      expect(result.data).toEqual({});
       expect(result.subData).toEqual({});
     });
   });

@@ -262,9 +262,9 @@ export function getRowData(row: NodeRowData): {
   if (task) {
     return {
       message: task.text ? { text: task.text } : undefined,
-      ddt: (task.mainData && task.mainData.length > 0) ? {
+      ddt: (task.data && task.data.length > 0) ? {
         label: task.label,
-        mainData: task.mainData,
+        data: task.data,
         stepPrompts: task.stepPrompts,
         constraints: task.constraints,
         examples: task.examples
@@ -311,7 +311,7 @@ export function updateRowData(
   if (data.ddt !== undefined) {
     // ✅ Spread DDT fields directly into task
     taskUpdates.label = data.ddt.label;
-    taskUpdates.mainData = data.ddt.mainData;
+    taskUpdates.data = data.ddt.data;
     taskUpdates.stepPrompts = data.ddt.stepPrompts;
     taskUpdates.constraints = data.ddt.constraints;
     taskUpdates.examples = data.ddt.examples;

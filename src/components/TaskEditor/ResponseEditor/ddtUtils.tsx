@@ -13,10 +13,10 @@ export function getDDTIcon(type: string): JSX.Element {
   return <FileText className="w-5 h-5 text-fuchsia-100 mr-2" />;
 }
 
-export function getNodeByIndex(mainData: any, index: number | null) {
-  if (index == null) return mainData;
-  if (!mainData.subData || !mainData.subData[index]) return mainData;
-  return mainData.subData[index];
+export function getNodeByIndex(data: any, index: number | null) {
+  if (index == null) return data;
+  if (!data.subData || !data.subData[index]) return data;
+  return data.subData[index];
 }
 
 export function ordinalIt(n: number): string {

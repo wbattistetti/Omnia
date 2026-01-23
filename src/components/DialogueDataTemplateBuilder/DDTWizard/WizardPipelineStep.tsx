@@ -91,11 +91,11 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
     setTotalSteps(total);
   }, [stableDataNode]);
 
-  useEffect(() => {
-    dlog('[DDT][UI][Pipeline][mount]', { headless, initialTotal: calculateTotalSteps(stableDataNode) });
-    return () => dlog('[DDT][UI][Pipeline][unmount]');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // ✅ Solo al mount, stableDataNode viene calcolato una volta
+  // ✅ Rimossi log di mount/unmount non necessari
+  // useEffect(() => {
+  //   dlog('[DDT][UI][Pipeline][mount]', { headless, initialTotal: calculateTotalSteps(stableDataNode) });
+  //   return () => dlog('[DDT][UI][Pipeline][unmount]');
+  // }, []);
 
   useEffect(() => {
     setCurrentStep(orchestrator.state.currentStepIndex + 1);
@@ -130,8 +130,6 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
             retryCount: prev[fieldId]?.retryCount || 0 // Initialize or preserve retryCount
           }
         }));
-
-        console.log('[WizardPipelineStep] Error captured for field:', fieldId, error.message);
       }
     }
   }, [orchestrator.state.stepError, orchestrator.state.lastError, confirmedLabel, stableDataNode, setFieldProcessingStates, progressByPath]);
@@ -151,7 +149,6 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
 
     // ✅ Solo al mount iniziale: currentStepIndex === 0 e nessun risultato
     if (currentStepIndex === 0 && stepResults.length === 0 && !stepError && !stepLoading) {
-      console.log('🟢 [PIPELINE] Auto-starting pipeline (mount)');
       mountTriggeredRef.current = true;
       alreadyStartedRef.current = true;
       orchestrator.runNextStep().finally(() => { alreadyStartedRef.current = false; });
@@ -168,7 +165,6 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
 
     // ✅ Solo per step successivi (currentStepIndex > 0), dopo che il mount è stato fatto
     if (currentStepIndex > 0 && !stepError && !stepLoading && stepResults.length > 0) {
-      console.log('🟢 [PIPELINE] Continuing to step', currentStepIndex);
       alreadyStartedRef.current = true;
       orchestrator.runNextStep().finally(() => { alreadyStartedRef.current = false; });
     }
@@ -185,10 +181,9 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
   // Phase 1: show structure preview when we have structure (result of suggestStructureAndConstraints)
   useEffect(() => {
     const structureResult = orchestrator.state.stepResults.find(r => r.stepKey === 'suggestStructureAndConstraints');
-    const mainData = structureResult?.payload?.mainData || structureResult?.payload;
-    if (mainData && !showStructureModal && !finalDDT) {
-      dlog('[DDT][UI][Pipeline] showStructureModal → open');
-      const normalized = normalizeStructure(mainData);
+    const data = structureResult?.payload?.data || structureResult?.payload;
+    if (data && !showStructureModal && !finalDDT) {
+      const normalized = normalizeStructure(data);
       setStructurePreview(normalized);
       setShowStructureModal(true);
     }
@@ -237,7 +232,7 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
 
   const currentDescription = getStepDescription(currentStep, dataNode);
   const detectedType = orchestrator.state.detectedType;
-  const mainData = orchestrator.state.mainData;
+  const data = orchestrator.state.data;
   const currentStepLabel = orchestrator.state.steps[orchestrator.state.currentStepIndex]?.label || '';
 
   // 🚀 NEW: TaskCounter-based progress calculation
@@ -258,7 +253,7 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
 
     // 🎯 Inizializza TaskCounter per questo main data
     if (!taskCounter.getFieldTasks(mainLabel).startPrompt) {
-      taskCounter.initializeField(mainLabel, 'mainData');
+      taskCounter.initializeField(mainLabel, 'data');
     }
 
     // Inizializza sub data
@@ -283,19 +278,18 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
     }
 
     // 🎯 Calcola progress ricorsivo
-    const mainDataArray = [{
+    const dataArray = [{
       label: mainLabel,
       subData: subList.map(s => ({ label: s }))
     }];
 
-    const progressMap = taskCounter.calculateRecursiveProgress(mainDataArray);
+    const progressMap = taskCounter.calculateRecursiveProgress(dataArray);
 
     onProgress(progressMap);
-    dlog('[DDT][UI][Pipeline][TaskCounter]', { idx, progressMap, currentStepLabel });
-  }, [orchestrator.state.currentStepIndex, orchestrator.state.steps, dataNode, confirmedLabel]);
+  }, [orchestrator.state.currentStepIndex, orchestrator.state.steps, dataNode, confirmedLabel, onProgress]);
 
   // Headless mode: run orchestration but don't render visual UI
-  if (headless) { dlog('[DDT][UI][Pipeline] headless=true → UI hidden'); return null; }
+  if (headless) { return null; }
 
   const handleCopyStructure = () => {
     if (!structurePreview) return;
@@ -323,7 +317,7 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
       />
 
       <div style={{ fontWeight: 600, fontSize: 20, color: '#fff', marginBottom: 12, textAlign: 'left', paddingLeft: 4 }}>
-        {`Creating "${mainData?.label || detectedType || 'data'}" data dialog:`}
+        {`Creating "${data?.label || detectedType || 'data'}" data dialog:`}
       </div>
       {/* Friendly message during message creation */}
       <div style={{ fontSize: '16px', color: '#94a3b8', marginBottom: 12, textAlign: 'left', paddingLeft: 4, fontStyle: 'italic' }}>

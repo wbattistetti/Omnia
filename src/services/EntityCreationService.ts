@@ -6,7 +6,7 @@ import { classifyTaskMode } from '../nlp/taskInteractivity';
 export interface EntityCreationConfig {
   entityType: 'taskTemplates' | 'backendActions' | 'macrotasks' | 'conditions';
   defaultCategoryName: string;
-  ddtEditorType: 'agentAct' | 'backendAction' | 'macrotask';
+  ddtEditorType: 'taskTemplate' | 'backendAction' | 'macrotask';
   sidebarEventType: 'taskTemplates' | 'backendActions' | 'macrotasks' | 'conditions';
 }
 
@@ -37,7 +37,7 @@ const ENTITY_CONFIGS: Record<string, EntityCreationConfig> = {
   taskTemplates: {
     entityType: 'taskTemplates',
     defaultCategoryName: 'Default Task Templates',
-    ddtEditorType: 'agentAct',
+    ddtEditorType: 'taskTemplate',
     sidebarEventType: 'taskTemplates'
   },
   backendActions: {

@@ -1,56 +1,53 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { SchemaNode } from './MainDataCollection';
+import type { SchemaNode } from './dataCollection';
 import { normalizeDDTMainNodes } from './normalizeKinds';
 import type { ArtifactStore } from './artifactStore';
 import { getAllV2Draft } from './V2DraftStore';
 import { taskTemplateService } from '../../../services/TaskTemplateService';
 import { cloneAndAdaptContract, createSubIdMapping } from '../../../utils/contractUtils';
 import { TaskType, templateIdToTaskType } from '../../../types/taskTypes';
+import { extractStartPrompts } from '../../../utils/ddtPromptExtractor';
+
+/**
+ * Extract prompts from root nodes only (not subData)
+ * DEPRECATED: Usa extractStartPrompts da ddtPromptExtractor.ts
+ * Mantenuto per retrocompatibilità, ora è un wrapper
+ */
+export function extractPromptsFromMainData(
+  steps: Record<string, any>,
+  data: any[],
+  projectTranslations: Record<string, string>
+): Array<{ guid: string; text: string; nodeId: string }> {
+  // ✅ Wrapper per retrocompatibilità - usa extractStartPrompts
+  const prompts = extractStartPrompts(steps, data, projectTranslations, { onlyRootNodes: true });
+
+  // ✅ Converti formato: nodeTemplateId -> nodeId per retrocompatibilità
+  return prompts.map(p => ({
+    guid: p.guid,
+    text: p.text,
+    nodeId: p.nodeTemplateId
+  }));
+}
 
 /**
  * Adapt start step prompts to a new context using AI.
- * Only adapts 'start' step prompts; escalation prompts remain generic.
- * @internal - Private function, only called from assembleFinalDDT
+ * Only adapts prompts from root nodes (not subData) by default.
+ * @param promptsToAdapt - Array of prompts to adapt (from extractStartPrompts)
+ * @param contextLabel - New context label (e.g., "Chiedi la data di nascita del paziente")
+ * @param templateLabel - Original template label (e.g., "Date")
+ * @param projectLocale - Project locale
+ * @param provider - AI provider
+ * @param options - Optional: adaptSubData (default: false)
  */
-async function adaptStartPromptsToContext(
-  rootSteps: Record<string, any>,
-  projectTranslations: Record<string, string>,
+export async function adaptStartPromptsToContext(
+  promptsToAdapt: Array<{ guid: string; text: string; nodeId: string }>,
   contextLabel: string,
   templateLabel: string,
   projectLocale: string,
-  provider: 'groq' | 'openai'
+  provider: 'groq' | 'openai',
+  options?: { adaptSubData?: boolean }
 ): Promise<Record<string, string>> {
   const adaptedTranslations: Record<string, string> = {};
-
-  // Collect all start step prompts that need adaptation
-  const promptsToAdapt: Array<{ guid: string; text: string }> = [];
-
-  // Iterate over all nodeIds
-  for (const [nodeId, nodeSteps] of Object.entries(rootSteps)) {
-    // ✅ Only adapt 'start' step
-    const startStep = nodeSteps?.start;
-    if (!startStep?.escalations || !Array.isArray(startStep.escalations)) continue;
-
-    // Extract all SayMessage task texts from start step escalations
-    for (const escalation of startStep.escalations) {
-      const tasks = escalation.tasks || escalation.actions || [];
-      for (const task of tasks) {
-        // Check if it's a SayMessage task
-        if (task.type === TaskType.SayMessage || task.type === 0 || !task.type) {
-          const textGuid = task.parameters?.find((p: any) => p.parameterId === 'text')?.value ||
-                          task.taskId ||
-                          task.id;
-
-          if (textGuid && projectTranslations[textGuid]) {
-            promptsToAdapt.push({
-              guid: textGuid,
-              text: projectTranslations[textGuid]
-            });
-          }
-        }
-      }
-    }
-  }
 
   if (promptsToAdapt.length === 0) {
     console.log('[adaptStartPromptsToContext] No prompts to adapt');
@@ -111,7 +108,7 @@ async function adaptStartPromptsToContext(
 export interface AssembledDDT {
   id: string;
   label: string;
-  mainData: any[];  // ✅ Solo struttura dati (senza steps)
+  data: any[];  // ✅ Solo struttura dati (senza steps)
   steps?: Record<string, any>;  // ✅ Steps a root level: { "nodeId": { start: {...}, noMatch: {...} } }
   // ❌ REMOVED: translations - translations are now stored in global ProjectTranslationsContext
   v2Draft?: any;
@@ -148,27 +145,27 @@ function extractBasePromptKeys(stepPayload: any): Record<string, string> {
 /**
  * Find the corresponding node in a template by matching structure.
  * Strategy:
- * 1. For mainData nodes: return first mainData node from template
+ * 1. For data nodes: return first data node from template
  * 2. For subData nodes: find by templateId match (if available) or by position
  */
 function findTemplateNodeByPosition(template: any, nodePath: string[], node?: SchemaNode): any | null {
-  if (!template || !template.mainData || !Array.isArray(template.mainData)) {
+  if (!template || !template.data || !Array.isArray(template.data)) {
     return null;
   }
 
   const isSub = nodePath.length > 1;
 
   if (!isSub) {
-    // MainData node: return first mainData node from template
-    // (Most templates have a single mainData node)
-    return template.mainData[0] || null;
+    // data node: return first data node from template
+    // (Most templates have a single data node)
+    return template.data[0] || null;
   }
 
   // SubData node: try to find by templateId match first, then fallback to position
   const nodeTemplateId = node ? (node as any).templateId : null;
 
-  // Find parent mainData (assume first mainData for now)
-  const mainNode = template.mainData[0];
+  // Find parent data (assume first data for now)
+  const mainNode = template.data[0];
   if (!mainNode || !mainNode.subData || !Array.isArray(mainNode.subData)) {
     return null;
   }
@@ -195,15 +192,15 @@ function findTemplateNodeByPosition(template: any, nodePath: string[], node?: Sc
 }
 
 /**
- * Find template node by ID (recursive search in mainData and subData)
+ * Find template node by ID (recursive search in data and subData)
  */
 function findTemplateNodeById(template: any, nodeId: string): any | null {
-  if (!template || !template.mainData || !Array.isArray(template.mainData)) {
+  if (!template || !template.data || !Array.isArray(template.data)) {
     return null;
   }
 
-  // Search in mainData
-  for (const mainNode of template.mainData) {
+  // Search in data
+  for (const mainNode of template.data) {
     if (mainNode.id === nodeId) {
       return mainNode;
     }
@@ -905,13 +902,20 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
             translationsCount: Object.keys(projectTranslations).length
           });
 
-          const adaptedTranslations = await adaptStartPromptsToContext(
+          // ✅ Extract prompts only from main data (not subData)
+          const promptsToAdapt = extractPromptsFromMainData(
             rootSteps,
-            projectTranslations,
+            assembledMains,
+            projectTranslations
+          );
+
+          const adaptedTranslations = await adaptStartPromptsToContext(
+            promptsToAdapt,
             options.contextLabel,
             options.templateLabel,
             projectLocale,
-            options.aiProvider
+            options.aiProvider,
+            { adaptSubData: false } // ✅ Default: solo main data
           );
 
           // Replace projectTranslations with adapted ones (only if we got results)
@@ -964,7 +968,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
     const result: AssembledDDT = {
       id: ddtId,
       label: rootLabel || 'Data',
-      mainData: assembledMains,  // ✅ mainData ora senza steps (solo struttura dati)
+      data: assembledMains,  // ✅ data ora senza steps (solo struttura dati)
       steps: Object.keys(rootSteps).length > 0 ? rootSteps : undefined,  // ✅ Steps a root level
       v2Draft: getAllV2Draft(),
     };
@@ -972,7 +976,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
     console.log('[assembleFinalDDT][RESULT]', {
       id: result.id,
       label: result.label,
-      mainsCount: result.mainData.length,
+      mainsCount: result.data.length,
       hasSteps: !!result.steps,
       stepsCount: result.steps ? Object.keys(result.steps).length : 0
     });

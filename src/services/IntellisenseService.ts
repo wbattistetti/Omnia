@@ -56,7 +56,7 @@ export class IntellisenseService {
             const task = taskRepository.getTask(taskId);
             if (!task) continue;
 
-            // ✅ Cerca values[] in mainData (non più task.intents)
+            // ✅ Cerca values[] in data (non più task.intents)
             const values = this.getValuesFromTask(task);
             if (values.length === 0) continue;
 
@@ -92,13 +92,13 @@ export class IntellisenseService {
 
     /**
      * ✅ NUOVO: Estrae values[] da un task
-     * Cerca nel primo mainData con values[] definiti
+     * Cerca nel primo data con values[] definiti
      */
     private getValuesFromTask(task: any): any[] {
-        if (!task?.mainData || !Array.isArray(task.mainData)) return [];
+        if (!task?.data || !Array.isArray(task.data)) return [];
 
-        // Cerca il primo mainData con values[]
-        for (const main of task.mainData) {
+        // Cerca il primo data con values[]
+        for (const main of task.data) {
             if (main.values && Array.isArray(main.values) && main.values.length > 0) {
                 return main.values;
             }

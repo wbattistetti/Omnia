@@ -48,7 +48,7 @@ function coercePhoneKind(src: any) {
     const clone = safeDeepClone(src);
     if (!clone) return src; // If clone failed, return original
 
-    const mains = Array.isArray(clone?.mainData) ? clone.mainData : [];
+    const mains = Array.isArray(clone?.data) ? clone.data : [];
     for (const m of mains) {
       const label = String(m?.label || '').toLowerCase();
       if (/phone|telephone|tel|cellulare|mobile/.test(label)) {
@@ -105,8 +105,8 @@ function ensureStepsForNode(node: any): any {
 
 function preserveStepsFromPrev(prev: any, next: any): any {
   if (!prev || !next) return next;
-  const prevMains = Array.isArray(prev?.mainData) ? prev.mainData : [];
-  const nextMains = Array.isArray(next?.mainData) ? next.mainData : [];
+  const prevMains = Array.isArray(prev?.data) ? prev.data : [];
+  const nextMains = Array.isArray(next?.data) ? next.data : [];
   const mapByLabel = (arr: any[]) => {
     const m = new Map<string, any>();
     arr.forEach((n: any) => { if (n?.label) m.set(String(n.label), n); });
@@ -127,7 +127,7 @@ function preserveStepsFromPrev(prev: any, next: any): any {
     });
     return { ...ensureStepsForNode(merged), subData: mergedSubs };
   });
-  return { ...next, mainData: enrichedMains };
+  return { ...next, data: enrichedMains };
 }
 
 /**

@@ -4,11 +4,11 @@ interface DataNode {
 }
 
 export const calculateTotalSteps = (dataNode: DataNode): number => {
-  // Formula semplice: 5 × (mainData + numero di subData)
-  const mainDataCount = 1; // Sempre 1 mainData
+  // Formula semplice: 5 × (data + numero di subData)
+  const dataCount = 1; // Sempre 1 data
   const subDataCount = dataNode.subData ? dataNode.subData.length : 0;
   
-  return 5 * (mainDataCount + subDataCount);
+  return 5 * (dataCount + subDataCount);
 };
 
 export const getStepDescription = (currentStep: number, dataNode: DataNode): string => {
@@ -23,9 +23,9 @@ export const getStepDescription = (currentStep: number, dataNode: DataNode): str
   const elementIndex = Math.floor((currentStep - 1) / stepPerElement);
   const stepInElement = ((currentStep - 1) % stepPerElement) + 1;
   
-  // Determina se è mainData o subData
+  // Determina se è data o subData
   if (elementIndex === 0) {
-    // MainData
+    // data
     const stepNames = [
       'Detecting data type',
       'Suggesting structure and constraints', 

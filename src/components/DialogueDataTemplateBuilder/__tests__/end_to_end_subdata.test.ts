@@ -138,12 +138,12 @@ describe('DDT Builder End-to-End SubData Test', () => {
     // Verifica la struttura del DDT
     expect(result.id).toBe(ddtId);
     expect(result.label).toBe('Birth Date');
-    expect(result.mainData.subData).toHaveLength(3);
+    expect(result.data.subData).toHaveLength(3);
 
     // Verifica che i subData abbiano i prompt specifici
-    const daySubData = result.mainData.subData.find((s: any) => s.variable === 'day');
-    const monthSubData = result.mainData.subData.find((s: any) => s.variable === 'month');
-    const yearSubData = result.mainData.subData.find((s: any) => s.variable === 'year');
+    const daySubData = result.data.subData.find((s: any) => s.variable === 'day');
+    const monthSubData = result.data.subData.find((s: any) => s.variable === 'month');
+    const yearSubData = result.data.subData.find((s: any) => s.variable === 'year');
 
     expect(daySubData).toBeDefined();
     expect(monthSubData).toBeDefined();
@@ -205,7 +205,7 @@ describe('DDT Builder End-to-End SubData Test', () => {
 
     expect(result.id).toBe(ddtId);
     expect(result.label).toBe('Name');
-    expect(result.mainData.subData).toHaveLength(0);
-    expect(result.mainData.steps).toHaveLength(5); // start, noMatch, noInput, confirmation, success
+    expect(result.data.subData).toHaveLength(0);
+    expect(result.data.steps).toHaveLength(5); // start, noMatch, noInput, confirmation, success
   });
 });

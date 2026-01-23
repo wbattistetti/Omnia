@@ -121,11 +121,11 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       allTasks.forEach(task => {
         const templateId = getTemplateId(task);
         // ✅ CASE-INSENSITIVE
-        // ✅ Check if task has DDT (mainData indicates DDT)
-        if (templateId && templateId.toLowerCase() === 'getdata' && task.mainData && task.mainData.length > 0) {
+        // ✅ Check if task has DDT (data indicates DDT)
+        if (templateId && templateId.toLowerCase() === 'getdata' && task.data && task.data.length > 0) {
           allDDTs.push({
             label: task.label,
-            mainData: task.mainData,
+            data: task.data,
             steps: task.steps,  // ✅ Steps a root level
             constraints: task.constraints,
             examples: task.examples
@@ -144,7 +144,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
             type: task.type,
             typeName: task.type !== undefined && task.type !== null ? `TaskType[${task.type}]` : 'MISSING',
             templateId: task.templateId,
-            hasMainData: !!(task.mainData && task.mainData.length > 0)
+            hasdata: !!(task.data && task.data.length > 0)
           });
         });
       }
@@ -238,7 +238,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
             type: task.type,
             typeName: task.type !== undefined && task.type !== null ? `TaskType[${task.type}]` : 'MISSING',
             templateId: task.templateId,
-            hasMainData: !!(task.mainData && task.mainData.length > 0)
+            hasdata: !!(task.data && task.data.length > 0)
           });
         });
 

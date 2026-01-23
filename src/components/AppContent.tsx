@@ -44,7 +44,7 @@ import ResponseEditor from './TaskEditor/ResponseEditor'; // ✅ RINOMINATO: Act
 import NonInteractiveResponseEditor from './TaskEditor/ResponseEditor/NonInteractiveResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import { taskRepository } from '../services/TaskRepository';
 import { getTemplateId } from '../utils/taskHelpers';
-import { extractModifiedDDTFields } from '../utils/ddtMergeUtils';
+import { extractModifiedDDTFields } from '../utils/taskUtils';
 import { TaskType } from '../types/taskTypes'; // ✅ RIMOSSO: taskIdToTaskType - non più necessario, le fonti emettono direttamente TaskType enum
 import type { TaskMeta } from './TaskEditor/EditorHost/types'; // ✅ RINOMINATO: ActEditor → TaskEditor
 
@@ -162,10 +162,10 @@ export const AppContent: React.FC<AppContentProps> = ({
         }, [tab.task?.id, tab.task?.type, tab.task?.label, tab.task?.instanceId]); // ✅ RINOMINATO: act → task
 
         const stableDDT = useMemo(() => {
-          const startStepTasksCount = (tab as any).ddt?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
+          const startStepTasksCount = (tab as any).ddt?.data?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
           console.log('[STABLE_DDT] Memoizing DDT', {
             tabId: tab.id,
-            mainDataLength: (tab as any).ddt?.mainData?.length,
+            dataLength: (tab as any).ddt?.data?.length,
             startStepTasksCount
           });
           return tab.ddt;
@@ -203,7 +203,7 @@ export const AppContent: React.FC<AppContentProps> = ({
         console.log('[DEBUG_MEMO] Rendering ResponseEditor', {
           editorKey,
           tabId: tab.id,
-          stableDDTMainDataLength: stableDDT?.mainData?.length,
+          stableDDTdataLength: stableDDT?.data?.length,
           stableTaskInstanceId: stableTask?.instanceId
         });
 
@@ -396,10 +396,10 @@ export const AppContent: React.FC<AppContentProps> = ({
       //   nextTaskId: nextTab.task?.id,
       //   prevInstanceId: prevTab.task?.instanceId,
       //   nextInstanceId: nextTab.task?.instanceId,
-      //   prevDDTMainDataLength: prevTab.ddt?.mainData?.length,
-      //   nextDDTMainDataLength: nextTab.ddt?.mainData?.length,
-      //   prevDDTMainDataFirstLabel: prevTab.ddt?.mainData?.[0]?.label,
-      //   nextDDTMainDataFirstLabel: nextTab.ddt?.mainData?.[0]?.label
+      //   prevDDTdataLength: prevTab.ddt?.data?.length,
+      //   nextDDTdataLength: nextTab.ddt?.data?.length,
+      //   prevDDTdataFirstLabel: prevTab.ddt?.data?.[0]?.label,
+      //   nextDDTdataFirstLabel: nextTab.ddt?.data?.[0]?.label
       // });
 
       // Se cambia id o type, re-render sempre
@@ -412,8 +412,8 @@ export const AppContent: React.FC<AppContentProps> = ({
       if (prevTab.type === 'responseEditor' && nextTab.type === 'responseEditor') {
         // ✅ Se ddt cambia reference, re-render SEMPRE (dockTree è stato aggiornato)
         if (prevTab.ddt !== nextTab.ddt) {
-          const prevStartTasksCount = prevTab.ddt?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
-          const nextStartTasksCount = nextTab.ddt?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
+          const prevStartTasksCount = prevTab.ddt?.data?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
+          const nextStartTasksCount = nextTab.ddt?.data?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
           // console.log('[DEBUG_MEMO] DECISIONE: re-render (ddt changed from dockTree)', {
           //   prevStartTasksCount,
           //   nextStartTasksCount,
@@ -562,8 +562,10 @@ export const AppContent: React.FC<AppContentProps> = ({
               task = taskRepository.createTask(taskMeta.type, null, undefined, instanceId);
             }
             // ✅ Salva DDT nel task (campi diretti, niente wrapper)
+            // ✅ CRITICAL: Non salvare steps qui - steps sono gestiti da ResponseEditor/DDTHostAdapter
+            const { steps, ...ddtWithoutSteps } = ddt;
             taskRepository.updateTask(instanceId, {
-              ...ddt,  // Spread: label, mainData, stepPrompts, ecc.
+              ...ddtWithoutSteps,  // Spread: label, data, ecc. (SENZA steps)
               templateId: d.templateId || task.templateId  // Mantieni templateId se presente
             }, pdUpdate?.getCurrentProjectId());
             preparedDDT = ddt;
@@ -577,15 +579,15 @@ export const AppContent: React.FC<AppContentProps> = ({
               // ✅ Crea task con DDT vuoto (campi diretti, niente wrapper)
               task = taskRepository.createTask(taskMeta.type, null, {
                 label: d.label || 'New DDT',
-                mainData: []
+                data: []
               }, instanceId);
             }
 
             // ✅ Load DDT async (if task has templateId, build from template)
             if (task && task.templateId) {
               try {
-                const { loadDDTFromTemplate } = await import('../utils/ddtMergeUtils');
-                ddt = await loadDDTFromTemplate(task);
+                const { buildDDTFromTask } = await import('../utils/taskUtils');
+                ddt = await buildDDTFromTask(task);
               } catch (err) {
                 console.error('[AppContent] Error loading DDT from template:', err);
               }
@@ -593,22 +595,22 @@ export const AppContent: React.FC<AppContentProps> = ({
 
             // ✅ Fallback: if no DDT loaded, build from task or create empty
             if (!ddt) {
-              if (task?.mainData && task.mainData.length > 0) {
-                // Task has mainData (old format or standalone)
+              if (task?.data && task.data.length > 0) {
+                // Task has data (old format or standalone)
                 ddt = {
                   label: task.label || d.label || 'New DDT',
-                  mainData: task.mainData,
+                  data: task.data,
                   stepPrompts: task.stepPrompts,
                   constraints: task.constraints,
                   examples: task.examples
                 };
               } else {
                 // DDT doesn't exist, create empty one
-                ddt = { label: d.label || 'New DDT', mainData: [] };
+                ddt = { label: d.label || 'New DDT', data: [] };
                 // Update task with empty DDT (campi diretti)
                 taskRepository.updateTask(instanceId, {
                   label: ddt.label,
-                  mainData: ddt.mainData
+                  data: ddt.data
                 }, pdUpdate?.getCurrentProjectId());
               }
             }
@@ -633,7 +635,7 @@ export const AppContent: React.FC<AppContentProps> = ({
               console.log('[DOCK_SYNC] 🔄 Updating taskRepository with DDT for existing tab', {
                 tabId,
                 instanceId,
-                mainDataLength: preparedDDT?.mainData?.length
+                dataLength: preparedDDT?.data?.length
               });
 
               // ✅ Salva DDT nel taskRepository (TaskEditorHost lo leggerà)
@@ -641,8 +643,10 @@ export const AppContent: React.FC<AppContentProps> = ({
               if (!task) {
                 task = taskRepository.createTask(taskMeta.type, null, undefined, instanceId);
               }
+              // ✅ CRITICAL: Non salvare steps qui - steps sono gestiti da ResponseEditor/DDTHostAdapter
+              const { steps: _, ...preparedDDTWithoutSteps } = preparedDDT;
               taskRepository.updateTask(instanceId, {
-                ...preparedDDT,
+                ...preparedDDTWithoutSteps,
                 templateId: d.templateId || task.templateId
               }, pdUpdate?.getCurrentProjectId());
             }
@@ -680,7 +684,7 @@ export const AppContent: React.FC<AppContentProps> = ({
             // ✅ UNIFICATO: Usa TaskEditorHost anche per 'ddt' (come per 'message' e 'backend')
             // TaskEditorHost → DDTHostAdapter → ResponseEditor gestirà il DDT
             // Il DDT viene preparato e salvato nel taskRepository prima di aprire l'editor
-            const startStepTasksCount = preparedDDT?.mainData?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
+            const startStepTasksCount = preparedDDT?.data?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
             // Creating new tab with DDT via TaskEditorHost
             // ✅ Salva DDT nel taskRepository prima di aprire l'editor (TaskEditorHost lo leggerà)
             if (preparedDDT) {
@@ -688,9 +692,12 @@ export const AppContent: React.FC<AppContentProps> = ({
               if (!task) {
                 task = taskRepository.createTask(taskMeta.type, null, undefined, instanceId);
               }
-              // ✅ Salva DDT nel task (campi diretti, niente wrapper)
+              // ✅ CRITICAL: Non salvare steps qui - steps sono gestiti da ResponseEditor/DDTHostAdapter
+              // ✅ Steps devono avere struttura corretta (chiavi = templateId, non step types)
+              // ✅ Se preparedDDT.steps ha struttura sbagliata, rimuovilo e lascia che DDTHostAdapter lo ricostruisca
+              const { steps: _, ...preparedDDTWithoutSteps } = preparedDDT;
               taskRepository.updateTask(instanceId, {
-                ...preparedDDT,  // Spread: label, mainData, stepPrompts, ecc.
+                ...preparedDDTWithoutSteps,  // Spread: label, data, ecc. (SENZA steps)
                 templateId: d.templateId || task.templateId  // Mantieni templateId se presente
               }, pdUpdate?.getCurrentProjectId());
             }
@@ -836,10 +843,10 @@ export const AppContent: React.FC<AppContentProps> = ({
             if (!taskName) continue;
             const ddt: any = it?.ddt;
             if (!ddt) continue;
-            // Support assembled shape (mainData) and snapshot shape (mains)
-            const mains: any[] = Array.isArray(ddt?.mainData)
-              ? ddt.mainData
-              : (ddt?.mainData ? [ddt.mainData] : (Array.isArray(ddt?.mains) ? ddt.mains : []));
+            // Support assembled shape (data) and snapshot shape (mains)
+            const mains: any[] = Array.isArray(ddt?.data)
+              ? ddt.data
+              : (ddt?.data ? [ddt.data] : (Array.isArray(ddt?.mains) ? ddt.mains : []));
             for (const m of (mains || [])) {
               const mainLabel: string = String(m?.labelKey || m?.label || m?.name || 'Data').trim();
               const mainKey = `${taskName}.${mainLabel}`; // ✅ RINOMINATO: actName → taskName
@@ -873,9 +880,9 @@ export const AppContent: React.FC<AppContentProps> = ({
             if (!taskName) continue;
             const ddt: any = it?.ddt;
             if (!ddt) continue;
-            const mains: any[] = Array.isArray(ddt?.mainData)
-              ? ddt.mainData
-              : (ddt?.mainData ? [ddt.mainData] : (Array.isArray(ddt?.mains) ? ddt.mains : []));
+            const mains: any[] = Array.isArray(ddt?.data)
+              ? ddt.data
+              : (ddt?.data ? [ddt.data] : (Array.isArray(ddt?.mains) ? ddt.mains : []));
             const mainsOut: any[] = [];
             for (const m of (mains || [])) {
               const mainLabel: string = String(m?.labelKey || m?.label || m?.name || 'Data').trim();
@@ -1108,27 +1115,37 @@ export const AppContent: React.FC<AppContentProps> = ({
   const handleOpenProjectById = useCallback(async (id: string) => {
     if (!id) return;
     const startTime = performance.now();
-    console.log(`[PERF][${new Date().toISOString()}] 🚀 START handleOpenProjectById`, { projectId: id });
+    // ❌ RIDOTTO: log [PERF] solo in dev mode o con flag
+    const showPerfLogs = import.meta.env.DEV && localStorage.getItem('SHOW_PERF_LOGS') === 'true';
+    if (showPerfLogs) {
+      console.log(`[PERF][${new Date().toISOString()}] 🚀 START handleOpenProjectById`, { projectId: id });
+    }
 
     try {
       // Modalità persisted: apri da catalogo e carica acts dal DB progetto
       const catStart = performance.now();
-      console.log(`[PERF][${new Date().toISOString()}] 📋 START fetch catalog`);
+      if (showPerfLogs) {
+        console.log(`[PERF][${new Date().toISOString()}] 📋 START fetch catalog`);
+      }
       const catRes = await fetch('/api/projects/catalog');
       if (!catRes.ok) throw new Error('Errore nel recupero catalogo');
       const list = await catRes.json();
       const meta = (list || []).find((x: any) => x._id === id || x.projectId === id) || {};
-      console.log(`[PERF][${new Date().toISOString()}] ✅ END fetch catalog`, {
-        duration: `${(performance.now() - catStart).toFixed(2)}ms`,
-        found: !!meta
-      });
+      if (showPerfLogs) {
+        console.log(`[PERF][${new Date().toISOString()}] ✅ END fetch catalog`, {
+          duration: `${(performance.now() - catStart).toFixed(2)}ms`,
+          found: !!meta
+        });
+      }
 
       pdUpdate.setCurrentProjectId(id);
       try { localStorage.setItem('current.projectId', id); } catch { }
 
       // ✅ OPTIMIZATION: Load acts, tasks, flow, and variable mappings in parallel (they are independent)
       const parallelStart = performance.now();
-      console.log(`[PERF][${new Date().toISOString()}] 🔄 START parallel load (acts, tasks, flow, mappings)`);
+      if (showPerfLogs) {
+        console.log(`[PERF][${new Date().toISOString()}] 🔄 START parallel load (acts, tasks, flow, mappings)`);
+      }
 
       const [tasksResult, flowResult, mappingsResult] = await Promise.allSettled([
         (async () => {
@@ -1171,9 +1188,11 @@ export const AppContent: React.FC<AppContentProps> = ({
         })()
       ]);
 
-      console.log(`[PERF][${new Date().toISOString()}] ✅ END parallel load`, {
-        duration: `${(performance.now() - parallelStart).toFixed(2)}ms`
-      });
+      if (showPerfLogs) {
+        console.log(`[PERF][${new Date().toISOString()}] ✅ END parallel load`, {
+          duration: `${(performance.now() - parallelStart).toFixed(2)}ms`
+        });
+      }
 
       // ✅ Raccogli tutti gli errori invece di lanciare subito
       const errors: string[] = [];
@@ -1206,22 +1225,29 @@ export const AppContent: React.FC<AppContentProps> = ({
 
       if (tasksResult.status === 'fulfilled') {
         const { taskRepository } = await import('../services/TaskRepository');
-        console.log(`[PERF][${new Date().toISOString()}] ✅ Tasks loaded`, {
-          success: tasksResult.value,
-          tasksCount: taskRepository.getInternalTasksCount(),
-          tasksWithValue: taskRepository.getAllTasks().filter(t => t.value && Object.keys(t.value).length > 0).length
-        });
+        if (showPerfLogs) {
+          console.log(`[PERF][${new Date().toISOString()}] ✅ Tasks loaded`, {
+            success: tasksResult.value,
+            tasksCount: taskRepository.getInternalTasksCount(),
+            tasksWithValue: taskRepository.getAllTasks().filter(t => t.value && Object.keys(t.value).length > 0).length
+          });
+        }
       }
 
       const dataStart = performance.now();
-      console.log(`[PERF][${new Date().toISOString()}] 📊 START loadProjectData`);
+      if (showPerfLogs) {
+        console.log(`[PERF][${new Date().toISOString()}] 📊 START loadProjectData`);
+      }
       let data;
       try {
         data = await ProjectDataService.loadProjectData();
-        console.log(`[PERF][${new Date().toISOString()}] ✅ END loadProjectData`, {
-          duration: `${(performance.now() - dataStart).toFixed(2)}ms`
-        });
+        if (showPerfLogs) {
+          console.log(`[PERF][${new Date().toISOString()}] ✅ END loadProjectData`, {
+            duration: `${(performance.now() - dataStart).toFixed(2)}ms`
+          });
+        }
       } catch (e) {
+        // ❌ MANTENUTO: errori sempre visibili
         console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR loadProjectData`, e);
         // Usa dati vuoti se loadProjectData fallisce
         data = {
@@ -1257,20 +1283,26 @@ export const AppContent: React.FC<AppContentProps> = ({
       } catch { }
 
       const refreshStart = performance.now();
-      console.log(`[PERF][${new Date().toISOString()}] 🔄 START refreshData`);
+      if (showPerfLogs) {
+        console.log(`[PERF][${new Date().toISOString()}] 🔄 START refreshData`);
+      }
       await refreshData();
-      console.log(`[PERF][${new Date().toISOString()}] ✅ END refreshData`, {
-        duration: `${(performance.now() - refreshStart).toFixed(2)}ms`
-      });
+      if (showPerfLogs) {
+        console.log(`[PERF][${new Date().toISOString()}] ✅ END refreshData`, {
+          duration: `${(performance.now() - refreshStart).toFixed(2)}ms`
+        });
+      }
 
       setAppState('mainApp');
 
       const totalDuration = performance.now() - startTime;
-      console.log(`[PERF][${new Date().toISOString()}] 🎉 COMPLETE handleOpenProjectById`, {
-        projectId: id,
-        totalDuration: `${totalDuration.toFixed(2)}ms`,
-        totalDurationSeconds: `${(totalDuration / 1000).toFixed(2)}s`
-      });
+      if (showPerfLogs) {
+        console.log(`[PERF][${new Date().toISOString()}] 🎉 COMPLETE handleOpenProjectById`, {
+          projectId: id,
+          totalDuration: `${totalDuration.toFixed(2)}ms`,
+          totalDurationSeconds: `${(totalDuration / 1000).toFixed(2)}s`
+        });
+      }
     } catch (err) {
       const totalDuration = performance.now() - startTime;
       console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR handleOpenProjectById`, {

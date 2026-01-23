@@ -3,14 +3,14 @@
 // - Incremental updates (merge/diff instead of delete+recreate)
 // - Database persistence (saved when project is saved, loaded when project is opened)
 
-import { getMainDataList, getSubDataList, hasMultipleMains, getLabel } from '../components/TaskEditor/ResponseEditor/ddtSelectors';
+import { getdataList, getSubDataList, hasMultipleMains, getLabel } from '../components/TaskEditor/ResponseEditor/ddtSelectors';
 
 interface VariableMapping {
   readableName: string; // e.g., "data di nascita", "data di nascita.giorno", "dati personali.Nominativo.Nome"
   nodeId: string; // DDT node ID (GUID)
   taskId: string; // Task ID
   rowId: string; // Row ID
-  ddtPath: string; // Path in DDT structure (e.g., "mainData[0]", "mainData[0].subData[1]")
+  ddtPath: string; // Path in DDT structure (e.g., "data[0]", "data[0].subData[1]")
   createdAt: number;
   updatedAt: number;
 }
@@ -66,19 +66,19 @@ class FlowchartVariablesService {
    * Create snapshot of DDT structure for comparison
    */
   private createDDTSnapshot(ddt: any): DDTNodeSnapshot[] {
-    const mainDataList = getMainDataList(ddt);
-    return mainDataList.map((mainData: any, mainIndex: number) => {
-      const subDataList = getSubDataList(mainData);
+    const dataList = getdataList(ddt);
+    return dataList.map((data: any, mainIndex: number) => {
+      const subDataList = getSubDataList(data);
       const subSnapshots = subDataList.map((subData: any, subIndex: number) => ({
         nodeId: subData.id || subData._id || '',
         label: getLabel(subData),
-        ddtPath: `mainData[${mainIndex}].subData[${subIndex}]`
+        ddtPath: `data[${mainIndex}].subData[${subIndex}]`
       }));
 
       return {
-        nodeId: mainData.id || mainData._id || '',
-        label: getLabel(mainData),
-        ddtPath: `mainData[${mainIndex}]`,
+        nodeId: data.id || data._id || '',
+        label: getLabel(data),
+        ddtPath: `data[${mainIndex}]`,
         subData: subSnapshots.length > 0 ? subSnapshots : undefined
       };
     });
@@ -175,12 +175,12 @@ class FlowchartVariablesService {
     // Normalize row text
     const normalizedRowText = this.normalizeRowText(rowText);
 
-    // Get mainData list
-    const mainDataList = getMainDataList(ddt);
+    // Get data list
+    const dataList = getdataList(ddt);
     const hasMultiple = hasMultipleMains(ddt);
 
-    if (mainDataList.length === 0) {
-      console.warn('[FlowchartVariables] No mainData found in DDT', { taskId, rowId });
+    if (dataList.length === 0) {
+      console.warn('[FlowchartVariables] No data found in DDT', { taskId, rowId });
       return [];
     }
 
@@ -207,7 +207,7 @@ class FlowchartVariablesService {
         const mapping = this.mappings.get(oldReadableName);
         if (mapping) {
           // Rebuild name based on structure
-          const newReadableName = this.buildReadableName(changed, normalizedRowText, hasMultiple, mainDataList);
+          const newReadableName = this.buildReadableName(changed, normalizedRowText, hasMultiple, dataList);
           if (newReadableName !== oldReadableName) {
             // Update mapping
             this.updateMapping(oldReadableName, newReadableName, changed.nodeId, taskId, rowId, nodeId, changed.ddtPath);
@@ -218,16 +218,16 @@ class FlowchartVariablesService {
 
     // Add mappings for new nodes
     const readableNames: string[] = [];
-    mainDataList.forEach((mainData: any, mainIndex: number) => {
-      const mainLabel = getLabel(mainData);
-      const mainNodeId = mainData.id || mainData._id;
+    dataList.forEach((data: any, mainIndex: number) => {
+      const mainLabel = getLabel(data);
+      const mainNodeId = data.id || data._id;
 
       if (!mainNodeId) {
-        console.warn('[FlowchartVariables] MainData missing ID', { mainIndex, taskId });
+        console.warn('[FlowchartVariables] data missing ID', { mainIndex, taskId });
         return;
       }
 
-      // Build variable name based on number of mainData
+      // Build variable name based on number of data
       let mainReadableName: string;
       if (hasMultiple) {
         mainReadableName = `${normalizedRowText}.${mainLabel}`;
@@ -244,13 +244,13 @@ class FlowchartVariablesService {
           taskId,
           rowId,
           nodeId,
-          `mainData[${mainIndex}]`
+          `data[${mainIndex}]`
         );
       }
       readableNames.push(mainReadableName);
 
       // Process subData
-      const subDataList = getSubDataList(mainData);
+      const subDataList = getSubDataList(data);
       if (subDataList.length > 0) {
         subDataList.forEach((subData: any, subIndex: number) => {
           const subLabel = getLabel(subData);
@@ -272,7 +272,7 @@ class FlowchartVariablesService {
               taskId,
               rowId,
               nodeId,
-              `mainData[${mainIndex}].subData[${subIndex}]`
+              `data[${mainIndex}].subData[${subIndex}]`
             );
           }
           readableNames.push(subReadableName);
@@ -306,10 +306,10 @@ class FlowchartVariablesService {
     node: DDTNodeSnapshot,
     normalizedRowText: string,
     hasMultiple: boolean,
-    mainDataList: any[]
+    dataList: any[]
   ): string {
-    // Find parent mainData index
-    const mainIndex = mainDataList.findIndex(m => {
+    // Find parent data index
+    const mainIndex = dataList.findIndex(m => {
       const mId = m.id || m._id;
       if (mId === node.nodeId) return true;
       const subs = getSubDataList(m);
@@ -321,12 +321,12 @@ class FlowchartVariablesService {
       return hasMultiple ? `${normalizedRowText}.${node.label}` : normalizedRowText;
     }
 
-    const mainData = mainDataList[mainIndex];
-    const mainLabel = getLabel(mainData);
+    const data = dataList[mainIndex];
+    const mainLabel = getLabel(data);
     const mainReadableName = hasMultiple ? `${normalizedRowText}.${mainLabel}` : normalizedRowText;
 
     // Check if this is a subData
-    const subDataList = getSubDataList(mainData);
+    const subDataList = getSubDataList(data);
     const subIndex = subDataList.findIndex(s => (s.id || s._id) === node.nodeId);
 
     if (subIndex !== -1) {

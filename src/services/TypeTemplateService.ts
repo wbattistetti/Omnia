@@ -74,7 +74,8 @@ export class TypeTemplateService {
 
     private static async _loadTemplatesFromAPI(): Promise<Record<string, TypeTemplate>> {
         try {
-            console.log('[TypeTemplateService] Caricando template dal database Factory...');
+            // ❌ RIMOSSO: log verboso di caricamento (non necessario all'avvio)
+            // console.log('[TypeTemplateService] Caricando template dal database Factory...');
             const response = await fetch('/api/factory/type-templates');
 
             if (!response.ok) {
@@ -83,7 +84,8 @@ export class TypeTemplateService {
 
             this.cache = await response.json();
             this.cacheLoaded = true;
-            console.log(`[TypeTemplateService] Caricati ${Object.keys(this.cache).length} template dal database`);
+            // ❌ RIMOSSO: log verboso di caricamento (non necessario all'avvio)
+            // console.log(`[TypeTemplateService] Caricati ${Object.keys(this.cache).length} template dal database`);
             return this.cache;
         } catch (error) {
             console.error('[TypeTemplateService] Errore nel caricamento dei template:', error);

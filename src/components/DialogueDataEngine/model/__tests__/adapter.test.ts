@@ -5,7 +5,7 @@ const current = {
   id: 'DDT_Date',
   label: 'Date',
   translations: {},
-  mainData: {
+  data: {
     id: 'date',
     label: 'Date',
     type: 'date',

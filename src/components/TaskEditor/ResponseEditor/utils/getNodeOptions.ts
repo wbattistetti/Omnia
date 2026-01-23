@@ -18,7 +18,7 @@ export interface NodeOption {
 
 /**
  * Ottiene le opzioni di un nodo DDT
- * @param node - Nodo DDT (mainData o subData)
+ * @param node - Nodo DDT (data o subData)
  * @returns Array di opzioni, o array vuoto se non ci sono opzioni
  */
 export function getNodeOptions(node: any): NodeOption[] {

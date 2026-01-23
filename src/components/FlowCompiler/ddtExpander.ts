@@ -24,13 +24,13 @@ export function expandDDT(
   };
 
   // Get main data node
-  const mainData = Array.isArray(ddt.mainData) ? ddt.mainData[0] : ddt.mainData;
-  if (!mainData || !mainData.steps) {
+  const data = Array.isArray(ddt.data) ? ddt.data[0] : ddt.data;
+  if (!data || !data.steps) {
     return { tasks, expansion };
   }
 
   // Process steps
-  const steps = Array.isArray(mainData.steps) ? mainData.steps : [];
+  const steps = Array.isArray(data.steps) ? data.steps : [];
 
   for (const stepGroup of steps) {
     const stepType = stepGroup.type || 'start';

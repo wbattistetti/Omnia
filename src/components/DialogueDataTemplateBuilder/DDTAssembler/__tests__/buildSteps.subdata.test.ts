@@ -23,8 +23,8 @@ describe('buildStepsWithSubData (subdata changes)', () => {
     expect(res.subData.day.noInput?.length).toBe(1);
     expect(res.subData.day.confirmation).toBeUndefined();
     expect(res.subData.day.success).toBeUndefined();
-    expect(res.mainData.confirmation?.length).toBeGreaterThan(0);
-    expect(res.mainData.success?.length).toBeGreaterThan(0);
+    expect(res.data.confirmation?.length).toBeGreaterThan(0);
+    expect(res.data.success?.length).toBeGreaterThan(0);
   });
 });
 

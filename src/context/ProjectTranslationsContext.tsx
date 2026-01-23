@@ -178,7 +178,7 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     isDirty
   }), [translations, addTranslation, addTranslations, getTranslation, loadAllTranslations, saveAllTranslations, isDirty]);
 
-  // Expose saveAllTranslations, addTranslations, and loadAllTranslations on window for explicit save from AppContent and ddtMergeUtils
+  // Expose saveAllTranslations, addTranslations, and loadAllTranslations on window for explicit save from AppContent and taskUtils
   useEffect(() => {
     if (typeof window !== 'undefined') {
       (window as any).__projectTranslationsContext = {

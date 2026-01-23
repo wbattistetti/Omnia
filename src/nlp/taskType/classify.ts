@@ -53,11 +53,8 @@ export async function classify(label: string, opts?: InferOptions): Promise<Infe
       continue;
     }
 
-    console.log(`🔍 [CLASSIFY] Testando lingua ${L}`, {
-      hasREQUEST_DATA: !!RS.REQUEST_DATA,
-      REQUEST_DATA_count: RS.REQUEST_DATA?.length || 0,
-      REQUEST_DATA_patterns: RS.REQUEST_DATA?.map(r => r.toString()) || []
-    });
+    // ❌ RIMOSSO: log verboso per ogni lingua testata
+    // console.log(`🔍 [CLASSIFY] Testando lingua ${L}`, {...});
 
     // 0. AI_AGENT (priorità massima - riconosce "AI:" o "AI :" all'inizio)
     // ✅ Mappato a SayMessage (default per AI agent)
@@ -90,17 +87,20 @@ export async function classify(label: string, opts?: InferOptions): Promise<Infe
     // - "Chiedi il motivo della chiamata" deve essere DataRequest (non ClassifyProblem)
     // - La categoria "problem-classification" viene inferita dopo, non dal taskType
     if (RS.REQUEST_DATA && RS.REQUEST_DATA.length > 0) {
-      console.log(`🔍 [CLASSIFY] Testando ${RS.REQUEST_DATA.length} pattern REQUEST_DATA per ${L}`);
+      // ❌ RIMOSSO: log verboso per ogni pattern testato
+      // console.log(`🔍 [CLASSIFY] Testando ${RS.REQUEST_DATA.length} pattern REQUEST_DATA per ${L}`);
       for (let i = 0; i < RS.REQUEST_DATA.length; i++) {
         const pattern = RS.REQUEST_DATA[i];
         const matches = pattern.test(txt);
-        console.log(`  Pattern ${i + 1}/${RS.REQUEST_DATA.length}: ${pattern.toString()} → ${matches ? '✅ MATCH' : '❌ NO MATCH'}`);
+        // ❌ RIMOSSO: log per ogni pattern (troppo verboso)
+        // console.log(`  Pattern ${i + 1}/${RS.REQUEST_DATA.length}: ${pattern.toString()} → ${matches ? '✅ MATCH' : '❌ NO MATCH'}`);
         if (matches) {
           console.log(`✅ [CLASSIFY] Match REQUEST_DATA in ${L} con pattern ${i + 1}: ${pattern.toString()}`);
           return { type: TaskType.DataRequest, lang: L, reason: 'REQUEST_DATA' };
         }
       }
-      console.log(`❌ [CLASSIFY] Nessun pattern REQUEST_DATA ha matchato per ${L}`);
+      // ❌ RIMOSSO: log "Nessun pattern matchato" (troppo verboso)
+      // console.log(`❌ [CLASSIFY] Nessun pattern REQUEST_DATA ha matchato per ${L}`);
     } else {
       console.log(`⚠️ [CLASSIFY] Nessun pattern REQUEST_DATA disponibile per ${L}`);
     }

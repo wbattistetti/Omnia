@@ -21,7 +21,7 @@ export interface NodeValue {
  * Ottiene i valori predefiniti (values[]) di un nodo
  * NON confondere con subData[] che sono parti composite
  *
- * @param node - Nodo DDT (mainData o subData)
+ * @param node - Nodo DDT (data o subData)
  * @returns Array di valori predefiniti, o array vuoto se non ci sono
  */
 export function getNodeValues(node: any): NodeValue[] {
@@ -61,16 +61,16 @@ export function buildConditionName(dataLabel: string, valueLabel: string): strin
 
 /**
  * Estrae values[] da un task
- * Cerca nel primo mainData con values[] definiti
+ * Cerca nel primo data con values[] definiti
  *
  * @param task - Task da cui estrarre i valori
  * @returns Array di valori predefiniti, o array vuoto se non ci sono
  */
 export function getValuesFromTask(task: any): NodeValue[] {
-  if (!task?.mainData || !Array.isArray(task.mainData)) return [];
+  if (!task?.data || !Array.isArray(task.data)) return [];
 
-  // Cerca il primo mainData con values[]
-  for (const main of task.mainData) {
+  // Cerca il primo data con values[]
+  for (const main of task.data) {
     const values = getNodeValues(main);
     if (values.length > 0) {
       return values;

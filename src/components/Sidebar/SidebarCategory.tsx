@@ -62,8 +62,8 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
         } catch {}
       }, 0);
     };
-    el.addEventListener('agentAct:openInlineBuilder', handler as any);
-    return () => { el.removeEventListener('agentAct:openInlineBuilder', handler as any); };
+    el.addEventListener('taskTemplate:openInlineBuilder', handler as any);
+    return () => { el.removeEventListener('taskTemplate:openInlineBuilder', handler as any); };
   }, [entityType]);
 
   useEffect(() => {

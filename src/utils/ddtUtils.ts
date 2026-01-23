@@ -23,8 +23,8 @@ export function extractGUIDsFromDDT(ddt: any): string[] {
     tasksProcessed: 0
   };
 
-  if (!ddt?.mainData) {
-    console.log('[extractGUIDsFromDDT] ❌ No mainData in DDT', { ddt: ddt ? Object.keys(ddt) : null });
+  if (!ddt?.data) {
+    console.log('[extractGUIDsFromDDT] ❌ No data in DDT', { ddt: ddt ? Object.keys(ddt) : null });
     return [];
   }
 
@@ -105,7 +105,7 @@ export function extractGUIDsFromDDT(ddt: any): string[] {
     }
   };
 
-  ddt.mainData.forEach((main: any) => processNode(main));
+  ddt.data.forEach((main: any) => processNode(main));
 
   const result = Array.from(guids);
 

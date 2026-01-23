@@ -23,7 +23,7 @@ function mapAITypeToKind(aiType: string | number | undefined): Kind | undefined 
   // Step 1: Check if it's a supported kind directly
   const supportedKinds = nlpTypesConfig.supportedKinds as string[];
   if (supportedKinds.includes(normalized)) {
-    console.log('[MainDataBuilder][mapType] Direct match', {
+    console.log('[dataBuilder][mapType] Direct match', {
       aiType,
       mappedKind: normalized
     });
@@ -33,7 +33,7 @@ function mapAITypeToKind(aiType: string | number | undefined): Kind | undefined 
   // Step 2: Check aliases mapping
   const aliases = nlpTypesConfig.aliases as Record<string, string>;
   if (aliases[normalized]) {
-    console.log('[MainDataBuilder][mapType] Alias match', {
+    console.log('[dataBuilder][mapType] Alias match', {
       aiType,
       alias: normalized,
       mappedKind: aliases[normalized]
@@ -42,7 +42,7 @@ function mapAITypeToKind(aiType: string | number | undefined): Kind | undefined 
   }
 
   // Step 3: Fallback to 'generic' for unknown types
-  console.log('[MainDataBuilder][mapType] Unknown type, using fallback', {
+  console.log('[dataBuilder][mapType] Unknown type, using fallback', {
     aiType,
     normalized,
     mappedKind: 'generic',
@@ -52,24 +52,24 @@ function mapAITypeToKind(aiType: string | number | undefined): Kind | undefined 
   return 'generic';
 }
 
-// Ricorsivo: struttura identica per mainData e subData.
-export function buildMainDataNode(
+// Ricorsivo: struttura identica per data e subData.
+export function builddataNode(
   ddtId: string,
   dataNode: any,
   stepMessages: Record<string, string[][]>,
   translations: Record<string, string>
 ) {
-  return buildMainDataNodeWithSubData(ddtId, dataNode, { mainData: stepMessages, subData: {} }, translations);
+  return builddataNodeWithSubData(ddtId, dataNode, { data: stepMessages, subData: {} }, translations);
 }
 
 // Nuova funzione che supporta stepMessages specifici per subData
-export function buildMainDataNodeWithSubData(
+export function builddataNodeWithSubData(
   ddtId: string,
   dataNode: any,
   stepMessagesWithSubData: SubDataStepMessages,
   translations: Record<string, string>
 ) {
-  console.log('[MainDataBuilder][buildMainDataNodeWithSubData]', {
+  console.log('[dataBuilder][builddataNodeWithSubData]', {
     ddtId,
     hasDataNode: !!dataNode,
     dataNodeKeys: dataNode ? Object.keys(dataNode) : [],
@@ -82,11 +82,11 @@ export function buildMainDataNodeWithSubData(
   // Normalize and enrich constraints, add prompt translations
   const constraints = enrichAndTranslateConstraints(Array.isArray(dataNode.constraints) ? dataNode.constraints : [], ddtId, translations);
 
-  // Build steps using StepBuilder - use mainData stepMessages
+  // Build steps using StepBuilder - use data stepMessages
   const STANDARD_STEPS: StepGroup['type'][] = ['start', 'noMatch', 'noInput', 'confirmation', 'success'];
   let allStepTranslations: { key: string; value: string }[] = [];
   const steps: StepGroup[] = STANDARD_STEPS.map((stepType) => {
-    const messagesArr = (stepMessagesWithSubData.mainData && stepMessagesWithSubData.mainData[stepType]) || [];
+    const messagesArr = (stepMessagesWithSubData.data && stepMessagesWithSubData.data[stepType]) || [];
     // Always create a step, even if messagesArr is empty (for sub-data without specific prompts)
     // This ensures each node has its own step objects, not shared references
     const step = buildStepGroup(stepType, messagesArr, ddtId, translations);
@@ -111,11 +111,17 @@ export function buildMainDataNodeWithSubData(
 
       // Create a SubDataStepMessages object for this subData
       const subDataStepMessagesObj: SubDataStepMessages = {
-        mainData: subDataStepMessages, // Use subData-specific messages as mainData
+        data: subDataStepMessages, // Use subData-specific messages as data
         subData: {} // No nested subData for now
       };
 
-      const result = buildMainDataNodeWithSubData(ddtId, sub, subDataStepMessagesObj, translations);
+      const result = builddataNodeWithSubData(ddtId, sub, subDataStepMessagesObj, translations);
+
+      // ✅ CRITICAL: Preserve templateId if present in input
+      if (sub.templateId) {
+        result.templateId = sub.templateId;
+      }
+
       return result;
     });
   }
@@ -125,29 +131,34 @@ export function buildMainDataNodeWithSubData(
     translations[key] = value;
   }
 
-  // Build mainData node
-  const mainData: any = {
+  // Build data node
+  const data: any = {
     constraints,
     steps,
     subData,
   };
-  // Always set label, id, and icon for mainData
-  mainData.label = dataNode.label || dataNode.variable || dataNode.name || 'Subdata';
-  mainData.id = dataNode.id || uuidv4();
-  if (dataNode.variable) mainData.variable = dataNode.variable;
-  if (dataNode.icon) mainData.icon = dataNode.icon;  // ✅ Preserve icon from AI
+  // Always set label, id, and icon for data
+  data.label = dataNode.label || dataNode.variable || dataNode.name || 'Subdata';
+  data.id = dataNode.id || uuidv4();
+  if (dataNode.variable) data.variable = dataNode.variable;
+  if (dataNode.icon) data.icon = dataNode.icon;  // ✅ Preserve icon from AI
+
+  // ✅ CRITICAL: Preserve templateId if present in input
+  if (dataNode.templateId) {
+    data.templateId = dataNode.templateId;
+  }
 
   // ✅ Map AI type → frontend Kind with fallback to 'generic'
   if (dataNode.type) {
-    mainData.kind = mapAITypeToKind(dataNode.type);
+    data.kind = mapAITypeToKind(dataNode.type);
   }
 
-  console.log('[MainDataBuilder][result]', {
+  console.log('[dataBuilder][result]', {
     ddtId,
-    assignedLabel: mainData.label,
-    assignedKind: mainData.kind,
+    assignedLabel: data.label,
+    assignedKind: data.kind,
     aiType: dataNode.type,
-    usedFallback: mainData.label === 'Subdata',
+    usedFallback: data.label === 'Subdata',
     hadLabel: !!dataNode.label,
     hadVariable: !!dataNode.variable,
     hadName: !!dataNode.name,
@@ -155,5 +166,5 @@ export function buildMainDataNodeWithSubData(
   });
 
   // Final clean log for the full node (including subData)
-  return mainData;
+  return data;
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pencil, Trash2, Check, X } from 'lucide-react';
-import type { SchemaNode } from '../MainDataCollection';
+import type { SchemaNode } from '../dataCollection';
 
 interface ConstraintsListProps {
   constraints: any[];

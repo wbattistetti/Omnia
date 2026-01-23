@@ -48,7 +48,7 @@ class TaskRepository {
    *
    * @param type - TaskType enum (obbligatorio) - Determina il comportamento del task
    * @param templateId - Template ID (null = standalone, GUID = referenzia un altro Task)
-   * @param fields - Task fields (label, mainData, text, etc.)
+   * @param fields - Task fields (label, data, text, etc.)
    * @param taskId - Optional task ID (generates if not provided)
    * @param projectId - Optional project ID
    * @returns Task
@@ -78,8 +78,8 @@ class TaskRepository {
       templateId: task.templateId,
       hasText: !!task.text,
       category: (task as any).category || null, // ✅ Log categoria se presente
-      hasMainData: !!(task as any).mainData,
-      mainDataLength: Array.isArray((task as any).mainData) ? (task as any).mainData.length : 0
+      hasdata: !!(task as any).data,
+      dataLength: Array.isArray((task as any).data) ? (task as any).data.length : 0
     });
 
     // Save to internal storage
@@ -119,6 +119,26 @@ class TaskRepository {
       return false;
     }
 
+    // ✅ CRITICAL: Validate steps structure before merging
+    if (updates.steps && typeof updates.steps === 'object') {
+      const stepsKeys = Object.keys(updates.steps);
+      const stepTypeKeys = ['start', 'noMatch', 'noInput', 'confirmation', 'notConfirmed', 'success'];
+      const hasWrongStructure = stepsKeys.length === stepTypeKeys.length &&
+        stepsKeys.every(key => stepTypeKeys.includes(key));
+
+      if (hasWrongStructure) {
+        const stackTrace = new Error().stack?.split('\n').slice(1, 6).join('\n') || 'No stack trace';
+        console.error('[🔍 TaskRepository][UPDATE] ❌ CRITICAL: Wrong steps structure detected!', {
+          taskId,
+          stepsKeys,
+          stepsKeysAsStrings: stepsKeys.join(', '),
+          expectedStructure: 'Object with templateId keys (e.g., { "templateId": { start: {...}, ... } })',
+          actualStructure: 'Object with step type keys (e.g., { "start": {...}, "noMatch": {...} })',
+          caller: stackTrace
+        });
+      }
+    }
+
     // Update in internal storage (merge fields directly, no value wrapper)
     const updatedTask: Task = {
       ...existingTask,
@@ -126,6 +146,30 @@ class TaskRepository {
       type: finalType,  // ✅ Always preserve/update type - REQUIRED
       updatedAt: updates.updatedAt || new Date()
     };
+
+    // ✅ CRITICAL: Log steps structure after update (before saving)
+    if (updatedTask.steps) {
+      const stepsKeys = Object.keys(updatedTask.steps);
+      const stepTypeKeys = ['start', 'noMatch', 'noInput', 'confirmation', 'notConfirmed', 'success'];
+      const hasWrongStructure = stepsKeys.length === stepTypeKeys.length &&
+        stepsKeys.every(key => stepTypeKeys.includes(key));
+
+      console.log('[🔍 TaskRepository][UPDATE] Steps structure after update (before save)', {
+        taskId: taskId,
+        stepsKeys: stepsKeys,
+        stepsKeysAsStrings: stepsKeys.join(', '),
+        hasWrongStructure: hasWrongStructure,
+        stepsStructure: Object.entries(updatedTask.steps).slice(0, 2).map(([key, value]: [string, any]) => ({
+          key,
+          valueKeys: typeof value === 'object' ? Object.keys(value || {}) : [],
+          valueType: typeof value
+        })),
+        ...(hasWrongStructure ? {
+          caller: new Error().stack?.split('\n').slice(1, 6).join('\n')
+        } : {})
+      });
+    }
+
     this.tasks.set(taskId, updatedTask);
 
     // ✅ Save to database if projectId is available
@@ -225,10 +269,27 @@ class TaskRepository {
           type: taskType,                // ✅ Enum numerico (0-19) - REQUIRED
           templateId: item.templateId ?? null,
           ...(value || {}),  // ✅ Backward compatibility: flatten value if present
-          ...directFields,   // ✅ Use direct fields (mainData, label, steps, ecc.)
+          ...directFields,   // ✅ Use direct fields (data, label, steps, ecc.)
           createdAt: item.createdAt ? new Date(item.createdAt) : undefined,
           updatedAt: item.updatedAt ? new Date(item.updatedAt) : undefined
         };
+
+        // ✅ CRITICAL: Log steps structure only if wrong (reduce noise)
+        if (task.steps) {
+          const stepsKeys = Object.keys(task.steps);
+          const stepTypeKeys = ['start', 'noMatch', 'noInput', 'confirmation', 'notConfirmed', 'success'];
+          const hasWrongStructure = stepsKeys.length === stepTypeKeys.length &&
+            stepsKeys.every(key => stepTypeKeys.includes(key));
+
+          // ✅ Log solo se struttura sbagliata
+          if (hasWrongStructure) {
+            console.warn('[🔍 TaskRepository][LOAD] ⚠️ Wrong steps structure loaded from backend', {
+              taskId: task.id,
+              stepsKeys,
+              stepsKeysAsStrings: stepsKeys.join(', ')
+            });
+          }
+        }
 
         this.tasks.set(task.id, task);
       }
@@ -363,6 +424,24 @@ class TaskRepository {
         ...fields  // ✅ Save fields directly (no value wrapper, excluding _id)
       };
 
+      // ✅ CRITICAL: Log steps structure only if wrong (reduce noise)
+      if (payload.steps) {
+        const stepsKeys = Object.keys(payload.steps);
+        const stepTypeKeys = ['start', 'noMatch', 'noInput', 'confirmation', 'notConfirmed', 'success'];
+        const hasWrongStructure = stepsKeys.length === stepTypeKeys.length &&
+          stepsKeys.every(key => stepTypeKeys.includes(key));
+
+        // ✅ Log solo se struttura sbagliata
+        if (hasWrongStructure) {
+          console.error('[🔍 TaskRepository][SAVE] ❌ CRITICAL: Saving wrong steps structure!', {
+            taskId: task.id,
+            stepsKeys,
+            stepsKeysAsStrings: stepsKeys.join(', ')
+          });
+        }
+        // ❌ RIMOSSO: log normale (troppo verboso)
+      }
+
       const payloadString = JSON.stringify(payload);
 
       const response = await fetch(`/api/projects/${projectId}/tasks`, {
@@ -373,10 +452,21 @@ class TaskRepository {
 
       if (!response.ok) {
         const errorText = await response.text();
+        let errorJson = null;
+        try {
+          errorJson = JSON.parse(errorText);
+        } catch {
+          // Not JSON, use text as is
+        }
         console.error('[TaskRepository] Failed to save task:', {
           taskId: task.id,
           status: response.status,
-          error: errorText.substring(0, 500)
+          error: errorJson || errorText.substring(0, 500),
+          taskType: task.type,
+          hasSteps: !!(task.steps),
+          stepsKeys: task.steps ? Object.keys(task.steps) : [],
+          hasData: !!(task.data),
+          dataLength: task.data ? task.data.length : 0
         });
         return false;
       }

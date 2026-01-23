@@ -24,7 +24,7 @@ export interface FieldTaskProgress {
 // ATTENZIONE: Nomi devono matchare esattamente con i tipi di step in WizardPipelineStep!
 export const STANDARD_TASKS = {
     // Task per Main Data (ogni main data ha questi task)
-    mainData: [
+    data: [
         'startPrompt',
         'noInputPrompts',
         'noMatchPrompts',
@@ -47,7 +47,7 @@ export class TaskCounter {
     private taskStates: Record<string, Record<string, TaskStatus>> = {};
 
     // Inizializza i task per un campo
-    initializeField(fieldId: string, fieldType: 'mainData' | 'subData'): void {
+    initializeField(fieldId: string, fieldType: 'data' | 'subData'): void {
         const tasks = STANDARD_TASKS[fieldType];
         this.taskStates[fieldId] = {};
 
@@ -93,18 +93,18 @@ export class TaskCounter {
 
     // 🚀 CALCOLO RICORSIVO per Main Data + Sub Data
     calculateRecursiveProgress(
-        mainData: any[],
+        data: any[],
         fieldProcessingStates?: Record<string, any>
     ): Record<string, number> {
         const progressMap: Record<string, number> = {};
 
         // Calcola progresso per ogni Main Data
-        mainData.forEach((main, mainIndex) => {
+        data.forEach((main, mainIndex) => {
             const mainFieldId = main.label || `main_${mainIndex}`;
 
             // Inizializza se non esiste
             if (!this.taskStates[mainFieldId]) {
-                this.initializeField(mainFieldId, 'mainData');
+                this.initializeField(mainFieldId, 'data');
             }
 
             // Calcola progresso Main Data
@@ -140,7 +140,7 @@ export class TaskCounter {
         });
 
         // Calcola progresso root (aggregato di tutti i Main Data)
-        const allMainProgress = mainData.map((main, index) => {
+        const allMainProgress = data.map((main, index) => {
             const mainFieldId = main.label || `main_${index}`;
             return progressMap[mainFieldId] || 0;
         });

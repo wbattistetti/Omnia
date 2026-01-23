@@ -1,4 +1,4 @@
-import type { SchemaNode, Constraint } from './MainDataCollection';
+import type { SchemaNode, Constraint } from './dataCollection';
 
 export interface DatumRef {
   path: string; // e.g., "Full Name" or "Address/Street"

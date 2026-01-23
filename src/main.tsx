@@ -42,9 +42,10 @@ if (DISABLE_NATIVE_LOGS) {
 // Per abilitare temporaneamente: window.Logger.enableFor(5000) // 5 secondi
 
 if (typeof window !== 'undefined') {
-  console.log('🔧 Logger available globally as window.Logger');
-  console.log('💡 Use window.Logger.enable() to enable logging');
-  console.log('💡 Use window.Logger.enableComponent("DDT_WIZARD") to enable specific component');
+  // ❌ RIMOSSO: log informativi su come usare il logger (non necessari all'avvio)
+  // console.log('🔧 Logger available globally as window.Logger');
+  // console.log('💡 Use window.Logger.enable() to enable logging');
+  // console.log('💡 Use window.Logger.enableComponent("DDT_WIZARD") to enable specific component');
 }
 
 createRoot(document.getElementById('root')!).render(

@@ -35,13 +35,13 @@ export function isSubFilled(state: DDTState, subId: string): boolean {
 }
 
 /**
- * Finds the first missing required sub for a mainData
+ * Finds the first missing required sub for a data
  */
 export function findMissingRequiredSub(
-  mainData: any,
+  data: any,
   state: DDTState
 ): string | undefined {
-  const subs = mainData.subData || [];
+  const subs = data.subData || [];
   const requiredSubs = subs.filter((sub: any) => sub.required !== false);
 
   for (const sub of requiredSubs) {
@@ -54,13 +54,13 @@ export function findMissingRequiredSub(
 }
 
 /**
- * Checks if all required subs of a mainData are filled
+ * Checks if all required subs of a data are filled
  */
 export function isAllRequiredSubsFilled(
-  mainData: any,
+  data: any,
   state: DDTState
 ): boolean {
-  return findMissingRequiredSub(mainData, state) === undefined;
+  return findMissingRequiredSub(data, state) === undefined;
 }
 
 

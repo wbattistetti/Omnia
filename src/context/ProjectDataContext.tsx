@@ -88,14 +88,15 @@ export const ProjectDataProvider: React.FC<ProjectDataProviderProps> = ({ childr
   useEffect(() => {
     if (data) {
       (window as any).__projectData = data;
-      console.log('[ProjectDataProvider] ✅ Populated window.__projectData', {
-        conditionsCount: data.conditions?.flatMap(cat => cat.items || []).length || 0,
-        conditions: data.conditions?.flatMap(cat => (cat.items || []).map((item: any) => ({
-          id: item.id || item._id,
-          name: item.name || item.label,
-          hasScript: !!(item.data?.script || item.script)
-        }))) || []
-      });
+      // ❌ RIMOSSO: log verboso quando popola window.__projectData (non necessario all'avvio)
+      // console.log('[ProjectDataProvider] ✅ Populated window.__projectData', {
+      //   conditionsCount: data.conditions?.flatMap(cat => cat.items || []).length || 0,
+      //   conditions: data.conditions?.flatMap(cat => (cat.items || []).map((item: any) => ({
+      //     id: item.id || item._id,
+      //     name: item.name || item.label,
+      //     hasScript: !!(item.data?.script || item.script)
+      //   }))) || []
+      // });
     } else {
       (window as any).__projectData = null;
     }

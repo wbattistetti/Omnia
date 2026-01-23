@@ -1,5 +1,5 @@
 import { useCallback, useRef, useEffect } from 'react';
-import { getMainDataList, getSubDataList } from '../ddtSelectors';
+import { getdataList, getSubDataList } from '../ddtSelectors';
 
 /**
  * Hook for updating selected nodes in ResponseEditor.
@@ -77,7 +77,7 @@ export function useNodeUpdate(
       }
 
       // Normal update for main/sub nodes - use shallow copy for efficiency
-      const mains = getMainDataList(prev);
+      const mains = getdataList(prev);
       const main = mains[selectedMainIndex];
       if (!main) return prev;
 
@@ -88,10 +88,10 @@ export function useNodeUpdate(
         const after = JSON.stringify(updated);
         if (before === after) return prev; // no content change
 
-        // Shallow copy: only copy mainData array and the specific main node
-        const newMainData = [...mains];
-        newMainData[selectedMainIndex] = updated;
-        const next = { ...prev, mainData: newMainData };
+        // Shallow copy: only copy data array and the specific main node
+        const newdata = [...mains];
+        newdata[selectedMainIndex] = updated;
+        const next = { ...prev, data: newdata };
         pendingDDTRef.current = { ddt: next, notify: notifyProvider };
         return next;
       } else {
@@ -111,9 +111,9 @@ export function useNodeUpdate(
         const newSubData = [...(main.subData || [])];
         newSubData[subIdx] = updated;
         const newMain = { ...main, subData: newSubData };
-        const newMainData = [...mains];
-        newMainData[selectedMainIndex] = newMain;
-        const next = { ...prev, mainData: newMainData };
+        const newdata = [...mains];
+        newdata[selectedMainIndex] = newMain;
+        const next = { ...prev, data: newdata };
         pendingDDTRef.current = { ddt: next, notify: notifyProvider };
         return next;
       }

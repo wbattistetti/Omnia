@@ -83,11 +83,11 @@ export function useNewFlowOrchestrator({
     if (templateId !== 'GetData') {
       return null;
     }
-    // ✅ DDT è nei campi diretti del task (mainData indica che è un DDT)
-    if (task?.mainData && task.mainData.length > 0) {
+    // ✅ DDT è nei campi diretti del task (data indica che è un DDT)
+    if (task?.data && task.data.length > 0) {
       return {
         label: task.label,
-        mainData: task.mainData,
+        data: task.data,
         stepPrompts: task.stepPrompts,
         constraints: task.constraints,
         examples: task.examples

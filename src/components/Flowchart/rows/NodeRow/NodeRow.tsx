@@ -410,43 +410,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           messageText: taskAfter?.value?.text?.substring(0, 50) || 'N/A'
         });
 
-        // Passa mode per permettere la creazione corretta se l'istanza non esiste nel DB
-        // Questo è cruciale: se l'istanza non esiste, il backend la crea con questi valori
-        const payload = {
-          message: { text: label },
-          mode: 'Message' // Esplicito: mode Message per evitare default 'DataRequest'
-        };
-
-        console.log('[Message][SAVE][DB_PAYLOAD]', {
-          instanceId,
-          projectId: pid,
-          payload: {
-            message: { text: label.substring(0, 50) + '...' },
-            mode: payload.mode
-          }
-        });
-
-        void ProjectDataService.updateInstance(pid, instanceId, payload)
-          .then((result) => {
-            console.log('[Message][SAVE][DB_SUCCESS]', {
-              instanceId,
-              projectId: pid,
-              result: result ? {
-                _id: result._id,
-                rowId: result.rowId,
-                mode: result.mode,
-                messageText: result.message?.text?.substring(0, 50) || 'N/A'
-              } : null
-            });
-          })
-          .catch((e) => {
-            console.error('[Message][SAVE][DB_FAILED]', {
-              instanceId,
-              projectId: pid,
-              error: String(e),
-              stack: e?.stack?.substring(0, 200)
-            });
-          });
+        // ✅ REMOVED: updateInstance (legacy act_instances) - taskRepository.updateTask already saves to database
       } else {
         console.log('[Message][SAVE][SKIPPED]', {
           hasProjectId: !!pid,
@@ -1813,7 +1777,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       });
 
                       // ✅ Logica di creazione task:
-                      // 1. Se c'è inferredCategory → crea mainData dalla categoria, NON cercare template
+                      // 1. Se c'è inferredCategory → crea data dalla categoria, NON cercare template
                       // 2. Se NON c'è categoria ma c'è templateId → usa template
                       // 3. Se NON c'è né categoria né template → l'utente crea manualmente
                       let initialTaskData: any = { label: row.text || '' };
@@ -1821,20 +1785,20 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       // ✅ CASO 1: Se c'è inferredCategory (problem-classification, choice, confirmation)
                       if (inferredCategory && metaTaskType === TaskType.DataRequest) {
                         const { v4: uuidv4 } = await import('uuid');
-                        const { getMainDataLabelForCategory, getDefaultValuesForCategory, getCurrentProjectLocale } = await import('../../../../utils/categoryPresets');
+                        const { getdataLabelForCategory, getDefaultValuesForCategory, getCurrentProjectLocale } = await import('../../../../utils/categoryPresets');
 
                         initialTaskData.category = inferredCategory;
                         initialTaskData.templateId = null; // ✅ FORZA null, non cercare template
 
                         const projectLocale = getCurrentProjectLocale();
-                        const categoryMainDataLabel = getMainDataLabelForCategory(inferredCategory, projectLocale);
+                        const categorydataLabel = getdataLabelForCategory(inferredCategory, projectLocale);
 
-                        if (categoryMainDataLabel) {
+                        if (categorydataLabel) {
                           const defaultValues = getDefaultValuesForCategory(inferredCategory, projectLocale);
 
-                          initialTaskData.mainData = [{
+                          initialTaskData.data = [{
                             id: uuidv4(),
-                            label: categoryMainDataLabel,
+                            label: categorydataLabel,
                             kind: 'generic',
                             ...(defaultValues ? { values: defaultValues } : {}), // ✅ Valori predefiniti se presenti
                             subData: [],
@@ -1849,26 +1813,26 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                           console.log('✅ [LAZY] DDT creato automaticamente da inferredCategory', {
                             category: inferredCategory,
-                            mainDataLabel: categoryMainDataLabel,
+                            dataLabel: categorydataLabel,
                             hasDefaultValues: !!defaultValues
                           });
                         }
                       }
-                      // ✅ CASO 2: Se NON c'è categoria ma c'è templateId → usa template (NON creare mainData qui)
+                      // ✅ CASO 2: Se NON c'è categoria ma c'è templateId → usa template (NON creare data qui)
                       else if (metaTemplateId && metaTaskType === TaskType.DataRequest) {
                         initialTaskData.templateId = metaTemplateId; // ✅ Usa template dall'euristica 2
-                        // mainData sarà caricato dal template quando si apre ResponseEditor
-                        console.log('✅ [LAZY] Task creato con templateId, mainData sarà caricato dal template', {
+                        // data sarà caricato dal template quando si apre ResponseEditor
+                        console.log('✅ [LAZY] Task creato con templateId, data sarà caricato dal template', {
                           templateId: metaTemplateId
                         });
                       }
                       // ✅ CASO 3: Se NON c'è né categoria né template → l'utente crea manualmente
                       else {
-                        // Nessun mainData, l'utente creerà manualmente
-                        console.log('✅ [LAZY] Task creato senza mainData, l\'utente creerà manualmente');
+                        // Nessun data, l'utente creerà manualmente
+                        console.log('✅ [LAZY] Task creato senza data, l\'utente creerà manualmente');
                       }
 
-                      // ✅ Crea task base (con DDT se inferredMainData presente)
+                      // ✅ Crea task base (con DDT se inferreddata presente)
                       taskForType = taskRepository.createTask(
                         metaTaskType,
                         metaTemplateId,
@@ -1879,27 +1843,46 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       taskIdForType = taskForType.id;
                       (row as any).taskId = taskIdForType;
 
-                      // ✅ Se c'è templateId, copia steps (escalations) dal template
+                      // ✅ Se c'è templateId, usa funzione centralizzata per clonare e adattare
                       if (metaTemplateId) {
-                        console.log('📋 [LAZY] Copiando steps dal template', { templateId: metaTemplateId });
-                        const DialogueTaskService = (await import('../../../../services/DialogueTaskService')).default;
-                        const template = DialogueTaskService.getTemplate(metaTemplateId);
+                        console.log('[🔍 NodeRow][LAZY] Clonando struttura dal template', {
+                          taskId: taskIdForType,
+                          templateId: metaTemplateId,
+                          taskLabel: taskForType?.label
+                        });
 
-                        if (template) {
-                          const { buildMainDataFromTemplate } = await import('../../../../utils/ddtMergeUtils');
-                          const { mainData } = buildMainDataFromTemplate(template);
+                        try {
+                          const { loadAndAdaptDDTForExistingTask } = await import('../../../../utils/ddtInstanceManager');
 
-                          // ✅ Copia solo mainData con steps (escalations), non constraints/examples/nlpContract
+                          // ✅ Usa funzione centralizzata (gestisce tutto: buildDataTree, cloneSteps, adattamento)
+                          const { ddt, adapted } = await loadAndAdaptDDTForExistingTask(taskForType, projectId);
+
+                          console.log('[🔍 NodeRow][LAZY] DDT ricevuto da loadAndAdaptDDTForExistingTask', {
+                            taskId: taskIdForType,
+                            ddtStepsKeys: Object.keys(ddt.steps || {}),
+                            ddtStepsCount: Object.keys(ddt.steps || {}).length,
+                            mainNodesTemplateIds: ddt.data?.map((n: any) => ({
+                              id: n.id,
+                              templateId: n.templateId,
+                              label: n.label
+                            })) || [],
+                            adapted
+                          });
+
+                          // ✅ Salva task con steps (NON salvare data - si ricostruisce runtime)
                           taskRepository.updateTask(taskIdForType, {
-                            mainData: mainData
+                            steps: ddt.steps, // ✅ Steps con prompt adattati (solo main data)
+                            metadata: { promptsAdapted: adapted || taskForType?.metadata?.promptsAdapted === true }
                           }, projectId);
 
-                          console.log('✅ [LAZY] Steps copiati dal template', {
-                            mainDataLength: mainData.length,
-                            hasSteps: mainData.some((n: any) => n.steps)
+                          console.log('[🔍 NodeRow][LAZY] ✅ Task salvato con steps', {
+                            taskId: taskIdForType,
+                            stepsCount: Object.keys(ddt.steps || {}).length,
+                            stepsKeys: Object.keys(ddt.steps || {}),
+                            promptsAdapted: adapted || taskForType?.metadata?.promptsAdapted === true
                           });
-                        } else {
-                          console.warn('⚠️ [LAZY] Template non trovato', { templateId: metaTemplateId });
+                        } catch (err) {
+                          console.error('[🔍 NodeRow][LAZY] ❌ Errore durante clonazione/adattamento', err);
                         }
                       }
                     }
@@ -1913,7 +1896,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                     // ✅ SOLO per DataRequest: costruisci DDT solo se:
                     // 1. C'è templateId E il template è di tipo DataRequest
-                    // 2. OPPURE c'è mainData esistente (DDT già salvato, standalone o con override)
+                    // 2. OPPURE c'è data esistente (DDT già salvato, standalone o con override)
                     let ddt: any = null;
 
                     if (taskForType?.templateId && taskForType.templateId !== 'UNDEFINED') {
@@ -1928,12 +1911,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                         // ✅ Costruisci DDT SOLO se il template è di tipo DataRequest
                         if (templateType === TaskType.DataRequest) {
-                          // ✅ loadDDTFromTemplate gestisce merge: template come base + override da instance.mainData
-                          const { loadDDTFromTemplate } = await import('../../../../utils/ddtMergeUtils');
-                          ddt = await loadDDTFromTemplate(taskForType);
+                          // ✅ buildDDTFromTask gestisce merge: template come base + override da instance.data
+                          const { buildDDTFromTask } = await import('../../../../utils/taskUtils');
+                          ddt = await buildDDTFromTask(taskForType);
                           if (!ddt) {
-                            // Fallback: create empty DDT solo se template è DataRequest ma loadDDTFromTemplate fallisce
-                            ddt = { label: taskForType.label || row.text || 'New DDT', mainData: [] };
+                            // Fallback: create empty DDT solo se template è DataRequest ma buildDDTFromTask fallisce
+                            ddt = { label: taskForType.label || row.text || 'New DDT', data: [] };
                           }
                         } else {
                           // ✅ NON costruire DDT se template non è DataRequest
@@ -1942,17 +1925,17 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       } else {
                         ddt = null;
                       }
-                    } else if (taskForType?.mainData && taskForType.mainData.length > 0) {
-                      // ✅ Usa mainData esistente (DDT standalone, non da template)
+                    } else if (taskForType?.data && taskForType.data.length > 0) {
+                      // ✅ Usa data esistente (DDT standalone, non da template)
                       ddt = {
                         label: taskForType.label || row.text || 'New DDT',
-                        mainData: taskForType.mainData,
+                        data: taskForType.data,
                         stepPrompts: taskForType.stepPrompts,
                         constraints: taskForType.constraints,
                         examples: taskForType.examples
                       };
                     }
-                    // ✅ NON creare DDT vuoto se non c'è né templateId DataRequest né mainData
+                    // ✅ NON creare DDT vuoto se non c'è né templateId DataRequest né data
                     // ResponseEditor gestirà il caso di ddt === null aprendo il wizard (AI genererà DDT)
 
                     // Emit event with DDT data so AppContent can open it as docking tab
@@ -2015,17 +1998,17 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       const template = DialogueTaskService.getTemplate(metaTemplateId);
 
                       if (template) {
-                        const { buildMainDataFromTemplate } = await import('../../../../utils/ddtMergeUtils');
-                        const { mainData } = buildMainDataFromTemplate(template);
+                          const { buildDataTree } = await import('../../../../utils/taskUtils');
+                          const data = buildDataTree(template);
 
-                        // ✅ Copia solo mainData con steps (escalations), non constraints/examples/nlpContract
+                        // ✅ Copia solo data con steps (escalations), non constraints/examples/nlpContract
                         taskRepository.updateTask(taskIdForType, {
-                          mainData: mainData
+                          data: data
                         }, projectId);
 
                         console.log('✅ [LAZY] Steps copiati dal template', {
-                          mainDataLength: mainData.length,
-                          hasSteps: mainData.some((n: any) => n.steps)
+                          dataLength: data.length,
+                          hasSteps: data.some((n: any) => n.steps)
                         });
                       } else {
                         console.warn('⚠️ [LAZY] Template non trovato', { templateId: metaTemplateId });
@@ -2051,7 +2034,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                   if (editorKind === 'ddt' && taskType === TaskType.DataRequest) {
                     // ✅ SOLO per DataRequest: costruisci DDT solo se:
                     // 1. C'è templateId E il template è di tipo DataRequest
-                    // 2. OPPURE c'è mainData esistente (DDT già salvato, standalone o con override)
+                    // 2. OPPURE c'è data esistente (DDT già salvato, standalone o con override)
                     let ddt: any = null;
 
                     if (taskForType?.templateId && taskForType.templateId !== 'UNDEFINED') {
@@ -2066,12 +2049,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                         // ✅ Costruisci DDT SOLO se il template è di tipo DataRequest
                         if (templateType === TaskType.DataRequest) {
-                          // ✅ loadDDTFromTemplate gestisce merge: template come base + override da instance.mainData
-                          const { loadDDTFromTemplate } = await import('../../../../utils/ddtMergeUtils');
-                          ddt = await loadDDTFromTemplate(taskForType);
+                          // ✅ buildDDTFromTask gestisce merge: template come base + override da instance.data
+                          const { buildDDTFromTask } = await import('../../../../utils/taskUtils');
+                          ddt = await buildDDTFromTask(taskForType);
                           if (!ddt) {
-                            // Fallback: create empty DDT solo se template è DataRequest ma loadDDTFromTemplate fallisce
-                            ddt = { label: taskForType.label || row.text || 'New DDT', mainData: [] };
+                            // Fallback: create empty DDT solo se template è DataRequest ma buildDDTFromTask fallisce
+                            ddt = { label: taskForType.label || row.text || 'New DDT', data: [] };
                           }
                         } else {
                           // ✅ NON costruire DDT se template non è DataRequest
@@ -2080,17 +2063,17 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       } else {
                         ddt = null;
                       }
-                    } else if (taskForType?.mainData && taskForType.mainData.length > 0) {
-                      // ✅ Usa mainData esistente (DDT standalone, non da template)
+                    } else if (taskForType?.data && taskForType.data.length > 0) {
+                      // ✅ Usa data esistente (DDT standalone, non da template)
                       ddt = {
                         label: taskForType.label || row.text || 'New DDT',
-                        mainData: taskForType.mainData,
+                        data: taskForType.data,
                         stepPrompts: taskForType.stepPrompts,
                         constraints: taskForType.constraints,
                         examples: taskForType.examples
                       };
                     }
-                    // ✅ NON creare DDT vuoto se non c'è né templateId DataRequest né mainData
+                    // ✅ NON creare DDT vuoto se non c'è né templateId DataRequest né data
                     // ResponseEditor gestirà il caso di ddt === null aprendo il wizard (AI genererà DDT)
 
                     // ✅ Emit event with DDT data so AppContent can open it as docking tab (solo per DataRequest)

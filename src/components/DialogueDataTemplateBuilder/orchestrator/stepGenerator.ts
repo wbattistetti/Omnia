@@ -47,14 +47,14 @@ export function generateStepsSkipDetectType(data: DataNode, skipDetectType: bool
       { key: 'successPrompts', type: 'successPrompts', endpoint: '/api/stepSuccess', label: 'Success prompts...', payoff: 'Prompts for successful completion.' },
     ];
 
-  // Add subData steps if subData exists - using same endpoints as mainData
+  // Add subData steps if subData exists - using same endpoints as data
   if (data.subData && data.subData.length > 0) {
     data.subData.forEach((subData, index) => {
       // Use label, variable, or name for the subData identifier
       const subDataName = subData.label || subData.variable || subData.name || `subData_${index}`;
       // console.log('[DEBUG] Creating steps for subData:', subDataName, 'with data:', subData);
 
-      // Use the same endpoints as mainData for subData
+      // Use the same endpoints as data for subData
       stepPlan.push(
         {
           key: `subData_startPrompt_${subDataName}_${index}`,

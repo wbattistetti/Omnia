@@ -71,7 +71,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       version,
       status: 'draft',
       labelKey: newDDT?.label || item.name,
-      mains: (newDDT?.mainData || []).map((m: any) => ({
+      mains: (newDDT?.data || []).map((m: any) => ({
         labelKey: m?.label,
         kind: m?.kind,
         required: (m?.constraints || []).some((c: any) => c?.kind === 'required'),
@@ -89,7 +89,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       })),
       translations: (newDDT?.translations && newDDT.translations.en) ? { en: newDDT.translations.en } : undefined,
       builtAt: new Date().toISOString(),
-      checksum: (() => { try { return String(btoa(unescape(encodeURIComponent(JSON.stringify(newDDT.mainData || []))))).slice(0, 32); } catch { return String(version); } })(),
+      checksum: (() => { try { return String(btoa(unescape(encodeURIComponent(JSON.stringify(newDDT.data || []))))).slice(0, 32); } catch { return String(version); } })(),
       origin: { tool: 'wizard' }
     } as any;
     item.ddt = snapshot;
@@ -104,7 +104,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       const transient = {
         id: `runtime.${item.id || item._id}.v${snapshot.version}`,
         label: snapshot.labelKey || item.name,
-        mainData: (snapshot.mains || []).map((m: any) => ({
+        data: (snapshot.mains || []).map((m: any) => ({
           id: `${Math.random()}`,
           label: m.labelKey,
           type: m.kind,
@@ -133,7 +133,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
     const transient = {
       id: `runtime.${item.id || item._id}.v${ddtSnap.version}`,
       label: ddtSnap.labelKey || item.name,
-      mainData: (ddtSnap.mains || []).map((m: any) => ({
+      data: (ddtSnap.mains || []).map((m: any) => ({
         id: `${Math.random()}`,
         label: m.labelKey,
         type: m.kind,
@@ -201,7 +201,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       // Open below DDT header (same behavior of '+')
       const event: any = new CustomEvent('ddt:openBuilderBelowHeader', {
         detail: {
-          initialDDT: { label: item?.name || item?.label || 'Data', mainData: [] },
+          initialDDT: { label: item?.name || item?.label || 'Data', data: [] },
           startOnStructure: false,
           prefillUserDesc: String(item?.name || item?.label || ''),
         },

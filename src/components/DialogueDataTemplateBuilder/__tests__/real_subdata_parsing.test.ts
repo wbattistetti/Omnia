@@ -26,14 +26,14 @@ describe('DDT Builder - SubData parsing test (Day)', () => {
 
     const result = buildDDT('test', dataNode, stepResults);
 
-    const daySubData = result.mainData.subData.find(s => s.label === 'Day');
+    const daySubData = result.data.subData.find(s => s.label === 'Day');
     expect(daySubData).toBeDefined();
 
     const startStep = daySubData.steps.find(s => s.type === 'start');
     expect(startStep).toBeDefined();
     expect(startStep.escalations.length).toBeGreaterThan(0);
 
-    // Verifica che le traduzioni contengano i messaggi specifici (come nel test mainData)
+    // Verifica che le traduzioni contengano i messaggi specifici (come nel test data)
     // ✅ MIGRATION: Support both tasks (new) and actions (legacy)
     const startTask = startStep.escalations[0].tasks?.[0] || startStep.escalations[0].actions?.[0];
     const startParameterValue = startTask?.parameters?.[0]?.value;

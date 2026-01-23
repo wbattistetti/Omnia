@@ -17,7 +17,7 @@ import EditorHeader from '../../common/EditorHeader';
 import { getTaskVisualsByType } from '../../Flowchart/utils/taskVisuals';
 import TaskDragLayer from './TaskDragLayer';
 import {
-  getMainDataList,
+  getdataList,
   getSubDataList
 } from './ddtSelectors';
 import { hasIntentMessages } from './utils/hasMessages';
@@ -36,7 +36,7 @@ import { useDDTTranslations } from '../../../hooks/useDDTTranslations';
 import { ToolbarButton } from '../../../dock/types';
 import { taskTemplateService } from '../../../services/TaskTemplateService';
 import { mapNode } from '../../../dock/ops';
-import { extractModifiedDDTFields } from '../../../utils/ddtMergeUtils';
+import { extractModifiedDDTFields } from '../../../utils/taskUtils';
 import { useWizardInference } from './hooks/useWizardInference';
 import { validateTaskStructure, getTaskSemantics } from '../../../utils/taskSemantics';
 import { getIsTesting } from './testingState';
@@ -65,7 +65,7 @@ function coercePhoneKind(src: any) {
   if (!src) return src;
   try {
     const clone = safeDeepClone(src);
-    const mains = Array.isArray(clone?.mainData) ? clone.mainData : [];
+    const mains = Array.isArray(clone?.data) ? clone.data : [];
     for (const m of mains) {
       const label = String(m?.label || '').toLowerCase();
       if (/phone|telephone|tel|cellulare|mobile/.test(label)) {
@@ -175,19 +175,19 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
       ddtRef.current = ddt;
       prevInstanceRef.current = instance;
       // ✅ ARCHITETTURA ESPERTO: Forza aggiornamento mainList quando DDT viene caricato
-      if (ddt?.mainData && ddt.mainData.length > 0) {
+      if (ddt?.data && ddt.data.length > 0) {
         setDDTVersion(v => v + 1);
       }
     } else if (ddt && ddt !== ddtRef.current) {
-      // ✅ Safe comparison: check reference and mainData length instead of JSON.stringify
+      // ✅ Safe comparison: check reference and data length instead of JSON.stringify
       // (JSON.stringify can fail on circular references)
       const ddtChanged = ddt !== ddtRef.current ||
-        (ddt?.mainData?.length !== ddtRef.current?.mainData?.length);
+        (ddt?.data?.length !== ddtRef.current?.data?.length);
       if (ddtChanged) {
         // Stessa istanza ma ddt prop è cambiato → sincronizza (dockTree è stato aggiornato esternamente)
         ddtRef.current = ddt;
         // ✅ ARCHITETTURA ESPERTO: Forza aggiornamento mainList quando DDT viene caricato
-        if (ddt?.mainData && ddt.mainData.length > 0) {
+        if (ddt?.data && ddt.data.length > 0) {
           setDDTVersion(v => v + 1);
         }
       }
@@ -205,6 +205,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
     try { localStorage.setItem('debug.reopen', '1'); } catch { }
     try { localStorage.setItem('debug.nodeSelection', '1'); } catch { }
     try { localStorage.setItem('debug.nodeSync', '1'); } catch { }
+    try { localStorage.setItem('debug.useDDTTranslations', '1'); } catch { }
+    try { localStorage.setItem('debug.getTaskText', '1'); } catch { }
   }, []);
   // Get project language from localStorage (set when project is created/loaded)
   const projectLocale = useMemo<'en' | 'it' | 'pt'>(() => {
@@ -232,7 +234,23 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
   };
 
   // ✅ Load translations from global table using shared hook
-  const localTranslations = useDDTTranslations(ddt);
+  // ✅ Pass task to extract GUIDs from task.steps[nodeId] (unified model)
+  const localTranslations = useDDTTranslations(ddt, task);
+
+  // 🔍 DEBUG: Log translations loading (rimosso - troppo verboso)
+  // React.useEffect(() => {
+  //   if (localStorage.getItem('debug.responseEditor') === '1') {
+  //     console.log('[ResponseEditor] 📚 Translations loaded', {
+  //       translationsCount: Object.keys(localTranslations).length,
+  //       sampleTranslations: Object.keys(localTranslations).slice(0, 10),
+  //       hasTask: !!task,
+  //       taskId: task?.id,
+  //       taskStepsCount: task?.steps ? Object.keys(task.steps).length : 0,
+  //       ddtId: ddt?.id || ddt?._id,
+  //       ddtLabel: ddt?.label
+  //     });
+  //   }
+  // }, [localTranslations, task?.id, task?.steps, ddt?.id]);
 
   // ❌ REMOVED: Sync from ddt.translations - translations are now in global table only
   // Translations are updated via the effect above that watches globalTranslations
@@ -262,7 +280,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
         const key = (task?.instanceId || task?.id) as string; // ✅ RINOMINATO: act → task
         const taskInstance = taskRepository.getTask(key);
         const currentDDT = { ...ddtRef.current };
-        const hasDDT = currentDDT && Object.keys(currentDDT).length > 0 && currentDDT.mainData && currentDDT.mainData.length > 0;
+        const hasDDT = currentDDT && Object.keys(currentDDT).length > 0 && currentDDT.data && currentDDT.data.length > 0;
 
         if (hasDDT && taskInstance) {
           // ✅ Estrai solo campi modificati rispetto al template (override)
@@ -304,9 +322,9 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
     // ✅ ARCHITETTURA ESPERTO: Usa ddt prop se disponibile, altrimenti ddtRef.current
     // Questo garantisce che mainList sia aggiornato quando DDTHostAdapter carica il DDT
     const currentDDT = ddt ?? ddtRef.current;
-    const list = getMainDataList(currentDDT);
+    const list = getdataList(currentDDT);
     return list;
-  }, [ddt?.label ?? '', ddt?.mainData?.length ?? 0, ddtVersion ?? 0, stableIsDdtLoading]); // ✅ Usa valori primitivi sempre definiti
+  }, [ddt?.label ?? '', ddt?.data?.length ?? 0, ddtVersion ?? 0, stableIsDdtLoading]); // ✅ Usa valori primitivi sempre definiti
   // Aggregated view: show a group header when there are multiple mains
   const isAggregatedAtomic = useMemo(() => (
     Array.isArray(mainList) && mainList.length > 1
@@ -555,9 +573,17 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
   // Persist explicitly on close only (avoid side-effects/flicker on unmount)
   const handleEditorClose = React.useCallback(async () => {
+    console.log('[ResponseEditor][CLOSE] 🚪 Editor close initiated', {
+      taskId: task?.id || task?.instanceId,
+      hasTask: !!task,
+      hasSelectedNode: !!selectedNode,
+      hasSelectedNodePath: !!selectedNodePath,
+      taskStepsCount: task?.steps ? Object.keys(task.steps).length : 0
+    });
+
     // ✅ Salva selectedNode corrente nel ref prima di chiudere (se non già salvato)
     if (selectedNode && selectedNodePath) {
-      const mains = getMainDataList(ddtRef.current);
+      const mains = getdataList(ddtRef.current);
       const { mainIndex, subIndex } = selectedNodePath;
       const isRoot = selectedRoot || false;
 
@@ -579,7 +605,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
           }
         } else if (subIndex === undefined) {
           mains[mainIndex] = selectedNode;
-          ddtRef.current.mainData = mains;
+          ddtRef.current.data = mains;
         } else {
           const subList = main.subData || [];
           const subIdx = subList.findIndex((s: any, idx: number) => idx === subIndex);
@@ -587,7 +613,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
             subList[subIdx] = selectedNode;
             main.subData = subList;
             mains[mainIndex] = main;
-            ddtRef.current.mainData = mains;
+            ddtRef.current.data = mains;
           }
         }
       }
@@ -600,18 +626,63 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
       // Se abbiamo un instanceId o task.id (caso DDTHostAdapter), salva nell'istanza // ✅ RINOMINATO: act → task
       if (task?.id || task?.instanceId) { // ✅ RINOMINATO: act → task
         const key = (task?.instanceId || task?.id) as string; // ✅ RINOMINATO: act → task
-        const hasDDT = finalDDT && Object.keys(finalDDT).length > 0 && finalDDT.mainData && finalDDT.mainData.length > 0;
+        const hasDDT = finalDDT && Object.keys(finalDDT).length > 0 && finalDDT.data && finalDDT.data.length > 0;
+
+        console.log('[ResponseEditor][CLOSE] 🔍 Pre-save check', {
+          taskId: task?.id || task?.instanceId,
+          key,
+          hasDDT,
+          finalDDTKeys: finalDDT ? Object.keys(finalDDT) : [],
+          hasdata: !!finalDDT?.data,
+          dataLength: finalDDT?.data?.length || 0
+        });
+
+        console.log('[ResponseEditor][CLOSE] 💾 Starting save process', {
+          taskId: task?.id || task?.instanceId,
+          key,
+          hasTask: !!task,
+          taskStepsKeys: task?.steps ? Object.keys(task.steps) : [],
+          taskStepsCount: task?.steps ? Object.keys(task.steps).length : 0,
+          taskStepsDetails: task?.steps ? Object.keys(task.steps).map(nodeId => {
+            const nodeSteps = task.steps[nodeId];
+            const isArray = Array.isArray(nodeSteps);
+            const isObject = typeof nodeSteps === 'object' && !Array.isArray(nodeSteps);
+            let escalationsCount = 0;
+            let tasksCount = 0;
+
+            if (isArray) {
+              escalationsCount = nodeSteps.length;
+              tasksCount = nodeSteps.reduce((acc: number, step: any) =>
+                acc + (step?.escalations?.reduce((a: number, esc: any) => a + (esc?.tasks?.length || 0), 0) || 0), 0);
+            } else if (isObject) {
+              escalationsCount = nodeSteps?.start?.escalations?.length || nodeSteps?.introduction?.escalations?.length || 0;
+              const startEscs = nodeSteps?.start?.escalations || [];
+              const introEscs = nodeSteps?.introduction?.escalations || [];
+              tasksCount = [...startEscs, ...introEscs].reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0);
+            }
+
+            return {
+              nodeId,
+              stepsType: typeof nodeSteps,
+              isArray,
+              isObject,
+              stepsKeys: isObject ? Object.keys(nodeSteps || {}) : [],
+              escalationsCount,
+              tasksCount
+            };
+          }) : []
+        });
 
         if (hasDDT) {
-          const finalMainData = finalDDT?.mainData?.[0];
-          const finalSubData = finalMainData?.subData?.[0];
+          const finaldata = finalDDT?.data?.[0];
+          const finalSubData = finaldata?.subData?.[0];
           const finalStartTasks = finalSubData?.steps?.start?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0;
 
           console.log('[handleEditorClose] 💾 Saving complete DDT (SYNC - blocking close until saved)', {
             key,
             finalStartTasks,
-            hasMainData: !!finalMainData,
-            mainDataLength: finalDDT?.mainData?.length || 0
+            hasdata: !!finaldata,
+            dataLength: finalDDT?.data?.length || 0
           });
 
           // ✅ Get or create task
@@ -625,39 +696,71 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
           const currentTemplateId = getTemplateId(taskInstance);
 
+          // ✅ CRITICAL: Aggiungi task.steps a finalDDT (unica fonte di verità per gli steps)
+          // Gli steps non sono in ddtRef.current perché vivono solo in task.steps[nodeId]
+          const finalDDTWithSteps = {
+            ...finalDDT,
+            steps: task?.steps || finalDDT.steps || {} // ✅ Preferisci task.steps (unica fonte di verità)
+          };
+
+          console.log('[ResponseEditor][CLOSE] 📦 Final DDT with steps prepared', {
+            taskId: task?.id || task?.instanceId,
+            key,
+            finalStepsKeys: finalDDTWithSteps.steps ? Object.keys(finalDDTWithSteps.steps) : [],
+            finalStepsCount: finalDDTWithSteps.steps ? Object.keys(finalDDTWithSteps.steps).length : 0,
+            taskStepsKeys: task?.steps ? Object.keys(task.steps) : [],
+            taskStepsCount: task?.steps ? Object.keys(task.steps).length : 0,
+            stepsMatch: JSON.stringify(finalDDTWithSteps.steps) === JSON.stringify(task?.steps || {})
+          });
+
           // ✅ CASE-INSENSITIVE - AWAIT OBBLIGATORIO: non chiudere finché non è salvato
           if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
             await taskRepository.updateTask(key, {
               type: TaskType.DataRequest,  // ✅ type: enum numerico
               templateId: null,            // ✅ templateId: null (standalone)
-              label: finalDDT.label,
-              mainData: finalDDT.mainData,
-              steps: finalDDT.steps, // ✅ CRITICAL: Salva steps a root level per evitare riapertura wizard
-              constraints: finalDDT.constraints,
-              examples: finalDDT.examples,
-              nlpContract: finalDDT.nlpContract,
-              introduction: finalDDT.introduction
+              label: finalDDTWithSteps.label,
+              data: finalDDTWithSteps.data,
+              steps: finalDDTWithSteps.steps, // ✅ CRITICAL: Salva steps da task.steps (unica fonte di verità)
+              constraints: finalDDTWithSteps.constraints,
+              examples: finalDDTWithSteps.examples,
+              nlpContract: finalDDTWithSteps.nlpContract,
+              introduction: finalDDTWithSteps.introduction
             }, currentProjectId || undefined);
           } else {
             await taskRepository.updateTask(key, {
-              label: finalDDT.label,
-              mainData: finalDDT.mainData,
-              steps: finalDDT.steps, // ✅ CRITICAL: Salva steps a root level per evitare riapertura wizard
-              constraints: finalDDT.constraints,
-              examples: finalDDT.examples,
-              nlpContract: finalDDT.nlpContract,
-              introduction: finalDDT.introduction
+              label: finalDDTWithSteps.label,
+              data: finalDDTWithSteps.data,
+              steps: finalDDTWithSteps.steps, // ✅ CRITICAL: Salva steps da task.steps (unica fonte di verità)
+              constraints: finalDDTWithSteps.constraints,
+              examples: finalDDTWithSteps.examples,
+              nlpContract: finalDDTWithSteps.nlpContract,
+              introduction: finalDDTWithSteps.introduction
             }, currentProjectId || undefined);
           }
 
-          console.log('[handleEditorClose] ✅ Save completed - repository is now up to date', {
+          // ✅ Verify steps were saved by reading back from repository
+          const savedTask = taskRepository.getTask(key);
+          const savedStepsKeys = savedTask?.steps ? Object.keys(savedTask.steps) : [];
+          const savedStepsCount = savedStepsKeys.length;
+
+          console.log('[ResponseEditor][CLOSE] ✅ Save completed successfully', {
+            taskId: task?.id || task?.instanceId,
             key,
-            mainDataLength: finalDDT.mainData?.length || 0,
+            dataLength: finalDDT.data?.length || 0,
             finalStartTasks,
-            // ✅ DEBUG: Verifica steps a root level
-            hasSteps: !!finalDDT.steps,
-            stepsCount: finalDDT.steps ? Object.keys(finalDDT.steps).length : 0,
-            stepsKeys: finalDDT.steps ? Object.keys(finalDDT.steps) : []
+            savedStepsKeys: finalDDTWithSteps.steps ? Object.keys(finalDDTWithSteps.steps) : [],
+            savedStepsCount: finalDDTWithSteps.steps ? Object.keys(finalDDTWithSteps.steps).length : 0,
+            repositoryTask: {
+              hasSteps: !!savedTask?.steps,
+              stepsKeys: savedStepsKeys,
+              stepsCount: savedStepsCount,
+              stepsMatch: JSON.stringify(savedTask?.steps || {}) === JSON.stringify(finalDDTWithSteps.steps || {})
+            },
+            verification: {
+              stepsWereSaved: savedStepsCount > 0,
+              stepsMatchExpected: savedStepsCount === (finalDDTWithSteps.steps ? Object.keys(finalDDTWithSteps.steps).length : 0),
+              allStepsPresent: savedStepsKeys.every(nodeId => finalDDTWithSteps.steps?.[nodeId] !== undefined)
+            }
           });
         } else if (finalDDT) {
           // ✅ No DDT structure, but save other fields (e.g., Message text)
@@ -670,7 +773,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
           }
           // ✅ AWAIT per garantire completamento
           await taskRepository.updateTask(key, finalDDT, currentProjectId || undefined);
-          console.log('[handleEditorClose] ✅ Save completed (no mainData)', { key });
+          console.log('[handleEditorClose] ✅ Save completed (no data)', { key });
         }
 
       }
@@ -682,13 +785,25 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
         replaceSelectedDDT(finalDDT);
       }
     } catch (e) {
-      console.error('[ResponseEditor][handleEditorClose] Persist error', {
-        taskId: task?.id,
-        error: e
+      console.error('[ResponseEditor][CLOSE] ❌ Persist error', {
+        taskId: task?.id || task?.instanceId,
+        error: e,
+        errorMessage: e instanceof Error ? e.message : String(e),
+        errorStack: e instanceof Error ? e.stack : undefined
       });
     }
 
-    try { onClose && onClose(); } catch { }
+    console.log('[ResponseEditor][CLOSE] 🚪 Calling onClose callback', {
+      taskId: task?.id || task?.instanceId,
+      hasOnClose: !!onClose
+    });
+
+    try { onClose && onClose(); } catch (e) {
+      console.error('[ResponseEditor][CLOSE] ❌ Error calling onClose', {
+        taskId: task?.id || task?.instanceId,
+        error: e
+      });
+    }
   }, [replaceSelectedDDT, onClose, task?.id, (task as any)?.instanceId, currentProjectId]);
 
   // ✅ NON serve più tracciare sincronizzazioni - selectedNode è l'unica fonte di verità
@@ -709,7 +824,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
   // ✅ Caricamento: legge da ddtRef.current (che contiene già le modifiche, come VB.NET)
   useEffect(() => {
     // 🔴 LOG CHIRURGICO 3: Caricamento nodo
-    const currentMainList = getMainDataList(ddtRef.current); // ✅ Leggi dal ref, non dal prop
+    const currentMainList = getdataList(ddtRef.current); // ✅ Leggi dal ref, non dal prop
 
     if (currentMainList.length === 0) {
       return;
@@ -752,10 +867,118 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
         : getSubDataList(currentMainList[selectedMainIndex])?.[selectedSubIndex];
 
       if (node) {
-        // ✅ Copia gli steps da task.steps[nodeId] a node.steps (per compatibilità con codice che legge node.steps)
-        const nodeId = node.id;
-        if (nodeId && task?.steps?.[nodeId]) {
-          node.steps = task.steps[nodeId];
+        // ✅ CRITICAL: Usa node.templateId come chiave (non node.id)
+        // task.steps[node.templateId] = steps clonati
+        // node.id potrebbe essere diverso (nel caso di template aggregato)
+        const nodeTemplateId = node.templateId || node.id; // ✅ Fallback a node.id se templateId non presente
+
+        const allTaskStepsKeys = task?.steps ? Object.keys(task.steps) : [];
+        // ✅ CRITICAL: Stampa chiavi come stringhe per debug
+        console.log('[🔍 ResponseEditor][NODE_SELECT] 🔑 CHIAVI IN task.steps:', allTaskStepsKeys);
+        console.log('[🔍 ResponseEditor][NODE_SELECT] 🔍 CERCHIAMO CHIAVE:', nodeTemplateId);
+
+        console.log('[🔍 ResponseEditor][NODE_SELECT] CRITICAL - Loading steps for node', {
+          nodeId: node.id,
+          nodeTemplateId,
+          nodeLabel: node?.label,
+          hasTaskSteps: !!(nodeTemplateId && task?.steps?.[nodeTemplateId]),
+          taskStepsKeys: allTaskStepsKeys,
+          taskStepsKeysAsStrings: allTaskStepsKeys.join(', '), // ✅ Stringa per vedere tutte le chiavi
+          taskStepsCount: allTaskStepsKeys.length,
+          lookingForKey: nodeTemplateId,
+          keyExists: nodeTemplateId ? !!(task?.steps?.[nodeTemplateId]) : false,
+          keyMatchDetails: nodeTemplateId && task?.steps ? {
+            exactMatch: task.steps[nodeTemplateId] ? '✅ MATCH' : '❌ NO MATCH',
+            allKeys: allTaskStepsKeys,
+            keyComparison: allTaskStepsKeys.map(k => ({
+              key: k,
+              keyFull: k, // ✅ Mostra chiave completa
+              matches: k === nodeTemplateId,
+              keyLength: k.length,
+              templateIdLength: nodeTemplateId.length,
+              keyPreview: k.substring(0, 30) + '...',
+              templateIdPreview: nodeTemplateId.substring(0, 30) + '...',
+              // ✅ Confronto carattere per carattere
+              charByChar: k.length === nodeTemplateId.length ? Array.from(k).map((char, idx) => ({
+                pos: idx,
+                keyChar: char,
+                templateChar: nodeTemplateId[idx],
+                matches: char === nodeTemplateId[idx],
+                keyCode: char.charCodeAt(0),
+                templateCode: nodeTemplateId[idx]?.charCodeAt(0)
+              })).filter(c => !c.matches).slice(0, 5) : 'LENGTH_MISMATCH'
+            }))
+          } : null,
+          taskStepsForNode: nodeTemplateId && task?.steps?.[nodeTemplateId] ? (() => {
+            const nodeSteps = task.steps[nodeTemplateId];
+            const isArray = Array.isArray(nodeSteps);
+            const isObject = typeof nodeSteps === 'object' && !Array.isArray(nodeSteps);
+            let escalationsCount = 0;
+            let tasksCount = 0;
+
+            if (isArray) {
+              escalationsCount = nodeSteps.length;
+              tasksCount = nodeSteps.reduce((acc: number, step: any) =>
+                acc + (step?.escalations?.reduce((a: number, esc: any) => a + (esc?.tasks?.length || 0), 0) || 0), 0);
+            } else if (isObject) {
+              escalationsCount = nodeSteps?.start?.escalations?.length || nodeSteps?.introduction?.escalations?.length || 0;
+              const startEscs = nodeSteps?.start?.escalations || [];
+              const introEscs = nodeSteps?.introduction?.escalations || [];
+              tasksCount = [...startEscs, ...introEscs].reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0);
+            }
+
+            return {
+              stepsType: typeof nodeSteps,
+              isArray,
+              isObject,
+              stepsKeys: isObject ? Object.keys(nodeSteps || {}) : [],
+              escalationsCount,
+              tasksCount
+            };
+          })() : null,
+          nodeHasStepsBefore: !!node.steps,
+          nodeStepsType: typeof node.steps
+        });
+
+        if (nodeTemplateId && task?.steps?.[nodeTemplateId]) {
+          node.steps = task.steps[nodeTemplateId];
+
+          console.log('[ResponseEditor][NODE_SELECT] ✅ Steps copied to node', {
+            nodeId: node.id,
+            nodeTemplateId,
+            nodeLabel: node?.label,
+            stepsCopied: true,
+            nodeStepsType: typeof node.steps,
+            nodeStepsKeys: typeof node.steps === 'object' && !Array.isArray(node.steps) ? Object.keys(node.steps || {}) : [],
+            escalationsCount: Array.isArray(node.steps)
+              ? node.steps.length
+              : (node.steps?.start?.escalations?.length || node.steps?.introduction?.escalations?.length || 0),
+            tasksCount: Array.isArray(node.steps)
+              ? node.steps.reduce((acc: number, step: any) =>
+                  acc + (step?.escalations?.reduce((a: number, esc: any) => a + (esc?.tasks?.length || 0), 0) || 0), 0)
+              : 0
+          });
+        } else {
+          console.log('[🔍 ResponseEditor][NODE_SELECT] ❌ CRITICAL - No steps found for node', {
+            nodeId: node.id,
+            nodeTemplateId,
+            nodeLabel: node?.label,
+            hasTaskSteps: !!(nodeTemplateId && task?.steps?.[nodeTemplateId]),
+            taskStepsKeys: task?.steps ? Object.keys(task.steps) : [],
+            taskStepsCount: task?.steps ? Object.keys(task.steps).length : 0,
+            nodeHasTemplateId: !!node.templateId,
+            nodeTemplateIdMatches: node.templateId ? task?.steps?.[node.templateId] : false,
+            keyMatchAnalysis: nodeTemplateId && task?.steps ? {
+              lookingFor: nodeTemplateId,
+              availableKeys: Object.keys(task.steps),
+              keyComparison: Object.keys(task.steps).map(k => ({
+                key: k,
+                matches: k === nodeTemplateId,
+                keyPreview: k.substring(0, 40),
+                templateIdPreview: nodeTemplateId.substring(0, 40)
+              }))
+            } : null
+          });
         }
 
         // 🔴 LOG CHIRURGICO 3 (continuazione): Dettagli del nodo caricato
@@ -816,7 +1039,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
     // ✅ Carica il nodo quando cambiano gli indici O quando ddt prop cambia (dal dockTree)
     // ddtRef.current è già sincronizzato con ddt prop dal useEffect precedente
-  }, [selectedMainIndex, selectedSubIndex, selectedRoot, introduction, ddt?.label, ddt?.mainData?.length, task?.steps]);
+  }, [selectedMainIndex, selectedSubIndex, selectedRoot, introduction, ddt?.label, ddt?.data?.length, task?.steps]);
 
   // ✅ NON serve più sincronizzare selectedNode con localDDT
   // selectedNode è l'unica fonte di verità durante l'editing
@@ -865,7 +1088,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
       // ✅ STEP 1: Costruisci il DDT completo aggiornato
       const currentDDT = ddtRef.current || ddt;
       const updatedDDT = { ...currentDDT };
-      const mains = [...(currentDDT.mainData || [])];
+      const mains = [...(currentDDT.data || [])];
 
       if (mainIndex < mains.length) {
         const main = { ...mains[mainIndex] };
@@ -884,15 +1107,15 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
         } else if (subIndex === undefined) {
           // Main node
           mains[mainIndex] = updated;
-          updatedDDT.mainData = mains;
+          updatedDDT.data = mains;
 
-          // ✅ CORRETTO: Salva updated.steps direttamente in task.steps[nodeId]
-          // NON salvare in updatedDDT.steps perché il DDT non contiene steps
-          const nodeId = updated.id;
-          if (nodeId && updated.steps && task) {
+          // ✅ CRITICAL: Salva updated.steps usando templateId come chiave (non id)
+          // task.steps[node.templateId] = steps clonati
+          const nodeTemplateId = updated.templateId || updated.id; // ✅ Fallback a id se templateId non presente
+          if (nodeTemplateId && updated.steps && task) {
             // Aggiorna task.steps immediatamente (unica fonte di verità)
             if (!task.steps) task.steps = {};
-            task.steps[nodeId] = updated.steps;
+            task.steps[nodeTemplateId] = updated.steps;
           }
         } else {
           // Sub node
@@ -902,15 +1125,15 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
             subList[subIdx] = updated;
             main.subData = subList;
             mains[mainIndex] = main;
-            updatedDDT.mainData = mains;
+            updatedDDT.data = mains;
 
-            // ✅ CORRETTO: Salva updated.steps direttamente in task.steps[nodeId]
-            // NON salvare in updatedDDT.steps perché il DDT non contiene steps
-            const nodeId = updated.id;
-            if (nodeId && updated.steps && task) {
+            // ✅ CRITICAL: Salva updated.steps usando templateId come chiave (non id)
+            // task.steps[node.templateId] = steps clonati
+            const nodeTemplateId = updated.templateId || updated.id; // ✅ Fallback a id se templateId non presente
+            if (nodeTemplateId && updated.steps && task) {
               // Aggiorna task.steps immediatamente (unica fonte di verità)
               if (!task.steps) task.steps = {};
-              task.steps[nodeId] = updated.steps;
+              task.steps[nodeTemplateId] = updated.steps;
             }
           }
         }
@@ -958,7 +1181,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
         if (taskToSave?.id || (taskToSave as any)?.instanceId) {
           const key = ((taskToSave as any)?.instanceId || taskToSave?.id) as string;
-          const hasDDT = updatedDDT && Object.keys(updatedDDT).length > 0 && updatedDDT.mainData && updatedDDT.mainData.length > 0;
+          const hasDDT = updatedDDT && Object.keys(updatedDDT).length > 0 && updatedDDT.data && updatedDDT.data.length > 0;
 
           if (hasDDT) {
             // Salva in modo asincrono (non bloccare l'UI)
@@ -967,15 +1190,15 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                 const taskInstance = taskRepository.getTask(key);
                 const currentTemplateId = getTemplateId(taskInstance);
 
-                // ✅ Se standalone (no templateId), salva tutto mainData completo
+                // ✅ Se standalone (no templateId), salva tutto data completo
                 // Se ha templateId, usa extractModifiedDDTFields per salvare solo override
                 let fieldsToSave: any;
                 if (!currentTemplateId || currentTemplateId === 'UNDEFINED') {
-                  // Standalone: salva tutto mainData completo (include tutti i task)
+                  // Standalone: salva tutto data completo (include tutti i task)
                   fieldsToSave = {
                     label: updatedDDT.label,
-                    mainData: updatedDDT.mainData, // ✅ Salva tutto, incluso tutti i task
-                    steps: taskToSave?.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
+                    data: updatedDDT.data, // ✅ Salva tutto, incluso tutti i task
+                    steps: task?.steps || taskToSave?.steps || {}, // ✅ CORRETTO: Salva steps da task corrente (unica fonte di verità)
                     constraints: updatedDDT.constraints,
                     examples: updatedDDT.examples,
                     nlpContract: updatedDDT.nlpContract,
@@ -984,6 +1207,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                 } else {
                   // Con templateId: salva solo override
                   fieldsToSave = await extractModifiedDDTFields(taskInstance, updatedDDT);
+                  // ✅ CRITICAL: Aggiungi task.steps agli override (unica fonte di verità per gli steps)
+                  if (task?.steps && Object.keys(task.steps).length > 0) {
+                    fieldsToSave.steps = task.steps;
+                  }
                 }
 
                 if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
@@ -1024,7 +1251,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
       return updated;
     });
-  }, [selectedNodePath, selectedRoot, tabId, setDockTree, ddt?.label, ddt?.mainData?.length ?? 0, task, currentProjectId]);
+  }, [selectedNodePath, selectedRoot, tabId, setDockTree, ddt?.label, ddt?.data?.length ?? 0, task, currentProjectId]);
 
   // ✅ NON serve più persistenza asincrona
   // Quando chiudi l'editor, costruisci il DDT da selectedNode e salva
@@ -1288,14 +1515,14 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                     // ✅ Pre-compila con il risultato dell'inferenza
                     id: ddt?.id || `temp_ddt_${task?.id}`,
                     label: inferenceResult.ai.schema.label || task?.label || 'Data',
-                    mainData: inferenceResult.ai.schema.mainData || [],
+                    data: inferenceResult.ai.schema.data || [],
                     _inferenceResult: inferenceResult // Passa anche il risultato completo per riferimento (con traduzioni se disponibili)
-                  } : (ddt && ddt.mainData && ddt.mainData.length > 0 ? {
-                    // ✅ Se ddt ha mainData (creato da categoria), passalo come initialDDT
+                  } : (ddt && ddt.data && ddt.data.length > 0 ? {
+                    // ✅ Se ddt ha data (creato da categoria), passalo come initialDDT
                     // Il wizard andrà direttamente a 'structure' e mostrerà "Build Messages"
                     id: ddt?.id || `temp_ddt_${task?.id}`,
                     label: ddt?.label || task?.label || 'Data',
-                    mainData: ddt.mainData,
+                    data: ddt.data,
                     steps: ddt.steps,  // ✅ Steps a root level
                     constraints: ddt.constraints,
                     examples: ddt.examples
@@ -1307,7 +1534,67 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                       return;
                     }
 
+                    // ✅ DEBUG: Verifica cosa contiene finalDDT dal wizard
+                    console.log('[ResponseEditor][onComplete] 🔍 finalDDT from wizard', {
+                      hasFinalDDT: !!finalDDT,
+                      finalDDTKeys: Object.keys(finalDDT || {}),
+                      hasSteps: !!finalDDT.steps,
+                      stepsType: typeof finalDDT.steps,
+                      stepsKeys: finalDDT.steps ? Object.keys(finalDDT.steps) : [],
+                      stepsCount: finalDDT.steps ? Object.keys(finalDDT.steps).length : 0,
+                      stepsDetails: finalDDT.steps ? Object.keys(finalDDT.steps).map(nodeId => {
+                        const nodeSteps = finalDDT.steps[nodeId];
+                        const isArray = Array.isArray(nodeSteps);
+                        const isObject = typeof nodeSteps === 'object' && !Array.isArray(nodeSteps);
+                        let stepKeys: string[] = [];
+                        if (isArray) {
+                          stepKeys = nodeSteps.map((s: any) => s?.type || 'unknown');
+                        } else if (isObject) {
+                          stepKeys = Object.keys(nodeSteps || {});
+                        }
+                        return {
+                          nodeId: nodeId.substring(0, 20) + '...',
+                          stepsType: typeof nodeSteps,
+                          isArray,
+                          isObject,
+                          stepKeys,
+                          stepCount: stepKeys.length
+                        };
+                      }) : [],
+                      hasdata: !!finalDDT.data,
+                      dataLength: finalDDT.data?.length || 0,
+                      dataFirstId: finalDDT.data?.[0]?.id
+                    });
+
                     const coerced = coercePhoneKind(finalDDT);
+
+                    // ✅ DEBUG: Verifica cosa contiene coerced dopo coercePhoneKind
+                    console.log('[ResponseEditor][onComplete] 🔍 coerced after coercePhoneKind', {
+                      hasSteps: !!coerced.steps,
+                      stepsType: typeof coerced.steps,
+                      stepsKeys: coerced.steps ? Object.keys(coerced.steps) : [],
+                      stepsCount: coerced.steps ? Object.keys(coerced.steps).length : 0,
+                      stepsDetails: coerced.steps ? Object.keys(coerced.steps).map(nodeId => {
+                        const nodeSteps = coerced.steps[nodeId];
+                        const isArray = Array.isArray(nodeSteps);
+                        const isObject = typeof nodeSteps === 'object' && !Array.isArray(nodeSteps);
+                        let stepKeys: string[] = [];
+                        if (isArray) {
+                          stepKeys = nodeSteps.map((s: any) => s?.type || 'unknown');
+                        } else if (isObject) {
+                          stepKeys = Object.keys(nodeSteps || {});
+                        }
+                        return {
+                          nodeId: nodeId.substring(0, 20) + '...',
+                          stepsType: typeof nodeSteps,
+                          isArray,
+                          isObject,
+                          stepKeys,
+                          stepCount: stepKeys.length
+                        };
+                      }) : [],
+                      stepsPreserved: JSON.stringify(coerced.steps) === JSON.stringify(finalDDT.steps)
+                    });
 
                     // Set flag to prevent auto-reopen IMMEDIATELY (before any state updates)
                     wizardOwnsDataRef.current = true;
@@ -1316,7 +1603,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                     // Questo assicura che quando si riapre l'editor, i steps siano già salvati
                     if (task?.id || task?.instanceId) {
                       const key = (task?.instanceId || task?.id) as string;
-                      const hasDDT = coerced && Object.keys(coerced).length > 0 && coerced.mainData && coerced.mainData.length > 0;
+                      const hasDDT = coerced && Object.keys(coerced).length > 0 && coerced.data && coerced.data.length > 0;
 
                       if (hasDDT) {
                         let taskInstance = taskRepository.getTask(key);
@@ -1325,28 +1612,75 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                           taskInstance = taskRepository.createTask(taskType, null, undefined, key, currentProjectId || undefined);
                         }
 
+                        // ✅ DEBUG: Verifica taskInstance prima del salvataggio
+                        console.log('[ResponseEditor][onComplete] 🔍 taskInstance before save', {
+                          key,
+                          hasTaskInstance: !!taskInstance,
+                          taskInstanceHasSteps: !!taskInstance.steps,
+                          taskInstanceStepsKeys: taskInstance.steps ? Object.keys(taskInstance.steps) : [],
+                          taskInstanceStepsCount: taskInstance.steps ? Object.keys(taskInstance.steps).length : 0
+                        });
+
                         const currentTemplateId = getTemplateId(taskInstance);
                         const updateData: Partial<Task> = {
                           label: coerced.label,
-                          mainData: coerced.mainData,
+                          // ❌ RIMOSSO: data: coerced.data,  // NON salvare data! (si ricostruisce runtime)
                           steps: coerced.steps, // ✅ Salva steps a root level immediatamente
-                          constraints: coerced.constraints,
-                          examples: coerced.examples,
-                          nlpContract: coerced.nlpContract,
+                          constraints: coerced.constraints, // ✅ Override opzionali (solo se modificati)
+                          examples: coerced.examples, // ✅ Override opzionali (solo se modificati)
+                          nlpContract: coerced.nlpContract, // ✅ Override opzionali (solo se modificati)
                           introduction: coerced.introduction
                         };
 
-                        if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
-                          updateData.type = TaskType.DataRequest;
-                          updateData.templateId = null;
+                        // ✅ CRITICAL: Preserva templateId
+                        if (currentTemplateId && currentTemplateId !== 'UNDEFINED') {
+                          updateData.templateId = currentTemplateId; // ✅ Preserva templateId esistente
+                        } else if (coerced.templateId) {
+                          updateData.templateId = coerced.templateId; // ✅ Usa templateId dal wizard
                         }
+                        // ❌ RIMOSSO: Non sovrascrivere templateId con null!
+
+                        // ✅ DEBUG: Verifica updateData prima del salvataggio
+                        console.log('[ResponseEditor][onComplete] 🔍 updateData before save', {
+                          key,
+                          updateDataKeys: Object.keys(updateData),
+                          hasSteps: !!updateData.steps,
+                          stepsType: typeof updateData.steps,
+                          stepsKeys: updateData.steps ? Object.keys(updateData.steps) : [],
+                          stepsCount: updateData.steps ? Object.keys(updateData.steps).length : 0,
+                          templateId: updateData.templateId, // ✅ Verifica templateId preservato
+                          stepsDetails: updateData.steps ? Object.keys(updateData.steps).map(nodeId => {
+                            const nodeSteps = updateData.steps[nodeId];
+                            const isArray = Array.isArray(nodeSteps);
+                            const isObject = typeof nodeSteps === 'object' && !Array.isArray(nodeSteps);
+                            let stepKeys: string[] = [];
+                            if (isArray) {
+                              stepKeys = nodeSteps.map((s: any) => s?.type || 'unknown');
+                            } else if (isObject) {
+                              stepKeys = Object.keys(nodeSteps || {});
+                            }
+                            return {
+                              nodeId: nodeId.substring(0, 20) + '...',
+                              stepKeys,
+                              stepCount: stepKeys.length
+                            };
+                          }) : []
+                        });
 
                         taskRepository.updateTask(key, updateData, currentProjectId || undefined);
+
+                        // ✅ DEBUG: Verifica task salvato dopo il salvataggio
+                        const savedTask = taskRepository.getTask(key);
                         console.log('[ResponseEditor][onComplete] ✅ Task saved with steps', {
                           key,
                           hasSteps: !!coerced.steps,
                           stepsCount: coerced.steps ? Object.keys(coerced.steps).length : 0,
-                          mainDataLength: coerced.mainData?.length || 0
+                          dataLength: coerced.data?.length || 0,
+                          savedTaskHasSteps: !!savedTask?.steps,
+                          savedTaskStepsKeys: savedTask?.steps ? Object.keys(savedTask.steps) : [],
+                          savedTaskStepsCount: savedTask?.steps ? Object.keys(savedTask.steps).length : 0,
+                          stepsWereSaved: savedTask?.steps && Object.keys(savedTask.steps).length > 0,
+                          stepsMatch: JSON.stringify(savedTask?.steps || {}) === JSON.stringify(coerced.steps || {})
                         });
                       }
                     }
@@ -1393,7 +1727,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                   // ✅ MIGRATION: Use getTemplateId() helper
                   // ✅ FIX: Se c'è un DDT, assicurati che il templateId sia 'DataRequest'
                   const taskInstance = taskRepository.getTask(key);
-                  const hasDDT = updatedDDT && Object.keys(updatedDDT).length > 0 && updatedDDT.mainData && updatedDDT.mainData.length > 0;
+                  const hasDDT = updatedDDT && Object.keys(updatedDDT).length > 0 && updatedDDT.data && updatedDDT.data.length > 0;
                   if (hasDDT && taskInstance) {
                     const currentTemplateId = getTemplateId(taskInstance);
                     // ✅ CASE-INSENSITIVE
@@ -1402,11 +1736,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                       taskRepository.updateTask(key, {
                         type: TaskType.DataRequest,  // ✅ type: enum numerico
                         templateId: null,            // ✅ templateId: null (standalone)
-                        ...updatedDDT  // ✅ Spread: label, mainData, steps, ecc.
+                        ...updatedDDT  // ✅ Spread: label, data, steps, ecc.
                       }, currentProjectId || undefined);
                     } else {
                       taskRepository.updateTask(key, {
-                        ...updatedDDT  // ✅ Spread: label, mainData, steps, ecc.
+                        ...updatedDDT  // ✅ Spread: label, data, steps, ecc.
                       }, currentProjectId || undefined);
                     }
                   } else if (hasDDT) {
@@ -1415,7 +1749,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                   } else {
                     // FIX: Salva con projectId per garantire persistenza nel database
                     taskRepository.updateTask(key, {
-                      ...updatedDDT  // ✅ Spread: label, mainData, stepPrompts, ecc.
+                      ...updatedDDT  // ✅ Spread: label, data, stepPrompts, ecc.
                     }, currentProjectId || undefined);
                   }
 
@@ -1463,7 +1797,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                   onChangeSubRequired={(mIdx: number, sIdx: number, required: boolean) => {
                     // Persist required flag on the exact sub (by indices), independent of current selection
                     const next = JSON.parse(JSON.stringify(ddt));
-                    const mains = getMainDataList(next);
+                    const mains = getdataList(next);
                     const main = mains[mIdx];
                     if (!main) return;
                     const subList = Array.isArray(main.subData) ? main.subData : [];
@@ -1471,7 +1805,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                     subList[sIdx] = { ...subList[sIdx], required };
                     main.subData = subList;
                     mains[mIdx] = main;
-                    next.mainData = mains;
+                    next.data = mains;
                     try {
                       const subs = getSubDataList(main) || [];
                       const target = subs[sIdx];
@@ -1481,7 +1815,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                   }}
                   onReorderSub={(mIdx: number, fromIdx: number, toIdx: number) => {
                     const next = JSON.parse(JSON.stringify(ddt));
-                    const mains = getMainDataList(next);
+                    const mains = getdataList(next);
                     const main = mains[mIdx];
                     if (!main) return;
                     const subList = Array.isArray(main.subData) ? main.subData : [];
@@ -1490,48 +1824,48 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                     subList.splice(toIdx, 0, moved);
                     main.subData = subList;
                     mains[mIdx] = main;
-                    next.mainData = mains;
+                    next.data = mains;
                     try { if (localStorage.getItem('debug.responseEditor') === '1') console.log('[DDT][subReorder][persist]', { main: main?.label, fromIdx, toIdx }); } catch { }
                     try { replaceSelectedDDT(next); } catch { }
                   }}
                   onAddMain={(label: string) => {
                     const next = JSON.parse(JSON.stringify(ddt));
-                    const mains = getMainDataList(next);
+                    const mains = getdataList(next);
                     mains.push({ label, subData: [] });
-                    next.mainData = mains;
+                    next.data = mains;
                     try { replaceSelectedDDT(next); } catch { }
                   }}
                   onRenameMain={(mIdx: number, label: string) => {
                     const next = JSON.parse(JSON.stringify(ddt));
-                    const mains = getMainDataList(next);
+                    const mains = getdataList(next);
                     if (!mains[mIdx]) return;
                     mains[mIdx].label = label;
-                    next.mainData = mains;
+                    next.data = mains;
                     try { replaceSelectedDDT(next); } catch { }
                   }}
                   onDeleteMain={(mIdx: number) => {
                     const next = JSON.parse(JSON.stringify(ddt));
-                    const mains = getMainDataList(next);
+                    const mains = getdataList(next);
                     if (mIdx < 0 || mIdx >= mains.length) return;
                     mains.splice(mIdx, 1);
-                    next.mainData = mains;
+                    next.data = mains;
                     try { replaceSelectedDDT(next); } catch { }
                   }}
                   onAddSub={(mIdx: number, label: string) => {
                     const next = JSON.parse(JSON.stringify(ddt));
-                    const mains = getMainDataList(next);
+                    const mains = getdataList(next);
                     const main = mains[mIdx];
                     if (!main) return;
                     const list = Array.isArray(main.subData) ? main.subData : [];
                     list.push({ label, required: true });
                     main.subData = list;
                     mains[mIdx] = main;
-                    next.mainData = mains;
+                    next.data = mains;
                     try { replaceSelectedDDT(next); } catch { }
                   }}
                   onRenameSub={(mIdx: number, sIdx: number, label: string) => {
                     const next = JSON.parse(JSON.stringify(ddt));
-                    const mains = getMainDataList(next);
+                    const mains = getdataList(next);
                     const main = mains[mIdx];
                     if (!main) return;
                     const list = Array.isArray(main.subData) ? main.subData : [];
@@ -1539,12 +1873,12 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                     list[sIdx] = { ...(list[sIdx] || {}), label };
                     main.subData = list;
                     mains[mIdx] = main;
-                    next.mainData = mains;
+                    next.data = mains;
                     try { replaceSelectedDDT(next); } catch { }
                   }}
                   onDeleteSub={(mIdx: number, sIdx: number) => {
                     const next = JSON.parse(JSON.stringify(ddt));
-                    const mains = getMainDataList(next);
+                    const mains = getdataList(next);
                     const main = mains[mIdx];
                     if (!main) return;
                     const list = Array.isArray(main.subData) ? main.subData : [];
@@ -1552,7 +1886,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                     list.splice(sIdx, 1);
                     main.subData = list;
                     mains[mIdx] = main;
-                    next.mainData = mains;
+                    next.data = mains;
                     try { replaceSelectedDDT(next); } catch { }
                   }}
                   onSelectAggregator={handleSelectAggregator}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { SchemaNode } from './MainDataCollection';
+import type { SchemaNode } from './dataCollection';
 import ProgressBar from './components/ProgressBar';
 import MainHeader from './components/MainHeader';
 import ConstraintsList from './components/ConstraintsList';
@@ -10,7 +10,7 @@ import { useSubEditing } from './hooks/useSubEditing';
 import { useConstraints } from './hooks/useConstraints';
 import type { FieldProcessingState } from './hooks/useFieldProcessing';
 
-interface MainDataWizardProps {
+interface dataWizardProps {
   node: SchemaNode;
   onChange: (node: SchemaNode) => void;
   onRemove: () => void;
@@ -26,7 +26,7 @@ interface MainDataWizardProps {
 }
 
 
-const MainDataWizard: React.FC<MainDataWizardProps & {
+const DataWizard: React.FC<dataWizardProps & {
   progressByPath?: Record<string, number>;
   fieldProcessingStates?: Record<string, FieldProcessingState>;
 }> = ({ node, onChange, onRemove, progressByPath, fieldProcessingStates, selected, autoEdit, pathPrefix = '', onChangeEvent, onRequestOpen, onRetryField, onCreateManually, compact = false }) => {
@@ -209,4 +209,4 @@ const MainDataWizard: React.FC<MainDataWizardProps & {
   );
 };
 
-export default MainDataWizard;
+export default DataWizard;

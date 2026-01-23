@@ -1,5 +1,5 @@
 import { extractTranslations, getEscalationActions, resolveActionText } from './DDTAdapter';
-import { getMainDataList, getSubDataList, getNodeSteps } from '../TaskEditor/ResponseEditor/ddtSelectors';
+import { getdataList, getSubDataList, getNodeSteps } from '../TaskEditor/ResponseEditor/ddtSelectors';
 import { inferExpectedKind, validateByKind, ExpectedKind } from './validators';
 export interface FlowState {
   currentStep: 'start' | 'noInput' | 'noMatch' | 'confirmation' | 'success';
@@ -93,7 +93,7 @@ export class ResponseFlowEngine {
     if (this.plan.length > 0) {
       node = this.getNodeForPlanIndex(plannerIndex);
     }
-    node = node || this.selectedNode || this.ddt?.mainData || this.ddt;
+    node = node || this.selectedNode || this.ddt?.data || this.ddt;
     const actions = getEscalationActions(node, stepType, level);
     console.log('[FlowEngine] resolve text', { stepType, level, hasNode: !!node, actions: actions?.length });
     for (const act of actions) {
@@ -107,7 +107,7 @@ export class ResponseFlowEngine {
 
   private buildPlan(ddt: any): Array<{ mainIndex: number; subIndex: number | null; label: string; expectedKind: ExpectedKind }>{
     const plan: Array<{ mainIndex: number; subIndex: number | null; label: string; expectedKind: ExpectedKind }> = [];
-    const mains = getMainDataList(ddt);
+    const mains = getdataList(ddt);
     mains.forEach((main, mIdx) => {
       const mainLabel = (main?.label || main?.name || `main_${mIdx}`).toString();
       // Only consider nodes that actually have usable start/success (or any steps)
@@ -130,7 +130,7 @@ export class ResponseFlowEngine {
   private getNodeForPlanIndex(index: number): any {
     if (!this.ddt || !this.plan.length) return this.selectedNode || this.ddt;
     const target = this.plan[Math.min(Math.max(index, 0), this.plan.length - 1)];
-    const mains = getMainDataList(this.ddt);
+    const mains = getdataList(this.ddt);
     const main = mains[target.mainIndex];
     if (target.subIndex == null) return main;
     const subs = getSubDataList(main);

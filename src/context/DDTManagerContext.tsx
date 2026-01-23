@@ -40,13 +40,13 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
   const createDDT = (ddt: any) => {
     // ensure has id for future lookups
     const withId = ddt.id ? ddt : { ...ddt, id: ddt._id || `${(ddt.label || 'DDT').replace(/\s+/g, '_')}_${crypto?.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}` };
-    try { console.log('[KindPersist][DDTManager][createDDT]', { label: withId?.label, mains: (withId?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch { }
+    try { console.log('[KindPersist][DDTManager][createDDT]', { label: withId?.label, mains: (withId?.data || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch { }
     setDDTList(prev => [...prev, withId]);
     setSelectedDDT(withId);
   };
 
   const openDDT = (ddt: any) => {
-    try { console.log('[KindPersist][DDTManager][openDDT]', { label: ddt?.label, mains: (ddt?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch { }
+    try { console.log('[KindPersist][DDTManager][openDDT]', { label: ddt?.label, mains: (ddt?.data || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch { }
     // Preserve steps if we already have an enriched copy of the same DDT in memory
     const sameId = (a: any, b: any) => !!a && !!b && ((a.id && b.id && a.id === b.id) || (a._id && b._id && a._id === b._id));
     const byLabel = (arr: any[]) => {
@@ -59,10 +59,10 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
       const next = { ...enriched };
       // Merge top-level steps if missing
       if (!next.steps && base.steps) next.steps = base.steps;
-      const baseMains = Array.isArray(base?.mainData) ? base.mainData : [];
-      const nextMains = Array.isArray(next?.mainData) ? next.mainData : [];
+      const baseMains = Array.isArray(base?.data) ? base.data : [];
+      const nextMains = Array.isArray(next?.data) ? next.data : [];
       const baseMap = byLabel(baseMains);
-      next.mainData = nextMains.map((n: any) => {
+      next.data = nextMains.map((n: any) => {
         const prev = baseMap.get(String(n?.label));
         const mergedTop = (!n?.steps && prev?.steps) ? { ...n, steps: prev.steps } : n;
         const subs = Array.isArray(mergedTop?.subData) ? mergedTop.subData : [];
@@ -132,7 +132,7 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
 
   const replaceSelectedDDT = (next: any) => {
     if (!next) return;
-    try { console.log('[KindPersist][DDTManager][replaceSelectedDDT]', { label: next?.label, mains: (next?.mainData || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch { }
+    try { console.log('[KindPersist][DDTManager][replaceSelectedDDT]', { label: next?.label, mains: (next?.data || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch { }
     setSelectedDDT(next);
     setDDTList(list => list.map(d => (d.id === next.id || d._id === next._id ? next : d)));
   };

@@ -27,7 +27,7 @@ const mockActionsCatalog = [
 const mockDDT = {
   id: 'test-ddt',
   label: 'Test DDT',
-  mainData: {
+  data: {
     steps: [
       { type: 'start', escalations: [] },
       { type: 'noMatch', escalations: [] }

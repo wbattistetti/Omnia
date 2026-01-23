@@ -1,4 +1,4 @@
-// DialogueStep: Flat structure for dialogue steps (replaces nested mainData[].steps)
+// DialogueStep: Flat structure for dialogue steps (replaces nested data[].steps)
 // Part of hybrid DDT structure migration
 
 import type { StepGroup, Escalation } from '../components/DialogueDataTemplateBuilder/DDTAssembler/types';
@@ -8,26 +8,26 @@ import type { StepGroup, Escalation } from '../components/DialogueDataTemplateBu
  *
  * Structure:
  * - id: Unique GUID for this step instance
- * - dataId: Reference to mainData or subData node (links step to data)
+ * - dataId: Reference to data or subData node (links step to data)
  * - type: Step type ('start', 'noMatch', 'noInput', etc.)
  * - escalations: Array of escalations for this step
  *
  * Migration from nested structure:
- * - Before: mainData[0].steps = [{ type: 'start', escalations: [...] }]
- * - After: dialogueSteps = [{ id: 'guid', dataId: 'mainData[0].id', type: 'start', escalations: [...] }]
+ * - Before: data[0].steps = [{ type: 'start', escalations: [...] }]
+ * - After: dialogueSteps = [{ id: 'guid', dataId: 'data[0].id', type: 'start', escalations: [...] }]
  */
 export interface DialogueStep {
   id: string;                    // ✅ GUID univoco per questo step
-  dataId: string;                 // ✅ Reference a mainData[].id o subData[].id
+  dataId: string;                 // ✅ Reference a data[].id o subData[].id
   type: StepGroup['type'];        // ✅ 'start' | 'noMatch' | 'noInput' | 'confirmation' | 'success' | 'introduction'
   escalations: Escalation[];      // ✅ Array di escalations (stessa struttura di StepGroup)
 }
 
 /**
- * Helper: Extract dialogue steps from nested mainData structure
+ * Helper: Extract dialogue steps from nested data structure
  * Used during migration to convert nested steps to flat dialogueSteps
  */
-export function extractStepsFromNested(mainData: any[]): DialogueStep[] {
+export function extractStepsFromNested(data: any[]): DialogueStep[] {
   const dialogueSteps: DialogueStep[] = [];
   const { v4: uuidv4 } = require('uuid');
 
@@ -63,8 +63,8 @@ export function extractStepsFromNested(mainData: any[]): DialogueStep[] {
     }
   }
 
-  // Extract from mainData nodes
-  for (const mainNode of mainData || []) {
+  // Extract from data nodes
+  for (const mainNode of data || []) {
     if (mainNode.id) {
       extractFromNode(mainNode, mainNode.id);
     }

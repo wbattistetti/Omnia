@@ -8,13 +8,15 @@ import { extractGUIDsFromDDT } from '../utils/ddtUtils';
  *
  * This hook:
  * 1. Extracts all GUIDs (translation keys) from the DDT structure
- * 2. Loads translations from the global translation table (already filtered by project locale)
- * 3. Returns a flat dictionary of { guid: text } for the current project locale
+ * 2. Also extracts GUIDs from task.steps[nodeId] if task is provided (unified model)
+ * 3. Loads translations from the global translation table (already filtered by project locale)
+ * 4. Returns a flat dictionary of { guid: text } for the current project locale
  *
  * @param ddt - The DDT object to extract translations for
+ * @param task - Optional Task object to extract GUIDs from task.steps[nodeId]
  * @returns Record<string, string> - Dictionary of translations { guid: text }
  */
-export function useDDTTranslations(ddt: any | null | undefined): Record<string, string> {
+export function useDDTTranslations(ddt: any | null | undefined, task?: any): Record<string, string> {
   const { translations: globalTranslations } = useProjectTranslations();
 
   // Track last logged state to avoid duplicate logs - use stable keys
@@ -25,8 +27,9 @@ export function useDDTTranslations(ddt: any | null | undefined): Record<string, 
     translationsCount?: number;
   }>({});
 
-  // Use stable dependencies: serialize ddt id and translations keys
+  // Use stable dependencies: serialize ddt id, task steps, and translations keys
   const ddtId = ddt?.id || ddt?._id || null;
+  const taskStepsKeys = task?.steps ? Object.keys(task.steps).sort().join(',') : '';
   const translationsKeys = Object.keys(globalTranslations).sort().join(',');
 
   return useMemo(() => {
@@ -34,8 +37,64 @@ export function useDDTTranslations(ddt: any | null | undefined): Record<string, 
       return {};
     }
 
-    const guids = extractGUIDsFromDDT(ddt);
+    const guidsArray = extractGUIDsFromDDT(ddt);
+    const guidsSet = new Set(guidsArray);
+
+    // ✅ Also extract GUIDs from task.steps[nodeId] (unified model)
+    if (task?.steps) {
+      const taskStepsGuids: string[] = [];
+      Object.entries(task.steps).forEach(([nodeId, steps]: [string, any]) => {
+        if (!steps || typeof steps !== 'object') {
+          if (typeof localStorage !== 'undefined' && localStorage.getItem('debug.useDDTTranslations') === '1') {
+            console.log('[useDDTTranslations] ⚠️ Invalid steps structure', { nodeId, steps, stepsType: typeof steps });
+          }
+          return;
+        }
+
+        // steps can be an array or an object with step keys
+        const stepEntries = Array.isArray(steps)
+          ? steps.map((s: any, idx: number) => [`step_${idx}`, s])
+          : Object.entries(steps);
+
+        stepEntries.forEach(([stepKey, step]: [string, any]) => {
+          if (step?.escalations) {
+            step.escalations.forEach((esc: any) => {
+              if (esc?.tasks) {
+                esc.tasks.forEach((task: any) => {
+                  // Extract text parameter GUID
+                  const textParam = task.parameters?.find((p: any) => p?.parameterId === 'text');
+                  if (textParam?.value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textParam.value)) {
+                    guidsSet.add(textParam.value);
+                    taskStepsGuids.push(textParam.value);
+                  }
+                });
+              }
+            });
+          }
+        });
+      });
+
+      if (typeof localStorage !== 'undefined' && localStorage.getItem('debug.useDDTTranslations') === '1' && taskStepsGuids.length > 0) {
+        console.log('[useDDTTranslations] ✅ Extracted GUIDs from task.steps', {
+          nodeIds: Object.keys(task.steps),
+          guidsFromTaskSteps: taskStepsGuids.length,
+          sampleGuids: taskStepsGuids.slice(0, 5)
+        });
+      }
+    }
+
+    const guids = Array.from(guidsSet);
     if (guids.length === 0) {
+      // 🔍 DEBUG: Log se non ci sono GUID
+      if (typeof localStorage !== 'undefined' && localStorage.getItem('debug.useDDTTranslations') === '1') {
+        console.log('[useDDTTranslations] ⚠️ No GUIDs found', {
+          ddtId: ddt?.id || ddt?._id,
+          hasTask: !!task,
+          taskStepsCount: task?.steps ? Object.keys(task.steps).length : 0,
+          hasdata: !!ddt?.data,
+          dataLength: ddt?.data?.length || 0
+        });
+      }
       return {};
     }
 
@@ -53,6 +112,22 @@ export function useDDTTranslations(ddt: any | null | undefined): Record<string, 
         missingGuids.push(guid);
       }
     });
+
+    // 🔍 DEBUG: Log sempre (non solo se mancano traduzioni)
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('debug.useDDTTranslations') === '1') {
+      console.log('[useDDTTranslations] 📚 Translation lookup', {
+        ddtId: ddt?.id || ddt?._id,
+        totalGuids: guids.length,
+        foundTranslations: foundGuids.length,
+        missingTranslations: missingGuids.length,
+        globalTranslationsCount: Object.keys(globalTranslations).length,
+        sampleGuids: guids.slice(0, 5),
+        sampleFound: foundGuids.slice(0, 5),
+        sampleMissing: missingGuids.slice(0, 5),
+        hasTask: !!task,
+        taskStepsCount: task?.steps ? Object.keys(task.steps).length : 0
+      });
+    }
 
     // ✅ Log warning only if state actually changed (not just reference change)
     const currentDdtId = ddt.id || ddt._id || 'no-id';
@@ -98,6 +173,6 @@ export function useDDTTranslations(ddt: any | null | undefined): Record<string, 
     }
 
     return translationsFromGlobal;
-  }, [ddtId, translationsKeys, ddt, globalTranslations]);
+  }, [ddtId, taskStepsKeys, translationsKeys, ddt, task, globalTranslations]);
 }
 

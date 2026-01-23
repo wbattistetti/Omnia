@@ -3,7 +3,7 @@ import { buildDDT } from '../DDTBuilder';
 import { StepResult } from '../../orchestrator/types';
 
 describe('DDTBuilder', () => {
-  it('should build DDT with mainData only', () => {
+  it('should build DDT with data only', () => {
     const ddtId = 'test-ddt';
     const dataNode = {
       name: 'birthDate',
@@ -29,9 +29,9 @@ describe('DDTBuilder', () => {
 
     expect(result.id).toBe(ddtId);
     expect(result.label).toBe('Birth Date');
-    expect(result.mainData.constraints).toHaveLength(1);
-    expect(result.mainData.steps).toHaveLength(5); // start, noMatch, noInput, confirmation, success
-    expect(result.mainData.subData).toHaveLength(0);
+    expect(result.data.constraints).toHaveLength(1);
+    expect(result.data.steps).toHaveLength(5); // start, noMatch, noInput, confirmation, success
+    expect(result.data.subData).toHaveLength(0);
   });
 
   it('should build DDT with subData and their specific messages', () => {
@@ -92,13 +92,13 @@ describe('DDTBuilder', () => {
 
     expect(result.id).toBe(ddtId);
     expect(result.label).toBe('Birth Date');
-    expect(result.mainData.constraints).toHaveLength(1);
-    expect(result.mainData.steps).toHaveLength(5);
-    expect(result.mainData.subData).toHaveLength(2);
+    expect(result.data.constraints).toHaveLength(1);
+    expect(result.data.steps).toHaveLength(5);
+    expect(result.data.subData).toHaveLength(2);
 
     // Check that subData have their specific messages
-    const daySubData = result.mainData.subData.find((s: any) => s.variable === 'day');
-    const monthSubData = result.mainData.subData.find((s: any) => s.variable === 'month');
+    const daySubData = result.data.subData.find((s: any) => s.variable === 'day');
+    const monthSubData = result.data.subData.find((s: any) => s.variable === 'month');
 
     expect(daySubData).toBeDefined();
     expect(monthSubData).toBeDefined();
@@ -145,8 +145,8 @@ describe('DDTBuilder', () => {
 
     expect(result.id).toBe(ddtId);
     expect(result.label).toBe('Test');
-    expect(result.mainData.constraints).toHaveLength(0);
-    expect(result.mainData.steps).toHaveLength(5); // Still creates all step types
-    expect(result.mainData.subData).toHaveLength(0);
+    expect(result.data.constraints).toHaveLength(0);
+    expect(result.data.steps).toHaveLength(5); // Still creates all step types
+    expect(result.data.subData).toHaveLength(0);
   });
 }); 

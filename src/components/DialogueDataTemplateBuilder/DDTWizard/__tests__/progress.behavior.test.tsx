@@ -20,11 +20,11 @@ describe('DDTWizard progress UI behavior', () => {
 	it('shows blue label for current step and renders percentage text near bars', async () => {
 		// 1) Detect type -> returns structure with mains and subs
 		enqueueJsonResponses([
-			{ ai: { schema: { label: 'Personal Data', mainData: [
+			{ ai: { schema: { label: 'Personal Data', data: [
 				{ label: 'Date of Birth', type: 'date', subData: [ { label: 'Day' }, { label: 'Month' }, { label: 'Year' } ] },
 			] } } },
 			// 2) Enrich constraints (echo structure)
-			{ ai: { schema: { label: 'Personal Data', mainData: [
+			{ ai: { schema: { label: 'Personal Data', data: [
 				{ label: 'Date of Birth', type: 'date', subData: [ { label: 'Day' }, { label: 'Month' }, { label: 'Year' } ] },
 			] } } }
 		]);

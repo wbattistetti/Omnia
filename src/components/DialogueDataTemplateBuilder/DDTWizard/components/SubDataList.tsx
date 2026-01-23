@@ -3,7 +3,7 @@ import { Pencil, Trash2, Link, Check, X } from 'lucide-react';
 import IconRenderer from './IconRenderer';
 import FieldStatusDisplay from './FieldStatusDisplay';
 import ConstraintsList from './ConstraintsList';
-import type { SchemaNode } from '../MainDataCollection';
+import type { SchemaNode } from '../dataCollection';
 import type { FieldProcessingState } from '../hooks/useFieldProcessing';
 
 interface SubDataListProps {

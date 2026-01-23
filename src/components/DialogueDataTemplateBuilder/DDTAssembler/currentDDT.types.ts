@@ -18,7 +18,7 @@ export type StepType = 'start' | 'noMatch' | 'noInput' | 'confirmation' | 'succe
 
 // Main data node produced by the assembler today
 // ✅ MIGRATION: steps removed (now in dialogueSteps array at DDT level)
-export interface MainDataNode {
+export interface dataNode {
   id: string;
   name?: string;
   label?: string;
@@ -27,7 +27,7 @@ export interface MainDataNode {
   condition?: string;
   // ⚠️ steps removed - use dialogueSteps array at DDT level instead
   // steps: StepGroup[];  // ❌ DEPRECATED: Use dialogueSteps with dataId reference
-  subData?: MainDataNode[];
+  subData?: dataNode[];
   synonyms?: string[]; // embedded synonyms per node (main/sub)
   constraints?: any[]; // kept as any to avoid behavior changes
 }
@@ -36,8 +36,8 @@ export interface MainDataNode {
 export interface AssembledDDT {
   id: string;
   label: string;
-  mainData: MainDataNode;
-  dialogueSteps?: any[]; // ✅ Flat dialogue steps array (replaces nested mainData[].steps)
+  data: dataNode;
+  dialogueSteps?: any[]; // ✅ Flat dialogue steps array (replaces nested data[].steps)
   translations: Record<string, string>;
   introduction?: StepGroup; // Optional introduction step at root level (aggregate)
 }

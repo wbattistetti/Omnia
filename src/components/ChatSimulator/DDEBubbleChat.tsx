@@ -527,7 +527,7 @@ export default function DDEBubbleChat({
 
     const main = getMain(state);
     const sub = getSub(state);
-    const legacyMain = Array.isArray(currentDDT?.mainData) ? currentDDT.mainData[0] : currentDDT?.mainData;
+    const legacyMain = Array.isArray(currentDDT?.data) ? currentDDT.data[0] : currentDDT?.data;
     const legacyDict = extractTranslations(currentDDT as any, translations);
 
     // Get current node state to check for NoMatch/NoInput
@@ -682,21 +682,21 @@ export default function DDEBubbleChat({
       });
 
       // Try to find the first main data node
-      const mainData = Array.isArray(currentDDT?.mainData)
-        ? currentDDT.mainData[0]
-        : currentDDT?.mainData;
+      const data = Array.isArray(currentDDT?.data)
+        ? currentDDT.data[0]
+        : currentDDT?.data;
 
-      console.log('[DDEBubbleChat] mainData check', {
-        hasMainData: !!mainData,
-        mainDataLabel: mainData?.label,
-        mainDataSteps: mainData?.steps ? Object.keys(mainData.steps) : [],
-        hasStartStep: !!mainData?.steps?.start,
-        startStepEscalations: mainData?.steps?.start?.escalations?.length || 0
+      console.log('[DDEBubbleChat] data check', {
+        hasdata: !!data,
+        dataLabel: data?.label,
+        dataSteps: data?.steps ? Object.keys(data.steps) : [],
+        hasStartStep: !!data?.steps?.start,
+        startStepEscalations: data?.steps?.start?.escalations?.length || 0
       });
 
-      if (mainData) {
+      if (data) {
         // Try to get the start step prompt
-        const startStep = mainData?.steps?.start;
+        const startStep = data?.steps?.start;
         if (startStep && Array.isArray(startStep.escalations) && startStep.escalations.length > 0) {
           const firstEscalation = startStep.escalations[0];
           // ✅ MIGRATION: Support both tasks (new) and actions (legacy)
@@ -759,7 +759,7 @@ export default function DDEBubbleChat({
           });
         }
       } else {
-        console.warn('[DDEBubbleChat] ❌ No mainData found in currentDDT');
+        console.warn('[DDEBubbleChat] ❌ No data found in currentDDT');
       }
     }
   }, [mode, currentDDT, messages.length, translations]);

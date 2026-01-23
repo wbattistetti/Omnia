@@ -1,14 +1,14 @@
 // Puri selettori/mappers per DDT. Nessuna dipendenza da React.
 // Le funzioni sono tolleranti a strutture diverse (steps come array o come oggetto, messages annidati, ecc.)
 
-export function getMainDataList(ddt: any): any[] {
+export function getdataList(ddt: any): any[] {
   if (!ddt) return [];
 
-  // Caso 1: ddt.mainData è un array
-  if (Array.isArray(ddt.mainData)) return ddt.mainData.filter(Boolean);
+  // Caso 1: ddt.data è un array
+  if (Array.isArray(ddt.data)) return ddt.data.filter(Boolean);
 
-  // Caso 2: ddt.mainData è un singolo oggetto
-  if (ddt.mainData && typeof ddt.mainData === 'object') return [ddt.mainData];
+  // Caso 2: ddt.data è un singolo oggetto
+  if (ddt.data && typeof ddt.data === 'object') return [ddt.data];
 
   // Caso 3: il root DDT stesso è un "main" (ha label/steps/subData)
   const looksLikeNode = !!(ddt && (ddt.label || ddt.name || ddt.steps || ddt.subData));
@@ -106,7 +106,7 @@ export function getMessagesFor(node: any, stepKey: string): any {
 }
 
 export function findNode(ddt: any, mainIndex: number, subIndex: number | null): any {
-  const mains = getMainDataList(ddt);
+  const mains = getdataList(ddt);
   if (mains.length === 0) return null;
 
   const safeMainIdx = Number.isFinite(mainIndex) && mainIndex >= 0 && mainIndex < mains.length ? mainIndex : 0;
@@ -140,7 +140,7 @@ export function getLabel(node: any, translations?: Record<string, string>): stri
 }
 
 export function hasMultipleMains(ddt: any): boolean {
-  return getMainDataList(ddt).length >= 2;
+  return getdataList(ddt).length >= 2;
 }
 
 /**

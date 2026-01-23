@@ -3,15 +3,278 @@ import { DialogueTaskService } from '../services/DialogueTaskService';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
+ * ============================================================================
+ * CONCETTUAL FLOW: Task Instance Creation from Row Definition
+ * ============================================================================
+ *
+ * Questo documento descrive il flusso completo di creazione di un task istanza
+ * a partire dalla definizione di una riga nel flowchart con i suoi metadati.
+ *
+ * ============================================================================
+ * FASE 1 — Creazione della riga e metadati
+ * ============================================================================
+ *
+ * Step 1.1: L'utente crea una riga nel flowchart
+ * - Testo: "Chiedi la data di nascita del paziente"
+ * - La riga viene creata con un rowId univoco
+ *
+ * Step 1.2: Analisi euristica della riga
+ * - Il sistema analizza il testo della riga
+ * - Classifica il tipo di task (es. DataRequest)
+ * - Cerca un template corrispondente tramite matching semantico
+ * - Trova il template "Date" con templateId: "723a1aa9-a904-4b55-82f3-a501dfbe0351"
+ * - Memorizza i metadati nella riga:
+ *   * taskType: DataRequest
+ *   * templateId: "723a1aa9-a904-4b55-82f3-a501dfbe0351"
+ *   * inferredCategory: null (opzionale)
+ *
+ * Step 1.3: La riga è pronta
+ * - La riga contiene i metadati necessari per creare il task
+ * - Il task non esiste ancora (lazy creation)
+ *
+ * ============================================================================
+ * FASE 2 — Click sull'ingranaggio (lazy task creation)
+ * ============================================================================
+ *
+ * Step 2.1: L'utente clicca sull'ingranaggio
+ * - Il sistema verifica se esiste già un task per questa riga
+ *   * Se esiste → carica quello esistente (non ricrea)
+ *   * Se non esiste → inizia la creazione lazy
+ *
+ * Step 2.2: Creazione del task base
+ * - Normalizza la label subito:
+ *   * Prende il testo della riga: "Chiedi la data di nascita del paziente"
+ *   * Rimuove "Chiedi la" / "Chiedi il" / "Chiedi" all'inizio
+ *   * Risultato: "data di nascita del paziente"
+ * - Crea un task con:
+ *   * id: rowId (stesso ID della riga)
+ *   * type: DataRequest
+ *   * templateId: "723a1aa9-a904-4b55-82f3-a501dfbe0351" (dai metadati)
+ *   * label: "data di nascita del paziente" (già normalizzata)
+ *   * steps: {} (vuoto, da popolare)
+ *   * ❌ NON data: [] - non serve salvarlo (si ricostruisce runtime)
+ *
+ * ============================================================================
+ * FASE 3 — Costruzione dell'albero dei dati (dereferenziazione)
+ * ============================================================================
+ *
+ * Step 3.1: Caricamento del template principale
+ * - Carica il template usando templateId: "723a1aa9-a904-4b55-82f3-a501dfbe0351"
+ * - Il template "Date" è un template composito con subData
+ *
+ * Step 3.2: Costruzione dell'albero completo
+ * - Chiama buildDataTree(template)
+ * - Il template ha un dato principale con subData referenziati:
+ *   * Main: { id: "723a1aa9-...", subData: [{ id: "879ad4a5-..." }, ...] }
+ * - Per ogni subData referenziato:
+ *   * Carica il template corrispondente (può essere atomico O composito)
+ *   * Se composito → dereferenzia ricorsivamente anche i suoi subData
+ *   * Supporta profondità arbitraria (ricorsione completa)
+ *   * Costruisce il nodo completo con constraints, examples, nlpContract
+ *   * Imposta templateId = ID del template referenziato
+ *
+ * IMPORTANTE - Terminologia:
+ * - "Nodo principale" = nodo al primo livello dell'albero
+ * - "Nodo annidato" = nodo in subData (qualsiasi profondità)
+ * - Ogni nodo rappresenta un dato con id e templateId
+ * - Non esiste più il concetto di "main node" o "root node"
+ * - L'annidamento dipende da come sono annidati i template
+ *
+ * IMPORTANTE - Regole id vs templateId:
+ * - Per template atomico/composito: id === templateId === template.id
+ * - Per template aggregato: ogni dato ha id === templateId (del template referenziato),
+ *   ma id !== template.id (del template aggregato)
+ * - Per subData (sempre): id === templateId (del template atomico/composito referenziato)
+ *
+ * Step 3.3: Albero completo in memoria
+ * - L'albero contiene:
+ *   * Nodo principale "Date" con templateId: "723a1aa9-..."
+ *   * Nodo annidato "Day" con templateId: "879ad4a5-..."
+ *   * Nodo annidato "Month" con templateId: "f4dc80fd-..."
+ *   * Nodo annidato "Year" con templateId: "3f7c43bf-..."
+ * - Ogni nodo ha id e templateId corretti
+ * - L'albero vive solo in memoria (non viene salvato)
+ *
+ * ============================================================================
+ * FASE 4 — Adattamento dei prompt al contesto
+ * ============================================================================
+ *
+ * Step 4.1: Estrazione dei prompt da adattare
+ * - Di default: solo per i nodi principali (primo livello dell'albero)
+ * - Opzionale: estendere ad altri nodi con flag esplicito (extendToChildren)
+ * - Estrae i prompt dello step "start" (o "normal")
+ * - Raccoglie tutti i prompt da adattare con i loro ID (per batch processing)
+ *
+ * IMPORTANTE - Contesto implicito:
+ * - Il primo messaggio principale definisce il contesto esplicito
+ *   Esempio: "Mi dica la data di nascita del paziente"
+ * - I messaggi successivi (subData, escalation) usano contesto implicito
+ *   Esempio subData "Day": "Che giorno?" (non serve "del paziente")
+ *   Esempio subData "Month": "Che mese?" (non serve "del paziente")
+ * - Se si chiede "mi dica i dati personali del paziente", poi:
+ *   * "Nome e cognome?" (non serve "del paziente")
+ *   * "Data di nascita?" (non serve "del paziente")
+ * - Si può estendere il contesto ad altri nodi con flag esplicito
+ *
+ * Step 4.2: Adattamento AI (batch processing)
+ * - Raccoglie TUTTI i prompt da adattare in un unico batch
+ * - Chiama l'API /api/ddt/adapt-prompts con:
+ *   * Array di prompt con ID: [{ promptId, nodeId, stepType, text }, ...]
+ *   * Contesto: "data di nascita del paziente"
+ *   * Task label: "data di nascita del paziente"
+ * - L'AI adatta tutti i prompt in una singola chiamata (più efficiente)
+ * - Esempio:
+ *   * Originale: "Qual è la data?"
+ *   * Adattato: "Qual è la data di nascita del paziente?"
+ *
+ * Step 4.3: Applicazione dei prompt adattati
+ * - Per ogni prompt adattato ricevuto:
+ *   * Trova il task di escalation corrispondente usando promptId
+ *   * Sostituisci il testo del prompt con quello adattato
+ * - I prompt adattati sono pronti per essere usati nella clonazione
+ *
+ * ============================================================================
+ * FASE 5 — Clonazione degli steps
+ * ============================================================================
+ *
+ * Step 5.1: Iterazione sull'albero
+ * - Per ogni nodo nell'albero (nodi principali + nodi annidati ricorsivamente):
+ *   * Prende node.templateId
+ *   * Determina quale template contiene gli steps per questo nodo
+ *
+ * Step 5.2: Caricamento degli steps dal template
+ * - Se node.templateId === template.id (template principale):
+ *   * Prende steps da template.steps[node.templateId]
+ * - Se node.templateId !== template.id (template atomico/composito referenziato):
+ *   * Carica il template atomico/composito
+ *   * Prende steps da atomicTemplate.steps[node.templateId]
+ *
+ * Step 5.3: Applicazione dei prompt adattati
+ * - Per i nodi principali: sostituisce i prompt "start" con quelli adattati
+ * - Per i nodi annidati: mantiene i prompt originali (o li adatta se esteso)
+ *
+ * Step 5.4: Clonazione con nuovi task IDs
+ * - Per ogni step clonato:
+ *   * Genera nuovi GUID per i task nelle escalation
+ *   * Mantiene la struttura degli step
+ *   * Crea un mapping oldGUID → newGUID per le traduzioni
+ *
+ * Step 5.5: Popolamento di task.steps
+ * - Aggiunge gli steps clonati a task.steps[node.templateId]
+ * - Struttura risultante:
+ *   task.steps = {
+ *     "723a1aa9-...": { start: [...], noMatch: [...], ... },  // Nodo principale
+ *     "879ad4a5-...": { start: [...], noMatch: [...], ... },  // Nodo annidato "Day"
+ *     "f4dc80fd-...": { start: [...], noMatch: [...], ... },  // Nodo annidato "Month"
+ *     "3f7c43bf-...": { start: [...], noMatch: [...], ... }   // Nodo annidato "Year"
+ *   }
+ *
+ * IMPORTANTE - Chiave di task.steps:
+ * - Usa SEMPRE node.templateId come chiave (non node.id)
+ * - Perché node.templateId identifica univocamente il template da cui vengono gli steps
+ * - node.id potrebbe essere diverso (nel caso di template aggregato)
+ *
+ * ============================================================================
+ * FASE 6 — Copia delle traduzioni
+ * ============================================================================
+ *
+ * Step 6.1: Mapping GUID
+ * - Usa il mapping oldGUID → newGUID creato durante la clonazione
+ * - Per ogni GUID clonato, trova la traduzione originale nel template
+ *
+ * Step 6.2: Copia delle traduzioni
+ * - Carica le traduzioni del template per i vecchi GUID
+ * - Crea nuove traduzioni per i nuovi GUID con lo stesso testo
+ * - Salva le traduzioni nel sistema di traduzioni del progetto
+ *
+ * ============================================================================
+ * FASE 7 — Salvataggio del task istanza
+ * ============================================================================
+ *
+ * Step 7.1: Preparazione dei dati da salvare
+ * - Prepara l'oggetto da salvare:
+ *   {
+ *     templateId: "723a1aa9-a904-4b55-82f3-a501dfbe0351",  // ✅ Per ricostruire tutto
+ *     label: "data di nascita del paziente",                // ✅ Specializzata (già normalizzata)
+ *     steps: { ... },                                        // ✅ Steps clonati e adattati
+ *     // ❌ NON data: [] - non serve! (si ricostruisce runtime)
+ *     // ❌ NON constraints, examples, nlpContract - vengono dal template (a meno di override)
+ *   }
+ *
+ * Step 7.2: Salvataggio nel repository
+ * - Salva il task nel TaskRepository
+ * - Il task è ora persistito con:
+ *   * templateId per ricostruire l'albero
+ *   * steps clonati e adattati
+ *   * label specializzata
+ *
+ * ============================================================================
+ * FASE 8 — Apertura del ResponseEditor
+ * ============================================================================
+ *
+ * Step 8.1: Caricamento del task
+ * - Carica il task dal repository usando rowId
+ *
+ * Step 8.2: Ricostruzione dell'albero
+ * - Prende task.templateId
+ * - Chiama buildDataTree(templateId) → ricostruisce l'albero in memoria
+ * - L'albero è identico a quello costruito in FASE 3
+ *
+ * Step 8.3: Caricamento degli steps
+ * - Prende task.steps (già clonati e adattati)
+ * - Per ogni nodo nell'albero:
+ *   * Trova gli steps usando task.steps[node.templateId]
+ *   * Mostra gli steps nel ResponseEditor
+ *
+ * Step 8.4: Visualizzazione nella sidebar
+ * - Mostra l'albero nella sidebar (nodi principali + nodi annidati)
+ * - Quando l'utente seleziona un nodo:
+ *   * Mostra gli steps da task.steps[node.templateId]
+ *   * Mostra constraints/examples/nlpContract dal nodo dell'albero (dal template)
+ *
+ * ============================================================================
+ * PRINCIPI FONDAMENTALI
+ * ============================================================================
+ *
+ * 1. L'albero dereferenziato vive solo in memoria
+ *    - Costruito runtime con buildDataTree(templateId)
+ *    - Usato per sidebar e clonazione steps
+ *    - NON viene salvato in task.data
+ *
+ * 2. Nel task istanza si salva solo:
+ *    - templateId (per ricostruire tutto)
+ *    - steps (clonati e adattati)
+ *    - label (specializzata e normalizzata)
+ *    - Override opzionali: constraints, examples, nlpContract (solo se modificati)
+ *
+ * 3. Ogni nodo ha id e templateId
+ *    - id = identificatore del nodo
+ *    - templateId = ID del template da cui viene il dato
+ *    - Regola: id === templateId (sempre)
+ *    - Eccezione: per template aggregato, id !== template.id (ma id === templateId del referenziato)
+ *
+ * 4. task.steps usa templateId come chiave
+ *    - task.steps[node.templateId] = steps clonati
+ *    - NON usare node.id come chiave
+ *
+ * 5. Il sistema è deterministico
+ *    - Con templateId puoi ricostruire tutto runtime
+ *    - Non serve salvare l'albero
+ *    - Non serve salvare constraints/examples (vengono dal template)
+ *
+ * ============================================================================
+ */
+
+/**
  * Load DDT from template (reference) and instance (steps + overrides)
  *
  * This function loads the DDT structure for the editor by combining:
- * - Template structure (mainData, constraints, examples, nlpContract) - source of truth
+ * - Template structure (data, constraints, examples, nlpContract) - source of truth
  * - Instance overrides (steps with cloned task IDs, modified constraints/examples)
  *
  * Rules:
  * - label, steps: Always from instance (always editable)
- * - mainData structure: From template (reference), but allows instance additions
+ * - data structure: From template (reference), but allows instance additions
  * - constraints, examples, nlpContract: From template (reference), unless overridden in instance
  *
  * Structure:
@@ -26,7 +289,7 @@ export async function loadDDTFromTemplate(instance: Task | null): Promise<any | 
   if (!instance.templateId || instance.templateId === 'UNDEFINED') {
     return {
       label: instance.label,
-      mainData: instance.mainData || [],
+      data: instance.data || [],
       steps: instance.steps,  // ✅ Steps a root level (già nel formato corretto)
       constraints: instance.constraints,
       examples: instance.examples
@@ -40,154 +303,69 @@ export async function loadDDTFromTemplate(instance: Task | null): Promise<any | 
     console.warn('[ddtMergeUtils] Template not found:', instance.templateId);
     return {
       label: instance.label,
-      mainData: instance.mainData || [],
+      data: instance.data || [],
       steps: instance.steps,  // ✅ Steps a root level (già nel formato corretto)
       constraints: instance.constraints,
       examples: instance.examples
     };
   }
 
-  // ✅ Build template structure for reference (to get contracts/constraints)
-  const { mainData: templateMainData, guidMapping: templateGuidMapping } = buildMainDataFromTemplate(template);
+  // ✅ CRITICAL: Ricostruisci SEMPRE l'albero dal template (NON usare instance.data!)
+  const dataTree = buildDataTree(template);
+  // ✅ dataTree contiene:
+  // - Tutti i nodi principali con templateId corretti
+  // - Tutti i subData dereferenziati con templateId corretti
+  // - Struttura completa del template
 
-  // ✅ ITERATE ON instance.mainData (not templateMainData) to include added nodes
-  const instanceMainData = instance.mainData || [];
+  // ✅ Clone steps usando dataTree (albero montato con templateId corretti)
+  const { guidMapping: templateGuidMapping } = cloneTemplateSteps(template, dataTree);
 
-  // If instance has no mainData, build from template
-  if (instanceMainData.length === 0) {
-    const allGuidMappings = new Map<string, string>(templateGuidMapping);
-    const enrichedMainData = templateMainData.map((templateNode: any) => {
-      // ✅ Process subData (no steps in nodes anymore)
-      const enrichedSubData = (templateNode.subData || []).map((subNode: any) => {
-        return subNode; // ✅ No steps in nodes
-      });
-
-      return {
-        ...templateNode,
-        // ❌ REMOVED: steps - steps are now at root level
-        subData: enrichedSubData
-      };
-    });
-
-    // ✅ Clone steps from template.steps[nodeId] directly to rootSteps
-    const rootSteps: Record<string, any> = {};
-    const cloneStepsForNode = (node: any, nodeId: string) => {
-      if (!nodeId) return;
-
-      // ✅ Get steps from template.steps[nodeId] (root level)
-      if (template.steps && template.steps[nodeId]) {
-        const templateSteps = template.steps[nodeId];
-        const { cloned, guidMapping } = cloneStepsWithNewTaskIds(templateSteps);
-        guidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
-        rootSteps[nodeId] = cloned;
-      }
-
-      // ✅ Process subData recursively
-      if (node.subData && Array.isArray(node.subData)) {
-        node.subData.forEach((sub: any) => {
-          if (sub.id) cloneStepsForNode(sub, sub.id);
-        });
-      }
+  // ✅ Usa dataTree come struttura base (NON instance.data!)
+  // ✅ Applica eventuali override dall'istanza (label, constraints, ecc.)
+  const enrichedData = dataTree.map((templateNode: any) => {
+    return {
+      ...templateNode, // ✅ Struttura dal template (include templateId!)
+      // ✅ Override dall'istanza (se presenti)
+      label: instance.label || templateNode.label,
+      constraints: instance.constraints || templateNode.constraints,
+      examples: instance.examples || templateNode.examples,
+      nlpContract: instance.nlpContract || templateNode.nlpContract,
+      // ✅ SubData viene dal template (già costruito da buildDataTree)
+      subData: templateNode.subData || []
     };
-
-    enrichedMainData.forEach((main: any) => {
-      if (main.id) cloneStepsForNode(main, main.id);
-    });
-
-    const result = {
-      label: instance.label ?? template.label,
-      mainData: enrichedMainData,  // ✅ mainData ora senza steps
-      steps: Object.keys(rootSteps).length > 0 ? rootSteps : undefined,  // ✅ Steps a root level
-      constraints: instance.constraints ?? template.dataContracts ?? template.constraints ?? undefined,
-      examples: instance.examples ?? template.examples ?? undefined,
-      nlpContract: instance.nlpContract ?? template.nlpContract ?? undefined
-    };
-
-    // ✅ Copy translations for cloned steps (only on first instance creation)
-    const isFirstTimeCreation = (!instance.mainData || instance.mainData.length === 0) && !instance.steps;
-    if (isFirstTimeCreation && allGuidMappings.size > 0) {
-      const templateId = template.id || template._id;
-      if (templateId) {
-        await copyTranslationsForClonedSteps(result, templateId, allGuidMappings);
-      }
-    }
-
-    return result;
-  }
-
-  // ✅ Build enriched mainData from instance.mainData
-  const enrichedMainData = instanceMainData.map((instanceNode: any) => {
-    if (instanceNode.templateId) {
-      // ✅ NODE FROM TEMPLATE: get structure from template, apply prompts from instance, contracts from template
-      const templateNode = findTemplateNodeByTemplateId(templateMainData, instanceNode.templateId);
-
-      if (templateNode) {
-        // ✅ Use structure from template (label, type, icon, constraints, examples, nlpContract)
-        // ✅ Steps are handled at root level, not in nodes
-
-        console.log('[loadDDTFromTemplate] 🔍 Merging node from template', {
-          instanceNodeTemplateId: instanceNode.templateId,
-          templateNodeId: templateNode.id,
-          templateHasSteps: !!(template.steps && template.steps[templateNode.id])
-        });
-
-        return {
-          ...templateNode,  // ✅ Structure from template (includes contracts/constraints)
-          // ❌ REMOVED: steps - steps are now at root level
-          // ✅ Enrich subData recursively
-          subData: enrichSubDataFromInstance(instanceNode.subData || [], templateNode.subData || [])
-        };
-      } else {
-        // Template node not found, use instance node as-is (fallback)
-        console.warn('[loadDDTFromTemplate] ⚠️ Template node not found, using instance node as-is', {
-          instanceNodeTemplateId: instanceNode.templateId
-        });
-        return instanceNode;
-      }
-    } else {
-      // ✅ NODE ADDED IN INSTANCE (templateId === null): use complete structure from instance
-      return instanceNode;  // ✅ Complete structure copied
-    }
   });
 
-  // ✅ Usa direttamente steps a root level (già nel formato corretto)
+  // ✅ Usa steps dall'istanza (già clonati) o clona dal template (prima creazione)
   let finalRootSteps: Record<string, any> | undefined = undefined;
 
   if (instance.steps && typeof instance.steps === 'object' && Object.keys(instance.steps).length > 0) {
-    // Instance ha già steps a root level - usali
+    // ✅ Instance ha già steps clonati - usali
     finalRootSteps = instance.steps;
   } else if (template.steps && typeof template.steps === 'object' && Object.keys(template.steps).length > 0) {
-    // Template ha steps a root level - clonali per prima creazione
-    const isFirstTimeCreation = (!instance.mainData || instance.mainData.length === 0) && !instance.steps;
-    if (isFirstTimeCreation) {
-      // Clona steps dal template con nuovi task IDs
-      finalRootSteps = {};
-      for (const [nodeId, templateSteps] of Object.entries(template.steps)) {
-        if (templateSteps && typeof templateSteps === 'object') {
-          const { cloned } = cloneStepsWithNewTaskIds(templateSteps as any);
-          finalRootSteps[nodeId] = cloned;
-        }
+    // ✅ Prima creazione - clona steps dal template
+    finalRootSteps = {};
+    for (const [nodeId, templateSteps] of Object.entries(template.steps)) {
+      if (templateSteps && typeof templateSteps === 'object') {
+        const { cloned } = cloneStepsWithNewTaskIds(templateSteps as any);
+        finalRootSteps[nodeId] = cloned;
       }
     }
   }
 
-  // Root level: use instance if present (override), otherwise template
   const result = {
     label: instance.label ?? template.label,
-    mainData: enrichedMainData,  // ✅ mainData ora senza steps (solo struttura dati)
-    steps: finalRootSteps,  // ✅ Steps a root level
+    data: enrichedData, // ✅ Struttura ricostruita dal template (con templateId!)
+    steps: finalRootSteps, // ✅ Steps dall'istanza o clonati
     constraints: instance.constraints ?? template.dataContracts ?? template.constraints ?? undefined,
     examples: instance.examples ?? template.examples ?? undefined,
     nlpContract: instance.nlpContract ?? template.nlpContract ?? undefined
   };
 
   // ✅ Copy translations for cloned steps (only on first instance creation)
-  // Check if instance has already been initialized (has mainData or steps)
-  const isFirstTimeCreation = (!instance.mainData || instance.mainData.length === 0) && !instance.steps;
+  const isFirstTimeCreation = !instance.steps || Object.keys(instance.steps).length === 0;
   if (isFirstTimeCreation) {
     const templateId = template.id || template._id;
     if (templateId) {
-      // Build guidMapping from templateMainData
       const allGuidMappings = new Map<string, string>(templateGuidMapping);
       await copyTranslationsForClonedSteps(result, templateId, allGuidMappings);
     }
@@ -284,135 +462,263 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
 
 
 /**
- * Build mainData structure from template (reference structure)
- * ✅ AGGIORNATO: Usa solo template.steps[nodeId] (non più template.mainData[].steps)
- * Returns both mainData and guidMapping for translation copying
+ * Clone steps from template with new task IDs
+ * Returns cloned steps and guidMapping for translation copying
+ *
+ * ✅ IMPORTANT: Se data (albero montato) è fornito, usa i templateId dall'albero
+ * per gestire correttamente le catene di referenziazione.
+ * Se data non è fornito, usa la logica fallback (per retrocompatibilità).
  */
-export function buildMainDataFromTemplate(template: any): { mainData: any[]; guidMapping: Map<string, string> } {
+export function cloneTemplateSteps(
+  template: any,
+  data?: any[]  // ✅ Albero montato con templateId corretti (da buildDataTree)
+): { steps: Record<string, any>; guidMapping: Map<string, string> } {
   const allGuidMappings = new Map<string, string>();
+  const clonedSteps: Record<string, any> = {};
 
-  // ✅ Check if template has mainData structure
-  if (template.mainData && Array.isArray(template.mainData) && template.mainData.length > 0) {
-    // Template has mainData - clone structure and steps from template.steps[nodeId]
-    const mainData = template.mainData.map((mainNode: any) => {
-      const templateNodeId = mainNode.id;
-      let clonedMainSteps = undefined;
+  // Helper function to clone steps for a nodeId from a source template
+  const cloneStepsForNodeId = (nodeId: string, sourceTemplate: any): void => {
+    if (!nodeId || !sourceTemplate) {
+      console.warn('⚠️ [cloneStepsForNodeId] Parametri mancanti', { nodeId, hasSourceTemplate: !!sourceTemplate });
+      return;
+    }
 
-      // ✅ Get steps from template.steps[nodeId] (root level)
-      if (templateNodeId && template.steps && template.steps[templateNodeId]) {
-        const templateSteps = template.steps[templateNodeId];
-        const { cloned, guidMapping } = cloneStepsWithNewTaskIds(templateSteps);
-        guidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
-        clonedMainSteps = cloned;
+    if (!sourceTemplate.steps) {
+      console.warn('⚠️ [cloneStepsForNodeId] Template senza steps', {
+        nodeId,
+        templateId: sourceTemplate.id || sourceTemplate._id
+      });
+      return;
+    }
+
+    const sourceStepsKeys = Object.keys(sourceTemplate.steps);
+    const templateDataFirstId = sourceTemplate.data && Array.isArray(sourceTemplate.data) && sourceTemplate.data.length > 0
+      ? sourceTemplate.data[0].id
+      : null;
+
+    // ✅ CASE 1: Template composito - steps organizzati per nodeId: template.steps[nodeId] = { start: {...}, ... }
+    if (sourceTemplate.steps[nodeId]) {
+      const templateSteps = sourceTemplate.steps[nodeId];
+      const { cloned, guidMapping } = cloneStepsWithNewTaskIds(templateSteps);
+      guidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
+      clonedSteps[nodeId] = cloned;
+      // Log rimosso per ridurre rumore - solo log critici
+      return;
+    }
+
+    // ✅ CASE 2: Template atomico - steps direttamente in template.steps: template.steps = { start: {...}, ... }
+    // Verifica se le chiavi sono nomi di step (non GUID)
+    const stepNames = ['start', 'noMatch', 'noInput', 'confirmation', 'notConfirmed', 'success', 'introduction'];
+    const hasStepNameKeys = sourceStepsKeys.some(key => stepNames.includes(key));
+
+    // ✅ Per template atomici con struttura flat, usa sempre gli steps direttamente
+    // Non serve verificare nodeId === templateDataFirstId perché per template atomici
+    // gli steps sono sempre per l'unico nodo del template
+    if (hasStepNameKeys) {
+      // ✅ Template atomico: gli steps sono direttamente in template.steps
+      const { cloned, guidMapping } = cloneStepsWithNewTaskIds(sourceTemplate.steps);
+      guidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
+      clonedSteps[nodeId] = cloned;
+      // Log rimosso per ridurre rumore - solo log critici
+      return;
+    }
+
+    // ❌ Steps non trovati
+    console.warn('⚠️ [cloneStepsForNodeId] Steps non trovati', {
+      nodeId,
+      templateId: sourceTemplate.id || sourceTemplate._id,
+      templateHasSteps: true,
+      templateStepsKeys: sourceStepsKeys,
+      templateStepsKeysExpanded: JSON.stringify(sourceStepsKeys),
+      lookingFor: nodeId,
+      templateDataFirstId: templateDataFirstId,
+      nodeIdMatchesDataFirstId: nodeId === templateDataFirstId,
+      hasStepNameKeys: hasStepNameKeys
+    });
+  };
+
+  // ✅ Se data è fornito, usa i templateId dall'albero montato (PREFERRED)
+  if (data && Array.isArray(data) && data.length > 0) {
+
+
+    // ✅ Iterate over mounted tree - use templateId directly (referenceId eliminato)
+    const processNode = (node: any): void => {
+      const templateId = node.templateId;
+      if (!templateId) {
+        console.warn('⚠️ [cloneTemplateSteps] Node senza templateId', { nodeId: node.id, nodeLabel: node.label });
+        return;
       }
 
-      // ✅ Process subData - get steps from template.steps[subNodeId]
-      const subData = (mainNode.subData || []).map((subNode: any) => {
-        const templateSubNodeId = subNode.id;
-        let clonedSubSteps = undefined;
-
-        if (templateSubNodeId && template.steps && template.steps[templateSubNodeId]) {
-          const templateSubSteps = template.steps[templateSubNodeId];
-          const { cloned, guidMapping: subGuidMapping } = cloneStepsWithNewTaskIds(templateSubSteps);
-          subGuidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
-          clonedSubSteps = cloned;
+      // ✅ Determine which template contains the steps for this node
+      // If node has templateId different from main template, steps are in the atomic template
+      // Otherwise, steps are in the main template
+      if (templateId !== (template.id || template._id)) {
+        // ✅ This is a referenced atomic template - get steps from atomic template
+        const atomicTemplate = DialogueTaskService.getTemplate(templateId);
+        if (atomicTemplate) {
+          cloneStepsForNodeId(templateId, atomicTemplate); // ✅ Usa templateId direttamente
+        } else {
+          console.warn('⚠️ [cloneTemplateSteps] Template atomico non trovato', { templateId });
         }
+      } else {
+        // ✅ This is a main data node - get steps from main template
+        cloneStepsForNodeId(templateId, template); // ✅ Usa templateId direttamente
+      }
 
-        return {
-          ...subNode,
-          // ❌ REMOVED: steps - steps are now at root level, not in nodes
-        };
-      });
+      // ✅ Process subData recursively (support for arbitrary depth)
+      if (node.subData && Array.isArray(node.subData)) {
+        node.subData.forEach((sub: any) => {
+          processNode(sub);
+        });
+      }
+    };
+
+    // ✅ Process all nodes in mounted tree
+    data.forEach((mainNode: any) => {
+      processNode(mainNode);
+    });
+
+    console.log('[🔍 cloneTemplateSteps] ✅ Steps clonati', {
+      clonedStepsCount: Object.keys(clonedSteps).length,
+      clonedStepsKeys: Object.keys(clonedSteps),
+      clonedStepsDetails: Object.entries(clonedSteps).map(([key, value]: [string, any]) => ({
+        key,
+        keyPreview: key.substring(0, 40) + '...',
+        stepKeys: typeof value === 'object' ? Object.keys(value || {}) : [],
+        hasStart: !!value?.start,
+        startEscalationsCount: value?.start?.escalations?.length || 0
+      }))
+    });
+
+    return { steps: clonedSteps, guidMapping: allGuidMappings };
+  }
+
+  // ❌ NO FALLBACK: data è richiesto
+  console.warn('⚠️ [cloneTemplateSteps] data non fornito - impossibile clonare steps', {
+    templateId: template.id || template._id,
+    templateLabel: template.label || template.name
+  });
+  return { steps: {}, guidMapping: new Map<string, string>() };
+}
+
+/**
+ * Build data tree from template (dereference subData)
+ * Returns only data structure (without steps)
+ * ✅ NON inventa label: se manca, logga warning e lascia undefined
+ */
+export function buildDataTree(template: any): any[] {
+  // Helper function to recursively dereference subData
+  const dereferenceSubData = (subNode: any): any => {
+    const subNodeId = subNode.id;
+    if (!subNodeId) {
+      return subNode;
+    }
+
+    // ✅ SEMPRE: subNode contiene solo { id } → carica task atomico completo
+    const subTemplate = DialogueTaskService.getTemplate(subNodeId);
+    if (!subTemplate) {
+      console.warn('[buildDataTree] Sub-template not found:', subNodeId);
+      return subNode;
+    }
+
+    // ✅ Recursively dereference subData (support for arbitrary depth)
+    const dereferencedSubData = (subTemplate.data && Array.isArray(subTemplate.data) && subTemplate.data.length > 0 && subTemplate.data[0].subData)
+      ? (subTemplate.data[0].subData || []).map(dereferenceSubData)
+      : [];
+
+    // ✅ Costruisci struttura completa dal task atomico - SOLO templateId (referenceId eliminato)
+    return {
+      id: subTemplate.id || subTemplate._id,
+      label: subTemplate.label, // ✅ NON inventare: se manca, sarà undefined
+      type: subTemplate.type,
+      icon: subTemplate.icon || 'FileText',
+      constraints: subTemplate.dataContracts || subTemplate.constraints || [],
+      examples: subTemplate.examples || [],
+      nlpContract: subTemplate.nlpContract || undefined,
+      subData: dereferencedSubData, // ✅ Supporta profondità arbitraria
+      templateId: subTemplate.id || subTemplate._id, // ✅ Solo templateId (uguale a id per template atomici/compositi)
+      kind: subTemplate.name || subTemplate.type || 'generic'
+    };
+  };
+
+  // ✅ Check if template has data structure
+  if (template.data && Array.isArray(template.data) && template.data.length > 0) {
+    // Template has data - dereference structure
+    const data = template.data.map((mainNode: any) => {
+      // ✅ Process subData recursively (support for arbitrary depth)
+      const subData = (mainNode.subData || []).map(dereferenceSubData);
+
+      // ✅ NON inventare label: se manca, logga warning
+      if (!mainNode.label && !template.label && !template.name) {
+        const labelForHeuristics = template.id || 'UNKNOWN';
+        console.warn('[buildDataTree] Label mancante nel template, uso ID come fallback tecnico per euristiche', {
+          templateId: template.id,
+          fallbackLabel: labelForHeuristics,
+          nodeId: mainNode.id
+        });
+      }
+
+      // ✅ CRITICAL: Determina templateId corretto
+      // Se template.data.length === 1 → dato principale → templateId = template.id
+      // Se template.data.length > 1 → template aggregato → ogni mainNode è un template referenziato → templateId = mainNode.id
+      const isAggregateTemplate = template.data.length > 1;
+      const nodeTemplateId = isAggregateTemplate
+        ? (mainNode.id || mainNode.templateId)  // ✅ Template aggregato: usa mainNode.id
+        : (template.id || template._id);        // ✅ Template atomico/composito: usa template.id
 
       return {
         ...mainNode,
-        // ❌ REMOVED: steps - steps are now at root level, not in nodes
+        id: mainNode.id || template.id || template._id, // ✅ Preserva id esistente o usa template.id
+        templateId: mainNode.templateId || nodeTemplateId, // ✅ CRITICAL: Imposta esplicitamente templateId
+        label: mainNode.label || template.label || template.name || undefined, // ✅ NON inventare: undefined se manca
         subData: subData
       };
     });
 
-    return { mainData, guidMapping: allGuidMappings };
+    return data;
   }
 
   // ✅ Build from subDataIds (composite template)
   const subDataIds = template.subDataIds || [];
-
   if (subDataIds.length > 0) {
-    // Template composito: crea UN SOLO mainData con subData[]
     const subDataInstances: any[] = [];
     for (const subId of subDataIds) {
       const subTemplate = DialogueTaskService.getTemplate(subId);
       if (subTemplate) {
-        // ✅ Get steps from subTemplate.steps[nodeId] (root level)
-        let subSteps = undefined;
-        if (subTemplate.mainData && Array.isArray(subTemplate.mainData) && subTemplate.mainData.length > 0) {
-          const subTemplateNodeId = subTemplate.mainData[0].id;
-          if (subTemplateNodeId && subTemplate.steps && subTemplate.steps[subTemplateNodeId]) {
-            subSteps = subTemplate.steps[subTemplateNodeId];
-          }
-        }
-
-        // Clone sub steps and collect mappings
-        let clonedSubSteps = undefined;
-        if (subSteps) {
-          const { cloned, guidMapping: subGuidMapping } = cloneStepsWithNewTaskIds(subSteps);
-          subGuidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
-          clonedSubSteps = cloned;
-        }
-
-        // ✅ Get referenceId from the referenced template's mainData[0].id
-        // This is the dataId that will be used in memory at runtime
-        let referenceId: string | undefined;
-        if (subTemplate.mainData && Array.isArray(subTemplate.mainData) && subTemplate.mainData.length > 0) {
-          referenceId = subTemplate.mainData[0].id;
-        } else {
-          // Fallback: use template id if mainData structure not available
-          referenceId = subTemplate.id || subTemplate._id;
-        }
-
-        // ✅ Validate: templateId must point to existing template (already checked above)
-        // ✅ Validate: referenceId must be a valid dataId (checked above)
+        // ✅ Recursively dereference subData
+        const dereferencedSubData = (subTemplate.data && Array.isArray(subTemplate.data) && subTemplate.data.length > 0 && subTemplate.data[0].subData)
+          ? (subTemplate.data[0].subData || []).map(dereferenceSubData)
+          : [];
 
         subDataInstances.push({
           id: subTemplate.id || subTemplate._id,
-          label: subTemplate.label || subTemplate.name || 'Sub',
+          label: subTemplate.label, // ✅ NON inventare
           type: subTemplate.type,
           icon: subTemplate.icon || 'FileText',
-          // ❌ REMOVED: steps - steps are now at root level, not in nodes
           constraints: subTemplate.dataContracts || subTemplate.constraints || [],
           examples: subTemplate.examples || [],
           nlpContract: subTemplate.nlpContract || undefined,
-          subData: [],
-          templateId: subTemplate.id || subTemplate._id, // ✅ GUID del task referenziato
-          referenceId: referenceId, // ✅ dataId del mainData[0] del template referenziato
+          subData: dereferencedSubData,
+          templateId: subTemplate.id || subTemplate._id, // ✅ Solo templateId (uguale a id per template atomici/compositi)
           kind: subTemplate.name || subTemplate.type || 'generic'
         });
       }
     }
 
-    // ✅ Get steps from template.steps[nodeId] (root level)
-    let mainSteps = undefined;
-    if (template.mainData && Array.isArray(template.mainData) && template.mainData.length > 0) {
-      const templateNodeId = template.mainData[0].id;
-      if (templateNodeId && template.steps && template.steps[templateNodeId]) {
-        mainSteps = template.steps[templateNodeId];
-      }
+    // ✅ NON inventare label per main node
+    if (!template.label && !template.name) {
+      const labelForHeuristics = template.id || 'UNKNOWN';
+      console.warn('[buildDataTree] Label mancante nel template composito, uso ID come fallback tecnico per euristiche', {
+        templateId: template.id,
+        fallbackLabel: labelForHeuristics
+      });
     }
 
-    // Clone main steps and collect mappings
-    let clonedMainSteps = undefined;
-    if (mainSteps) {
-      const { cloned, guidMapping: mainGuidMapping } = cloneStepsWithNewTaskIds(mainSteps);
-      mainGuidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
-      clonedMainSteps = cloned;
-    }
-
-    const result = [{
+    return [{
       id: template.id || template._id,
-      label: template.label || template.name || 'Data',
+      label: template.label || template.name || undefined, // ✅ NON inventare
       type: template.type,
       icon: template.icon || 'Calendar',
-      // ❌ REMOVED: steps - steps are now at root level, not in nodes
       constraints: template.dataContracts || template.constraints || [],
       examples: template.examples || [],
       nlpContract: template.nlpContract || undefined,
@@ -420,44 +726,43 @@ export function buildMainDataFromTemplate(template: any): { mainData: any[]; gui
       templateId: template.id || template._id,
       kind: template.name || template.type || 'generic'
     }];
-
-    return { mainData: result, guidMapping: allGuidMappings };
-  } else {
-    // Template semplice
-    // ✅ Get steps from template.steps[nodeId] (root level)
-    let mainSteps = undefined;
-    if (template.mainData && Array.isArray(template.mainData) && template.mainData.length > 0) {
-      const templateNodeId = template.mainData[0].id;
-      if (templateNodeId && template.steps && template.steps[templateNodeId]) {
-        mainSteps = template.steps[templateNodeId];
-      }
-    }
-
-    // Clone main steps and collect mappings
-    let clonedMainSteps = undefined;
-    if (mainSteps) {
-      const { cloned, guidMapping: mainGuidMapping } = cloneStepsWithNewTaskIds(mainSteps);
-      mainGuidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
-      clonedMainSteps = cloned;
-    }
-
-    return {
-      mainData: [{
-        id: template.id || template._id,
-        label: template.label || template.name || 'Data',
-        type: template.type,
-        icon: template.icon || 'Calendar',
-        // ❌ REMOVED: steps - steps are now at root level, not in nodes
-        constraints: template.dataContracts || template.constraints || [],
-        examples: template.examples || [],
-        nlpContract: template.nlpContract || undefined,
-        subData: [],
-        templateId: template.id || template._id,
-        kind: template.name || template.type || 'generic'
-      }],
-      guidMapping: allGuidMappings
-    };
   }
+
+  // Template semplice
+  if (!template.label && !template.name) {
+    const labelForHeuristics = template.id || 'UNKNOWN';
+    console.warn('[buildDataTree] Label mancante nel template semplice, uso ID come fallback tecnico per euristiche', {
+      templateId: template.id,
+      fallbackLabel: labelForHeuristics
+    });
+  }
+
+  return [{
+    id: template.id || template._id,
+    label: template.label || template.name || undefined, // ✅ NON inventare
+    type: template.type,
+    icon: template.icon || 'Calendar',
+    constraints: template.dataContracts || template.constraints || [],
+    examples: template.examples || [],
+    nlpContract: template.nlpContract || undefined,
+    subData: [],
+    templateId: template.id || template._id,
+    kind: template.name || template.type || 'generic'
+  }];
+}
+
+/**
+ * Build data structure from template (reference structure)
+ * ✅ DEPRECATED: Usa cloneTemplateSteps + buildDataTree invece
+ * Mantenuto per retrocompatibilità
+ * Returns both data and guidMapping for translation copying
+ */
+export function buildDataFromTemplate(template: any): { data: any[]; guidMapping: Map<string, string> } {
+  // ✅ Prima monta l'albero completo, poi clona gli steps usando i templateId dall'albero
+  const data = buildDataTree(template);
+  const { guidMapping } = cloneTemplateSteps(template, data);
+  return { data, guidMapping };
+
 }
 
 /**
@@ -563,53 +868,10 @@ async function copyTranslationsForClonedSteps(_ddt: any, _templateId: string, gu
 }
 
 
-/**
- * Find template node by templateId
- */
-function findTemplateNodeByTemplateId(templateMainData: any[], templateId: string): any | null {
-  for (const mainNode of templateMainData) {
-    if (mainNode.templateId === templateId) {
-      return mainNode;
-    }
-    // Check subData
-    if (mainNode.subData && Array.isArray(mainNode.subData)) {
-      for (const subNode of mainNode.subData) {
-        if (subNode.templateId === templateId) {
-          return subNode;
-        }
-      }
-    }
-  }
-  return null;
-}
-
-/**
- * Enrich subData from instance (apply instance prompts, but keep template contracts)
- */
-function enrichSubDataFromInstance(instanceSubData: any[], templateSubData: any[]): any[] {
-  return instanceSubData.map((instanceSub: any) => {
-    if (instanceSub.templateId) {
-      // ✅ SUB-DATA FROM TEMPLATE: get structure from template, apply prompts from instance
-      const templateSub = templateSubData.find((t: any) => t.templateId === instanceSub.templateId);
-
-      if (templateSub) {
-        // ✅ Clone steps from template with new task IDs, or use steps from instance if modified
-        const subSteps = instanceSub.steps ?? (templateSub.steps ? cloneStepsWithNewTaskIds(templateSub.steps) : undefined);
-
-        return {
-          ...templateSub,  // ✅ Structure from template (includes contracts/constraints)
-          steps: subSteps  // ✅ Clone steps with new task IDs
-        };
-      } else {
-        // Template sub not found, use instance as-is (fallback)
-        return instanceSub;
-      }
-    } else {
-      // ✅ SUB-DATA ADDED IN INSTANCE (templateId === null): use complete structure from instance
-      return instanceSub;  // ✅ Complete structure copied
-    }
-  });
-}
+// ❌ RIMOSSO: findTemplateNodeByTemplateId e enrichSubDataFromInstance
+// Queste funzioni non sono più necessarie perché loadDDTFromTemplate
+// ora ricostruisce sempre l'albero da templateId usando buildDataTree,
+// invece di iterare su instance.data
 
 
 
@@ -626,9 +888,9 @@ export function hasDataContractOverrides(instance: Task | null): boolean {
     return true;
   }
 
-  // Check mainData nodes
-  if (instance.mainData && Array.isArray(instance.mainData)) {
-    for (const mainNode of instance.mainData) {
+  // Check data nodes
+  if (instance.data && Array.isArray(instance.data)) {
+    for (const mainNode of instance.data) {
       if (mainNode.constraints || mainNode.examples || mainNode.nlpContract) {
         return true;
       }
@@ -651,34 +913,33 @@ export function hasDataContractOverrides(instance: Task | null): boolean {
  * Returns true if structure is identical, false if different
  *
  * Structure includes:
- * - mainData[].id, label, type
- * - mainData[].subData[] (array of referenceId/templateId)
+ * - data[].id, label, type
+ * - data[].subData[] (array with templateId)
  * - Semantics (Atomic/Composite/Collection)
  *
  * Structure does NOT include:
  * - steps, escalations (logic)
  * - constraints, examples, nlpContract (overrides)
  */
-function compareDataStructure(localMainData: any[], templateMainData: any[]): boolean {
-  if (localMainData.length !== templateMainData.length) {
-    return false; // Different number of mainData nodes
+function compareDataStructure(localdata: any[], templateData: any[]): boolean {
+  if (localdata.length !== templateData.length) {
+    return false; // Different number of data nodes
   }
 
-  for (let i = 0; i < localMainData.length; i++) {
-    const localNode = localMainData[i];
-    const templateNode = templateMainData[i] || templateMainData[0]; // Fallback to first
+  for (let i = 0; i < localdata.length; i++) {
+    const localNode = localdata[i];
+    const templateNode = templateData[i] || templateData[0]; // Fallback to first
 
-    // Compare main node structure (id, label, type, templateId, referenceId)
+    // Compare main node structure (id, label, type, templateId)
     if (localNode.id !== templateNode.id ||
-        localNode.label !== templateNode.label ||
-        localNode.type !== templateNode.type ||
-        localNode.templateId !== templateNode.templateId ||
-        (localNode.referenceId || localNode.id) !== (templateNode.referenceId || templateNode.id)) {
+      localNode.label !== templateNode.label ||
+      localNode.type !== templateNode.type ||
+      localNode.templateId !== templateNode.templateId) {
       return false; // Structure changed
     }
 
-    // Compare subData structure (only referenceId/templateId, not logic)
-    const localSubData = localMainData[i].subData || [];
+    // Compare subData structure (only templateId, not logic)
+    const localSubData = localdata[i].subData || [];
     const templateSubData = templateNode.subData || [];
 
     if (localSubData.length !== templateSubData.length) {
@@ -689,10 +950,9 @@ function compareDataStructure(localMainData: any[], templateMainData: any[]): bo
       const localSub = localSubData[j];
       const templateSub = templateSubData[j];
 
-      // Compare subData structure (templateId, referenceId, label)
+      // Compare subData structure (templateId, label)
       if (localSub.templateId !== templateSub.templateId ||
-          (localSub.referenceId || localSub.id) !== (templateSub.referenceId || templateSub.id) ||
-          localSub.label !== templateSub.label) {
+        localSub.label !== templateSub.label) {
         return false; // Structure changed
       }
     }
@@ -705,7 +965,7 @@ function compareDataStructure(localMainData: any[], templateMainData: any[]): bo
  * Extract only modified fields from DDT (compared to template)
  *
  * LOGICA CORRETTA:
- * - Il template definisce SOLO la struttura dei dati (mainData, subData, dataId, semantica)
+ * - Il template definisce SOLO la struttura dei dati (data, subData, dataId, semantica)
  * - L'istanza definisce la logica (step, escalation, constraints, examples, nlpContract)
  * - Se la struttura è identica → salva solo override (logica)
  * - Se la struttura è diversa → salva tutto (derivazione rotta, diventa standalone)
@@ -724,7 +984,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
   if (!instance.templateId) {
     return {
       label: localDDT.label,
-      mainData: localDDT.mainData,
+      data: localDDT.data,
       steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
       constraints: localDDT.constraints,
       examples: localDDT.examples,
@@ -740,7 +1000,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
     console.warn(`[extractModifiedDDTFields] Template ${instance.templateId} not found - saving everything (cannot resolve lazy)`);
     return {
       label: localDDT.label,
-      mainData: localDDT.mainData,
+      data: localDDT.data,
       steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
       constraints: localDDT.constraints,
       examples: localDDT.examples,
@@ -756,63 +1016,57 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
   };
 
   // ✅ Confronta SOLO la struttura dei dati (senza step, constraints, etc.)
-  // Usa template.mainData direttamente (non buildMainDataFromTemplate che clona già gli step)
+  // Usa template.data direttamente (non buildDataFromTemplate che clona già gli step)
   // Oppure costruisci struttura base da subDataIds se template composito
   let templateStructureForCompare: any[] = [];
 
-  if (template.mainData && Array.isArray(template.mainData) && template.mainData.length > 0) {
-    // Template ha mainData: usa direttamente (senza step, constraints, etc.)
-    templateStructureForCompare = template.mainData.map((main: any) => ({
+  if (template.data && Array.isArray(template.data) && template.data.length > 0) {
+    // Template ha data: usa direttamente (senza step, constraints, etc.)
+    templateStructureForCompare = template.data.map((main: any) => ({
       id: main.id,
       label: main.label,
       type: main.type,
       templateId: main.templateId,
-      referenceId: main.referenceId || main.id,
       subData: (main.subData || []).map((sub: any) => ({
         templateId: sub.templateId,
-        referenceId: sub.referenceId || sub.id,
         label: sub.label
       }))
     }));
   } else if (template.subDataIds && Array.isArray(template.subDataIds) && template.subDataIds.length > 0) {
-    // Template composito: costruisci struttura base (solo id, label, type, subData con templateId/referenceId)
+    // Template composito: costruisci struttura base (solo id, label, type, subData con templateId)
     templateStructureForCompare = [{
       id: template.id || template._id,
       label: template.label || template.name || 'Data',
       type: template.type,
       templateId: template.id || template._id,
-      referenceId: template.id || template._id,
       subData: template.subDataIds.map((subId: string) => {
         const subTemplate = DialogueTaskService.getTemplate(subId);
         if (subTemplate) {
           return {
             templateId: subTemplate.id || subTemplate._id,
-            referenceId: subTemplate.mainData?.[0]?.id || subTemplate.id || subTemplate._id,
             label: subTemplate.label || subTemplate.name || 'Sub'
           };
         }
-        return { templateId: subId, referenceId: subId, label: 'Sub' };
+        return { templateId: subId, label: 'Sub' };
       })
     }];
   }
 
-  // ✅ Normalizza localDDT.mainData per confronto (solo struttura, senza step, constraints, etc.)
-  const localStructureForCompare = (localDDT.mainData || []).map((main: any) => ({
+  // ✅ Normalizza localDDT.data per confronto (solo struttura, senza step, constraints, etc.)
+  const localStructureForCompare = (localDDT.data || []).map((main: any) => ({
     id: main.id,
     label: main.label,
     type: main.type,
     templateId: main.templateId,
-    referenceId: main.referenceId || main.id,
     subData: (main.subData || []).map((sub: any) => ({
       templateId: sub.templateId,
-      referenceId: sub.referenceId || sub.id,
       label: sub.label
     }))
   }));
 
   console.log('[extractModifiedDDTFields] 🔍 Comparing structure', {
-    localMainDataLength: localDDT.mainData?.length || 0,
-    templateMainDataLength: templateStructureForCompare.length,
+    localdataLength: localDDT.data?.length || 0,
+    templateDataLength: templateStructureForCompare.length,
     localStructure: JSON.stringify(localStructureForCompare, null, 2).substring(0, 500),
     templateStructure: JSON.stringify(templateStructureForCompare, null, 2).substring(0, 500)
   });
@@ -824,18 +1078,18 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
 
   console.log('[extractModifiedDDTFields] ✅ Structure comparison result', {
     structureIdentical,
-    localMainDataLength: localDDT.mainData?.length || 0
+    localdataLength: localDDT.data?.length || 0
   });
 
   if (!structureIdentical) {
     // ✅ Struttura diversa → derivazione rotta → salva tutto (diventa standalone)
-    console.log('[extractModifiedDDTFields] ⚠️ Structure changed - saving full mainData (derivation broken)', {
-      localMainDataLength: localDDT.mainData?.length || 0,
-      templateMainDataLength: templateStructureForCompare.length
+    console.log('[extractModifiedDDTFields] ⚠️ Structure changed - saving full data (derivation broken)', {
+      localdataLength: localDDT.data?.length || 0,
+      templateDataLength: templateStructureForCompare.length
     });
     return {
       label: localDDT.label,
-      mainData: localDDT.mainData, // ✅ Salva struttura completa
+      data: localDDT.data, // ✅ Salva struttura completa
       steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
       constraints: localDDT.constraints,
       examples: localDDT.examples,
@@ -845,29 +1099,34 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
   }
 
   // ✅ Struttura identica → salva solo override (logica: steps, constraints, examples, nlpContract)
-  // Usa buildMainDataFromTemplate per ottenere templateNode con constraints/examples per confronto override
-  const { mainData: templateMainDataForOverride } = buildMainDataFromTemplate(template);
+  // Usa buildDataTree per ottenere templateNode con constraints/examples per confronto override
+  const templateDataForOverride = buildDataTree(template);
 
   console.log('[extractModifiedDDTFields] ✅ Structure identical - extracting overrides only', {
-    localMainDataLength: localDDT.mainData?.length || 0,
-    templateMainDataForOverrideLength: templateMainDataForOverride.length
+    localdataLength: localDDT.data?.length || 0,
+    templateDataForOverrideLength: templateDataForOverride.length
   });
 
-  if (localDDT.mainData && Array.isArray(localDDT.mainData) && templateMainDataForOverride.length > 0) {
-    const mainDataOverrides: any[] = [];
+  if (localDDT.data && Array.isArray(localDDT.data) && templateDataForOverride.length > 0) {
+    const dataOverrides: any[] = [];
 
-    for (let i = 0; i < localDDT.mainData.length; i++) {
-      const mainNode = localDDT.mainData[i];
-      const templateNode = templateMainDataForOverride[i] || templateMainDataForOverride[0]; // Fallback to first
+    for (let i = 0; i < localDDT.data.length; i++) {
+      const mainNode = localDDT.data[i];
+      const templateNode = templateDataForOverride[i] || templateDataForOverride[0]; // Fallback to first
 
       const templateNodeConstraints = templateNode?.dataContracts || templateNode?.constraints || [];
       const templateNodeExamples = templateNode?.examples || [];
       const templateNodeNlpContract = templateNode?.nlpContract;
 
-      // ✅ CORRETTO: Leggi steps da instance.steps[nodeId], NON da mainNode.steps
-      // Gli steps vivono solo in task.steps[nodeId], il DDT contiene solo la struttura
-      const nodeId = mainNode.id;
-      const nodeSteps = nodeId && instance.steps ? instance.steps[nodeId] : null;
+      // ✅ CRITICAL: Leggi steps usando templateId come chiave (non id)
+      // task.steps[node.templateId] = steps clonati
+      if (!mainNode.templateId) {
+        const errorMsg = `[extractModifiedDDTFields] Nodo senza templateId: ${mainNode.label || mainNode.id || 'unknown'}`;
+        console.error(errorMsg, { mainNode });
+        throw new Error(errorMsg);
+      }
+      const nodeTemplateId = mainNode.templateId;
+      const nodeSteps = nodeTemplateId && instance.steps ? instance.steps[nodeTemplateId] : null;
       const hasSteps = nodeSteps && (
         (Array.isArray(nodeSteps) && nodeSteps.length > 0) ||
         (typeof nodeSteps === 'object' && Object.keys(nodeSteps).length > 0)
@@ -878,7 +1137,8 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
 
       console.log('[extractModifiedDDTFields] 🔍 Checking overrides for mainNode', {
         mainNodeIndex: i,
-        mainNodeId: nodeId,
+        mainNodeId: mainNode.id,
+        mainNodeTemplateId: nodeTemplateId,
         hasSteps,
         hasConstraintsOverride,
         hasExamplesOverride,
@@ -895,14 +1155,15 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
           label: mainNode.label
         };
 
-        // ✅ CORRETTO: Salva steps in result.steps[nodeId] a root level, NON in overrideNode.steps
-        // Gli steps vivono solo in task.steps[nodeId], non nel DDT
-        if (hasSteps && nodeId) {
+        // ✅ CRITICAL: Salva steps usando templateId come chiave (non id)
+        // task.steps[node.templateId] = steps clonati
+        if (hasSteps && nodeTemplateId) {
           if (!result.steps) result.steps = {};
-          result.steps[nodeId] = nodeSteps;
+          result.steps[nodeTemplateId] = nodeSteps;
           console.log('[extractModifiedDDTFields] ✅ Including steps in override', {
             mainNodeIndex: i,
-            nodeId,
+            nodeId: mainNode.id,
+            nodeTemplateId,
             stepsType: typeof nodeSteps,
             stepsIsArray: Array.isArray(nodeSteps),
             stepsKeys: typeof nodeSteps === 'object' ? Object.keys(nodeSteps || {}) : [],
@@ -938,6 +1199,11 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
               const hasSubNlpContractOverride = JSON.stringify(subNode.nlpContract) !== JSON.stringify(templateSubNlpContract);
 
               if (hasSubSteps || hasSubConstraintsOverride || hasSubExamplesOverride || hasSubNlpContractOverride) {
+                if (!subNode.templateId && !templateSubNode.templateId) {
+                  const errorMsg = `[extractModifiedDDTFields] Sub-nodo senza templateId: ${subNode.label || subNode.id || 'unknown'}`;
+                  console.error(errorMsg, { subNode, templateSubNode });
+                  throw new Error(errorMsg);
+                }
                 const overrideSubNode: any = {
                   templateId: subNode.templateId || templateSubNode.templateId,
                   label: subNode.label
@@ -961,24 +1227,24 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
           }
         }
 
-        mainDataOverrides.push(overrideNode);
+        dataOverrides.push(overrideNode);
       }
     }
 
-    if (mainDataOverrides.length > 0) {
-      result.mainData = mainDataOverrides;
-      console.log('[extractModifiedDDTFields] ✅ Saving mainData overrides', {
-        mainDataOverridesLength: mainDataOverrides.length,
-        firstOverride: mainDataOverrides[0] ? {
-          templateId: mainDataOverrides[0].templateId,
-          label: mainDataOverrides[0].label,
-          hasSteps: !!mainDataOverrides[0].steps,
-          stepsType: typeof mainDataOverrides[0].steps,
-          stepsKeys: typeof mainDataOverrides[0].steps === 'object' ? Object.keys(mainDataOverrides[0].steps || {}) : []
+    if (dataOverrides.length > 0) {
+      result.data = dataOverrides;
+      console.log('[extractModifiedDDTFields] ✅ Saving data overrides', {
+        dataOverridesLength: dataOverrides.length,
+        firstOverride: dataOverrides[0] ? {
+          templateId: dataOverrides[0].templateId,
+          label: dataOverrides[0].label,
+          hasSteps: !!dataOverrides[0].steps,
+          stepsType: typeof dataOverrides[0].steps,
+          stepsKeys: typeof dataOverrides[0].steps === 'object' ? Object.keys(dataOverrides[0].steps || {}) : []
         } : null
       });
     } else {
-      console.log('[extractModifiedDDTFields] ⚠️ No mainData overrides found - saving empty mainData array');
+      console.log('[extractModifiedDDTFields] ⚠️ No data overrides found - saving empty data array');
     }
   }
 
@@ -1007,8 +1273,8 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
 
   console.log('[extractModifiedDDTFields] ✅ Final result', {
     hasLabel: !!result.label,
-    hasMainData: !!result.mainData,
-    mainDataLength: result.mainData?.length || 0,
+    hasdata: !!result.data,
+    dataLength: result.data?.length || 0,
     hasConstraints: !!result.constraints,
     hasExamples: !!result.examples,
     hasNlpContract: !!result.nlpContract,

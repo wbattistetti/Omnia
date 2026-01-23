@@ -68,9 +68,9 @@ export function getSub(state: any): DDTNode | undefined {
 // Helper to find the original node from currentDDT by label/id to get nlpProfile
 export function findOriginalNode(currentDDT: AssembledDDT, nodeLabel?: string, nodeId?: string): any {
   if (!currentDDT) return undefined;
-  const mains = Array.isArray((currentDDT as any)?.mainData)
-    ? (currentDDT as any).mainData
-    : (currentDDT as any)?.mainData ? [(currentDDT as any).mainData] : [];
+  const mains = Array.isArray((currentDDT as any)?.data)
+    ? (currentDDT as any).data
+    : (currentDDT as any)?.data ? [(currentDDT as any).data] : [];
 
   for (const main of mains) {
     if (!main) continue;

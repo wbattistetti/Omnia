@@ -7,10 +7,10 @@ vi.mock('../ResponseEditorUI', () => ({
   default: ({ onSelectNode, editorState }: any) => (
     <div data-testid="response-editor-ui">
       <button 
-        data-testid="select-maindata" 
+        data-testid="select-data" 
         onClick={() => onSelectNode(null)}
       >
-        MainData
+        data
       </button>
       <button 
         data-testid="select-subdata-0" 
@@ -57,7 +57,7 @@ describe('ResponseEditor', () => {
   const mockDDT = {
     label: 'Date of birth',
     dataType: { type: 'date' },
-    mainData: {
+    data: {
       steps: [
         { type: 'start', escalations: [] },
         { type: 'noMatch', escalations: [] },
@@ -102,7 +102,7 @@ describe('ResponseEditor', () => {
     expect(screen.getByTestId('selected-step')).toHaveTextContent('start');
   });
 
-  it('should not reset step when switching from mainData to subData with same step available', () => {
+  it('should not reset step when switching from data to subData with same step available', () => {
     render(
       <ResponseEditor 
         ddt={mockDDT} 
@@ -125,8 +125,8 @@ describe('ResponseEditor', () => {
     // Mock DDT con subData che non ha lo step 'start'
     const ddtWithoutStart = {
       ...mockDDT,
-      mainData: {
-        ...mockDDT.mainData,
+      data: {
+        ...mockDDT.data,
         subData: [
           {
             label: 'Day',
@@ -177,8 +177,8 @@ describe('ResponseEditor', () => {
     fireEvent.click(screen.getByTestId('select-subdata-1'));
     expect(screen.getByTestId('selected-step')).toHaveTextContent('start');
 
-    // Torna a mainData
-    fireEvent.click(screen.getByTestId('select-maindata'));
+    // Torna a data
+    fireEvent.click(screen.getByTestId('select-data'));
     expect(screen.getByTestId('selected-step')).toHaveTextContent('start');
   });
 }); 

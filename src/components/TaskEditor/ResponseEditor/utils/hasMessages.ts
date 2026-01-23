@@ -7,17 +7,18 @@ export function hasIntentMessages(ddt: any, task?: any): boolean {
     return false;
   }
 
-  // ✅ Verifica che ci sia mainData[0] con id
-  const mainList = Array.isArray(ddt.mainData) ? ddt.mainData : [];
+  // ✅ Verifica che ci sia data[0] con id
+  const mainList = Array.isArray(ddt.data) ? ddt.data : [];
   const firstMain = mainList[0];
 
   if (!firstMain || !firstMain.id) {
     return false;
   }
 
-  // ✅ CORRETTO: Leggi steps da task.steps[nodeId], NON da ddt.steps[nodeId]
-  const firstMainId = firstMain.id;
-  const steps = (task?.steps && task.steps[firstMainId]) || {};
+  // ✅ CRITICAL: Leggi steps usando templateId come chiave (non id)
+  // task.steps[node.templateId] = steps clonati
+  const firstMainTemplateId = firstMain.templateId || firstMain.id; // ✅ Fallback a id se templateId non presente
+  const steps = (task?.steps && task.steps[firstMainTemplateId]) || {};
 
   // Required steps for intent classification
   const requiredSteps = ['start', 'noInput', 'noMatch', 'confirmation'];

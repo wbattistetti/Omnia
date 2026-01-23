@@ -152,8 +152,8 @@ export function compileFlow(
 
       // ✅ MIGRATION: Use templateId instead of task.action
       // ✅ CASE-INSENSITIVE: If task is DataRequest, expand DDT
-      // ✅ Check if task has DDT (mainData indicates DDT)
-      if (templateId && (templateId.toLowerCase() === 'getdata' || templateId.toLowerCase() === 'datarequest') && task.mainData && task.mainData.length > 0 && options.getDDT) {
+      // ✅ Check if task has DDT (data indicates DDT)
+      if (templateId && (templateId.toLowerCase() === 'getdata' || templateId.toLowerCase() === 'datarequest') && task.data && task.data.length > 0 && options.getDDT) {
         const ddt = options.getDDT(task.id);
         if (ddt) {
           const { tasks: ddtTasks, expansion } = expandDDT(
@@ -176,8 +176,8 @@ export function compileFlow(
       // ✅ MIGRATION: Use templateId instead of task.action
       // If task is ClassifyProblem, expand DDT
       // ✅ CASE-INSENSITIVE
-      // ✅ Check if task has DDT (mainData indicates DDT)
-      if (templateId && templateId.toLowerCase() === 'classifyproblem' && task.mainData && task.mainData.length > 0 && options.getDDT) {
+      // ✅ Check if task has DDT (data indicates DDT)
+      if (templateId && templateId.toLowerCase() === 'classifyproblem' && task.data && task.data.length > 0 && options.getDDT) {
         const ddt = options.getDDT(task.id);
         if (ddt) {
           const { tasks: ddtTasks, expansion } = expandDDT(

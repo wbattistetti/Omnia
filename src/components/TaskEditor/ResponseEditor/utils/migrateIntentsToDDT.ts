@@ -3,7 +3,7 @@
  *
  * Questa funzione unifica la rappresentazione degli intenti:
  * - Prima: task.intents[] (array di ProblemIntent)
- * - Dopo: ddt.mainData[0].values[] (opzioni predefinite)
+ * - Dopo: ddt.data[0].values[] (opzioni predefinite)
  *
  * IMPORTANTE: values[] sono opzioni predefinite (valori tra cui scegliere)
  * NON confondere con subData[] che sono parti composite (struttura del dato)
@@ -15,7 +15,7 @@ import type { ProblemIntent } from '../../../types/project';
 import type { NLPContract } from '../../../components/DialogueDataEngine/contracts/contractLoader';
 
 export interface MigrateIntentsResult {
-  mainData: any[];
+  data: any[];
   contract?: NLPContract;
 }
 
@@ -24,7 +24,7 @@ export interface MigrateIntentsResult {
  *
  * @param intents - Array di ProblemIntent da task.intents
  * @param existingDDT - DDT esistente (opzionale, per preservare altri dati)
- * @returns DDT con mainData[0].values[] popolato dagli intenti
+ * @returns DDT con data[0].values[] popolato dagli intenti
  */
 export function migrateIntentsToDDT(
   intents: ProblemIntent[],
@@ -37,9 +37,9 @@ export function migrateIntentsToDDT(
     value: intent.name, // ✅ Valore da usare nella condizione
   }));
 
-  // ✅ Crea o aggiorna mainData[0]
-  const mainData = existingDDT?.mainData || [];
-  const firstMain = mainData[0] || {
+  // ✅ Crea o aggiorna data[0]
+  const data = existingDDT?.data || [];
+  const firstMain = data[0] || {
     id: `main-${Date.now()}`,
     label: 'Seleziona opzione',
     kind: 'generic' as const, // ✅ Non più 'intent'
@@ -55,8 +55,8 @@ export function migrateIntentsToDDT(
   // ✅ Aggiorna values del primo main (NON subData)
   firstMain.values = values;
 
-  // ✅ Aggiorna mainData
-  const updatedMainData = [firstMain, ...mainData.slice(1)];
+  // ✅ Aggiorna data
+  const updateddata = [firstMain, ...data.slice(1)];
 
   // ✅ Crea contract NLP con embeddings configurato
   // NOTA: subDataMapping è vuoto perché values[] non sono subData (parti composite)
@@ -84,7 +84,7 @@ export function migrateIntentsToDDT(
   };
 
   return {
-    mainData: updatedMainData,
+    data: updateddata,
     contract,
   };
 }

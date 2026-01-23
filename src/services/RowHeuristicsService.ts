@@ -221,7 +221,8 @@ export class RowHeuristicsService {
           continue;
         }
 
-        console.log(`🔍 [RowHeuristics][inferCategory] Testando ${ruleSet.CATEGORY_PATTERNS.length} pattern per lingua ${currentLang}`);
+        // ❌ RIMOSSO: log verboso per ogni lingua testata
+        // console.log(`🔍 [RowHeuristics][inferCategory] Testando ${ruleSet.CATEGORY_PATTERNS.length} pattern per lingua ${currentLang}`);
 
         // ✅ Testa ogni pattern (già compilato in cache)
         for (const catPattern of ruleSet.CATEGORY_PATTERNS as CompiledCategoryPattern[]) {

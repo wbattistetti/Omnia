@@ -232,8 +232,8 @@ export interface TaskHeuristic {
  * - templateId = GUID → Task che referenzia un altro Task (per ereditare struttura/contratti)
  *
  * Esempi:
- * - Task DDT standalone: { id: "guid", type: TaskType.DataRequest, templateId: null, label: "...", mainData: [...] }
- * - Task DDT che referenzia: { id: "guid", type: TaskType.DataRequest, templateId: "guid-altro-task", label: "...", mainData: [...] }
+ * - Task DDT standalone: { id: "guid", type: TaskType.DataRequest, templateId: null, label: "...", data: [...] }
+ * - Task DDT che referenzia: { id: "guid", type: TaskType.DataRequest, templateId: "guid-altro-task", label: "...", data: [...] }
  *
  * Per altri tipi di task (SayMessage, BackendCall, ecc.):
  * - Task standalone: { id: "guid", type: TaskType.SayMessage, templateId: null, text: "Ciao!", ... }
@@ -246,8 +246,8 @@ export interface Task {
   // ✅ Campi diretti (niente wrapper value):
   // Per DataRequest/DDT:
   label?: string;                // Label del DDT (solo per UI, non usato a runtime)
-  mainData?: any[];              // Main data array (solo struttura dati, senza steps)
-  dialogueSteps?: any[];         // ✅ Flat dialogue steps array (replaces nested mainData[].steps) - DEPRECATED
+  data?: any[];                  // Data array (solo struttura dati, senza steps)
+  dialogueSteps?: any[];         // ✅ Flat dialogue steps array (replaces nested data[].steps) - DEPRECATED
   steps?: Record<string, any>;   // ✅ Steps a root level: { "nodeId": { start: {...}, noMatch: {...} } }
   // ❌ DEPRECATED: stepPrompts - use steps instead
   stepPrompts?: any;             // @deprecated Use steps instead

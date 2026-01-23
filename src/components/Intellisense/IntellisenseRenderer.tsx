@@ -74,12 +74,12 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
 
   // Funzioni per gestire la selezione categoria
   const handleCategorySelect = (categoryName: string, scope: 'global' | 'industry') => {
-    handleCreateAgentAct(query.trim(), scope, categoryName);
+    handleCreateTaskTemplate(query.trim(), scope, categoryName);
   };
 
   const handleCreateNewCategory = (scope: 'global' | 'industry') => {
     if (newCategoryName.trim()) {
-      handleCreateAgentAct(query.trim(), scope, newCategoryName.trim());
+      handleCreateTaskTemplate(query.trim(), scope, newCategoryName.trim());
     }
   };
 
@@ -95,8 +95,8 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
   // Funzione generica per gestire la selezione delle entità
   const handleEntitySelect = (entityType: string, scope: 'global' | 'industry') => {
     switch (entityType) {
-      case 'agentAct':
-        handleCreateAgentAct(query.trim(), scope);
+      case 'taskTemplate':
+        handleCreateTaskTemplate(query.trim(), scope);
         break;
       case 'backendCall':
         handleCreateBackendCall(query.trim(), scope);
@@ -110,7 +110,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
   };
 
   // Funzioni wrapper per gestire il loading durante la creazione
-  const handleCreateAgentAct = (name: string, scope: 'global' | 'industry', categoryName?: string) => {
+  const handleCreateTaskTemplate = (name: string, scope: 'global' | 'industry', categoryName?: string) => {
     setIsCreating(true);
     setCreatingScope(scope);
     try {
@@ -234,7 +234,7 @@ export const IntellisenseRenderer: React.FC<IntellisenseRendererProps> = ({
                 className="px-2 py-1 border rounded-md bg-white hover:bg-slate-50 flex items-center gap-1 whitespace-nowrap"
                 style={{ fontSize: '8px', lineHeight: 1.2, minWidth: 180 }}
                 onClick={() => {
-                  handleCreateAgentAct(query.trim(), 'industry');
+                  handleCreateTaskTemplate(query.trim(), 'industry');
                 }}
               >
                 <Icon className="w-3 h-3" style={{ color }} />

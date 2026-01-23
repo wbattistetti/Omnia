@@ -143,11 +143,11 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
                     if (hasEmbedded && onOpenEmbedded) {
                       onOpenEmbedded(item);
                     } else {
-                      const ev: any = new CustomEvent('agentAct:openInlineBuilder', {
+                      const ev: any = new CustomEvent('taskTemplate:openInlineBuilder', {
                         detail: {
                           anchorId: (item as any)?.id,
                           prefillUserDesc: String(item?.name || ''),
-                          initialDDT: { label: item?.name || 'Data', mainData: [] },
+                          initialDDT: { label: item?.name || 'Data', data: [] },
                         },
                         bubbles: true,
                       });

@@ -30,7 +30,8 @@ export function BackendTypeProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, backendType);
-      console.log(`[BackendTypeContext] Backend type set to: ${backendType}`);
+      // ❌ RIMOSSO: log verboso quando viene settato backend type (non necessario ogni volta)
+      // console.log(`[BackendTypeContext] Backend type set to: ${backendType}`);
     } catch (e) {
       console.warn('[BackendTypeContext] Failed to save to localStorage', e);
     }

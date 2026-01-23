@@ -27,7 +27,7 @@ function getUseNewEngineFromStorage(): boolean {
 
 /**
  * Executes GetData task using hierarchical DDT navigation
- * Implements: FOR EACH maindata → Retrieve → FOR EACH sub → Retrieve → Composite
+ * Implements: FOR EACH data → Retrieve → FOR EACH sub → Retrieve → Composite
  *
  * @param options.useNewEngine - If true, uses new DDT engine. If false or undefined, reads from localStorage/env.
  */
@@ -74,47 +74,47 @@ async function executeGetDataHierarchicalOld(
 ): Promise<RetrieveResult> {
   // Removed verbose logging
 
-  // DDT can have mainData as array or single object
-  let mainData = Array.isArray(ddt.mainData) ? ddt.mainData[0] : ddt.mainData;
+  // DDT can have data as array or single object
+  let data = Array.isArray(ddt.data) ? ddt.data[0] : ddt.data;
 
-  // If mainData is not found, try alternative structures
-  if (!mainData) {
-    // Try to find mainData in alternative locations
+  // If data is not found, try alternative structures
+  if (!data) {
+    // Try to find data in alternative locations
     if ((ddt as any).nodes && Array.isArray((ddt as any).nodes)) {
-      // DDT might have nodes array instead of mainData
-      mainData = (ddt as any).nodes[0];
+      // DDT might have nodes array instead of data
+      data = (ddt as any).nodes[0];
     }
   }
 
-  if (!mainData) {
-    console.error('[DDTNavigator] DDT missing mainData', {
+  if (!data) {
+    console.error('[DDTNavigator] DDT missing data', {
       ddtKeys: Object.keys(ddt),
       ddtId: ddt.id,
       ddtLabel: ddt.label,
-      mainDataType: typeof ddt.mainData,
-      isArray: Array.isArray(ddt.mainData),
+      dataType: typeof ddt.data,
+      isArray: Array.isArray(ddt.data),
       hasNodes: !!(ddt as any).nodes,
       nodesCount: (ddt as any).nodes?.length || 0
     });
     return {
       success: false,
-      error: new Error('DDT missing mainData')
+      error: new Error('DDT missing data')
     };
   }
 
-  // If mainData doesn't have id/label, try to get from DDT or generate
-  if (!mainData.id) {
-    mainData.id = mainData._id || ddt.id || `main_${Date.now()}`;
+  // If data doesn't have id/label, try to get from DDT or generate
+  if (!data.id) {
+    data.id = data._id || ddt.id || `main_${Date.now()}`;
   }
-  if (!mainData.label && !mainData.name) {
-    mainData.label = ddt.label || 'Data';
+  if (!data.label && !data.name) {
+    data.label = ddt.label || 'Data';
   }
 
   // Removed verbose logging
 
-  // Retrieve mainData
+  // Retrieve data
   // Pass DDT to callbacks so retrieve() can access it
-  const mainResult = await retrieve(mainData, state, { ...callbacks, ddt });
+  const mainResult = await retrieve(data, state, { ...callbacks, ddt });
 
   // Removed verbose logging
 
@@ -129,17 +129,17 @@ async function executeGetDataHierarchicalOld(
 
   // Update state with main result
   // ✅ Runtime: use referenceId from instance (not recalculated from template)
-  const mainDataId = (mainData as any).referenceId || mainData.id;
+  const dataId = (data as any).referenceId || data.id;
   state = {
     ...state,
     memory: {
       ...state.memory,
-      [mainDataId]: { value: mainResult.value, confirmed: true }
+      [dataId]: { value: mainResult.value, confirmed: true }
     }
   };
 
   // FOR EACH subdatum WHERE mandatory not filled or attempts terminated
-  const subDataList = mainData.subData || [];
+  const subDataList = data.subData || [];
   const requiredSubs = subDataList.filter((sub: any) => sub.required !== false);
 
   // Removed verbose logging
@@ -179,20 +179,20 @@ async function executeGetDataHierarchicalOld(
     }
   }
 
-  // Composite mainData value from sub values
+  // Composite data value from sub values
   // ✅ Pass ddt for Collection semantics
-  const composedValue = compositeMainValue(mainData, state, ddt);
+  const composedValue = compositeMainValue(data, state, ddt);
   // ✅ Runtime: use referenceId from instance (not recalculated from template)
-  const mainDataId = (mainData as any).referenceId || mainData.id;
+  const dataId = (data as any).referenceId || data.id;
   state = {
     ...state,
     memory: {
       ...state.memory,
-      [mainDataId]: { value: composedValue, confirmed: true }
+      [dataId]: { value: composedValue, confirmed: true }
     }
   };
 
-  // MainData completed successfully
+  // data completed successfully
   return { success: true };
 }
 

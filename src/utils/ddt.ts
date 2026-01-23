@@ -1,10 +1,10 @@
 export function isDDTEmpty(ddt?: any): boolean {
   try {
     if (!ddt || typeof ddt !== 'object') return true;
-    const mains: any[] = Array.isArray(ddt?.mainData)
-      ? ddt.mainData
+    const mains: any[] = Array.isArray(ddt?.data)
+      ? ddt.data
       : (Array.isArray(ddt?.mains) ? ddt.mains : []);
-    // Se esiste la struttura (mainData/mains), non è vuoto
+    // Se esiste la struttura (data/mains), non è vuoto
     return mains.length === 0;
   } catch {
     return true;
@@ -12,40 +12,103 @@ export function isDDTEmpty(ddt?: any): boolean {
 }
 
 /**
- * Verifica se il DDT ha mainData ma senza steps completi
- * ✅ CORRETTO: Legge da task.steps[nodeId] (unica fonte di verità), NON da ddt.steps[nodeId]
+ * Verifica se il DDT ha data ma senza steps completi
+ * ✅ CRITICAL: Legge da task.steps[node.templateId] (unica fonte di verità), NON da ddt.steps
  * Gli steps vivono solo in task.steps, il DDT contiene solo la struttura
+ * ✅ Usa node.templateId come chiave (non node.id) perché task.steps[node.templateId] = steps clonati
  * Questo indica che la struttura esiste ma i messaggi devono ancora essere generati
  */
-export function hasMainDataButNoStepPrompts(ddt?: any, task?: any): boolean {
+export function hasdataButNoStepPrompts(ddt?: any, task?: any): boolean {
   try {
     if (!ddt || typeof ddt !== 'object') return false;
-    const mains: any[] = Array.isArray(ddt?.mainData)
-      ? ddt.mainData
+    const mains: any[] = Array.isArray(ddt?.data)
+      ? ddt.data
       : (Array.isArray(ddt?.mains) ? ddt.mains : []);
 
     if (mains.length === 0) return false;
 
-    // ✅ CORRETTO: Leggi da task.steps[nodeId], NON da ddt.steps[nodeId]
+    // ✅ CRITICAL: Leggi da task.steps[node.templateId], NON da ddt.steps
     // Gli steps vivono solo in task.steps, il DDT contiene solo la struttura
     if (!task?.steps || typeof task.steps !== 'object') {
       return true; // Non ha steps nel task
     }
 
-    // Verifica se almeno un mainData ha steps corrispondenti
-    // (collegati tramite nodeId come chiave in task.steps)
+    // Verifica se almeno un data ha steps corrispondenti
+    // ✅ CRITICAL: Usa templateId come chiave (non id)
+    // task.steps[node.templateId] = steps clonati
     return mains.some((main: any) => {
       const mainId = main.id;
-      if (!mainId) return true; // Main senza ID non può avere steps
+      if (!main.templateId) {
+        const errorMsg = `[hasdataButNoStepPrompts] Nodo senza templateId: ${main.label || main.id || 'unknown'}`;
+        console.error(errorMsg, { main, mainId });
+        throw new Error(errorMsg);
+      }
+      const mainTemplateId = main.templateId;
+      if (!mainTemplateId) {
+        console.log('[🔍 hasdataButNoStepPrompts] Main senza templateId/id', {
+          mainLabel: main.label,
+          mainId,
+          mainTemplateId
+        });
+        return true; // Main senza ID/templateId non può avere steps
+      }
 
-      // ✅ CORRETTO: Leggi da task.steps[mainId], NON da ddt.steps[mainId]
-      const mainSteps = task.steps[mainId];
+      // ✅ CRITICAL: Leggi da task.steps[mainTemplateId], NON da task.steps[mainId]
+      const mainSteps = task.steps[mainTemplateId];
+
+      const allTaskStepsKeys = Object.keys(task.steps);
+      // ✅ CRITICAL: Stampa chiavi come stringhe per debug
+      console.log('[🔍 hasdataButNoStepPrompts] 🔑 CHIAVI IN task.steps:', allTaskStepsKeys);
+      console.log('[🔍 hasdataButNoStepPrompts] 🔍 CERCHIAMO CHIAVE:', mainTemplateId);
+
+      console.log('[🔍 hasdataButNoStepPrompts] Verifica steps per main', {
+        mainLabel: main.label,
+        mainId,
+        mainTemplateId,
+        lookingForKey: mainTemplateId,
+        taskStepsKeys: allTaskStepsKeys,
+        taskStepsKeysAsStrings: allTaskStepsKeys.join(', '), // ✅ Stringa per vedere tutte le chiavi
+        taskStepsCount: allTaskStepsKeys.length,
+        keyExists: !!mainSteps,
+        keyMatchDetails: {
+          exactMatch: mainSteps ? '✅ MATCH' : '❌ NO MATCH',
+          allKeys: allTaskStepsKeys,
+          keyComparison: allTaskStepsKeys.map(k => ({
+            key: k,
+            keyFull: k, // ✅ Mostra chiave completa
+            matches: k === mainTemplateId,
+            keyLength: k.length,
+            templateIdLength: mainTemplateId.length,
+            keyPreview: k.substring(0, 40) + '...',
+            templateIdPreview: mainTemplateId.substring(0, 40) + '...',
+            // ✅ Confronto carattere per carattere
+            charByChar: k.length === mainTemplateId.length ? Array.from(k).map((char, idx) => ({
+              pos: idx,
+              keyChar: char,
+              templateChar: mainTemplateId[idx],
+              matches: char === mainTemplateId[idx],
+              keyCode: char.charCodeAt(0),
+              templateCode: mainTemplateId[idx]?.charCodeAt(0)
+            })).filter(c => !c.matches).slice(0, 5) : 'LENGTH_MISMATCH'
+          }))
+        }
+      });
+
       if (!mainSteps || typeof mainSteps !== 'object') {
+        console.log('[🔍 hasdataButNoStepPrompts] ❌ Main non ha steps', {
+          mainLabel: main.label,
+          mainTemplateId,
+          mainStepsType: typeof mainSteps
+        });
         return true; // Questo main non ha steps
       }
 
       const stepKeys = Object.keys(mainSteps);
       if (stepKeys.length === 0) {
+        console.log('[🔍 hasdataButNoStepPrompts] ❌ Main ha steps vuoto', {
+          mainLabel: main.label,
+          mainTemplateId
+        });
         return true; // steps per questo main è vuoto
       }
 
@@ -59,6 +122,25 @@ export function hasMainDataButNoStepPrompts(ddt?: any, task?: any): boolean {
         return step.escalations.some((esc: any) =>
           esc.tasks && Array.isArray(esc.tasks) && esc.tasks.length > 0
         );
+      });
+
+      console.log('[🔍 hasdataButNoStepPrompts] Verifica messaggi', {
+        mainLabel: main.label,
+        mainTemplateId,
+        stepKeys,
+        hasMessages,
+        stepDetails: stepKeys.map((sk: string) => {
+          const step = mainSteps[sk];
+          const escalationsCount = step?.escalations?.length || 0;
+          const tasksCount = step?.escalations?.reduce((acc: number, esc: any) =>
+            acc + (esc?.tasks?.length || 0), 0) || 0;
+          return {
+            stepKey: sk,
+            escalationsCount,
+            tasksCount,
+            hasTasks: tasksCount > 0
+          };
+        })
       });
 
       return !hasMessages;

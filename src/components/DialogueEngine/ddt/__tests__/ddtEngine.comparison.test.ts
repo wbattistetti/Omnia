@@ -3,7 +3,7 @@
 
 import { runDDT } from '../ddtEngine';
 import { executeGetDataHierarchical } from '../ddtNavigator';
-import type { AssembledDDT, MainDataNode } from '../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledDDT, dataNode } from '../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
 import type { DDTState, DDTNavigatorCallbacks } from '../ddtTypes';
 
 // ============================================================================
@@ -11,7 +11,7 @@ import type { DDTState, DDTNavigatorCallbacks } from '../ddtTypes';
 // ============================================================================
 
 function createTestDDT(overrides?: Partial<AssembledDDT>): AssembledDDT {
-  const mainData: MainDataNode = {
+  const data: dataNode = {
     id: 'test-main',
     label: 'Test Data',
     required: true,
@@ -102,7 +102,7 @@ function createTestDDT(overrides?: Partial<AssembledDDT>): AssembledDDT {
   return {
     id: 'test-ddt',
     label: 'Test DDT',
-    mainData,
+    data,
     translations: {},
     ...overrides
   };
@@ -270,7 +270,7 @@ describe('Direct Comparison: Old vs New Engine', () => {
 describe('Confirmation Flow Tests', () => {
   test('Confirmation flow: Match → Confirmation → Confirmed → Success (NEW ENGINE)', async () => {
     const ddt = createTestDDT({
-      mainData: {
+      data: {
         id: 'test-main',
         label: 'Test Data',
         required: true,
@@ -344,7 +344,7 @@ describe('Confirmation Flow Tests', () => {
 
   test('NotConfirmed flow: Match → Confirmation → NotConfirmed → Start (NEW ENGINE)', async () => {
     const ddt = createTestDDT({
-      mainData: {
+      data: {
         id: 'test-main',
         label: 'Test Data',
         required: true,
@@ -440,7 +440,7 @@ describe('Confirmation Flow Tests', () => {
 
 describe('CollectingSub Flow Tests', () => {
   test('CollectingSub: Main → Sub → Success (NEW ENGINE)', async () => {
-    const mainData: MainDataNode = {
+    const data: dataNode = {
       id: 'date-main',
       label: 'Date',
       required: true,
@@ -524,7 +524,7 @@ describe('CollectingSub Flow Tests', () => {
       ]
     };
 
-    const ddt = createTestDDT({ mainData });
+    const ddt = createTestDDT({ data });
 
     const { callbacks, messages, events } = createMockCallbacks();
 
@@ -551,7 +551,7 @@ describe('CollectingSub Flow Tests', () => {
 describe('Multiple Escalations Tests', () => {
   test('Multiple NoMatch escalations (NEW ENGINE)', async () => {
     const ddt = createTestDDT({
-      mainData: {
+      data: {
         id: 'test-main',
         label: 'Test Data',
         required: true,
@@ -663,8 +663,8 @@ describe('Edge Cases Tests', () => {
     expect(noInputMessage).toBeDefined();
   });
 
-  test('Multiple mainData handling (NEW ENGINE)', async () => {
-    const mainData1: MainDataNode = {
+  test('Multiple data handling (NEW ENGINE)', async () => {
+    const data1: dataNode = {
       id: 'main-1',
       label: 'First Data',
       required: true,
@@ -702,7 +702,7 @@ describe('Edge Cases Tests', () => {
       ]
     };
 
-    const mainData2: MainDataNode = {
+    const data2: dataNode = {
       id: 'main-2',
       label: 'Second Data',
       required: true,
@@ -741,7 +741,7 @@ describe('Edge Cases Tests', () => {
     };
 
     const ddt = createTestDDT({
-      mainData: [mainData1, mainData2] as any
+      data: [data1, data2] as any
     });
 
     const { callbacks, messages, events } = createMockCallbacks();
@@ -753,7 +753,7 @@ describe('Edge Cases Tests', () => {
     const result = await runDDT(ddt, callbacks);
 
     expect(result.success).toBe(true);
-    // Dovrebbe processare entrambi i mainData
+    // Dovrebbe processare entrambi i data
     const firstMessage = messages.find(m => m.text?.includes('First'));
     const secondMessage = messages.find(m => m.text?.includes('Second'));
     expect(firstMessage).toBeDefined();

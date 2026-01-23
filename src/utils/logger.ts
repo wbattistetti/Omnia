@@ -103,7 +103,8 @@ class Logger {
 
     public enable() {
         this.isEnabled = true;
-        this.info('MAIN', 'Logger enabled globally.');
+        // ❌ RIMOSSO: log verboso all'avvio (mostrare solo se esplicitamente richiesto)
+        // this.info('MAIN', 'Logger enabled globally.');
     }
 
     public disable() {
@@ -121,7 +122,8 @@ class Logger {
     public setLevel(level: LogLevel) {
         this.logLevel = level;
         if (this.isEnabled) {
-            this.info('MAIN', `Log level set to ${level.toUpperCase()}.`);
+            // ❌ RIMOSSO: log verboso all'avvio (mostrare solo se esplicitamente richiesto)
+            // this.info('MAIN', `Log level set to ${level.toUpperCase()}.`);
         }
     }
 
@@ -130,7 +132,8 @@ class Logger {
             this.enabledComponents.clear();
             this.enabledComponents.add('ALL');
             if (this.isEnabled) {
-                this.info('MAIN', 'All components enabled for logging.');
+                // ❌ RIMOSSO: log verboso all'avvio (mostrare solo se esplicitamente richiesto)
+                // this.info('MAIN', 'All components enabled for logging.');
             }
         } else {
             this.enabledComponents.delete('ALL');
