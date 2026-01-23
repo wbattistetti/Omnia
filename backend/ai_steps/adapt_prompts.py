@@ -2,9 +2,22 @@ from fastapi import APIRouter, Body, HTTPException
 import os
 import json
 import re
-from ai_prompts.adapt_prompts_prompt import get_adapt_prompts_prompt
-from call_openai import call_openai_json as call_openai_json, OPENAI_KEY as OPENAI_KEY
-from call_groq import call_groq
+
+# ✅ Import with fallback (same pattern as other files)
+try:
+    from ai_prompts.adapt_prompts_prompt import get_adapt_prompts_prompt
+except Exception:
+    from backend.ai_prompts.adapt_prompts_prompt import get_adapt_prompts_prompt
+
+try:
+    from call_openai import call_openai_json as call_openai_json, OPENAI_KEY as OPENAI_KEY
+except Exception:
+    from backend.call_openai import call_openai_json as call_openai_json, OPENAI_KEY as OPENAI_KEY
+
+try:
+    from call_groq import call_groq
+except Exception:
+    from backend.call_groq import call_groq
 
 router = APIRouter()
 

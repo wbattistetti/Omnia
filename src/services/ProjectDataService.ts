@@ -797,13 +797,32 @@ export async function getIDETranslations() {
 
 export async function getTemplateTranslations(keys: string[]): Promise<Record<string, { en: string; it: string; pt: string }>> {
   if (!keys || keys.length === 0) return {};
-  const res = await fetch('/api/factory/template-translations', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ keys })
-  });
-  if (!res.ok) throw new Error('Errore nel recupero di Template Translations');
-  return res.json();
+
+  try {
+    const res = await fetch('/api/factory/template-translations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keys })
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('[ProjectDataService] Failed to get template translations:', {
+        status: res.status,
+        statusText: res.statusText,
+        error: errorText.substring(0, 500),
+        keysCount: keys.length,
+        sampleKeys: keys.slice(0, 5)
+      });
+      throw new Error(`Errore nel recupero di Template Translations: ${res.status} ${res.statusText}`);
+    }
+
+    return res.json();
+  } catch (err) {
+    console.error('[ProjectDataService] Error in getTemplateTranslations:', err);
+    // Return empty object instead of throwing to allow graceful degradation
+    return {};
+  }
 }
 
 export async function saveProjectTranslations(

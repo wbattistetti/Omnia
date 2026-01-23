@@ -6,104 +6,12 @@ import { getAllV2Draft } from './V2DraftStore';
 import { taskTemplateService } from '../../../services/TaskTemplateService';
 import { cloneAndAdaptContract, createSubIdMapping } from '../../../utils/contractUtils';
 import { TaskType, templateIdToTaskType } from '../../../types/taskTypes';
-import { extractStartPrompts } from '../../../utils/ddtPromptExtractor';
 
-/**
- * Extract prompts from root nodes only (not subData)
- * DEPRECATED: Usa extractStartPrompts da ddtPromptExtractor.ts
- * Mantenuto per retrocompatibilità, ora è un wrapper
- */
-export function extractPromptsFromMainData(
-  steps: Record<string, any>,
-  data: any[],
-  projectTranslations: Record<string, string>
-): Array<{ guid: string; text: string; nodeId: string }> {
-  // ✅ Wrapper per retrocompatibilità - usa extractStartPrompts
-  const prompts = extractStartPrompts(steps, data, projectTranslations, { onlyRootNodes: true });
+// ✅ REMOVED: extractPromptsFromMainData - DEPRECATED
+// Ora usiamo extractStartPrompts da ddtPromptExtractor.ts direttamente
 
-  // ✅ Converti formato: nodeTemplateId -> nodeId per retrocompatibilità
-  return prompts.map(p => ({
-    guid: p.guid,
-    text: p.text,
-    nodeId: p.nodeTemplateId
-  }));
-}
-
-/**
- * Adapt start step prompts to a new context using AI.
- * Only adapts prompts from root nodes (not subData) by default.
- * @param promptsToAdapt - Array of prompts to adapt (from extractStartPrompts)
- * @param contextLabel - New context label (e.g., "Chiedi la data di nascita del paziente")
- * @param templateLabel - Original template label (e.g., "Date")
- * @param projectLocale - Project locale
- * @param provider - AI provider
- * @param options - Optional: adaptSubData (default: false)
- */
-export async function adaptStartPromptsToContext(
-  promptsToAdapt: Array<{ guid: string; text: string; nodeId: string }>,
-  contextLabel: string,
-  templateLabel: string,
-  projectLocale: string,
-  provider: 'groq' | 'openai',
-  options?: { adaptSubData?: boolean }
-): Promise<Record<string, string>> {
-  const adaptedTranslations: Record<string, string> = {};
-
-  if (promptsToAdapt.length === 0) {
-    console.log('[adaptStartPromptsToContext] No prompts to adapt');
-    return adaptedTranslations;
-  }
-
-  // Extract original texts
-  const originalTexts = promptsToAdapt.map(p => p.text);
-
-  try {
-    console.log('[adaptStartPromptsToContext] Calling AI to adapt prompts', {
-      count: originalTexts.length,
-      contextLabel,
-      templateLabel,
-      locale: projectLocale,
-      provider
-    });
-
-    const res = await fetch('/api/ddt/adapt-prompts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        originalTexts,
-        contextLabel,
-        templateLabel,
-        locale: projectLocale,
-        provider
-      })
-    });
-
-    if (!res.ok) {
-      throw new Error(`API returned ${res.status}: ${res.statusText}`);
-    }
-
-    const data = await res.json();
-
-    if (data.adaptedTexts && Array.isArray(data.adaptedTexts) && data.adaptedTexts.length === promptsToAdapt.length) {
-      // Map adapted texts back to GUIDs
-      promptsToAdapt.forEach(({ guid }, idx) => {
-        adaptedTranslations[guid] = data.adaptedTexts[idx];
-      });
-
-      console.log('[adaptStartPromptsToContext] ✅ Successfully adapted prompts', {
-        count: Object.keys(adaptedTranslations).length
-      });
-    } else {
-      console.warn('[adaptStartPromptsToContext] ⚠️ AI returned unexpected format, using original texts');
-      // Return empty - will use original texts
-    }
-  } catch (err) {
-    console.error('[adaptStartPromptsToContext] ❌ Error adapting prompts', err);
-    // Return empty - will use original texts
-  }
-
-  return adaptedTranslations;
-}
+// ✅ REMOVED: adaptStartPromptsToContext - DEPRECATED
+// Ora usiamo AdaptPromptToContext da ddtPromptAdapter.ts che gestisce tutto in modo centralizzato
 
 export interface AssembledDDT {
   id: string;
@@ -883,71 +791,10 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
       projectLocale
     });
 
-    // ✅ ADAPT START PROMPTS TO CONTEXT (only when creating new DDT from template match)
-    // This adapts template prompts (e.g., "Qual è la data?") to the new context (e.g., "Qual è la data di nascita del paziente?")
-    // Only adapts 'start' step prompts; escalation prompts (noInput, noMatch, etc.) remain generic
-    // ⚠️ IMPORTANT: Only adapt when BOTH contextLabel AND templateLabel are provided (indicates template match scenario)
-    // When opening existing DDT, these are not provided, so adaptation is skipped
-    if (options?.contextLabel && options?.templateLabel && options?.aiProvider && Object.keys(rootSteps).length > 0) {
-      // Additional safety check: ensure we have translations to adapt
-      const hasTranslationsToAdapt = Object.keys(projectTranslations).length > 0;
-
-      if (hasTranslationsToAdapt) {
-        try {
-          console.log('[assembleFinalDDT] 🔄 Adapting start prompts to context', {
-            contextLabel: options.contextLabel,
-            templateLabel: options.templateLabel,
-            provider: options.aiProvider,
-            locale: projectLocale,
-            translationsCount: Object.keys(projectTranslations).length
-          });
-
-          // ✅ Extract prompts only from main data (not subData)
-          const promptsToAdapt = extractPromptsFromMainData(
-            rootSteps,
-            assembledMains,
-            projectTranslations
-          );
-
-          const adaptedTranslations = await adaptStartPromptsToContext(
-            promptsToAdapt,
-            options.contextLabel,
-            options.templateLabel,
-            projectLocale,
-            options.aiProvider,
-            { adaptSubData: false } // ✅ Default: solo main data
-          );
-
-          // Replace projectTranslations with adapted ones (only if we got results)
-          if (Object.keys(adaptedTranslations).length > 0) {
-            Object.keys(adaptedTranslations).forEach(guid => {
-              projectTranslations[guid] = adaptedTranslations[guid];
-            });
-
-            console.log('[assembleFinalDDT] ✅ Start prompts adapted to context', {
-              adaptedCount: Object.keys(adaptedTranslations).length
-            });
-          } else {
-            console.log('[assembleFinalDDT] ⚠️ No prompts adapted (empty result), using original');
-          }
-        } catch (err) {
-          console.warn('[assembleFinalDDT] ⚠️ Failed to adapt prompts, using original', err);
-          // Continue with original translations - don't break the flow
-        }
-      } else {
-        console.log('[assembleFinalDDT] ⚠️ No translations to adapt, skipping adaptation');
-      }
-    } else {
-      // Log why adaptation was skipped (for debugging)
-      if (options?.contextLabel || options?.templateLabel || options?.aiProvider) {
-        console.log('[assembleFinalDDT] ⚠️ Adaptation skipped', {
-          hasContextLabel: !!options?.contextLabel,
-          hasTemplateLabel: !!options?.templateLabel,
-          hasAiProvider: !!options?.aiProvider,
-          hasRootSteps: Object.keys(rootSteps).length > 0
-        });
-      }
-    }
+    // ✅ REMOVED: Prompt adaptation logic from assembleFinalDDT
+    // L'adattamento dei prompt è ora gestito da AdaptPromptToContext in ddtPromptAdapter.ts
+    // Questo viene chiamato da ddtOrchestrator.ts quando si crea un DDT da template
+    // assembleFinalDDT ora si limita ad assemblare la struttura, senza adattare i prompt
 
     // ✅ Add translations to global table (in memory only, not saved to DB yet)
     if (addTranslations && Object.keys(projectTranslations).length > 0) {

@@ -82,15 +82,9 @@ class TaskRepository {
       dataLength: Array.isArray((task as any).data) ? (task as any).data.length : 0
     });
 
-    // Save to internal storage
+    // ✅ Save to internal storage only (in-memory)
+    // ✅ NO automatic database save - save only on explicit user action (project:save event)
     this.tasks.set(finalTaskId, task);
-
-    // Save to database if projectId is available
-    if (finalProjectId) {
-      this.saveTaskToDatabase(task, finalProjectId).catch(err => {
-        console.error('[📝 CREATE_TASK] Failed to save:', err);
-      });
-    }
 
     return task;
   }
@@ -170,15 +164,9 @@ class TaskRepository {
       });
     }
 
+    // ✅ Update internal storage only (in-memory)
+    // ✅ NO automatic database save - save only on explicit user action (project:save event)
     this.tasks.set(taskId, updatedTask);
-
-    // ✅ Save to database if projectId is available
-    const finalProjectId = projectId || this.getCurrentProjectId();
-    if (finalProjectId) {
-      this.saveTaskToDatabase(updatedTask, finalProjectId).catch(err => {
-        console.error('[TaskRepository] Failed to save updated task to database:', err);
-      });
-    }
 
     return true;
   }
@@ -442,6 +430,30 @@ class TaskRepository {
         // ❌ RIMOSSO: log normale (troppo verboso)
       }
 
+      // ✅ Validate payload before stringifying
+      try {
+        // Check for circular references in steps
+        if (payload.steps) {
+          const stepsString = JSON.stringify(payload.steps);
+          if (stepsString.length > 10 * 1024 * 1024) { // 10MB limit
+            console.error('[TaskRepository] Steps too large:', {
+              taskId: task.id,
+              stepsSize: stepsString.length,
+              stepsKeys: Object.keys(payload.steps)
+            });
+            // Remove steps if too large (should not happen, but safety check)
+            delete payload.steps;
+          }
+        }
+      } catch (e) {
+        console.error('[TaskRepository] Error validating payload:', e);
+        // Remove steps if circular reference or other error
+        if (payload.steps) {
+          console.warn('[TaskRepository] Removing steps due to serialization error');
+          delete payload.steps;
+        }
+      }
+
       const payloadString = JSON.stringify(payload);
 
       const response = await fetch(`/api/projects/${projectId}/tasks`, {
@@ -466,7 +478,9 @@ class TaskRepository {
           hasSteps: !!(task.steps),
           stepsKeys: task.steps ? Object.keys(task.steps) : [],
           hasData: !!(task.data),
-          dataLength: task.data ? task.data.length : 0
+          dataLength: task.data ? task.data.length : 0,
+          payloadSize: payloadString.length,
+          payloadKeys: Object.keys(payload)
         });
         return false;
       }

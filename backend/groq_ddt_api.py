@@ -31,23 +31,32 @@ try:
     from backend.ai_endpoints.intent_generation import router as intent_gen_router
     from backend.ai_steps.intentMessages import router as intentMessages_router
     from backend.ai_steps.adapt_prompts import router as adapt_prompts_router
-except Exception:
-    from ai_steps.step3_suggest_constraints import router as step3_router
-    from ai_steps.constraint_messages import router as constraint_messages_router
-    from ai_steps.generate_validator import router as generate_validator_router
-    from ai_steps.generate_tests import router as generate_tests_router
-    from ai_steps.stepNoMatch import router as stepNoMatch_router
-    from ai_steps.stepNoInput import router as stepNoInput_router
-    from ai_steps.stepConfirmation import router as stepConfirmation_router
-    from ai_steps.nlp_extract import router as nlp_extract_router
-    from ner_spacy import router as ner_router
-    from ai_steps.stepSuccess import router as stepSuccess_router
-    from ai_steps.startPrompt import router as startPrompt_router
-    from ai_steps.stepNotConfirmed import router as stepNotConfirmed_router
-    from ai_steps.parse_address import router as parse_address_router
-    from ai_endpoints.intent_generation import router as intent_gen_router
-    from ai_steps.intentMessages import router as intentMessages_router
-    from ai_steps.adapt_prompts import router as adapt_prompts_router
+except Exception as e:
+    print(f"[groq_ddt_api] ⚠️ Failed to import adapt_prompts_router from backend.ai_steps.adapt_prompts: {e}")
+    try:
+        from ai_steps.step3_suggest_constraints import router as step3_router
+        from ai_steps.constraint_messages import router as constraint_messages_router
+        from ai_steps.generate_validator import router as generate_validator_router
+        from ai_steps.generate_tests import router as generate_tests_router
+        from ai_steps.stepNoMatch import router as stepNoMatch_router
+        from ai_steps.stepNoInput import router as stepNoInput_router
+        from ai_steps.stepConfirmation import router as stepConfirmation_router
+        from ai_steps.nlp_extract import router as nlp_extract_router
+        from ner_spacy import router as ner_router
+        from ai_steps.stepSuccess import router as stepSuccess_router
+        from ai_steps.startPrompt import router as startPrompt_router
+        from ai_steps.stepNotConfirmed import router as stepNotConfirmed_router
+        from ai_steps.parse_address import router as parse_address_router
+        from ai_endpoints.intent_generation import router as intent_gen_router
+        from ai_steps.intentMessages import router as intentMessages_router
+        from ai_steps.adapt_prompts import router as adapt_prompts_router
+        print("[groq_ddt_api] ✅ Successfully imported adapt_prompts_router from ai_steps.adapt_prompts (fallback)")
+    except Exception as e2:
+        print(f"[groq_ddt_api] ❌ CRITICAL: Failed to import adapt_prompts_router from both paths: {e2}")
+        # Crea un router vuoto per evitare crash
+        from fastapi import APIRouter
+        adapt_prompts_router = APIRouter()
+        print("[groq_ddt_api] ⚠️ Created empty adapt_prompts_router to prevent crash")
 
 GROQ_KEY = os.environ.get("Groq_key")
 
@@ -224,7 +233,36 @@ app.include_router(stepConfirmation_router)
 app.include_router(stepSuccess_router)
 app.include_router(startPrompt_router)
 app.include_router(stepNotConfirmed_router)
-app.include_router(adapt_prompts_router)
+
+# ✅ Include adapt_prompts_router with error handling
+print("[FASTAPI] 🔍 Attempting to include adapt_prompts_router...")
+print(f"[FASTAPI] Router type: {type(adapt_prompts_router)}")
+print(f"[FASTAPI] Router has routes attr: {hasattr(adapt_prompts_router, 'routes')}")
+if hasattr(adapt_prompts_router, 'routes'):
+    print(f"[FASTAPI] Router routes count BEFORE include: {len(adapt_prompts_router.routes)}")
+    for route in adapt_prompts_router.routes:
+        if hasattr(route, 'path') and hasattr(route, 'methods'):
+            print(f"[FASTAPI]   - {list(route.methods)} {route.path}")
+
+try:
+    app.include_router(adapt_prompts_router)
+    print("[FASTAPI] ✅ adapt_prompts_router included successfully")
+    # Verify the router has routes
+    if hasattr(adapt_prompts_router, 'routes'):
+        print(f"[FASTAPI] adapt_prompts_router has {len(adapt_prompts_router.routes)} route(s)")
+        for route in adapt_prompts_router.routes:
+            if hasattr(route, 'path') and hasattr(route, 'methods'):
+                print(f"[FASTAPI]   - {list(route.methods)} {route.path}")
+
+    # Verify app routes after inclusion
+    app_routes = [r for r in app.routes if hasattr(r, 'path') and '/api/ddt/adapt-prompts' in r.path]
+    print(f"[FASTAPI] ✅ Found {len(app_routes)} route(s) in app matching '/api/ddt/adapt-prompts'")
+    for r in app_routes:
+        print(f"[FASTAPI]   - {list(r.methods) if hasattr(r, 'methods') else 'N/A'} {r.path}")
+except Exception as e:
+    print(f"[FASTAPI] ❌ ERROR including adapt_prompts_router: {e}")
+    import traceback
+    traceback.print_exc()
 
 # --- Condition: suggest minimal variables ---
 @app.post("/api/conditions/suggest-vars")

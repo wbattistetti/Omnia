@@ -82,10 +82,49 @@ export async function AdaptPromptToContext(
   });
 
   // ✅ Carica traduzioni del progetto (necessarie per estrarre i testi)
-  // TODO: Caricare da ProjectTranslationsContext o da dove sono memorizzate
+  const { getTemplateTranslations } = await import('../services/ProjectDataService');
+  const { getCurrentProjectLocale } = await import('./categoryPresets');
+
+  // Raccogli tutti i GUID dai task negli steps
+  const allGuids = new Set<string>();
+  Object.values(task.steps).forEach((nodeSteps: any) => {
+    const startStep = nodeSteps?.start || nodeSteps?.normal;
+    if (startStep?.escalations?.[0]?.tasks) {
+      startStep.escalations[0].tasks.forEach((t: any) => {
+        const textGuid = t.parameters?.find((p: any) => p.parameterId === 'text')?.value || t.taskId || t.id;
+        if (textGuid) allGuids.add(textGuid);
+      });
+    }
+  });
+
+  const projectLocale = getCurrentProjectLocale() || 'it';
   const projectTranslations: Record<string, string> = {};
-  // Per ora, assumiamo che le traduzioni siano già caricate nel contesto
-  // Questo sarà implementato quando integreremo con il sistema di traduzioni
+
+  if (allGuids.size > 0) {
+    try {
+      const translations = await getTemplateTranslations(Array.from(allGuids));
+      for (const guid of allGuids) {
+        const trans = translations[guid];
+        if (trans) {
+          const text = typeof trans === 'object'
+            ? (trans[projectLocale] || trans.en || trans.it || trans.pt || '')
+            : String(trans);
+          if (text) projectTranslations[guid] = text;
+        }
+      }
+    } catch (err) {
+      console.warn('[🔍 AdaptPromptToContext] ⚠️ Failed to load translations, continuing without them', {
+        error: err instanceof Error ? err.message : String(err),
+        guidsCount: allGuids.size
+      });
+      // Continue without translations - prompts will use original text from template
+    }
+  }
+
+  console.log('[🔍 AdaptPromptToContext] Traduzioni caricate', {
+    guidsCount: allGuids.size,
+    translationsLoaded: Object.keys(projectTranslations).length
+  });
 
   // ✅ Estrai prompt da adattare
   const promptsToAdapt = extractStartPrompts(
@@ -113,8 +152,7 @@ export async function AdaptPromptToContext(
 
   // ✅ Prepara payload per API
   const originalTexts = promptsToAdapt.map(p => p.text);
-  const projectLocale = 'it'; // TODO: Ottenere da contesto progetto
-  const provider: 'groq' | 'openai' = 'groq'; // TODO: Ottenere da configurazione
+  const provider = (localStorage.getItem('ai.provider') as 'groq' | 'openai') || 'groq';
 
   try {
     console.log('[🔍 AdaptPromptToContext] Chiamata API adattamento prompt', {
@@ -139,7 +177,44 @@ export async function AdaptPromptToContext(
 
     if (!res.ok) {
       const errorMsg = `[AdaptPromptToContext] API returned ${res.status}: ${res.statusText}`;
-      console.error(errorMsg, { status: res.status, statusText: res.statusText });
+      console.error(errorMsg, {
+        status: res.status,
+        statusText: res.statusText,
+        url: '/api/ddt/adapt-prompts',
+        backendUrl: 'http://localhost:8000'
+      });
+
+      // ✅ Se 404, mostra messaggio di servizio e continua senza adattamento
+      if (res.status === 404) {
+        const errorMsg = 'Servizio di personalizzazione prompt non raggiungibile. Verranno usati i prompt originali dal template.';
+        console.error('[🔍 AdaptPromptToContext] ❌ ' + errorMsg, {
+          endpoint: '/api/ddt/adapt-prompts',
+          backendUrl: 'http://localhost:8000',
+          possibleCauses: [
+            'Backend FastAPI non in esecuzione su porta 8000',
+            'Router adapt_prompts_router non incluso correttamente',
+            'Backend non riavviato dopo aggiunta endpoint'
+          ]
+        });
+
+        // ✅ Mostra messaggio di servizio all'utente
+        if (typeof window !== 'undefined') {
+          const event = new CustomEvent('service:unavailable', {
+            detail: {
+              service: 'Personalizzazione Prompt',
+              message: errorMsg,
+              endpoint: '/api/ddt/adapt-prompts',
+              severity: 'warning'
+            },
+            bubbles: true
+          });
+          window.dispatchEvent(event);
+        }
+
+        // Non bloccare il flusso, usa i prompt originali
+        return;
+      }
+
       throw new Error(errorMsg);
     }
 
@@ -155,30 +230,75 @@ export async function AdaptPromptToContext(
       adaptedCount: data.adaptedTexts.length
     });
 
-    // ✅ Riassocia prompt adattati agli steps (modifica in-place)
-    // TODO: Implementare riassociazione usando taskKey o guid
-    // Per ora, assumiamo che l'ordine sia mantenuto
-    // Questo sarà implementato quando avremo il sistema di traduzioni completo
-
-    console.warn('[🔍 AdaptPromptToContext] ⚠️ Riassociazione prompt non ancora implementata completamente');
-    console.log('[🔍 AdaptPromptToContext] Prompt adattati (da riassociare)', {
-      adaptedTexts: data.adaptedTexts.map((text: string, idx: number) => ({
-        original: promptsToAdapt[idx].text.substring(0, 50) + '...',
-        adapted: text.substring(0, 50) + '...',
-        guid: promptsToAdapt[idx].guid,
-        nodeTemplateId: promptsToAdapt[idx].nodeTemplateId
-      }))
+    // ✅ Crea mappa GUID -> testo adattato
+    const adaptedTranslations: Record<string, string> = {};
+    promptsToAdapt.forEach((p, idx) => {
+      adaptedTranslations[p.guid] = data.adaptedTexts[idx];
     });
 
-    // TODO: Aggiornare task.steps con i prompt adattati
-    // Questo richiede:
-    // 1. Trovare il task corrispondente negli steps usando guid o taskKey
-    // 2. Aggiornare la traduzione corrispondente
-    // 3. Salvare le nuove traduzioni nel sistema di traduzioni
+    console.log('[🔍 AdaptPromptToContext] Riassociazione prompt', {
+      adaptedCount: Object.keys(adaptedTranslations).length,
+      guids: Object.keys(adaptedTranslations)
+    });
+
+    // ✅ 1. Aggiorna task.steps in-place con i nuovi prompt adattati
+    Object.values(task.steps).forEach((nodeSteps: any) => {
+      const startStep = nodeSteps?.start || nodeSteps?.normal;
+      if (startStep?.escalations?.[0]?.tasks) {
+        startStep.escalations[0].tasks.forEach((t: any) => {
+          const textParam = t.parameters?.find((p: any) => p.parameterId === 'text');
+          const textGuid = textParam?.value || t.taskId || t.id;
+
+          // ✅ Se questo GUID ha un prompt adattato, aggiorna il parametro text
+          if (textGuid && adaptedTranslations[textGuid]) {
+            // ✅ Aggiorna il valore del parametro text direttamente in task.steps
+            if (textParam) {
+              textParam.value = adaptedTranslations[textGuid];
+            } else {
+              // Se non esiste il parametro, crealo
+              if (!t.parameters) {
+                t.parameters = [];
+              }
+              t.parameters.push({
+                parameterId: 'text',
+                value: adaptedTranslations[textGuid]
+              });
+            }
+          }
+        });
+      }
+    });
+
+    console.log('[🔍 AdaptPromptToContext] ✅ task.steps aggiornato in-place', {
+      taskId: task.id,
+      promptsUpdated: Object.keys(adaptedTranslations).length
+    });
+
+    // ✅ 2. Aggiungi traduzioni al ProjectTranslationsContext in memoria (NO salvataggio DB)
+    if (typeof window !== 'undefined' && (window as any).__projectTranslationsContext) {
+      (window as any).__projectTranslationsContext.addTranslations(adaptedTranslations);
+      console.log('[🔍 AdaptPromptToContext] ✅ Traduzioni aggiunte al context (in memoria)', {
+        count: Object.keys(adaptedTranslations).length,
+        guids: Object.keys(adaptedTranslations),
+        sampleTexts: Object.entries(adaptedTranslations).slice(0, 3).map(([guid, text]) => ({
+          guid,
+          textPreview: text.substring(0, 50) + '...'
+        }))
+      });
+    } else {
+      console.warn('[🔍 AdaptPromptToContext] ⚠️ ProjectTranslationsContext non disponibile', {
+        hasWindow: typeof window !== 'undefined',
+        hasContext: typeof window !== 'undefined' && !!(window as any).__projectTranslationsContext
+      });
+    }
+
+    // ✅ 3. Aggiorna metadata task in memoria (NO salvataggio DB)
+    task.metadata = { ...task.metadata, promptsAdapted: true };
 
     console.log('[🔍 AdaptPromptToContext] COMPLETE', {
       taskId: task.id,
-      promptsAdapted: data.adaptedTexts.length
+      promptsAdapted: data.adaptedTexts.length,
+      taskStepsUpdated: true
     });
 
   } catch (err) {

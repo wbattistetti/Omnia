@@ -138,25 +138,8 @@ export function getInstanceIdFromRow(row: NodeRowData): string {
 // ❌ RIMOSSO: mapActIdToTemplateId() - non più necessario
 // templateId deve essere null o GUID, non stringhe semantiche
 
-/**
- * Deriva il tipo di task dal templateId
- * @param templateId - Template ID (es. 'SayMessage', 'DataRequest', 'UNDEFINED')
- * @returns Tipo di task (es. 'Message', 'DataRequest', 'UNDEFINED')
- */
-export function deriveTaskTypeFromTemplateId(templateId: string | undefined | null): string | undefined {
-  if (!templateId) return undefined;
-
-  const normalized = templateId.toLowerCase().trim();
-
-  // Mapping inverso: templateId -> type
-  if (normalized === 'getdata' || normalized === 'datarequest') return 'DataRequest';
-  if (normalized === 'saymessage' || normalized === 'message') return 'Message';
-  if (normalized === 'undefined') return 'UNDEFINED';
-  if (normalized === 'classifyproblem' || normalized === 'problemclassification') return 'ProblemClassification';
-  if (normalized === 'callbackend' || normalized === 'backendcall') return 'BackendCall';
-
-  return undefined; // Tipo sconosciuto
-}
+// ✅ REMOVED: deriveTaskTypeFromTemplateId - DEPRECATED
+// Usa taskIdToTaskType() da taskTypes.ts invece
 
 /**
  * Create a new row with Task (dual mode: Task + InstanceRepository)

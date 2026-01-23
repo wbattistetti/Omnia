@@ -26,7 +26,9 @@ try:
     from backend.ai_steps.stepNotConfirmed import router as stepNotConfirmed_router
     from backend.ai_steps.parse_address import router as parse_address_router
     from backend.ai_steps.intentMessages import router as intentMessages_router
+    from backend.ai_steps.adapt_prompts import router as adapt_prompts_router
     print("[INFO] Intent messages router loaded successfully")
+    print("[INFO] Adapt prompts router loaded successfully")
 except ImportError as e:
     print(f"Warning: Could not import DDT wizard routers: {e}")
     # Fallback to empty routers
@@ -39,6 +41,7 @@ except ImportError as e:
     stepNotConfirmed_router = APIRouter()
     parse_address_router = APIRouter()
     intentMessages_router = APIRouter()
+    adapt_prompts_router = APIRouter()
 
 # Import intent generation router from old backend
 try:
@@ -214,6 +217,27 @@ app.include_router(stepSuccess_router)
 app.include_router(stepNotConfirmed_router)
 app.include_router(parse_address_router)
 app.include_router(intentMessages_router)
+
+# Include adapt_prompts_router with error handling
+try:
+    app.include_router(adapt_prompts_router)
+    print("[INFO] adapt_prompts_router included successfully")
+    # Verify the router has routes
+    if hasattr(adapt_prompts_router, 'routes'):
+        print(f"[INFO] adapt_prompts_router has {len(adapt_prompts_router.routes)} route(s)")
+        for route in adapt_prompts_router.routes:
+            if hasattr(route, 'path') and hasattr(route, 'methods'):
+                print(f"[INFO]   - {list(route.methods)} {route.path}")
+
+    # Verify app routes after inclusion
+    app_routes = [r for r in app.routes if hasattr(r, 'path') and '/api/ddt/adapt-prompts' in r.path]
+    print(f"[INFO] Found {len(app_routes)} route(s) in app matching '/api/ddt/adapt-prompts'")
+    for r in app_routes:
+        print(f"[INFO]   - {list(r.methods) if hasattr(r, 'methods') else 'N/A'} {r.path}")
+except Exception as e:
+    print(f"[ERROR] ERROR including adapt_prompts_router: {e}")
+    import traceback
+    traceback.print_exc()
 
 # Include NER and LLM extract routers (empty for now - will be implemented in api_nlp)
 app.include_router(ner_router)

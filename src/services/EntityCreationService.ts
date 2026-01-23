@@ -492,12 +492,8 @@ export class EntityCreationService {
     return this.createEntity('macrotasks', options);
   }
 
-  /**
-   * @deprecated Use createMacrotask instead. Kept for backward compatibility.
-   */
-  static createTask(options: EntityCreationOptions): CreatedEntity | null {
-    return this.createMacrotask(options);
-  }
+  // ✅ REMOVED: createTask - DEPRECATED
+  // Usa createMacrotask direttamente
 
   /**
    * Factory method per creare Condition

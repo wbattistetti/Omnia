@@ -182,7 +182,7 @@ export async function loadAndAdaptDDTForExistingTask(
   if (!promptsAlreadyAdapted && task.label) {
     // ✅ 8. Adatta prompt al contesto
     try {
-      const { adaptStartPromptsToContext } = await import('../components/DialogueDataTemplateBuilder/DDTWizard/assembleFinal');
+      // ✅ Rimossa import di adaptStartPromptsToContext - ora usiamo AdaptPromptToContext da ddtPromptAdapter.ts
       const { getCurrentProjectLocale } = await import('./categoryPresets');
       const { getTemplateTranslations, saveProjectTranslations } = await import('../services/ProjectDataService');
 
@@ -215,58 +215,33 @@ export async function loadAndAdaptDDTForExistingTask(
         }
       }
 
-      // ✅ 8.2. Estrai prompt solo dai nodi radice (PRIMA escalation, step "start")
-      const promptsToAdapt = extractStartPrompts(finalSteps, enrichedData, projectTranslations, { onlyRootNodes: true });
-      // ✅ Log già presente in extractStartPrompts, non duplicare
+      // ✅ 8.2. Adatta prompt al contesto usando la nuova funzione centralizzata
+      // ✅ Usa AdaptPromptToContext che gestisce tutto: estrazione, chiamata API, salvataggio
+      const { AdaptPromptToContext } = await import('./ddtPromptAdapter');
 
-      // ✅ 8.3. Adatta al contesto
-      if (promptsToAdapt.length > 0) {
-        const templateLabel = template.label || template.name || template.id || 'Template';
-        const aiProvider = (localStorage.getItem('ai.provider') as 'groq' | 'openai') || 'groq';
-        const projectLocale = getCurrentProjectLocale() || 'it';
+      try {
+        await AdaptPromptToContext(task, task.label || '', false); // false = solo nodi radice
 
-        const adaptedTranslations = await adaptStartPromptsToContext(
-          promptsToAdapt,
-          task.label, // ✅ Context label (normalizzata, non row.text)
-          templateLabel,
-          projectLocale,
-          aiProvider,
-          { adaptSubData: false }
-        );
+        console.log('[🔍 ddtInstanceManager] ✅ Prompts adattati', {
+          taskId: task.id,
+          taskLabel: task.label
+        });
 
-        // ✅ 8.4. Aggiorna traduzioni
-        if (Object.keys(adaptedTranslations).length > 0 && projectId) {
-          const translationsToSave = Object.entries(adaptedTranslations).map(([guid, text]) => ({
-            guid,
-            language: projectLocale,
-            text: text as string,
-            type: 'Instance'
-          }));
-          await saveProjectTranslations(projectId, translationsToSave);
-
-          // ✅ 8.5. Marca come adattato (salva nel task)
-          taskRepository.updateTask(task.id, {
-            metadata: { promptsAdapted: true }
-          }, projectId || undefined);
-
-          console.log('[🔍 ddtInstanceManager] ✅ Prompts adattati e salvati', {
-            count: translationsToSave.length,
-            taskId: task.id
-          });
-
-          return {
-            ddt: {
-              label: task.label ?? template.label,
-              data: enrichedData,
-              steps: finalSteps,
-              constraints: task.constraints ?? template.constraints,
-              examples: task.examples ?? template.examples,
-              nlpContract: task.nlpContract ?? template.nlpContract,
-              templateId: task.templateId
-            },
-            adapted: true
-          };
-        }
+        return {
+          ddt: {
+            label: task.label ?? template.label,
+            data: enrichedData,
+            steps: finalSteps,
+            constraints: task.constraints ?? template.constraints,
+            examples: task.examples ?? template.examples,
+            nlpContract: task.nlpContract ?? template.nlpContract,
+            templateId: task.templateId
+          },
+          adapted: true
+        };
+      } catch (adaptErr) {
+        console.error('[🔍 ddtInstanceManager] ❌ Errore durante adattamento prompt', adaptErr);
+        // Continua senza adattamento - i prompt originali sono comunque validi
       }
     } catch (err) {
       console.error('[🔍 ddtInstanceManager] ❌ Errore adattamento prompt', err);

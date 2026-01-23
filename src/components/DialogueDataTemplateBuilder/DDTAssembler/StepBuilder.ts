@@ -46,16 +46,8 @@ export function buildTask(
   };
 }
 
-// Legacy function names for backward compatibility
-// @deprecated Use buildTask instead
-export function buildTaskReference(
-  stepType: string,
-  message: string,
-  ddtId: string,
-  translations: Record<string, string>
-): Task {
-  return buildTask(stepType, message, ddtId, translations);
-}
+// ✅ REMOVED: buildTaskReference - DEPRECATED
+// Usa buildTask direttamente
 
 export function buildActionInstance(
   stepType: string,

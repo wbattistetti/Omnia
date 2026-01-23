@@ -2369,7 +2369,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         // ✅ CASO 1: Template candidato → clona steps e adatta prompt
                         const { createDDTFromTemplate } = await import('../../../../utils/ddtOrchestrator');
 
-                        // Crea task base
+                        // Crea task base (createTask salva automaticamente, ma senza steps è OK)
                         const task = taskRepository.createTask(
                           TaskType.DataRequest,
                           previewData.templateId,
@@ -2378,13 +2378,14 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                           projectId
                         );
 
-                        // Clona steps e adatta prompt
+                        // Clona steps e adatta prompt (modifica task.steps in-place)
                         await createDDTFromTemplate(previewData.templateId, task, row.text || '', false);
 
-                        // Salva task
+                        // Salva task con steps clonati e adattati
+                        // ✅ updateTask sovrascrive il task precedente con tutti i campi aggiornati
                         taskRepository.updateTask(task.id, {
                           steps: task.steps,
-                          metadata: { promptsAdapted: true }
+                          metadata: { promptsAdapted: task.metadata?.promptsAdapted === true }
                         }, projectId);
 
                         // Apri ResponseEditor

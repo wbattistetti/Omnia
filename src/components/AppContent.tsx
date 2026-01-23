@@ -978,6 +978,8 @@ export const AppContent: React.FC<AppContentProps> = ({
   const [allProjects, setAllProjects] = useState<any[]>([]);
   const [showAllProjectsModal, setShowAllProjectsModal] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  // ✅ REMOVED: Service unavailable listener - now handled in ResponseEditor with centered overlay
   const [searchTerm, setSearchTerm] = useState('');
 
   // Stato per finestre editor DDT aperte (ora con react-mosaic)
@@ -1361,7 +1363,9 @@ export const AppContent: React.FC<AppContentProps> = ({
       {/* overlay ricarico rimosso per test */}
       {/* Toast feedback */}
       {toast && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 bg-emerald-700 text-white px-6 py-3 rounded shadow-lg z-50 animate-fade-in">
+        <div className={`fixed top-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded shadow-lg z-50 animate-fade-in ${
+          toast.includes('⚠️') ? 'bg-yellow-600' : 'bg-emerald-700'
+        } text-white`}>
           {toast}
         </div>
       )}
