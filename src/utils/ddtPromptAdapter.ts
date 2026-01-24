@@ -150,6 +150,31 @@ export async function AdaptPromptToContext(
     }))
   });
 
+  // ✅ Normalizza contextLabel: estrai solo la parte descrittiva
+  // Es: "Chiedi la data di nascita del paziente" -> "data di nascita del paziente"
+  const normalizeContextLabel = (label: string): string => {
+    let normalized = label.toLowerCase().trim();
+    // Rimuovi verbi all'imperativo all'inizio
+    const verbsToRemove = ['chiedi', 'richiedi', 'domanda', 'acquisisci', 'raccogli', 'invita', 'ask', 'request', 'collect', 'tell', 'give'];
+    for (const verb of verbsToRemove) {
+      if (normalized.startsWith(verb + ' ')) {
+        normalized = normalized.substring(verb.length + 1).trim();
+        break;
+      }
+    }
+    // Rimuovi articoli all'inizio se presenti
+    const articles = ['la', 'il', 'lo', 'le', 'gli', 'the', 'a', 'an'];
+    for (const article of articles) {
+      if (normalized.startsWith(article + ' ')) {
+        normalized = normalized.substring(article.length + 1).trim();
+        break;
+      }
+    }
+    return normalized;
+  };
+
+  const normalizedContextLabel = normalizeContextLabel(contextLabel);
+
   // ✅ Prepara payload per API
   const originalTexts = promptsToAdapt.map(p => p.text);
   const provider = (localStorage.getItem('ai.provider') as 'groq' | 'openai') || 'groq';
@@ -158,6 +183,7 @@ export async function AdaptPromptToContext(
     console.log('[🔍 AdaptPromptToContext] Chiamata API adattamento prompt', {
       promptsCount: originalTexts.length,
       contextLabel,
+      normalizedContextLabel,
       templateLabel,
       locale: projectLocale,
       provider
@@ -168,7 +194,7 @@ export async function AdaptPromptToContext(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         originalTexts,
-        contextLabel,
+        contextLabel: normalizedContextLabel, // ✅ Usa la versione normalizzata
         templateLabel,
         locale: projectLocale,
         provider
