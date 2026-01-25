@@ -90,11 +90,6 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
                 const variables = (window as any).__omniaVars || {};
                 const script = (item as any)?.data?.script || '';
                 const label = String((item as any)?.name || (item as any)?.label || 'Condition');
-                console.log('[LOAD_SCRIPT] 🔍 From SidebarItem (click)', {
-                  conditionName: label,
-                  hasScript: !!script,
-                  scriptLength: script.length
-                });
                 (await import('../../ui/events')).emitConditionEditorOpen({ variables, script, label, name: label });
               } catch {}
             }}
@@ -135,7 +130,6 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
                   e.stopPropagation();
                   try {
                     const exists = hasEmbedded || (hasDDTFor ? hasDDTFor(item.name) : false);
-                    console.log('[DDT][BuildFromAct][click]', { name: item?.name, exists, isAgentAct });
                   } catch {}
                   const act = item as any;
                   const interactiveAct = isInteractive; // precomputed above
@@ -188,11 +182,6 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ item, onUpdate, onDelete, cat
                     const variables = (window as any).__omniaVars || {};
                     const script = (item as any)?.data?.script || '';
                     const label = String((item as any)?.name || (item as any)?.label || 'Condition');
-                    console.log('[LOAD_SCRIPT] 🔍 From SidebarItem (gear)', {
-                      conditionName: label,
-                      hasScript: !!script,
-                      scriptLength: script.length
-                    });
                     const ev: any = new CustomEvent('conditionEditor:open', { detail: { variables, script, label, name: label }, bubbles: true });
                     (e.currentTarget as any).dispatchEvent(ev);
                   } catch {}

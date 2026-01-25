@@ -2357,9 +2357,20 @@ app.get('/api/factory/ide-translations', async (req, res) => {
 app.post('/api/factory/template-translations', async (req, res) => {
   const client = new MongoClient(uri);
   try {
+    // Validate request body
+    if (!req.body) {
+      console.error('[TEMPLATE_TRANSLATIONS] No request body received');
+      return res.status(400).json({ error: 'Request body is required' });
+    }
+
     const { keys } = req.body; // Array of translation keys (GUIDs or old-style keys)
 
-    if (!Array.isArray(keys) || keys.length === 0) {
+    if (!Array.isArray(keys)) {
+      console.error('[TEMPLATE_TRANSLATIONS] Invalid keys format:', typeof keys, keys);
+      return res.status(400).json({ error: 'Keys must be an array', received: typeof keys });
+    }
+
+    if (keys.length === 0) {
       return res.json({});
     }
 
@@ -2423,10 +2434,60 @@ app.post('/api/factory/template-translations', async (req, res) => {
     console.log('[TEMPLATE_TRANSLATIONS] Loaded', Object.keys(merged).length, 'translations for', keys.length, 'keys');
     res.json(merged);
   } catch (err) {
-    console.error('[TEMPLATE_TRANSLATIONS] Error:', err);
-    res.status(500).json({ error: err.message, stack: err.stack });
+    console.error('[TEMPLATE_TRANSLATIONS] Error:', {
+      message: err.message,
+      stack: err.stack,
+      name: err.name,
+      keysReceived: req.body?.keys,
+      keysCount: req.body?.keys?.length
+    });
+    res.status(500).json({
+      error: err.message || 'Unknown error',
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+      keysReceived: req.body?.keys,
+      keysCount: req.body?.keys?.length
+    });
   } finally {
     await client.close();
+  }
+});
+
+// GET /api/factory/heuristics-synonyms - Get all heuristics synonyms for a language
+app.get('/api/factory/heuristics-synonyms', async (req, res) => {
+  const client = await getMongoClient();
+  try {
+    const { language } = req.query;
+    if (!language) {
+      return res.status(400).json({ error: 'language parameter is required' });
+    }
+
+    if (!['it', 'en', 'pt'].includes(language)) {
+      return res.status(400).json({ error: 'language must be one of: it, en, pt' });
+    }
+
+    const db = client.db(dbFactory);
+    const coll = db.collection('Translations');
+
+    const query = {
+      language: String(language),
+      Use: 'Heuristics',
+      Find: 'TaskTemplate'
+    };
+
+    const docs = await coll.find(query).toArray();
+
+    const synonymsMap = {};
+    docs.forEach(doc => {
+      if (doc.guid && Array.isArray(doc.synonyms)) {
+        synonymsMap[doc.guid] = doc.synonyms;
+      }
+    });
+
+    console.log(`[HEURISTICS_SYNONYMS] Loaded ${Object.keys(synonymsMap).length} synonym sets for language ${language}`);
+    res.json(synonymsMap);
+  } catch (err) {
+    console.error('[HEURISTICS_SYNONYMS] Error:', err);
+    res.status(500).json({ error: err.message, stack: err.stack });
   }
 });
 

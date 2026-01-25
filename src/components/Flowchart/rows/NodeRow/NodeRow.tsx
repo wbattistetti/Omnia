@@ -516,36 +516,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       }
       // ✅ FLUSSO CENTRALIZZATO: Usa RowHeuristicsService per analisi euristica
       try {
-        console.log('🔍 [EURISTICA] START - Creazione riga', {
-          text: q,
-          rowId: row.id,
-          hasTaskId: !!row.taskId,
-          timestamp: new Date().toISOString()
-        });
-
         // ✅ Usa servizio centralizzato per analisi euristica
         const heuristicsResult = await RowHeuristicsService.analyzeRowLabel(q);
         const { taskType, templateId, isUndefined, inferredCategory } = heuristicsResult;
 
-        console.log('✅ [EURISTICA] Risultato analisi', {
-          rowId: row.id,
-          text: q,
-          taskType,
-          taskTypeName: TaskType[taskType],
-          templateId,
-          isUndefined,
-          inferredCategory: inferredCategory || null
-        });
-
         // ✅ LAZY APPROACH: Memorizza metadati nella riga invece di creare task subito
         // ✅ Il task verrà creato solo quando si apre l'editor (lazy creation)
-        console.log('💾 [METADATA] Memorizzando metadati nella riga (lazy task creation)', {
-          rowId: row.id,
-          hasExistingTaskId: !!row.taskId,
-          taskType: taskType,
-          taskTypeName: TaskType[taskType],
-          templateId: templateId
-        });
 
         // ✅ LAZY: NON creiamo/aggiorniamo il task qui - solo memorizziamo metadati nella riga
         // ✅ Il task verrà creato solo quando si apre l'editor (cliccando sul gear)
@@ -573,27 +549,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           }
         };
 
-        console.log('📝 [ROW UPDATE] Aggiornamento riga', {
-          rowId: row.id,
-          text: q,
-          type: rowType,
-          mode: rowType,
-          isUndefined: updatedRow.isUndefined,
-          meta: updatedRow.meta
-        });
-
         onUpdate(updatedRow as any, q);
         setIsEditing(false);
-
-        console.log('✅ [EURISTICA] COMPLETE - Riga creata/aggiornata', {
-          rowId: row.id,
-          text: q,
-          finalTaskType: taskType,
-          finalTaskTypeName: TaskType[taskType],
-          templateId: templateId,
-          isUndefined: updatedRow.isUndefined,
-          timestamp: new Date().toISOString()
-        });
 
         return;
       } catch (err) {
@@ -2309,15 +2266,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
       {/* ✅ TemplatePreviewDialog - Preview e conferma struttura dati */}
       {showPreviewDialog && previewData && createPortal(
-        (() => {
-          console.log('[🔍 NodeRow] Rendering TemplatePreviewDialog via Portal', {
-            showPreviewDialog,
-            hasPreviewData: !!previewData,
-            previewType: previewData?.type
-          });
-
-          return (
-            <FontProvider>
+        <FontProvider>
               <div style={{
                 position: 'fixed',
                 inset: 0,
@@ -2381,12 +2330,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         // Clona steps e adatta prompt (modifica task.steps in-place)
                         await createDDTFromTemplate(previewData.templateId, task, row.text || '', false);
 
-                        // Salva task con steps clonati e adattati
-                        // ✅ updateTask sovrascrive il task precedente con tutti i campi aggiornati
-                        taskRepository.updateTask(task.id, {
-                          steps: task.steps,
-                          metadata: { promptsAdapted: task.metadata?.promptsAdapted === true }
-                        }, projectId);
+                        // ✅ REMOVED: updateTask ridondante - task è già nella cache e modificato in-place
+                        // ✅ task.steps e task.metadata sono già aggiornati direttamente nella cache
+                        // ✅ updatedAt verrà aggiornato al salvataggio esplicito del progetto
 
                         // Apri ResponseEditor
                         taskEditorCtx.open({ id: task.id, type: TaskType.DataRequest, label: row.text, instanceId: row.id });
@@ -2464,10 +2410,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     }
                   }}
                   onReject={() => {
-                    console.log('[🔍 NodeRow][PreviewReject] ❌ REJECT - Utente ha rifiutato, aprendo wizard vuoto', {
-                      previewType: previewData?.type
-                    });
-
                     // ✅ Se rifiutato, apri wizard vuoto per creazione manuale
                     setShowPreviewDialog(false);
                     setPreviewData(null);
@@ -2499,9 +2441,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                 />
                 </div>
               </div>
-            </FontProvider>
-          );
-        })(),
+            </FontProvider>,
         document.body
       )}
     </>

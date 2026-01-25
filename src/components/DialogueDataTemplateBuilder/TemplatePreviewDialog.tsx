@@ -31,16 +31,7 @@ export const TemplatePreviewDialog: React.FC<TemplatePreviewDialogProps> = ({
   onDataTreeChange,
   compact = true
 }) => {
-  console.log('[🔍 TemplatePreviewDialog] Render', {
-    open,
-    hasTitle: !!title,
-    hasDataTree: !!dataTree,
-    dataTreeLength: dataTree?.length || 0,
-    rootLabel
-  });
-
   if (!open) {
-    console.log('[🔍 TemplatePreviewDialog] Not open, returning null');
     return null;
   }
 

@@ -19,18 +19,10 @@ export async function classify(label: string, opts?: InferOptions): Promise<Infe
   const txt = (label || '').trim();
   if (!txt) return { type: TaskType.UNDEFINED, reason: 'empty' };
 
-  console.log('🔍 [CLASSIFY] START', {
-    label: txt,
-    cacheLoaded: isCacheLoaded(),
-    timestamp: new Date().toISOString()
-  });
-
   // Verifica e aspetta che la cache sia caricata
   if (!isCacheLoaded()) {
-    console.log('⏳ [CLASSIFY] Cache non caricata, attendo...');
     try {
       await waitForCache();
-      console.log('✅ [CLASSIFY] Cache caricata');
       // Verifica che la cache sia effettivamente caricata dopo waitForCache
       if (!isCacheLoaded()) {
         console.warn('[TASK_TYPE_CLASSIFY] Cache ancora non caricata dopo waitForCache, ritorno UNDEFINED');
@@ -43,13 +35,10 @@ export async function classify(label: string, opts?: InferOptions): Promise<Infe
   }
 
   const langs = getLanguageOrder(opts?.languageOrder);
-  console.log('🌐 [CLASSIFY] Lingue da testare', { langs });
-
   // Test in ordine di priorità (primo match vince)
   for (const L of langs) {
     const RS = getRuleSet(L as Lang);
     if (!RS) {
-      console.log(`⚠️ [CLASSIFY] Nessun RuleSet per lingua ${L}`);
       continue;
     }
 
@@ -59,26 +48,22 @@ export async function classify(label: string, opts?: InferOptions): Promise<Infe
     // 0. AI_AGENT (priorità massima - riconosce "AI:" o "AI :" all'inizio)
     // ✅ Mappato a SayMessage (default per AI agent)
     if (RS.AI_AGENT?.some(r => r.test(txt))) {
-      console.log(`✅ [CLASSIFY] Match AI_AGENT in ${L}`);
       return { type: TaskType.SayMessage, lang: L, reason: 'AI_AGENT' };
     }
 
     // 1. NEGOTIATION (priorità massima)
     // ✅ Mappato a SayMessage (default per negotiation)
     if (RS.NEGOTIATION?.some(r => r.test(txt))) {
-      console.log(`✅ [CLASSIFY] Match NEGOTIATION in ${L}`);
       return { type: TaskType.SayMessage, lang: L, reason: 'NEGOTIATION' };
     }
 
     // 2. PROBLEM_SPEC_DIRECT
     if (RS.PROBLEM_SPEC_DIRECT?.some(r => r.test(txt))) {
-      console.log(`✅ [CLASSIFY] Match PROBLEM_SPEC_DIRECT in ${L}`);
       return { type: TaskType.ClassifyProblem, lang: L, reason: 'PROBLEM_SPEC_DIRECT' };
     }
 
     // 3. BACKEND_CALL
     if (RS.BACKEND_CALL?.some(r => r.test(txt))) {
-      console.log(`✅ [CLASSIFY] Match BACKEND_CALL in ${L}`);
       return { type: TaskType.BackendCall, lang: L, reason: 'BACKEND_CALL' };
     }
 
@@ -95,47 +80,41 @@ export async function classify(label: string, opts?: InferOptions): Promise<Infe
         // ❌ RIMOSSO: log per ogni pattern (troppo verboso)
         // console.log(`  Pattern ${i + 1}/${RS.REQUEST_DATA.length}: ${pattern.toString()} → ${matches ? '✅ MATCH' : '❌ NO MATCH'}`);
         if (matches) {
-          console.log(`✅ [CLASSIFY] Match REQUEST_DATA in ${L} con pattern ${i + 1}: ${pattern.toString()}`);
           return { type: TaskType.DataRequest, lang: L, reason: 'REQUEST_DATA' };
         }
       }
       // ❌ RIMOSSO: log "Nessun pattern matchato" (troppo verboso)
       // console.log(`❌ [CLASSIFY] Nessun pattern REQUEST_DATA ha matchato per ${L}`);
     } else {
-      console.log(`⚠️ [CLASSIFY] Nessun pattern REQUEST_DATA disponibile per ${L}`);
+      console.warn(`⚠️ [CLASSIFY] Nessun pattern REQUEST_DATA disponibile per ${L}`);
     }
 
     // 5. PROBLEM_REASON (dopo REQUEST_DATA)
     // ✅ IMPORTANTE: Viene dopo REQUEST_DATA perché "chiedi il motivo" deve essere DataRequest
     // con categoria problem-classification, non ClassifyProblem
     if (RS.PROBLEM_REASON?.some(r => r.test(txt))) {
-      console.log(`✅ [CLASSIFY] Match PROBLEM_REASON in ${L}`);
       return { type: TaskType.ClassifyProblem, lang: L, reason: 'PROBLEM_REASON' };
     }
 
     // 6. SUMMARY
     // ✅ Mappato a SayMessage (default per summary)
     if (RS.SUMMARY?.some(r => r.test(txt))) {
-      console.log(`✅ [CLASSIFY] Match SUMMARY in ${L}`);
       return { type: TaskType.SayMessage, lang: L, reason: 'SUMMARY' };
     }
 
     // 7. MESSAGE
     if (RS.MESSAGE?.some(r => r.test(txt))) {
-      console.log(`✅ [CLASSIFY] Match MESSAGE in ${L}`);
       return { type: TaskType.SayMessage, lang: L, reason: 'MESSAGE' };
     }
 
     // 8. PROBLEM (generico) - solo se esiste un pattern valido (non null)
     if (RS.PROBLEM && RS.PROBLEM.test(txt)) {
-      console.log(`✅ [CLASSIFY] Match PROBLEM in ${L}`);
       return { type: TaskType.ClassifyProblem, lang: L, reason: 'PROBLEM' };
     }
   }
 
   // Se nessun match, ritorna UNDEFINED (nodo con punto interrogativo)
   // NOTA: L'euristica 2 (DDTTemplateMatcherService) può inferire il tipo se trova un template DDT
-  console.log('❌ [CLASSIFY] Nessun match trovato, ritorno UNDEFINED');
   return { type: TaskType.UNDEFINED, reason: 'no_match' };
 }
 

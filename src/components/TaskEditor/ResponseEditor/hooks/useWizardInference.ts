@@ -291,10 +291,6 @@ export function useWizardInference({
 
         if (localMatch) {
           // Euristica trovata → usa template
-          console.log('[useWizardInference] Template trovato via euristica locale', {
-            templateId: localMatch.ai.schema.data?.[0]?.templateId
-          });
-
           // Aggiorna task se era UNDEFINED
           if (task?.id && stableTaskType === TaskType.UNDEFINED) {
             try {
@@ -340,11 +336,6 @@ export function useWizardInference({
         // ====================================================================
         // STEP 2: Euristica non trovata → chiama AI
         // ====================================================================
-
-        console.log('[useWizardInference] Template non trovato, chiamando AI', {
-          taskType: stableTaskType,
-          label: taskLabel
-        });
 
         setIsInferring(true);
 

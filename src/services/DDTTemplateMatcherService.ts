@@ -24,7 +24,7 @@ export class DDTTemplateMatcherService {
     normalized = normalized.replace(/^(chiedi|richiedi|domanda|acquisisci|raccogli|invita|ask|request|get|collect|acquire)\s+(for\s+)?/i, '');
 
     // 2. Rimuovi articoli e preposizioni comuni
-    normalized = normalized.replace(/\b(di|del|della|dei|degli|delle|the|of|a|al|alla|ai|agli|alle)\b/gi, ' ');
+    normalized = normalized.replace(/\b(di|del|della|dei|degli|delle|il|lo|la|l'|un|uno|una|un'|the|of|a|al|alla|ai|agli|alle)\b/gi, ' ');
 
     // 3. Rimuovi parole comuni (paziente, cliente, utente)
     normalized = normalized.replace(/\b(paziente|patient|cliente|customer|utente|user)\b/gi, ' ');
@@ -35,48 +35,94 @@ export class DDTTemplateMatcherService {
     return normalized;
   }
 
+
   /**
-   * Verifica se tutte le parole chiave del template sono presenti nel testo normalizzato
-   * Supporta anche sinonimi cross-lingua (date/data, birth/nascita)
+   * Verifica se il testo normalizzato matcha il template usando label e sinonimi euristici.
+   *
+   * Strategia:
+   * - Normalizza il testo utente (textNormalized) e lo splitta in token.
+   * - Costruisce una lista di "frasi" candidate per il template:
+   *   - label normalizzata del template (templateNormalized)
+   *   - ogni sinonimo euristico normalizzato dal database (cross‑lingua)
+   * - Per ogni frase candidata, controlla se *tutti* i token significativi della frase
+   *   compaiono nel testo utente (con match parziale token↔token).
    */
-  private static matchByKeywords(templateNormalized: string, textNormalized: string): boolean {
-    const templateWords = templateNormalized.split(/\s+/).filter(w => w.length > 0);
-    const textWords = textNormalized.split(/\s+/).filter(w => w.length > 0);
+  private static scoreCandidate(
+    textNormalized: string,
+    templateId: string,
+    language: 'it' | 'en' | 'pt'
+  ): { score: number; matchedPhrase: string | null } {
+    const textTokens = textNormalized.split(/\s+/).filter(Boolean).filter(t => t.length >= 3);
+    if (textTokens.length === 0) {
+      return { score: 0, matchedPhrase: null };
+    }
 
-    if (templateWords.length === 0) return false;
+    const candidatePhrases: string[] = [];
+    const templateSynonyms = TemplateTranslationsService.getHeuristicsSynonyms(templateId, language);
+    if (templateSynonyms && templateSynonyms.length > 0) {
+      for (const syn of templateSynonyms) {
+        const normalizedSyn = this.normalizeForMatch(syn);
+        if (normalizedSyn && normalizedSyn.length > 0) {
+          candidatePhrases.push(normalizedSyn);
+        }
+      }
+    }
 
-    // Mappa sinonimi cross-lingua
-    const synonyms: Record<string, string[]> = {
-      'date': ['data', 'date'],
-      'data': ['date', 'data'],
-      'birth': ['nascita', 'birth'],
-      'nascita': ['birth', 'nascita']
-    };
+    if (candidatePhrases.length === 0) {
+      return { score: 0, matchedPhrase: null };
+    }
 
-    // Tutte le parole del template devono essere presenti nel testo (o viceversa per match parziale)
-    const allTemplateWordsInText = templateWords.every(word => {
-      // Match diretto
-      const directMatch = textWords.some(textWord =>
-        textWord.includes(word) || word.includes(textWord)
-      );
-      if (directMatch) return true;
+    let bestScore = 0;
+    let bestPhrase: string | null = null;
 
-      // Match tramite sinonimi
-      const wordLower = word.toLowerCase();
-      const wordSynonyms = synonyms[wordLower] || [];
-      if (wordSynonyms.length > 0) {
-        return textWords.some(textWord => {
-          const textWordLower = textWord.toLowerCase();
-          return wordSynonyms.some(syn =>
-            textWordLower.includes(syn) || syn.includes(textWordLower)
-          );
+    for (const phrase of candidatePhrases) {
+      const phraseTokens = phrase.split(/\s+/).filter(Boolean);
+      if (phraseTokens.length === 0) continue;
+
+      let score = 0;
+      let totalStrong = 0;
+      let matchedStrong = 0;
+
+      for (const token of phraseTokens) {
+        if (token.length < 3) {
+          continue; // ignore weak tokens
+        }
+        totalStrong++;
+        const tokenLower = token.toLowerCase();
+        const exactMatch = textTokens.some(t => t.toLowerCase() === tokenLower);
+        if (exactMatch) {
+          score += 3;
+          matchedStrong++;
+          continue;
+        }
+
+        const partialMatch = textTokens.some(t => {
+          const tLower = t.toLowerCase();
+          return tLower.includes(tokenLower) || tokenLower.includes(tLower);
         });
+        if (partialMatch) {
+          score += 1;
+          matchedStrong++;
+          continue;
+        }
+
+        // Strong token not matched -> penalize and invalidate this phrase
+        score -= 5;
+        matchedStrong = 0;
+        break;
       }
 
-      return false;
-    });
+      if (totalStrong > 0 && matchedStrong === totalStrong) {
+        score += 2; // full phrase match bonus
+      }
 
-    return allTemplateWordsInText;
+      if (score > bestScore) {
+        bestScore = score;
+        bestPhrase = phrase;
+      }
+    }
+
+    return { score: bestScore, matchedPhrase: bestPhrase };
   }
 
   /**
@@ -116,15 +162,16 @@ export class DDTTemplateMatcherService {
         return null;
       }
 
-      // ✅ STEP 3: Verifica cache traduzioni label
+      // ✅ STEP 3: Verifica cache traduzioni label E sinonimi euristici
       const projectLang = (localStorage.getItem('project.lang') || 'it') as 'it' | 'en' | 'pt';
       const translationsLoaded = TemplateTranslationsService.isLoaded(projectLang);
 
       if (!translationsLoaded) {
         try {
           await TemplateTranslationsService.loadForLanguage(projectLang);
+          await TemplateTranslationsService.loadHeuristicsSynonyms(projectLang); // Carica anche sinonimi euristici
         } catch (err) {
-          console.error('[DDTTemplateMatcherService] ❌ Errore caricamento traduzioni:', err);
+          console.error('[DDTTemplateMatcherService] ❌ Errore caricamento traduzioni/sinonimi:', err);
           return null;
         }
       }
@@ -176,14 +223,13 @@ export class DDTTemplateMatcherService {
         labelUsed: string;
         templateId: string;
         normalizedLabelLength: number; // Lunghezza della label normalizzata
+        score: number;
+        matchedPhrase: string | null;
       }> = [];
-
-      console.log(`[DDTTemplateMatcherService] 🔍 Inizio matching su ${templates.length} template`);
 
       for (const template of templates) {
         const templateId = template.id || template._id?.toString() || '';
         if (!templateId) {
-          console.log(`[DDTTemplateMatcherService] ⚠️ Template senza ID, skip:`, template);
           continue;
         }
 
@@ -204,27 +250,29 @@ export class DDTTemplateMatcherService {
 
         // Match esatto dopo normalizzazione
         if (templateNormalized === textNormalized) {
-          console.log(`[DDTTemplateMatcherService] ✅ MATCH ESATTO trovato: "${templateNormalized}" === "${textNormalized}"`);
           matches.push({
             template,
             matchType: 'exact',
             labelUsed,
             templateId,
-            normalizedLabelLength: templateNormalized.length
+            normalizedLabelLength: templateNormalized.length,
+            score: 100,
+            matchedPhrase: templateNormalized
           });
           continue; // Continua a cercare altri match
         }
 
-        // Match per parole chiave
-        const keywordMatch = this.matchByKeywords(templateNormalized, textNormalized);
-        if (keywordMatch) {
-          console.log(`[DDTTemplateMatcherService] ✅ MATCH KEYWORDS trovato: template="${templateNormalized}" matcha con testo="${textNormalized}"`);
+        // Match per parole chiave con scoring (usa sinonimi dal database)
+        const { score, matchedPhrase } = this.scoreCandidate(textNormalized, templateId, detectedLang);
+        if (score > 0) {
           matches.push({
             template,
             matchType: 'keywords',
             labelUsed,
             templateId,
-            normalizedLabelLength: templateNormalized.length
+            normalizedLabelLength: templateNormalized.length,
+            score,
+            matchedPhrase
           });
         }
         // ❌ RIMOSSO: log "No match" (troppo verboso, 53 template = 53 log)
@@ -245,29 +293,50 @@ export class DDTTemplateMatcherService {
       //   console.log(`[DDTTemplateMatcherService] 📋 Match trovati:`, matches.map(m => ({...})));
       // }
 
-      // Ordina: prima per tipo (exact > keywords), poi per lunghezza label decrescente
+      // Ordina: prima per tipo (exact > keywords), poi per score, poi per priorità (atomic > composite), poi per lunghezza label
       matches.sort((a, b) => {
-        // Priorità ai match esatti
+        // 1. Priorità ai match esatti
         if (a.matchType === 'exact' && b.matchType !== 'exact') return -1;
         if (a.matchType !== 'exact' && b.matchType === 'exact') return 1;
-        // Se stesso tipo, ordina per lunghezza decrescente (vince quello con più parole)
+
+        // 2. Punteggio più alto vince
+        if (a.score !== b.score) return b.score - a.score;
+
+        // 3. Priorità ai template atomici (più specifici) rispetto ai compositi (più generici)
+        const aIsAtomic = !a.template.subDataIds || a.template.subDataIds.length === 0;
+        const bIsAtomic = !b.template.subDataIds || b.template.subDataIds.length === 0;
+        if (aIsAtomic && !bIsAtomic) return -1; // Atomic vince su composite
+        if (!aIsAtomic && bIsAtomic) return 1;  // Composite perde contro atomic
+
+        // 4. Se stesso tipo (entrambi atomic o entrambi composite), ordina per lunghezza decrescente (vince quello con più parole)
         return b.normalizedLabelLength - a.normalizedLabelLength;
       });
 
       const bestMatch = matches[0];
-      console.log(`[DDTTemplateMatcherService] 🏆 MIGLIOR MATCH selezionato:`, {
-        templateId: bestMatch.templateId,
-        label: bestMatch.labelUsed,
-        matchType: bestMatch.matchType,
-        normalizedLength: bestMatch.normalizedLabelLength,
-        totalMatches: matches.length,
-        allMatches: matches.map(m => ({
-          templateId: m.templateId,
-          label: m.labelUsed,
-          matchType: m.matchType,
-          length: m.normalizedLabelLength
-        }))
-      });
+
+      // ✅ TARGETED DEBUG: single log to inspect synonyms + candidates + final match
+      try {
+        const candidates = matches.slice(0, 20).map(m => {
+          const syns = TemplateTranslationsService.getHeuristicsSynonyms(m.templateId, detectedLang);
+          return {
+            templateId: m.templateId,
+            label: m.labelUsed,
+            matchType: m.matchType,
+            score: m.score,
+            synonyms: syns ? syns.slice(0, 8) : [],
+            matchedPhrase: m.matchedPhrase
+          };
+        });
+        console.log('[DDT_MATCH]', {
+          text: textNormalized,
+          candidates,
+          match: {
+            templateId: bestMatch.templateId,
+            label: bestMatch.labelUsed,
+            matchType: bestMatch.matchType
+          }
+        });
+      } catch { }
 
       return {
         template: bestMatch.template,

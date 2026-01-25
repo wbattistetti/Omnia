@@ -113,11 +113,26 @@ export async function AdaptPromptToContext(
         }
       }
     } catch (err) {
-      console.warn('[🔍 AdaptPromptToContext] ⚠️ Failed to load translations, continuing without them', {
+      const errorMsg = 'Could not adapt prompts because template translations were not reachable.';
+      console.error('[🔍 AdaptPromptToContext] ❌ ' + errorMsg, {
         error: err instanceof Error ? err.message : String(err),
         guidsCount: allGuids.size
       });
-      // Continue without translations - prompts will use original text from template
+
+      if (typeof window !== 'undefined') {
+        const retry = () => AdaptPromptToContext(task, contextLabel, adaptAllNormalSteps);
+        const event = new CustomEvent('service:unavailable', {
+          detail: {
+            service: 'Template translations',
+            message: errorMsg,
+            endpoint: '/api/factory/template-translations',
+            onRetry: retry
+          },
+          bubbles: true
+        });
+        window.dispatchEvent(event);
+      }
+      return;
     }
   }
 
@@ -125,6 +140,27 @@ export async function AdaptPromptToContext(
     guidsCount: allGuids.size,
     translationsLoaded: Object.keys(projectTranslations).length
   });
+
+  if (allGuids.size > 0 && Object.keys(projectTranslations).length === 0) {
+    const errorMsg = 'No template translations found for the prompt GUIDs. Cannot adapt prompts.';
+    console.error('[🔍 AdaptPromptToContext] ❌ ' + errorMsg, {
+      guidsCount: allGuids.size
+    });
+    if (typeof window !== 'undefined') {
+      const retry = () => AdaptPromptToContext(task, contextLabel, adaptAllNormalSteps);
+      const event = new CustomEvent('service:unavailable', {
+        detail: {
+          service: 'Template translations',
+          message: errorMsg,
+          endpoint: '/api/factory/template-translations',
+          onRetry: retry
+        },
+        bubbles: true
+      });
+      window.dispatchEvent(event);
+    }
+    return;
+  }
 
   // ✅ Estrai prompt da adattare
   const promptsToAdapt = extractStartPrompts(
@@ -212,7 +248,7 @@ export async function AdaptPromptToContext(
 
       // ✅ Se 404, mostra messaggio di servizio e continua senza adattamento
       if (res.status === 404) {
-        const errorMsg = 'Servizio di personalizzazione prompt non raggiungibile. Verranno usati i prompt originali dal template.';
+        const errorMsg = 'Prompt adaptation service not reachable. Original template prompts will be used.';
         console.error('[🔍 AdaptPromptToContext] ❌ ' + errorMsg, {
           endpoint: '/api/ddt/adapt-prompts',
           backendUrl: 'http://localhost:8000',
@@ -225,12 +261,14 @@ export async function AdaptPromptToContext(
 
         // ✅ Mostra messaggio di servizio all'utente
         if (typeof window !== 'undefined') {
+          const retry = () => AdaptPromptToContext(task, contextLabel, adaptAllNormalSteps);
           const event = new CustomEvent('service:unavailable', {
             detail: {
-              service: 'Personalizzazione Prompt',
+              service: 'Prompt adaptation',
               message: errorMsg,
               endpoint: '/api/ddt/adapt-prompts',
-              severity: 'warning'
+              severity: 'warning',
+              onRetry: retry
             },
             bubbles: true
           });

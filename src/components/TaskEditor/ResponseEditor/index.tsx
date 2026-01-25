@@ -97,13 +97,18 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
   const { provider: selectedProvider, model: selectedModel } = useAIProvider();
 
   // ✅ Service unavailable warning state (centered overlay in ResponseEditor)
-  const [serviceUnavailable, setServiceUnavailable] = React.useState<{ service: string; message: string } | null>(null);
+  const [serviceUnavailable, setServiceUnavailable] = React.useState<{
+    service: string;
+    message: string;
+    endpoint?: string;
+    onRetry?: () => void;
+  } | null>(null);
 
   // ✅ Listen for service unavailable events
   React.useEffect(() => {
     const handleServiceUnavailable = (event: CustomEvent) => {
-      const { service, message } = event.detail;
-      setServiceUnavailable({ service, message });
+      const { service, message, endpoint, onRetry } = event.detail || {};
+      setServiceUnavailable({ service, message, endpoint, onRetry });
       // ✅ Modal: NO auto-hide, l'utente deve chiudere manualmente con OK
     };
 
@@ -371,9 +376,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
   const tasksStartWidthRef = React.useRef<number>(0);
   const tasksStartXRef = React.useRef<number>(0);
 
-  // ✅ DEBUG: Abilita log con localStorage.setItem('debug.sidebarResize', '1')
-  const DEBUG_RESIZE = typeof localStorage !== 'undefined' && localStorage.getItem('debug.sidebarResize') === '1';
-
   // ✅ Pulisci localStorage all'avvio per garantire che autosize prevalga
   React.useEffect(() => {
     try {
@@ -382,22 +384,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
   }, []);
 
   const handleSidebarResizeStart = React.useCallback((e: React.MouseEvent) => {
-    if (DEBUG_RESIZE) console.log('🔵 [SIDEBAR_RESIZE] handleSidebarResizeStart chiamato', {
-      clientX: e.clientX,
-      button: e.button,
-      buttons: e.buttons,
-      target: e.target,
-      currentTarget: e.currentTarget,
-      sidebarRefExists: !!sidebarRef,
-      sidebarRefCurrent: !!sidebarRef?.current,
-    });
-
     e.preventDefault();
     e.stopPropagation(); // ✅ CRITICO: previeni che altri handler interferiscano
 
     const sidebarEl = sidebarRef?.current;
     if (!sidebarEl) {
-      if (DEBUG_RESIZE) console.error('❌ [SIDEBAR_RESIZE] sidebarRef.current è null!');
       return;
     }
 
@@ -405,27 +396,13 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
     sidebarStartWidthRef.current = rect.width;
     sidebarStartXRef.current = e.clientX;
 
-    if (DEBUG_RESIZE) console.log('✅ [SIDEBAR_RESIZE] Impostando isDraggingSidebar = true', {
-      startWidth: sidebarStartWidthRef.current,
-      startX: sidebarStartXRef.current,
-      sidebarRect: { width: rect.width, left: rect.left, right: rect.right },
-    });
-
     setIsDraggingSidebar(true);
-  }, [sidebarRef, DEBUG_RESIZE]);
+  }, [sidebarRef]);
 
   React.useEffect(() => {
-    if (DEBUG_RESIZE) console.log('🟡 [SIDEBAR_RESIZE] useEffect isDraggingSidebar cambiato', {
-      isDraggingSidebar,
-      sidebarManualWidth,
-    });
-
     if (!isDraggingSidebar) {
-      if (DEBUG_RESIZE) console.log('⏸️ [SIDEBAR_RESIZE] isDraggingSidebar è false, esco');
       return;
     }
-
-    if (DEBUG_RESIZE) console.log('▶️ [SIDEBAR_RESIZE] Aggiungendo listener mousemove/mouseup');
 
     const handleMove = (e: MouseEvent) => {
       const deltaX = e.clientX - sidebarStartXRef.current;
@@ -436,46 +413,22 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
       const calculatedWidth = sidebarStartWidthRef.current + deltaX;
       const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, calculatedWidth));
 
-      if (DEBUG_RESIZE) console.log('🔄 [SIDEBAR_RESIZE] handleMove', {
-        clientX: e.clientX,
-        startX: sidebarStartXRef.current,
-        deltaX,
-        startWidth: sidebarStartWidthRef.current,
-        calculatedWidth,
-        newWidth,
-        clamped: newWidth !== calculatedWidth,
-        clampedMin: newWidth === MIN_WIDTH,
-        clampedMax: newWidth === MAX_WIDTH,
-      });
-
       setSidebarManualWidth(newWidth);
       // ✅ NON salvare in localStorage - solo durante la sessione
     };
 
     const handleUp = () => {
-      if (DEBUG_RESIZE) console.log('🛑 [SIDEBAR_RESIZE] handleUp - fine drag');
       setIsDraggingSidebar(false);
     };
 
     window.addEventListener('mousemove', handleMove);
     window.addEventListener('mouseup', handleUp);
 
-    if (DEBUG_RESIZE) console.log('✅ [SIDEBAR_RESIZE] Listener aggiunti');
-
     return () => {
-      if (DEBUG_RESIZE) console.log('🧹 [SIDEBAR_RESIZE] Cleanup - rimuovendo listener');
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleUp);
     };
-  }, [isDraggingSidebar, DEBUG_RESIZE]);
-
-  // ✅ DEBUG: Log quando sidebarManualWidth cambia
-  React.useEffect(() => {
-    if (DEBUG_RESIZE) console.log('📏 [SIDEBAR_RESIZE] sidebarManualWidth cambiato', {
-      sidebarManualWidth,
-      isDraggingSidebar,
-    });
-  }, [sidebarManualWidth, isDraggingSidebar, DEBUG_RESIZE]);
+  }, [isDraggingSidebar]);
 
   // ✅ Mantieni rightMode per compatibilità (combinazione di leftPanelMode e testPanelMode)
   const rightMode: RightPanelMode = testPanelMode === 'chat' ? 'chat' : leftPanelMode;
@@ -740,7 +693,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
               steps: finalDDTWithSteps.steps, // ✅ CRITICAL: Salva steps da task.steps (unica fonte di verità)
               constraints: finalDDTWithSteps.constraints,
               examples: finalDDTWithSteps.examples,
-              nlpContract: finalDDTWithSteps.nlpContract,
+              dataContract: finalDDTWithSteps.dataContract,
               introduction: finalDDTWithSteps.introduction
             }, currentProjectId || undefined);
           } else {
@@ -750,7 +703,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
               steps: finalDDTWithSteps.steps, // ✅ CRITICAL: Salva steps da task.steps (unica fonte di verità)
               constraints: finalDDTWithSteps.constraints,
               examples: finalDDTWithSteps.examples,
-              nlpContract: finalDDTWithSteps.nlpContract,
+              dataContract: finalDDTWithSteps.dataContract,
               introduction: finalDDTWithSteps.introduction
             }, currentProjectId || undefined);
           }
@@ -1218,7 +1171,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                     steps: task?.steps || taskToSave?.steps || {}, // ✅ CORRETTO: Salva steps da task corrente (unica fonte di verità)
                     constraints: updatedDDT.constraints,
                     examples: updatedDDT.examples,
-                    nlpContract: updatedDDT.nlpContract,
+                    dataContract: updatedDDT.dataContract,
                     introduction: updatedDDT.introduction
                   };
                 } else {
@@ -1645,7 +1598,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                           steps: coerced.steps, // ✅ Salva steps a root level immediatamente
                           constraints: coerced.constraints, // ✅ Override opzionali (solo se modificati)
                           examples: coerced.examples, // ✅ Override opzionali (solo se modificati)
-                          nlpContract: coerced.nlpContract, // ✅ Override opzionali (solo se modificati)
+                          dataContract: coerced.dataContract, // ✅ Override opzionali (solo se modificati)
                           introduction: coerced.introduction
                         };
 
@@ -1911,20 +1864,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                 {/* ✅ REFACTOR: Resizer verticale tra Sidebar e contenuto principale - sempre visibile */}
                 <div
                   onMouseDown={(e) => {
-                    if (DEBUG_RESIZE) console.log('🖱️ [SIDEBAR_RESIZE] onMouseDown sul resizer', {
-                      clientX: e.clientX,
-                      button: e.button,
-                      buttons: e.buttons,
-                      target: e.target,
-                      currentTarget: e.currentTarget,
-                    });
                     handleSidebarResizeStart(e);
-                  }}
-                  onMouseEnter={() => {
-                    if (DEBUG_RESIZE) console.log('👆 [SIDEBAR_RESIZE] Mouse enter resizer');
-                  }}
-                  onMouseLeave={() => {
-                    if (DEBUG_RESIZE) console.log('👋 [SIDEBAR_RESIZE] Mouse leave resizer');
                   }}
                   style={{
                     width: 8,
@@ -2195,13 +2135,37 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
               </p>
             )}
 
-            {/* Pulsante OK */}
+            {/* Azioni */}
             <div style={{
               display: 'flex',
               justifyContent: 'flex-end',
               gap: 8,
               marginTop: 8
             }}>
+              {serviceUnavailable.onRetry && (
+                <button
+                  onClick={() => {
+                    const retry = serviceUnavailable.onRetry;
+                    setServiceUnavailable(null);
+                    try { retry(); } catch { }
+                  }}
+                  style={{
+                    background: '#0ea5e9',
+                    color: '#0b1220',
+                    border: 'none',
+                    borderRadius: 8,
+                    padding: '10px 24px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    fontSize: 14,
+                    transition: 'background 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#0284c7'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = '#0ea5e9'}
+                >
+                  Retry
+                </button>
+              )}
               <button
                 onClick={() => setServiceUnavailable(null)}
                 style={{

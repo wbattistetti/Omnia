@@ -1551,7 +1551,6 @@ export const AppContent: React.FC<AppContentProps> = ({
                       const tEnd = performance.now();
                       console.log('[Save][5-acts-conditions] ✅ DONE', {
                         totalMs: Math.round(tEnd - tStart),
-                        actsMs: Math.round(tActsEnd - tActs),
                         conditionsMs: Math.round(tCondEnd - tCond),
                         reloadMs: Math.round(tReloadEnd - tReload)
                       });

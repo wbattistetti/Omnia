@@ -44,17 +44,8 @@ export class RowHeuristicsService {
     }
 
     // 1️⃣ EURISTICA 1: interpreta la label e decide il TaskType
-    console.log('🔍 [RowHeuristics] Euristica 1 - Analisi label', { label: trimmedLabel });
     const heuristic1Result = await inferTaskType(trimmedLabel, { languageOrder: ['IT', 'EN', 'PT'] as any });
     let taskType = heuristic1Result.type;
-
-    console.log('✅ [RowHeuristics] Euristica 1 risultato', {
-      label: trimmedLabel,
-      taskType,
-      taskTypeName: TaskType[taskType],
-      confidence: heuristic1Result.confidence,
-      reasoning: heuristic1Result.reasoning || 'N/A'
-    });
 
     // 2️⃣ EURISTICA 2: cerca template task che matcha la label
     let matchedTemplate: DDTTemplateMatch | null = null;
@@ -63,12 +54,6 @@ export class RowHeuristicsService {
     if (taskType !== TaskType.UNDEFINED) {
       // Euristica 1 ha trovato un tipo → cerca template per quel tipo
       const typeForMatch = taskTypeToHeuristicString(taskType);
-      console.log('🔍 [RowHeuristics] Euristica 2 - Cerca template per tipo specifico', {
-        label: trimmedLabel,
-        taskType,
-        typeForMatch
-      });
-
       if (typeForMatch) {
         matchedTemplate = await DDTTemplateMatcherService.findDDTTemplate(trimmedLabel, typeForMatch);
         if (matchedTemplate) {
@@ -77,22 +62,11 @@ export class RowHeuristicsService {
       }
     } else {
       // Euristica 1 è UNDEFINED → cerca template generico (qualsiasi tipo)
-      console.log('🔍 [RowHeuristics] Euristica 2 - Cerca template generico (Euristica 1 UNDEFINED)', {
-        label: trimmedLabel
-      });
       matchedTemplate = await DDTTemplateMatcherService.findDDTTemplate(trimmedLabel, null);
       if (matchedTemplate) {
         templateType = this.getTemplateType(matchedTemplate.template);
       }
     }
-
-    console.log('✅ [RowHeuristics] Euristica 2 risultato', {
-      label: trimmedLabel,
-      found: !!matchedTemplate,
-      templateId: matchedTemplate?.templateId || null,
-      templateType: templateType ? TaskType[templateType] : null,
-      templateLabel: matchedTemplate?.labelUsed || null
-    });
 
     // 3️⃣ LOGICA DI OVERRIDE
     // - Se Euristica 1 trova tipo → usa quello (anche se Euristica 2 trova template)
@@ -104,24 +78,9 @@ export class RowHeuristicsService {
       if (taskType === TaskType.UNDEFINED) {
         // Euristica 1 non ha trovato niente, ma Euristica 2 ha trovato template
         taskType = templateType;
-        console.log('🔄 [RowHeuristics] Override: UNDEFINED → tipo template', {
-          before: taskTypeBeforeOverride,
-          beforeName: TaskType[taskTypeBeforeOverride],
-          after: taskType,
-          afterName: TaskType[taskType],
-          templateId: matchedTemplate.templateId,
-          templateType: TaskType[templateType]
-        });
       } else if (taskType === TaskType.SayMessage && templateType === TaskType.DataRequest) {
         // Esempio: "chiedi data nascita" → Euristica 1: Message, Euristica 2: template Data
         taskType = TaskType.DataRequest;
-        console.log('🔄 [RowHeuristics] Override: SayMessage → DataRequest (template trovato)', {
-          before: taskTypeBeforeOverride,
-          beforeName: TaskType[taskTypeBeforeOverride],
-          after: taskType,
-          afterName: TaskType[taskType],
-          templateId: matchedTemplate.templateId
-        });
       }
     }
 
@@ -131,23 +90,7 @@ export class RowHeuristicsService {
     let inferredCategory: string | null = null;
     if (taskType === TaskType.DataRequest) {
       inferredCategory = await this.inferCategory(trimmedLabel, taskType, heuristic1Result.lang);
-      if (inferredCategory) {
-        console.log('✅ [RowHeuristics] Euristica 3 - Categoria dedotta', {
-          label: trimmedLabel,
-          inferredCategory
-        });
-      }
     }
-
-    console.log('✅ [RowHeuristics] Risultato finale', {
-      label: trimmedLabel,
-      finalTaskType: taskType,
-      finalTaskTypeName: TaskType[taskType],
-      templateId: matchedTemplate?.templateId || null,
-      templateType: templateType ? TaskType[templateType] : null,
-      isUndefined,
-      inferredCategory: inferredCategory || null
-    });
 
     return {
       taskType,
@@ -194,20 +137,10 @@ export class RowHeuristicsService {
         .replace(/\s+/g, ' ') // Normalizza spazi multipli
         .replace(/[''""]/g, "'"); // Normalizza apostrofi tipografici
 
-      // ✅ Logging iniziale per debug
       const totalPatterns = availableLangs.reduce((sum, l) => {
         const rs = getRuleSet(l);
         return sum + (rs?.CATEGORY_PATTERNS?.length || 0);
       }, 0);
-
-      console.log('🔍 [RowHeuristics][inferCategory] Inizio analisi', {
-        label,
-        normalizedLabel,
-        taskType: TaskType[taskType],
-        lang: lang || 'default',
-        availableLangs,
-        totalPatterns
-      });
 
       if (totalPatterns === 0) {
         console.warn('[RowHeuristics][inferCategory] ⚠️ Nessun pattern CATEGORY_PATTERNS disponibile in nessuna lingua!');
@@ -217,7 +150,6 @@ export class RowHeuristicsService {
       for (const currentLang of availableLangs) {
         const ruleSet = getRuleSet(currentLang);
         if (!ruleSet || !ruleSet.CATEGORY_PATTERNS || ruleSet.CATEGORY_PATTERNS.length === 0) {
-          console.debug(`[RowHeuristics][inferCategory] Nessun pattern disponibile per lingua ${currentLang}`);
           continue;
         }
 
@@ -229,13 +161,6 @@ export class RowHeuristicsService {
           try {
             // ✅ Pattern già compilato, usa direttamente
             if (catPattern.pattern.test(normalizedLabel)) {
-              console.log('✅ [RowHeuristics][inferCategory] Pattern matchato', {
-                label,
-                normalizedLabel,
-                pattern: catPattern.originalPattern,
-                category: catPattern.category,
-                lang: currentLang
-              });
               return catPattern.category;
             }
           } catch (err) {
@@ -247,11 +172,6 @@ export class RowHeuristicsService {
       }
 
       // Nessun pattern matchato
-      console.log('❌ [RowHeuristics][inferCategory] Nessun pattern matchato', {
-        label,
-        normalizedLabel,
-        testedLangs: availableLangs
-      });
       return null;
     } catch (error) {
       console.error('[RowHeuristics][inferCategory] Errore durante inferenza categoria:', error);

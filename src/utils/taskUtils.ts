@@ -322,14 +322,37 @@ export async function buildDDTFromTask(instance: Task | null): Promise<any | nul
 
   // ✅ Usa dataTree come struttura base (NON instance.data!)
   // ✅ Applica eventuali override dall'istanza (label, constraints, ecc.)
+  // ✅ IMPORTANTE: constraints/examples sono referenziati dal template, NON copiati
+  // ✅ Solo se l'istanza ha override espliciti (array non vuoto), usa quelli
   const enrichedData = dataTree.map((templateNode: any) => {
+    // ✅ DEBUG: Verifica constraints
+    const instanceConstraints = instance.constraints;
+    const templateConstraints = templateNode.constraints;
+    const finalConstraints = (instanceConstraints && instanceConstraints.length > 0)
+      ? instanceConstraints
+      : templateConstraints;
+
+    console.log('[🔍 buildDDTFromTask] Constraints check', {
+      nodeLabel: templateNode.label,
+      nodeTemplateId: templateNode.templateId,
+      instanceConstraints: instanceConstraints ? `Array(${instanceConstraints.length})` : 'undefined',
+      templateConstraints: templateConstraints ? `Array(${templateConstraints.length})` : 'undefined',
+      finalConstraints: finalConstraints ? `Array(${finalConstraints.length})` : 'undefined',
+      usingTemplate: finalConstraints === templateConstraints
+    });
+
     return {
       ...templateNode, // ✅ Struttura dal template (include templateId!)
-      // ✅ Override dall'istanza (se presenti)
+      // ✅ Override dall'istanza (se presenti e non vuoti)
       label: instance.label || templateNode.label,
-      constraints: instance.constraints || templateNode.constraints,
-      examples: instance.examples || templateNode.examples,
-      nlpContract: instance.nlpContract || templateNode.nlpContract,
+      // ✅ Se instance.constraints è array vuoto [], usa templateNode.constraints (referenza)
+      constraints: finalConstraints,
+      // ✅ Se instance.examples è array vuoto [], usa templateNode.examples (referenza)
+      examples: (instance.examples && instance.examples.length > 0)
+        ? instance.examples
+        : templateNode.examples,
+      // ✅ nlpContract è oggetto/stringa, quindi || va bene (undefined è falsy)
+      dataContract: instance.dataContract || templateNode.dataContract,
       // ✅ SubData viene dal template (già costruito da buildDataTree)
       subData: templateNode.subData || []
     };
@@ -356,9 +379,16 @@ export async function buildDDTFromTask(instance: Task | null): Promise<any | nul
     label: instance.label ?? template.label,
     data: enrichedData, // ✅ Struttura ricostruita dal template (con templateId!)
     steps: finalRootSteps, // ✅ Steps dall'istanza o clonati
-    constraints: instance.constraints ?? template.dataContracts ?? template.constraints ?? undefined,
-    examples: instance.examples ?? template.examples ?? undefined,
-    nlpContract: instance.nlpContract ?? template.nlpContract ?? undefined
+    // ✅ Se instance.constraints è array vuoto [], usa template (referenza)
+    constraints: (instance.constraints && instance.constraints.length > 0)
+      ? instance.constraints
+      : (template.dataContracts ?? template.constraints ?? undefined),
+    // ✅ Se instance.examples è array vuoto [], usa template (referenza)
+    examples: (instance.examples && instance.examples.length > 0)
+      ? instance.examples
+      : (template.examples ?? undefined),
+    // ✅ nlpContract è oggetto/stringa, quindi ?? va bene (undefined è nullish)
+    dataContract: instance.dataContract ?? template.dataContract ?? undefined
   };
 
   // ✅ Copy translations for cloned steps (only on first instance creation)
@@ -634,7 +664,7 @@ export function buildDataTree(template: any): any[] {
       icon: subTemplate.icon || 'FileText',
       constraints: subTemplate.dataContracts || subTemplate.constraints || [],
       examples: subTemplate.examples || [],
-      nlpContract: subTemplate.nlpContract || undefined,
+      dataContract: subTemplate.dataContract || undefined,
       subData: dereferencedSubData, // ✅ Supporta profondità arbitraria
       templateId: subTemplate.id || subTemplate._id, // ✅ Solo templateId (uguale a id per template atomici/compositi)
       kind: subTemplate.name || subTemplate.type || 'generic'
@@ -666,11 +696,32 @@ export function buildDataTree(template: any): any[] {
         ? (mainNode.id || mainNode.templateId)  // ✅ Template aggregato: usa mainNode.id
         : (template.id || template._id);        // ✅ Template atomico/composito: usa template.id
 
+      // ✅ CRITICAL: Copia dataContracts dal template se mainNode non li ha
+      // ✅ I dataContracts sono referenziati dal template, NON copiati nell'istanza
+      const nodeConstraints = mainNode.constraints || mainNode.dataContracts || template.dataContracts || template.constraints || [];
+
+      console.log('[🔍 buildDataTree] Main node constraints and contract', {
+        nodeLabel: mainNode.label || template.label,
+        nodeTemplateId: nodeTemplateId,
+        mainNodeHasConstraints: !!(mainNode.constraints && mainNode.constraints.length > 0),
+        mainNodeHasDataContracts: !!(mainNode.dataContracts && mainNode.dataContracts.length > 0),
+        templateHasDataContracts: !!(template.dataContracts && template.dataContracts.length > 0),
+        templateHasConstraints: !!(template.constraints && template.constraints.length > 0),
+        finalConstraints: nodeConstraints ? `Array(${nodeConstraints.length})` : 'undefined',
+        mainNodeHasDataContract: !!mainNode.dataContract,
+        templateHasDataContract: !!template.dataContract,
+        templateDataContractContractsCount: template.dataContract?.contracts?.length || 0,
+        finalDataContract: mainNode.dataContract || template.dataContract ? 'present' : 'undefined'
+      });
+
       return {
         ...mainNode,
         id: mainNode.id || template.id || template._id, // ✅ Preserva id esistente o usa template.id
         templateId: mainNode.templateId || nodeTemplateId, // ✅ CRITICAL: Imposta esplicitamente templateId
         label: mainNode.label || template.label || template.name || undefined, // ✅ NON inventare: undefined se manca
+        constraints: nodeConstraints, // ✅ CRITICAL: Copia dataContracts dal template (referenza)
+        examples: mainNode.examples || template.examples || [],
+        dataContract: mainNode.dataContract || template.dataContract || undefined, // ✅ CRITICAL: Copia dataContract dal template
         subData: subData
       };
     });
@@ -697,7 +748,7 @@ export function buildDataTree(template: any): any[] {
           icon: subTemplate.icon || 'FileText',
           constraints: subTemplate.dataContracts || subTemplate.constraints || [],
           examples: subTemplate.examples || [],
-          nlpContract: subTemplate.nlpContract || undefined,
+          dataContract: subTemplate.dataContract || undefined,
           subData: dereferencedSubData,
           templateId: subTemplate.id || subTemplate._id, // ✅ Solo templateId (uguale a id per template atomici/compositi)
           kind: subTemplate.name || subTemplate.type || 'generic'
@@ -721,7 +772,7 @@ export function buildDataTree(template: any): any[] {
       icon: template.icon || 'Calendar',
       constraints: template.dataContracts || template.constraints || [],
       examples: template.examples || [],
-      nlpContract: template.nlpContract || undefined,
+      dataContract: template.dataContract || undefined,
       subData: subDataInstances,
       templateId: template.id || template._id,
       kind: template.name || template.type || 'generic'
@@ -744,7 +795,7 @@ export function buildDataTree(template: any): any[] {
     icon: template.icon || 'Calendar',
     constraints: template.dataContracts || template.constraints || [],
     examples: template.examples || [],
-    nlpContract: template.nlpContract || undefined,
+    dataContract: template.dataContract || undefined, // ✅ CRITICAL: Copia dataContract dal template
     subData: [],
     templateId: template.id || template._id,
     kind: template.name || template.type || 'generic'
@@ -884,20 +935,20 @@ export function hasDataContractOverrides(instance: Task | null): boolean {
   if (!instance) return false;
 
   // Check root level
-  if (instance.constraints || instance.examples || instance.nlpContract) {
+  if (instance.constraints || instance.examples || instance.dataContract) {
     return true;
   }
 
   // Check data nodes
   if (instance.data && Array.isArray(instance.data)) {
     for (const mainNode of instance.data) {
-      if (mainNode.constraints || mainNode.examples || mainNode.nlpContract) {
+      if (mainNode.constraints || mainNode.examples || mainNode.dataContract) {
         return true;
       }
       // Check subData nodes
       if (mainNode.subData && Array.isArray(mainNode.subData)) {
         for (const subNode of mainNode.subData) {
-          if (subNode.constraints || subNode.examples || subNode.nlpContract) {
+          if (subNode.constraints || subNode.examples || subNode.dataContract) {
             return true;
           }
         }
@@ -988,7 +1039,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
       steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
       constraints: localDDT.constraints,
       examples: localDDT.examples,
-      nlpContract: localDDT.nlpContract,
+      dataContract: localDDT.dataContract,
       introduction: localDDT.introduction
     };
   }
@@ -1004,7 +1055,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
       steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
       constraints: localDDT.constraints,
       examples: localDDT.examples,
-      nlpContract: localDDT.nlpContract,
+      dataContract: localDDT.dataContract,
       introduction: localDDT.introduction
     };
   }
@@ -1093,7 +1144,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
       steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
       constraints: localDDT.constraints,
       examples: localDDT.examples,
-      nlpContract: localDDT.nlpContract,
+      dataContract: localDDT.dataContract,
       introduction: localDDT.introduction
     };
   }
@@ -1116,7 +1167,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
 
       const templateNodeConstraints = templateNode?.dataContracts || templateNode?.constraints || [];
       const templateNodeExamples = templateNode?.examples || [];
-      const templateNodeNlpContract = templateNode?.nlpContract;
+      const templateNodeDataContract = templateNode?.dataContract;
 
       // ✅ CRITICAL: Leggi steps usando templateId come chiave (non id)
       // task.steps[node.templateId] = steps clonati
@@ -1133,7 +1184,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
       );
       const hasConstraintsOverride = JSON.stringify(mainNode.constraints || []) !== JSON.stringify(templateNodeConstraints);
       const hasExamplesOverride = JSON.stringify(mainNode.examples || []) !== JSON.stringify(templateNodeExamples);
-      const hasNlpContractOverride = JSON.stringify(mainNode.nlpContract) !== JSON.stringify(templateNodeNlpContract);
+      const hasDataContractOverride = JSON.stringify(mainNode.dataContract) !== JSON.stringify(templateNodeDataContract);
 
       console.log('[extractModifiedDDTFields] 🔍 Checking overrides for mainNode', {
         mainNodeIndex: i,
@@ -1142,14 +1193,14 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
         hasSteps,
         hasConstraintsOverride,
         hasExamplesOverride,
-        hasNlpContractOverride,
+        hasDataContractOverride,
         stepsType: typeof nodeSteps,
         stepsIsArray: Array.isArray(nodeSteps),
         stepsKeys: typeof nodeSteps === 'object' ? Object.keys(nodeSteps || {}) : [],
         stepsLength: Array.isArray(nodeSteps) ? nodeSteps.length : 0
       });
 
-      if (hasSteps || hasConstraintsOverride || hasExamplesOverride || hasNlpContractOverride) {
+      if (hasSteps || hasConstraintsOverride || hasExamplesOverride || hasDataContractOverride) {
         const overrideNode: any = {
           templateId: mainNode.templateId || templateNode.templateId,
           label: mainNode.label
@@ -1172,7 +1223,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
         }
         if (hasConstraintsOverride) overrideNode.constraints = mainNode.constraints;
         if (hasExamplesOverride) overrideNode.examples = mainNode.examples;
-        if (hasNlpContractOverride) overrideNode.nlpContract = mainNode.nlpContract;
+        if (hasDataContractOverride) overrideNode.dataContract = mainNode.dataContract;
 
         // Check subData overrides (solo logica, non struttura)
         if (mainNode.subData && Array.isArray(mainNode.subData) && templateNode.subData && Array.isArray(templateNode.subData)) {
@@ -1185,7 +1236,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
             if (templateSubNode) {
               const templateSubConstraints = templateSubNode.dataContracts || templateSubNode.constraints || [];
               const templateSubExamples = templateSubNode.examples || [];
-              const templateSubNlpContract = templateSubNode.nlpContract;
+              const templateSubDataContract = templateSubNode.dataContract;
 
               // ✅ CORRETTO: Leggi steps da instance.steps[subNodeId], NON da subNode.steps
               const subNodeId = subNode.id;
@@ -1196,9 +1247,9 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
               );
               const hasSubConstraintsOverride = JSON.stringify(subNode.constraints || []) !== JSON.stringify(templateSubConstraints);
               const hasSubExamplesOverride = JSON.stringify(subNode.examples || []) !== JSON.stringify(templateSubExamples);
-              const hasSubNlpContractOverride = JSON.stringify(subNode.nlpContract) !== JSON.stringify(templateSubNlpContract);
+              const hasSubDataContractOverride = JSON.stringify(subNode.dataContract) !== JSON.stringify(templateSubDataContract);
 
-              if (hasSubSteps || hasSubConstraintsOverride || hasSubExamplesOverride || hasSubNlpContractOverride) {
+              if (hasSubSteps || hasSubConstraintsOverride || hasSubExamplesOverride || hasSubDataContractOverride) {
                 if (!subNode.templateId && !templateSubNode.templateId) {
                   const errorMsg = `[extractModifiedDDTFields] Sub-nodo senza templateId: ${subNode.label || subNode.id || 'unknown'}`;
                   console.error(errorMsg, { subNode, templateSubNode });
@@ -1216,7 +1267,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
                 }
                 if (hasSubConstraintsOverride) overrideSubNode.constraints = subNode.constraints;
                 if (hasSubExamplesOverride) overrideSubNode.examples = subNode.examples;
-                if (hasSubNlpContractOverride) overrideSubNode.nlpContract = subNode.nlpContract;
+                if (hasSubDataContractOverride) overrideSubNode.dataContract = subNode.dataContract;
 
                 subDataOverrides.push(overrideSubNode);
               }
@@ -1252,7 +1303,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
   // Salva solo se diversi dal template (override)
   const templateConstraints = template.dataContracts || template.constraints || [];
   const templateExamples = template.examples || [];
-  const templateNlpContract = template.nlpContract;
+  const templateDataContract = template.dataContract;
   const templateIntroduction = template.introduction;
 
   if (JSON.stringify(localDDT.constraints || []) !== JSON.stringify(templateConstraints)) {
@@ -1263,8 +1314,8 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
     result.examples = localDDT.examples;
   }
 
-  if (JSON.stringify(localDDT.nlpContract) !== JSON.stringify(templateNlpContract)) {
-    result.nlpContract = localDDT.nlpContract;
+  if (JSON.stringify(localDDT.dataContract) !== JSON.stringify(templateDataContract)) {
+    result.dataContract = localDDT.dataContract;
   }
 
   if (localDDT.introduction !== templateIntroduction) {
@@ -1277,11 +1328,10 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
     dataLength: result.data?.length || 0,
     hasConstraints: !!result.constraints,
     hasExamples: !!result.examples,
-    hasNlpContract: !!result.nlpContract,
+    hasDataContract: !!result.dataContract,
     hasIntroduction: !!result.introduction,
     resultKeys: Object.keys(result)
   });
 
   return result;
 }
-

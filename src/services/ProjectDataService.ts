@@ -798,31 +798,38 @@ export async function getIDETranslations() {
 export async function getTemplateTranslations(keys: string[]): Promise<Record<string, { en: string; it: string; pt: string }>> {
   if (!keys || keys.length === 0) return {};
 
-  try {
-    const res = await fetch('/api/factory/template-translations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ keys })
-    });
+  console.log('[ProjectDataService] Requesting template translations:', {
+    keysCount: keys.length,
+    sampleKeys: keys.slice(0, 5),
+    allKeys: keys
+  });
 
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error('[ProjectDataService] Failed to get template translations:', {
-        status: res.status,
-        statusText: res.statusText,
-        error: errorText.substring(0, 500),
-        keysCount: keys.length,
-        sampleKeys: keys.slice(0, 5)
-      });
-      throw new Error(`Errore nel recupero di Template Translations: ${res.status} ${res.statusText}`);
+  const res = await fetch('/api/factory/template-translations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ keys })
+  });
+
+  if (!res.ok) {
+    let errorText = '';
+    try {
+      errorText = await res.text();
+    } catch (e) {
+      errorText = 'Failed to read error response';
     }
-
-    return res.json();
-  } catch (err) {
-    console.error('[ProjectDataService] Error in getTemplateTranslations:', err);
-    // Return empty object instead of throwing to allow graceful degradation
-    return {};
+    console.error('[ProjectDataService] Failed to get template translations:', {
+      status: res.status,
+      statusText: res.statusText,
+      error: errorText.substring(0, 500),
+      keysCount: keys.length,
+      sampleKeys: keys.slice(0, 5),
+      allKeys: keys,
+      responseHeaders: Object.fromEntries(res.headers.entries())
+    });
+    throw new Error(`Errore nel recupero di Template Translations: ${res.status} ${res.statusText}${errorText ? ' - ' + errorText.substring(0, 200) : ''}`);
   }
+
+  return res.json();
 }
 
 export async function saveProjectTranslations(

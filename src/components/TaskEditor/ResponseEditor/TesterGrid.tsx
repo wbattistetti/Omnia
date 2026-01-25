@@ -12,7 +12,7 @@ import TesterGridRow from './TesterGrid/components/TesterGridRow';
 import { useColumnResize } from './TesterGrid/hooks/useColumnResize';
 import { useEditorOverlay } from './TesterGrid/hooks/useEditorOverlay';
 import { RowResult } from './hooks/useExtractionTesting';
-import type { NLPContract } from '../../DialogueDataEngine/contracts/contractLoader';
+import type { DataContract } from '../../DialogueDataEngine/contracts/contractLoader';
 
 // 🎨 Colori centralizzati per extractors (usati solo per editor overlay)
 const EXTRACTOR_COLORS = {
@@ -54,8 +54,8 @@ const RunningTestsScreen = React.memo(() => (
 RunningTestsScreen.displayName = 'RunningTestsScreen';
 
 interface TesterGridProps {
-  contract?: NLPContract | null; // ✅ STEP 4: Contract prop
-  onContractChange?: (contract: NLPContract | null) => void; // ✅ STEP 10: Callback per modificare contract
+  contract?: DataContract | null;
+  onContractChange?: (contract: DataContract | null) => void;
   examplesList: string[];
   rowResults: RowResult[];
   selectedRow: number | null;
@@ -569,7 +569,10 @@ const TesterGrid = React.memo(TesterGridComponent, (prev, next) => {
   if (prev.contract !== next.contract) {
     return false;
   }
-  if (prev.contract?.escalationOrder?.join(',') !== next.contract?.escalationOrder?.join(',')) {
+  // Compare contracts array
+  const prevContractsKey = prev.contract?.contracts?.map(c => `${c.type}:${c.enabled}`).join(',') || '';
+  const nextContractsKey = next.contract?.contracts?.map(c => `${c.type}:${c.enabled}`).join(',') || '';
+  if (prevContractsKey !== nextContractsKey) {
     return false;
   }
 

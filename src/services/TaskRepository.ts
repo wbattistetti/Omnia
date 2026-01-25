@@ -71,15 +71,14 @@ class TaskRepository {
       updatedAt: new Date()
     };
 
-    console.log('[📝 CREATE_TASK]', {
-      taskId: task.id,
-      type: task.type,
-      typeName: TaskType[task.type],
+    // ✅ LOG: Verifica templateId dopo creazione
+    console.log('[🔍 TaskRepository][CREATE] ✅ Task creato', {
+      taskId: finalTaskId,
       templateId: task.templateId,
-      hasText: !!task.text,
-      category: (task as any).category || null, // ✅ Log categoria se presente
-      hasdata: !!(task as any).data,
-      dataLength: Array.isArray((task as any).data) ? (task as any).data.length : 0
+      templateIdFromParam: templateId,
+      fieldsTemplateId: fields?.templateId,
+      finalTemplateId: task.templateId,
+      fieldsKeys: fields ? Object.keys(fields) : []
     });
 
     // ✅ Save to internal storage only (in-memory)
@@ -101,7 +100,7 @@ class TaskRepository {
     }
 
     // ✅ CRITICAL: Preserve type field - never allow it to be removed
-    const { type, ...updatesWithoutType } = updates;
+    const { type, templateId, ...updatesWithoutTypeAndTemplateId } = updates;
 
     // ✅ If type is explicitly provided and different, update it
     // ✅ If type is not provided, preserve existing type
@@ -112,6 +111,24 @@ class TaskRepository {
       console.error(`[TaskRepository] Cannot update task ${taskId} - type field is missing. This task is invalid.`);
       return false;
     }
+
+    // ✅ CRITICAL: Protect templateId from accidental overwrite
+    // ✅ Se updates.templateId === null E existingTask.templateId !== null, preservare quello esistente
+    // ✅ Altrimenti, usare quello passato negli updates (anche se null, se è un cambio esplicito)
+    const finalTemplateId = (templateId === null && existingTask.templateId !== null)
+      ? existingTask.templateId  // ✅ Preserva templateId esistente se viene passato null per errore
+      : (templateId !== undefined ? templateId : existingTask.templateId);  // ✅ Usa quello passato o preserva
+
+    // ✅ LOG: Verifica templateId prima del merge
+    console.log('[🔍 TaskRepository][UPDATE] 🔄 Prima del merge', {
+      taskId,
+      existingTemplateId: existingTask.templateId,
+      updatesTemplateId: templateId,
+      finalTemplateId,
+      templateIdProtected: (templateId === null && existingTask.templateId !== null),
+      updatesKeys: Object.keys(updates),
+      updatesWithoutTypeAndTemplateIdKeys: Object.keys(updatesWithoutTypeAndTemplateId)
+    });
 
     // ✅ CRITICAL: Validate steps structure before merging
     if (updates.steps && typeof updates.steps === 'object') {
@@ -136,33 +153,20 @@ class TaskRepository {
     // Update in internal storage (merge fields directly, no value wrapper)
     const updatedTask: Task = {
       ...existingTask,
-      ...updatesWithoutType,
+      ...updatesWithoutTypeAndTemplateId,  // ✅ Spread senza type e templateId
       type: finalType,  // ✅ Always preserve/update type - REQUIRED
+      templateId: finalTemplateId,  // ✅ Protected templateId
       updatedAt: updates.updatedAt || new Date()
     };
 
-    // ✅ CRITICAL: Log steps structure after update (before saving)
-    if (updatedTask.steps) {
-      const stepsKeys = Object.keys(updatedTask.steps);
-      const stepTypeKeys = ['start', 'noMatch', 'noInput', 'confirmation', 'notConfirmed', 'success'];
-      const hasWrongStructure = stepsKeys.length === stepTypeKeys.length &&
-        stepsKeys.every(key => stepTypeKeys.includes(key));
-
-      console.log('[🔍 TaskRepository][UPDATE] Steps structure after update (before save)', {
-        taskId: taskId,
-        stepsKeys: stepsKeys,
-        stepsKeysAsStrings: stepsKeys.join(', '),
-        hasWrongStructure: hasWrongStructure,
-        stepsStructure: Object.entries(updatedTask.steps).slice(0, 2).map(([key, value]: [string, any]) => ({
-          key,
-          valueKeys: typeof value === 'object' ? Object.keys(value || {}) : [],
-          valueType: typeof value
-        })),
-        ...(hasWrongStructure ? {
-          caller: new Error().stack?.split('\n').slice(1, 6).join('\n')
-        } : {})
-      });
-    }
+    // ✅ LOG: Verifica templateId dopo il merge
+    console.log('[🔍 TaskRepository][UPDATE] ✅ Dopo il merge', {
+      taskId,
+      finalTemplateId: updatedTask.templateId,
+      existingTemplateId: existingTask.templateId,
+      updatesHadTemplateId: 'templateId' in updates,
+      templateIdWasProtected: (templateId === null && existingTask.templateId !== null)
+    });
 
     // ✅ Update internal storage only (in-memory)
     // ✅ NO automatic database save - save only on explicit user action (project:save event)
@@ -243,6 +247,18 @@ class TaskRepository {
         const { id, templateId, createdAt, updatedAt, projectId: _projectId, value, type, Type, ...directFields } = item;
         const taskType = type !== undefined && type !== null ? type : (Type !== undefined && Type !== null ? Type : undefined);
 
+        // ✅ LOG: Verifica templateId dal database
+        console.log('[🔍 TaskRepository][LOAD] 📥 Task caricato dal database', {
+          taskId: id,
+          itemTemplateId: item.templateId,
+          extractedTemplateId: templateId,
+          valueTemplateId: value?.templateId,
+          directFieldsTemplateId: directFields.templateId,
+          valueKeys: value ? Object.keys(value) : [],
+          directFieldsKeys: Object.keys(directFields),
+          itemKeys: Object.keys(item)
+        });
+
         // ✅ CRITICAL: type is REQUIRED - must be saved correctly in database
         if (taskType === undefined || taskType === null) {
           console.error('[TaskRepository] Task without type - SKIPPED', {
@@ -255,12 +271,42 @@ class TaskRepository {
         const task: Task = {
           id: item.id,
           type: taskType,                // ✅ Enum numerico (0-19) - REQUIRED
-          templateId: item.templateId ?? null,
           ...(value || {}),  // ✅ Backward compatibility: flatten value if present
           ...directFields,   // ✅ Use direct fields (data, label, steps, ecc.)
+          // ✅ CRITICAL: templateId deve essere impostato DOPO value e directFields
+          // ✅ per evitare che venga sovrascritto da value.templateId o directFields.templateId
+          templateId: item.templateId ?? null,
           createdAt: item.createdAt ? new Date(item.createdAt) : undefined,
           updatedAt: item.updatedAt ? new Date(item.updatedAt) : undefined
         };
+
+        // ✅ LOG: Verifica templateId dopo il merge
+        console.log('[🔍 TaskRepository][LOAD] ✅ Task dopo merge', {
+          taskId: task.id,
+          finalTemplateId: task.templateId,
+          itemTemplateId: item.templateId,
+          valueHadTemplateId: value?.templateId !== undefined,
+          directFieldsHadTemplateId: directFields.templateId !== undefined,
+          valueTemplateIdValue: value?.templateId,
+          directFieldsTemplateIdValue: directFields.templateId
+        });
+
+        // ✅ CLEANUP: Rimuovi constraints/examples vuoti (sono referenziati dal template, non salvati)
+        // ✅ Se constraints/examples sono array vuoti, rimuovili (useranno quelli del template)
+        if (task.constraints && Array.isArray(task.constraints) && task.constraints.length === 0) {
+          delete task.constraints;
+          console.log('[🔍 TaskRepository][LOAD] ✅ Cleanup: rimosso constraints vuoto (userà template)', {
+            taskId: task.id,
+            taskLabel: task.label
+          });
+        }
+        if (task.examples && Array.isArray(task.examples) && task.examples.length === 0) {
+          delete task.examples;
+          console.log('[🔍 TaskRepository][LOAD] ✅ Cleanup: rimosso examples vuoto (userà template)', {
+            taskId: task.id,
+            taskLabel: task.label
+          });
+        }
 
         // ✅ CRITICAL: Log steps structure only if wrong (reduce noise)
         if (task.steps) {
@@ -348,12 +394,23 @@ class TaskRepository {
           }
         }
 
-        return {
+        const itemToSave = {
           id: task.id,
           type: task.type,          // ✅ Enum numerico (0-19) - REQUIRED
           templateId: finalTemplateId,
           ...fields  // ✅ Save fields directly
         };
+
+        // ✅ LOG: Verifica templateId prima del salvataggio
+        console.log('[🔍 TaskRepository][SAVE_ALL] 💾 Task da salvare', {
+          taskId: task.id,
+          taskTemplateId: task.templateId,
+          finalTemplateId: finalTemplateId,
+          hasTemplateId: !!finalTemplateId,
+          fieldsKeys: Object.keys(fields)
+        });
+
+        return itemToSave;
       }).filter(item => item !== null);
 
       console.log('[💾 SAVE_ALL] Sending', {

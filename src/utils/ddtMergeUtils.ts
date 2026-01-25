@@ -322,13 +322,22 @@ export async function loadDDTFromTemplate(instance: Task | null): Promise<any | 
 
   // ✅ Usa dataTree come struttura base (NON instance.data!)
   // ✅ Applica eventuali override dall'istanza (label, constraints, ecc.)
+  // ✅ IMPORTANTE: constraints/examples sono referenziati dal template, NON copiati
+  // ✅ Solo se l'istanza ha override espliciti (array non vuoto), usa quelli
   const enrichedData = dataTree.map((templateNode: any) => {
     return {
       ...templateNode, // ✅ Struttura dal template (include templateId!)
-      // ✅ Override dall'istanza (se presenti)
+      // ✅ Override dall'istanza (se presenti e non vuoti)
       label: instance.label || templateNode.label,
-      constraints: instance.constraints || templateNode.constraints,
-      examples: instance.examples || templateNode.examples,
+      // ✅ Se instance.constraints è array vuoto [], usa templateNode.constraints (referenza)
+      constraints: (instance.constraints && instance.constraints.length > 0)
+        ? instance.constraints
+        : templateNode.constraints,
+      // ✅ Se instance.examples è array vuoto [], usa templateNode.examples (referenza)
+      examples: (instance.examples && instance.examples.length > 0)
+        ? instance.examples
+        : templateNode.examples,
+      // ✅ nlpContract è oggetto/stringa, quindi || va bene (undefined è falsy)
       nlpContract: instance.nlpContract || templateNode.nlpContract,
       // ✅ SubData viene dal template (già costruito da buildDataTree)
       subData: templateNode.subData || []
@@ -356,8 +365,15 @@ export async function loadDDTFromTemplate(instance: Task | null): Promise<any | 
     label: instance.label ?? template.label,
     data: enrichedData, // ✅ Struttura ricostruita dal template (con templateId!)
     steps: finalRootSteps, // ✅ Steps dall'istanza o clonati
-    constraints: instance.constraints ?? template.dataContracts ?? template.constraints ?? undefined,
-    examples: instance.examples ?? template.examples ?? undefined,
+    // ✅ Se instance.constraints è array vuoto [], usa template (referenza)
+    constraints: (instance.constraints && instance.constraints.length > 0)
+      ? instance.constraints
+      : (template.dataContracts ?? template.constraints ?? undefined),
+    // ✅ Se instance.examples è array vuoto [], usa template (referenza)
+    examples: (instance.examples && instance.examples.length > 0)
+      ? instance.examples
+      : (template.examples ?? undefined),
+    // ✅ nlpContract è oggetto/stringa, quindi ?? va bene (undefined è nullish)
     nlpContract: instance.nlpContract ?? template.nlpContract ?? undefined
   };
 
@@ -602,6 +618,58 @@ export function cloneTemplateSteps(
 }
 
 /**
+ * Convert template patterns to nlpContract structure
+ * If template has patterns but no nlpContract, create nlpContract from patterns
+ */
+function convertPatternsToNlpContract(template: any): any | undefined {
+  // If nlpContract already exists, use it
+  if (template.nlpContract) {
+    return template.nlpContract;
+  }
+
+  // If no patterns, return undefined
+  if (!template.patterns || typeof template.patterns !== 'object') {
+    return undefined;
+  }
+
+  // Convert patterns to nlpContract structure
+  const templateId = template.id || template._id;
+  const templateName = template.name || template.label || 'unknown';
+
+  // Extract patterns by locale (IT, EN, PT) and flatten into single array
+  const allPatterns: string[] = [];
+  if (template.patterns.IT && Array.isArray(template.patterns.IT)) {
+    allPatterns.push(...template.patterns.IT);
+  }
+  if (template.patterns.EN && Array.isArray(template.patterns.EN)) {
+    allPatterns.push(...template.patterns.EN);
+  }
+  if (template.patterns.PT && Array.isArray(template.patterns.PT)) {
+    allPatterns.push(...template.patterns.PT);
+  }
+
+  // If no patterns found, return undefined
+  if (allPatterns.length === 0) {
+    return undefined;
+  }
+
+  // Build nlpContract structure
+  return {
+    templateName,
+    templateId,
+    subDataMapping: {},
+    regex: {
+      patterns: allPatterns,
+      examples: template.examples || [],
+      testCases: []
+    },
+    rules: null,
+    llm: null,
+    ner: null
+  };
+}
+
+/**
  * Build data tree from template (dereference subData)
  * Returns only data structure (without steps)
  * ✅ NON inventa label: se manca, logga warning e lascia undefined
@@ -634,7 +702,7 @@ export function buildDataTree(template: any): any[] {
       icon: subTemplate.icon || 'FileText',
       constraints: subTemplate.dataContracts || subTemplate.constraints || [],
       examples: subTemplate.examples || [],
-      nlpContract: subTemplate.nlpContract || undefined,
+      nlpContract: convertPatternsToNlpContract(subTemplate), // ✅ Converti patterns in nlpContract se necessario
       subData: dereferencedSubData, // ✅ Supporta profondità arbitraria
       templateId: subTemplate.id || subTemplate._id, // ✅ Solo templateId (uguale a id per template atomici/compositi)
       kind: subTemplate.name || subTemplate.type || 'generic'
@@ -666,11 +734,16 @@ export function buildDataTree(template: any): any[] {
         ? (mainNode.id || mainNode.templateId)  // ✅ Template aggregato: usa mainNode.id
         : (template.id || template._id);        // ✅ Template atomico/composito: usa template.id
 
+      // ✅ CRITICAL: Copia dataContracts dal template se mainNode non li ha
+      // ✅ I dataContracts sono referenziati dal template, NON copiati nell'istanza
+      const nodeConstraints = mainNode.constraints || mainNode.dataContracts || template.dataContracts || template.constraints || [];
+
       return {
         ...mainNode,
         id: mainNode.id || template.id || template._id, // ✅ Preserva id esistente o usa template.id
         templateId: mainNode.templateId || nodeTemplateId, // ✅ CRITICAL: Imposta esplicitamente templateId
         label: mainNode.label || template.label || template.name || undefined, // ✅ NON inventare: undefined se manca
+        constraints: nodeConstraints, // ✅ CRITICAL: Copia dataContracts dal template (referenza)
         subData: subData
       };
     });

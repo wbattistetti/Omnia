@@ -6,9 +6,9 @@
 
 import React, { useState, useCallback } from 'react';
 import { Plus, ChevronUp, ChevronDown, X, Sparkles } from 'lucide-react';
-import type { NLPContract } from '../../../../components/DialogueDataEngine/contracts/contractLoader';
+import type { DataContract, ContractType } from '../../../../components/DialogueDataEngine/contracts/contractLoader';
 
-export type ContractMethod = 'regex' | 'rules' | 'ner' | 'llm' | 'embeddings';
+export type ContractMethod = ContractType;
 
 export interface ContractMethodInfo {
   id: ContractMethod;
@@ -29,8 +29,8 @@ const ALL_CONTRACTS: ContractMethodInfo[] = [
 const SUGGESTED_ORDER: ContractMethod[] = ['regex', 'rules', 'ner', 'llm', 'embeddings'];
 
 interface ContractSelectorProps {
-  contract: NLPContract | null;
-  onContractChange: (contract: NLPContract) => void;
+  contract: DataContract | null;
+  onContractChange: (contract: DataContract) => void;
   kind?: string; // 'intent' or other data types
 }
 
@@ -39,18 +39,16 @@ export default function ContractSelector({
   onContractChange,
   kind,
 }: ContractSelectorProps) {
-  // Get current escalation order from contract, or use suggested
-  const currentOrder = contract?.escalationOrder || SUGGESTED_ORDER;
+  // Get enabled contracts from contract.contracts array
+  const enabledContracts = React.useMemo(() => {
+    if (!contract?.contracts || !Array.isArray(contract.contracts)) return [];
+    return contract.contracts.filter(c => c.enabled !== false);
+  }, [contract?.contracts]);
 
-  // Get enabled methods from contract
+  // Get enabled method types (for compatibility)
   const enabledMethods = React.useMemo(() => {
-    if (!contract?.methods) return [];
-
-    return currentOrder.filter(method => {
-      const methodData = contract.methods?.[method];
-      return methodData?.enabled !== false;
-    });
-  }, [contract, currentOrder]);
+    return enabledContracts.map(c => c.type);
+  }, [enabledContracts]);
 
   // Get available methods (not yet added)
   const availableMethods = React.useMemo(() => {
@@ -61,86 +59,121 @@ export default function ContractSelector({
 
   const [showAddMenu, setShowAddMenu] = useState(false);
 
+  // Helper: Create default contract item
+  const createDefaultContract = (type: ContractType): any => {
+    const base = { type, enabled: true };
+    switch (type) {
+      case 'regex':
+        return { ...base, patterns: [], examples: [], testCases: [] };
+      case 'rules':
+        return { ...base, extractorCode: '', validators: [], testCases: [] };
+      case 'ner':
+        return { ...base, entityTypes: [], confidence: 0.8 };
+      case 'llm':
+        return { ...base, systemPrompt: '', userPromptTemplate: '', responseSchema: {} };
+      case 'embeddings':
+        return { ...base, intents: [] };
+      default:
+        return base;
+    }
+  };
+
   // Add a contract method
   const handleAddContract = useCallback((method: ContractMethod) => {
-    if (!contract) return;
+    if (!contract) {
+      // Create new contract if doesn't exist
+      const newContract: DataContract = {
+        templateName: '',
+        templateId: '',
+        subDataMapping: {},
+        contracts: [createDefaultContract(method)],
+      };
+      onContractChange(newContract);
+      setShowAddMenu(false);
+      return;
+    }
 
-    const updatedContract: NLPContract = {
-      ...contract,
-      methods: {
-        ...contract.methods,
-        [method]: {
-          enabled: true,
-          ...(contract.methods?.[method] || {}),
-        },
-      },
-      escalationOrder: [...enabledMethods, method],
-    };
-
-    onContractChange(updatedContract);
+    // Check if contract already exists
+    const existingContract = contract.contracts.find(c => c.type === method);
+    if (existingContract) {
+      // Re-enable if disabled
+      const updatedContracts = contract.contracts.map(c =>
+        c.type === method ? { ...c, enabled: true } : c
+      );
+      const updatedContract: DataContract = {
+        ...contract,
+        contracts: updatedContracts,
+      };
+      onContractChange(updatedContract);
+    } else {
+      // Add new contract
+      const newContractItem = createDefaultContract(method);
+      const updatedContract: DataContract = {
+        ...contract,
+        contracts: [...contract.contracts, newContractItem],
+      };
+      onContractChange(updatedContract);
+    }
     setShowAddMenu(false);
-  }, [contract, enabledMethods, onContractChange]);
+  }, [contract, onContractChange]);
 
-  // Remove a contract method
+  // Remove a contract method (disable it)
   const handleRemoveContract = useCallback((method: ContractMethod) => {
     if (!contract) return;
 
-    const updatedMethods = { ...contract.methods };
-    if (updatedMethods[method]) {
-      updatedMethods[method] = {
-        ...updatedMethods[method],
-        enabled: false,
-      };
-    }
+    const updatedContracts = contract.contracts.map(c =>
+      c.type === method ? { ...c, enabled: false } : c
+    );
 
-    const updatedOrder = enabledMethods.filter(m => m !== method);
-
-    const updatedContract: NLPContract = {
+    const updatedContract: DataContract = {
       ...contract,
-      methods: updatedMethods,
-      escalationOrder: updatedOrder.length > 0 ? updatedOrder : undefined,
+      contracts: updatedContracts,
     };
 
     onContractChange(updatedContract);
-  }, [contract, enabledMethods, onContractChange]);
+  }, [contract, onContractChange]);
 
-  // Move contract up in escalation order
+  // Move contract up in escalation order (reorder contracts array)
   const handleMoveUp = useCallback((method: ContractMethod) => {
     if (!contract) return;
 
-    const currentIndex = enabledMethods.indexOf(method);
+    const currentIndex = enabledContracts.findIndex(c => c.type === method);
     if (currentIndex <= 0) return;
 
-    const newOrder = [...enabledMethods];
-    [newOrder[currentIndex - 1], newOrder[currentIndex]] =
-      [newOrder[currentIndex], newOrder[currentIndex - 1]];
+    const newContracts = [...contract.contracts];
+    // Find indices in full contracts array
+    const fullIndex1 = contract.contracts.findIndex(c => c.type === enabledContracts[currentIndex - 1].type);
+    const fullIndex2 = contract.contracts.findIndex(c => c.type === method);
+    [newContracts[fullIndex1], newContracts[fullIndex2]] = [newContracts[fullIndex2], newContracts[fullIndex1]];
 
-    const updatedContract: NLPContract = {
+    const updatedContract: DataContract = {
       ...contract,
-      escalationOrder: newOrder,
+      contracts: newContracts,
     };
 
     onContractChange(updatedContract);
-  }, [contract, enabledMethods, onContractChange]);
+  }, [contract, enabledContracts, onContractChange]);
 
-  // Move contract down in escalation order
+  // Move contract down in escalation order (reorder contracts array)
   const handleMoveDown = useCallback((method: ContractMethod) => {
     if (!contract) return;
 
-    const currentIndex = enabledMethods.indexOf(method);
-    if (currentIndex < 0 || currentIndex >= enabledMethods.length - 1) return;
+    const currentIndex = enabledContracts.findIndex(c => c.type === method);
+    if (currentIndex < 0 || currentIndex >= enabledContracts.length - 1) return;
 
-    const newOrder = [...enabledMethods];
-    [newOrder[currentIndex], newOrder[currentIndex + 1]] =
-      [newOrder[currentIndex + 1], newOrder[currentIndex]];
+    const newContracts = [...contract.contracts];
+    // Find indices in full contracts array
+    const fullIndex1 = contract.contracts.findIndex(c => c.type === method);
+    const fullIndex2 = contract.contracts.findIndex(c => c.type === enabledContracts[currentIndex + 1].type);
+    [newContracts[fullIndex1], newContracts[fullIndex2]] = [newContracts[fullIndex2], newContracts[fullIndex1]];
 
-    const updatedContract: NLPContract = {
+    const updatedContract: DataContract = {
       ...contract,
-      escalationOrder: newOrder,
+      contracts: newContracts,
     };
 
     onContractChange(updatedContract);
-  }, [contract, enabledMethods, onContractChange]);
+  }, [contract, enabledContracts, onContractChange]);
 
   // Check if order differs from suggested
   const isOrderDifferent = React.useMemo(() => {

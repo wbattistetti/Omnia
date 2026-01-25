@@ -42,8 +42,6 @@ const WizardInputStep: React.FC<Props> = ({
       setLoadingTemplates(true);
       try {
         const allTemplates = await getAllDialogueTemplates();
-        console.log('[WIZARD_INPUT][LOAD] Raw templates from API:', allTemplates);
-
         // ✅ Filtra template per tipo se Euristica 1 ha trovato un tipo
         let filtered = Array.isArray(allTemplates) ? [...allTemplates] : [];
 
@@ -75,18 +73,7 @@ const WizardInputStep: React.FC<Props> = ({
           return labelA.localeCompare(labelB);
         });
 
-        console.log('[WIZARD_INPUT][LOAD] Sorted templates:', sorted.map(t => ({
-          id: t._id || t.id || t.name,
-          label: t.label || t.name,
-          hasPatterns: !!t.patterns,
-          patternsKeys: t.patterns ? Object.keys(t.patterns) : [],
-          patternsIT: t.patterns?.IT,
-          patternsEN: t.patterns?.EN,
-          patternsPT: t.patterns?.PT
-        })));
-
         setTemplates(sorted);
-        console.log('[WIZARD_INPUT][LOAD] Loaded templates:', sorted.length);
       } catch (err) {
         console.error('[WIZARD_INPUT][LOAD] Failed to load templates:', err);
         setTemplates([]);
@@ -99,87 +86,48 @@ const WizardInputStep: React.FC<Props> = ({
 
   // Auto-select template based on node label using patterns
   React.useEffect(() => {
-    console.log('[WIZARD_INPUT][PATTERN_MATCH] Starting pattern matching', {
-      templatesCount: templates.length,
-      dataNodeName: dataNode?.name,
-      hasDataNode: !!dataNode
-    });
-
     if (templates.length === 0) {
-      console.log('[WIZARD_INPUT][PATTERN_MATCH] No templates loaded, skipping');
       return;
     }
 
     if (!dataNode?.name) {
-      console.log('[WIZARD_INPUT][PATTERN_MATCH] No dataNode.name, skipping');
       return;
     }
 
     // ✅ FIX: Converti a stringa per evitare errori se dataNode.name è un oggetto
     const nodeLabel = String(dataNode.name || '').toLowerCase().trim();
     if (!nodeLabel) {
-      console.log('[WIZARD_INPUT][PATTERN_MATCH] Empty nodeLabel after trim, skipping');
       return;
     }
-
-    console.log('[WIZARD_INPUT][PATTERN_MATCH] Node label to match:', nodeLabel);
-    console.log('[WIZARD_INPUT][PATTERN_MATCH] Available templates:', templates.map(t => ({
-      id: t._id || t.id || t.name,
-      label: t.label || t.name,
-      hasPatterns: !!t.patterns,
-      patterns: t.patterns
-    })));
 
     // Try to match node label with template patterns
     for (const template of templates) {
       const templateId = template._id || template.id || template.name;
       const templateLabel = template.label || template.name || 'Unknown';
 
-      console.log(`[WIZARD_INPUT][PATTERN_MATCH] Testing template: ${templateLabel} (${templateId})`);
-
       const patterns = template.patterns;
       if (!patterns || typeof patterns !== 'object') {
-        console.log(`[WIZARD_INPUT][PATTERN_MATCH] Template ${templateLabel} has no patterns or invalid patterns object:`, patterns);
         continue;
       }
-
-      console.log(`[WIZARD_INPUT][PATTERN_MATCH] Template ${templateLabel} patterns object:`, patterns);
 
       // Try IT first (default), then EN, PT
       const langPatterns = patterns.IT || patterns.EN || patterns.PT;
       if (!Array.isArray(langPatterns)) {
-        console.log(`[WIZARD_INPUT][PATTERN_MATCH] Template ${templateLabel} has no valid langPatterns array:`, langPatterns);
         continue;
       }
-
-      console.log(`[WIZARD_INPUT][PATTERN_MATCH] Template ${templateLabel} langPatterns (${langPatterns.length} patterns):`, langPatterns);
 
       // Test each pattern regex
       for (let i = 0; i < langPatterns.length; i++) {
         const patternStr = langPatterns[i];
-        console.log(`[WIZARD_INPUT][PATTERN_MATCH] Testing pattern ${i + 1}/${langPatterns.length} for ${templateLabel}:`, patternStr);
 
         try {
           const regex = new RegExp(patternStr, 'i');
           const testResult = regex.test(nodeLabel);
-          console.log(`[WIZARD_INPUT][PATTERN_MATCH] Pattern "${patternStr}" test result:`, testResult, {
-            pattern: patternStr,
-            nodeLabel: nodeLabel,
-            match: testResult
-          });
 
           if (testResult) {
-            console.log('[WIZARD_INPUT][PATTERN_MATCH] ✅ MATCH FOUND!', {
-              nodeLabel,
-              templateLabel,
-              templateId,
-              pattern: patternStr
-            });
-
             setSelectedTemplateId(templateId);
             // Optionally auto-select the template
             if (onTemplateSelect) {
-              console.log('[WIZARD_INPUT][PATTERN_MATCH] Calling onTemplateSelect with:', template);
               onTemplateSelect(template);
             }
             return; // Found match, stop searching
@@ -190,11 +138,7 @@ const WizardInputStep: React.FC<Props> = ({
           continue;
         }
       }
-
-      console.log(`[WIZARD_INPUT][PATTERN_MATCH] No match found for template ${templateLabel}`);
     }
-
-    console.log('[WIZARD_INPUT][PATTERN_MATCH] ❌ No template pattern match found for:', nodeLabel);
   }, [templates, dataNode?.name, onTemplateSelect]);
 
   // Close dropdown when clicking outside
@@ -222,7 +166,6 @@ const WizardInputStep: React.FC<Props> = ({
     if (templateId && onTemplateSelect) {
       const selectedTemplate = templates.find(t => (t._id || t.id || t.name) === templateId);
       if (selectedTemplate) {
-        console.log('[WIZARD_INPUT] Template selected:', selectedTemplate.label);
         onTemplateSelect(selectedTemplate);
       }
     } else if (!templateId) {
@@ -234,12 +177,8 @@ const WizardInputStep: React.FC<Props> = ({
   // Auto-detect function - NO DEBOUNCE, called only on mount or explicit trigger
   const handleAutoDetect = React.useCallback((text: string) => {
     const trimmed = text.trim();
-    console.log('[WIZARD_INPUT][AUTO_DETECT] Called', { text, trimmed, trimmedLength: trimmed.length, hasOnAutoDetect: !!onAutoDetect });
     if (trimmed.length >= 3 && onAutoDetect) {
-      console.log('[WIZARD_INPUT][AUTO_DETECT] Calling onAutoDetect immediately (no debounce)', { trimmed });
       onAutoDetect(trimmed);
-    } else {
-      console.log('[WIZARD_INPUT][AUTO_DETECT] Skipped', { reason: trimmed.length < 3 ? 'too_short' : !onAutoDetect ? 'no_callback' : 'unknown' });
     }
   }, [onAutoDetect]);
 
@@ -252,15 +191,8 @@ const WizardInputStep: React.FC<Props> = ({
     };
   }, []);
   React.useEffect(() => {
-    console.log('[DDT][WizardInputStep][mount]', {
-      hasOnAutoDetect: !!onAutoDetect,
-      userDesc,
-      userDescLength: userDesc?.length || 0,
-      dataNodeName: dataNode?.name
-    });
     const handler = (e: any) => {
       const text = e?.detail?.text || '';
-      console.log('[DDT][WizardInputStep][prefill received]', text);
       // ✅ FIX: Assicura che text sia sempre una stringa
       try { setUserDesc(String(text || '')); } catch { }
       if (textareaRef.current) {
@@ -270,7 +202,6 @@ const WizardInputStep: React.FC<Props> = ({
     document.addEventListener('ddtWizard:prefillDesc', handler as any);
     return () => {
       document.removeEventListener('ddtWizard:prefillDesc', handler as any);
-      console.log('[DDT][WizardInputStep][unmount]');
     };
   }, [setUserDesc, onAutoDetect, userDesc, dataNode?.name]);
 
@@ -282,66 +213,28 @@ const WizardInputStep: React.FC<Props> = ({
     if (textareaRef.current && typeof textareaRef.current.value !== 'string') {
       textareaRef.current.value = '';
     }
-    console.log('[WIZARD_INPUT][INIT] ════════════════════════════════════════');
   }, [dataNode?.name, userDesc]);
 
   // ✅ Trigger auto-detect when userDesc becomes non-empty for the first time
   // ⚠️ IMPORTANTE: NON triggerare se onAutoDetect è undefined (c'è già un risultato di inferenza)
   const hasAutoDetectedRef = React.useRef<string>('');
   React.useEffect(() => {
-    console.log('[WIZARD_INPUT][AUTO_DETECT_TRIGGER] ════════════════════════════════════════');
-    console.log('[WIZARD_INPUT][AUTO_DETECT_TRIGGER] 🎯 Checking if should auto-detect', {
-      timestamp: new Date().toISOString(),
-      userDesc,
-      trimmed: (userDesc || '').trim(),
-      trimmedLength: (userDesc || '').trim().length,
-      hasOnAutoDetect: !!onAutoDetect,
-      hasAutoDetected: hasAutoDetectedRef.current,
-      dataNodeName: dataNode?.name,
-      skipReason: !onAutoDetect ? 'inference result already available' : 'none'
-    });
-
     const trimmed = (userDesc || '').trim();
     // ✅ NON triggerare se onAutoDetect è undefined (significa che c'è già un risultato di inferenza)
     const shouldTrigger = trimmed.length >= 3 && onAutoDetect && trimmed !== hasAutoDetectedRef.current;
 
-    console.log('[WIZARD_INPUT][AUTO_DETECT_TRIGGER] 📊 Conditions check', {
-      trimmedLengthOk: trimmed.length >= 3,
-      hasOnAutoDetect: !!onAutoDetect,
-      notAlreadyDetected: trimmed !== hasAutoDetectedRef.current,
-      shouldTrigger
-    });
-
     // Only trigger if text is long enough, callback exists, and we haven't already processed this text
     if (shouldTrigger) {
-      console.log('[WIZARD_INPUT][AUTO_DETECT_TRIGGER] ✅ TRIGGERING auto-detect!', {
-        trimmed,
-        timestamp: new Date().toISOString(),
-        delay: '100ms (component mount delay)'
-      });
       hasAutoDetectedRef.current = trimmed;
 
       // Small delay just to ensure component is fully mounted and state is stable
       const timer = setTimeout(() => {
-        console.log('[WIZARD_INPUT][AUTO_DETECT_TRIGGER] ⏰ Timer fired, calling onAutoDetect NOW', {
-          trimmed,
-          timestamp: new Date().toISOString(),
-          elapsed: '100ms after mount'
-        });
         onAutoDetect(trimmed);
       }, 100);
       return () => {
-        console.log('[WIZARD_INPUT][AUTO_DETECT_TRIGGER] 🧹 Cleanup: clearing timer');
         clearTimeout(timer);
       };
-    } else {
-      console.log('[WIZARD_INPUT][AUTO_DETECT_TRIGGER] ⏭️ NOT triggering auto-detect', {
-        reason: !trimmed.length || trimmed.length < 3 ? 'text too short' :
-                !onAutoDetect ? 'no callback' :
-                trimmed === hasAutoDetectedRef.current ? 'already detected' : 'unknown'
-      });
     }
-    console.log('[WIZARD_INPUT][AUTO_DETECT_TRIGGER] ════════════════════════════════════════');
   }, [userDesc, onAutoDetect, dataNode?.name]); // Run when userDesc or onAutoDetect changes
 
   return (
@@ -505,7 +398,6 @@ const WizardInputStep: React.FC<Props> = ({
         value={userDesc}
         onChange={e => {
           const newValue = e.target.value;
-          console.log('[WIZARD_INPUT] 🔤 Text changed:', { newValue, length: newValue.length, trimmedLength: newValue.trim().length });
           // ✅ FIX: Assicura che newValue sia sempre una stringa
           setUserDesc(String(newValue || ''));
           // NO auto-detect on typing - only on mount or "Invia" button
@@ -538,8 +430,6 @@ const WizardInputStep: React.FC<Props> = ({
                 : nodeLabel || userDetails;
 
               if (combinedText && combinedText !== '[object Object]') {
-                console.log('[WIZARD_INPUT] ⏎ Enter pressed with combined text:', combinedText);
-                try { console.log('[DDT][WizardInputStep][submit][Enter]'); } catch { };
                 onNext(combinedText);
               }
             }
@@ -574,16 +464,7 @@ const WizardInputStep: React.FC<Props> = ({
               ? `${nodeLabel} ${userDetails}`
               : nodeLabel || userDetails;
 
-            console.log('[WIZARD_INPUT] 🖱️ Continua clicked', {
-              nodeLabel,
-              userDetails,
-              combinedText,
-              taskLabel,
-              hasTaskLabel: !!taskLabel
-            });
-
             if (combinedText && combinedText !== '[object Object]') {
-              try { console.log('[DDT][WizardInputStep][submit][Click]'); } catch { };
               onNext(combinedText);
             } else {
               console.error('[WIZARD_INPUT] ❌ Invalid combinedText:', {

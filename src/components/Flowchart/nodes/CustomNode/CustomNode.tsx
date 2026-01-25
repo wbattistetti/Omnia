@@ -149,15 +149,6 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
             const descendants = findAllDescendants(id);
 
             if (descendants.length > 0) {
-              console.log('📏 [NODE_RESIZE] Spostando discendenti per mantenere distanze', {
-                nodeId: id,
-                heightDelta,
-                previousHeight,
-                currentHeight,
-                descendantsCount: descendants.length,
-                timestamp: Date.now()
-              });
-
               // Sposta tutti i discendenti della stessa quantità
               setNodes((nds) => nds.map((n) => {
                 if (descendants.includes(n.id)) {

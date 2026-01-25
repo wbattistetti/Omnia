@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import type { NLPContract } from '../../../../components/DialogueDataEngine/contracts/contractLoader';
+import type { DataContract, DataContractItem } from '../../../../components/DialogueDataEngine/contracts/contractLoader';
 import type { ContractMethod } from './ContractSelector';
 import RegexInlineEditor from '../InlineEditors/RegexInlineEditor';
 import ExtractorInlineEditor from '../InlineEditors/ExtractorInlineEditor';
@@ -15,8 +15,8 @@ import IntentEditorInlineEditor from '../InlineEditors/IntentEditorInlineEditor'
 
 interface ContractEditorWrapperProps {
   method: ContractMethod;
-  contract: NLPContract | null;
-  onContractChange: (contract: NLPContract) => void;
+  contract: DataContract | null;
+  onContractChange: (contract: DataContract) => void;
   node?: any;
   kind?: string;
   profile?: any;
@@ -38,24 +38,12 @@ export default function ContractEditorWrapper({
   onProfileUpdate,
   onClose,
 }: ContractEditorWrapperProps) {
-  // Get method data from contract
+  // Get method data from contract.contracts array
   const methodData = React.useMemo(() => {
-    if (!contract?.methods?.[method]) {
-      // Legacy fallback
-      switch (method) {
-        case 'regex':
-          return contract?.regex;
-        case 'rules':
-          return contract?.rules;
-        case 'ner':
-          return contract?.ner;
-        case 'llm':
-          return contract?.llm;
-        default:
-          return null;
-      }
+    if (!contract?.contracts || !Array.isArray(contract.contracts)) {
+      return null;
     }
-    return contract.methods[method];
+    return contract.contracts.find(c => c.type === method) || null;
   }, [contract, method]);
 
   if (!methodData || methodData.enabled === false) {
@@ -75,18 +63,15 @@ export default function ContractEditorWrapper({
     case 'regex':
       return (
         <RegexInlineEditor
-          regex={methodData.patterns?.[0] || ''}
+          regex={(methodData as any).patterns?.[0] || ''}
           setRegex={(value: string) => {
             if (!contract) return;
-            const updatedContract: NLPContract = {
+            const updatedContracts = contract.contracts.map(c =>
+              c.type === 'regex' ? { ...c, patterns: [value] } : c
+            );
+            const updatedContract: DataContract = {
               ...contract,
-              methods: {
-                ...contract.methods,
-                regex: {
-                  ...methodData,
-                  patterns: [value],
-                },
-              },
+              contracts: updatedContracts,
             };
             onContractChange(updatedContract);
           }}

@@ -230,31 +230,13 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
       if (!overlayHoverRef.current && !stillHoveringItem) setOverlay(null);
     }, delay);
   };
-  // ✅ DEBUG: Abilita log con localStorage.setItem('debug.sidebarResize', '1')
-  const DEBUG_RESIZE = typeof localStorage !== 'undefined' && localStorage.getItem('debug.sidebarResize') === '1';
-
   // ✅ FIX: Leggi manualWidth da style prop (se presente)
   const manualWidth = React.useMemo(() => {
     if (!style?.width) return null;
     const w = typeof style.width === 'number' ? style.width : parseFloat(String(style.width));
     const result = Number.isFinite(w) && w > 0 ? w : null;
-    if (DEBUG_RESIZE) console.log('📐 [SIDEBAR] manualWidth calcolato', {
-      styleWidth: style?.width,
-      parsed: w,
-      result,
-    });
     return result;
-  }, [style?.width, DEBUG_RESIZE]);
-
-  // ✅ DEBUG: Log quando manualWidth o measuredW cambiano
-  React.useEffect(() => {
-    if (DEBUG_RESIZE) console.log('📏 [SIDEBAR] manualWidth/measuredW cambiato', {
-      manualWidth,
-      measuredW,
-      styleWidth: style?.width,
-      finalWidth: manualWidth ?? measuredW ?? 'auto',
-    });
-  }, [manualWidth, measuredW, style?.width, DEBUG_RESIZE]);
+  }, [style?.width]);
 
   // ✅ GHOST METHOD: Ref per il container ghost
   const ghostContainerRef = React.useRef<HTMLDivElement | null>(null);
@@ -264,7 +246,6 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
   React.useLayoutEffect(() => {
     // Se c'è una larghezza manuale, NON calcolare autosize
     if (manualWidth !== null && manualWidth > 0) {
-      if (DEBUG_RESIZE) console.log('⏸️ [SIDEBAR] manualWidth attivo, salto autosize', { manualWidth });
       return;
     }
 
@@ -368,7 +349,6 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
     // ✅ Funzione di misurazione
     const measure = () => {
       if (!ghostContainerRef.current) {
-        if (DEBUG_RESIZE) console.warn('👻 [GHOST] ghostContainerRef.current è null');
         return;
       }
 
@@ -387,7 +367,6 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
       const allButtons = findAllButtons(ghostContainerRef.current);
 
       if (allButtons.length === 0) {
-        if (DEBUG_RESIZE) console.warn('👻 [GHOST] Nessun button trovato, riprovo...');
         // Riprova dopo un breve delay
         setTimeout(() => {
           requestAnimationFrame(() => {
@@ -412,7 +391,6 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
         if (containerRect.width > 0) {
           maxWidth = containerRect.width;
         } else {
-          if (DEBUG_RESIZE) console.warn('👻 [GHOST] Impossibile misurare, uso fallback');
           setMeasuredW(280); // Fallback
           return;
         }
@@ -514,7 +492,7 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
         clearTimeout(measureTimeout);
       }
     };
-  }, [mainList, aggregated, rootLabel, translations, manualWidth, DEBUG_RESIZE, combinedClass, bgBase, textBase, borderColor, itemStyle]);
+  }, [mainList, aggregated, rootLabel, translations, manualWidth, combinedClass, bgBase, textBase, borderColor, itemStyle]);
 
   // ✅ Cleanup: rimuovi ghost container quando il componente si smonta
   React.useEffect(() => {
@@ -548,17 +526,6 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
   // ✅ IMPORTANTE: Se measuredW è null, usa un fallback invece di 'auto' per evitare sidebar troppo larga
   const finalWidth = manualWidth ?? measuredW ?? 280; // Fallback a 280 invece di 'auto'
   const hasFlex = !manualWidth && measuredW === null; // ✅ CRITICO: Solo flex se non c'è manualWidth E measuredW è null
-  React.useEffect(() => {
-    if (DEBUG_RESIZE) console.log('🎨 [SIDEBAR] Render con width finale', {
-      manualWidth,
-      measuredW,
-      finalWidth,
-      styleWidth: style?.width,
-      hasFlex,
-      containerRefExists: !!containerRef.current,
-      actualWidth: containerRef.current?.getBoundingClientRect().width,
-    });
-  }, [finalWidth, manualWidth, measuredW, style?.width, hasFlex, DEBUG_RESIZE]);
 
   // ✅ Early return check moved here (after all hooks) to comply with React Hooks rules
   if (!Array.isArray(mainList) || mainList.length === 0) return null;

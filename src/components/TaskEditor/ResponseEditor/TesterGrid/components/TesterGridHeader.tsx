@@ -3,7 +3,7 @@ import TesterGridInput from './TesterGridInput';
 import TesterGridActionsColumn from './TesterGridActionsColumn';
 import TesterGridHeaderColumn from './TesterGridHeaderColumn';
 import AddContractDropdown from './AddContractDropdown';
-import type { NLPContract } from '../../../../DialogueDataEngine/contracts/contractLoader';
+import type { DataContract, ContractType } from '../../../../DialogueDataEngine/contracts/contractLoader';
 
 // 🎨 Colori centralizzati per extractors
 const EXTRACTOR_COLORS = {
@@ -44,7 +44,7 @@ const COLUMN_LABELS = {
 };
 
 interface TesterGridHeaderProps {
-  contract?: NLPContract | null; // ✅ STEP 5: Contract prop
+  contract?: DataContract | null;
   newExample: string;
   setNewExample: (value: string) => void;
   onAddExample: () => void;
@@ -64,7 +64,7 @@ interface TesterGridHeaderProps {
   showNER: boolean;
   showEmbeddings: boolean;
   headerRowRef: React.RefObject<HTMLTableRowElement>;
-  onContractChange?: (contract: NLPContract | null) => void; // ✅ STEP 9: Callback per modificare contract
+  onContractChange?: (contract: DataContract | null) => void;
 }
 
 /**
@@ -88,163 +88,118 @@ export default function TesterGridHeader({
   headerRowRef,
   onContractChange, // ✅ STEP 9: Destructure callback
 }: TesterGridHeaderProps) {
-  // ✅ STEP 9: State per gestire quale colonna ha il dropdown "+" aperto
+  // State per gestire quale colonna ha il dropdown "+" aperto
   const [openDropdownAfter, setOpenDropdownAfter] = React.useState<string | null>(null);
-  // ✅ STEP 5: Read escalationOrder from contract (simplified, no legacy fallback)
-  // ✅ FIX: Dipende dalla stringa join invece che dall'oggetto per forzare il rilevamento del cambiamento
-  const escalationOrder = useMemo<Array<'regex' | 'rules' | 'ner' | 'llm' | 'embeddings'> | null>(() => {
-    if (contract?.methods && contract.escalationOrder) {
-      // ✅ FIX: Crea un nuovo array per forzare il rilevamento del cambiamento
-      return [...contract.escalationOrder];
+
+  // Leggi contracts dal dataContract - ordine implicito (ordine array = ordine escalation)
+  const contracts = useMemo(() => {
+    if (!contract?.contracts || !Array.isArray(contract.contracts)) {
+      return [];
     }
-    return null; // No contract or no escalationOrder → will show "Add contract" button
-  }, [contract?.escalationOrder?.join(',')]); // ✅ FIX: Dipende dalla stringa join
+    // Filtra solo i contract con enabled: true
+    return contract.contracts.filter(c => c.enabled !== false);
+  }, [contract?.contracts]);
 
-  // ✅ STEP 6: Map contract method type to component type
-  const mapMethodTypeToComponentType = (method: 'regex' | 'rules' | 'ner' | 'llm' | 'embeddings'): 'regex' | 'deterministic' | 'ner' | 'llm' | 'embeddings' => {
-    if (method === 'rules') return 'deterministic';
-    return method;
+  // Map contract type to component type
+  const mapContractTypeToComponentType = (type: ContractType): 'regex' | 'deterministic' | 'ner' | 'llm' | 'embeddings' => {
+    if (type === 'rules') return 'deterministic';
+    return type;
   };
 
-  // ✅ STEP 6: Check if method is enabled in contract
-  const isMethodEnabled = (method: 'regex' | 'rules' | 'ner' | 'llm' | 'embeddings'): boolean => {
-    if (!contract?.methods) return false;
-    switch (method) {
-      case 'regex':
-        return contract.methods.regex?.enabled ?? false;
-      case 'rules':
-        return contract.methods.rules?.enabled ?? false;
-      case 'ner':
-        return contract.methods.ner?.enabled ?? false;
-      case 'llm':
-        return contract.methods.llm?.enabled ?? false;
-      case 'embeddings':
-        return contract.methods.embeddings?.enabled ?? false;
-      default:
-        return false;
-    }
+  // Get available methods (excluding already added ones)
+  const getAvailableMethods = (): ContractType[] => {
+    const allMethods: ContractType[] = ['regex', 'rules', 'ner', 'llm', 'embeddings'];
+    if (!contracts || contracts.length === 0) return allMethods;
+    const usedTypes = contracts.map(c => c.type);
+    return allMethods.filter(m => !usedTypes.includes(m));
   };
 
-  // ✅ STEP 9: Get available methods (excluding already added ones)
-  const getAvailableMethods = (): Array<'regex' | 'rules' | 'ner' | 'llm' | 'embeddings'> => {
-    const allMethods: Array<'regex' | 'rules' | 'ner' | 'llm' | 'embeddings'> = ['regex', 'rules', 'ner', 'llm', 'embeddings'];
-    if (!escalationOrder) return allMethods;
-    return allMethods.filter(m => !escalationOrder.includes(m));
-  };
-
-  // ✅ STEP 9: Handle adding contract after a specific column
-  const handleAddContractAfter = (insertAfterMethod: 'regex' | 'rules' | 'ner' | 'llm' | 'embeddings') => {
-    return (newMethod: 'regex' | 'rules' | 'ner' | 'llm' | 'embeddings') => {
-      console.log('[TesterGridHeader][handleAddContractAfter] Adding contract', {
-        insertAfterMethod,
-        newMethod,
-        hasContract: !!contract,
-        hasOnContractChange: !!onContractChange,
-        currentEscalationOrder: escalationOrder,
-      });
-
+  // Handle adding contract after a specific column
+  const handleAddContractAfter = (insertAfterType: ContractType) => {
+    return (newType: ContractType) => {
       if (!contract || !onContractChange) {
-        console.warn('[TesterGridHeader][handleAddContractAfter] Missing contract or callback', {
-          hasContract: !!contract,
-          hasOnContractChange: !!onContractChange,
-        });
+        console.warn('[TesterGridHeader][handleAddContractAfter] Missing contract or callback');
         return;
       }
 
-      const currentOrder = escalationOrder || [];
-      const insertIndex = currentOrder.indexOf(insertAfterMethod) + 1;
+      const currentContracts = contracts || [];
+      const insertIndex = currentContracts.findIndex(c => c.type === insertAfterType) + 1;
 
-      // Create new escalation order
-      const newEscalationOrder = [
-        ...currentOrder.slice(0, insertIndex),
-        newMethod,
-        ...currentOrder.slice(insertIndex),
+      // Crea nuovo contract item
+      const newContractItem = createDefaultContract(newType);
+
+      // Inserisci nel posto corretto
+      const newContracts = [
+        ...currentContracts.slice(0, insertIndex),
+        newContractItem,
+        ...currentContracts.slice(insertIndex),
       ];
 
-      console.log('[TesterGridHeader][handleAddContractAfter] New escalation order', {
-        insertIndex,
-        newEscalationOrder,
-      });
-
-      // Initialize new method in contract.methods if not exists
-      const updatedMethods = { ...contract.methods };
-      if (!updatedMethods[newMethod]) {
-        updatedMethods[newMethod] = { enabled: true } as any;
-      }
-
-      // ✅ FIX: Crea un nuovo oggetto contract per forzare il cambio di riferimento
-      const updatedContract: NLPContract = {
+      const updatedContract: DataContract = {
         ...contract,
-        methods: { ...updatedMethods },
-        escalationOrder: newEscalationOrder,
+        contracts: newContracts,
       };
 
-      console.log('[TesterGridHeader][handleAddContractAfter] Calling onContractChange', {
-        escalationOrder: updatedContract.escalationOrder,
-        methods: Object.keys(updatedContract.methods || {}),
-      });
-
-      // ✅ FIX: Chiudi il dropdown prima di chiamare onContractChange
       setOpenDropdownAfter(null);
-
       onContractChange(updatedContract);
     };
   };
 
-  // ✅ STEP 9: Handle adding first contract (when no contract exists)
-  const handleAddFirstContract = (method: 'regex' | 'rules' | 'ner' | 'llm' | 'embeddings') => {
+  // Helper: Crea contract item di default per tipo
+  const createDefaultContract = (type: ContractType): any => {
+    const base = { type, enabled: true };
+    switch (type) {
+      case 'regex':
+        return { ...base, patterns: [], examples: [], testCases: [] };
+      case 'rules':
+        return { ...base, extractorCode: '', validators: [], testCases: [] };
+      case 'ner':
+        return { ...base, entityTypes: [], confidence: 0.8 };
+      case 'llm':
+        return { ...base, systemPrompt: '', userPromptTemplate: '', responseSchema: {} };
+      case 'embeddings':
+        return { ...base, intents: [] };
+      default:
+        return base;
+    }
+  };
+
+  // Handle adding first contract (when no contract exists)
+  const handleAddFirstContract = (type: ContractType) => {
     if (!onContractChange) {
       console.warn('[TesterGridHeader][handleAddFirstContract] No onContractChange callback');
       return;
     }
 
-    console.log('[TesterGridHeader][handleAddFirstContract] Adding first contract', {
-      method,
-      hasExistingContract: !!contract,
-    });
-
-    // ✅ FIX: Crea un nuovo contract con spread operator per forzare nuovo riferimento
-    const newContract: NLPContract = {
+    const newContractItem = createDefaultContract(type);
+    const newContract: DataContract = {
       templateName: contract?.templateName || '',
       templateId: contract?.templateId || '',
-      subDataMapping: contract?.subDataMapping ? { ...contract.subDataMapping } : {},
-      methods: {
-        [method]: { enabled: true } as any,
-      },
-      escalationOrder: [method],
+      subDataMapping: contract?.subDataMapping || {},
+      contracts: [newContractItem],
     };
-
-    console.log('[TesterGridHeader][handleAddFirstContract] Created contract', {
-      escalationOrder: newContract.escalationOrder,
-      methods: Object.keys(newContract.methods || {}),
-    });
 
     onContractChange(newContract);
   };
 
-  // ✅ NUOVO: Handle removing a contract
-  const handleRemoveContract = (methodToRemove: 'regex' | 'rules' | 'ner' | 'llm' | 'embeddings') => {
+  // Handle removing a contract
+  const handleRemoveContract = (typeToRemove: ContractType) => {
     if (!contract || !onContractChange) return;
 
-    const newEscalationOrder = escalationOrder?.filter(m => m !== methodToRemove) || [];
+    const newContracts = contracts.filter(c => c.type !== typeToRemove);
 
-    if (newEscalationOrder.length === 0) {
+    if (newContracts.length === 0) {
       // Se non ci sono più contratti, rimuovi tutto
       onContractChange(null);
       return;
     }
 
-    // Rimuovi il metodo dal contract
-    const newMethods = { ...contract.methods };
-    delete newMethods[methodToRemove];
-
-    const newContract: NLPContract = {
+    const updatedContract: DataContract = {
       ...contract,
-      escalationOrder: newEscalationOrder,
-      methods: newMethods,
+      contracts: newContracts,
     };
 
-    onContractChange(newContract);
+    onContractChange(updatedContract);
   };
 
   // ✅ FIX: Calculate column width for dynamic columns
@@ -262,10 +217,10 @@ export default function TesterGridHeader({
     return calculatedWidth;
   };
 
-  // ✅ STEP 6: Render dynamic columns based on escalationOrder
+  // Render dynamic columns based on contracts array
   const renderDynamicColumns = () => {
-    if (!escalationOrder || escalationOrder.length === 0) {
-      // STEP 11: Show "Add contract" dropdown when no contract
+    if (!contracts || contracts.length === 0) {
+      // Show "Add contract" dropdown when no contract
       return (
         <th colSpan={1} style={{ padding: 8, background: '#f9fafb', textAlign: 'center', width: '200px' }}>
           <AddContractDropdown
@@ -277,25 +232,25 @@ export default function TesterGridHeader({
       );
     }
 
-    const columnWidth = calculateColumnWidth(escalationOrder.length);
+    const columnWidth = calculateColumnWidth(contracts.length);
 
-    return escalationOrder.map((method, index) => {
-      const componentType = mapMethodTypeToComponentType(method);
+    return contracts.map((contractItem, index) => {
+      const componentType = mapContractTypeToComponentType(contractItem.type);
       const labels = COLUMN_LABELS[componentType] || COLUMN_LABELS.regex;
       const color = EXTRACTOR_COLORS[componentType] || EXTRACTOR_COLORS.regex;
-      const enabled = isMethodEnabled(method);
+      const enabled = contractItem.enabled !== false;
 
       // Map to enabledMethods prop (for backward compatibility)
       const enabledMethodKey = componentType === 'deterministic' ? 'deterministic' : componentType;
       const isEnabledInProps = enabledMethods[enabledMethodKey as keyof typeof enabledMethods] ?? false;
 
-      // ✅ STEP 9: Get available methods for this column
+      // Get available methods for this column
       const availableMethods = getAvailableMethods();
-      const isDropdownOpen = openDropdownAfter === method;
+      const isDropdownOpen = openDropdownAfter === contractItem.type;
 
       return (
         <TesterGridHeaderColumn
-          key={method}
+          key={contractItem.type}
           type={componentType}
           mainLabel={labels.main}
           techLabel={labels.tech}
@@ -307,17 +262,17 @@ export default function TesterGridHeader({
           onToggleEditor={toggleEditor}
           showPostProcess={componentType === 'deterministic'}
           onAddContract={availableMethods.length > 0 && onContractChange ? () => {
-            // ✅ STEP 9: Toggle dropdown for this column
-            setOpenDropdownAfter(isDropdownOpen ? null : method);
+            // Toggle dropdown for this column
+            setOpenDropdownAfter(isDropdownOpen ? null : contractItem.type);
           } : undefined}
           availableMethods={availableMethods}
           isDropdownOpen={isDropdownOpen}
           onSelectMethod={onContractChange ? (selectedMethod) => {
-            handleAddContractAfter(method)(selectedMethod);
+            handleAddContractAfter(contractItem.type)(selectedMethod);
             setOpenDropdownAfter(null);
           } : undefined}
           columnWidth={columnWidth}
-          onRemoveContract={onContractChange && escalationOrder.length > 1 ? () => handleRemoveContract(method) : undefined}
+          onRemoveContract={onContractChange && contracts.length > 1 ? () => handleRemoveContract(contractItem.type) : undefined}
         />
       );
     });
@@ -373,11 +328,11 @@ export default function TesterGridHeader({
           />
         </th>
         <TesterGridActionsColumn rowIndex={-1} newExample={newExample} onAddExample={onAddExample} phraseColumnWidth={phraseColumnWidth} />
-        {/* ✅ STEP 6: Render dynamic columns based on escalationOrder */}
-        {escalationOrder ? (
+        {/* Render dynamic columns based on contracts array */}
+        {contracts && contracts.length > 0 ? (
           renderDynamicColumns()
         ) : (
-          // ✅ STEP 11: Show "Add contract" dropdown when no contract
+          // Show "Add contract" dropdown when no contract
           <th colSpan={1} style={{ padding: 8, background: '#f9fafb', textAlign: 'center' }}>
             <AddContractDropdown
               onSelect={handleAddFirstContract}

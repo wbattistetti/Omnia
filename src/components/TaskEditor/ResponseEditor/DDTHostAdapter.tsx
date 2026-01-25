@@ -45,55 +45,6 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
     try {
       const loaded = taskRepository.getTask(instanceKey);
 
-      // ✅ AGGIUNTO: Definisci loadedStepsKeys PRIMA di usarla
-      const loadedStepsKeys = loaded?.steps ? Object.keys(loaded.steps) : [];
-
-      // ✅ Log solo critico (ridotto verbosità)
-      console.log('[🔍 DDTHostAdapter] CRITICAL - Task loaded from repository', {
-        instanceKey,
-        hasTask: !!loaded,
-        taskId: loaded?.id,
-        taskTemplateId: loaded?.templateId,
-        hasSteps: !!loaded?.steps,
-        stepsKeys: loadedStepsKeys,
-        stepsKeysAsStrings: loadedStepsKeys.join(', '), // ✅ Stringa per vedere tutte le chiavi
-        stepsCount: loadedStepsKeys.length,
-        stepsDetails: loaded?.steps ? Object.keys(loaded.steps).map((nodeId: string) => {
-          const nodeSteps = loaded.steps[nodeId];
-          const isArray = Array.isArray(nodeSteps);
-          const isObject = typeof nodeSteps === 'object' && !Array.isArray(nodeSteps);
-          let escalationsCount = 0;
-          let tasksCount = 0;
-
-          if (isArray) {
-            escalationsCount = nodeSteps.length;
-            tasksCount = nodeSteps.reduce((acc: number, step: any) =>
-              acc + (step?.escalations?.reduce((a: number, esc: any) => a + (esc?.tasks?.length || 0), 0) || 0), 0);
-          } else if (isObject) {
-            escalationsCount = nodeSteps?.start?.escalations?.length || nodeSteps?.introduction?.escalations?.length || 0;
-            const startEscs = nodeSteps?.start?.escalations || [];
-            const introEscs = nodeSteps?.introduction?.escalations || [];
-            tasksCount = [...startEscs, ...introEscs].reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0);
-          }
-
-          return {
-            nodeId,
-            nodeIdPreview: nodeId.substring(0, 40) + '...',
-            stepsType: typeof nodeSteps,
-            isArray,
-            isObject,
-            stepsKeys: isObject ? Object.keys(nodeSteps || {}) : [],
-            escalationsCount,
-            tasksCount,
-            hasStartStep: !!nodeSteps?.start,
-            startEscalationsCount: nodeSteps?.start?.escalations?.length || 0
-          };
-        }) : [],
-        hasdata: !!loaded?.data,
-        dataLength: loaded?.data?.length || 0,
-        metadata: loaded?.metadata
-      });
-
       return loaded;
     } catch (error) {
       console.error('[DDTHostAdapter] Error loading task:', error);
@@ -117,7 +68,7 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
           data: fullTask.data,
           constraints: fullTask.constraints,
           examples: fullTask.examples,
-          nlpContract: fullTask.nlpContract,
+          dataContract: fullTask.dataContract,
           introduction: fullTask.introduction
         };
       }
@@ -242,34 +193,51 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
       // ✅ CRITICAL: Preserva templateId se esiste già
       const currentTemplateId = taskInstance?.templateId;
 
-      const updatePayload: Partial<Task> = {
-        type: TaskType.DataRequest,
-        label: finalDDT.label,
-        // ❌ RIMOSSO: ...finalDDT,  // NON salvare tutto, solo quello che serve!
-        steps: finalDDT.steps, // ✅ Salva steps
-        constraints: finalDDT.constraints, // ✅ Override opzionali (solo se modificati)
-        examples: finalDDT.examples, // ✅ Override opzionali (solo se modificati)
-        nlpContract: finalDDT.nlpContract, // ✅ Override opzionali (solo se modificati)
-        introduction: finalDDT.introduction
-      };
+      // ✅ REMOVED: updateTask ridondante - modifica direttamente task nella cache
+      if (taskInstance) {
+        // ✅ Modifica diretta nella cache
+        taskInstance.type = TaskType.DataRequest;
+        taskInstance.label = finalDDT.label;
+        taskInstance.steps = finalDDT.steps;
+        taskInstance.constraints = finalDDT.constraints;
+        taskInstance.examples = finalDDT.examples;
+        taskInstance.dataContract = finalDDT.dataContract;
+        taskInstance.introduction = finalDDT.introduction;
 
-      // ✅ CRITICAL: Preserva templateId
-      if (currentTemplateId && currentTemplateId !== 'UNDEFINED') {
-        updatePayload.templateId = currentTemplateId; // ✅ Preserva templateId esistente
-      } else if (finalDDT.templateId) {
-        updatePayload.templateId = finalDDT.templateId; // ✅ Usa templateId dal wizard
+        // ✅ CRITICAL: Preserva templateId se esiste già
+        if (currentTemplateId && currentTemplateId !== 'UNDEFINED') {
+          taskInstance.templateId = currentTemplateId; // ✅ Preserva templateId esistente
+        } else if (finalDDT.templateId) {
+          taskInstance.templateId = finalDDT.templateId; // ✅ Usa templateId dal wizard
+        }
+        // ❌ RIMOSSO: Non impostare templateId: null!
+
+        taskInstance.updatedAt = new Date();
+      } else {
+        // ✅ Task non esiste, crealo
+        taskInstance = taskRepository.createTask(
+          TaskType.DataRequest,
+          finalDDT.templateId || currentTemplateId || null,
+          {
+            label: finalDDT.label,
+            steps: finalDDT.steps,
+            constraints: finalDDT.constraints,
+            examples: finalDDT.examples,
+            nlpContract: finalDDT.nlpContract,
+            introduction: finalDDT.introduction
+          },
+          instanceKey,
+          currentProjectId || undefined
+        );
       }
-      // ❌ RIMOSSO: Non impostare templateId: null!
-      console.log('[DDTHostAdapter][handleComplete] 🔍 updatePayload before save', {
-        instanceKey,
-        updatePayloadKeys: Object.keys(updatePayload),
-        hasSteps: !!updatePayload.steps,
-        stepsType: typeof updatePayload.steps,
-        stepsKeys: updatePayload.steps ? Object.keys(updatePayload.steps) : [],
-        stepsCount: updatePayload.steps ? Object.keys(updatePayload.steps).length : 0
-      });
 
-      taskRepository.updateTask(instanceKey, updatePayload, currentProjectId || undefined);
+      console.log('[DDTHostAdapter][handleComplete] ✅ Task updated directly in cache', {
+        instanceKey,
+        hasSteps: !!taskInstance?.steps,
+        stepsKeys: taskInstance?.steps ? Object.keys(taskInstance.steps) : [],
+        stepsCount: taskInstance?.steps ? Object.keys(taskInstance.steps).length : 0,
+        templateId: taskInstance?.templateId
+      });
 
       // ✅ DEBUG: Verifica task salvato dopo il salvataggio
       const savedTask = taskRepository.getTask(instanceKey);

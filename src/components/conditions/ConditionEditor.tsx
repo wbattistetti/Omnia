@@ -201,12 +201,6 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     setHasFailures(false);
     try { getFailuresRef.current = () => []; hasFailuresRef.current = () => false; resetTesterVisualsRef.current = () => {}; markNotesAsUsedRef.current = () => {}; } catch {}
     // ✅ Reset script to template or provided initialScript when opening a new condition
-    console.log('[LOAD_SCRIPT] 🔍 Opening editor', {
-      conditionName: label,
-      hasInitialScript: !!initialScript,
-      initialScriptLength: initialScript?.length || 0,
-      initialScriptPreview: initialScript?.substring(0, 50) || ''
-    });
     const base = (initialScript && initialScript.trim()) ? initialScript : DEFAULT_CODE;
     setScript(base);
     const created = !!(initialScript && initialScript.trim());

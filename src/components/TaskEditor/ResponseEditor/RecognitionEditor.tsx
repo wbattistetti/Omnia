@@ -6,7 +6,7 @@ import WaitingMessagesConfig from './Config/WaitingMessagesConfig';
 import TesterGrid from './TesterGrid';
 import { RowResult } from './hooks/useExtractionTesting';
 import { loadContractFromNode, saveContractToNode } from './ContractSelector/contractHelpers';
-import type { NLPContract } from '../../DialogueDataEngine/contracts/contractLoader';
+import type { DataContract } from '../../DialogueDataEngine/contracts/contractLoader';
 
 interface RecognitionEditorProps {
   // Config props (Kind, Confidence, Waiting Messages)
@@ -136,55 +136,73 @@ export default function RecognitionEditor({
   baselineStats,
   lastStats,
 }: RecognitionEditorProps) {
-  // ✅ STEP 3: Load contract from node
-  // ✅ FIX: Usa stato locale per mantenere il contract aggiornato
-  const [localContract, setLocalContract] = useState<NLPContract | null>(() => {
+  // Load contract from node
+  const [localContract, setLocalContract] = useState<DataContract | null>(() => {
     const node = editorProps?.node;
-    if (!node) return null;
-    return loadContractFromNode(node);
+    if (!node) {
+      console.log('[🔍 RecognitionEditor][INIT] No node provided');
+      return null;
+    }
+    console.log('[🔍 RecognitionEditor][INIT] Loading contract from node', {
+      nodeLabel: node?.label,
+      nodeId: node?.id,
+      nodeTemplateId: node?.templateId,
+      hasNodeDataContract: !!node?.dataContract,
+      nodeDataContractKeys: node?.dataContract ? Object.keys(node.dataContract) : [],
+      nodeDataContractContractsCount: node?.dataContract?.contracts?.length || 0
+    });
+    const contract = loadContractFromNode(node);
+    console.log('[🔍 RecognitionEditor][INIT] Contract loaded', {
+      hasContract: !!contract,
+      contractKeys: contract ? Object.keys(contract) : [],
+      contractsCount: contract?.contracts?.length || 0
+    });
+    return contract;
   });
 
-  // ✅ Sincronizza localContract con node SOLO quando cambia il node (non quando cambia il contract)
+  // Sincronizza localContract con node SOLO quando cambia il node
   const prevNodeRef = React.useRef(editorProps?.node);
   useEffect(() => {
     const node = editorProps?.node;
-    // ✅ Solo se il node è cambiato (nuovo node), non se è lo stesso node con contract modificato
     if (node !== prevNodeRef.current) {
       prevNodeRef.current = node;
       if (!node) {
         setLocalContract(null);
         return;
       }
+      console.log('[🔍 RecognitionEditor][NODE_CHANGE] Node changed, reloading contract', {
+        nodeLabel: node?.label,
+        nodeId: node?.id,
+        nodeTemplateId: node?.templateId,
+        hasNodeDataContract: !!node?.dataContract,
+        nodeDataContractContractsCount: node?.dataContract?.contracts?.length || 0
+      });
       const loadedContract = loadContractFromNode(node);
+      console.log('[🔍 RecognitionEditor][NODE_CHANGE] Contract reloaded', {
+        hasContract: !!loadedContract,
+        contractsCount: loadedContract?.contracts?.length || 0
+      });
       setLocalContract(loadedContract);
     }
   }, [editorProps?.node]);
 
-  // ✅ CRITICAL FIX: Crea sempre un nuovo riferimento per forzare re-render
-  // ✅ Usa una key basata su escalationOrder per forzare nuovo riferimento quando cambia
-  const contractKey = localContract?.escalationOrder?.join(',') || '';
-  const contract = useMemo<NLPContract | null>(() => {
+  // Crea sempre un nuovo riferimento per forzare re-render
+  const contractKey = localContract?.contracts?.map(c => `${c.type}:${c.enabled}`).join(',') || '';
+  const contract = useMemo<DataContract | null>(() => {
     if (!localContract) return null;
 
-    // ✅ Crea sempre un nuovo oggetto per forzare il cambio di riferimento
-    const newContractRef: NLPContract = {
+    // Crea sempre un nuovo oggetto per forzare il cambio di riferimento
+    const newContractRef: DataContract = {
       ...localContract,
-      methods: localContract.methods ? { ...localContract.methods } : undefined,
-      escalationOrder: localContract.escalationOrder ? [...localContract.escalationOrder] : undefined,
+      contracts: localContract.contracts ? [...localContract.contracts] : [],
       subDataMapping: { ...localContract.subDataMapping },
     };
 
-    console.log('[RecognitionEditor][useMemo] Creating new contract reference', {
-      contractKey,
-      escalationOrder: newContractRef.escalationOrder,
-      methods: newContractRef.methods ? Object.keys(newContractRef.methods) : [],
-    });
-
     return newContractRef;
-  }, [localContract, contractKey]); // ✅ Dipende da localContract e contractKey per forzare nuovo riferimento
+  }, [localContract, contractKey]);
 
-  // ✅ STEP 10: Handle contract changes and save to node
-  const handleContractChange = useCallback((updatedContract: NLPContract | null) => {
+  // Handle contract changes and save to node
+  const handleContractChange = useCallback((updatedContract: DataContract | null) => {
     const node = editorProps?.node;
     if (!node) {
       console.warn('[RecognitionEditor][handleContractChange] No node available');
@@ -197,23 +215,22 @@ export default function RecognitionEditor({
       methods: updatedContract?.methods ? Object.keys(updatedContract.methods) : [],
     });
 
-    // ✅ FIX: Crea un nuovo oggetto per forzare il cambio di riferimento
+    // Crea un nuovo oggetto per forzare il cambio di riferimento
     const contractToSave = updatedContract ? {
       ...updatedContract,
-      methods: updatedContract.methods ? { ...updatedContract.methods } : undefined,
-      escalationOrder: updatedContract.escalationOrder ? [...updatedContract.escalationOrder] : undefined,
+      contracts: updatedContract.contracts ? [...updatedContract.contracts] : [],
       subDataMapping: { ...updatedContract.subDataMapping },
     } : null;
 
     // Save contract to node
     saveContractToNode(node, contractToSave);
 
-    // ✅ CRITICAL FIX: Aggiorna lo stato locale IMMEDIATAMENTE con un nuovo oggetto per forzare re-render
+    // Aggiorna lo stato locale IMMEDIATAMENTE con un nuovo oggetto per forzare re-render
     setLocalContract(contractToSave);
 
     console.log('[RecognitionEditor][handleContractChange] Updated localContract', {
-      escalationOrder: contractToSave?.escalationOrder,
-      methods: contractToSave?.methods ? Object.keys(contractToSave.methods) : [],
+      contractsCount: contractToSave?.contracts?.length || 0,
+      contractTypes: contractToSave?.contracts?.map(c => c.type) || [],
     });
 
     // ✅ Notify parent component of the change (if onProfileUpdate exists, use it)

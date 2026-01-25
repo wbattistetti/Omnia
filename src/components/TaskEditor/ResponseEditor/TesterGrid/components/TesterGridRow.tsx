@@ -7,7 +7,7 @@ import NoteEditor from '../../CellNote/NoteEditor';
 import NoteDisplay from '../../CellNote/NoteDisplay';
 import NoteSeparator from '../../CellNote/NoteSeparator';
 import { RowResult } from '../../hooks/useExtractionTesting';
-import type { NLPContract } from '../../../DialogueDataEngine/contracts/contractLoader';
+import type { DataContract } from '../../../DialogueDataEngine/contracts/contractLoader';
 
 interface TesterGridRowProps {
   rowIndex: number;
@@ -30,7 +30,7 @@ interface TesterGridRowProps {
   showNER: boolean;
   showEmbeddings: boolean;
   activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings' | null;
-  contract?: NLPContract | null; // ✅ FIX: Contract per colonne dinamiche
+  contract?: DataContract | null;
   // Cell editing
   cellOverrides: Record<string, string>;
   setCellOverrides: React.Dispatch<React.SetStateAction<Record<string, string>>>;
@@ -140,10 +140,12 @@ function TesterGridRowComponent({
         phraseColumnWidth={phraseColumnWidth}
         rowBackground={selectedRow === rowIndex ? '#fff7ed' : '#fff'} // ✅ FIX: Passa il background della riga
       />
-      {/* ✅ FIX: Render colonne dinamiche basate su contract.escalationOrder */}
-      {contract?.escalationOrder && contract.escalationOrder.length > 0 ? (
-        contract.escalationOrder.map((method) => {
-          const componentType = method === 'rules' ? 'deterministic' : method;
+      {/* Render colonne dinamiche basate su contract.contracts */}
+      {contract?.contracts && contract.contracts.length > 0 ? (
+        contract.contracts
+          .filter(c => c.enabled !== false) // Filtra solo contract abilitati
+          .map((contractItem) => {
+          const componentType = contractItem.type === 'rules' ? 'deterministic' : contractItem.type;
           const color = {
             regex: '#93c5fd',
             deterministic: '#e5e7eb',
@@ -184,7 +186,7 @@ function TesterGridRowComponent({
           if (componentType === 'embeddings') {
             return (
               <td
-                key={method}
+                key={contractItem.type}
                 style={{
                   padding: 8,
                   color: '#374151',
@@ -232,7 +234,7 @@ function TesterGridRowComponent({
           // Regular extraction columns
           return (
             <td
-              key={method}
+              key={contractItem.type}
               style={{
                 padding: 8,
                 color: enabled ? '#374151' : '#9ca3af',

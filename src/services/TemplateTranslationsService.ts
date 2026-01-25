@@ -7,6 +7,8 @@ export class TemplateTranslationsService {
   private static labelsByLang: Map<string, Map<string, string>> = new Map();
   private static cacheLoaded = false;
   private static currentLanguage: 'it' | 'en' | 'pt' = 'it';
+  // Map<language, Map<templateId, synonyms[]>>
+  private static heuristicsSynonyms: Map<string, Map<string, string[]>> = new Map();
 
   /**
    * Carica tutte le traduzioni label per la lingua specificata
@@ -76,10 +78,12 @@ export class TemplateTranslationsService {
   }
 
   /**
-   * Verifica se la cache è caricata per una lingua specifica
+   * Verifica se la cache è caricata per una lingua specifica (label E sinonimi euristici)
    */
   static isLoaded(lang: 'it' | 'en' | 'pt'): boolean {
-    return this.labelsByLang.has(lang) && this.labelsByLang.get(lang)!.size > 0;
+    return this.labelsByLang.has(lang) &&
+           this.labelsByLang.get(lang)!.size > 0 &&
+           this.heuristicsSynonyms.has(lang);
   }
 
   /**
@@ -96,6 +100,38 @@ export class TemplateTranslationsService {
    */
   static getCurrentLanguage(): 'it' | 'en' | 'pt' {
     return this.currentLanguage;
+  }
+
+  /**
+   * Carica i sinonimi euristici per la lingua specificata dal database.
+   */
+  static async loadHeuristicsSynonyms(lang: 'it' | 'en' | 'pt'): Promise<void> {
+    try {
+      const response = await fetch(`/api/factory/heuristics-synonyms?language=${lang}`);
+      if (!response.ok) {
+        console.error('[TemplateTranslationsService] Errore caricamento sinonimi euristici:', response.status);
+        return;
+      }
+      const data = await response.json(); // { templateId: ['syn1', 'syn2'], ... }
+
+      const synonymsMap = new Map<string, string[]>();
+      Object.entries(data).forEach(([templateId, synonyms]) => {
+        if (Array.isArray(synonyms)) {
+          synonymsMap.set(templateId, synonyms.map(String));
+        }
+      });
+      this.heuristicsSynonyms.set(lang, synonymsMap);
+      console.log(`[TemplateTranslationsService] ✅ Caricati ${synonymsMap.size} set di sinonimi euristici per lingua ${lang}`);
+    } catch (error) {
+      console.error('[TemplateTranslationsService] Errore nel caricamento sinonimi euristici:', error);
+    }
+  }
+
+  /**
+   * Ottiene i sinonimi euristici per un template e una lingua.
+   */
+  static getHeuristicsSynonyms(templateId: string, lang: 'it' | 'en' | 'pt'): string[] {
+    return this.heuristicsSynonyms.get(lang)?.get(templateId) || [];
   }
 }
 

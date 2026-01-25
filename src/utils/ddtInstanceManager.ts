@@ -55,7 +55,7 @@ export async function loadAndAdaptDDTForExistingTask(
         steps: task.steps,
         constraints: task.constraints,
         examples: task.examples,
-        nlpContract: task.nlpContract
+        dataContract: task.dataContract
       },
       adapted: false
     };
@@ -110,12 +110,21 @@ export async function loadAndAdaptDDTForExistingTask(
   });
 
   // ✅ 5. Applica override dall'istanza
+  // ✅ IMPORTANTE: constraints/examples sono referenziati dal template, NON copiati
+  // ✅ Solo se l'istanza ha override espliciti (array non vuoto), usa quelli
   const enrichedData = dataTree.map((templateNode: any) => ({
     ...templateNode,
     label: task.label || templateNode.label,
-    constraints: task.constraints || templateNode.constraints,
-    examples: task.examples || templateNode.examples,
-    nlpContract: task.nlpContract || templateNode.nlpContract,
+    // ✅ Se task.constraints è array vuoto [], usa templateNode.constraints (referenza)
+    constraints: (task.constraints && task.constraints.length > 0)
+      ? task.constraints
+      : templateNode.constraints,
+    // ✅ Se task.examples è array vuoto [], usa templateNode.examples (referenza)
+    examples: (task.examples && task.examples.length > 0)
+      ? task.examples
+      : templateNode.examples,
+    // ✅ dataContract è oggetto, quindi || va bene (undefined è falsy)
+    dataContract: task.dataContract || templateNode.dataContract,
     subData: templateNode.subData || []
   }));
 
@@ -147,10 +156,8 @@ export async function loadAndAdaptDDTForExistingTask(
       correctKeys: Object.keys(clonedSteps)
     });
     // ✅ Correggi il task salvando i clonedSteps corretti
-    // ✅ taskRepository è già importato in cima al file
-    const { getCurrentProjectId } = await import('../state/runtime');
-    const projectId = getCurrentProjectId();
-    taskRepository.updateTask(task.id, { steps: clonedSteps }, projectId || undefined);
+    // ✅ REMOVED: updateTask ridondante - task è già nella cache, modifica direttamente
+    task.steps = clonedSteps;  // ✅ Modifica diretta nella cache
     finalSteps = clonedSteps; // ✅ Usa clonedSteps come finalSteps
   }
 
@@ -202,7 +209,12 @@ export async function loadAndAdaptDDTForExistingTask(
 
       const projectTranslations: Record<string, string> = {};
       if (allGuids.size > 0) {
-        const translations = await getTemplateTranslations(Array.from(allGuids));
+        const guidArray = Array.from(allGuids);
+        console.log('[🔍 ddtInstanceManager] Requesting translations for GUIDs:', {
+          count: guidArray.length,
+          guids: guidArray
+        });
+        const translations = await getTemplateTranslations(guidArray);
         const projectLocale = getCurrentProjectLocale() || 'it';
         for (const guid of allGuids) {
           const trans = translations[guid];
@@ -232,9 +244,16 @@ export async function loadAndAdaptDDTForExistingTask(
             label: task.label ?? template.label,
             data: enrichedData,
             steps: finalSteps,
-            constraints: task.constraints ?? template.constraints,
-            examples: task.examples ?? template.examples,
-            nlpContract: task.nlpContract ?? template.nlpContract,
+            // ✅ Se task.constraints è array vuoto [], usa template (referenza)
+            constraints: (task.constraints && task.constraints.length > 0)
+              ? task.constraints
+              : template.constraints,
+            // ✅ Se task.examples è array vuoto [], usa template (referenza)
+            examples: (task.examples && task.examples.length > 0)
+              ? task.examples
+              : template.examples,
+            // ✅ dataContract è oggetto, quindi ?? va bene (undefined è nullish)
+            dataContract: task.dataContract ?? template.dataContract,
             templateId: task.templateId
           },
           adapted: true
@@ -255,9 +274,16 @@ export async function loadAndAdaptDDTForExistingTask(
       label: task.label ?? template.label,
       data: enrichedData,
       steps: finalSteps,
-      constraints: task.constraints ?? template.constraints,
-      examples: task.examples ?? template.examples,
-      nlpContract: task.nlpContract ?? template.nlpContract,
+      // ✅ Se task.constraints è array vuoto [], usa template (referenza)
+      constraints: (task.constraints && task.constraints.length > 0)
+        ? task.constraints
+        : template.constraints,
+      // ✅ Se task.examples è array vuoto [], usa template (referenza)
+      examples: (task.examples && task.examples.length > 0)
+        ? task.examples
+        : template.examples,
+      // ✅ dataContract è oggetto, quindi ?? va bene (undefined è nullish)
+      dataContract: task.dataContract ?? template.dataContract,
       templateId: task.templateId
     },
     adapted: promptsAlreadyAdapted
