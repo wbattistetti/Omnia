@@ -54,6 +54,7 @@ interface RecognitionEditorProps {
   setHovered: (row: number | null, col: string | null) => void;
   activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings' | null;
   toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings') => void;
+  openEditor?: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings') => void;
   mode?: 'extraction' | 'classification';
   newExample: string;
   setNewExample: React.Dispatch<React.SetStateAction<string>>;
@@ -62,12 +63,19 @@ interface RecognitionEditorProps {
   editorProps?: {
     regex?: string;
     setRegex?: (value: string) => void;
+    extractorCode?: string;
+    setExtractorCode?: (value: string) => void;
+    entityTypes?: string[];
+    setEntityTypes?: (value: string[]) => void;
+    systemPrompt?: string;
+    setSystemPrompt?: (value: string) => void;
     node?: any;
     kind?: string;
     profile?: any;
     testCases?: string[];
     setTestCases?: (cases: string[]) => void;
     onProfileUpdate?: (profile: any) => void;
+    task?: any;
   };
   runAllRows?: () => Promise<void>;
   testing?: boolean;
@@ -123,6 +131,7 @@ export default function RecognitionEditor({
   setHovered,
   activeEditor,
   toggleEditor,
+  openEditor,
   mode = 'extraction',
   newExample,
   setNewExample,
@@ -186,20 +195,8 @@ export default function RecognitionEditor({
     }
   }, [editorProps?.node]);
 
-  // Crea sempre un nuovo riferimento per forzare re-render
-  const contractKey = localContract?.contracts?.map(c => `${c.type}:${c.enabled}`).join(',') || '';
-  const contract = useMemo<DataContract | null>(() => {
-    if (!localContract) return null;
-
-    // Crea sempre un nuovo oggetto per forzare il cambio di riferimento
-    const newContractRef: DataContract = {
-      ...localContract,
-      contracts: localContract.contracts ? [...localContract.contracts] : [],
-      subDataMapping: { ...localContract.subDataMapping },
-    };
-
-    return newContractRef;
-  }, [localContract, contractKey]);
+  // ✅ Usa direttamente localContract come contract (non serve creare nuovo oggetto)
+  const contract = localContract;
 
   // Handle contract changes and save to node
   const handleContractChange = useCallback((updatedContract: DataContract | null) => {
@@ -211,8 +208,8 @@ export default function RecognitionEditor({
 
     console.log('[RecognitionEditor][handleContractChange] Saving contract', {
       hasContract: !!updatedContract,
-      escalationOrder: updatedContract?.escalationOrder,
-      methods: updatedContract?.methods ? Object.keys(updatedContract.methods) : [],
+      contractsCount: updatedContract?.contracts?.length || 0,
+      contractTypes: updatedContract?.contracts?.map(c => c.type) || [],
     });
 
     // Crea un nuovo oggetto per forzare il cambio di riferimento
@@ -239,6 +236,114 @@ export default function RecognitionEditor({
       editorProps.onProfileUpdate(editorProps.profile || {});
     }
   }, [editorProps?.node, editorProps?.onProfileUpdate, editorProps?.profile]);
+
+  // ✅ Costruisci editorProps dinamico basato su activeEditor e contract
+  // ✅ IMPORTANTE: Usa solo activeEditor come dipendenza, non contract o handleContractChange
+  // per evitare loop infiniti. contract e handleContractChange sono stabili.
+  const dynamicEditorProps = useMemo(() => {
+    const node = editorProps?.node;
+    if (!node || !contract) {
+      return editorProps; // Fallback agli editorProps passati
+    }
+
+    // ✅ Trova il contract item corrispondente all'editor attivo
+    // Map editor type to contract type: 'extractor' → 'rules', others stay the same
+    const getContractTypeFromEditorType = (editorType: string): string => {
+      if (editorType === 'extractor') return 'rules';
+      return editorType;
+    };
+
+    const contractItem = activeEditor ? contract.contracts?.find((c: any) => {
+      const expectedContractType = getContractTypeFromEditorType(activeEditor);
+      return c.type === expectedContractType;
+    }) : null;
+
+    // Log rimosso per evitare loop infinito
+
+    const baseProps = {
+      node,
+      kind: editorProps?.kind,
+      profile: editorProps?.profile,
+      testCases: editorProps?.testCases,
+      setTestCases: editorProps?.setTestCases,
+      onProfileUpdate: editorProps?.onProfileUpdate,
+      task: editorProps?.task,
+    };
+
+    switch (activeEditor) {
+      case 'regex':
+        return {
+          ...baseProps,
+          regex: contractItem?.patterns?.[0] || editorProps?.regex || '',
+          setRegex: (value: string) => {
+            // ✅ Aggiorna il contract item specifico usando contractItem.type
+            if (contractItem && contract) {
+              const contractType = contractItem.type;
+              const updatedContracts = contract.contracts.map((c: any) =>
+                c.type === contractType ? { ...c, patterns: [value] } : c
+              );
+              const updatedContract = { ...contract, contracts: updatedContracts };
+              handleContractChange(updatedContract);
+            } else if (editorProps?.setRegex) {
+              // Fallback al vecchio comportamento
+              editorProps.setRegex(value);
+            }
+          },
+        };
+      case 'extractor':
+        // ExtractorInlineEditor gestisce extractorCode internamente, ma potremmo sincronizzarlo
+        return {
+          ...baseProps,
+          extractorCode: contractItem?.extractorCode || '',
+          setExtractorCode: (value: string) => {
+            if (contractItem && contract) {
+              const contractType = contractItem.type; // Should be 'rules'
+              const updatedContracts = contract.contracts.map((c: any) =>
+                c.type === contractType ? { ...c, extractorCode: value } : c
+              );
+              const updatedContract = { ...contract, contracts: updatedContracts };
+              handleContractChange(updatedContract);
+            }
+          },
+        };
+      case 'ner':
+        return {
+          ...baseProps,
+          entityTypes: contractItem?.entityTypes || [],
+          setEntityTypes: (value: string[]) => {
+            if (contractItem && contract) {
+              const contractType = contractItem.type;
+              const updatedContracts = contract.contracts.map((c: any) =>
+                c.type === contractType ? { ...c, entityTypes: value } : c
+              );
+              const updatedContract = { ...contract, contracts: updatedContracts };
+              handleContractChange(updatedContract);
+            }
+          },
+        };
+      case 'llm':
+        return {
+          ...baseProps,
+          systemPrompt: contractItem?.systemPrompt || '',
+          setSystemPrompt: (value: string) => {
+            if (contractItem && contract) {
+              const contractType = contractItem.type;
+              const updatedContracts = contract.contracts.map((c: any) =>
+                c.type === contractType ? { ...c, systemPrompt: value } : c
+              );
+              const updatedContract = { ...contract, contracts: updatedContracts };
+              handleContractChange(updatedContract);
+            }
+          },
+        };
+      default:
+        return editorProps || baseProps;
+    }
+    // ✅ SOLO activeEditor come dipendenza principale
+    // ✅ contract e editorProps sono letti ma non nelle dipendenze per evitare loop infiniti
+    // ✅ handleContractChange è stabile (useCallback con dipendenze corrette)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeEditor]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
@@ -330,12 +435,13 @@ export default function RecognitionEditor({
           setHovered={setHovered}
           activeEditor={activeEditor}
           toggleEditor={toggleEditor}
+          openEditor={openEditor}
           mode={mode}
           newExample={newExample}
           setNewExample={setNewExample}
           setExamplesList={setExamplesList}
           onCloseEditor={onCloseEditor}
-          editorProps={editorProps}
+          editorProps={dynamicEditorProps}
           runAllRows={runAllRows}
           testing={testing}
           reportOpen={reportOpen}

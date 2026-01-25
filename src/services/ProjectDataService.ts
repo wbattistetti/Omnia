@@ -822,6 +822,7 @@ export async function getTemplateTranslations(keys: string[]): Promise<Record<st
       statusText: res.statusText,
       error: errorText.substring(0, 500),
       keysCount: keys.length,
+      requestedKeys: keys,
       sampleKeys: keys.slice(0, 5),
       allKeys: keys,
       responseHeaders: Object.fromEntries(res.headers.entries())
@@ -829,7 +830,22 @@ export async function getTemplateTranslations(keys: string[]): Promise<Record<st
     throw new Error(`Errore nel recupero di Template Translations: ${res.status} ${res.statusText}${errorText ? ' - ' + errorText.substring(0, 200) : ''}`);
   }
 
-  return res.json();
+  const result = await res.json();
+
+  // ✅ DEBUG: Log what we received
+  console.log('[ProjectDataService] Template translations received:', {
+    keysRequested: keys.length,
+    keysReceived: Object.keys(result).length,
+    requestedKeys: keys,
+    receivedKeys: Object.keys(result),
+    missingKeys: keys.filter(k => !result[k]),
+    sampleResult: Object.keys(result).length > 0 ? {
+      firstKey: Object.keys(result)[0],
+      firstValue: result[Object.keys(result)[0]]
+    } : null
+  });
+
+  return result;
 }
 
 export async function saveProjectTranslations(

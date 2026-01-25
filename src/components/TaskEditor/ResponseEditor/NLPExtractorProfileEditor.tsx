@@ -418,6 +418,7 @@ export default function NLPExtractorProfileEditor({
         setHovered={setHovered}
         activeEditor={activeEditor}
         toggleEditor={toggleEditor}
+        openEditor={openEditor}
         mode={testMode}
         newExample={newExample}
         setNewExample={setNewExample}

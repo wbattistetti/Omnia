@@ -369,8 +369,8 @@ class TaskRepository {
           return null;
         }
 
-        // Extract all fields except id, templateId, createdAt, updatedAt
-        const { id, templateId, createdAt, updatedAt, ...fields } = task;
+        // ✅ CRITICAL: Extract all fields and REMOVE _id to prevent MongoDB immutable field error
+        const { id, templateId, createdAt, updatedAt, _id, ...fields } = task as any;
 
         // ✅ Validate templateId: must be null or valid GUID (not semantic string)
         const finalTemplateId = templateId === null || templateId === undefined ? null : templateId;

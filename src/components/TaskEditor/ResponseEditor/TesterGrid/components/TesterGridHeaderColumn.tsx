@@ -4,6 +4,7 @@ import SmartTooltip from '../../../../SmartTooltip';
 
 interface TesterGridHeaderColumnProps {
   type: 'regex' | 'deterministic' | 'ner' | 'llm' | 'embeddings';
+  contractType: 'regex' | 'rules' | 'ner' | 'llm' | 'embeddings'; // ✅ Original contract type from DataContract
   mainLabel: string;
   techLabel: string;
   tooltip: string;
@@ -26,6 +27,7 @@ interface TesterGridHeaderColumnProps {
  */
 export default function TesterGridHeaderColumn({
   type,
+  contractType, // ✅ Original contract type
   mainLabel,
   techLabel,
   tooltip,
@@ -42,7 +44,21 @@ export default function TesterGridHeaderColumn({
   columnWidth, // ✅ FIX: Explicit column width
   onRemoveContract, // ✅ NUOVO: Destructure remove prop
 }: TesterGridHeaderColumnProps) {
-  const isEditorActive = activeEditor === type || (type === 'deterministic' && activeEditor === 'extractor') || (type === 'deterministic' && activeEditor === 'post');
+  // ✅ Removed excessive render logging
+
+  // ✅ Map contractType to editor type for comparison
+  // 'rules' contract type maps to 'extractor' editor type
+  // All other contract types map directly to their editor type
+  const getEditorTypeFromContractType = (ct: string): 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings' => {
+    if (ct === 'rules') return 'extractor';
+    return ct as 'regex' | 'ner' | 'llm' | 'embeddings';
+  };
+
+  const editorType = getEditorTypeFromContractType(contractType);
+  // ✅ Editor is active if:
+  // 1. activeEditor matches the mapped editor type (e.g., 'extractor' for 'rules' contract)
+  // 2. OR it's a 'rules' contract and activeEditor is 'post' (post-process editor)
+  const isEditorActive = activeEditor === editorType || (contractType === 'rules' && activeEditor === 'post');
   const shouldHide = activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) && !isEditorActive;
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -110,7 +126,7 @@ export default function TesterGridHeaderColumn({
                 <button
                   onClick={() => onToggleEditor('extractor')}
                   style={{
-                    background: activeEditor === 'extractor' ? '#3b82f6' : 'rgba(255,255,255,0.3)',
+                    background: isEditorActive ? '#3b82f6' : 'rgba(255,255,255,0.3)',
                     border: 'none',
                     borderRadius: 4,
                     padding: '4px 6px',
@@ -121,14 +137,14 @@ export default function TesterGridHeaderColumn({
                     flexShrink: 0,
                   }}
                 >
-                  <Wand2 size={14} color={activeEditor === 'extractor' ? '#fff' : '#666'} />
+                  <Wand2 size={14} color={isEditorActive ? '#fff' : '#666'} />
                 </button>
               </SmartTooltip>
               <SmartTooltip text="Configure Post Process" tutorId="configure_post_help" placement="bottom">
                 <button
                   onClick={() => onToggleEditor('post')}
                   style={{
-                    background: activeEditor === 'post' ? '#10b981' : 'rgba(255,255,255,0.3)',
+                    background: (contractType === 'rules' && activeEditor === 'post') ? '#10b981' : 'rgba(255,255,255,0.3)',
                     border: 'none',
                     borderRadius: 4,
                     padding: '4px 6px',
@@ -139,14 +155,22 @@ export default function TesterGridHeaderColumn({
                     flexShrink: 0,
                   }}
                 >
-                  <TypeIcon size={14} color={activeEditor === 'post' ? '#fff' : '#666'} />
+                  <TypeIcon size={14} color={(contractType === 'rules' && activeEditor === 'post') ? '#fff' : '#666'} />
                 </button>
               </SmartTooltip>
             </>
           ) : (
             <SmartTooltip text={`Configure ${techLabel}`} tutorId={`configure_${type}_help`} placement="bottom">
               <button
-                onClick={() => onToggleEditor(type === 'deterministic' ? 'extractor' : type)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  // ✅ Use contractType to determine editor type directly
+                  const editorTypeToOpen = contractType === 'rules' ? 'extractor' : contractType;
+                  if (onToggleEditor) {
+                    onToggleEditor(editorTypeToOpen);
+                  }
+                }}
                 title={`Configure ${techLabel}`}
                 style={{
                   background: isEditorActive ? '#3b82f6' : 'rgba(255,255,255,0.3)',

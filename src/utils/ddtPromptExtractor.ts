@@ -140,14 +140,18 @@ export function extractStartPrompts(
             nodeTemplateId,
             nodeLabel: node.label,
             guid: textGuid,
-            textPreview: projectTranslations[textGuid].substring(0, 50) + '...'
+            textPreview: projectTranslations[textGuid].substring(0, 50) + '...',
+            fullText: projectTranslations[textGuid]
           });
         } else {
-          console.log('[🔍 extractStartPrompts] Task senza textGuid o traduzione', {
+          console.warn('[🔍 extractStartPrompts] ⚠️ Task senza textGuid o traduzione', {
             nodeTemplateId,
             taskId: task.taskId || task.id,
             hasTextGuid: !!textGuid,
-            hasTranslation: !!(textGuid && projectTranslations[textGuid])
+            textGuid: textGuid,
+            hasTranslation: !!(textGuid && projectTranslations[textGuid]),
+            availableTranslations: Object.keys(projectTranslations),
+            taskParams: task.params
           });
         }
       }

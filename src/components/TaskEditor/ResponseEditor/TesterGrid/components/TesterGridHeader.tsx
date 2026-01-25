@@ -60,6 +60,7 @@ interface TesterGridHeaderProps {
   toggleMethod: (method: keyof TesterGridHeaderProps['enabledMethods']) => void;
   activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings' | null;
   toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings') => void;
+  openEditor?: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings') => void;
   showDeterministic: boolean;
   showNER: boolean;
   showEmbeddings: boolean;
@@ -82,6 +83,7 @@ export default function TesterGridHeader({
   toggleMethod,
   activeEditor,
   toggleEditor,
+  openEditor,
   showDeterministic,
   showNER,
   showEmbeddings,
@@ -252,6 +254,7 @@ export default function TesterGridHeader({
         <TesterGridHeaderColumn
           key={contractItem.type}
           type={componentType}
+          contractType={contractItem.type} // ✅ Pass original contract type for editor logic
           mainLabel={labels.main}
           techLabel={labels.tech}
           tooltip={labels.tooltip}
@@ -259,7 +262,7 @@ export default function TesterGridHeader({
           enabled={isEnabledInProps}
           activeEditor={activeEditor}
           onToggleMethod={() => toggleMethod(enabledMethodKey as keyof typeof enabledMethods)}
-          onToggleEditor={toggleEditor}
+          onToggleEditor={openEditor ? (type) => openEditor(type) : toggleEditor}
           showPostProcess={componentType === 'deterministic'}
           onAddContract={availableMethods.length > 0 && onContractChange ? () => {
             // Toggle dropdown for this column

@@ -90,6 +90,7 @@ interface TesterGridProps {
   // Editor toggle
   activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings' | null;
   toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings') => void;
+  openEditor?: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings') => void;
   // Mode: extraction (default) or classification
   mode?: 'extraction' | 'classification';
   // Input for adding new phrases
@@ -148,6 +149,7 @@ function TesterGridComponent({
   setHovered,
   activeEditor,
   toggleEditor,
+  openEditor,
   mode = 'extraction', // Default to extraction for backward compatibility
   newExample,
   setNewExample,
@@ -398,6 +400,7 @@ function TesterGridComponent({
               toggleMethod={toggleMethod}
               activeEditor={activeEditor}
               toggleEditor={toggleEditor}
+              openEditor={openEditor}
               showDeterministic={showDeterministic}
               showNER={showNER}
               showEmbeddings={showEmbeddings}
@@ -461,7 +464,7 @@ function TesterGridComponent({
 
         {/* Overlay dell'editor quando attivo */}
         {/* ✅ Don't render editor during batch testing to prevent Monaco unmount errors */}
-        {activeEditor && !testing && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) && Object.keys(editorOverlayStyle).length > 0 && (
+        {activeEditor && !testing && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) && Object.keys(editorOverlayStyle).length > 0 && editorProps && (
           <div
             style={{
               ...editorOverlayStyle,
