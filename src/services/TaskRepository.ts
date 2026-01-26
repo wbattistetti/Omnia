@@ -119,16 +119,6 @@ class TaskRepository {
       ? existingTask.templateId  // ✅ Preserva templateId esistente se viene passato null per errore
       : (templateId !== undefined ? templateId : existingTask.templateId);  // ✅ Usa quello passato o preserva
 
-    // ✅ LOG: Verifica templateId prima del merge
-    console.log('[🔍 TaskRepository][UPDATE] 🔄 Prima del merge', {
-      taskId,
-      existingTemplateId: existingTask.templateId,
-      updatesTemplateId: templateId,
-      finalTemplateId,
-      templateIdProtected: (templateId === null && existingTask.templateId !== null),
-      updatesKeys: Object.keys(updates),
-      updatesWithoutTypeAndTemplateIdKeys: Object.keys(updatesWithoutTypeAndTemplateId)
-    });
 
     // ✅ CRITICAL: Validate steps structure before merging
     if (updates.steps && typeof updates.steps === 'object') {
@@ -159,14 +149,6 @@ class TaskRepository {
       updatedAt: updates.updatedAt || new Date()
     };
 
-    // ✅ LOG: Verifica templateId dopo il merge
-    console.log('[🔍 TaskRepository][UPDATE] ✅ Dopo il merge', {
-      taskId,
-      finalTemplateId: updatedTask.templateId,
-      existingTemplateId: existingTask.templateId,
-      updatesHadTemplateId: 'templateId' in updates,
-      templateIdWasProtected: (templateId === null && existingTask.templateId !== null)
-    });
 
     // ✅ Update internal storage only (in-memory)
     // ✅ NO automatic database save - save only on explicit user action (project:save event)
@@ -290,6 +272,17 @@ class TaskRepository {
           valueTemplateIdValue: value?.templateId,
           directFieldsTemplateIdValue: directFields.templateId
         });
+
+        // ✅ LOG: Check dataContract in loaded task
+        if (task.data && Array.isArray(task.data) && task.data.length > 0) {
+          const firstNode = task.data[0];
+          const regexPattern = firstNode.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+          console.log('[REGEX] LOAD - From database', {
+            taskId: task.id,
+            firstNodeId: firstNode.id,
+            regexPattern: regexPattern || '(none)'
+          });
+        }
 
         // ✅ CLEANUP: Rimuovi constraints/examples vuoti (sono referenziati dal template, non salvati)
         // ✅ Se constraints/examples sono array vuoti, rimuovili (useranno quelli del template)

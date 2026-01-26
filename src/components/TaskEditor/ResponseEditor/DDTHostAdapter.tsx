@@ -8,7 +8,7 @@ import { getTemplateId } from '../../../utils/taskHelpers';
 // ❌ RIMOSSO: buildDDTFromTask - ora usiamo loadAndAdaptDDTForExistingTask da ddtInstanceManager
 import { TaskType, taskIdToTaskType, getEditorFromTaskType } from '../../../types/taskTypes'; // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
 
-export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, onToolbarUpdate }: EditorProps) { // ✅ PATTERN CENTRALIZZATO: Accetta hideHeader e onToolbarUpdate
+export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, onToolbarUpdate, registerOnClose }: EditorProps) { // ✅ PATTERN CENTRALIZZATO: Accetta hideHeader e onToolbarUpdate
   // ✅ ARCHITETTURA ESPERTO: Verifica che questo componente sia usato solo per DDT
   // Se il task è di tipo Message, questo componente NON dovrebbe essere montato
   if (taskMeta?.type !== undefined && taskMeta.type !== null) {
@@ -328,6 +328,7 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
       isDdtLoading={loading} // ✅ ARCHITETTURA ESPERTO: Stato di loading
       hideHeader={hideHeader} // ✅ PATTERN CENTRALIZZATO: Passa hideHeader al wrapper
       onToolbarUpdate={onToolbarUpdate} // ✅ PATTERN CENTRALIZZATO: Passa onToolbarUpdate per ereditare header
+      registerOnClose={registerOnClose} // ✅ Passa registerOnClose per gestire chiusura con controllo contracts
     />
   );
 }

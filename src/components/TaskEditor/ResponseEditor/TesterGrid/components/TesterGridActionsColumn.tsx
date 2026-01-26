@@ -92,7 +92,7 @@ export default function TesterGridActionsColumn({
             testingState.startTesting();
             flushSync(() => {
               // Forza React a processare il cambio di getIsTesting() immediatamente
-              // Questo assicura che NLPExtractorProfileEditor venga smontato PRIMA che runAllRows() venga chiamato
+              // Questo assicura che DataExtractionEditor venga smontato PRIMA che runAllRows() venga chiamato
             });
             void runAllRows();
           }}

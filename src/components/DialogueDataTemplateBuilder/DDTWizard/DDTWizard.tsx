@@ -19,7 +19,7 @@ import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
 import { useProjectTranslations } from '../../../context/ProjectTranslationsContext';
 import { getTemplateTranslations } from '../../../services/ProjectDataService';
 import { DialogueTaskService } from '../../../services/DialogueTaskService';
-import { cloneTemplateSteps } from '../../../utils/taskUtils';
+import { cloneTemplateSteps } from '../../../utils/ddtMergeUtils';
 // ResponseEditor will be opened by sidebar after onComplete
 
 // 🚀 NEW: Interface for field processing state

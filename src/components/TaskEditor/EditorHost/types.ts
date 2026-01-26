@@ -16,6 +16,7 @@ export type EditorProps = {
   onClose?: () => void;
   onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void;
   hideHeader?: boolean;
+  registerOnClose?: (fn: () => Promise<boolean>) => void; // ✅ Per gestire chiusura con controllo contracts
 };
 
 import type { ToolbarButton } from '../../../dock/types';

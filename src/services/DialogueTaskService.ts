@@ -27,6 +27,8 @@ export class DialogueTaskService {
   private static cache: DialogueTask[] = [];
   private static cacheLoaded = false;
   private static loadingPromise: Promise<DialogueTask[]> | null = null;
+  // ✅ Traccia templates modificati in memoria (per salvarli quando si salva il progetto)
+  private static modifiedTemplates = new Set<string>(); // Set di templateId modificati
 
   /**
    * Carica tutti i Task dal database Factory
@@ -58,6 +60,11 @@ export class DialogueTaskService {
       const data = await response.json();
       this.cache = Array.isArray(data) ? data : [];
       this.cacheLoaded = true;
+
+      // ✅ Resetta lista templates modificati quando si ricarica la cache
+      // (i templates ricaricati sono quelli dal database, quindi non sono più "modificati")
+      this.modifiedTemplates.clear();
+      console.log('[DialogueTaskService] 🧹 Cleared modified templates list after cache reload');
 
       return this.cache;
     } catch (error) {
@@ -151,6 +158,153 @@ export class DialogueTaskService {
   }
 
   private static _loggedMissingIds?: Set<string>;
+
+  /**
+   * Marca un template come modificato (da chiamare quando si modifica dataContract in memoria)
+   */
+  static markTemplateAsModified(templateId: string): void {
+    this.modifiedTemplates.add(templateId);
+    // ✅ Log dettagliato per debugging
+    const template = this.getTemplate(templateId);
+    const templateInfo = template ? {
+      has_id: !!template._id,
+      _id: template._id ? (typeof template._id === 'object' ? template._id.toString() : String(template._id)) : null,
+      hasId: !!template.id,
+      id: template.id,
+      label: template.label
+    } : null;
+    console.log('[DialogueTaskService] 📝 Template marked as modified', {
+      templateId,
+      totalModified: this.modifiedTemplates.size,
+      templateInfo
+    });
+  }
+
+  /**
+   * Ottiene la lista di templateId modificati
+   */
+  static getModifiedTemplateIds(): string[] {
+    return Array.from(this.modifiedTemplates);
+  }
+
+  /**
+   * Rimuove un template dalla lista dei modificati (dopo il salvataggio)
+   */
+  static clearModifiedTemplate(templateId: string): void {
+    this.modifiedTemplates.delete(templateId);
+    console.log('[DialogueTaskService] ✅ Template cleared from modified list', {
+      templateId,
+      remainingModified: this.modifiedTemplates.size
+    });
+  }
+
+  /**
+   * Salva tutti i templates modificati nel database Factory
+   */
+  static async saveModifiedTemplates(): Promise<{ saved: number; failed: number }> {
+    if (this.modifiedTemplates.size === 0) {
+      console.log('[DialogueTaskService] ✅ No modified templates to save');
+      return { saved: 0, failed: 0 };
+    }
+
+    console.log('[DialogueTaskService] 💾 Saving modified templates', {
+      count: this.modifiedTemplates.size,
+      templateIds: Array.from(this.modifiedTemplates)
+    });
+
+    const templateIds = Array.from(this.modifiedTemplates);
+    const results = await Promise.allSettled(
+      templateIds.map(async (templateId) => {
+        const template = this.getTemplate(templateId);
+        if (!template) {
+          console.warn('[DialogueTaskService] ⚠️ Template not found for saving', { templateId });
+          throw new Error(`Template not found: ${templateId}`);
+        }
+
+        try {
+          // ✅ Prepara payload per salvataggio
+          // ✅ IMPORTANTE: L'endpoint PUT cerca per _id MongoDB, non per id
+          // Devo usare template._id se disponibile, altrimenti templateId potrebbe essere l'id
+          const templateForSave = template as any;
+          const mongoId = templateForSave._id
+            ? (typeof templateForSave._id === 'object' ? templateForSave._id.toString() : String(templateForSave._id))
+            : templateId;
+
+          // ✅ Prepara payload (rimuovi _id dal payload ma usalo nell'URL)
+          const { _id, ...templatePayload } = templateForSave;
+          const payload = {
+            ...templatePayload,
+            updatedAt: new Date()
+          };
+
+          console.log('[DialogueTaskService] 💾 Saving template', {
+            templateId,
+            mongoId,
+            has_id: !!templateForSave._id,
+            _idType: typeof templateForSave._id,
+            _idValue: templateForSave._id ? (typeof templateForSave._id === 'object' ? templateForSave._id.toString() : String(templateForSave._id)) : null,
+            hasId: !!templateForSave.id,
+            idValue: templateForSave.id
+          });
+
+          // ✅ Usa mongoId (template._id) se disponibile, altrimenti templateId
+          // L'endpoint PUT cerca per _id MongoDB
+          const response = await fetch(`/api/factory/task-templates/${mongoId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text().catch(() => 'Unknown error');
+            throw new Error(`Failed to save template: ${response.status} ${errorText}`);
+          }
+
+          const saved = await response.json();
+          console.log('[DialogueTaskService] ✅ Template saved', {
+            templateId,
+            hasDataContract: !!saved?.dataContract
+          });
+          this.clearModifiedTemplate(templateId);
+          return { templateId, success: true };
+        } catch (error: any) {
+          console.error('[DialogueTaskService] ❌ Error saving template', {
+            templateId,
+            error: error.message || error
+          });
+          throw error;
+        }
+      })
+    );
+
+    const saved = results.filter(r => r.status === 'fulfilled').length;
+    const failed = results.filter(r => r.status === 'rejected').length;
+
+    if (failed > 0) {
+      console.error('[DialogueTaskService] ❌ Some templates failed to save', {
+        failed,
+        total: templateIds.length,
+        failedIds: results
+          .map((r, idx) => r.status === 'rejected' ? templateIds[idx] : null)
+          .filter(Boolean)
+      });
+    } else {
+      console.log('[DialogueTaskService] ✅ All modified templates saved successfully', {
+        saved,
+        total: templateIds.length
+      });
+    }
+
+    return { saved, failed };
+  }
+
+  /**
+   * Resetta la lista dei templates modificati (utile per testing o reset)
+   */
+  static clearAllModifiedTemplates(): void {
+    this.modifiedTemplates.clear();
+    console.log('[DialogueTaskService] 🧹 All modified templates cleared');
+  }
 }
 
 // Export per compatibilità

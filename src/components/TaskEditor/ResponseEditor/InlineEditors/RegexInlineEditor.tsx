@@ -7,7 +7,7 @@ import { useRegexValidation } from '../hooks/useRegexValidation';
 import { useRegexButtonMode } from '../hooks/useRegexButtonMode';
 import { usePlaceholderSelection } from '../hooks/usePlaceholderSelection';
 import { useRegexAIGeneration } from '../hooks/useRegexAIGeneration';
-import { NLPProfile } from '../NLPExtractorProfileEditor';
+import { NLPProfile } from '../DataExtractionEditor';
 import { getIsTesting } from '../testingState';
 
 interface RegexInlineEditorProps {

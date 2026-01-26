@@ -112,29 +112,38 @@ export async function loadAndAdaptDDTForExistingTask(
   // ✅ 5. Applica override dall'istanza
   // ✅ IMPORTANTE: constraints/examples sono referenziati dal template, NON copiati
   // ✅ Solo se l'istanza ha override espliciti (array non vuoto), usa quelli
-  const enrichedData = dataTree.map((templateNode: any) => ({
-    ...templateNode,
-    label: task.label || templateNode.label,
-    // ✅ Se task.constraints è array vuoto [], usa templateNode.constraints (referenza)
-    constraints: (task.constraints && task.constraints.length > 0)
-      ? task.constraints
-      : templateNode.constraints,
-    // ✅ Se task.examples è array vuoto [], usa templateNode.examples (referenza)
-    examples: (task.examples && task.examples.length > 0)
-      ? task.examples
-      : templateNode.examples,
-    // ✅ dataContract è oggetto, quindi || va bene (undefined è falsy)
-    dataContract: task.dataContract || templateNode.dataContract,
-    subData: templateNode.subData || []
-  }));
+  // ✅ CRITICAL: Il dataContract può essere salvato in task.data[0].dataContract (override) o task.dataContract (root)
+  // ✅ Cerca prima negli override in task.data, poi a livello root, poi nel template
+  const enrichedData = dataTree.map((templateNode: any, index: number) => {
+    // ✅ Cerca override nel task.data corrispondente (per templateId match)
+    const taskDataOverride = task.data && Array.isArray(task.data)
+      ? task.data.find((node: any) => node.templateId === templateNode.templateId) || task.data[index]
+      : null;
 
-  console.log('[🔍 ddtInstanceManager] enrichedData creato', {
-    enrichedDataLength: enrichedData.length,
-    mainNodesWithTemplateId: enrichedData.map((n: any) => ({
-      id: n.id,
-      templateId: n.templateId,
-      label: n.label
-    }))
+      // ✅ CRITICAL: dataContract è sempre dal template, non più override
+      const finalDataContract = templateNode.dataContract;
+      const regexPattern = finalDataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+      console.log('[CONTRACT] LOAD - From template only', {
+        nodeId: templateNode.id,
+        templateId: templateNode.templateId,
+        regexPattern: regexPattern || '(none)'
+      });
+
+    return {
+      ...templateNode,
+      label: task.label || templateNode.label,
+      // ✅ Se task.constraints è array vuoto [], usa templateNode.constraints (referenza)
+      constraints: (task.constraints && task.constraints.length > 0)
+        ? task.constraints
+        : templateNode.constraints,
+      // ✅ Se task.examples è array vuoto [], usa templateNode.examples (referenza)
+      examples: (task.examples && task.examples.length > 0)
+        ? task.examples
+        : templateNode.examples,
+      // ✅ CRITICAL: dataContract è sempre dal template, non più override
+      dataContract: templateNode.dataContract,
+      subData: templateNode.subData || []
+    };
   });
 
   // ✅ 6. Usa steps dall'istanza (se esistono E hanno struttura corretta) o quelli clonati

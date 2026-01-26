@@ -221,21 +221,47 @@ function DockRenderer(props: {
       active={node.active}
       setActive={(idx) => { props.setActiveTabSetId(node.id); props.setRoot(activateTab(props.rootNode, node.tabs[idx].id)); }}
       onClose={async (tabId) => {
+        console.log('[DockManager] 🔴 onClose called', { tabId });
         // ✅ PRIMA: Chiama onClose del tab se presente (per salvataggio sincrono)
         const t = getTab(props.rootNode, tabId);
+        console.log('[DockManager] 🔍 Tab found', {
+          tabId,
+          hasTab: !!t,
+          tabType: t?.type,
+          hasOnClose: t && 'onClose' in t,
+          onCloseType: t && 'onClose' in t ? typeof t.onClose : 'N/A'
+        });
+        let shouldClose = true; // Default: chiudi il tab
+
         if (t && 'onClose' in t && typeof t.onClose === 'function') {
+          console.log('[DockManager] 🟢 Calling tab.onClose', { tabId, tabType: t.type });
           try {
             // ✅ Pass the tab to onClose so it can read tab.ddt (which is updated during editing)
-            await t.onClose(t);
+            const result = await t.onClose(t);
+            console.log('[DockManager] ✅ tab.onClose completed', { tabId, result, shouldClose: result !== false });
+            // ✅ Se onClose ritorna false, non chiudere il tab
+            if (result === false) {
+              shouldClose = false;
+              console.log('[DockManager] ⏸️ Tab close prevented by tab.onClose', { tabId });
+            }
           } catch (err) {
-            console.error('[DockManager] Error in tab.onClose:', err);
+            console.error('[DockManager] ❌ Error in tab.onClose:', err);
+            // ✅ In caso di errore, chiudi comunque il tab (comportamento precedente)
           }
+        } else {
+          console.warn('[DockManager] ⚠️ Tab.onClose not available', {
+            tabId,
+            hasTab: !!t,
+            hasOnClose: t && 'onClose' in t,
+            onCloseType: t && 'onClose' in t ? typeof t.onClose : 'N/A'
+          });
         }
 
-        // ✅ POI: Chiudi la tab nel suo tabset; non spostarla automaticamente altrove.
-        // Delego all'header "Closed" (shelf) la riapertura esplicita.
-        if (t) props.onTabClosed(t);
-        props.setRoot(closeTab(props.rootNode, tabId));
+        // ✅ POI: Chiudi la tab solo se onClose non ha ritornato false
+        if (shouldClose) {
+          if (t) props.onTabClosed(t);
+          props.setRoot(closeTab(props.rootNode, tabId));
+        }
       }}
       onDragTabStart={props.onDragTabStart}
       onDragTabEnd={props.onDragTabEnd}

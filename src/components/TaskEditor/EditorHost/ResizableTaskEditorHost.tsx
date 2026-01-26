@@ -4,7 +4,7 @@ import ResizeHandle from '../../common/ResizeHandle';
 import { useResizablePanel } from '../../../hooks/useResizablePanel';
 import type { TaskMeta } from './types';
 
-export default function ResizableTaskEditorHost({ task, onClose, onToolbarUpdate, hideHeader }: { task: TaskMeta; onClose?: () => void; onToolbarUpdate?: (toolbar: any[], color: string) => void; hideHeader?: boolean }){
+export default function ResizableTaskEditorHost({ task, onClose, onToolbarUpdate, hideHeader, registerOnClose }: { task: TaskMeta; onClose?: () => void; onToolbarUpdate?: (toolbar: any[], color: string) => void; hideHeader?: boolean; registerOnClose?: (fn: () => Promise<boolean>) => void }){
   const { size, handleResize, style } = useResizablePanel({
     initialSize: 420,
     min: 260,
@@ -38,7 +38,7 @@ export default function ResizableTaskEditorHost({ task, onClose, onToolbarUpdate
         inverted={true}
       />
       <div style={{ flex: 1, minHeight: 0, height: '100%' }}>
-        <TaskEditorHost task={task} onClose={onClose} onToolbarUpdate={onToolbarUpdate} hideHeader={hideHeader} />
+        <TaskEditorHost task={task} onClose={onClose} onToolbarUpdate={onToolbarUpdate} hideHeader={hideHeader} registerOnClose={registerOnClose} />
       </div>
     </div>
   );

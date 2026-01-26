@@ -1,5 +1,5 @@
 import { databaseService } from '../../../../nlp/services/databaseService';
-import { NLPProfile } from '../NLPExtractorProfileEditor';
+import { NLPProfile } from '../DataExtractionEditor';
 
 interface NLPConfigDB {
   supportedKinds: string[];

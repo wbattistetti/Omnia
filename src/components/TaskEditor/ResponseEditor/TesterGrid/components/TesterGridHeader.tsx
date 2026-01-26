@@ -72,7 +72,7 @@ interface TesterGridHeaderProps {
  * Header component for the tester grid
  */
 export default function TesterGridHeader({
-  contract, // ✅ STEP 5: Contract prop
+  contract,
   newExample,
   setNewExample,
   onAddExample,
@@ -88,7 +88,7 @@ export default function TesterGridHeader({
   showNER,
   showEmbeddings,
   headerRowRef,
-  onContractChange, // ✅ STEP 9: Destructure callback
+  onContractChange,
 }: TesterGridHeaderProps) {
   // State per gestire quale colonna ha il dropdown "+" aperto
   const [openDropdownAfter, setOpenDropdownAfter] = React.useState<string | null>(null);
@@ -211,7 +211,7 @@ export default function TesterGridHeader({
     if (totalColumns === 0) return 200; // Default width if no columns
     // Estimate: 100% - 440px fixed = available width
     // Distribute evenly among dynamic columns (min 220px per column per contenere "Espressione (Regex)" + icone)
-    const minColumnWidth = 220; // ✅ AUMENTATO da 150 a 220 per evitare tagli
+    const minColumnWidth = 220; // Increased from 150 to 220 to prevent text clipping
     const estimatedTotalWidth = 1200; // Approximate table width
     const fixedWidth = 440; // phraseColumnWidth (280) + Actions (80) + Buttons (80)
     const availableWidth = estimatedTotalWidth - fixedWidth;
@@ -254,7 +254,7 @@ export default function TesterGridHeader({
         <TesterGridHeaderColumn
           key={contractItem.type}
           type={componentType}
-          contractType={contractItem.type} // ✅ Pass original contract type for editor logic
+          contractType={contractItem.type}
           mainLabel={labels.main}
           techLabel={labels.tech}
           tooltip={labels.tooltip}
@@ -289,9 +289,9 @@ export default function TesterGridHeader({
           padding: 8,
           background: '#f9fafb',
           width: `${phraseColumnWidth}px`,
-          position: 'sticky', // ✅ FIX: Cambiato da 'relative' a 'sticky'
-          left: 0, // ✅ FIX: Fissa a sinistra
-          zIndex: 1002, // ✅ CRITICAL: zIndex più alto per garantire che l'input sia sempre cliccabile
+          position: 'sticky',
+          left: 0,
+          zIndex: 1002, // Higher zIndex to ensure input is always clickable
         }}>
           <TesterGridInput
             value={newExample}

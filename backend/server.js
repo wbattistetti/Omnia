@@ -3168,13 +3168,44 @@ app.put('/api/factory/task-templates/:id', async (req, res) => {
     delete updateDoc._id; // Don't update _id
     delete updateDoc.createdAt; // Don't update createdAt
 
+    // ✅ Cerca per _id prima (converti stringa in ObjectId se necessario)
+    let saved = null;
+    let actualId = null;
+
+    // ✅ Prova a convertire id in ObjectId
+    try {
+      const objectId = typeof id === 'string' && /^[0-9a-fA-F]{24}$/.test(id)
+        ? new ObjectId(id)
+        : id;
+      saved = await coll.findOne({ _id: objectId });
+      if (saved) {
+        actualId = saved._id;
+      }
+    } catch (e) {
+      // ✅ Se la conversione fallisce, cerca per id field
+      logWarn('TaskTemplates.put', { id, error: 'Invalid ObjectId format, trying id field' });
+    }
+
+    // ✅ Fallback: cerca per id field se _id non trova nulla
+    if (!saved) {
+      saved = await coll.findOne({ id: id });
+      if (saved) {
+        actualId = saved._id;
+      }
+    }
+
+    if (!saved || !actualId) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+
+    // ✅ Aggiorna usando actualId (ObjectId corretto)
     await coll.updateOne(
-      { _id: id },
+      { _id: actualId },
       { $set: updateDoc },
       { upsert: false }
     );
+    saved = await coll.findOne({ _id: actualId });
 
-    const saved = await coll.findOne({ _id: id });
     if (!saved) {
       return res.status(404).json({ error: 'Template not found' });
     }

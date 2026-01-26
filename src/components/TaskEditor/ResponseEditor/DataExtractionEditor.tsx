@@ -69,13 +69,15 @@ if (typeof document !== 'undefined' && !document.getElementById('nlp-spinner-ani
 
 import { TaskMeta } from '../../EditorHost/types';
 
-export default function NLPExtractorProfileEditor({
+export default function DataExtractionEditor({
   node,
   taskType,
   locale = 'it-IT',
   onChange,
   intentSelected,
   task,
+  updateSelectedNode,
+  contractChangeRef,
 }: {
   node: any;
   taskType?: TaskType; // ✅ Type del task per determinare classification vs extraction mode
@@ -83,6 +85,13 @@ export default function NLPExtractorProfileEditor({
   onChange?: (profile: NLPProfile) => void;
   intentSelected?: string; // Intent ID selected from IntentListEditor (when kind === 'intent')
   task?: TaskMeta; // Task info for syncing intents
+  updateSelectedNode?: (updater: (node: any) => any, notifyProvider?: boolean) => void;
+  contractChangeRef?: React.RefObject<{
+    hasUnsavedChanges: boolean;
+    modifiedContract: any;
+    nodeTemplateId: string | undefined;
+    nodeLabel: string | undefined;
+  }>;
 }) {
   // Profile state management (extracted to hook)
   const {
@@ -272,7 +281,7 @@ export default function NLPExtractorProfileEditor({
           phrases = (payload?.editor?.tests || []).map((t: any) => t.text);
         }
       } catch (err) {
-        console.warn('[NLPExtractorProfileEditor] Could not load test phrases:', err);
+        console.warn('[DataExtractionEditor] Could not load test phrases:', err);
       }
     }
 
@@ -437,12 +446,14 @@ export default function NLPExtractorProfileEditor({
           },
           task, // ✅ FIX: Pass task directly in editorProps for embeddings editor
         }}
+        contractChangeRef={contractChangeRef} // ✅ FIX: Pass contractChangeRef to RecognitionEditor
         runAllRows={runAllRows}
         testing={testing}
         reportOpen={reportOpen}
         setReportOpen={setReportOpen}
         baselineStats={baselineStats}
         lastStats={lastStats}
+        updateSelectedNode={updateSelectedNode}
       />
 
       {/* OLD tab editors - now replaced by inline editors */}

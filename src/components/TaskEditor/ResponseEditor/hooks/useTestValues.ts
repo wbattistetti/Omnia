@@ -1,5 +1,5 @@
 import { useCallback, useState, useEffect, useRef } from 'react';
-import { NLPProfile } from '../NLPExtractorProfileEditor';
+import { NLPProfile } from '../DataExtractionEditor';
 
 /**
  * Hook for managing test cases state in extractor editors

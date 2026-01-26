@@ -102,6 +102,11 @@ export const AppContent: React.FC<AppContentProps> = ({
   });
 
   // ✅ Unified tab content renderer - Memoizzato con comparatore per evitare re-render inutili
+  // ✅ Map globale per tenere traccia di tutti i refs di chiusura per tutti i tab
+  // Questo risolve il problema delle closure stale: quando tab.onClose viene chiamato,
+  // legge sempre il valore più recente dal Map invece di una closure catturata
+  const editorCloseRefsMap = React.useRef<Map<string, () => Promise<boolean>>>(new Map());
+
   const UnifiedTabContent: React.FC<{ tab: DockTab }> = React.memo(
     ({ tab }) => {
       // 🔴 LOG CHIRURGICO 3: UnifiedTabContent render (DISABILITATO - troppo rumoroso)
@@ -142,6 +147,13 @@ export const AppContent: React.FC<AppContentProps> = ({
 
       // Response Editor tab
       if (tab.type === 'responseEditor') {
+        // ✅ Reset ref nel Map quando cambia il tab
+        React.useEffect(() => {
+          return () => {
+            editorCloseRefsMap.current.delete(tab.id);
+          };
+        }, [tab.id]);
+
         // ✅ Stabilizza key, task, ddt, onToolbarUpdate per evitare re-mount
         const editorKey = useMemo(() => {
           const instanceKey = tab.task?.instanceId || tab.task?.id || tab.id;
@@ -200,12 +212,58 @@ export const AppContent: React.FC<AppContentProps> = ({
           [tab.id, setDockTree]
         );
 
-        console.log('[DEBUG_MEMO] Rendering ResponseEditor', {
-          editorKey,
-          tabId: tab.id,
-          stableDDTdataLength: stableDDT?.data?.length,
-          stableTaskInstanceId: stableTask?.instanceId
-        });
+        // ✅ Funzione event-driven: imposta tab.onClose immediatamente quando registerOnClose viene chiamato
+        const handleRegisterOnClose = React.useCallback(
+          (fn: () => Promise<boolean>) => {
+            if (!tab.id || !setDockTree) return;
+
+            // ✅ Salva nel Map globale (legge sempre il valore più recente)
+            editorCloseRefsMap.current.set(tab.id, fn);
+
+            // ✅ Aggiorna SEMPRE tab.onClose per leggere dal Map al momento della chiamata
+            setDockTree(prev =>
+              mapNode(prev, n => {
+                if (n.kind === 'tabset') {
+                  const idx = n.tabs.findIndex(t => t.id === tab.id);
+                  if (idx !== -1 && n.tabs[idx].type === 'responseEditor') {
+                    const updatedTab = {
+                      ...n.tabs[idx],
+                      onClose: async (tab: DockTabResponseEditor) => {
+                        // ✅ Legge dal Map al momento della chiamata (non closure stale)
+                        const fn = editorCloseRefsMap.current.get(tab.id);
+                        if (fn) {
+                          try {
+                            return await fn();
+                          } catch (err) {
+                            console.error('[AppContent] ❌ Error in editorCloseRef.current()', err);
+                            return true;
+                          }
+                        }
+                        return true;
+                      }
+                    } as DockTabResponseEditor;
+                    return {
+                      ...n,
+                      tabs: [
+                        ...n.tabs.slice(0, idx),
+                        updatedTab,
+                        ...n.tabs.slice(idx + 1)
+                      ]
+                    };
+                  }
+                }
+                return n;
+              })
+            );
+          },
+          [tab.id, setDockTree]
+        );
+
+        // ✅ Reset ref quando cambia il tab
+        React.useEffect(() => {
+          tabOnCloseSetRef.current = false;
+          editorCloseRef.current = null;
+        }, [tab.id]);
 
         return (
           <div style={{ width: '100%', flex: 1, minHeight: 0, backgroundColor: '#0b1220', display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100%' }}>
@@ -217,10 +275,11 @@ export const AppContent: React.FC<AppContentProps> = ({
               setDockTree={setDockTree}
               hideHeader={true}
               onToolbarUpdate={stableOnToolbarUpdate}
+              registerOnClose={handleRegisterOnClose}
               onClose={() => {
-                // ✅ Salvataggio gestito da tab.onClose (chiamato da DockManager)
-                // Qui chiudiamo solo il tab
-                setDockTree(prev => closeTab(prev, tab.id));
+                // ✅ NON chiudere il tab qui - la chiusura è gestita completamente da tab.onClose nel DockManager
+                // Questo callback serve solo per compatibilità legacy, ma non deve fare nulla
+                // Il tab viene chiuso da tab.onClose solo se handleEditorClose ritorna true
               }}
             />
           </div>
@@ -335,12 +394,69 @@ export const AppContent: React.FC<AppContentProps> = ({
       // Task Editor tab (BackendCall, etc.)
       if (tab.type === 'taskEditor') { // ✅ RINOMINATO: 'actEditor' → 'taskEditor'
         const taskEditorTab = tab as DockTabTaskEditor; // ✅ RINOMINATO: actEditorTab → taskEditorTab, DockTabActEditor → DockTabTaskEditor
+        // ✅ Verifica se questo taskEditor contiene un ResponseEditor (editorKind === 'ddt')
+        const editorKind = resolveEditorKind(tab.task || { id: '', type: TaskType.SayMessage, label: '' });
+        const isDDTEditor = editorKind === 'ddt';
+
+        // ✅ Reset ref nel Map quando cambia il tab
+        React.useEffect(() => {
+          return () => {
+            editorCloseRefsMap.current.delete(tab.id);
+          };
+        }, [tab.id]);
+
+        // ✅ Funzione event-driven: imposta tab.onClose immediatamente quando registerOnClose viene chiamato
+        const handleRegisterOnClose = React.useCallback((fn: () => Promise<boolean>) => {
+          if (!isDDTEditor || !tab.id || !setDockTree) {
+            return;
+          }
+
+          // ✅ Salva nel Map globale (legge sempre il valore più recente)
+          editorCloseRefsMap.current.set(tab.id, fn);
+
+          // ✅ Aggiorna SEMPRE tab.onClose per leggere dal Map al momento della chiamata
+          setDockTree(prev =>
+            mapNode(prev, n => {
+              if (n.kind === 'tabset') {
+                const idx = n.tabs.findIndex(t => t.id === tab.id);
+                if (idx !== -1 && n.tabs[idx].type === 'taskEditor') {
+                  const updatedTab = {
+                    ...n.tabs[idx],
+                    onClose: async (tab: DockTabTaskEditor) => {
+                      // ✅ Legge dal Map al momento della chiamata (non closure stale)
+                      const fn = editorCloseRefsMap.current.get(tab.id);
+                      if (fn) {
+                        try {
+                          return await fn();
+                        } catch (err) {
+                          console.error('[AppContent][taskEditor] ❌ Error in editorCloseRef.current()', err);
+                          return true;
+                        }
+                      }
+                      return true;
+                    }
+                  } as DockTabTaskEditor;
+                  return {
+                    ...n,
+                    tabs: [
+                      ...n.tabs.slice(0, idx),
+                      updatedTab,
+                      ...n.tabs.slice(idx + 1)
+                    ]
+                  };
+                }
+              }
+              return n;
+            })
+          );
+        }, [tab.id, setDockTree, isDDTEditor]);
+
         return (
           <div style={{ width: '100%', flex: 1, minHeight: 0, backgroundColor: '#0b1220', display: 'flex', flexDirection: 'column' }}>
             <ResizableTaskEditorHost // ✅ RINOMINATO: ResizableActEditorHost → ResizableTaskEditorHost
               task={tab.task || { id: '', type: TaskType.SayMessage, label: '' }} // ✅ RINOMINATO: act → task, usa TaskMeta con TaskType enum
               onClose={() => {
-                setDockTree(prev => closeTab(prev, tab.id));
+                // ✅ NON chiudere il tab qui - la chiusura è gestita da tab.onClose (solo per DDT editor)
               }}
               onToolbarUpdate={(toolbar, color) => {
                 // Update tab with toolbar and color
@@ -358,6 +474,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                 });
               }}
               hideHeader={true}
+              registerOnClose={isDDTEditor ? handleRegisterOnClose : undefined}
             />
           </div>
         );
@@ -1517,7 +1634,45 @@ export const AppContent: React.FC<AppContentProps> = ({
                     }
                   })(),
 
-                  // 5. Save acts and conditions
+                  // 5. Save modified templates (templates with modified contracts)
+                  (async () => {
+                    if (!pid) return;
+                    const tStart = performance.now();
+                    try {
+                      console.log('[Save][5-templates] 🚀 START');
+                      const { DialogueTaskService } = await import('../services/DialogueTaskService');
+                      const modifiedIds = DialogueTaskService.getModifiedTemplateIds();
+                      console.log('[Save][5-templates] 📊 Templates to save', { count: modifiedIds.length, templateIds: modifiedIds });
+
+                      if (modifiedIds.length === 0) {
+                        const tEnd = performance.now();
+                        console.log('[Save][5-templates] ✅ DONE (no modified templates)', { ms: Math.round(tEnd - tStart) });
+                        return;
+                      }
+
+                      const result = await DialogueTaskService.saveModifiedTemplates();
+                      const tEnd = performance.now();
+                      if (result.failed === 0) {
+                        console.log('[Save][5-templates] ✅ DONE', {
+                          ms: Math.round(tEnd - tStart),
+                          saved: result.saved,
+                          total: modifiedIds.length
+                        });
+                      } else {
+                        console.warn('[Save][5-templates] ⚠️ PARTIAL', {
+                          ms: Math.round(tEnd - tStart),
+                          saved: result.saved,
+                          failed: result.failed,
+                          total: modifiedIds.length
+                        });
+                      }
+                    } catch (e) {
+                      const tEnd = performance.now();
+                      console.error('[Save][5-templates] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
+                    }
+                  })(),
+
+                  // 6. Save acts and conditions
                   (async () => {
                     if (!pid || !projectData) return;
                     const tStart = performance.now();
@@ -1560,7 +1715,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                     }
                   })(),
 
-                  // 6. Save flow
+                  // 7. Save flow
                   (async () => {
                     if (!pid) return;
                     const tStart = performance.now();

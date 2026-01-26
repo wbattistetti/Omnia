@@ -12,7 +12,10 @@ import BehaviourEditor from './BehaviourEditor';
 import RightPanel, { useRightPanelWidth, RightPanelMode } from './RightPanel';
 import MessageReviewView from './MessageReview/MessageReviewView';
 // import SynonymsEditor from './SynonymsEditor';
-import NLPExtractorProfileEditor from './NLPExtractorProfileEditor';
+import DataExtractionEditor from './DataExtractionEditor';
+import { ContractUpdateDialog } from './ContractUpdateDialog';
+import { updateTemplateContract, createNewTemplateFrom } from '../../../services/TemplateUpdateService';
+import DialogueTaskService from '../../../services/DialogueTaskService';
 import EditorHeader from '../../common/EditorHeader';
 import { getTaskVisualsByType } from '../../Flowchart/utils/taskVisuals';
 import TaskDragLayer from './TaskDragLayer';
@@ -35,7 +38,7 @@ import { useProjectTranslations } from '../../../context/ProjectTranslationsCont
 import { useDDTTranslations } from '../../../hooks/useDDTTranslations';
 import { ToolbarButton } from '../../../dock/types';
 import { taskTemplateService } from '../../../services/TaskTemplateService';
-import { mapNode } from '../../../dock/ops';
+import { mapNode, closeTab } from '../../../dock/ops';
 import { extractModifiedDDTFields } from '../../../utils/taskUtils';
 import { useWizardInference } from './hooks/useWizardInference';
 import { validateTaskStructure, getTaskSemantics } from '../../../utils/taskSemantics';
@@ -82,7 +85,7 @@ function coercePhoneKind(src: any) {
   }
 }
 
-function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoading, hideHeader, onToolbarUpdate, tabId, setDockTree }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, task?: TaskMeta | Task, isDdtLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void }) { // ✅ ARCHITETTURA ESPERTO: task può essere TaskMeta o Task completo
+function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoading, hideHeader, onToolbarUpdate, tabId, setDockTree, registerOnClose }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, task?: TaskMeta | Task, isDdtLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void, registerOnClose?: (fn: () => Promise<boolean>) => void }) { // ✅ ARCHITETTURA ESPERTO: task può essere TaskMeta o Task completo
 
 
   // Ottieni projectId corrente per salvare le istanze nel progetto corretto
@@ -103,6 +106,29 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
     endpoint?: string;
     onRetry?: () => void;
   } | null>(null);
+
+  // ✅ Contract change dialog state
+  const [showContractDialog, setShowContractDialog] = React.useState(false);
+  const [pendingContractChange, setPendingContractChange] = React.useState<{
+    templateId: string;
+    templateLabel: string;
+    modifiedContract: any;
+  } | null>(null);
+
+  // ✅ Ref per accedere allo stato delle modifiche da RecognitionEditor
+  const contractChangeRef = React.useRef<{
+    hasUnsavedChanges: boolean;
+    modifiedContract: any;
+    originalContract: any; // ✅ Contract originale (dal DB) per poterlo ripristinare
+    nodeTemplateId: string | undefined;
+    nodeLabel: string | undefined;
+  }>({
+    hasUnsavedChanges: false,
+    modifiedContract: null,
+    originalContract: null,
+    nodeTemplateId: undefined,
+    nodeLabel: undefined
+  });
 
   // ✅ Listen for service unavailable events
   React.useEffect(() => {
@@ -542,14 +568,78 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
   }, [stableDdtVersion, stableIntroductionKey]); // ✅ Usa chiave serializzata sempre stringa
 
   // Persist explicitly on close only (avoid side-effects/flicker on unmount)
-  const handleEditorClose = React.useCallback(async () => {
+  const handleEditorClose = React.useCallback(async (): Promise<boolean> => {
     console.log('[ResponseEditor][CLOSE] 🚪 Editor close initiated', {
       taskId: task?.id || task?.instanceId,
       hasTask: !!task,
       hasSelectedNode: !!selectedNode,
       hasSelectedNodePath: !!selectedNodePath,
-      taskStepsCount: task?.steps ? Object.keys(task.steps).length : 0
+      taskStepsCount: task?.steps ? Object.keys(task.steps).length : 0,
+      contractChangeRefType: typeof contractChangeRef.current,
+      contractChangeRefExists: !!contractChangeRef.current
     });
+
+    // ✅ Verifica se ci sono modifiche ai contracts non salvate
+    const contractChange = contractChangeRef.current;
+    console.log('[ResponseEditor][CLOSE] 🔍 Checking contract changes', {
+      hasUnsavedChanges: contractChange?.hasUnsavedChanges,
+      hasModifiedContract: !!contractChange?.modifiedContract,
+      hasOriginalContract: !!contractChange?.originalContract,
+      nodeTemplateId: contractChange?.nodeTemplateId,
+      nodeLabel: contractChange?.nodeLabel,
+      refKeys: contractChange ? Object.keys(contractChange) : [],
+      contractChangeRefExists: !!contractChangeRef.current,
+      contractChangeType: typeof contractChange
+    });
+
+    // ✅ CRITICAL: Controlla anche se contractChangeRef.current è stato aggiornato via useImperativeHandle
+    // Se contractChange è null/undefined, prova a leggere direttamente dal RecognitionEditor ref
+    if (!contractChange) {
+      console.log('[ResponseEditor][CLOSE] ⚠️ contractChangeRef.current is null/undefined');
+    } else if (!contractChange.hasUnsavedChanges) {
+      console.log('[ResponseEditor][CLOSE] ⚠️ No unsaved changes', {
+        hasUnsavedChanges: contractChange.hasUnsavedChanges,
+        hasModifiedContract: !!contractChange.modifiedContract,
+        hasNodeTemplateId: !!contractChange.nodeTemplateId
+      });
+    } else if (!contractChange.modifiedContract) {
+      console.log('[ResponseEditor][CLOSE] ⚠️ hasUnsavedChanges is true but modifiedContract is null', {
+        hasUnsavedChanges: contractChange.hasUnsavedChanges,
+        modifiedContract: contractChange.modifiedContract,
+        nodeTemplateId: contractChange.nodeTemplateId
+      });
+    } else if (!contractChange.nodeTemplateId) {
+      console.log('[ResponseEditor][CLOSE] ⚠️ hasUnsavedChanges and modifiedContract are set but nodeTemplateId is missing', {
+        hasUnsavedChanges: contractChange.hasUnsavedChanges,
+        hasModifiedContract: !!contractChange.modifiedContract,
+        nodeTemplateId: contractChange.nodeTemplateId
+      });
+    } else if (contractChange.hasUnsavedChanges && contractChange.modifiedContract && contractChange.nodeTemplateId) {
+      console.log('[ResponseEditor][CLOSE] ⚠️ Unsaved contract changes detected', {
+        nodeTemplateId: contractChange.nodeTemplateId,
+        nodeLabel: contractChange.nodeLabel,
+        hasModifiedContract: !!contractChange.modifiedContract,
+        hasOriginalContract: !!contractChange.originalContract
+      });
+
+      // ✅ Mostra dialog e blocca chiusura
+      const template = DialogueTaskService.getTemplate(contractChange.nodeTemplateId);
+      console.log('[ResponseEditor][CLOSE] 🟡 Showing dialog...', {
+        templateId: contractChange.nodeTemplateId,
+        templateLabel: template?.label || contractChange.nodeLabel || 'Template',
+        hasModifiedContract: !!contractChange.modifiedContract
+      });
+
+      setPendingContractChange({
+        templateId: contractChange.nodeTemplateId,
+        templateLabel: template?.label || contractChange.nodeLabel || 'Template',
+        modifiedContract: contractChange.modifiedContract
+      });
+      setShowContractDialog(true);
+      console.log('[ResponseEditor][CLOSE] ✅ Dialog state set to true, blocking close');
+      // ✅ Ritorna false per bloccare la chiusura del tab
+      return false;
+    }
 
     // ✅ Salva selectedNode corrente nel ref prima di chiudere (se non già salvato)
     if (selectedNode && selectedNodePath) {
@@ -574,6 +664,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
             delete ddtRef.current.introduction;
           }
         } else if (subIndex === undefined) {
+          const regexPattern = selectedNode?.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+          console.log('[REGEX] CLOSE - Saving to ddtRef', {
+            nodeId: selectedNode?.id,
+            regexPattern: regexPattern || '(none)'
+          });
           mains[mainIndex] = selectedNode;
           ddtRef.current.data = mains;
         } else {
@@ -591,6 +686,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
     // ✅ Usa direttamente ddtRef.current (già contiene tutte le modifiche)
     const finalDDT = { ...ddtRef.current };
+    const firstNodeRegex = finalDDT.data?.[0]?.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+    console.log('[REGEX] CLOSE - Final DDT before save', {
+      hasData: !!finalDDT.data,
+      firstNodeRegex: firstNodeRegex || '(none)'
+    });
 
     try {
       // Se abbiamo un instanceId o task.id (caso DDTHostAdapter), salva nell'istanza // ✅ RINOMINATO: act → task
@@ -685,7 +785,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
           // ✅ CASE-INSENSITIVE - AWAIT OBBLIGATORIO: non chiudere finché non è salvato
           if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
-            await taskRepository.updateTask(key, {
+            const dataToSave = {
               type: TaskType.DataRequest,  // ✅ type: enum numerico
               templateId: null,            // ✅ templateId: null (standalone)
               label: finalDDTWithSteps.label,
@@ -695,17 +795,30 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
               examples: finalDDTWithSteps.examples,
               dataContract: finalDDTWithSteps.dataContract,
               introduction: finalDDTWithSteps.introduction
-            }, currentProjectId || undefined);
+            };
+            const regexPattern = dataToSave.data?.[0]?.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+            console.log('[REGEX] CLOSE - Saving to DB (standalone)', {
+              taskId: key,
+              regexPattern: regexPattern || '(none)'
+            });
+            await taskRepository.updateTask(key, dataToSave, currentProjectId || undefined);
           } else {
-            await taskRepository.updateTask(key, {
+            const dataToSave = {
               label: finalDDTWithSteps.label,
               data: finalDDTWithSteps.data,
-              steps: finalDDTWithSteps.steps, // ✅ CRITICAL: Salva steps da task.steps (unica fonte di verità)
+              steps: finalDDTWithSteps.steps,
               constraints: finalDDTWithSteps.constraints,
               examples: finalDDTWithSteps.examples,
               dataContract: finalDDTWithSteps.dataContract,
               introduction: finalDDTWithSteps.introduction
-            }, currentProjectId || undefined);
+            };
+            const regexPattern = dataToSave.data?.[0]?.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+            console.log('[REGEX] CLOSE - Saving to DB (with templateId)', {
+              taskId: key,
+              templateId: currentTemplateId,
+              regexPattern: regexPattern || '(none)'
+            });
+            await taskRepository.updateTask(key, dataToSave, currentProjectId || undefined);
           }
 
           // ✅ Verify steps were saved by reading back from repository
@@ -763,18 +876,34 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
       });
     }
 
-    console.log('[ResponseEditor][CLOSE] 🚪 Calling onClose callback', {
-      taskId: task?.id || task?.instanceId,
-      hasOnClose: !!onClose
+    // ✅ NON chiamare onClose() qui - la chiusura del tab è gestita da tab.onClose nel DockManager
+    // tab.onClose chiamerà closeTab solo se questo handleEditorClose ritorna true
+    // onClose() è solo per compatibilità legacy e non deve chiudere il tab
+    console.log('[ResponseEditor][CLOSE] ✅ Close process completed, returning true to allow tab closure', {
+      taskId: task?.id || task?.instanceId
     });
 
-    try { onClose && onClose(); } catch (e) {
-      console.error('[ResponseEditor][CLOSE] ❌ Error calling onClose', {
-        taskId: task?.id || task?.instanceId,
-        error: e
-      });
-    }
+    // ✅ Ritorna true per indicare che la chiusura può procedere
+    // DockManager chiuderà il tab solo se tab.onClose ritorna true
+    return true;
   }, [replaceSelectedDDT, onClose, task?.id, (task as any)?.instanceId, currentProjectId]);
+
+  // ✅ Ref per evitare re-registrazioni quando handleEditorClose cambia
+  const handleEditorCloseRef = React.useRef(handleEditorClose);
+  React.useEffect(() => {
+    handleEditorCloseRef.current = handleEditorClose;
+  }, [handleEditorClose]);
+
+  // ✅ Registra handleEditorClose nel ref per permettere a tab.onClose di chiamarlo
+  React.useEffect(() => {
+    if (registerOnClose) {
+      // ✅ Usa ref per evitare dipendenza da handleEditorClose (evita re-registrazioni)
+      registerOnClose(() => handleEditorCloseRef.current());
+      console.log('[ResponseEditor] ✅ Registered handleEditorClose');
+    } else {
+      console.warn('[ResponseEditor] ⚠️ registerOnClose not provided');
+    }
+  }, [registerOnClose]); // ✅ Solo registerOnClose nelle dipendenze
 
   // ✅ NON serve più tracciare sincronizzazioni - selectedNode è l'unica fonte di verità
   // Helper per convertire steps (oggetto o array) in array
@@ -1033,17 +1162,6 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
     }
 
     try {
-      if (localStorage.getItem('debug.nodeSync') === '1') {
-        console.log('[NODE_SYNC][UPDATE] 🎯 updateSelectedNode called', {
-          hasSelectedNode: !!selectedNode,
-          selectedNodePath,
-          hasTask: !!task,
-          taskId: task?.id,
-          instanceId: (task as any)?.instanceId,
-          hasTabId: !!tabId,
-          hasSetDockTree: !!setDockTree
-        });
-      }
     } catch { }
 
     setSelectedNode((prev: any) => {
@@ -1052,6 +1170,19 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
       }
 
       const updated = updater(prev) || prev;
+
+      // ✅ LOG: Always log dataContract comparison (even if unchanged)
+      const dataContractChanged = updated.dataContract !== prev.dataContract;
+      const dataContractDeepChanged = JSON.stringify(updated.dataContract) !== JSON.stringify(prev.dataContract);
+
+      const updatedRegex = updated.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+      if (dataContractChanged && updatedRegex) {
+        console.log('[REGEX] UPDATE - updateSelectedNode', {
+          nodeId: updated.id,
+          regexPattern: updatedRegex
+        });
+      }
+
       const { mainIndex, subIndex } = selectedNodePath;
       const isRoot = selectedRoot || false;
 
@@ -1898,12 +2029,14 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                       {showSynonyms ? (
                         <div style={{ padding: 6, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
                           {/* ✅ TesterGrid deve rimanere visibile durante batch per mostrare risultati e permettere input */}
-                          <NLPExtractorProfileEditor
+                          <DataExtractionEditor
                             node={selectedNode}
                             taskType={taskType}
                             locale={'it-IT'}
                             intentSelected={mainList[0]?.kind === 'intent' ? selectedIntentIdForTraining || undefined : undefined}
                             task={task}
+                            updateSelectedNode={updateSelectedNode}
+                            contractChangeRef={contractChangeRef}
                             onChange={(profile) => {
                               // ✅ CRITICAL: Block onChange during batch testing per prevenire feedback loop
                               if (getIsTesting()) {
@@ -2188,15 +2321,88 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
           </div>
         </div>
       )}
+
+      {/* Contract Update Dialog - dentro ResponseEditor */}
+      {showContractDialog && pendingContractChange && (
+        <ContractUpdateDialog
+          open={showContractDialog}
+          templateLabel={pendingContractChange.templateLabel}
+          onKeep={() => {
+            // ✅ Mantieni: chiudi editor, modifiche già in memoria (NON salvare nel DB)
+            console.log('[ResponseEditor][DIALOG] ✅ Mantieni modifiche - chiudendo editor');
+            setShowContractDialog(false);
+            setPendingContractChange(null);
+            contractChangeRef.current = {
+              hasUnsavedChanges: false,
+              modifiedContract: null,
+              originalContract: null,
+              nodeTemplateId: undefined,
+              nodeLabel: undefined
+            };
+            // ✅ Chiudi tab tramite setDockTree (se disponibile)
+            if (tabId && setDockTree) {
+              console.log('[ResponseEditor][DIALOG] Closing tab via setDockTree', { tabId });
+              setDockTree(prev => closeTab(prev, tabId));
+            } else if (onClose) {
+              // ✅ Fallback per compatibilità legacy
+              console.log('[ResponseEditor][DIALOG] Closing via onClose (legacy)');
+              onClose();
+            }
+          }}
+          onDiscard={() => {
+            // ✅ Scarta: ripristina originale in memoria, poi chiudi
+            console.log('[ResponseEditor][DIALOG] ❌ Scarta modifiche - ripristinando originale');
+            const template = DialogueTaskService.getTemplate(pendingContractChange.templateId);
+            if (template && contractChangeRef.current.originalContract !== undefined) {
+              // ✅ Ripristina contract originale in memoria
+              template.dataContract = contractChangeRef.current.originalContract
+                ? JSON.parse(JSON.stringify(contractChangeRef.current.originalContract))
+                : null;
+              // ✅ Rimuovi template dalla lista dei modificati (è tornato allo stato originale)
+              DialogueTaskService.clearModifiedTemplate(pendingContractChange.templateId);
+              console.log('[ResponseEditor][DIALOG] ✅ Template ripristinato in memoria', {
+                templateId: pendingContractChange.templateId,
+                hasOriginalContract: !!contractChangeRef.current.originalContract
+              });
+            }
+
+            setShowContractDialog(false);
+            setPendingContractChange(null);
+            contractChangeRef.current = {
+              hasUnsavedChanges: false,
+              modifiedContract: null,
+              originalContract: null,
+              nodeTemplateId: undefined,
+              nodeLabel: undefined
+            };
+            // ✅ Chiudi tab tramite setDockTree (se disponibile)
+            if (tabId && setDockTree) {
+              console.log('[ResponseEditor][DIALOG] Closing tab via setDockTree', { tabId });
+              setDockTree(prev => closeTab(prev, tabId));
+            } else if (onClose) {
+              // ✅ Fallback per compatibilità legacy
+              console.log('[ResponseEditor][DIALOG] Closing via onClose (legacy)');
+              onClose();
+            }
+          }}
+          onCancel={() => {
+            // ✅ Annulla: non chiudere editor
+            console.log('[ResponseEditor][DIALOG] ⏸️ Annulla - non chiudere editor');
+            setShowContractDialog(false);
+            setPendingContractChange(null);
+            // ✅ NON resettare contractChangeRef, così se riprova a chiudere ricompare il dialog
+          }}
+        />
+      )}
     </div>
   );
 }
 
-export default function ResponseEditor({ ddt, onClose, onWizardComplete, task, isDdtLoading, hideHeader, onToolbarUpdate, tabId, setDockTree }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, task?: TaskMeta | Task, isDdtLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void }) {
+export default function ResponseEditor({ ddt, onClose, onWizardComplete, task, isDdtLoading, hideHeader, onToolbarUpdate, tabId, setDockTree, registerOnClose }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, task?: TaskMeta | Task, isDdtLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void, registerOnClose?: (fn: () => Promise<boolean>) => void }) {
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <FontProvider>
-        <ResponseEditorInner ddt={ddt} onClose={onClose} onWizardComplete={onWizardComplete} task={task} isDdtLoading={isDdtLoading} hideHeader={hideHeader} onToolbarUpdate={onToolbarUpdate} tabId={tabId} setDockTree={setDockTree} /> {/* ✅ ARCHITETTURA ESPERTO: Passa isDdtLoading */}
+        <ResponseEditorInner ddt={ddt} onClose={onClose} onWizardComplete={onWizardComplete} task={task} isDdtLoading={isDdtLoading} hideHeader={hideHeader} onToolbarUpdate={onToolbarUpdate} tabId={tabId} setDockTree={setDockTree} registerOnClose={registerOnClose} /> {/* ✅ ARCHITETTURA ESPERTO: Passa isDdtLoading */}
       </FontProvider>
     </div>
   );

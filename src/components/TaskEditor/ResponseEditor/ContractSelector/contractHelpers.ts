@@ -9,85 +9,43 @@ import DialogueTaskService from '../../../../services/DialogueTaskService';
 /**
  * Load contract from node
  * Priority:
- * 1. node.dataContract (override dell'istanza)
- * 2. template.dataContract (dal template usando node.templateId)
- * 3. template.patterns → convertito in dataContract
+ * 1. template.dataContract (dal template usando node.templateId)
+ * 2. template.patterns → convertito in dataContract (legacy)
+ *
+ * ❌ RIMOSSO: node.dataContract (override) - i contracts sono sempre nel template
  */
 export function loadContractFromNode(node: any): DataContract | null {
-  if (!node) {
-    console.log('[🔍 loadContractFromNode] No node provided');
-    return null;
-  }
+  if (!node) return null;
 
-  console.log('[🔍 loadContractFromNode] Loading contract', {
-    nodeLabel: node.label,
-    nodeId: node.id,
-    nodeTemplateId: node.templateId,
-    hasNodeDataContract: !!node.dataContract,
-    nodeDataContractContractsCount: node.dataContract?.contracts?.length || 0
-  });
-
-  // ✅ PRIORITY 1: Override dell'istanza
-  if (node.dataContract) {
-    console.log('[🔍 loadContractFromNode] ✅ Using node.dataContract (override)');
-    return node.dataContract as DataContract;
-  }
-
-  // ✅ PRIORITY 2: Carica dal template usando templateId
+  // ✅ Carica dal template usando templateId
   const templateId = node.templateId;
   if (templateId) {
-    console.log('[🔍 loadContractFromNode] Loading from template', { templateId });
     const template = DialogueTaskService.getTemplate(templateId);
-
-    if (!template) {
-      console.warn('[🔍 loadContractFromNode] ⚠️ Template not found', { templateId });
-      return null;
-    }
-
-    console.log('[🔍 loadContractFromNode] Template loaded', {
-      templateId: template.id || template._id,
-      templateLabel: template.label || template.name,
-      hasTemplateDataContract: !!template.dataContract,
-      templateDataContractContractsCount: template.dataContract?.contracts?.length || 0,
-      hasNlpContract: !!template.nlpContract,
-      hasPatterns: !!template.patterns,
-      templateKeys: Object.keys(template).filter(k => k.includes('contract') || k.includes('Contract') || k.includes('pattern') || k.includes('Pattern'))
-    });
+    if (!template) return null;
 
     if (template?.dataContract) {
-      console.log('[🔍 loadContractFromNode] ✅ Using template.dataContract');
+      const regexPattern = template.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+      console.log('[CONTRACT] LOAD - From template', {
+        nodeId: node.id,
+        templateId,
+        regexPattern: regexPattern || '(none)'
+      });
       return template.dataContract as DataContract;
     }
-
-    const contractKeys = Object.keys(template).filter(k =>
-      k.includes('contract') || k.includes('Contract') ||
-      k.includes('pattern') || k.includes('Pattern')
-    );
-    console.warn('[🔍 loadContractFromNode] ⚠️ Template has no dataContract', {
-      templateId: template.id || template._id,
-      templateLabel: template.label || template.name,
-      templateKeys: contractKeys,
-      hasNlpContract: !!template.nlpContract,
-      hasPatterns: !!template.patterns,
-      nlpContractKeys: template.nlpContract ? Object.keys(template.nlpContract) : [],
-      patternsKeys: template.patterns ? Object.keys(template.patterns) : []
-    });
-  } else {
-    console.warn('[🔍 loadContractFromNode] ⚠️ Node has no templateId', {
-      nodeLabel: node.label,
-      nodeId: node.id
-    });
   }
 
+  console.log('[CONTRACT] LOAD - No contract found', { nodeId: node.id });
   return null;
 }
 
 
 /**
- * Save contract to node (override dell'istanza)
+ * @deprecated Contracts non sono più override - devono essere aggiornati nel template
+ * Questa funzione non fa più nulla, mantenuta per retrocompatibilità
  */
 export function saveContractToNode(node: any, contract: DataContract | null): void {
-  if (!node) return;
+  console.warn('[DEPRECATED] saveContractToNode - Contracts devono essere aggiornati nel template, non come override');
+  // ❌ NON salvare più come overrideif (!node) return;
 
   if (contract) {
     node.dataContract = contract;

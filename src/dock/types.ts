@@ -31,7 +31,7 @@ export type DockTabResponseEditor = DockTabBase & {
   task?: TaskMeta; // ✅ RINOMINATO: act → task, usa TaskMeta con TaskType enum
   headerColor?: string; // Color of the ResponseEditor header (e.g., '#9a4f00' for orange)
   toolbarButtons?: ToolbarButton[]; // Toolbar buttons from ResponseEditor
-  onClose?: (tab: DockTabResponseEditor) => void | Promise<void>; // Callback called before closing the tab (for saving), receives the tab to read current ddt
+  onClose?: (tab: DockTabResponseEditor) => boolean | Promise<boolean> | void | Promise<void>; // Callback called before closing the tab. Return false to prevent closing. Receives the tab to read current ddt
 };
 
 // Non-Interactive Editor tab - for simple message editing
@@ -57,6 +57,7 @@ export type DockTabTaskEditor = DockTabBase & { // ✅ RINOMINATO: DockTabActEdi
   task: TaskMeta; // ✅ RINOMINATO: act → task, usa TaskMeta con TaskType enum
   headerColor?: string;
   toolbarButtons?: ToolbarButton[];
+  onClose?: (tab: DockTabTaskEditor) => boolean | Promise<boolean> | void | Promise<void>; // Callback called before closing the tab. Return false to prevent closing.
 };
 
 // Union type for all tab types

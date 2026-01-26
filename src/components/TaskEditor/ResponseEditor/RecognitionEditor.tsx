@@ -5,8 +5,10 @@ import ConfidenceInput from './Config/ConfidenceInput';
 import WaitingMessagesConfig from './Config/WaitingMessagesConfig';
 import TesterGrid from './TesterGrid';
 import { RowResult } from './hooks/useExtractionTesting';
-import { loadContractFromNode, saveContractToNode } from './ContractSelector/contractHelpers';
+import { loadContractFromNode } from './ContractSelector/contractHelpers';
 import type { DataContract } from '../../DialogueDataEngine/contracts/contractLoader';
+import DialogueTaskService from '../../../services/DialogueTaskService';
+import { useProjectData } from '../../../context/ProjectDataContext';
 
 interface RecognitionEditorProps {
   // Config props (Kind, Confidence, Waiting Messages)
@@ -144,109 +146,206 @@ export default function RecognitionEditor({
   setReportOpen,
   baselineStats,
   lastStats,
+  updateSelectedNode,
+  contractChangeRef,
 }: RecognitionEditorProps) {
+  const { currentProjectId } = useProjectData();
+  const task = editorProps?.task;
+
   // Load contract from node
   const [localContract, setLocalContract] = useState<DataContract | null>(() => {
     const node = editorProps?.node;
-    if (!node) {
-      console.log('[🔍 RecognitionEditor][INIT] No node provided');
-      return null;
-    }
-    console.log('[🔍 RecognitionEditor][INIT] Loading contract from node', {
-      nodeLabel: node?.label,
-      nodeId: node?.id,
-      nodeTemplateId: node?.templateId,
-      hasNodeDataContract: !!node?.dataContract,
-      nodeDataContractKeys: node?.dataContract ? Object.keys(node.dataContract) : [],
-      nodeDataContractContractsCount: node?.dataContract?.contracts?.length || 0
-    });
+    if (!node) return null;
     const contract = loadContractFromNode(node);
-    console.log('[🔍 RecognitionEditor][INIT] Contract loaded', {
+    const regexPattern = contract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+    console.log('[CONTRACT] INIT - Contract loaded', {
+      nodeId: node.id,
       hasContract: !!contract,
-      contractKeys: contract ? Object.keys(contract) : [],
-      contractsCount: contract?.contracts?.length || 0
+      regexPattern: regexPattern || '(none)'
     });
     return contract;
   });
 
-  // Sincronizza localContract con node SOLO quando cambia il node
-  const prevNodeRef = React.useRef(editorProps?.node);
+  // ✅ Traccia modifiche non salvate (per verificare alla chiusura)
+  const [hasUnsavedContractChanges, setHasUnsavedContractChanges] = useState(false);
+  const [modifiedContract, setModifiedContract] = useState<DataContract | null>(null);
+
+  // ✅ Ref per salvare contract originale (dal DB) per poterlo ripristinare
+  const originalContractRef = React.useRef<DataContract | null>(null);
+
+  // ✅ Carica contract SOLO quando apri l'editor o cambi nodo
+  const prevNodeIdRef = React.useRef<string | undefined>(editorProps?.node?.id);
   useEffect(() => {
     const node = editorProps?.node;
-    if (node !== prevNodeRef.current) {
-      prevNodeRef.current = node;
+    const currentNodeId = node?.id;
+    const nodeIdChanged = currentNodeId !== prevNodeIdRef.current;
+
+    if (nodeIdChanged) {
+      prevNodeIdRef.current = currentNodeId;
+
       if (!node) {
         setLocalContract(null);
+        setHasUnsavedContractChanges(false);
+        setModifiedContract(null);
+        originalContractRef.current = null;
         return;
       }
-      console.log('[🔍 RecognitionEditor][NODE_CHANGE] Node changed, reloading contract', {
-        nodeLabel: node?.label,
-        nodeId: node?.id,
-        nodeTemplateId: node?.templateId,
-        hasNodeDataContract: !!node?.dataContract,
-        nodeDataContractContractsCount: node?.dataContract?.contracts?.length || 0
-      });
+
+      // ✅ Carica dal template UNA VOLTA quando apri l'editor
       const loadedContract = loadContractFromNode(node);
-      console.log('[🔍 RecognitionEditor][NODE_CHANGE] Contract reloaded', {
+      const regexPattern = loadedContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+      console.log('[REGEX] INIT - Contract loaded from template', {
+        nodeId: node.id,
         hasContract: !!loadedContract,
-        contractsCount: loadedContract?.contracts?.length || 0
+        regexPattern: regexPattern || '(none)'
       });
+
+      // ✅ SALVA ORIGINALE (deep copy) per poterlo ripristinare se l'utente sceglie "Scarta"
+      originalContractRef.current = loadedContract
+        ? JSON.parse(JSON.stringify(loadedContract))
+        : null;
+
+      console.log('[CONTRACT] INIT - Original contract saved', {
+        nodeId: node.id,
+        hasOriginalContract: !!originalContractRef.current,
+        originalRegexPattern: originalContractRef.current?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0] || '(none)'
+      });
+
       setLocalContract(loadedContract);
+
+      // ✅ Reset stato modifiche quando cambi nodo
+      setHasUnsavedContractChanges(false);
+      setModifiedContract(null);
     }
-  }, [editorProps?.node]);
+  }, [editorProps?.node?.id]);
 
   // ✅ Usa direttamente localContract come contract (non serve creare nuovo oggetto)
   const contract = localContract;
 
-  // Handle contract changes and save to node
+  // Helper: confronta contract con template
+  const hasContractChanged = useCallback((nodeTemplateId: string, modifiedContract: DataContract | null): boolean => {
+    if (!nodeTemplateId) return false;
+
+    const template = DialogueTaskService.getTemplate(nodeTemplateId);
+    if (!template) return false;
+
+    const templateContract = template.dataContract;
+
+    // Se entrambi sono null/undefined, non c'è cambiamento
+    if (!templateContract && !modifiedContract) return false;
+
+    // Se uno è null e l'altro no, c'è cambiamento
+    if (!templateContract || !modifiedContract) return true;
+
+    // Confronta deep equality
+    return JSON.stringify(templateContract) !== JSON.stringify(modifiedContract);
+  }, []);
+
+  // Handle contract changes - traccia modifiche ma NON mostra dialog subito
   const handleContractChange = useCallback((updatedContract: DataContract | null) => {
     const node = editorProps?.node;
-    if (!node) {
-      console.warn('[RecognitionEditor][handleContractChange] No node available');
+    if (!node || !node.templateId) {
+      console.warn('[RecognitionEditor][handleContractChange] ❌ No node or templateId available');
       return;
     }
 
-    console.log('[RecognitionEditor][handleContractChange] Saving contract', {
-      hasContract: !!updatedContract,
-      contractsCount: updatedContract?.contracts?.length || 0,
-      contractTypes: updatedContract?.contracts?.map(c => c.type) || [],
+    const nodeTemplateId = node.templateId;
+    const regexPattern = updatedContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+    console.log('[CONTRACT] CHANGE - Tracking modifications', {
+      nodeId: node.id,
+      nodeTemplateId,
+      regexPattern: regexPattern || '(empty)'
     });
 
-    // Crea un nuovo oggetto per forzare il cambio di riferimento
-    const contractToSave = updatedContract ? {
-      ...updatedContract,
-      contracts: updatedContract.contracts ? [...updatedContract.contracts] : [],
-      subDataMapping: { ...updatedContract.subDataMapping },
-    } : null;
+    // ✅ Confronta con template
+    const changed = hasContractChanged(nodeTemplateId, updatedContract);
 
-    // Save contract to node
-    saveContractToNode(node, contractToSave);
+    if (changed) {
+      // ✅ AGGIORNA TEMPLATE IN MEMORIA (così quando riapri vedi le modifiche)
+      const template = DialogueTaskService.getTemplate(nodeTemplateId);
+      if (template) {
+        template.dataContract = updatedContract
+          ? JSON.parse(JSON.stringify(updatedContract))
+          : null;
+        // ✅ Marca template come modificato per salvataggio futuro
+        DialogueTaskService.markTemplateAsModified(nodeTemplateId);
+        console.log('[CONTRACT] CHANGE - Template updated in memory', {
+          nodeTemplateId,
+          regexPattern: updatedContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0] || '(empty)'
+        });
+      }
 
-    // Aggiorna lo stato locale IMMEDIATAMENTE con un nuovo oggetto per forzare re-render
-    setLocalContract(contractToSave);
+      // ✅ Contract modificato: traccia ma NON mostra dialog
+      setHasUnsavedContractChanges(true);
+      setModifiedContract(updatedContract);
+      setLocalContract(updatedContract); // ✅ Aggiorna UI immediatamente
+      console.log('[CONTRACT] CHANGE - Contract modified, tracking for later', {
+        nodeTemplateId,
+        regexPattern: updatedContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0] || '(empty)'
+      });
 
-    console.log('[RecognitionEditor][handleContractChange] Updated localContract', {
-      contractsCount: contractToSave?.contracts?.length || 0,
-      contractTypes: contractToSave?.contracts?.map(c => c.type) || [],
-    });
+      // ✅ Aggiorna immediatamente il ref (non aspetta useImperativeHandle)
+      if (contractChangeRef) {
+        contractChangeRef.current = {
+          hasUnsavedChanges: true,
+          modifiedContract: updatedContract,
+          originalContract: originalContractRef.current, // ✅ Passa originale per poterlo ripristinare
+          nodeTemplateId: node.templateId,
+          nodeLabel: node.label
+        };
+        console.log('[CONTRACT] CHANGE - Ref updated immediately', {
+          hasUnsavedChanges: contractChangeRef.current.hasUnsavedChanges,
+          nodeTemplateId: contractChangeRef.current.nodeTemplateId,
+          hasOriginalContract: !!contractChangeRef.current.originalContract
+        });
+      }
+    } else {
+      // ✅ Nessun cambiamento: usa template
+      const template = DialogueTaskService.getTemplate(nodeTemplateId);
+      setLocalContract(template?.dataContract || null);
+      setHasUnsavedContractChanges(false);
+      setModifiedContract(null);
+      console.log('[CONTRACT] CHANGE - No changes detected, using template contract');
 
-    // ✅ Notify parent component of the change (if onProfileUpdate exists, use it)
-    if (editorProps?.onProfileUpdate) {
-      // Trigger a profile update to ensure the change is persisted
-      editorProps.onProfileUpdate(editorProps.profile || {});
+      // ✅ Reset ref
+      if (contractChangeRef) {
+        contractChangeRef.current = {
+          hasUnsavedChanges: false,
+          modifiedContract: null,
+          originalContract: originalContractRef.current,
+          nodeTemplateId: node.templateId,
+          nodeLabel: node.label
+        };
+      }
     }
-  }, [editorProps?.node, editorProps?.onProfileUpdate, editorProps?.profile]);
+  }, [editorProps?.node, hasContractChanged, contractChangeRef]);
 
-  // ✅ Costruisci editorProps dinamico basato su activeEditor e contract
-  // ✅ IMPORTANTE: Usa solo activeEditor come dipendenza, non contract o handleContractChange
-  // per evitare loop infiniti. contract e handleContractChange sono stabili.
+  // ✅ Esponi funzione per verificare modifiche non salvate
+  React.useImperativeHandle(contractChangeRef, () => {
+    const result = {
+      hasUnsavedChanges: hasUnsavedContractChanges,
+      modifiedContract,
+      originalContract: originalContractRef.current, // ✅ Esponi originale per poterlo ripristinare
+      nodeTemplateId: editorProps?.node?.templateId,
+      nodeLabel: editorProps?.node?.label
+    };
+    console.log('[CONTRACT] IMPERATIVE_HANDLE - Ref updated', {
+      hasUnsavedChanges: result.hasUnsavedChanges,
+      nodeTemplateId: result.nodeTemplateId,
+      hasOriginalContract: !!result.originalContract
+    });
+    return result;
+  }, [hasUnsavedContractChanges, modifiedContract, editorProps?.node]);
+
+  // Build dynamic editorProps based on activeEditor and contract
+  // IMPORTANT: Include contract in dependencies to update when contract changes
   const dynamicEditorProps = useMemo(() => {
     const node = editorProps?.node;
     if (!node || !contract) {
-      return editorProps; // Fallback agli editorProps passati
+      return editorProps; // Fallback to passed editorProps
     }
 
-    // ✅ Trova il contract item corrispondente all'editor attivo
+    // Find the contract item corresponding to the active editor
     // Map editor type to contract type: 'extractor' → 'rules', others stay the same
     const getContractTypeFromEditorType = (editorType: string): string => {
       if (editorType === 'extractor') return 'rules';
@@ -276,7 +375,8 @@ export default function RecognitionEditor({
           ...baseProps,
           regex: contractItem?.patterns?.[0] || editorProps?.regex || '',
           setRegex: (value: string) => {
-            // ✅ Aggiorna il contract item specifico usando contractItem.type
+            console.log('[REGEX] USER_INPUT - setRegex', { newValue: value });
+            // Update the specific contract item using contractItem.type
             if (contractItem && contract) {
               const contractType = contractItem.type;
               const updatedContracts = contract.contracts.map((c: any) =>
@@ -285,8 +385,9 @@ export default function RecognitionEditor({
               const updatedContract = { ...contract, contracts: updatedContracts };
               handleContractChange(updatedContract);
             } else if (editorProps?.setRegex) {
-              // Fallback al vecchio comportamento
               editorProps.setRegex(value);
+            } else {
+              console.error('[REGEX] ERROR - No way to save regex!');
             }
           },
         };
@@ -339,11 +440,9 @@ export default function RecognitionEditor({
       default:
         return editorProps || baseProps;
     }
-    // ✅ SOLO activeEditor come dipendenza principale
-    // ✅ contract e editorProps sono letti ma non nelle dipendenze per evitare loop infiniti
-    // ✅ handleContractChange è stabile (useCallback con dipendenze corrette)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeEditor]);
+    // Include contract in dependencies to update when contract changes
+    // handleContractChange creates a new object, so this won't cause infinite loops
+  }, [activeEditor, contract]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>

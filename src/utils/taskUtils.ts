@@ -1039,7 +1039,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
       steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
       constraints: localDDT.constraints,
       examples: localDDT.examples,
-      dataContract: localDDT.dataContract,
+      // ❌ RIMOSSO: dataContract non è più override, è sempre nel template
       introduction: localDDT.introduction
     };
   }
@@ -1055,7 +1055,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
       steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
       constraints: localDDT.constraints,
       examples: localDDT.examples,
-      dataContract: localDDT.dataContract,
+      // ❌ RIMOSSO: dataContract non è più override, è sempre nel template
       introduction: localDDT.introduction
     };
   }
@@ -1115,36 +1115,20 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
     }))
   }));
 
-  console.log('[extractModifiedDDTFields] 🔍 Comparing structure', {
-    localdataLength: localDDT.data?.length || 0,
-    templateDataLength: templateStructureForCompare.length,
-    localStructure: JSON.stringify(localStructureForCompare, null, 2).substring(0, 500),
-    templateStructure: JSON.stringify(templateStructureForCompare, null, 2).substring(0, 500)
-  });
-
   const structureIdentical = compareDataStructure(
     localStructureForCompare,
     templateStructureForCompare
   );
 
-  console.log('[extractModifiedDDTFields] ✅ Structure comparison result', {
-    structureIdentical,
-    localdataLength: localDDT.data?.length || 0
-  });
-
   if (!structureIdentical) {
     // ✅ Struttura diversa → derivazione rotta → salva tutto (diventa standalone)
-    console.log('[extractModifiedDDTFields] ⚠️ Structure changed - saving full data (derivation broken)', {
-      localdataLength: localDDT.data?.length || 0,
-      templateDataLength: templateStructureForCompare.length
-    });
     return {
       label: localDDT.label,
       data: localDDT.data, // ✅ Salva struttura completa
       steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
       constraints: localDDT.constraints,
       examples: localDDT.examples,
-      dataContract: localDDT.dataContract,
+      // ❌ RIMOSSO: dataContract non è più override, è sempre nel template
       introduction: localDDT.introduction
     };
   }
@@ -1197,7 +1181,14 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
         stepsType: typeof nodeSteps,
         stepsIsArray: Array.isArray(nodeSteps),
         stepsKeys: typeof nodeSteps === 'object' ? Object.keys(nodeSteps || {}) : [],
-        stepsLength: Array.isArray(nodeSteps) ? nodeSteps.length : 0
+        stepsLength: Array.isArray(nodeSteps) ? nodeSteps.length : 0,
+        // ✅ LOG: Detailed dataContract info
+        mainNodeHasDataContract: !!mainNode.dataContract,
+        mainNodeDataContractContractsCount: mainNode.dataContract?.contracts?.length || 0,
+        mainNodeRegexPattern: mainNode.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0],
+        templateHasDataContract: !!templateNodeDataContract,
+        templateDataContractContractsCount: templateNodeDataContract?.contracts?.length || 0,
+        templateRegexPattern: templateNodeDataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0],
       });
 
       if (hasSteps || hasConstraintsOverride || hasExamplesOverride || hasDataContractOverride) {
@@ -1223,7 +1214,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
         }
         if (hasConstraintsOverride) overrideNode.constraints = mainNode.constraints;
         if (hasExamplesOverride) overrideNode.examples = mainNode.examples;
-        if (hasDataContractOverride) overrideNode.dataContract = mainNode.dataContract;
+        // ❌ RIMOSSO: dataContract non è più override, è sempre nel template
 
         // Check subData overrides (solo logica, non struttura)
         if (mainNode.subData && Array.isArray(mainNode.subData) && templateNode.subData && Array.isArray(templateNode.subData)) {
@@ -1267,7 +1258,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
                 }
                 if (hasSubConstraintsOverride) overrideSubNode.constraints = subNode.constraints;
                 if (hasSubExamplesOverride) overrideSubNode.examples = subNode.examples;
-                if (hasSubDataContractOverride) overrideSubNode.dataContract = subNode.dataContract;
+                // ❌ RIMOSSO: dataContract non è più override, è sempre nel template
 
                 subDataOverrides.push(overrideSubNode);
               }
@@ -1314,9 +1305,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
     result.examples = localDDT.examples;
   }
 
-  if (JSON.stringify(localDDT.dataContract) !== JSON.stringify(templateDataContract)) {
-    result.dataContract = localDDT.dataContract;
-  }
+  // ❌ RIMOSSO: dataContract non è più override, è sempre nel template
 
   if (localDDT.introduction !== templateIntroduction) {
     result.introduction = localDDT.introduction;
@@ -1328,7 +1317,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
     dataLength: result.data?.length || 0,
     hasConstraints: !!result.constraints,
     hasExamples: !!result.examples,
-    hasDataContract: !!result.dataContract,
+    // ❌ RIMOSSO: dataContract non è più override
     hasIntroduction: !!result.introduction,
     resultKeys: Object.keys(result)
   });

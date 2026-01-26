@@ -1,10 +1,10 @@
 import React from 'react';
 import EditorPanel from '../../../CodeEditor/EditorPanel';
 import EditorHeader from './shared/EditorHeader';
-// TestValuesColumn rimosso - ora è unico in NLPExtractorProfileEditor
+// TestValuesColumn rimosso - ora è unico in DataExtractionEditor
 import { type TestResult } from './shared/TestValuesColumn';
 import { useEditorMode } from '../hooks/useEditorMode';
-import { NLPProfile } from '../NLPExtractorProfileEditor';
+import { NLPProfile } from '../DataExtractionEditor';
 
 interface LLMInlineEditorProps {
   onClose: () => void;

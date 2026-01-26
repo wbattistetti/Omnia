@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import EmbeddingEditorShell, { EmbeddingEditorShellRef } from '../../../../features/intent-editor/EmbeddingEditorShell';
-import { NLPProfile } from '../NLPExtractorProfileEditor';
+import { NLPProfile } from '../DataExtractionEditor';
 import { useIntentStore } from '../../../../features/intent-editor/state/intentStore';
 import { taskRepository } from '../../../../services/TaskRepository';
 import type { ProblemIntent } from '../../../../types/project';
@@ -35,7 +35,7 @@ function toEditorState(intents: ProblemIntent[] = []) {
 
 /**
  * Inline editor wrapper for EmbeddingEditorShell
- * Adapts EmbeddingEditorShell for use within NLPExtractorProfileEditor
+ * Adapts EmbeddingEditorShell for use within DataExtractionEditor
  * Shows intent classifier/embeddings configuration
  */
 export default function IntentEditorInlineEditor({

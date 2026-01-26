@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { NLPProfile } from '../NLPExtractorProfileEditor';
+import { NLPProfile } from '../DataExtractionEditor';
 import { getIsTesting } from '../testingState';
 
 // Helper functions
@@ -37,7 +37,7 @@ function inferKindFromNode(n: any): string {
 }
 
 /**
- * Hook for managing NLP profile state in NLPExtractorProfileEditor.
+ * Hook for managing NLP profile state in DataExtractionEditor.
  * Handles kind, synonyms, regex, formatHints, examples, confidence, postProcess, waiting messages.
  */
 export function useProfileState(

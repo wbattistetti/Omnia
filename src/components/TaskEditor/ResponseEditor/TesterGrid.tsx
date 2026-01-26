@@ -1,14 +1,8 @@
 import React from 'react';
-import { Wand2, X } from 'lucide-react';
-// Inline editors
-import RegexInlineEditor from './InlineEditors/RegexInlineEditor';
-import ExtractorInlineEditor from './InlineEditors/ExtractorInlineEditor';
-import NERInlineEditor from './InlineEditors/NERInlineEditor';
-import LLMInlineEditor from './InlineEditors/LLMInlineEditor';
-import IntentEditorInlineEditor from './InlineEditors/IntentEditorInlineEditor';
 // Modular components
 import TesterGridHeader from './TesterGrid/components/TesterGridHeader';
 import TesterGridRow from './TesterGrid/components/TesterGridRow';
+import { MemoizedEditorOverlay } from './TesterGrid/components/EditorOverlay';
 import { useColumnResize } from './TesterGrid/hooks/useColumnResize';
 import { useEditorOverlay } from './TesterGrid/hooks/useEditorOverlay';
 import { RowResult } from './hooks/useExtractionTesting';
@@ -23,7 +17,7 @@ const EXTRACTOR_COLORS = {
   embeddings: '#e0e7ff',
 };
 
-// ✅ Memorizza il componente "Running tests..." fuori dal componente per evitare re-render
+// Store "Running tests..." component outside to avoid re-renders
 const RunningTestsScreen = React.memo(() => (
   <div style={{
     display: 'flex',
@@ -108,7 +102,7 @@ interface TesterGridProps {
     testCases?: string[];
     setTestCases?: (cases: string[]) => void;
     onProfileUpdate?: (profile: any) => void;
-    task?: any; // ✅ FIX: Task passed directly for embeddings editor
+    task?: any;
   };
   // Buttons props
   runAllRows?: () => Promise<void>;
@@ -121,8 +115,8 @@ interface TesterGridProps {
 
 
 function TesterGridComponent({
-  contract, // ✅ STEP 4: Contract prop
-  onContractChange, // ✅ STEP 10: Callback per modificare contract
+  contract,
+  onContractChange,
   examplesList,
   rowResults,
   selectedRow,
@@ -168,11 +162,10 @@ function TesterGridComponent({
   const showNER = mode !== 'classification';
   const showEmbeddings = mode === 'classification';
 
-  // ✅ FIX: Calculate colSpan for empty state based on dynamic contract columns
-  // ✅ FIX: Rimossa variabile non usata (colSpanEmpty)
+  // Calculate colSpan for empty state based on dynamic contract columns
 
   // Handler for adding new example
-  // ✅ SIMPLIFIED: Catena lineare - usa ref per evitare dipendenze che causano re-render
+  // Use ref to avoid dependencies that cause re-renders
   const newExampleRef = React.useRef<string>(newExample);
   React.useEffect(() => {
     newExampleRef.current = newExample;
@@ -182,7 +175,7 @@ function TesterGridComponent({
     const t = (newExampleRef.current || '').trim();
     if (!t) return;
 
-    // ✅ SIMPLIFIED: Solo aggiungi la frase, senza lanciare test automatico
+    // Only add the phrase, don't run automatic test
     // Il test automatico causava re-render che bloccavano l'input
     setExamplesList((prevList) => {
       const existIdx = prevList.findIndex((p) => p === t);
@@ -195,7 +188,7 @@ function TesterGridComponent({
         // Nuova frase: aggiungi alla lista
         const next = Array.from(new Set([...prevList, t]));
         setNewExample('');
-        // ✅ Seleziona l'ultima riga aggiunta
+        // Select the last added row
         setSelectedRow(next.length - 1);
         return next;
       }
@@ -204,22 +197,17 @@ function TesterGridComponent({
 
   // Use modular hooks
   const { phraseColumnWidth, isResizing, handleResizeStart } = useColumnResize(280);
-  const scrollContainerRef = React.useRef<HTMLDivElement>(null); // ✅ FIX: Riferimento al contenitore scrollabile
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const { editorOverlayStyle, tableRef, headerRowRef } = useEditorOverlay({
     activeEditor,
-    showDeterministic,
-    showNER,
-    examplesListLength: examplesList.length,
-    phraseColumnWidth,
-    contractTableRef: scrollContainerRef, // ✅ FIX: Passa il riferimento
+    contractTableRef: scrollContainerRef,
   });
 
-  // ✅ Stato per il pulsante dell'editor da mostrare nell'header
+  // State for editor button and error message to display in header
   const [editorButton, setEditorButton] = React.useState<React.ReactNode>(null);
-  // ✅ Stato per il messaggio di errore da mostrare nell'header
   const [editorErrorMessage, setEditorErrorMessage] = React.useState<React.ReactNode>(null);
 
-  // ✅ Reset del pulsante e del messaggio di errore quando l'editor cambia o viene chiuso
+  // Reset button and error message when editor changes or closes
   React.useEffect(() => {
     if (!activeEditor) {
       setEditorButton(null);
@@ -227,71 +215,8 @@ function TesterGridComponent({
     }
   }, [activeEditor]);
 
-  // Determina quale editor renderizzare
-  const renderEditor = () => {
-    if (!activeEditor || !['regex', 'extractor', 'ner', 'llm', 'embeddings'].includes(activeEditor) || !editorProps) {
-      return null;
-    }
-
-    const commonProps = {
-      onClose: onCloseEditor || (() => toggleEditor(activeEditor)),
-      node: editorProps.node,
-      profile: editorProps.profile,
-      testCases: editorProps.testCases,
-      setTestCases: editorProps.setTestCases,
-      onProfileUpdate: editorProps.onProfileUpdate,
-      onButtonRender: setEditorButton, // ✅ Espone il pulsante all'overlay
-    };
-
-    switch (activeEditor) {
-      case 'regex':
-        return (
-          <RegexInlineEditor
-            regex={editorProps.regex || ''}
-            setRegex={editorProps.setRegex || (() => { })}
-            kind={editorProps.kind}
-            {...commonProps}
-            onErrorRender={setEditorErrorMessage} // ✅ Espone il messaggio di errore all'overlay
-          />
-        );
-      case 'extractor':
-        return <ExtractorInlineEditor {...commonProps} />;
-      case 'ner':
-        return <NERInlineEditor {...commonProps} />;
-      case 'llm':
-        return <LLMInlineEditor {...commonProps} />;
-      case 'embeddings':
-        // ✅ FIX: Use task from editorProps directly (not from node.task)
-        const taskForEmbeddings = editorProps.task;
-        const actForEmbeddings = taskForEmbeddings ? {
-          id: taskForEmbeddings.id || taskForEmbeddings.instanceId || '',
-          type: taskForEmbeddings.type || '',
-          label: taskForEmbeddings.label,
-          instanceId: taskForEmbeddings.instanceId,
-        } : undefined;
-
-        // ✅ DEBUG: Log solo se act è undefined per diagnosticare
-        if (!actForEmbeddings) {
-          console.warn('[TesterGrid][embeddings] act is undefined', {
-            hasNode: !!editorProps.node,
-            hasTaskProp: !!editorProps.task,
-            task: editorProps.task,
-          });
-        }
-
-        return (
-          <IntentEditorInlineEditor
-            {...commonProps}
-            act={actForEmbeddings}
-          />
-        );
-      default:
-        return null;
-    }
-  };
-
-  // Determina il nome dell'editor attivo
-  const getActiveEditorTitle = () => {
+  // Memoize functions to prevent excessive re-renders of EditorOverlay
+  const getActiveEditorTitle = React.useCallback(() => {
     if (!activeEditor) return '';
     switch (activeEditor) {
       case 'regex':
@@ -307,10 +232,9 @@ function TesterGridComponent({
       default:
         return '';
     }
-  };
+  }, [activeEditor]);
 
-  // Determina il colore dell'header in base all'editor attivo
-  const getActiveEditorColor = () => {
+  const getActiveEditorColor = React.useCallback(() => {
     if (!activeEditor) return '#10b981';
     switch (activeEditor) {
       case 'regex':
@@ -326,25 +250,24 @@ function TesterGridComponent({
       default:
         return '#10b981';
     }
-  };
+  }, [activeEditor]);
 
-  // Determina il colore del testo in base al colore di sfondo (per leggibilità)
-  const getTextColor = (bgColor: string) => {
+  const getTextColor = React.useCallback((bgColor: string) => {
     // Colori chiari che richiedono testo scuro
     const lightColors = [EXTRACTOR_COLORS.regex, EXTRACTOR_COLORS.deterministic, EXTRACTOR_COLORS.ner, EXTRACTOR_COLORS.llm];
     if (lightColors.includes(bgColor)) {
       return '#0b0f17'; // Testo scuro per sfondi chiari
     }
     return '#fff'; // Testo bianco per sfondi scuri
-  };
+  }, []);
 
   return (
     <>
-      {/* ✅ Stili per la scrollbar personalizzata */}
+      {/* Custom scrollbar styles */}
       <style>{`
         .tester-grid-scroll::-webkit-scrollbar {
           width: 12px;
-          height: 12px; /* ✅ AGGIUNTO: Altezza per scrollbar orizzontale */
+          height: 12px;
         }
         .tester-grid-scroll::-webkit-scrollbar-track {
           background: #f9fafb;
@@ -370,22 +293,21 @@ function TesterGridComponent({
         height: '100%',
         overflow: 'hidden',
       }}>
-        {/* ✅ FIX: Tabella unica con position sticky - soluzione semplificata */}
         <div
-          ref={scrollContainerRef} // ✅ FIX: Aggiungi il riferimento
+          ref={scrollContainerRef}
           className="tester-grid-scroll"
           style={{
             flex: 1,
             minHeight: 0,
             overflowY: 'auto',
-            overflowX: 'auto', // ✅ Scroll orizzontale per tutte le colonne (scrollbar può estendersi per tutta la larghezza)
-            position: 'relative', // ✅ FIX: Necessario per position: absolute dell'overlay
+            overflowX: 'auto',
+            position: 'relative',
           }}>
           <table ref={tableRef} style={{
             width: '100%',
             borderCollapse: 'collapse',
             tableLayout: 'fixed' as any,
-            minWidth: 'max-content', // ✅ Tabella si espande oltre il contenitore
+            minWidth: 'max-content',
           }}>
             <TesterGridHeader
               contract={contract}
@@ -462,113 +384,44 @@ function TesterGridComponent({
           </table>
         </div>
 
-        {/* Overlay dell'editor quando attivo */}
-        {/* ✅ Don't render editor during batch testing to prevent Monaco unmount errors */}
-        {activeEditor && !testing && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) && Object.keys(editorOverlayStyle).length > 0 && editorProps && (
-          <div
-            style={{
-              ...editorOverlayStyle,
-              background: '#fff',
-              border: '1px solid #e5e7eb',
-              borderRadius: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-              pointerEvents: 'auto', // ✅ Permetti interazioni con l'overlay
-            }}
-          >
-            {/* Header dell'editor (colore dinamico basato sulla colonna) */}
-            <div
-              style={{
-                background: getActiveEditorColor(),
-                padding: '8px 12px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexShrink: 0,
-                borderRadius: 0,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input type="checkbox" checked={true} readOnly style={{ cursor: 'default' }} />
-                <span style={{ fontWeight: 600, color: getTextColor(getActiveEditorColor()) }}>{getActiveEditorTitle()}</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1, justifyContent: 'flex-end' }}>
-                {editorErrorMessage && (
-                  <div style={{ marginLeft: 'auto', marginRight: 0 }}>
-                    {editorErrorMessage}
-                  </div>
-                )}
-                {editorButton && (
-                  <div style={{ marginRight: 0 }}>
-                    {editorButton}
-                  </div>
-                )}
-                <button
-                  onClick={() => toggleEditor(activeEditor)}
-                  style={{
-                    background: 'rgba(0,0,0,0.1)',
-                    border: 'none',
-                    borderRadius: 4,
-                    padding: '4px 6px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    transition: 'all 0.2s',
-                  }}
-                  title="Configure"
-                >
-                  <Wand2 size={14} color={getTextColor(getActiveEditorColor())} />
-                </button>
-                <button
-                  onClick={onCloseEditor || (() => toggleEditor(activeEditor))}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    borderRadius: 4,
-                    padding: '4px 6px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    color: getTextColor(getActiveEditorColor()),
-                  }}
-                  title="Close Editor"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            </div>
-
-            {/* Corpo dell'editor */}
-            <div style={{ flex: 1, overflow: 'auto', padding: 6, minHeight: 0 }}>
-              {renderEditor()}
-            </div>
-          </div>
-        )}
+        {/* Editor overlay when active */}
+        <MemoizedEditorOverlay
+          activeEditor={activeEditor}
+          testing={testing || false}
+          editorOverlayStyle={editorOverlayStyle}
+          editorProps={editorProps}
+          toggleEditor={toggleEditor}
+          onCloseEditor={onCloseEditor}
+          editorButton={editorButton}
+          editorErrorMessage={editorErrorMessage}
+          getActiveEditorColor={getActiveEditorColor}
+          getActiveEditorTitle={getActiveEditorTitle}
+          getTextColor={getTextColor}
+          setEditorButton={setEditorButton}
+          setEditorErrorMessage={setEditorErrorMessage}
+        />
       </div>
     </>
   );
 }
 
-// ✅ CRITICAL: Memo con comparatore personalizzato per prevenire re-render durante batch
-// Confronta solo gli elementi di rowResults che sono effettivamente cambiati
+// Memo with custom comparator to prevent re-renders during batch testing
+// Only compares rowResults elements that have actually changed
 const TesterGrid = React.memo(TesterGridComponent, (prev, next) => {
-  // ✅ Se rowResults ha la stessa lunghezza e gli stessi riferimenti agli oggetti, non re-renderizzare
+  // If rowResults has the same length and same object references, don't re-render
   if (prev.rowResults.length !== next.rowResults.length) {
     return false; // Re-render se la lunghezza è cambiata
   }
 
-  // ✅ Confronta ogni elemento di rowResults
-  // Se anche solo un elemento è cambiato, re-renderizza (ma React.memo dei figli gestirà il resto)
+  // Compare each rowResults element
+  // If any element changed, re-render (but React.memo of children will handle the rest)
   for (let i = 0; i < prev.rowResults.length; i++) {
     if (prev.rowResults[i] !== next.rowResults[i]) {
-      // ✅ Elemento cambiato - re-renderizza (ma TesterGridRow memoizzato gestirà il confronto granulare)
-      return false;
+      return false; // Element changed - re-render (but memoized TesterGridRow will handle granular comparison)
     }
   }
 
-  // ✅ CRITICAL FIX: Confronta contract per forzare re-render quando cambia
+  // Compare contract to force re-render when it changes
   if (prev.contract !== next.contract) {
     return false;
   }
@@ -579,7 +432,7 @@ const TesterGrid = React.memo(TesterGridComponent, (prev, next) => {
     return false;
   }
 
-  // ✅ Altri props critici
+  // Other critical props
   if (prev.testing !== next.testing) {
     return false;
   }
@@ -593,11 +446,11 @@ const TesterGrid = React.memo(TesterGridComponent, (prev, next) => {
     return false;
   }
   if (prev.newExample !== next.newExample) {
-    return false; // ✅ CRITICAL: newExample deve triggerare re-render!
+    return false; // newExample must trigger re-render
   }
 
-  // ✅ Tutti gli altri props sono funzioni o oggetti che non cambiano durante batch
-  // Le righe memoizzate gestiranno i loro confronti interni
+  // All other props are functions or objects that don't change during batch
+  // Memoized rows will handle their internal comparisons
   return true; // Skip re-render
 });
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Wand2, TypeIcon, Plus, X } from 'lucide-react';
 import SmartTooltip from '../../../../SmartTooltip';
+import { getEditorTypeFromContractType } from '../helpers/contractTypeMapper';
 
 interface TesterGridHeaderColumnProps {
   type: 'regex' | 'deterministic' | 'ner' | 'llm' | 'embeddings';
@@ -42,20 +43,11 @@ export default function TesterGridHeaderColumn({
   isDropdownOpen = false,
   onSelectMethod,
   columnWidth, // ✅ FIX: Explicit column width
-  onRemoveContract, // ✅ NUOVO: Destructure remove prop
+  onRemoveContract,
 }: TesterGridHeaderColumnProps) {
-  // ✅ Removed excessive render logging
-
-  // ✅ Map contractType to editor type for comparison
-  // 'rules' contract type maps to 'extractor' editor type
-  // All other contract types map directly to their editor type
-  const getEditorTypeFromContractType = (ct: string): 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings' => {
-    if (ct === 'rules') return 'extractor';
-    return ct as 'regex' | 'ner' | 'llm' | 'embeddings';
-  };
-
   const editorType = getEditorTypeFromContractType(contractType);
-  // ✅ Editor is active if:
+
+  // Editor is active if:
   // 1. activeEditor matches the mapped editor type (e.g., 'extractor' for 'rules' contract)
   // 2. OR it's a 'rules' contract and activeEditor is 'post' (post-process editor)
   const isEditorActive = activeEditor === editorType || (contractType === 'rules' && activeEditor === 'post');
