@@ -1,28 +1,11 @@
 import React from 'react';
 import type { AssembledDDT } from '../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
-import { adaptCurrentToV2 } from '../../../DialogueDataEngine/model/adapters/currentToV2';
-import type { DDTNode, DDTTemplateV2 } from '../../../DialogueDataEngine/model/ddt.v2.types';
-import { useDDTSimulator } from '../../../DialogueDataEngine/useSimulator';
-// Removed resolveMessage and DEFAULT_FALLBACKS - using translations directly like StepEditor
-import { extractTranslations, resolveActionText } from './DDTAdapter';
 import { AlertTriangle } from 'lucide-react';
 import UserMessage, { type Message } from '../../../ChatSimulator/UserMessage';
 import BotMessage from './BotMessage';
 import { getStepColor } from './chatSimulatorUtils';
 import { useFontContext } from '../../../../context/FontContext';
-import {
-  getMain,
-  getSub,
-  resolveAsk,
-  resolveConfirm,
-  resolveSuccess
-} from './messageResolvers';
 import { useMessageEditing } from './hooks/useMessageEditing';
-import { useMessageHandling } from './hooks/useMessageHandling';
-
-// getStepIcon and getStepColor moved to chatSimulatorUtils.tsx
-// Helper functions for message resolution moved to messageResolvers.ts
-// UserMessage and BotMessage components moved to separate files
 
 export default function DDEBubbleChat({
   currentDDT,
@@ -33,93 +16,22 @@ export default function DDEBubbleChat({
   translations?: Record<string, string>;
   onUpdateDDT?: (updater: (ddt: AssembledDDT) => AssembledDDT) => void;
 }) {
-  console.log('🔵🔵🔵 [DDEBubbleChat] FUNCTION CALLED 🔵🔵🔵');
-  console.log('[DDEBubbleChat] Component mounted/updated', {
-    hasCurrentDDT: !!currentDDT,
-    currentDDTId: currentDDT?.id,
-    currentDDTLabel: currentDDT?.label,
-    translationsKeys: translations ? Object.keys(translations).length : 0,
-    translationsType: typeof translations,
-    sampleTranslations: translations ? Object.entries(translations).slice(0, 3).map(([k, v]) => ({
-      guid: k.substring(0, 20) + '...',
-      text: String(v).substring(0, 30) + '...'
-    })) : []
-  });
-
   const { combinedClass, fontSize } = useFontContext();
-  const [template, setTemplate] = React.useState<DDTTemplateV2 | null>(null);
+  const [messages, setMessages] = React.useState<Message[]>([]);
+  const [sessionId, setSessionId] = React.useState<string | null>(null);
+  const [backendError, setBackendError] = React.useState<string | null>(null);
+  const [isWaitingForInput, setIsWaitingForInput] = React.useState(false);
+  const eventSourceRef = React.useRef<EventSource | null>(null);
+  const sentTextRef = React.useRef<string>('');
 
-  React.useEffect(() => {
-    if (currentDDT) {
-      // ✅ projectLanguage è OBBLIGATORIO - nessun fallback
-      let projectLanguage: string;
-      try {
-        const lang = localStorage.getItem('project.lang');
-        if (!lang) {
-          throw new Error('[DDEBubbleChat] project.lang not found in localStorage. Cannot adapt DDT without project language.');
-        }
-        projectLanguage = lang;
-      } catch (err) {
-        console.error('[DDEBubbleChat] Failed to get project language:', err);
-        setTemplate(null);
-        return;
-      }
-
-      adaptCurrentToV2(currentDDT, projectLanguage)
-        .then((result) => {
-          setTemplate(result);
-        })
-        .catch((err) => {
-          console.error('[DDEBubbleChat] Error adapting DDT to V2', err);
-          setTemplate(null);
-        });
-    } else {
-      setTemplate(null);
-    }
-  }, [currentDDT]);
-
-  // Enable simulator debug logs only when explicitly toggled
-  const debugEnabled = (() => { try { return localStorage.getItem('debug.chatSimulator') === '1'; } catch { return false; } })();
-  const { state, send, reset, setConfig } = useDDTSimulator(template || { nodes: [], introduction: undefined }, { typingIndicatorMs: 0, debug: debugEnabled });
-
-  console.log('[DDEBubbleChat] Simulator state initialized', {
-    stateMode: state?.mode,
-    statePlan: state?.plan ? Object.keys(state.plan.byId || {}).length : 0,
-    stateCurrentIndex: state?.currentIndex,
-    stateCurrentSubId: state?.currentSubId
-  });
-
-  // Message ID generator with counter to ensure uniqueness
+  // Message ID generator
   const messageIdCounter = React.useRef(0);
   const generateMessageId = (prefix: string = 'msg') => {
     messageIdCounter.current += 1;
     return `${prefix}-${Date.now()}-${messageIdCounter.current}`;
   };
-  // updateTranslation moved to useMessageEditing hook
 
-  const [messages, setMessages] = React.useState<Message[]>([]);
-  const lastKeyRef = React.useRef<string>('');
-  // Track no-input escalation counts per (mainIdx|subId|mode)
-  const [noInputCounts, setNoInputCounts] = React.useState<Record<string, number>>({});
-  // Track no-match escalation counts per (mainIdx|subId|mode)
-  const [noMatchCounts, setNoMatchCounts] = React.useState<Record<string, number>>({});
-  const legacyDict = React.useMemo(() => {
-    const extracted = extractTranslations(currentDDT as any, translations);
-    console.log('[DDEBubbleChat] legacyDict extracted', {
-      extractedKeys: Object.keys(extracted).length,
-      translationsKeys: translations ? Object.keys(translations).length : 0,
-      sampleExtracted: Object.entries(extracted).slice(0, 3).map(([k, v]) => ({
-        guid: k.substring(0, 20) + '...',
-        text: String(v).substring(0, 30) + '...'
-      }))
-    });
-    return extracted;
-  }, [currentDDT, translations]);
-
-  // 🆕 Track sent text to clear input when it appears as a message
-  const sentTextRef = React.useRef<string>('');
-
-  // Message editing state and handlers (extracted to hook)
+  // Message editing state and handlers
   const {
     hoveredId,
     setHoveredId,
@@ -139,336 +51,280 @@ export default function DDEBubbleChat({
     currentDDT,
     onUpdateDDT
   });
-  // Removed lastBotIndex - input field is now rendered after all messages
 
-  const getPositionKey = React.useCallback((s: any): string => (
-    `${s.mode}|${s.currentIndex}|${s.currentSubId || 'main'}`
-  ), []);
-
-  // Show initial message on mount (only once)
+  // Connect to backend via SSE
   React.useEffect(() => {
-    console.log('[DDEBubbleChat] ════════════════════════════════════════');
-    console.log('[DDEBubbleChat] useEffect - MOUNT - showing initial ask', {
-      messagesCount: messages.length,
-      stateMode: state?.mode,
-      hasState: !!state,
-      hasCurrentDDT: !!currentDDT,
-      currentDDTId: currentDDT?.id,
-      currentDDTLabel: currentDDT?.label,
-      translationsKeys: translations ? Object.keys(translations).length : 0,
-      legacyDictKeys: legacyDict ? Object.keys(legacyDict).length : 0,
-      sampleTranslations: translations ? Object.entries(translations).slice(0, 3).map(([k, v]) => ({
-        guid: k.substring(0, 20) + '...',
-        text: String(v).substring(0, 30) + '...'
-      })) : []
-    });
+    if (!currentDDT) return;
 
-    const key = getPositionKey(state);
-    const main = getMain(state);
+    const baseUrl = 'http://localhost:3101';
 
-    console.log('[DDEBubbleChat] useEffect - node resolution', {
-      key,
-      hasMain: !!main,
-      mainId: main?.id,
-      mainLabel: main?.label,
-      statePlan: state?.plan ? Object.keys(state.plan.byId || {}).length : 0
-    });
+    const startSession = async () => {
+      try {
+        setBackendError(null);
+        const translationsData = ((currentDDT as any)?.translations && (((currentDDT as any).translations as any).en || (currentDDT as any).translations)) || {};
 
-    // Find legacy nodes
-    const legacyMain = Array.isArray((currentDDT as any)?.data)
-      ? (currentDDT as any)?.data[0]
-      : (currentDDT as any)?.data;
-    const legacySub = undefined;
+        const startResponse = await fetch(`${baseUrl}/api/runtime/ddt/session/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ddtInstance: currentDDT,
+            translations: translationsData,
+            limits: {
+              noMatchMax: 3,
+              noInputMax: 3,
+              notConfirmedMax: 2
+            }
+          })
+        });
 
-    console.log('[DDEBubbleChat] useEffect - legacy nodes', {
-      hasLegacyMain: !!legacyMain,
-      legacyMainLabel: legacyMain?.label,
-      legacyMainSteps: legacyMain?.steps ? Object.keys(legacyMain.steps) : [],
-      legacyMainHasStart: !!legacyMain?.steps?.start
-    });
+        if (!startResponse.ok) {
+          const errorText = await startResponse.text();
+          throw new Error(`Backend server not available: ${startResponse.statusText} - ${errorText}`);
+        }
 
-    if (!main) {
-      console.warn('[DDEBubbleChat] useEffect - no main node, returning');
-      return;
-    }
-    // If we are collecting a main but it is already saturated (all subs present), auto-advance to confirmation
-    if (state.mode === 'CollectingMain' && main && Array.isArray((main as any).subs) && (main as any).subs.length > 0) {
-      const allPresent = (main as any).subs.every((sid: string) => {
-        const m = (state as any)?.memory?.[sid];
-        return m && m.value !== undefined && m.value !== null && String(m.value).length > 0;
-      });
-      if (allPresent) {
-        void send('');
-        return;
-      }
-    }
+        const { sessionId: newSessionId } = await startResponse.json();
+        setSessionId(newSessionId);
+        console.log('[DDEBubbleChat] ✅ Backend session created:', { sessionId: newSessionId });
 
-    if (!messages.length) {
-      // First, check if there's an introduction step in the root DDT
-      const introductionStep = (currentDDT as any)?.introduction;
-      if (introductionStep && Array.isArray(introductionStep.escalations) && introductionStep.escalations.length > 0) {
-        const introEscalation = introductionStep.escalations[0];
-        const introActions = introEscalation?.actions || [];
-        const introTexts: string[] = [];
-        const introKeys: string[] = [];
+        // Open SSE stream
+        const eventSource = new EventSource(`${baseUrl}/api/runtime/ddt/session/${newSessionId}/stream`);
+        eventSourceRef.current = eventSource;
 
-        for (const action of introActions) {
-          const actionText = resolveActionText(action, { ...legacyDict, ...(translations || {}) });
-          if (actionText) {
-            introTexts.push(actionText);
-            const textKey = action?.parameters?.find((p: any) => p?.parameterId === 'text')?.value;
-            if (textKey) introKeys.push(textKey);
+        // Handle messages from backend
+        eventSource.addEventListener('message', (e: MessageEvent) => {
+          try {
+            const msg = JSON.parse(e.data);
+            console.log('[DDEBubbleChat] Backend message:', msg);
+
+            // Determine message type from backend data
+            const stepType = msg.stepType || 'ask';
+            const textKey = msg.textKey || msg.key;
+
+            setMessages((m) => [...m, {
+              id: generateMessageId('bot'),
+              type: 'bot',
+              text: msg.text || msg.message || '',
+              stepType: stepType as any,
+              textKey: textKey,
+              color: getStepColor(stepType)
+            }]);
+          } catch (error) {
+            console.error('[DDEBubbleChat] Error parsing message', error);
           }
-        }
-
-        // Show all introduction messages
-        if (introTexts.length > 0) {
-          const introMessages = introTexts.map((text, idx) => ({
-            id: `intro-${idx}`,
-            type: 'bot' as const,
-            text,
-            stepType: 'introduction' as const,
-            textKey: introKeys[idx],
-            color: getStepColor('introduction')
-          }));
-          setMessages(introMessages);
-          lastKeyRef.current = introKeys[0] || 'introduction';
-          return;
-        }
-      }
-
-      // No introduction, show first main ask
-      console.log('[DDEBubbleChat] useEffect - calling resolveAsk', {
-        hasMain: !!main,
-        hasLegacyMain: !!legacyMain,
-        translationsKeys: translations ? Object.keys(translations).length : 0,
-        legacyDictKeys: legacyDict ? Object.keys(legacyDict).length : 0
-      });
-
-      const { text, key } = resolveAsk(main, undefined, translations, legacyDict, legacyMain, legacySub);
-
-      console.log('[DDEBubbleChat] useEffect - resolveAsk result', {
-        text,
-        textLength: text?.length,
-        key,
-        hasText: !!text && text.length > 0
-      });
-
-      if (text && text.length > 0) {
-        setMessages([{ id: 'init', type: 'bot', text, stepType: 'ask', textKey: key, color: getStepColor('ask') }]);
-        lastKeyRef.current = key || 'ask.base';
-        console.log('[DDEBubbleChat] useEffect - ✅ Message set', {
-          text: text.substring(0, 50),
-          key
         });
-      } else {
-        console.warn('[DDEBubbleChat] useEffect - ❌ No text from resolveAsk, message NOT set', {
-          text,
-          key,
-          mainId: main?.id,
-          mainLabel: main?.label
+
+        // Handle waiting for input
+        eventSource.addEventListener('waitingForInput', (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(e.data);
+            console.log('[DDEBubbleChat] Backend waiting for input:', data);
+            setIsWaitingForInput(true);
+          } catch (error) {
+            console.error('[DDEBubbleChat] Error parsing waitingForInput', error);
+          }
         });
-      }
-      return;
-    }
-  }, [state, messages, currentDDT, translations, legacyDict, getPositionKey]);
 
-  // Handle state changes (after initial mount)
-  React.useEffect(() => {
-    // Skip if no messages yet (initial message handled by mount effect above)
-    if (messages.length === 0) {
-      return;
-    }
-
-    const key = getPositionKey(state);
-    const main = getMain(state);
-
-    // Debug: log when entering ConfirmingMain
-    if (state.mode === 'ConfirmingMain') {
-      console.log('[DDEBubbleChat][ConfirmingMain][CHECK]', {
-        lastKey: lastKeyRef.current,
-        currentKey: key,
-        keysMatch: lastKeyRef.current === key,
-        messagesCount: messages.length,
-        willEmitConfirm: lastKeyRef.current !== key
-      });
-    }
-    // ✅ Don't skip message if mode changed to ConfirmingMain (always show confirmation)
-    // Skip only if same key AND not entering ConfirmingMain mode
-    if (lastKeyRef.current === key && state.mode !== 'ConfirmingMain') {
-      console.log('[DDEBubbleChat][SKIP_MESSAGE]', {
-        reason: 'lastKeyRef.current === key AND mode !== ConfirmingMain',
-        lastKey: lastKeyRef.current,
-        currentKey: key,
-        mode: state.mode
-      });
-      return;
-    }
-    lastKeyRef.current = key || getPositionKey(state);
-    // Push appropriate bot message for new state
-    if (state.mode === 'CollectingMain') {
-      // If already saturated, jump to confirmation without showing ask
-      if (main && Array.isArray((main as any).subs) && (main as any).subs.length > 0) {
-        const allPresent = (main as any).subs.every((sid: string) => {
-          const m = (state as any)?.memory?.[sid];
-          return m && m.value !== undefined && m.value !== null && String(m.value).length > 0;
+        // Handle state updates
+        eventSource.addEventListener('stateUpdate', (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(e.data);
+            console.log('[DDEBubbleChat] Backend state update:', data);
+            // State updates are handled by backend, we just log them
+          } catch (error) {
+            console.error('[DDEBubbleChat] Error parsing stateUpdate', error);
+          }
         });
-        if (allPresent) {
-          void send('');
-          return;
-        }
-      }
-      const sub = undefined;
-      const legacyMain = Array.isArray((currentDDT as any)?.data)
-        ? (currentDDT as any)?.data[0]
-        : (currentDDT as any)?.data;
-      const legacySub = undefined;
-      const { text, key: k } = resolveAsk(main, sub, translations, legacyDict, legacyMain, legacySub);
-      setMessages((prev) => [...prev, { id: key || generateMessageId('bot'), type: 'bot', text, stepType: 'ask', textKey: k, color: getStepColor('ask') }]);
-    } else if (state.mode === 'CollectingSub') {
-      const sub = getSub(state);
-      // find legacy sub by id label match
-      const legacyMain = Array.isArray((currentDDT as any)?.data)
-        ? (currentDDT as any)?.data[0]
-        : (currentDDT as any)?.data;
-      const candidate = (legacyMain?.subData || []).find((s: any) => (s?.id === sub?.id) || (String(s?.label || '').toLowerCase() === String(sub?.label || '').toLowerCase()));
-      const { text, key: k } = resolveAsk(main, sub, translations, legacyDict, candidate || legacyMain, candidate);
-      setMessages((prev) => [...prev, { id: key, type: 'bot', text, stepType: 'ask', textKey: k, color: getStepColor('ask') }]);
-    } else if (state.mode === 'ConfirmingMain') {
-      // If the main has REQUIRED subs missing, ask the first missing REQUIRED sub instead of confirming
-      if (main && Array.isArray((main as any).subs) && (main as any).subs.length > 0) {
-        const firstMissingRequired = (main as any).subs.find((sid: string) => {
-          const sub = state.plan?.byId?.[sid];
-          if (!sub || sub.required === false) return false;
-          const mv = state.memory?.[sid]?.value;
-          return mv === undefined || mv === null || String(mv).length === 0;
-        });
-        if (firstMissingRequired) {
-          const sub = state.plan?.byId?.[firstMissingRequired];
-          const legacyMain = Array.isArray((currentDDT as any)?.data)
-            ? (currentDDT as any)?.data[0]
-            : (currentDDT as any)?.data;
-          const candidate = (legacyMain?.subData || []).find((s: any) => (s?.id === sub?.id) || (String(s?.label || '').toLowerCase() === String(sub?.label || '').toLowerCase()));
-          const { text, key: k } = resolveAsk(main, sub, translations, legacyDict, candidate || legacyMain, candidate);
-          setMessages((prev) => [...prev, { id: key || generateMessageId('bot'), type: 'bot', text, stepType: 'ask', textKey: k, color: getStepColor('ask') }]);
-          return;
-        }
-      }
-      const legacyMain = Array.isArray((currentDDT as any)?.data)
-        ? (currentDDT as any)?.data[0]
-        : (currentDDT as any)?.data;
-      const { text, key: k } = resolveConfirm(state, main, legacyDict, legacyMain, translations);
-      console.log('[DDEBubbleChat][ConfirmingMain][EMITTING]', {
-        text,
-        textKey: k,
-        positionKey: key,
-        messagesCount: messages.length
-      });
-      setMessages((prev) => [...prev, { id: key, type: 'bot', text, stepType: 'confirm', textKey: k, color: getStepColor('confirm') }]);
-    } else if (state.mode === 'NotConfirmed') {
-      const tKey = main?.steps?.notConfirmed?.prompts?.[0];
-      const mergedTranslations = { ...(legacyDict || {}), ...(translations || {}) };
-      // Use translations directly like StepEditor does: translations[key] || key
-      const text = typeof tKey === 'string' ? (mergedTranslations[tKey] || tKey) : '';
-      setMessages((prev) => [...prev, { id: key, type: 'bot', text, stepType: 'notConfirmed', textKey: tKey, color: getStepColor('notConfirmed') }]);
-    } else if (state.mode === 'SuccessMain') {
-      const legacyMain = Array.isArray((currentDDT as any)?.data)
-        ? (currentDDT as any)?.data[0]
-        : (currentDDT as any)?.data;
-      const { text, key: k } = resolveSuccess(main, translations, legacyDict, legacyMain);
-      setMessages((prev) => [...prev, { id: key, type: 'bot', text, stepType: 'success', textKey: k, color: getStepColor('success') }]);
-      // Auto-advance engine by sending an empty acknowledgment to move to next main
-      // 🆕 Instant in debug mode, no delay
-      void send('');
-    }
-  }, [state]);
 
-  // 🆕 Clear input when sent text appears as a user message (frozen label)
-  // This happens after handleSend adds the message to messages, before engine processes
+        // Handle completion
+        eventSource.addEventListener('complete', (e: MessageEvent) => {
+          try {
+            const result = JSON.parse(e.data);
+            console.log('[DDEBubbleChat] Backend complete:', result);
+            if (result.success) {
+              setMessages((m) => [...m, {
+                id: generateMessageId('bot'),
+                type: 'bot',
+                text: '✅ Dati raccolti con successo!',
+                stepType: 'success',
+                color: getStepColor('success')
+              }]);
+            }
+            setIsWaitingForInput(false);
+          } catch (error) {
+            console.error('[DDEBubbleChat] Error parsing complete', error);
+          }
+        });
+
+        // Handle errors
+        eventSource.addEventListener('error', (e: MessageEvent) => {
+          try {
+            if (e.data) {
+              const errorData = JSON.parse(e.data);
+              setBackendError(errorData.error || 'Backend error');
+            }
+          } catch (error) {
+            console.error('[DDEBubbleChat] Error parsing error event', error);
+          }
+        });
+
+        eventSource.onerror = (error) => {
+          console.error('[DDEBubbleChat] SSE connection error', error);
+          if (eventSource.readyState === EventSource.CLOSED) {
+            setBackendError('Connection to backend server closed. Is Ruby server running on port 3101?');
+            setIsWaitingForInput(false);
+          }
+        };
+      } catch (error) {
+        console.error('[DDEBubbleChat] Backend session error', error);
+        setBackendError(error instanceof Error ? error.message : 'Failed to connect to backend server. Is Ruby server running on port 3101?');
+        setIsWaitingForInput(false);
+      }
+    };
+
+    startSession();
+
+    // Cleanup on unmount
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      if (sessionId) {
+        const baseUrl = 'http://localhost:3101';
+        fetch(`${baseUrl}/api/runtime/ddt/session/${sessionId}`, {
+          method: 'DELETE'
+        }).catch(() => {});
+      }
+    };
+  }, [currentDDT]);
+
+  // Clear input when sent text appears as a user message
   React.useEffect(() => {
     if (sentTextRef.current && messages.length > 0) {
-      // Find the last user message that matches the sent text
       const matchingMessage = [...messages]
         .reverse()
         .find(m => m.type === 'user' && m.text === sentTextRef.current);
 
       if (matchingMessage) {
-        // Message found in chat - text is now frozen/visible, clear input
         setInlineDraft('');
-        sentTextRef.current = ''; // Reset ref
-        // Ensure focus after clearing (new text box ready for next input)
-        // 🆕 Use requestAnimationFrame for instant focus without delay
+        sentTextRef.current = '';
         requestAnimationFrame(() => ensureInlineFocus());
       }
     }
   }, [messages, setInlineDraft, ensureInlineFocus]);
 
-  // Keep the inline input minimally in view when it exists
+  // Keep the inline input in view
   React.useEffect(() => {
-    // 🆕 Use requestAnimationFrame for instant execution, no setTimeout delay
     const rafId = requestAnimationFrame(() => {
       try {
         inlineInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       } catch { }
-      // After scroll, try to focus the inline input
       try { ensureInlineFocus(); } catch { }
     });
     return () => cancelAnimationFrame(rafId);
   }, [messages.length, ensureInlineFocus]);
 
-  // Message handling logic (extracted to hook)
-  const { handleSend } = useMessageHandling({
-    state,
-    send,
-    currentDDT,
-    translations,
-    legacyDict,
-    messages,
-    setMessages,
-    noInputCounts,
-    setNoInputCounts,
-    noMatchCounts,
-    setNoMatchCounts,
-    generateMessageId,
-    getPositionKey
-  });
+  // Handle sending user input to backend
+  const handleSend = async (text: string) => {
+    const trimmed = String(text || '').trim();
+    if (!trimmed || !sessionId) return;
 
-  // handleSend function moved to useMessageHandling hook (see hooks/useMessageHandling.ts)
+    try {
+      // Add user message immediately
+      setMessages((prev) => [...prev, {
+        id: generateMessageId('user'),
+        type: 'user',
+        text: trimmed,
+        matchStatus: 'match'
+      }]);
 
-  console.log('[DDEBubbleChat] Rendering component', {
-    messagesCount: messages.length,
-    stateMode: state?.mode,
-    hasTranslations: !!translations,
-    translationsKeys: translations ? Object.keys(translations).length : 0,
-    legacyDictKeys: Object.keys(legacyDict).length
-  });
+      // Freeze text for input clearing
+      sentTextRef.current = trimmed;
+
+      // Send input to backend
+      const baseUrl = 'http://localhost:3101';
+      const response = await fetch(`${baseUrl}/api/runtime/ddt/session/${sessionId}/input`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input: trimmed
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to send input: ${response.statusText} - ${errorText}`);
+      }
+
+      setIsWaitingForInput(false);
+    } catch (error) {
+      console.error('[DDEBubbleChat] Error sending input', error);
+      setBackendError(error instanceof Error ? error.message : 'Failed to send input to backend');
+    }
+  };
+
+  // Reset function
+  const handleReset = () => {
+    if (sessionId) {
+      const baseUrl = 'http://localhost:3101';
+      fetch(`${baseUrl}/api/runtime/ddt/session/${sessionId}`, {
+        method: 'DELETE'
+      }).catch(() => {});
+    }
+    setMessages([]);
+    messageIdCounter.current = 0;
+    setBackendError(null);
+    setIsWaitingForInput(false);
+    sentTextRef.current = '';
+
+    // Restart session
+    if (currentDDT) {
+      const baseUrl = 'http://localhost:3101';
+      const translationsData = ((currentDDT as any)?.translations && (((currentDDT as any).translations as any).en || (currentDDT as any).translations)) || {};
+
+      fetch(`${baseUrl}/api/runtime/ddt/session/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ddtInstance: currentDDT,
+          translations: translationsData,
+          limits: {
+            noMatchMax: 3,
+            noInputMax: 3,
+            notConfirmedMax: 2
+          }
+        })
+      })
+        .then(res => res.json())
+        .then(data => {
+          setSessionId(data.sessionId);
+          // SSE connection will be re-established by useEffect
+        })
+        .catch(err => {
+          console.error('[DDEBubbleChat] Error restarting session', err);
+          setBackendError(err.message);
+        });
+    }
+  };
 
   return (
     <div className={`h-full flex flex-col bg-white ${combinedClass}`}>
       <div className="border-b p-3 bg-gray-50 flex items-center gap-2">
         <button
-          onClick={() => {
-            reset();
-            setMessages([]);
-            lastKeyRef.current = '';
-            messageIdCounter.current = 0;
-            setNoMatchCounts({});
-            setNoInputCounts({});
-          }}
+          onClick={handleReset}
           className={`px-2 py-1 rounded border bg-gray-100 border-gray-300 text-gray-700 ${combinedClass}`}
         >
           Reset
         </button>
-        <button
-          onClick={() => setConfig({ typingIndicatorMs: 150 })}
-          className={`px-2 py-1 rounded border bg-gray-100 border-gray-300 text-gray-700 ${combinedClass}`}
-        >
-          Typing 150ms
-        </button>
+        {backendError && (
+          <div className="flex items-center gap-2 text-red-600 text-sm">
+            <AlertTriangle size={16} />
+            <span>{backendError}</span>
+          </div>
+        )}
       </div>
       <div className={`flex-1 overflow-y-auto p-4 space-y-3 ${combinedClass}`} ref={scrollContainerRef}>
         {messages.map((m) => {
-          // Render user message
           if (m.type === 'user') {
             return (
               <UserMessage
@@ -484,7 +340,6 @@ export default function DDEBubbleChat({
             );
           }
 
-          // Render bot message
           if (m.type === 'bot') {
             return (
               <BotMessage
@@ -501,7 +356,6 @@ export default function DDEBubbleChat({
             );
           }
 
-          // Render system message (legacy - dovrebbe essere raro ora)
           if (m.type === 'system') {
             return (
               <div key={m.id} className={`flex items-center gap-2 text-yellow-700 ${combinedClass}`}>
@@ -513,7 +367,7 @@ export default function DDEBubbleChat({
 
           return null;
         })}
-        {/* Input field DOPO tutti i messaggi */}
+        {/* Input field */}
         <div className={`bg-white border border-gray-300 rounded-lg p-2 shadow-sm max-w-xs lg:max-w-md w-full mt-3 ${combinedClass}`}>
           <style dangerouslySetInnerHTML={{__html: `
             .chat-simulator-input-placeholder::placeholder {
@@ -532,27 +386,22 @@ export default function DDEBubbleChat({
             onFocus={() => {
               try { inlineInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch { }
             }}
-            placeholder="Type response..."
+            placeholder={isWaitingForInput ? "Type response..." : "Waiting for backend..."}
             value={inlineDraft}
             onChange={(e) => setInlineDraft(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+              if (e.key === 'Enter' && isWaitingForInput) {
                 const v = inlineDraft.trim();
                 if (!v) return;
-                // 🆕 Freeze text: save it so we can clear input when it appears as a message
-                // The text will become a frozen message label, then engine processes it
                 sentTextRef.current = v;
                 void handleSend(v);
-                // Focus will be handled after input is cleared (see useEffect below)
               }
             }}
+            disabled={!isWaitingForInput}
             autoFocus
           />
         </div>
       </div>
-      {/* input spostato nella nuvoletta inline sotto l'ultimo prompt */}
     </div>
   );
 }
-
-
