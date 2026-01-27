@@ -1,76 +1,174 @@
 require 'json'
-require 'open3'
+require 'net/http'
+require 'uri'
 
 class VBNetClient
-  # Path to ApiServer.exe (relative to project root)
-  API_SERVER_PATH = File.join(__dir__, '..', '..', '..', 'VBNET', 'ApiServer', 'bin', 'Debug', 'net8.0', 'ApiServer.exe')
-
-  def self.compile_flow(nodes, edges, tasks, ddts)
-    command = {
-      command: 'compile-flow',
-      data: {
-        nodes: nodes,
-        edges: edges,
-        tasks: tasks,
-        ddts: ddts || []
-      }
+  # ApiServer HTTP endpoint
+  API_SERVER_BASE_URL = 'http://localhost:5000'
+  
+  # Compile flow via HTTP API
+  def self.compile_flow(nodes, edges, tasks, ddts, translations = {})
+    data = {
+      nodes: nodes,
+      edges: edges,
+      tasks: tasks,
+      ddts: ddts || [],
+      translations: translations || {} # ✅ Translations from frontend (already in memory)
     }
 
-    execute_command(command)
+    call_api('/api/runtime/compile', data)
   end
 
+  # Compile DDT via HTTP API
   def self.compile_ddt(ddt_json)
-    command = {
-      command: 'compile-ddt',
-      data: {
-        ddtJson: ddt_json
-      }
+    data = {
+      ddtJson: ddt_json
     }
 
-    execute_command(command)
+    call_api('/api/compile-ddt', data)
   end
 
+  # Run DDT via HTTP API
   def self.run_ddt(ddt_instance, user_inputs, translations, limits)
-    command = {
-      command: 'run-ddt',
-      data: {
-        ddt_instance: ddt_instance,
-        user_inputs: user_inputs || [],
-        translations: translations || {},
-        limits: limits || {}
-      }
+    data = {
+      ddt_instance: ddt_instance,
+      user_inputs: user_inputs || [],
+      translations: translations || {},
+      limits: limits || {}
     }
 
-    execute_command(command)
+    call_api('/api/run-ddt', data)
   end
 
   private
 
-  def self.execute_command(command)
-    json_input = command.to_json
+  # Make HTTP POST request to ApiServer
+  def self.call_api(endpoint, data)
+    uri = URI.parse("#{API_SERVER_BASE_URL}#{endpoint}")
+    
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.read_timeout = 30 # 30 seconds timeout
+    http.open_timeout = 5  # 5 seconds to connect
+    
+    request = Net::HTTP::Post.new(uri.path)
+    request['Content-Type'] = 'application/json'
+    request['Accept'] = 'application/json'
+    request.body = data.to_json
 
-    unless File.exist?(API_SERVER_PATH)
-      raise "ApiServer.exe not found at: #{API_SERVER_PATH}"
-    end
-
-    stdout, stderr, status = Open3.capture3(API_SERVER_PATH, stdin_data: json_input)
-
-    unless status.success?
-      raise "ApiServer.exe failed: #{stderr}"
-    end
+    puts "[VBNetClient] 📤 Calling ApiServer: POST #{endpoint}"
+    puts "[VBNetClient]    URL: #{uri}"
+    puts "[VBNetClient]    Payload size: #{request.body.bytesize} bytes"
 
     begin
-      response = JSON.parse(stdout)
-      if response['success']
-        response['data']
+      response = http.request(request)
+      
+      puts "[VBNetClient] 📥 Response: #{response.code} #{response.message}"
+      
+      case response.code.to_i
+      when 200..299
+        # Success
+        result = JSON.parse(response.body)
+        puts "[VBNetClient] ✅ Request successful"
+        result
+      when 400..499
+        # Client error
+        error_data = JSON.parse(response.body) rescue { error: response.body }
+        raise <<~ERROR
+          ❌ ApiServer returned client error (#{response.code})
+          
+          Endpoint: POST #{endpoint}
+          Error: #{error_data['error'] || error_data['message'] || 'Unknown error'}
+          
+          Response body:
+          #{response.body}
+        ERROR
+      when 500..599
+        # Server error
+        error_data = JSON.parse(response.body) rescue { error: response.body }
+        raise <<~ERROR
+          ❌ ApiServer returned server error (#{response.code})
+          
+          Endpoint: POST #{endpoint}
+          Error: #{error_data['error'] || error_data['message'] || 'Internal server error'}
+          
+          Response body:
+          #{response.body}
+        ERROR
       else
-        error_msg = response['error'] || 'Unknown error'
-        stack_trace = response['stackTrace']
-        raise "VB.NET API error: #{error_msg}#{stack_trace ? "\n#{stack_trace}" : ''}"
+        raise "Unexpected HTTP response code: #{response.code}"
       end
+    rescue Errno::ECONNREFUSED => e
+      raise <<~ERROR
+        ❌ Cannot connect to ApiServer at #{API_SERVER_BASE_URL}
+        
+        The VB.NET ApiServer is not running.
+        
+        To start ApiServer:
+          cd VBNET/ApiServer
+          dotnet run
+        
+        Or:
+          dotnet run --project VBNET/ApiServer/ApiServer.vbproj
+        
+        Original error: #{e.message}
+      ERROR
+    rescue Timeout::Error => e
+      raise <<~ERROR
+        ❌ Request to ApiServer timed out
+        
+        Endpoint: POST #{endpoint}
+        Timeout: #{http.read_timeout} seconds
+        
+        The ApiServer may be overloaded or unresponsive.
+        
+        Original error: #{e.message}
+      ERROR
     rescue JSON::ParserError => e
-      raise "Failed to parse ApiServer response: #{e.message}\nResponse: #{stdout}"
+      raise <<~ERROR
+        ❌ ApiServer returned invalid JSON
+        
+        Endpoint: POST #{endpoint}
+        Response code: #{response.code}
+        Parse error: #{e.message}
+        
+        Raw response:
+        #{response.body}
+      ERROR
+    rescue StandardError => e
+      raise <<~ERROR
+        ❌ Unexpected error calling ApiServer
+        
+        Endpoint: POST #{endpoint}
+        Error class: #{e.class}
+        Error message: #{e.message}
+        
+        Backtrace:
+        #{e.backtrace.first(5).join("\n")}
+      ERROR
+    end
+  end
+
+  # Health check - verify ApiServer is running
+  def self.health_check
+    uri = URI.parse("#{API_SERVER_BASE_URL}/api/health")
+    
+    begin
+      response = Net::HTTP.get_response(uri)
+      
+      if response.code.to_i == 200
+        data = JSON.parse(response.body)
+        puts "[VBNetClient] ✅ ApiServer is healthy: #{data}"
+        true
+      else
+        puts "[VBNetClient] ⚠️  ApiServer returned #{response.code}"
+        false
+      end
+    rescue Errno::ECONNREFUSED
+      puts "[VBNetClient] ❌ ApiServer is not running at #{API_SERVER_BASE_URL}"
+      false
+    rescue StandardError => e
+      puts "[VBNetClient] ❌ Health check failed: #{e.message}"
+      false
     end
   end
 end
-

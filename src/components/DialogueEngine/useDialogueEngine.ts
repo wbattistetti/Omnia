@@ -162,16 +162,20 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         console.log(`[FRONTEND] ⚠️ Filtered out ${totalTasksInRepository - allTasks.length} unused tasks from repository`);
       }
 
-      // Get base URL from localStorage (React: localhost:3100, VB.NET: localhost:5000)
-      const backendType = (() => {
-        try {
-          const stored = localStorage.getItem('omnia_backend_type');
-          return stored === 'vbnet' ? 'vbnet' : 'react';
-        } catch {
-          return 'react';
-        }
-      })();
-      const baseUrl = backendType === 'vbnet' ? 'http://localhost:5000' : 'http://localhost:3100';
+      // ⭐ SEMPRE RUBY (porta 3101) - Unica fonte di verità per interpretare dialoghi
+      // ❌ POSTEGGIATO: Node.js (3100) e VB.NET diretto (5000) - non usati per ora
+      const baseUrl = 'http://localhost:3101';
+
+      // ❌ POSTEGGIATO: Logica switch backendType - non usata per ora
+      // const backendType = (() => {
+      //   try {
+      //     const stored = localStorage.getItem('omnia_backend_type');
+      //     return stored === 'vbnet' ? 'vbnet' : 'react';
+      //   } catch {
+      //     return 'react';
+      //   }
+      // })();
+      // const baseUrl = backendType === 'vbnet' ? 'http://localhost:5000' : 'http://localhost:3100';
 
       // Transform nodes from ReactFlow structure (data.rows) to simplified structure (rows directly)
       // VB.NET backend expects: { id, label, rows: [...] } (no data wrapper)
@@ -220,13 +224,28 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       });
       console.log('═══════════════════════════════════════════════════════════════════════════');
 
+      // ✅ Get translations from options or global context (already in memory)
+      let translations: Record<string, string> = {};
+      if (options.translations && Object.keys(options.translations).length > 0) {
+        translations = options.translations;
+      } else {
+        // Fallback: Try to get from window or context
+        try {
+          const globalTranslations = (window as any).__globalTranslations || {};
+          translations = globalTranslations;
+        } catch (e) {
+          console.warn('[useDialogueEngine] ⚠️ Could not load translations for compilation', e);
+        }
+      }
+
       // ✅ DEBUG: Log tasks before serialization to verify type field
       const requestBody = {
         nodes: simplifiedNodes,  // ✅ Use simplified structure (rows directly, no data wrapper)
         edges: options.edges,
         tasks: allTasks,
         ddts: allDDTs,
-        projectId: localStorage.getItem('currentProjectId') || undefined
+        projectId: localStorage.getItem('currentProjectId') || undefined,
+        translations: translations // ✅ Pass translations table (already in memory) - runtime will do lookup at execution time
       };
 
       // Log first few tasks to verify type field is present

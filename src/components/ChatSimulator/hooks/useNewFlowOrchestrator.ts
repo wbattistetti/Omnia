@@ -99,14 +99,17 @@ export function useNewFlowOrchestrator({
   // Track current DDT
   const [currentDDTState, setCurrentDDTState] = useState<AssembledDDT | null>(null);
 
-  // Debug: log when currentDDTState changes
+  // Debug: log when currentDDTState changes (only if DDT exists or in flow mode)
   React.useEffect(() => {
-    console.log('[useNewFlowOrchestrator] currentDDTState changed', {
-      hasDDT: !!currentDDTState,
-      ddtId: currentDDTState?.id,
-      ddtLabel: currentDDTState?.label
-    });
-  }, [currentDDTState]);
+    // Only log if DDT exists or if we're in flow mode (to reduce noise in single-ddt mode)
+    if (currentDDTState || (nodes && nodes.length > 0)) {
+      console.log('[useNewFlowOrchestrator] currentDDTState changed', {
+        hasDDT: !!currentDDTState,
+        ddtId: currentDDTState?.id,
+        ddtLabel: currentDDTState?.label
+      });
+    }
+  }, [currentDDTState, nodes]);
 
   // ✅ Get global translations from context (safe - handles missing provider)
   const { translations: globalTranslations } = useProjectTranslationsSafe();

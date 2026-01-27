@@ -12,8 +12,46 @@ Imports DDTEngine
 ''' - Normalizzare cardinalità (mainData singolo → MainDataList)
 ''' - Convertire tipi (DialogueStep IDE → DialogueStep Runtime)
 ''' - Gestire default e validazioni
+''' - Sostituire GUID con testi tradotti nella lingua corrente
 ''' </summary>
 Public Class DDTAssembler
+
+    ' ✅ Traduzioni per sostituire GUID con testi durante la compilazione
+    Private translations As Dictionary(Of String, String)
+
+    ''' <summary>
+    ''' Verifica se una stringa è un GUID valido
+    ''' </summary>
+    Private Function IsGuid(value As String) As Boolean
+        If String.IsNullOrEmpty(value) Then
+            Return False
+        End If
+        ' GUID format: 8-4-4-4-12 hex digits
+        Dim guidPattern As String = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        Return System.Text.RegularExpressions.Regex.IsMatch(value.ToLower(), guidPattern)
+    End Function
+
+    ''' <summary>
+    ''' Risolve un valore: se è un GUID, cerca la traduzione; altrimenti usa il valore originale
+    ''' </summary>
+    Private Function ResolveText(value As String) As String
+        If String.IsNullOrEmpty(value) Then
+            Return value
+        End If
+
+        ' Se è un GUID e abbiamo traduzioni, cerca la traduzione
+        If IsGuid(value) AndAlso translations IsNot Nothing AndAlso translations.ContainsKey(value) Then
+            Dim translatedText = translations(value)
+            If Not String.IsNullOrEmpty(translatedText) Then
+                Console.WriteLine($"✅ [DDTAssembler] Resolved GUID to text: {value.Substring(0, 8)}... -> '{translatedText.Substring(0, Math.Min(50, translatedText.Length))}...'")
+                System.Diagnostics.Debug.WriteLine($"✅ [DDTAssembler] Resolved GUID to text: {value} -> '{translatedText}'")
+                Return translatedText
+            End If
+        End If
+
+        ' Altrimenti usa il valore originale (non è un GUID o traduzione non trovata)
+        Return value
+    End Function
 
     ''' <summary>
     ''' Trasforma AssembledDDT (IDE) in DDTInstance (Runtime)
@@ -26,10 +64,15 @@ Public Class DDTAssembler
             Throw New ArgumentNullException(NameOf(assembled), "AssembledDDT cannot be Nothing")
         End If
 
+        ' ✅ Salva traduzioni per uso durante la conversione
+        translations = If(assembled.Translations, New Dictionary(Of String, String)())
+        Console.WriteLine($"🔍 [DDTAssembler] Loaded {translations.Count} translations for GUID resolution")
+        System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] Loaded {translations.Count} translations for GUID resolution")
+
         ' ❌ REMOVED: .Label = assembled.Label, (label non serve a runtime, solo per UI)
         Dim instance As New DDTInstance() With {
             .Id = assembled.Id,
-            .Translations = If(assembled.Translations, New Dictionary(Of String, String)()),
+            .Translations = translations, ' ✅ Passa traduzioni all'istanza (per riferimento futuro se necessario)
             .MainDataList = New List(Of DDTNode)(),
             .IsAggregate = (assembled.Introduction IsNot Nothing)
         }
@@ -301,9 +344,10 @@ Public Class DDTAssembler
                 System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertTask: Matched SayMessage/Message, checking for text...")
                 ' ✅ Nuovo modello: text come proprietà diretta
                 If Not String.IsNullOrEmpty(ideTask.Text) Then
-                    Console.WriteLine($"✅ [DDTAssembler] ConvertTask: Creating MessageTask with direct text: '{ideTask.Text}'")
-                    System.Diagnostics.Debug.WriteLine($"✅ [DDTAssembler] ConvertTask: Creating MessageTask with direct text: '{ideTask.Text}'")
-                    Return New MessageTask(ideTask.Text)
+                    Dim resolvedText = ResolveText(ideTask.Text)
+                    Console.WriteLine($"✅ [DDTAssembler] ConvertTask: Creating MessageTask with direct text: '{resolvedText.Substring(0, Math.Min(50, resolvedText.Length))}...'")
+                    System.Diagnostics.Debug.WriteLine($"✅ [DDTAssembler] ConvertTask: Creating MessageTask with direct text: '{resolvedText}'")
+                    Return New MessageTask(resolvedText)
                 End If
                 ' ✅ Nuovo modello: text in Parameters array (proprietà diretta)
                 Console.WriteLine($"🔍 [DDTAssembler] ConvertTask: Direct text not found, checking Parameters array...")
@@ -311,9 +355,10 @@ Public Class DDTAssembler
                 If ideTask.Parameters IsNot Nothing Then
                     Dim textParam = ideTask.Parameters.FirstOrDefault(Function(p) p.ParameterId = "text")
                     If textParam IsNot Nothing AndAlso Not String.IsNullOrEmpty(textParam.Value) Then
-                        Console.WriteLine($"✅ [DDTAssembler] ConvertTask: Creating MessageTask with text from Parameters array: '{textParam.Value}'")
-                        System.Diagnostics.Debug.WriteLine($"✅ [DDTAssembler] ConvertTask: Creating MessageTask with text from Parameters array: '{textParam.Value}'")
-                        Return New MessageTask(textParam.Value)
+                        Dim resolvedText = ResolveText(textParam.Value)
+                        Console.WriteLine($"✅ [DDTAssembler] ConvertTask: Creating MessageTask with text from Parameters array: '{resolvedText.Substring(0, Math.Min(50, resolvedText.Length))}...'")
+                        System.Diagnostics.Debug.WriteLine($"✅ [DDTAssembler] ConvertTask: Creating MessageTask with text from Parameters array: '{resolvedText}'")
+                        Return New MessageTask(resolvedText)
                     End If
                 End If
 
@@ -330,9 +375,10 @@ Public Class DDTAssembler
                         If textParam IsNot Nothing Then
                             Dim textValue = CType(textParam, Dictionary(Of String, Object))("value")?.ToString()
                             If Not String.IsNullOrEmpty(textValue) Then
-                                Console.WriteLine($"✅ [DDTAssembler] ConvertTask: Creating MessageTask with text from value.parameters: '{textValue}'")
-                                System.Diagnostics.Debug.WriteLine($"✅ [DDTAssembler] ConvertTask: Creating MessageTask with text from value.parameters: '{textValue}'")
-                                Return New MessageTask(textValue)
+                                Dim resolvedText = ResolveText(textValue)
+                                Console.WriteLine($"✅ [DDTAssembler] ConvertTask: Creating MessageTask with text from value.parameters: '{resolvedText.Substring(0, Math.Min(50, resolvedText.Length))}...'")
+                                System.Diagnostics.Debug.WriteLine($"✅ [DDTAssembler] ConvertTask: Creating MessageTask with text from value.parameters: '{resolvedText}'")
+                                Return New MessageTask(resolvedText)
                             End If
                         End If
                     End If

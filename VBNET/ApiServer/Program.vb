@@ -80,7 +80,7 @@ Module Program
                                   End Function)
 
         ' POST /api/runtime/compile - Read body manually to use Newtonsoft.Json (handles string->int conversion)
-        app.MapPost("/api/runtime/compile", Function(context As HttpContext) As Task(Of IResult)
+        app.MapPost("/api/runtime/compile", Function(context As HttpContext) As Task
                                                 Return HandleCompileFlow(context)
                                             End Function)
 
@@ -138,7 +138,7 @@ Module Program
     ''' <summary>
     ''' Handles POST /api/runtime/compile
     ''' </summary>
-    Private Async Function HandleCompileFlow(context As HttpContext) As Task(Of IResult)
+    Private Async Function HandleCompileFlow(context As HttpContext) As Task
         Console.WriteLine("📥 [HandleCompileFlow] Received compilation request")
 
         Try
@@ -166,16 +166,23 @@ Module Program
                 Console.WriteLine($"❌ [HandleCompileFlow] Error reading request body: {readEx.Message}")
                 Console.WriteLine($"Stack trace: {readEx.StackTrace}")
                 System.Diagnostics.Debug.WriteLine($"❌ [HandleCompileFlow] Error reading request body: {readEx.Message}")
-                Return Results.BadRequest(New With {
-                    .error = "Failed to read request body",
-                    .message = readEx.Message
-                })
+
+                Dim errorJson = "{""status"":""error"",""message"":""Failed to read request body"",""error"":""" & readEx.Message.Replace("""", "\""") & """}"
+                context.Response.ContentType = "application/json"
+                context.Response.StatusCode = 400
+                context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
+                Return
             End Try
 
             If String.IsNullOrEmpty(body) Then
                 Console.WriteLine("❌ [HandleCompileFlow] Empty request body")
                 System.Diagnostics.Debug.WriteLine("❌ [HandleCompileFlow] Empty request body")
-                Return Results.BadRequest(New With {.error = "Empty request body"})
+
+                Dim errorJson = "{""status"":""error"",""message"":""Empty request body""}"
+                context.Response.ContentType = "application/json"
+                context.Response.StatusCode = 400
+                Await context.Response.WriteAsync(errorJson)
+                Return
             End If
 
             Console.WriteLine($"📦 [HandleCompileFlow] Request body preview (first 1000 chars): {body.Substring(0, Math.Min(1000, body.Length))}")
@@ -252,27 +259,34 @@ Module Program
                 Console.WriteLine($"❌ [HandleCompileFlow] JSON deserialization error: {jsonEx.Message}")
                 Console.WriteLine($"   Line: {jsonEx.LineNumber}, Position: {jsonEx.LinePosition}")
                 Console.WriteLine($"   Path: {jsonEx.Path}")
-                Return Results.BadRequest(New With {
-                    .error = "Invalid JSON format",
-                    .message = jsonEx.Message,
-                    .line = jsonEx.LineNumber,
-                    .position = jsonEx.LinePosition
-                })
+
+                Dim errorJson = "{""status"":""error"",""message"":""Invalid JSON format"",""error"":""" & jsonEx.Message.Replace("""", "\""") & """,""line"":" & jsonEx.LineNumber & ",""position"":" & jsonEx.LinePosition & "}"
+                context.Response.ContentType = "application/json"
+                context.Response.StatusCode = 400
+                context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
+                Return
             Catch deserializeEx As Exception
                 Console.WriteLine($"❌ [HandleCompileFlow] Deserialization error: {deserializeEx.Message}")
                 Console.WriteLine($"Stack trace: {deserializeEx.StackTrace}")
                 If deserializeEx.InnerException IsNot Nothing Then
                     Console.WriteLine($"Inner exception: {deserializeEx.InnerException.Message}")
                 End If
-                Return Results.BadRequest(New With {
-                    .error = "Failed to deserialize request",
-                    .message = deserializeEx.Message
-                })
+
+                Dim errorJson = "{""status"":""error"",""message"":""Failed to deserialize request"",""error"":""" & deserializeEx.Message.Replace("""", "\""") & """}"
+                context.Response.ContentType = "application/json"
+                context.Response.StatusCode = 400
+                context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
+                Return
             End Try
 
             If request Is Nothing Then
                 Console.WriteLine("❌ [HandleCompileFlow] Deserialized request is Nothing")
-                Return Results.BadRequest(New With {.error = "Invalid request format"})
+
+                Dim errorJson = "{""status"":""error"",""message"":""Invalid request format""}"
+                context.Response.ContentType = "application/json"
+                context.Response.StatusCode = 400
+                context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
+                Return
             End If
 
             Console.WriteLine($"✅ [HandleCompileFlow] Request deserialized: {If(request.Nodes IsNot Nothing, request.Nodes.Count, 0)} nodes, {If(request.Edges IsNot Nothing, request.Edges.Count, 0)} edges, {If(request.Tasks IsNot Nothing, request.Tasks.Count, 0)} tasks")
@@ -309,9 +323,34 @@ Module Program
                 System.Diagnostics.Debug.WriteLine($"🔍 [HandleCompileFlow] First task details: Id={request.Tasks(0).Id}, TemplateId={If(String.IsNullOrEmpty(request.Tasks(0).TemplateId), "NULL/EMPTY", request.Tasks(0).TemplateId)}")
             End If
 
-            ' Validate request
-            If request.Nodes Is Nothing OrElse request.Nodes.Count = 0 Then
-                Return Results.BadRequest(New With {.error = "No nodes provided"})
+            ' Validate and initialize - allow empty flows
+            If request.Nodes Is Nothing Then
+                request.Nodes = New List(Of Compiler.FlowNode)()
+            End If
+            If request.Edges Is Nothing Then
+                request.Edges = New List(Of Compiler.FlowEdge)()
+            End If
+            If request.Tasks Is Nothing Then
+                request.Tasks = New List(Of Compiler.Task)()
+            End If
+            If request.DDTs Is Nothing Then
+                request.DDTs = New List(Of Compiler.AssembledDDT)()
+            End If
+
+            ' Check if flow is empty - return valid JSON instead of calling compiler
+            If request.Nodes.Count = 0 AndAlso request.Tasks.Count = 0 Then
+                Console.WriteLine("⚠️ [HandleCompileFlow] Flow is empty, returning empty result")
+
+                ' Use plain JSON string instead of object serialization
+                Dim emptyFlowJson = "{""status"":""ok"",""message"":""Flow is empty"",""taskGroups"":[],""entryTaskGroupId"":null,""tasks"":[],""compiledBy"":""VB.NET_RUNTIME"",""timestamp"":""" & DateTime.UtcNow.ToString("O") & """}"
+
+                Console.WriteLine("📤 [HandleCompileFlow] Returning empty flow response")
+                Console.WriteLine($"   Response: {emptyFlowJson}")
+
+                ' Return JSON string directly with proper content type
+                context.Response.ContentType = "application/json"
+                Await context.Response.WriteAsync(emptyFlowJson)
+                Return
             End If
 
             ' Create Flow structure
@@ -363,63 +402,41 @@ Module Program
             System.Diagnostics.Debug.WriteLine($"   Tasks count: {If(compilationResult.Tasks IsNot Nothing, compilationResult.Tasks.Count, 0)}")
 
             ' Serialize response manually and write directly to response stream
-            Try
-                Dim responseObj = New With {
-                    .taskGroups = compilationResult.TaskGroups,
-                    .entryTaskGroupId = compilationResult.EntryTaskGroupId,
-                    .tasks = compilationResult.Tasks,
-                    .compiledBy = "VB.NET_RUNTIME",
-                    .timestamp = DateTime.UtcNow.ToString("O")
-                }
+            Dim responseObj = New With {
+                .taskGroups = compilationResult.TaskGroups,
+                .entryTaskGroupId = compilationResult.EntryTaskGroupId,
+                .tasks = compilationResult.Tasks,
+                .compiledBy = "VB.NET_RUNTIME",
+                .timestamp = DateTime.UtcNow.ToString("O")
+            }
 
-                Console.WriteLine($"✅ [HandleCompileFlow] Building response object...")
-                Console.WriteLine($"   - TaskGroups: {If(compilationResult.TaskGroups IsNot Nothing, compilationResult.TaskGroups.Count, 0)}")
-                Console.WriteLine($"   - Tasks: {If(compilationResult.Tasks IsNot Nothing, compilationResult.Tasks.Count, 0)}")
+            Console.WriteLine($"✅ [HandleCompileFlow] Building response object...")
+            Console.WriteLine($"   - TaskGroups: {If(compilationResult.TaskGroups IsNot Nothing, compilationResult.TaskGroups.Count, 0)}")
+            Console.WriteLine($"   - Tasks: {If(compilationResult.Tasks IsNot Nothing, compilationResult.Tasks.Count, 0)}")
 
-                Console.WriteLine("📤 [HandleCompileFlow] Serializing response...")
-                Dim jsonResponse = JsonConvert.SerializeObject(responseObj, New JsonSerializerSettings() With {
-                    .NullValueHandling = NullValueHandling.Ignore,
-                    .ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-                    .Formatting = Formatting.None
-                })
-                Console.WriteLine($"✅ [HandleCompileFlow] Serialization successful: {jsonResponse.Length} characters")
+            Console.WriteLine("📤 [HandleCompileFlow] Serializing response manually...")
 
-                If String.IsNullOrEmpty(jsonResponse) Then
-                    Throw New Exception("Serialization returned empty string")
-                End If
+            ' Serialize manually using Newtonsoft.Json to avoid Results.Json() issues
+            Dim jsonResponse = Newtonsoft.Json.JsonConvert.SerializeObject(responseObj)
 
-                ' Write directly to response stream
-                context.Response.ContentType = "application/json; charset=utf-8"
-                context.Response.ContentLength = System.Text.Encoding.UTF8.GetByteCount(jsonResponse)
-                Await context.Response.WriteAsync(jsonResponse)
+            Console.WriteLine($"   JSON length: {jsonResponse.Length} characters")
+            Console.WriteLine($"   JSON preview: {If(jsonResponse.Length > 200, jsonResponse.Substring(0, 200) & "...", jsonResponse)}")
 
-                Console.WriteLine($"✅ [HandleCompileFlow] Response written to stream: {jsonResponse.Length} characters")
-
-                ' Return empty since we've written directly
-                Return Results.Empty
-            Catch serializationEx As Exception
-                Console.WriteLine($"❌ [HandleCompileFlow] Error serializing/writing response: {serializationEx.Message}")
-                Console.WriteLine($"Stack trace: {serializationEx.StackTrace}")
-                If serializationEx.InnerException IsNot Nothing Then
-                    Console.WriteLine($"Inner exception: {serializationEx.InnerException.Message}")
-                    Console.WriteLine($"Inner stack trace: {serializationEx.InnerException.StackTrace}")
-                End If
-
-                ' Return error response using Results.Problem (can't use Await in Catch)
-                Return Results.Problem(
-                    title:="Serialization failed",
-                    detail:=$"Failed to serialize response: {serializationEx.Message}",
-                    statusCode:=500
-                )
-            End Try
+            context.Response.ContentType = "application/json"
+            Await context.Response.WriteAsync(jsonResponse)
         Catch ex As Exception
             Console.WriteLine($"❌ [HandleCompileFlow] Exception: {ex.Message}")
             Console.WriteLine($"Stack trace: {ex.StackTrace}")
-            Return Results.Problem(
-                title:="Compilation failed",
-                detail:=ex.Message,
-                statusCode:=500
-            )
+
+            ' Return error as plain JSON string
+            Dim errorJson = "{""status"":""error"",""message"":""Compilation failed"",""error"":""" & ex.Message.Replace("""", "\""") & """,""timestamp"":""" & DateTime.UtcNow.ToString("O") & """}"
+
+            Console.WriteLine("📤 [HandleCompileFlow] Returning error response")
+            Console.WriteLine($"   Error: {errorJson}")
+
+            context.Response.ContentType = "application/json"
+            context.Response.StatusCode = 500
+            context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
         End Try
     End Function
 

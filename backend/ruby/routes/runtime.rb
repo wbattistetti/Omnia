@@ -5,14 +5,25 @@ class RuntimeRoutes < Sinatra::Base
     content_type :json
 
     begin
+      puts "[RUBY] POST /api/runtime/compile - Request received"
       request_data = JSON.parse(request.body.read)
+      puts "[RUBY] Request parsed successfully"
+
+      # ✅ Translations come from frontend (already in memory from ProjectTranslationsContext)
+      # Frontend passes translations table directly - no database access needed
+      # Runtime will do lookup at execution time instead of "baking" translations during compilation
+      translations = request_data['translations'] || {}
+      puts "[RUBY] Calling VBNetClient.compile_flow..."
 
       result = VBNetClient.compile_flow(
         request_data['nodes'],
         request_data['edges'],
         request_data['tasks'],
-        request_data['ddts']
+        request_data['ddts'],
+        translations # ✅ Pass translations to VB.NET compiler (already in memory from frontend)
       )
+
+      puts "[RUBY] VBNetClient.compile_flow completed successfully"
 
       {
         taskGroups: result['taskGroups'],
@@ -20,10 +31,16 @@ class RuntimeRoutes < Sinatra::Base
         entryTaskGroupId: result['entryTaskGroupId'],
         tasks: result['tasks'],
         taskMap: result['taskMap'],
+        translations: result['translations'] || {}, # ✅ Include translation table for runtime lookup
         compiledBy: 'VB.NET_RUNTIME',
         timestamp: Time.now.iso8601
       }.to_json
     rescue => e
+      puts "[RUBY] ❌ Error in /api/runtime/compile:"
+      puts "[RUBY]    #{e.class}: #{e.message}"
+      puts "[RUBY]    Backtrace:"
+      e.backtrace.first(10).each { |line| puts "[RUBY]      #{line}" }
+
       status 500
       {
         error: 'Compilation failed',

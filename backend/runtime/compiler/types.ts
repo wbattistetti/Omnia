@@ -53,6 +53,7 @@ export interface CompilationResult {
   tasks: CompiledTask[];
   entryTaskId: string | null; // First task to execute
   taskMap: Map<string, CompiledTask>; // Fast lookup by task ID
+  translations: Record<string, string>; // Translation table: { translationKey: translatedText } - for runtime lookup
 }
 
 /**

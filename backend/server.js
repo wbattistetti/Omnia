@@ -4231,15 +4231,21 @@ app.post('/api/runtime/compile', async (req, res) => {
     console.log('🚀 [API] POST /api/runtime/compile - REQUEST RECEIVED');
     console.log('═══════════════════════════════════════════════════════════════════════════');
 
-    const { nodes, edges, tasks, ddts, projectId } = req.body;
+    const { nodes, edges, tasks, ddts, projectId, translations } = req.body;
 
     console.log('[API] Compile request:', {
       nodesCount: nodes?.length || 0,
       edgesCount: edges?.length || 0,
       tasksCount: tasks?.length || 0,
       ddtsCount: ddts?.length || 0,
-      projectId
+      projectId,
+      translationsCount: translations ? Object.keys(translations).length : 0
     });
+
+    // ✅ Translations come from frontend (already in memory from ProjectTranslationsContext)
+    // Frontend passes translations table directly - no database access needed
+    // Runtime will do lookup at execution time instead of "baking" translations during compilation
+    const projectTranslations = translations || {};
 
     // Import compiler (TypeScript - using ts-node)
     let compileFlow;
@@ -4321,7 +4327,8 @@ app.post('/api/runtime/compile', async (req, res) => {
     console.log('[API] Calling backend compiler...');
     const result = compileFlow(nodes, edges, {
       getTask,
-      getDDT
+      getDDT,
+      translations: projectTranslations // ✅ Pass translation table to compiler
     });
 
     // Convert Map to object for JSON serialization
@@ -4334,6 +4341,7 @@ app.post('/api/runtime/compile', async (req, res) => {
       tasks: result.tasks,
       entryTaskId: result.entryTaskId,
       taskMap: taskMapObj,
+      translations: result.translations || {}, // ✅ Include translation table for runtime lookup
       compiledBy: 'BACKEND_RUNTIME', // ✅ Flag to confirm backend compiler was used
       timestamp: new Date().toISOString()
     };
@@ -4345,6 +4353,7 @@ app.post('/api/runtime/compile', async (req, res) => {
     console.log('[API] Compile result:', {
       tasksCount: result.tasks.length,
       entryTaskId: result.entryTaskId,
+      translationsCount: Object.keys(result.translations || {}).length,
       compiledBy: 'BACKEND_RUNTIME',
       timestamp: response.timestamp
     });

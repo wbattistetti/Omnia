@@ -30,21 +30,23 @@ export async function executeOrchestratorBackend(
   translations: Record<string, string>,
   callbacks: OrchestratorCallbacks
 ): Promise<{ sessionId: string; stop: () => void }> {
-  // Get base URL from context (React: localhost:3100, VB.NET: localhost:5000)
-  // Note: This is a workaround - hooks can't be used in non-React functions
-  // We'll read from localStorage directly here
-  const backendType = (() => {
-    try {
-      const stored = localStorage.getItem('omnia_backend_type');
-      return stored === 'vbnet' ? 'vbnet' : 'react';
-    } catch {
-      return 'react';
-    }
-  })();
-  const baseUrl = backendType === 'vbnet' ? 'http://localhost:5000' : 'http://localhost:3100';
+  // ⭐ SEMPRE RUBY (porta 3101) - Unica fonte di verità per interpretare dialoghi
+  // ❌ POSTEGGIATO: Node.js (3100) e VB.NET diretto (5000) - non usati per ora
+  const baseUrl = 'http://localhost:3101';
+
+  // ❌ POSTEGGIATO: Logica switch backendType - non usata per ora
+  // const backendType = (() => {
+  //   try {
+  //     const stored = localStorage.getItem('omnia_backend_type');
+  //     return stored === 'vbnet' ? 'vbnet' : 'react';
+  //   } catch {
+  //     return 'react';
+  //   }
+  // })();
+  // const baseUrl = backendType === 'vbnet' ? 'http://localhost:5000' : 'http://localhost:3100';
 
   console.log('🚀 [ORCHESTRATOR] Frontend calling BACKEND Orchestrator via SSE');
-  console.log(`📍 [ORCHESTRATOR] Backend type: ${backendType.toUpperCase()}, Base URL: ${baseUrl}`);
+  console.log(`📍 [ORCHESTRATOR] Using Ruby server (unica fonte di verità): ${baseUrl}`);
   console.log('═══════════════════════════════════════════════════════════════════════════');
   console.log('[ORCHESTRATOR] Compilation result (original JSON from compiler):', {
     tasksCount: compilationResultJson.tasks?.length || 0,
@@ -249,15 +251,8 @@ export async function executeOrchestratorBackend(
           console.log('[ORCHESTRATOR] ✅ SSE connection closed');
         }
         if (sessionId) {
-          const backendType = (() => {
-            try {
-              const stored = localStorage.getItem('omnia_backend_type');
-              return stored === 'vbnet' ? 'vbnet' : 'react';
-            } catch {
-              return 'react';
-            }
-          })();
-          const baseUrl = backendType === 'vbnet' ? 'http://localhost:5000' : 'http://localhost:3100';
+          // ⭐ SEMPRE RUBY (porta 3101) - Unica fonte di verità
+          const baseUrl = 'http://localhost:3101';
           fetch(`${baseUrl}/api/runtime/orchestrator/session/${sessionId}`, {
             method: 'DELETE'
           }).catch(err => {
@@ -284,21 +279,13 @@ export async function provideOrchestratorInput(
   input: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // Get base URL from localStorage (same logic as executeOrchestratorBackend)
-    const backendType = (() => {
-      try {
-        const stored = localStorage.getItem('omnia_backend_type');
-        return stored === 'vbnet' ? 'vbnet' : 'react';
-      } catch {
-        return 'react';
-      }
-    })();
-    const baseUrl = backendType === 'vbnet' ? 'http://localhost:5000' : 'http://localhost:3100';
+    // ⭐ SEMPRE RUBY (porta 3101) - Unica fonte di verità
+    const baseUrl = 'http://localhost:3101';
 
     console.log('[ORCHESTRATOR] 📤 Providing input to backend', {
       sessionId,
       inputLength: input.length,
-      backendType,
+      backendType: 'RUBY',
       baseUrl
     });
 

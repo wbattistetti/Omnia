@@ -43,8 +43,8 @@ Public Class MainDataNode
         Public Property Constraints As List(Of Object)
 
         Public Sub New()
-            Steps = New List(Of DialogueStep)()
-            SubData = New List(Of MainDataNode)()
+            Steps = New List(Of Compiler.DialogueStep)()
+            SubData = New List(Of Compiler.MainDataNode)()
             Synonyms = New List(Of String)()
             Constraints = New List(Of Object)()
         End Sub

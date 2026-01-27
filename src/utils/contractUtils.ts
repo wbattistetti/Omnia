@@ -27,8 +27,8 @@ export async function cloneAndAdaptContract(
         templateName: sourceContract.templateName,
         instanceId,
         sourceTemplateId,
-        sourceSubDataMappingCount: Object.keys(sourceContract.subDataMapping).length,
-        sourceSubDataMappingKeys: Object.keys(sourceContract.subDataMapping).slice(0, 5),
+        sourceSubDataMappingCount: sourceContract.subDataMapping ? Object.keys(sourceContract.subDataMapping).length : 0,
+        sourceSubDataMappingKeys: sourceContract.subDataMapping ? Object.keys(sourceContract.subDataMapping).slice(0, 5) : [],
         subIdMappingProvided: Object.keys(subIdMapping).length,
         subIdMapping,
         projectLanguage
@@ -36,6 +36,11 @@ export async function cloneAndAdaptContract(
 
     // Deep clone the contract
     const cloned = JSON.parse(JSON.stringify(sourceContract)) as NLPContract;
+
+    // ✅ Fix: Ensure subDataMapping exists before accessing it
+    if (!cloned.subDataMapping) {
+        cloned.subDataMapping = {};
+    }
 
     // Update templateId to match instance GUID
     cloned.templateId = instanceId;

@@ -209,7 +209,8 @@ export function compileFlow(
   const result = {
     tasks,
     entryTaskId,
-    taskMap
+    taskMap,
+    translations: {} // ✅ Frontend compiler is deprecated - translations should come from backend compiler
   };
 
   console.log('═══════════════════════════════════════════════════════════════════════════');

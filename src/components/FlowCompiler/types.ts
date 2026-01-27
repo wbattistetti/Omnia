@@ -67,6 +67,7 @@ export interface CompilationResult {
   tasks: CompiledTask[];
   entryTaskId: string | null; // First task to execute (for frontend compatibility)
   taskMap: Map<string, CompiledTask>; // Fast lookup by task ID
+  translations?: Record<string, string>; // Translation table: { translationKey: translatedText } - for runtime lookup
   // VB.NET backend fields
   taskGroups?: TaskGroup[]; // TaskGroups (one per node) - from VB.NET compiler
   entryTaskGroupId?: string | null; // First TaskGroup to execute - from VB.NET compiler

@@ -26,14 +26,8 @@ function getUseNewEngine(): boolean {
   }
 }
 
-// ✅ NEW: Flag per usare backend DDT Engine (sessioni interattive)
-function getUseBackendDDTEngine(): boolean {
-  try {
-    return localStorage.getItem('ddt.useBackendEngine') === 'true';
-  } catch {
-    return false;
-  }
-}
+// ⭐ Backend DDT sempre attivo - Ruby è l'unica fonte di verità
+// Rimossa funzione getUseBackendDDTEngine() - backend sempre attivo
 
 /**
  * ✅ NEW: Usa backend DDT Engine tramite SSE (Server-Sent Events) - NO POLLING!
@@ -57,9 +51,12 @@ async function executeGetDataHierarchicalBackend(
   let eventSource: EventSource | null = null;
 
   try {
+    // ⭐ SEMPRE RUBY (porta 3101) - Unica fonte di verità per interpretare dialoghi
+    const baseUrl = 'http://localhost:3101';
+
     // 1. Crea sessione backend
     console.log('[DDT ENGINE] Creating backend session...');
-    const startResponse = await fetch('http://localhost:3100/api/runtime/ddt/session/start', {
+    const startResponse = await fetch(`${baseUrl}/api/runtime/ddt/session/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -96,7 +93,9 @@ async function executeGetDataHierarchicalBackend(
         }
         if (sessionId) {
           try {
-            await fetch(`http://localhost:3100/api/runtime/ddt/session/${sessionId}`, {
+            // ⭐ SEMPRE RUBY (porta 3101) - Unica fonte di verità
+            const baseUrl = 'http://localhost:3101';
+            await fetch(`${baseUrl}/api/runtime/ddt/session/${sessionId}`, {
               method: 'DELETE'
             });
             console.log('[DDT ENGINE] ✅ Session deleted', { sessionId });
@@ -106,8 +105,11 @@ async function executeGetDataHierarchicalBackend(
         }
       };
 
+      // ⭐ SEMPRE RUBY (porta 3101) - Unica fonte di verità
+      const baseUrl = 'http://localhost:3101';
+
       console.log('[DDT ENGINE] Opening SSE stream...');
-      eventSource = new EventSource(`http://localhost:3100/api/runtime/ddt/session/${sessionId}/stream`);
+      eventSource = new EventSource(`${baseUrl}/api/runtime/ddt/session/${sessionId}/stream`);
 
       // Event: nuovo messaggio
       eventSource.addEventListener('message', (e: MessageEvent) => {
@@ -169,8 +171,11 @@ async function executeGetDataHierarchicalBackend(
                 valueLength: inputValue.length
               });
 
+              // ⭐ SEMPRE RUBY (porta 3101) - Unica fonte di verità
+              const baseUrl = 'http://localhost:3101';
+
               const inputResponse = await fetch(
-                `http://localhost:3100/api/runtime/ddt/session/${sessionId}/input`,
+                `${baseUrl}/api/runtime/ddt/session/${sessionId}/input`,
                 {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -320,7 +325,8 @@ export async function executeGetDataHierarchicalNew(
   callbacks: DDTNavigatorCallbacks
 ): Promise<RetrieveResult> {
   // ✅ Check se usare backend
-  if (getUseBackendDDTEngine()) {
+  // ⭐ Backend DDT sempre attivo - Ruby è l'unica fonte di verità
+  if (true) {
     return executeGetDataHierarchicalBackend(ddt, state, callbacks);
   }
 

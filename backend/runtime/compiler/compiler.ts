@@ -5,9 +5,112 @@ import type { CompiledTask, CompilationResult, DDTExpansion } from './types';
 import { buildFirstRowCondition, buildSequentialCondition } from './conditionBuilder';
 import { expandDDT } from './ddtExpander';
 
+/**
+ * Extracts all translation keys (GUIDs) from a task
+ * Translation keys are found in:
+ * - task.parameters where parameterId === 'text' and value is a GUID
+ * - task.id (GUID of the task instance)
+ */
+function extractTranslationKeysFromTask(task: any): Set<string> {
+  const keys = new Set<string>();
+  const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  // Extract from task.id (GUID of the task instance)
+  if (task.id && guidPattern.test(task.id)) {
+    keys.add(task.id);
+  }
+
+  // Extract from parameters
+  if (task.parameters && Array.isArray(task.parameters)) {
+    for (const param of task.parameters) {
+      // Look for text parameter with GUID value
+      if ((param.parameterId === 'text' || param.key === 'text') && param.value) {
+        if (guidPattern.test(param.value)) {
+          keys.add(param.value);
+        }
+      }
+    }
+  }
+
+  // Also check task.params.text (alternative structure)
+  if (task.params?.text && guidPattern.test(task.params.text)) {
+    keys.add(task.params.text);
+  }
+
+  return keys;
+}
+
+/**
+ * Extracts all translation keys (GUIDs) from a DDT structure
+ * Translation keys are found in:
+ * - node.messages[stepKey].textKey
+ * - task.id (GUID of the task instance)
+ * - task.parameters where parameterId === 'text' and value is a GUID
+ */
+function extractTranslationKeysFromDDT(ddt: AssembledDDT | null): Set<string> {
+  const keys = new Set<string>();
+  const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  if (!ddt || !ddt.mainData) {
+    return keys;
+  }
+
+  const processNode = (node: any) => {
+    // Extract from messages
+    if (node.messages) {
+      Object.values(node.messages).forEach((msg: any) => {
+        if (msg?.textKey && guidPattern.test(msg.textKey)) {
+          keys.add(msg.textKey);
+        }
+      });
+    }
+
+    // Extract from steps and escalations
+    if (node.steps) {
+      Object.values(node.steps).forEach((step: any) => {
+        if (step?.escalations && Array.isArray(step.escalations)) {
+          step.escalations.forEach((esc: any) => {
+            if (esc?.tasks && Array.isArray(esc.tasks)) {
+              esc.tasks.forEach((task: any) => {
+                // Extract from task.id
+                if (task.id && guidPattern.test(task.id)) {
+                  keys.add(task.id);
+                }
+                // Extract from task parameters
+                if (task.parameters && Array.isArray(task.parameters)) {
+                  for (const param of task.parameters) {
+                    if ((param.parameterId === 'text' || param.key === 'text') && param.value) {
+                      if (guidPattern.test(param.value)) {
+                        keys.add(param.value);
+                      }
+                    }
+                  }
+                }
+              });
+            }
+          });
+        }
+      });
+    }
+
+    // Recursively process subData
+    if (node.subData && Array.isArray(node.subData)) {
+      node.subData.forEach((sub: any) => processNode(sub));
+    }
+  };
+
+  // Process all main data nodes
+  if (Array.isArray(ddt.mainData)) {
+    ddt.mainData.forEach((main: any) => processNode(main));
+  }
+
+  return keys;
+}
+
 interface CompilerOptions {
   getTask: (taskId: string) => any; // Function to resolve Task from taskId
   getDDT?: (taskId: string) => AssembledDDT | null; // Function to get DDT for GetData tasks
+  translations?: Record<string, string>; // Translation table: { translationKey: translatedText } - optional, will be collected if not provided
 }
 
 /**
@@ -22,13 +125,17 @@ export function compileFlow(
   const taskMap = new Map<string, CompiledTask>();
   const ddtExpansions = new Map<string, DDTExpansion>();
 
+  // ✅ Collect all translation keys from tasks and DDTs
+  // This allows runtime to do lookup at execution time instead of "baking" translations during compilation
+  const translationKeys = new Set<string>();
+
   // Find entry nodes (nodes without incoming edges)
   const entryNodes = nodes.filter(n =>
     !edges.some(e => e.target === n.id)
   );
 
   if (entryNodes.length === 0) {
-    return { tasks, entryTaskId: null, taskMap };
+    return { tasks, entryTaskId: null, taskMap, translations: {} };
   }
 
   // For now, use first entry node (TODO: prompt user if multiple)
@@ -85,6 +192,10 @@ export function compileFlow(
         taskAction: task.action
       });
 
+      // ✅ Collect translation keys from task
+      const taskKeys = extractTranslationKeysFromTask(task);
+      taskKeys.forEach(key => translationKeys.add(key));
+
       // Build condition
       let condition;
       if (rowIndex === 0) {
@@ -124,6 +235,10 @@ export function compileFlow(
       if (task.action === 'GetData' && task.mainData && task.mainData.length > 0 && options.getDDT) {
         const ddt = options.getDDT(task.id);
         if (ddt) {
+          // ✅ Collect translation keys from DDT
+          const ddtKeys = extractTranslationKeysFromDDT(ddt);
+          ddtKeys.forEach(key => translationKeys.add(key));
+
           const { tasks: ddtTasks, expansion } = expandDDT(
             ddt,
             node.id,
@@ -135,6 +250,10 @@ export function compileFlow(
           for (const ddtTask of ddtTasks) {
             tasks.push(ddtTask);
             taskMap.set(ddtTask.id, ddtTask);
+
+            // ✅ Collect translation keys from expanded DDT tasks
+            const expandedTaskKeys = extractTranslationKeysFromTask(ddtTask);
+            expandedTaskKeys.forEach(key => translationKeys.add(key));
           }
 
           ddtExpansions.set(node.id, expansion);
@@ -146,6 +265,10 @@ export function compileFlow(
       if (task.action === 'ClassifyProblem' && task.mainData && task.mainData.length > 0 && options.getDDT) {
         const ddt = options.getDDT(task.id);
         if (ddt) {
+          // ✅ Collect translation keys from DDT
+          const ddtKeys = extractTranslationKeysFromDDT(ddt);
+          ddtKeys.forEach(key => translationKeys.add(key));
+
           const { tasks: ddtTasks, expansion } = expandDDT(
             ddt,
             node.id,
@@ -157,6 +280,10 @@ export function compileFlow(
           for (const ddtTask of ddtTasks) {
             tasks.push(ddtTask);
             taskMap.set(ddtTask.id, ddtTask);
+
+            // ✅ Collect translation keys from expanded DDT tasks
+            const expandedTaskKeys = extractTranslationKeysFromTask(ddtTask);
+            expandedTaskKeys.forEach(key => translationKeys.add(key));
           }
 
           ddtExpansions.set(node.id, expansion);
@@ -172,10 +299,32 @@ export function compileFlow(
     ? tasks.find(t => t.source.nodeId === entryNodeId && t.source.rowId === entryRow.id)?.id || null
     : null;
 
+  // ✅ Build translation table: if translations provided, filter by collected keys; otherwise return empty
+  // Runtime will use this table to do lookup at execution time instead of "baking" translations during compilation
+  const translations: Record<string, string> = {};
+  if (options.translations) {
+    const keysArray = Array.from(translationKeys);
+    for (const key of keysArray) {
+      if (options.translations[key]) {
+        translations[key] = options.translations[key];
+      }
+    }
+    console.log('[Compiler] ✅ Translation table built', {
+      collectedKeys: translationKeys.size,
+      translationsProvided: Object.keys(options.translations).length,
+      translationsIncluded: Object.keys(translations).length
+    });
+  } else {
+    console.log('[Compiler] ⚠️ No translations provided - runtime will need to load translations separately', {
+      collectedKeys: translationKeys.size
+    });
+  }
+
   return {
     tasks,
     entryTaskId,
-    taskMap
+    taskMap,
+    translations // ✅ Translation table for runtime lookup
   };
 }
 

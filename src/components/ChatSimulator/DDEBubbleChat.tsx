@@ -663,106 +663,59 @@ export default function DDEBubbleChat({
     }
   }, [mode, orchestrator.variableStore]);
 
-  // Show initial message when DDT is available in single-ddt mode
+  // ⚠️ REMOVED: Static preview completely removed - backend DDT engine is the only source of truth
+  // No preview messages should be shown - all messages must come from backend
+
+  // ⭐ Check backend DDT engine status (only for single-ddt mode)
+  // ⭐ Backend DDT è sempre attivo - Ruby è l'unica fonte di verità
+  const [backendStatus, setBackendStatus] = React.useState<'checking' | 'online' | 'offline' | null>(null);
   React.useEffect(() => {
-    if (mode === 'single-ddt' && currentDDT && messages.length === 0) {
-      console.log('[DDEBubbleChat] ════════════════════════════════════════');
-      console.log('[DDEBubbleChat] useEffect - showing initial message for single-ddt mode', {
-        hasCurrentDDT: !!currentDDT,
-        currentDDTId: currentDDT?.id,
-        currentDDTLabel: currentDDT?.label,
-        translationsKeys: translations ? Object.keys(translations).length : 0,
-        messagesCount: messages.length
-      });
-
-      const legacyDict = extractTranslations(currentDDT as any, translations);
-      console.log('[DDEBubbleChat] legacyDict extracted', {
-        legacyDictKeys: Object.keys(legacyDict).length,
-        translationsKeys: translations ? Object.keys(translations).length : 0
-      });
-
-      // Try to find the first main data node
-      const data = Array.isArray(currentDDT?.data)
-        ? currentDDT.data[0]
-        : currentDDT?.data;
-
-      console.log('[DDEBubbleChat] data check', {
-        hasdata: !!data,
-        dataLabel: data?.label,
-        dataSteps: data?.steps ? Object.keys(data.steps) : [],
-        hasStartStep: !!data?.steps?.start,
-        startStepEscalations: data?.steps?.start?.escalations?.length || 0
-      });
-
-      if (data) {
-        // Try to get the start step prompt
-        const startStep = data?.steps?.start;
-        if (startStep && Array.isArray(startStep.escalations) && startStep.escalations.length > 0) {
-          const firstEscalation = startStep.escalations[0];
-          // ✅ MIGRATION: Support both tasks (new) and actions (legacy)
-          const firstAction = firstEscalation?.tasks?.[0] || firstEscalation?.actions?.[0];
-
-          console.log('[DDEBubbleChat] firstAction check', {
-            hasFirstEscalation: !!firstEscalation,
-            hasFirstAction: !!firstAction,
-            actionId: firstAction?.templateId || firstAction?.actionId,  // ✅ Support both
-            actionInstanceId: firstAction?.taskId || firstAction?.actionInstanceId,  // ✅ Support both
-            hasParameters: !!firstAction?.parameters,
-            parametersCount: firstAction?.parameters?.length || 0
-          });
-
-          if (firstAction) {
-            const mergedDict = { ...legacyDict, ...(translations || {}) };
-            console.log('[DDEBubbleChat] Resolving action text', {
-              mergedDictKeys: Object.keys(mergedDict).length,
-              sampleMergedKeys: Object.keys(mergedDict).slice(0, 5)
-            });
-
-            const text = resolveActionText(firstAction, mergedDict);
-
-            console.log('[DDEBubbleChat] Action text resolved', {
-              text,
-              textLength: text?.length,
-              found: !!text
-            });
-
-            if (text) {
-              const textKey = firstAction?.parameters?.[0]?.value;
-              console.log('[DDEBubbleChat] ✅ Found initial message text', {
-                text: text.substring(0, 50),
-                textKey
-              });
-              setMessages([{
-                id: 'init',
-                type: 'bot',
-                text,
-                stepType: 'ask',
-                textKey,
-                color: getStepColor('ask')
-              }]);
-              return;
-            } else {
-              console.warn('[DDEBubbleChat] ❌ resolveActionText returned empty', {
-                actionId: firstAction.templateId || firstAction.actionId,  // ✅ Support both
-                actionInstanceId: firstAction.taskId || firstAction.actionInstanceId,  // ✅ Support both
-                hasText: !!firstAction.text,
-                parameters: firstAction.parameters
-              });
-            }
-          } else {
-            console.warn('[DDEBubbleChat] ❌ No first action found in escalation');
-          }
-        } else {
-          console.warn('[DDEBubbleChat] ❌ No start step or escalations found', {
-            hasStartStep: !!startStep,
-            escalationsCount: startStep?.escalations?.length || 0
-          });
-        }
-      } else {
-        console.warn('[DDEBubbleChat] ❌ No data found in currentDDT');
-      }
+    if (mode !== 'single-ddt' || !currentDDT) {
+      setBackendStatus(null);
+      return;
     }
-  }, [mode, currentDDT, messages.length, translations]);
+
+    // ⭐ Backend DDT sempre attivo - nessun controllo localStorage
+
+    // Check if backend is running (try to connect to any endpoint)
+    setBackendStatus('checking');
+    const baseUrl = 'http://localhost:3101';
+
+    // Try to connect - any response (even 404/500) means server is running
+    // Connection error (network error) means server is offline
+    const checkBackend = async () => {
+      try {
+        // Try a simple request - if server responds (even with error), it's online
+        const response = await fetch(`${baseUrl}/api/runtime/compile`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}) // Empty body - will fail but server will respond
+        });
+        // Any response means server is online (even if it's an error)
+        setBackendStatus('online');
+      } catch (error: any) {
+        // Network error (connection refused, etc.) means server is offline
+        // TypeError with message containing "Failed to fetch" or "NetworkError" = offline
+        if (error instanceof TypeError && (
+          error.message.includes('Failed to fetch') ||
+          error.message.includes('NetworkError') ||
+          error.message.includes('fetch')
+        )) {
+          setBackendStatus('offline');
+        } else {
+          // Other errors might mean server responded with an error, so it's online
+          setBackendStatus('online');
+        }
+      }
+    };
+
+    checkBackend();
+
+    // Check periodically (every 5 seconds)
+    const interval = setInterval(checkBackend, 5000);
+
+    return () => clearInterval(interval);
+  }, [mode, currentDDT]);
 
   // Auto-focus input when DDT becomes active
   React.useEffect(() => {
@@ -920,29 +873,15 @@ export default function DDEBubbleChat({
             </span>
           )}
         </label>
-        {/* Backend DDT Engine Toggle */}
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={localStorage.getItem('ddt.useBackendEngine') === 'true'}
-            onChange={(e) => {
-              localStorage.setItem('ddt.useBackendEngine', e.target.checked ? 'true' : 'false');
-              console.log('[DDEBubbleChat] Backend DDT Engine toggle changed', { useBackend: e.target.checked });
-              // Force re-render
-              window.location.reload();
-            }}
-            className="w-4 h-4 cursor-pointer"
-            title="Use Backend DDT Engine (via sessions)"
-          />
+        {/* ⭐ Backend DDT sempre attivo - Ruby è l'unica fonte di verità */}
+        <div className="flex items-center gap-2">
           <span className="text-xs text-gray-700">
             🚀 Backend DDT
           </span>
-          {localStorage.getItem('ddt.useBackendEngine') === 'true' && (
-            <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
-              BACKEND
-            </span>
-          )}
-        </label>
+          <span className="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
+            BACKEND
+          </span>
+        </div>
       </div>
       {/* Error message from orchestrator (e.g., DDT validation failed) */}
       {mode === 'flow' && orchestrator.error && (
@@ -957,6 +896,29 @@ export default function DDEBubbleChat({
           </div>
         </div>
       )}
+      {/* ⚠️ Error message for single-ddt mode: Backend DDT must be running */}
+      {/* ⭐ Backend DDT è sempre attivo - controlla solo se il server risponde */}
+      {mode === 'single-ddt' && currentDDT && (() => {
+        // Backend is always enabled, check if it's running
+        if (backendStatus === 'offline') {
+          return (
+            <div className="mx-4 mt-2 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+              <AlertTriangle size={16} className="flex-shrink-0 text-red-600 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-red-800">Motore non sta girando</p>
+                <p className="text-xs text-red-700 mt-1">
+                  Il backend DDT è attivo ma il server Ruby non risponde.
+                </p>
+                <p className="text-xs text-red-600 mt-2">
+                  Avvia il server Ruby: <code className="bg-red-100 px-1 rounded">cd backend/ruby && bundle exec rackup config.ru</code>
+                </p>
+              </div>
+            </div>
+          );
+        }
+
+        return null;
+      })()}
       <div className="flex-1 overflow-y-auto p-4 space-y-3" ref={scrollContainerRef}>
         {allMessages.map((m) => {
           // Render user message

@@ -61,11 +61,18 @@ export function useBackendType(): BackendTypeContextType {
 }
 
 /**
- * Hook to get the base URL for API calls based on backend type
+ * Hook to get the base URL for API calls
+ * ⭐ SEMPRE RUBY (porta 3101) - Unica fonte di verità per interpretare dialoghi
+ * ❌ POSTEGGIATO: Node.js (3100) e VB.NET diretto (5000) - non usati per ora
+ * TODO: Quando Ruby funziona completamente, rimuovere gli altri server
  */
 export function useBackendBaseUrl(): string {
-  const { backendType } = useBackendType();
-  return backendType === 'vbnet' ? 'http://localhost:5000' : 'http://localhost:3100';
+  // ⭐ SEMPRE RUBY - Unica fonte di verità
+  return 'http://localhost:3101';
+
+  // ❌ POSTEGGIATO: Logica switch backendType - non usata per ora
+  // const { backendType } = useBackendType();
+  // return backendType === 'vbnet' ? 'http://localhost:5000' : 'http://localhost:3100';
 }
 
 

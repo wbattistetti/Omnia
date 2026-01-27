@@ -22,6 +22,6 @@ Public Class DialogueStep
     Public Property Escalations As List(Of Compiler.Escalation)
 
         Public Sub New()
-            Escalations = New List(Of Escalation)()
+            Escalations = New List(Of Compiler.Escalation)()
         End Sub
 End Class
