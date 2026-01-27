@@ -73,7 +73,7 @@ export function useProfileState(
 
 
     return result;
-  }, [node, locale]);
+  }, [node, locale, (node as any)?.nlpProfile?.regex]); // ✅ Aggiunto nlpProfile.regex per reagire alle modifiche del contract
 
   const inferredKind = useMemo(() => inferKindFromNode(node), [node]);
 
@@ -219,6 +219,27 @@ export function useProfileState(
     setWaitingEsc1(initial.waitingEsc1 || '');
     setWaitingEsc2(initial.waitingEsc2 || '');
   }, [initial.slotId]); // ✅ RIMOSSO initial.examples - sincronizza solo quando cambia nodo
+
+  // ✅ CRITICAL FIX: Sincronizza regex quando node.nlpProfile.regex cambia (da contract sync)
+  // Questo assicura che quando il contract viene sincronizzato con node.nlpProfile.regex,
+  // lo stato locale regex viene aggiornato immediatamente
+  const prevNlpProfileRegexRef = useRef<string | undefined>(initial.regex);
+  useEffect(() => {
+    const currentRegex = initial.regex;
+    // ✅ Solo se è cambiato E non è vuoto (per evitare di resettare quando l'utente cancella)
+    if (currentRegex !== prevNlpProfileRegexRef.current && currentRegex) {
+      console.log('[useProfileState] Syncing regex from node.nlpProfile', {
+        oldRegex: prevNlpProfileRegexRef.current || '(empty)',
+        newRegex: currentRegex || '(empty)',
+        'will update state': true
+      });
+      prevNlpProfileRegexRef.current = currentRegex;
+      setRegex(currentRegex);
+    } else if (currentRegex !== prevNlpProfileRegexRef.current) {
+      // ✅ Aggiorna il ref anche se non aggiorniamo lo stato (per tracciare cambiamenti)
+      prevNlpProfileRegexRef.current = currentRegex;
+    }
+  }, [initial.regex]);
 
   // ✅ Sync testCases quando riapri l'editor (initial.testCases cambia) MA solo se lo stato locale è vuoto
   // Questo gestisce il caso in cui il componente non viene smontato quando chiudi l'editor

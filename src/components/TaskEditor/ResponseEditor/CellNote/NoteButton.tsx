@@ -8,7 +8,7 @@ interface NoteButtonProps {
 
 /**
  * Button to add/edit notes in test grid cells
- * Shows on hover or when note exists
+ * Always visible when there's a test result (Approach B)
  */
 export default function NoteButton({ hasNote, onClick }: NoteButtonProps) {
   return (

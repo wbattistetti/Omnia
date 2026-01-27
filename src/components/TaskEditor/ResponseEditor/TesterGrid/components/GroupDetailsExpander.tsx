@@ -52,11 +52,17 @@ export default function GroupDetailsExpander({
     ...extractedGroupKeys.filter(k => !expectedGroupKeys.includes(k))
   ];
 
-  const hasGroups = orderedGroupKeys.length > 0;
+  // ✅ FIX: Se non ci sono gruppi estratti ma c'è 'value', mostra almeno 'value' per dare feedback
+  const hasExtractedGroups = orderedGroupKeys.length > 0;
+  const hasValue = kv.value !== undefined && kv.value !== '' && kv.value !== null;
 
-  if (!hasGroups) {
+  // ✅ Mostra il pannello se ci sono gruppi estratti O se c'è solo value (per dare feedback visivo)
+  if (!hasExtractedGroups && !hasValue) {
     return null;
   }
+
+  // ✅ Se non ci sono gruppi estratti ma c'è value, mostra solo value
+  const keysToShow = hasExtractedGroups ? orderedGroupKeys : ['value'];
 
   return (
     <div
@@ -72,10 +78,11 @@ export default function GroupDetailsExpander({
         lineHeight: 1.2,
       }}
     >
-          {orderedGroupKeys.map((k) => {
+          {keysToShow.map((k) => {
             const overrideKey = `${rowIdx}:${col}:${k}`;
             const overridden = cellOverrides[overrideKey];
-            const baseVal = filteredKv[k];
+            // ✅ Se stiamo mostrando 'value', prendilo da kv invece di filteredKv
+            const baseVal = k === 'value' ? kv[k] : filteredKv[k];
             const value = typeof overridden !== 'undefined' ? overridden : baseVal;
             const present = typeof value !== 'undefined' && value !== '';
             const isEditing = !!editingCell && editingCell.row === rowIdx && editingCell.col === col && editingCell.key === k;

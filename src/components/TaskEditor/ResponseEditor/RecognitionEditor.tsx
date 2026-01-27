@@ -251,10 +251,16 @@ export default function RecognitionEditor({
 
     const nodeTemplateId = node.templateId;
     const regexPattern = updatedContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+    const nodeNlpProfileRegex = node?.nlpProfile?.regex;
+    const areTheySynced = regexPattern === nodeNlpProfileRegex;
+
     console.log('[CONTRACT] CHANGE - Tracking modifications', {
       nodeId: node.id,
       nodeTemplateId,
-      regexPattern: regexPattern || '(empty)'
+      regexPattern: regexPattern || '(empty)',
+      nodeNlpProfileRegex: nodeNlpProfileRegex || '(empty)',
+      areTheySynced,
+      '⚠️ SYNC ISSUE': !areTheySynced ? 'Contract and node.nlpProfile.regex are NOT synced!' : 'OK'
     });
 
     // ✅ Confronta con template
@@ -283,6 +289,30 @@ export default function RecognitionEditor({
         nodeTemplateId,
         regexPattern: updatedContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0] || '(empty)'
       });
+
+      // ✅ CRITICAL FIX: Sincronizza contract.regex → node.nlpProfile.regex
+      // Questo assicura che useProfileState legga la regex corretta per il tester
+      if (updateSelectedNode && regexPattern !== undefined) {
+        updateSelectedNode((prev: any) => {
+          if (!prev) return prev;
+          const updated = { ...prev };
+          if (!updated.nlpProfile) {
+            updated.nlpProfile = {};
+          }
+          // ✅ Sincronizza regex dal contract al node.nlpProfile
+          updated.nlpProfile = {
+            ...updated.nlpProfile,
+            regex: regexPattern || undefined
+          };
+          console.log('[CONTRACT] CHANGE - Synced regex to node.nlpProfile', {
+            nodeId: node.id,
+            contractRegex: regexPattern || '(empty)',
+            nodeNlpProfileRegex: updated.nlpProfile.regex || '(empty)',
+            synced: true
+          });
+          return updated;
+        }, false); // false = non notificare provider (solo sync locale)
+      }
 
       // ✅ Aggiorna immediatamente il ref (non aspetta useImperativeHandle)
       if (contractChangeRef) {

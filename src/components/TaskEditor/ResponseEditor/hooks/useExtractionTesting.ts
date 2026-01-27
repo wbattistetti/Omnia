@@ -222,41 +222,80 @@ export function useExtractionTesting({
     let value = '';
     const extractedGroups: Record<string, any> = {};
 
+    // ✅ ERROR: Se profile.regex è undefined, mostra errore e non procedere
+    if (!profile.regex) {
+      console.error('[TEST] ❌ ERROR - extractRegexOnly called without profile.regex!', {
+        'profile.regex': profile.regex,
+        'text': text.substring(0, 30),
+        'profile keys': Object.keys(profile),
+        'node.nlpProfile.regex': node?.nlpProfile?.regex,
+        'message': 'This is a synchronization issue between contract and profile!'
+      });
+      // ✅ Ritorna risultato vuoto con errore nel summary
+      return { value: '', spans: [], summary: '❌ ERROR: regex not synced', extractedGroups: {} };
+    }
+
     if (profile.regex) {
       try {
+        // ✅ FIX: Usa la stessa logica del batch mode - trova TUTTI i match e prendi il più lungo
+        // Questo risolve il problema di matchare solo "1" invece di "12" o "13"
         const re = new RegExp(profile.regex, 'g');
-        let m: RegExpExecArray | null;
+        let bestMatch: RegExpExecArray | null = null;
+        let longestMatch = '';
+        let match: RegExpExecArray | null;
         let matchCount = 0;
-        // eslint-disable-next-line no-cond-assign
-        while ((m = re.exec(text)) !== null) {
+
+        // Reset lastIndex per assicurarsi di iniziare dall'inizio
+        re.lastIndex = 0;
+
+        // Trova tutti i match e prendi il più lungo
+        while ((match = re.exec(text)) !== null) {
           matchCount++;
-          spans.push({ start: m.index, end: m.index + m[0].length });
-          if (!value) {
-            value = m[0];
+          spans.push({ start: match.index, end: match.index + match[0].length });
+          if (match[0].length > longestMatch.length) {
+            longestMatch = match[0];
+            bestMatch = match;
+          }
+        }
 
-            // Extract capture groups and map them to sub-data
-            if (m.length > 1 && node) {
-              const allSubs = [...(node.subSlots || []), ...(node.subData || [])];
+        // Se non abbiamo trovato match con flag 'g', prova senza flag (match globale)
+        if (!bestMatch) {
+          const reNoG = new RegExp(profile.regex);
+          const m = text.match(reNoG);
+          if (m && m[0].length > longestMatch.length) {
+            bestMatch = m as RegExpExecArray;
+            longestMatch = m[0];
+            if (m.index !== undefined) {
+              spans.push({ start: m.index, end: m.index + m[0].length });
+            }
+          }
+        }
 
-              // Iterate through capture groups (m[1], m[2], m[3], ...)
-              for (let i = 1; i < m.length; i++) {
-                const groupValue = m[i];
-                if (groupValue !== undefined && groupValue !== null) {
-                  const trimmedValue = String(groupValue).trim();
-                  if (trimmedValue !== '') {
-                    // Map group to corresponding sub-data index
-                    const subIndex = i - 1; // Group 1 -> subIndex 0, Group 2 -> subIndex 1, etc.
-                    if (subIndex < allSubs.length) {
-                      const sub = allSubs[subIndex];
-                      const subLabel = String(sub.label || sub.name || '');
-                      const standardKey = mapLabelToStandardKey(subLabel);
+        if (bestMatch) {
+          value = bestMatch[0]; // ✅ Usa il match più lungo
 
-                      if (standardKey) {
-                        extractedGroups[standardKey] = trimmedValue;
-                      } else if (subLabel) {
-                        // Fallback: use original label
-                        extractedGroups[subLabel] = trimmedValue;
-                      }
+          // Extract capture groups and map them to sub-data
+          if (bestMatch.length > 1 && node) {
+            const allSubs = [...(node.subSlots || []), ...(node.subData || [])];
+
+            // Iterate through capture groups (m[1], m[2], m[3], ...)
+            for (let i = 1; i < bestMatch.length; i++) {
+              const groupValue = bestMatch[i];
+              if (groupValue !== undefined && groupValue !== null) {
+                const trimmedValue = String(groupValue).trim();
+                if (trimmedValue !== '') {
+                  // Map group to corresponding sub-data index
+                  const subIndex = i - 1; // Group 1 -> subIndex 0, Group 2 -> subIndex 1, etc.
+                  if (subIndex < allSubs.length) {
+                    const sub = allSubs[subIndex];
+                    const subLabel = String(sub.label || sub.name || '');
+                    const standardKey = mapLabelToStandardKey(subLabel);
+
+                    if (standardKey) {
+                      extractedGroups[standardKey] = trimmedValue;
+                    } else if (subLabel) {
+                      // Fallback: use original label
+                      extractedGroups[subLabel] = trimmedValue;
                     }
                   }
                 }
@@ -322,6 +361,31 @@ export function useExtractionTesting({
       return;
     }
 
+    // ✅ DIAGNOSTIC LOG: Verifica profile.regex prima del test
+    console.log('[TEST] runRowTest - Diagnostic', {
+      idx,
+      phrase,
+      'profile.regex': profile.regex,
+      'profile.regex type': typeof profile.regex,
+      'profile.regex length': profile.regex?.length,
+      'profile.regex preview': profile.regex?.substring(0, 50),
+      'enabledMethods.regex': enabledMethods.regex,
+      'profile object keys': Object.keys(profile),
+    });
+
+    // ✅ ERROR: Se profile.regex è undefined, mostra errore chiaro
+    if (!profile.regex && enabledMethods.regex) {
+      console.error('[TEST] ❌ ERROR - profile.regex is undefined!', {
+        idx,
+        phrase,
+        'profile.regex': profile.regex,
+        'node.nlpProfile.regex': node?.nlpProfile?.regex,
+        'node.id': node?.id,
+          'node.templateId': node?.templateId,
+          'message': 'This means contract and profile are NOT synced!'
+        });
+    }
+
     // ✅ STEP 1: Regex reale (sync) - nessuna chiamata async
     // ✅ Durante batch, calcoliamo solo summary (non spans) per evitare accumulo
     const t0Regex = performance.now();
@@ -332,7 +396,19 @@ export function useExtractionTesting({
       let value = '';
       const extractedGroups: Record<string, any> = {};
 
-      if (profile.regex) {
+      // ✅ ERROR: Se profile.regex è undefined in batch mode, mostra errore
+      if (!profile.regex && enabledMethods.regex) {
+        console.error('[TEST] ❌ ERROR - profile.regex is undefined in batch mode!', {
+          idx,
+          phrase,
+          'profile.regex': profile.regex,
+          'node.nlpProfile.regex': node?.nlpProfile?.regex,
+          'message': 'This means contract and profile are NOT synced!'
+        });
+        // ✅ Ritorna risultato con errore
+        const errorSummary = '❌ ERROR: regex not synced';
+        regexRes = { value: '', spans: [], summary: errorSummary, extractedGroups: {} };
+      } else if (profile.regex) {
         try {
           // ✅ Usa exec() con flag 'g' per trovare TUTTI i match possibili
           // Il regex potrebbe matchare solo una parte della stringa (es. solo '12' invece di '12 3 1980')
@@ -399,13 +475,17 @@ export function useExtractionTesting({
         } catch (e) {
           // Regex error - silently fail
         }
+
+        // ✅ Costruisci summary solo se abbiamo processato la regex
+        const summary = Object.keys(extractedGroups).length > 0
+          ? summarizeVars(extractedGroups, value)
+          : (value ? `value=${value}` : '—');
+
+        regexRes = { value, spans: [], summary, extractedGroups };
+      } else {
+        // ✅ Regex non abilitata o non disponibile
+        regexRes = { value: '', spans: [], summary: '—', extractedGroups: {} };
       }
-
-      const summary = Object.keys(extractedGroups).length > 0
-        ? summarizeVars(extractedGroups, value)
-        : (value ? `value=${value}` : '—');
-
-      regexRes = { value, spans: [], summary, extractedGroups };
     } else {
       regexRes = extractRegexOnly(phrase);
     }

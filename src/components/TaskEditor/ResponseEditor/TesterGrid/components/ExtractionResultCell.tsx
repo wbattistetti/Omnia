@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { renderTimeBar } from '../helpers/renderTimeBar';
 import { parseSummaryToGroups } from '../helpers/parseSummaryToGroups';
 import GroupDetailsExpander from './GroupDetailsExpander';
@@ -71,9 +71,19 @@ function ExtractionResultCellComponent({
   setHovered,
 }: ExtractionResultCellProps) {
   const [isExpanded, setIsExpanded] = React.useState(false);
+  // ✅ Get current editing state - this will cause re-render when editingNote changes in parent
+  // The memo comparison checks isEditing() result, so when editingNote changes,
+  // isEditing() will return different value, triggering re-render
+  const isCurrentlyEditing = isEditing(rowIdx, col);
+  const currentNote = getNote(rowIdx, col);
+
+  // ✅ Force re-render when editing state changes by using the values in render
+  // This ensures the component updates when isEditing/getNote return different values
   const kv = parseSummaryToGroups(summary);
   const keys = expectedKeysForKind(kind);
-  const hasGroups = keys.length > 0 && Object.keys(kv).some(k => kv[k] !== undefined && kv[k] !== '');
+  // ✅ FIX: hasGroups deve essere true se ci sono chiavi nel summary (anche solo 'value')
+  // Il chevron deve apparire anche se c'è solo value= per mostrare i dettagli
+  const hasGroups = Object.keys(kv).length > 0 && Object.keys(kv).some(k => kv[k] !== undefined && kv[k] !== '');
 
   // Extract full match value
   // If summary has "value=", extract it; otherwise use the full summary or first group value
@@ -130,6 +140,20 @@ function ExtractionResultCellComponent({
               )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                 <span>{fullValue}{ms(processingTime)}</span>
+                {/* ✅ Icona nota a destra del valore */}
+                {enabled && summary && summary !== '—' && (
+                  <NoteButton
+                    hasNote={hasNote(rowIdx, col)}
+                    onClick={() => {
+                      if (isEditing(rowIdx, col)) {
+                        stopEditing();
+                      } else {
+                        startEditing(rowIdx, col);
+                      }
+                    }}
+                  />
+                )}
+                {/* ✅ Icona occhio a destra della nota (sostituisce chevron) */}
                 {hasGroups && (
                   <button
                     onClick={(e) => {
@@ -148,7 +172,7 @@ function ExtractionResultCellComponent({
                     }}
                     title={isExpanded ? 'Nascondi dettagli' : 'Mostra dettagli'}
                   >
-                    {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    {isExpanded ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
                 )}
               </div>
@@ -171,12 +195,6 @@ function ExtractionResultCellComponent({
             </>
           ) : '—'}
         </div>
-        {(isHovered(rowIdx, col) || hasNote(rowIdx, col)) && enabled && (
-          <NoteButton
-            hasNote={hasNote(rowIdx, col)}
-            onClick={() => isEditing(rowIdx, col) ? stopEditing() : startEditing(rowIdx, col)}
-          />
-        )}
       </div>
       {(getNote(rowIdx, col) || isEditing(rowIdx, col)) && enabled && (
         <>
@@ -209,6 +227,14 @@ function ExtractionResultCellComponent({
  * to prevent unnecessary re-renders during batch testing.
  */
 const ExtractionResultCell = React.memo(ExtractionResultCellComponent, (prev, next) => {
+  // ✅ Check note editing state FIRST (before other checks)
+  const prevIsEditing = prev.isEditing(prev.rowIdx, prev.col);
+  const nextIsEditing = next.isEditing(next.rowIdx, next.col);
+
+  if (prevIsEditing !== nextIsEditing) {
+    return false; // Re-render if editing state changed
+  }
+
   // ✅ Critical props that trigger re-render
   if (prev.summary !== next.summary) return false; // Re-render if summary changed
   if (prev.isRunning !== next.isRunning) return false; // Re-render if loading state changed
@@ -228,14 +254,17 @@ const ExtractionResultCell = React.memo(ExtractionResultCellComponent, (prev, ne
     if (isEditing) return false;
   }
 
-  // ✅ Notes and hover (compare by reference)
+  // ✅ Notes (compare by reference)
   const prevHasNote = prev.hasNote(prev.rowIdx, prev.col);
   const nextHasNote = next.hasNote(next.rowIdx, next.col);
   if (prevHasNote !== nextHasNote) return false;
 
-  const prevIsHovered = prev.isHovered(prev.rowIdx, prev.col);
-  const nextIsHovered = next.isHovered(next.rowIdx, next.col);
-  if (prevIsHovered !== nextIsHovered) return false;
+  // ✅ Also check if getNote result changed (for note display)
+  const prevNote = prev.getNote(prev.rowIdx, prev.col);
+  const nextNote = next.getNote(next.rowIdx, next.col);
+  if (prevNote !== nextNote) {
+    return false; // Re-render if note content changed
+  }
 
   // ✅ All other props unchanged - skip re-render
   return true;
