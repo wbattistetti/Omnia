@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { ValidationResult } from './useRegexValidation';
 import { RowResult } from './useExtractionTesting';
-import { useNotesStore, getCellKey } from '../stores/notesStore';
+import { useNotesStore, getCellKeyFromPhrase } from '../stores/notesStore';
 
 interface FeedbackItem {
   testPhrase: string;
@@ -50,7 +50,8 @@ export function useRegexAIGeneration({
     const feedbackItems: FeedbackItem[] = [];
     if (examplesList && rowResults && examplesList.length > 0) {
       examplesList.forEach((phrase, index) => {
-        const note = getNote(getCellKey(index, 'regex'));
+        // ✅ Use phrase-based key (stable, not index-based)
+        const note = getNote(getCellKeyFromPhrase(phrase, 'regex'));
         if (note && note.trim()) {
           const result = rowResults[index];
           // Extract value from result - rowResults[index].regex contains the summary (e.g., "value=1" or "day=12, month=3")

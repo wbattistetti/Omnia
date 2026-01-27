@@ -9,7 +9,7 @@ import { usePlaceholderSelection } from '../hooks/usePlaceholderSelection';
 import { useRegexAIGeneration } from '../hooks/useRegexAIGeneration';
 import { NLPProfile } from '../DataExtractionEditor';
 import { getIsTesting } from '../testingState';
-import { useNotesStore, getCellKey } from '../stores/notesStore';
+import { useNotesStore } from '../stores/notesStore';
 
 import { RowResult } from '../hooks/useExtractionTesting';
 

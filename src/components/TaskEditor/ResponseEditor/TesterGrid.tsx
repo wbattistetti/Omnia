@@ -161,21 +161,32 @@ function TesterGridComponent({
     const t = (newExampleRef.current || '').trim();
     if (!t) return;
 
-    // Only add the phrase, don't run automatic test
-    // Il test automatico causava re-render che bloccavano l'input
+    // ✅ CRITICAL: Verifica che la frase non esista già (case-sensitive)
+    // Questo garantisce che ogni frase sia univoca, così la chiave `${phrase}|${method}` è sempre non ambigua
     setExamplesList((prevList) => {
       const existIdx = prevList.findIndex((p) => p === t);
       if (existIdx !== -1) {
-        // Frase già esistente: seleziona ma NON testare
+        // Frase già esistente: seleziona ma NON aggiungere
+        // Mostra un warning in console (in futuro potresti mostrare un toast)
+        console.warn('[TesterGrid] Frase già esistente, non aggiunta', {
+          phrase: t,
+          existingIndex: existIdx,
+          existingPhrase: prevList[existIdx]
+        });
         setSelectedRow(existIdx);
         setNewExample('');
-        return prevList;
+        return prevList; // Non modificare la lista
       } else {
         // Nuova frase: aggiungi alla lista
         const next = Array.from(new Set([...prevList, t]));
         setNewExample('');
         // Select the last added row
         setSelectedRow(next.length - 1);
+        console.log('[TesterGrid] Frase aggiunta', {
+          phrase: t,
+          newIndex: next.length - 1,
+          totalPhrases: next.length
+        });
         return next;
       }
     });

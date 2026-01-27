@@ -140,10 +140,62 @@ class TaskRepository {
       }
     }
 
+    // ✅ CRITICAL: Se updates.data è presente, fa merge profondo dei node per preservare nlpProfile
+    let finalData = updates.data;
+    if (updates.data && Array.isArray(updates.data) && existingTask.data && Array.isArray(existingTask.data)) {
+      // ✅ Merge profondo: per ogni node in updates.data, preserva nlpProfile e testNotes dal node esistente se non presente
+      finalData = updates.data.map((updatedNode: any, index: number) => {
+        const existingNode = existingTask.data.find((n: any) =>
+          n.id === updatedNode.id || n.templateId === updatedNode.templateId
+        ) || existingTask.data[index];
+
+        if (existingNode) {
+          // ✅ CRITICAL: Merge profondo di nlpProfile (preserva examples se presente in updatedNode)
+          const mergedNlpProfile = updatedNode.nlpProfile
+            ? {
+                ...(existingNode.nlpProfile || {}), // Base dal node esistente
+                ...updatedNode.nlpProfile            // Override con quello aggiornato (preserva examples)
+              }
+            : existingNode.nlpProfile; // Se updatedNode non ha nlpProfile, usa quello esistente
+
+          // ✅ Merge profondo: preserva nlpProfile e testNotes se non presenti in updatedNode
+          const mergedNode = {
+            ...existingNode, // Base dal node esistente (preserva tutti i campi)
+            ...updatedNode,  // Override con i campi aggiornati
+            // ✅ CRITICAL: Usa mergedNlpProfile (preserva examples se presente in updatedNode)
+            nlpProfile: mergedNlpProfile,
+            // ✅ CRITICAL: Se updatedNode ha testNotes, preservalo; altrimenti usa quello esistente
+            testNotes: updatedNode.testNotes || existingNode.testNotes
+          };
+
+          // ✅ DEBUG: Log del merge per verificare che examples sia preservato
+          if (mergedNode.nlpProfile?.examples) {
+            console.log('[TaskRepository] updateTask - Deep merge preserved nlpProfile.examples', {
+              taskId,
+              nodeId: mergedNode.id,
+              nodeTemplateId: mergedNode.templateId,
+              updatedNodeHasNlpProfile: !!updatedNode.nlpProfile,
+              updatedNodeHasExamples: !!updatedNode.nlpProfile?.examples,
+              updatedNodeExamplesCount: updatedNode.nlpProfile?.examples?.length || 0,
+              existingNodeHasNlpProfile: !!existingNode.nlpProfile,
+              existingNodeHasExamples: !!existingNode.nlpProfile?.examples,
+              existingNodeExamplesCount: existingNode.nlpProfile?.examples?.length || 0,
+              mergedNodeHasExamples: !!mergedNode.nlpProfile?.examples,
+              mergedNodeExamplesCount: mergedNode.nlpProfile.examples.length
+            });
+          }
+
+          return mergedNode;
+        }
+        return updatedNode; // Nuovo node, usa così com'è
+      });
+    }
+
     // Update in internal storage (merge fields directly, no value wrapper)
     const updatedTask: Task = {
       ...existingTask,
       ...updatesWithoutTypeAndTemplateId,  // ✅ Spread senza type e templateId
+      ...(finalData ? { data: finalData } : {}), // ✅ Usa finalData se presente (merge profondo)
       type: finalType,  // ✅ Always preserve/update type - REQUIRED
       templateId: finalTemplateId,  // ✅ Protected templateId
       updatedAt: updates.updatedAt || new Date()
@@ -153,6 +205,15 @@ class TaskRepository {
     // ✅ Update internal storage only (in-memory)
     // ✅ NO automatic database save - save only on explicit user action (project:save event)
     this.tasks.set(taskId, updatedTask);
+
+    // ✅ DEBUG: Verifica che data[0].nlpProfile.examples sia presente dopo l'aggiornamento
+    if (updatedTask.data?.[0]?.nlpProfile?.examples) {
+      console.log('[TaskRepository] updateTask - Cache updated with examples', {
+        taskId,
+        examplesCount: updatedTask.data[0].nlpProfile.examples.length,
+        examples: updatedTask.data[0].nlpProfile.examples.slice(0, 3)
+      });
+    }
 
     return true;
   }
@@ -261,6 +322,22 @@ class TaskRepository {
           createdAt: item.createdAt ? new Date(item.createdAt) : undefined,
           updatedAt: item.updatedAt ? new Date(item.updatedAt) : undefined
         };
+
+        // ✅ DEBUG: Log nlpProfile.examples quando carichi dal database
+        const firstNodeNlpProfileExamples = task.data?.[0]?.nlpProfile?.examples;
+        if (firstNodeNlpProfileExamples || task.data?.[0]?.nlpProfile) {
+          console.log('[EXAMPLES] LOAD - From database', {
+            taskId: task.id,
+            hasData: !!task.data,
+            dataLength: task.data?.length || 0,
+            firstNodeId: task.data?.[0]?.id,
+            hasFirstNodeNlpProfile: !!task.data?.[0]?.nlpProfile,
+            firstNodeNlpProfileKeys: task.data?.[0]?.nlpProfile ? Object.keys(task.data[0].nlpProfile) : [],
+            hasFirstNodeNlpProfileExamples: !!firstNodeNlpProfileExamples,
+            firstNodeNlpProfileExamplesCount: Array.isArray(firstNodeNlpProfileExamples) ? firstNodeNlpProfileExamples.length : 0,
+            firstNodeNlpProfileExamples: firstNodeNlpProfileExamples?.slice(0, 3)
+          });
+        }
 
         // ✅ LOG: Verifica templateId dopo il merge
         console.log('[🔍 TaskRepository][LOAD] ✅ Task dopo merge', {

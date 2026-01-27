@@ -84,6 +84,132 @@ export async function loadAndAdaptDDTForExistingTask(
     templateStepsKeys: template.steps ? Object.keys(template.steps) : []
   });
 
+  // ✅ CRITICAL: Verifica se task.data esiste ed è completo (fonte di verità in memoria)
+  const hasTaskData = task.data && Array.isArray(task.data) && task.data.length > 0;
+  const hasTaskSteps = task.steps && Object.keys(task.steps).length > 0;
+
+  // ✅ DEBUG: Log dettagliato del primo node per capire cosa contiene
+  const firstNode = task.data?.[0];
+  console.log('[🔍 ddtInstanceManager] Task data check', {
+    hasTaskData,
+    taskDataLength: task.data?.length || 0,
+    hasTaskSteps,
+    taskStepsKeys: task.steps ? Object.keys(task.steps) : [],
+    firstNodeId: firstNode?.id,
+    firstNodeTemplateId: firstNode?.templateId,
+    firstNodeKeys: firstNode ? Object.keys(firstNode) : [],
+    firstNodeHasNlpProfile: !!firstNode?.nlpProfile,
+    firstNodeNlpProfileKeys: firstNode?.nlpProfile ? Object.keys(firstNode.nlpProfile) : [],
+    firstNodeHasExamples: !!firstNode?.nlpProfile?.examples,
+    firstNodeExamplesCount: firstNode?.nlpProfile?.examples?.length || 0,
+    firstNodeExamples: firstNode?.nlpProfile?.examples?.slice(0, 3),
+    firstNodeHasTestNotes: !!firstNode?.testNotes,
+    firstNodeTestNotesCount: firstNode?.testNotes ? Object.keys(firstNode.testNotes).length : 0,
+    // ✅ Verifica anche node.examples (root level)
+    firstNodeHasRootExamples: !!firstNode?.examples,
+    firstNodeRootExamplesCount: Array.isArray(firstNode?.examples) ? firstNode.examples.length : 0,
+    firstNodeRootExamples: Array.isArray(firstNode?.examples) ? firstNode.examples.slice(0, 3) : undefined
+  });
+
+  // ✅ Se task.data esiste ed è completo, usalo direttamente (NON ricostruire dal template)
+  if (hasTaskData) {
+    console.log('[🔍 ddtInstanceManager] ✅ Using task.data as source of truth (NOT rebuilding from template)', {
+      taskDataLength: task.data.length,
+      firstNodeId: task.data[0]?.id,
+      firstNodeTemplateId: task.data[0]?.templateId,
+      firstNodeLabel: task.data[0]?.label,
+      firstNodeHasNlpProfile: !!task.data[0]?.nlpProfile,
+      firstNodeHasExamples: !!task.data[0]?.nlpProfile?.examples,
+      firstNodeExamplesCount: task.data[0]?.nlpProfile?.examples?.length || 0,
+      firstNodeHasTestNotes: !!task.data[0]?.testNotes,
+      firstNodeTestNotesCount: task.data[0]?.testNotes ? Object.keys(task.data[0].testNotes).length : 0
+    });
+
+    // ✅ Usa task.data direttamente (preserva nlpProfile.examples, testNotes, ecc.)
+    const enrichedData = task.data.map((node: any) => {
+      // ✅ Preserva TUTTI i campi del node (inclusi nlpProfile.examples e testNotes)
+      // ✅ CRITICAL: Se node.nlpProfile.examples esiste, usalo (fonte di verità)
+      // ✅ NON usare template.examples come fallback se node.nlpProfile.examples non esiste
+      // ✅ Questo perché template.examples sono esempi del template, non quelli dell'utente
+      const hasNodeNlpProfileExamples = Array.isArray(node.nlpProfile?.examples) && node.nlpProfile.examples.length > 0;
+
+      return {
+        ...node, // ✅ Spread completo: preserva tutto
+        // ✅ Assicurati che label, constraints, examples siano corretti
+        label: node.label || task.label,
+        constraints: node.constraints || task.constraints || template.constraints,
+        // ✅ CRITICAL: examples a root level viene da node.examples o task.examples o template.examples
+        // ✅ Ma nlpProfile.examples è la fonte di verità per examplesList
+        examples: node.examples || task.examples || template.examples,
+        // ✅ CRITICAL: Preserva nlpProfile con examples se esiste (NON usare template.examples come fallback)
+        nlpProfile: {
+          ...(node.nlpProfile || {}), // Base nlpProfile (preserva regex, minConfidence, ecc.)
+          // ✅ Se node.nlpProfile.examples esiste, usalo; altrimenti undefined (NON template.examples)
+          examples: hasNodeNlpProfileExamples ? node.nlpProfile.examples : undefined
+        },
+        // ✅ Preserva testNotes se esiste
+        testNotes: node.testNotes || undefined
+      };
+    });
+
+    // ✅ DEBUG: Verifica che enrichedData abbia nlpProfile.examples
+    console.log('[🔍 ddtInstanceManager] enrichedData dopo preservazione', {
+      enrichedDataLength: enrichedData.length,
+      firstNodeId: enrichedData[0]?.id,
+      firstNodeHasNlpProfile: !!enrichedData[0]?.nlpProfile,
+      firstNodeHasExamples: !!enrichedData[0]?.nlpProfile?.examples,
+      firstNodeExamplesCount: enrichedData[0]?.nlpProfile?.examples?.length || 0,
+      firstNodeHasTestNotes: !!enrichedData[0]?.testNotes,
+      firstNodeTestNotesCount: enrichedData[0]?.testNotes ? Object.keys(enrichedData[0].testNotes).length : 0
+    });
+
+    // ✅ Usa task.steps se esistono, altrimenti clona dal template
+    let finalSteps = hasTaskSteps ? task.steps : null;
+
+    if (!finalSteps) {
+      // ✅ Solo se task.steps non esiste, costruisci dataTree e clona steps
+      const dataTree = buildDataTree(template);
+      const { steps: clonedSteps } = cloneTemplateSteps(template, dataTree);
+      finalSteps = clonedSteps;
+      console.log('[🔍 ddtInstanceManager] Steps clonati dal template (task.steps non esiste)', {
+        clonedStepsKeys: Object.keys(clonedSteps),
+        clonedStepsCount: Object.keys(clonedSteps).length
+      });
+    } else {
+      console.log('[🔍 ddtInstanceManager] ✅ Using task.steps as source of truth', {
+        taskStepsKeys: Object.keys(finalSteps),
+        taskStepsCount: Object.keys(finalSteps).length
+      });
+    }
+
+    // ✅ Verifica se i prompt sono già stati adattati
+    const promptsAlreadyAdapted = task.metadata?.promptsAdapted === true;
+
+    // ✅ Ritorna DDT usando task.data (fonte di verità)
+    return {
+      ddt: {
+        label: task.label ?? template.label,
+        data: enrichedData, // ✅ Usa task.data (preserva examples, testNotes, ecc.)
+        steps: finalSteps,
+        constraints: (task.constraints && task.constraints.length > 0)
+          ? task.constraints
+          : template.constraints,
+        examples: (task.examples && task.examples.length > 0)
+          ? task.examples
+          : template.examples,
+        dataContract: task.dataContract ?? template.dataContract,
+        templateId: task.templateId
+      },
+      adapted: promptsAlreadyAdapted
+    };
+  }
+
+  // ✅ Se task.data NON esiste, ricostruisci dal template (comportamento originale)
+  console.log('[🔍 ddtInstanceManager] ⚠️ task.data non esiste, ricostruendo dal template', {
+    taskId: task.id,
+    templateId: template.id
+  });
+
   // ✅ 3. Costruisci dataTree (dereferenziazione ricorsiva)
   const dataTree = buildDataTree(template);
   console.log('[🔍 ddtInstanceManager] dataTree costruito', {
@@ -129,6 +255,41 @@ export async function loadAndAdaptDDTForExistingTask(
         regexPattern: regexPattern || '(none)'
       });
 
+    // ✅ CRITICAL: Applica nlpProfile.examples da task.data se presente (override a livello nodo)
+    const nodeNlpProfile = taskDataOverride?.nlpProfile || {};
+    const nodeExamples = nodeNlpProfile.examples;
+    const hasNodeExamples = Array.isArray(nodeExamples) && nodeExamples.length > 0;
+
+    // ✅ DEBUG: Log completo del task.data[0] per vedere cosa c'è realmente
+    const firstTaskDataNode = task.data?.[0];
+    console.log('[EXAMPLES] LOAD - Checking node override', {
+      nodeId: templateNode.id,
+      templateId: templateNode.templateId,
+      hasTaskData: !!task.data,
+      taskDataLength: task.data?.length || 0,
+      firstTaskDataNodeKeys: firstTaskDataNode ? Object.keys(firstTaskDataNode) : [],
+      firstTaskDataNodeId: firstTaskDataNode?.id,
+      firstTaskDataNodeTemplateId: firstTaskDataNode?.templateId,
+      hasFirstTaskDataNodeNlpProfile: !!firstTaskDataNode?.nlpProfile,
+      firstTaskDataNodeNlpProfileKeys: firstTaskDataNode?.nlpProfile ? Object.keys(firstTaskDataNode.nlpProfile) : [],
+      firstTaskDataNodeNlpProfileExamples: firstTaskDataNode?.nlpProfile?.examples,
+      firstTaskDataNodeNlpProfileExamplesCount: Array.isArray(firstTaskDataNode?.nlpProfile?.examples) ? firstTaskDataNode.nlpProfile.examples.length : 0,
+      taskDataKeys: task.data ? task.data.map((n: any) => ({ id: n?.id, templateId: n?.templateId, hasNlpProfile: !!n?.nlpProfile, hasExamples: !!n?.nlpProfile?.examples, nlpProfileKeys: n?.nlpProfile ? Object.keys(n.nlpProfile) : [] })) : [],
+      hasTaskDataOverride: !!taskDataOverride,
+      taskDataOverrideId: taskDataOverride?.id,
+      taskDataOverrideTemplateId: taskDataOverride?.templateId,
+      hasNodeNlpProfile: !!taskDataOverride?.nlpProfile,
+      nodeNlpProfileKeys: taskDataOverride?.nlpProfile ? Object.keys(taskDataOverride.nlpProfile) : [],
+      nodeNlpProfileExamples: taskDataOverride?.nlpProfile?.examples,
+      hasNodeExamples,
+      nodeExamplesCount: nodeExamples?.length || 0,
+      nodeExamples: nodeExamples?.slice(0, 3),
+      templateExamplesCount: templateNode.examples?.length || 0,
+      hasNodeTestNotes: !!taskDataOverride?.testNotes,
+      nodeTestNotesCount: taskDataOverride?.testNotes ? Object.keys(taskDataOverride.testNotes).length : 0,
+      nodeTestNotesKeys: taskDataOverride?.testNotes ? Object.keys(taskDataOverride.testNotes).slice(0, 3) : []
+    });
+
     return {
       ...templateNode,
       label: task.label || templateNode.label,
@@ -136,10 +297,26 @@ export async function loadAndAdaptDDTForExistingTask(
       constraints: (task.constraints && task.constraints.length > 0)
         ? task.constraints
         : templateNode.constraints,
-      // ✅ Se task.examples è array vuoto [], usa templateNode.examples (referenza)
-      examples: (task.examples && task.examples.length > 0)
-        ? task.examples
-        : templateNode.examples,
+      // ✅ PRIORITY: node.nlpProfile.examples > task.examples > templateNode.examples
+      examples: hasNodeExamples
+        ? nodeExamples
+        : (task.examples && task.examples.length > 0)
+          ? task.examples
+          : templateNode.examples,
+      // ✅ CRITICAL: Applica nlpProfile completo da task.data se presente
+      // ✅ PRIORITY: task.data[].nlpProfile (override) > templateNode.nlpProfile (template)
+      // Questo garantisce che examplesList e altre modifiche in memoria siano preservate
+      nlpProfile: taskDataOverride?.nlpProfile
+        ? {
+            ...(templateNode.nlpProfile || {}), // Base dal template
+            ...taskDataOverride.nlpProfile      // Override dal task in memoria (fonte di verità)
+          }
+        : templateNode.nlpProfile,
+      // ✅ CRITICAL: Applica testNotes da task.data se presente (override a livello nodo)
+      // ✅ PRIORITY: task.data[].testNotes (override) > undefined (template non ha testNotes)
+      testNotes: taskDataOverride?.testNotes && typeof taskDataOverride.testNotes === 'object' && Object.keys(taskDataOverride.testNotes).length > 0
+        ? taskDataOverride.testNotes
+        : undefined,
       // ✅ CRITICAL: dataContract è sempre dal template, non più override
       dataContract: templateNode.dataContract,
       subData: templateNode.subData || []

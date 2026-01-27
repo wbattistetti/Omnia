@@ -665,12 +665,26 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
           }
         } else if (subIndex === undefined) {
           const regexPattern = selectedNode?.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+          const nlpProfileExamples = selectedNode?.nlpProfile?.examples;
           console.log('[REGEX] CLOSE - Saving to ddtRef', {
             nodeId: selectedNode?.id,
-            regexPattern: regexPattern || '(none)'
+            regexPattern: regexPattern || '(none)',
+            hasNlpProfile: !!selectedNode?.nlpProfile,
+            hasNlpProfileExamples: !!nlpProfileExamples,
+            nlpProfileExamplesCount: Array.isArray(nlpProfileExamples) ? nlpProfileExamples.length : 0,
+            nlpProfileExamples: nlpProfileExamples?.slice(0, 3)
           });
           mains[mainIndex] = selectedNode;
           ddtRef.current.data = mains;
+
+          // ✅ VERIFICA: Controlla se nlpProfile.examples è presente dopo il salvataggio
+          const savedNode = ddtRef.current.data[mainIndex];
+          console.log('[EXAMPLES] CLOSE - Verifying saved node', {
+            nodeId: savedNode?.id,
+            hasNlpProfile: !!savedNode?.nlpProfile,
+            hasNlpProfileExamples: !!savedNode?.nlpProfile?.examples,
+            nlpProfileExamplesCount: Array.isArray(savedNode?.nlpProfile?.examples) ? savedNode.nlpProfile.examples.length : 0
+          });
         } else {
           const subList = main.subData || [];
           const subIdx = subList.findIndex((s: any, idx: number) => idx === subIndex);
@@ -687,9 +701,15 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
     // ✅ Usa direttamente ddtRef.current (già contiene tutte le modifiche)
     const finalDDT = { ...ddtRef.current };
     const firstNodeRegex = finalDDT.data?.[0]?.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+    const firstNodeNlpProfileExamples = finalDDT.data?.[0]?.nlpProfile?.examples;
     console.log('[REGEX] CLOSE - Final DDT before save', {
       hasData: !!finalDDT.data,
-      firstNodeRegex: firstNodeRegex || '(none)'
+      firstNodeRegex: firstNodeRegex || '(none)',
+      firstNodeId: finalDDT.data?.[0]?.id,
+      hasFirstNodeNlpProfile: !!finalDDT.data?.[0]?.nlpProfile,
+      hasFirstNodeNlpProfileExamples: !!firstNodeNlpProfileExamples,
+      firstNodeNlpProfileExamplesCount: Array.isArray(firstNodeNlpProfileExamples) ? firstNodeNlpProfileExamples.length : 0,
+      firstNodeNlpProfileExamples: firstNodeNlpProfileExamples?.slice(0, 3)
     });
 
     try {
@@ -697,6 +717,36 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
       if (task?.id || task?.instanceId) { // ✅ RINOMINATO: act → task
         const key = (task?.instanceId || task?.id) as string; // ✅ RINOMINATO: act → task
         const hasDDT = finalDDT && Object.keys(finalDDT).length > 0 && finalDDT.data && finalDDT.data.length > 0;
+
+        // ✅ CRITICAL: Aggiorna la cache del TaskRepository con il DDT finale
+        // Questo è ESSENZIALE per garantire che quando riapri l'editor,
+        // taskRepository.getTask() restituisca il task aggiornato con examplesList
+        const currentTask = taskRepository.getTask(key);
+        if (currentTask && hasDDT) {
+          // Aggiorna il task nella cache con il DDT finale
+          taskRepository.updateTask(key, {
+            data: finalDDT.data,
+            label: finalDDT.label,
+            constraints: finalDDT.constraints,
+            examples: finalDDT.examples,
+            dataContract: finalDDT.dataContract,
+            introduction: finalDDT.introduction
+          }, currentProjectId || undefined);
+
+          const firstNodeTestNotes = finalDDT.data?.[0]?.testNotes;
+          console.log('[EXAMPLES] CLOSE - Updated TaskRepository cache with final DDT', {
+            taskId: key,
+            dataLength: finalDDT.data?.length || 0,
+            firstNodeId: finalDDT.data?.[0]?.id,
+            hasFirstNodeNlpProfile: !!finalDDT.data?.[0]?.nlpProfile,
+            hasFirstNodeNlpProfileExamples: !!firstNodeNlpProfileExamples,
+            firstNodeNlpProfileExamplesCount: Array.isArray(firstNodeNlpProfileExamples) ? firstNodeNlpProfileExamples.length : 0,
+            firstNodeNlpProfileExamples: firstNodeNlpProfileExamples?.slice(0, 3),
+            hasFirstNodeTestNotes: !!firstNodeTestNotes,
+            firstNodeTestNotesCount: firstNodeTestNotes ? Object.keys(firstNodeTestNotes).length : 0,
+            firstNodeTestNotesKeys: firstNodeTestNotes ? Object.keys(firstNodeTestNotes).slice(0, 3) : []
+          });
+        }
 
         console.log('[ResponseEditor][CLOSE] 🔍 Pre-save check', {
           taskId: task?.id || task?.instanceId,
@@ -797,11 +847,75 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
               introduction: finalDDTWithSteps.introduction
             };
             const regexPattern = dataToSave.data?.[0]?.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+            const savedNlpProfileExamples = dataToSave.data?.[0]?.nlpProfile?.examples;
             console.log('[REGEX] CLOSE - Saving to DB (standalone)', {
               taskId: key,
-              regexPattern: regexPattern || '(none)'
+              regexPattern: regexPattern || '(none)',
+              firstNodeId: dataToSave.data?.[0]?.id,
+              hasFirstNodeNlpProfile: !!dataToSave.data?.[0]?.nlpProfile,
+              hasFirstNodeNlpProfileExamples: !!savedNlpProfileExamples,
+              firstNodeNlpProfileExamplesCount: Array.isArray(savedNlpProfileExamples) ? savedNlpProfileExamples.length : 0,
+              firstNodeNlpProfileExamples: savedNlpProfileExamples?.slice(0, 3)
             });
-            await taskRepository.updateTask(key, dataToSave, currentProjectId || undefined);
+            // ✅ STEP 1: Salva in memoria
+            taskRepository.updateTask(key, dataToSave, currentProjectId || undefined);
+
+            // ✅ STEP 2: Salva IMMEDIATAMENTE nel database per preservare nlpProfile.examples
+            const finalProjectId = currentProjectId || undefined;
+            if (finalProjectId) {
+              const taskToSave = taskRepository.getTask(key);
+              if (taskToSave) {
+                try {
+                  const { id, _id, templateId, createdAt, updatedAt, ...fields } = taskToSave;
+                  const payload = {
+                    id: taskToSave.id,
+                    type: taskToSave.type,
+                    templateId: taskToSave.templateId ?? null,
+                    ...fields
+                  };
+
+                  const payloadString = JSON.stringify(payload);
+                  const response = await fetch(`/api/projects/${finalProjectId}/tasks`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: payloadString
+                  });
+
+                  if (!response.ok) {
+                    console.error('[EXAMPLES] CLOSE - Failed to save task to database', {
+                      taskId: key,
+                      status: response.status
+                    });
+                  } else {
+                    console.log('[EXAMPLES] CLOSE - Task saved to database', {
+                      taskId: key,
+                      hasFirstNodeNlpProfile: !!taskToSave.data?.[0]?.nlpProfile,
+                      hasFirstNodeNlpProfileExamples: !!taskToSave.data?.[0]?.nlpProfile?.examples,
+                      firstNodeNlpProfileExamplesCount: taskToSave.data?.[0]?.nlpProfile?.examples?.length || 0
+                    });
+                  }
+                } catch (error) {
+                  console.error('[EXAMPLES] CLOSE - Error saving task to database', {
+                    taskId: key,
+                    error
+                  });
+                }
+              }
+            }
+
+            // ✅ VERIFICA: Controlla se è stato salvato correttamente
+            const savedTask = taskRepository.getTask(key);
+            const savedTaskNlpProfileExamples = savedTask?.data?.[0]?.nlpProfile?.examples;
+            console.log('[EXAMPLES] CLOSE - Verifying saved task', {
+              taskId: key,
+              hasSavedTask: !!savedTask,
+              hasSavedTaskData: !!savedTask?.data,
+              savedTaskDataLength: savedTask?.data?.length || 0,
+              hasFirstNodeNlpProfile: !!savedTask?.data?.[0]?.nlpProfile,
+              hasFirstNodeNlpProfileExamples: !!savedTaskNlpProfileExamples,
+              savedFirstNodeNlpProfileExamplesCount: Array.isArray(savedTaskNlpProfileExamples) ? savedTaskNlpProfileExamples.length : 0,
+              savedFirstNodeNlpProfileExamples: savedTaskNlpProfileExamples?.slice(0, 3)
+            });
           } else {
             const dataToSave = {
               label: finalDDTWithSteps.label,
@@ -818,7 +932,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
               templateId: currentTemplateId,
               regexPattern: regexPattern || '(none)'
             });
-            await taskRepository.updateTask(key, dataToSave, currentProjectId || undefined);
+            // ✅ STEP 1: Salva in memoria
+            taskRepository.updateTask(key, dataToSave, currentProjectId || undefined);
           }
 
           // ✅ Verify steps were saved by reading back from repository
@@ -970,6 +1085,22 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
         // task.steps[node.templateId] = steps clonati
         // node.id potrebbe essere diverso (nel caso di template aggregato)
         const nodeTemplateId = node.templateId || node.id; // ✅ Fallback a node.id se templateId non presente
+
+        // ✅ DEBUG: Log node.nlpProfile.examples quando viene caricato
+        const nodeNlpProfileExamples = (node as any)?.nlpProfile?.examples;
+        if (nodeNlpProfileExamples || (node as any)?.nlpProfile) {
+          console.log('[NODE_SELECT] Node loaded with nlpProfile', {
+            nodeId: node.id,
+            nodeTemplateId,
+            hasNlpProfile: !!(node as any)?.nlpProfile,
+            nlpProfileKeys: (node as any)?.nlpProfile ? Object.keys((node as any).nlpProfile) : [],
+            hasNlpProfileExamples: !!nodeNlpProfileExamples,
+            nlpProfileExamplesCount: Array.isArray(nodeNlpProfileExamples) ? nodeNlpProfileExamples.length : 0,
+            nlpProfileExamples: nodeNlpProfileExamples?.slice(0, 3),
+            hasTestNotes: !!(node as any)?.testNotes,
+            testNotesCount: (node as any)?.testNotes ? Object.keys((node as any).testNotes).length : 0
+          });
+        }
 
         const allTaskStepsKeys = task?.steps ? Object.keys(task.steps) : [];
         // ✅ CRITICAL: Stampa chiavi come stringhe per debug
@@ -1210,6 +1341,19 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
           mains[mainIndex] = updated;
           updatedDDT.data = mains;
 
+          // ✅ LOG: Verifica che nlpProfile.examples sia presente dopo l'aggiornamento
+          const savedNlpProfileExamples = mains[mainIndex]?.nlpProfile?.examples;
+          if (savedNlpProfileExamples) {
+            console.log('[EXAMPLES] UPDATE - Saved to ddtRef.data', {
+              nodeId: updated.id,
+              mainIndex,
+              hasNlpProfile: !!mains[mainIndex]?.nlpProfile,
+              hasNlpProfileExamples: !!savedNlpProfileExamples,
+              nlpProfileExamplesCount: savedNlpProfileExamples.length,
+              nlpProfileExamples: savedNlpProfileExamples.slice(0, 3)
+            });
+          }
+
           // ✅ CRITICAL: Salva updated.steps usando templateId come chiave (non id)
           // task.steps[node.templateId] = steps clonati
           const nodeTemplateId = updated.templateId || updated.id; // ✅ Fallback a id se templateId non presente
@@ -1250,6 +1394,19 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
         // ✅ STEP 3: Aggiorna ddtRef.current (buffer locale)
         ddtRef.current = updatedDDT;
+
+        // ✅ LOG: Verifica che nlpProfile.examples sia presente in ddtRef.current dopo l'aggiornamento
+        const ddtRefNlpProfileExamples = ddtRef.current.data?.[mainIndex]?.nlpProfile?.examples;
+        if (ddtRefNlpProfileExamples) {
+          console.log('[EXAMPLES] UPDATE - Verified in ddtRef.current', {
+            nodeId: updated.id,
+            mainIndex,
+            hasNlpProfile: !!ddtRef.current.data?.[mainIndex]?.nlpProfile,
+            hasNlpProfileExamples: !!ddtRefNlpProfileExamples,
+            nlpProfileExamplesCount: ddtRefNlpProfileExamples.length,
+            nlpProfileExamples: ddtRefNlpProfileExamples.slice(0, 3)
+          });
+        }
 
         // ✅ STEP 4: Aggiorna IMMEDIATAMENTE tab.ddt nel dockTree (FONTE DI VERITÀ) - solo se disponibili
         if (tabId && setDockTree) {

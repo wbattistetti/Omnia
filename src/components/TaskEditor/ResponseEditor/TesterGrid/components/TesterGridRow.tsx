@@ -8,7 +8,7 @@ import NoteDisplay from '../../CellNote/NoteDisplay';
 import NoteSeparator from '../../CellNote/NoteSeparator';
 import { RowResult } from '../../hooks/useExtractionTesting';
 import type { DataContract } from '../../../DialogueDataEngine/contracts/contractLoader';
-import { useNotesStore, getCellKey } from '../../stores/notesStore';
+import { useNotesStore, getCellKeyFromPhrase } from '../../stores/notesStore';
 
 interface TesterGridRowProps {
   rowIndex: number;
@@ -193,7 +193,7 @@ function TesterGridRowComponent({
                   </div>
                   {(() => {
                     const { isHovered, hasNote, startEditing, stopEditing, editingNote } = useNotesStore();
-                    const cellKey = getCellKey(rowIndex, 'embeddings');
+                    const cellKey = getCellKeyFromPhrase(phrase, 'embeddings');
                     return (isHovered(cellKey) || hasNote(cellKey)) && (
                       <NoteButton
                         hasNote={hasNote(cellKey)}
@@ -204,7 +204,7 @@ function TesterGridRowComponent({
                 </div>
                 {(() => {
                   const { getNote, editingNote, addNote, deleteNote, stopEditing } = useNotesStore();
-                  const cellKey = getCellKey(rowIndex, 'embeddings');
+                  const cellKey = getCellKeyFromPhrase(phrase, 'embeddings');
                   return (getNote(cellKey) || editingNote === cellKey) && (
                     <>
                       <NoteSeparator />
@@ -241,7 +241,7 @@ function TesterGridRowComponent({
               }}
               onMouseEnter={() => {
                 const { setHovered } = useNotesStore.getState();
-                setHovered(getCellKey(rowIndex, componentType));
+                setHovered(getCellKeyFromPhrase(phrase, componentType));
               }}
               onMouseLeave={() => {
                 const { setHovered } = useNotesStore.getState();
@@ -253,6 +253,7 @@ function TesterGridRowComponent({
                 processingTime={processingTime}
                 maxMs={maxMs}
                 rowIdx={rowIndex}
+                phrase={phrase}
                 col={componentType as any}
                 kind={kind}
                 expectedKeysForKind={expectedKeysForKind}
@@ -286,7 +287,7 @@ function TesterGridRowComponent({
             }}
             onMouseEnter={() => {
               const { setHovered } = useNotesStore.getState();
-              setHovered(getCellKey(rowIndex, 'regex'));
+              setHovered(getCellKeyFromPhrase(phrase, 'regex'));
             }}
             onMouseLeave={() => {
               const { setHovered } = useNotesStore.getState();
@@ -298,6 +299,7 @@ function TesterGridRowComponent({
               processingTime={rowResult.regexMs}
               maxMs={maxMs}
               rowIdx={rowIndex}
+              phrase={phrase}
               col="regex"
               kind={kind}
               expectedKeysForKind={expectedKeysForKind}
@@ -327,7 +329,7 @@ function TesterGridRowComponent({
               }}
               onMouseEnter={() => {
                 const { setHovered } = useNotesStore.getState();
-                setHovered(getCellKey(rowIndex, 'deterministic'));
+                setHovered(getCellKeyFromPhrase(phrase, 'deterministic'));
               }}
               onMouseLeave={() => {
                 const { setHovered } = useNotesStore.getState();
@@ -339,6 +341,7 @@ function TesterGridRowComponent({
                 processingTime={rowResult.detMs}
                 maxMs={maxMs}
                 rowIdx={rowIndex}
+                phrase={phrase}
                 col="det"
                 kind={kind}
                 expectedKeysForKind={expectedKeysForKind}
@@ -369,7 +372,7 @@ function TesterGridRowComponent({
               }}
               onMouseEnter={() => {
                 const { setHovered } = useNotesStore.getState();
-                setHovered(getCellKey(rowIndex, 'ner'));
+                setHovered(getCellKeyFromPhrase(phrase, 'ner'));
               }}
               onMouseLeave={() => {
                 const { setHovered } = useNotesStore.getState();
@@ -381,6 +384,7 @@ function TesterGridRowComponent({
                 processingTime={rowResult.nerMs}
                 maxMs={maxMs}
                 rowIdx={rowIndex}
+                phrase={phrase}
                 col="ner"
                 kind={kind}
                 expectedKeysForKind={expectedKeysForKind}
@@ -410,7 +414,7 @@ function TesterGridRowComponent({
               }}
               onMouseEnter={() => {
                 const { setHovered } = useNotesStore.getState();
-                setHovered(getCellKey(rowIndex, 'embeddings'));
+                setHovered(getCellKeyFromPhrase(phrase, 'embeddings'));
               }}
               onMouseLeave={() => {
                 const { setHovered } = useNotesStore.getState();
@@ -424,7 +428,7 @@ function TesterGridRowComponent({
                 </div>
                 {(() => {
                   const { isHovered, hasNote, startEditing, stopEditing, editingNote } = useNotesStore();
-                  const cellKey = getCellKey(rowIndex, 'embeddings');
+                  const cellKey = getCellKeyFromPhrase(phrase, 'embeddings');
                   return (isHovered(cellKey) || hasNote(cellKey)) && (
                     <NoteButton
                       hasNote={hasNote(cellKey)}
@@ -435,7 +439,7 @@ function TesterGridRowComponent({
               </div>
               {(() => {
                 const { getNote, editingNote, addNote, deleteNote, stopEditing } = useNotesStore();
-                const cellKey = getCellKey(rowIndex, 'embeddings');
+                const cellKey = getCellKeyFromPhrase(phrase, 'embeddings');
                 return (getNote(cellKey) || editingNote === cellKey) && (
                   <>
                     <NoteSeparator />
@@ -468,7 +472,7 @@ function TesterGridRowComponent({
             }}
             onMouseEnter={() => {
               const { setHovered } = useNotesStore.getState();
-              setHovered(getCellKey(rowIndex, 'llm'));
+              setHovered(getCellKeyFromPhrase(phrase, 'llm'));
             }}
             onMouseLeave={() => {
               const { setHovered } = useNotesStore.getState();
@@ -480,6 +484,7 @@ function TesterGridRowComponent({
               processingTime={rowResult.llmMs}
               maxMs={maxMs}
               rowIdx={rowIndex}
+              phrase={phrase}
               col="llm"
               kind={kind}
               expectedKeysForKind={expectedKeysForKind}

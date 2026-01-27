@@ -7,13 +7,14 @@ import NoteButton from '../../CellNote/NoteButton';
 import NoteEditor from '../../CellNote/NoteEditor';
 import NoteDisplay from '../../CellNote/NoteDisplay';
 import NoteSeparator from '../../CellNote/NoteSeparator';
-import { useNotesStore, getCellKey } from '../../stores/notesStore';
+import { useNotesStore, getCellKeyFromPhrase } from '../../stores/notesStore';
 
 interface ExtractionResultCellProps {
   summary: string | undefined;
   processingTime?: number;
   maxMs?: number;
-  rowIdx: number;
+  rowIdx: number; // ✅ Kept for backward compatibility, but phrase is preferred
+  phrase: string; // ✅ NEW: Phrase text for stable key generation
   col: 'regex' | 'det' | 'ner' | 'llm';
   kind: string;
   expectedKeysForKind: (k?: string) => string[];
@@ -41,6 +42,7 @@ function ExtractionResultCellComponent({
   processingTime,
   maxMs,
   rowIdx,
+  phrase, // ✅ NEW: Phrase text for stable key
   col,
   kind,
   expectedKeysForKind,
@@ -60,16 +62,19 @@ function ExtractionResultCellComponent({
   const notes = useNotesStore((s) => s.notes);
 
   // ✅ Get functions from store state (functions that use get() need direct access)
-  const getNote = useNotesStore.getState().getNote;
-  const hasNote = useNotesStore.getState().hasNote;
+  // ✅ Use new phrase|method-based functions from store
+  const getNoteByPhraseAndMethod = useNotesStore.getState().getNoteByPhraseAndMethod;
+  const hasNoteForPhraseAndMethod = useNotesStore.getState().hasNoteForPhraseAndMethod;
+  const setNoteForPhraseAndMethod = useNotesStore.getState().setNoteForPhraseAndMethod;
+  const deleteNoteForPhraseAndMethod = useNotesStore.getState().deleteNoteForPhraseAndMethod;
   const startEditing = useNotesStore.getState().startEditing;
   const stopEditing = useNotesStore.getState().stopEditing;
-  const addNote = useNotesStore.getState().addNote;
-  const deleteNote = useNotesStore.getState().deleteNote;
 
-  const cellKey = getCellKey(rowIdx, col);
+  // ✅ Use phrase-based key (stable, not index-based)
+  const cellKey = getCellKeyFromPhrase(phrase, col);
   const isCurrentlyEditing = editingNote === cellKey;
-  const currentNote = getNote(cellKey);
+  const currentNote = getNoteByPhraseAndMethod(phrase, col);
+  const hasNote = hasNoteForPhraseAndMethod(phrase, col);
 
   // ✅ REMOVED: Debug logs - notes are now managed via Zustand store
 
@@ -149,7 +154,7 @@ function ExtractionResultCellComponent({
                   });
                   return shouldShowNoteButton ? (
                     <NoteButton
-                    hasNote={hasNote(cellKey)}
+                    hasNote={hasNote}
                     onClick={() => {
                       if (isCurrentlyEditing) {
                         stopEditing();
@@ -204,7 +209,7 @@ function ExtractionResultCellComponent({
         </div>
       </div>
       {(() => {
-        const hasNoteValue = getNote(cellKey);
+        const hasNoteValue = currentNote;
         const shouldShowNoteSection = (hasNoteValue || isCurrentlyEditing) && enabled;
         if (!shouldShowNoteSection) {
           return null;
@@ -214,13 +219,19 @@ function ExtractionResultCellComponent({
             <NoteSeparator />
             {isCurrentlyEditing ? (
               <NoteEditor
-                value={getNote(cellKey)}
-                onSave={(text) => { addNote(cellKey, text); stopEditing(); }}
-                onDelete={() => { deleteNote(cellKey); stopEditing(); }}
+                value={currentNote}
+                onSave={(text) => {
+                  setNoteForPhraseAndMethod(phrase, col, text);
+                  stopEditing();
+                }}
+                onDelete={() => {
+                  deleteNoteForPhraseAndMethod(phrase, col);
+                  stopEditing();
+                }}
                 onCancel={stopEditing}
               />
             ) : (
-              <NoteDisplay text={getNote(cellKey)} />
+              <NoteDisplay text={currentNote} />
             )}
           </>
         );

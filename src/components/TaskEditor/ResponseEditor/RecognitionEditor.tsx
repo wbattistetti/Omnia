@@ -9,6 +9,8 @@ import { loadContractFromNode } from './ContractSelector/contractHelpers';
 import type { DataContract } from '../../DialogueDataEngine/contracts/contractLoader';
 import DialogueTaskService from '../../../services/DialogueTaskService';
 import { useProjectData } from '../../../context/ProjectDataContext';
+import { useNotesStore } from './stores/notesStore';
+import { taskRepository } from '../../../services/TaskRepository';
 
 interface RecognitionEditorProps {
   // Config props (Kind, Confidence, Waiting Messages)
@@ -226,8 +228,208 @@ export default function RecognitionEditor({
       // ✅ Reset stato modifiche quando cambi nodo
       setHasUnsavedContractChanges(false);
       setModifiedContract(null);
+
+      // ✅ Load test notes from node
+      const testNotes = node.testNotes || {};
+      const notesStore = useNotesStore.getState();
+
+      // ✅ Migrate old notes if needed
+      const migratedNotes = examplesList.length > 0
+        ? notesStore.migrateOldNotes(testNotes, examplesList)
+        : testNotes;
+
+      // ✅ Load notes into store
+      notesStore.loadNotes(migratedNotes);
+
+      console.log('[NOTES] INIT - Loaded notes from node', {
+        nodeId: node.id,
+        notesCount: Object.keys(migratedNotes).length,
+        hasOldFormat: Object.keys(testNotes).some(k => /^\d+-/.test(k)),
+        migratedCount: Object.keys(migratedNotes).length - Object.keys(testNotes).length
+      });
     }
-  }, [editorProps?.node?.id, updateSelectedNode]);
+  }, [editorProps?.node?.id, updateSelectedNode, examplesList]);
+
+  // ✅ Sync notes to node when they change
+  const notes = useNotesStore((s) => s.notes);
+  const notesStore = useNotesStore();
+
+  // ✅ Load notes from node.testNotes when editor opens or node changes
+  const prevNodeIdForNotesRef = React.useRef<string | undefined>(editorProps?.node?.id);
+  useEffect(() => {
+    const node = editorProps?.node;
+    const currentNodeId = node?.id;
+    const nodeIdChanged = currentNodeId !== prevNodeIdForNotesRef.current;
+
+    // ✅ Solo aggiorna se il node è cambiato (evita loop infiniti)
+    if (!nodeIdChanged && node) {
+      return;
+    }
+
+    prevNodeIdForNotesRef.current = currentNodeId;
+
+    if (!node) {
+      notesStore.reset();
+      return;
+    }
+
+    const nodeTestNotes = (node as any)?.testNotes;
+    if (nodeTestNotes && typeof nodeTestNotes === 'object' && Object.keys(nodeTestNotes).length > 0) {
+      // ✅ Migrate old notes if present
+      const examplesList = editorProps?.examplesList || [];
+      const migratedNotes = notesStore.migrateOldNotes(nodeTestNotes, examplesList);
+
+      // ✅ Load notes into store
+      notesStore.loadNotes(migratedNotes);
+
+      console.log('[NOTES] Loaded notes from node', {
+        nodeId: node.id,
+        notesCount: Object.keys(migratedNotes).length,
+        examplesListCount: examplesList.length,
+        sampleNotes: Object.keys(migratedNotes).slice(0, 3)
+      });
+    } else {
+      // No notes in node, reset store (solo se nodeId è cambiato)
+      if (nodeIdChanged) {
+        notesStore.reset();
+      }
+    }
+  }, [editorProps?.node?.id, editorProps?.examplesList]);
+
+  // ✅ Save notes to node.testNotes when they change
+  const prevNotesRef = React.useRef<Record<string, string>>({});
+  useEffect(() => {
+    const node = editorProps?.node;
+    if (!node || !updateSelectedNode) return;
+
+    // ✅ Solo salva se notes è cambiato (evita loop infiniti)
+    const notesChanged = JSON.stringify(notes) !== JSON.stringify(prevNotesRef.current);
+    if (!notesChanged) {
+      return;
+    }
+
+    prevNotesRef.current = { ...notes };
+
+    // ✅ Save notes to node.testNotes
+    updateSelectedNode((prev: any) => {
+      if (!prev) return prev;
+      const updated = { ...prev };
+      updated.testNotes = { ...notes };
+
+      // ✅ CRITICAL: Aggiorna anche la cache del TaskRepository
+      const taskId = editorProps?.task?.id || editorProps?.task?.instanceId;
+      if (taskId) {
+        try {
+          const currentTask = taskRepository.getTask(taskId);
+          if (currentTask && currentTask.data && Array.isArray(currentTask.data)) {
+            const nodeIndex = currentTask.data.findIndex((n: any) =>
+              n.id === node.id || n.templateId === node.templateId
+            );
+            if (nodeIndex >= 0) {
+              const updatedData = [...currentTask.data];
+              updatedData[nodeIndex] = updated; // Node aggiornato con testNotes
+              taskRepository.updateTask(taskId, { data: updatedData }, undefined);
+              console.log('[NOTES] Updated TaskRepository cache', {
+                taskId,
+                nodeIndex,
+                notesCount: Object.keys(notes).length
+              });
+            }
+          }
+        } catch (error) {
+          console.error('[NOTES] Error updating TaskRepository cache', error);
+        }
+      }
+
+      return updated;
+    }, false); // false = non notificare provider (solo sync locale)
+  }, [notes, editorProps?.node?.id, updateSelectedNode, editorProps?.task?.id, editorProps?.task?.instanceId]);
+
+  // ✅ Sync examplesList to node when they change
+  useEffect(() => {
+    const node = editorProps?.node;
+    if (!node || !updateSelectedNode) return;
+
+    // ✅ Save examplesList to node.nlpProfile.examples
+    updateSelectedNode((prev: any) => {
+      if (!prev) return prev;
+      const updated = { ...prev };
+      if (!updated.nlpProfile) {
+        updated.nlpProfile = {};
+      }
+      const newExamples = examplesList.length > 0 ? [...examplesList] : undefined;
+      const prevExamples = updated.nlpProfile.examples;
+
+      // ✅ Solo salva se è cambiato (evita loop infiniti)
+      const hasChanged =
+        (prevExamples?.length || 0) !== (newExamples?.length || 0) ||
+        (prevExamples || []).some((ex: string, idx: number) => ex !== newExamples?.[idx]);
+
+      if (hasChanged) {
+        console.log('[EXAMPLES] Saving examplesList to node', {
+          nodeId: node.id,
+          prevCount: prevExamples?.length || 0,
+          newCount: newExamples?.length || 0,
+          examples: newExamples?.slice(0, 3)
+        });
+        updated.nlpProfile.examples = newExamples;
+
+        // ✅ CRITICAL: Aggiorna anche la cache del TaskRepository
+        // Questo garantisce che quando riapri l'editor, taskRepository.getTask()
+        // restituisca il task aggiornato con examplesList
+        const taskId = editorProps?.task?.id || editorProps?.task?.instanceId;
+        if (taskId) {
+          try {
+            const currentTask = taskRepository.getTask(taskId);
+            if (currentTask && currentTask.data && Array.isArray(currentTask.data)) {
+              // Trova il node corrispondente e aggiornalo
+              const nodeIndex = currentTask.data.findIndex((n: any) =>
+                n.id === node.id || n.templateId === node.templateId
+              );
+              if (nodeIndex >= 0) {
+                const updatedData = [...currentTask.data];
+                // ✅ CRITICAL: Assicurati che il node aggiornato abbia la struttura completa
+                // Il node 'updated' viene da updateSelectedNode e dovrebbe avere nlpProfile.examples
+                // Ma verifichiamo e assicuriamoci che nlpProfile esista e abbia examples
+                const nodeToSave = {
+                  ...updated, // Spread completo del node aggiornato
+                  // ✅ Assicurati che nlpProfile esista e abbia examples
+                  nlpProfile: {
+                    ...(updated.nlpProfile || {}), // Base nlpProfile se esiste
+                    examples: newExamples // Override examples (fonte di verità)
+                  }
+                };
+                updatedData[nodeIndex] = nodeToSave; // Node aggiornato con examples
+                taskRepository.updateTask(taskId, { data: updatedData }, undefined);
+                console.log('[EXAMPLES] Updated TaskRepository cache', {
+                  taskId,
+                  nodeIndex,
+                  examplesCount: newExamples?.length || 0,
+                  nodeHasNlpProfile: !!nodeToSave.nlpProfile,
+                  nodeHasExamples: !!nodeToSave.nlpProfile?.examples,
+                  nodeExamplesCount: nodeToSave.nlpProfile?.examples?.length || 0,
+                  // ✅ Verifica che il node salvato abbia effettivamente examples
+                  savedNodeKeys: Object.keys(nodeToSave),
+                  savedNlpProfileKeys: nodeToSave.nlpProfile ? Object.keys(nodeToSave.nlpProfile) : []
+                });
+              } else {
+                console.warn('[EXAMPLES] Node not found in task.data', {
+                  taskId,
+                  nodeId: node.id,
+                  nodeTemplateId: node.templateId,
+                  dataLength: currentTask.data.length
+                });
+              }
+            }
+          } catch (error) {
+            console.error('[EXAMPLES] Error updating TaskRepository cache', error);
+          }
+        }
+      }
+
+      return updated;
+    }, false); // false = non notificare provider (solo sync locale)
+  }, [examplesList, editorProps?.node?.id, updateSelectedNode, editorProps?.task?.id, editorProps?.task?.instanceId]);
 
   // ✅ Usa direttamente localContract come contract (non serve creare nuovo oggetto)
   const contract = localContract;

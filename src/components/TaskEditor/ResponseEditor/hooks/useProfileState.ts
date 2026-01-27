@@ -49,7 +49,20 @@ export function useProfileState(
   const initial: NLPProfile = useMemo(() => {
     const p = (node && (node as any).nlpProfile) || {};
 
-
+    // ✅ DEBUG: Log node.nlpProfile.examples quando viene calcolato initial
+    const nodeExamples = Array.isArray(p.examples) ? p.examples : undefined;
+    if (nodeExamples || p.examples !== undefined) {
+      console.log('[useProfileState] Computing initial profile from node', {
+        nodeId: node?.id,
+        hasNlpProfile: !!(node as any)?.nlpProfile,
+        nlpProfileKeys: (node as any)?.nlpProfile ? Object.keys((node as any).nlpProfile) : [],
+        hasExamples: !!nodeExamples,
+        examplesCount: nodeExamples?.length || 0,
+        examples: nodeExamples?.slice(0, 3),
+        hasTestNotes: !!(node as any)?.testNotes,
+        testNotesCount: (node as any)?.testNotes ? Object.keys((node as any).testNotes).length : 0
+      });
+    }
 
     const result = {
       slotId: (node?.id || node?._id || node?.label || 'slot') as string,
@@ -73,7 +86,7 @@ export function useProfileState(
 
 
     return result;
-  }, [node, locale, (node as any)?.nlpProfile?.regex]); // ✅ Aggiunto nlpProfile.regex per reagire alle modifiche del contract
+  }, [node, locale, (node as any)?.nlpProfile?.regex, (node as any)?.nlpProfile?.examples]); // ✅ Aggiunto nlpProfile.examples per reagire alle modifiche delle frasi
 
   const inferredKind = useMemo(() => inferKindFromNode(node), [node]);
 
@@ -273,20 +286,33 @@ export function useProfileState(
     }
   }, [initial.testCases]);
 
-  // ✅ NUOVO: Sync examplesList quando riapri l'editor (come per testCases)
+  // ✅ CRITICAL: Sync examplesList quando initial.examples cambia (riaprimento editor o reload)
   // Questo gestisce il caso in cui il componente non viene smontato quando chiudi l'editor
-  const isFirstMountExamplesRef = useRef(true);
+  const prevInitialExamplesRef = useRef<string[] | undefined>(initial.examples);
   useEffect(() => {
-    if (isFirstMountExamplesRef.current) {
-      isFirstMountExamplesRef.current = false;
-      return; // Prima volta: già inizializzato con useState
-    }
+    const currentExamples = initial.examples || [];
+    const prevExamples = prevInitialExamplesRef.current || [];
 
-    // Se lo stato locale è vuoto, sincronizza con initial (riaprimento editor)
-    if (examplesList.length === 0 && (initial.examples || []).length > 0) {
-      setExamplesList(initial.examples || []);
+    // ✅ Sincronizza se initial.examples è cambiato (riaprimento editor o reload)
+    // Confronta array per vedere se sono diversi
+    const hasChanged =
+      currentExamples.length !== prevExamples.length ||
+      currentExamples.some((ex, idx) => ex !== prevExamples[idx]);
+
+    if (hasChanged) {
+      console.log('[useProfileState] Syncing examplesList from node', {
+        prevCount: prevExamples.length,
+        newCount: currentExamples.length,
+        prevExamples: prevExamples.slice(0, 3),
+        newExamples: currentExamples.slice(0, 3)
+      });
+      prevInitialExamplesRef.current = currentExamples;
+      setExamplesList(currentExamples);
+    } else {
+      // Aggiorna il ref anche se non cambia (per tracciare)
+      prevInitialExamplesRef.current = currentExamples;
     }
-  }, [initial.examples, examplesList.length]);
+  }, [initial.examples]);
 
   // Keep kind synced with inferred when lockKind is enabled
   useEffect(() => {

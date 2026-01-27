@@ -110,6 +110,10 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
         try {
           const { loadAndAdaptDDTForExistingTask } = await import('../../../utils/ddtInstanceManager');
           const { ddt, adapted } = await loadAndAdaptDDTForExistingTask(fullTask, currentProjectId);
+
+          // ✅ DEBUG: Verifica che il DDT costruito abbia nlpProfile.examples e testNotes
+          const firstNodeNlpProfileExamples = ddt.data?.[0]?.nlpProfile?.examples;
+          const firstNodeTestNotes = ddt.data?.[0]?.testNotes;
           console.log('[🔍 DDTHostAdapter] DDT caricato', {
             taskId: fullTask.id,
             ddtLabel: ddt.label,
@@ -121,7 +125,14 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
               templateId: n.templateId,
               label: n.label
             })) || [],
-            adapted
+            adapted,
+            firstNodeId: ddt.data?.[0]?.id,
+            hasFirstNodeNlpProfile: !!ddt.data?.[0]?.nlpProfile,
+            hasFirstNodeNlpProfileExamples: !!firstNodeNlpProfileExamples,
+            firstNodeNlpProfileExamplesCount: Array.isArray(firstNodeNlpProfileExamples) ? firstNodeNlpProfileExamples.length : 0,
+            firstNodeNlpProfileExamples: firstNodeNlpProfileExamples?.slice(0, 3),
+            hasFirstNodeTestNotes: !!firstNodeTestNotes,
+            firstNodeTestNotesCount: firstNodeTestNotes ? Object.keys(firstNodeTestNotes).length : 0
           });
           setDdt(ddt);
         } catch (err) {
