@@ -1,7 +1,8 @@
 import React from 'react';
 import TaskList from '../TaskPalette/TaskList';
-import ResponseSimulator from '../../ChatSimulator/ResponseSimulator';
-import DDEBubbleChat from '../../ChatSimulator/DDEBubbleChat';
+// ❌ REMOVED: ResponseSimulator - contains duplicate runtime logic
+// ✅ Using clean DDEBubbleChat from ResponseEditor (SSE-only, no runtime logic)
+import DDEBubbleChat from './ChatSimulator/DDEBubbleChat';
 import { stepMeta } from './ddtUtils';
 import { useDDTManager } from '../../../context/DDTManagerContext';
 import { useFontContext } from '../../../context/FontContext';

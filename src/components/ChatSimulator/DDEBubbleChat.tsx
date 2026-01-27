@@ -1,3 +1,17 @@
+/**
+ * ⚠️ DEPRECATED: This file contains duplicate runtime logic and should be replaced.
+ *
+ * This component (`DDEBubbleChat` in `ChatSimulator/`) contains frontend runtime logic
+ * that duplicates the VB.NET backend functionality. All dialogue logic (message determination,
+ * escalation handling, state management) should be handled by the VB.NET backend via SSE.
+ *
+ * ✅ USE INSTEAD: `src/components/TaskEditor/ResponseEditor/ChatSimulator/DDEBubbleChat.tsx`
+ * That component is clean and uses only SSE to communicate with the backend.
+ *
+ * This file is kept temporarily for backward compatibility but should be removed
+ * once all references are updated to use the clean version.
+ */
+
 import React from 'react';
 import { flushSync } from 'react-dom';
 import type { AssembledDDT } from '../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
@@ -12,7 +26,10 @@ import { FlowNode, EdgeData } from '../Flowchart/types/flowTypes';
 import { extractTranslations, resolveActionText } from './DDTAdapter';
 import { adaptCurrentToV2 } from '../DialogueDataEngine/model/adapters/currentToV2';
 import { useDDTSimulator } from '../DialogueDataEngine/useSimulator';
-import { getMain, getSub, resolveAsk, resolveConfirm, resolveSuccess, resolveEscalation, findOriginalNode } from './messageResolvers';
+// ❌ REMOVED: getMain, getSub, resolveAsk, resolveConfirm, resolveSuccess, resolveEscalation
+// These functions contained duplicate runtime logic and have been removed.
+// All message determination is now handled by the VB.NET backend via SSE.
+import { findOriginalNode } from './messageResolvers';
 import { taskRepository } from '../../services/TaskRepository';
 
 // getStepIcon and getStepColor moved to chatSimulatorUtils.tsx
@@ -358,8 +375,10 @@ export default function DDEBubbleChat({
         prevMemoryKeys: Object.keys(prevMemoryRef.current)
       });
 
-      // ✅ Use getMain helper instead of direct plan.main access
-      const main = getMain(currentState);
+      // ❌ REMOVED: getMain - duplicate runtime logic
+      // TODO: This file should be replaced with the clean version from ResponseEditor
+      // For now, accessing state directly (temporary workaround)
+      const main = currentState?.plan?.byId?.[currentState?.plan?.order?.[currentState?.currentIndex]];
       if (!main) {
         console.log('[DDEBubbleChat][USE-EFFECT] ⚠️ No main node found', {
           hasPlan: !!currentState.plan,
@@ -489,10 +508,13 @@ export default function DDEBubbleChat({
 
   // Helper to get position key from simulator state
   // Include counters to trigger when escalation happens (same position, different message)
+  // ❌ REMOVED: getMain, getSub - duplicate runtime logic
+  // TODO: This file should be replaced with the clean version from ResponseEditor
   const getPositionKey = React.useCallback((state: any) => {
     if (!state) return '';
-    const main = getMain(state);
-    const sub = getSub(state);
+    // Temporary workaround: access state directly
+    const main = state?.plan?.byId?.[state?.plan?.order?.[state?.currentIndex]];
+    const sub = state?.currentSubId ? state?.plan?.byId?.[state?.currentSubId] : undefined;
     const targetNode = sub || main;
     const targetNodeId = targetNode?.id;
     const nodeState = targetNodeId ? state.nodeStates?.[targetNodeId] : null;
@@ -525,8 +547,10 @@ export default function DDEBubbleChat({
     }
     lastKeyRef.current = key;
 
-    const main = getMain(state);
-    const sub = getSub(state);
+    // ❌ REMOVED: getMain, getSub - duplicate runtime logic
+    // Temporary workaround: access state directly
+    const main = state?.plan?.byId?.[state?.plan?.order?.[state?.currentIndex]];
+    const sub = state?.currentSubId ? state?.plan?.byId?.[state?.currentSubId] : undefined;
     const legacyMain = Array.isArray(currentDDT?.data) ? currentDDT.data[0] : currentDDT?.data;
     const legacyDict = extractTranslations(currentDDT as any, translations);
 
@@ -547,83 +571,15 @@ export default function DDEBubbleChat({
     const step = (mainStep === 'NoMatch' || mainStep === 'NoInput') ? mainStep : targetStep;
     const counters = (mainStep === 'NoMatch' || mainStep === 'NoInput') ? mainCounters : targetCounters;
 
-    // Resolve and add message based on current mode and step
-    if (step === 'NoMatch') {
-      // Mostra sempre il normale messaggio di escalation NoMatch
-      // Il badge "Grammar missing!" viene mostrato sul messaggio utente, non qui
-      const escalationLevel = (counters.noMatch || 0) + 1;
-      const legacyNode = legacyMain;
-      const { text, key: textKey } = resolveEscalation(legacyNode, 'noMatch', escalationLevel, legacyDict, translations);
-      if (text) {
-        setMessages((prev) => [...prev, {
-          id: `sim-${Date.now()}-${Math.random()}`,
-          type: 'bot',
-          text,
-          stepType: 'noMatch',
-          textKey,
-          color: getStepColor('noMatch')
-        }]);
-      }
-    } else if (step === 'NoInput') {
-      const escalationLevel = (counters.noInput || 0) + 1;
-      const legacyNode = legacyMain;
-      const { text, key: textKey } = resolveEscalation(legacyNode, 'noInput', escalationLevel, legacyDict, translations);
-      if (text) {
-        setMessages((prev) => [...prev, {
-          id: `sim-${Date.now()}-${Math.random()}`,
-          type: 'bot',
-          text,
-          stepType: 'noInput',
-          textKey,
-          color: getStepColor('noInput')
-        }]);
-      }
-    } else if (state.mode === 'CollectingMain' || state.mode === 'CollectingSub') {
-      // Trova legacySub se c'è un sub attivo
-      const legacySub = sub?.id && currentDDT ? findOriginalNode(currentDDT, undefined, sub.id) : undefined;
-      const { text, key: textKey } = resolveAsk(main, sub, translations, legacyDict, legacyMain, legacySub);
-      if (text) {
-        setMessages((prev) => {
-          // Rimuovi 'init' solo se esiste un altro messaggio ask diverso da 'init'
-          const hasOtherAskMessage = prev.some(
-            m => m.id !== 'init' && (m.stepType === 'ask' || m.stepType === 'start')
-          );
-          const filtered = hasOtherAskMessage ? prev.filter(m => m.id !== 'init') : prev;
-          return [...filtered, {
-            id: `sim-${Date.now()}-${Math.random()}`,
-            type: 'bot',
-            text,
-            stepType: 'ask',
-            textKey,
-            color: getStepColor('ask')
-          }];
-        });
-      }
-    } else if (state.mode === 'ConfirmingMain') {
-      const { text, key: textKey } = resolveConfirm(state, main, legacyDict, legacyMain, translations);
-      if (text) {
-        setMessages((prev) => [...prev, {
-          id: `sim-${Date.now()}-${Math.random()}`,
-          type: 'bot',
-          text,
-          stepType: 'confirmation',
-          textKey,
-          color: getStepColor('confirmation')
-        }]);
-      }
-    } else if (state.mode === 'SuccessMain') {
-      const { text, key: textKey } = resolveSuccess(main, translations, legacyDict, legacyMain);
-      if (text) {
-        setMessages((prev) => [...prev, {
-          id: `sim-${Date.now()}-${Math.random()}`,
-          type: 'bot',
-          text,
-          stepType: 'success',
-          textKey,
-          color: getStepColor('success')
-        }]);
-      }
-    }
+    // ❌ REMOVED: All message resolution logic (resolveEscalation, resolveAsk, resolveConfirm, resolveSuccess)
+    // These functions contained duplicate runtime logic and have been removed.
+    // All message determination is now handled by the VB.NET backend via SSE.
+    // TODO: This entire file should be replaced with the clean version from ResponseEditor/ChatSimulator/DDEBubbleChat.tsx
+    // For now, this code is disabled to prevent duplicate logic
+    console.warn('[DDEBubbleChat] ⚠️ This file contains deprecated runtime logic. Use ResponseEditor/ChatSimulator/DDEBubbleChat.tsx instead.');
+
+    // Messages should come from backend via SSE, not from frontend logic
+    // This code block is intentionally left empty to prevent duplicate message generation
   }, [mode, simulator?.state?.mode, simulator?.state?.currentIndex, simulator?.state?.currentSubId, simulator?.state?.nodeStates, currentDDT, translations]);
 
   // updateTranslation moved to useMessageEditing hook

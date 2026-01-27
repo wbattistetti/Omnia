@@ -223,15 +223,9 @@ export default function DDTSimulatorPreview({ currentDDT }: Props) {
     return typeof t === 'string' && t.trim() ? t : key;
   };
 
-  // Seed first main ask if empty (only for frontend engine)
-  useEffect(() => {
-    if (useBackend || messages.length > 0) return;
-    try {
-      const firstMain = (template.nodes || []).find((n: any) => n?.type === 'main');
-      const ask = resolveTxt(firstMain?.steps?.ask?.base);
-      if (ask) setMessages([{ from: 'bot', text: ask }]);
-    } catch {}
-  }, [template, messages.length, useBackend]);
+  // ❌ REMOVED: Seed first main ask - backend determines initial message via SSE
+  // No frontend logic should determine which message to show
+  // All messages come from backend via SSE stream
 
   // Append prompts based on engine transitions (only for frontend engine)
   const prevIndexRef = useRef<number>(-1);

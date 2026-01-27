@@ -33,6 +33,7 @@ Public Class DDTAssembler
 
     ''' <summary>
     ''' Risolve un valore: se è un GUID, cerca la traduzione; altrimenti usa il valore originale
+    ''' Se il valore sembra essere una chiave non risolta (es. "ask.base"), restituisce stringa vuota
     ''' </summary>
     Private Function ResolveText(value As String) As String
         If String.IsNullOrEmpty(value) Then
@@ -49,7 +50,16 @@ Public Class DDTAssembler
             End If
         End If
 
-        ' Altrimenti usa il valore originale (non è un GUID o traduzione non trovata)
+        ' ❌ Se il valore sembra essere una chiave non risolta (es. "ask.base", "confirm.base", ecc.), restituisci messaggio di errore con la chiave
+        ' Questi valori indicano che il frontend ha inviato una chiave invece di un GUID o testo tradotto
+        If value.Contains(".") AndAlso (value.StartsWith("ask.") OrElse value.StartsWith("confirm.") OrElse value.StartsWith("success.") OrElse value.StartsWith("noMatch.") OrElse value.StartsWith("noInput.")) Then
+            Dim errorMessage = $"Messaggio non trovato: {value}"
+            Console.WriteLine($"⚠️ [DDTAssembler] ResolveText: Detected unresolved key '{value}', returning error message")
+            System.Diagnostics.Debug.WriteLine($"⚠️ [DDTAssembler] ResolveText: Detected unresolved key '{value}', returning error message: '{errorMessage}'")
+            Return errorMessage
+        End If
+
+        ' Altrimenti usa il valore originale (non è un GUID o traduzione non trovata, ma sembra essere testo valido)
         Return value
     End Function
 

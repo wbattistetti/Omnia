@@ -53,8 +53,22 @@ export default function DDEBubbleChat({
   });
 
   // Connect to backend via SSE
+  // ❌ CRITICAL: NO frontend dialogue logic - ALL messages come from backend via SSE
+  // If backend is not reachable, NO messages should be shown, NO dialogue should start
   React.useEffect(() => {
-    if (!currentDDT) return;
+    if (!currentDDT) {
+      // Clear messages when DDT is not available - NO frontend logic
+      setMessages([]);
+      setBackendError(null);
+      setIsWaitingForInput(false);
+      return;
+    }
+
+    // Clear any existing messages when starting a new session - NO frontend logic
+    setMessages([]);
+    messageIdCounter.current = 0;
+    setBackendError(null);
+    setIsWaitingForInput(false);
 
     const baseUrl = 'http://localhost:3101';
 
@@ -79,6 +93,8 @@ export default function DDEBubbleChat({
 
         if (!startResponse.ok) {
           const errorText = await startResponse.text();
+          // Clear any existing messages when backend is not available
+          setMessages([]);
           throw new Error(`Backend server not available: ${startResponse.statusText} - ${errorText}`);
         }
 
@@ -91,25 +107,35 @@ export default function DDEBubbleChat({
         eventSourceRef.current = eventSource;
 
         // Handle messages from backend
+        // ❌ CRITICAL: ONLY add messages that come from backend - NO frontend logic
         eventSource.addEventListener('message', (e: MessageEvent) => {
           try {
             const msg = JSON.parse(e.data);
             console.log('[DDEBubbleChat] Backend message:', msg);
 
+            // Only add message if it has actual text from backend
+            const messageText = msg.text || msg.message || '';
+            if (!messageText.trim()) {
+              console.warn('[DDEBubbleChat] Received empty message from backend, ignoring');
+              return;
+            }
+
             // Determine message type from backend data
             const stepType = msg.stepType || 'ask';
             const textKey = msg.textKey || msg.key;
 
+            // ❌ ONLY backend can determine messages - frontend just displays them
             setMessages((m) => [...m, {
               id: generateMessageId('bot'),
               type: 'bot',
-              text: msg.text || msg.message || '',
+              text: messageText,
               stepType: stepType as any,
               textKey: textKey,
               color: getStepColor(stepType)
             }]);
           } catch (error) {
             console.error('[DDEBubbleChat] Error parsing message', error);
+            // ❌ Do NOT create fallback messages - if backend fails, show nothing
           }
         });
 
@@ -136,15 +162,18 @@ export default function DDEBubbleChat({
         });
 
         // Handle completion
+        // ❌ CRITICAL: Only show success message if backend sends it - NO frontend-generated messages
         eventSource.addEventListener('complete', (e: MessageEvent) => {
           try {
             const result = JSON.parse(e.data);
             console.log('[DDEBubbleChat] Backend complete:', result);
-            if (result.success) {
+            // ❌ Only add message if backend explicitly sends a message in the result
+            // Do NOT generate frontend messages like "✅ Dati raccolti con successo!"
+            if (result.success && result.message) {
               setMessages((m) => [...m, {
                 id: generateMessageId('bot'),
                 type: 'bot',
-                text: '✅ Dati raccolti con successo!',
+                text: result.message,
                 stepType: 'success',
                 color: getStepColor('success')
               }]);
@@ -152,6 +181,7 @@ export default function DDEBubbleChat({
             setIsWaitingForInput(false);
           } catch (error) {
             console.error('[DDEBubbleChat] Error parsing complete', error);
+            // ❌ Do NOT create fallback messages - if backend fails, show nothing
           }
         });
 
@@ -170,12 +200,16 @@ export default function DDEBubbleChat({
         eventSource.onerror = (error) => {
           console.error('[DDEBubbleChat] SSE connection error', error);
           if (eventSource.readyState === EventSource.CLOSED) {
+            // Clear messages when connection is closed - backend is not available
+            setMessages([]);
             setBackendError('Connection to backend server closed. Is Ruby server running on port 3101?');
             setIsWaitingForInput(false);
           }
         };
       } catch (error) {
         console.error('[DDEBubbleChat] Backend session error', error);
+        // Clear any existing messages when connection fails
+        setMessages([]);
         setBackendError(error instanceof Error ? error.message : 'Failed to connect to backend server. Is Ruby server running on port 3101?');
         setIsWaitingForInput(false);
       }
