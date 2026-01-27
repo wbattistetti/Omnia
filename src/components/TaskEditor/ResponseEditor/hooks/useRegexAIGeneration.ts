@@ -1,5 +1,14 @@
 import { useState, useCallback } from 'react';
 import { ValidationResult } from './useRegexValidation';
+import { RowResult } from './useExtractionTesting';
+import { useNotesStore, getCellKey } from '../stores/notesStore';
+
+interface FeedbackItem {
+  testPhrase: string;
+  extractedValue: string;
+  userNote: string;
+  groupKey: string;
+}
 
 interface UseRegexAIGenerationOptions {
   node?: any;
@@ -7,6 +16,10 @@ interface UseRegexAIGenerationOptions {
   testCases?: string[];
   onSuccess?: (newRegex: string) => void;
   onError?: (error: Error) => void;
+  // ✅ NEW: Feedback from test notes
+  examplesList?: string[];
+  rowResults?: RowResult[];
+  // ✅ REMOVED: getNote prop - now managed via Zustand store
 }
 
 /**
@@ -19,7 +32,11 @@ export function useRegexAIGeneration({
   testCases = [],
   onSuccess,
   onError,
+  examplesList = [],
+  rowResults = [],
 }: UseRegexAIGenerationOptions) {
+  // ✅ Use Zustand store for notes
+  const getNote = useNotesStore((s) => s.getNote);
   const [generatingRegex, setGeneratingRegex] = useState(false);
   const [regexBackup, setRegexBackup] = useState('');
 
@@ -28,6 +45,30 @@ export function useRegexAIGeneration({
     validationResult: ValidationResult | null
   ) => {
     let prompt = currentRegex || '';
+
+    // ✅ Collect feedback items from notes
+    const feedbackItems: FeedbackItem[] = [];
+    if (examplesList && rowResults && examplesList.length > 0) {
+      examplesList.forEach((phrase, index) => {
+        const note = getNote(getCellKey(index, 'regex'));
+        if (note && note.trim()) {
+          const result = rowResults[index];
+          // Extract value from result - rowResults[index].regex contains the summary (e.g., "value=1" or "day=12, month=3")
+          // For feedback, we use the summary as-is since it represents what was actually extracted
+          let extractedValue = '—';
+          if (result?.regex) {
+            extractedValue = result.regex; // This is the summary, e.g., "value=1" or "day=12, month=3"
+          }
+
+          feedbackItems.push({
+            testPhrase: phrase,
+            extractedValue: extractedValue || '—',
+            userNote: note.trim(),
+            groupKey: '0', // Default groupKey, can be extended in future
+          });
+        }
+      });
+    }
 
     // ✅ Find test cases that don't match the current regex
     const unmatchedTestCases: string[] = [];
@@ -45,25 +86,47 @@ export function useRegexAIGeneration({
       }
     }
 
+    // ✅ Build prompt with feedback items if available
+    const hasFeedback = feedbackItems.length > 0;
+    const hasValidationErrors = validationResult && !validationResult.valid && validationResult.errors.length > 0;
+    const hasUnmatchedTestCases = unmatchedTestCases.length > 0;
+
     // ✅ If regex is invalid, include validation errors in the prompt
-    if (validationResult && !validationResult.valid && validationResult.errors.length > 0) {
-      const errorsText = validationResult.errors.join('. ');
-      const warningsText = validationResult.warnings.length > 0 ? ' Warnings: ' + validationResult.warnings.join('. ') : '';
-      prompt = `Current regex: ${currentRegex}\n\nErrors found: ${errorsText}${warningsText}\n\nPlease fix the regex to include the correct capture groups. Expected ${validationResult.groupsExpected} capture groups for: ${(() => {
+    if (hasValidationErrors) {
+      const errorsText = validationResult!.errors.join('. ');
+      const warningsText = validationResult!.warnings.length > 0 ? ' Warnings: ' + validationResult!.warnings.join('. ') : '';
+      prompt = `Current regex: ${currentRegex}\n\nErrors found: ${errorsText}${warningsText}\n\nPlease fix the regex to include the correct capture groups. Expected ${validationResult!.groupsExpected} capture groups for: ${(() => {
         const allSubs = [...((node?.subSlots || [])), ...(node?.subData || [])];
         return allSubs.map((s: any) => s.label || s.name || 'sub-data').join(', ');
       })()}`;
 
-      // ✅ Add unmatched test cases to the prompt
-      if (unmatchedTestCases.length > 0) {
+      // ✅ Add feedback items to the prompt (priority over unmatched test cases)
+      if (hasFeedback) {
+        const feedbackText = feedbackItems.map((fb, idx) => {
+          return `${idx + 1}. Test phrase: "${fb.testPhrase}"\n   Current extraction: "${fb.extractedValue}"\n   User feedback: "${fb.userNote}"`;
+        }).join('\n\n');
+        prompt += `\n\nUser feedback from test results:\n${feedbackText}\n\nPlease refine the regex to address all the user feedback above.`;
+        console.log('[AI Regex] 🔵 Including user feedback in prompt:', feedbackItems.length, 'items');
+      } else if (hasUnmatchedTestCases) {
+        // ✅ Add unmatched test cases to the prompt (only if no feedback)
         prompt += `\n\nIMPORTANT: The following test values should be matched by the regex but are currently NOT matching:\n${unmatchedTestCases.map(tc => `- "${tc}"`).join('\n')}\n\nPlease fix the regex so it matches all these values.`;
       }
 
       console.log('[AI Regex] 🔵 Refine Regex clicked with validation errors, enhancing prompt');
-      if (unmatchedTestCases.length > 0) {
-        console.log('[AI Regex] 🔵 Including unmatched test cases in prompt:', unmatchedTestCases);
-      }
-    } else if (unmatchedTestCases.length > 0) {
+    } else if (hasFeedback) {
+      // ✅ If regex is valid but has feedback items, use them for refinement
+      const allSubs = [...((node?.subSlots || [])), ...(node?.subData || [])];
+      const subLabels = allSubs.length > 0
+        ? allSubs.map((s: any) => s.label || s.name || 'sub-data').join(', ')
+        : 'the sub-data components';
+
+      const feedbackText = feedbackItems.map((fb, idx) => {
+        return `${idx + 1}. Test phrase: "${fb.testPhrase}"\n   Current extraction: "${fb.extractedValue}"\n   User feedback: "${fb.userNote}"`;
+      }).join('\n\n');
+
+      prompt = `Current regex: ${currentRegex}\n\nUser feedback from test results:\n${feedbackText}\n\nPlease refine the regex to address all the user feedback above while maintaining the existing capture groups for: ${subLabels}`;
+      console.log('[AI Regex] 🔵 Refine Regex clicked with user feedback:', feedbackItems.length, 'items');
+    } else if (hasUnmatchedTestCases) {
       // ✅ If regex is valid but has unmatched test cases, enhance the prompt
       const allSubs = [...((node?.subSlots || [])), ...(node?.subData || [])];
       const subLabels = allSubs.length > 0
@@ -109,13 +172,24 @@ export function useRegexAIGeneration({
         console.warn('[AI Regex] Could not read AI config from localStorage:', e);
       }
 
-      const requestBody = {
+      const requestBody: any = {
         description: prompt,
         subData: subDataInfo.length > 0 ? subDataInfo : undefined,
         kind: kind || undefined,
         provider,
         model
       };
+
+      // ✅ Include feedback items in request body if available
+      if (feedbackItems.length > 0) {
+        requestBody.feedback = feedbackItems.map(fb => ({
+          testPhrase: fb.testPhrase,
+          extractedValue: fb.extractedValue,
+          userNote: fb.userNote,
+          groupKey: fb.groupKey,
+        }));
+        console.log('[AI Regex] 🟢 Including feedback items in request:', feedbackItems.length);
+      }
 
       console.log('[AI Regex] 🟢 Calling API /api/nlp/generate-regex');
       console.log('[AI Regex] 🟢 Request body:', JSON.stringify(requestBody, null, 2));
@@ -170,7 +244,7 @@ export function useRegexAIGeneration({
       setGeneratingRegex(false);
       console.log('[AI Regex] 🟢 generatingRegex should now be: false');
     }
-  }, [node, kind, testCases, onSuccess, onError]);
+  }, [node, kind, testCases, onSuccess, onError, examplesList, rowResults, getNote]);
 
   return {
     generatingRegex,

@@ -45,16 +45,39 @@ def generate_regex(body: dict = Body(...)):
     from newBackend.core.core_settings import OPENAI_KEY
 
     description = (body or {}).get("description", "").strip()
+    feedback = (body or {}).get("feedback", [])  # ✅ NEW: Feedback items from test notes
+
     if not description:
         return {"error": "Description is required"}
 
     if not OPENAI_KEY:
         return {"error": "OPENAI_KEY not configured"}
 
+    # ✅ Build feedback section if available
+    feedback_section = ""
+    if feedback and isinstance(feedback, list) and len(feedback) > 0:
+        feedback_items = []
+        for fb in feedback:
+            if isinstance(fb, dict):
+                test_phrase = fb.get("testPhrase", "")
+                extracted_value = fb.get("extractedValue", "")
+                user_note = fb.get("userNote", "")
+                if test_phrase and user_note:
+                    feedback_items.append(f"- Test phrase: \"{test_phrase}\"\n  Current extraction: \"{extracted_value}\"\n  User feedback: \"{user_note}\"")
+
+        if feedback_items:
+            feedback_section = f"""
+
+User feedback from test results:
+{chr(10).join(feedback_items)}
+
+Please refine the regex to address all the user feedback above. The regex should extract the correct values as described in the user notes.
+"""
+
     prompt = f"""
 You are a regex expert. Generate a JavaScript-compatible regular expression pattern based on the user's description.
 
-User description: "{description}"
+User description: "{description}"{feedback_section}
 
 Requirements:
 1. Generate a regex pattern that matches the described pattern

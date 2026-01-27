@@ -157,19 +157,9 @@ export default function DataExtractionEditor({
   const [regexAiPrompt, setRegexAiPrompt] = React.useState<string>('');
   const [regexBackup, setRegexBackup] = React.useState<string>('');
 
-  // 🎯 Use custom hooks
-  const {
-    notes: cellNotes,
-    getNote,
-    hasNote,
-    addNote,
-    deleteNote,
-    startEditing,
-    stopEditing,
-    isEditing,
-    setHovered,
-    isHovered
-  } = useNotes();
+  // ✅ Zustand store - no need for useNotes hook anymore
+  // Notes are now managed via Zustand store (notesStore.ts)
+  // Components access the store directly via useNotesStore()
 
   const {
     activeEditor,
@@ -416,15 +406,7 @@ export default function DataExtractionEditor({
         setEditingCell={setEditingCell}
         editingText={editingText}
         setEditingText={setEditingText}
-        hasNote={hasNote}
-        getNote={getNote}
-        addNote={addNote}
-        deleteNote={deleteNote}
-        isEditing={isEditing}
-        startEditing={startEditing}
-        stopEditing={stopEditing}
-        isHovered={isHovered}
-        setHovered={setHovered}
+        // ✅ REMOVED: Notes props - now managed via Zustand store
         activeEditor={activeEditor}
         toggleEditor={toggleEditor}
         openEditor={openEditor}

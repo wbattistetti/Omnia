@@ -7,6 +7,7 @@ import NoteButton from '../../CellNote/NoteButton';
 import NoteEditor from '../../CellNote/NoteEditor';
 import NoteDisplay from '../../CellNote/NoteDisplay';
 import NoteSeparator from '../../CellNote/NoteSeparator';
+import { useNotesStore, getCellKey } from '../../stores/notesStore';
 
 interface ExtractionResultCellProps {
   summary: string | undefined;
@@ -24,16 +25,7 @@ interface ExtractionResultCellProps {
   setEditingCell: React.Dispatch<React.SetStateAction<{ row: number; col: 'det' | 'ner' | 'llm'; key: string } | null>>;
   setEditingText: React.Dispatch<React.SetStateAction<string>>;
   setCellOverrides: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-  // Notes
-  hasNote: (row: number, col: string) => boolean;
-  getNote: (row: number, col: string) => string | undefined;
-  isEditing: (row: number, col: string) => boolean;
-  startEditing: (row: number, col: string) => void;
-  stopEditing: () => void;
-  addNote: (row: number, col: string, text: string) => void;
-  deleteNote: (row: number, col: string) => void;
-  isHovered: (row: number, col: string) => boolean;
-  setHovered: (row: number | null, col: string | null) => void;
+  // ✅ REMOVED: Notes props - now managed via Zustand store (stores/notesStore.ts)
 }
 
 /**
@@ -60,22 +52,26 @@ function ExtractionResultCellComponent({
   setEditingCell,
   setEditingText,
   setCellOverrides,
-  hasNote,
-  getNote,
-  isEditing,
-  startEditing,
-  stopEditing,
-  addNote,
-  deleteNote,
-  isHovered,
-  setHovered,
 }: ExtractionResultCellProps) {
   const [isExpanded, setIsExpanded] = React.useState(false);
-  // ✅ Get current editing state - this will cause re-render when editingNote changes in parent
-  // The memo comparison checks isEditing() result, so when editingNote changes,
-  // isEditing() will return different value, triggering re-render
-  const isCurrentlyEditing = isEditing(rowIdx, col);
-  const currentNote = getNote(rowIdx, col);
+
+  // ✅ Use Zustand store for notes - zero prop drilling!
+  const editingNote = useNotesStore((s) => s.editingNote);
+  const notes = useNotesStore((s) => s.notes);
+
+  // ✅ Get functions from store state (functions that use get() need direct access)
+  const getNote = useNotesStore.getState().getNote;
+  const hasNote = useNotesStore.getState().hasNote;
+  const startEditing = useNotesStore.getState().startEditing;
+  const stopEditing = useNotesStore.getState().stopEditing;
+  const addNote = useNotesStore.getState().addNote;
+  const deleteNote = useNotesStore.getState().deleteNote;
+
+  const cellKey = getCellKey(rowIdx, col);
+  const isCurrentlyEditing = editingNote === cellKey;
+  const currentNote = getNote(cellKey);
+
+  // ✅ REMOVED: Debug logs - notes are now managed via Zustand store
 
   // ✅ Force re-render when editing state changes by using the values in render
   // This ensures the component updates when isEditing/getNote return different values
@@ -141,18 +137,29 @@ function ExtractionResultCellComponent({
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                 <span>{fullValue}{ms(processingTime)}</span>
                 {/* ✅ Icona nota a destra del valore */}
-                {enabled && summary && summary !== '—' && (
-                  <NoteButton
-                    hasNote={hasNote(rowIdx, col)}
+                {(() => {
+                  const shouldShowNoteButton = enabled && summary && summary !== '—';
+                  console.log('[NOTE] ExtractionResultCell NoteButton render check', {
+                    rowIdx,
+                    col,
+                    enabled,
+                    summary,
+                    'summary !== "—"': summary !== '—',
+                    shouldShowNoteButton
+                  });
+                  return shouldShowNoteButton ? (
+                    <NoteButton
+                    hasNote={hasNote(cellKey)}
                     onClick={() => {
-                      if (isEditing(rowIdx, col)) {
+                      if (isCurrentlyEditing) {
                         stopEditing();
                       } else {
-                        startEditing(rowIdx, col);
+                        startEditing(cellKey);
                       }
                     }}
                   />
-                )}
+                  ) : null;
+                })()}
                 {/* ✅ Icona occhio a destra della nota (sostituisce chevron) */}
                 {hasGroups && (
                   <button
@@ -196,21 +203,28 @@ function ExtractionResultCellComponent({
           ) : '—'}
         </div>
       </div>
-      {(getNote(rowIdx, col) || isEditing(rowIdx, col)) && enabled && (
-        <>
-          <NoteSeparator />
-          {isEditing(rowIdx, col) ? (
-            <NoteEditor
-              value={getNote(rowIdx, col)}
-              onSave={(text) => { addNote(rowIdx, col, text); stopEditing(); }}
-              onDelete={() => { deleteNote(rowIdx, col); stopEditing(); }}
-              onCancel={stopEditing}
-            />
-          ) : (
-            <NoteDisplay text={getNote(rowIdx, col)} />
-          )}
-        </>
-      )}
+      {(() => {
+        const hasNoteValue = getNote(cellKey);
+        const shouldShowNoteSection = (hasNoteValue || isCurrentlyEditing) && enabled;
+        if (!shouldShowNoteSection) {
+          return null;
+        }
+        return (
+          <>
+            <NoteSeparator />
+            {isCurrentlyEditing ? (
+              <NoteEditor
+                value={getNote(cellKey)}
+                onSave={(text) => { addNote(cellKey, text); stopEditing(); }}
+                onDelete={() => { deleteNote(cellKey); stopEditing(); }}
+                onCancel={stopEditing}
+              />
+            ) : (
+              <NoteDisplay text={getNote(cellKey)} />
+            )}
+          </>
+        );
+      })()}
     </>
   );
 }
@@ -222,18 +236,16 @@ function ExtractionResultCellComponent({
  * - summary changes (the actual result value)
  * - isRunning changes (loading state)
  * - processingTime changes (performance metric)
+ * - note editing state changes (editingNoteKey prop)
+ * - note content changes (getNote result)
  *
- * All other props (editing state, notes, hover) are compared by reference
- * to prevent unnecessary re-renders during batch testing.
+ * ✅ ROBUST: Uses editingNoteKey prop directly instead of function calls
+ * This eliminates timing issues and ensures reliable re-renders when editing state changes
  */
 const ExtractionResultCell = React.memo(ExtractionResultCellComponent, (prev, next) => {
-  // ✅ Check note editing state FIRST (before other checks)
-  const prevIsEditing = prev.isEditing(prev.rowIdx, prev.col);
-  const nextIsEditing = next.isEditing(next.rowIdx, next.col);
-
-  if (prevIsEditing !== nextIsEditing) {
-    return false; // Re-render if editing state changed
-  }
+  // ✅ REMOVED: Notes props comparison - notes are now managed via Zustand store
+  // Components using notes will re-render automatically via Zustand subscriptions
+  // We only need to compare props that are NOT managed by Zustand
 
   // ✅ Critical props that trigger re-render
   if (prev.summary !== next.summary) return false; // Re-render if summary changed
@@ -252,18 +264,6 @@ const ExtractionResultCell = React.memo(ExtractionResultCellComponent, (prev, ne
     // Only re-render if THIS cell is being edited
     const isEditing = prev.editingCell?.row === prev.rowIdx && prev.editingCell?.col === prev.col;
     if (isEditing) return false;
-  }
-
-  // ✅ Notes (compare by reference)
-  const prevHasNote = prev.hasNote(prev.rowIdx, prev.col);
-  const nextHasNote = next.hasNote(next.rowIdx, next.col);
-  if (prevHasNote !== nextHasNote) return false;
-
-  // ✅ Also check if getNote result changed (for note display)
-  const prevNote = prev.getNote(prev.rowIdx, prev.col);
-  const nextNote = next.getNote(next.rowIdx, next.col);
-  if (prevNote !== nextNote) {
-    return false; // Re-render if note content changed
   }
 
   // ✅ All other props unchanged - skip re-render

@@ -8,6 +8,7 @@ import NoteDisplay from '../../CellNote/NoteDisplay';
 import NoteSeparator from '../../CellNote/NoteSeparator';
 import { RowResult } from '../../hooks/useExtractionTesting';
 import type { DataContract } from '../../../DialogueDataEngine/contracts/contractLoader';
+import { useNotesStore, getCellKey } from '../../stores/notesStore';
 
 interface TesterGridRowProps {
   rowIndex: number;
@@ -38,16 +39,7 @@ interface TesterGridRowProps {
   setEditingCell: React.Dispatch<React.SetStateAction<{ row: number; col: 'det' | 'ner' | 'llm'; key: string } | null>>;
   editingText: string;
   setEditingText: React.Dispatch<React.SetStateAction<string>>;
-  // Notes
-  hasNote: (row: number, col: string) => boolean;
-  getNote: (row: number, col: string) => string | undefined;
-  addNote: (row: number, col: string, text: string) => void;
-  deleteNote: (row: number, col: string) => void;
-  isEditing: (row: number, col: string) => boolean;
-  startEditing: (row: number, col: string) => void;
-  stopEditing: () => void;
-  isHovered: (row: number, col: string) => boolean;
-  setHovered: (row: number | null, col: string | null) => void;
+  // ✅ REMOVED: Notes props - now managed via Zustand store (stores/notesStore.ts)
   // Actions
   runRowTest?: (idx: number) => Promise<void>;
   runAllRows?: () => Promise<void>;
@@ -88,15 +80,7 @@ function TesterGridRowComponent({
   setEditingCell,
   editingText,
   setEditingText,
-  hasNote,
-  getNote,
-  addNote,
-  deleteNote,
-  isEditing,
-  startEditing,
-  stopEditing,
-  isHovered,
-  setHovered,
+  // ✅ REMOVED: Notes props - now managed via Zustand store
   runRowTest,
   runAllRows,
   testing,
@@ -106,6 +90,8 @@ function TesterGridRowComponent({
   baselineStats,
   lastStats,
 }: TesterGridRowProps) {
+  // ✅ REMOVED: Notes are now managed via Zustand store
+
   const leading = rowResult.running ? (
     <span title="Analisi in corso" style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid #94a3b8', borderTopColor: 'transparent', borderRadius: '50%', marginRight: 6, animation: 'spin 0.8s linear infinite' }} />
   ) : null;
@@ -205,28 +191,36 @@ function TesterGridRowComponent({
                     {/* TODO: Show classification results here in Fase 9 */}
                     {'—'}
                   </div>
-                  {(isHovered(rowIndex, 'embeddings') || hasNote(rowIndex, 'embeddings')) && (
-                    <NoteButton
-                      hasNote={hasNote(rowIndex, 'embeddings')}
-                      onClick={() => isEditing(rowIndex, 'embeddings') ? stopEditing() : startEditing(rowIndex, 'embeddings')}
-                    />
-                  )}
-                </div>
-                {(getNote(rowIndex, 'embeddings') || isEditing(rowIndex, 'embeddings')) && (
-                  <>
-                    <NoteSeparator />
-                    {isEditing(rowIndex, 'embeddings') ? (
-                      <NoteEditor
-                        value={getNote(rowIndex, 'embeddings')}
-                        onSave={(text) => { addNote(rowIndex, 'embeddings', text); stopEditing(); }}
-                        onDelete={() => { deleteNote(rowIndex, 'embeddings'); stopEditing(); }}
-                        onCancel={stopEditing}
+                  {(() => {
+                    const { isHovered, hasNote, startEditing, stopEditing, editingNote } = useNotesStore();
+                    const cellKey = getCellKey(rowIndex, 'embeddings');
+                    return (isHovered(cellKey) || hasNote(cellKey)) && (
+                      <NoteButton
+                        hasNote={hasNote(cellKey)}
+                        onClick={() => editingNote === cellKey ? stopEditing() : startEditing(cellKey)}
                       />
-                    ) : (
-                      <NoteDisplay text={getNote(rowIndex, 'embeddings')} />
-                    )}
-                  </>
-                )}
+                    );
+                  })()}
+                </div>
+                {(() => {
+                  const { getNote, editingNote, addNote, deleteNote, stopEditing } = useNotesStore();
+                  const cellKey = getCellKey(rowIndex, 'embeddings');
+                  return (getNote(cellKey) || editingNote === cellKey) && (
+                    <>
+                      <NoteSeparator />
+                      {editingNote === cellKey ? (
+                        <NoteEditor
+                          value={getNote(cellKey)}
+                          onSave={(text) => { addNote(cellKey, text); stopEditing(); }}
+                          onDelete={() => { deleteNote(cellKey); stopEditing(); }}
+                          onCancel={stopEditing}
+                        />
+                      ) : (
+                        <NoteDisplay text={getNote(cellKey)} />
+                      )}
+                    </>
+                  );
+                })()}
               </td>
             );
           }
@@ -245,8 +239,14 @@ function TesterGridRowComponent({
                 opacity: enabled ? 1 : 0.6,
                 visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm', 'embeddings'].includes(activeEditor) && activeEditor !== componentType ? 'hidden' : 'visible'
               }}
-              onMouseEnter={() => setHovered(rowIndex, componentType)}
-              onMouseLeave={() => setHovered(null, null)}
+              onMouseEnter={() => {
+                const { setHovered } = useNotesStore.getState();
+                setHovered(getCellKey(rowIndex, componentType));
+              }}
+              onMouseLeave={() => {
+                const { setHovered } = useNotesStore.getState();
+                setHovered(null);
+              }}
             >
               <ExtractionResultCell
                 summary={result || undefined}
@@ -264,15 +264,7 @@ function TesterGridRowComponent({
                 setEditingCell={setEditingCell}
                 setEditingText={setEditingText}
                 setCellOverrides={setCellOverrides}
-                hasNote={hasNote}
-                getNote={getNote}
-                isEditing={isEditing}
-                startEditing={startEditing}
-                stopEditing={stopEditing}
-                addNote={addNote}
-                deleteNote={deleteNote}
-                isHovered={isHovered}
-                setHovered={setHovered}
+                // ✅ REMOVED: Notes props - now managed via Zustand store
               />
             </td>
           );
@@ -292,8 +284,14 @@ function TesterGridRowComponent({
               opacity: enabledMethods.regex ? 1 : 0.6,
               visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
             }}
-            onMouseEnter={() => setHovered(rowIndex, 'regex')}
-            onMouseLeave={() => setHovered(null, null)}
+            onMouseEnter={() => {
+              const { setHovered } = useNotesStore.getState();
+              setHovered(getCellKey(rowIndex, 'regex'));
+            }}
+            onMouseLeave={() => {
+              const { setHovered } = useNotesStore.getState();
+              setHovered(null);
+            }}
           >
             <ExtractionResultCell
               summary={rowResult.regex}
@@ -311,15 +309,7 @@ function TesterGridRowComponent({
               setEditingCell={setEditingCell}
               setEditingText={setEditingText}
               setCellOverrides={setCellOverrides}
-              hasNote={hasNote}
-              getNote={getNote}
-              isEditing={isEditing}
-              startEditing={startEditing}
-              stopEditing={stopEditing}
-              addNote={addNote}
-              deleteNote={deleteNote}
-              isHovered={isHovered}
-              setHovered={setHovered}
+              // ✅ REMOVED: Notes props - now managed via Zustand store
             />
           </td>
           {/* Deterministic column */}
@@ -335,8 +325,14 @@ function TesterGridRowComponent({
                 opacity: enabledMethods.deterministic ? 1 : 0.6,
                 visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
               }}
-              onMouseEnter={() => setHovered(rowIndex, 'deterministic')}
-              onMouseLeave={() => setHovered(null, null)}
+              onMouseEnter={() => {
+                const { setHovered } = useNotesStore.getState();
+                setHovered(getCellKey(rowIndex, 'deterministic'));
+              }}
+              onMouseLeave={() => {
+                const { setHovered } = useNotesStore.getState();
+                setHovered(null);
+              }}
             >
               <ExtractionResultCell
                 summary={rowResult.deterministic}
@@ -354,15 +350,7 @@ function TesterGridRowComponent({
                 setEditingCell={setEditingCell}
                 setEditingText={setEditingText}
                 setCellOverrides={setCellOverrides}
-                hasNote={hasNote}
-                getNote={getNote}
-                isEditing={isEditing}
-                startEditing={startEditing}
-                stopEditing={stopEditing}
-                addNote={(row, col, text) => addNote(row, col, text)}
-                deleteNote={(row, col) => deleteNote(row, col)}
-                isHovered={isHovered}
-                setHovered={setHovered}
+                // ✅ REMOVED: Notes props - now managed via Zustand store
               />
             </td>
           )}
@@ -379,8 +367,14 @@ function TesterGridRowComponent({
                 opacity: enabledMethods.ner ? 1 : 0.6,
                 visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
               }}
-              onMouseEnter={() => setHovered(rowIndex, 'ner')}
-              onMouseLeave={() => setHovered(null, null)}
+              onMouseEnter={() => {
+                const { setHovered } = useNotesStore.getState();
+                setHovered(getCellKey(rowIndex, 'ner'));
+              }}
+              onMouseLeave={() => {
+                const { setHovered } = useNotesStore.getState();
+                setHovered(null);
+              }}
             >
               <ExtractionResultCell
                 summary={rowResult.ner}
@@ -398,15 +392,7 @@ function TesterGridRowComponent({
                 setEditingCell={setEditingCell}
                 setEditingText={setEditingText}
                 setCellOverrides={setCellOverrides}
-                hasNote={hasNote}
-                getNote={getNote}
-                isEditing={isEditing}
-                startEditing={startEditing}
-                stopEditing={stopEditing}
-                addNote={(row, col, text) => addNote(row, col, text)}
-                deleteNote={(row, col) => deleteNote(row, col)}
-                isHovered={isHovered}
-                setHovered={setHovered}
+                // ✅ REMOVED: Notes props - now managed via Zustand store
               />
             </td>
           )}
@@ -422,36 +408,50 @@ function TesterGridRowComponent({
                 verticalAlign: 'top',
                 opacity: 1
               }}
-              onMouseEnter={() => setHovered(rowIndex, 'embeddings')}
-              onMouseLeave={() => setHovered(null, null)}
+              onMouseEnter={() => {
+                const { setHovered } = useNotesStore.getState();
+                setHovered(getCellKey(rowIndex, 'embeddings'));
+              }}
+              onMouseLeave={() => {
+                const { setHovered } = useNotesStore.getState();
+                setHovered(null);
+              }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                 <div style={{ flex: 1 }}>
                   {/* TODO: Show classification results here in Fase 9 */}
                   {'—'}
                 </div>
-                {(isHovered(rowIndex, 'embeddings') || hasNote(rowIndex, 'embeddings')) && (
-                  <NoteButton
-                    hasNote={hasNote(rowIndex, 'embeddings')}
-                    onClick={() => isEditing(rowIndex, 'embeddings') ? stopEditing() : startEditing(rowIndex, 'embeddings')}
-                  />
-                )}
-              </div>
-              {(getNote(rowIndex, 'embeddings') || isEditing(rowIndex, 'embeddings')) && (
-                <>
-                  <NoteSeparator />
-                  {isEditing(rowIndex, 'embeddings') ? (
-                    <NoteEditor
-                      value={getNote(rowIndex, 'embeddings')}
-                      onSave={(text) => { addNote(rowIndex, 'embeddings', text); stopEditing(); }}
-                      onDelete={() => { deleteNote(rowIndex, 'embeddings'); stopEditing(); }}
-                      onCancel={stopEditing}
+                {(() => {
+                  const { isHovered, hasNote, startEditing, stopEditing, editingNote } = useNotesStore();
+                  const cellKey = getCellKey(rowIndex, 'embeddings');
+                  return (isHovered(cellKey) || hasNote(cellKey)) && (
+                    <NoteButton
+                      hasNote={hasNote(cellKey)}
+                      onClick={() => editingNote === cellKey ? stopEditing() : startEditing(cellKey)}
                     />
-                  ) : (
-                    <NoteDisplay text={getNote(rowIndex, 'embeddings')} />
-                  )}
-                </>
-              )}
+                  );
+                })()}
+              </div>
+              {(() => {
+                const { getNote, editingNote, addNote, deleteNote, stopEditing } = useNotesStore();
+                const cellKey = getCellKey(rowIndex, 'embeddings');
+                return (getNote(cellKey) || editingNote === cellKey) && (
+                  <>
+                    <NoteSeparator />
+                    {editingNote === cellKey ? (
+                      <NoteEditor
+                        value={getNote(cellKey)}
+                        onSave={(text) => { addNote(cellKey, text); stopEditing(); }}
+                        onDelete={() => { deleteNote(cellKey); stopEditing(); }}
+                        onCancel={stopEditing}
+                      />
+                    ) : (
+                      <NoteDisplay text={getNote(cellKey)} />
+                    )}
+                  </>
+                );
+              })()}
             </td>
           )}
           {/* LLM column */}
@@ -466,8 +466,14 @@ function TesterGridRowComponent({
               opacity: enabledMethods.llm ? 1 : 0.6,
               visibility: activeEditor && ['regex', 'extractor', 'ner', 'llm'].includes(activeEditor) ? 'hidden' : 'visible'
             }}
-            onMouseEnter={() => setHovered(rowIndex, 'llm')}
-            onMouseLeave={() => setHovered(null, null)}
+            onMouseEnter={() => {
+              const { setHovered } = useNotesStore.getState();
+              setHovered(getCellKey(rowIndex, 'llm'));
+            }}
+            onMouseLeave={() => {
+              const { setHovered } = useNotesStore.getState();
+              setHovered(null);
+            }}
           >
             <ExtractionResultCell
               summary={rowResult.llm}
@@ -485,15 +491,7 @@ function TesterGridRowComponent({
               setEditingCell={setEditingCell}
               setEditingText={setEditingText}
               setCellOverrides={setCellOverrides}
-              hasNote={hasNote}
-              getNote={getNote}
-              isEditing={isEditing}
-              startEditing={startEditing}
-              stopEditing={stopEditing}
-              addNote={(row, col, text) => addNote(row, col, text)}
-              deleteNote={(row, col) => deleteNote(row, col)}
-              isHovered={isHovered}
-              setHovered={setHovered}
+              // ✅ REMOVED: Notes props - now managed via Zustand store
             />
           </td>
         </>
@@ -513,6 +511,17 @@ function TesterGridRowComponent({
  * This enables per-cell updates without re-rendering the entire row.
  */
 const TesterGridRow = React.memo(TesterGridRowComponent, (prev, next) => {
+  // ✅ CRITICAL: Check editingNote FIRST - this is essential for note editor to work
+  if (prev.editingNote !== next.editingNote) {
+    console.log('[NOTE] TesterGridRow MEMO - editingNote changed', {
+      prevEditingNote: prev.editingNote,
+      nextEditingNote: next.editingNote,
+      rowIndex: prev.rowIndex,
+      'will re-render': true
+    });
+    return false; // Re-render if editingNote changed
+  }
+
   // ✅ Critical props that trigger re-render
   if (prev.rowResult !== next.rowResult) return false; // Re-render if results changed
   if (prev.selectedRow !== next.selectedRow) {

@@ -71,16 +71,8 @@ interface TesterGridProps {
   setEditingCell: React.Dispatch<React.SetStateAction<{ row: number; col: 'det' | 'ner' | 'llm'; key: string } | null>>;
   editingText: string;
   setEditingText: React.Dispatch<React.SetStateAction<string>>;
-  // Notes
-  hasNote: (row: number, col: string) => boolean;
-  getNote: (row: number, col: string) => string | undefined;
-  addNote: (row: number, col: string, text: string) => void;
-  deleteNote: (row: number, col: string) => void;
-  isEditing: (row: number, col: string) => boolean;
-  startEditing: (row: number, col: string) => void;
-  stopEditing: () => void;
-  isHovered: (row: number, col: string) => boolean;
-  setHovered: (row: number | null, col: string | null) => void;
+  // ✅ REMOVED: Notes props - now managed via Zustand store (stores/notesStore.ts)
+  // All note-related functionality is accessed via useNotesStore() hook
   // Editor toggle
   activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings' | null;
   toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings') => void;
@@ -132,15 +124,7 @@ function TesterGridComponent({
   setEditingCell,
   editingText,
   setEditingText,
-  hasNote,
-  getNote,
-  addNote,
-  deleteNote,
-  isEditing,
-  startEditing,
-  stopEditing,
-  isHovered,
-  setHovered,
+  // ✅ REMOVED: Notes props - now managed via Zustand store
   activeEditor,
   toggleEditor,
   openEditor,
@@ -157,6 +141,8 @@ function TesterGridComponent({
   baselineStats,
   lastStats,
 }: TesterGridProps) {
+  // ✅ REMOVED: Notes are now managed via Zustand store
+
   // Determine which columns to show based on mode
   const showDeterministic = mode !== 'classification';
   const showNER = mode !== 'classification';
@@ -354,15 +340,7 @@ function TesterGridComponent({
                   setEditingCell={setEditingCell}
                   editingText={editingText}
                   setEditingText={setEditingText}
-                  hasNote={hasNote}
-                  getNote={getNote}
-                  addNote={addNote}
-                  deleteNote={deleteNote}
-                  isEditing={isEditing}
-                  startEditing={startEditing}
-                  stopEditing={stopEditing}
-                  isHovered={isHovered}
-                  setHovered={setHovered}
+                  // ✅ REMOVED: Notes props - now managed via Zustand store
                   runRowTest={runRowTest}
                   runAllRows={runAllRows}
                   testing={testing}

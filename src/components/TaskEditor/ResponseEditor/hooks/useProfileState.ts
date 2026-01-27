@@ -102,6 +102,23 @@ export function useProfileState(
     }
   }, [node?.label]);
 
+  // ✅ CRITICAL: Sync local regex state when initial.regex changes (from contract sync)
+  // This ensures that when node.nlpProfile.regex is updated by handleContractChange,
+  // the local state is updated and useExtractionTesting receives the correct regex
+  useEffect(() => {
+    const newRegex = initial.regex || '';
+    // Only update if different to avoid unnecessary re-renders
+    if (regex !== newRegex) {
+      console.log('[useProfileState] Syncing regex state', {
+        oldRegex: regex || '(empty)',
+        newRegex: newRegex || '(empty)',
+        initialRegex: initial.regex || '(empty)',
+        nodeNlpProfileRegex: (node as any)?.nlpProfile?.regex || '(empty)'
+      });
+      setRegex(newRegex);
+    }
+  }, [initial.regex]); // ✅ Only depend on initial.regex, not node (to avoid excessive re-renders)
+
   // Recommended defaults per kind
   const recommendedForKind = useCallback((k: string) => {
     const s = (k || '').toLowerCase();

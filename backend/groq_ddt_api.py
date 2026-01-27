@@ -1801,10 +1801,12 @@ def generate_regex(body: dict = Body(...)):
         description = (body or {}).get("description", "").strip()
         sub_data = (body or {}).get("subData")  # List of {id, label, index}
         kind = (body or {}).get("kind")  # Field kind (date, email, etc.)
+        feedback = (body or {}).get("feedback", [])  # ✅ NEW: Feedback items from test notes
 
         print(f"[generate-regex] Description: {description}")
         print(f"[generate-regex] Sub_data type: {type(sub_data)}, value: {sub_data}")
         print(f"[generate-regex] Kind type: {type(kind)}, value: {kind}")
+        print(f"[generate-regex] Feedback items: {len(feedback) if isinstance(feedback, list) else 0}")
 
         if not description:
             raise HTTPException(status_code=400, detail="Description is required")
@@ -1879,12 +1881,33 @@ CRITICAL: Each sub-data component needs its own capture group.
             else:
                 kind_hint = f"\nField type (kind): {kind.strip()}. Consider formats typical for this type of field.\n"
 
+        # ✅ Build feedback section if available
+        feedback_section = ""
+        if feedback and isinstance(feedback, list) and len(feedback) > 0:
+            feedback_items = []
+            for fb in feedback:
+                if isinstance(fb, dict):
+                    test_phrase = fb.get("testPhrase", "")
+                    extracted_value = fb.get("extractedValue", "")
+                    user_note = fb.get("userNote", "")
+                    if test_phrase and user_note:
+                        feedback_items.append(f"- Test phrase: \"{test_phrase}\"\n  Current extraction: \"{extracted_value}\"\n  User feedback: \"{user_note}\"")
+
+            if feedback_items:
+                feedback_section = f"""
+
+User feedback from test results:
+{chr(10).join(feedback_items)}
+
+Please refine the regex to address all the user feedback above. The regex should extract the correct values as described in the user notes.
+"""
+
         # Build prompt safely
         try:
             prompt = f"""
 You are a regex expert. Generate a JavaScript-compatible regular expression pattern based on the user's description.
 {kind_hint}
-User description: "{description}"
+User description: "{description}"{feedback_section}
 {capture_groups_instructions}
 Requirements:
 1. Generate a regex pattern that matches the described pattern
@@ -1918,11 +1941,32 @@ Be precise and practical. Test mentally that your regex works correctly.
             print(f"[generate-regex] Error building prompt: {prompt_build_error}")
             import traceback
             traceback.print_exc()
+            # ✅ Build feedback section for fallback prompt
+            feedback_section_fallback = ""
+            if feedback and isinstance(feedback, list) and len(feedback) > 0:
+                feedback_items = []
+                for fb in feedback:
+                    if isinstance(fb, dict):
+                        test_phrase = fb.get("testPhrase", "")
+                        extracted_value = fb.get("extractedValue", "")
+                        user_note = fb.get("userNote", "")
+                        if test_phrase and user_note:
+                            feedback_items.append(f"- Test phrase: \"{test_phrase}\"\n  Current extraction: \"{extracted_value}\"\n  User feedback: \"{user_note}\"")
+
+                if feedback_items:
+                    feedback_section_fallback = f"""
+
+User feedback from test results:
+{chr(10).join(feedback_items)}
+
+Please refine the regex to address all the user feedback above. The regex should extract the correct values as described in the user notes.
+"""
+
             # Fallback to simple prompt
             prompt = f"""
 You are a regex expert. Generate a JavaScript-compatible regular expression pattern based on the user's description.
 
-User description: "{description}"
+User description: "{description}"{feedback_section_fallback}
 
 Requirements:
 1. Generate a regex pattern that matches the described pattern

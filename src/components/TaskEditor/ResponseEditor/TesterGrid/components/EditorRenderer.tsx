@@ -5,6 +5,8 @@ import NERInlineEditor from '../../InlineEditors/NERInlineEditor';
 import LLMInlineEditor from '../../InlineEditors/LLMInlineEditor';
 import IntentEditorInlineEditor from '../../InlineEditors/IntentEditorInlineEditor';
 
+import { RowResult } from '../../hooks/useExtractionTesting';
+
 interface EditorRendererProps {
   activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings' | null;
   editorProps?: {
@@ -17,6 +19,10 @@ interface EditorRendererProps {
     setTestCases?: (cases: string[]) => void;
     onProfileUpdate?: (profile: any) => void;
     task?: any;
+    // ✅ NEW: Feedback from test notes
+    examplesList?: string[];
+    rowResults?: RowResult[];
+    getNote?: (rowIndex: number, col: string) => string | undefined;
   };
   onCloseEditor?: () => void;
   toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings') => void;
@@ -56,6 +62,9 @@ export function EditorRenderer({
           regex={editorProps.regex || ''}
           setRegex={editorProps.setRegex || (() => { })}
           kind={editorProps.kind}
+          examplesList={editorProps.examplesList}
+          rowResults={editorProps.rowResults}
+          getNote={editorProps.getNote}
           {...commonProps}
           onErrorRender={setEditorErrorMessage}
         />

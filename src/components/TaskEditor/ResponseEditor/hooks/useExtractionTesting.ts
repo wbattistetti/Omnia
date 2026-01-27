@@ -4,6 +4,7 @@ import { nerExtract } from '../../../../nlp/services/nerClient';
 import nlpTypesConfig from '../../../../../config/nlp-types.json';
 import { mapLabelToStandardKey } from './useRegexValidation';
 import * as testingState from '../testingState';
+import { loadContractFromNode } from '../ContractSelector/contractHelpers';
 
 export interface RowResult {
   regex?: string;
@@ -216,15 +217,54 @@ export function useExtractionTesting({
     return 'generic';
   }, [kind, synonymsText, formatText, examplesList]);
 
+  // ✅ Helper: Get effective regex (from profile or fallback to contract)
+  const getEffectiveRegex = useCallback((): string | undefined => {
+    // ✅ First try profile.regex
+    if (profile.regex) {
+      return profile.regex;
+    }
+
+    // ✅ Fallback: Try to load from contract
+    if (node) {
+      try {
+        const contract = loadContractFromNode(node);
+        const regexPattern = contract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+        if (regexPattern) {
+          console.log('[TEST] 🔄 Fallback: Using regex from contract', {
+            nodeId: node.id,
+            regexPattern: regexPattern.substring(0, 50)
+          });
+          return regexPattern;
+        }
+      } catch (e) {
+        console.warn('[TEST] ⚠️ Error loading contract for regex fallback', e);
+      }
+    }
+
+    // ✅ Last resort: Try node.nlpProfile.regex
+    if (node?.nlpProfile?.regex) {
+      console.log('[TEST] 🔄 Fallback: Using regex from node.nlpProfile', {
+        nodeId: node.id,
+        regexPattern: node.nlpProfile.regex.substring(0, 50)
+      });
+      return node.nlpProfile.regex;
+    }
+
+    return undefined;
+  }, [profile.regex, node]);
+
   // Extract regex only
   const extractRegexOnly = useCallback((text: string) => {
     const spans: Array<{ start: number; end: number }> = [];
     let value = '';
     const extractedGroups: Record<string, any> = {};
 
-    // ✅ ERROR: Se profile.regex è undefined, mostra errore e non procedere
-    if (!profile.regex) {
-      console.error('[TEST] ❌ ERROR - extractRegexOnly called without profile.regex!', {
+    // ✅ Get effective regex (with fallback)
+    const effectiveRegex = getEffectiveRegex();
+
+    // ✅ ERROR: Se effectiveRegex è undefined, mostra errore e non procedere
+    if (!effectiveRegex) {
+      console.error('[TEST] ❌ ERROR - extractRegexOnly called without regex!', {
         'profile.regex': profile.regex,
         'text': text.substring(0, 30),
         'profile keys': Object.keys(profile),
@@ -235,11 +275,11 @@ export function useExtractionTesting({
       return { value: '', spans: [], summary: '❌ ERROR: regex not synced', extractedGroups: {} };
     }
 
-    if (profile.regex) {
+    if (effectiveRegex) {
       try {
         // ✅ FIX: Usa la stessa logica del batch mode - trova TUTTI i match e prendi il più lungo
         // Questo risolve il problema di matchare solo "1" invece di "12" o "13"
-        const re = new RegExp(profile.regex, 'g');
+        const re = new RegExp(effectiveRegex, 'g');
         let bestMatch: RegExpExecArray | null = null;
         let longestMatch = '';
         let match: RegExpExecArray | null;
@@ -258,9 +298,9 @@ export function useExtractionTesting({
           }
         }
 
-        // Se non abbiamo trovato match con flag 'g', prova senza flag (match globale)
-        if (!bestMatch) {
-          const reNoG = new RegExp(profile.regex);
+          // Se non abbiamo trovato match con flag 'g', prova senza flag (match globale)
+          if (!bestMatch) {
+            const reNoG = new RegExp(effectiveRegex);
           const m = text.match(reNoG);
           if (m && m[0].length > longestMatch.length) {
             bestMatch = m as RegExpExecArray;
@@ -316,7 +356,7 @@ export function useExtractionTesting({
       : (value ? `value=${value}` : '—');
 
     return { value, spans, summary, extractedGroups };
-  }, [profile.regex, node]);
+  }, [getEffectiveRegex]);
 
   // Summarize extraction result
   const summarizeResult = useCallback((result: any, currentField: string): string => {
@@ -396,9 +436,12 @@ export function useExtractionTesting({
       let value = '';
       const extractedGroups: Record<string, any> = {};
 
-      // ✅ ERROR: Se profile.regex è undefined in batch mode, mostra errore
-      if (!profile.regex && enabledMethods.regex) {
-        console.error('[TEST] ❌ ERROR - profile.regex is undefined in batch mode!', {
+      // ✅ Get effective regex (with fallback)
+      const effectiveRegex = getEffectiveRegex();
+
+      // ✅ ERROR: Se effectiveRegex è undefined in batch mode, mostra errore
+      if (!effectiveRegex && enabledMethods.regex) {
+        console.error('[TEST] ❌ ERROR - regex is undefined in batch mode!', {
           idx,
           phrase,
           'profile.regex': profile.regex,
@@ -408,12 +451,12 @@ export function useExtractionTesting({
         // ✅ Ritorna risultato con errore
         const errorSummary = '❌ ERROR: regex not synced';
         regexRes = { value: '', spans: [], summary: errorSummary, extractedGroups: {} };
-      } else if (profile.regex) {
+      } else if (effectiveRegex) {
         try {
           // ✅ Usa exec() con flag 'g' per trovare TUTTI i match possibili
           // Il regex potrebbe matchare solo una parte della stringa (es. solo '12' invece di '12 3 1980')
           // Quindi cerchiamo TUTTI i match e prendiamo il più lungo che contiene tutti i gruppi
-          const re = new RegExp(profile.regex, 'g');
+          const re = new RegExp(effectiveRegex, 'g');
           let bestMatch: RegExpExecArray | null = null;
           let longestMatch = '';
           let match: RegExpExecArray | null;
@@ -431,7 +474,7 @@ export function useExtractionTesting({
 
           // Se non abbiamo trovato match con flag 'g', prova senza flag (match globale)
           if (!bestMatch) {
-            const reNoG = new RegExp(profile.regex);
+            const reNoG = new RegExp(effectiveRegex);
             const m = phrase.match(reNoG);
             if (m && m[0].length > longestMatch.length) {
               bestMatch = m as RegExpExecArray;
@@ -521,7 +564,7 @@ export function useExtractionTesting({
       setTesting(false);
       testingState.stopTesting();
     }
-  }, [examplesList, enabledMethods, extractRegexOnly, mapKindToField, node, profile.regex, summarizeVars]);
+  }, [examplesList, enabledMethods, extractRegexOnly, mapKindToField, node, getEffectiveRegex, summarizeVars]);
 
   // Compute stats from results (can accept results directly or use state)
   const computeStatsFromResults = useCallback((results?: RowResult[]) => {

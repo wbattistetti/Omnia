@@ -45,15 +45,7 @@ interface RecognitionEditorProps {
   setEditingCell: React.Dispatch<React.SetStateAction<{ row: number; col: 'det' | 'ner' | 'llm'; key: string } | null>>;
   editingText: string;
   setEditingText: React.Dispatch<React.SetStateAction<string>>;
-  hasNote: (row: number, col: string) => boolean;
-  getNote: (row: number, col: string) => string | undefined;
-  addNote: (row: number, col: string, text: string) => void;
-  deleteNote: (row: number, col: string) => void;
-  isEditing: (row: number, col: string) => boolean;
-  startEditing: (row: number, col: string) => void;
-  stopEditing: () => void;
-  isHovered: (row: number, col: string) => boolean;
-  setHovered: (row: number | null, col: string | null) => void;
+  // ✅ REMOVED: Notes props - now managed via Zustand store (stores/notesStore.ts)
   activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings' | null;
   toggleEditor: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings') => void;
   openEditor?: (type: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings') => void;
@@ -122,15 +114,7 @@ export default function RecognitionEditor({
   setEditingCell,
   editingText,
   setEditingText,
-  hasNote,
-  getNote,
-  addNote,
-  deleteNote,
-  isEditing,
-  startEditing,
-  stopEditing,
-  isHovered,
-  setHovered,
+  // ✅ REMOVED: Notes props - now managed via Zustand store
   activeEditor,
   toggleEditor,
   openEditor,
@@ -149,6 +133,8 @@ export default function RecognitionEditor({
   updateSelectedNode,
   contractChangeRef,
 }: RecognitionEditorProps) {
+  // ✅ REMOVED: Notes are now managed via Zustand store
+
   const { currentProjectId } = useProjectData();
   const task = editorProps?.task;
 
@@ -213,11 +199,35 @@ export default function RecognitionEditor({
 
       setLocalContract(loadedContract);
 
+      // ✅ CRITICAL: Sincronizza contract.regex → node.nlpProfile.regex anche all'inizializzazione
+      // Questo assicura che useProfileState legga la regex corretta dal contract
+      if (updateSelectedNode && regexPattern !== undefined) {
+        updateSelectedNode((prev: any) => {
+          if (!prev) return prev;
+          const updated = { ...prev };
+          if (!updated.nlpProfile) {
+            updated.nlpProfile = {};
+          }
+          // ✅ Sincronizza regex dal contract al node.nlpProfile
+          updated.nlpProfile = {
+            ...updated.nlpProfile,
+            regex: regexPattern || undefined
+          };
+          console.log('[CONTRACT] INIT - Synced regex to node.nlpProfile', {
+            nodeId: node.id,
+            contractRegex: regexPattern || '(empty)',
+            nodeNlpProfileRegex: updated.nlpProfile.regex || '(empty)',
+            synced: true
+          });
+          return updated;
+        }, false); // false = non notificare provider (solo sync locale)
+      }
+
       // ✅ Reset stato modifiche quando cambi nodo
       setHasUnsavedContractChanges(false);
       setModifiedContract(null);
     }
-  }, [editorProps?.node?.id]);
+  }, [editorProps?.node?.id, updateSelectedNode]);
 
   // ✅ Usa direttamente localContract come contract (non serve creare nuovo oggetto)
   const contract = localContract;
@@ -397,6 +407,10 @@ export default function RecognitionEditor({
       setTestCases: editorProps?.setTestCases,
       onProfileUpdate: editorProps?.onProfileUpdate,
       task: editorProps?.task,
+      // ✅ NEW: Feedback from test notes
+      examplesList,
+      rowResults,
+      // ✅ REMOVED: getNote prop - now managed via Zustand store
     };
 
     switch (activeEditor) {
@@ -553,15 +567,7 @@ export default function RecognitionEditor({
           setEditingCell={setEditingCell}
           editingText={editingText}
           setEditingText={setEditingText}
-          hasNote={hasNote}
-          getNote={getNote}
-          addNote={addNote}
-          deleteNote={deleteNote}
-          isEditing={isEditing}
-          startEditing={startEditing}
-          stopEditing={stopEditing}
-          isHovered={isHovered}
-          setHovered={setHovered}
+          // ✅ REMOVED: Notes props - now managed via Zustand store
           activeEditor={activeEditor}
           toggleEditor={toggleEditor}
           openEditor={openEditor}

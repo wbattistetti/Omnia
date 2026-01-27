@@ -9,6 +9,9 @@ import { usePlaceholderSelection } from '../hooks/usePlaceholderSelection';
 import { useRegexAIGeneration } from '../hooks/useRegexAIGeneration';
 import { NLPProfile } from '../DataExtractionEditor';
 import { getIsTesting } from '../testingState';
+import { useNotesStore, getCellKey } from '../stores/notesStore';
+
+import { RowResult } from '../hooks/useExtractionTesting';
 
 interface RegexInlineEditorProps {
   regex: string;
@@ -22,6 +25,10 @@ interface RegexInlineEditorProps {
   onProfileUpdate?: (profile: NLPProfile) => void; // Callback to update profile
   onButtonRender?: (button: React.ReactNode) => void; // ✅ Callback to render button in overlay header
   onErrorRender?: (errorMessage: React.ReactNode | null) => void; // ✅ Callback to render error message in overlay header
+  // ✅ NEW: Feedback from test notes
+  examplesList?: string[];
+  rowResults?: RowResult[];
+  // ✅ REMOVED: getNote prop - now managed via Zustand store
 }
 
 /**
@@ -40,7 +47,11 @@ export default function RegexInlineEditor({
   onProfileUpdate,
   onButtonRender,
   onErrorRender,
+  examplesList = [],
+  rowResults = [],
 }: RegexInlineEditorProps) {
+  // ✅ Use Zustand store for notes
+  const getNote = useNotesStore((s) => s.getNote);
   const [hasUserEdited, setHasUserEdited] = React.useState(false);
 
   // Debounce timer for profile updates to avoid too many calls
@@ -135,6 +146,9 @@ export default function RegexInlineEditor({
     node,
     kind,
     testCases,
+    examplesList,
+    rowResults,
+    // ✅ REMOVED: getNote prop - now managed via Zustand store
     onSuccess: (newRegex: string) => {
       setRegex(newRegex);
       setCurrentRegexValue(newRegex);

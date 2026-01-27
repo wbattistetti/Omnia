@@ -14,8 +14,11 @@ export default function NoteButton({ hasNote, onClick }: NoteButtonProps) {
   return (
     <button
       onClick={(e) => {
+        console.log('[NOTE] NoteButton clicked!', { hasNote });
         e.stopPropagation();
+        console.log('[NOTE] Calling onClick handler');
         onClick();
+        console.log('[NOTE] onClick handler called');
       }}
       title={hasNote ? "Edit note" : "Add note"}
       style={{
