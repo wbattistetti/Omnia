@@ -71,7 +71,7 @@ Public Class CompiledTaskGetData
 
     Public Overrides ReadOnly Property TaskType As TaskTypes
         Get
-            Return TaskTypes.DataRequest
+            Return TaskTypes.UtteranceInterpretation
         End Get
     End Property
 End Class

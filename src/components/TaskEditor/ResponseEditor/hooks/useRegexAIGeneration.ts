@@ -97,7 +97,7 @@ export function useRegexAIGeneration({
       const errorsText = validationResult!.errors.join('. ');
       const warningsText = validationResult!.warnings.length > 0 ? ' Warnings: ' + validationResult!.warnings.join('. ') : '';
       prompt = `Current regex: ${currentRegex}\n\nErrors found: ${errorsText}${warningsText}\n\nPlease fix the regex to include the correct capture groups. Expected ${validationResult!.groupsExpected} capture groups for: ${(() => {
-        const allSubs = [...((node?.subSlots || [])), ...(node?.subData || [])];
+        const allSubs = [...((node?.subSlots || [])), ...(node?.subTasks || [])];
         return allSubs.map((s: any) => s.label || s.name || 'sub-data').join(', ');
       })()}`;
 

@@ -118,7 +118,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       // ✅ Transient DDT object (no type field) → assume DataRequest
       const taskMeta: TaskMeta = {
         id: transient.id,
-        type: TaskType.DataRequest, // ✅ Transient DDT objects are always DataRequest
+        type: TaskType.UtteranceInterpretation, // ✅ Transient DDT objects are always DataRequest
         label: transient.label,
         instanceId: transient.id,
       };
@@ -148,7 +148,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
       // ✅ Transient DDT object (no type field) → assume DataRequest
       const taskMeta: TaskMeta = {
         id: transient.id,
-        type: TaskType.DataRequest, // ✅ Transient DDT objects are always DataRequest
+        type: TaskType.UtteranceInterpretation, // ✅ Transient DDT objects are always DataRequest
         label: transient.label,
         instanceId: transient.id,
       };

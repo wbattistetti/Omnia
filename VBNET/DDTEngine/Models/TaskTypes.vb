@@ -11,7 +11,7 @@ Public Enum TaskTypes
     SayMessage
     CloseSession
     Transfer
-    DataRequest    ' ✅ Rinominato da GetData
+    UtteranceInterpretation    ' ✅ Rinominato da DataRequest (interpreta utterance utente per estrarre dati)
     BackendCall
     ClassifyProblem
 End Enum

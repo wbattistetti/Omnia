@@ -19,6 +19,17 @@ class VBNetClient
     call_api('/api/runtime/compile', data)
   end
 
+  # Compile single task via HTTP API (for chat simulator)
+  def self.compile_task(task, ddts = [], translations = {})
+    data = {
+      task: task,
+      ddts: ddts || [],
+      translations: translations || {}
+    }
+
+    call_api('/api/runtime/compile/task', data)
+  end
+
   # Compile DDT via HTTP API
   def self.compile_ddt(ddt_json)
     data = {

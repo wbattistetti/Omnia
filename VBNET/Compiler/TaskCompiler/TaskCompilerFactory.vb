@@ -21,7 +21,7 @@ Public Class TaskCompilerFactory
             Console.WriteLine($"🔍 [TaskCompilerFactory] Compiler not in cache, creating new one for taskType={taskType}")
             System.Diagnostics.Debug.WriteLine($"🔍 [TaskCompilerFactory] Compiler not in cache, creating new one for taskType={taskType}")
             Select Case taskType
-                Case TaskTypes.DataRequest
+                Case TaskTypes.UtteranceInterpretation
                     Console.WriteLine($"✅ [TaskCompilerFactory] Creating DataRequestTaskCompiler for taskType={taskType}")
                     System.Diagnostics.Debug.WriteLine($"✅ [TaskCompilerFactory] Creating DataRequestTaskCompiler for taskType={taskType}")
                     _compilerCache(taskType) = New DataRequestTaskCompiler()

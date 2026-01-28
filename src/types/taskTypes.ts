@@ -19,7 +19,7 @@ export enum TaskType {
   SayMessage = 0,      // TaskTypes.SayMessage
   CloseSession = 1,    // TaskTypes.CloseSession
   Transfer = 2,        // TaskTypes.Transfer
-  DataRequest = 3,     // TaskTypes.DataRequest (rinominato da GetData)
+  UtteranceInterpretation = 3,     // TaskTypes.UtteranceInterpretation (interpreta utterance utente per estrarre dati)
   BackendCall = 4,     // TaskTypes.BackendCall
   ClassifyProblem = 5, // TaskTypes.ClassifyProblem
   AIAgent = 6,         // ✅ AI Agent task
@@ -33,7 +33,7 @@ export enum TaskType {
 export function taskTypeToTemplateId(type: TaskType): string | null {
   switch (type) {
     case TaskType.SayMessage: return 'SayMessage';
-    case TaskType.DataRequest: return 'DataRequest';
+    case TaskType.UtteranceInterpretation: return 'UtteranceInterpretation';
     case TaskType.ClassifyProblem: return 'ClassifyProblem';
     case TaskType.BackendCall: return 'BackendCall';
     case TaskType.CloseSession: return 'CloseSession';
@@ -54,8 +54,7 @@ export function templateIdToTaskType(templateId: string | null | undefined): Tas
   const normalized = templateId.toLowerCase().trim();
   switch (normalized) {
     case 'saymessage': return TaskType.SayMessage;
-    case 'getdata': return TaskType.DataRequest; // ✅ Backward compatibility: 'getdata' → DataRequest
-    case 'datarequest': return TaskType.DataRequest;
+    case 'utteranceinterpretation': return TaskType.UtteranceInterpretation;
     case 'classifyproblem': return TaskType.ClassifyProblem;
     case 'backendcall': return TaskType.BackendCall;
     case 'closesession': return TaskType.CloseSession;
@@ -82,8 +81,7 @@ export function taskIdToTaskType(taskId: string): TaskType { // ✅ RINOMINATO: 
   // Mapping taskId (UI) → TaskType enum
   switch (normalized) {
     case 'message': return TaskType.SayMessage;
-    case 'datarequest': return TaskType.DataRequest;
-    case 'getdata': return TaskType.DataRequest; // ✅ Backward compatibility
+    case 'utteranceinterpretation': return TaskType.UtteranceInterpretation;
     case 'problemclassification': return TaskType.ClassifyProblem;
     case 'classifyproblem': return TaskType.ClassifyProblem;
     case 'backendcall': return TaskType.BackendCall;
@@ -107,7 +105,7 @@ export function heuristicStringToTaskType(heuristic: string): TaskType {
   const normalized = heuristic.toUpperCase().trim();
   switch (normalized) {
     case 'MESSAGE': return TaskType.SayMessage;
-    case 'REQUEST_DATA': return TaskType.DataRequest;
+    case 'REQUEST_DATA': return TaskType.UtteranceInterpretation;
     case 'PROBLEM_SPEC': return TaskType.ClassifyProblem;
     case 'BACKEND_CALL': return TaskType.BackendCall;
     case 'AI_AGENT': return TaskType.SayMessage; // Default to SayMessage
@@ -123,7 +121,7 @@ export function heuristicStringToTaskType(heuristic: string): TaskType {
  */
 export function taskTypeToHeuristicString(type: TaskType): string | null {
   switch (type) {
-    case TaskType.DataRequest: return 'DataRequest';
+    case TaskType.UtteranceInterpretation: return 'UtteranceInterpretation';
     case TaskType.SayMessage: return 'Message';
     case TaskType.UNDEFINED: return 'UNDEFINED';
     default: return null;
@@ -139,7 +137,7 @@ export function getEditorFromTaskType(type: TaskType): 'message' | 'ddt' | 'prob
     case TaskType.CloseSession:
     case TaskType.Transfer:
       return 'message';
-    case TaskType.DataRequest:
+    case TaskType.UtteranceInterpretation:
       return 'ddt';
     case TaskType.AIAgent:
       return 'aiagent';
@@ -148,12 +146,36 @@ export function getEditorFromTaskType(type: TaskType): 'message' | 'ddt' | 'prob
     case TaskType.Negotiation:
       return 'negotiation';
     case TaskType.ClassifyProblem:
-      return 'ddt'; // ✅ UNIFICATO: ClassifyProblem ora usa ResponseEditor (DDT) come DataRequest
+      return 'ddt'; // ✅ UNIFICATO: ClassifyProblem ora usa ResponseEditor (DDT) come UtteranceInterpretation
     case TaskType.BackendCall:
       return 'backend';
     default:
       return 'simple';
   }
+}
+
+/**
+ * ✅ Helper: Verifica se un task è di tipo UtteranceInterpretation
+ * Sostituisce stringhe hardcoded come templateId.toLowerCase() !== 'datarequest'
+ */
+export function isUtteranceInterpretationTask(task: { type?: TaskType; templateId?: string | null } | null | undefined): boolean {
+  if (!task) return false;
+  if (task.type !== undefined) {
+    return task.type === TaskType.UtteranceInterpretation;
+  }
+  if (task.templateId) {
+    return templateIdToTaskType(task.templateId) === TaskType.UtteranceInterpretation;
+  }
+  return false;
+}
+
+/**
+ * ✅ Helper: Verifica se un templateId corrisponde a UtteranceInterpretation
+ * Sostituisce stringhe hardcoded come templateId.toLowerCase() === 'datarequest'
+ */
+export function isUtteranceInterpretationTemplateId(templateId: string | null | undefined): boolean {
+  if (!templateId) return false;
+  return templateIdToTaskType(templateId) === TaskType.UtteranceInterpretation;
 }
 
 /**
@@ -174,7 +196,7 @@ export interface TaskCatalog {
   icon: string;                  // Icon name (e.g. "MessageCircle", "HelpCircle")
   color: string;                 // UI color (e.g. "text-blue-500")
   type: TaskType;                // ✅ Enum numerato (comportamento: DataRequest, SayMessage, ecc.)
-  name?: string;                 // ✅ Nome semantico (opzionale, per built-in: "DataRequest", "SayMessage")
+  name?: string;                 // ✅ Nome semantico (opzionale, per built-in: "UtteranceInterpretation", "SayMessage")
   contexts: TaskContext[];        // ✅ Where this catalog entry can be inserted
 
   // Signature: Input parameters schema (if needed)
@@ -232,8 +254,8 @@ export interface TaskHeuristic {
  * - templateId = GUID → Task che referenzia un altro Task (per ereditare struttura/contratti)
  *
  * Esempi:
- * - Task DDT standalone: { id: "guid", type: TaskType.DataRequest, templateId: null, label: "...", data: [...] }
- * - Task DDT che referenzia: { id: "guid", type: TaskType.DataRequest, templateId: "guid-altro-task", label: "...", data: [...] }
+ * - Task DDT standalone: { id: "guid", type: TaskType.UtteranceInterpretation, templateId: null, label: "...", data: [...] }
+ * - Task DDT che referenzia: { id: "guid", type: TaskType.UtteranceInterpretation, templateId: "guid-altro-task", label: "...", data: [...] }
  *
  * Per altri tipi di task (SayMessage, BackendCall, ecc.):
  * - Task standalone: { id: "guid", type: TaskType.SayMessage, templateId: null, text: "Ciao!", ... }

@@ -12,7 +12,7 @@ import { isCacheLoaded, getPatternCache, waitForCache } from './patternLoader';
  *        (Message, DataRequest/REQUEST_DATA, BackendCall, AIAgent, ecc.)
  * Pattern da: Task_Types (categorie generiche: DataRequest, Message, ecc.)
  * Usata in: NodeRow.tsx quando l'utente digita una nuova riga
- * Output: TaskType enum (es. TaskType.DataRequest, TaskType.SayMessage, TaskType.UNDEFINED)
+ * Output: TaskType enum (es. TaskType.UtteranceInterpretation, TaskType.SayMessage, TaskType.UNDEFINED)
  * ============================================================
  */
 export async function classify(label: string, opts?: InferOptions): Promise<Inference> {
@@ -80,7 +80,7 @@ export async function classify(label: string, opts?: InferOptions): Promise<Infe
         // ❌ RIMOSSO: log per ogni pattern (troppo verboso)
         // console.log(`  Pattern ${i + 1}/${RS.REQUEST_DATA.length}: ${pattern.toString()} → ${matches ? '✅ MATCH' : '❌ NO MATCH'}`);
         if (matches) {
-          return { type: TaskType.DataRequest, lang: L, reason: 'REQUEST_DATA' };
+          return { type: TaskType.UtteranceInterpretation, lang: L, reason: 'REQUEST_DATA' };
         }
       }
       // ❌ RIMOSSO: log "Nessun pattern matchato" (troppo verboso)

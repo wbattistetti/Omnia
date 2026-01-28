@@ -18,7 +18,7 @@ Public Class TaskExecutorFactory
                 Return New ClassifyProblemTaskExecutor(ddtEngine)
             Case TaskTypes.BackendCall
                 Return New BackendTaskExecutor(ddtEngine)
-            Case TaskTypes.DataRequest
+            Case TaskTypes.UtteranceInterpretation
                 Return New DataRequestTaskExecutor(ddtEngine)
             Case TaskTypes.SayMessage
                 Return New SayMessageTaskExecutor(ddtEngine)

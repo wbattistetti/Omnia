@@ -31,11 +31,10 @@ async function migrateStepsToRootLevel() {
     const factoryDb = client.db(factoryDbName);
 
     // ✅ Collections nel database principale (progetti)
-    const tasksCollection = db.collection('Tasks');
+    const tasksCollection = db.collection('tasks');
 
     // ✅ Collections nel database Factory (template)
-    const templatesCollection = factoryDb.collection('Task_Templates');
-    const templatesCollectionAlt = factoryDb.collection('task_templates'); // Fallback
+    const templatesCollection = factoryDb.collection('tasks');
 
     let tasksMigrated = 0;
     let templatesMigrated = 0;
@@ -140,17 +139,10 @@ async function migrateStepsToRootLevel() {
     let collectionToUse = templatesCollection;
     try {
       templates = await templatesCollection.find({}).toArray();
-      console.log(`   Found ${templates.length} templates in Task_Templates`);
+      console.log(`   Found ${templates.length} templates in Tasks`);
     } catch (err) {
-      console.log(`   Task_Templates not found, trying task_templates...`);
-      try {
-        templates = await templatesCollectionAlt.find({}).toArray();
-        collectionToUse = templatesCollectionAlt;
-        console.log(`   Found ${templates.length} templates in task_templates`);
-      } catch (err2) {
-        console.log(`   ⚠️ No templates collection found, skipping templates migration`);
-        templates = [];
-      }
+      console.log(`   ⚠️ Tasks collection not found, skipping templates migration`);
+      templates = [];
     }
 
     for (const template of templates) {

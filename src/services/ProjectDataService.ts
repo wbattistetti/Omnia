@@ -220,10 +220,10 @@ export const ProjectDataService = {
       };
 
       // Load from each collection separately
-      // ✅ MIGRATO: backend-calls → task-templates-v2?taskType=Action (Tasks type: 4)
+      // ✅ backend-calls → tasks?taskType=Action (Tasks type: 4)
       const [taskTemplatesRes, backendCallsRes, conditionsRes, tasksRes, macroTasksRes] = await Promise.all([
-        fetch(`/api/factory/task-templates-v2?scopes=general${projectIndustry && projectIndustry !== 'undefined' ? `,industry:${projectIndustry}` : ''}`),
-        fetch(`/api/factory/task-templates-v2?scopes=general${projectIndustry && projectIndustry !== 'undefined' ? `,industry:${projectIndustry}` : ''}&taskType=Action`, {
+        fetch(`/api/factory/tasks?scopes=general${projectIndustry && projectIndustry !== 'undefined' ? `,industry:${projectIndustry}` : ''}`),
+        fetch(`/api/factory/tasks?scopes=general${projectIndustry && projectIndustry !== 'undefined' ? `,industry:${projectIndustry}` : ''}&taskType=Action`, {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' }
         }),
@@ -586,7 +586,7 @@ export const ProjectDataService = {
       if (type === 'taskTemplates') {
         try {
           const payload = { _id: item._id || item.id, label: (item as any).name, description: (item as any).description, category: (category as any)?.name, type: (item as any)?.type, shortLabel: (item as any)?.shortLabel, data: (item as any)?.data, ddt: (item as any)?.ddt, prompts: (item as any)?.prompts || {} }; // ✅ mode removed
-          await fetch(`/api/factory/task-templates-v2/${encodeURIComponent(payload._id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+          await fetch(`/api/factory/tasks/${encodeURIComponent(payload._id)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         } catch (e) { console.warn('[ProjectDataService] save task template failed', e); }
       }
     }
@@ -741,7 +741,7 @@ export const ProjectDataService = {
             defaultValue: item.data || {},
             scope: 'general'
           };
-          const res = await fetch(`/api/factory/task-templates-v2/${encodeURIComponent(payload.id)}`, {
+          const res = await fetch(`/api/factory/tasks/${encodeURIComponent(payload.id)}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)

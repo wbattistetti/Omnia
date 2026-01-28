@@ -1,8 +1,7 @@
 /**
  * TaskTemplateServiceV2 - Nuovo servizio per caricare TaskCatalog entries
  *
- * Dual mode: carica da task_templates (nuovo) con fallback su AgentActs (vecchio)
- * Supporta scope filtering (general, industry, client)
+ * Carica da Tasks collection con scope filtering (general, industry, client)
  */
 
 import type { TaskCatalog } from '../types/taskTypes';
@@ -83,7 +82,7 @@ class TaskTemplateServiceV2 {
         params.append('industry', industry);
       }
 
-      const url = `${this.baseUrl}/api/factory/task-templates-v2${params.toString() ? '?' + params.toString() : ''}`;
+      const url = `${this.baseUrl}/api/factory/tasks${params.toString() ? '?' + params.toString() : ''}`;
 
       console.log('[TaskTemplateServiceV2] 🌐 Fetching from:', url);
       console.log('[TaskTemplateServiceV2] 📡 Full URL:', url);
@@ -123,7 +122,7 @@ class TaskTemplateServiceV2 {
       if (fallbackCount > 0) {
         console.warn(`[TaskTemplateServiceV2] ⚠️ ${fallbackCount} templates loaded from fallback (AgentActs)`);
       } else {
-        console.log('[TaskTemplateServiceV2] ✅ All templates from new system (task_templates collection)');
+        console.log('[TaskTemplateServiceV2] ✅ All templates from Tasks collection');
       }
 
       return templates;

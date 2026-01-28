@@ -315,8 +315,7 @@ async function loadTemplatesFromDB() {
     await client.connect();
     const db = client.db('factory');
 
-    // ✅ FIX: Carica da Task_Templates (dialogue templates), non da Heuristics (pattern euristiche)
-    // Cerca in entrambe le collection per backward compatibility
+    // ✅ Carica dialogue templates da tasks collection
     const query = {
       $or: [
         { type: 3 },                              // ✅ Enum numeric (TaskType.GetData = 3)
@@ -326,8 +325,8 @@ async function loadTemplatesFromDB() {
       ]
     };
 
-    // ✅ MIGRATO: Usa Tasks (migrazione completa, Task_Templates rimosso)
-    const templates1 = await db.collection('Tasks').find(query).toArray();  // ✅ Nuova collection
+    // ✅ Collection tasks (lowercase)
+    const templates1 = await db.collection('tasks').find(query).toArray();  // ✅ Collection tasks (lowercase)
 
     await client.close();
 
@@ -357,7 +356,7 @@ async function loadTemplatesFromDB() {
 }
 
 // Risolvi templateRef espandendo i riferimenti ai template (ESTESO PER 3 LIVELLI)
-async function resolveTemplateRefs(subData, templates, level = 0) {
+async function resolveTemplateRefs(subTasks, templates, level = 0) {
   const resolved = [];
 
   // Limite di sicurezza per evitare ricorsioni infinite
@@ -366,15 +365,15 @@ async function resolveTemplateRefs(subData, templates, level = 0) {
     return resolved;
   }
 
-  for (const item of subData) {
+  for (const item of subTasks) {
     if (item.templateRef && templates[item.templateRef]) {
       // Espandi il template referenziato
       const referencedTemplate = templates[item.templateRef];
 
-      if (referencedTemplate.subData && referencedTemplate.subData.length > 0) {
-        // Se il template referenziato ha subData, espandili ricorsivamente
-        const expandedSubData = await resolveTemplateRefs(referencedTemplate.subData, templates, level + 1);
-        resolved.push(...expandedSubData);
+      if (referencedTemplate.subTasks && referencedTemplate.subTasks.length > 0) {
+        // Se il template referenziato ha subTasks, espandili ricorsivamente
+        const expandedSubTasks = await resolveTemplateRefs(referencedTemplate.subTasks, templates, level + 1);
+        resolved.push(...expandedSubTasks);
       } else {
         // Se è un template atomico, aggiungilo direttamente
         resolved.push({
@@ -401,8 +400,8 @@ async function resolveTemplateRefs(subData, templates, level = 0) {
 }
 
 // ✅ NUOVO: Funzione per gestire template con 3 livelli
-async function resolveTemplateRefsWithLevels(subData, templates) {
-  return await resolveTemplateRefs(subData, templates, 0);
+async function resolveTemplateRefsWithLevels(subTasks, templates) {
+  return await resolveTemplateRefs(subTasks, templates, 0);
 }
 
 // Template cache verrà precaricata da preloadAllServerCaches()
@@ -747,7 +746,7 @@ app.delete('/api/projects/catalog', async (req, res) => {
 });
 
 // -----------------------------
-// DEPRECATED: AgentActs endpoints removed - use /api/factory/task-templates-v2 instead
+// DEPRECATED: AgentActs endpoints removed - use /api/factory/tasks instead
 
 // -----------------------------
 // Endpoint: Bootstrap progetto (crea DB e clona acts)
@@ -830,9 +829,9 @@ app.post('/api/projects/bootstrap', async (req, res) => {
       { upsert: true }
     );
 
-    // 4) Clona Tasks dalla factory al progetto (migrato da Task_Templates)
+    // 4) Clona Tasks dalla factory al progetto
     const factoryDb = client.db(dbFactory);
-    const templatesColl = factoryDb.collection('Tasks');  // ✅ MIGRATO: Usa Tasks invece di Task_Templates
+    const templatesColl = factoryDb.collection('tasks');  // ✅ Collection tasks (lowercase)
 
     // Scope filtering: global + industry-specific
     let templatesQuery = {};
@@ -869,7 +868,7 @@ app.post('/api/projects/bootstrap', async (req, res) => {
 
       if (mappedTemplates.length > 0) {
         try {
-          const result = await projDb.collection('tasks').insertMany(mappedTemplates, { ordered: false });  // ✅ MIGRATO: Usa tasks invece di Task_Templates
+          const result = await projDb.collection('tasks').insertMany(mappedTemplates, { ordered: false });
           templatesInserted = result.insertedCount || Object.keys(result.insertedIds || {}).length || 0;
         } catch (insertError) {
           console.error('[Bootstrap] Error inserting tasks:', insertError);
@@ -925,7 +924,7 @@ app.post('/api/projects/bootstrap', async (req, res) => {
       projectId,
       dbName,
       counts: {
-        task_templates: templatesInserted,
+        tasks: templatesInserted,
         task_heuristics: heuristicsInserted
       }
     });
@@ -938,16 +937,16 @@ app.post('/api/projects/bootstrap', async (req, res) => {
 });
 
 // -----------------------------
-// Endpoints: Task Templates per progetto
+// Endpoints: Tasks per progetto
 // -----------------------------
-// GET /api/projects/:pid/task-templates - Load project templates
-app.get('/api/projects/:pid/task-templates', async (req, res) => {
+// GET /api/projects/:pid/tasks - Load project tasks
+app.get('/api/projects/:pid/tasks', async (req, res) => {
   const projectId = req.params.pid;
   const client = new MongoClient(uri);
   try {
     await client.connect();
     const projDb = await getProjectDb(client, projectId);
-    const coll = projDb.collection('tasks');  // ✅ MIGRATO: Usa tasks invece di Task_Templates
+    const coll = projDb.collection('tasks');
     const templates = await coll.find({}).toArray();
     logInfo('TaskTemplates.get', { projectId, count: templates.length });
     res.json({ items: templates });
@@ -959,8 +958,8 @@ app.get('/api/projects/:pid/task-templates', async (req, res) => {
   }
 });
 
-// POST /api/projects/:pid/task-templates - Create/update template in project
-app.post('/api/projects/:pid/task-templates', async (req, res) => {
+// POST /api/projects/:pid/tasks - Create/update task in project
+app.post('/api/projects/:pid/tasks', async (req, res) => {
   const projectId = req.params.pid;
   const payload = req.body || {};
   if (!payload.id || !payload.label || !payload.valueSchema) {
@@ -970,7 +969,7 @@ app.post('/api/projects/:pid/task-templates', async (req, res) => {
   try {
     await client.connect();
     const projDb = await getProjectDb(client, projectId);
-    const coll = projDb.collection('tasks');  // ✅ MIGRATO: Usa tasks invece di Task_Templates
+    const coll = projDb.collection('tasks');
     const now = new Date();
     const doc = {
       _id: payload.id,
@@ -1846,11 +1845,10 @@ function deriveIsInteractiveFromMode(mode) {
 // DEPRECATED: Legacy AgentActs endpoints removed - use /api/factory/task-templates-v2 instead
 
 // -----------------------------
-// ✅ STEP 4: Task Templates V2 (NEW - Dual Mode)
-// Endpoint per caricare task_templates con scope filtering
-// Mantiene compatibilità con formato AgentActs per il frontend
+// ✅ STEP 4: Factory Tasks
+// Endpoint per caricare Tasks con scope filtering
 // -----------------------------
-app.get('/api/factory/task-templates-v2', async (req, res) => {
+app.get('/api/factory/tasks', async (req, res) => {
   const client = new MongoClient(uri);
   try {
     await client.connect();
@@ -1880,7 +1878,7 @@ app.get('/api/factory/task-templates-v2', async (req, res) => {
       scopeArray.push(`industry:${industry}`);
     }
 
-    // ✅ MIGRATO: Query per Tasks (invece di task_templates)
+    // ✅ Query per Tasks
     // IMPORTANTE: Include anche template senza campo contexts (backward compatibility)
     let query = {};
     if (context) {
@@ -1902,8 +1900,8 @@ app.get('/api/factory/task-templates-v2', async (req, res) => {
 
     console.log(`[TaskTemplatesV2] Query:`, JSON.stringify(query, null, 2));
 
-    // ✅ MIGRATO: Carica da Tasks invece di task_templates
-    const templates = await db.collection('Tasks')
+    // ✅ Carica da Tasks
+    const templates = await db.collection('tasks')
       .find(query)
       .toArray();
 
@@ -1962,7 +1960,7 @@ function mapModeToBuiltIn(mode) {
 // I DDT sono ora gestiti direttamente nei Tasks con type: DataRequest
 
 // ❌ RIMOSSO: Backend Calls endpoints (collection eliminata, migrata a Tasks type: 4)
-// Usa /api/factory/task-templates-v2?taskType=Action invece
+// Usa /api/factory/tasks?taskType=Action invece
 
 // Conditions - GET (legacy)
 app.get('/api/factory/conditions', async (req, res) => {
@@ -2107,7 +2105,7 @@ app.get('/api/factory/tasks', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const coll = db.collection('Tasks');
+    const coll = db.collection('tasks');
     const docs = await coll.find({}).toArray();
     console.log(`>>> Found ${docs.length} Tasks`);
     res.json(docs);
@@ -2125,7 +2123,7 @@ app.post('/api/factory/tasks', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const coll = db.collection('Tasks');
+    const coll = db.collection('tasks');
 
     const { industry, scope } = req.body;
 
@@ -2271,7 +2269,7 @@ app.post('/api/factory/macro-tasks', async (req, res) => {
   }
 });
 
-// DEPRECATED: AgentActs endpoints removed - use /api/factory/task-templates-v2 instead
+// DEPRECATED: AgentActs endpoints removed - use /api/factory/tasks instead
 
 app.get('/api/factory/actions', async (req, res) => {
   const client = new MongoClient(uri);
@@ -2279,7 +2277,7 @@ app.get('/api/factory/actions', async (req, res) => {
     await client.connect();
     const db = client.db(dbFactory);
     // ✅ Actions sono in Tasks con type enum 6-19 (SendSMS=6, SendEmail=7, EscalateToHuman=8, ecc.)
-    const actions = await db.collection('Tasks').find({  // ✅ MIGRATO: Usa Tasks invece di Task_Templates
+    const actions = await db.collection('tasks').find({  // ✅ Collection tasks (lowercase)
       type: { $gte: 6, $lte: 19 }  // ✅ Action types: enum 6-19
     }).toArray();
     // Convert to old format for backward compatibility
@@ -2304,12 +2302,12 @@ app.get('/api/factory/dialogue-templates', async (req, res) => {
     await withMongoClient(async (client) => {
       const db = client.db(dbFactory);
 
-      // ✅ Carica TUTTI i template dalla collection Tasks (migrato da Task_Templates)
+      // ✅ Carica TUTTI i task dalla collection tasks
       // Non filtrare per tipo - serve tutta la cache per risolvere i reference (subDataIds)
       const query = {}; // ✅ Query vuota = carica tutto
 
-      // ✅ MIGRATO: Usa Tasks (migrazione completa, Task_Templates rimosso)
-      const ddt1 = await db.collection('Tasks').find(query).toArray();  // ✅ MIGRATO: Usa Tasks invece di Task_Templates
+      // ✅ Collection tasks (lowercase)
+      const ddt1 = await db.collection('tasks').find(query).toArray();  // ✅ Collection tasks (lowercase)
 
       // Converti in oggetto per accesso rapido
       const templateMap = new Map();
@@ -2756,7 +2754,7 @@ app.post('/api/factory/dialogue-templates', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const coll = db.collection('Tasks');  // ✅ MIGRATO: Usa Tasks invece di Task_Templates
+    const coll = db.collection('tasks');
     const now = new Date();
 
     // Handle single template or array of templates
@@ -2797,7 +2795,7 @@ app.delete('/api/factory/dialogue-templates/:id', async (req, res) => {
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const coll = db.collection('Tasks');  // ✅ MIGRATO: Usa Tasks invece di Task_Templates
+    const coll = db.collection('tasks');
     // Delete by name or _id
     let filter;
     if (/^[a-fA-F0-9]{24}$/.test(id)) {
@@ -3001,17 +2999,15 @@ app.post('/api/factory/task-heuristics', async (req, res) => {
 });
 
 // -----------------------------
-// Factory: Task Templates Endpoints
+// Factory: Tasks Endpoints
 // -----------------------------
-// GET /api/factory/task-templates - List all templates
-app.get('/api/factory/task-templates', async (req, res) => {
+// GET /api/factory/tasks - List all tasks
+app.get('/api/factory/tasks', async (req, res) => {
   try {
     await withMongoClient(async (client) => {
       const db = client.db(dbFactory);
 
-      // ✅ MIGRATO: Usa Tasks (migrazione completa, Task_Templates rimosso)
-      const coll1 = db.collection('Tasks');  // ✅ MIGRATO: Usa Tasks invece di Task_Templates
-      const coll2 = null;  // ✅ Task_Templates rimosso
+      const coll = db.collection('tasks');
 
       const { industry, scope, taskType } = req.query;
 
@@ -3061,30 +3057,17 @@ app.get('/api/factory/task-templates', async (req, res) => {
       }
     }
 
-    // ✅ MIGRATO: Usa Tasks (migrazione completa, Task_Templates rimosso)
-    const templates1 = await coll1.find(query).toArray();
-    const templates2 = [];  // ✅ Task_Templates rimosso
+    const templates = await coll.find(query).toArray();
 
     // ✅ DEBUG: Log per verificare il filtro
     if (taskType && taskType.toLowerCase() === 'action') {
-      console.log('[TaskTemplates.get] Action query:', JSON.stringify(query, null, 2));
-      console.log('[TaskTemplates.get] Found tasks:', templates1.length);
-      templates1.forEach((t, idx) => {
+      console.log('[Tasks.get] Action query:', JSON.stringify(query, null, 2));
+      console.log('[Tasks.get] Found tasks:', templates.length);
+      templates.forEach((t, idx) => {
         console.log(`  ${idx + 1}. ID: ${t.id || t._id}, Label: ${t.label || 'N/A'}, Type: ${t.type}, allowedContexts: ${JSON.stringify(t.allowedContexts)}`);
       });
     }
-
-    // Unisci i risultati, evitando duplicati per ID
-    const templateMap = new Map();
-    [...templates1, ...templates2].forEach(t => {
-      const id = t.id || t._id?.toString();
-      if (id && !templateMap.has(id)) {
-        templateMap.set(id, t);
-      }
-    });
-
-      const templates = Array.from(templateMap.values());
-      logInfo('TaskTemplates.get', { count: templates.length, industry, scope, taskType, fromTasks: templates1.length });
+      logInfo('Tasks.get', { count: templates.length, industry, scope, taskType });
       res.json(templates);
     });
   } catch (e) {
@@ -3093,13 +3076,13 @@ app.get('/api/factory/task-templates', async (req, res) => {
   }
 });
 
-// POST /api/factory/task-templates - Create template
-app.post('/api/factory/task-templates', async (req, res) => {
+// POST /api/factory/tasks - Create task
+app.post('/api/factory/tasks', async (req, res) => {
   const client = new MongoClient(uri);
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const coll = db.collection('Tasks');  // ✅ MIGRATO: Usa Tasks invece di Task_Templates
+    const coll = db.collection('tasks');
 
     const payload = req.body || {};
     if (!payload.id || !payload.label || !payload.valueSchema) {
@@ -3149,14 +3132,14 @@ app.post('/api/factory/task-templates', async (req, res) => {
   }
 });
 
-// PUT /api/factory/task-templates/:id - Update template
-app.put('/api/factory/task-templates/:id', async (req, res) => {
+// PUT /api/factory/tasks/:id - Update task
+app.put('/api/factory/tasks/:id', async (req, res) => {
   const id = req.params.id;
   const client = new MongoClient(uri);
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const coll = db.collection('Tasks');  // ✅ MIGRATO: Usa Tasks invece di Task_Templates
+    const coll = db.collection('tasks');
 
     const payload = req.body || {};
     const now = new Date();
@@ -3220,14 +3203,14 @@ app.put('/api/factory/task-templates/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/factory/task-templates/:id - Delete template
-app.delete('/api/factory/task-templates/:id', async (req, res) => {
+// DELETE /api/factory/tasks/:id - Delete task
+app.delete('/api/factory/tasks/:id', async (req, res) => {
   const id = req.params.id;
   const client = new MongoClient(uri);
   try {
     await client.connect();
     const db = client.db(dbFactory);
-    const coll = db.collection('Tasks');  // ✅ MIGRATO: Usa Tasks invece di Task_Templates
+    const coll = db.collection('tasks');
 
     const result = await coll.deleteOne({ _id: id });
     if (result.deletedCount === 0) {
@@ -3273,7 +3256,7 @@ app.post('/api/factory/type-templates', async (req, res) => {
       label: payload.label || payload.name,
       type: payload.type || 'atomic',
       icon: payload.icon || 'FileText',
-      subData: payload.subData || [],
+      subTasks: payload.subTasks || [],
       mainData: payload.mainData || [],
       synonyms: payload.synonyms || [],
       constraints: payload.constraints || [],
@@ -3326,7 +3309,7 @@ app.post('/api/projects/:pid/type-templates', async (req, res) => {
       label: payload.label || payload.name,
       type: payload.type || 'atomic',
       icon: payload.icon || 'FileText',
-      subData: payload.subData || [],
+      subTasks: payload.subTasks || [],
       mainData: payload.mainData || [],
       synonyms: payload.synonyms || [],
       constraints: payload.constraints || [],
@@ -3571,7 +3554,7 @@ async function analyzeUserRequestWithAI(userDesc, templates, provider = 'groq', 
           icon: main.icon,
           hasValidation: !!main.validation,
           hasExamples: !!main.example,
-          subDataCount: main.subData?.length || 0,
+          subTasksCount: main.subTasks?.length || 0,
           validationDescription: main.validation?.description || 'NO DESCRIPTION',
           exampleValue: main.example || 'NO EXAMPLE'
         });
@@ -3594,8 +3577,8 @@ async function composeTemplates(templateNames, templates, userDesc) {
   for (const templateName of templateNames) {
     const template = templates[templateName];
     if (template) {
-      // Risolvi subData con supporto 3 livelli
-      const resolvedSubData = await resolveTemplateRefsWithLevels(template.subData || [], templates);
+      // Risolvi subTasks con supporto 3 livelli
+      const resolvedSubTasks = await resolveTemplateRefsWithLevels(template.subTasks || [], templates);
 
       // Aggiungi validazione e esempi migliorati
       const enhancedSubData = resolvedSubData.map(item => ({
@@ -3611,7 +3594,7 @@ async function composeTemplates(templateNames, templates, userDesc) {
         label: template.label,
         type: template.type,
         icon: template.icon,
-        subData: enhancedSubData,
+        subTasks: enhancedSubTasks,
         validation: {
           description: `This field contains ${template.label.toLowerCase()} information`,
           examples: generateTestExamples(template.type, template.validation)
@@ -3645,21 +3628,21 @@ async function useExistingTemplate(templateName, templates, userDesc) {
     throw new Error(`Template ${templateName} not found`);
   }
 
-  // ✅ NUOVA STRUTTURA: Usa subDataIds invece di subData
+  // ✅ NUOVA STRUTTURA: Usa subTasksIds invece di subData
   // NOTA: Un template alla radice non sa se sarà usato come sottodato o come main,
   // quindi può avere tutti i 6 tipi di stepPrompts (start, noMatch, noInput, confirmation, notConfirmed, success).
   // Quando lo usiamo come sottodato, filtriamo e prendiamo solo start, noInput, noMatch.
   // Ignoriamo confirmation, notConfirmed, success anche se presenti nel template sottodato.
-  const subDataIds = template.subDataIds || [];
+  const subTasksIds = template.subTasksIds || [];
   const mainDataList = [];
 
-  if (subDataIds.length > 0) {
-    // ✅ Template composito: crea UN SOLO mainData con subData[] popolato
-    // ✅ PRIMA: Costruisci array di subData instances
-    // Per ogni ID in subDataIds, cerca il template corrispondente e crea una sotto-istanza
-    const subDataInstances = [];
+  if (subTasksIds.length > 0) {
+    // ✅ Template composito: crea UN SOLO mainData con subTasks[] popolato
+    // ✅ PRIMA: Costruisci array di subTasks instances
+    // Per ogni ID in subTasksIds, cerca il template corrispondente e crea una sotto-istanza
+    const subTasksInstances = [];
 
-    for (const subId of subDataIds) {
+    for (const subId of subTasksIds) {
       // ✅ Cerca template per ID (può essere _id, id, name, o label)
       const subTemplate = templates[subId] ||
         Object.values(templates).find((t) =>
@@ -3684,19 +3667,19 @@ async function useExistingTemplate(templateName, templates, userDesc) {
         }
 
         // ✅ Usa la label del template trovato (non l'ID!)
-        subDataInstances.push({
+        subTasksInstances.push({
           label: subTemplate.label || subTemplate.name || 'Sub',
           type: subTemplate.type || subTemplate.name || 'generic',
           icon: subTemplate.icon || 'FileText',
           stepPrompts: Object.keys(filteredStepPrompts).length > 0 ? filteredStepPrompts : null,
           constraints: subTemplate.dataContracts || subTemplate.constraints || [],
           examples: subTemplate.examples || [],
-          subData: []
+          subTasks: []
         });
       }
     }
 
-    // ✅ POI: Crea UN SOLO mainData con subData[] popolato (non elementi separati!)
+    // ✅ POI: Crea UN SOLO mainData con subTasks[] popolato (non elementi separati!)
     // L'istanza principale copia TUTTI i stepPrompts dal template (tutti e 6 i tipi)
     mainDataList.push({
       label: template.label,
@@ -3705,7 +3688,7 @@ async function useExistingTemplate(templateName, templates, userDesc) {
       stepPrompts: template.stepPrompts || null, // ✅ Tutti e 6 i tipi per main
       constraints: template.dataContracts || template.constraints || [],
       examples: template.examples || [],
-      subData: subDataInstances // ✅ Sottodati QUI dentro subData[], non in mainData[]
+      subTasks: subTasksInstances // ✅ Sottodati QUI dentro subTasks[], non in mainData[]
     }); // ✅ UN SOLO elemento in mainDataList
   } else {
     // ✅ Template semplice: crea istanza dal template root
@@ -3716,7 +3699,7 @@ async function useExistingTemplate(templateName, templates, userDesc) {
       stepPrompts: template.stepPrompts || null,
       constraints: template.dataContracts || template.constraints || [],
       examples: template.examples || [],
-      subData: []
+      subTasks: []
     });
   }
 
@@ -3951,8 +3934,8 @@ app.post('/step2-with-provider', async (req, res) => {
           score: heuristicResult.score,
           reason: heuristicResult.reason,
           templateType: heuristicResult.template?.type,
-          hasSubData: !!heuristicResult.template?.subData,
-          subDataCount: heuristicResult.template?.subData?.length || 0
+          hasSubTasks: !!heuristicResult.template?.subTasks,
+          subTasksCount: heuristicResult.template?.subTasks?.length || 0
         } : null
       });
 
@@ -5254,7 +5237,7 @@ app.get('/api/factory/template-label-translations', async (req, res) => {
       ]
     };
 
-    const templates1 = await db.collection('Tasks').find(templatesQuery).toArray();  // ✅ MIGRATO: Usa Tasks (migrazione completa, Task_Templates rimosso)
+    const templates1 = await db.collection('tasks').find(templatesQuery).toArray();  // ✅ Collection tasks (lowercase)
 
     const templateMap = new Map();
     templates1.forEach(t => {

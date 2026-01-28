@@ -13,6 +13,8 @@ Imports Microsoft.Extensions.DependencyInjection
 Imports Microsoft.Extensions.Hosting
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
+Imports Compiler
+Imports DDTEngine
 
 Module Program
     ''' <summary>
@@ -80,9 +82,14 @@ Module Program
                                   End Function)
 
         ' POST /api/runtime/compile - Read body manually to use Newtonsoft.Json (handles string->int conversion)
-        app.MapPost("/api/runtime/compile", Function(context As HttpContext) As Task
+        app.MapPost("/api/runtime/compile", Function(context As HttpContext) As System.Threading.Tasks.Task
                                                 Return HandleCompileFlow(context)
                                             End Function)
+
+        ' POST /api/runtime/compile/task - Compile a single task (for chat simulator)
+        app.MapPost("/api/runtime/compile/task", Function(context As HttpContext) As System.Threading.Tasks.Task(Of IResult)
+                                                    Return HandleCompileTask(context)
+                                                End Function)
 
         ' POST /api/runtime/orchestrator/session/start
         app.MapPost("/api/runtime/orchestrator/session/start", Async Function(context As HttpContext) As Task(Of IResult)
@@ -120,7 +127,7 @@ Module Program
                                                                End Function)
 
         ' GET /api/runtime/orchestrator/session/{id}/stream (SSE)
-        app.MapGet("/api/runtime/orchestrator/session/{id}/stream", Function(context As HttpContext, id As String) As Task
+        app.MapGet("/api/runtime/orchestrator/session/{id}/stream", Function(context As HttpContext, id As String) As System.Threading.Tasks.Task
                                                                         Return HandleOrchestratorSessionStream(context, id)
                                                                     End Function)
 
@@ -138,7 +145,7 @@ Module Program
     ''' <summary>
     ''' Handles POST /api/runtime/compile
     ''' </summary>
-    Private Async Function HandleCompileFlow(context As HttpContext) As Task
+    Private Async Function HandleCompileFlow(context As HttpContext) As System.Threading.Tasks.Task
         Console.WriteLine("📥 [HandleCompileFlow] Received compilation request")
 
         Try
@@ -437,6 +444,166 @@ Module Program
             context.Response.ContentType = "application/json"
             context.Response.StatusCode = 500
             context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' Handles POST /api/runtime/compile/task - Compile a single task
+    ''' </summary>
+    Private Async Function HandleCompileTask(context As HttpContext) As Task(Of IResult)
+        Console.WriteLine("═══════════════════════════════════════════════════════════════════════════")
+        Console.WriteLine("📥 [HandleCompileTask] Received single task compilation request")
+        System.Diagnostics.Debug.WriteLine("📥 [HandleCompileTask] Received single task compilation request")
+
+        Try
+            ' Enable buffering
+            Try
+                context.Request.EnableBuffering()
+            Catch ex As Exception
+                Console.WriteLine($"⚠️ [HandleCompileTask] EnableBuffering failed: {ex.Message}")
+            End Try
+
+            ' Reset stream position
+            Try
+                context.Request.Body.Position = 0
+            Catch ex As Exception
+                Console.WriteLine($"⚠️ [HandleCompileTask] Cannot reset stream position: {ex.Message}")
+            End Try
+
+            ' Read request body
+            Dim body As String = Nothing
+            Try
+                Dim reader As New StreamReader(context.Request.Body)
+                body = Await reader.ReadToEndAsync()
+                Console.WriteLine($"📦 [HandleCompileTask] Body read successfully: {If(body IsNot Nothing, body.Length, 0)} characters")
+            Catch readEx As Exception
+                Console.WriteLine($"❌ [HandleCompileTask] Error reading request body: {readEx.Message}")
+                Return Results.BadRequest(New With {.error = "Failed to read request body", .message = readEx.Message})
+            End Try
+
+            If String.IsNullOrEmpty(body) Then
+                Console.WriteLine("❌ [HandleCompileTask] Empty request body")
+                Return Results.BadRequest(New With {.error = "Empty request body"})
+            End If
+
+            ' Deserialize request - use JObject to parse and extract task
+            Dim requestObj As Newtonsoft.Json.Linq.JObject = Nothing
+            Try
+                Console.WriteLine("🔄 [HandleCompileTask] Starting JSON deserialization...")
+                requestObj = Newtonsoft.Json.Linq.JObject.Parse(body)
+                Console.WriteLine($"✅ [HandleCompileTask] JSON deserialization completed")
+            Catch deserializeEx As Exception
+                Console.WriteLine($"❌ [HandleCompileTask] Deserialization error: {deserializeEx.Message}")
+                Return Results.BadRequest(New With {.error = "Failed to deserialize request", .message = deserializeEx.Message})
+            End Try
+
+            If requestObj Is Nothing OrElse requestObj("task") Is Nothing Then
+                Console.WriteLine("❌ [HandleCompileTask] Request or task is Nothing")
+                Return Results.BadRequest(New With {.error = "Missing task in request"})
+            End If
+
+            ' Deserialize task
+            Dim task As Compiler.Task = Nothing
+            Try
+                Dim taskJson = requestObj("task").ToString()
+                task = JsonConvert.DeserializeObject(Of Compiler.Task)(taskJson, New JsonSerializerSettings() With {
+                    .NullValueHandling = NullValueHandling.Ignore,
+                    .MissingMemberHandling = MissingMemberHandling.Ignore
+                })
+            Catch ex As Exception
+                Console.WriteLine($"❌ [HandleCompileTask] Error deserializing task: {ex.Message}")
+                Return Results.BadRequest(New With {.error = "Failed to deserialize task", .message = ex.Message})
+            End Try
+
+            If task Is Nothing Then
+                Console.WriteLine("❌ [HandleCompileTask] Task is Nothing after deserialization")
+                Return Results.BadRequest(New With {.error = "Task is null"})
+            End If
+
+            ' Deserialize DDTs if present
+            Dim ddts As List(Of Compiler.AssembledDDT) = Nothing
+            If requestObj("ddts") IsNot Nothing Then
+                Try
+                    Dim ddtsJson = requestObj("ddts").ToString()
+                    ddts = JsonConvert.DeserializeObject(Of List(Of Compiler.AssembledDDT))(ddtsJson, New JsonSerializerSettings() With {
+                        .NullValueHandling = NullValueHandling.Ignore,
+                        .MissingMemberHandling = MissingMemberHandling.Ignore
+                    })
+                Catch ex As Exception
+                    Console.WriteLine($"⚠️ [HandleCompileTask] Error deserializing DDTs: {ex.Message}, continuing without DDTs")
+                End Try
+            End If
+            Console.WriteLine($"🔍 [HandleCompileTask] Task received: Id={task.Id}, Type={If(task.Type.HasValue, task.Type.Value.ToString(), "NULL")}")
+
+            ' Validate task type
+            If Not task.Type.HasValue Then
+                Console.WriteLine("❌ [HandleCompileTask] Task has no Type")
+                Return Results.BadRequest(New With {.error = "Task has no Type. Type is required."})
+            End If
+
+            Dim typeValue = task.Type.Value
+            If Not [Enum].IsDefined(GetType(TaskTypes), typeValue) Then
+                Console.WriteLine($"❌ [HandleCompileTask] Invalid TaskType: {typeValue}")
+                Return Results.BadRequest(New With {.error = $"Invalid TaskType: {typeValue}"})
+            End If
+
+            Dim taskType = CType(typeValue, TaskTypes)
+            Console.WriteLine($"✅ [HandleCompileTask] TaskType: {taskType} (value={typeValue})")
+
+            ' Get appropriate compiler based on task type
+            Dim compiler = TaskCompilerFactory.GetCompiler(taskType)
+            Console.WriteLine($"✅ [HandleCompileTask] Using compiler: {compiler.GetType().Name}")
+
+            ' Create dummy row/node/flow for compilation (required by compiler interface)
+            Dim dummyRow As New Compiler.RowData() With {
+                .Id = task.Id,
+                .TaskId = task.Id
+            }
+            Dim dummyNode As New Compiler.FlowNode() With {
+                .Id = "dummy-node",
+                .Rows = New List(Of Compiler.RowData) From {dummyRow}
+            }
+            Dim dummyFlow As New Compiler.Flow() With {
+                .Nodes = New List(Of Compiler.FlowNode) From {dummyNode},
+                .Tasks = New List(Of Compiler.Task) From {task},
+                .Edges = New List(Of Compiler.FlowEdge)(),
+                .DDTs = If(ddts, New List(Of Compiler.AssembledDDT)())
+            }
+
+            ' Compile the task
+            Console.WriteLine($"🔄 [HandleCompileTask] Calling compiler.Compile for task {task.Id}...")
+            Dim compiledTask = compiler.Compile(task, dummyRow, dummyNode, task.Id, dummyFlow)
+            Console.WriteLine($"✅ [HandleCompileTask] Task compiled successfully: {compiledTask.GetType().Name}")
+
+            ' Build response
+            Dim responseObj = New With {
+                .success = True,
+                .taskId = task.Id,
+                .taskType = taskType.ToString(),
+                .compiler = compiler.GetType().Name,
+                .compiledTaskType = compiledTask.GetType().Name,
+                .timestamp = DateTime.UtcNow.ToString("O")
+            }
+
+            Console.WriteLine($"✅ [HandleCompileTask] Compilation completed successfully")
+            Console.WriteLine("═══════════════════════════════════════════════════════════════════════════")
+
+            Return Results.Ok(responseObj)
+
+        Catch ex As Exception
+            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+            Console.WriteLine($"❌ [HandleCompileTask] Exception: {ex.Message}")
+            Console.WriteLine($"Stack trace: {ex.StackTrace}")
+            System.Diagnostics.Debug.WriteLine($"❌ [HandleCompileTask] Exception: {ex.Message}")
+            If ex.InnerException IsNot Nothing Then
+                Console.WriteLine($"Inner exception: {ex.InnerException.Message}")
+            End If
+            Console.WriteLine("═══════════════════════════════════════════════════════════════════════════")
+            Return Results.Problem(
+                title:="Compilation failed",
+                detail:=ex.Message,
+                statusCode:=500
+            )
         End Try
     End Function
 
@@ -1033,7 +1200,7 @@ Module Program
     ''' <summary>
     ''' Handles GET /api/runtime/orchestrator/session/{id}/stream (SSE)
     ''' </summary>
-    Private Async Function HandleOrchestratorSessionStream(context As HttpContext, sessionId As String) As Task
+    Private Async Function HandleOrchestratorSessionStream(context As HttpContext, sessionId As String) As System.Threading.Tasks.Task
         Try
             Console.WriteLine($"📡 [HandleOrchestratorSessionStream] SSE connection opened for session: {sessionId}")
             System.Diagnostics.Debug.WriteLine($"📡 [HandleOrchestratorSessionStream] SSE connection opened for session: {sessionId}")
@@ -1083,7 +1250,7 @@ Module Program
 
             ' Register event handlers (using Action with Task.Run for async operations)
             Dim onMessage As Action(Of Object) = Sub(data)
-                                                     Task.Run(Async Function()
+                                                     System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
                                                                   Try
                                                                       Await writer.WriteLineAsync($"event: message")
                                                                       Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
@@ -1092,12 +1259,11 @@ Module Program
                                                                   Catch ex As Exception
                                                                       Console.WriteLine($"❌ [SSE] Error sending message: {ex.Message}")
                                                                   End Try
-                                                                  Return Task.CompletedTask
                                                               End Function)
                                                  End Sub
 
             Dim onDDTStart As Action(Of Object) = Sub(data)
-                                                      Task.Run(Async Function()
+                                                      System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
                                                                    Try
                                                                        Await writer.WriteLineAsync($"event: ddtStart")
                                                                        Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
@@ -1106,12 +1272,11 @@ Module Program
                                                                    Catch ex As Exception
                                                                        Console.WriteLine($"❌ [SSE] Error sending ddtStart: {ex.Message}")
                                                                    End Try
-                                                                   Return Task.CompletedTask
                                                                End Function)
                                                   End Sub
 
             Dim onWaitingForInput As Action(Of Object) = Sub(data)
-                                                             Task.Run(Async Function()
+                                                             System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
                                                                           Try
                                                                               session.IsWaitingForInput = True
                                                                               session.WaitingForInputData = data
@@ -1122,12 +1287,11 @@ Module Program
                                                                           Catch ex As Exception
                                                                               Console.WriteLine($"❌ [SSE] Error sending waitingForInput: {ex.Message}")
                                                                           End Try
-                                                                          Return Task.CompletedTask
                                                                       End Function)
                                                          End Sub
 
             Dim onStateUpdate As Action(Of Object) = Sub(data)
-                                                         Task.Run(Async Function()
+                                                         System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
                                                                       Try
                                                                           Await writer.WriteLineAsync($"event: stateUpdate")
                                                                           Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
@@ -1136,12 +1300,11 @@ Module Program
                                                                       Catch ex As Exception
                                                                           Console.WriteLine($"❌ [SSE] Error sending stateUpdate: {ex.Message}")
                                                                       End Try
-                                                                      Return Task.CompletedTask
                                                                   End Function)
                                                      End Sub
 
             Dim onComplete As Action(Of Object) = Sub(data)
-                                                      Task.Run(Async Function()
+                                                      System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
                                                                    Try
                                                                        Await writer.WriteLineAsync($"event: complete")
                                                                        Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
@@ -1151,12 +1314,11 @@ Module Program
                                                                    Catch ex As Exception
                                                                        Console.WriteLine($"❌ [SSE] Error sending complete: {ex.Message}")
                                                                    End Try
-                                                                   Return Task.CompletedTask
                                                                End Function)
                                                   End Sub
 
             Dim onError As Action(Of Object) = Sub(data)
-                                                   Task.Run(Async Function()
+                                                   System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
                                                                 Try
                                                                     Await writer.WriteLineAsync($"event: error")
                                                                     Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
@@ -1166,7 +1328,6 @@ Module Program
                                                                 Catch ex As Exception
                                                                     Console.WriteLine($"❌ [SSE] Error sending error: {ex.Message}")
                                                                 End Try
-                                                                Return Task.CompletedTask
                                                             End Function)
                                                End Sub
 
@@ -1203,8 +1364,8 @@ Module Program
 
             ' Wait for connection to close
             Try
-                Await Task.Delay(Timeout.Infinite, context.RequestAborted)
-            Catch ex As TaskCanceledException
+                Await System.Threading.Tasks.Task.Delay(Timeout.Infinite, context.RequestAborted)
+            Catch ex As System.Threading.Tasks.TaskCanceledException
                 ' Connection closed normally
                 Console.WriteLine($"✅ [HandleOrchestratorSessionStream] Connection closed normally for session: {sessionId}")
                 System.Diagnostics.Debug.WriteLine($"✅ [HandleOrchestratorSessionStream] Connection closed normally for session: {sessionId}")
@@ -1354,3 +1515,5 @@ End Class
 Public Class OrchestratorSessionInputRequest
     Public Property Input As String
 End Class
+
+

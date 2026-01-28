@@ -39,7 +39,7 @@ export function resolveTaskType(row: any): TaskType {
     if (typeof row.type === 'string') {
       const typeMap: Record<string, TaskType> = {
         'Message': TaskType.SayMessage,
-        'DataRequest': TaskType.DataRequest,
+        'UtteranceInterpretation': TaskType.UtteranceInterpretation,
         'BackendCall': TaskType.BackendCall,
         'ProblemClassification': TaskType.ClassifyProblem,
         'AIAgent': TaskType.AIAgent,
@@ -107,13 +107,13 @@ export function hasTaskDDT(row: any): boolean {
 
     // Per DataRequest/ProblemClassification: controlla se c'è templateId o data
     // ✅ Per DataRequest, permettere sempre l'apertura (può essere creato un DDT vuoto)
-    if (taskType === TaskType.DataRequest || taskType === TaskType.ClassifyProblem) {
+    if (taskType === TaskType.UtteranceInterpretation || taskType === TaskType.ClassifyProblem) {
       // ✅ Controlla templateId (riferimento a template) o data (struttura diretta)
       // ✅ Per DataRequest, ritorna true anche se templateId è null (può essere creato un DDT vuoto)
       const hasTemplateId = task?.templateId && task.templateId !== 'UNDEFINED' && task.templateId !== null;
       const hasdata = task?.data && task.data.length > 0;
       // ✅ Per DataRequest, permettere sempre l'apertura (anche con DDT vuoto)
-      if (taskType === TaskType.DataRequest) {
+      if (taskType === TaskType.UtteranceInterpretation) {
         return true; // ✅ Sempre permesso per DataRequest (può essere creato un DDT vuoto)
       }
       // Per ProblemClassification, richiedi templateId o data
@@ -156,7 +156,7 @@ export function getTaskVisualsByType(type: TaskType, hasDDT: boolean) {
       labelColor = purple;
       iconColor = hasDDT ? purple : gray;
       break;
-    case TaskType.DataRequest:
+    case TaskType.UtteranceInterpretation:
       Icon = Ear;
       labelColor = blue;
       iconColor = hasDDT ? blue : gray;

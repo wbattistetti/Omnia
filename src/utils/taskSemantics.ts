@@ -2,9 +2,9 @@
  * Task Semantics Helper
  *
  * Deduce la semantica del task dalla struttura data:
- * - Atomic: 1 data, nessun subData
- * - CompositeData: 1 data, con subData
- * - Collection: N data, nessun subData nei data
+ * - Atomic: 1 data, nessun subTasks
+ * - CompositeData: 1 data, con subTasks
+ * - Collection: N data, nessun subTasks nei data
  *
  * La semantica è dedotta dalla struttura, non da campi espliciti.
  * Questo garantisce coerenza e retrocompatibilità.
@@ -25,22 +25,22 @@ export function getTaskSemantics(ddt: any): 'Atomic' | 'CompositeData' | 'Collec
     ? [ddt.data]
     : [];
 
-  // Atomic: 1 data, nessun subData
-  if (dataList.length === 1 && !dataList[0].subData?.length) {
+  // Atomic: 1 data, nessun subTasks
+  if (dataList.length === 1 && !dataList[0].subTasks?.length) {
     return 'Atomic';
   }
 
-  // CompositeData: 1 data, con subData
-  if (dataList.length === 1 && dataList[0].subData?.length > 0) {
+  // CompositeData: 1 data, con subTasks
+  if (dataList.length === 1 && dataList[0].subTasks?.length > 0) {
     return 'CompositeData';
   }
 
-  // Collection: N data, nessun subData nei data
+  // Collection: N data, nessun subTasks nei data
   if (dataList.length > 1) {
-    // Validazione: Collection non può avere subData
-    const hasSubData = dataList.some(m => m.subData?.length > 0);
+    // Validazione: Collection non può avere subTasks
+    const hasSubData = dataList.some(m => m.subTasks?.length > 0);
     if (hasSubData) {
-      throw new Error('Collection cannot have data with subData');
+      throw new Error('Collection cannot have data with subTasks');
     }
     return 'Collection';
   }
@@ -59,19 +59,19 @@ export function validateTaskStructure(ddt: any): { valid: boolean; error?: strin
   try {
     const semantics = getTaskSemantics(ddt);
 
-    // Validazione: massimo 2 livelli (data → subData)
+    // Validazione: massimo 2 livelli (data → subTasks)
     const dataList = Array.isArray(ddt.data)
       ? ddt.data
       : ddt.data ? [ddt.data] : [];
 
     for (const main of dataList) {
-      if (main.subData && Array.isArray(main.subData)) {
-        for (const sub of main.subData) {
-          // Verifica che non ci siano sub-subData (terzo livello)
-          if (sub.subData && Array.isArray(sub.subData) && sub.subData.length > 0) {
+      if (main.subTasks && Array.isArray(main.subTasks)) {
+        for (const sub of main.subTasks) {
+          // Verifica che non ci siano sub-subTasks (terzo livello)
+          if (sub.subTasks && Array.isArray(sub.subTasks) && sub.subTasks.length > 0) {
             return {
               valid: false,
-              error: 'Maximum 2 levels allowed (data → subData). Cannot have sub-subData.'
+              error: 'Maximum 2 levels allowed (data → subTasks). Cannot have sub-subTasks.'
             };
           }
         }

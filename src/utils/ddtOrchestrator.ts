@@ -174,11 +174,11 @@ export async function generateStructureFromAI(
     label: m.label || m.name || 'Field',
     type: m.type || 'text',
     constraints: m.constraints || [],
-    subData: (m.subData || []).map((s: any) => ({
+    subTasks: (m.subTasks || []).map((s: any) => ({
       label: s.label || s.name || 'Field',
       type: s.type || 'text',
       constraints: s.constraints || [],
-      subData: []
+      subTasks: []
     }))
   }));
 

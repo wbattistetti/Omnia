@@ -33,7 +33,7 @@ export const STANDARD_TASKS = {
     ],
 
     // Task per Sub Data (ogni sub data ha questi task)
-    subData: [
+    subTasks: [
         'startPrompt',
         'noInputPrompts',
         'noMatchPrompts',
@@ -47,7 +47,7 @@ export class TaskCounter {
     private taskStates: Record<string, Record<string, TaskStatus>> = {};
 
     // Inizializza i task per un campo
-    initializeField(fieldId: string, fieldType: 'data' | 'subData'): void {
+    initializeField(fieldId: string, fieldType: 'data' | 'subTasks'): void {
         const tasks = STANDARD_TASKS[fieldType];
         this.taskStates[fieldId] = {};
 
@@ -113,13 +113,13 @@ export class TaskCounter {
             // Calcola progresso Sub Data
             let subDataProgress = { totalTasks: 0, completedTasks: 0 };
 
-            if (main.subData && main.subData.length > 0) {
-                main.subData.forEach((sub: any, subIndex: number) => {
+            if (main.subTasks && main.subTasks.length > 0) {
+                main.subTasks.forEach((sub: any, subIndex: number) => {
                     const subFieldId = `${mainFieldId}/${sub.label || `sub_${subIndex}`}`;
 
                     // Inizializza se non esiste
                     if (!this.taskStates[subFieldId]) {
-                        this.initializeField(subFieldId, 'subData');
+                        this.initializeField(subFieldId, 'subTasks');
                     }
 
                     const subProgress = this.calculateFieldProgress(subFieldId);

@@ -19,7 +19,7 @@ function schemaNodeToDataNode(node: SchemaNode): any {
     label: node.label || '',
     type: node.type || 'text',
     variable: (node as any).variable,
-    subData: node.subData?.map(schemaNodeToDataNode) || [],
+    subData: node.subTasks?.map(schemaNodeToDataNode) || [],
     constraints: node.constraints || [],
     icon: (node as any).icon,
     nlpContract: (node as any).nlpContract,
@@ -67,7 +67,7 @@ export async function generateAllStepsFromAI(
     rootLabel,
     contextLabel,
     provider,
-    mainNodes: dataTree.map((n: any) => ({ label: n.label, type: n.type, subDataCount: n.subData?.length || 0 }))
+    mainNodes: dataTree.map((n: any) => ({ label: n.label, type: n.type, subDataCount: n.subTasks?.length || 0 }))
   });
 
   if (!dataTree || dataTree.length === 0) {

@@ -17,8 +17,8 @@ export function findOriginalNode(currentDDT: AssembledDDT, nodeLabel?: string, n
       return main;
     }
     // Check sub nodes
-    if (Array.isArray(main.subData)) {
-      for (const sub of main.subData) {
+    if (Array.isArray(main.subTasks)) {
+      for (const sub of main.subTasks) {
         if ((nodeLabel && sub.label === nodeLabel) || (nodeId && sub.id === nodeId)) {
           return sub;
         }

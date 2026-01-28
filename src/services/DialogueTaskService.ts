@@ -249,7 +249,7 @@ export class DialogueTaskService {
 
           // ✅ Usa mongoId (template._id) se disponibile, altrimenti templateId
           // L'endpoint PUT cerca per _id MongoDB
-          const response = await fetch(`/api/factory/task-templates/${mongoId}`, {
+          const response = await fetch(`/api/factory/tasks/${mongoId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)

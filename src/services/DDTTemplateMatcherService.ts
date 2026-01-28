@@ -158,7 +158,7 @@ export class DDTTemplateMatcherService {
 
       // ✅ STEP 2: Se il tipo è già DataRequest, non cercare (già corretto)
       // ✅ Accetta anche UNDEFINED e Message (Message è il default, può essere sovrascritto)
-      if (currentTaskType && currentTaskType !== 'UNDEFINED' && currentTaskType !== 'DataRequest' && currentTaskType !== 'Message') {
+      if (currentTaskType && currentTaskType !== 'UNDEFINED' && currentTaskType !== 'UtteranceInterpretation' && currentTaskType !== 'Message') {
         return null;
       }
 
@@ -182,8 +182,8 @@ export class DDTTemplateMatcherService {
       }
 
       // ✅ STEP 4: Filtra template in base al tipo trovato da Euristica 1
-      if (currentTaskType === 'DataRequest') {
-        // ✅ SOLO enum numerico: type === 3 (TaskType.DataRequest)
+      if (currentTaskType === 'UtteranceInterpretation') {
+        // ✅ SOLO enum numerico: type === 3 (TaskType.UtteranceInterpretation)
         const beforeFilter = templates.length;
         templates = templates.filter(t => t.type === 3);
         const afterFilter = templates.length;

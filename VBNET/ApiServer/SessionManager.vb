@@ -311,8 +311,8 @@ Public Class SessionManager
                                                                                      Dim firstNode = ddtInstance.MainDataList(0)
                                                                                      ' Calcola IsEmpty direttamente (evita problemi con extension methods tra progetti)
                                                                                      Dim firstNodeIsEmpty As Boolean
-                                                                                     If firstNode.SubData.Any Then
-                                                                                         firstNodeIsEmpty = Not firstNode.SubData.Any(Function(sd) sd.Value IsNot Nothing)
+                                                                                     If firstNode.SubTasks.Any Then
+                                                                                         firstNodeIsEmpty = Not firstNode.SubTasks.Any(Function(sd) sd.Value IsNot Nothing)
                                                                                      Else
                                                                                          firstNodeIsEmpty = firstNode.Value Is Nothing
                                                                                      End If

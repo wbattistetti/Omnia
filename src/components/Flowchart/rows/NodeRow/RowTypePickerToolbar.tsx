@@ -16,7 +16,7 @@ let isLoadingCache = false;
 // I 7 task principali
 const MAIN_TYPE_OPTIONS = [
     { value: TaskType.SayMessage, label: 'Message', Icon: Megaphone, color: '#34d399' },
-    { value: TaskType.DataRequest, label: 'Data', Icon: Ear, color: '#3b82f6' },
+    { value: TaskType.UtteranceInterpretation, label: 'Data', Icon: Ear, color: '#3b82f6' },
     { value: TaskType.BackendCall, label: 'BackendCall', Icon: Server, color: '#94a3b8' },
     { value: TaskType.ClassifyProblem, label: 'Problem', Icon: GitBranch, color: '#f59e0b' },
     { value: TaskType.AIAgent, label: 'AI Agent', Icon: Bot, color: '#a855f7' },
@@ -86,7 +86,7 @@ export function RowTypePickerToolbar({
             setIsLoadingOtherTasks(true);
             isLoadingCache = true;
 
-            fetch('/api/factory/task-templates?taskType=Action')
+            fetch('/api/factory/tasks?taskType=Action')
                 .then(res => res.json())
                 .then(templates => {
                     const tasks = templates.map((template: any) => ({
@@ -138,7 +138,7 @@ export function RowTypePickerToolbar({
             const map: Record<string, TaskType> = {
                 a: TaskType.AIAgent,
                 m: TaskType.SayMessage,
-                d: TaskType.DataRequest,
+                d: TaskType.UtteranceInterpretation,
                 n: TaskType.Negotiation,
                 p: TaskType.ClassifyProblem,
                 s: TaskType.Summarizer,

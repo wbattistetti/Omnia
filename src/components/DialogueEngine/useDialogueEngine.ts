@@ -7,6 +7,8 @@ import type { CompiledTask, CompilationResult, ExecutionState } from '../FlowCom
 // Frontend DialogueEngine removed - backend orchestrator is now default
 import { taskRepository } from '../../services/TaskRepository';
 import { getTemplateId } from '../../utils/taskHelpers';
+import { DialogueTaskService } from '../../services/DialogueTaskService';
+import { templateIdToTaskType, TaskType } from '../../types/taskTypes';
 
 interface UseDialogueEngineOptions {
   nodes: Node<FlowNode>[];
@@ -122,16 +124,63 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         const templateId = getTemplateId(task);
         // ✅ CASE-INSENSITIVE
         // ✅ Check if task has DDT (data indicates DDT)
-        if (templateId && templateId.toLowerCase() === 'getdata' && task.data && task.data.length > 0) {
+        if (templateId && templateIdToTaskType(templateId) === TaskType.UtteranceInterpretation && task.data && task.data.length > 0) {
           allDDTs.push({
             label: task.label,
             data: task.data,
-            steps: task.steps,  // ✅ Steps a root level
-            constraints: task.constraints,
-            examples: task.examples
+            steps: task.steps  // ✅ Steps a root level
+            // ❌ REMOVED: constraints, examples - these should come from template, not instance
           });
         }
       });
+
+      // ✅ Collect referenced templates and add them to allTasks
+      // Templates are needed by the compiler to resolve constraints/examples/nlpContract
+      const referencedTemplateIds = new Set<string>();
+      allTasks.forEach(task => {
+        if (task.templateId) {
+          referencedTemplateIds.add(task.templateId);
+        }
+        // Also check data nodes for templateId references
+        if (task.data && Array.isArray(task.data)) {
+          task.data.forEach((node: any) => {
+            if (node.templateId) {
+              referencedTemplateIds.add(node.templateId);
+            }
+            if (node.subTasks && Array.isArray(node.subTasks)) {
+              node.subTasks.forEach((subNode: any) => {
+                if (subNode.templateId) {
+                  referencedTemplateIds.add(subNode.templateId);
+                }
+              });
+            }
+          });
+        }
+      });
+
+      // Load referenced templates and add them to allTasks
+      const referencedTemplates: any[] = [];
+      referencedTemplateIds.forEach(templateId => {
+        // Skip if template is already in allTasks (as an instance)
+        if (allTasks.some(t => t.id === templateId)) {
+          return;
+        }
+        // Load template from DialogueTaskService
+        try {
+          const template = DialogueTaskService.getTemplate(templateId);
+          if (template) {
+            referencedTemplates.push(template);
+            console.log(`[useDialogueEngine] ✅ Added referenced template to flow.Tasks: ${templateId}`);
+          } else {
+            console.warn(`[useDialogueEngine] ⚠️ Referenced template not found: ${templateId}`);
+          }
+        } catch (error) {
+          console.warn(`[useDialogueEngine] ⚠️ Error loading template ${templateId}:`, error);
+        }
+      });
+
+      // Combine instance tasks and referenced templates
+      const allTasksWithTemplates = [...allTasks, ...referencedTemplates];
 
       const totalTasksInRepository = taskRepository.getAllTasks().length;
 
@@ -242,7 +291,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       const requestBody = {
         nodes: simplifiedNodes,  // ✅ Use simplified structure (rows directly, no data wrapper)
         edges: options.edges,
-        tasks: allTasks,
+        tasks: allTasksWithTemplates,  // ✅ Include both instance tasks and referenced templates
         ddts: allDDTs,
         projectId: localStorage.getItem('currentProjectId') || undefined,
         translations: translations // ✅ Pass translations table (already in memory) - runtime will do lookup at execution time

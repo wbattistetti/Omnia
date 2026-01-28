@@ -207,7 +207,7 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
       // ✅ REMOVED: updateTask ridondante - modifica direttamente task nella cache
       if (taskInstance) {
         // ✅ Modifica diretta nella cache
-        taskInstance.type = TaskType.DataRequest;
+        taskInstance.type = TaskType.UtteranceInterpretation;
         taskInstance.label = finalDDT.label;
         taskInstance.steps = finalDDT.steps;
         taskInstance.constraints = finalDDT.constraints;
@@ -227,7 +227,7 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
       } else {
         // ✅ Task non esiste, crealo
         taskInstance = taskRepository.createTask(
-          TaskType.DataRequest,
+          TaskType.UtteranceInterpretation,
           finalDDT.templateId || currentTemplateId || null,
           {
             label: finalDDT.label,

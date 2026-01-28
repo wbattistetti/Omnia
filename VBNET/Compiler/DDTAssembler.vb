@@ -179,7 +179,7 @@ Public Class DDTAssembler
             .Name = ideNode.Name,
             .Required = ideNode.Required,
             .Steps = New List(Of DDTEngine.DialogueStep)(),
-            .SubData = New List(Of DDTNode)(),
+            .SubTasks = New List(Of DDTNode)(),
             .State = DialogueState.Start,
             .Value = Nothing,
             .ParentData = parentNode
@@ -203,9 +203,9 @@ Public Class DDTAssembler
         End If
 
         ' Compila SubData (ricorsivo)
-        If ideNode.SubData IsNot Nothing Then
-            For Each subNode As Compiler.MainDataNode In ideNode.SubData
-                runtimeNode.SubData.Add(CompileNode(subNode, runtimeNode))
+        If ideNode.SubTasks IsNot Nothing Then
+            For Each subNode As Compiler.MainDataNode In ideNode.SubTasks
+                runtimeNode.SubTasks.Add(CompileNode(subNode, runtimeNode))
             Next
         End If
 
@@ -436,9 +436,9 @@ Public Class DDTAssembler
                 Console.WriteLine($"✅ [COMPILER][DDTAssembler] CompileTask: Creating TransferTask")
                 System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTAssembler] CompileTask: Creating TransferTask")
                 Return New TransferTask()
-            Case TaskTypes.DataRequest
-                Console.WriteLine($"❌ [COMPILER][DDTAssembler] CompileTask: DataRequest tasks are not supported in escalations, returning Nothing")
-                System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][DDTAssembler] CompileTask: DataRequest tasks are not supported in escalations, returning Nothing")
+            Case TaskTypes.UtteranceInterpretation
+                Console.WriteLine($"❌ [COMPILER][DDTAssembler] CompileTask: UtteranceInterpretation tasks are not supported in escalations, returning Nothing")
+                System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][DDTAssembler] CompileTask: UtteranceInterpretation tasks are not supported in escalations, returning Nothing")
                 Return Nothing
             Case TaskTypes.BackendCall
                 Console.WriteLine($"❌ [COMPILER][DDTAssembler] CompileTask: BackendCall tasks are not supported in escalations, returning Nothing")
@@ -502,8 +502,8 @@ Public Class DDTAssembler
         node.FullLabel = currentPath
 
         ' Ricorsivo per subData
-        If node.SubData IsNot Nothing Then
-            For Each subNode As DDTNode In node.SubData
+        If node.SubTasks IsNot Nothing Then
+            For Each subNode As DDTNode In node.SubTasks
                 CalculateFullLabelForNode(subNode, currentPath)
             Next
         End If

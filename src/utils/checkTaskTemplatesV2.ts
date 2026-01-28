@@ -33,7 +33,7 @@ export async function checkTaskTemplatesV2(): Promise<{
     // 2. Usa path relativo per sfruttare il proxy Vite
     // Il proxy in vite.config.ts inoltra /api/factory a http://localhost:3100 (Express)
     // Gli endpoint /api/factory sono sempre gestiti da Express, anche se il runtime è VB.NET
-    const testUrl = `/api/factory/task-templates-v2?scopes=general`;
+    const testUrl = `/api/factory/tasks?scopes=general`;
 
     console.log('[checkTaskTemplatesV2] Testing endpoint:', testUrl);
     console.log('[checkTaskTemplatesV2] Full URL (via Vite proxy):', window.location.origin + testUrl);

@@ -8,6 +8,7 @@ import { buildFirstRowCondition, buildSequentialCondition } from './conditionBui
 import { expandDDT } from './ddtExpander';
 import { taskRepository } from '../../services/TaskRepository';
 import { getTemplateId } from '../../utils/taskHelpers';
+import { templateIdToTaskType, TaskType } from '../../types/taskTypes';
 // ✅ REMOVED: templateIdToVBAction - no longer needed, VB.NET uses templateId (string) directly
 
 interface CompilerOptions {
@@ -153,7 +154,7 @@ export function compileFlow(
       // ✅ MIGRATION: Use templateId instead of task.action
       // ✅ CASE-INSENSITIVE: If task is DataRequest, expand DDT
       // ✅ Check if task has DDT (data indicates DDT)
-      if (templateId && (templateId.toLowerCase() === 'getdata' || templateId.toLowerCase() === 'datarequest') && task.data && task.data.length > 0 && options.getDDT) {
+      if (templateId && templateIdToTaskType(templateId) === TaskType.UtteranceInterpretation && task.data && task.data.length > 0 && options.getDDT) {
         const ddt = options.getDDT(task.id);
         if (ddt) {
           const { tasks: ddtTasks, expansion } = expandDDT(

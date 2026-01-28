@@ -528,7 +528,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
         // ✅ AGGIORNA RIGA con metadati
         // ✅ Converti TaskType enum → string per row.type (compatibilità con codice esistente)
-        const rowType = taskType === TaskType.DataRequest ? 'DataRequest' :
+        const rowType = taskType === TaskType.UtteranceInterpretation ? 'UtteranceInterpretation' :
                        taskType === TaskType.SayMessage ? 'Message' :
                        taskType === TaskType.ClassifyProblem ? 'ProblemClassification' :
                        taskType === TaskType.BackendCall ? 'BackendCall' : undefined;
@@ -681,7 +681,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         // ✅ TaskType enum: usa direttamente
         finalTaskType = selectedTaskType;
         typeString = finalTaskType === TaskType.SayMessage ? 'Message' :
-                    finalTaskType === TaskType.DataRequest ? 'DataRequest' :
+                    finalTaskType === TaskType.UtteranceInterpretation ? 'UtteranceInterpretation' :
                     finalTaskType === TaskType.BackendCall ? 'BackendCall' :
                     finalTaskType === TaskType.ClassifyProblem ? 'ProblemClassification' :
                     finalTaskType === TaskType.AIAgent ? 'AIAgent' :
@@ -1112,8 +1112,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       // Map templateId to task type
       const templateIdToTaskType: Record<string, string> = {
         'SayMessage': 'Message',
-        'GetData': 'DataRequest', // ✅ Backward compatibility
-        'DataRequest': 'DataRequest',
+        'UtteranceInterpretation': 'UtteranceInterpretation',
         'ClassifyProblem': 'ProblemClassification',
         'callBackend': 'BackendCall'
       };
@@ -1709,7 +1708,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             // ✅ Per DataRequest, sempre abilitato (può essere creato un DDT vuoto)
             gearDisabled={(() => {
               const taskType = resolveTaskType(row);
-              if (taskType === TaskType.DataRequest) {
+              if (taskType === TaskType.UtteranceInterpretation) {
                 return false; // ✅ Sempre abilitato per DataRequest
               }
               return isUndefined && !hasTaskDDT(row); // Disabilitato se undefined e nessun DDT
@@ -1717,7 +1716,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             onOpenDDT={(() => {
               // ✅ Permetti sempre l'apertura per DataRequest (può essere creato un DDT vuoto)
               const taskType = resolveTaskType(row);
-              if (taskType === TaskType.DataRequest) {
+              if (taskType === TaskType.UtteranceInterpretation) {
                 // ✅ Sempre permesso per DataRequest, anche se isUndefined o !hasTaskDDT
                 return async () => {
                   try {
@@ -1759,7 +1758,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         if (template) {
                           const { RowHeuristicsService } = await import('../../../../services/RowHeuristicsService');
                           const templateType = RowHeuristicsService.getTemplateType(template);
-                          if (templateType === TaskType.DataRequest) {
+                          if (templateType === TaskType.UtteranceInterpretation) {
                             const { buildDDTFromTask } = await import('../../../../utils/taskUtils');
                             ddt = await buildDDTFromTask(taskForType);
                           }
@@ -1798,7 +1797,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     const projectId = getProjectId?.() || undefined;
 
                     // ✅ Sotto-caso 2a: C'è templateId → mostra preview struttura template
-                    if (metaTemplateId && metaTaskType === TaskType.DataRequest) {
+                    if (metaTemplateId && metaTaskType === TaskType.UtteranceInterpretation) {
                       try {
                         console.log('[🔍 NodeRow][onOpenDDT] ✅ CASO 2a: Template candidato trovato, mostrando preview', {
                           templateId: metaTemplateId,
@@ -1835,7 +1834,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     }
 
                     // ✅ Sotto-caso 2b: NON c'è templateId → genera struttura da AI, poi mostra preview
-                    if (!metaTemplateId && metaTaskType === TaskType.DataRequest && row.text && row.text.trim().length >= 3) {
+                    if (!metaTemplateId && metaTaskType === TaskType.UtteranceInterpretation && row.text && row.text.trim().length >= 3) {
                       try {
                         console.log('[🔍 NodeRow][onOpenDDT] ✅ CASO 2b: Nessun template, generando struttura da AI', {
                           label: row.text,
@@ -1892,7 +1891,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       let initialTaskData: any = { label: row.text || '' };
 
                       // ✅ CASO 1: Se c'è inferredCategory (problem-classification, choice, confirmation)
-                      if (inferredCategory && metaTaskType === TaskType.DataRequest) {
+                      if (inferredCategory && metaTaskType === TaskType.UtteranceInterpretation) {
                         const { v4: uuidv4 } = await import('uuid');
                         const { getdataLabelForCategory, getDefaultValuesForCategory, getCurrentProjectLocale } = await import('../../../../utils/categoryPresets');
 
@@ -1928,7 +1927,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         }
                       }
                       // ✅ CASO 2: Se NON c'è categoria ma c'è templateId → usa template (NON creare data qui)
-                      else if (metaTemplateId && metaTaskType === TaskType.DataRequest) {
+                      else if (metaTemplateId && metaTaskType === TaskType.UtteranceInterpretation) {
                         initialTaskData.templateId = metaTemplateId; // ✅ Usa template dall'euristica 2
                         // data sarà caricato dal template quando si apre ResponseEditor
                         console.log('✅ [LAZY] Task creato con templateId, data sarà caricato dal template', {
@@ -1999,7 +1998,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     // ✅ Usa TaskType dal task o dai metadati
                     const finalTaskType = taskForType
                       ? (taskForType.type as TaskType)
-                      : ((row as any)?.meta?.type || TaskType.DataRequest);
+                      : ((row as any)?.meta?.type || TaskType.UtteranceInterpretation);
 
                     taskEditorCtx.open({ id: String(taskIdForType), type: finalTaskType, label: row.text, instanceId: row.id }); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx, type → taskType (enum)
 
@@ -2019,7 +2018,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         const templateType = RowHeuristicsService.getTemplateType(template);
 
                         // ✅ Costruisci DDT SOLO se il template è di tipo DataRequest
-                        if (templateType === TaskType.DataRequest) {
+                        if (templateType === TaskType.UtteranceInterpretation) {
                           // ✅ buildDDTFromTask gestisce merge: template come base + override da instance.data
                           const { buildDDTFromTask } = await import('../../../../utils/taskUtils');
                           ddt = await buildDDTFromTask(taskForType);
@@ -2140,7 +2139,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                   // ✅ Solo per DataRequest (editorKind === 'ddt'), prepara DDT ed emetti evento
                   // ✅ Per altri tipi (SayMessage, BackendCall, AIAgent, Summarizer, Negotiation, ecc.), emetti evento senza DDT
-                  if (editorKind === 'ddt' && taskType === TaskType.DataRequest) {
+                  if (editorKind === 'ddt' && taskType === TaskType.UtteranceInterpretation) {
                     // ✅ SOLO per DataRequest: costruisci DDT solo se:
                     // 1. C'è templateId E il template è di tipo DataRequest
                     // 2. OPPURE c'è data esistente (DDT già salvato, standalone o con override)
@@ -2157,7 +2156,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         const templateType = RowHeuristicsService.getTemplateType(template);
 
                         // ✅ Costruisci DDT SOLO se il template è di tipo DataRequest
-                        if (templateType === TaskType.DataRequest) {
+                        if (templateType === TaskType.UtteranceInterpretation) {
                           // ✅ buildDDTFromTask gestisce merge: template come base + override da instance.data
                           const { buildDDTFromTask } = await import('../../../../utils/taskUtils');
                           ddt = await buildDDTFromTask(taskForType);
@@ -2320,7 +2319,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                         // Crea task base (createTask salva automaticamente, ma senza steps è OK)
                         const task = taskRepository.createTask(
-                          TaskType.DataRequest,
+                          TaskType.UtteranceInterpretation,
                           previewData.templateId,
                           { label: row.text || '' },
                           row.id,
@@ -2335,7 +2334,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         // ✅ updatedAt verrà aggiornato al salvataggio esplicito del progetto
 
                         // Apri ResponseEditor
-                        taskEditorCtx.open({ id: task.id, type: TaskType.DataRequest, label: row.text, instanceId: row.id });
+                        taskEditorCtx.open({ id: task.id, type: TaskType.UtteranceInterpretation, label: row.text, instanceId: row.id });
 
                         const { buildDDTFromTask } = await import('../../../../utils/taskUtils');
                         const ddt = await buildDDTFromTask(task);
@@ -2343,7 +2342,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         const event = new CustomEvent('taskEditor:open', {
                           detail: {
                             id: task.id,
-                            type: TaskType.DataRequest,
+                            type: TaskType.UtteranceInterpretation,
                             label: row.text,
                             ddt: ddt,
                             instanceId: row.id,
@@ -2364,7 +2363,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                         // Crea task base (senza templateId = standalone)
                         const task = taskRepository.createTask(
-                          TaskType.DataRequest,
+                          TaskType.UtteranceInterpretation,
                           null, // ✅ Standalone, no templateId
                           { label: row.text || '' },
                           row.id,
@@ -2386,12 +2385,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         }, projectId);
 
                         // Apri ResponseEditor
-                        taskEditorCtx.open({ id: task.id, type: TaskType.DataRequest, label: row.text, instanceId: row.id });
+                        taskEditorCtx.open({ id: task.id, type: TaskType.UtteranceInterpretation, label: row.text, instanceId: row.id });
 
                         const event = new CustomEvent('taskEditor:open', {
                           detail: {
                             id: task.id,
-                            type: TaskType.DataRequest,
+                            type: TaskType.UtteranceInterpretation,
                             label: row.text,
                             ddt: ddt,
                             instanceId: row.id
@@ -2417,19 +2416,19 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     // Crea task vuoto e apri ResponseEditor (che aprirà wizard)
                     const projectId = getProjectId?.() || undefined;
                     const task = taskRepository.createTask(
-                      TaskType.DataRequest,
+                      TaskType.UtteranceInterpretation,
                       null,
                       { label: row.text || '' },
                       row.id,
                       projectId
                     );
 
-                    taskEditorCtx.open({ id: task.id, type: TaskType.DataRequest, label: row.text, instanceId: row.id });
+                    taskEditorCtx.open({ id: task.id, type: TaskType.UtteranceInterpretation, label: row.text, instanceId: row.id });
 
                     const event = new CustomEvent('taskEditor:open', {
                       detail: {
                         id: task.id,
-                        type: TaskType.DataRequest,
+                        type: TaskType.UtteranceInterpretation,
                         label: row.text,
                         ddt: null, // ✅ null = ResponseEditor aprirà wizard
                         instanceId: row.id

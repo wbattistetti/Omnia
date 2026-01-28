@@ -218,7 +218,7 @@ export async function loadAndAdaptDDTForExistingTask(
       id: n.id,
       templateId: n.templateId,
       label: n.label,
-      subDataCount: n.subData?.length || 0
+      subDataCount: n.subTasks?.length || 0
     }))
   });
 
@@ -319,7 +319,7 @@ export async function loadAndAdaptDDTForExistingTask(
         : undefined,
       // ✅ CRITICAL: dataContract è sempre dal template, non più override
       dataContract: templateNode.dataContract,
-      subData: templateNode.subData || []
+      subData: templateNode.subTasks || []
     };
   });
 

@@ -234,7 +234,7 @@ export default function DDEBubbleChat({
         const baseUrl = 'http://localhost:3101';
         fetch(`${baseUrl}/api/runtime/ddt/session/${sessionId}`, {
           method: 'DELETE'
-        }).catch(() => {});
+        }).catch(() => { });
       }
     };
   }, [currentDDT]);
@@ -304,13 +304,83 @@ export default function DDEBubbleChat({
     }
   };
 
+  // Compile function - Recompiles the DDT task using task-specific compiler
+  const [isCompiling, setIsCompiling] = React.useState(false);
+  const handleCompile = async () => {
+    if (!currentDDT) {
+      setBackendError('No DDT to compile');
+      return;
+    }
+
+    setIsCompiling(true);
+    setBackendError(null);
+
+    try {
+      const baseUrl = 'http://localhost:3101';
+      const translationsData = ((currentDDT as any)?.translations && (((currentDDT as any).translations as any).en || (currentDDT as any).translations)) || {};
+
+      // ✅ Extract task from DDT - DDT is a DataRequest task
+      // TaskType 3 = DataRequest (from TaskTypes enum)
+      // ✅ Constraints/examples/nlpContract are ALWAYS from template, NOT from instance
+      const task = {
+        id: currentDDT.id || `task-${Date.now()}`,
+        type: 3, // TaskTypes.DataRequest
+        templateId: null, // TODO: Should be set to actual templateId if task references a template
+        data: currentDDT.data || [],
+        label: currentDDT.label,
+        stepPrompts: currentDDT.stepPrompts
+        // ❌ REMOVED: constraints, examples - these should come from template, not instance
+      };
+
+      console.log('[DDEBubbleChat] 🔄 Compiling single task...', { taskId: task.id, taskType: task.type });
+
+      const response = await fetch(`${baseUrl}/api/runtime/compile/task`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          task: task,
+          ddts: [currentDDT], // Include DDT for reference
+          translations: translationsData
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || errorData.message || errorData.detail || 'Compilation failed');
+      }
+
+      const result = await response.json();
+      console.log('[DDEBubbleChat] ✅ Task compiled successfully', result);
+
+      // Show success message with compiler info
+      const compilerInfo = result.compiler ? ` using ${result.compiler}` : '';
+      const successMessage: Message = {
+        id: generateMessageId('compile-success'),
+        type: 'bot',
+        text: `✅ Task compiled successfully${compilerInfo} (${result.taskType || 'Unknown'})`,
+        timestamp: new Date().toISOString()
+      };
+      setMessages(prev => [...prev, successMessage]);
+
+      // Optionally reset and restart session after compilation
+      setTimeout(() => {
+        handleReset();
+      }, 500);
+    } catch (err: any) {
+      console.error('[DDEBubbleChat] Error compiling task', err);
+      setBackendError(err.message || 'Failed to compile task');
+    } finally {
+      setIsCompiling(false);
+    }
+  };
+
   // Reset function
   const handleReset = () => {
     if (sessionId) {
       const baseUrl = 'http://localhost:3101';
       fetch(`${baseUrl}/api/runtime/ddt/session/${sessionId}`, {
         method: 'DELETE'
-      }).catch(() => {});
+      }).catch(() => { });
     }
     setMessages([]);
     messageIdCounter.current = 0;
@@ -352,8 +422,17 @@ export default function DDEBubbleChat({
     <div className={`h-full flex flex-col bg-white ${combinedClass}`}>
       <div className="border-b p-3 bg-gray-50 flex items-center gap-2">
         <button
+          onClick={handleCompile}
+          disabled={isCompiling}
+          className={`px-2 py-1 rounded border bg-blue-100 border-blue-300 text-blue-700 hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed ${combinedClass}`}
+          title="Recompile the DDT task"
+        >
+          {isCompiling ? 'Compiling...' : 'Compila'}
+        </button>
+        <button
           onClick={handleReset}
-          className={`px-2 py-1 rounded border bg-gray-100 border-gray-300 text-gray-700 ${combinedClass}`}
+          className={`px-2 py-1 rounded border bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200 ${combinedClass}`}
+          title="Reset the chat session"
         >
           Reset
         </button>
@@ -410,7 +489,8 @@ export default function DDEBubbleChat({
         })}
         {/* Input field */}
         <div className={`bg-white border border-gray-300 rounded-lg p-2 shadow-sm max-w-xs lg:max-w-md w-full mt-3 ${combinedClass}`}>
-          <style dangerouslySetInnerHTML={{__html: `
+          <style dangerouslySetInnerHTML={{
+            __html: `
             .chat-simulator-input-placeholder::placeholder {
               font-family: inherit !important;
               font-size: inherit !important;

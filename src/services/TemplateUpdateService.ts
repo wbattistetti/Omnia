@@ -36,7 +36,7 @@ export async function updateTemplateContract(
     };
 
     // Chiama API backend
-    const response = await fetch(`/api/factory/task-templates/${templateId}`, {
+    const response = await fetch(`/api/factory/tasks/${templateId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updatePayload)

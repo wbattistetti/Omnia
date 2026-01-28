@@ -92,7 +92,7 @@ Public Class DDTCompiler
     End Sub
 
     ''' <summary>
-    ''' Carica e compila nlpContract per un nodo e ricorsivamente per i suoi subData
+    ''' Carica e compila nlpContract per un nodo e ricorsivamente per i suoi subTasks
     ''' </summary>
     Private Sub LoadContractForNode(node As DDTNode)
         ' Se il contract non è già presente, prova a caricarlo e compilarlo
@@ -104,9 +104,9 @@ Public Class DDTCompiler
             End If
         End If
 
-        ' Ricorsivo per subData
-        If node.SubData IsNot Nothing Then
-            For Each subData As DDTNode In node.SubData
+        ' Ricorsivo per subTasks
+        If node.SubTasks IsNot Nothing Then
+            For Each subData As DDTNode In node.SubTasks
                 LoadContractForNode(subData)
             Next
         End If
@@ -128,7 +128,7 @@ Public Class DDTCompiler
     End Function
 
     ''' <summary>
-    ''' Valida un nodo e ricorsivamente i suoi subData
+    ''' Valida un nodo e ricorsivamente i suoi subTasks
     ''' </summary>
     Private Sub ValidateNode(node As DDTNode, errors As List(Of String))
         ' Valida placeholder nei messaggi
@@ -154,9 +154,9 @@ Public Class DDTCompiler
             ValidateRegexPatterns(node.NlpContract.Regex, node, errors)
         End If
 
-        ' Ricorsivo per subData
-        If node.SubData IsNot Nothing Then
-            For Each subData As DDTNode In node.SubData
+        ' Ricorsivo per subTasks
+        If node.SubTasks IsNot Nothing Then
+            For Each subData As DDTNode In node.SubTasks
                 ValidateNode(subData, errors)
             Next
         End If

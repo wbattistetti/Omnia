@@ -29,9 +29,9 @@ Public Class DDTNode
     Public Property Required As Boolean
 
     ''' <summary>
-    ''' Lista di subData (per nodi compositi)
+    ''' Lista di subTasks (per nodi compositi)
     ''' </summary>
-    Public Property SubData As List(Of DDTNode)
+    Public Property SubTasks As List(Of DDTNode)
 
     ' ============================================================
     ' CAMPI RUNTIME (calcolati/usati durante esecuzione)
@@ -84,7 +84,7 @@ Public Class DDTNode
         Value = Nothing
         InvalidConditionId = Nothing
 
-        ' Resetta anche tutti i subData
+        ' Resetta anche tutti i subTasks
         If SubData IsNot Nothing Then
             For Each subNode As DDTNode In SubData
                 subNode.Reset()
@@ -93,10 +93,10 @@ Public Class DDTNode
     End Sub
 
     ''' <summary>
-    ''' Verifica se il nodo ha subData
+    ''' Verifica se il nodo ha subTasks
     ''' </summary>
-    Public Function HasSubData() As Boolean
-        Return SubData IsNot Nothing AndAlso SubData.Count > 0
+    Public Function HasSubTasks() As Boolean
+        Return SubTasks IsNot Nothing AndAlso SubTasks.Count > 0
     End Function
 
     ''' <summary>

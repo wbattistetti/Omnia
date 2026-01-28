@@ -332,8 +332,8 @@ export function useProfileState(
     const ex = examplesList;
     const post = tryParseJSON(postProcessText);
     setJsonError(post.error);
-    const autoSubSlots = Array.isArray((node as any)?.subData)
-      ? (node as any).subData.map((s: any) => ({
+    const autoSubSlots = Array.isArray((node as any)?.subTasks)
+      ? (node as any).subTasks.map((s: any) => ({
         slotId: s?.id || String(s?.label || s?.name || '').toLowerCase().replace(/\s+/g, '_'),
         label: s?.label || s?.name || ''
       }))

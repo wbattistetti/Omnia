@@ -133,8 +133,8 @@ export class EntityCreationService {
           // ✅ Convert mode string to TaskType enum if needed
           const finalType = providedType || (() => {
             const mode = classifyTaskMode(options.name);
-            if (mode === 'DataRequest') return TaskType.DataRequest;
-            if (mode === 'DataConfirmation') return TaskType.DataRequest; // DataConfirmation → DataRequest
+            if (mode === 'DataRequest') return TaskType.UtteranceInterpretation;
+            if (mode === 'DataConfirmation') return TaskType.UtteranceInterpretation; // DataConfirmation → UtteranceInterpretation
             return TaskType.SayMessage; // Message → SayMessage
           })();
           return {
@@ -198,10 +198,10 @@ export class EntityCreationService {
     const config = ENTITY_CONFIGS[entityType];
 
     // Mappa i tipi di entità agli endpoint
-    // ✅ MIGRATO: backendActions → task-templates-v2?taskType=Action (Tasks type: 4)
+    // ✅ backendActions → tasks?taskType=Action (Tasks type: 4)
     const endpointMap: { [key: string]: string } = {
-      'taskTemplates': '/api/factory/task-templates-v2',
-      'backendActions': '/api/factory/task-templates-v2?taskType=Action',
+      'taskTemplates': '/api/factory/tasks',
+      'backendActions': '/api/factory/tasks?taskType=Action',
       'macrotasks': '/api/factory/macrotasks'
     };
 
@@ -230,8 +230,8 @@ export class EntityCreationService {
       ...(entityType === 'taskTemplates' && {
         type: (() => {
           const mode = classifyTaskMode(name);
-          if (mode === 'DataRequest') return TaskType.DataRequest;
-          if (mode === 'DataConfirmation') return TaskType.DataRequest; // DataConfirmation → DataRequest
+          if (mode === 'DataRequest') return TaskType.UtteranceInterpretation;
+          if (mode === 'DataConfirmation') return TaskType.UtteranceInterpretation; // DataConfirmation → DataRequest
           return TaskType.SayMessage; // Message → SayMessage
         })(), // ✅ TaskType enum instead of mode
         data: {},
@@ -349,8 +349,8 @@ export class EntityCreationService {
   ): any {
     const finalType = originalEntityType === 'taskTemplates' ? (() => {
       const mode = classifyTaskMode(name);
-      if (mode === 'DataRequest') return TaskType.DataRequest;
-      if (mode === 'DataConfirmation') return TaskType.DataRequest; // DataConfirmation → DataRequest
+      if (mode === 'DataRequest') return TaskType.UtteranceInterpretation;
+      if (mode === 'DataConfirmation') return TaskType.UtteranceInterpretation; // DataConfirmation → DataRequest
       return TaskType.SayMessage; // Message → SayMessage
     })() : undefined;
     const newItemId = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;

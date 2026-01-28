@@ -61,8 +61,8 @@ export function extractStartPrompts(
     const collectAllNodes = (nodes: any[]) => {
       for (const node of nodes) {
         nodesToProcess.push(node);
-        if (node.subData && Array.isArray(node.subData)) {
-          collectAllNodes(node.subData);
+        if (node.subTasks && Array.isArray(node.subTasks)) {
+          collectAllNodes(node.subTasks);
         }
       }
     };

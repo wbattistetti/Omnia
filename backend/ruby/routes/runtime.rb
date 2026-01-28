@@ -61,6 +61,39 @@ class RuntimeRoutes < Sinatra::Base
     end
   end
 
+  post '/api/runtime/compile/task' do
+    content_type :json
+
+    begin
+      puts "[RUBY] POST /api/runtime/compile/task - Request received"
+      request_data = JSON.parse(request.body.read)
+      puts "[RUBY] Request parsed successfully"
+
+      # Forward to VB.NET API
+      result = VBNetClient.compile_task(
+        request_data['task'],
+        request_data['ddts'] || [],
+        request_data['translations'] || {}
+      )
+
+      puts "[RUBY] VBNetClient.compile_task completed successfully"
+
+      result.to_json
+    rescue => e
+      puts "[RUBY] ❌ Error in /api/runtime/compile/task:"
+      puts "[RUBY]    #{e.class}: #{e.message}"
+      puts "[RUBY]    Backtrace:"
+      e.backtrace.first(10).each { |line| puts "[RUBY]      #{line}" }
+
+      status 500
+      {
+        error: 'Task compilation failed',
+        message: e.message,
+        stack: e.backtrace.join("\n")
+      }.to_json
+    end
+  end
+
   post '/api/runtime/ddt/run' do
     content_type :json
 

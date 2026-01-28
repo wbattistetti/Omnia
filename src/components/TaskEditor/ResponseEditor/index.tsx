@@ -6,7 +6,7 @@ import { useDDTManager } from '../../../context/DDTManagerContext';
 import { taskRepository } from '../../../services/TaskRepository';
 import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
 import { getTemplateId } from '../../../utils/taskHelpers';
-import { TaskType } from '../../../types/taskTypes'; // ✅ RIMOSSO: taskIdToTaskType - non più necessario, task.type è già TaskType enum
+import { TaskType, isUtteranceInterpretationTemplateId, isUtteranceInterpretationTask } from '../../../types/taskTypes'; // ✅ Helper functions per evitare stringhe hardcoded
 import Sidebar from './Sidebar';
 import BehaviourEditor from './BehaviourEditor';
 import RightPanel, { useRightPanelWidth, RightPanelMode } from './RightPanel';
@@ -147,7 +147,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
   // ✅ Load tasks for escalation palette
   const [escalationTasks, setEscalationTasks] = React.useState<any[]>([]);
   React.useEffect(() => {
-    fetch('/api/factory/task-templates?taskType=Action')
+    fetch('/api/factory/tasks?taskType=Action')
       .then(res => {
         if (!res.ok) {
           console.warn('[ResponseEditor] Failed to load escalation tasks: HTTP', res.status);
@@ -338,10 +338,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
           const currentTemplateId = getTemplateId(taskInstance);
 
-          // ✅ CASE-INSENSITIVE
-          if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
+          // ✅ Usa helper function invece di stringa hardcoded
+          if (!isUtteranceInterpretationTemplateId(currentTemplateId)) {
             await taskRepository.updateTask(key, {
-              type: TaskType.DataRequest,  // ✅ type: enum numerico
+              type: TaskType.UtteranceInterpretation,  // ✅ type: enum numerico
               templateId: null,            // ✅ templateId: null (standalone)
               ...modifiedFields  // ✅ Salva solo override, non tutto
             }, currentProjectId || undefined);
@@ -465,7 +465,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
   const [selectedIntentIdForTraining, setSelectedIntentIdForTraining] = useState<string | null>(null);
 
   // Header: icon, title, and toolbar
-  const taskType = task?.type ?? TaskType.DataRequest; // ✅ RINOMINATO: actType → taskType, usa TaskType enum
+  const taskType = task?.type ?? TaskType.UtteranceInterpretation; // ✅ RINOMINATO: actType → taskType, usa TaskType enum
 
   // ✅ Verifica se kind === "intent" e non ha messaggi (mostra IntentMessagesBuilder se non ci sono)
   const needsIntentMessages = useMemo(() => {
@@ -686,11 +686,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
             nlpProfileExamplesCount: Array.isArray(savedNode?.nlpProfile?.examples) ? savedNode.nlpProfile.examples.length : 0
           });
         } else {
-          const subList = main.subData || [];
+          const subList = main.subTasks || [];
           const subIdx = subList.findIndex((s: any, idx: number) => idx === subIndex);
           if (subIdx >= 0) {
             subList[subIdx] = selectedNode;
-            main.subData = subList;
+            main.subTasks = subList;
             mains[mainIndex] = main;
             ddtRef.current.data = mains;
           }
@@ -795,7 +795,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
         if (hasDDT) {
           const finaldata = finalDDT?.data?.[0];
-          const finalSubData = finaldata?.subData?.[0];
+          const finalSubData = finaldata?.subTasks?.[0];
           const finalStartTasks = finalSubData?.steps?.start?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0;
 
           console.log('[handleEditorClose] 💾 Saving complete DDT (SYNC - blocking close until saved)', {
@@ -810,7 +810,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
           let taskInstance = taskRepository.getTask(key);
           if (!taskInstance) {
             // ✅ Usa direttamente task.type (TaskType enum) invece di convertire da stringa
-            const taskType = task?.type ?? TaskType.DataRequest; // ✅ Usa direttamente task.type (TaskType enum)
+            const taskType = task?.type ?? TaskType.UtteranceInterpretation; // ✅ Usa direttamente task.type (TaskType enum)
             taskInstance = taskRepository.createTask(taskType, null, undefined, key, currentProjectId || undefined);
           }
 
@@ -833,10 +833,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
             stepsMatch: JSON.stringify(finalDDTWithSteps.steps) === JSON.stringify(task?.steps || {})
           });
 
-          // ✅ CASE-INSENSITIVE - AWAIT OBBLIGATORIO: non chiudere finché non è salvato
-          if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
+          // ✅ Usa helper function invece di stringa hardcoded - AWAIT OBBLIGATORIO: non chiudere finché non è salvato
+          if (!isUtteranceInterpretationTemplateId(currentTemplateId)) {
             const dataToSave = {
-              type: TaskType.DataRequest,  // ✅ type: enum numerico
+              type: TaskType.UtteranceInterpretation,  // ✅ type: enum numerico
               templateId: null,            // ✅ templateId: null (standalone)
               label: finalDDTWithSteps.label,
               data: finalDDTWithSteps.data,
@@ -1364,11 +1364,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
           }
         } else {
           // Sub node
-          const subList = [...(main.subData || [])];
+          const subList = [...(main.subTasks || [])];
           const subIdx = subList.findIndex((s: any, idx: number) => idx === subIndex);
           if (subIdx >= 0) {
             subList[subIdx] = updated;
-            main.subData = subList;
+            main.subTasks = subList;
             mains[mainIndex] = main;
             updatedDDT.data = mains;
 
@@ -1471,9 +1471,9 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                   }
                 }
 
-                if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
-                  await taskRepository.updateTask(key, {
-                    type: TaskType.DataRequest,  // ✅ type: enum numerico
+          if (!isUtteranceInterpretationTemplateId(currentTemplateId)) {
+            await taskRepository.updateTask(key, {
+              type: TaskType.UtteranceInterpretation,  // ✅ type: enum numerico
                     templateId: null,            // ✅ templateId: null (standalone)
                     ...fieldsToSave
                   }, projectIdToSave || undefined);
@@ -1866,7 +1866,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                       if (hasDDT) {
                         let taskInstance = taskRepository.getTask(key);
                         if (!taskInstance) {
-                          const taskType = task?.type ?? TaskType.DataRequest;
+                          const taskType = task?.type ?? TaskType.UtteranceInterpretation;
                           taskInstance = taskRepository.createTask(taskType, null, undefined, key, currentProjectId || undefined);
                         }
 
@@ -1983,16 +1983,16 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                 if (task?.id || (task as any)?.instanceId) {
                   const key = ((task as any)?.instanceId || task?.id) as string;
                   // ✅ MIGRATION: Use getTemplateId() helper
-                  // ✅ FIX: Se c'è un DDT, assicurati che il templateId sia 'DataRequest'
+                  // ✅ FIX: Se c'è un DDT, assicurati che il templateId sia 'UtteranceInterpretation'
                   const taskInstance = taskRepository.getTask(key);
                   const hasDDT = updatedDDT && Object.keys(updatedDDT).length > 0 && updatedDDT.data && updatedDDT.data.length > 0;
                   if (hasDDT && taskInstance) {
                     const currentTemplateId = getTemplateId(taskInstance);
-                    // ✅ CASE-INSENSITIVE
+                    // ✅ Usa helper function invece di stringa hardcoded
                     // ✅ Update task con campi DDT direttamente (niente wrapper value)
-                    if (!currentTemplateId || currentTemplateId.toLowerCase() !== 'datarequest') {
+                    if (!isUtteranceInterpretationTemplateId(currentTemplateId)) {
                       taskRepository.updateTask(key, {
-                        type: TaskType.DataRequest,  // ✅ type: enum numerico
+                        type: TaskType.UtteranceInterpretation,  // ✅ type: enum numerico
                         templateId: null,            // ✅ templateId: null (standalone)
                         ...updatedDDT  // ✅ Spread: label, data, steps, ecc.
                       }, currentProjectId || undefined);
@@ -2002,8 +2002,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                       }, currentProjectId || undefined);
                     }
                   } else if (hasDDT) {
-                    // Task doesn't exist, create it with DataRequest type
-                    taskRepository.createTask(TaskType.DataRequest, null, updatedDDT, key, currentProjectId || undefined);
+                    // Task doesn't exist, create it with UtteranceInterpretation type
+                    taskRepository.createTask(TaskType.UtteranceInterpretation, null, updatedDDT, key, currentProjectId || undefined);
                   } else {
                     // FIX: Salva con projectId per garantire persistenza nel database
                     taskRepository.updateTask(key, {
@@ -2058,10 +2058,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                     const mains = getdataList(next);
                     const main = mains[mIdx];
                     if (!main) return;
-                    const subList = Array.isArray(main.subData) ? main.subData : [];
+                    const subList = Array.isArray(main.subTasks) ? main.subTasks : [];
                     if (sIdx < 0 || sIdx >= subList.length) return;
                     subList[sIdx] = { ...subList[sIdx], required };
-                    main.subData = subList;
+                    main.subTasks = subList;
                     mains[mIdx] = main;
                     next.data = mains;
                     try {
@@ -2076,11 +2076,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                     const mains = getdataList(next);
                     const main = mains[mIdx];
                     if (!main) return;
-                    const subList = Array.isArray(main.subData) ? main.subData : [];
+                    const subList = Array.isArray(main.subTasks) ? main.subTasks : [];
                     if (fromIdx < 0 || fromIdx >= subList.length || toIdx < 0 || toIdx >= subList.length) return;
                     const [moved] = subList.splice(fromIdx, 1);
                     subList.splice(toIdx, 0, moved);
-                    main.subData = subList;
+                    main.subTasks = subList;
                     mains[mIdx] = main;
                     next.data = mains;
                     try { if (localStorage.getItem('debug.responseEditor') === '1') console.log('[DDT][subReorder][persist]', { main: main?.label, fromIdx, toIdx }); } catch { }
@@ -2089,7 +2089,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                   onAddMain={(label: string) => {
                     const next = JSON.parse(JSON.stringify(ddt));
                     const mains = getdataList(next);
-                    mains.push({ label, subData: [] });
+                    mains.push({ label, subTasks: [] });
                     next.data = mains;
                     try { replaceSelectedDDT(next); } catch { }
                   }}
@@ -2114,9 +2114,9 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                     const mains = getdataList(next);
                     const main = mains[mIdx];
                     if (!main) return;
-                    const list = Array.isArray(main.subData) ? main.subData : [];
+                    const list = Array.isArray(main.subTasks) ? main.subTasks : [];
                     list.push({ label, required: true });
-                    main.subData = list;
+                    main.subTasks = list;
                     mains[mIdx] = main;
                     next.data = mains;
                     try { replaceSelectedDDT(next); } catch { }
@@ -2126,10 +2126,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                     const mains = getdataList(next);
                     const main = mains[mIdx];
                     if (!main) return;
-                    const list = Array.isArray(main.subData) ? main.subData : [];
+                    const list = Array.isArray(main.subTasks) ? main.subTasks : [];
                     if (sIdx < 0 || sIdx >= list.length) return;
                     list[sIdx] = { ...(list[sIdx] || {}), label };
-                    main.subData = list;
+                    main.subTasks = list;
                     mains[mIdx] = main;
                     next.data = mains;
                     try { replaceSelectedDDT(next); } catch { }
@@ -2139,10 +2139,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                     const mains = getdataList(next);
                     const main = mains[mIdx];
                     if (!main) return;
-                    const list = Array.isArray(main.subData) ? main.subData : [];
+                    const list = Array.isArray(main.subTasks) ? main.subTasks : [];
                     if (sIdx < 0 || sIdx >= list.length) return;
                     list.splice(sIdx, 1);
-                    main.subData = list;
+                    main.subTasks = list;
                     mains[mIdx] = main;
                     next.data = mains;
                     try { replaceSelectedDDT(next); } catch { }

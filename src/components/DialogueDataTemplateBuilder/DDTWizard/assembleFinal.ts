@@ -54,7 +54,7 @@ function extractBasePromptKeys(stepPayload: any): Record<string, string> {
  * Find the corresponding node in a template by matching structure.
  * Strategy:
  * 1. For data nodes: return first data node from template
- * 2. For subData nodes: find by templateId match (if available) or by position
+ * 2. For subTasks nodes: find by templateId match (if available) or by position
  */
 function findTemplateNodeByPosition(template: any, nodePath: string[], node?: SchemaNode): any | null {
   if (!template || !template.data || !Array.isArray(template.data)) {
@@ -74,29 +74,29 @@ function findTemplateNodeByPosition(template: any, nodePath: string[], node?: Sc
 
   // Find parent data (assume first data for now)
   const mainNode = template.data[0];
-  if (!mainNode || !mainNode.subData || !Array.isArray(mainNode.subData)) {
+  if (!mainNode || !mainNode.subTasks || !Array.isArray(mainNode.subTasks)) {
     return null;
   }
 
-  // Strategy 1: If node has templateId, try to find subData with matching templateId
-  // (This works when subData nodes reference their own templates)
+  // Strategy 1: If node has templateId, try to find subTasks with matching templateId
+  // (This works when subTasks nodes reference their own templates)
   if (nodeTemplateId) {
-    const matchedSub = mainNode.subData.find((sub: any) => sub.templateId === nodeTemplateId);
+    const matchedSub = mainNode.subTasks.find((sub: any) => sub.templateId === nodeTemplateId);
     if (matchedSub) {
       return matchedSub;
     }
   }
 
   // Strategy 2: Fallback to position-based matching
-  // Find subData at the same position in the path
+  // Find subTasks at the same position in the path
   // nodePath format: ['main', 'sub0', 'sub1', ...]
   const subDataIndex = nodePath.length > 1 ? parseInt(nodePath[1]) || 0 : 0;
-  if (subDataIndex < mainNode.subData.length) {
-    return mainNode.subData[subDataIndex];
+  if (subDataIndex < mainNode.subTasks.length) {
+    return mainNode.subTasks[subDataIndex];
   }
 
-  // Strategy 3: Last resort - return first subData
-  return mainNode.subData[0] || null;
+  // Strategy 3: Last resort - return first subTasks
+  return mainNode.subTasks[0] || null;
 }
 
 /**
@@ -112,9 +112,9 @@ function findTemplateNodeById(template: any, nodeId: string): any | null {
     if (mainNode.id === nodeId) {
       return mainNode;
     }
-    // Search in subData
-    if (mainNode.subData && Array.isArray(mainNode.subData)) {
-      for (const subNode of mainNode.subData) {
+    // Search in subTasks
+    if (mainNode.subTasks && Array.isArray(mainNode.subTasks)) {
+      for (const subNode of mainNode.subTasks) {
         if (subNode.id === nodeId) {
           return subNode;
         }
@@ -340,7 +340,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
       type: node.type,
       icon: node.icon,
       constraints: [] as any[],
-      subData: [] as any[],
+      subTasks: [] as any[],
       messages: {} as Record<string, any>,
       // ❌ REMOVED: steps - steps are now created directly in rootSteps[nodeId]
       synonyms: [nodeLabel, (nodeLabel || '').toLowerCase()].filter(Boolean),
@@ -506,7 +506,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
     // ✅ CRITICAL: Check sub-data stepPrompts before processing
     // Create sub-instances first (needed for contract mapping)
     const subInstances: any[] = [];
-    for (const s of node.subData || []) {
+    for (const s of node.subTasks || []) {
       const subHasStepPrompts = !!(s as any).stepPrompts && typeof (s as any).stepPrompts === 'object' && Object.keys((s as any).stepPrompts).length > 0;
 
       if (!subHasStepPrompts) {
@@ -516,14 +516,14 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
         });
       }
 
-      // ✅ CRITICAL: Preserve stepPrompts when assembling subData
+      // ✅ CRITICAL: Preserve stepPrompts when assembling subTasks
       const subNodeWithStepPrompts = {
         ...s,
         stepPrompts: (s as any).stepPrompts || undefined
       };
       const subInstance = await assembleNode(subNodeWithStepPrompts, [...nodePath, s.label]);
       subInstances.push(subInstance);
-      assembled.subData.push(subInstance);
+      assembled.subTasks.push(subInstance);
     }
 
     // ✅ Clone and adapt contract after sub-instances are created
@@ -689,7 +689,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
         }
 
         // ✅ Rimosso askQuestion, usa DataRequest per step 'start' quando isAsk
-        const templateIdForTask = stepKey === 'start' && isAsk ? 'DataRequest' : 'sayMessage';
+        const templateIdForTask = stepKey === 'start' && isAsk ? 'UtteranceInterpretation' : 'sayMessage';
         const taskType = templateIdToTaskType(templateIdForTask) || TaskType.SayMessage;
 
         const baseTask = {
@@ -774,7 +774,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
     const assembledMains: any[] = [];
     for (let idx = 0; idx < (normalizedMains || []).length; idx++) {
       const m = normalizedMains![idx];
-      console.log(`[assembleFinalDDT][ASSEMBLING] Main ${idx + 1}/${normalizedMains?.length}:`, m.label, '| subData:', (m.subData || []).length);
+      console.log(`[assembleFinalDDT][ASSEMBLING] Main ${idx + 1}/${normalizedMains?.length}:`, m.label, '| subTasks:', (m.subTasks || []).length);
       try {
         const assembled = await assembleNode(m, [m.label]);
         console.log(`[assembleFinalDDT][ASSEMBLED] Main ${idx + 1}/${normalizedMains?.length}:`, m.label, '✓');

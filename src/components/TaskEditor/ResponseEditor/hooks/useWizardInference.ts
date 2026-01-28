@@ -233,7 +233,7 @@ export function useWizardInference({
     // ========================================================================
     // VALIDATION: Solo DataRequest può usare wizard AI
     // ========================================================================
-    const canUseWizard = stableTaskType === TaskType.DataRequest;
+    const canUseWizard = stableTaskType === TaskType.UtteranceInterpretation;
 
     if (!canUseWizard) {
       // Per altri tipi, apri wizard vuoto (senza AI)
@@ -295,7 +295,7 @@ export function useWizardInference({
           if (task?.id && stableTaskType === TaskType.UNDEFINED) {
             try {
               taskRepository.updateTask(task.id, {
-                type: TaskType.DataRequest,
+                type: TaskType.UtteranceInterpretation,
                 templateId: null
               }, currentProjectId || undefined);
             } catch (err) {

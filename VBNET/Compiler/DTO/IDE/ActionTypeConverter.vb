@@ -69,8 +69,8 @@ Public Class TaskTypeConverter
                 Return CInt(TaskTypes.CloseSession)
             Case "transfer", "transferaction"
                 Return CInt(TaskTypes.Transfer)
-            Case "getdata", "getdataaction", "datarequest", "datarequestaction"
-                Return CInt(TaskTypes.DataRequest)  ' ✅ Rinominato da GetData (backward compatibility)
+            Case "utteranceinterpretation", "interpretutterance"
+                Return CInt(TaskTypes.UtteranceInterpretation)
             Case "backendcall", "callbackend", "backendcallaction"
                 Return CInt(TaskTypes.BackendCall)
             Case "classifyproblem", "classifyproblemaction"

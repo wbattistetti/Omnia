@@ -99,9 +99,9 @@ export function extractGUIDsFromDDT(ddt: any): string[] {
       });
     }
 
-    // Recursively process subData
-    if (node.subData && Array.isArray(node.subData)) {
-      node.subData.forEach((sub: any) => processNode(sub, currentNodePath));
+    // Recursively process subTasks
+    if (node.subTasks && Array.isArray(node.subTasks)) {
+      node.subTasks.forEach((sub: any) => processNode(sub, currentNodePath));
     }
   };
 

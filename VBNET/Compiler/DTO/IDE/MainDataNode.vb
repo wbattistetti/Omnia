@@ -33,8 +33,8 @@ Public Class MainDataNode
         <JsonConverter(GetType(DialogueStepListConverter))>
         Public Property Steps As List(Of Compiler.DialogueStep)
 
-        <JsonProperty("subData")>
-        Public Property SubData As List(Of Compiler.MainDataNode)
+        <JsonProperty("subTasks")>
+        Public Property SubTasks As List(Of Compiler.MainDataNode)
 
         <JsonProperty("synonyms")>
         Public Property Synonyms As List(Of String)
@@ -42,9 +42,12 @@ Public Class MainDataNode
         <JsonProperty("constraints")>
         Public Property Constraints As List(Of Object)
 
+        <JsonProperty("templateId")>
+        Public Property TemplateId As String
+
         Public Sub New()
             Steps = New List(Of Compiler.DialogueStep)()
-            SubData = New List(Of Compiler.MainDataNode)()
+            SubTasks = New List(Of Compiler.MainDataNode)()
             Synonyms = New List(Of String)()
             Constraints = New List(Of Object)()
         End Sub

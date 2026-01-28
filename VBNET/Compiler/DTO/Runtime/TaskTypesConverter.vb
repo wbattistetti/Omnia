@@ -58,8 +58,8 @@ Public Class TaskTypesConverter
                 Return TaskTypes.CloseSession
             Case "transfer"
                 Return TaskTypes.Transfer
-            Case "getdata", "datarequest", "askquestion"
-                Return TaskTypes.DataRequest  ' ✅ Rinominato da GetData (backward compatibility: 'getdata' → DataRequest)
+            Case "utteranceinterpretation", "interpretutterance"
+                Return TaskTypes.UtteranceInterpretation
             Case "backendcall", "callbackend", "readfrombackend", "writetobackend"
                 Return TaskTypes.BackendCall
             Case "classifyproblem", "problemclassification"

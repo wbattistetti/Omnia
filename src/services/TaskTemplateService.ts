@@ -30,7 +30,7 @@ class TaskTemplateService {
   private async loadTemplates(): Promise<void> {
     try {
       // Try to load from Factory first
-      const factoryResponse = await fetch('/api/factory/task-templates');
+      const factoryResponse = await fetch('/api/factory/tasks');
       if (factoryResponse.ok) {
         const factoryTemplates = await factoryResponse.json();
         if (Array.isArray(factoryTemplates) && factoryTemplates.length > 0) {
@@ -116,7 +116,7 @@ class TaskTemplateService {
    */
   async loadProjectTemplates(projectId: string): Promise<void> {
     try {
-      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/task-templates`);
+      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/tasks`);
       if (!response.ok) {
         console.warn('[TaskTemplateService] Failed to load project templates');
         return;

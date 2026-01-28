@@ -49,7 +49,7 @@ const AnimatedDots: React.FC<{ intervalMs?: number }> = ({ intervalMs = 450 }) =
 // Tipo per dataNode
 interface DataNode {
   name: string;
-  subData?: string[];
+  subTasks?: string[];
 }
 
 // Auto-Mapping Service (inline to avoid import issues)
@@ -63,7 +63,7 @@ interface FieldAnalysis {
       label: string;
       type: string;
       icon: string;
-      subData: Array<{
+      subTasks: Array<{
         label: string;
         type: string;
         icon: string;
@@ -150,8 +150,8 @@ class AutoMappingService {
         label: main.label,
         type: main.type,
         icon: main.icon,
-        subData: main.subData.map(sub => ({
-          id: sub.id,  // ✅ CRITICAL: Preserve subData node ID (GUID from template)
+        subTasks: main.subTasks.map(sub => ({
+          id: sub.id,  // ✅ CRITICAL: Preserve subTasks node ID (GUID from template)
           label: sub.label,
           type: sub.type,
           icon: sub.icon

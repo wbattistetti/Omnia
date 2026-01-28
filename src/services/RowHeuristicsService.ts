@@ -78,9 +78,9 @@ export class RowHeuristicsService {
       if (taskType === TaskType.UNDEFINED) {
         // Euristica 1 non ha trovato niente, ma Euristica 2 ha trovato template
         taskType = templateType;
-      } else if (taskType === TaskType.SayMessage && templateType === TaskType.DataRequest) {
+      } else if (taskType === TaskType.SayMessage && templateType === TaskType.UtteranceInterpretation) {
         // Esempio: "chiedi data nascita" → Euristica 1: Message, Euristica 2: template Data
-        taskType = TaskType.DataRequest;
+        taskType = TaskType.UtteranceInterpretation;
       }
     }
 
@@ -88,7 +88,7 @@ export class RowHeuristicsService {
 
     // ✅ EURISTICA 3 - Inferenza categoria semantica (solo per DataRequest)
     let inferredCategory: string | null = null;
-    if (taskType === TaskType.DataRequest) {
+    if (taskType === TaskType.UtteranceInterpretation) {
       inferredCategory = await this.inferCategory(trimmedLabel, taskType, heuristic1Result.lang);
     }
 
@@ -116,7 +116,7 @@ export class RowHeuristicsService {
     lang?: string
   ): Promise<string | null> {
     // Solo per DataRequest
-    if (taskType !== TaskType.DataRequest) {
+    if (taskType !== TaskType.UtteranceInterpretation) {
       return null;
     }
 
@@ -187,7 +187,7 @@ export class RowHeuristicsService {
   public static getTemplateType(template: any): TaskType {
     // Template.type può essere:
     // - numero (enum): 1 = SayMessage, 3 = DataRequest, ecc.
-    // - stringa: 'DataRequest', 'Message', ecc.
+    // - stringa: 'UtteranceInterpretation', 'Message', ecc.
 
     if (template.type === undefined || template.type === null) {
       return TaskType.UNDEFINED;
@@ -200,7 +200,7 @@ export class RowHeuristicsService {
       if (template.type === 0) return TaskType.SayMessage;
       if (template.type === 1) return TaskType.CloseSession;
       if (template.type === 2) return TaskType.Transfer;
-      if (template.type === 3) return TaskType.DataRequest;
+      if (template.type === 3) return TaskType.UtteranceInterpretation;
       if (template.type === 4) return TaskType.BackendCall;
       if (template.type === 5) return TaskType.ClassifyProblem;
       // Altri mapping se necessario
@@ -212,8 +212,7 @@ export class RowHeuristicsService {
       const typeMap: Record<string, TaskType> = {
         'SayMessage': TaskType.SayMessage,
         'Message': TaskType.SayMessage,
-        'DataRequest': TaskType.DataRequest,
-        'GetData': TaskType.DataRequest,
+        'UtteranceInterpretation': TaskType.UtteranceInterpretation,
         'BackendCall': TaskType.BackendCall,
         'ProblemClassification': TaskType.ClassifyProblem,
         'ClassifyProblem': TaskType.ClassifyProblem
