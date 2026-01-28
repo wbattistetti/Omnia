@@ -30,20 +30,32 @@ Public Class Motore
     ''' Funzione principale che coordina il processo di acquisizione di una serie di dati seguendo le regole di prompting: DDT (Data Dialogue Template)
     ''' </summary>
     Public Sub ExecuteDDT(ddtInstance As DDTInstance)
+        Console.WriteLine($"[RUNTIME][DDTEngine] ExecuteDDT started: MainDataList.Count={ddtInstance.MainDataList.Count}, IsAggregate={ddtInstance.IsAggregate}")
         Dim state As DialogueState = DialogueState.Start
 
         If ddtInstance.IsAggregate AndAlso ddtInstance.Introduction IsNot Nothing Then
+            Console.WriteLine($"[RUNTIME][DDTEngine] Executing introduction tasks")
             ExecuteResponse(ddtInstance.Introduction.Tasks, Nothing, ddtInstance)
         End If
 
+        Dim iterationCount As Integer = 0
         While True
+            iterationCount += 1
+            Console.WriteLine($"[RUNTIME][DDTEngine] Iteration {iterationCount}: Calling GetNextData...")
             Dim currDataNode As DDTNode = GetNextData(ddtInstance)
 
-            If currDataNode Is Nothing Then Exit While  ' Tutti i dati completati o acquisitionFailed
+            If currDataNode Is Nothing Then
+                Console.WriteLine($"[RUNTIME][DDTEngine] GetNextData returned Nothing - exiting loop")
+                Exit While  ' Tutti i dati completati o acquisitionFailed
+            End If
 
+            Dim isEmpty = currDataNode.IsEmpty()
+            Console.WriteLine($"[RUNTIME][DDTEngine] GetNextData returned node: Id={currDataNode.Id}, State={currDataNode.State}, IsEmpty={isEmpty}")
             Dim tasks = GetResponse(currDataNode)
+            Console.WriteLine($"[RUNTIME][DDTEngine] GetResponse returned {tasks.Count()} tasks")
 
             Dim isAterminationResponse As Boolean = ExecuteResponse(tasks, currDataNode, ddtInstance)
+            Console.WriteLine($"[RUNTIME][DDTEngine] ExecuteResponse completed, isTermination={isAterminationResponse}")
 
             If isAterminationResponse Then
                 ' Exit condition attivata: marca il dato come acquisitionFailed
@@ -52,17 +64,24 @@ Public Class Motore
                 Continue While  ' GetNextData prenderà il prossimo dato
             End If
 
-            ' Interpreta l'input utente (solo parsing, nessuna gestione di response)
-            Dim parseResult As ParseResult = _parser.InterpretUtterance(currDataNode)
+            ' ✅ Per Chat Simulator: fermati dopo il primo response, non aspettare input
+            ' L'input arriverà via HTTP, non dalla coda locale
+            Console.WriteLine($"[RUNTIME][DDTEngine] First response executed - stopping execution (waiting for HTTP input)")
+            Exit While  ' Fermati qui, l'input arriverà via HTTP dal frontend
 
-            ' Aggiorna lo stato basandosi sul risultato del parsing: il prossimo response dipenderà dallo stato
-            SetState(parseResult, state, currDataNode)
+            ' ❌ CODICE ORIGINALE (non usato per Chat Simulator):
+            ' Interpreta l'input utente (solo parsing, nessuna gestione di response)
+            ' NOTA: Questo blocca aspettando input dalla coda locale - non usato per Chat Simulator
+            ' Dim parseResult As ParseResult = _parser.InterpretUtterance(currDataNode)
+            ' SetState(parseResult, state, currDataNode)
 
         End While
 
         If ddtInstance.SuccessResponse IsNot Nothing Then
+            Console.WriteLine($"[RUNTIME][DDTEngine] Executing success response")
             ExecuteResponse(ddtInstance.SuccessResponse.Tasks, Nothing, ddtInstance)
         End If
+        Console.WriteLine($"[RUNTIME][DDTEngine] ExecuteDDT completed")
     End Sub
 
 
@@ -70,30 +89,66 @@ Public Class Motore
     ''' lo step di dialogo dipende dallo stato di acquisizione del dato (start, noMatch, NoInput, ecc)
     ''' </summary>
     Private Function GetResponse(currDataNode As DDTNode) As IEnumerable(Of ITask)
-        Dim dStep = currDataNode.Steps.FirstOrDefault(Function(s) s.Type = currDataNode.State)  'migliorare per gestore  validation conditions multiple
+        Console.WriteLine($"[RUNTIME][DDTEngine] GetResponse: node State={currDataNode.State}, Steps.Count={currDataNode.Steps.Count}")
+
+        Dim dStep = currDataNode.Steps.FirstOrDefault(Function(s) s.Type = currDataNode.State)
+
+        If dStep Is Nothing Then
+            Console.WriteLine($"[RUNTIME][DDTEngine] ERROR: No step found for state {currDataNode.State}")
+            ' Prova fallback a Start
+            dStep = currDataNode.Steps.FirstOrDefault(Function(s) s.Type = DialogueState.Start)
+            If dStep Is Nothing Then
+                Console.WriteLine($"[RUNTIME][DDTEngine] ERROR: No Start step found either!")
+                Return New List(Of ITask)()  ' Ritorna lista vuota invece di lanciare eccezione
+            End If
+            Console.WriteLine($"[RUNTIME][DDTEngine] Using Start step as fallback")
+            currDataNode.State = DialogueState.Start
+        End If
 
         Select Case currDataNode.State
             Case DialogueState.NoMatch, DialogueState.IrrelevantMatch, DialogueState.NoInput, DialogueState.NotConfirmed
                 If Not dStep.Escalations?.Any Then
                     ' Fallback a Start
                     currDataNode.State = DialogueState.Start
+                    dStep = currDataNode.Steps.FirstOrDefault(Function(s) s.Type = DialogueState.Start)
                 End If
         End Select
 
-        Dim escalationCounter = GetEscalationCounter(dStep, currDataNode.State)
-        Dim escalation = dStep.Escalations(escalationCounter)
-        Return currDataNode.Steps.SingleOrDefault(Function(s) s.Type = currDataNode.State).Escalations(escalationCounter).Tasks
+        If dStep Is Nothing OrElse dStep.Escalations Is Nothing OrElse dStep.Escalations.Count = 0 Then
+            Console.WriteLine($"[RUNTIME][DDTEngine] ERROR: Step has no escalations!")
+            Return New List(Of ITask)()
+        End If
 
+        Dim escalationCounter = GetEscalationCounter(dStep, currDataNode.State)
+        If escalationCounter < 0 OrElse escalationCounter >= dStep.Escalations.Count Then
+            Console.WriteLine($"[RUNTIME][DDTEngine] ERROR: Invalid escalation counter: {escalationCounter}, Escalations.Count={dStep.Escalations.Count}")
+            Return New List(Of ITask)()
+        End If
+
+        Dim escalation = dStep.Escalations(escalationCounter)
+        If escalation Is Nothing OrElse escalation.Tasks Is Nothing Then
+            Console.WriteLine($"[RUNTIME][DDTEngine] ERROR: Escalation or Tasks is Nothing!")
+            Return New List(Of ITask)()
+        End If
+
+        Console.WriteLine($"[RUNTIME][DDTEngine] GetResponse: returning {escalation.Tasks.Count} tasks from escalation {escalationCounter}")
+        Return escalation.Tasks
     End Function
 
     ''' <summary>
     ''' Eseguire il response significa eseguire la serie di tasks di cui è composto
     ''' </summary>
     Private Function ExecuteResponse(tasks As IEnumerable(Of ITask), currDataNode As DDTNode, ddtInstance As DDTInstance) As Boolean
-
+        Console.WriteLine($"[RUNTIME][DDTEngine] ExecuteResponse: {tasks.Count()} tasks to execute")
+        Dim taskIndex As Integer = 0
         For Each task As ITask In tasks
+            taskIndex += 1
+            Console.WriteLine($"[RUNTIME][DDTEngine] Executing task {taskIndex}/{tasks.Count()}: {task.GetType().Name}")
             ' Passa un lambda che solleva l'evento MessageToShow
-            task.Execute(currDataNode, ddtInstance, Sub(msg As String) RaiseEvent MessageToShow(Me, New MessageEventArgs(msg)))
+            task.Execute(currDataNode, ddtInstance, Sub(msg As String)
+                                                        Console.WriteLine($"[RUNTIME][DDTEngine] Task generated message: '{msg}'")
+                                                        RaiseEvent MessageToShow(Me, New MessageEventArgs(msg))
+                                                    End Sub)
         Next
         If currDataNode IsNot Nothing Then IncrementCounter(currDataNode) 'eccezione in caso si introduction o success di un aggregato
 
@@ -131,17 +186,27 @@ Public Class Motore
 
 
     Private Function GetNextData(ddtInstance As DDTInstance) As DDTNode
+        Console.WriteLine($"[RUNTIME][DDTEngine] GetNextData: checking {ddtInstance.MainDataList.Count} main nodes")
         Dim allCandidates As New List(Of DDTNode)()
 
         For Each mainData As DDTNode In ddtInstance.MainDataList.Where(Function(dt) dt.State <> DialogueState.AcquisitionFailed)
-            If mainData.IsEmpty Then Return mainData
-            If {DialogueState.Confirmation, DialogueState.Invalid, DialogueState.NoMatch, DialogueState.NoInput}.Contains(mainData.State) Then Return mainData
+            Dim isEmpty = mainData.IsEmpty()
+            Console.WriteLine($"[RUNTIME][DDTEngine] Checking main node: Id={mainData.Id}, State={mainData.State}, IsEmpty={isEmpty}, Value={If(mainData.Value Is Nothing, "Nothing", mainData.Value.ToString())}")
+            If isEmpty Then
+                Console.WriteLine($"[RUNTIME][DDTEngine] Returning empty main node")
+                Return mainData
+            End If
+            If {DialogueState.Confirmation, DialogueState.Invalid, DialogueState.NoMatch, DialogueState.NoInput}.Contains(mainData.State) Then
+                Console.WriteLine($"[RUNTIME][DDTEngine] Returning main node with state {mainData.State}")
+                Return mainData
+            End If
 
             For Each subData As DDTNode In mainData.SubData.Where(Function(st) st.State <> DialogueState.AcquisitionFailed)
-                If subData.IsEmpty Then Return subData
+                If subData.IsEmpty() Then Return subData
                 If {DialogueState.Confirmation, DialogueState.Invalid, DialogueState.NoMatch, DialogueState.NoInput}.Contains(subData.State) Then Return subData
             Next
         Next
+        Console.WriteLine($"[RUNTIME][DDTEngine] GetNextData: No suitable node found, returning Nothing")
         Return Nothing
     End Function
 

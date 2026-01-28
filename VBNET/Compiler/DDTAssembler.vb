@@ -6,11 +6,11 @@ Imports System.Linq
 Imports DDTEngine
 
 ''' <summary>
-''' DDTAssembler: trasforma strutture IDE (AssembledDDT) in strutture Runtime (DDTInstance)
+''' DDTAssembler: compila strutture IDE (AssembledDDT) in strutture Runtime (DDTInstance)
 ''' Responsabilità:
 ''' - Mappare campi uno a uno
-''' - Normalizzare cardinalità (mainData singolo → MainDataList)
-''' - Convertire tipi (DialogueStep IDE → DialogueStep Runtime)
+''' - Normalizzare cardinalità (data singolo → MainDataList)
+''' - Compilare tipi (DialogueStep IDE → DialogueStep Runtime)
 ''' - Gestire default e validazioni
 ''' - Sostituire GUID con testi tradotti nella lingua corrente
 ''' </summary>
@@ -18,6 +18,13 @@ Public Class DDTAssembler
 
     ' ✅ Traduzioni per sostituire GUID con testi durante la compilazione
     Private translations As Dictionary(Of String, String)
+
+    ''' <summary>
+    ''' Imposta le traduzioni per la risoluzione dei GUID
+    ''' </summary>
+    Public Sub SetTranslations(translationsDict As Dictionary(Of String, String))
+        translations = translationsDict
+    End Sub
 
     ''' <summary>
     ''' Verifica se una stringa è un GUID valido
@@ -44,8 +51,8 @@ Public Class DDTAssembler
         If IsGuid(value) AndAlso translations IsNot Nothing AndAlso translations.ContainsKey(value) Then
             Dim translatedText = translations(value)
             If Not String.IsNullOrEmpty(translatedText) Then
-                Console.WriteLine($"✅ [DDTAssembler] Resolved GUID to text: {value.Substring(0, 8)}... -> '{translatedText.Substring(0, Math.Min(50, translatedText.Length))}...'")
-                System.Diagnostics.Debug.WriteLine($"✅ [DDTAssembler] Resolved GUID to text: {value} -> '{translatedText}'")
+                Console.WriteLine($"✅ [COMPILER][DDTAssembler] Resolved GUID to text: {value.Substring(0, 8)}... -> '{translatedText.Substring(0, Math.Min(50, translatedText.Length))}...'")
+                System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTAssembler] Resolved GUID to text: {value} -> '{translatedText}'")
                 Return translatedText
             End If
         End If
@@ -54,8 +61,8 @@ Public Class DDTAssembler
         ' Questi valori indicano che il frontend ha inviato una chiave invece di un GUID o testo tradotto
         If value.Contains(".") AndAlso (value.StartsWith("ask.") OrElse value.StartsWith("confirm.") OrElse value.StartsWith("success.") OrElse value.StartsWith("noMatch.") OrElse value.StartsWith("noInput.")) Then
             Dim errorMessage = $"Messaggio non trovato: {value}"
-            Console.WriteLine($"⚠️ [DDTAssembler] ResolveText: Detected unresolved key '{value}', returning error message")
-            System.Diagnostics.Debug.WriteLine($"⚠️ [DDTAssembler] ResolveText: Detected unresolved key '{value}', returning error message: '{errorMessage}'")
+            Console.WriteLine($"⚠️ [COMPILER][DDTAssembler] ResolveText: Detected unresolved key '{value}', returning error message")
+            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DDTAssembler] ResolveText: Detected unresolved key '{value}', returning error message: '{errorMessage}'")
             Return errorMessage
         End If
 
@@ -64,11 +71,11 @@ Public Class DDTAssembler
     End Function
 
     ''' <summary>
-    ''' Trasforma AssembledDDT (IDE) in DDTInstance (Runtime)
+    ''' Compila AssembledDDT (IDE) in DDTInstance (Runtime)
     ''' </summary>
-    Public Function ToRuntime(assembled As Compiler.AssembledDDT) As DDTInstance
-        Console.WriteLine($"🔍 [DDTAssembler] ToRuntime called for AssembledDDT Id={assembled.Id}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ToRuntime called for AssembledDDT Id={assembled.Id}")
+    Public Function Compile(assembled As Compiler.AssembledDDT) As DDTInstance
+        Console.WriteLine($"🔍 [COMPILER][DDTAssembler] Compile called for AssembledDDT Id={assembled.Id}")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] Compile called for AssembledDDT Id={assembled.Id}")
 
         If assembled Is Nothing Then
             Throw New ArgumentNullException(NameOf(assembled), "AssembledDDT cannot be Nothing")
@@ -76,8 +83,8 @@ Public Class DDTAssembler
 
         ' ✅ Salva traduzioni per uso durante la conversione
         translations = If(assembled.Translations, New Dictionary(Of String, String)())
-        Console.WriteLine($"🔍 [DDTAssembler] Loaded {translations.Count} translations for GUID resolution")
-        System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] Loaded {translations.Count} translations for GUID resolution")
+        Console.WriteLine($"🔍 [COMPILER][DDTAssembler] Loaded {translations.Count} translations for GUID resolution")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] Loaded {translations.Count} translations for GUID resolution")
 
         ' ❌ REMOVED: .Label = assembled.Label, (label non serve a runtime, solo per UI)
         Dim instance As New DDTInstance() With {
@@ -87,48 +94,73 @@ Public Class DDTAssembler
             .IsAggregate = (assembled.Introduction IsNot Nothing)
         }
 
-        Console.WriteLine($"🔍 [DDTAssembler] assembled.MainData IsNot Nothing={assembled.MainData IsNot Nothing}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] assembled.MainData IsNot Nothing={assembled.MainData IsNot Nothing}")
-        ' ✅ FIX: mainData è ora sempre una lista (normalizzata dal converter)
-        ' Gestisce sia oggetto singolo che array
-        If assembled.MainData IsNot Nothing Then
-            Console.WriteLine($"🔍 [DDTAssembler] assembled.MainData.Count={assembled.MainData.Count}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] assembled.MainData.Count={assembled.MainData.Count}")
-            For Each mainDataNode In assembled.MainData
+        Console.WriteLine($"🔍 [COMPILER][DDTAssembler] assembled.Data IsNot Nothing={assembled.Data IsNot Nothing}")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] assembled.Data IsNot Nothing={assembled.Data IsNot Nothing}")
+        ' ✅ FIX: data è sempre una lista (normalizzata dal converter)
+        If assembled.Data IsNot Nothing Then
+            Console.WriteLine($"🔍 [COMPILER][DDTAssembler] assembled.Data.Count={assembled.Data.Count}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] assembled.Data.Count={assembled.Data.Count}")
+            For Each mainDataNode In assembled.Data
                 If mainDataNode IsNot Nothing Then
-                    Console.WriteLine($"🔍 [DDTAssembler] Converting mainDataNode: Id={mainDataNode.Id}, Name={mainDataNode.Name}, Steps IsNot Nothing={mainDataNode.Steps IsNot Nothing}")
-                    System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] Converting mainDataNode: Id={mainDataNode.Id}, Name={mainDataNode.Name}, Steps IsNot Nothing={mainDataNode.Steps IsNot Nothing}")
+                    Console.WriteLine($"🔍 [COMPILER][DDTAssembler] Converting mainDataNode: Id={mainDataNode.Id}, Name={mainDataNode.Name}, Steps IsNot Nothing={mainDataNode.Steps IsNot Nothing}")
+                    System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] Converting mainDataNode: Id={mainDataNode.Id}, Name={mainDataNode.Name}, Steps IsNot Nothing={mainDataNode.Steps IsNot Nothing}")
                     If mainDataNode.Steps IsNot Nothing Then
-                        Console.WriteLine($"🔍 [DDTAssembler] mainDataNode.Steps.Count={mainDataNode.Steps.Count}")
-                        System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] mainDataNode.Steps.Count={mainDataNode.Steps.Count}")
+                        Console.WriteLine($"🔍 [COMPILER][DDTAssembler] mainDataNode.Steps.Count={mainDataNode.Steps.Count}")
+                        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] mainDataNode.Steps.Count={mainDataNode.Steps.Count}")
                     End If
-                    Dim mainNode = ConvertNode(mainDataNode, Nothing)
+                    Dim mainNode = CompileNode(mainDataNode, Nothing)
                     instance.MainDataList.Add(mainNode)
-                    Console.WriteLine($"✅ [DDTAssembler] mainDataNode converted, runtimeNode.Steps.Count={mainNode.Steps.Count}")
-                    System.Diagnostics.Debug.WriteLine($"✅ [DDTAssembler] mainDataNode converted, runtimeNode.Steps.Count={mainNode.Steps.Count}")
+                    Console.WriteLine($"✅ [COMPILER][DDTAssembler] mainDataNode converted, runtimeNode.Steps.Count={mainNode.Steps.Count}")
+                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTAssembler] mainDataNode converted, runtimeNode.Steps.Count={mainNode.Steps.Count}")
                 End If
             Next
         Else
-            Console.WriteLine($"⚠️ [DDTAssembler] assembled.MainData is Nothing!")
-            System.Diagnostics.Debug.WriteLine($"⚠️ [DDTAssembler] assembled.MainData is Nothing!")
+            Console.WriteLine($"⚠️ [COMPILER][DDTAssembler] assembled.Data is Nothing!")
+            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DDTAssembler] assembled.Data is Nothing!")
         End If
 
-        ' Converti Introduction (DialogueStep → Response)
+        ' Compila Introduction (DialogueStep → Response)
         If assembled.Introduction IsNot Nothing Then
-            instance.Introduction = ConvertDialogueStepToResponse(assembled.Introduction)
+            instance.Introduction = CompileDialogueStepToResponse(assembled.Introduction)
         End If
 
         ' Calcola FullLabel per tutti i nodi (compile-time)
         CalculateFullLabels(instance)
 
+        ' ✅ DEBUG: Verifica istanza finale PRIMA di restituirla
+        Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+        Console.WriteLine($"🔍 [COMPILER][DDTAssembler] DEBUG: Final instance verification")
+        Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+        Console.WriteLine($"[COMPILER][DDTAssembler] instance.Id={If(String.IsNullOrEmpty(instance.Id), "NULL/EMPTY", instance.Id)}")
+        Console.WriteLine($"[COMPILER][DDTAssembler] instance.MainDataList IsNot Nothing={instance.MainDataList IsNot Nothing}")
+        Console.WriteLine($"[COMPILER][DDTAssembler] instance.MainDataList.Count={If(instance.MainDataList IsNot Nothing, instance.MainDataList.Count, 0)}")
+        Console.WriteLine($"[COMPILER][DDTAssembler] instance.IsAggregate={instance.IsAggregate}")
+        Console.WriteLine($"[COMPILER][DDTAssembler] instance.Introduction IsNot Nothing={instance.Introduction IsNot Nothing}")
+        Console.WriteLine($"[COMPILER][DDTAssembler] instance.SuccessResponse IsNot Nothing={instance.SuccessResponse IsNot Nothing}")
+        Console.WriteLine($"[COMPILER][DDTAssembler] instance.Translations IsNot Nothing={instance.Translations IsNot Nothing}")
+        If instance.Translations IsNot Nothing Then
+            Console.WriteLine($"[COMPILER][DDTAssembler] instance.Translations.Count={instance.Translations.Count}")
+        End If
+        If instance.MainDataList IsNot Nothing AndAlso instance.MainDataList.Count > 0 Then
+            Dim firstNode = instance.MainDataList(0)
+            Console.WriteLine($"[COMPILER][DDTAssembler] First node: Id={If(String.IsNullOrEmpty(firstNode.Id), "NULL", firstNode.Id)}, Name={If(String.IsNullOrEmpty(firstNode.Name), "NULL", firstNode.Name)}, Steps.Count={firstNode.Steps.Count}")
+        Else
+            Console.WriteLine($"[COMPILER][DDTAssembler] ⚠️ WARNING: instance.MainDataList is empty or Nothing!")
+        End If
+        Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+        System.Diagnostics.Debug.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] DEBUG: Final instance verification")
+        System.Diagnostics.Debug.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+        System.Diagnostics.Debug.WriteLine($"[COMPILER][DDTAssembler] instance.MainDataList.Count={If(instance.MainDataList IsNot Nothing, instance.MainDataList.Count, 0)}")
+
         Return instance
     End Function
 
     ''' <summary>
-    ''' Converte MainDataNode (IDE) in DDTNode (Runtime)
+    ''' Compila MainDataNode (IDE) in DDTNode (Runtime)
     ''' Copia solo le proprietà necessarie per l'esecuzione runtime
     ''' </summary>
-    Private Function ConvertNode(ideNode As Compiler.MainDataNode, parentNode As DDTNode) As DDTNode
+    Private Function CompileNode(ideNode As Compiler.MainDataNode, parentNode As DDTNode) As DDTNode
         ' ✅ Copia solo proprietà runtime essenziali:
         ' - Id: necessario per identificare il nodo
         ' - Name: usato per fallback regex hardcoded in Parser.vb
@@ -153,27 +185,27 @@ Public Class DDTAssembler
             .ParentData = parentNode
         }
 
-        ' Converti Steps (DialogueStep[] → DialogueStep[])
-        Console.WriteLine($"🔍 [DDTAssembler] ConvertNode: ideNode.Steps IsNot Nothing={ideNode.Steps IsNot Nothing}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertNode: ideNode.Steps IsNot Nothing={ideNode.Steps IsNot Nothing}")
+        ' Compila Steps (DialogueStep[] → DialogueStep[])
+        Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileNode: ideNode.Steps IsNot Nothing={ideNode.Steps IsNot Nothing}")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileNode: ideNode.Steps IsNot Nothing={ideNode.Steps IsNot Nothing}")
         If ideNode.Steps IsNot Nothing Then
-            Console.WriteLine($"🔍 [DDTAssembler] ConvertNode: ideNode.Steps.Count={ideNode.Steps.Count}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertNode: ideNode.Steps.Count={ideNode.Steps.Count}")
+            Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileNode: ideNode.Steps.Count={ideNode.Steps.Count}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileNode: ideNode.Steps.Count={ideNode.Steps.Count}")
             For Each ideStep As Compiler.DialogueStep In ideNode.Steps
-                Console.WriteLine($"🔍 [DDTAssembler] ConvertNode: converting step type={ideStep.Type}")
-                System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertNode: converting step type={ideStep.Type}")
-                Dim runtimeStep = ConvertDialogueStep(ideStep)
+                Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileNode: compiling step type={ideStep.Type}")
+                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileNode: compiling step type={ideStep.Type}")
+                Dim runtimeStep = CompileDialogueStep(ideStep)
                 runtimeNode.Steps.Add(runtimeStep)
             Next
         Else
-            Console.WriteLine($"⚠️ [DDTAssembler] ConvertNode: ideNode.Steps is Nothing!")
-            System.Diagnostics.Debug.WriteLine($"⚠️ [DDTAssembler] ConvertNode: ideNode.Steps is Nothing!")
+            Console.WriteLine($"⚠️ [COMPILER][DDTAssembler] CompileNode: ideNode.Steps is Nothing!")
+            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DDTAssembler] CompileNode: ideNode.Steps is Nothing!")
         End If
 
-        ' Converti SubData (ricorsivo)
+        ' Compila SubData (ricorsivo)
         If ideNode.SubData IsNot Nothing Then
             For Each subNode As Compiler.MainDataNode In ideNode.SubData
-                runtimeNode.SubData.Add(ConvertNode(subNode, runtimeNode))
+                runtimeNode.SubData.Add(CompileNode(subNode, runtimeNode))
             Next
         End If
 
@@ -181,51 +213,51 @@ Public Class DDTAssembler
     End Function
 
     ''' <summary>
-    ''' Converte DialogueStep (IDE) in DialogueStep (Runtime)
+    ''' Compila DialogueStep (IDE) in DialogueStep (Runtime)
     ''' </summary>
-    Private Function ConvertDialogueStep(ideStep As Compiler.DialogueStep) As DDTEngine.DialogueStep
+    Private Function CompileDialogueStep(ideStep As Compiler.DialogueStep) As DDTEngine.DialogueStep
         Dim runtimeStep As New DDTEngine.DialogueStep() With {
-            .Type = ConvertStepType(ideStep.Type),
+            .Type = CompileStepType(ideStep.Type),
             .Escalations = New List(Of DDTEngine.Escalation)()
         }
 
-        Console.WriteLine($"🔍 [DDTAssembler] ConvertDialogueStep: type={ideStep.Type}, escalations IsNot Nothing={ideStep.Escalations IsNot Nothing}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertDialogueStep: type={ideStep.Type}, escalations IsNot Nothing={ideStep.Escalations IsNot Nothing}")
+        Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileDialogueStep: type={ideStep.Type}, escalations IsNot Nothing={ideStep.Escalations IsNot Nothing}")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileDialogueStep: type={ideStep.Type}, escalations IsNot Nothing={ideStep.Escalations IsNot Nothing}")
 
         If ideStep.Escalations IsNot Nothing Then
-            Console.WriteLine($"🔍 [DDTAssembler] ConvertDialogueStep: escalations.Count={ideStep.Escalations.Count}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertDialogueStep: escalations.Count={ideStep.Escalations.Count}")
+            Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileDialogueStep: escalations.Count={ideStep.Escalations.Count}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileDialogueStep: escalations.Count={ideStep.Escalations.Count}")
             For Each ideEscalation As Compiler.Escalation In ideStep.Escalations
-                Console.WriteLine($"🔍 [DDTAssembler] ConvertDialogueStep: converting escalation {ideEscalation.EscalationId}, tasks IsNot Nothing={ideEscalation.Tasks IsNot Nothing}")
-                System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertDialogueStep: converting escalation {ideEscalation.EscalationId}, tasks IsNot Nothing={ideEscalation.Tasks IsNot Nothing}")
+                Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileDialogueStep: compiling escalation {ideEscalation.EscalationId}, tasks IsNot Nothing={ideEscalation.Tasks IsNot Nothing}")
+                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileDialogueStep: compiling escalation {ideEscalation.EscalationId}, tasks IsNot Nothing={ideEscalation.Tasks IsNot Nothing}")
                 If ideEscalation.Tasks IsNot Nothing Then
-                    Console.WriteLine($"🔍 [DDTAssembler] ConvertDialogueStep: escalation.Tasks.Count={ideEscalation.Tasks.Count}")
-                    System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertDialogueStep: escalation.Tasks.Count={ideEscalation.Tasks.Count}")
+                    Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileDialogueStep: escalation.Tasks.Count={ideEscalation.Tasks.Count}")
+                    System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileDialogueStep: escalation.Tasks.Count={ideEscalation.Tasks.Count}")
                 End If
-                Dim runtimeEscalation = ConvertEscalation(ideEscalation)
+                Dim runtimeEscalation = CompileEscalation(ideEscalation)
                 If runtimeEscalation IsNot Nothing Then
-                    Console.WriteLine($"✅ [DDTAssembler] ConvertDialogueStep: escalation converted, runtime.Tasks.Count={runtimeEscalation.Tasks.Count}")
-                    System.Diagnostics.Debug.WriteLine($"✅ [DDTAssembler] ConvertDialogueStep: escalation converted, runtime.Tasks.Count={runtimeEscalation.Tasks.Count}")
+                    Console.WriteLine($"✅ [COMPILER][DDTAssembler] CompileDialogueStep: escalation compiled, runtime.Tasks.Count={runtimeEscalation.Tasks.Count}")
+                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTAssembler] CompileDialogueStep: escalation compiled, runtime.Tasks.Count={runtimeEscalation.Tasks.Count}")
                     runtimeStep.Escalations.Add(runtimeEscalation)
                 Else
-                    Console.WriteLine($"❌ [DDTAssembler] ConvertDialogueStep: escalation conversion returned Nothing")
-                    System.Diagnostics.Debug.WriteLine($"❌ [DDTAssembler] ConvertDialogueStep: escalation conversion returned Nothing")
+                    Console.WriteLine($"❌ [COMPILER][DDTAssembler] CompileDialogueStep: escalation compilation returned Nothing")
+                    System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][DDTAssembler] CompileDialogueStep: escalation compilation returned Nothing")
                 End If
             Next
         Else
-            Console.WriteLine($"⚠️ [DDTAssembler] ConvertDialogueStep: ideStep.Escalations is Nothing")
-            System.Diagnostics.Debug.WriteLine($"⚠️ [DDTAssembler] ConvertDialogueStep: ideStep.Escalations is Nothing")
+            Console.WriteLine($"⚠️ [COMPILER][DDTAssembler] CompileDialogueStep: ideStep.Escalations is Nothing")
+            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DDTAssembler] CompileDialogueStep: ideStep.Escalations is Nothing")
         End If
 
-        Console.WriteLine($"🔍 [DDTAssembler] ConvertDialogueStep: final runtimeStep.Escalations.Count={runtimeStep.Escalations.Count}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertDialogueStep: final runtimeStep.Escalations.Count={runtimeStep.Escalations.Count}")
+        Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileDialogueStep: final runtimeStep.Escalations.Count={runtimeStep.Escalations.Count}")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileDialogueStep: final runtimeStep.Escalations.Count={runtimeStep.Escalations.Count}")
         Return runtimeStep
     End Function
 
     ''' <summary>
-    ''' Converte stringa step type in DialogueState enum
+    ''' Compila stringa step type in DialogueState enum
     ''' </summary>
-    Private Function ConvertStepType(typeStr As String) As DialogueState
+    Private Function CompileStepType(typeStr As String) As DialogueState
         If String.IsNullOrEmpty(typeStr) Then
             Return DialogueState.Start
         End If
@@ -249,135 +281,135 @@ Public Class DDTAssembler
     End Function
 
     ''' <summary>
-    ''' Converte Escalation (IDE) in Escalation (Runtime)
+    ''' Compila Escalation (IDE) in Escalation (Runtime)
     ''' </summary>
-    Private Function ConvertEscalation(ideEscalation As Compiler.Escalation) As DDTEngine.Escalation
+    Private Function CompileEscalation(ideEscalation As Compiler.Escalation) As DDTEngine.Escalation
         Dim runtimeEscalation As New DDTEngine.Escalation() With {
             .EscalationId = ideEscalation.EscalationId,
             .Tasks = New List(Of ITask)()
         }
 
-        Console.WriteLine($"🔍 [DDTAssembler] ConvertEscalation: escalationId={ideEscalation.EscalationId}, tasks IsNot Nothing={ideEscalation.Tasks IsNot Nothing}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertEscalation: escalationId={ideEscalation.EscalationId}, tasks IsNot Nothing={ideEscalation.Tasks IsNot Nothing}")
+        Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileEscalation: escalationId={ideEscalation.EscalationId}, tasks IsNot Nothing={ideEscalation.Tasks IsNot Nothing}")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileEscalation: escalationId={ideEscalation.EscalationId}, tasks IsNot Nothing={ideEscalation.Tasks IsNot Nothing}")
 
-        ' Converti Tasks (Task[] → ITask[])
+        ' Compila Tasks (Task[] → ITask[])
         If ideEscalation.Tasks IsNot Nothing Then
-            Console.WriteLine($"🔍 [DDTAssembler] ConvertEscalation: ideEscalation.Tasks.Count={ideEscalation.Tasks.Count}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertEscalation: ideEscalation.Tasks.Count={ideEscalation.Tasks.Count}")
+            Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileEscalation: ideEscalation.Tasks.Count={ideEscalation.Tasks.Count}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileEscalation: ideEscalation.Tasks.Count={ideEscalation.Tasks.Count}")
             For Each ideTask As Compiler.Task In ideEscalation.Tasks
-                Console.WriteLine($"🔍 [DDTAssembler] ConvertEscalation: converting task id={ideTask.Id}, templateId={ideTask.TemplateId}, text={ideTask.Text}")
-                System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertEscalation: converting task id={ideTask.Id}, templateId={ideTask.TemplateId}, text={ideTask.Text}")
-                Dim runtimeTask = ConvertTask(ideTask)
+                Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileEscalation: compiling task id={ideTask.Id}, templateId={ideTask.TemplateId}, text={ideTask.Text}")
+                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileEscalation: compiling task id={ideTask.Id}, templateId={ideTask.TemplateId}, text={ideTask.Text}")
+                Dim runtimeTask = CompileTask(ideTask)
                 If runtimeTask IsNot Nothing Then
-                    Console.WriteLine($"✅ [DDTAssembler] ConvertEscalation: task converted successfully")
-                    System.Diagnostics.Debug.WriteLine($"✅ [DDTAssembler] ConvertEscalation: task converted successfully")
+                    Console.WriteLine($"✅ [COMPILER][DDTAssembler] CompileEscalation: task compiled successfully")
+                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTAssembler] CompileEscalation: task compiled successfully")
                     runtimeEscalation.Tasks.Add(runtimeTask)
                 Else
-                    Console.WriteLine($"❌ [DDTAssembler] ConvertEscalation: task conversion returned Nothing for templateId={ideTask.TemplateId}")
-                    System.Diagnostics.Debug.WriteLine($"❌ [DDTAssembler] ConvertEscalation: task conversion returned Nothing for templateId={ideTask.TemplateId}")
+                    Console.WriteLine($"❌ [COMPILER][DDTAssembler] CompileEscalation: task compilation returned Nothing for templateId={ideTask.TemplateId}")
+                    System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][DDTAssembler] CompileEscalation: task compilation returned Nothing for templateId={ideTask.TemplateId}")
                 End If
             Next
         Else
-            Console.WriteLine($"⚠️ [DDTAssembler] ConvertEscalation: ideEscalation.Tasks is Nothing")
-            System.Diagnostics.Debug.WriteLine($"⚠️ [DDTAssembler] ConvertEscalation: ideEscalation.Tasks is Nothing")
+            Console.WriteLine($"⚠️ [COMPILER][DDTAssembler] CompileEscalation: ideEscalation.Tasks is Nothing")
+            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DDTAssembler] CompileEscalation: ideEscalation.Tasks is Nothing")
         End If
 
-        Console.WriteLine($"🔍 [DDTAssembler] ConvertEscalation: final runtimeEscalation.Tasks.Count={runtimeEscalation.Tasks.Count}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertEscalation: final runtimeEscalation.Tasks.Count={runtimeEscalation.Tasks.Count}")
+        Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileEscalation: final runtimeEscalation.Tasks.Count={runtimeEscalation.Tasks.Count}")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileEscalation: final runtimeEscalation.Tasks.Count={runtimeEscalation.Tasks.Count}")
         Return runtimeEscalation
     End Function
 
     ''' <summary>
-    ''' Converte Task (IDE) in ITask (Runtime)
+    ''' Compila Task (IDE) in ITask (Runtime)
     ''' </summary>
-    Private Function ConvertTask(ideTask As Compiler.Task) As ITask
-        Console.WriteLine($"🔍 [DDTAssembler] ConvertTask called: id={ideTask.Id}, type={If(ideTask.Type.HasValue, ideTask.Type.Value.ToString(), "NULL")}, templateId={If(String.IsNullOrEmpty(ideTask.TemplateId), "EMPTY", ideTask.TemplateId)}, text={If(String.IsNullOrEmpty(ideTask.Text), "EMPTY", ideTask.Text)}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertTask called: id={ideTask.Id}, type={If(ideTask.Type.HasValue, ideTask.Type.Value.ToString(), "NULL")}, templateId={If(String.IsNullOrEmpty(ideTask.TemplateId), "EMPTY", ideTask.TemplateId)}, text={If(String.IsNullOrEmpty(ideTask.Text), "EMPTY", ideTask.Text)}")
+    Private Function CompileTask(ideTask As Compiler.Task) As ITask
+        Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileTask called: id={ideTask.Id}, type={If(ideTask.Type.HasValue, ideTask.Type.Value.ToString(), "NULL")}, templateId={If(String.IsNullOrEmpty(ideTask.TemplateId), "EMPTY", ideTask.TemplateId)}, text={If(String.IsNullOrEmpty(ideTask.Text), "EMPTY", ideTask.Text)}")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileTask called: id={ideTask.Id}, type={If(ideTask.Type.HasValue, ideTask.Type.Value.ToString(), "NULL")}, templateId={If(String.IsNullOrEmpty(ideTask.TemplateId), "EMPTY", ideTask.TemplateId)}, text={If(String.IsNullOrEmpty(ideTask.Text), "EMPTY", ideTask.Text)}")
 
         ' ✅ DEBUG: Log Parameters array e Value dictionary
         If ideTask.Parameters IsNot Nothing Then
-            Console.WriteLine($"🔍 [DDTAssembler] ConvertTask: ideTask.Parameters IsNot Nothing, Count={ideTask.Parameters.Count}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertTask: ideTask.Parameters IsNot Nothing, Count={ideTask.Parameters.Count}")
+            Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileTask: ideTask.Parameters IsNot Nothing, Count={ideTask.Parameters.Count}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileTask: ideTask.Parameters IsNot Nothing, Count={ideTask.Parameters.Count}")
             For Each param In ideTask.Parameters
-                Console.WriteLine($"🔍 [DDTAssembler] ConvertTask: Parameter parameterId={param.ParameterId}, value={param.Value}")
-                System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertTask: Parameter parameterId={param.ParameterId}, value={param.Value}")
+                Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileTask: Parameter parameterId={param.ParameterId}, value={param.Value}")
+                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileTask: Parameter parameterId={param.ParameterId}, value={param.Value}")
             Next
         Else
-            Console.WriteLine($"🔍 [DDTAssembler] ConvertTask: ideTask.Parameters is Nothing")
-            System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertTask: ideTask.Parameters is Nothing")
+            Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileTask: ideTask.Parameters is Nothing")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileTask: ideTask.Parameters is Nothing")
         End If
 
         If ideTask.Value IsNot Nothing Then
-            Console.WriteLine($"🔍 [DDTAssembler] ConvertTask: ideTask.Value IsNot Nothing, keys={String.Join(", ", ideTask.Value.Keys)}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertTask: ideTask.Value IsNot Nothing, keys={String.Join(", ", ideTask.Value.Keys)}")
+            Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileTask: ideTask.Value IsNot Nothing, keys={String.Join(", ", ideTask.Value.Keys)}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileTask: ideTask.Value IsNot Nothing, keys={String.Join(", ", ideTask.Value.Keys)}")
             If ideTask.Value.ContainsKey("parameters") Then
-                Console.WriteLine($"🔍 [DDTAssembler] ConvertTask: Found 'parameters' key in Value")
-                System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertTask: Found 'parameters' key in Value")
+                Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileTask: Found 'parameters' key in Value")
+                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileTask: Found 'parameters' key in Value")
             End If
         Else
-            Console.WriteLine($"🔍 [DDTAssembler] ConvertTask: ideTask.Value is Nothing")
-            System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertTask: ideTask.Value is Nothing")
+            Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileTask: ideTask.Value is Nothing")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileTask: ideTask.Value is Nothing")
         End If
 
         ' ✅ USA SOLO Type (enum numerico) - templateId è SOLO un GUID per riferimenti
         If Not ideTask.Type.HasValue Then
-            Console.WriteLine($"❌ [DDTAssembler] ConvertTask: Type is missing, returning Nothing")
-            Console.WriteLine($"❌ [DDTAssembler] ConvertTask: Task structure:")
+            Console.WriteLine($"❌ [COMPILER][DDTAssembler] CompileTask: Type is missing, returning Nothing")
+            Console.WriteLine($"❌ [COMPILER][DDTAssembler] CompileTask: Task structure:")
             Console.WriteLine($"   - Id: {ideTask.Id}")
             Console.WriteLine($"   - Type: NULL (REQUIRED)")
             Console.WriteLine($"   - TemplateId: {If(String.IsNullOrEmpty(ideTask.TemplateId), "EMPTY", ideTask.TemplateId)} (GUID reference, not used for type)")
             Console.WriteLine($"   - Text: {If(String.IsNullOrEmpty(ideTask.Text), "EMPTY", ideTask.Text)}")
             Console.WriteLine($"   - Parameters Count: {If(ideTask.Parameters IsNot Nothing, ideTask.Parameters.Count, 0)}")
-            System.Diagnostics.Debug.WriteLine($"❌ [DDTAssembler] ConvertTask: Type is missing, returning Nothing")
+            System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][DDTAssembler] CompileTask: Type is missing, returning Nothing")
             Return Nothing
         End If
 
         Dim typeValue = ideTask.Type.Value
         If Not [Enum].IsDefined(GetType(TaskTypes), typeValue) Then
-            Console.WriteLine($"❌ [DDTAssembler] ConvertTask: Invalid Type enum value: {typeValue}, returning Nothing")
-            Console.WriteLine($"❌ [DDTAssembler] ConvertTask: Task structure:")
+            Console.WriteLine($"❌ [COMPILER][DDTAssembler] CompileTask: Invalid Type enum value: {typeValue}, returning Nothing")
+            Console.WriteLine($"❌ [COMPILER][DDTAssembler] CompileTask: Task structure:")
             Console.WriteLine($"   - Id: {ideTask.Id}")
             Console.WriteLine($"   - Type: {typeValue} (INVALID)")
             Console.WriteLine($"   - TemplateId: {If(String.IsNullOrEmpty(ideTask.TemplateId), "EMPTY", ideTask.TemplateId)}")
-            System.Diagnostics.Debug.WriteLine($"❌ [DDTAssembler] ConvertTask: Invalid Type enum value: {typeValue}, returning Nothing")
+            System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][DDTAssembler] CompileTask: Invalid Type enum value: {typeValue}, returning Nothing")
             Return Nothing
         End If
 
         Dim taskType = CType(typeValue, TaskTypes)
-        Console.WriteLine($"✅ [DDTAssembler] ConvertTask: Using Type enum: {taskType} (value={typeValue})")
-        System.Diagnostics.Debug.WriteLine($"✅ [DDTAssembler] ConvertTask: Using Type enum: {taskType} (value={typeValue})")
+        Console.WriteLine($"✅ [COMPILER][DDTAssembler] CompileTask: Using Type enum: {taskType} (value={typeValue})")
+        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTAssembler] CompileTask: Using Type enum: {taskType} (value={typeValue})")
 
         ' ✅ Usa taskType per determinare il tipo di task
         Select Case taskType
             Case TaskTypes.SayMessage
-                Console.WriteLine($"🔍 [DDTAssembler] ConvertTask: Matched SayMessage/Message, checking for text...")
-                System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertTask: Matched SayMessage/Message, checking for text...")
+                Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileTask: Matched SayMessage/Message, checking for text...")
+                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileTask: Matched SayMessage/Message, checking for text...")
                 ' ✅ Nuovo modello: text come proprietà diretta
                 If Not String.IsNullOrEmpty(ideTask.Text) Then
                     Dim resolvedText = ResolveText(ideTask.Text)
-                    Console.WriteLine($"✅ [DDTAssembler] ConvertTask: Creating MessageTask with direct text: '{resolvedText.Substring(0, Math.Min(50, resolvedText.Length))}...'")
-                    System.Diagnostics.Debug.WriteLine($"✅ [DDTAssembler] ConvertTask: Creating MessageTask with direct text: '{resolvedText}'")
+                    Console.WriteLine($"✅ [COMPILER][DDTAssembler] CompileTask: Creating MessageTask with direct text: '{resolvedText.Substring(0, Math.Min(50, resolvedText.Length))}...'")
+                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTAssembler] CompileTask: Creating MessageTask with direct text: '{resolvedText}'")
                     Return New MessageTask(resolvedText)
                 End If
                 ' ✅ Nuovo modello: text in Parameters array (proprietà diretta)
-                Console.WriteLine($"🔍 [DDTAssembler] ConvertTask: Direct text not found, checking Parameters array...")
-                System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertTask: Direct text not found, checking Parameters array...")
+                Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileTask: Direct text not found, checking Parameters array...")
+                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileTask: Direct text not found, checking Parameters array...")
                 If ideTask.Parameters IsNot Nothing Then
                     Dim textParam = ideTask.Parameters.FirstOrDefault(Function(p) p.ParameterId = "text")
                     If textParam IsNot Nothing AndAlso Not String.IsNullOrEmpty(textParam.Value) Then
                         Dim resolvedText = ResolveText(textParam.Value)
-                        Console.WriteLine($"✅ [DDTAssembler] ConvertTask: Creating MessageTask with text from Parameters array: '{resolvedText.Substring(0, Math.Min(50, resolvedText.Length))}...'")
-                        System.Diagnostics.Debug.WriteLine($"✅ [DDTAssembler] ConvertTask: Creating MessageTask with text from Parameters array: '{resolvedText}'")
+                        Console.WriteLine($"✅ [COMPILER][DDTAssembler] CompileTask: Creating MessageTask with text from Parameters array: '{resolvedText.Substring(0, Math.Min(50, resolvedText.Length))}...'")
+                        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTAssembler] CompileTask: Creating MessageTask with text from Parameters array: '{resolvedText}'")
                         Return New MessageTask(resolvedText)
                     End If
                 End If
 
                 ' ✅ Vecchio modello: text in value.parameters (backward compatibility)
-                Console.WriteLine($"🔍 [DDTAssembler] ConvertTask: Parameters array not found, checking value.parameters...")
-                System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertTask: Parameters array not found, checking value.parameters...")
+                Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileTask: Parameters array not found, checking value.parameters...")
+                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileTask: Parameters array not found, checking value.parameters...")
                 If ideTask.Value IsNot Nothing AndAlso ideTask.Value.ContainsKey("parameters") Then
-                    Console.WriteLine($"🔍 [DDTAssembler] ConvertTask: Found 'parameters' in Value, extracting text...")
-                    System.Diagnostics.Debug.WriteLine($"🔍 [DDTAssembler] ConvertTask: Found 'parameters' in Value, extracting text...")
+                    Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileTask: Found 'parameters' in Value, extracting text...")
+                    System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileTask: Found 'parameters' in Value, extracting text...")
                     Dim parameters = ideTask.Value("parameters")
                     If TypeOf parameters Is List(Of Object) Then
                         Dim paramsList = CType(parameters, List(Of Object))
@@ -386,47 +418,47 @@ Public Class DDTAssembler
                             Dim textValue = CType(textParam, Dictionary(Of String, Object))("value")?.ToString()
                             If Not String.IsNullOrEmpty(textValue) Then
                                 Dim resolvedText = ResolveText(textValue)
-                                Console.WriteLine($"✅ [DDTAssembler] ConvertTask: Creating MessageTask with text from value.parameters: '{resolvedText.Substring(0, Math.Min(50, resolvedText.Length))}...'")
-                                System.Diagnostics.Debug.WriteLine($"✅ [DDTAssembler] ConvertTask: Creating MessageTask with text from value.parameters: '{resolvedText}'")
+                                Console.WriteLine($"✅ [COMPILER][DDTAssembler] CompileTask: Creating MessageTask with text from value.parameters: '{resolvedText.Substring(0, Math.Min(50, resolvedText.Length))}...'")
+                                System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTAssembler] CompileTask: Creating MessageTask with text from value.parameters: '{resolvedText}'")
                                 Return New MessageTask(resolvedText)
                             End If
                         End If
                     End If
                 End If
-                Console.WriteLine($"❌ [DDTAssembler] ConvertTask: No text found for SayMessage task, returning Nothing")
-                System.Diagnostics.Debug.WriteLine($"❌ [DDTAssembler] ConvertTask: No text found for SayMessage task, returning Nothing")
+                Console.WriteLine($"❌ [COMPILER][DDTAssembler] CompileTask: No text found for SayMessage task, returning Nothing")
+                System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][DDTAssembler] CompileTask: No text found for SayMessage task, returning Nothing")
                 Return Nothing
             Case TaskTypes.CloseSession
-                Console.WriteLine($"✅ [DDTAssembler] ConvertTask: Creating CloseSessionTask")
-                System.Diagnostics.Debug.WriteLine($"✅ [DDTAssembler] ConvertTask: Creating CloseSessionTask")
+                Console.WriteLine($"✅ [COMPILER][DDTAssembler] CompileTask: Creating CloseSessionTask")
+                System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTAssembler] CompileTask: Creating CloseSessionTask")
                 Return New CloseSessionTask()
             Case TaskTypes.Transfer
-                Console.WriteLine($"✅ [DDTAssembler] ConvertTask: Creating TransferTask")
-                System.Diagnostics.Debug.WriteLine($"✅ [DDTAssembler] ConvertTask: Creating TransferTask")
+                Console.WriteLine($"✅ [COMPILER][DDTAssembler] CompileTask: Creating TransferTask")
+                System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTAssembler] CompileTask: Creating TransferTask")
                 Return New TransferTask()
             Case TaskTypes.DataRequest
-                Console.WriteLine($"❌ [DDTAssembler] ConvertTask: DataRequest tasks are not supported in escalations, returning Nothing")
-                System.Diagnostics.Debug.WriteLine($"❌ [DDTAssembler] ConvertTask: DataRequest tasks are not supported in escalations, returning Nothing")
+                Console.WriteLine($"❌ [COMPILER][DDTAssembler] CompileTask: DataRequest tasks are not supported in escalations, returning Nothing")
+                System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][DDTAssembler] CompileTask: DataRequest tasks are not supported in escalations, returning Nothing")
                 Return Nothing
             Case TaskTypes.BackendCall
-                Console.WriteLine($"❌ [DDTAssembler] ConvertTask: BackendCall tasks are not supported in escalations, returning Nothing")
-                System.Diagnostics.Debug.WriteLine($"❌ [DDTAssembler] ConvertTask: BackendCall tasks are not supported in escalations, returning Nothing")
+                Console.WriteLine($"❌ [COMPILER][DDTAssembler] CompileTask: BackendCall tasks are not supported in escalations, returning Nothing")
+                System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][DDTAssembler] CompileTask: BackendCall tasks are not supported in escalations, returning Nothing")
                 Return Nothing
             Case TaskTypes.ClassifyProblem
-                Console.WriteLine($"❌ [DDTAssembler] ConvertTask: ClassifyProblem tasks are not supported in escalations, returning Nothing")
-                System.Diagnostics.Debug.WriteLine($"❌ [DDTAssembler] ConvertTask: ClassifyProblem tasks are not supported in escalations, returning Nothing")
+                Console.WriteLine($"❌ [COMPILER][DDTAssembler] CompileTask: ClassifyProblem tasks are not supported in escalations, returning Nothing")
+                System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][DDTAssembler] CompileTask: ClassifyProblem tasks are not supported in escalations, returning Nothing")
                 Return Nothing
             Case Else
-                Console.WriteLine($"❌ [DDTAssembler] ConvertTask: Unknown TaskType '{taskType}', returning Nothing")
-                System.Diagnostics.Debug.WriteLine($"❌ [DDTAssembler] ConvertTask: Unknown TaskType '{taskType}', returning Nothing")
+                Console.WriteLine($"❌ [COMPILER][DDTAssembler] CompileTask: Unknown TaskType '{taskType}', returning Nothing")
+                System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][DDTAssembler] CompileTask: Unknown TaskType '{taskType}', returning Nothing")
                 Return Nothing
         End Select
     End Function
 
     ''' <summary>
-    ''' Converte DialogueStep in Response (per Introduction)
+    ''' Compila DialogueStep in Response (per Introduction)
     ''' </summary>
-    Private Function ConvertDialogueStepToResponse(ideStep As Compiler.DialogueStep) As Response
+    Private Function CompileDialogueStepToResponse(ideStep As Compiler.DialogueStep) As Response
         Dim response As New Response()
 
         ' Prendi la prima escalation del primo step
@@ -434,7 +466,7 @@ Public Class DDTAssembler
             Dim firstEscalation = ideStep.Escalations(0)
             If firstEscalation.Tasks IsNot Nothing Then
                 For Each ideTask As Compiler.Task In firstEscalation.Tasks
-                    Dim runtimeTask = ConvertTask(ideTask)
+                    Dim runtimeTask = CompileTask(ideTask)
                     If runtimeTask IsNot Nothing Then
                         response.Tasks.Add(runtimeTask)
                     End If

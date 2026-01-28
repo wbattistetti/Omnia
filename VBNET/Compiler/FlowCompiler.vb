@@ -17,17 +17,17 @@ Public Class FlowCompiler
     ''' Crea un CompiledTask type-safe in base al TaskType usando il factory pattern
     ''' </summary>
     Private Function CreateTypedCompiledTask(taskType As TaskTypes, task As Task, row As RowData, node As FlowNode, taskId As String, flow As Flow) As CompiledTask
-        Console.WriteLine($"🔍 [FlowCompiler] CreateTypedCompiledTask called: taskType={taskType}, taskId={taskId}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [FlowCompiler] CreateTypedCompiledTask called: taskType={taskType}, taskId={taskId}")
+        Console.WriteLine($"🔍 [COMPILER][FlowCompiler] CreateTypedCompiledTask called: taskType={taskType}, taskId={taskId}")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][FlowCompiler] CreateTypedCompiledTask called: taskType={taskType}, taskId={taskId}")
         ' Usa il factory per ottenere il compiler appropriato
         Dim compiler = TaskCompilerFactory.GetCompiler(taskType)
-        Console.WriteLine($"🔍 [FlowCompiler] Compiler obtained: type={compiler.GetType().Name}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [FlowCompiler] Compiler obtained: type={compiler.GetType().Name}")
-        Console.WriteLine($"🔍 [FlowCompiler] Calling compiler.Compile for task {taskId}...")
-        System.Diagnostics.Debug.WriteLine($"🔍 [FlowCompiler] Calling compiler.Compile for task {taskId}...")
+        Console.WriteLine($"🔍 [COMPILER][FlowCompiler] Compiler obtained: type={compiler.GetType().Name}")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][FlowCompiler] Compiler obtained: type={compiler.GetType().Name}")
+        Console.WriteLine($"🔍 [COMPILER][FlowCompiler] Calling compiler.Compile for task {taskId}...")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][FlowCompiler] Calling compiler.Compile for task {taskId}...")
         Dim result = compiler.Compile(task, row, node, taskId, flow)
-        Console.WriteLine($"✅ [FlowCompiler] compiler.Compile completed for task {taskId}, result type={result.GetType().Name}")
-        System.Diagnostics.Debug.WriteLine($"✅ [FlowCompiler] compiler.Compile completed for task {taskId}, result type={result.GetType().Name}")
+        Console.WriteLine($"✅ [COMPILER][FlowCompiler] compiler.Compile completed for task {taskId}, result type={result.GetType().Name}")
+        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][FlowCompiler] compiler.Compile completed for task {taskId}, result type={result.GetType().Name}")
         Return result
     End Function
 
@@ -43,8 +43,8 @@ Public Class FlowCompiler
     ''' </summary>
     Public Function CompileFlow(flow As Flow) As FlowCompilationResult
         Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-        Console.WriteLine($"🔧 [FlowCompiler] Starting compilation...")
-        System.Diagnostics.Debug.WriteLine($"🔧 [FlowCompiler] Starting compilation...")
+        Console.WriteLine($"🔧 [COMPILER][FlowCompiler] Starting compilation...")
+        System.Diagnostics.Debug.WriteLine($"🔧 [COMPILER][FlowCompiler] Starting compilation...")
         Console.WriteLine($"   Flow.Nodes count: {If(flow.Nodes IsNot Nothing, flow.Nodes.Count, 0)}")
         Console.WriteLine($"   Flow.Tasks count: {If(flow.Tasks IsNot Nothing, flow.Tasks.Count, 0)}")
         Console.WriteLine($"   Flow.Edges count: {If(flow.Edges IsNot Nothing, flow.Edges.Count, 0)}")
@@ -69,8 +69,8 @@ Public Class FlowCompiler
         ' Topologicamente impossibile avere 0 entry nodes in un grafo connesso
         ' Se 0, significa grafo vuoto o non connesso
         If entryNodes.Count = 0 Then
-            Console.WriteLine($"❌ [FlowCompiler] No entry nodes found!")
-            System.Diagnostics.Debug.WriteLine($"❌ [FlowCompiler] No entry nodes found!")
+            Console.WriteLine($"❌ [COMPILER][FlowCompiler] No entry nodes found!")
+            System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][FlowCompiler] No entry nodes found!")
             Throw New Exception("No entry nodes found. Graph may be empty or disconnected. At least one entry node is required.")
         End If
 
@@ -79,8 +79,8 @@ Public Class FlowCompiler
         ' La compilazione viene bloccata: bisogna definire/marcare quale nodo è di start
         If entryNodes.Count > 1 Then
             Dim entryNodeIds = String.Join(", ", entryNodes.Select(Function(n) $"'{n.Id}'"))
-            Console.WriteLine($"❌ [FlowCompiler] Multiple entry nodes found: {entryNodeIds}")
-            System.Diagnostics.Debug.WriteLine($"❌ [FlowCompiler] Multiple entry nodes found: {entryNodeIds}")
+            Console.WriteLine($"❌ [COMPILER][FlowCompiler] Multiple entry nodes found: {entryNodeIds}")
+            System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][FlowCompiler] Multiple entry nodes found: {entryNodeIds}")
             Throw New Exception($"Multiple entry nodes found ({entryNodes.Count}): {entryNodeIds}. " &
                                 "Please mark one node as the start/entry point. " &
                                 "All nodes in a cycle cannot be entry points simultaneously.")
@@ -123,66 +123,66 @@ Public Class FlowCompiler
                 Dim taskId As String = Nothing
                 If Not String.IsNullOrEmpty(row.TaskId) Then
                     taskId = row.TaskId
-                    Console.WriteLine($"     ✅ [FlowCompiler] Using row.TaskId: {taskId}")
-                    System.Diagnostics.Debug.WriteLine($"     ✅ [FlowCompiler] Using row.TaskId: {taskId}")
+                    Console.WriteLine($"     ✅ [COMPILER][FlowCompiler] Using row.TaskId: {taskId}")
+                    System.Diagnostics.Debug.WriteLine($"     ✅ [COMPILER][FlowCompiler] Using row.TaskId: {taskId}")
                 Else
                     taskId = row.Id
-                    Console.WriteLine($"     ⚠️ [FlowCompiler] row.TaskId not found, using row.Id: {taskId}")
-                    System.Diagnostics.Debug.WriteLine($"     ⚠️ [FlowCompiler] row.TaskId not found, using row.Id: {taskId}")
+                    Console.WriteLine($"     ⚠️ [COMPILER][FlowCompiler] row.TaskId not found, using row.Id: {taskId}")
+                    System.Diagnostics.Debug.WriteLine($"     ⚠️ [COMPILER][FlowCompiler] row.TaskId not found, using row.Id: {taskId}")
                 End If
 
                 ' ✅ DEBUG: Log available task IDs before lookup
-                Console.WriteLine($"     🔍 [FlowCompiler] Looking for task: taskId={taskId}, row.Id={row.Id}")
-                System.Diagnostics.Debug.WriteLine($"     🔍 [FlowCompiler] Looking for task: taskId={taskId}, row.Id={row.Id}")
+                Console.WriteLine($"     🔍 [COMPILER][FlowCompiler] Looking for task: taskId={taskId}, row.Id={row.Id}")
+                System.Diagnostics.Debug.WriteLine($"     🔍 [COMPILER][FlowCompiler] Looking for task: taskId={taskId}, row.Id={row.Id}")
                 If flow.Tasks IsNot Nothing Then
-                    Console.WriteLine($"     🔍 [FlowCompiler] Available tasks in flow.Tasks ({flow.Tasks.Count}): {String.Join(", ", flow.Tasks.Select(Function(t) $"{t.Id}(templateId={If(String.IsNullOrEmpty(t.TemplateId), "NULL", t.TemplateId)})"))}")
-                    System.Diagnostics.Debug.WriteLine($"     🔍 [FlowCompiler] Available tasks in flow.Tasks ({flow.Tasks.Count}): {String.Join(", ", flow.Tasks.Select(Function(t) $"{t.Id}(templateId={If(String.IsNullOrEmpty(t.TemplateId), "NULL", t.TemplateId)})"))}")
+                    Console.WriteLine($"     🔍 [COMPILER][FlowCompiler] Available tasks in flow.Tasks ({flow.Tasks.Count}): {String.Join(", ", flow.Tasks.Select(Function(t) $"{t.Id}(templateId={If(String.IsNullOrEmpty(t.TemplateId), "NULL", t.TemplateId)})"))}")
+                    System.Diagnostics.Debug.WriteLine($"     🔍 [COMPILER][FlowCompiler] Available tasks in flow.Tasks ({flow.Tasks.Count}): {String.Join(", ", flow.Tasks.Select(Function(t) $"{t.Id}(templateId={If(String.IsNullOrEmpty(t.TemplateId), "NULL", t.TemplateId)})"))}")
                 Else
-                    Console.WriteLine($"     ⚠️ [FlowCompiler] flow.Tasks is Nothing!")
-                    System.Diagnostics.Debug.WriteLine($"     ⚠️ [FlowCompiler] flow.Tasks is Nothing!")
+                    Console.WriteLine($"     ⚠️ [COMPILER][FlowCompiler] flow.Tasks is Nothing!")
+                    System.Diagnostics.Debug.WriteLine($"     ⚠️ [COMPILER][FlowCompiler] flow.Tasks is Nothing!")
                 End If
 
                 ' Risolvi task direttamente da flow.Tasks
                 Dim task = flow.GetTaskById(taskId)
                 If task Is Nothing Then
-                    Console.WriteLine($"     ❌ [FlowCompiler] Task not found: taskId={taskId}, row.Id={row.Id}, node.Id={node.Id}")
-                    System.Diagnostics.Debug.WriteLine($"     ❌ [FlowCompiler] Task not found: taskId={taskId}, row.Id={row.Id}, node.Id={node.Id}")
+                    Console.WriteLine($"     ❌ [COMPILER][FlowCompiler] Task not found: taskId={taskId}, row.Id={row.Id}, node.Id={node.Id}")
+                    System.Diagnostics.Debug.WriteLine($"     ❌ [COMPILER][FlowCompiler] Task not found: taskId={taskId}, row.Id={row.Id}, node.Id={node.Id}")
                     Throw New Exception($"Task not found: {taskId} in node {node.Id}, row {row.Id}. Task must exist.")
                 End If
 
                 ' ✅ USA SOLO task.Type (enum numerico) - templateId è SOLO un GUID per riferimenti
-                Console.WriteLine($"🔍 [FlowCompiler] Processing task: Id={task.Id}, Type={If(task.Type.HasValue, task.Type.Value.ToString(), "NULL")}, TemplateId={If(String.IsNullOrEmpty(task.TemplateId), "NULL/EMPTY", task.TemplateId)}, Node={node.Id}, Row={row.Id}")
-                System.Diagnostics.Debug.WriteLine($"🔍 [FlowCompiler] Processing task: Id={task.Id}, Type={If(task.Type.HasValue, task.Type.Value.ToString(), "NULL")}, TemplateId={If(String.IsNullOrEmpty(task.TemplateId), "NULL/EMPTY", task.TemplateId)}, Node={node.Id}, Row={row.Id}")
+                Console.WriteLine($"🔍 [COMPILER][FlowCompiler] Processing task: Id={task.Id}, Type={If(task.Type.HasValue, task.Type.Value.ToString(), "NULL")}, TemplateId={If(String.IsNullOrEmpty(task.TemplateId), "NULL/EMPTY", task.TemplateId)}, Node={node.Id}, Row={row.Id}")
+                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][FlowCompiler] Processing task: Id={task.Id}, Type={If(task.Type.HasValue, task.Type.Value.ToString(), "NULL")}, TemplateId={If(String.IsNullOrEmpty(task.TemplateId), "NULL/EMPTY", task.TemplateId)}, Node={node.Id}, Row={row.Id}")
 
                 If Not task.Type.HasValue Then
-                    Console.WriteLine($"❌ [FlowCompiler] Task {taskId} has no Type!")
-                    Console.WriteLine($"❌ [FlowCompiler] Task structure:")
+                    Console.WriteLine($"❌ [COMPILER][FlowCompiler] Task {taskId} has no Type!")
+                    Console.WriteLine($"❌ [COMPILER][FlowCompiler] Task structure:")
                     Console.WriteLine($"   - Id: {task.Id}")
                     Console.WriteLine($"   - Type: NULL (REQUIRED)")
                     Console.WriteLine($"   - TemplateId: {If(String.IsNullOrEmpty(task.TemplateId), "EMPTY", task.TemplateId)} (GUID reference, not used for type)")
-                    System.Diagnostics.Debug.WriteLine($"❌ [FlowCompiler] Task {taskId} has no Type!")
+                    System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][FlowCompiler] Task {taskId} has no Type!")
                     Throw New Exception($"Task {taskId} (node {node.Id}, row {row.Id}) has no Type. Type is required.")
                 End If
 
                 Dim typeValue = task.Type.Value
                 If Not [Enum].IsDefined(GetType(TaskTypes), typeValue) Then
-                    Console.WriteLine($"❌ [FlowCompiler] Task {taskId} has invalid Type: {typeValue}")
-                    Console.WriteLine($"❌ [FlowCompiler] Task structure:")
+                    Console.WriteLine($"❌ [COMPILER][FlowCompiler] Task {taskId} has invalid Type: {typeValue}")
+                    Console.WriteLine($"❌ [COMPILER][FlowCompiler] Task structure:")
                     Console.WriteLine($"   - Id: {task.Id}")
                     Console.WriteLine($"   - Type: {typeValue} (INVALID)")
                     Console.WriteLine($"   - TemplateId: {If(String.IsNullOrEmpty(task.TemplateId), "EMPTY", task.TemplateId)}")
-                    System.Diagnostics.Debug.WriteLine($"❌ [FlowCompiler] Task {taskId} has invalid Type: {typeValue}")
+                    System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][FlowCompiler] Task {taskId} has invalid Type: {typeValue}")
                     Throw New Exception($"Task {taskId} (node {node.Id}, row {row.Id}) has invalid Type: {typeValue}")
                 End If
 
                 Dim taskType = CType(typeValue, TaskTypes)
-                Console.WriteLine($"✅ [FlowCompiler] Using task.Type: {taskType} (value={typeValue})")
-                System.Diagnostics.Debug.WriteLine($"✅ [FlowCompiler] Using task.Type: {taskType} (value={typeValue})")
+                Console.WriteLine($"✅ [COMPILER][FlowCompiler] Using task.Type: {taskType} (value={typeValue})")
+                System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][FlowCompiler] Using task.Type: {taskType} (value={typeValue})")
 
                 Dim compiledTask As CompiledTask = CreateTypedCompiledTask(taskType, task, row, node, taskId, flow)
 
-                Console.WriteLine($"✅ [FlowCompiler] Created CompiledTask: Id={compiledTask.Id}, TaskType={compiledTask.TaskType}")
-                System.Diagnostics.Debug.WriteLine($"✅ [FlowCompiler] Created CompiledTask: Id={compiledTask.Id}, TaskType={compiledTask.TaskType}")
+                Console.WriteLine($"✅ [COMPILER][FlowCompiler] Created CompiledTask: Id={compiledTask.Id}, TaskType={compiledTask.TaskType}")
+                System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][FlowCompiler] Created CompiledTask: Id={compiledTask.Id}, TaskType={compiledTask.TaskType}")
 
                 ' Aggiungi task al TaskGroup
                 taskGroup.Tasks.Add(compiledTask)
@@ -220,9 +220,9 @@ Public Class FlowCompiler
             .Tasks = allTasks
         }
 
-        Console.WriteLine($"✅ [FlowCompiler] Compilation completed: {taskGroups.Count} task groups, {allTasks.Count} tasks")
+        Console.WriteLine($"✅ [COMPILER][FlowCompiler] Compilation completed: {taskGroups.Count} task groups, {allTasks.Count} tasks")
         Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-        System.Diagnostics.Debug.WriteLine($"✅ [FlowCompiler] Compilation completed: {taskGroups.Count} task groups, {allTasks.Count} tasks")
+        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][FlowCompiler] Compilation completed: {taskGroups.Count} task groups, {allTasks.Count} tasks")
 
         Return result
     End Function

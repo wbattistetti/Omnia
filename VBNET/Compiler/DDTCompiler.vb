@@ -26,16 +26,16 @@ Public Class DDTCompiler
     ''' Compila un DDT da stringa JSON
     ''' </summary>
     Public Function Compile(ddtJson As String) As DDTCompilationResult
-        Console.WriteLine($"🔍 [DDTCompiler] Compile called, ddtJson length={If(ddtJson IsNot Nothing, ddtJson.Length, 0)}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [DDTCompiler] Compile called, ddtJson length={If(ddtJson IsNot Nothing, ddtJson.Length, 0)}")
+        Console.WriteLine($"🔍 [COMPILER][DDTCompiler] Compile called, ddtJson length={If(ddtJson IsNot Nothing, ddtJson.Length, 0)}")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] Compile called, ddtJson length={If(ddtJson IsNot Nothing, ddtJson.Length, 0)}")
 
         If String.IsNullOrEmpty(ddtJson) Then
             Throw New ArgumentException("DDT JSON cannot be null or empty", NameOf(ddtJson))
         End If
 
         ' 1. Deserializza JSON in AssembledDDT (struttura IDE tipizzata)
-        Console.WriteLine($"🔍 [DDTCompiler] Step 1: Deserializing JSON to AssembledDDT...")
-        System.Diagnostics.Debug.WriteLine($"🔍 [DDTCompiler] Step 1: Deserializing JSON to AssembledDDT...")
+        Console.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 1: Deserializing JSON to AssembledDDT...")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 1: Deserializing JSON to AssembledDDT...")
         Dim settings As New JsonSerializerSettings() With {
             .NullValueHandling = NullValueHandling.Ignore,
             .MissingMemberHandling = MissingMemberHandling.Ignore
@@ -49,22 +49,22 @@ Public Class DDTCompiler
             Throw New InvalidOperationException("Impossibile deserializzare AssembledDDT dal JSON")
         End If
 
-        Console.WriteLine($"✅ [DDTCompiler] AssembledDDT deserialized: Id={assembled.Id}, MainData IsNot Nothing={assembled.MainData IsNot Nothing}")
-        System.Diagnostics.Debug.WriteLine($"✅ [DDTCompiler] AssembledDDT deserialized: Id={assembled.Id}, MainData IsNot Nothing={assembled.MainData IsNot Nothing}")
-        If assembled.MainData IsNot Nothing Then
-            Console.WriteLine($"🔍 [DDTCompiler] AssembledDDT.MainData.Count={assembled.MainData.Count}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [DDTCompiler] AssembledDDT.MainData.Count={assembled.MainData.Count}")
+        Console.WriteLine($"✅ [COMPILER][DDTCompiler] AssembledDDT deserialized: Id={assembled.Id}, Data IsNot Nothing={assembled.Data IsNot Nothing}")
+        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTCompiler] AssembledDDT deserialized: Id={assembled.Id}, Data IsNot Nothing={assembled.Data IsNot Nothing}")
+        If assembled.Data IsNot Nothing Then
+            Console.WriteLine($"🔍 [COMPILER][DDTCompiler] AssembledDDT.Data.Count={assembled.Data.Count}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] AssembledDDT.Data.Count={assembled.Data.Count}")
         End If
 
         ' 2. Trasforma AssembledDDT (IDE) → DDTInstance (Runtime)
-        Console.WriteLine($"🔍 [DDTCompiler] Step 2: Converting AssembledDDT to DDTInstance using DDTAssembler.ToRuntime...")
-        System.Diagnostics.Debug.WriteLine($"🔍 [DDTCompiler] Step 2: Converting AssembledDDT to DDTInstance using DDTAssembler.ToRuntime...")
-        Dim instance As DDTInstance = _assembler.ToRuntime(assembled)
-        Console.WriteLine($"✅ [DDTCompiler] DDTInstance created: MainDataList IsNot Nothing={instance.MainDataList IsNot Nothing}")
-        System.Diagnostics.Debug.WriteLine($"✅ [DDTCompiler] DDTInstance created: MainDataList IsNot Nothing={instance.MainDataList IsNot Nothing}")
+        Console.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 2: Compiling AssembledDDT to DDTInstance using DDTAssembler.Compile...")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 2: Compiling AssembledDDT to DDTInstance using DDTAssembler.Compile...")
+        Dim instance As DDTInstance = _assembler.Compile(assembled)
+        Console.WriteLine($"✅ [COMPILER][DDTCompiler] DDTInstance created: MainDataList IsNot Nothing={instance.MainDataList IsNot Nothing}")
+        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTCompiler] DDTInstance created: MainDataList IsNot Nothing={instance.MainDataList IsNot Nothing}")
         If instance.MainDataList IsNot Nothing Then
-            Console.WriteLine($"🔍 [DDTCompiler] DDTInstance.MainDataList.Count={instance.MainDataList.Count}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [DDTCompiler] DDTInstance.MainDataList.Count={instance.MainDataList.Count}")
+            Console.WriteLine($"🔍 [COMPILER][DDTCompiler] DDTInstance.MainDataList.Count={instance.MainDataList.Count}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] DDTInstance.MainDataList.Count={instance.MainDataList.Count}")
         End If
 
         ' 3. Carica nlpContract per tutti i nodi

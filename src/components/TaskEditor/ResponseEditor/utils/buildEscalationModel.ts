@@ -4,7 +4,7 @@
 export type EscalationModel = {
   tasks?: Array<{
     templateId?: string;
-    taskId?: string;
+    id?: string;  // ✅ Standard: id (GUID univoco)
     text?: string;
     textKey?: string;
     icon?: string;
@@ -93,14 +93,14 @@ export function buildEscalationModel(
           }
         }
 
-        return { templateId: task.templateId, taskId: task.id, text, textKey, color: task.color, label: task.label };
+        return { templateId: task.templateId, id: task.id, text, textKey, color: task.color, label: task.label };
       });
 
       if (shouldDebug()) {
         console.log('[DROP_DEBUG][buildEscalationModel] ✅ Escalation mapped', {
           escIdx,
           tasksCount: mappedTasks.length,
-          tasks: mappedTasks.map(t => ({ templateId: t.templateId, taskId: t.taskId, hasText: !!t.text }))
+          tasks: mappedTasks.map(t => ({ templateId: t.templateId, id: t.id, hasText: !!t.text }))
         });
       }
 
@@ -137,7 +137,7 @@ export function buildEscalationModel(
           // ✅ Ensure templateId is never undefined
           const finalTemplateId = task.templateId || 'sayMessage';
 
-          return { templateId: finalTemplateId, taskId: task.id, text, textKey, color: task.color, label: task.label };
+          return { templateId: finalTemplateId, id: task.id, text, textKey, color: task.color, label: task.label };
         })
       }));
     }
@@ -151,7 +151,7 @@ export function buildEscalationModel(
     const text = translationValue || textKey;
     return [
       {
-        tasks: [{ templateId: 'sayMessage', taskId: `task-${Date.now()}`, parameters: textKey ? [{ parameterId: 'text', value: textKey }] : [], text, textKey }]
+        tasks: [{ templateId: 'sayMessage', id: `task-${Date.now()}`, parameters: textKey ? [{ parameterId: 'text', value: textKey }] : [], text, textKey }]
       }
     ];
   }

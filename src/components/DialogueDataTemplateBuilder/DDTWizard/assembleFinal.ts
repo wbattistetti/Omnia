@@ -406,8 +406,8 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
                 escalationId: `e_${uuidv4()}`,
                 tasks: [  // ✅ Renamed from actions
                   {
+                    id: uuidv4(),              // ✅ Standard: id (GUID univoco)
                     templateId: 'sayMessage',  // ✅ Renamed from actionId
-                    taskId: uuidv4(),          // ✅ Renamed from actionInstanceId
                     parameters: [{ parameterId: 'text', value: r1Key }]
                   }
                 ],
@@ -426,8 +426,8 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
                 escalationId: `e_${uuidv4()}`,
                 tasks: [  // ✅ Renamed from actions
                   {
+                    id: uuidv4(),              // ✅ Standard: id (GUID univoco)
                     templateId: 'sayMessage',  // ✅ Renamed from actionId
-                    taskId: uuidv4(),          // ✅ Renamed from actionInstanceId
                     parameters: [{ parameterId: 'text', value: r2Key }]
                   }
                 ],
@@ -457,8 +457,8 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
               escalationId: `e_${uuidv4()}`,
               tasks: [  // ✅ Renamed from actions
                 {
+                  id: uuidv4(),              // ✅ Standard: id (GUID univoco)
                   templateId: 'sayMessage',  // ✅ Renamed from actionId
-                  taskId: uuidv4(),          // ✅ Renamed from actionInstanceId
                   parameters: [{ parameterId: 'text', value: r1Key }]
                 }
               ],
@@ -477,8 +477,8 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
               escalationId: `e_${uuidv4()}`,
               tasks: [  // ✅ Renamed from actions
                 {
+                  id: uuidv4(),              // ✅ Standard: id (GUID univoco)
                   templateId: 'sayMessage',  // ✅ Renamed from actionId
-                  taskId: uuidv4(),          // ✅ Renamed from actionInstanceId
                   parameters: [{ parameterId: 'text', value: r2Key }]
                 }
               ],
@@ -693,9 +693,9 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
         const taskType = templateIdToTaskType(templateIdForTask) || TaskType.SayMessage;
 
         const baseTask = {
-          type: taskType, // ✅ Aggiunto campo type (enum numerico)
-          templateId: null,  // ✅ null = standalone task (non deriva da altri Task)
-          taskId: actionInstanceId,  // ✅ Renamed from actionInstanceId
+          id: actionInstanceId,      // ✅ Standard: id (GUID univoco)
+          type: taskType,             // ✅ Aggiunto campo type (enum numerico)
+          templateId: null,           // ✅ null = standalone task (non deriva da altri Task)
           parameters: [{ parameterId: 'text', value: actionInstanceId }]
         };
 

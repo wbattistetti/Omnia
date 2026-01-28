@@ -6,9 +6,7 @@ Imports Newtonsoft.Json
 
 ''' <summary>
 ''' AssembledDDT: corrisponde ESATTAMENTE a AssembledDDT TypeScript del frontend
-''' mainData può essere:
-''' - Oggetto singolo (DDT semplice): mainData: MainDataNode
-''' - Array (DDT aggregato): mainData: MainDataNode[]
+''' data è sempre un array: data: MainDataNode[]
 ''' </summary>
 Public Class AssembledDDT
     <JsonProperty("id")>
@@ -17,9 +15,9 @@ Public Class AssembledDDT
     <JsonProperty("label")>
     Public Property Label As String
 
-    <JsonProperty("mainData")>
+    <JsonProperty("data")>
     <JsonConverter(GetType(MainDataNodeListConverter))>
-    Public Property MainData As List(Of Compiler.MainDataNode)
+    Public Property Data As List(Of Compiler.MainDataNode)
 
     <JsonProperty("translations")>
     Public Property Translations As Dictionary(Of String, String)
@@ -41,7 +39,7 @@ Public Class AssembledDDT
 
     Public Sub New()
         Translations = New Dictionary(Of String, String)()
-        MainData = New List(Of Compiler.MainDataNode)()
+        Data = New List(Of Compiler.MainDataNode)()
         Constraints = New List(Of Object)()
         Examples = New List(Of Object)()
     End Sub

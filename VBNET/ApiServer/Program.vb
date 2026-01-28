@@ -510,22 +510,75 @@ Module Program
             Try
                 Dim reader As New StreamReader(context.Request.Body)
                 body = Await reader.ReadToEndAsync()
-                Console.WriteLine($"📦 [HandleOrchestratorSessionStart] Body read: {If(body IsNot Nothing, body.Length, 0)} chars")
-                System.Diagnostics.Debug.WriteLine($"📦 [HandleOrchestratorSessionStart] Body read: {If(body IsNot Nothing, body.Length, 0)} chars")
+                Console.WriteLine($"📦 [API][OrchestratorSession] Body read: {If(body IsNot Nothing, body.Length, 0)} chars")
+                System.Diagnostics.Debug.WriteLine($"📦 [API][OrchestratorSession] Body read: {If(body IsNot Nothing, body.Length, 0)} chars")
                 Console.Out.Flush()
             Catch readEx As Exception
-                Console.WriteLine($"❌ [HandleOrchestratorSessionStart] Error reading body: {readEx.Message}")
-                System.Diagnostics.Debug.WriteLine($"❌ [HandleOrchestratorSessionStart] Error reading body: {readEx.Message}")
+                Console.WriteLine($"❌ [API][OrchestratorSession] Error reading body: {readEx.Message}")
+                System.Diagnostics.Debug.WriteLine($"❌ [API][OrchestratorSession] Error reading body: {readEx.Message}")
                 Console.Out.Flush()
                 Return Results.BadRequest(New With {.error = "Failed to read request body"})
             End Try
 
             If String.IsNullOrEmpty(body) Then
-                Console.WriteLine("❌ [HandleOrchestratorSessionStart] Empty body")
-                System.Diagnostics.Debug.WriteLine("❌ [HandleOrchestratorSessionStart] Empty body")
+                Console.WriteLine("❌ [API][OrchestratorSession] Empty body")
+                System.Diagnostics.Debug.WriteLine("❌ [API][OrchestratorSession] Empty body")
                 Console.Out.Flush()
                 Return Results.BadRequest(New With {.error = "Empty request body"})
             End If
+
+            ' ✅ DEBUG: Verifica presenza di "ddts" nel body JSON PRIMA della deserializzazione
+            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+            Console.WriteLine($"🔍 [API][OrchestratorSession] DEBUG: Analyzing request body for DDTs")
+            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+            Console.WriteLine($"[API][OrchestratorSession] Body length: {body.Length} characters")
+            If body.Contains("ddts") OrElse body.Contains("DDTs") Then
+                Console.WriteLine($"[API][OrchestratorSession] ✅ Found 'ddts' or 'DDTs' in body")
+                ' Cerca il campo ddts nel JSON
+                Try
+                    Dim jObj = Newtonsoft.Json.Linq.JObject.Parse(body)
+                    If jObj("ddts") IsNot Nothing Then
+                        Dim ddtsToken = jObj("ddts")
+                        Console.WriteLine($"[API][OrchestratorSession] ✅ Found 'ddts' field in JSON")
+                        Console.WriteLine($"[API][OrchestratorSession] ddts type: {ddtsToken.GetType().Name}")
+                        If TypeOf ddtsToken Is Newtonsoft.Json.Linq.JArray Then
+                            Dim ddtsArray = CType(ddtsToken, Newtonsoft.Json.Linq.JArray)
+                            Console.WriteLine($"[API][OrchestratorSession] ddts is JArray, count: {ddtsArray.Count}")
+                            If ddtsArray.Count > 0 Then
+                                Dim firstDDTToken = ddtsArray(0)
+                                If TypeOf firstDDTToken Is Newtonsoft.Json.Linq.JObject Then
+                                    Dim firstDDTObj = CType(firstDDTToken, Newtonsoft.Json.Linq.JObject)
+                                    Console.WriteLine($"[API][OrchestratorSession] First DDT keys: {String.Join(", ", firstDDTObj.Properties().Select(Function(p) p.Name))}")
+                                    If firstDDTObj("data") IsNot Nothing Then
+                                        Console.WriteLine($"[API][OrchestratorSession] ✅ First DDT has 'data' field")
+                                        Dim dataToken = firstDDTObj("data")
+                                        If TypeOf dataToken Is Newtonsoft.Json.Linq.JArray Then
+                                            Dim dataArray = CType(dataToken, Newtonsoft.Json.Linq.JArray)
+                                            Console.WriteLine($"[API][OrchestratorSession] data is JArray, count: {dataArray.Count}")
+                                        Else
+                                            Console.WriteLine($"[API][OrchestratorSession] data type: {dataToken.GetType().Name}")
+                                        End If
+                                    Else
+                                        Console.WriteLine($"[API][OrchestratorSession] ⚠️ WARNING: First DDT does NOT have 'data' field!")
+                                    End If
+                                End If
+                            Else
+                                Console.WriteLine($"[API][OrchestratorSession] ⚠️ WARNING: ddts array is EMPTY!")
+                            End If
+                        End If
+                    ElseIf jObj("DDTs") IsNot Nothing Then
+                        Console.WriteLine($"[API][OrchestratorSession] ✅ Found 'DDTs' field (capitalized) in JSON")
+                    Else
+                        Console.WriteLine($"[API][OrchestratorSession] ⚠️ WARNING: 'ddts' or 'DDTs' field NOT found in JSON!")
+                    End If
+                Catch parseEx As Exception
+                    Console.WriteLine($"[API][OrchestratorSession] ⚠️ Error parsing JSON for DDTs check: {parseEx.Message}")
+                End Try
+            Else
+                Console.WriteLine($"[API][OrchestratorSession] ⚠️ WARNING: 'ddts' or 'DDTs' NOT found in body string!")
+            End If
+            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+            Console.Out.Flush()
 
             ' Deserialize request
             Dim request As OrchestratorSessionStartRequest = Nothing
@@ -534,19 +587,50 @@ Module Program
                     .NullValueHandling = NullValueHandling.Ignore,
                     .MissingMemberHandling = MissingMemberHandling.Ignore
                 })
-                Console.WriteLine($"✅ [HandleOrchestratorSessionStart] Request deserialized")
-                System.Diagnostics.Debug.WriteLine($"✅ [HandleOrchestratorSessionStart] Request deserialized")
+                Console.WriteLine($"✅ [API][OrchestratorSession] Request deserialized")
+                System.Diagnostics.Debug.WriteLine($"✅ [API][OrchestratorSession] Request deserialized")
                 Console.Out.Flush()
             Catch jsonEx As Exception
-                Console.WriteLine($"❌ [HandleOrchestratorSessionStart] JSON error: {jsonEx.Message}")
-                System.Diagnostics.Debug.WriteLine($"❌ [HandleOrchestratorSessionStart] JSON error: {jsonEx.Message}")
+                Console.WriteLine($"❌ [API][OrchestratorSession] JSON error: {jsonEx.Message}")
+                System.Diagnostics.Debug.WriteLine($"❌ [API][OrchestratorSession] JSON error: {jsonEx.Message}")
                 Console.Out.Flush()
                 Return Results.BadRequest(New With {.error = "Invalid JSON", .message = jsonEx.Message})
             End Try
 
+            ' ✅ DEBUG: Verifica contenuto di request.DDTs PRIMA di creare la sessione
+            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+            Console.WriteLine($"🔍 [API][OrchestratorSession] DEBUG: Analyzing request.DDTs")
+            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+            Console.WriteLine($"[API][OrchestratorSession] request.DDTs IsNot Nothing={request.DDTs IsNot Nothing}")
+            If request.DDTs IsNot Nothing Then
+                Console.WriteLine($"[API][OrchestratorSession] request.DDTs.Count={request.DDTs.Count}")
+                If request.DDTs.Count > 0 Then
+                    Dim firstDDT = request.DDTs(0)
+                    Console.WriteLine($"[API][OrchestratorSession] firstDDT IsNot Nothing={firstDDT IsNot Nothing}")
+                    If firstDDT IsNot Nothing Then
+                        Console.WriteLine($"[API][OrchestratorSession] firstDDT.Id={If(String.IsNullOrEmpty(firstDDT.Id), "NULL/EMPTY", firstDDT.Id)}")
+                        Console.WriteLine($"[API][OrchestratorSession] firstDDT.Label={If(String.IsNullOrEmpty(firstDDT.Label), "NULL/EMPTY", firstDDT.Label)}")
+                        Console.WriteLine($"[API][OrchestratorSession] firstDDT.Data IsNot Nothing={firstDDT.Data IsNot Nothing}")
+                        If firstDDT.Data IsNot Nothing Then
+                            Console.WriteLine($"[API][OrchestratorSession] firstDDT.Data.Count={firstDDT.Data.Count}")
+                        Else
+                            Console.WriteLine($"[API][OrchestratorSession] ⚠️ WARNING: firstDDT.Data is Nothing!")
+                        End If
+                    Else
+                        Console.WriteLine($"[API][OrchestratorSession] ❌ CRITICAL ERROR: firstDDT is Nothing!")
+                    End If
+                Else
+                    Console.WriteLine($"[API][OrchestratorSession] ⚠️ WARNING: request.DDTs.Count = 0 (EMPTY!)")
+                End If
+            Else
+                Console.WriteLine($"[API][OrchestratorSession] ⚠️ WARNING: request.DDTs is Nothing!")
+            End If
+            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+            Console.Out.Flush()
+
             If request Is Nothing OrElse request.CompilationResult Is Nothing Then
-                Console.WriteLine("❌ [HandleOrchestratorSessionStart] Missing CompilationResult")
-                System.Diagnostics.Debug.WriteLine("❌ [HandleOrchestratorSessionStart] Missing CompilationResult")
+                Console.WriteLine("❌ [API][OrchestratorSession] Missing CompilationResult")
+                System.Diagnostics.Debug.WriteLine("❌ [API][OrchestratorSession] Missing CompilationResult")
                 Console.Out.Flush()
                 Return Results.BadRequest(New With {.error = "Missing CompilationResult"})
             End If
@@ -555,14 +639,14 @@ Module Program
             Dim compilationResult As Compiler.FlowCompilationResult = Nothing
             Try
                 ' Log what we received
-                Console.WriteLine($"🔍 [HandleOrchestratorSessionStart] CompilationResult type: {If(request.CompilationResult IsNot Nothing, request.CompilationResult.GetType().Name, "Nothing")}")
-                System.Diagnostics.Debug.WriteLine($"🔍 [HandleOrchestratorSessionStart] CompilationResult type: {If(request.CompilationResult IsNot Nothing, request.CompilationResult.GetType().Name, "Nothing")}")
+                Console.WriteLine($"🔍 [API][OrchestratorSession] CompilationResult type: {If(request.CompilationResult IsNot Nothing, request.CompilationResult.GetType().Name, "Nothing")}")
+                System.Diagnostics.Debug.WriteLine($"🔍 [API][OrchestratorSession] CompilationResult type: {If(request.CompilationResult IsNot Nothing, request.CompilationResult.GetType().Name, "Nothing")}")
 
                 ' Try to deserialize directly if it's already a JObject
                 If TypeOf request.CompilationResult Is JObject Then
                     Dim jObj = CType(request.CompilationResult, JObject)
-                    Console.WriteLine($"🔍 [HandleOrchestratorSessionStart] CompilationResult is JObject, checking taskGroups...")
-                    System.Diagnostics.Debug.WriteLine($"🔍 [HandleOrchestratorSessionStart] CompilationResult is JObject")
+                    Console.WriteLine($"🔍 [API][OrchestratorSession] CompilationResult is JObject, checking taskGroups...")
+                    System.Diagnostics.Debug.WriteLine($"🔍 [API][OrchestratorSession] CompilationResult is JObject")
 
                     ' Log all keys in JObject
                     Console.WriteLine($"   All keys in CompilationResult: {String.Join(", ", jObj.Properties().Select(Function(p) p.Name))}")
@@ -576,9 +660,9 @@ Module Program
                     ' Check if taskGroups exists
                     If jObj("taskGroups") IsNot Nothing Then
                         Dim taskGroupsToken = jObj("taskGroups")
-                        Console.WriteLine($"✅ [HandleOrchestratorSessionStart] taskGroups found in JObject")
+                        Console.WriteLine($"✅ [API][OrchestratorSession] taskGroups found in JObject")
                         Console.WriteLine($"   taskGroups type: {taskGroupsToken.GetType().Name}")
-                        System.Diagnostics.Debug.WriteLine($"✅ [HandleOrchestratorSessionStart] taskGroups found")
+                        System.Diagnostics.Debug.WriteLine($"✅ [API][OrchestratorSession] taskGroups found")
                         System.Diagnostics.Debug.WriteLine($"   taskGroups type: {taskGroupsToken.GetType().Name}")
 
                         If TypeOf taskGroupsToken Is JArray Then
@@ -603,8 +687,8 @@ Module Program
                             System.Diagnostics.Debug.WriteLine($"   ⚠️ taskGroups is NOT a JArray, it's: {taskGroupsToken.GetType().Name}")
                         End If
                     Else
-                        Console.WriteLine($"⚠️ [HandleOrchestratorSessionStart] taskGroups NOT found in JObject")
-                        System.Diagnostics.Debug.WriteLine($"⚠️ [HandleOrchestratorSessionStart] taskGroups NOT found in JObject")
+                        Console.WriteLine($"⚠️ [API][OrchestratorSession] taskGroups NOT found in JObject")
+                        System.Diagnostics.Debug.WriteLine($"⚠️ [API][OrchestratorSession] taskGroups NOT found in JObject")
                     End If
 
                     ' Deserialize from JObject directly
@@ -615,8 +699,8 @@ Module Program
                 Else
                     ' Fallback: serialize and deserialize
                     Dim compilationResultJson = JsonConvert.SerializeObject(request.CompilationResult)
-                    Console.WriteLine($"🔍 [HandleOrchestratorSessionStart] Serialized CompilationResult JSON length: {compilationResultJson.Length}")
-                    System.Diagnostics.Debug.WriteLine($"🔍 [HandleOrchestratorSessionStart] Serialized JSON length: {compilationResultJson.Length}")
+                    Console.WriteLine($"🔍 [API][OrchestratorSession] Serialized CompilationResult JSON length: {compilationResultJson.Length}")
+                    System.Diagnostics.Debug.WriteLine($"🔍 [API][OrchestratorSession] Serialized JSON length: {compilationResultJson.Length}")
 
                     ' Log first 500 chars of JSON to see structure
                     Console.WriteLine($"   JSON preview: {compilationResultJson.Substring(0, Math.Min(500, compilationResultJson.Length))}")
@@ -628,8 +712,8 @@ Module Program
                     })
                 End If
 
-                Console.WriteLine($"✅ [HandleOrchestratorSessionStart] CompilationResult deserialized: {If(compilationResult IsNot Nothing, compilationResult.TaskGroups.Count, 0)} task groups")
-                System.Diagnostics.Debug.WriteLine($"✅ [HandleOrchestratorSessionStart] CompilationResult deserialized: {If(compilationResult IsNot Nothing, compilationResult.TaskGroups.Count, 0)} task groups")
+                Console.WriteLine($"✅ [API][OrchestratorSession] CompilationResult deserialized: {If(compilationResult IsNot Nothing, compilationResult.TaskGroups.Count, 0)} task groups")
+                System.Diagnostics.Debug.WriteLine($"✅ [API][OrchestratorSession] CompilationResult deserialized: {If(compilationResult IsNot Nothing, compilationResult.TaskGroups.Count, 0)} task groups")
 
                 If compilationResult IsNot Nothing AndAlso compilationResult.TaskGroups IsNot Nothing Then
                     Console.WriteLine($"   TaskGroups details:")
@@ -643,9 +727,9 @@ Module Program
 
                 Console.Out.Flush()
             Catch deserializeEx As Exception
-                Console.WriteLine($"❌ [HandleOrchestratorSessionStart] CompilationResult error: {deserializeEx.Message}")
+                Console.WriteLine($"❌ [API][OrchestratorSession] CompilationResult error: {deserializeEx.Message}")
                 Console.WriteLine($"   Stack trace: {deserializeEx.StackTrace}")
-                System.Diagnostics.Debug.WriteLine($"❌ [HandleOrchestratorSessionStart] CompilationResult error: {deserializeEx.Message}")
+                System.Diagnostics.Debug.WriteLine($"❌ [API][OrchestratorSession] CompilationResult error: {deserializeEx.Message}")
                 System.Diagnostics.Debug.WriteLine($"   Stack trace: {deserializeEx.StackTrace}")
                 Console.Out.Flush()
                 Return Results.BadRequest(New With {.error = "Failed to deserialize CompilationResult", .message = deserializeEx.Message})
@@ -653,14 +737,14 @@ Module Program
 
             ' Generate session ID
             Dim sessionId = Guid.NewGuid().ToString()
-            Console.WriteLine($"✅ [HandleOrchestratorSessionStart] Session ID: {sessionId}")
-            System.Diagnostics.Debug.WriteLine($"✅ [HandleOrchestratorSessionStart] Session ID: {sessionId}")
+            Console.WriteLine($"✅ [API][OrchestratorSession] Session ID: {sessionId}")
+            System.Diagnostics.Debug.WriteLine($"✅ [API][OrchestratorSession] Session ID: {sessionId}")
             Console.Out.Flush()
 
             ' Create session in SessionManager
             Try
-                Console.WriteLine($"🔄 [HandleOrchestratorSessionStart] Calling SessionManager.CreateSession...")
-                System.Diagnostics.Debug.WriteLine($"🔄 [HandleOrchestratorSessionStart] Calling SessionManager.CreateSession...")
+                Console.WriteLine($"🔄 [API][OrchestratorSession] Calling SessionManager.CreateSession...")
+                System.Diagnostics.Debug.WriteLine($"🔄 [API][OrchestratorSession] Calling SessionManager.CreateSession...")
                 Console.Out.Flush()
                 Dim session = SessionManager.CreateSession(
                     sessionId,
@@ -669,13 +753,13 @@ Module Program
                     request.DDTs,
                     request.Translations
                 )
-                Console.WriteLine($"✅ [HandleOrchestratorSessionStart] Session created successfully")
-                System.Diagnostics.Debug.WriteLine($"✅ [HandleOrchestratorSessionStart] Session created successfully")
+                Console.WriteLine($"✅ [API][OrchestratorSession] Session created successfully")
+                System.Diagnostics.Debug.WriteLine($"✅ [API][OrchestratorSession] Session created successfully")
                 Console.Out.Flush()
             Catch sessionEx As Exception
-                Console.WriteLine($"❌ [HandleOrchestratorSessionStart] Session creation error: {sessionEx.Message}")
+                Console.WriteLine($"❌ [API][OrchestratorSession] Session creation error: {sessionEx.Message}")
                 Console.WriteLine($"Stack trace: {sessionEx.StackTrace}")
-                System.Diagnostics.Debug.WriteLine($"❌ [HandleOrchestratorSessionStart] Session creation error: {sessionEx.Message}")
+                System.Diagnostics.Debug.WriteLine($"❌ [API][OrchestratorSession] Session creation error: {sessionEx.Message}")
                 System.Diagnostics.Debug.WriteLine($"Stack trace: {sessionEx.StackTrace}")
                 Console.Out.Flush()
                 Return Results.Problem(title:="Failed to create session", detail:=sessionEx.Message, statusCode:=500)
@@ -691,15 +775,15 @@ Module Program
             context.Response.ContentType = "application/json; charset=utf-8"
             Await context.Response.WriteAsync(jsonResponse)
 
-            Console.WriteLine($"✅ [HandleOrchestratorSessionStart] Response sent: {jsonResponse}")
-            System.Diagnostics.Debug.WriteLine($"✅ [HandleOrchestratorSessionStart] Response sent: {jsonResponse}")
+            Console.WriteLine($"✅ [API][OrchestratorSession] Response sent: {jsonResponse}")
+            System.Diagnostics.Debug.WriteLine($"✅ [API][OrchestratorSession] Response sent: {jsonResponse}")
             Console.Out.Flush()
 
             Return Results.Empty
         Catch ex As Exception
-            Console.WriteLine($"❌ [HandleOrchestratorSessionStart] ERROR: {ex.Message}")
+            Console.WriteLine($"❌ [API][OrchestratorSession] ERROR: {ex.Message}")
             Console.WriteLine($"Stack trace: {ex.StackTrace}")
-            System.Diagnostics.Debug.WriteLine($"❌ [HandleOrchestratorSessionStart] ERROR: {ex.Message}")
+            System.Diagnostics.Debug.WriteLine($"❌ [API][OrchestratorSession] ERROR: {ex.Message}")
             System.Diagnostics.Debug.WriteLine($"Stack trace: {ex.StackTrace}")
             Console.Out.Flush()
             Return Results.Problem(detail:=ex.Message, statusCode:=500)
@@ -712,57 +796,57 @@ Module Program
     Private Async Function HandleOrchestratorSessionStart_OLD(context As HttpContext) As Task(Of IResult)
         ' Use both Console.WriteLine and System.Diagnostics.Debug for maximum visibility
         Console.WriteLine("═══════════════════════════════════════════════════════════════════════════")
-        Console.WriteLine("📥 [HandleOrchestratorSessionStart] FUNCTION STARTED")
+        Console.WriteLine("📥 [API][OrchestratorSession] FUNCTION STARTED")
         Console.WriteLine($"   Method: {context.Request.Method}")
         Console.WriteLine($"   Path: {context.Request.Path}")
         Console.WriteLine($"   Content-Type: {context.Request.ContentType}")
         Console.WriteLine($"   Content-Length: {If(context.Request.ContentLength.HasValue, context.Request.ContentLength.Value.ToString(), "unknown")}")
         Console.WriteLine("═══════════════════════════════════════════════════════════════════════════")
-        System.Diagnostics.Debug.WriteLine("📥 [HandleOrchestratorSessionStart] Function called")
-        Console.WriteLine("🔍 [HandleOrchestratorSessionStart] Starting execution flow...")
-        Console.WriteLine("🔍 [HandleOrchestratorSessionStart] About to enter Try block...")
-        Console.WriteLine("🔍 [HandleOrchestratorSessionStart] BEFORE TRY BLOCK - Line 406")
+        System.Diagnostics.Debug.WriteLine("📥 [API][OrchestratorSession] Function called")
+        Console.WriteLine("🔍 [API][OrchestratorSession] Starting execution flow...")
+        Console.WriteLine("🔍 [API][OrchestratorSession] About to enter Try block...")
+        Console.WriteLine("🔍 [API][OrchestratorSession] BEFORE TRY BLOCK - Line 406")
         System.Diagnostics.Debug.WriteLine("🔍 BEFORE TRY BLOCK")
 
         Try
             Console.WriteLine("═══════════════════════════════════════════════════════════════════════════")
-            Console.WriteLine("🔍 [HandleOrchestratorSessionStart] INSIDE TRY BLOCK - Line 407")
+            Console.WriteLine("🔍 [API][OrchestratorSession] INSIDE TRY BLOCK - Line 407")
             Console.Out.Flush()
             System.Diagnostics.Debug.WriteLine("🔍 INSIDE TRY BLOCK")
-            Console.WriteLine("🔍 [HandleOrchestratorSessionStart] Inside Try block")
+            Console.WriteLine("🔍 [API][OrchestratorSession] Inside Try block")
             Console.Out.Flush()
             Console.WriteLine("═══════════════════════════════════════════════════════════════════════════")
             Console.Out.Flush()
-            Console.WriteLine("🔍 [HandleOrchestratorSessionStart] Line 415 - About to enable buffering...")
+            Console.WriteLine("🔍 [API][OrchestratorSession] Line 415 - About to enable buffering...")
             Console.Out.Flush()
             ' Enable buffering to allow reading the body
             Try
-                Console.WriteLine("🔍 [HandleOrchestratorSessionStart] Line 417 - Calling EnableBuffering()...")
+                Console.WriteLine("🔍 [API][OrchestratorSession] Line 417 - Calling EnableBuffering()...")
                 context.Request.EnableBuffering()
-                Console.WriteLine("✅ [HandleOrchestratorSessionStart] EnableBuffering() succeeded")
+                Console.WriteLine("✅ [API][OrchestratorSession] EnableBuffering() succeeded")
             Catch ex As Exception
-                Console.WriteLine($"⚠️ [HandleOrchestratorSessionStart] EnableBuffering failed (may already be enabled): {ex.Message}")
+                Console.WriteLine($"⚠️ [API][OrchestratorSession] EnableBuffering failed (may already be enabled): {ex.Message}")
             End Try
 
             ' Reset stream position to beginning
-            Console.WriteLine("🔍 [HandleOrchestratorSessionStart] Line 423 - About to reset stream position...")
+            Console.WriteLine("🔍 [API][OrchestratorSession] Line 423 - About to reset stream position...")
             Try
-                Console.WriteLine("🔍 [HandleOrchestratorSessionStart] Line 424 - Setting Body.Position = 0...")
+                Console.WriteLine("🔍 [API][OrchestratorSession] Line 424 - Setting Body.Position = 0...")
                 context.Request.Body.Position = 0
-                Console.WriteLine("✅ [HandleOrchestratorSessionStart] Stream position reset succeeded")
+                Console.WriteLine("✅ [API][OrchestratorSession] Stream position reset succeeded")
             Catch ex As Exception
-                Console.WriteLine($"⚠️ [HandleOrchestratorSessionStart] Cannot reset stream position: {ex.Message}")
+                Console.WriteLine($"⚠️ [API][OrchestratorSession] Cannot reset stream position: {ex.Message}")
             End Try
 
-            Console.WriteLine("🔍 [HandleOrchestratorSessionStart] Line 429 - About to read request body...")
+            Console.WriteLine("🔍 [API][OrchestratorSession] Line 429 - About to read request body...")
             Dim body As String = Nothing
             Try
                 Dim reader As New StreamReader(context.Request.Body)
                 body = Await reader.ReadToEndAsync()
-                Console.WriteLine($"📦 [HandleOrchestratorSessionStart] Body read successfully: {If(body IsNot Nothing, body.Length, 0)} characters")
-                Console.WriteLine($"📦 [HandleOrchestratorSessionStart] Body preview (first 200 chars): {If(body IsNot Nothing, body.Substring(0, Math.Min(200, body.Length)), "null")}")
+                Console.WriteLine($"📦 [API][OrchestratorSession] Body read successfully: {If(body IsNot Nothing, body.Length, 0)} characters")
+                Console.WriteLine($"📦 [API][OrchestratorSession] Body preview (first 200 chars): {If(body IsNot Nothing, body.Substring(0, Math.Min(200, body.Length)), "null")}")
             Catch readEx As Exception
-                Console.WriteLine($"❌ [HandleOrchestratorSessionStart] Error reading request body: {readEx.Message}")
+                Console.WriteLine($"❌ [API][OrchestratorSession] Error reading request body: {readEx.Message}")
                 Console.WriteLine($"Stack trace: {readEx.StackTrace}")
                 Return Results.BadRequest(New With {
                     .error = "Failed to read request body",
@@ -770,28 +854,28 @@ Module Program
                 })
             End Try
 
-            Console.WriteLine("🔍 [HandleOrchestratorSessionStart] Checking if body is empty... - Line 434")
+            Console.WriteLine("🔍 [API][OrchestratorSession] Checking if body is empty... - Line 434")
             If String.IsNullOrEmpty(body) Then
-                Console.WriteLine("❌ [HandleOrchestratorSessionStart] Empty request body - RETURNING BAD REQUEST")
+                Console.WriteLine("❌ [API][OrchestratorSession] Empty request body - RETURNING BAD REQUEST")
                 Return Results.BadRequest(New With {.error = "Empty request body"})
             End If
-            Console.WriteLine("✅ [HandleOrchestratorSessionStart] Body is not empty, proceeding...")
+            Console.WriteLine("✅ [API][OrchestratorSession] Body is not empty, proceeding...")
 
-            Console.WriteLine("🔍 [HandleOrchestratorSessionStart] About to deserialize request... - Line 443")
+            Console.WriteLine("🔍 [API][OrchestratorSession] About to deserialize request... - Line 443")
             Dim request As OrchestratorSessionStartRequest = Nothing
             Try
-                Console.WriteLine("🔄 [HandleOrchestratorSessionStart] Starting JSON deserialization... - Line 445")
+                Console.WriteLine("🔄 [API][OrchestratorSession] Starting JSON deserialization... - Line 445")
                 request = JsonConvert.DeserializeObject(Of OrchestratorSessionStartRequest)(body, New JsonSerializerSettings() With {
                     .Error = Sub(sender, args)
-                                 Console.WriteLine($"❌ [HandleOrchestratorSessionStart] JSON Error: {args.ErrorContext.Error.Message}")
+                                 Console.WriteLine($"❌ [API][OrchestratorSession] JSON Error: {args.ErrorContext.Error.Message}")
                                  Console.WriteLine($"   Path: {args.ErrorContext.Path}")
                              End Sub,
                     .NullValueHandling = NullValueHandling.Ignore,
                     .MissingMemberHandling = MissingMemberHandling.Ignore
                 })
-                Console.WriteLine($"✅ [HandleOrchestratorSessionStart] JSON deserialization completed")
+                Console.WriteLine($"✅ [API][OrchestratorSession] JSON deserialization completed")
             Catch jsonEx As JsonReaderException
-                Console.WriteLine($"❌ [HandleOrchestratorSessionStart] JSON deserialization error: {jsonEx.Message}")
+                Console.WriteLine($"❌ [API][OrchestratorSession] JSON deserialization error: {jsonEx.Message}")
                 Console.WriteLine($"   Line: {jsonEx.LineNumber}, Position: {jsonEx.LinePosition}")
                 Console.WriteLine($"   Path: {jsonEx.Path}")
                 Return Results.BadRequest(New With {
@@ -801,7 +885,7 @@ Module Program
                     .position = jsonEx.LinePosition
                 })
             Catch deserializeEx As Exception
-                Console.WriteLine($"❌ [HandleOrchestratorSessionStart] Deserialization error: {deserializeEx.Message}")
+                Console.WriteLine($"❌ [API][OrchestratorSession] Deserialization error: {deserializeEx.Message}")
                 Console.WriteLine($"Stack trace: {deserializeEx.StackTrace}")
                 If deserializeEx.InnerException IsNot Nothing Then
                     Console.WriteLine($"Inner exception: {deserializeEx.InnerException.Message}")
@@ -812,41 +896,41 @@ Module Program
                 })
             End Try
 
-            Console.WriteLine("🔍 [HandleOrchestratorSessionStart] Checking if request is Nothing... - Line 477")
+            Console.WriteLine("🔍 [API][OrchestratorSession] Checking if request is Nothing... - Line 477")
             If request Is Nothing Then
-                Console.WriteLine("❌ [HandleOrchestratorSessionStart] Deserialized request is Nothing - RETURNING BAD REQUEST")
+                Console.WriteLine("❌ [API][OrchestratorSession] Deserialized request is Nothing - RETURNING BAD REQUEST")
                 Return Results.BadRequest(New With {.error = "Invalid request format"})
             End If
-            Console.WriteLine("✅ [HandleOrchestratorSessionStart] Request is not Nothing")
+            Console.WriteLine("✅ [API][OrchestratorSession] Request is not Nothing")
 
-            Console.WriteLine("🔍 [HandleOrchestratorSessionStart] Checking if CompilationResult is Nothing... - Line 482")
+            Console.WriteLine("🔍 [API][OrchestratorSession] Checking if CompilationResult is Nothing... - Line 482")
             If request.CompilationResult Is Nothing Then
-                Console.WriteLine("❌ [HandleOrchestratorSessionStart] Missing compilationResult - RETURNING BAD REQUEST")
+                Console.WriteLine("❌ [API][OrchestratorSession] Missing compilationResult - RETURNING BAD REQUEST")
                 Return Results.BadRequest(New With {.error = "Missing compilationResult"})
             End If
-            Console.WriteLine("✅ [HandleOrchestratorSessionStart] CompilationResult is not Nothing")
+            Console.WriteLine("✅ [API][OrchestratorSession] CompilationResult is not Nothing")
 
             ' Deserializza CompilationResult
-            Console.WriteLine("🔍 [HandleOrchestratorSessionStart] About to deserialize CompilationResult... - Line 487")
+            Console.WriteLine("🔍 [API][OrchestratorSession] About to deserialize CompilationResult... - Line 487")
             Dim compilationResult As Compiler.FlowCompilationResult = Nothing
             Try
-                Console.WriteLine($"🔄 [HandleOrchestratorSessionStart] Starting CompilationResult deserialization... - Line 490")
+                Console.WriteLine($"🔄 [API][OrchestratorSession] Starting CompilationResult deserialization... - Line 490")
                 Dim compilationResultJson = JsonConvert.SerializeObject(request.CompilationResult)
-                Console.WriteLine($"📦 [HandleOrchestratorSessionStart] CompilationResult JSON length: {compilationResultJson.Length} characters")
-                Console.WriteLine($"📦 [HandleOrchestratorSessionStart] CompilationResult JSON preview: {compilationResultJson.Substring(0, Math.Min(500, compilationResultJson.Length))}")
+                Console.WriteLine($"📦 [API][OrchestratorSession] CompilationResult JSON length: {compilationResultJson.Length} characters")
+                Console.WriteLine($"📦 [API][OrchestratorSession] CompilationResult JSON preview: {compilationResultJson.Substring(0, Math.Min(500, compilationResultJson.Length))}")
 
                 compilationResult = JsonConvert.DeserializeObject(Of Compiler.FlowCompilationResult)(compilationResultJson, New JsonSerializerSettings() With {
                     .NullValueHandling = NullValueHandling.Ignore,
                     .MissingMemberHandling = MissingMemberHandling.Ignore
                 })
-                Console.WriteLine($"✅ [HandleOrchestratorSessionStart] CompilationResult deserialized: {If(compilationResult IsNot Nothing, compilationResult.TaskGroups.Count, 0)} task groups")
+                Console.WriteLine($"✅ [API][OrchestratorSession] CompilationResult deserialized: {If(compilationResult IsNot Nothing, compilationResult.TaskGroups.Count, 0)} task groups")
                 If compilationResult IsNot Nothing Then
                     Console.WriteLine($"   EntryTaskGroupId: {compilationResult.EntryTaskGroupId}")
                     Console.WriteLine($"   Tasks count: {If(compilationResult.Tasks IsNot Nothing, compilationResult.Tasks.Count, 0)}")
                     Console.WriteLine($"   TaskGroups count: {If(compilationResult.TaskGroups IsNot Nothing, compilationResult.TaskGroups.Count, 0)}")
                 End If
             Catch deserializeEx As Exception
-                Console.WriteLine($"❌ [HandleOrchestratorSessionStart] Error deserializing CompilationResult: {deserializeEx.Message}")
+                Console.WriteLine($"❌ [API][OrchestratorSession] Error deserializing CompilationResult: {deserializeEx.Message}")
                 Console.WriteLine($"Stack trace: {deserializeEx.StackTrace}")
                 If deserializeEx.InnerException IsNot Nothing Then
                     Console.WriteLine($"Inner exception: {deserializeEx.InnerException.Message}")
@@ -858,17 +942,17 @@ Module Program
             End Try
 
             If compilationResult Is Nothing Then
-                Console.WriteLine("❌ [HandleOrchestratorSessionStart] Deserialized CompilationResult is Nothing")
+                Console.WriteLine("❌ [API][OrchestratorSession] Deserialized CompilationResult is Nothing")
                 Return Results.BadRequest(New With {.error = "Invalid CompilationResult format"})
             End If
 
             ' Genera session ID
             Dim sessionId = Guid.NewGuid().ToString()
-            Console.WriteLine($"✅ [HandleOrchestratorSessionStart] Generated session ID: {sessionId}")
+            Console.WriteLine($"✅ [API][OrchestratorSession] Generated session ID: {sessionId}")
 
             ' Crea sessione usando SessionManager
             Try
-                Console.WriteLine($"🔄 [HandleOrchestratorSessionStart] Calling SessionManager.CreateSession...")
+                Console.WriteLine($"🔄 [API][OrchestratorSession] Calling SessionManager.CreateSession...")
                 Dim session = SessionManager.CreateSession(
                     sessionId,
                     compilationResult,
@@ -876,9 +960,9 @@ Module Program
                     request.DDTs,
                     request.Translations
                 )
-                Console.WriteLine($"✅ [HandleOrchestratorSessionStart] Session created successfully, orchestrator should be starting...")
+                Console.WriteLine($"✅ [API][OrchestratorSession] Session created successfully, orchestrator should be starting...")
             Catch sessionEx As Exception
-                Console.WriteLine($"❌ [HandleOrchestratorSessionStart] Error creating session: {sessionEx.Message}")
+                Console.WriteLine($"❌ [API][OrchestratorSession] Error creating session: {sessionEx.Message}")
                 Console.WriteLine($"Stack trace: {sessionEx.StackTrace}")
                 If sessionEx.InnerException IsNot Nothing Then
                     Console.WriteLine($"Inner exception: {sessionEx.InnerException.Message}")
@@ -890,14 +974,14 @@ Module Program
                 )
             End Try
 
-            Console.WriteLine("🔍 [HandleOrchestratorSessionStart] Line 551 - About to create response object...")
+            Console.WriteLine("🔍 [API][OrchestratorSession] Line 551 - About to create response object...")
             Dim responseObj = New With {
                 .sessionId = sessionId,
                 .timestamp = DateTime.UtcNow.ToString("O")
             }
-            Console.WriteLine("🔍 [HandleOrchestratorSessionStart] Line 556 - Response object created")
+            Console.WriteLine("🔍 [API][OrchestratorSession] Line 556 - Response object created")
 
-            Console.WriteLine($"✅ [HandleOrchestratorSessionStart] Line 557 - Returning response: sessionId={sessionId}")
+            Console.WriteLine($"✅ [API][OrchestratorSession] Line 557 - Returning response: sessionId={sessionId}")
 
             ' Serialize manually to ensure Newtonsoft.Json is used
             Try
@@ -905,28 +989,28 @@ Module Program
                     .NullValueHandling = NullValueHandling.Ignore,
                     .Formatting = Formatting.None
                 })
-                Console.WriteLine($"✅ [HandleOrchestratorSessionStart] Serialized response: {jsonResponse.Length} characters")
+                Console.WriteLine($"✅ [API][OrchestratorSession] Serialized response: {jsonResponse.Length} characters")
                 Console.WriteLine($"   Response preview: {jsonResponse}")
-                System.Diagnostics.Debug.WriteLine($"✅ [HandleOrchestratorSessionStart] Serialized: {jsonResponse}")
+                System.Diagnostics.Debug.WriteLine($"✅ [API][OrchestratorSession] Serialized: {jsonResponse}")
 
                 ' Set response headers and write directly to response stream
                 context.Response.ContentType = "application/json; charset=utf-8"
                 context.Response.ContentLength = jsonResponse.Length
                 Await context.Response.WriteAsync(jsonResponse)
-                Console.WriteLine($"✅ [HandleOrchestratorSessionStart] Response written to stream")
-                System.Diagnostics.Debug.WriteLine($"✅ [HandleOrchestratorSessionStart] Response written")
+                Console.WriteLine($"✅ [API][OrchestratorSession] Response written to stream")
+                System.Diagnostics.Debug.WriteLine($"✅ [API][OrchestratorSession] Response written")
 
                 ' Return empty since we've written directly
                 Return Results.Empty
             Catch serializationEx As Exception
-                Console.WriteLine($"❌ [HandleOrchestratorSessionStart] Error serializing response: {serializationEx.Message}")
+                Console.WriteLine($"❌ [API][OrchestratorSession] Error serializing response: {serializationEx.Message}")
                 Console.WriteLine($"Stack trace: {serializationEx.StackTrace}")
                 ' Fallback to Results.Ok (will use default serializer)
                 Return Results.Ok(responseObj)
             End Try
         Catch ex As Exception
             Console.WriteLine("═══════════════════════════════════════════════════════════════════════════")
-            Console.WriteLine($"❌ [HandleOrchestratorSessionStart] EXCEPTION CAUGHT IN OUTER CATCH BLOCK")
+            Console.WriteLine($"❌ [API][OrchestratorSession] EXCEPTION CAUGHT IN OUTER CATCH BLOCK")
             Console.WriteLine($"   Exception Type: {ex.GetType().Name}")
             Console.WriteLine($"   Exception Message: {ex.Message}")
             Console.WriteLine($"   Stack trace: {ex.StackTrace}")
@@ -943,7 +1027,7 @@ Module Program
                 statusCode:=500
             )
         End Try
-        Console.WriteLine("⚠️ [HandleOrchestratorSessionStart] AFTER TRY-CATCH BLOCK - This should never be reached")
+        Console.WriteLine("⚠️ [API][OrchestratorSession] AFTER TRY-CATCH BLOCK - This should never be reached")
     End Function
 
     ''' <summary>
@@ -1222,10 +1306,20 @@ End Module
 ''' Compile Flow Request
 ''' </summary>
 Public Class CompileFlowRequest
+    <JsonProperty("nodes")>
     Public Property Nodes As List(Of Compiler.FlowNode)
+
+    <JsonProperty("edges")>
     Public Property Edges As List(Of Compiler.FlowEdge)
+
+    <JsonProperty("tasks")>
     Public Property Tasks As List(Of Compiler.Task)
+
+    <JsonProperty("ddts")>
     Public Property DDTs As List(Of Compiler.AssembledDDT)
+
+    <JsonProperty("translations")>
+    Public Property Translations As Dictionary(Of String, String)
 End Class
 
 ''' <summary>
@@ -1241,9 +1335,16 @@ End Class
 ''' Orchestrator Session Start Request
 ''' </summary>
 Public Class OrchestratorSessionStartRequest
+    <JsonProperty("compilationResult")>
     Public Property CompilationResult As Object
+
+    <JsonProperty("tasks")>
     Public Property Tasks As List(Of Object)
+
+    <JsonProperty("ddts")>
     Public Property DDTs As List(Of Compiler.AssembledDDT)
+
+    <JsonProperty("translations")>
     Public Property Translations As Dictionary(Of String, String)
 End Class
 

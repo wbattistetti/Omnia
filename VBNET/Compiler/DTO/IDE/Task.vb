@@ -59,9 +59,9 @@ Public Class Task
     <JsonProperty("label")>
     Public Property Label As String
 
-    <JsonProperty("mainData")>
+    <JsonProperty("data")>
     <JsonConverter(GetType(MainDataNodeListConverter))>
-    Public Property MainData As List(Of MainDataNode)
+    Public Property Data As List(Of MainDataNode)
 
     <JsonProperty("stepPrompts")>
     Public Property StepPrompts As Dictionary(Of String, Object)
@@ -75,7 +75,7 @@ Public Class Task
     Public Sub New()
         Parameters = New List(Of TaskParameter)()
         Value = New Dictionary(Of String, Object)()
-        MainData = New List(Of MainDataNode)()
+        Data = New List(Of MainDataNode)()
         StepPrompts = New Dictionary(Of String, Object)()
         Constraints = New List(Of Object)()
         Examples = New List(Of Object)()

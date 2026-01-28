@@ -25,15 +25,15 @@ Public Class DataRequestTaskCompiler
     Inherits TaskCompilerBase
 
     Public Overrides Function Compile(task As Task, row As RowData, node As FlowNode, taskId As String, flow As Flow) As CompiledTask
-        Console.WriteLine($"🔍 [DataRequestTaskCompiler] Compile called for task {taskId}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [DataRequestTaskCompiler] Compile called for task {taskId}")
-        Console.WriteLine($"🔍 [DataRequestTaskCompiler] task.TemplateId={task.TemplateId}, task.Id={task.Id}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [DataRequestTaskCompiler] task.TemplateId={task.TemplateId}, task.Id={task.Id}")
-        Console.WriteLine($"🔍 [DataRequestTaskCompiler] task.MainData IsNot Nothing={task.MainData IsNot Nothing}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [DataRequestTaskCompiler] task.MainData IsNot Nothing={task.MainData IsNot Nothing}")
-        If task.MainData IsNot Nothing Then
-            Console.WriteLine($"🔍 [DataRequestTaskCompiler] task.MainData.Count={task.MainData.Count}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [DataRequestTaskCompiler] task.MainData.Count={task.MainData.Count}")
+        Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] Compile called for task {taskId}")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] Compile called for task {taskId}")
+        Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] task.TemplateId={task.TemplateId}, task.Id={task.Id}")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] task.TemplateId={task.TemplateId}, task.Id={task.Id}")
+        Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] task.Data IsNot Nothing={task.Data IsNot Nothing}")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] task.Data IsNot Nothing={task.Data IsNot Nothing}")
+        If task.Data IsNot Nothing Then
+            Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] task.Data.Count={task.Data.Count}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] task.Data.Count={task.Data.Count}")
         End If
 
         Dim dataRequestTask As New CompiledTaskGetData()
@@ -43,8 +43,8 @@ Public Class DataRequestTaskCompiler
         ' Se constraints/examples/nlpContract mancano → risoluzione lazy dal template
         Dim assembledDDT As Compiler.AssembledDDT = Nothing
 
-        If task.MainData IsNot Nothing AndAlso task.MainData.Count > 0 Then
-            Console.WriteLine($"🔍 [DataRequestTaskCompiler] Trying to load DDT from task.MainData (PRIORITY 1)")
+        If task.Data IsNot Nothing AndAlso task.Data.Count > 0 Then
+            Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] Trying to load DDT from task.Data (PRIORITY 1)")
             Try
                 ' Serializza task a JSON e deserializza come AssembledDDT
                 ' Questo gestisce automaticamente la conversione di MainData usando i converter
@@ -73,29 +73,29 @@ Public Class DataRequestTaskCompiler
                             If (assembledDDT.Constraints Is Nothing OrElse assembledDDT.Constraints.Count = 0) AndAlso
                                template.Constraints IsNot Nothing AndAlso template.Constraints.Count > 0 Then
                                 assembledDDT.Constraints = template.Constraints
-                                Console.WriteLine($"✅ [DataRequestTaskCompiler] Resolved constraints from template {task.TemplateId}")
-                                System.Diagnostics.Debug.WriteLine($"✅ [DataRequestTaskCompiler] Resolved constraints from template {task.TemplateId}")
+                                Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Resolved constraints from template {task.TemplateId}")
+                                System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Resolved constraints from template {task.TemplateId}")
                             End If
 
                             If (assembledDDT.Examples Is Nothing OrElse assembledDDT.Examples.Count = 0) AndAlso
                                template.Examples IsNot Nothing AndAlso template.Examples.Count > 0 Then
                                 assembledDDT.Examples = template.Examples
-                                Console.WriteLine($"✅ [DataRequestTaskCompiler] Resolved examples from template {task.TemplateId}")
-                                System.Diagnostics.Debug.WriteLine($"✅ [DataRequestTaskCompiler] Resolved examples from template {task.TemplateId}")
+                                Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Resolved examples from template {task.TemplateId}")
+                                System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Resolved examples from template {task.TemplateId}")
                             End If
 
-                            ' ✅ Risolvi constraints/examples/nlpContract per ogni nodo mainData
-                            If assembledDDT.MainData IsNot Nothing AndAlso template.MainData IsNot Nothing Then
-                                For i = 0 To Math.Min(assembledDDT.MainData.Count - 1, template.MainData.Count - 1)
-                                    Dim instanceNode = assembledDDT.MainData(i)
-                                    Dim templateNode = template.MainData(i)
+                            ' ✅ Risolvi constraints/examples/nlpContract per ogni nodo data
+                            If assembledDDT.Data IsNot Nothing AndAlso template.Data IsNot Nothing Then
+                                For i = 0 To Math.Min(assembledDDT.Data.Count - 1, template.Data.Count - 1)
+                                    Dim instanceNode = assembledDDT.Data(i)
+                                    Dim templateNode = template.Data(i)
 
                                     ' ✅ Risolvi constraints se mancanti
                                     If (instanceNode.Constraints Is Nothing OrElse instanceNode.Constraints.Count = 0) AndAlso
                                        templateNode.Constraints IsNot Nothing AndAlso templateNode.Constraints.Count > 0 Then
                                         instanceNode.Constraints = templateNode.Constraints
-                                        Console.WriteLine($"✅ [DataRequestTaskCompiler] Resolved constraints for mainData[{i}] from template")
-                                        System.Diagnostics.Debug.WriteLine($"✅ [DataRequestTaskCompiler] Resolved constraints for mainData[{i}] from template")
+                                        Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Resolved constraints for data[{i}] from template")
+                                        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Resolved constraints for data[{i}] from template")
                                     End If
 
                                     ' ✅ Risolvi constraints per subData (ricorsivo)
@@ -111,8 +111,8 @@ Public Class DataRequestTaskCompiler
                                                 If (instanceSubNode.Constraints Is Nothing OrElse instanceSubNode.Constraints.Count = 0) AndAlso
                                                    templateSubNode.Constraints IsNot Nothing AndAlso templateSubNode.Constraints.Count > 0 Then
                                                     instanceSubNode.Constraints = templateSubNode.Constraints
-                                                    Console.WriteLine($"✅ [DataRequestTaskCompiler] Resolved constraints for subData[{j}] from template")
-                                                    System.Diagnostics.Debug.WriteLine($"✅ [DataRequestTaskCompiler] Resolved constraints for subData[{j}] from template")
+                                                    Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Resolved constraints for subData[{j}] from template")
+                                                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Resolved constraints for subData[{j}] from template")
                                                 End If
                                             End If
                                         Next
@@ -122,18 +122,18 @@ Public Class DataRequestTaskCompiler
                         Else
                             ' ❌ NO FALLBACK: Se template non trovato → errore esplicito
                             ' Non mascherare il problema con fallback silenzioso
-                            Console.WriteLine($"❌ [DataRequestTaskCompiler] Template {task.TemplateId} not found in flow.Tasks - cannot resolve missing constraints/examples")
-                            Console.WriteLine($"❌ [DataRequestTaskCompiler] This indicates a data inconsistency: task references template that doesn't exist")
-                            System.Diagnostics.Debug.WriteLine($"❌ [DataRequestTaskCompiler] Template {task.TemplateId} not found in flow.Tasks")
+                            Console.WriteLine($"❌ [COMPILER][DataRequestTaskCompiler] Template {task.TemplateId} not found in flow.Tasks - cannot resolve missing constraints/examples")
+                            Console.WriteLine($"❌ [COMPILER][DataRequestTaskCompiler] This indicates a data inconsistency: task references template that doesn't exist")
+                            System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][DataRequestTaskCompiler] Template {task.TemplateId} not found in flow.Tasks")
                             ' Non lanciare eccezione qui, ma logga l'errore (il DDT compiler gestirà i campi mancanti)
                         End If
                     End If
 
-                    Console.WriteLine($"✅ [DataRequestTaskCompiler] DDT loaded from task direct fields for task {taskId}")
+                    Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] DDT loaded from task direct fields for task {taskId}")
                 End If
             Catch ex As Exception
-                Console.WriteLine($"⚠️ [DataRequestTaskCompiler] Failed to build AssembledDDT from task fields: {ex.Message}")
-                System.Diagnostics.Debug.WriteLine($"⚠️ [DataRequestTaskCompiler] Exception details: {ex.ToString()}")
+                Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Failed to build AssembledDDT from task fields: {ex.Message}")
+                System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Exception details: {ex.ToString()}")
             End Try
         End If
 
@@ -143,37 +143,37 @@ Public Class DataRequestTaskCompiler
 
         ' Compila DDT se trovato
         If assembledDDT IsNot Nothing Then
-            Console.WriteLine($"🔍 [DataRequestTaskCompiler] assembledDDT found! Starting DDT compilation...")
-            System.Diagnostics.Debug.WriteLine($"🔍 [DataRequestTaskCompiler] assembledDDT found! Starting DDT compilation...")
-            Console.WriteLine($"🔍 [DataRequestTaskCompiler] assembledDDT.Id={assembledDDT.Id}, MainData IsNot Nothing={assembledDDT.MainData IsNot Nothing}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [DataRequestTaskCompiler] assembledDDT.Id={assembledDDT.Id}, MainData IsNot Nothing={assembledDDT.MainData IsNot Nothing}")
-            If assembledDDT.MainData IsNot Nothing Then
-                Console.WriteLine($"🔍 [DataRequestTaskCompiler] assembledDDT.MainData.Count={assembledDDT.MainData.Count}")
-                System.Diagnostics.Debug.WriteLine($"🔍 [DataRequestTaskCompiler] assembledDDT.MainData.Count={assembledDDT.MainData.Count}")
+            Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] assembledDDT found! Starting DDT compilation...")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] assembledDDT found! Starting DDT compilation...")
+            Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] assembledDDT.Id={assembledDDT.Id}, Data IsNot Nothing={assembledDDT.Data IsNot Nothing}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] assembledDDT.Id={assembledDDT.Id}, Data IsNot Nothing={assembledDDT.Data IsNot Nothing}")
+            If assembledDDT.Data IsNot Nothing Then
+                Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] assembledDDT.Data.Count={assembledDDT.Data.Count}")
+                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] assembledDDT.Data.Count={assembledDDT.Data.Count}")
             End If
             Try
                 Dim ddtCompiler As New DDTCompiler()
                 ' Serializza AssembledDDT a JSON per DDTCompiler.Compile
                 Dim ddtJson = JsonConvert.SerializeObject(assembledDDT)
-                Console.WriteLine($"🔍 [DataRequestTaskCompiler] Calling DDTCompiler.Compile with JSON length={ddtJson.Length}")
-                System.Diagnostics.Debug.WriteLine($"🔍 [DataRequestTaskCompiler] Calling DDTCompiler.Compile with JSON length={ddtJson.Length}")
+                Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] Calling DDTCompiler.Compile with JSON length={ddtJson.Length}")
+                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] Calling DDTCompiler.Compile with JSON length={ddtJson.Length}")
                 Dim ddtResult = ddtCompiler.Compile(ddtJson)
                 If ddtResult IsNot Nothing AndAlso ddtResult.Instance IsNot Nothing Then
                     dataRequestTask.DDT = ddtResult.Instance
-                    Console.WriteLine($"✅ [DataRequestTaskCompiler] DDT compiled successfully for task {taskId}")
-                    System.Diagnostics.Debug.WriteLine($"✅ [DataRequestTaskCompiler] DDT compiled successfully for task {taskId}")
+                    Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] DDT compiled successfully for task {taskId}")
+                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] DDT compiled successfully for task {taskId}")
                 Else
-                    Console.WriteLine($"⚠️ [DataRequestTaskCompiler] DDT compilation returned no instance for task {taskId}")
-                    System.Diagnostics.Debug.WriteLine($"⚠️ [DataRequestTaskCompiler] DDT compilation returned no instance for task {taskId}")
+                    Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] DDT compilation returned no instance for task {taskId}")
+                    System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] DDT compilation returned no instance for task {taskId}")
                 End If
             Catch ex As Exception
-                Console.WriteLine($"⚠️ [DataRequestTaskCompiler] Failed to compile DDT for task {taskId}: {ex.Message}")
-                System.Diagnostics.Debug.WriteLine($"⚠️ [DataRequestTaskCompiler] Failed to compile DDT for task {taskId}: {ex.Message}")
-                System.Diagnostics.Debug.WriteLine($"⚠️ [DataRequestTaskCompiler] Exception details: {ex.ToString()}")
+                Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Failed to compile DDT for task {taskId}: {ex.Message}")
+                System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Failed to compile DDT for task {taskId}: {ex.Message}")
+                System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Exception details: {ex.ToString()}")
             End Try
         Else
-            Console.WriteLine($"⚠️ [DataRequestTaskCompiler] No DDT found for DataRequest task {taskId} - DDT will be Nothing")
-            System.Diagnostics.Debug.WriteLine($"⚠️ [DataRequestTaskCompiler] No DDT found for DataRequest task {taskId} - DDT will be Nothing")
+            Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] No DDT found for DataRequest task {taskId} - DDT will be Nothing")
+            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] No DDT found for DataRequest task {taskId} - DDT will be Nothing")
         End If
 
         ' Popola campi comuni

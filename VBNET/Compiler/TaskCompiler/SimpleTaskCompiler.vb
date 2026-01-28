@@ -78,7 +78,7 @@ Public Class SimpleTaskCompiler
 
             Case Else
                 ' Fallback: crea SayMessage
-                Console.WriteLine($"⚠️ [SimpleTaskCompiler] Unknown TaskType {_taskType}, creating SayMessage fallback")
+                Console.WriteLine($"⚠️ [COMPILER][SimpleTaskCompiler] Unknown TaskType {_taskType}, creating SayMessage fallback")
                 compiledTask = New CompiledTaskSayMessage()
         End Select
 

@@ -106,7 +106,7 @@ export function normalizeTaskForEscalation(
 
   return {
     templateId,
-    taskId: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,  // ✅ Standard: id (GUID univoco)
     parameters: templateId === 'sayMessage'
       ? [{ parameterId: 'text', value: generateGuidFn() }]
       : (task.parameters || []),

@@ -50,16 +50,16 @@ export function saveIntentMessagesToDDT(ddt: any, messages: IntentMessages): any
       escalationId: uuidv4(),
       tasks: [  // ✅ New field
         {
-          type: taskType, // ✅ Aggiunto campo type (enum numerico)
-          templateId: templateId,  // ✅ Renamed from actionId
-          taskId: taskId,            // ✅ Renamed from actionInstanceId
+          id: taskId,                 // ✅ Standard: id (GUID univoco)
+          type: taskType,             // ✅ Aggiunto campo type (enum numerico)
+          templateId: templateId,     // ✅ Renamed from actionId
           parameters: [
-          {
-            parameterId: 'text',
-            value: text, // Direct text value (no textKey per semplicità iniziale)
-          },
-        ],
-      }
+            {
+              parameterId: 'text',
+              value: text, // Direct text value (no textKey per semplicità iniziale)
+            },
+          ],
+        }
       ],
       actions: [  // ✅ Legacy alias for backward compatibility
         {

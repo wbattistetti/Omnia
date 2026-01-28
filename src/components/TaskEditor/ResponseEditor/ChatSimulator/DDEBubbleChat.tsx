@@ -102,16 +102,23 @@ export default function DDEBubbleChat({
         setSessionId(newSessionId);
         console.log('[DDEBubbleChat] ✅ Backend session created:', { sessionId: newSessionId });
 
-        // Open SSE stream
+        // Open SSE stream via Ruby proxy (to avoid CORS issues)
+        // Ruby proxies /api/runtime/ddt/session/{id}/stream to VB.NET orchestrator
+        console.log('[DDEBubbleChat] Opening SSE stream via Ruby proxy:', `${baseUrl}/api/runtime/ddt/session/${newSessionId}/stream`);
         const eventSource = new EventSource(`${baseUrl}/api/runtime/ddt/session/${newSessionId}/stream`);
         eventSourceRef.current = eventSource;
+
+        // Log connection state changes
+        eventSource.onopen = () => {
+          console.log('[DDEBubbleChat] ✅ SSE stream opened successfully');
+        };
 
         // Handle messages from backend
         // ❌ CRITICAL: ONLY add messages that come from backend - NO frontend logic
         eventSource.addEventListener('message', (e: MessageEvent) => {
           try {
             const msg = JSON.parse(e.data);
-            console.log('[DDEBubbleChat] Backend message:', msg);
+            console.log('[DDEBubbleChat] 📨 Backend message received:', msg);
 
             // Only add message if it has actual text from backend
             const messageText = msg.text || msg.message || '';
@@ -275,7 +282,7 @@ export default function DDEBubbleChat({
       // Freeze text for input clearing
       sentTextRef.current = trimmed;
 
-      // Send input to backend
+      // Send input to backend (Ruby proxies to orchestrator)
       const baseUrl = 'http://localhost:3101';
       const response = await fetch(`${baseUrl}/api/runtime/ddt/session/${sessionId}/input`, {
         method: 'POST',
