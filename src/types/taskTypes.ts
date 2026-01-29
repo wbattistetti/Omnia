@@ -250,30 +250,35 @@ export interface TaskHeuristic {
  * Task: Unified structure for all tasks
  *
  * - type: TaskType enum numerico (0-19) → Determina il comportamento del task
- * - templateId = null → Task standalone (non referenzia altri Task)
- * - templateId = GUID → Task che referenzia un altro Task (per ereditare struttura/contratti)
+ * - templateId = null → Crea automaticamente un nuovo template (ogni task ha sempre un templateId)
+ * - templateId = GUID → Task che referenzia un template (per ereditare struttura/contratti)
+ *
+ * IMPORTANTE:
+ * - Ogni task DEVE avere un templateId (o viene creato automaticamente)
+ * - Non esistono più "task standalone" come concetto separato
+ * - La struttura (data, constraints, dataContract) viene sempre dal template, non dall'istanza
+ * - L'istanza contiene solo override: steps, label, introduction
  *
  * Esempi:
- * - Task DDT standalone: { id: "guid", type: TaskType.UtteranceInterpretation, templateId: null, label: "...", data: [...] }
- * - Task DDT che referenzia: { id: "guid", type: TaskType.UtteranceInterpretation, templateId: "guid-altro-task", label: "...", data: [...] }
- *
- * Per altri tipi di task (SayMessage, BackendCall, ecc.):
- * - Task standalone: { id: "guid", type: TaskType.SayMessage, templateId: null, text: "Ciao!", ... }
- * - Task che referenzia: { id: "guid", type: TaskType.SayMessage, templateId: "guid-altro-task", text: "Ciao!", ... }
+ * - Task con template: { id: "guid", type: TaskType.UtteranceInterpretation, templateId: "template-guid", label: "...", steps: {...} }
+ * - Task senza templateId: { id: "guid", type: TaskType.UtteranceInterpretation, templateId: null, ... } → viene creato template automaticamente
  */
 export interface Task {
   id: string;                    // ✅ GUID univoco
   type: TaskType;                 // ✅ Enum numerico (0-19) - Determina il comportamento del task
-  templateId: string | null;      // ✅ null = Task standalone, GUID = referenzia un altro Task
+  templateId: string | null;      // ✅ null = crea template automaticamente, GUID = referenzia un template
   // ✅ Campi diretti (niente wrapper value):
-  // Per DataRequest/DDT:
-  label?: string;                // Label del DDT (solo per UI, non usato a runtime)
-  data?: any[];                  // Data array (solo struttura dati, senza steps)
+  // Per DataRequest/UtteranceInterpretation:
+  label?: string;                // Label override (se diversa dal template)
+  // ❌ RIMOSSO: data - Non più persistito. Costruisci TaskTree da templateId usando buildTaskTree()
+  // ❌ RIMOSSO: constraints - Vengono sempre dal template, non dall'istanza
+  // ❌ RIMOSSO: examples - Vengono sempre dal template, non dall'istanza
+  // ❌ RIMOSSO: dataContract - Viene sempre dal template, non dall'istanza
   dialogueSteps?: any[];         // ✅ Flat dialogue steps array (replaces nested data[].steps) - DEPRECATED
-  steps?: Record<string, any>;   // ✅ Steps a root level: { "nodeId": { start: {...}, noMatch: {...} } }
+  steps?: Record<string, any>;   // ✅ Steps override a root level: { "templateId": { start: {...}, noMatch: {...} } }
   // ❌ DEPRECATED: stepPrompts - use steps instead
   stepPrompts?: any;             // @deprecated Use steps instead
-  constraints?: any[];           // Constraints
+  introduction?: any;             // ✅ Introduction override (opzionale)
   // Per SayMessage:
   text?: string;                 // Message text
   // Per ClassifyProblem:
@@ -291,6 +296,43 @@ export interface Task {
   [key: string]: any;           // Allow additional fields
   createdAt?: Date;
   updatedAt?: Date;
+}
+
+/**
+ * TaskTreeNode: Nodo dell'albero TaskTree (vista runtime)
+ * NON è un'entità persistita, è solo una vista costruita da Template + Instance
+ */
+export interface TaskTreeNode {
+  id: string;                    // ✅ ID del nodo
+  templateId: string;            // ✅ ID del template referenziato (fondamentale per il grafo)
+  label: string;                  // ✅ Label del nodo
+  type?: string;                  // ✅ Tipo del dato (es. 'date', 'email', 'text')
+  icon?: string;                  // ✅ Icona per UI
+  constraints?: any[];            // ✅ Dal template (sempre, non dall'istanza)
+  dataContract?: any;             // ✅ Dal template (sempre, non dall'istanza)
+  subNodes?: TaskTreeNode[];     // ✅ Nodi figli (ricorsivo)
+}
+
+/**
+ * TaskTree: Vista runtime costruita da Template + Instance
+ * NON è un'entità persistita, NON è un DDT rinominato
+ * È solo una vista in memoria per l'editor, costruita dinamicamente
+ *
+ * Costruzione:
+ * - Template fornisce: struttura (nodes), constraints, dataContract
+ * - Instance fornisce: steps override, label override, introduction override
+ *
+ * Uso:
+ * - ResponseEditor usa TaskTree per mostrare la struttura nella sidebar
+ * - TaskTree viene costruito ogni volta che si apre l'editor (non viene salvato)
+ */
+export interface TaskTree {
+  label: string;                 // ✅ Label (da instance se override, altrimenti da template)
+  nodes: TaskTreeNode[];         // ✅ Nodi principali (costruiti da template.subTasksIds)
+  steps: Record<string, any>;     // ✅ Steps override per ogni nodo: { "templateId": { start: {...}, ... } }
+  constraints?: any[];           // ✅ Dal template (sempre)
+  dataContract?: any;            // ✅ Dal template (sempre)
+  introduction?: any;             // ✅ Opzionale (da instance se override)
 }
 
 /**

@@ -1,32 +1,32 @@
 // useWizardInference.ts
-// Hook custom per gestire la logica di inferenza e apertura del wizard DDT
+// Hook custom per gestire la logica di inferenza e apertura del wizard TaskTree
 //
 // LOGICA:
 // 1. Se task.templateId esiste → NON rifare euristica, usa template esistente
 // 2. Se task.type === DataRequest E task.templateId NON esiste → chiama AI
-// 3. Se task.type !== DataRequest → NON chiamare AI (wizard supporta solo DDT)
+// 3. Se task.type !== DataRequest → NON chiamare AI (wizard supporta solo TaskTree)
 
 import React, { useEffect, useRef, useState } from 'react';
 import { TaskType } from '../../../../types/taskTypes';
 import { taskRepository } from '../../../../services/TaskRepository';
 import { getTemplateId } from '../../../../utils/taskHelpers';
-import { isDDTEmpty, hasdataButNoStepPrompts } from '../../../../utils/ddt';
+import { isTaskTreeEmpty, hasdataButNoStepPrompts } from '../../../../utils/ddt';
 import { getdataList } from '../ddtSelectors';
 import type { Task } from '../../../../types/taskTypes';
 import { findLocalTemplate } from './helpers/templateMatcher';
 import { callAIInference } from './helpers/aiInference';
-import { preAssembleDDT } from './helpers/preAssembly';
+import { preAssembleTaskTree } from './helpers/preAssembly';
 import { normalizeTemplateId, isValidTemplateId } from './helpers/templateIdUtils';
 
 interface UseWizardInferenceParams {
-  ddt: any;
-  ddtRef: React.MutableRefObject<any>;
+  taskTree: any; // ✅ Renamed from ddt to taskTree
+  taskTreeRef: React.MutableRefObject<any>; // ✅ Renamed from ddtRef to taskTreeRef
   task: Task | null | undefined; // ✅ ARCHITETTURA ESPERTO: Task completo, non TaskMeta
-  isDdtLoading: boolean; // ✅ ARCHITETTURA ESPERTO: Stato di loading
+  isTaskTreeLoading: boolean; // ✅ Renamed from isDdtLoading to isTaskTreeLoading
   currentProjectId: string | null;
   selectedProvider: string;
   selectedModel: string;
-  preAssembledDDTCache: React.MutableRefObject<Map<string, { ddt: any; _templateTranslations: Record<string, { en: string; it: string; pt: string }> }>>;
+  preAssembledTaskTreeCache: React.MutableRefObject<Map<string, { taskTree: any; _templateTranslations: Record<string, { en: string; it: string; pt: string }> }>>;
   wizardOwnsDataRef: React.MutableRefObject<boolean>;
 }
 
@@ -40,25 +40,25 @@ interface UseWizardInferenceResult {
 }
 
 /**
- * Hook custom per gestire la logica di inferenza e apertura del wizard DDT
+ * Hook custom per gestire la logica di inferenza e apertura del wizard TaskTree
  *
  * ✅ ARCHITETTURA ESPERTO: Decision engine puro basato su input già coerenti
  *
  * LOGICA CORRETTA:
- * 1. Se isDdtLoading === true → non decidere ancora (early return)
+ * 1. Se isTaskTreeLoading === true → non decidere ancora (early return)
  * 2. Se task?.templateId esiste → early exit vero, non chiamare AI
- * 3. Se ddt non è vuoto → non chiamare AI
- * 4. Solo se: !isDdtLoading && !task?.templateId && ddt vuoto → allora chiami AI
+ * 3. Se taskTree non è vuoto → non chiamare AI
+ * 4. Solo se: !isTaskTreeLoading && !task?.templateId && taskTree vuoto → allora chiami AI
  */
 export function useWizardInference({
-  ddt,
-  ddtRef,
+  taskTree, // ✅ Renamed from ddt to taskTree
+  taskTreeRef, // ✅ Renamed from ddtRef to taskTreeRef
   task, // ✅ ARCHITETTURA ESPERTO: Task completo
-  isDdtLoading, // ✅ ARCHITETTURA ESPERTO: Stato di loading
+  isTaskTreeLoading, // ✅ Renamed from isDdtLoading to isTaskTreeLoading
   currentProjectId,
   selectedProvider,
   selectedModel,
-  preAssembledDDTCache,
+  preAssembledTaskTreeCache,
   wizardOwnsDataRef,
 }: UseWizardInferenceParams): UseWizardInferenceResult {
   const [showWizard, setShowWizard] = useState<boolean>(false);
@@ -71,8 +71,8 @@ export function useWizardInference({
   const isProcessingRef = useRef<boolean>(false);
 
   // Stabilizza valori primitivi
-  const stableDdtLabel = ddt?.label ?? '';
-  const stableDdtdataLength = ddt?.data?.length ?? 0;
+  const stableTaskTreeLabel = taskTree?.label ?? '';
+  const stableTaskTreeNodesLength = taskTree?.nodes?.length ?? 0;
   const stableTaskId = task?.id ?? '';
   const stableTaskType = task?.type ?? TaskType.UNDEFINED;
   const stableTaskLabel = task?.label ?? '';
@@ -84,12 +84,12 @@ export function useWizardInference({
   const stableTemplateId = normalizeTemplateId(rawTemplateId);
 
   useEffect(() => {
-    const currentDDT = ddtRef.current || ddt;
+    const currentTaskTree = taskTreeRef?.current || taskTree;
 
     // ========================================================================
     // ✅ ARCHITETTURA ESPERTO: EARLY EXIT se dati non sono ancora caricati
     // ========================================================================
-    if (isDdtLoading) {
+    if (isTaskTreeLoading) {
       // Aspetta che i dati siano caricati prima di decidere
       return;
     }
@@ -99,7 +99,7 @@ export function useWizardInference({
     // ========================================================================
 
     // Se kind === "intent" non mostrare wizard
-    const currentMainList = getdataList(currentDDT);
+    const currentMainList = getdataList(currentTaskTree);
     const firstMain = currentMainList[0];
     if (firstMain?.kind === 'intent') {
       setShowWizard(false);
@@ -107,13 +107,13 @@ export function useWizardInference({
       return;
     }
 
-    const empty = isDDTEmpty(currentDDT);
-    const hasStructureButNoMessages = hasdataButNoStepPrompts(currentDDT, task);
+    const empty = isTaskTreeEmpty(currentTaskTree);
+    const hasStructureButNoMessages = hasdataButNoStepPrompts(currentTaskTree, task);
 
     // ✅ CRITICAL: Leggi da task.steps usando templateId come chiave (non id)
     // task.steps[node.templateId] = steps clonati
-    if (!empty && currentDDT?.data && currentDDT.data.length > 0) {
-      const firstMain = currentDDT.data[0];
+    if (!empty && currentTaskTree?.nodes && currentTaskTree.nodes.length > 0) {
+      const firstMain = currentTaskTree.nodes[0];
       const firstMainId = firstMain?.id;
       const firstMainTemplateId = firstMain?.templateId || firstMain?.id; // ✅ Fallback a id se templateId non presente
       const hasSteps = !!(firstMainTemplateId && task?.steps && task.steps[firstMainTemplateId]);
@@ -124,7 +124,7 @@ export function useWizardInference({
       console.log('[🔍 useWizardInference] 🔍 CERCHIAMO CHIAVE:', firstMainTemplateId);
 
       console.log('[🔍 useWizardInference] CRITICAL steps check', {
-        dataCount: currentDDT.data.length,
+        nodesCount: currentTaskTree.nodes.length,
         firstMainLabel: firstMain?.label,
         firstMainId: firstMainId,
         firstMainTemplateId: firstMainTemplateId,
@@ -159,7 +159,7 @@ export function useWizardInference({
       });
     }
 
-    // Se DDT non è vuoto e wizard aveva ownership → chiudi wizard
+    // Se TaskTree non è vuoto e wizard aveva ownership → chiudi wizard
     // ✅ ECCEZIONE: Se ha struttura ma non ha messaggi, apri wizard per generare messaggi
     if (!empty && !hasStructureButNoMessages && wizardOwnsDataRef.current && showWizard) {
       setShowWizard(false);
@@ -167,30 +167,30 @@ export function useWizardInference({
       return;
     }
 
-    // ✅ NUOVO: Se DDT ha struttura ma non ha messaggi → apri wizard al passo pipeline
+    // ✅ NUOVO: Se TaskTree ha struttura ma non ha messaggi → apri wizard al passo pipeline
     if (hasStructureButNoMessages) {
-      console.log('[🔍 useWizardInference] ⚠️ DDT ha struttura ma non ha messaggi, aprendo wizard', {
-        dataCount: currentDDT?.data?.length || 0,
+      console.log('[🔍 useWizardInference] ⚠️ TaskTree ha struttura ma non ha messaggi, aprendo wizard', {
+        nodesCount: currentTaskTree?.nodes?.length || 0,
         taskType: stableTaskType,
         taskId: task?.id,
         taskStepsCount: task?.steps ? Object.keys(task.steps).length : 0,
         taskStepsKeys: task?.steps ? Object.keys(task.steps) : [],
-        firstMainTemplateId: currentDDT?.data?.[0]?.templateId || currentDDT?.data?.[0]?.id
+        firstMainTemplateId: currentTaskTree?.nodes?.[0]?.templateId || currentTaskTree?.nodes?.[0]?.id
       });
 
-      // Apri wizard con initialDDT che contiene il data esistente
+      // Apri wizard con initialTaskTree che contiene i nodes esistenti
       // Il wizard dovrebbe saltare automaticamente al passo 'pipeline'
       const inferenceKey = `${stableTaskLabel || ''}_hasStructureButNoMessages`;
       if (inferenceStartedRef.current !== inferenceKey) {
         inferenceStartedRef.current = inferenceKey;
         setShowWizard(true);
         wizardOwnsDataRef.current = true;
-        // ✅ Imposta inferenceResult con il DDT esistente per passarlo come initialDDT
+        // ✅ Imposta inferenceResult con il TaskTree esistente per passarlo come initialTaskTree
         setInferenceResult({
           ai: {
             schema: {
-              label: currentDDT?.label || stableTaskLabel || 'Data',
-              data: currentDDT?.data || []
+              label: currentTaskTree?.label || stableTaskLabel || 'Data',
+              nodes: currentTaskTree?.nodes || []
             }
           }
         });
@@ -198,7 +198,7 @@ export function useWizardInference({
       return;
     }
 
-    // Se DDT non è vuoto e ha messaggi → non aprire wizard
+    // Se TaskTree non è vuoto e ha messaggi → non aprire wizard
     if (!empty) {
       return;
     }
@@ -211,7 +211,7 @@ export function useWizardInference({
     // ========================================================================
     // ✅ ARCHITETTURA ESPERTO: EARLY EXIT se templateId esiste (dal Task completo)
     // NON rifare euristica se template già trovato
-    // DDTHostAdapter gestisce tutto (caricamento + adattamento automatico)
+    // TaskTreeHostAdapter gestisce tutto (caricamento + adattamento automatico)
     // ========================================================================
     if (isValidTemplateId(stableTemplateId)) {
       console.log('[useWizardInference] Template già trovato, DDTHostAdapter gestisce tutto', {
@@ -308,23 +308,23 @@ export function useWizardInference({
           wizardOwnsDataRef.current = true;
 
           // Pre-assembly in background
-          const templateId = localMatch.ai.schema.data?.[0]?.templateId;
-          await preAssembleDDT(
+          const templateId = localMatch.ai.schema.nodes?.[0]?.templateId || localMatch.ai.schema.data?.[0]?.templateId;
+          await preAssembleTaskTree(
             localMatch.ai.schema,
             localMatch.ai.translationGuids,
             templateId,
-            preAssembledDDTCache
+            preAssembledTaskTreeCache
           );
 
           // Aggiorna inferenceResult con traduzioni se in cache
-          if (templateId && preAssembledDDTCache.current.has(templateId)) {
-            const cached = preAssembledDDTCache.current.get(templateId)!;
+          if (templateId && preAssembledTaskTreeCache.current.has(templateId)) {
+            const cached = preAssembledTaskTreeCache.current.get(templateId)!;
             setInferenceResult((prev: any) => ({
               ...prev,
               ai: {
                 ...prev?.ai,
                 templateTranslations: cached._templateTranslations,
-                preAssembledDDT: cached.ddt
+                preAssembledTaskTree: cached.taskTree
               }
             }));
           }
@@ -360,22 +360,22 @@ export function useWizardInference({
       }
     })();
   }, [
-    stableDdtLabel,
-    stableDdtdataLength,
+    stableTaskTreeLabel,
+    stableTaskTreeNodesLength,
     stableTaskId,
     stableTaskType,
     stableTaskLabel,
     stableProvider,
     stableModel,
     stableTemplateId, // ✅ Aggiunto per early exit
-    isDdtLoading, // ✅ ARCHITETTURA ESPERTO: Dipendenza critica
+    isTaskTreeLoading, // ✅ ARCHITETTURA ESPERTO: Dipendenza critica
     isInferring,
     inferenceResult?.ai?.schema?.label ?? '',
     showWizard,
-    ddtRef,
+    taskTreeRef,
     wizardOwnsDataRef,
     currentProjectId,
-    preAssembledDDTCache,
+    preAssembledTaskTreeCache,
     task?.id, // ✅ ARCHITETTURA ESPERTO: Usa task.id invece di task?.instanceId
   ]);
 

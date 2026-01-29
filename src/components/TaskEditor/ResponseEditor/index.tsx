@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { info } from '../../../utils/logger';
 import DDTWizard from '../../DialogueDataTemplateBuilder/DDTWizard/DDTWizard';
-import { isDDTEmpty } from '../../../utils/ddt';
+import { isTaskTreeEmpty } from '../../../utils/ddt';
 import { useDDTManager } from '../../../context/DDTManagerContext';
 import { taskRepository } from '../../../services/TaskRepository';
 import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
@@ -25,7 +25,7 @@ import {
 } from './ddtSelectors';
 import { hasIntentMessages } from './utils/hasMessages';
 import IntentMessagesBuilder from './components/IntentMessagesBuilder';
-import { saveIntentMessagesToDDT } from './utils/saveIntentMessages';
+import { saveIntentMessagesToTaskTree } from './utils/saveIntentMessages';
 import { useNodeSelection } from './hooks/useNodeSelection';
 import { useNodeUpdate } from './hooks/useNodeUpdate';
 import { useNodePersistence } from './hooks/useNodePersistence';
@@ -39,7 +39,7 @@ import { useDDTTranslations } from '../../../hooks/useDDTTranslations';
 import { ToolbarButton } from '../../../dock/types';
 import { taskTemplateService } from '../../../services/TaskTemplateService';
 import { mapNode, closeTab } from '../../../dock/ops';
-import { extractModifiedDDTFields } from '../../../utils/taskUtils';
+import { extractModifiedDDTFields, extractTaskOverrides, buildTaskTree } from '../../../utils/taskUtils';
 import { useWizardInference } from './hooks/useWizardInference';
 import { validateTaskStructure, getTaskSemantics } from '../../../utils/taskSemantics';
 import { getIsTesting } from './testingState';
@@ -85,7 +85,7 @@ function coercePhoneKind(src: any) {
   }
 }
 
-function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoading, hideHeader, onToolbarUpdate, tabId, setDockTree, registerOnClose }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, task?: TaskMeta | Task, isDdtLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void, registerOnClose?: (fn: () => Promise<boolean>) => void }) { // ✅ ARCHITETTURA ESPERTO: task può essere TaskMeta o Task completo
+function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTaskTreeLoading, hideHeader, onToolbarUpdate, tabId, setDockTree, registerOnClose }: { taskTree?: TaskTree | null, onClose?: () => void, onWizardComplete?: (finalTaskTree: TaskTree) => void, task?: TaskMeta | Task, isTaskTreeLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void, registerOnClose?: (fn: () => Promise<boolean>) => void }) { // ✅ ARCHITETTURA ESPERTO: task può essere TaskMeta o Task completo
 
 
   // Ottieni projectId corrente per salvare le istanze nel progetto corretto
@@ -184,13 +184,18 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
   const rootRef = useRef<HTMLDivElement>(null);
   const wizardOwnsDataRef = useRef(false); // Flag: wizard has control over data lifecycle
 
-  // ✅ Cache globale per DDT pre-assemblati (per templateId)
+  // ✅ Cache globale per TaskTree pre-assemblati (per templateId)
   // Key: templateId (es. "723a1aa9-a904-4b55-82f3-a501dfbe0351")
-  // Value: { ddt, _templateTranslations }
-  const preAssembledDDTCache = React.useRef<Map<string, { ddt: any; _templateTranslations: Record<string, { en: string; it: string; pt: string }> }>>(new Map());
+  // Value: { taskTree, _templateTranslations }
+  const preAssembledTaskTreeCache = React.useRef<Map<string, { taskTree: any; _templateTranslations: Record<string, { en: string; it: string; pt: string }> }>>(new Map());
 
-  const { ideTranslations, replaceSelectedDDT } = useDDTManager();
+  const { ideTranslations, replaceSelectedDDT } = useDDTManager(); // ✅ replaceSelectedDDT sarà aggiornato in futuro
   const mergedBase = useMemo(() => (ideTranslations || {}), [ideTranslations]);
+
+  // ✅ Alias per compatibilità: replaceSelectedTaskTree usa replaceSelectedDDT internamente
+  const replaceSelectedTaskTree = React.useCallback((taskTree: any) => {
+    replaceSelectedDDT(taskTree);
+  }, [replaceSelectedDDT]);
 
   // Node selection management (must be before useDDTInitialization for callback)
   const {
@@ -206,41 +211,44 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
     handleSelectAggregator,
   } = useNodeSelection(0); // Initial main index
 
-  // ✅ DDT come ref mutabile (simula VB.NET: modifica diretta sulla struttura in memoria)
-  const ddtRef = useRef(ddt);
+  // ✅ TaskTree come ref mutabile (simula VB.NET: modifica diretta sulla struttura in memoria)
+  const taskTreeRef = useRef(taskTree);
 
-  // ✅ Inizializza ddtRef.current solo su cambio istanza (non ad ogni re-render)
+  // ✅ Inizializza taskTreeRef.current solo su cambio istanza (non ad ogni re-render)
   const prevInstanceRef = useRef<string | undefined>(undefined);
 
-  // ✅ Sincronizza ddtRef.current con ddt prop (fonte di verità dal dockTree)
-  // Quando ddt prop cambia (dal dockTree), aggiorna il buffer locale
+  // ✅ Sincronizza taskTreeRef.current con taskTree prop (fonte di verità dal dockTree)
+  // Quando taskTree prop cambia (dal dockTree), aggiorna il buffer locale
   useEffect(() => {
-    const instance = task?.instanceId || task?.id; // ✅ RINOMINATO: act → task
+    const instance = task?.instanceId || task?.id;
     const isNewInstance = prevInstanceRef.current !== instance;
 
     if (isNewInstance) {
-      // Nuova istanza → inizializza dal prop ddt (fonte di verità)
-      ddtRef.current = ddt;
+      // Nuova istanza → inizializza dal prop taskTree (fonte di verità)
+      taskTreeRef.current = taskTree;
       prevInstanceRef.current = instance;
-      // ✅ ARCHITETTURA ESPERTO: Forza aggiornamento mainList quando DDT viene caricato
-      if (ddt?.data && ddt.data.length > 0) {
-        setDDTVersion(v => v + 1);
+      // ✅ ARCHITETTURA ESPERTO: Forza aggiornamento mainList quando TaskTree viene caricato
+      const currentList = getdataList(taskTree);
+      if (currentList && currentList.length > 0) {
+        setTaskTreeVersion(v => v + 1);
       }
-    } else if (ddt && ddt !== ddtRef.current) {
-      // ✅ Safe comparison: check reference and data length instead of JSON.stringify
+    } else if (taskTree && taskTree !== taskTreeRef.current) {
+      // ✅ Safe comparison: check reference and nodes length instead of JSON.stringify
       // (JSON.stringify can fail on circular references)
-      const ddtChanged = ddt !== ddtRef.current ||
-        (ddt?.data?.length !== ddtRef.current?.data?.length);
-      if (ddtChanged) {
-        // Stessa istanza ma ddt prop è cambiato → sincronizza (dockTree è stato aggiornato esternamente)
-        ddtRef.current = ddt;
-        // ✅ ARCHITETTURA ESPERTO: Forza aggiornamento mainList quando DDT viene caricato
-        if (ddt?.data && ddt.data.length > 0) {
-          setDDTVersion(v => v + 1);
+      const currentList = getdataList(taskTree);
+      const prevList = getdataList(taskTreeRef.current);
+      const taskTreeChanged = taskTree !== taskTreeRef.current ||
+        (currentList?.length !== prevList?.length);
+      if (taskTreeChanged) {
+        // Stessa istanza ma taskTree prop è cambiato → sincronizza (dockTree è stato aggiornato esternamente)
+        taskTreeRef.current = taskTree;
+        // ✅ ARCHITETTURA ESPERTO: Forza aggiornamento mainList quando TaskTree viene caricato
+        if (currentList && currentList.length > 0) {
+          setTaskTreeVersion(v => v + 1);
         }
       }
     }
-  }, [ddt, (task as any)?.instanceId, task?.id]);
+  }, [taskTree, (task as any)?.instanceId, task?.id]);
 
   // Debug logger gated by localStorage flag: set localStorage.setItem('debug.responseEditor','1') to enable
   const log = (...args: any[]) => {
@@ -275,7 +283,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
       return mergedBase;
     }
 
-    // Structure: ddt.translations = { en: {...}, it: {...}, pt: {...} }
+    // Structure: taskTree.translations = { en: {...}, it: {...}, pt: {...} }
     const localeTranslations = ddtTranslations[locale] || ddtTranslations.en || ddtTranslations;
     const result = { ...mergedBase, ...localeTranslations };
     return result;
@@ -283,7 +291,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
   // ✅ Load translations from global table using shared hook
   // ✅ Pass task to extract GUIDs from task.steps[nodeId] (unified model)
-  const localTranslations = useDDTTranslations(ddt, task);
+  const localTranslations = useDDTTranslations(taskTree, task); // ✅ useDDTTranslations sarà aggiornato in futuro
 
   // 🔍 DEBUG: Log translations loading (rimosso - troppo verboso)
   // React.useEffect(() => {
@@ -304,18 +312,18 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
   // Translations are updated via the effect above that watches globalTranslations
 
   // ✅ selectedNode è uno stato separato (fonte di verità durante l'editing)
-  // NON è una derivazione da localDDT - questo elimina race conditions e dipendenze circolari
+  // NON è una derivazione da localTaskTree - questo elimina race conditions e dipendenze circolari
   const [selectedNode, setSelectedNode] = useState<any>(null);
   const [selectedNodePath, setSelectedNodePath] = useState<{
     mainIndex: number;
     subIndex?: number;
   } | null>(null);
 
-  // ✅ Quando chiudi, usa direttamente ddtRef.current (già contiene tutte le modifiche)
-  // Non serve più buildDDTFromSelectedNode perché le modifiche sono già nel ref
+  // ✅ Quando chiudi, usa direttamente taskTreeRef.current (già contiene tutte le modifiche)
+  // Non serve più buildTaskTree perché le modifiche sono già nel ref
 
   // ✅ Salva modifiche quando si clicca "Salva" nel progetto (senza chiudere l'editor)
-  // Usa ddtRef.current che è sempre sincronizzato con dockTree (fonte di verità)
+  // Usa taskTreeRef.current che è sempre sincronizzato con dockTree (fonte di verità)
   //
   // LOGICA CONCETTUALE DEL SALVATAGGIO:
   // - Template: contiene struttura condivisa (constraints, examples, nlpContract)
@@ -327,14 +335,16 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
       if (task?.id || task?.instanceId) { // ✅ RINOMINATO: act → task
         const key = (task?.instanceId || task?.id) as string; // ✅ RINOMINATO: act → task
         const taskInstance = taskRepository.getTask(key);
-        const currentDDT = { ...ddtRef.current };
-        const hasDDT = currentDDT && Object.keys(currentDDT).length > 0 && currentDDT.data && currentDDT.data.length > 0;
+        const currentTaskTree = taskTreeRef.current;
+        const currentMainList = getdataList(currentTaskTree);
+        const hasTaskTree = currentTaskTree && Object.keys(currentTaskTree).length > 0 && currentMainList && currentMainList.length > 0;
 
-        if (hasDDT && taskInstance) {
+        if (hasTaskTree && taskInstance) {
           // ✅ Estrai solo campi modificati rispetto al template (override)
           // Questo evita duplicazione: constraints/examples/nlpContract vengono salvati
           // solo se sono stati modificati rispetto al template
-          const modifiedFields = await extractModifiedDDTFields(taskInstance, currentDDT);
+          const { extractTaskOverrides } = await import('../../../utils/taskUtils');
+          const modifiedFields = await extractTaskOverrides(taskInstance, currentTaskTree, currentProjectId || undefined);
 
           const currentTemplateId = getTemplateId(taskInstance);
 
@@ -348,8 +358,18 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
           } else {
             await taskRepository.updateTask(key, modifiedFields, currentProjectId || undefined);
           }
-        } else if (currentDDT) {
-          await taskRepository.updateTask(key, currentDDT, currentProjectId || undefined);
+        } else if (currentTaskTree) {
+          // ✅ Usa extractTaskOverrides per salvare solo override
+          const { extractTaskOverrides } = await import('../../../utils/taskUtils');
+          const tempTask: Task = {
+            id: key,
+            type: currentTask.type || TaskType.UtteranceInterpretation,
+            templateId: currentTask.templateId || null,
+            label: currentTaskTree.label,
+            steps: currentTaskTree.steps
+          };
+          const overrides = await extractTaskOverrides(tempTask, currentTaskTree, currentProjectId || undefined);
+          await taskRepository.updateTask(key, overrides, currentProjectId || undefined);
         }
       }
     };
@@ -361,18 +381,18 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
   }, [task?.id, (task as any)?.instanceId, currentProjectId]);
 
 
-  // ✅ Usa ddtRef.current per mainList (contiene già le modifiche)
-  // Forza re-render quando ddtRef cambia usando uno stato trigger
-  const [ddtVersion, setDDTVersion] = useState(0);
-  // ✅ ARCHITETTURA ESPERTO: Stabilizza isDdtLoading per evitare problemi con dipendenze undefined
-  const stableIsDdtLoading = isDdtLoading ?? false;
+  // ✅ Usa taskTreeRef.current per mainList (contiene già le modifiche)
+  // Forza re-render quando taskTreeRef cambia usando uno stato trigger
+  const [taskTreeVersion, setTaskTreeVersion] = useState(0);
+  // ✅ ARCHITETTURA ESPERTO: Stabilizza isTaskTreeLoading per evitare problemi con dipendenze undefined
+  const stableIsTaskTreeLoading = isTaskTreeLoading ?? false;
   const mainList = useMemo(() => {
-    // ✅ ARCHITETTURA ESPERTO: Usa ddt prop se disponibile, altrimenti ddtRef.current
-    // Questo garantisce che mainList sia aggiornato quando DDTHostAdapter carica il DDT
-    const currentDDT = ddt ?? ddtRef.current;
-    const list = getdataList(currentDDT);
+    // ✅ ARCHITETTURA ESPERTO: Usa taskTree prop se disponibile, altrimenti taskTreeRef.current
+    // Questo garantisce che mainList sia aggiornato quando DDTHostAdapter carica il TaskTree
+    const currentTaskTree = taskTree ?? taskTreeRef.current;
+    const list = getdataList(currentTaskTree);
     return list;
-  }, [ddt?.label ?? '', ddt?.data?.length ?? 0, ddtVersion ?? 0, stableIsDdtLoading]); // ✅ Usa valori primitivi sempre definiti
+  }, [taskTree?.label ?? '', taskTree?.nodes?.length ?? 0, taskTreeVersion ?? 0, stableIsTaskTreeLoading]); // ✅ Usa valori primitivi sempre definiti
   // Aggregated view: show a group header when there are multiple mains
   const isAggregatedAtomic = useMemo(() => (
     Array.isArray(mainList) && mainList.length > 1
@@ -470,9 +490,9 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
   // ✅ Verifica se kind === "intent" e non ha messaggi (mostra IntentMessagesBuilder se non ci sono)
   const needsIntentMessages = useMemo(() => {
     const firstMain = mainList[0];
-    const hasMessages = hasIntentMessages(ddt, task);
+    const hasMessages = hasIntentMessages(taskTree, task);
     return firstMain?.kind === 'intent' && !hasMessages;
-  }, [mainList, ddt, task]); // ✅ CORRETTO: Passa task a hasIntentMessages
+  }, [mainList, taskTree, task]); // ✅ CORRETTO: Passa task a hasIntentMessages
 
   // ✅ Usa hook custom per gestire wizard e inferenza (estratto per migliorare manutenibilità)
   const {
@@ -483,23 +503,23 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
     inferenceResult,
     setInferenceResult,
   } = useWizardInference({
-    ddt,
-    ddtRef,
+    taskTree,
+    taskTreeRef,
     task: task && 'templateId' in task ? task : null, // ✅ ARCHITETTURA ESPERTO: Cast a Task completo (se ha templateId) o null
-    isDdtLoading: isDdtLoading ?? false, // ✅ ARCHITETTURA ESPERTO: Passa stato di loading
+    isTaskTreeLoading: isTaskTreeLoading ?? false, // ✅ ARCHITETTURA ESPERTO: Passa stato di loading
     currentProjectId,
     selectedProvider,
     selectedModel,
-    preAssembledDDTCache,
+    preAssembledTaskTreeCache,
     wizardOwnsDataRef,
   });
   // ✅ TODO FUTURO: Category System (vedi documentation/TODO_NUOVO.md)
-  // Aggiornare per usare getTaskVisuals(taskType, task?.category, task?.categoryCustom, !!ddt)
-  const { Icon, color: iconColor } = getTaskVisualsByType(taskType, !!ddt); // ✅ RINOMINATO: actType → taskType
-  // Priority: _sourceTask.label (preserved task info) > task.label (direct prop) > localDDT._userLabel (legacy) > generic fallback
-  // NOTE: Do NOT use localDDT.label here - that's the DDT root label (e.g. "Age") which belongs in the TreeView, not the header
-  const sourceTask = (ddt as any)?._sourceTask || (ddt as any)?._sourceAct; // ✅ RINOMINATO: sourceAct → sourceTask (backward compatibility con _sourceAct)
-  const headerTitle = sourceTask?.label || task?.label || (ddt as any)?._userLabel || 'Response Editor'; // ✅ RINOMINATO: act → task
+  // Aggiornare per usare getTaskVisuals(taskType, task?.category, task?.categoryCustom, !!taskTree)
+  const { Icon, color: iconColor } = getTaskVisualsByType(taskType, !!taskTree); // ✅ RINOMINATO: actType → taskType
+  // Priority: _sourceTask.label (preserved task info) > task.label (direct prop) > localTaskTree._userLabel (legacy) > generic fallback
+  // NOTE: Do NOT use localTaskTree.label here - that's the TaskTree root label (e.g. "Age") which belongs in the TreeView, not the header
+  const sourceTask = (taskTree as any)?._sourceTask || (taskTree as any)?._sourceAct; // ✅ RINOMINATO: sourceAct → sourceTask (backward compatibility con _sourceAct)
+  const headerTitle = sourceTask?.label || task?.label || (taskTree as any)?._userLabel || 'Response Editor'; // ✅ RINOMINATO: act → task
 
   // ✅ Handler per il pannello sinistro (Behaviour/Personality/Recognition)
   const saveLeftPanelMode = (m: RightPanelMode) => {
@@ -556,16 +576,16 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
     onTasksPanelWidthChange: setTasksPanelWidth,
   });
 
-  // Track introduction separately - usa ddtRef.current con dipendenze stabilizzate
+  // Track introduction separately - usa taskTreeRef.current con dipendenze stabilizzate
   // Stabilizza i valori primitivi per evitare problemi con array di dipendenze
-  const stableDdtVersion = ddtVersion ?? 0;
+  const stableTaskTreeVersion = taskTreeVersion ?? 0;
   // ✅ Serializza introduction per confronto stabile (evita problemi con oggetti)
   // Usa sempre stringa (non null) per evitare problemi con React
-  const stableIntroductionKey = ddt?.introduction ? JSON.stringify(ddt.introduction) : '';
+  const stableIntroductionKey = taskTree?.introduction ? JSON.stringify(taskTree.introduction) : '';
 
   const introduction = useMemo(() => {
-    return ddtRef.current?.introduction ?? null;
-  }, [stableDdtVersion, stableIntroductionKey]); // ✅ Usa chiave serializzata sempre stringa
+    return taskTreeRef.current?.introduction ?? null;
+  }, [stableTaskTreeVersion, stableIntroductionKey]); // ✅ Usa chiave serializzata sempre stringa
 
   // Persist explicitly on close only (avoid side-effects/flicker on unmount)
   const handleEditorClose = React.useCallback(async (): Promise<boolean> => {
@@ -656,17 +676,18 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
             esc?.tasks && Array.isArray(esc.tasks) && esc.tasks.length > 0
           );
           if (hasTasks) {
-            ddtRef.current.introduction = {
+            if (!taskTreeRef.current) taskTreeRef.current = { label: '', nodes: [], steps: {} };
+            taskTreeRef.current.introduction = {
               type: 'introduction',
               escalations: newIntroStep.escalations || []
             };
           } else {
-            delete ddtRef.current.introduction;
+            if (taskTreeRef.current) delete taskTreeRef.current.introduction;
           }
         } else if (subIndex === undefined) {
           const regexPattern = selectedNode?.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
           const nlpProfileExamples = selectedNode?.nlpProfile?.examples;
-          console.log('[REGEX] CLOSE - Saving to ddtRef', {
+          console.log('[REGEX] CLOSE - Saving to taskTreeRef', {
             nodeId: selectedNode?.id,
             regexPattern: regexPattern || '(none)',
             hasNlpProfile: !!selectedNode?.nlpProfile,
@@ -678,7 +699,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
           ddtRef.current.data = mains;
 
           // ✅ VERIFICA: Controlla se nlpProfile.examples è presente dopo il salvataggio
-          const savedNode = ddtRef.current.data[mainIndex];
+          const savedNode = taskTreeRef.current.nodes[mainIndex];
           console.log('[EXAMPLES] CLOSE - Verifying saved node', {
             nodeId: savedNode?.id,
             hasNlpProfile: !!savedNode?.nlpProfile,
@@ -692,21 +713,24 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
             subList[subIdx] = selectedNode;
             main.subTasks = subList;
             mains[mainIndex] = main;
-            ddtRef.current.data = mains;
+            if (!taskTreeRef.current) taskTreeRef.current = { label: '', nodes: [], steps: {} };
+            taskTreeRef.current.nodes = mains;
           }
         }
       }
     }
 
-    // ✅ Usa direttamente ddtRef.current (già contiene tutte le modifiche)
-    const finalDDT = { ...ddtRef.current };
-    const firstNodeRegex = finalDDT.data?.[0]?.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
-    const firstNodeNlpProfileExamples = finalDDT.data?.[0]?.nlpProfile?.examples;
-    console.log('[REGEX] CLOSE - Final DDT before save', {
-      hasData: !!finalDDT.data,
+    // ✅ Usa direttamente taskTreeRef.current (già contiene tutte le modifiche)
+    const finalTaskTree = { ...taskTreeRef.current };
+    const finalMainList = getdataList(finalTaskTree);
+    const firstNode = finalMainList?.[0];
+    const firstNodeRegex = firstNode?.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+    const firstNodeNlpProfileExamples = firstNode?.nlpProfile?.examples;
+    console.log('[REGEX] CLOSE - Final TaskTree before save', {
+      hasData: !!finalMainList && finalMainList.length > 0,
       firstNodeRegex: firstNodeRegex || '(none)',
-      firstNodeId: finalDDT.data?.[0]?.id,
-      hasFirstNodeNlpProfile: !!finalDDT.data?.[0]?.nlpProfile,
+      firstNodeId: firstNode?.id,
+      hasFirstNodeNlpProfile: !!firstNode?.nlpProfile,
       hasFirstNodeNlpProfileExamples: !!firstNodeNlpProfileExamples,
       firstNodeNlpProfileExamplesCount: Array.isArray(firstNodeNlpProfileExamples) ? firstNodeNlpProfileExamples.length : 0,
       firstNodeNlpProfileExamples: firstNodeNlpProfileExamples?.slice(0, 3)
@@ -716,29 +740,24 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
       // Se abbiamo un instanceId o task.id (caso DDTHostAdapter), salva nell'istanza // ✅ RINOMINATO: act → task
       if (task?.id || task?.instanceId) { // ✅ RINOMINATO: act → task
         const key = (task?.instanceId || task?.id) as string; // ✅ RINOMINATO: act → task
-        const hasDDT = finalDDT && Object.keys(finalDDT).length > 0 && finalDDT.data && finalDDT.data.length > 0;
+        const hasTaskTree = finalTaskTree && Object.keys(finalTaskTree).length > 0 && finalTaskTree.nodes && finalTaskTree.nodes.length > 0;
 
-        // ✅ CRITICAL: Aggiorna la cache del TaskRepository con il DDT finale
+        // ✅ CRITICAL: Aggiorna la cache del TaskRepository con il TaskTree finale
         // Questo è ESSENZIALE per garantire che quando riapri l'editor,
         // taskRepository.getTask() restituisca il task aggiornato con examplesList
         const currentTask = taskRepository.getTask(key);
-        if (currentTask && hasDDT) {
-          // Aggiorna il task nella cache con il DDT finale
-          taskRepository.updateTask(key, {
-            data: finalDDT.data,
-            label: finalDDT.label,
-            constraints: finalDDT.constraints,
-            examples: finalDDT.examples,
-            dataContract: finalDDT.dataContract,
-            introduction: finalDDT.introduction
-          }, currentProjectId || undefined);
+        if (currentTask && hasTaskTree) {
+          // ✅ Usa extractTaskOverrides per salvare solo override
+          const { extractTaskOverrides } = await import('../../../utils/taskUtils');
+          const overrides = await extractTaskOverrides(currentTask, finalTaskTree, currentProjectId || undefined);
+          taskRepository.updateTask(key, overrides, currentProjectId || undefined);
 
-          const firstNodeTestNotes = finalDDT.data?.[0]?.testNotes;
-          console.log('[EXAMPLES] CLOSE - Updated TaskRepository cache with final DDT', {
+          const firstNodeTestNotes = firstNode?.testNotes;
+          console.log('[EXAMPLES] CLOSE - Updated TaskRepository cache with final TaskTree', {
             taskId: key,
-            dataLength: finalDDT.data?.length || 0,
-            firstNodeId: finalDDT.data?.[0]?.id,
-            hasFirstNodeNlpProfile: !!finalDDT.data?.[0]?.nlpProfile,
+            dataLength: finalMainList?.length || 0,
+            firstNodeId: firstNode?.id,
+            hasFirstNodeNlpProfile: !!firstNode?.nlpProfile,
             hasFirstNodeNlpProfileExamples: !!firstNodeNlpProfileExamples,
             firstNodeNlpProfileExamplesCount: Array.isArray(firstNodeNlpProfileExamples) ? firstNodeNlpProfileExamples.length : 0,
             firstNodeNlpProfileExamples: firstNodeNlpProfileExamples?.slice(0, 3),
@@ -751,10 +770,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
         console.log('[ResponseEditor][CLOSE] 🔍 Pre-save check', {
           taskId: task?.id || task?.instanceId,
           key,
-          hasDDT,
-          finalDDTKeys: finalDDT ? Object.keys(finalDDT) : [],
-          hasdata: !!finalDDT?.data,
-          dataLength: finalDDT?.data?.length || 0
+          hasTaskTree,
+          finalTaskTreeKeys: finalTaskTree ? Object.keys(finalTaskTree) : [],
+          hasdata: !!finalMainList && finalMainList.length > 0,
+          dataLength: finalMainList?.length || 0
         });
 
         console.log('[ResponseEditor][CLOSE] 💾 Starting save process', {
@@ -793,16 +812,16 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
           }) : []
         });
 
-        if (hasDDT) {
-          const finaldata = finalDDT?.data?.[0];
+        if (hasTaskTree) {
+          const finaldata = firstNode;
           const finalSubData = finaldata?.subTasks?.[0];
           const finalStartTasks = finalSubData?.steps?.start?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0;
 
-          console.log('[handleEditorClose] 💾 Saving complete DDT (SYNC - blocking close until saved)', {
+          console.log('[handleEditorClose] 💾 Saving complete TaskTree (SYNC - blocking close until saved)', {
             key,
             finalStartTasks,
             hasdata: !!finaldata,
-            dataLength: finalDDT?.data?.length || 0
+            dataLength: finalMainList?.length || 0
           });
 
           // ✅ Get or create task
@@ -816,43 +835,49 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
           const currentTemplateId = getTemplateId(taskInstance);
 
-          // ✅ CRITICAL: Aggiungi task.steps a finalDDT (unica fonte di verità per gli steps)
-          // Gli steps non sono in ddtRef.current perché vivono solo in task.steps[nodeId]
-          const finalDDTWithSteps = {
-            ...finalDDT,
-            steps: task?.steps || finalDDT.steps || {} // ✅ Preferisci task.steps (unica fonte di verità)
+          // ✅ CRITICAL: Aggiungi task.steps a finalTaskTree (unica fonte di verità per gli steps)
+          // Gli steps non sono in taskTreeRef.current perché vivono solo in task.steps[nodeId]
+          const finalTaskTreeWithSteps: TaskTree = {
+            ...finalTaskTree,
+            steps: task?.steps || finalTaskTree.steps || {} // ✅ Preferisci task.steps (unica fonte di verità)
           };
 
-          console.log('[ResponseEditor][CLOSE] 📦 Final DDT with steps prepared', {
+          console.log('[ResponseEditor][CLOSE] 📦 Final TaskTree with steps prepared', {
             taskId: task?.id || task?.instanceId,
             key,
-            finalStepsKeys: finalDDTWithSteps.steps ? Object.keys(finalDDTWithSteps.steps) : [],
-            finalStepsCount: finalDDTWithSteps.steps ? Object.keys(finalDDTWithSteps.steps).length : 0,
+            finalStepsKeys: finalTaskTreeWithSteps.steps ? Object.keys(finalTaskTreeWithSteps.steps) : [],
+            finalStepsCount: finalTaskTreeWithSteps.steps ? Object.keys(finalTaskTreeWithSteps.steps).length : 0,
             taskStepsKeys: task?.steps ? Object.keys(task.steps) : [],
             taskStepsCount: task?.steps ? Object.keys(task.steps).length : 0,
-            stepsMatch: JSON.stringify(finalDDTWithSteps.steps) === JSON.stringify(task?.steps || {})
+            stepsMatch: JSON.stringify(finalTaskTreeWithSteps.steps) === JSON.stringify(task?.steps || {})
           });
 
           // ✅ Usa helper function invece di stringa hardcoded - AWAIT OBBLIGATORIO: non chiudere finché non è salvato
           if (!isUtteranceInterpretationTemplateId(currentTemplateId)) {
-            const dataToSave = {
-              type: TaskType.UtteranceInterpretation,  // ✅ type: enum numerico
-              templateId: null,            // ✅ templateId: null (standalone)
-              label: finalDDTWithSteps.label,
-              data: finalDDTWithSteps.data,
-              steps: finalDDTWithSteps.steps, // ✅ CRITICAL: Salva steps da task.steps (unica fonte di verità)
-              constraints: finalDDTWithSteps.constraints,
-              examples: finalDDTWithSteps.examples,
-              dataContract: finalDDTWithSteps.dataContract,
-              introduction: finalDDTWithSteps.introduction
+            // ❌ DEPRECATED: Non salvare più data nell'istanza (viene dal template)
+            // ✅ Usa extractTaskOverrides per salvare solo override
+            // ✅ Usa direttamente finalTaskTreeWithSteps (già è un TaskTree)
+
+            // ✅ Crea task temporaneo per extractTaskOverrides
+            const tempTask: Task = {
+              id: key,
+              type: TaskType.UtteranceInterpretation,
+              templateId: null,  // Verrà creato automaticamente
+              label: finalTaskTreeWithSteps.label,
+              steps: finalTaskTreeWithSteps.steps
             };
-            const regexPattern = dataToSave.data?.[0]?.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
-            const savedNlpProfileExamples = dataToSave.data?.[0]?.nlpProfile?.examples;
+            const { extractTaskOverrides } = await import('../../../utils/taskUtils');
+            const dataToSave = await extractTaskOverrides(tempTask, finalTaskTreeWithSteps, currentProjectId || undefined);
+
+            const dataToSaveMainList = getdataList(finalTaskTreeWithSteps);
+            const dataToSaveFirstNode = dataToSaveMainList?.[0];
+            const regexPattern = dataToSaveFirstNode?.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+            const savedNlpProfileExamples = dataToSaveFirstNode?.nlpProfile?.examples;
             console.log('[REGEX] CLOSE - Saving to DB (standalone)', {
               taskId: key,
               regexPattern: regexPattern || '(none)',
-              firstNodeId: dataToSave.data?.[0]?.id,
-              hasFirstNodeNlpProfile: !!dataToSave.data?.[0]?.nlpProfile,
+              firstNodeId: dataToSaveFirstNode?.id,
+              hasFirstNodeNlpProfile: !!dataToSaveFirstNode?.nlpProfile,
               hasFirstNodeNlpProfileExamples: !!savedNlpProfileExamples,
               firstNodeNlpProfileExamplesCount: Array.isArray(savedNlpProfileExamples) ? savedNlpProfileExamples.length : 0,
               firstNodeNlpProfileExamples: savedNlpProfileExamples?.slice(0, 3)
@@ -918,13 +943,12 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
             });
           } else {
             const dataToSave = {
-              label: finalDDTWithSteps.label,
-              data: finalDDTWithSteps.data,
-              steps: finalDDTWithSteps.steps,
-              constraints: finalDDTWithSteps.constraints,
-              examples: finalDDTWithSteps.examples,
-              dataContract: finalDDTWithSteps.dataContract,
-              introduction: finalDDTWithSteps.introduction
+              label: finalTaskTreeWithSteps.label,
+              nodes: finalTaskTreeWithSteps.nodes,
+              steps: finalTaskTreeWithSteps.steps,
+              constraints: finalTaskTreeWithSteps.constraints,
+              dataContract: finalTaskTreeWithSteps.dataContract,
+              introduction: finalTaskTreeWithSteps.introduction
             };
             const regexPattern = dataToSave.data?.[0]?.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
             console.log('[REGEX] CLOSE - Saving to DB (with templateId)', {
@@ -946,22 +970,22 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
             key,
             dataLength: finalDDT.data?.length || 0,
             finalStartTasks,
-            savedStepsKeys: finalDDTWithSteps.steps ? Object.keys(finalDDTWithSteps.steps) : [],
-            savedStepsCount: finalDDTWithSteps.steps ? Object.keys(finalDDTWithSteps.steps).length : 0,
+            savedStepsKeys: finalTaskTreeWithSteps.steps ? Object.keys(finalTaskTreeWithSteps.steps) : [],
+            savedStepsCount: finalTaskTreeWithSteps.steps ? Object.keys(finalTaskTreeWithSteps.steps).length : 0,
             repositoryTask: {
               hasSteps: !!savedTask?.steps,
               stepsKeys: savedStepsKeys,
               stepsCount: savedStepsCount,
-              stepsMatch: JSON.stringify(savedTask?.steps || {}) === JSON.stringify(finalDDTWithSteps.steps || {})
+              stepsMatch: JSON.stringify(savedTask?.steps || {}) === JSON.stringify(finalTaskTreeWithSteps.steps || {})
             },
             verification: {
               stepsWereSaved: savedStepsCount > 0,
-              stepsMatchExpected: savedStepsCount === (finalDDTWithSteps.steps ? Object.keys(finalDDTWithSteps.steps).length : 0),
-              allStepsPresent: savedStepsKeys.every(nodeId => finalDDTWithSteps.steps?.[nodeId] !== undefined)
+              stepsMatchExpected: savedStepsCount === (finalTaskTreeWithSteps.steps ? Object.keys(finalTaskTreeWithSteps.steps).length : 0),
+              allStepsPresent: savedStepsKeys.every(nodeId => finalTaskTreeWithSteps.steps?.[nodeId] !== undefined)
             }
           });
         } else if (finalDDT) {
-          // ✅ No DDT structure, but save other fields (e.g., Message text)
+          // ✅ No TaskTree structure, but save other fields (e.g., Message text)
           // ✅ Get or create task
           let taskInstance = taskRepository.getTask(key);
           if (!taskInstance) {
@@ -1035,10 +1059,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
   // ✅ NON serve più salvare prima di cambiare nodo
   // dockTree è la fonte di verità - le modifiche sono già salvate immediatamente in updateSelectedNode
 
-  // ✅ Caricamento: legge da ddtRef.current (che contiene già le modifiche, come VB.NET)
+  // ✅ Caricamento: legge da taskTreeRef.current (che contiene già le modifiche, come VB.NET)
   useEffect(() => {
     // 🔴 LOG CHIRURGICO 3: Caricamento nodo
-    const currentMainList = getdataList(ddtRef.current); // ✅ Leggi dal ref, non dal prop
+    const currentMainList = getdataList(taskTreeRef.current); // ✅ Leggi dal ref, non dal prop
 
     if (currentMainList.length === 0) {
       return;
@@ -1046,7 +1070,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
     try {
       if (localStorage.getItem('debug.nodeSync') === '1') {
-        console.log('[NODE_SYNC][LOAD] 🔄 Loading node from ddt', {
+        console.log('[NODE_SYNC][LOAD] 🔄 Loading node from taskTree', {
           selectedMainIndex,
           selectedSubIndex,
           selectedRoot,
@@ -1242,7 +1266,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
               };
             });
 
-            console.log('[NODE_SYNC][LOAD] ✅ Node loaded from ddt', {
+            console.log('[NODE_SYNC][LOAD] ✅ Node loaded from taskTree', {
               mainIndex: selectedMainIndex,
               subIndex: selectedSubIndex,
               nodeLabel: node?.label,
@@ -1267,21 +1291,21 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
     }
 
 
-    // ✅ Carica il nodo quando cambiano gli indici O quando ddt prop cambia (dal dockTree)
-    // ddtRef.current è già sincronizzato con ddt prop dal useEffect precedente
-  }, [selectedMainIndex, selectedSubIndex, selectedRoot, introduction, ddt?.label, ddt?.data?.length, task?.steps]);
+    // ✅ Carica il nodo quando cambiano gli indici O quando taskTree prop cambia (dal dockTree)
+    // taskTreeRef.current è già sincronizzato con taskTree prop dal useEffect precedente
+  }, [selectedMainIndex, selectedSubIndex, selectedRoot, introduction, taskTree?.label, taskTree?.nodes?.length, task?.steps]);
 
   // ✅ NON serve più sincronizzare selectedNode con localDDT
   // selectedNode è l'unica fonte di verità durante l'editing
-  // Quando chiudi l'editor, costruisci il DDT da selectedNode e salva
+  // Quando chiudi l'editor, costruisci il TaskTree da selectedNode e salva
 
 
   // ✅ Step keys e selectedStepKey sono ora gestiti internamente da BehaviourEditor
 
   // ✅ updateSelectedNode: SINGOLA FONTE DI VERITÀ = dockTree
   // 1. Modifica ddtRef.current (buffer locale per editing)
-  // 2. Aggiorna IMMEDIATAMENTE tab.ddt nel dockTree (fonte di verità)
-  // 3. React re-renderizza con tab.ddt aggiornato
+  // 2. Aggiorna IMMEDIATAMENTE tab.taskTree nel dockTree (fonte di verità)
+  // 3. React re-renderizza con tab.taskTree aggiornato
   //
   // ✅ BATCH TESTING: During batch testing, node structure is IMMUTABLE
   // This prevents feedback loops: updateSelectedNode → re-render → onChange → handleProfileUpdate → ...
@@ -1317,10 +1341,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
       const { mainIndex, subIndex } = selectedNodePath;
       const isRoot = selectedRoot || false;
 
-      // ✅ STEP 1: Costruisci il DDT completo aggiornato
-      const currentDDT = ddtRef.current || ddt;
-      const updatedDDT = { ...currentDDT };
-      const mains = [...(currentDDT.data || [])];
+      // ✅ STEP 1: Costruisci il TaskTree completo aggiornato
+      const currentTaskTree = taskTreeRef.current || taskTree;
+      const updatedTaskTree = { ...currentTaskTree };
+      const mains = [...(currentTaskTree.nodes || [])];
 
       if (mainIndex < mains.length) {
         const main = { ...mains[mainIndex] };
@@ -1329,17 +1353,17 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
           // Root node (introduction)
           const newIntroStep = updated?.steps?.find((s: any) => s.type === 'introduction');
           if (newIntroStep?.escalations?.some((esc: any) => esc?.tasks?.length > 0)) {
-            updatedDDT.introduction = {
+            updatedTaskTree.introduction = {
               type: 'introduction',
               escalations: newIntroStep.escalations || []
             };
           } else {
-            delete updatedDDT.introduction;
+            delete updatedTaskTree.introduction;
           }
         } else if (subIndex === undefined) {
           // Main node
           mains[mainIndex] = updated;
-          updatedDDT.data = mains;
+          updatedTaskTree.nodes = mains;
 
           // ✅ LOG: Verifica che nlpProfile.examples sia presente dopo l'aggiornamento
           const savedNlpProfileExamples = mains[mainIndex]?.nlpProfile?.examples;
@@ -1370,7 +1394,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
             subList[subIdx] = updated;
             main.subTasks = subList;
             mains[mainIndex] = main;
-            updatedDDT.data = mains;
+            updatedTaskTree.nodes = mains;
 
             // ✅ CRITICAL: Salva updated.steps usando templateId come chiave (non id)
             // task.steps[node.templateId] = steps clonati
@@ -1383,39 +1407,39 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
           }
         }
 
-        // ✅ STEP 2: Valida struttura DDT
-        const validation = validateTaskStructure(updatedDDT);
+        // ✅ STEP 2: Valida struttura TaskTree
+        const validation = validateTaskStructure(updatedTaskTree);
         if (!validation.valid) {
-          console.error('[ResponseEditor] Invalid DDT structure:', validation.error);
+          console.error('[ResponseEditor] Invalid TaskTree structure:', validation.error);
           // Mostra errore all'utente (puoi aggiungere un toast/alert qui)
           alert(`Invalid structure: ${validation.error}`);
           return prev; // Non aggiornare se struttura invalida
         }
 
-        // ✅ STEP 3: Aggiorna ddtRef.current (buffer locale)
-        ddtRef.current = updatedDDT;
+        // ✅ STEP 3: Aggiorna taskTreeRef.current (buffer locale)
+        taskTreeRef.current = updatedTaskTree;
 
-        // ✅ LOG: Verifica che nlpProfile.examples sia presente in ddtRef.current dopo l'aggiornamento
-        const ddtRefNlpProfileExamples = ddtRef.current.data?.[mainIndex]?.nlpProfile?.examples;
-        if (ddtRefNlpProfileExamples) {
-          console.log('[EXAMPLES] UPDATE - Verified in ddtRef.current', {
+        // ✅ LOG: Verifica che nlpProfile.examples sia presente in taskTreeRef.current dopo l'aggiornamento
+        const taskTreeRefNlpProfileExamples = taskTreeRef.current?.nodes?.[mainIndex]?.nlpProfile?.examples;
+        if (taskTreeRefNlpProfileExamples) {
+          console.log('[EXAMPLES] UPDATE - Verified in taskTreeRef.current', {
             nodeId: updated.id,
             mainIndex,
-            hasNlpProfile: !!ddtRef.current.data?.[mainIndex]?.nlpProfile,
-            hasNlpProfileExamples: !!ddtRefNlpProfileExamples,
-            nlpProfileExamplesCount: ddtRefNlpProfileExamples.length,
-            nlpProfileExamples: ddtRefNlpProfileExamples.slice(0, 3)
+            hasNlpProfile: !!taskTreeRef.current?.nodes?.[mainIndex]?.nlpProfile,
+            hasNlpProfileExamples: !!taskTreeRefNlpProfileExamples,
+            nlpProfileExamplesCount: taskTreeRefNlpProfileExamples.length,
+            nlpProfileExamples: taskTreeRefNlpProfileExamples.slice(0, 3)
           });
         }
 
-        // ✅ STEP 4: Aggiorna IMMEDIATAMENTE tab.ddt nel dockTree (FONTE DI VERITÀ) - solo se disponibili
+        // ✅ STEP 4: Aggiorna IMMEDIATAMENTE tab.taskTree nel dockTree (FONTE DI VERITÀ) - solo se disponibili
         if (tabId && setDockTree) {
           setDockTree(prev =>
             mapNode(prev, n => {
               if (n.kind === 'tabset') {
                 const idx = n.tabs.findIndex(t => t.id === tabId);
                 if (idx !== -1 && n.tabs[idx].type === 'responseEditor') {
-                  const updatedTab = { ...n.tabs[idx], ddt: updatedDDT };
+                  const updatedTab = { ...n.tabs[idx], taskTree: updatedTaskTree };
                   return {
                     ...n,
                     tabs: [
@@ -1448,38 +1472,16 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                 const taskInstance = taskRepository.getTask(key);
                 const currentTemplateId = getTemplateId(taskInstance);
 
-                // ✅ Se standalone (no templateId), salva tutto data completo
-                // Se ha templateId, usa extractModifiedDDTFields per salvare solo override
-                let fieldsToSave: any;
-                if (!currentTemplateId || currentTemplateId === 'UNDEFINED') {
-                  // Standalone: salva tutto data completo (include tutti i task)
-                  fieldsToSave = {
-                    label: updatedDDT.label,
-                    data: updatedDDT.data, // ✅ Salva tutto, incluso tutti i task
-                    steps: task?.steps || taskToSave?.steps || {}, // ✅ CORRETTO: Salva steps da task corrente (unica fonte di verità)
-                    constraints: updatedDDT.constraints,
-                    examples: updatedDDT.examples,
-                    dataContract: updatedDDT.dataContract,
-                    introduction: updatedDDT.introduction
-                  };
-                } else {
-                  // Con templateId: salva solo override
-                  fieldsToSave = await extractModifiedDDTFields(taskInstance, updatedDDT);
-                  // ✅ CRITICAL: Aggiungi task.steps agli override (unica fonte di verità per gli steps)
-                  if (task?.steps && Object.keys(task.steps).length > 0) {
-                    fieldsToSave.steps = task.steps;
-                  }
-                }
+                // ✅ NUOVO: Usa extractTaskOverrides (sempre, anche se templateId è null)
+                // Se templateId è null, viene creato automaticamente un template
+                // ✅ updatedTaskTree è già un TaskTree
 
-          if (!isUtteranceInterpretationTemplateId(currentTemplateId)) {
-            await taskRepository.updateTask(key, {
-              type: TaskType.UtteranceInterpretation,  // ✅ type: enum numerico
-                    templateId: null,            // ✅ templateId: null (standalone)
-                    ...fieldsToSave
-                  }, projectIdToSave || undefined);
-                } else {
-                  await taskRepository.updateTask(key, fieldsToSave, projectIdToSave || undefined);
-                }
+                // ✅ SEMPRE estrai solo override (non struttura)
+                const fieldsToSave = await extractTaskOverrides(taskInstance, updatedTaskTree, projectIdToSave || undefined);
+
+                // ✅ Aggiorna task con override (sempre, anche se templateId era null)
+                // Se templateId era null, extractTaskOverrides ha già creato il template
+                await taskRepository.updateTask(key, fieldsToSave, projectIdToSave || undefined);
               } catch (err) {
                 console.error('[ResponseEditor] Failed to save task:', err);
               }
@@ -1509,10 +1511,10 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
 
       return updated;
     });
-  }, [selectedNodePath, selectedRoot, tabId, setDockTree, ddt?.label, ddt?.data?.length ?? 0, task, currentProjectId]);
+  }, [selectedNodePath, selectedRoot, tabId, setDockTree, taskTree?.label, taskTree?.nodes?.length ?? 0, task, currentProjectId]);
 
   // ✅ NON serve più persistenza asincrona
-  // Quando chiudi l'editor, costruisci il DDT da selectedNode e salva
+  // Quando chiudi l'editor, costruisci il TaskTree da selectedNode e salva
 
   // ✅ normalizeAndPersistModel è ora gestito internamente da BehaviourEditor
 
@@ -1672,8 +1674,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
         return null;
       })()}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
-        {false && isDDTEmpty(ddt) ? ( // Summarizer not yet implemented
-          /* Placeholder for Summarizer when DDT is empty */
+        {false && isTaskTreeEmpty(taskTree) ? ( // Summarizer not yet implemented
+          /* Placeholder for Summarizer when TaskTree is empty */
           <div className={combinedClass} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '24px', color: '#e2e8f0', lineHeight: 1.6 }}>
             <div style={{ maxWidth: '800px', margin: '0 auto' }}>
               <h2 className={combinedClass} style={{ fontWeight: 700, marginBottom: '16px', color: '#fb923c', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1696,8 +1698,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
               </div>
             </div>
           </div>
-        ) : false && isDDTEmpty(ddt) ? ( // Negotiation not yet implemented
-          /* Placeholder for Negotiation when DDT is empty */
+        ) : false && isTaskTreeEmpty(taskTree) ? ( // Negotiation not yet implemented
+          /* Placeholder for Negotiation when TaskTree is empty */
           <div className={combinedClass} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '24px', color: '#e2e8f0', lineHeight: 1.6 }}>
             <div style={{ maxWidth: '800px', margin: '0 auto' }}>
               <h2 className={combinedClass} style={{ fontWeight: 700, marginBottom: '16px', color: '#fb923c', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1771,20 +1773,20 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                   taskLabel={task?.label || ''} // ✅ Passa il label del task (testo della riga di nodo) come fallback
                   initialDDT={inferenceResult?.ai?.schema ? {
                     // ✅ Pre-compila con il risultato dell'inferenza
-                    id: ddt?.id || `temp_ddt_${task?.id}`,
+                    id: taskTree?.id || `temp_taskTree_${task?.id}`,
                     label: inferenceResult.ai.schema.label || task?.label || 'Data',
-                    data: inferenceResult.ai.schema.data || [],
+                    nodes: inferenceResult.ai.schema.nodes || [],
                     _inferenceResult: inferenceResult // Passa anche il risultato completo per riferimento (con traduzioni se disponibili)
-                  } : (ddt && ddt.data && ddt.data.length > 0 ? {
-                    // ✅ Se ddt ha data (creato da categoria), passalo come initialDDT
+                  } : (taskTree && taskTree.nodes && taskTree.nodes.length > 0 ? {
+                    // ✅ Se taskTree ha nodes (creato da categoria), passalo come initialDDT
                     // Il wizard andrà direttamente a 'structure' e mostrerà "Build Messages"
-                    id: ddt?.id || `temp_ddt_${task?.id}`,
-                    label: ddt?.label || task?.label || 'Data',
-                    data: ddt.data,
-                    steps: ddt.steps,  // ✅ Steps a root level
-                    constraints: ddt.constraints,
-                    examples: ddt.examples
-                  } : ddt)}
+                    id: taskTree?.id || `temp_taskTree_${task?.id}`,
+                    label: taskTree?.label || task?.label || 'Data',
+                    nodes: taskTree.nodes,
+                    steps: taskTree.steps,  // ✅ Steps a root level
+                    constraints: taskTree.constraints,
+                    dataContract: taskTree.dataContract
+                  } : taskTree)}
                   onCancel={onClose || (() => { })}
                   onComplete={(finalDDT, messages) => {
                     if (!finalDDT) {
@@ -1974,9 +1976,9 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
           /* Build Messages UI for ProblemClassification without messages */
           <div style={{ flex: 1, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start', padding: '16px 20px' }}>
             <IntentMessagesBuilder
-              intentLabel={task?.label || ddt?.label || 'chiedi il problema'}
+              intentLabel={task?.label || taskTree?.label || 'chiedi il problema'}
               onComplete={(messages) => {
-                const updatedDDT = saveIntentMessagesToDDT(ddt, messages);
+                const updatedTaskTree = saveIntentMessagesToTaskTree(taskTree, messages);
 
                 // ✅ CRITICO: Salva il DDT nell'istanza IMMEDIATAMENTE quando si completano i messaggi
                 // Questo assicura che quando si fa "Save" globale, l'istanza abbia il DDT aggiornato
@@ -1985,38 +1987,38 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                   // ✅ MIGRATION: Use getTemplateId() helper
                   // ✅ FIX: Se c'è un DDT, assicurati che il templateId sia 'UtteranceInterpretation'
                   const taskInstance = taskRepository.getTask(key);
-                  const hasDDT = updatedDDT && Object.keys(updatedDDT).length > 0 && updatedDDT.data && updatedDDT.data.length > 0;
-                  if (hasDDT && taskInstance) {
+                  const hasTaskTree = updatedTaskTree && Object.keys(updatedTaskTree).length > 0 && updatedTaskTree.nodes && updatedTaskTree.nodes.length > 0;
+                  if (hasTaskTree && taskInstance) {
                     const currentTemplateId = getTemplateId(taskInstance);
                     // ✅ Usa helper function invece di stringa hardcoded
-                    // ✅ Update task con campi DDT direttamente (niente wrapper value)
+                    // ✅ Update task con campi TaskTree direttamente (niente wrapper value)
                     if (!isUtteranceInterpretationTemplateId(currentTemplateId)) {
                       taskRepository.updateTask(key, {
                         type: TaskType.UtteranceInterpretation,  // ✅ type: enum numerico
                         templateId: null,            // ✅ templateId: null (standalone)
-                        ...updatedDDT  // ✅ Spread: label, data, steps, ecc.
+                        ...updatedTaskTree  // ✅ Spread: label, nodes, steps, ecc.
                       }, currentProjectId || undefined);
                     } else {
                       taskRepository.updateTask(key, {
-                        ...updatedDDT  // ✅ Spread: label, data, steps, ecc.
+                        ...updatedTaskTree  // ✅ Spread: label, nodes, steps, ecc.
                       }, currentProjectId || undefined);
                     }
-                  } else if (hasDDT) {
+                  } else if (hasTaskTree) {
                     // Task doesn't exist, create it with UtteranceInterpretation type
-                    taskRepository.createTask(TaskType.UtteranceInterpretation, null, updatedDDT, key, currentProjectId || undefined);
+                    taskRepository.createTask(TaskType.UtteranceInterpretation, null, updatedTaskTree, key, currentProjectId || undefined);
                   } else {
                     // FIX: Salva con projectId per garantire persistenza nel database
                     taskRepository.updateTask(key, {
-                      ...updatedDDT  // ✅ Spread: label, data, stepPrompts, ecc.
+                      ...updatedTaskTree  // ✅ Spread: label, nodes, stepPrompts, ecc.
                     }, currentProjectId || undefined);
                   }
 
-                  // ✅ FIX: Notifica il parent (DDTHostAdapter) che il DDT è stato aggiornato
-                  onWizardComplete?.(updatedDDT);
+                  // ✅ FIX: Notifica il parent (DDTHostAdapter) che il TaskTree è stato aggiornato
+                  onWizardComplete?.(updatedTaskTree);
                 }
 
                 try {
-                  replaceSelectedDDT(updatedDDT);
+                  replaceSelectedTaskTree(updatedTaskTree);
                 } catch (err) {
                   console.error('[ResponseEditor][replaceSelectedDDT] FAILED', err);
                 }
@@ -2050,11 +2052,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                   selectedSubIndex={selectedSubIndex}
                   onSelectSub={handleSelectSub}
                   aggregated={isAggregatedAtomic}
-                  rootLabel={ddt?.label || 'Data'}
+                  rootLabel={taskTree?.label || 'Data'}
                   style={sidebarManualWidth ? { width: sidebarManualWidth, flexShrink: 0 } : { flexShrink: 0 }} // ✅ FIX: passa sempre style, ma width solo se c'è manualWidth
                   onChangeSubRequired={(mIdx: number, sIdx: number, required: boolean) => {
                     // Persist required flag on the exact sub (by indices), independent of current selection
-                    const next = JSON.parse(JSON.stringify(ddt));
+                    const next = JSON.parse(JSON.stringify(taskTree));
                     const mains = getdataList(next);
                     const main = mains[mIdx];
                     if (!main) return;
@@ -2063,16 +2065,16 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                     subList[sIdx] = { ...subList[sIdx], required };
                     main.subTasks = subList;
                     mains[mIdx] = main;
-                    next.data = mains;
+                    next.nodes = mains;
                     try {
                       const subs = getSubDataList(main) || [];
                       const target = subs[sIdx];
                       if (localStorage.getItem('debug.responseEditor') === '1') console.log('[DDT][subRequiredToggle][persist]', { main: main?.label, label: target?.label, required });
                     } catch { }
-                    try { replaceSelectedDDT(next); } catch { }
+                    try { replaceSelectedTaskTree(next); } catch { }
                   }}
                   onReorderSub={(mIdx: number, fromIdx: number, toIdx: number) => {
-                    const next = JSON.parse(JSON.stringify(ddt));
+                    const next = JSON.parse(JSON.stringify(taskTree));
                     const mains = getdataList(next);
                     const main = mains[mIdx];
                     if (!main) return;
@@ -2082,35 +2084,35 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                     subList.splice(toIdx, 0, moved);
                     main.subTasks = subList;
                     mains[mIdx] = main;
-                    next.data = mains;
+                    next.nodes = mains;
                     try { if (localStorage.getItem('debug.responseEditor') === '1') console.log('[DDT][subReorder][persist]', { main: main?.label, fromIdx, toIdx }); } catch { }
-                    try { replaceSelectedDDT(next); } catch { }
+                    try { replaceSelectedTaskTree(next); } catch { }
                   }}
                   onAddMain={(label: string) => {
-                    const next = JSON.parse(JSON.stringify(ddt));
+                    const next = JSON.parse(JSON.stringify(taskTree));
                     const mains = getdataList(next);
                     mains.push({ label, subTasks: [] });
-                    next.data = mains;
-                    try { replaceSelectedDDT(next); } catch { }
+                    next.nodes = mains;
+                    try { replaceSelectedTaskTree(next); } catch { }
                   }}
                   onRenameMain={(mIdx: number, label: string) => {
-                    const next = JSON.parse(JSON.stringify(ddt));
+                    const next = JSON.parse(JSON.stringify(taskTree));
                     const mains = getdataList(next);
                     if (!mains[mIdx]) return;
                     mains[mIdx].label = label;
-                    next.data = mains;
-                    try { replaceSelectedDDT(next); } catch { }
+                    next.nodes = mains;
+                    try { replaceSelectedTaskTree(next); } catch { }
                   }}
                   onDeleteMain={(mIdx: number) => {
-                    const next = JSON.parse(JSON.stringify(ddt));
+                    const next = JSON.parse(JSON.stringify(taskTree));
                     const mains = getdataList(next);
                     if (mIdx < 0 || mIdx >= mains.length) return;
                     mains.splice(mIdx, 1);
-                    next.data = mains;
-                    try { replaceSelectedDDT(next); } catch { }
+                    next.nodes = mains;
+                    try { replaceSelectedTaskTree(next); } catch { }
                   }}
                   onAddSub={(mIdx: number, label: string) => {
-                    const next = JSON.parse(JSON.stringify(ddt));
+                    const next = JSON.parse(JSON.stringify(taskTree));
                     const mains = getdataList(next);
                     const main = mains[mIdx];
                     if (!main) return;
@@ -2118,11 +2120,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                     list.push({ label, required: true });
                     main.subTasks = list;
                     mains[mIdx] = main;
-                    next.data = mains;
-                    try { replaceSelectedDDT(next); } catch { }
+                    next.nodes = mains;
+                    try { replaceSelectedTaskTree(next); } catch { }
                   }}
                   onRenameSub={(mIdx: number, sIdx: number, label: string) => {
-                    const next = JSON.parse(JSON.stringify(ddt));
+                    const next = JSON.parse(JSON.stringify(taskTree));
                     const mains = getdataList(next);
                     const main = mains[mIdx];
                     if (!main) return;
@@ -2131,11 +2133,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                     list[sIdx] = { ...(list[sIdx] || {}), label };
                     main.subTasks = list;
                     mains[mIdx] = main;
-                    next.data = mains;
-                    try { replaceSelectedDDT(next); } catch { }
+                    next.nodes = mains;
+                    try { replaceSelectedTaskTree(next); } catch { }
                   }}
                   onDeleteSub={(mIdx: number, sIdx: number) => {
-                    const next = JSON.parse(JSON.stringify(ddt));
+                    const next = JSON.parse(JSON.stringify(taskTree));
                     const mains = getdataList(next);
                     const main = mains[mIdx];
                     if (!main) return;
@@ -2144,8 +2146,8 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                     list.splice(sIdx, 1);
                     main.subTasks = list;
                     mains[mIdx] = main;
-                    next.data = mains;
-                    try { replaceSelectedDDT(next); } catch { }
+                    next.nodes = mains;
+                    try { replaceSelectedTaskTree(next); } catch { }
                   }}
                   onSelectAggregator={handleSelectAggregator}
                 />
@@ -2231,12 +2233,12 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                     onWidthChange={setRightWidth}
                     onStartResize={() => setDraggingPanel('left')}
                     dragging={draggingPanel === 'left'}
-                    ddt={ddt}
+                    taskTree={taskTree}
                     translations={localTranslations}
                     selectedNode={selectedNode}
                     onUpdateDDT={(updater) => {
-                      const updated = updater(ddt);
-                      try { replaceSelectedDDT(updated); } catch { }
+                      const updated = updater(taskTree);
+                      try { replaceSelectedTaskTree(updated); } catch { }
                     }}
                     tasks={escalationTasks}
                   />
@@ -2252,7 +2254,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                       onStartResize={() => setDraggingPanel('test')}
                       dragging={draggingPanel === 'test'}
                       hideSplitter={tasksPanelMode === 'actions' && tasksPanelWidth > 1} // ✅ Nascondi splitter se Tasks è visibile (usiamo quello condiviso)
-                      ddt={ddt}
+                      taskTree={taskTree}
                       translations={localTranslations}
                       selectedNode={selectedNode}
                       onUpdateDDT={(updater) => {
@@ -2325,7 +2327,7 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
                       onStartResize={() => setDraggingPanel('tasks')}
                       dragging={draggingPanel === 'tasks'}
                       hideSplitter={true} // ✅ Nascondi splitter interno, usiamo quello esterno
-                      ddt={ddt}
+                      taskTree={taskTree}
                       tasks={escalationTasks}
                       translations={localTranslations}
                       selectedNode={selectedNode}
@@ -2555,11 +2557,11 @@ function ResponseEditorInner({ ddt, onClose, onWizardComplete, task, isDdtLoadin
   );
 }
 
-export default function ResponseEditor({ ddt, onClose, onWizardComplete, task, isDdtLoading, hideHeader, onToolbarUpdate, tabId, setDockTree, registerOnClose }: { ddt: any, onClose?: () => void, onWizardComplete?: (finalDDT: any) => void, task?: TaskMeta | Task, isDdtLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void, registerOnClose?: (fn: () => Promise<boolean>) => void }) {
+export default function ResponseEditor({ taskTree, onClose, onWizardComplete, task, isTaskTreeLoading, hideHeader, onToolbarUpdate, tabId, setDockTree, registerOnClose }: { taskTree?: TaskTree | null, onClose?: () => void, onWizardComplete?: (finalTaskTree: TaskTree) => void, task?: TaskMeta | Task, isTaskTreeLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void, registerOnClose?: (fn: () => Promise<boolean>) => void }) {
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <FontProvider>
-        <ResponseEditorInner ddt={ddt} onClose={onClose} onWizardComplete={onWizardComplete} task={task} isDdtLoading={isDdtLoading} hideHeader={hideHeader} onToolbarUpdate={onToolbarUpdate} tabId={tabId} setDockTree={setDockTree} registerOnClose={registerOnClose} /> {/* ✅ ARCHITETTURA ESPERTO: Passa isDdtLoading */}
+        <ResponseEditorInner taskTree={taskTree} onClose={onClose} onWizardComplete={onWizardComplete} task={task} isTaskTreeLoading={isTaskTreeLoading} hideHeader={hideHeader} onToolbarUpdate={onToolbarUpdate} tabId={tabId} setDockTree={setDockTree} registerOnClose={registerOnClose} /> {/* ✅ ARCHITETTURA ESPERTO: Passa isTaskTreeLoading */}
       </FontProvider>
     </div>
   );

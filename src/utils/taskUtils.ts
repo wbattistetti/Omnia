@@ -1,5 +1,6 @@
-import type { Task } from '../types/taskTypes';
+import type { Task, TaskTree, TaskTreeNode } from '../types/taskTypes';
 import { DialogueTaskService } from '../services/DialogueTaskService';
+import { TaskType } from '../types/taskTypes';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -280,6 +281,110 @@ import { v4 as uuidv4 } from 'uuid';
  * Structure:
  * - Nodes with templateId !== null: Structure from template, steps cloned with new task IDs, contracts from template
  * - Nodes with templateId === null: Complete structure from instance (added nodes)
+ */
+
+/**
+ * Carica template dal progetto (non dalla Factory)
+ * I template del progetto sono salvati nella collection 'tasks' del database del progetto
+ */
+async function loadTemplateFromProject(templateId: string, projectId: string): Promise<any | null> {
+  try {
+    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/tasks`);
+    if (!response.ok) return null;
+
+    const tasks = await response.json();
+    // ✅ Template ha templateId === null (sono template, non istanze)
+    const template = tasks.find((t: any) => t.id === templateId && t.templateId === null);
+    return template || null;
+  } catch (error) {
+    console.error('[loadTemplateFromProject] Error loading template from project:', error);
+    return null;
+  }
+}
+
+/**
+ * Assicura che esista un template per il task nel progetto.
+ * Se templateId è null, crea automaticamente un nuovo template nel progetto.
+ *
+ * IMPORTANTE:
+ * - Template creati automaticamente vengono salvati nel progetto, non nella Factory
+ * - La Factory contiene solo concetti universali
+ * - Template del progetto sono specifici del flusso
+ *
+ * @param instance - Task instance (può avere templateId === null)
+ * @param taskTree - TaskTree opzionale (se disponibile, usa la struttura)
+ * @param projectId - Project ID (obbligatorio per salvare nel progetto)
+ * @returns Template creato o esistente
+ */
+export async function ensureTemplateExists(
+  instance: Task,
+  taskTree: TaskTree | undefined,
+  projectId: string
+): Promise<any> {
+  // Se ha già templateId, restituisci il template esistente
+  if (instance.templateId && instance.templateId !== 'UNDEFINED') {
+    // ✅ Prima prova dalla cache (Factory)
+    const existing = DialogueTaskService.getTemplate(instance.templateId);
+    if (existing) return existing;
+
+    // ✅ Se non è in cache, prova a caricarlo dal progetto
+    const projectTemplate = await loadTemplateFromProject(instance.templateId, projectId);
+    if (projectTemplate) {
+      return projectTemplate;
+    }
+  }
+
+  // ✅ Crea nuovo template nel progetto
+  const newTemplateId = uuidv4();
+
+  // Costruisci struttura template da taskTree o da instance (legacy)
+  const templateData: any = {
+    id: newTemplateId,
+    type: instance.type || TaskType.UtteranceInterpretation,
+    templateId: null,  // ✅ Template ha sempre templateId === null
+    label: instance.label || taskTree?.label || 'New Template',
+    icon: 'FileText',
+    subTasksIds: taskTree?.nodes?.map(n => n.templateId).filter(Boolean) || [],
+    steps: {},  // Steps vuoti nel template (saranno clonati nelle istanze)
+    constraints: taskTree?.constraints || [],
+    dataContract: taskTree?.dataContract || undefined,
+    introduction: taskTree?.introduction || undefined,
+    // ❌ NON salvare: data (usa subTasksIds)
+  };
+
+  // ✅ Salva template nel progetto usando /api/projects/:pid/tasks
+  const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/tasks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(templateData)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to create template in project: ${response.status} ${errorText}`);
+  }
+
+  const saved = await response.json();
+
+  console.log('[ensureTemplateExists] ✅ Template creato automaticamente nel progetto', {
+    templateId: newTemplateId,
+    projectId,
+    label: saved.label,
+    subTasksIdsCount: saved.subTasksIds?.length || 0
+  });
+
+  return saved;
+}
+
+/**
+ * @deprecated Use buildTaskTree instead
+ *
+ * IMPORTANTE:
+ * - DDT NON è più un concetto persistito
+ * - buildTaskTree costruisce TaskTree (vista runtime) da Template + Instance
+ * - buildDDTFromTask è mantenuto solo per backward compatibility
+ *
+ * Mantenuto per backward compatibility durante migrazione
  */
 export async function buildDDTFromTask(instance: Task | null): Promise<any | null> {
   if (!instance) return null;
@@ -599,6 +704,94 @@ export function cloneTemplateSteps(
     templateLabel: template.label || template.name
   });
   return { steps: {}, guidMapping: new Map<string, string>() };
+}
+
+/**
+ * Converte un nodo da buildDataTree in TaskTreeNode (ricorsivo)
+ * Garantisce che tutto il TaskTree sia nel formato corretto
+ */
+function toTaskTreeNode(node: any): TaskTreeNode {
+  return {
+    id: node.id,
+    templateId: node.templateId,
+    label: node.label,
+    type: node.type,
+    icon: node.icon,
+    constraints: node.constraints,
+    dataContract: node.dataContract,
+    subNodes: (node.subTasks || []).map(toTaskTreeNode)  // ✅ Ricorsione pulita
+  };
+}
+
+/**
+ * Build TaskTree from template and instance
+ * TaskTree è una vista runtime costruita da Template + Instance
+ * NON è un'entità persistita, è solo una vista in memoria per l'editor
+ *
+ * @param instance - Task instance (DEVE avere templateId o viene creato automaticamente)
+ * @param projectId - Project ID (obbligatorio per creare template se necessario)
+ * @returns TaskTree costruito da template + instance
+ */
+export async function buildTaskTree(
+  instance: Task | null,
+  projectId?: string
+): Promise<TaskTree | null> {
+  if (!instance) return null;
+
+  // ✅ CRITICAL: Ogni task DEVE avere templateId
+  if (!instance.templateId || instance.templateId === 'UNDEFINED') {
+    if (!projectId) {
+      throw new Error('[buildTaskTree] Cannot create template: projectId is required');
+    }
+
+    // ✅ Crea template automaticamente nel progetto
+    console.warn('[buildTaskTree] Task senza templateId - creando template automaticamente', {
+      taskId: instance.id,
+      taskLabel: instance.label,
+      projectId
+    });
+
+    const autoTemplate = await ensureTemplateExists(instance, undefined, projectId);
+    instance.templateId = autoTemplate.id;
+  }
+
+  // ✅ SEMPRE costruisci da template
+  let template = DialogueTaskService.getTemplate(instance.templateId);
+
+  // ✅ Se non è in cache, prova a caricarlo dal progetto
+  if (!template && projectId) {
+    const projectTemplate = await loadTemplateFromProject(instance.templateId, projectId);
+    if (projectTemplate) {
+      template = projectTemplate;
+    }
+  }
+
+  if (!template) {
+    throw new Error(`Template ${instance.templateId} not found`);
+  }
+
+  // ✅ Costruisci dataTree dal template
+  const dataTree = buildDataTree(template);
+
+  // ✅ Converti dataTree in TaskTree usando ricorsione pulita
+  const nodes: TaskTreeNode[] = dataTree.map(toTaskTreeNode);
+
+  // ✅ Steps dall'istanza o clonati dal template
+  let finalSteps: Record<string, any> = instance.steps || {};
+  if (!finalSteps || Object.keys(finalSteps).length === 0) {
+    // Prima creazione: clona steps dal template
+    const { steps: clonedSteps } = cloneTemplateSteps(template, dataTree);
+    finalSteps = clonedSteps;
+  }
+
+  return {
+    label: instance.label ?? template.label,
+    nodes,  // ✅ nodes invece di data
+    steps: finalSteps,
+    constraints: template.dataContracts ?? template.constraints ?? undefined,
+    dataContract: template.dataContract ?? undefined,
+    introduction: template.introduction ?? instance.introduction
+  };
 }
 
 /**
@@ -957,18 +1150,77 @@ function compareDataStructure(localdata: any[], templateData: any[]): boolean {
 }
 
 /**
- * Extract only modified fields from DDT (compared to template)
+ * Extract only task overrides from TaskTree (compared to template)
  *
- * LOGICA CORRETTA:
- * - Il template definisce SOLO la struttura dei dati (data, subData, dataId, semantica)
- * - L'istanza definisce la logica (step, escalation, constraints, examples, nlpContract)
- * - Se la struttura è identica → salva solo override (logica)
- * - Se la struttura è diversa → salva tutto (derivazione rotta, diventa standalone)
+ * IMPORTANTE:
+ * - Ogni task DEVE avere templateId (o viene creato automaticamente)
+ * - L'istanza contiene SOLO override: steps, label, introduction
+ * - La struttura (nodes, constraints, dataContract) viene sempre dal template
+ * - NON salva più: data, constraints, dataContract, examples
  *
- * VANTAGGI:
- * - Elimina duplicazione: stessa struttura salvata N volte per N istanze
- * - Override legittimi: step/escalation possono divergere senza rompere derivazione
- * - Performance: meno dati nel database, lookup template in memoria (O(1))
+ * @param instance - Task instance (DEVE avere templateId o viene creato automaticamente)
+ * @param localTaskTree - TaskTree locale (vista runtime)
+ * @param projectId - Project ID (obbligatorio per creare template se necessario)
+ * @returns Solo override da salvare nell'istanza
+ */
+export async function extractTaskOverrides(
+  instance: Task | null,
+  localTaskTree: TaskTree,
+  projectId?: string
+): Promise<Partial<Task>> {
+  if (!instance || !localTaskTree) {
+    return {};
+  }
+
+  // ✅ CRITICAL: Ogni task DEVE avere templateId
+  if (!instance.templateId || instance.templateId === 'UNDEFINED') {
+    if (!projectId) {
+      throw new Error('[extractTaskOverrides] Cannot create template: projectId is required');
+    }
+
+    // ✅ Crea template automaticamente nel progetto
+    const autoTemplate = await ensureTemplateExists(instance, localTaskTree, projectId);
+    instance.templateId = autoTemplate.id;
+  }
+
+  // ✅ SEMPRE estrai solo override (non struttura)
+  let template = DialogueTaskService.getTemplate(instance.templateId);
+
+  // ✅ Se non è in cache, prova a caricarlo dal progetto
+  if (!template && projectId) {
+    const projectTemplate = await loadTemplateFromProject(instance.templateId, projectId);
+    if (projectTemplate) {
+      template = projectTemplate;
+    }
+  }
+
+  if (!template) {
+    throw new Error(`Template ${instance.templateId} not found`);
+  }
+
+  const result: Partial<Task> = {};
+
+  // ✅ Label override (solo se diversa dal template)
+  if (localTaskTree.label !== template.label) {
+    result.label = localTaskTree.label;
+  }
+
+  // ✅ Steps override (sempre salva)
+  result.steps = instance.steps || {};
+
+  // ✅ Introduction override (solo se diversa dal template)
+  if (localTaskTree.introduction !== template.introduction) {
+    result.introduction = localTaskTree.introduction;
+  }
+
+  // ❌ NON salvare: data, constraints, dataContract (vengono dal template)
+
+  return result;
+}
+
+/**
+ * @deprecated Use extractTaskOverrides instead
+ * Mantenuto per backward compatibility durante migrazione
  */
 export async function extractModifiedDDTFields(instance: Task | null, localDDT: any): Promise<Partial<Task>> {
   if (!instance || !localDDT) {
@@ -980,9 +1232,8 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
     return {
       label: localDDT.label,
       data: localDDT.data,
-      steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
+      steps: instance.steps || {},
       constraints: localDDT.constraints,
-      // ❌ RIMOSSO: dataContract non è più override, è sempre nel template
       introduction: localDDT.introduction
     };
   }
@@ -990,14 +1241,12 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
   // ✅ Carica template per confronto
   const template = DialogueTaskService.getTemplate(instance.templateId);
   if (!template) {
-    // ❌ Template non trovato → salva tutto (non può risolvere lazy)
     console.warn(`[extractModifiedDDTFields] Template ${instance.templateId} not found - saving everything (cannot resolve lazy)`);
     return {
       label: localDDT.label,
       data: localDDT.data,
-      steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
+      steps: instance.steps || {},
       constraints: localDDT.constraints,
-      // ❌ RIMOSSO: dataContract non è più override, è sempre nel template
       introduction: localDDT.introduction
     };
   }
@@ -1005,7 +1254,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
   // ✅ Salva sempre label (sempre modificabile)
   const result: Partial<Task> = {
     label: localDDT.label,
-    steps: {} // ✅ CORRETTO: Inizializza steps a root level (unica fonte di verità)
+    steps: {}
   };
 
   // ✅ Confronta SOLO la struttura dei dati (senza step, constraints, etc.)

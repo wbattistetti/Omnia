@@ -3,31 +3,32 @@ import type { IntentMessages } from '../components/IntentMessagesBuilder';
 import { TaskType, templateIdToTaskType } from '../../../../types/taskTypes';
 
 /**
- * Converte IntentMessages in formato DDT steps e li salva nel DDT
- * ✅ AGGIORNATO: Usa steps a root level (non più data[0].steps)
+ * Converte IntentMessages in formato TaskTree steps e li salva nel TaskTree
+ * ✅ AGGIORNATO: Usa steps a root level (non più nodes[0].steps)
  * ✅ AGGIORNATO: Non crea più kind: 'intent' - tutto è DataRequest
  */
-export function saveIntentMessagesToDDT(ddt: any, messages: IntentMessages): any {
-  if (!ddt || !messages) {
-    console.warn('[saveIntentMessagesToDDT] Missing ddt or messages');
-    return ddt;
+export function saveIntentMessagesToTaskTree(taskTree: any, messages: IntentMessages): any {
+  if (!taskTree || !messages) {
+    console.warn('[saveIntentMessagesToTaskTree] Missing taskTree or messages');
+    return taskTree;
   }
 
-  // Crea una copia del DDT
-  const updated = JSON.parse(JSON.stringify(ddt));
+  // Crea una copia del TaskTree
+  const updated = JSON.parse(JSON.stringify(taskTree));
 
-  // ✅ Assicurati che data[0] esista (per struttura dati)
-  if (!Array.isArray(updated.data) || updated.data.length === 0) {
+  // ✅ Assicurati che nodes[0] esista (per struttura dati)
+  if (!Array.isArray(updated.nodes) || updated.nodes.length === 0) {
     const firstMainId = uuidv4();
-    updated.data = [{
+    updated.nodes = [{
       id: firstMainId,
+      templateId: firstMainId,
       label: updated.label || 'Data',
       type: 'text', // Default type
-      subData: []
+      subNodes: []
     }];
   }
 
-  const firstMain = updated.data[0];
+  const firstMain = updated.nodes[0];
   const firstMainId = firstMain.id || uuidv4();
   if (!firstMain.id) {
     firstMain.id = firstMainId;
@@ -102,3 +103,9 @@ export function saveIntentMessagesToDDT(ddt: any, messages: IntentMessages): any
   return updated;
 }
 
+/**
+ * @deprecated Use saveIntentMessagesToTaskTree instead
+ */
+export function saveIntentMessagesToDDT(ddt: any, messages: IntentMessages): any {
+  return saveIntentMessagesToTaskTree(ddt, messages);
+}

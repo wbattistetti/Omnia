@@ -1,29 +1,34 @@
-export function isDDTEmpty(ddt?: any): boolean {
+export function isTaskTreeEmpty(taskTree?: any): boolean {
   try {
-    if (!ddt || typeof ddt !== 'object') return true;
-    const mains: any[] = Array.isArray(ddt?.data)
-      ? ddt.data
-      : (Array.isArray(ddt?.mains) ? ddt.mains : []);
-    // Se esiste la struttura (data/mains), non è vuoto
-    return mains.length === 0;
+    if (!taskTree || typeof taskTree !== 'object') return true;
+    // ✅ NUOVO: Usa TaskTree.nodes invece di data
+    const nodes: any[] = Array.isArray(taskTree?.nodes) ? taskTree.nodes : [];
+    // Se esiste la struttura (nodes), non è vuoto
+    return nodes.length === 0;
   } catch {
     return true;
   }
 }
 
 /**
- * Verifica se il DDT ha data ma senza steps completi
- * ✅ CRITICAL: Legge da task.steps[node.templateId] (unica fonte di verità), NON da ddt.steps
- * Gli steps vivono solo in task.steps, il DDT contiene solo la struttura
+ * @deprecated Use isTaskTreeEmpty instead
+ */
+export function isDDTEmpty(ddt?: any): boolean {
+  return isTaskTreeEmpty(ddt);
+}
+
+/**
+ * Verifica se il TaskTree ha nodes ma senza steps completi
+ * ✅ CRITICAL: Legge da task.steps[node.templateId] (unica fonte di verità), NON da taskTree.steps
+ * Gli steps vivono solo in task.steps, il TaskTree contiene solo la struttura
  * ✅ Usa node.templateId come chiave (non node.id) perché task.steps[node.templateId] = steps clonati
  * Questo indica che la struttura esiste ma i messaggi devono ancora essere generati
  */
-export function hasdataButNoStepPrompts(ddt?: any, task?: any): boolean {
+export function hasdataButNoStepPrompts(taskTree?: any, task?: any): boolean {
   try {
-    if (!ddt || typeof ddt !== 'object') return false;
-    const mains: any[] = Array.isArray(ddt?.data)
-      ? ddt.data
-      : (Array.isArray(ddt?.mains) ? ddt.mains : []);
+    if (!taskTree || typeof taskTree !== 'object') return false;
+    // ✅ NUOVO: Usa TaskTree.nodes invece di data
+    const mains: any[] = Array.isArray(taskTree?.nodes) ? taskTree.nodes : [];
 
     if (mains.length === 0) return false;
 

@@ -165,7 +165,7 @@ Public Class DDTAssembler
         ' - Id: necessario per identificare il nodo
         ' - Name: usato per fallback regex hardcoded in Parser.vb
         ' - Required: usato per determinare se il dato è obbligatorio
-        ' - SubData: necessario per nodi compositi
+        ' - SubTasks: necessario per nodi compositi
         ' - Steps: necessario per i response del dialogo
         ' - State, Value, ParentData: gestiti a runtime
         ' ❌ Rimosse proprietà design-time non usate a runtime:

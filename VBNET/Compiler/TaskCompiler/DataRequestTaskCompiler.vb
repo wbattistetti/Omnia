@@ -39,22 +39,45 @@ Public Class DataRequestTaskCompiler
 
         Dim dataRequestTask As New CompiledTaskGetData()
 
-        ' ✅ PRIORITY 1: Campi diretti sul task (nuovo modello)
-        ' L'istanza contiene solo override (modifiche rispetto al template)
-        ' Se constraints/examples/nlpContract mancano → risoluzione lazy dal template
+        ' ✅ NUOVO MODELLO: Costruisci AssembledDDT dal template usando task.templateId
+        ' LOGICA:
+        ' 1. Se task.templateId esiste → carica template e costruisci struttura
+        ' 2. Applica task.steps come override
+        ' 3. Se task.templateId è null → fallback legacy a task.Data
         Dim assembledDDT As Compiler.AssembledDDT = Nothing
 
-        If task.Data IsNot Nothing AndAlso task.Data.Count > 0 Then
-            Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] Trying to load DDT from task.Data (PRIORITY 1)")
+        ' ✅ PRIORITY 1: Costruisci da template (nuovo modello)
+        If Not String.IsNullOrEmpty(task.TemplateId) Then
+            Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] Building DDT from template {task.TemplateId}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] Building DDT from template {task.TemplateId}")
+
+            Dim template = flow.Tasks.FirstOrDefault(Function(t) t.Id = task.TemplateId)
+            If template IsNot Nothing Then
+                Try
+                    assembledDDT = BuildAssembledDDTFromTemplate(template, task, flow)
+                    Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] DDT built from template {task.TemplateId}")
+                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] DDT built from template {task.TemplateId}")
+                Catch ex As Exception
+                    Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Failed to build DDT from template: {ex.Message}")
+                    System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Exception details: {ex.ToString()}")
+                End Try
+            Else
+                Console.WriteLine($"❌ [COMPILER][DataRequestTaskCompiler] Template {task.TemplateId} not found in flow.Tasks")
+                System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][DataRequestTaskCompiler] Template {task.TemplateId} not found")
+            End If
+        End If
+
+        ' ✅ FALLBACK LEGACY: Se no templateId o costruzione fallita, usa task.Data (backward compatibility)
+        If assembledDDT Is Nothing AndAlso task.Data IsNot Nothing AndAlso task.Data.Count > 0 Then
+            Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] No templateId or template build failed, using legacy task.Data")
+            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Using legacy task.Data")
             Try
                 ' Serializza task a JSON e deserializza come AssembledDDT
-                ' Questo gestisce automaticamente la conversione di MainData usando i converter
                 Dim taskJson = JsonConvert.SerializeObject(task)
                 Dim settings As New JsonSerializerSettings()
                 settings.Converters.Add(New MainDataNodeListConverter())
                 assembledDDT = JsonConvert.DeserializeObject(Of Compiler.AssembledDDT)(taskJson, settings)
 
-                ' Assicurati che Id e Label siano impostati
                 If assembledDDT IsNot Nothing Then
                     assembledDDT.Id = task.Id
                     If String.IsNullOrEmpty(assembledDDT.Label) Then
@@ -64,48 +87,16 @@ Public Class DataRequestTaskCompiler
                         assembledDDT.Translations = New Dictionary(Of String, String)()
                     End If
 
-                    ' ✅ ESPANSIONE ALBERO: Dereferenzia ricorsivamente tutti i templateId
-                    ' Il compilatore deve produrre un albero completamente espanso per il runtime
-                    ' Il runtime naviga MainDataList → SubData senza dereferenziare template
+                    ' ✅ Espandi ricorsivamente
                     If assembledDDT.Data IsNot Nothing AndAlso assembledDDT.Data.Count > 0 Then
-                        Console.WriteLine($"🔄 [COMPILER][DataRequestTaskCompiler] Expanding data tree recursively...")
-                        System.Diagnostics.Debug.WriteLine($"🔄 [COMPILER][DataRequestTaskCompiler] Expanding data tree recursively...")
                         assembledDDT.Data = ExpandDataTreeRecursively(assembledDDT.Data, flow.Tasks, New HashSet(Of String)())
-                        Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Data tree expanded successfully")
-                        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Data tree expanded successfully")
                     End If
-
-                    ' ✅ RISOLUZIONE: Constraints/examples/nlpContract a livello root dal template principale
-                    ' LOGICA: L'istanza contiene solo steps clonati, constraints/examples vengono sempre dal template
-                    If Not String.IsNullOrEmpty(task.TemplateId) Then
-                        Dim template = flow.Tasks.FirstOrDefault(Function(t) t.Id = task.TemplateId)
-                        If template IsNot Nothing Then
-                            ' ✅ Risolvi constraints/examples/nlpContract a livello root SEMPRE dal template
-                            If template.Constraints IsNot Nothing AndAlso template.Constraints.Count > 0 Then
-                                assembledDDT.Constraints = template.Constraints
-                                Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Resolved root constraints from template {task.TemplateId}")
-                                System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Resolved root constraints from template {task.TemplateId}")
-                            End If
-
-                        Else
-                            ' ❌ NO FALLBACK: Se template non trovato → errore esplicito
-                            Console.WriteLine($"❌ [COMPILER][DataRequestTaskCompiler] Template {task.TemplateId} not found in flow.Tasks - cannot resolve missing constraints/examples")
-                            Console.WriteLine($"❌ [COMPILER][DataRequestTaskCompiler] This indicates a data inconsistency: task references template that doesn't exist")
-                            System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][DataRequestTaskCompiler] Template {task.TemplateId} not found in flow.Tasks")
-                        End If
-                    End If
-
-                    Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] DDT loaded from task direct fields for task {taskId}")
                 End If
             Catch ex As Exception
-                Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Failed to build AssembledDDT from task fields: {ex.Message}")
+                Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Failed to build AssembledDDT from legacy task.Data: {ex.Message}")
                 System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Exception details: {ex.ToString()}")
             End Try
         End If
-
-        ' ❌ RIMOSSO: PRIORITY 2 (flow.DDTs) e PRIORITY 3 (task.Value("ddt"))
-        ' LOGICA: Ogni task contiene già tutto quello che serve (con risoluzione lazy da template)
-        ' flow.DDTs e task.Value("ddt") sono ridondanti/legacy e non servono più
 
         ' Compila DDT se trovato
         If assembledDDT IsNot Nothing Then
@@ -259,5 +250,92 @@ Public Class DataRequestTaskCompiler
         }
         Return cloned
     End Function
+
+    ''' <summary>
+    ''' Costruisce AssembledDDT dal template e applica gli override dall'istanza
+    ''' </summary>
+    Private Function BuildAssembledDDTFromTemplate(
+        template As Task,
+        instance As Task,
+        flow As Flow
+    ) As AssembledDDT
+        Dim assembledDDT As New AssembledDDT() With {
+            .Id = instance.Id,
+            .Label = If(String.IsNullOrEmpty(instance.Label), template.Label, instance.Label),
+            .Translations = New Dictionary(Of String, String)()
+        }
+
+        ' ✅ Costruisci struttura dal template (ricorsivamente usando templateId di ogni nodo)
+        If template.Data IsNot Nothing AndAlso template.Data.Count > 0 Then
+            ' ✅ Espandi ricorsivamente usando templateId di ogni nodo
+            assembledDDT.Data = ExpandDataTreeFromTemplate(template.Data, flow.Tasks, New HashSet(Of String)())
+
+            ' ✅ Applica steps override dall'istanza
+            If instance.Steps IsNot Nothing AndAlso instance.Steps.Count > 0 Then
+                ApplyStepsOverrides(assembledDDT.Data, instance.Steps)
+            End If
+        End If
+
+        ' ✅ Constraints sempre dal template
+        If template.Constraints IsNot Nothing AndAlso template.Constraints.Count > 0 Then
+            assembledDDT.Constraints = template.Constraints
+        End If
+
+        Return assembledDDT
+    End Function
+
+    ''' <summary>
+    ''' Espande ricorsivamente l'albero dal template dereferenziando templateId
+    ''' </summary>
+    Private Function ExpandDataTreeFromTemplate(
+        nodes As List(Of MainDataNode),
+        allTemplates As List(Of Task),
+        visitedTemplates As HashSet(Of String)
+    ) As List(Of MainDataNode)
+        ' ✅ Usa la stessa logica di ExpandDataTreeRecursively ma parte dai nodi del template
+        Return ExpandDataTreeRecursively(nodes, allTemplates, visitedTemplates)
+    End Function
+
+    ''' <summary>
+    ''' Applica gli steps override dall'istanza ai nodi corrispondenti
+    ''' steps è un dizionario: { "templateId": { "start": {...}, "noMatch": {...} } }
+    ''' Ogni valore è un oggetto con chiavi tipo step e valori DialogueStep
+    ''' DialogueStepListConverter gestisce automaticamente la conversione da oggetto a lista
+    ''' </summary>
+    Private Sub ApplyStepsOverrides(
+        nodes As List(Of MainDataNode),
+        stepsOverrides As Dictionary(Of String, Object)
+    )
+        For Each node In nodes
+            ' ✅ Applica steps se presente override per questo templateId
+            If Not String.IsNullOrEmpty(node.TemplateId) AndAlso stepsOverrides.ContainsKey(node.TemplateId) Then
+                Try
+                    Dim overrideValue = stepsOverrides(node.TemplateId)
+                    If overrideValue IsNot Nothing Then
+                        ' ✅ Usa DialogueStepListConverter per convertire oggetto → List(Of DialogueStep)
+                        ' overrideValue è un oggetto: { "start": { escalations: [...] }, "noMatch": {...} }
+                        Dim overrideJson = JsonConvert.SerializeObject(overrideValue)
+                        Dim settings As New JsonSerializerSettings()
+                        settings.Converters.Add(New DialogueStepListConverter())
+                        Dim overrideSteps = JsonConvert.DeserializeObject(Of List(Of Compiler.DialogueStep))(overrideJson, settings)
+
+                        If overrideSteps IsNot Nothing AndAlso overrideSteps.Count > 0 Then
+                            node.Steps = overrideSteps
+                            Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Applied {overrideSteps.Count} steps override for templateId={node.TemplateId}")
+                            System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Applied steps override for templateId={node.TemplateId}")
+                        End If
+                    End If
+                Catch ex As Exception
+                    Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Failed to apply steps override for templateId={node.TemplateId}: {ex.Message}")
+                    System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Exception details: {ex.ToString()}")
+                End Try
+            End If
+
+            ' ✅ Ricorsione per subTasks
+            If node.SubTasks IsNot Nothing AndAlso node.SubTasks.Count > 0 Then
+                ApplyStepsOverrides(node.SubTasks, stepsOverrides)
+            End If
+        Next
+    End Sub
 End Class
 

@@ -129,7 +129,7 @@ Public Class Parser
 
         ' Logica normale: estrazione dati
         ' Se è un mainData composito, usa regex con gruppi opzionali per estrarre subData
-        If currDataNode.HasSubData() Then
+        If currDataNode.HasSubTasks() Then
             Dim extractedData As Dictionary(Of String, Object) = TryExtractCompositeData(userInput, currDataNode)
 
             ' Se non è stato estratto nulla → NoMatch
@@ -137,9 +137,9 @@ Public Class Parser
                 Return New ParseResult() With {.Result = ParseResultType.NoMatch}
             End If
 
-            ' Match riuscito: popola i subData corrispondenti
+            ' Match riuscito: popola i subTasks corrispondenti
             For Each kvp As KeyValuePair(Of String, Object) In extractedData
-                Dim subDataNode As DDTNode = currDataNode.SubData.FirstOrDefault(Function(s) s.Id = kvp.Key)
+                Dim subDataNode As DDTNode = currDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = kvp.Key)
                 If subDataNode IsNot Nothing Then
                     subDataNode.Value = kvp.Value
                 End If

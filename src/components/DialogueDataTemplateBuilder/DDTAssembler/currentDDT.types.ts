@@ -32,7 +32,18 @@ export interface dataNode {
   constraints?: any[]; // kept as any to avoid behavior changes
 }
 
-// Top-level assembled DDT shape used by the Response Editor
+/**
+ * @deprecated Use TaskTree instead
+ *
+ * AssembledDDT è mantenuto solo per backward compatibility durante migrazione.
+ *
+ * IMPORTANTE:
+ * - DDT NON è più un concetto persistito
+ * - TaskTree è la vista runtime costruita da Template + Instance
+ * - AssembledDDT è ancora usato nel runtime backend (DDTEngine) ma non come entità persistita
+ *
+ * In futuro, AssembledDDT sarà sostituito completamente da TaskTree nel runtime.
+ */
 export interface AssembledDDT {
   id: string;
   label: string;

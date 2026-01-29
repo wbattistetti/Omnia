@@ -273,7 +273,7 @@ Namespace DDTEngine.TestUI
 
             ' Se c'è un subDataId, cerca il subData
             If Not String.IsNullOrEmpty(subDataId) Then
-                Dim subDataNode As Global.DDTEngine.DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = subDataId)
+                Dim subDataNode As Global.DDTEngine.DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = subDataId)
                 If subDataNode IsNot Nothing AndAlso subDataNode.Value IsNot Nothing Then
                     Return subDataNode.Value.ToString()
                 End If
@@ -281,10 +281,10 @@ Namespace DDTEngine.TestUI
             End If
 
             ' Se non c'è subDataId, costruisci il valore completo del mainData composito
-            If mainDataNode.HasSubData() Then
-                ' Costruisci il valore dai subData
+            If mainDataNode.HasSubTasks() Then
+                ' Costruisci il valore dai subTasks
                 Dim valueParts As New List(Of String)()
-                For Each subData As Global.DDTEngine.DDTNode In mainDataNode.SubData
+                For Each subData As Global.DDTEngine.DDTNode In mainDataNode.SubTasks
                     If subData.Value IsNot Nothing Then
                         valueParts.Add(subData.Value.ToString())
                     End If

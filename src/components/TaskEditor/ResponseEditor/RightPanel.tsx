@@ -15,10 +15,10 @@ type Props = {
   onWidthChange: (w: number) => void;
   onStartResize: () => void;
   dragging: boolean;
-  ddt: any;
+  taskTree?: any; // ✅ Renamed from ddt to taskTree
   translations: Record<string, string>;
   selectedNode: any;
-  onUpdateDDT?: (updater: (ddt: any) => any) => void;
+  onUpdateDDT?: (updater: (taskTree: any) => any) => void;
   hideSplitter?: boolean; // ✅ Nascondi lo splitter quando c'è un altro pannello a sinistra
   tasks?: any[]; // ✅ Tasks for escalation palette
   stepKey?: string; // ✅ Current step key for filtering tasks
@@ -145,7 +145,7 @@ function StylesView() {
   );
 }
 
-export default function RightPanel({ mode, width, onWidthChange, onStartResize, dragging, ddt, translations, selectedNode, onUpdateDDT, hideSplitter = false, tasks = [], stepKey }: Props) {
+export default function RightPanel({ mode, width, onWidthChange, onStartResize, dragging, taskTree, translations, selectedNode, onUpdateDDT, hideSplitter = false, tasks = [], stepKey }: Props) {
   const { combinedClass } = useFontContext();
   const minWidth = 160;
   const [isHovered, setIsHovered] = React.useState(false);
@@ -198,7 +198,7 @@ export default function RightPanel({ mode, width, onWidthChange, onStartResize, 
                   <div style={{ fontWeight: 700, color: '#0b1220' }}>Chat Simulator</div>
                 </div>
                 <div style={{ flex: 1, minHeight: 0 }}>
-                  <DDEBubbleChat currentDDT={ddt} translations={translations} onUpdateDDT={onUpdateDDT} />
+                  <DDEBubbleChat currentDDT={taskTree} translations={translations} onUpdateDDT={onUpdateDDT} />
                 </div>
               </div>
             );

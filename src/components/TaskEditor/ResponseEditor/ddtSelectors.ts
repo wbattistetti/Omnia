@@ -1,27 +1,30 @@
-// Puri selettori/mappers per DDT. Nessuna dipendenza da React.
+// Puri selettori/mappers per TaskTree. Nessuna dipendenza da React.
 // Le funzioni sono tolleranti a strutture diverse (steps come array o come oggetto, messages annidati, ecc.)
 
-export function getdataList(ddt: any): any[] {
-  if (!ddt) return [];
-
-  // Caso 1: ddt.data è un array
-  if (Array.isArray(ddt.data)) return ddt.data.filter(Boolean);
-
-  // Caso 2: ddt.data è un singolo oggetto
-  if (ddt.data && typeof ddt.data === 'object') return [ddt.data];
-
-  // Caso 3: il root DDT stesso è un "main" (ha label/steps/subData)
-  const looksLikeNode = !!(ddt && (ddt.label || ddt.name || ddt.steps || ddt.subData));
-  if (looksLikeNode) return [ddt];
-
-  // Fallback
+/**
+ * Get node list from TaskTree
+ * ✅ Usa solo TaskTree.nodes (nessuna backward compatibility)
+ */
+export function getdataList(taskTree: any): any[] {
+  if (!taskTree) return [];
+  // ✅ Usa solo TaskTree.nodes
+  if (Array.isArray(taskTree.nodes)) {
+    return taskTree.nodes.filter(Boolean);
+  }
   return [];
 }
 
+/**
+ * Get sub-node list from main node (TaskTree format)
+ * ✅ Usa solo TaskTreeNode.subNodes (nessuna backward compatibility)
+ */
 export function getSubDataList(main: any): any[] {
   if (!main) return [];
-  const sub = main.subData;
-  return Array.isArray(sub) ? sub.filter(Boolean) : [];
+  // ✅ Usa solo TaskTreeNode.subNodes
+  if (Array.isArray(main.subNodes)) {
+    return main.subNodes.filter(Boolean);
+  }
+  return [];
 }
 
 // Ordine consigliato per la visualizzazione degli step
@@ -105,8 +108,8 @@ export function getMessagesFor(node: any, stepKey: string): any {
   return {};
 }
 
-export function findNode(ddt: any, mainIndex: number, subIndex: number | null): any {
-  const mains = getdataList(ddt);
+export function findNode(taskTree: any, mainIndex: number, subIndex: number | null): any {
+  const mains = getdataList(taskTree);
   if (mains.length === 0) return null;
 
   const safeMainIdx = Number.isFinite(mainIndex) && mainIndex >= 0 && mainIndex < mains.length ? mainIndex : 0;
@@ -139,8 +142,8 @@ export function getLabel(node: any, translations?: Record<string, string>): stri
   return (node.label || node.name || '').toString();
 }
 
-export function hasMultipleMains(ddt: any): boolean {
-  return getdataList(ddt).length >= 2;
+export function hasMultipleMains(taskTree: any): boolean {
+  return getdataList(taskTree).length >= 2;
 }
 
 /**

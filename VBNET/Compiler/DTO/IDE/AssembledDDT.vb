@@ -5,7 +5,9 @@ Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
 ''' <summary>
-''' AssembledDDT: corrisponde ESATTAMENTE a AssembledDDT TypeScript del frontend
+''' AssembledDDT: formato runtime per DDTEngine
+''' ✅ MIGRATION: Questo formato è mantenuto per compatibilità con il runtime VB.NET.
+''' Il frontend ora usa TaskTree, ma il compilatore converte TaskTree → AssembledDDT per il runtime.
 ''' data è sempre un array: data: MainDataNode[]
 ''' </summary>
 Public Class AssembledDDT

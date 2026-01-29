@@ -5,8 +5,9 @@ import { taskRepository } from '../../../services/TaskRepository';
 import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
 import { flowchartVariablesService } from '../../../services/FlowchartVariablesService';
 import { getTemplateId } from '../../../utils/taskHelpers';
-// ❌ RIMOSSO: buildDDTFromTask - ora usiamo loadAndAdaptDDTForExistingTask da ddtInstanceManager
-import { TaskType, taskIdToTaskType, getEditorFromTaskType } from '../../../types/taskTypes'; // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
+import { buildTaskTree } from '../../../utils/taskUtils';
+import { TaskType, taskIdToTaskType, getEditorFromTaskType } from '../../../types/taskTypes';
+import type { TaskTree } from '../../../types/taskTypes';
 
 export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, onToolbarUpdate, registerOnClose }: EditorProps) { // ✅ PATTERN CENTRALIZZATO: Accetta hideHeader e onToolbarUpdate
   // ✅ ARCHITETTURA ESPERTO: Verifica che questo componente sia usato solo per DDT
@@ -52,145 +53,82 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
     }
   }, [instanceKey]);
 
-  // ✅ FIX: Costruisci DDT in modo sincrono se possibile (non serve async)
-  const initialDdt = React.useMemo(() => {
-      // ✅ Carica DDT in modo sincrono nel render iniziale se il task esiste e non ha templateId
-      if (fullTask) {
-        if (fullTask.templateId && fullTask.templateId !== 'UNDEFINED') {
-          // Ha templateId → serve async loadAndAdaptDDTForExistingTask, ritorna null per ora
-          return null;
-      } else if (fullTask.data && fullTask.data.length > 0) {
-        // ✅ NON ha templateId ma ha data → costruisci DDT in modo sincrono
-        // ✅ CORRETTO: Il DDT contiene solo la struttura, NON gli steps
-        // Gli steps vivono solo in task.steps[nodeId], non nel DDT
-        return {
-          label: fullTask.label,
-          data: fullTask.data,
-          constraints: fullTask.constraints,
-          examples: fullTask.examples,
-          dataContract: fullTask.dataContract,
-          introduction: fullTask.introduction
-        };
-      }
-    }
-    return null;
-  }, [fullTask]);
+  // ✅ TaskTree state (sostituisce ddt)
+  const [taskTree, setTaskTree] = React.useState<TaskTree | null>(null);
+  const [taskTreeLoading, setTaskTreeLoading] = React.useState(true);
 
-  const [ddt, setDdt] = React.useState<any | null>(initialDdt);
-
-  const [ddtLoading, setDdtLoading] = React.useState(() => {
-    // ✅ Se il task ha templateId, serve async loading
-    if (fullTask?.templateId && fullTask.templateId !== 'UNDEFINED') return true;
-    // ✅ Se il DDT è già stato caricato in modo sincrono, non c'è loading
-    if (initialDdt !== null) return false;
-    // ✅ Altrimenti, non c'è loading (DDT vuoto o task non esiste)
-    return false;
-  });
-
-  const [refreshTrigger, setRefreshTrigger] = React.useState(0);
-
-  // ✅ ARCHITETTURA ESPERTO: Carica DDT async solo se serve (ha templateId)
+  // ✅ ARCHITETTURA ESPERTO: Carica TaskTree async usando buildTaskTree
   React.useEffect(() => {
-    const loadDDT = async () => {
+    const loadTaskTree = async () => {
       if (!fullTask) {
-        setDdtLoading(false);
+        setTaskTreeLoading(false);
         return;
       }
 
-      // ✅ Se il DDT è già stato caricato in modo sincrono, non fare nulla
-      if (initialDdt !== null && (!fullTask.templateId || fullTask.templateId === 'UNDEFINED')) {
-        return;
-      }
+      try {
+        setTaskTreeLoading(true);
 
-      // ✅ Solo se ha templateId, carica in modo async usando funzione centralizzata
-      if (fullTask.templateId && fullTask.templateId !== 'UNDEFINED') {
-        setDdtLoading(true);
-        // ✅ Log ridotto (solo se necessario per debug)
-        // console.log('[🔍 DDTHostAdapter] Caricamento DDT async', {...});
-        try {
-          const { loadAndAdaptDDTForExistingTask } = await import('../../../utils/ddtInstanceManager');
-          const { ddt, adapted } = await loadAndAdaptDDTForExistingTask(fullTask, currentProjectId);
+        // ✅ Usa buildTaskTree per costruire TaskTree da template + instance
+        const tree = await buildTaskTree(fullTask, currentProjectId || undefined);
 
-          // ✅ DEBUG: Verifica che il DDT costruito abbia nlpProfile.examples e testNotes
-          const firstNodeNlpProfileExamples = ddt.data?.[0]?.nlpProfile?.examples;
-          const firstNodeTestNotes = ddt.data?.[0]?.testNotes;
-          console.log('[🔍 DDTHostAdapter] DDT caricato', {
+        // ✅ TaskTree caricato
+        if (tree) {
+          setTaskTree(tree);
+
+          console.log('[🔍 DDTHostAdapter] ✅ TaskTree caricato', {
             taskId: fullTask.id,
-            ddtLabel: ddt.label,
-            ddtDataLength: ddt.data?.length || 0,
-            ddtStepsKeys: Object.keys(ddt.steps || {}),
-            ddtStepsCount: Object.keys(ddt.steps || {}).length,
-            mainNodesTemplateIds: ddt.data?.map((n: any) => ({
+            taskTreeNodesLength: tree.nodes?.length || 0,
+            mainNodesTemplateIds: tree.nodes?.map((n: any) => ({
               id: n.id,
               templateId: n.templateId,
               label: n.label
             })) || [],
-            adapted,
-            firstNodeId: ddt.data?.[0]?.id,
-            hasFirstNodeNlpProfile: !!ddt.data?.[0]?.nlpProfile,
-            hasFirstNodeNlpProfileExamples: !!firstNodeNlpProfileExamples,
-            firstNodeNlpProfileExamplesCount: Array.isArray(firstNodeNlpProfileExamples) ? firstNodeNlpProfileExamples.length : 0,
-            firstNodeNlpProfileExamples: firstNodeNlpProfileExamples?.slice(0, 3),
-            hasFirstNodeTestNotes: !!firstNodeTestNotes,
-            firstNodeTestNotesCount: firstNodeTestNotes ? Object.keys(firstNodeTestNotes).length : 0
+            hasSteps: !!tree.steps,
+            stepsType: typeof tree.steps,
+            stepsKeys: tree.steps ? Object.keys(tree.steps) : []
           });
-          setDdt(ddt);
-        } catch (err) {
-          console.error('[🔍 DDTHostAdapter] ❌ Errore caricamento DDT', err);
-          setDdt(null);
-        } finally {
-          setDdtLoading(false);
+        } else {
+          setTaskTree(null);
         }
-      } else if (!fullTask.data || fullTask.data.length === 0) {
-        // ✅ Non ha templateId e non ha data → DDT vuoto
-        setDdt(null);
-        setDdtLoading(false);
+      } catch (error) {
+        console.error('[DDTHostAdapter] Error loading TaskTree:', error);
+        setTaskTree(null);
+      } finally {
+        setTaskTreeLoading(false);
       }
     };
 
-    loadDDT();
-  }, [fullTask, instanceKey, refreshTrigger, initialDdt, currentProjectId]); // ✅ Aggiungi currentProjectId
+    loadTaskTree();
+  }, [fullTask, currentProjectId]);
 
   // ✅ ARCHITETTURA ESPERTO: Loading solo se serve async
-  const loading = ddtLoading;
+  const loading = taskTreeLoading;
 
   // 3. Quando completi il wizard, salva nel Task E aggiorna lo state
-  const handleComplete = React.useCallback(async (finalDDT: any) => {
-    // ✅ DEBUG: Verifica cosa contiene finalDDT quando arriva in handleComplete
-    console.log('[DDTHostAdapter][handleComplete] 🔍 finalDDT received', {
-      instanceKey,
-      hasFinalDDT: !!finalDDT,
-      finalDDTKeys: Object.keys(finalDDT || {}),
-      hasSteps: !!finalDDT.steps,
-      stepsType: typeof finalDDT.steps,
-      stepsKeys: finalDDT.steps ? Object.keys(finalDDT.steps) : [],
-      stepsCount: finalDDT.steps ? Object.keys(finalDDT.steps).length : 0,
-      stepsDetails: finalDDT.steps ? Object.keys(finalDDT.steps).map((nodeId: string) => {
-        const nodeSteps = finalDDT.steps[nodeId];
-        const isArray = Array.isArray(nodeSteps);
-        const isObject = typeof nodeSteps === 'object' && !Array.isArray(nodeSteps);
-        let stepKeys: string[] = [];
-        if (isArray) {
-          stepKeys = nodeSteps.map((s: any) => s?.type || 'unknown');
-        } else if (isObject) {
-          stepKeys = Object.keys(nodeSteps || {});
-        }
-        return {
-          nodeId: nodeId.substring(0, 20) + '...',
-          stepsType: typeof nodeSteps,
-          isArray,
-          isObject,
-          stepKeys,
-          stepCount: stepKeys.length
+  const handleComplete = React.useCallback(async (finalDDTOrTaskTree: any) => {
+    // ✅ NUOVO: Supporta sia DDT (backward compatibility) che TaskTree
+    const finalTaskTree: TaskTree = finalDDTOrTaskTree.nodes
+      ? finalDDTOrTaskTree as TaskTree
+      : {
+          label: finalDDTOrTaskTree.label || '',
+          nodes: finalDDTOrTaskTree.data || [],
+          steps: finalDDTOrTaskTree.steps || {},
+          constraints: finalDDTOrTaskTree.constraints,
+          dataContract: finalDDTOrTaskTree.dataContract,
+          introduction: finalDDTOrTaskTree.introduction
         };
-      }) : [],
-      hasdata: !!finalDDT.data,
-      dataLength: finalDDT.data?.length || 0
+
+    console.log('[DDTHostAdapter][handleComplete] 🔍 finalTaskTree received', {
+      instanceKey,
+      hasTaskTree: !!finalTaskTree,
+      nodesLength: finalTaskTree.nodes?.length || 0,
+      hasSteps: !!finalTaskTree.steps,
+      stepsKeys: finalTaskTree.steps ? Object.keys(finalTaskTree.steps) : []
     });
 
-    // ✅ Salva DDT nel Task con campi direttamente (niente wrapper value)
-    const hasDDT = finalDDT && Object.keys(finalDDT).length > 0 && finalDDT.data && finalDDT.data.length > 0;
-    if (hasDDT) {
+    // ✅ Salva TaskTree nel Task usando extractTaskOverrides
+    const hasTaskTree = finalTaskTree && Object.keys(finalTaskTree).length > 0 && finalTaskTree.nodes && finalTaskTree.nodes.length > 0;
+    if (hasTaskTree) {
       // ✅ DEBUG: Verifica taskInstance prima del salvataggio
       let taskInstance = taskRepository.getTask(instanceKey);
       console.log('[DDTHostAdapter][handleComplete] 🔍 taskInstance before save', {
@@ -201,52 +139,42 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
         taskInstanceStepsCount: taskInstance?.steps ? Object.keys(taskInstance.steps).length : 0
       });
 
-      // ✅ CRITICAL: Preserva templateId se esiste già
-      const currentTemplateId = taskInstance?.templateId;
+      // ✅ NUOVO: Usa extractTaskOverrides per salvare solo override
+      if (taskInstance && currentProjectId) {
+        const { extractTaskOverrides } = await import('../../../utils/taskUtils');
+        const overrides = await extractTaskOverrides(taskInstance, finalTaskTree, currentProjectId);
 
-      // ✅ REMOVED: updateTask ridondante - modifica direttamente task nella cache
-      if (taskInstance) {
-        // ✅ Modifica diretta nella cache
+        // ✅ Aggiorna task con solo override
+        if (overrides.label !== undefined) taskInstance.label = overrides.label;
+        if (overrides.steps !== undefined) taskInstance.steps = overrides.steps;
+        if (overrides.introduction !== undefined) taskInstance.introduction = overrides.introduction;
+        // ❌ NON salvare: constraints, dataContract (vengono dal template)
+
         taskInstance.type = TaskType.UtteranceInterpretation;
-        taskInstance.label = finalDDT.label;
-        taskInstance.steps = finalDDT.steps;
-        taskInstance.constraints = finalDDT.constraints;
-        taskInstance.dataContract = finalDDT.dataContract;
-        taskInstance.introduction = finalDDT.introduction;
-
-        // ✅ CRITICAL: Preserva templateId se esiste già
-        if (currentTemplateId && currentTemplateId !== 'UNDEFINED') {
-          taskInstance.templateId = currentTemplateId; // ✅ Preserva templateId esistente
-        } else if (finalDDT.templateId) {
-          taskInstance.templateId = finalDDT.templateId; // ✅ Usa templateId dal wizard
-        }
-        // ❌ RIMOSSO: Non impostare templateId: null!
-
         taskInstance.updatedAt = new Date();
-      } else {
-        // ✅ Task non esiste, crealo
-        taskInstance = taskRepository.createTask(
+
+        // ✅ Salva nel database
+        await taskRepository.updateTask(instanceKey, overrides, currentProjectId);
+      } else if (!taskInstance) {
+        // ✅ Task non esiste, crealo (extractTaskOverrides crea automaticamente il template se necessario)
+        const { extractTaskOverrides } = await import('../../../utils/taskUtils');
+        const tempTask: Task = {
+          id: instanceKey,
+          type: TaskType.UtteranceInterpretation,
+          templateId: null,  // Verrà creato automaticamente da extractTaskOverrides
+          label: finalTaskTree.label,
+          steps: finalTaskTree.steps
+        };
+        const overrides = await extractTaskOverrides(tempTask, finalTaskTree, currentProjectId || undefined);
+
+        taskRepository.createTask(
           TaskType.UtteranceInterpretation,
-          finalDDT.templateId || currentTemplateId || null,
-          {
-            label: finalDDT.label,
-            steps: finalDDT.steps,
-            constraints: finalDDT.constraints,
-            nlpContract: finalDDT.nlpContract,
-            introduction: finalDDT.introduction
-          },
+          tempTask.templateId,  // Ora ha templateId dopo extractTaskOverrides
+          overrides,
           instanceKey,
           currentProjectId || undefined
         );
       }
-
-      console.log('[DDTHostAdapter][handleComplete] ✅ Task updated directly in cache', {
-        instanceKey,
-        hasSteps: !!taskInstance?.steps,
-        stepsKeys: taskInstance?.steps ? Object.keys(taskInstance.steps) : [],
-        stepsCount: taskInstance?.steps ? Object.keys(taskInstance.steps).length : 0,
-        templateId: taskInstance?.templateId
-      });
 
       // ✅ DEBUG: Verifica task salvato dopo il salvataggio
       const savedTask = taskRepository.getTask(instanceKey);
@@ -255,29 +183,34 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
         savedTaskHasSteps: !!savedTask?.steps,
         savedTaskStepsKeys: savedTask?.steps ? Object.keys(savedTask.steps) : [],
         savedTaskStepsCount: savedTask?.steps ? Object.keys(savedTask.steps).length : 0,
-        stepsWereSaved: savedTask?.steps && Object.keys(savedTask.steps).length > 0,
-        stepsMatch: JSON.stringify(savedTask?.steps || {}) === JSON.stringify(finalDDT.steps || {})
+        templateId: savedTask?.templateId
       });
     }
 
-    // ✅ NEW: Extract variables from DDT structure
+    // ✅ NEW: Extract variables from TaskTree structure
     try {
-      if (currentProjectId && finalDDT) {
+      if (currentProjectId && finalTaskTree) {
         await flowchartVariablesService.init(currentProjectId);
 
         // Get row text from task (this is the label of the row)
         const taskInstance = taskRepository.getTask(instanceKey);
         const rowText = taskInstance?.text || taskMeta.label || 'Task';
 
+        // ✅ BACKWARD COMPATIBILITY: Converti TaskTree in DDT per extractVariablesFromDDT
+        const ddtForVariables = {
+          label: finalTaskTree.label,
+          data: finalTaskTree.nodes,
+          steps: finalTaskTree.steps
+        };
+
         // Extract variables from DDT using row text and DDT labels
         const varNames = await flowchartVariablesService.extractVariablesFromDDT(
-          finalDDT,
+          ddtForVariables,
           instanceKey, // taskId
           instanceKey, // rowId (same as taskId)
           rowText, // Row text (e.g., "chiedi data di nascita")
           undefined // nodeId (not available here)
         );
-
 
         // Emit event to refresh ConditionEditor variables
         try {
@@ -287,27 +220,25 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
         } catch {}
       }
     } catch (e) {
-      // Failed to extract variables from DDT
+      // Failed to extract variables from TaskTree
     }
 
-    // ✅ ARCHITETTURA ESPERTO: Aggiorna immediatamente ddt per aggiornare il prop
-    setDdt(finalDDT);
-
-    // FIX: Forza il ricalcolo quando necessario
-    setRefreshTrigger(prev => prev + 1);
+    // ✅ ARCHITETTURA ESPERTO: Aggiorna immediatamente taskTree e ddt per aggiornare i props
+    // ✅ Aggiorna taskTree
+    setTaskTree(finalTaskTree);
   }, [instanceKey, currentProjectId, taskMeta.label]);
 
-  // ✅ ARCHITETTURA ESPERTO: Ensure data is always an array before passing to ResponseEditor
-  const safeDDT = React.useMemo(() => {
-    if (!ddt) {
+  // ✅ ARCHITETTURA ESPERTO: Ensure nodes is always an array before passing to ResponseEditor
+  const safeTaskTree = React.useMemo(() => {
+    if (!taskTree) {
       return null;
     }
     const safe = {
-      ...ddt,
-      data: Array.isArray(ddt.data) ? ddt.data : []
+      ...taskTree,
+      nodes: Array.isArray(taskTree.nodes) ? taskTree.nodes : []
     };
     return safe;
-  }, [ddt, loading]);
+  }, [taskTree, loading]);
 
   // ✅ Stable key per impedire re-mount durante l'editing
   const editorKey = React.useMemo(() => {
@@ -323,18 +254,18 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
     } catch {}
   }, [onClose]);
 
-  const stableOnWizardComplete = React.useCallback((finalDDT: any) => {
-    handleComplete(finalDDT);
+  const stableOnWizardComplete = React.useCallback((finalTaskTree: TaskTree) => {
+    handleComplete(finalTaskTree);
   }, [handleComplete]);
 
   return (
     <ResponseEditor
       key={editorKey}
-      ddt={safeDDT}
+      taskTree={safeTaskTree}
       onClose={stableOnClose}
       onWizardComplete={stableOnWizardComplete}
       task={fullTask} // ✅ ARCHITETTURA ESPERTO: Task completo, non TaskMeta
-      isDdtLoading={loading} // ✅ ARCHITETTURA ESPERTO: Stato di loading
+      isTaskTreeLoading={loading} // ✅ ARCHITETTURA ESPERTO: Stato di loading
       hideHeader={hideHeader} // ✅ PATTERN CENTRALIZZATO: Passa hideHeader al wrapper
       onToolbarUpdate={onToolbarUpdate} // ✅ PATTERN CENTRALIZZATO: Passa onToolbarUpdate per ereditare header
       registerOnClose={registerOnClose} // ✅ Passa registerOnClose per gestire chiusura con controllo contracts
