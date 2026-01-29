@@ -205,7 +205,6 @@ async function executeGetData(  // ✅ Function name kept for backward compatibi
     mainData: task.mainData,
     stepPrompts: task.stepPrompts,
     constraints: task.constraints,
-    examples: task.examples
   } : null;
 
   if (!ddt) {
@@ -291,7 +290,6 @@ async function executeClassifyProblem(
     mainData: task.mainData,
     stepPrompts: task.stepPrompts,
     constraints: task.constraints,
-    examples: task.examples
   } : null;
 
   if (!ddt) {

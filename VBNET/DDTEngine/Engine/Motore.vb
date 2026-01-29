@@ -201,7 +201,7 @@ Public Class Motore
                 Return mainData
             End If
 
-            For Each subData As DDTNode In mainData.SubData.Where(Function(st) st.State <> DialogueState.AcquisitionFailed)
+            For Each subData As DDTNode In mainData.SubTasks.Where(Function(st) st.State <> DialogueState.AcquisitionFailed)
                 If subData.IsEmpty() Then Return subData
                 If {DialogueState.Confirmation, DialogueState.Invalid, DialogueState.NoMatch, DialogueState.NoInput}.Contains(subData.State) Then Return subData
             Next

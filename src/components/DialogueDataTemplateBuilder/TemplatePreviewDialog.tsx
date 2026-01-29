@@ -96,7 +96,7 @@ export const TemplatePreviewDialog: React.FC<TemplatePreviewDialogProps> = ({
               label: 'New Field',
               type: 'text',
               constraints: [],
-              subData: []
+              subTasks: []
             };
             handleDataTreeChange([...localDataTree, newMain]);
           }}

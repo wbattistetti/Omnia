@@ -71,13 +71,13 @@ Public Class DDTNode
     Public Sub New()
         Steps = New List(Of DialogueStep)()
         ValidationConditions = New List(Of ValidationCondition)()
-        SubData = New List(Of DDTNode)()
+        SubTasks = New List(Of DDTNode)()
         State = DialogueState.Start
         Value = Nothing
     End Sub
 
     ''' <summary>
-    ''' Resetta lo stato del nodo e dei suoi subData
+    ''' Resetta lo stato del nodo e dei suoi subTasks
     ''' </summary>
     Public Sub Reset()
         State = DialogueState.Start
@@ -85,8 +85,8 @@ Public Class DDTNode
         InvalidConditionId = Nothing
 
         ' Resetta anche tutti i subTasks
-        If SubData IsNot Nothing Then
-            For Each subNode As DDTNode In SubData
+        If SubTasks IsNot Nothing Then
+            For Each subNode As DDTNode In SubTasks
                 subNode.Reset()
             Next
         End If
@@ -103,7 +103,7 @@ Public Class DDTNode
     ''' Verifica se il nodo è composito
     ''' </summary>
     Public Function IsComposite() As Boolean
-        Return HasSubData()
+        Return HasSubTasks()
     End Function
 End Class
 

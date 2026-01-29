@@ -18,9 +18,11 @@ export function useSubEditing({ node, pathPrefix = '', onChange, onChangeEvent }
   };
 
   const commitSub = (idx: number) => {
-    const next = { ...node, subData: Array.isArray(node.subData) ? node.subData.slice() : [] } as SchemaNode;
-    const old = String((next.subData![idx] as any)?.label || '');
-    next.subData![idx] = { ...(next.subData![idx] || { label: '' }), label: subDraft } as SchemaNode;
+    // ✅ Support both subTasks (from buildDataTree) and subData (legacy)
+    const subTasks = (node as any).subTasks || node.subData || [];
+    const next = { ...node, subTasks: Array.isArray(subTasks) ? subTasks.slice() : [], subData: undefined } as SchemaNode;
+    const old = String((next.subTasks![idx] as any)?.label || '');
+    next.subTasks![idx] = { ...(next.subTasks![idx] || { label: '' }), label: subDraft } as SchemaNode;
     onChange(next);
     setEditingSubIdx(null);
     setSubDraft('');
@@ -35,12 +37,14 @@ export function useSubEditing({ node, pathPrefix = '', onChange, onChangeEvent }
   };
 
   const handleQuickAddSub = () => {
-    const next = { ...node, subData: Array.isArray(node.subData) ? node.subData.slice() : [] } as SchemaNode;
-    next.subData!.push({ label: '', type: 'text', icon: 'FileText' } as any);
+    // ✅ Support both subTasks (from buildDataTree) and subData (legacy)
+    const subTasks = (node as any).subTasks || node.subData || [];
+    const next = { ...node, subTasks: Array.isArray(subTasks) ? subTasks.slice() : [], subData: undefined } as SchemaNode;
+    next.subTasks!.push({ label: '', type: 'text', icon: 'FileText' } as any);
     onChange(next);
-    setEditingSubIdx((next.subData!.length - 1));
+    setEditingSubIdx((next.subTasks!.length - 1));
     setSubDraft('');
-    onChangeEvent?.({ type: 'sub.added', path: `${pathPrefix}/${(next.subData![next.subData!.length - 1] as any)?.label || 'sub'}` });
+    onChangeEvent?.({ type: 'sub.added', path: `${pathPrefix}/${(next.subTasks![next.subTasks!.length - 1] as any)?.label || 'sub'}` });
   };
 
   return {

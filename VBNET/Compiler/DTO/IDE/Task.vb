@@ -69,16 +69,12 @@ Public Class Task
     <JsonProperty("constraints")>
     Public Property Constraints As List(Of Object)
 
-    <JsonProperty("examples")>
-    Public Property Examples As List(Of Object)
-
     Public Sub New()
         Parameters = New List(Of TaskParameter)()
         Value = New Dictionary(Of String, Object)()
         Data = New List(Of MainDataNode)()
         StepPrompts = New Dictionary(Of String, Object)()
         Constraints = New List(Of Object)()
-        Examples = New List(Of Object)()
     End Sub
 End Class
 

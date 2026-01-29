@@ -53,7 +53,6 @@ export const createTask = (item: any): Task => {
     ...(task?.data && { data: task.data }),
     ...(task?.stepPrompts && { stepPrompts: task.stepPrompts }),
     ...(task?.constraints && { constraints: task.constraints }),
-    ...(task?.examples && { examples: task.examples }),
     ...(task?.intents && { intents: task.intents }),
     ...(task?.endpoint && { endpoint: task.endpoint }),
     ...(task?.method && { method: task.method }),

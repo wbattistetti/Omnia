@@ -94,7 +94,6 @@ export class OrchestratorSessionManager {
           mainData: task.mainData,
           stepPrompts: task.stepPrompts,
           constraints: task.constraints,
-          examples: task.examples
         };
       }
       return ddtMap.get(taskId) || null;
@@ -179,7 +178,6 @@ export class OrchestratorSessionManager {
               mainData: task.mainData,
               stepPrompts: task.stepPrompts,
               constraints: task.constraints,
-              examples: task.examples
             } : null) // Include DDT in event
           });
 
@@ -208,7 +206,6 @@ export class OrchestratorSessionManager {
             mainData: task.mainData,
             stepPrompts: task.stepPrompts,
             constraints: task.constraints,
-            examples: task.examples
           } : null;
           if (ddt) {
             // Use backend DDT contract extraction

@@ -103,9 +103,9 @@ Public Class GlobalVariableContext
         End If
 
         ' Se è un mainData composito, costruisci il valore dai subData
-        If node.HasSubData() Then
+        If node.HasSubTasks() Then
             Dim valueParts As New List(Of String)()
-            For Each subData As DDTNode In node.SubData
+            For Each subData As DDTNode In node.SubTasks
                 If subData.Value IsNot Nothing Then
                     valueParts.Add(subData.Value.ToString())
                 End If
@@ -158,8 +158,8 @@ Public Class GlobalVariableContext
         End If
 
         ' Cerca ricorsivamente nei subData
-        If node.SubData IsNot Nothing Then
-            For Each subData As DDTNode In node.SubData
+        If node.SubTasks IsNot Nothing Then
+            For Each subData As DDTNode In node.SubTasks
                 Dim found As DDTNode = FindNodeRecursive(subData, fullLabel)
                 If found IsNot Nothing Then
                     Return found

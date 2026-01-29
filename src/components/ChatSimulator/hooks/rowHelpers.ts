@@ -32,7 +32,6 @@ function getInstanceFromTask(taskId: string): { message?: { text?: string }; ddt
       data: task.data,
       stepPrompts: task.stepPrompts,
       constraints: task.constraints,
-      examples: task.examples
     };
   }
 

@@ -104,11 +104,6 @@ Public Class RegexConfig
     Public Property Ambiguity As AmbiguityConfig
 
     ''' <summary>
-    ''' Esempi di input validi
-    ''' </summary>
-    Public Property Examples As List(Of String)
-
-    ''' <summary>
     ''' Test cases per validazione
     ''' </summary>
     Public Property TestCases As List(Of String)
@@ -116,7 +111,6 @@ Public Class RegexConfig
     Public Sub New()
         Patterns = New List(Of String)()
         PatternModes = New List(Of String)()
-        Examples = New List(Of String)()
         TestCases = New List(Of String)()
         Ambiguity = New AmbiguityConfig()
     End Sub

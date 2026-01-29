@@ -291,8 +291,7 @@ export async function buildDDTFromTask(instance: Task | null): Promise<any | nul
       label: instance.label,
       data: instance.data || [],
       steps: instance.steps,  // ✅ Steps a root level (già nel formato corretto)
-      constraints: instance.constraints,
-      examples: instance.examples
+      constraints: instance.constraints
     };
   }
 
@@ -305,8 +304,7 @@ export async function buildDDTFromTask(instance: Task | null): Promise<any | nul
       label: instance.label,
       data: instance.data || [],
       steps: instance.steps,  // ✅ Steps a root level (già nel formato corretto)
-      constraints: instance.constraints,
-      examples: instance.examples
+      constraints: instance.constraints
     };
   }
 
@@ -328,11 +326,11 @@ export async function buildDDTFromTask(instance: Task | null): Promise<any | nul
       ...templateNode, // ✅ Struttura dal template (include templateId!)
       // ✅ Override dall'istanza (solo label)
       label: instance.label || templateNode.label,
-      // ✅ Constraints/examples/nlpContract SEMPRE dal template (NO override)
+      // ✅ Constraints/nlpContract SEMPRE dal template (NO override)
       constraints: templateNode.constraints,
-      examples: templateNode.examples,
       dataContract: templateNode.dataContract,
-      // ✅ SubData viene dal template (già costruito da buildDataTree)
+      // ✅ SubTasks viene dal template (già costruito da buildDataTree - Task template references)
+      // ✅ Map to subData for compatibility with existing DDT structure
       subData: templateNode.subTasks || []
     };
   });
@@ -358,9 +356,8 @@ export async function buildDDTFromTask(instance: Task | null): Promise<any | nul
     label: instance.label ?? template.label,
     data: enrichedData, // ✅ Struttura ricostruita dal template (con templateId!)
     steps: finalRootSteps, // ✅ Steps dall'istanza o clonati
-    // ✅ Constraints/examples/nlpContract SEMPRE dal template (NO override dall'istanza)
+    // ✅ Constraints/nlpContract SEMPRE dal template (NO override dall'istanza)
     constraints: template.dataContracts ?? template.constraints ?? undefined,
-    examples: template.examples ?? undefined,
     dataContract: template.dataContract ?? undefined
   };
 
@@ -636,7 +633,6 @@ export function buildDataTree(template: any): any[] {
       type: subTemplate.type,
       icon: subTemplate.icon || 'FileText',
       constraints: subTemplate.dataContracts || subTemplate.constraints || [],
-      examples: subTemplate.examples || [],
       dataContract: subTemplate.dataContract || undefined,
       subTasks: dereferencedSubData, // ✅ Supporta profondità arbitraria
       templateId: subTemplate.id || subTemplate._id, // ✅ Solo templateId (uguale a id per template atomici/compositi)
@@ -693,7 +689,6 @@ export function buildDataTree(template: any): any[] {
         templateId: mainNode.templateId || nodeTemplateId, // ✅ CRITICAL: Imposta esplicitamente templateId
         label: mainNode.label || template.label || template.name || undefined, // ✅ NON inventare: undefined se manca
         constraints: nodeConstraints, // ✅ CRITICAL: Copia dataContracts dal template (referenza)
-        examples: mainNode.examples || template.examples || [],
         dataContract: mainNode.dataContract || template.dataContract || undefined, // ✅ CRITICAL: Copia dataContract dal template
         subTasks: subData
       };
@@ -720,7 +715,6 @@ export function buildDataTree(template: any): any[] {
           type: subTemplate.type,
           icon: subTemplate.icon || 'FileText',
           constraints: subTemplate.dataContracts || subTemplate.constraints || [],
-          examples: subTemplate.examples || [],
           dataContract: subTemplate.dataContract || undefined,
           subTasks: dereferencedSubData,
           templateId: subTemplate.id || subTemplate._id, // ✅ Solo templateId (uguale a id per template atomici/compositi)
@@ -744,7 +738,6 @@ export function buildDataTree(template: any): any[] {
       type: template.type,
       icon: template.icon || 'Calendar',
       constraints: template.dataContracts || template.constraints || [],
-      examples: template.examples || [],
       dataContract: template.dataContract || undefined,
       subTasks: subDataInstances,
       templateId: template.id || template._id,
@@ -989,7 +982,6 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
       data: localDDT.data,
       steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
       constraints: localDDT.constraints,
-      examples: localDDT.examples,
       // ❌ RIMOSSO: dataContract non è più override, è sempre nel template
       introduction: localDDT.introduction
     };
@@ -1005,7 +997,6 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
       data: localDDT.data,
       steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
       constraints: localDDT.constraints,
-      examples: localDDT.examples,
       // ❌ RIMOSSO: dataContract non è più override, è sempre nel template
       introduction: localDDT.introduction
     };
@@ -1078,7 +1069,6 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
       data: localDDT.data, // ✅ Salva struttura completa
       steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
       constraints: localDDT.constraints,
-      examples: localDDT.examples,
       // ❌ RIMOSSO: dataContract non è più override, è sempre nel template
       introduction: localDDT.introduction
     };
@@ -1253,7 +1243,6 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
     hasdata: !!result.data,
     dataLength: result.data?.length || 0,
     hasConstraints: !!result.constraints,
-    hasExamples: !!result.examples,
     // ❌ RIMOSSO: dataContract non è più override
     hasIntroduction: !!result.introduction,
     resultKeys: Object.keys(result)

@@ -54,7 +54,6 @@ export async function loadAndAdaptDDTForExistingTask(
         data: task.data || [],
         steps: task.steps,
         constraints: task.constraints,
-        examples: task.examples,
         dataContract: task.dataContract
       },
       adapted: false
@@ -71,7 +70,6 @@ export async function loadAndAdaptDDTForExistingTask(
         data: task.data || [],
         steps: task.steps,
         constraints: task.constraints,
-        examples: task.examples
       },
       adapted: false
     };
@@ -105,10 +103,6 @@ export async function loadAndAdaptDDTForExistingTask(
     firstNodeExamples: firstNode?.nlpProfile?.examples?.slice(0, 3),
     firstNodeHasTestNotes: !!firstNode?.testNotes,
     firstNodeTestNotesCount: firstNode?.testNotes ? Object.keys(firstNode.testNotes).length : 0,
-    // ✅ Verifica anche node.examples (root level)
-    firstNodeHasRootExamples: !!firstNode?.examples,
-    firstNodeRootExamplesCount: Array.isArray(firstNode?.examples) ? firstNode.examples.length : 0,
-    firstNodeRootExamples: Array.isArray(firstNode?.examples) ? firstNode.examples.slice(0, 3) : undefined
   });
 
   // ✅ Se task.data esiste ed è completo, usalo direttamente (NON ricostruire dal template)
@@ -194,9 +188,6 @@ export async function loadAndAdaptDDTForExistingTask(
         constraints: (task.constraints && task.constraints.length > 0)
           ? task.constraints
           : template.constraints,
-        examples: (task.examples && task.examples.length > 0)
-          ? task.examples
-          : template.examples,
         dataContract: task.dataContract ?? template.dataContract,
         templateId: task.templateId
       },
@@ -297,12 +288,6 @@ export async function loadAndAdaptDDTForExistingTask(
       constraints: (task.constraints && task.constraints.length > 0)
         ? task.constraints
         : templateNode.constraints,
-      // ✅ PRIORITY: node.nlpProfile.examples > task.examples > templateNode.examples
-      examples: hasNodeExamples
-        ? nodeExamples
-        : (task.examples && task.examples.length > 0)
-          ? task.examples
-          : templateNode.examples,
       // ✅ CRITICAL: Applica nlpProfile completo da task.data se presente
       // ✅ PRIORITY: task.data[].nlpProfile (override) > templateNode.nlpProfile (template)
       // Questo garantisce che examplesList e altre modifiche in memoria siano preservate

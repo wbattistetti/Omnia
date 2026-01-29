@@ -280,7 +280,18 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         templateId: m.templateId,  // ✅ Preserve templateId (ID of template root)
         nlpContract: m.nlpContract,  // ✅ Preserve contract
         // ✅ Steps non sono più dentro data, sono a root level
-        subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({
+        // ✅ Support both subTasks (from buildDataTree - Task template references) and subData (legacy)
+        subTasks: Array.isArray((m as any).subTasks) ? (m as any).subTasks.map((s: any) => ({
+          id: s.id,  // ✅ CRITICAL: Preserve subTasks node ID (GUID from template)
+          label: s.label,
+          type: s.type,
+          icon: s.icon,
+          constraints: s.constraints || [],
+          templateId: s.templateId,  // ✅ Preserve templateId
+          nlpContract: s.nlpContract,  // ✅ Preserve contract
+          // ✅ Preserva stepPrompts per subTasks (solo start, noInput, noMatch)
+          stepPrompts: s.stepPrompts || null
+        })) : (Array.isArray(m.subData) ? m.subData.map((s: any) => ({
           id: s.id,  // ✅ CRITICAL: Preserve subData node ID (GUID from template)
           label: s.label,
           type: s.type,
@@ -290,7 +301,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           nlpContract: s.nlpContract,  // ✅ Preserve contract
           // ✅ Preserva stepPrompts per subData (solo start, noInput, noMatch)
           stepPrompts: s.stepPrompts || null
-        })) : []
+        })) : [])
       })) as SchemaNode[];
       return mains;
     }
@@ -300,7 +311,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   // Check if DDT is composite (has multiple data or is explicitly composite)
   const isCompositeDDT = useMemo(() => {
     return mountedDataTree.length > 1 ||
-      (mountedDataTree.length === 1 && mountedDataTree[0]?.subData && mountedDataTree[0].subData.length > 0);
+      (mountedDataTree.length === 1 && ((mountedDataTree[0] as any)?.subTasks && (mountedDataTree[0] as any).subTasks.length > 0) || (mountedDataTree[0]?.subData && mountedDataTree[0].subData.length > 0));
   }, [mountedDataTree]);
 
   // Save template to Factory (global)

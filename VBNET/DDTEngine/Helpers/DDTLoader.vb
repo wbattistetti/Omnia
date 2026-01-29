@@ -98,8 +98,8 @@ Imports System.Text.Json.Serialization
             End If
 
             ' Calcola ricorsivamente per subData
-            If node.SubData IsNot Nothing Then
-                For Each subData As DDTNode In node.SubData
+            If node.SubTasks IsNot Nothing Then
+                For Each subData As DDTNode In node.SubTasks
                     CalculateFullLabelForNode(subData, node.FullLabel)
                 Next
             End If

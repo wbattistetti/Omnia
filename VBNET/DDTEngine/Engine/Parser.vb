@@ -52,13 +52,13 @@ Public Class Parser
                 Dim valueInput As String = cleanedInput.Substring(3).Trim()
 
                 ' Prova a estrarre il valore (gestisce sia mainData semplici che compositi)
-                If currDataNode.HasSubData() Then
+                If currDataNode.HasSubTasks() Then
                     ' MainData composito: usa TryExtractCompositeData
                     Dim extractedData As Dictionary(Of String, Object) = TryExtractCompositeData(valueInput, currDataNode)
                     If extractedData IsNot Nothing AndAlso extractedData.Count > 0 Then
                         ' Aggiorna i subData estratti
                         For Each kvp As KeyValuePair(Of String, Object) In extractedData
-                            Dim subDataNode As DDTNode = currDataNode.SubData.FirstOrDefault(Function(s) s.Id = kvp.Key)
+                            Dim subDataNode As DDTNode = currDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = kvp.Key)
                             If subDataNode IsNot Nothing Then
                                 subDataNode.Value = kvp.Value
                             End If
@@ -77,11 +77,11 @@ Public Class Parser
                 Dim valueInput As String = cleanedInput.Substring(4).Trim()
 
                 ' Stessa logica di estrazione per "non"
-                If currDataNode.HasSubData() Then
+                If currDataNode.HasSubTasks() Then
                     Dim extractedData As Dictionary(Of String, Object) = TryExtractCompositeData(valueInput, currDataNode)
                     If extractedData IsNot Nothing AndAlso extractedData.Count > 0 Then
                         For Each kvp As KeyValuePair(Of String, Object) In extractedData
-                            Dim subDataNode As DDTNode = currDataNode.SubData.FirstOrDefault(Function(s) s.Id = kvp.Key)
+                            Dim subDataNode As DDTNode = currDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = kvp.Key)
                             If subDataNode IsNot Nothing Then
                                 subDataNode.Value = kvp.Value
                             End If
@@ -97,11 +97,11 @@ Public Class Parser
                 End If
             Else
                 ' TERZA: se non è sì/no, prova a estrarre come correzione implicita (senza "no")
-                If currDataNode.HasSubData() Then
+                If currDataNode.HasSubTasks() Then
                     Dim extractedData As Dictionary(Of String, Object) = TryExtractCompositeData(cleanedInput, currDataNode)
                     If extractedData IsNot Nothing AndAlso extractedData.Count > 0 Then
                         For Each kvp As KeyValuePair(Of String, Object) In extractedData
-                            Dim subDataNode As DDTNode = currDataNode.SubData.FirstOrDefault(Function(s) s.Id = kvp.Key)
+                            Dim subDataNode As DDTNode = currDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = kvp.Key)
                             If subDataNode IsNot Nothing Then
                                 subDataNode.Value = kvp.Value
                             End If
@@ -350,7 +350,7 @@ Public Class Parser
     ''' Estrae dati parziali da un mainData composito usando regex dal contract o fallback a regex hardcoded
     ''' </summary>
     Private Function TryExtractCompositeData(input As String, mainDataNode As DDTNode) As Dictionary(Of String, Object)
-        If mainDataNode Is Nothing OrElse Not mainDataNode.HasSubData() Then
+        If mainDataNode Is Nothing OrElse Not mainDataNode.HasSubTasks() Then
             Return Nothing
         End If
 
@@ -431,21 +431,21 @@ Public Class Parser
                     matched = True
                     ' Pattern 1: giorno/mese/anno o varianti
                     If Not String.IsNullOrEmpty(dateMatch1.Groups(1).Value) Then
-                        Dim giornoNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "giorno")
+                        Dim giornoNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "giorno")
                         If giornoNode IsNot Nothing Then
                             extractedData("giorno") = dateMatch1.Groups(1).Value
                         End If
                     End If
 
                     If Not String.IsNullOrEmpty(dateMatch1.Groups(2).Value) Then
-                        Dim meseNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "mese")
+                        Dim meseNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "mese")
                         If meseNode IsNot Nothing Then
                             extractedData("mese") = dateMatch1.Groups(2).Value
                         End If
                     End If
 
                     If Not String.IsNullOrEmpty(dateMatch1.Groups(3).Value) Then
-                        Dim annoNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "anno")
+                        Dim annoNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "anno")
                         If annoNode IsNot Nothing Then
                             extractedData("anno") = dateMatch1.Groups(3).Value
                         End If
@@ -453,14 +453,14 @@ Public Class Parser
 
                     ' Pattern 2: mese/anno (gruppi 4 e 5)
                     If Not String.IsNullOrEmpty(dateMatch1.Groups(4).Value) AndAlso String.IsNullOrEmpty(dateMatch1.Groups(1).Value) Then
-                        Dim meseNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "mese")
+                        Dim meseNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "mese")
                         If meseNode IsNot Nothing Then
                             extractedData("mese") = dateMatch1.Groups(4).Value
                         End If
                     End If
 
                     If Not String.IsNullOrEmpty(dateMatch1.Groups(5).Value) AndAlso String.IsNullOrEmpty(dateMatch1.Groups(3).Value) Then
-                        Dim annoNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "anno")
+                        Dim annoNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "anno")
                         If annoNode IsNot Nothing Then
                             extractedData("anno") = dateMatch1.Groups(5).Value
                         End If
@@ -475,13 +475,13 @@ Public Class Parser
 
                         ' Prova giorno (1-31)
                         If num >= 1 AndAlso num <= 31 Then
-                            Dim giornoNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "giorno")
+                            Dim giornoNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "giorno")
                             If giornoNode IsNot Nothing Then
                                 extractedData("giorno") = numValue
                             End If
                             ' Prova mese (1-12)
                         ElseIf num >= 1 AndAlso num <= 12 Then
-                            Dim meseNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "mese")
+                            Dim meseNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "mese")
                             If meseNode IsNot Nothing Then
                                 extractedData("mese") = numValue
                             End If
@@ -494,7 +494,7 @@ Public Class Parser
                     matched = True
                     ' Giorno (gruppo 1)
                     If Not String.IsNullOrEmpty(dateMatch2.Groups(1).Value) Then
-                        Dim giornoNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "giorno")
+                        Dim giornoNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "giorno")
                         If giornoNode IsNot Nothing Then
                             extractedData("giorno") = dateMatch2.Groups(1).Value
                         End If
@@ -514,7 +514,7 @@ Public Class Parser
                             meseValue = monthMap(meseLower)
                         End If
 
-                        Dim meseNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "mese")
+                        Dim meseNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "mese")
                         If meseNode IsNot Nothing Then
                             extractedData("mese") = meseValue
                         End If
@@ -522,7 +522,7 @@ Public Class Parser
 
                     ' Anno (gruppo 3)
                     If Not String.IsNullOrEmpty(dateMatch2.Groups(3).Value) Then
-                        Dim annoNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "anno")
+                        Dim annoNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "anno")
                         If annoNode IsNot Nothing Then
                             extractedData("anno") = dateMatch2.Groups(3).Value
                         End If
@@ -546,7 +546,7 @@ Public Class Parser
                             meseValue = monthMap(meseLower)
                         End If
 
-                        Dim meseNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "mese")
+                        Dim meseNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "mese")
                         If meseNode IsNot Nothing Then
                             extractedData("mese") = meseValue
                         End If
@@ -561,7 +561,7 @@ Public Class Parser
                     End If
 
                     If Not String.IsNullOrEmpty(annoValue) Then
-                        Dim annoNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "anno")
+                        Dim annoNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "anno")
                         If annoNode IsNot Nothing Then
                             extractedData("anno") = annoValue
                         End If
@@ -573,7 +573,7 @@ Public Class Parser
                     matched = True
                     ' Giorno (gruppo 1)
                     If Not String.IsNullOrEmpty(dateMatch4.Groups(1).Value) Then
-                        Dim giornoNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "giorno")
+                        Dim giornoNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "giorno")
                         If giornoNode IsNot Nothing Then
                             extractedData("giorno") = dateMatch4.Groups(1).Value
                         End If
@@ -593,7 +593,7 @@ Public Class Parser
                             meseValue = monthMap(meseLower)
                         End If
 
-                        Dim meseNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "mese")
+                        Dim meseNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "mese")
                         If meseNode IsNot Nothing Then
                             extractedData("mese") = meseValue
                         End If
@@ -610,7 +610,7 @@ Public Class Parser
                 If nameMatch.Success Then
                     ' Nome (sempre presente)
                     If Not String.IsNullOrEmpty(nameMatch.Groups(1).Value) Then
-                        Dim nomeNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "nome")
+                        Dim nomeNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "nome")
                         If nomeNode IsNot Nothing Then
                             extractedData("nome") = nameMatch.Groups(1).Value
                         End If
@@ -618,7 +618,7 @@ Public Class Parser
 
                     ' Cognome (opzionale)
                     If Not String.IsNullOrEmpty(nameMatch.Groups(2).Value) Then
-                        Dim cognomeNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "cognome")
+                        Dim cognomeNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "cognome")
                         If cognomeNode IsNot Nothing Then
                             extractedData("cognome") = nameMatch.Groups(2).Value
                         End If
@@ -663,28 +663,28 @@ Public Class Parser
                     matched = True
                     ' Tipo via (gruppo 1)
                     If Not String.IsNullOrEmpty(addressMatch1.Groups(1).Value) Then
-                        Dim tipoViaNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "tipoVia")
+                        Dim tipoViaNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "tipoVia")
                         If tipoViaNode IsNot Nothing Then
                             extractedData("tipoVia") = addressMatch1.Groups(1).Value
                         End If
                     End If
                     ' Nome via (gruppo 2)
                     If Not String.IsNullOrEmpty(addressMatch1.Groups(2).Value) Then
-                        Dim nomeViaNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "nomeVia")
+                        Dim nomeViaNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "nomeVia")
                         If nomeViaNode IsNot Nothing Then
                             extractedData("nomeVia") = addressMatch1.Groups(2).Value
                         End If
                     End If
                     ' Numero civico (gruppo 3)
                     If Not String.IsNullOrEmpty(addressMatch1.Groups(3).Value) Then
-                        Dim numeroCivicoNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "numeroCivico")
+                        Dim numeroCivicoNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "numeroCivico")
                         If numeroCivicoNode IsNot Nothing Then
                             extractedData("numeroCivico") = addressMatch1.Groups(3).Value
                         End If
                     End If
                     ' CAP (gruppo 4)
                     If Not String.IsNullOrEmpty(addressMatch1.Groups(4).Value) Then
-                        Dim capNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "cap")
+                        Dim capNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "cap")
                         If capNode IsNot Nothing Then
                             extractedData("cap") = addressMatch1.Groups(4).Value
                         End If
@@ -697,7 +697,7 @@ Public Class Parser
                         cittaValue = addressMatch1.Groups(6).Value
                     End If
                     If Not String.IsNullOrEmpty(cittaValue) Then
-                        Dim cittaNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "citta")
+                        Dim cittaNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "citta")
                         If cittaNode IsNot Nothing Then
                             extractedData("citta") = cittaValue
                         End If
@@ -709,21 +709,21 @@ Public Class Parser
                     matched = True
                     ' Tipo via (gruppo 1)
                     If Not String.IsNullOrEmpty(addressMatch2.Groups(1).Value) Then
-                        Dim tipoViaNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "tipoVia")
+                        Dim tipoViaNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "tipoVia")
                         If tipoViaNode IsNot Nothing Then
                             extractedData("tipoVia") = addressMatch2.Groups(1).Value
                         End If
                     End If
                     ' Nome via (gruppo 2)
                     If Not String.IsNullOrEmpty(addressMatch2.Groups(2).Value) Then
-                        Dim nomeViaNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "nomeVia")
+                        Dim nomeViaNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "nomeVia")
                         If nomeViaNode IsNot Nothing Then
                             extractedData("nomeVia") = addressMatch2.Groups(2).Value
                         End If
                     End If
                     ' Città (gruppo 3)
                     If Not String.IsNullOrEmpty(addressMatch2.Groups(3).Value) Then
-                        Dim cittaNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "citta")
+                        Dim cittaNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "citta")
                         If cittaNode IsNot Nothing Then
                             extractedData("citta") = addressMatch2.Groups(3).Value
                         End If
@@ -735,21 +735,21 @@ Public Class Parser
                     matched = True
                     ' Nome via (gruppo 1)
                     If Not String.IsNullOrEmpty(addressMatch3.Groups(1).Value) Then
-                        Dim nomeViaNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "nomeVia")
+                        Dim nomeViaNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "nomeVia")
                         If nomeViaNode IsNot Nothing Then
                             extractedData("nomeVia") = addressMatch3.Groups(1).Value
                         End If
                     End If
                     ' Numero civico (gruppo 2)
                     If Not String.IsNullOrEmpty(addressMatch3.Groups(2).Value) Then
-                        Dim numeroCivicoNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "numeroCivico")
+                        Dim numeroCivicoNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "numeroCivico")
                         If numeroCivicoNode IsNot Nothing Then
                             extractedData("numeroCivico") = addressMatch3.Groups(2).Value
                         End If
                     End If
                     ' CAP (gruppo 3)
                     If Not String.IsNullOrEmpty(addressMatch3.Groups(3).Value) Then
-                        Dim capNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "cap")
+                        Dim capNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "cap")
                         If capNode IsNot Nothing Then
                             extractedData("cap") = addressMatch3.Groups(3).Value
                         End If
@@ -762,7 +762,7 @@ Public Class Parser
                         cittaValue = addressMatch3.Groups(5).Value
                     End If
                     If Not String.IsNullOrEmpty(cittaValue) Then
-                        Dim cittaNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "citta")
+                        Dim cittaNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "citta")
                         If cittaNode IsNot Nothing Then
                             extractedData("citta") = cittaValue
                         End If
@@ -774,14 +774,14 @@ Public Class Parser
                     matched = True
                     ' Nome via (gruppo 1)
                     If Not String.IsNullOrEmpty(addressMatch4.Groups(1).Value) Then
-                        Dim nomeViaNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "nomeVia")
+                        Dim nomeViaNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "nomeVia")
                         If nomeViaNode IsNot Nothing Then
                             extractedData("nomeVia") = addressMatch4.Groups(1).Value
                         End If
                     End If
                     ' Città (gruppo 2)
                     If Not String.IsNullOrEmpty(addressMatch4.Groups(2).Value) Then
-                        Dim cittaNode As DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = "citta")
+                        Dim cittaNode As DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = "citta")
                         If cittaNode IsNot Nothing Then
                             extractedData("citta") = addressMatch4.Groups(2).Value
                         End If

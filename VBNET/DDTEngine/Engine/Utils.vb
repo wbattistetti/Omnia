@@ -7,8 +7,8 @@ Module Utils
     Private ReadOnly PlaceholderRegex As New Regex("\[([^\[\]]+)\]", RegexOptions.Compiled)
     <Extension>
     Public Function IsEmpty(dataNode As DDTNode) As Boolean
-        If dataNode.SubData.Any Then
-            Return Not dataNode.SubData.Any(Function(sd) sd.Value IsNot Nothing)
+        If dataNode.SubTasks.Any Then
+            Return Not dataNode.SubTasks.Any(Function(sd) sd.Value IsNot Nothing)
         Else
             Return dataNode.Value Is Nothing
         End If
@@ -16,8 +16,8 @@ Module Utils
 
     <Extension>
     Public Function IsFilled(dataNode As DDTNode) As Boolean
-        If dataNode.SubData.Any Then
-            Return Not dataNode.SubData.Any(Function(sd) sd.Value Is Nothing)
+        If dataNode.SubTasks.Any Then
+            Return Not dataNode.SubTasks.Any(Function(sd) sd.Value Is Nothing)
         Else
             Return dataNode.Value IsNot Nothing
         End If

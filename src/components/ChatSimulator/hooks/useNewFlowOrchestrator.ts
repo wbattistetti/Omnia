@@ -90,7 +90,6 @@ export function useNewFlowOrchestrator({
         data: task.data,
         stepPrompts: task.stepPrompts,
         constraints: task.constraints,
-        examples: task.examples
       };
     }
     return null;

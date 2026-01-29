@@ -358,9 +358,8 @@ export async function loadDDTFromTemplate(instance: Task | null): Promise<any | 
     label: instance.label ?? template.label,
     data: enrichedData, // ✅ Struttura ricostruita dal template (con templateId!)
     steps: finalRootSteps, // ✅ Steps dall'istanza o clonati
-    // ✅ Constraints/examples/nlpContract SEMPRE dal template (NO override dall'istanza)
+    // ✅ Constraints/nlpContract SEMPRE dal template (NO override dall'istanza)
     constraints: template.dataContracts ?? template.constraints ?? undefined,
-    examples: template.examples ?? undefined,
     nlpContract: template.nlpContract ?? undefined
   };
 
@@ -647,7 +646,6 @@ function convertPatternsToNlpContract(template: any): any | undefined {
     subDataMapping: {},
     regex: {
       patterns: allPatterns,
-      examples: template.examples || [],
       testCases: []
     },
     rules: null,
@@ -944,20 +942,20 @@ export function hasDataContractOverrides(instance: Task | null): boolean {
   if (!instance) return false;
 
   // Check root level
-  if (instance.constraints || instance.examples || instance.nlpContract) {
+  if (instance.constraints || instance.nlpContract) {
     return true;
   }
 
   // Check data nodes
   if (instance.data && Array.isArray(instance.data)) {
     for (const mainNode of instance.data) {
-      if (mainNode.constraints || mainNode.examples || mainNode.nlpContract) {
+      if (mainNode.constraints || mainNode.nlpContract) {
         return true;
       }
       // Check subData nodes
       if (mainNode.subTasks && Array.isArray(mainNode.subTasks)) {
         for (const subNode of mainNode.subTasks) {
-          if (subNode.constraints || subNode.examples || subNode.nlpContract) {
+          if (subNode.constraints || subNode.nlpContract) {
             return true;
           }
         }
@@ -1047,7 +1045,6 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
       data: localDDT.data,
       steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
       constraints: localDDT.constraints,
-      examples: localDDT.examples,
       nlpContract: localDDT.nlpContract,
       introduction: localDDT.introduction
     };
@@ -1063,7 +1060,6 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
       data: localDDT.data,
       steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
       constraints: localDDT.constraints,
-      examples: localDDT.examples,
       nlpContract: localDDT.nlpContract,
       introduction: localDDT.introduction
     };
@@ -1152,7 +1148,6 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
       data: localDDT.data, // ✅ Salva struttura completa
       steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
       constraints: localDDT.constraints,
-      examples: localDDT.examples,
       nlpContract: localDDT.nlpContract,
       introduction: localDDT.introduction
     };
@@ -1175,7 +1170,6 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
       const templateNode = templateDataForOverride[i] || templateDataForOverride[0]; // Fallback to first
 
       const templateNodeConstraints = templateNode?.dataContracts || templateNode?.constraints || [];
-      const templateNodeExamples = templateNode?.examples || [];
       const templateNodeNlpContract = templateNode?.nlpContract;
 
       // ✅ CRITICAL: Leggi steps usando templateId come chiave (non id)
@@ -1192,7 +1186,6 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
         (typeof nodeSteps === 'object' && Object.keys(nodeSteps).length > 0)
       );
       const hasConstraintsOverride = JSON.stringify(mainNode.constraints || []) !== JSON.stringify(templateNodeConstraints);
-      const hasExamplesOverride = JSON.stringify(mainNode.examples || []) !== JSON.stringify(templateNodeExamples);
       const hasNlpContractOverride = JSON.stringify(mainNode.nlpContract) !== JSON.stringify(templateNodeNlpContract);
 
       console.log('[extractModifiedDDTFields] 🔍 Checking overrides for mainNode', {
@@ -1201,7 +1194,6 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
         mainNodeTemplateId: nodeTemplateId,
         hasSteps,
         hasConstraintsOverride,
-        hasExamplesOverride,
         hasNlpContractOverride,
         stepsType: typeof nodeSteps,
         stepsIsArray: Array.isArray(nodeSteps),
@@ -1209,7 +1201,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
         stepsLength: Array.isArray(nodeSteps) ? nodeSteps.length : 0
       });
 
-      if (hasSteps || hasConstraintsOverride || hasExamplesOverride || hasNlpContractOverride) {
+      if (hasSteps || hasConstraintsOverride || hasNlpContractOverride) {
         const overrideNode: any = {
           templateId: mainNode.templateId || templateNode.templateId,
           label: mainNode.label
@@ -1231,7 +1223,6 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
           });
         }
         if (hasConstraintsOverride) overrideNode.constraints = mainNode.constraints;
-        if (hasExamplesOverride) overrideNode.examples = mainNode.examples;
         if (hasNlpContractOverride) overrideNode.nlpContract = mainNode.nlpContract;
 
         // Check subTasks overrides (solo logica, non struttura)
@@ -1275,7 +1266,6 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
                   result.steps[subNodeId] = subNodeSteps;
                 }
                 if (hasSubConstraintsOverride) overrideSubNode.constraints = subNode.constraints;
-                if (hasSubExamplesOverride) overrideSubNode.examples = subNode.examples;
                 if (hasSubNlpContractOverride) overrideSubNode.nlpContract = subNode.nlpContract;
 
                 subDataOverrides.push(overrideSubNode);
@@ -1308,19 +1298,14 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
     }
   }
 
-  // ✅ Confronta root-level constraints/examples/nlpContract/introduction
+  // ✅ Confronta root-level constraints/nlpContract/introduction
   // Salva solo se diversi dal template (override)
   const templateConstraints = template.dataContracts || template.constraints || [];
-  const templateExamples = template.examples || [];
   const templateNlpContract = template.nlpContract;
   const templateIntroduction = template.introduction;
 
   if (JSON.stringify(localDDT.constraints || []) !== JSON.stringify(templateConstraints)) {
     result.constraints = localDDT.constraints;
-  }
-
-  if (JSON.stringify(localDDT.examples || []) !== JSON.stringify(templateExamples)) {
-    result.examples = localDDT.examples;
   }
 
   if (JSON.stringify(localDDT.nlpContract) !== JSON.stringify(templateNlpContract)) {
@@ -1336,7 +1321,6 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
     hasdata: !!result.data,
     dataLength: result.data?.length || 0,
     hasConstraints: !!result.constraints,
-    hasExamples: !!result.examples,
     hasNlpContract: !!result.nlpContract,
     hasIntroduction: !!result.introduction,
     resultKeys: Object.keys(result)

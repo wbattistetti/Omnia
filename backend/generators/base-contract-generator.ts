@@ -30,7 +30,6 @@ export interface NLPContract {
       };
       ambiguousCanonicalKeys: string[];  // Lista di canonicalKey che possono essere ambigui (es: ['day', 'month'])
     };
-    examples: string[];
     testCases: string[];
   };
   rules: {

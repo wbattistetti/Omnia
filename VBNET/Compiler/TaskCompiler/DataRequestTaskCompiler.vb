@@ -87,11 +87,6 @@ Public Class DataRequestTaskCompiler
                                 System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Resolved root constraints from template {task.TemplateId}")
                             End If
 
-                            If template.Examples IsNot Nothing AndAlso template.Examples.Count > 0 Then
-                                assembledDDT.Examples = template.Examples
-                                Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Resolved root examples from template {task.TemplateId}")
-                                System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Resolved root examples from template {task.TemplateId}")
-                            End If
                         Else
                             ' ❌ NO FALLBACK: Se template non trovato → errore esplicito
                             Console.WriteLine($"❌ [COMPILER][DataRequestTaskCompiler] Template {task.TemplateId} not found in flow.Tasks - cannot resolve missing constraints/examples")

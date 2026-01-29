@@ -3586,7 +3586,6 @@ async function composeTemplates(templateNames, templates, userDesc) {
         validation: {
           ...item.validation,
           description: generateValidationDescription(item.type, item.validation),
-          examples: generateTestExamples(item.type, item.validation)
         }
       }));
 
@@ -3597,7 +3596,6 @@ async function composeTemplates(templateNames, templates, userDesc) {
         subTasks: enhancedSubTasks,
         validation: {
           description: `This field contains ${template.label.toLowerCase()} information`,
-          examples: generateTestExamples(template.type, template.validation)
         },
         example: generateExampleValue(template.type)
       });
@@ -3673,7 +3671,6 @@ async function useExistingTemplate(templateName, templates, userDesc) {
           icon: subTemplate.icon || 'FileText',
           stepPrompts: Object.keys(filteredStepPrompts).length > 0 ? filteredStepPrompts : null,
           constraints: subTemplate.dataContracts || subTemplate.constraints || [],
-          examples: subTemplate.examples || [],
           subTasks: []
         });
       }
@@ -3687,7 +3684,6 @@ async function useExistingTemplate(templateName, templates, userDesc) {
       icon: template.icon,
       stepPrompts: template.stepPrompts || null, // ✅ Tutti e 6 i tipi per main
       constraints: template.dataContracts || template.constraints || [],
-      examples: template.examples || [],
       subTasks: subTasksInstances // ✅ Sottodati QUI dentro subTasks[], non in mainData[]
     }); // ✅ UN SOLO elemento in mainDataList
   } else {
@@ -3698,7 +3694,6 @@ async function useExistingTemplate(templateName, templates, userDesc) {
       icon: template.icon,
       stepPrompts: template.stepPrompts || null,
       constraints: template.dataContracts || template.constraints || [],
-      examples: template.examples || [],
       subTasks: []
     });
   }

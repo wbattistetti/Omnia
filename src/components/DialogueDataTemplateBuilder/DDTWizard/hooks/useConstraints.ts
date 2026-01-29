@@ -22,7 +22,9 @@ export function useConstraints({ node, pathPrefix = '', onChange, onChangeEvent 
   const ensureMainConstraints = () => Array.isArray(node.constraints) ? node.constraints.slice() : [];
 
   const ensureSubConstraints = (subIdx: number) => {
-    const sub = (node.subData || [])[subIdx];
+    // ✅ Support both subTasks (from buildDataTree) and subData (legacy)
+    const subTasks = (node as any).subTasks || node.subData || [];
+    const sub = subTasks[subIdx];
     const arr = sub && Array.isArray(sub.constraints) ? sub.constraints.slice() : [];
     return arr;
   };
@@ -42,19 +44,21 @@ export function useConstraints({ node, pathPrefix = '', onChange, onChangeEvent 
   };
 
   const addSubConstraint = (subIdx: number) => {
-    const next = { ...node, subData: Array.isArray(node.subData) ? node.subData.slice() : [] } as SchemaNode;
-    const sub = { ...(next.subData?.[subIdx] || {}) } as any;
+    // ✅ Support both subTasks (from buildDataTree) and subData (legacy)
+    const subTasks = (node as any).subTasks || node.subData || [];
+    const next = { ...node, subTasks: Array.isArray(subTasks) ? subTasks.slice() : [], subData: undefined } as SchemaNode;
+    const sub = { ...(next.subTasks?.[subIdx] || {}) } as any;
     const list = Array.isArray(sub.constraints) ? sub.constraints.slice() : [];
     const newIdx = list.length;
     list.push({ kind: 'length', title: '', payoff: '' } as any);
     sub.constraints = list;
-    (next.subData as any)[subIdx] = sub;
+    (next.subTasks as any)[subIdx] = sub;
     onChange(next);
     setEditingConstraint({ scope: 'sub', subIdx, idx: newIdx });
     setConstraintTitleDraft('');
     setConstraintPayoffDraft('');
     lastAddedConstraintRef.current = { scope: 'sub', subIdx, idx: newIdx };
-    onChangeEvent?.({ type: 'constraint.added', path: `${pathPrefix}/${(next.subData?.[subIdx] as any)?.label || 'sub'}::constraint#${newIdx}` });
+    onChangeEvent?.({ type: 'constraint.added', path: `${pathPrefix}/${(next.subTasks?.[subIdx] as any)?.label || 'sub'}::constraint#${newIdx}` });
   };
 
   const startEditConstraint = (scope: 'main' | 'sub', idx: number, subIdx?: number) => {
@@ -81,12 +85,14 @@ export function useConstraints({ node, pathPrefix = '', onChange, onChangeEvent 
       }
     } else {
       const { subIdx, idx } = editingConstraint as any;
-      const next = { ...node, subData: Array.isArray(node.subData) ? node.subData.slice() : [] } as SchemaNode;
-      const sub = { ...(next.subData?.[subIdx] || {}) } as any;
+      // ✅ Support both subTasks (from buildDataTree) and subData (legacy)
+      const subTasks = (node as any).subTasks || node.subData || [];
+      const next = { ...node, subTasks: Array.isArray(subTasks) ? subTasks.slice() : [], subData: undefined } as SchemaNode;
+      const sub = { ...(next.subTasks?.[subIdx] || {}) } as any;
       const list = Array.isArray(sub.constraints) ? sub.constraints.slice() : [];
       if (list[idx]) list[idx] = { ...list[idx], title: (list[idx] as any)?.title || '', payoff: constraintPayoffDraft } as any;
       sub.constraints = list;
-      (next.subData as any)[subIdx] = sub;
+      (next.subTasks as any)[subIdx] = sub;
       onChange(next);
     }
     setEditingConstraint(null);
@@ -107,11 +113,13 @@ export function useConstraints({ node, pathPrefix = '', onChange, onChangeEvent 
         lastAddedConstraintRef.current = null;
         onChangeEvent?.({ type: 'constraint.removed', path: `${pathPrefix}::constraint#${a.idx}` });
       } else if (a.scope === 'sub' && editingConstraint.scope === 'sub' && a.idx === editingConstraint.idx && a.subIdx === editingConstraint.subIdx) {
-        const next = { ...node, subData: Array.isArray(node.subData) ? node.subData.slice() : [] } as any;
-        const sub = { ...(next.subData?.[a.subIdx!] || {}) };
+        // ✅ Support both subTasks (from buildDataTree) and subData (legacy)
+        const subTasks = (node as any).subTasks || node.subData || [];
+        const next = { ...node, subTasks: Array.isArray(subTasks) ? subTasks.slice() : [], subData: undefined } as any;
+        const sub = { ...(next.subTasks?.[a.subIdx!] || {}) };
         const list = Array.isArray(sub.constraints) ? sub.constraints.slice() : [];
         sub.constraints = list.filter((_: any, i: number) => i !== a.idx);
-        next.subData[a.subIdx!] = sub;
+        next.subTasks[a.subIdx!] = sub;
         onChange(next);
         lastAddedConstraintRef.current = null;
         onChangeEvent?.({ type: 'constraint.removed', path: `${pathPrefix}/${(sub as any)?.label || 'sub'}::constraint#${a.idx}` });
@@ -128,11 +136,13 @@ export function useConstraints({ node, pathPrefix = '', onChange, onChangeEvent 
       const nextList = list.filter((_, i) => i !== idx);
       onChange({ ...node, constraints: nextList });
     } else if (typeof subIdx === 'number') {
-      const next = { ...node, subData: Array.isArray(node.subData) ? node.subData.slice() : [] } as SchemaNode;
-      const sub = { ...(next.subData?.[subIdx] || {}) } as any;
+      // ✅ Support both subTasks (from buildDataTree) and subData (legacy)
+      const subTasks = (node as any).subTasks || node.subData || [];
+      const next = { ...node, subTasks: Array.isArray(subTasks) ? subTasks.slice() : [], subData: undefined } as SchemaNode;
+      const sub = { ...(next.subTasks?.[subIdx] || {}) } as any;
       const list = Array.isArray(sub.constraints) ? sub.constraints.slice() : [];
       sub.constraints = list.filter((_: any, i: number) => i !== idx);
-      (next.subData as any)[subIdx] = sub;
+      (next.subTasks as any)[subIdx] = sub;
       onChange(next);
     }
   };

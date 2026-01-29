@@ -1769,7 +1769,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                           data: taskForType.data,
                           stepPrompts: taskForType.stepPrompts,
                           constraints: taskForType.constraints,
-                          examples: taskForType.examples
                         };
                       }
 
@@ -1811,10 +1810,17 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                           const { buildDataTree } = await import('../../../../utils/taskUtils');
                           const dataTree = buildDataTree(template);
 
+                          // ✅ Map subTasks to subData for SchemaNode compatibility (buildDataTree returns subTasks from Task templates)
+                          const mappedDataTree = dataTree.map((node: any) => ({
+                            ...node,
+                            subData: node.subTasks || node.subData || [],
+                            subTasks: undefined // Remove subTasks to avoid confusion
+                          }));
+
                           console.log('[🔍 NodeRow][onOpenDDT] 📋 Mostrando preview dialog (template)', {
                             templateId: metaTemplateId,
                             templateLabel: template.label || template.name,
-                            dataTreeLength: dataTree.length
+                            dataTreeLength: mappedDataTree.length
                           });
 
                           // Mostra preview dialog
@@ -1822,7 +1828,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                             type: 'template',
                             templateId: metaTemplateId,
                             templateLabel: template.label || template.name || 'Template',
-                            dataTree: dataTree,
+                            dataTree: mappedDataTree,
                             rootLabel: template.label || row.text || 'Data'
                           });
                           setShowPreviewDialog(true);
@@ -2040,7 +2046,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         data: taskForType.data,
                         stepPrompts: taskForType.stepPrompts,
                         constraints: taskForType.constraints,
-                        examples: taskForType.examples
                       };
                     }
                     // ✅ NON creare DDT vuoto se non c'è né templateId DataRequest né data
@@ -2178,7 +2183,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         data: taskForType.data,
                         stepPrompts: taskForType.stepPrompts,
                         constraints: taskForType.constraints,
-                        examples: taskForType.examples
                       };
                     }
                     // ✅ NON creare DDT vuoto se non c'è né templateId DataRequest né data

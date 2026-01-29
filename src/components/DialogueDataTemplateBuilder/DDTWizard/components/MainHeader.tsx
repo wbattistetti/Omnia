@@ -319,7 +319,7 @@ export default function MainHeader({
         )}
         {/* Chevron expand/collapse - moved to end of first row */}
         <div style={{ marginLeft: 'auto' }}>
-          {Array.isArray(node.subData) && node.subData.length > 0 && (
+          {((node as any).subTasks && Array.isArray((node as any).subTasks) && (node as any).subTasks.length > 0) || (Array.isArray(node.subData) && node.subData.length > 0) && (
             <button
               title={open ? 'Collapse' : 'Expand'}
               onClick={() => { setForceOpen(!open); onRequestOpen?.(); }}

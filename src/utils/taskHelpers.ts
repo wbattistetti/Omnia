@@ -250,7 +250,6 @@ export function getRowData(row: NodeRowData): {
         data: task.data,
         stepPrompts: task.stepPrompts,
         constraints: task.constraints,
-        examples: task.examples
       } : undefined,
       intents: task.intents
       // ❌ RIMOSSO: action field (legacy)

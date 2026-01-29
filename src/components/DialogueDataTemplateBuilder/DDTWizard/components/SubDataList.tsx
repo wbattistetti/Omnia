@@ -63,13 +63,15 @@ export default function SubDataList({
   onCreateManually,
   compact = false,
 }: SubDataListProps) {
-  if (!Array.isArray(node.subData) || node.subData.length === 0) {
+  // ✅ Support both subTasks (from buildDataTree - Task template references) and subData (legacy schema nodes)
+  const subTasks = (node as any).subTasks || node.subData || [];
+  if (!Array.isArray(subTasks) || subTasks.length === 0) {
     return <div style={{ opacity: 0.8, fontStyle: 'italic', marginTop: 6 }}>No sub fields yet.</div>;
   }
 
   return (
     <>
-      {node.subData.map((s, i) => (
+      {subTasks.map((s, i) => (
         <div
           key={i}
           style={{ display: 'flex', alignItems: 'center', gap: compact ? 4 : 8, marginTop: compact ? 2 : 8 }}
@@ -150,7 +152,15 @@ export default function SubDataList({
                     </button>
                     <button
                       title="Delete"
-                      onClick={() => onChange({ ...node, subData: node.subData!.filter((_, x) => x !== i) })}
+                      onClick={() => {
+                        const updatedNode = { ...node };
+                        if ((node as any).subTasks) {
+                          (updatedNode as any).subTasks = (node as any).subTasks.filter((_: any, x: number) => x !== i);
+                        } else if (node.subData) {
+                          updatedNode.subData = node.subData.filter((_, x) => x !== i);
+                        }
+                        onChange(updatedNode as SchemaNode);
+                      }}
                       style={iconBtn}
                     >
                       <Trash2 size={16} color="#fb923c" />

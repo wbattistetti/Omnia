@@ -7,7 +7,8 @@ export interface SchemaNode {
   label: string;
   type?: string;
   icon?: string;
-  subData?: SchemaNode[];
+  subData?: SchemaNode[];  // ✅ Legacy: schema nodes (non-Task)
+  subTasks?: SchemaNode[]; // ✅ New: Task template references (from buildDataTree)
   constraints?: Constraint[];
 }
 

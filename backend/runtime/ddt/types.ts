@@ -146,7 +146,6 @@ export interface NLPContract {
       };
       ambiguousCanonicalKeys: string[];
     };
-    examples: string[];
     testCases: string[];
   };
   rules: {

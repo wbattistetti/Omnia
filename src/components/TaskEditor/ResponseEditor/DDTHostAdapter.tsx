@@ -211,7 +211,6 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
         taskInstance.label = finalDDT.label;
         taskInstance.steps = finalDDT.steps;
         taskInstance.constraints = finalDDT.constraints;
-        taskInstance.examples = finalDDT.examples;
         taskInstance.dataContract = finalDDT.dataContract;
         taskInstance.introduction = finalDDT.introduction;
 
@@ -233,7 +232,6 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
             label: finalDDT.label,
             steps: finalDDT.steps,
             constraints: finalDDT.constraints,
-            examples: finalDDT.examples,
             nlpContract: finalDDT.nlpContract,
             introduction: finalDDT.introduction
           },

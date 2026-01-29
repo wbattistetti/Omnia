@@ -31,17 +31,10 @@ Public Class AssembledDDT
     <JsonProperty("constraints")>
     Public Property Constraints As List(Of Object)
 
-    ''' <summary>
-    ''' Examples a livello root (opzionale, risolto lazy dal template se mancante)
-    ''' </summary>
-    <JsonProperty("examples")>
-    Public Property Examples As List(Of Object)
-
     Public Sub New()
         Translations = New Dictionary(Of String, String)()
         Data = New List(Of Compiler.MainDataNode)()
         Constraints = New List(Of Object)()
-        Examples = New List(Of Object)()
     End Sub
 End Class
 

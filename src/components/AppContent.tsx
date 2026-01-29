@@ -719,7 +719,6 @@ export const AppContent: React.FC<AppContentProps> = ({
                   data: task.data,
                   stepPrompts: task.stepPrompts,
                   constraints: task.constraints,
-                  examples: task.examples
                 };
               } else {
                 // DDT doesn't exist, create empty one

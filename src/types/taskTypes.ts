@@ -274,7 +274,6 @@ export interface Task {
   // ❌ DEPRECATED: stepPrompts - use steps instead
   stepPrompts?: any;             // @deprecated Use steps instead
   constraints?: any[];           // Constraints
-  examples?: any[];              // Examples
   // Per SayMessage:
   text?: string;                 // Message text
   // Per ClassifyProblem:
