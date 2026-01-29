@@ -39,12 +39,12 @@ Public Class DataRequestTaskCompiler
 
         Dim dataRequestTask As New CompiledTaskGetData()
 
-        ' ✅ NUOVO MODELLO: Costruisci AssembledDDT dal template usando task.templateId
+        ' ✅ NUOVO MODELLO: Costruisci TaskTreeRuntime dal template usando task.templateId
         ' LOGICA:
         ' 1. Se task.templateId esiste → carica template e costruisci struttura
         ' 2. Applica task.steps come override
         ' 3. Se task.templateId è null → fallback legacy a task.Data
-        Dim assembledDDT As Compiler.AssembledDDT = Nothing
+        Dim taskTreeRuntime As Compiler.TaskTreeRuntime = Nothing
 
         ' ✅ PRIORITY 1: Costruisci da template (nuovo modello)
         If Not String.IsNullOrEmpty(task.TemplateId) Then
@@ -54,9 +54,9 @@ Public Class DataRequestTaskCompiler
             Dim template = flow.Tasks.FirstOrDefault(Function(t) t.Id = task.TemplateId)
             If template IsNot Nothing Then
                 Try
-                    assembledDDT = BuildAssembledDDTFromTemplate(template, task, flow)
-                    Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] DDT built from template {task.TemplateId}")
-                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] DDT built from template {task.TemplateId}")
+                    taskTreeRuntime = BuildTaskTreeRuntimeFromTemplate(template, task, flow)
+                    Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] TaskTreeRuntime built from template {task.TemplateId}")
+                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] TaskTreeRuntime built from template {task.TemplateId}")
                 Catch ex As Exception
                     Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Failed to build DDT from template: {ex.Message}")
                     System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Exception details: {ex.ToString()}")
@@ -68,50 +68,50 @@ Public Class DataRequestTaskCompiler
         End If
 
         ' ✅ FALLBACK LEGACY: Se no templateId o costruzione fallita, usa task.Data (backward compatibility)
-        If assembledDDT Is Nothing AndAlso task.Data IsNot Nothing AndAlso task.Data.Count > 0 Then
+        If taskTreeRuntime Is Nothing AndAlso task.Data IsNot Nothing AndAlso task.Data.Count > 0 Then
             Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] No templateId or template build failed, using legacy task.Data")
             System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Using legacy task.Data")
             Try
-                ' Serializza task a JSON e deserializza come AssembledDDT
+                ' Serializza task a JSON e deserializza come TaskTreeRuntime
                 Dim taskJson = JsonConvert.SerializeObject(task)
                 Dim settings As New JsonSerializerSettings()
                 settings.Converters.Add(New MainDataNodeListConverter())
-                assembledDDT = JsonConvert.DeserializeObject(Of Compiler.AssembledDDT)(taskJson, settings)
+                taskTreeRuntime = JsonConvert.DeserializeObject(Of Compiler.TaskTreeRuntime)(taskJson, settings)
 
-                If assembledDDT IsNot Nothing Then
-                    assembledDDT.Id = task.Id
-                    If String.IsNullOrEmpty(assembledDDT.Label) Then
-                        assembledDDT.Label = task.Label
+                If taskTreeRuntime IsNot Nothing Then
+                    taskTreeRuntime.Id = task.Id
+                    If String.IsNullOrEmpty(taskTreeRuntime.Label) Then
+                        taskTreeRuntime.Label = task.Label
                     End If
-                    If assembledDDT.Translations Is Nothing Then
-                        assembledDDT.Translations = New Dictionary(Of String, String)()
+                    If taskTreeRuntime.Translations Is Nothing Then
+                        taskTreeRuntime.Translations = New Dictionary(Of String, String)()
                     End If
 
                     ' ✅ Espandi ricorsivamente
-                    If assembledDDT.Data IsNot Nothing AndAlso assembledDDT.Data.Count > 0 Then
-                        assembledDDT.Data = ExpandDataTreeRecursively(assembledDDT.Data, flow.Tasks, New HashSet(Of String)())
+                    If taskTreeRuntime.Data IsNot Nothing AndAlso taskTreeRuntime.Data.Count > 0 Then
+                        taskTreeRuntime.Data = ExpandDataTreeRecursively(taskTreeRuntime.Data, flow.Tasks, New HashSet(Of String)())
                     End If
                 End If
             Catch ex As Exception
-                Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Failed to build AssembledDDT from legacy task.Data: {ex.Message}")
+                Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Failed to build TaskTreeRuntime from legacy task.Data: {ex.Message}")
                 System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Exception details: {ex.ToString()}")
             End Try
         End If
 
-        ' Compila DDT se trovato
-        If assembledDDT IsNot Nothing Then
-            Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] assembledDDT found! Starting DDT compilation...")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] assembledDDT found! Starting DDT compilation...")
-            Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] assembledDDT.Id={assembledDDT.Id}, Data IsNot Nothing={assembledDDT.Data IsNot Nothing}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] assembledDDT.Id={assembledDDT.Id}, Data IsNot Nothing={assembledDDT.Data IsNot Nothing}")
-            If assembledDDT.Data IsNot Nothing Then
-                Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] assembledDDT.Data.Count={assembledDDT.Data.Count}")
-                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] assembledDDT.Data.Count={assembledDDT.Data.Count}")
+        ' Compila TaskTreeRuntime se trovato
+        If taskTreeRuntime IsNot Nothing Then
+            Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] TaskTreeRuntime found! Starting compilation...")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] TaskTreeRuntime found! Starting compilation...")
+            Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] TaskTreeRuntime.Id={taskTreeRuntime.Id}, Data IsNot Nothing={taskTreeRuntime.Data IsNot Nothing}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] TaskTreeRuntime.Id={taskTreeRuntime.Id}, Data IsNot Nothing={taskTreeRuntime.Data IsNot Nothing}")
+            If taskTreeRuntime.Data IsNot Nothing Then
+                Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] TaskTreeRuntime.Data.Count={taskTreeRuntime.Data.Count}")
+                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] TaskTreeRuntime.Data.Count={taskTreeRuntime.Data.Count}")
             End If
             Try
                 Dim ddtCompiler As New DDTCompiler()
-                ' Serializza AssembledDDT a JSON per DDTCompiler.Compile
-                Dim ddtJson = JsonConvert.SerializeObject(assembledDDT)
+                ' Serializza TaskTreeRuntime a JSON per DDTCompiler.Compile
+                Dim ddtJson = JsonConvert.SerializeObject(taskTreeRuntime)
                 Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] Calling DDTCompiler.Compile with JSON length={ddtJson.Length}")
                 System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] Calling DDTCompiler.Compile with JSON length={ddtJson.Length}")
                 Dim ddtResult = ddtCompiler.Compile(ddtJson)
@@ -129,8 +129,8 @@ Public Class DataRequestTaskCompiler
                 System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Exception details: {ex.ToString()}")
             End Try
         Else
-            Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] No DDT found for DataRequest task {taskId} - DDT will be Nothing")
-            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] No DDT found for DataRequest task {taskId} - DDT will be Nothing")
+            Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] No TaskTreeRuntime found for DataRequest task {taskId} - DDT will be Nothing")
+            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] No TaskTreeRuntime found for DataRequest task {taskId} - DDT will be Nothing")
         End If
 
         ' Popola campi comuni
@@ -252,14 +252,14 @@ Public Class DataRequestTaskCompiler
     End Function
 
     ''' <summary>
-    ''' Costruisce AssembledDDT dal template e applica gli override dall'istanza
+    ''' Costruisce TaskTreeRuntime dal template e applica gli override dall'istanza
     ''' </summary>
-    Private Function BuildAssembledDDTFromTemplate(
+    Private Function BuildTaskTreeRuntimeFromTemplate(
         template As Task,
         instance As Task,
         flow As Flow
-    ) As AssembledDDT
-        Dim assembledDDT As New AssembledDDT() With {
+    ) As TaskTreeRuntime
+        Dim taskTreeRuntime As New TaskTreeRuntime() With {
             .Id = instance.Id,
             .Label = If(String.IsNullOrEmpty(instance.Label), template.Label, instance.Label),
             .Translations = New Dictionary(Of String, String)()
@@ -268,20 +268,20 @@ Public Class DataRequestTaskCompiler
         ' ✅ Costruisci struttura dal template (ricorsivamente usando templateId di ogni nodo)
         If template.Data IsNot Nothing AndAlso template.Data.Count > 0 Then
             ' ✅ Espandi ricorsivamente usando templateId di ogni nodo
-            assembledDDT.Data = ExpandDataTreeFromTemplate(template.Data, flow.Tasks, New HashSet(Of String)())
+            taskTreeRuntime.Data = ExpandDataTreeFromTemplate(template.Data, flow.Tasks, New HashSet(Of String)())
 
             ' ✅ Applica steps override dall'istanza
             If instance.Steps IsNot Nothing AndAlso instance.Steps.Count > 0 Then
-                ApplyStepsOverrides(assembledDDT.Data, instance.Steps)
+                ApplyStepsOverrides(taskTreeRuntime.Data, instance.Steps)
             End If
         End If
 
         ' ✅ Constraints sempre dal template
         If template.Constraints IsNot Nothing AndAlso template.Constraints.Count > 0 Then
-            assembledDDT.Constraints = template.Constraints
+            taskTreeRuntime.Constraints = template.Constraints
         End If
 
-        Return assembledDDT
+        Return taskTreeRuntime
     End Function
 
     ''' <summary>

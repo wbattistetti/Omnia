@@ -9,13 +9,13 @@ Namespace Compiler
 
     ''' <summary>
     ''' Helper per caricare DDTInstance da vari formati (JSON, JObject, ecc.)
-    ''' Centralizza la logica di conversione: input → AssembledDDT → DDTInstance
+    ''' Centralizza la logica di conversione: input → TaskTreeRuntime (ex AssembledDDT) → DDTInstance
     ''' </summary>
     Public Class DDTLoader
 
         ''' <summary>
         ''' Carica DDTInstance da un valore (JObject, JToken, o String JSON)
-        ''' Converte direttamente: JSON → AssembledDDT → DDTInstance usando DDTCompiler
+        ''' Converte direttamente: JSON → TaskTreeRuntime (ex AssembledDDT) → DDTInstance usando DDTCompiler
         ''' </summary>
         ''' <param name="ddtValue">Valore da convertire (String JSON, JToken, JObject)</param>
         ''' <returns>DDTInstance pronto per l'esecuzione</returns>
@@ -40,10 +40,10 @@ Namespace Compiler
 
             Console.WriteLine($"🔄 [DDTLoader] Loading DDT from JSON ({jsonString.Length} chars)...")
 
-            ' ✅ Usa DDTCompiler per convertire direttamente: JSON → AssembledDDT → DDTInstance
+            ' ✅ Usa DDTCompiler per convertire direttamente: JSON → TaskTreeRuntime → DDTInstance
             ' DDTCompiler gestisce internamente:
-            ' 1. Deserializza JSON in AssembledDDT (IDE format)
-            ' 2. Converte AssembledDDT in DDTInstance (Runtime format) usando DDTAssembler
+            ' 1. Deserializza JSON in TaskTreeRuntime (IDE format, ex AssembledDDT)
+            ' 2. Converte TaskTreeRuntime in DDTInstance (Runtime format) usando DDTAssembler
             ' 3. Carica NLP contracts e valida la struttura
             Dim compiler As New DDTCompiler()
             Dim compileResult = compiler.Compile(jsonString)

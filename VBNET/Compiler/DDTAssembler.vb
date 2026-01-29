@@ -6,7 +6,7 @@ Imports System.Linq
 Imports DDTEngine
 
 ''' <summary>
-''' DDTAssembler: compila strutture IDE (AssembledDDT) in strutture Runtime (DDTInstance)
+''' DDTAssembler: compila strutture IDE (TaskTreeRuntime, ex AssembledDDT) in strutture Runtime (DDTInstance)
 ''' Responsabilità:
 ''' - Mappare campi uno a uno
 ''' - Normalizzare cardinalità (data singolo → MainDataList)
@@ -71,14 +71,14 @@ Public Class DDTAssembler
     End Function
 
     ''' <summary>
-    ''' Compila AssembledDDT (IDE) in DDTInstance (Runtime)
+    ''' Compila TaskTreeRuntime (IDE, ex AssembledDDT) in DDTInstance (Runtime)
     ''' </summary>
-    Public Function Compile(assembled As Compiler.AssembledDDT) As DDTInstance
-        Console.WriteLine($"🔍 [COMPILER][DDTAssembler] Compile called for AssembledDDT Id={assembled.Id}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] Compile called for AssembledDDT Id={assembled.Id}")
+    Public Function Compile(assembled As Compiler.TaskTreeRuntime) As DDTInstance
+        Console.WriteLine($"🔍 [COMPILER][DDTAssembler] Compile called for TaskTreeRuntime Id={assembled.Id}")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] Compile called for TaskTreeRuntime Id={assembled.Id}")
 
         If assembled Is Nothing Then
-            Throw New ArgumentNullException(NameOf(assembled), "AssembledDDT cannot be Nothing")
+            Throw New ArgumentNullException(NameOf(assembled), "TaskTreeRuntime cannot be Nothing")
         End If
 
         ' ✅ Salva traduzioni per uso durante la conversione

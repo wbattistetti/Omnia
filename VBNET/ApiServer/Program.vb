@@ -340,9 +340,7 @@ Module Program
             If request.Tasks Is Nothing Then
                 request.Tasks = New List(Of Compiler.Task)()
             End If
-            If request.DDTs Is Nothing Then
-                request.DDTs = New List(Of Compiler.AssembledDDT)()
-            End If
+            ' ❌ RIMOSSO: request.DDTs - non più usato, struttura costruita da template
 
             ' Check if flow is empty - return valid JSON instead of calling compiler
             If request.Nodes.Count = 0 AndAlso request.Tasks.Count = 0 Then
@@ -362,11 +360,10 @@ Module Program
 
             ' Create Flow structure
             Dim flow As New Compiler.Flow() With {
-            .Nodes = If(request.Nodes, New List(Of Compiler.FlowNode)()),
-            .Edges = If(request.Edges, New List(Of Compiler.FlowEdge)()),
-            .Tasks = If(request.Tasks, New List(Of Compiler.Task)()),
-            .DDTs = If(request.DDTs, New List(Of Compiler.AssembledDDT)())
-        }
+                .Nodes = If(request.Nodes, New List(Of Compiler.FlowNode)()),
+                .Edges = If(request.Edges, New List(Of Compiler.FlowEdge)()),
+                .Tasks = If(request.Tasks, New List(Of Compiler.Task)())
+            }
 
             ' Log Flow structure after creation
             Console.WriteLine($"🔍 [HandleCompileFlow] Flow structure created:")
@@ -520,19 +517,8 @@ Module Program
                 Return Results.BadRequest(New With {.error = "Task is null"})
             End If
 
-            ' Deserialize DDTs if present
-            Dim ddts As List(Of Compiler.AssembledDDT) = Nothing
-            If requestObj("ddts") IsNot Nothing Then
-                Try
-                    Dim ddtsJson = requestObj("ddts").ToString()
-                    ddts = JsonConvert.DeserializeObject(Of List(Of Compiler.AssembledDDT))(ddtsJson, New JsonSerializerSettings() With {
-                        .NullValueHandling = NullValueHandling.Ignore,
-                        .MissingMemberHandling = MissingMemberHandling.Ignore
-                    })
-                Catch ex As Exception
-                    Console.WriteLine($"⚠️ [HandleCompileTask] Error deserializing DDTs: {ex.Message}, continuing without DDTs")
-                End Try
-            End If
+            ' ❌ RIMOSSO: Deserializzazione ddts legacy
+            ' Il nuovo modello usa TaskTree costruito da template, non più ddts array
             Console.WriteLine($"🔍 [HandleCompileTask] Task received: Id={task.Id}, Type={If(task.Type.HasValue, task.Type.Value.ToString(), "NULL")}")
 
             ' Validate task type
@@ -566,8 +552,7 @@ Module Program
             Dim dummyFlow As New Compiler.Flow() With {
                 .Nodes = New List(Of Compiler.FlowNode) From {dummyNode},
                 .Tasks = New List(Of Compiler.Task) From {task},
-                .Edges = New List(Of Compiler.FlowEdge)(),
-                .DDTs = If(ddts, New List(Of Compiler.AssembledDDT)())
+                .Edges = New List(Of Compiler.FlowEdge)()
             }
 
             ' Compile the task
@@ -628,11 +613,10 @@ Module Program
 
             ' Create Flow structure
             Dim flow As New Compiler.Flow() With {
-            .Nodes = If(request.Nodes, New List(Of Compiler.FlowNode)()),
-            .Edges = If(request.Edges, New List(Of Compiler.FlowEdge)()),
-            .Tasks = If(request.Tasks, New List(Of Compiler.Task)()),
-            .DDTs = If(request.DDTs, New List(Of Compiler.AssembledDDT)())
-        }
+                .Nodes = If(request.Nodes, New List(Of Compiler.FlowNode)()),
+                .Edges = If(request.Edges, New List(Of Compiler.FlowEdge)()),
+                .Tasks = If(request.Tasks, New List(Of Compiler.Task)())
+            }
 
             ' Compile flow
             Dim compiler = New Compiler.FlowCompiler()
@@ -694,59 +678,6 @@ Module Program
                 Return Results.BadRequest(New With {.error = "Empty request body"})
             End If
 
-            ' ✅ DEBUG: Verifica presenza di "ddts" nel body JSON PRIMA della deserializzazione
-            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-            Console.WriteLine($"🔍 [API][OrchestratorSession] DEBUG: Analyzing request body for DDTs")
-            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-            Console.WriteLine($"[API][OrchestratorSession] Body length: {body.Length} characters")
-            If body.Contains("ddts") OrElse body.Contains("DDTs") Then
-                Console.WriteLine($"[API][OrchestratorSession] ✅ Found 'ddts' or 'DDTs' in body")
-                ' Cerca il campo ddts nel JSON
-                Try
-                    Dim jObj = Newtonsoft.Json.Linq.JObject.Parse(body)
-                    If jObj("ddts") IsNot Nothing Then
-                        Dim ddtsToken = jObj("ddts")
-                        Console.WriteLine($"[API][OrchestratorSession] ✅ Found 'ddts' field in JSON")
-                        Console.WriteLine($"[API][OrchestratorSession] ddts type: {ddtsToken.GetType().Name}")
-                        If TypeOf ddtsToken Is Newtonsoft.Json.Linq.JArray Then
-                            Dim ddtsArray = CType(ddtsToken, Newtonsoft.Json.Linq.JArray)
-                            Console.WriteLine($"[API][OrchestratorSession] ddts is JArray, count: {ddtsArray.Count}")
-                            If ddtsArray.Count > 0 Then
-                                Dim firstDDTToken = ddtsArray(0)
-                                If TypeOf firstDDTToken Is Newtonsoft.Json.Linq.JObject Then
-                                    Dim firstDDTObj = CType(firstDDTToken, Newtonsoft.Json.Linq.JObject)
-                                    Console.WriteLine($"[API][OrchestratorSession] First DDT keys: {String.Join(", ", firstDDTObj.Properties().Select(Function(p) p.Name))}")
-                                    If firstDDTObj("data") IsNot Nothing Then
-                                        Console.WriteLine($"[API][OrchestratorSession] ✅ First DDT has 'data' field")
-                                        Dim dataToken = firstDDTObj("data")
-                                        If TypeOf dataToken Is Newtonsoft.Json.Linq.JArray Then
-                                            Dim dataArray = CType(dataToken, Newtonsoft.Json.Linq.JArray)
-                                            Console.WriteLine($"[API][OrchestratorSession] data is JArray, count: {dataArray.Count}")
-                                        Else
-                                            Console.WriteLine($"[API][OrchestratorSession] data type: {dataToken.GetType().Name}")
-                                        End If
-                                    Else
-                                        Console.WriteLine($"[API][OrchestratorSession] ⚠️ WARNING: First DDT does NOT have 'data' field!")
-                                    End If
-                                End If
-                            Else
-                                Console.WriteLine($"[API][OrchestratorSession] ⚠️ WARNING: ddts array is EMPTY!")
-                            End If
-                        End If
-                    ElseIf jObj("DDTs") IsNot Nothing Then
-                        Console.WriteLine($"[API][OrchestratorSession] ✅ Found 'DDTs' field (capitalized) in JSON")
-                    Else
-                        Console.WriteLine($"[API][OrchestratorSession] ⚠️ WARNING: 'ddts' or 'DDTs' field NOT found in JSON!")
-                    End If
-                Catch parseEx As Exception
-                    Console.WriteLine($"[API][OrchestratorSession] ⚠️ Error parsing JSON for DDTs check: {parseEx.Message}")
-                End Try
-            Else
-                Console.WriteLine($"[API][OrchestratorSession] ⚠️ WARNING: 'ddts' or 'DDTs' NOT found in body string!")
-            End If
-            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-            Console.Out.Flush()
-
             ' Deserialize request
             Dim request As OrchestratorSessionStartRequest = Nothing
             Try
@@ -764,36 +695,7 @@ Module Program
                 Return Results.BadRequest(New With {.error = "Invalid JSON", .message = jsonEx.Message})
             End Try
 
-            ' ✅ DEBUG: Verifica contenuto di request.DDTs PRIMA di creare la sessione
-            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-            Console.WriteLine($"🔍 [API][OrchestratorSession] DEBUG: Analyzing request.DDTs")
-            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-            Console.WriteLine($"[API][OrchestratorSession] request.DDTs IsNot Nothing={request.DDTs IsNot Nothing}")
-            If request.DDTs IsNot Nothing Then
-                Console.WriteLine($"[API][OrchestratorSession] request.DDTs.Count={request.DDTs.Count}")
-                If request.DDTs.Count > 0 Then
-                    Dim firstDDT = request.DDTs(0)
-                    Console.WriteLine($"[API][OrchestratorSession] firstDDT IsNot Nothing={firstDDT IsNot Nothing}")
-                    If firstDDT IsNot Nothing Then
-                        Console.WriteLine($"[API][OrchestratorSession] firstDDT.Id={If(String.IsNullOrEmpty(firstDDT.Id), "NULL/EMPTY", firstDDT.Id)}")
-                        Console.WriteLine($"[API][OrchestratorSession] firstDDT.Label={If(String.IsNullOrEmpty(firstDDT.Label), "NULL/EMPTY", firstDDT.Label)}")
-                        Console.WriteLine($"[API][OrchestratorSession] firstDDT.Data IsNot Nothing={firstDDT.Data IsNot Nothing}")
-                        If firstDDT.Data IsNot Nothing Then
-                            Console.WriteLine($"[API][OrchestratorSession] firstDDT.Data.Count={firstDDT.Data.Count}")
-                        Else
-                            Console.WriteLine($"[API][OrchestratorSession] ⚠️ WARNING: firstDDT.Data is Nothing!")
-                        End If
-                    Else
-                        Console.WriteLine($"[API][OrchestratorSession] ❌ CRITICAL ERROR: firstDDT is Nothing!")
-                    End If
-                Else
-                    Console.WriteLine($"[API][OrchestratorSession] ⚠️ WARNING: request.DDTs.Count = 0 (EMPTY!)")
-                End If
-            Else
-                Console.WriteLine($"[API][OrchestratorSession] ⚠️ WARNING: request.DDTs is Nothing!")
-            End If
-            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-            Console.Out.Flush()
+            ' ❌ RIMOSSO: Debug request.DDTs legacy - non più usato
 
             If request Is Nothing OrElse request.CompilationResult Is Nothing Then
                 Console.WriteLine("❌ [API][OrchestratorSession] Missing CompilationResult")
@@ -917,7 +819,6 @@ Module Program
                     sessionId,
                     compilationResult,
                     request.Tasks,
-                    request.DDTs,
                     request.Translations
                 )
                 Console.WriteLine($"✅ [API][OrchestratorSession] Session created successfully")
@@ -1124,7 +1025,6 @@ Module Program
                     sessionId,
                     compilationResult,
                     request.Tasks,
-                    request.DDTs,
                     request.Translations
                 )
                 Console.WriteLine($"✅ [API][OrchestratorSession] Session created successfully, orchestrator should be starting...")
@@ -1251,89 +1151,75 @@ Module Program
             ' Register event handlers (using Action with Task.Run for async operations)
             Dim onMessage As Action(Of Object) = Sub(data)
                                                      System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
-                                                                  Try
-                                                                      Await writer.WriteLineAsync($"event: message")
-                                                                      Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
-                                                                      Await writer.WriteLineAsync()
-                                                                      Await writer.FlushAsync()
-                                                                  Catch ex As Exception
-                                                                      Console.WriteLine($"❌ [SSE] Error sending message: {ex.Message}")
-                                                                  End Try
-                                                              End Function)
+                                                                                         Try
+                                                                                             Await writer.WriteLineAsync($"event: message")
+                                                                                             Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
+                                                                                             Await writer.WriteLineAsync()
+                                                                                             Await writer.FlushAsync()
+                                                                                         Catch ex As Exception
+                                                                                             Console.WriteLine($"❌ [SSE] Error sending message: {ex.Message}")
+                                                                                         End Try
+                                                                                     End Function)
                                                  End Sub
-
-            Dim onDDTStart As Action(Of Object) = Sub(data)
-                                                      System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
-                                                                   Try
-                                                                       Await writer.WriteLineAsync($"event: ddtStart")
-                                                                       Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
-                                                                       Await writer.WriteLineAsync()
-                                                                       Await writer.FlushAsync()
-                                                                   Catch ex As Exception
-                                                                       Console.WriteLine($"❌ [SSE] Error sending ddtStart: {ex.Message}")
-                                                                   End Try
-                                                               End Function)
-                                                  End Sub
 
             Dim onWaitingForInput As Action(Of Object) = Sub(data)
                                                              System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
-                                                                          Try
-                                                                              session.IsWaitingForInput = True
-                                                                              session.WaitingForInputData = data
-                                                                              Await writer.WriteLineAsync($"event: waitingForInput")
-                                                                              Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
-                                                                              Await writer.WriteLineAsync()
-                                                                              Await writer.FlushAsync()
-                                                                          Catch ex As Exception
-                                                                              Console.WriteLine($"❌ [SSE] Error sending waitingForInput: {ex.Message}")
-                                                                          End Try
-                                                                      End Function)
+                                                                                                 Try
+                                                                                                     session.IsWaitingForInput = True
+                                                                                                     session.WaitingForInputData = data
+                                                                                                     Await writer.WriteLineAsync($"event: waitingForInput")
+                                                                                                     Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
+                                                                                                     Await writer.WriteLineAsync()
+                                                                                                     Await writer.FlushAsync()
+                                                                                                 Catch ex As Exception
+                                                                                                     Console.WriteLine($"❌ [SSE] Error sending waitingForInput: {ex.Message}")
+                                                                                                 End Try
+                                                                                             End Function)
                                                          End Sub
 
             Dim onStateUpdate As Action(Of Object) = Sub(data)
                                                          System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
-                                                                      Try
-                                                                          Await writer.WriteLineAsync($"event: stateUpdate")
-                                                                          Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
-                                                                          Await writer.WriteLineAsync()
-                                                                          Await writer.FlushAsync()
-                                                                      Catch ex As Exception
-                                                                          Console.WriteLine($"❌ [SSE] Error sending stateUpdate: {ex.Message}")
-                                                                      End Try
-                                                                  End Function)
+                                                                                             Try
+                                                                                                 Await writer.WriteLineAsync($"event: stateUpdate")
+                                                                                                 Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
+                                                                                                 Await writer.WriteLineAsync()
+                                                                                                 Await writer.FlushAsync()
+                                                                                             Catch ex As Exception
+                                                                                                 Console.WriteLine($"❌ [SSE] Error sending stateUpdate: {ex.Message}")
+                                                                                             End Try
+                                                                                         End Function)
                                                      End Sub
 
             Dim onComplete As Action(Of Object) = Sub(data)
                                                       System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
-                                                                   Try
-                                                                       Await writer.WriteLineAsync($"event: complete")
-                                                                       Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
-                                                                       Await writer.WriteLineAsync()
-                                                                       Await writer.FlushAsync()
-                                                                       writer.Close()
-                                                                   Catch ex As Exception
-                                                                       Console.WriteLine($"❌ [SSE] Error sending complete: {ex.Message}")
-                                                                   End Try
-                                                               End Function)
+                                                                                          Try
+                                                                                              Await writer.WriteLineAsync($"event: complete")
+                                                                                              Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
+                                                                                              Await writer.WriteLineAsync()
+                                                                                              Await writer.FlushAsync()
+                                                                                              writer.Close()
+                                                                                          Catch ex As Exception
+                                                                                              Console.WriteLine($"❌ [SSE] Error sending complete: {ex.Message}")
+                                                                                          End Try
+                                                                                      End Function)
                                                   End Sub
 
             Dim onError As Action(Of Object) = Sub(data)
                                                    System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
-                                                                Try
-                                                                    Await writer.WriteLineAsync($"event: error")
-                                                                    Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
-                                                                    Await writer.WriteLineAsync()
-                                                                    Await writer.FlushAsync()
-                                                                    writer.Close()
-                                                                Catch ex As Exception
-                                                                    Console.WriteLine($"❌ [SSE] Error sending error: {ex.Message}")
-                                                                End Try
-                                                            End Function)
+                                                                                       Try
+                                                                                           Await writer.WriteLineAsync($"event: error")
+                                                                                           Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
+                                                                                           Await writer.WriteLineAsync()
+                                                                                           Await writer.FlushAsync()
+                                                                                           writer.Close()
+                                                                                       Catch ex As Exception
+                                                                                           Console.WriteLine($"❌ [SSE] Error sending error: {ex.Message}")
+                                                                                       End Try
+                                                                                   End Function)
                                                End Sub
 
             ' Register listeners
             session.EventEmitter.[On]("message", onMessage)
-            session.EventEmitter.[On]("ddtStart", onDDTStart)
             session.EventEmitter.[On]("waitingForInput", onWaitingForInput)
             session.EventEmitter.[On]("stateUpdate", onStateUpdate)
             session.EventEmitter.[On]("complete", onComplete)
@@ -1343,7 +1229,6 @@ Module Program
             context.RequestAborted.Register(Sub()
                                                 Console.WriteLine($"✅ [HandleOrchestratorSessionStream] SSE connection closed for session: {sessionId}")
                                                 session.EventEmitter.RemoveListener("message", onMessage)
-                                                session.EventEmitter.RemoveListener("ddtStart", onDDTStart)
                                                 session.EventEmitter.RemoveListener("waitingForInput", onWaitingForInput)
                                                 session.EventEmitter.RemoveListener("stateUpdate", onStateUpdate)
                                                 session.EventEmitter.RemoveListener("complete", onComplete)
@@ -1476,8 +1361,9 @@ Public Class CompileFlowRequest
     <JsonProperty("tasks")>
     Public Property Tasks As List(Of Compiler.Task)
 
-    <JsonProperty("ddts")>
-    Public Property DDTs As List(Of Compiler.AssembledDDT)
+    ' ❌ RIMOSSO: DDTs property - non più usato, struttura costruita da template
+    ' <JsonProperty("ddts")>
+    ' Public Property DDTs As List(Of Compiler.AssembledDDT)
 
     <JsonProperty("translations")>
     Public Property Translations As Dictionary(Of String, String)
@@ -1502,8 +1388,9 @@ Public Class OrchestratorSessionStartRequest
     <JsonProperty("tasks")>
     Public Property Tasks As List(Of Object)
 
-    <JsonProperty("ddts")>
-    Public Property DDTs As List(Of Compiler.AssembledDDT)
+    ' ❌ RIMOSSO: DDTs property - non più usato, struttura costruita da template
+    ' <JsonProperty("ddts")>
+    ' Public Property DDTs As List(Of Compiler.AssembledDDT)
 
     <JsonProperty("translations")>
     Public Property Translations As Dictionary(Of String, String)

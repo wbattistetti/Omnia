@@ -58,7 +58,8 @@
     <Compile Include="DTO\IDE\DialogueStepListConverter.vb" />
     <Compile Include="DTO\IDE\MainDataNode.vb" />
     <Compile Include="DTO\IDE\MainDataNodeListConverter.vb" />
-    <Compile Include="DTO\IDE\AssembledDDT.vb" />
+    <Compile Include="DTO\IDE\TaskTreeRuntime.vb" />
+    <!-- ❌ RIMOSSO: AssembledDDT.vb - rinominato in TaskTreeRuntime.vb -->
 
     <!-- Runtime Types (Output for execution) -->
     <Compile Include="DTO\Runtime\TaskState.vb" />

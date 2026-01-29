@@ -1759,17 +1759,14 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                           const { RowHeuristicsService } = await import('../../../../services/RowHeuristicsService');
                           const templateType = RowHeuristicsService.getTemplateType(template);
                           if (templateType === TaskType.UtteranceInterpretation) {
-                            const { buildDDTFromTask } = await import('../../../../utils/taskUtils');
-                            ddt = await buildDDTFromTask(taskForType);
+                            const { buildTaskTree } = await import('../../../../utils/taskUtils');
+                            const projectId = getProjectId?.() || undefined;
+                            ddt = await buildTaskTree(taskForType, projectId);
                           }
                         }
-                      } else if (taskForType?.data && taskForType.data.length > 0) {
-                        ddt = {
-                          label: taskForType.label || row.text || 'New DDT',
-                          data: taskForType.data,
-                          stepPrompts: taskForType.stepPrompts,
-                          constraints: taskForType.constraints,
-                        };
+                      } else {
+                        // ✅ Task senza templateId - ResponseEditor gestirà creando template automaticamente
+                        ddt = null;
                       }
 
                       const event = new CustomEvent('taskEditor:open', {
@@ -2025,12 +2022,13 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                         // ✅ Costruisci DDT SOLO se il template è di tipo DataRequest
                         if (templateType === TaskType.UtteranceInterpretation) {
-                          // ✅ buildDDTFromTask gestisce merge: template come base + override da instance.data
-                          const { buildDDTFromTask } = await import('../../../../utils/taskUtils');
-                          ddt = await buildDDTFromTask(taskForType);
+                          // ✅ buildTaskTree costruisce TaskTree da template + instance
+                          const { buildTaskTree } = await import('../../../../utils/taskUtils');
+                          const projectId = getProjectId?.() || undefined;
+                          ddt = await buildTaskTree(taskForType, projectId);
                           if (!ddt) {
-                            // Fallback: create empty DDT solo se template è DataRequest ma buildDDTFromTask fallisce
-                            ddt = { label: taskForType.label || row.text || 'New DDT', data: [] };
+                            // Fallback: create empty TaskTree solo se template è DataRequest ma buildTaskTree fallisce
+                            ddt = { label: taskForType.label || row.text || 'New Task', nodes: [] };
                           }
                         } else {
                           // ✅ NON costruire DDT se template non è DataRequest
@@ -2162,12 +2160,13 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                         // ✅ Costruisci DDT SOLO se il template è di tipo DataRequest
                         if (templateType === TaskType.UtteranceInterpretation) {
-                          // ✅ buildDDTFromTask gestisce merge: template come base + override da instance.data
-                          const { buildDDTFromTask } = await import('../../../../utils/taskUtils');
-                          ddt = await buildDDTFromTask(taskForType);
+                          // ✅ buildTaskTree costruisce TaskTree da template + instance
+                          const { buildTaskTree } = await import('../../../../utils/taskUtils');
+                          const projectId = getProjectId?.() || undefined;
+                          ddt = await buildTaskTree(taskForType, projectId);
                           if (!ddt) {
-                            // Fallback: create empty DDT solo se template è DataRequest ma buildDDTFromTask fallisce
-                            ddt = { label: taskForType.label || row.text || 'New DDT', data: [] };
+                            // Fallback: create empty TaskTree solo se template è DataRequest ma buildTaskTree fallisce
+                            ddt = { label: taskForType.label || row.text || 'New Task', nodes: [] };
                           }
                         } else {
                           // ✅ NON costruire DDT se template non è DataRequest
@@ -2340,8 +2339,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         // Apri ResponseEditor
                         taskEditorCtx.open({ id: task.id, type: TaskType.UtteranceInterpretation, label: row.text, instanceId: row.id });
 
-                        const { buildDDTFromTask } = await import('../../../../utils/taskUtils');
-                        const ddt = await buildDDTFromTask(task);
+                        const { buildTaskTree } = await import('../../../../utils/taskUtils');
+                        const projectId = getProjectId?.() || undefined;
+                        const ddt = await buildTaskTree(task, projectId);
 
                         const event = new CustomEvent('taskEditor:open', {
                           detail: {

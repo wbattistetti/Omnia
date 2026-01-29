@@ -10,12 +10,7 @@ export function isTaskTreeEmpty(taskTree?: any): boolean {
   }
 }
 
-/**
- * @deprecated Use isTaskTreeEmpty instead
- */
-export function isDDTEmpty(ddt?: any): boolean {
-  return isTaskTreeEmpty(ddt);
-}
+// ❌ RIMOSSO: isDDTEmpty - Usa isTaskTreeEmpty invece
 
 /**
  * Verifica se il TaskTree ha nodes ma senza steps completi

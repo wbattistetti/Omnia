@@ -6,6 +6,7 @@ Option Explicit On
 ''' Contiene solo i campi necessari per l'esecuzione runtime
 ''' I campi design-time (Label, Type, Synonyms, Constraints, Condition) sono rimossi
 ''' perché non utilizzati durante l'esecuzione
+''' ✅ NOTA: DDTNode è interno al runtime e non viene rinominato in TaskNode per non toccare la logica funzionale
 ''' </summary>
 Public Class DDTNode
     ' ============================================================

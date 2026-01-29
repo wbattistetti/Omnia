@@ -5,12 +5,13 @@ Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
 ''' <summary>
-''' AssembledDDT: formato runtime per DDTEngine
-''' ✅ MIGRATION: Questo formato è mantenuto per compatibilità con il runtime VB.NET.
-''' Il frontend ora usa TaskTree, ma il compilatore converte TaskTree → AssembledDDT per il runtime.
+''' TaskTreeRuntime: formato runtime per DDTEngine (ex AssembledDDT)
+''' ✅ RINOMINATO: AssembledDDT → TaskTreeRuntime
+''' Il frontend usa TaskTree, il compilatore converte TaskTree → TaskTreeRuntime per il runtime.
+''' NOTA: DDTEngine/DDTInstance/DDTNode sono interni al runtime e non vengono rinominati per non toccare la logica funzionale.
 ''' data è sempre un array: data: MainDataNode[]
 ''' </summary>
-Public Class AssembledDDT
+Public Class TaskTreeRuntime
     <JsonProperty("id")>
     Public Property Id As String
 

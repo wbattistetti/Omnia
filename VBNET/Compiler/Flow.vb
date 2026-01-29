@@ -5,8 +5,9 @@ Imports System.Collections.Generic
 Imports System.Linq
 
 ''' <summary>
-''' Flow structure: contiene nodes, edges, tasks, ddts
+''' Flow structure: contiene nodes, edges, tasks
 ''' Helper per navigare struttura IDE durante la compilazione
+''' ❌ RIMOSSO: ddts - struttura costruita da template usando templateId
 ''' </summary>
 Public Class Flow
     ''' <summary>
@@ -24,16 +25,14 @@ Public Class Flow
     ''' </summary>
     Public Property Tasks As List(Of Task)
 
-    ''' <summary>
-    ''' DDTs disponibili (mondo IDE - struttura tipizzata identica al frontend)
-    ''' </summary>
-    Public Property DDTs As List(Of Compiler.AssembledDDT)
+    ' ❌ RIMOSSO: DDTs property - non più usato, struttura costruita da template usando templateId
+    ' Public Property DDTs As List(Of Compiler.AssembledDDT)
 
     Public Sub New()
         Nodes = New List(Of FlowNode)()
         Edges = New List(Of FlowEdge)()
         Tasks = New List(Of Task)()
-        DDTs = New List(Of AssembledDDT)()
+        ' ❌ RIMOSSO: DDTs initialization - non più usato
     End Sub
 End Class
 

@@ -39,7 +39,7 @@ import { useDDTTranslations } from '../../../hooks/useDDTTranslations';
 import { ToolbarButton } from '../../../dock/types';
 import { taskTemplateService } from '../../../services/TaskTemplateService';
 import { mapNode, closeTab } from '../../../dock/ops';
-import { extractModifiedDDTFields, extractTaskOverrides, buildTaskTree } from '../../../utils/taskUtils';
+import { extractTaskOverrides, buildTaskTree } from '../../../utils/taskUtils';
 import { useWizardInference } from './hooks/useWizardInference';
 import { validateTaskStructure, getTaskSemantics } from '../../../utils/taskSemantics';
 import { getIsTesting } from './testingState';
@@ -328,7 +328,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   // LOGICA CONCETTUALE DEL SALVATAGGIO:
   // - Template: contiene struttura condivisa (constraints, examples, nlpContract)
   // - Istanza: contiene SOLO override (modifiche rispetto al template)
-  // - extractModifiedDDTFields confronta istanza con template e salva solo differenze
+  // - extractTaskOverrides confronta istanza con template e salva solo differenze
   // - A runtime: se mancante nell'istanza → risoluzione lazy dal template (backend VB.NET)
   React.useEffect(() => {
     const handleProjectSave = async () => {

@@ -7,8 +7,8 @@ Imports DDTEngine
 
 ''' <summary>
 ''' Compilatore DDT: trasforma strutture IDE in strutture Runtime
-''' - Deserializza JSON in AssembledDDT (IDE)
-''' - Trasforma AssembledDDT in DDTInstance (Runtime)
+''' - Deserializza JSON in TaskTreeRuntime (IDE, ex AssembledDDT)
+''' - Trasforma TaskTreeRuntime in DDTInstance (Runtime)
 ''' - Carica nlpContract per ogni nodo
 ''' - Valida struttura
 ''' - Pre-compila regex
@@ -33,9 +33,9 @@ Public Class DDTCompiler
             Throw New ArgumentException("DDT JSON cannot be null or empty", NameOf(ddtJson))
         End If
 
-        ' 1. Deserializza JSON in AssembledDDT (struttura IDE tipizzata)
-        Console.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 1: Deserializing JSON to AssembledDDT...")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 1: Deserializing JSON to AssembledDDT...")
+        ' 1. Deserializza JSON in TaskTreeRuntime (struttura IDE tipizzata, ex AssembledDDT)
+        Console.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 1: Deserializing JSON to TaskTreeRuntime...")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 1: Deserializing JSON to TaskTreeRuntime...")
         Dim settings As New JsonSerializerSettings() With {
             .NullValueHandling = NullValueHandling.Ignore,
             .MissingMemberHandling = MissingMemberHandling.Ignore
@@ -44,21 +44,21 @@ Public Class DDTCompiler
         settings.Converters.Add(New MainDataNodeListConverter())
         settings.Converters.Add(New DialogueStepListConverter())
 
-        Dim assembled As Compiler.AssembledDDT = JsonConvert.DeserializeObject(Of Compiler.AssembledDDT)(ddtJson, settings)
+        Dim assembled As Compiler.TaskTreeRuntime = JsonConvert.DeserializeObject(Of Compiler.TaskTreeRuntime)(ddtJson, settings)
         If assembled Is Nothing Then
-            Throw New InvalidOperationException("Impossibile deserializzare AssembledDDT dal JSON")
+            Throw New InvalidOperationException("Impossibile deserializzare TaskTreeRuntime dal JSON")
         End If
 
-        Console.WriteLine($"✅ [COMPILER][DDTCompiler] AssembledDDT deserialized: Id={assembled.Id}, Data IsNot Nothing={assembled.Data IsNot Nothing}")
-        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTCompiler] AssembledDDT deserialized: Id={assembled.Id}, Data IsNot Nothing={assembled.Data IsNot Nothing}")
+        Console.WriteLine($"✅ [COMPILER][DDTCompiler] TaskTreeRuntime deserialized: Id={assembled.Id}, Data IsNot Nothing={assembled.Data IsNot Nothing}")
+        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTCompiler] TaskTreeRuntime deserialized: Id={assembled.Id}, Data IsNot Nothing={assembled.Data IsNot Nothing}")
         If assembled.Data IsNot Nothing Then
-            Console.WriteLine($"🔍 [COMPILER][DDTCompiler] AssembledDDT.Data.Count={assembled.Data.Count}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] AssembledDDT.Data.Count={assembled.Data.Count}")
+            Console.WriteLine($"🔍 [COMPILER][DDTCompiler] TaskTreeRuntime.Data.Count={assembled.Data.Count}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] TaskTreeRuntime.Data.Count={assembled.Data.Count}")
         End If
 
-        ' 2. Trasforma AssembledDDT (IDE) → DDTInstance (Runtime)
-        Console.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 2: Compiling AssembledDDT to DDTInstance using DDTAssembler.Compile...")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 2: Compiling AssembledDDT to DDTInstance using DDTAssembler.Compile...")
+        ' 2. Trasforma TaskTreeRuntime (IDE) → DDTInstance (Runtime)
+        Console.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 2: Compiling TaskTreeRuntime to DDTInstance using DDTAssembler.Compile...")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 2: Compiling TaskTreeRuntime to DDTInstance using DDTAssembler.Compile...")
         Dim instance As DDTInstance = _assembler.Compile(assembled)
         Console.WriteLine($"✅ [COMPILER][DDTCompiler] DDTInstance created: MainDataList IsNot Nothing={instance.MainDataList IsNot Nothing}")
         System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTCompiler] DDTInstance created: MainDataList IsNot Nothing={instance.MainDataList IsNot Nothing}")

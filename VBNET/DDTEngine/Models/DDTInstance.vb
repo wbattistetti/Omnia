@@ -10,7 +10,8 @@ Option Explicit On
     ''' </summary>
     Public Class DDTInstance
         ' ============================================================
-        ' CAMPI DESIGN-TIME (dal frontend AssembledDDT)
+        ' CAMPI DESIGN-TIME (dal frontend TaskTreeRuntime, ex AssembledDDT)
+        ' ✅ NOTA: DDTInstance è interno al runtime e non viene rinominato per non toccare la logica funzionale
         ' ============================================================
 
         ''' <summary>

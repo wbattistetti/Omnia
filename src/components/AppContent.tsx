@@ -44,7 +44,6 @@ import ResponseEditor from './TaskEditor/ResponseEditor'; // ✅ RINOMINATO: Act
 import NonInteractiveResponseEditor from './TaskEditor/ResponseEditor/NonInteractiveResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import { taskRepository } from '../services/TaskRepository';
 import { getTemplateId } from '../utils/taskHelpers';
-import { extractModifiedDDTFields } from '../utils/taskUtils';
 import { TaskType } from '../types/taskTypes'; // ✅ RIMOSSO: taskIdToTaskType - non più necessario, le fonti emettono direttamente TaskType enum
 import type { TaskMeta } from './TaskEditor/EditorHost/types'; // ✅ RINOMINATO: ActEditor → TaskEditor
 
@@ -700,33 +699,24 @@ export const AppContent: React.FC<AppContentProps> = ({
               }, instanceId);
             }
 
-            // ✅ Load DDT async (if task has templateId, build from template)
+            // ✅ Load TaskTree async (if task has templateId, build from template)
             if (task && task.templateId) {
               try {
-                const { buildDDTFromTask } = await import('../utils/taskUtils');
-                ddt = await buildDDTFromTask(task);
+                const { buildTaskTree } = await import('../utils/taskUtils');
+                const projectId = currentProject?.id || undefined;
+                ddt = await buildTaskTree(task, projectId);
               } catch (err) {
-                console.error('[AppContent] Error loading DDT from template:', err);
+                console.error('[AppContent] Error loading TaskTree from template:', err);
               }
             }
 
-            // ✅ Fallback: if no DDT loaded, build from task or create empty
+            // ✅ Fallback: if no TaskTree loaded, create empty one
             if (!ddt) {
-              if (task?.data && task.data.length > 0) {
-                // Task has data (old format or standalone)
-                ddt = {
-                  label: task.label || d.label || 'New DDT',
-                  data: task.data,
-                  stepPrompts: task.stepPrompts,
-                  constraints: task.constraints,
-                };
-              } else {
-                // DDT doesn't exist, create empty one
-                ddt = { label: d.label || 'New DDT', data: [] };
-                // Update task with empty DDT (campi diretti)
-                taskRepository.updateTask(instanceId, {
-                  label: ddt.label,
-                  data: ddt.data
+              // TaskTree doesn't exist, create empty one
+              ddt = { label: d.label || 'New Task', nodes: [] };
+              // Update task with empty label (structure comes from template)
+              taskRepository.updateTask(instanceId, {
+                label: ddt.label
                 }, pdUpdate?.getCurrentProjectId());
               }
             }

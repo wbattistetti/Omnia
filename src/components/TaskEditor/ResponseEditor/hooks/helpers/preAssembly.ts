@@ -77,16 +77,6 @@ export async function preAssembleTaskTree(
   }
 }
 
-/**
- * @deprecated Use preAssembleTaskTree instead
- */
-export async function preAssembleDDT(
-  schema: any,
-  translationGuids: string[],
-  templateId: string | undefined,
-  cache: React.MutableRefObject<Map<string, PreAssemblyCache>>
-): Promise<void> {
-  return preAssembleTaskTree(schema, translationGuids, templateId, cache);
-}
+// ❌ RIMOSSO: preAssembleDDT - Usa preAssembleTaskTree invece
 
 

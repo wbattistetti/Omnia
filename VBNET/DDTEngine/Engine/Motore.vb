@@ -1,5 +1,7 @@
 ' DDTEngine.vb
 ' Classe principale del DDT Engine - Implementa Execute
+' ✅ NOTA: Motore/DDTEngine/DDTInstance/DDTNode sono interni al runtime e non vengono rinominati
+' per non toccare la logica funzionale. Il rename strutturale riguarda solo l'API/compilatore.
 
 Option Strict On
 Option Explicit On
@@ -9,8 +11,9 @@ Imports System.Linq
 Imports System.Reflection.PortableExecutable
 
 ''' <summary>
-''' Classe principale del DDT Engine
+''' Classe principale del DDT Engine (runtime interno)
 ''' Implementa la funzione Execute che coordina il processo di acquisizione dati
+''' NOTA: Non rinominata in TaskEngine per non toccare la logica funzionale del runtime
 ''' </summary>
 Public Class Motore
     Private ReadOnly _parser As Parser
