@@ -93,15 +93,15 @@ async function analyze() {
     }
     console.log();
 
-    // Analizza stepPrompts
-    console.log('stepPrompts (root level):');
-    if (sample.stepPrompts) {
-      if (typeof sample.stepPrompts === 'object') {
+    // Analizza steps
+    console.log('steps (root level):');
+    if (sample.steps) {
+      if (typeof sample.steps === 'object') {
         console.log(`  - Tipo: object`);
-        console.log(`  - Keys: ${Object.keys(sample.stepPrompts).join(', ')}`);
-        console.log(`  - Sample stepPrompts:`, JSON.stringify(sample.stepPrompts, null, 2).substring(0, 300));
+        console.log(`  - Keys: ${Object.keys(sample.steps).join(', ')}`);
+        console.log(`  - Sample steps:`, JSON.stringify(sample.steps, null, 2).substring(0, 300));
       } else {
-        console.log(`  - Tipo: ${typeof sample.stepPrompts}`);
+        console.log(`  - Tipo: ${typeof sample.steps}`);
       }
     } else {
       console.log('  - Assente');
@@ -133,24 +133,24 @@ async function analyze() {
 
     const hasMainData = sample.mainData && Array.isArray(sample.mainData) && sample.mainData.length > 0;
     const hasStepsRoot = sample.steps && typeof sample.steps === 'object' && Object.keys(sample.steps).length > 0;
-    const hasStepPrompts = sample.stepPrompts && typeof sample.stepPrompts === 'object' && Object.keys(sample.stepPrompts).length > 0;
+    const hassteps = sample.steps && typeof sample.steps === 'object' && Object.keys(sample.steps).length > 0;
     const hasDataContracts = sample.dataContracts && Array.isArray(sample.dataContracts) && sample.dataContracts.length > 0;
 
     console.log(`\n1. mainData: ${hasMainData ? '✅ Presente' : '❌ Assente'}`);
     console.log(`2. steps (root): ${hasStepsRoot ? '✅ Presente' : '❌ Assente'}`);
-    console.log(`3. stepPrompts (root): ${hasStepPrompts ? '✅ Presente' : '❌ Assente'}`);
+    console.log(`3. steps (root): ${hassteps ? '✅ Presente' : '❌ Assente'}`);
     console.log(`4. dataContracts: ${hasDataContracts ? '✅ Presente' : '❌ Assente'}`);
 
     console.log('\n💡 INTERPRETAZIONE:');
 
     if (hasMainData) {
       console.log('   ✅ Task ha mainData - DDT completo con struttura gerarchica');
-    } else if (hasStepsRoot && hasStepPrompts) {
-      console.log('   ⚠️  Task ha steps e stepPrompts a root level, ma NON ha mainData');
+    } else if (hasStepsRoot && hassteps) {
+      console.log('   ⚠️  Task ha steps e steps a root level, ma NON ha mainData');
       console.log('   💡 Questo è un DDT "flat" - steps senza struttura gerarchica mainData');
       console.log('   💡 Forse è un formato legacy o una struttura semplificata');
-    } else if (hasStepPrompts) {
-      console.log('   ⚠️  Task ha solo stepPrompts, ma NON ha mainData né steps');
+    } else if (hassteps) {
+      console.log('   ⚠️  Task ha solo steps, ma NON ha mainData né steps');
       console.log('   💡 Questo è un template DDT senza struttura - solo prompt');
     } else {
       console.log('   ❌ Task NON ha DDT - è solo un template senza struttura');

@@ -22,7 +22,7 @@ node generate_all_prompts.js
 
 Lo script:
 - Scansiona tutti i templates nella collection `Task_Templates` (template di dati DDT)
-- Estrae tutti i `stepPrompts` (root, mainData, subData)
+- Estrae tutti i `steps` (root, mainData, subData)
 - Genera GUID coordinati per ogni chiave legacy
 - **Genera i messaggi direttamente** basandosi sul tipo di campo e step type (start, noMatch, noInput, confirmation, notConfirmed, success)
 - Crea le translations multilingua (en, it, pt) nella collection `Translations`
@@ -35,18 +35,18 @@ Lo script:
 
 ### STEP 1: Scansione Templates
 - Legge tutti i templates da `factory.Task_Templates` (template di dati DDT)
-- Estrae `stepPrompts` da:
-  - `template.stepPrompts` (root level)
-  - `template.subData[].stepPrompts` (subData root - atomici)
-  - `template.mainData[].stepPrompts` (mainData level)
-  - `template.mainData[].subData[].stepPrompts` (subData dentro mainData)
+- Estrae `steps` da:
+  - `template.steps` (root level)
+  - `template.subData[].steps` (subData root - atomici)
+  - `template.mainData[].steps` (mainData level)
+  - `template.mainData[].subData[].steps` (subData dentro mainData)
 
 ### STEP 2: Generazione GUID
 - Per ogni chiave legacy trovata, genera un GUID univoco
 - Mantiene un mapping consistente (stessa chiave → stesso GUID)
 
 ### STEP 3: Generazione Messaggi Diretta
-- Per ogni campo con `stepPrompts`:
+- Per ogni campo con `steps`:
   - **Genera i messaggi direttamente** basandosi su:
     - Tipo di campo (phone, email, date, name, address, day, month, year, time, hour, minute, second, number, generic)
     - Tipo di step (start, noMatch, noInput, confirmation, notConfirmed, success)

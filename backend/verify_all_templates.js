@@ -24,7 +24,7 @@ async function verifyAllTemplates() {
       hasDataType: [],
       hasMainData: [],
       missingSubDataIds: [],
-      stepPromptsInMetadata: [],
+      stepsInMetadata: [],
       hasMetadataFlags: []
     };
 
@@ -43,8 +43,8 @@ async function verifyAllTemplates() {
         issues.missingSubDataIds.push(label);
       }
 
-      if (template.metadata?.stepPrompts !== undefined) {
-        issues.stepPromptsInMetadata.push(label);
+      if (template.metadata?.steps !== undefined) {
+        issues.stepsInMetadata.push(label);
       }
 
       if (template.metadata?.isMainData !== undefined || template.metadata?.isSubData !== undefined) {
@@ -71,9 +71,9 @@ async function verifyAllTemplates() {
       console.log(`   ${issues.missingSubDataIds.slice(0, 5).join(', ')}${issues.missingSubDataIds.length > 5 ? '...' : ''}`);
     }
 
-    console.log(`\n❌ Templates con stepPrompts in metadata: ${issues.stepPromptsInMetadata.length}`);
-    if (issues.stepPromptsInMetadata.length > 0) {
-      console.log(`   ${issues.stepPromptsInMetadata.slice(0, 5).join(', ')}${issues.stepPromptsInMetadata.length > 5 ? '...' : ''}`);
+    console.log(`\n❌ Templates con steps in metadata: ${issues.stepsInMetadata.length}`);
+    if (issues.stepsInMetadata.length > 0) {
+      console.log(`   ${issues.stepsInMetadata.slice(0, 5).join(', ')}${issues.stepsInMetadata.length > 5 ? '...' : ''}`);
     }
 
     console.log(`\n❌ Templates con metadata flags: ${issues.hasMetadataFlags.length}`);

@@ -2037,15 +2037,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       } else {
                         ddt = null;
                       }
-                    } else if (taskForType?.data && taskForType.data.length > 0) {
-                      // ✅ Usa data esistente (DDT standalone, non da template)
-                      ddt = {
-                        label: taskForType.label || row.text || 'New DDT',
-                        data: taskForType.data,
-                        stepPrompts: taskForType.stepPrompts,
-                        constraints: taskForType.constraints,
-                      };
-                    }
                     // ✅ NON creare DDT vuoto se non c'è né templateId DataRequest né data
                     // ResponseEditor gestirà il caso di ddt === null aprendo il wizard (AI genererà DDT)
 
@@ -2175,15 +2166,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       } else {
                         ddt = null;
                       }
-                    } else if (taskForType?.data && taskForType.data.length > 0) {
-                      // ✅ Usa data esistente (DDT standalone, non da template)
-                      ddt = {
-                        label: taskForType.label || row.text || 'New DDT',
-                        data: taskForType.data,
-                        stepPrompts: taskForType.stepPrompts,
-                        constraints: taskForType.constraints,
-                      };
-                    }
                     // ✅ NON creare DDT vuoto se non c'è né templateId DataRequest né data
                     // ResponseEditor gestirà il caso di ddt === null aprendo il wizard (AI genererà DDT)
 

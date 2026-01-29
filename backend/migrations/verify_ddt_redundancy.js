@@ -26,7 +26,7 @@ async function verify() {
 
     let tasksWithMainData = 0;
     let tasksWithSteps = 0;
-    let tasksWithStepPrompts = 0;
+    let tasksWithsteps = 0;
     let tasksWithFullDDT = 0;
 
     const tasksWithDDT = [];
@@ -34,7 +34,7 @@ async function verify() {
     for (const task of tasks) {
       let hasMainData = false;
       let hasSteps = false;
-      let hasStepPrompts = false;
+      let hassteps = false;
 
       // Verifica mainData
       if (task.mainData && Array.isArray(task.mainData) && task.mainData.length > 0) {
@@ -51,35 +51,35 @@ async function verify() {
         }
       }
 
-      // Verifica stepPrompts a root level
-      if (task.stepPrompts && Object.keys(task.stepPrompts || {}).length > 0) {
-        hasStepPrompts = true;
-        tasksWithStepPrompts++;
+      // Verifica steps a root level
+      if (task.steps && Object.keys(task.steps || {}).length > 0) {
+        hassteps = true;
+        tasksWithsteps++;
       }
 
       // Task con DDT completo
-      if (hasMainData && (hasSteps || hasStepPrompts)) {
+      if (hasMainData && (hasSteps || hassteps)) {
         tasksWithFullDDT++;
         tasksWithDDT.push({
           id: task.id,
           label: task.label,
           mainDataCount: task.mainData?.length || 0,
           hasSteps: hasSteps,
-          hasStepPrompts: hasStepPrompts
+          hassteps: hassteps
         });
       }
     }
 
     console.log(`   Tasks con mainData: ${tasksWithMainData}`);
     console.log(`   Tasks con steps (dentro mainData): ${tasksWithSteps}`);
-    console.log(`   Tasks con stepPrompts (root level): ${tasksWithStepPrompts}`);
+    console.log(`   Tasks con steps (root level): ${tasksWithsteps}`);
     console.log(`   Tasks con DDT completo: ${tasksWithFullDDT}\n`);
 
     if (tasksWithDDT.length > 0) {
       console.log('   Esempi Tasks con DDT:');
       tasksWithDDT.slice(0, 5).forEach(t => {
         console.log(`      - ${t.id}: ${t.label}`);
-        console.log(`        mainData: ${t.mainDataCount} nodi, steps: ${t.hasSteps}, stepPrompts: ${t.hasStepPrompts}`);
+        console.log(`        mainData: ${t.mainDataCount} nodi, steps: ${t.hasSteps}, steps: ${t.hassteps}`);
       });
       console.log();
     }
@@ -189,7 +189,7 @@ async function verify() {
 
     console.log(`\n1. Tasks con DDT completo: ${tasksWithFullDDT}/${tasks.length}`);
     console.log(`   - Hanno mainData con steps dentro i nodi`);
-    console.log(`   - Hanno stepPrompts a root level`);
+    console.log(`   - Hanno steps a root level`);
 
     console.log(`\n2. ddt_library: ${ddtLibrary.length} DDT`);
     console.log(`   - DDT con mainData: ${ddtWithMainData}`);

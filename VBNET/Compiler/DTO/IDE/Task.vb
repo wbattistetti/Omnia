@@ -59,42 +59,26 @@ Public Class Task
     Public Property Label As String
 
     ''' <summary>
-    ''' ❌ DEPRECATED: Non più usato. La struttura viene costruita dal template usando templateId.
-    ''' Mantenuto solo per backward compatibility durante migrazione.
+    ''' ✅ NUOVO: SubTasksIds - Array di templateId che referenziano altri template
+    ''' Solo per template: definisce la struttura come grafo di riferimenti
+    ''' Per istanze: sempre null (la struttura viene dal template)
     ''' </summary>
-    <JsonProperty("data")>
-    <Obsolete("Use templateId to build structure from template instead")>
-    <JsonConverter(GetType(MainDataNodeListConverter))>
-    Public Property Data As List(Of MainDataNode)
+    <JsonProperty("subTasksIds")>
+    Public Property SubTasksIds As List(Of String)
 
     ''' <summary>
     ''' ✅ NUOVO: Steps override a root level: { "templateId": { start: {...}, noMatch: {...} } }
     ''' Steps sono keyed per templateId del nodo
+    ''' Solo per istanze: override degli steps del template
     ''' </summary>
     <JsonProperty("steps")>
     Public Property Steps As Dictionary(Of String, Object)
 
-    ''' <summary>
-    ''' ❌ DEPRECATED: Use Steps instead
-    ''' </summary>
-    <JsonProperty("stepPrompts")>
-    <Obsolete("Use Steps instead")>
-    Public Property StepPrompts As Dictionary(Of String, Object)
-
-    ''' <summary>
-    ''' ❌ DEPRECATED: Constraints vengono sempre dal template, non dall'istanza
-    ''' </summary>
-    <JsonProperty("constraints")>
-    <Obsolete("Constraints come sempre dal template, non dall'istanza")>
-    Public Property Constraints As List(Of Object)
-
     Public Sub New()
         Parameters = New List(Of TaskParameter)()
         Value = New Dictionary(Of String, Object)()
-        Data = New List(Of MainDataNode)()
+        SubTasksIds = New List(Of String)()
         Steps = New Dictionary(Of String, Object)()
-        StepPrompts = New Dictionary(Of String, Object)()
-        Constraints = New List(Of Object)()
     End Sub
 End Class
 

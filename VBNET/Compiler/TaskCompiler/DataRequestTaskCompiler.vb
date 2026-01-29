@@ -30,26 +30,19 @@ Public Class DataRequestTaskCompiler
         System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] Compile called for task {taskId}")
         Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] task.TemplateId={task.TemplateId}, task.Id={task.Id}")
         System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] task.TemplateId={task.TemplateId}, task.Id={task.Id}")
-        Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] task.Data IsNot Nothing={task.Data IsNot Nothing}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] task.Data IsNot Nothing={task.Data IsNot Nothing}")
-        If task.Data IsNot Nothing Then
-            Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] task.Data.Count={task.Data.Count}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] task.Data.Count={task.Data.Count}")
-        End If
 
         Dim dataRequestTask As New CompiledTaskGetData()
 
-        ' ✅ NUOVO MODELLO: Costruisci TaskTreeRuntime dal template usando task.templateId
+        ' ✅ NUOVO MODELLO: Costruisci TaskTreeRuntime dal template usando task.templateId e subTasksIds
         ' LOGICA:
-        ' 1. Se task.templateId esiste → carica template e costruisci struttura
+        ' 1. Se task.templateId esiste → carica template e costruisci struttura da subTasksIds
         ' 2. Applica task.steps come override
-        ' 3. Se task.templateId è null → fallback legacy a task.Data
         Dim taskTreeRuntime As Compiler.TaskTreeRuntime = Nothing
 
-        ' ✅ PRIORITY 1: Costruisci da template (nuovo modello)
+        ' ✅ NUOVO MODELLO: Costruisci SEMPRE da template usando subTasksIds
         If Not String.IsNullOrEmpty(task.TemplateId) Then
-            Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] Building DDT from template {task.TemplateId}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] Building DDT from template {task.TemplateId}")
+            Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] Building TaskTreeRuntime from template {task.TemplateId}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] Building TaskTreeRuntime from template {task.TemplateId}")
 
             Dim template = flow.Tasks.FirstOrDefault(Function(t) t.Id = task.TemplateId)
             If template IsNot Nothing Then
@@ -58,44 +51,20 @@ Public Class DataRequestTaskCompiler
                     Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] TaskTreeRuntime built from template {task.TemplateId}")
                     System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] TaskTreeRuntime built from template {task.TemplateId}")
                 Catch ex As Exception
-                    Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Failed to build DDT from template: {ex.Message}")
-                    System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Exception details: {ex.ToString()}")
+                    Console.WriteLine($"❌ [COMPILER][DataRequestTaskCompiler] Failed to build TaskTreeRuntime from template: {ex.Message}")
+                    System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][DataRequestTaskCompiler] Exception details: {ex.ToString()}")
+                    Throw New InvalidOperationException($"Failed to build TaskTreeRuntime from template {task.TemplateId}: {ex.Message}", ex)
                 End Try
             Else
                 Console.WriteLine($"❌ [COMPILER][DataRequestTaskCompiler] Template {task.TemplateId} not found in flow.Tasks")
                 System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][DataRequestTaskCompiler] Template {task.TemplateId} not found")
+                Throw New InvalidOperationException($"Template {task.TemplateId} not found. Every task must have a valid templateId.")
             End If
-        End If
-
-        ' ✅ FALLBACK LEGACY: Se no templateId o costruzione fallita, usa task.Data (backward compatibility)
-        If taskTreeRuntime Is Nothing AndAlso task.Data IsNot Nothing AndAlso task.Data.Count > 0 Then
-            Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] No templateId or template build failed, using legacy task.Data")
-            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Using legacy task.Data")
-            Try
-                ' Serializza task a JSON e deserializza come TaskTreeRuntime
-                Dim taskJson = JsonConvert.SerializeObject(task)
-                Dim settings As New JsonSerializerSettings()
-                settings.Converters.Add(New MainDataNodeListConverter())
-                taskTreeRuntime = JsonConvert.DeserializeObject(Of Compiler.TaskTreeRuntime)(taskJson, settings)
-
-                If taskTreeRuntime IsNot Nothing Then
-                    taskTreeRuntime.Id = task.Id
-                    If String.IsNullOrEmpty(taskTreeRuntime.Label) Then
-                        taskTreeRuntime.Label = task.Label
-                    End If
-                    If taskTreeRuntime.Translations Is Nothing Then
-                        taskTreeRuntime.Translations = New Dictionary(Of String, String)()
-                    End If
-
-                    ' ✅ Espandi ricorsivamente
-                    If taskTreeRuntime.Data IsNot Nothing AndAlso taskTreeRuntime.Data.Count > 0 Then
-                        taskTreeRuntime.Data = ExpandDataTreeRecursively(taskTreeRuntime.Data, flow.Tasks, New HashSet(Of String)())
-                    End If
-                End If
-            Catch ex As Exception
-                Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Failed to build TaskTreeRuntime from legacy task.Data: {ex.Message}")
-                System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Exception details: {ex.ToString()}")
-            End Try
+        Else
+            ' ❌ RIMOSSO: Fallback legacy a task.Data
+            ' Ogni task DEVE avere templateId (viene creato automaticamente se mancante)
+            Console.WriteLine($"❌ [COMPILER][DataRequestTaskCompiler] Task {taskId} has no templateId. This is not supported.")
+            Throw New InvalidOperationException($"Task {taskId} must have a templateId. Legacy task.Data is not supported.")
         End If
 
         ' Compila TaskTreeRuntime se trovato
@@ -170,52 +139,28 @@ Public Class DataRequestTaskCompiler
                 Console.WriteLine($"🔄 [COMPILER][DataRequestTaskCompiler] Dereferencing templateId={node.TemplateId} for node Id={node.Id}")
                 System.Diagnostics.Debug.WriteLine($"🔄 [COMPILER][DataRequestTaskCompiler] Dereferencing templateId={node.TemplateId} for node Id={node.Id}")
 
-                ' Cerca il template referenziato
+                ' ✅ NUOVO MODELLO: Cerca il template referenziato e usa subTasksIds
                 Dim referencedTemplate = allTemplates.FirstOrDefault(Function(t) t.Id = node.TemplateId)
-                If referencedTemplate IsNot Nothing AndAlso referencedTemplate.Data IsNot Nothing AndAlso referencedTemplate.Data.Count > 0 Then
-                    ' ✅ Template trovato: materializza constraints/examples/nlpContract
-                    ' Per template atomico/composito: usa il primo nodo data
-                    Dim templateNode = referencedTemplate.Data(0)
-
-                    ' ✅ Copia constraints dal template referenziato
-                    If templateNode.Constraints IsNot Nothing AndAlso templateNode.Constraints.Count > 0 Then
-                        node.Constraints = templateNode.Constraints
-                        Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Materialized constraints from template {node.TemplateId} (count={templateNode.Constraints.Count})")
-                        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Materialized constraints from template {node.TemplateId}")
-                    End If
-
-                    ' ✅ Copia anche Name, Label, Type se mancanti (per completezza)
-                    If String.IsNullOrEmpty(node.Name) AndAlso Not String.IsNullOrEmpty(templateNode.Name) Then
-                        node.Name = templateNode.Name
-                    End If
-                    If String.IsNullOrEmpty(node.Label) AndAlso Not String.IsNullOrEmpty(templateNode.Label) Then
-                        node.Label = templateNode.Label
-                    End If
-                    If String.IsNullOrEmpty(node.Type) AndAlso Not String.IsNullOrEmpty(templateNode.Type) Then
-                        node.Type = templateNode.Type
-                    End If
-
-                    ' ✅ Espandi ricorsivamente i subData del template referenziato
-                    If templateNode.SubTasks IsNot Nothing AndAlso templateNode.SubTasks.Count > 0 Then
-                        ' Se il nodo corrente non ha subData, copia quelli del template
+                If referencedTemplate IsNot Nothing Then
+                    ' ✅ Se il template ha subTasksIds, costruisci i subTasks
+                    If referencedTemplate.SubTasksIds IsNot Nothing AndAlso referencedTemplate.SubTasksIds.Count > 0 Then
+                        ' Se il nodo corrente non ha subTasks, costruiscili da subTasksIds
                         If node.SubTasks Is Nothing OrElse node.SubTasks.Count = 0 Then
-                            node.SubTasks = New List(Of Compiler.MainDataNode)()
-                            For Each templateSubNode In templateNode.SubTasks
-                                ' Crea una copia del subNode del template con constraints materializzati
-                                Dim clonedSubNode = CloneMainDataNode(templateSubNode)
-                                ' ✅ IMPORTANTE: Mantieni il templateId per permettere ulteriore dereferenziazione
-                                clonedSubNode.TemplateId = templateSubNode.TemplateId
-                                node.SubTasks.Add(clonedSubNode)
-                            Next
-                            Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Copied {node.SubTasks.Count} subTasks from template {node.TemplateId}")
-                            System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Copied {node.SubTasks.Count} subTasks from template {node.TemplateId}")
+                            node.SubTasks = BuildDataTreeFromSubTasksIds(referencedTemplate.SubTasksIds, allTemplates, visitedTemplates)
+                            Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Built {node.SubTasks.Count} subTasks from template {node.TemplateId} using subTasksIds")
+                            System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Built subTasks from template {node.TemplateId}")
                         End If
+                    End If
+
+                    ' ✅ Copia Label se mancante (per completezza)
+                    If String.IsNullOrEmpty(node.Label) AndAlso Not String.IsNullOrEmpty(referencedTemplate.Label) Then
+                        node.Label = referencedTemplate.Label
                     End If
 
                     visitedTemplates.Remove(node.TemplateId)
                 Else
-                    Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Template {node.TemplateId} not found or has no data - cannot dereference")
-                    System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Template {node.TemplateId} not found or has no data")
+                    Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Template {node.TemplateId} not found - cannot dereference")
+                    System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Template {node.TemplateId} not found")
                     visitedTemplates.Remove(node.TemplateId)
                 End If
             End If
@@ -253,6 +198,7 @@ Public Class DataRequestTaskCompiler
 
     ''' <summary>
     ''' Costruisce TaskTreeRuntime dal template e applica gli override dall'istanza
+    ''' ✅ NUOVO MODELLO: Usa subTasksIds invece di Data
     ''' </summary>
     Private Function BuildTaskTreeRuntimeFromTemplate(
         template As Task,
@@ -265,35 +211,76 @@ Public Class DataRequestTaskCompiler
             .Translations = New Dictionary(Of String, String)()
         }
 
-        ' ✅ Costruisci struttura dal template (ricorsivamente usando templateId di ogni nodo)
-        If template.Data IsNot Nothing AndAlso template.Data.Count > 0 Then
-            ' ✅ Espandi ricorsivamente usando templateId di ogni nodo
-            taskTreeRuntime.Data = ExpandDataTreeFromTemplate(template.Data, flow.Tasks, New HashSet(Of String)())
+        ' ✅ NUOVO MODELLO: Costruisci struttura da subTasksIds (grafo di template)
+        If template.SubTasksIds IsNot Nothing AndAlso template.SubTasksIds.Count > 0 Then
+            ' ✅ Dereferenzia ricorsivamente subTasksIds per costruire MainDataNode[]
+            taskTreeRuntime.Data = BuildDataTreeFromSubTasksIds(template.SubTasksIds, flow.Tasks, New HashSet(Of String)())
 
             ' ✅ Applica steps override dall'istanza
             If instance.Steps IsNot Nothing AndAlso instance.Steps.Count > 0 Then
                 ApplyStepsOverrides(taskTreeRuntime.Data, instance.Steps)
             End If
-        End If
-
-        ' ✅ Constraints sempre dal template
-        If template.Constraints IsNot Nothing AndAlso template.Constraints.Count > 0 Then
-            taskTreeRuntime.Constraints = template.Constraints
+        Else
+            ' ✅ Template atomico (nessun subTask) → struttura vuota
+            taskTreeRuntime.Data = New List(Of MainDataNode)()
+            Console.WriteLine($"ℹ️ [COMPILER][DataRequestTaskCompiler] Template {template.Id} has no subTasksIds (atomic template)")
         End If
 
         Return taskTreeRuntime
     End Function
 
     ''' <summary>
-    ''' Espande ricorsivamente l'albero dal template dereferenziando templateId
+    ''' ✅ NUOVO MODELLO: Costruisce MainDataNode[] da subTasksIds (grafo di template)
+    ''' Dereferenzia ricorsivamente ogni templateId in subTasksIds
     ''' </summary>
-    Private Function ExpandDataTreeFromTemplate(
-        nodes As List(Of MainDataNode),
+    Private Function BuildDataTreeFromSubTasksIds(
+        subTasksIds As List(Of String),
         allTemplates As List(Of Task),
         visitedTemplates As HashSet(Of String)
     ) As List(Of MainDataNode)
-        ' ✅ Usa la stessa logica di ExpandDataTreeRecursively ma parte dai nodi del template
-        Return ExpandDataTreeRecursively(nodes, allTemplates, visitedTemplates)
+        Dim nodes As New List(Of MainDataNode)()
+
+        For Each subTaskId In subTasksIds
+            ' Protezione contro riferimenti circolari
+            If visitedTemplates.Contains(subTaskId) Then
+                Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Circular reference detected for subTaskId={subTaskId}, skipping")
+                Continue For
+            End If
+
+            visitedTemplates.Add(subTaskId)
+            Console.WriteLine($"🔄 [COMPILER][DataRequestTaskCompiler] Dereferencing subTaskId={subTaskId}")
+
+            ' Cerca il template referenziato
+            Dim subTemplate = allTemplates.FirstOrDefault(Function(t) t.Id = subTaskId)
+            If subTemplate IsNot Nothing Then
+                ' ✅ Crea MainDataNode dal template
+                Dim node As New MainDataNode() With {
+                    .Id = subTemplate.Id,
+                    .TemplateId = subTemplate.Id,
+                    .Label = subTemplate.Label,
+                    .Type = Nothing, ' Type viene dal template se presente
+                    .Required = False,
+                    .Steps = New List(Of Compiler.DialogueStep)(),
+                    .SubTasks = New List(Of Compiler.MainDataNode)(),
+                    .Synonyms = New List(Of String)(),
+                    .Constraints = New List(Of Object)()
+                }
+
+                ' ✅ Se il sub-template ha a sua volta subTasksIds, dereferenzia ricorsivamente
+                If subTemplate.SubTasksIds IsNot Nothing AndAlso subTemplate.SubTasksIds.Count > 0 Then
+                    node.SubTasks = BuildDataTreeFromSubTasksIds(subTemplate.SubTasksIds, allTemplates, visitedTemplates)
+                End If
+
+                nodes.Add(node)
+                Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Created node from subTemplate {subTaskId}, subTasksCount={node.SubTasks.Count}")
+            Else
+                Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] SubTemplate {subTaskId} not found")
+            End If
+
+            visitedTemplates.Remove(subTaskId)
+        Next
+
+        Return nodes
     End Function
 
     ''' <summary>
@@ -310,7 +297,8 @@ Public Class DataRequestTaskCompiler
             ' ✅ Applica steps se presente override per questo templateId
             If Not String.IsNullOrEmpty(node.TemplateId) AndAlso stepsOverrides.ContainsKey(node.TemplateId) Then
                 Try
-                    Dim overrideValue = stepsOverrides(node.TemplateId)
+                    ' ✅ Option Strict On: cast esplicito da Object
+                    Dim overrideValue As Object = stepsOverrides(node.TemplateId)
                     If overrideValue IsNot Nothing Then
                         ' ✅ Usa DialogueStepListConverter per convertire oggetto → List(Of DialogueStep)
                         ' overrideValue è un oggetto: { "start": { escalations: [...] }, "noMatch": {...} }

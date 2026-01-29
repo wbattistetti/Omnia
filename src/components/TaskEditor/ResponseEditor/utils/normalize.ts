@@ -50,9 +50,7 @@ export const createTask = (item: any): Task => {
     color,
     params,
     // Copy other task properties if present
-    ...(task?.data && { data: task.data }),
-    ...(task?.stepPrompts && { stepPrompts: task.stepPrompts }),
-    ...(task?.constraints && { constraints: task.constraints }),
+    // ❌ RIMOSSO: data, steps, constraints - vengono sempre dal template
     ...(task?.intents && { intents: task.intents }),
     ...(task?.endpoint && { endpoint: task.endpoint }),
     ...(task?.method && { method: task.method }),

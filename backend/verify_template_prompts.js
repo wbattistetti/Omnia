@@ -31,12 +31,12 @@ async function verifyTemplates() {
       missingTranslations: []
     };
 
-    // Funzione ricorsiva per estrarre tutti i stepPrompts
-    const extractStepPrompts = (node, path = '') => {
+    // Funzione ricorsiva per estrarre tutti i steps
+    const extractsteps = (node, path = '') => {
       const prompts = [];
 
-      if (node.stepPrompts) {
-        Object.entries(node.stepPrompts).forEach(([stepKey, keys]) => {
+      if (node.steps) {
+        Object.entries(node.steps).forEach(([stepKey, keys]) => {
           if (Array.isArray(keys)) {
             keys.forEach(key => {
               prompts.push({
@@ -53,7 +53,7 @@ async function verifyTemplates() {
       if (node.subData && Array.isArray(node.subData)) {
         node.subData.forEach(sub => {
           const subPath = path ? `${path}/${sub.label || sub.name || 'sub'}` : (sub.label || sub.name || 'sub');
-          prompts.push(...extractStepPrompts(sub, subPath));
+          prompts.push(...extractsteps(sub, subPath));
         });
       }
 
@@ -70,16 +70,16 @@ async function verifyTemplates() {
 
       const allPrompts = [];
 
-      // Root level stepPrompts
-      if (template.stepPrompts) {
-        allPrompts.push(...extractStepPrompts(template, 'root'));
+      // Root level steps
+      if (template.steps) {
+        allPrompts.push(...extractsteps(template, 'root'));
       }
 
-      // mainData stepPrompts
+      // mainData steps
       if (template.mainData && Array.isArray(template.mainData)) {
         template.mainData.forEach((main, mainIdx) => {
           const mainPath = `main[${mainIdx}]/${main.label || main.name || 'main'}`;
-          allPrompts.push(...extractStepPrompts(main, mainPath));
+          allPrompts.push(...extractsteps(main, mainPath));
         });
       }
 

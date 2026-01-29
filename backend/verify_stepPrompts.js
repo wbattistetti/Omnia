@@ -1,8 +1,8 @@
 /**
- * Script per verificare stepPrompts nei template e nelle translations
+ * Script per verificare steps nei template e nelle translations
  * Verifica:
- * 1. Se i template hanno stepPrompts (mainData e subData)
- * 2. Se le chiavi stepPrompts esistono nella collezione Translations
+ * 1. Se i template hanno steps (mainData e subData)
+ * 2. Se le chiavi steps esistono nella collezione Translations
  * 3. Se i testi sono presenti per tutte le lingue (en, it, pt)
  */
 
@@ -12,7 +12,7 @@ const { MongoClient } = require('mongodb');
 const uri = process.env.MONGODB_URI || 'mongodb+srv://walterbattistetti:omnia@omnia-db.a5j05mj.mongodb.net/?retryWrites=true&w=majority&appName=Omnia-db';
 const DB_NAME = 'factory';
 
-async function verifyStepPrompts() {
+async function verifysteps() {
     const client = new MongoClient(uri);
 
     try {
@@ -64,7 +64,7 @@ async function verifyStepPrompts() {
 
             console.log(`\n🔍 [${results.templatesChecked}/${templates.length}] Checking template: ${templateLabel} (${templateName})`);
 
-            // Check mainData stepPrompts
+            // Check mainData steps
             const mainData = template.mainData || [];
             if (Array.isArray(mainData) && mainData.length > 0) {
                 console.log(`  📦 Found ${mainData.length} mainData items`);
@@ -72,13 +72,13 @@ async function verifyStepPrompts() {
                 for (const mainItem of mainData) {
                     const mainLabel = mainItem.label || 'unknown';
 
-                    if (mainItem.stepPrompts && typeof mainItem.stepPrompts === 'object' && Object.keys(mainItem.stepPrompts).length > 0) {
+                    if (mainItem.steps && typeof mainItem.steps === 'object' && Object.keys(mainItem.steps).length > 0) {
                         results.mainDataItemsWithPrompts++;
                         results.templatesWithMainPrompts++;
-                        console.log(`    ✅ ${mainLabel}: has stepPrompts (${Object.keys(mainItem.stepPrompts).length} steps)`);
+                        console.log(`    ✅ ${mainLabel}: has steps (${Object.keys(mainItem.steps).length} steps)`);
 
                         // Check translation keys for this main data
-                        Object.entries(mainItem.stepPrompts).forEach(([stepKey, keys]) => {
+                        Object.entries(mainItem.steps).forEach(([stepKey, keys]) => {
                             if (Array.isArray(keys)) {
                                 keys.forEach(key => {
                                     results.translationKeysChecked++;
@@ -119,10 +119,10 @@ async function verifyStepPrompts() {
                         });
                     } else {
                         results.mainDataItemsWithoutPrompts++;
-                        console.log(`    ❌ ${mainLabel}: missing stepPrompts`);
+                        console.log(`    ❌ ${mainLabel}: missing steps`);
                     }
 
-                    // Check subData stepPrompts
+                    // Check subData steps
                     const subData = mainItem.subData || [];
                     if (Array.isArray(subData) && subData.length > 0) {
                         console.log(`      📦 Found ${subData.length} subData items`);
@@ -131,13 +131,13 @@ async function verifyStepPrompts() {
                         for (const subItem of subData) {
                             const subLabel = subItem.label || 'unknown';
 
-                            if (subItem.stepPrompts && typeof subItem.stepPrompts === 'object' && Object.keys(subItem.stepPrompts).length > 0) {
+                            if (subItem.steps && typeof subItem.steps === 'object' && Object.keys(subItem.steps).length > 0) {
                                 results.subDataItemsWithPrompts++;
                                 hasSubDataPrompts = true;
-                                console.log(`        ✅ ${subLabel}: has stepPrompts (${Object.keys(subItem.stepPrompts).length} steps)`);
+                                console.log(`        ✅ ${subLabel}: has steps (${Object.keys(subItem.steps).length} steps)`);
 
                                 // Check translation keys for this sub-data
-                                Object.entries(subItem.stepPrompts).forEach(([stepKey, keys]) => {
+                                Object.entries(subItem.steps).forEach(([stepKey, keys]) => {
                                     if (Array.isArray(keys)) {
                                         keys.forEach(key => {
                                             results.translationKeysChecked++;
@@ -176,7 +176,7 @@ async function verifyStepPrompts() {
                                 });
                             } else {
                                 results.subDataItemsWithoutPrompts++;
-                                console.log(`        ❌ ${subLabel}: missing stepPrompts`);
+                                console.log(`        ❌ ${subLabel}: missing steps`);
                             }
                         }
 
@@ -193,13 +193,13 @@ async function verifyStepPrompts() {
                     }
                 }
             } else {
-                // Check root level stepPrompts (for atomic templates)
-                if (template.stepPrompts && typeof template.stepPrompts === 'object' && Object.keys(template.stepPrompts).length > 0) {
+                // Check root level steps (for atomic templates)
+                if (template.steps && typeof template.steps === 'object' && Object.keys(template.steps).length > 0) {
                     results.templatesWithMainPrompts++;
-                    console.log(`  ✅ Has root level stepPrompts (${Object.keys(template.stepPrompts).length} steps)`);
+                    console.log(`  ✅ Has root level steps (${Object.keys(template.steps).length} steps)`);
 
                     // Check translation keys
-                    Object.entries(template.stepPrompts).forEach(([stepKey, keys]) => {
+                    Object.entries(template.steps).forEach(([stepKey, keys]) => {
                         if (Array.isArray(keys)) {
                             keys.forEach(key => {
                                 results.translationKeysChecked++;
@@ -240,7 +240,7 @@ async function verifyStepPrompts() {
                         template: templateLabel,
                         name: templateName
                     });
-                    console.log(`  ❌ Missing root level stepPrompts`);
+                    console.log(`  ❌ Missing root level steps`);
                 }
             }
         }
@@ -252,18 +252,18 @@ async function verifyStepPrompts() {
 
         console.log(`Templates:`);
         console.log(`  📦 Total checked: ${results.templatesChecked}`);
-        console.log(`  ✅ With mainData stepPrompts: ${results.templatesWithMainPrompts}`);
-        console.log(`  ✅ With subData stepPrompts: ${results.templatesWithSubDataPrompts}`);
-        console.log(`  ❌ Missing mainData stepPrompts: ${results.templatesMissingMainPrompts.length}`);
-        console.log(`  ❌ Missing subData stepPrompts: ${results.templatesMissingSubDataPrompts.length}`);
+        console.log(`  ✅ With mainData steps: ${results.templatesWithMainPrompts}`);
+        console.log(`  ✅ With subData steps: ${results.templatesWithSubDataPrompts}`);
+        console.log(`  ❌ Missing mainData steps: ${results.templatesMissingMainPrompts.length}`);
+        console.log(`  ❌ Missing subData steps: ${results.templatesMissingSubDataPrompts.length}`);
 
         console.log(`\nMain Data Items:`);
-        console.log(`  ✅ With stepPrompts: ${results.mainDataItemsWithPrompts}`);
-        console.log(`  ❌ Without stepPrompts: ${results.mainDataItemsWithoutPrompts}`);
+        console.log(`  ✅ With steps: ${results.mainDataItemsWithPrompts}`);
+        console.log(`  ❌ Without steps: ${results.mainDataItemsWithoutPrompts}`);
 
         console.log(`\nSub Data Items:`);
-        console.log(`  ✅ With stepPrompts: ${results.subDataItemsWithPrompts}`);
-        console.log(`  ❌ Without stepPrompts: ${results.subDataItemsWithoutPrompts}`);
+        console.log(`  ✅ With steps: ${results.subDataItemsWithPrompts}`);
+        console.log(`  ❌ Without steps: ${results.subDataItemsWithoutPrompts}`);
 
         console.log(`\nTranslation Keys:`);
         console.log(`  📦 Total checked: ${results.translationKeysChecked}`);
@@ -273,14 +273,14 @@ async function verifyStepPrompts() {
 
         // Detailed missing lists
         if (results.templatesMissingMainPrompts.length > 0) {
-            console.log(`\n❌ Templates missing mainData stepPrompts:`);
+            console.log(`\n❌ Templates missing mainData steps:`);
             results.templatesMissingMainPrompts.forEach(t => {
                 console.log(`    - ${t.template} (${t.name})`);
             });
         }
 
         if (results.templatesMissingSubDataPrompts.length > 0) {
-            console.log(`\n❌ Templates missing subData stepPrompts:`);
+            console.log(`\n❌ Templates missing subData steps:`);
             results.templatesMissingSubDataPrompts.forEach(t => {
                 console.log(`    - ${t.template} (${t.name}) - Main: ${t.main} - ${t.subDataCount} subData items`);
             });
@@ -300,21 +300,21 @@ async function verifyStepPrompts() {
                 if (template.mainData && template.mainData.length > 0) {
                     template.mainData.forEach((main, mainIdx) => {
                         console.log(`      Main ${mainIdx + 1}: ${main.label}`);
-                        console.log(`        Has stepPrompts: ${!!main.stepPrompts}`);
-                        if (main.stepPrompts) {
-                            console.log(`        Steps: ${Object.keys(main.stepPrompts).join(', ')}`);
+                        console.log(`        Has steps: ${!!main.steps}`);
+                        if (main.steps) {
+                            console.log(`        Steps: ${Object.keys(main.steps).join(', ')}`);
                         }
                         if (main.subData && main.subData.length > 0) {
                             console.log(`        SubData count: ${main.subData.length}`);
                             main.subData.forEach((sub, subIdx) => {
-                                console.log(`          Sub ${subIdx + 1}: ${sub.label} - Has stepPrompts: ${!!sub.stepPrompts}`);
+                                console.log(`          Sub ${subIdx + 1}: ${sub.label} - Has steps: ${!!sub.steps}`);
                             });
                         }
                     });
                 }
-                console.log(`    Has root stepPrompts: ${!!template.stepPrompts}`);
-                if (template.stepPrompts) {
-                    console.log(`    Root steps: ${Object.keys(template.stepPrompts).join(', ')}`);
+                console.log(`    Has root steps: ${!!template.steps}`);
+                if (template.steps) {
+                    console.log(`    Root steps: ${Object.keys(template.steps).join(', ')}`);
                 }
             } else {
                 console.log(`\n  ❌ ${templateNames[idx]} template not found with mainData`);
@@ -353,5 +353,5 @@ async function verifyStepPrompts() {
     }
 }
 
-verifyStepPrompts().catch(console.error);
+verifysteps().catch(console.error);
 

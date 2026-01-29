@@ -10,7 +10,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { TaskType } from '../../../../types/taskTypes';
 import { taskRepository } from '../../../../services/TaskRepository';
 import { getTemplateId } from '../../../../utils/taskHelpers';
-import { isTaskTreeEmpty, hasdataButNoStepPrompts } from '../../../../utils/ddt';
+import { isTaskTreeEmpty, hasdataButNosteps } from '../../../../utils/ddt';
 import { getdataList } from '../ddtSelectors';
 import type { Task } from '../../../../types/taskTypes';
 import { findLocalTemplate } from './helpers/templateMatcher';
@@ -108,7 +108,7 @@ export function useWizardInference({
     }
 
     const empty = isTaskTreeEmpty(currentTaskTree);
-    const hasStructureButNoMessages = hasdataButNoStepPrompts(currentTaskTree, task);
+    const hasStructureButNoMessages = hasdataButNosteps(currentTaskTree, task);
 
     // ✅ CRITICAL: Leggi da task.steps usando templateId come chiave (non id)
     // task.steps[node.templateId] = steps clonati

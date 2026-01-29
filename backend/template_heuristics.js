@@ -5,6 +5,47 @@
  */
 
 /**
+ * Estrae steps da un template e li filtra per sub-tasks (solo start, noInput, noMatch)
+ *
+ * @param {Object} template - Template con steps
+ * @param {string} templateId - ID del template
+ * @returns {Object|undefined} Steps filtrati per sub-tasks o undefined
+ */
+function extractFilteredStepsForSubTask(template, templateId) {
+  if (!template || !template.steps || typeof template.steps !== 'object') {
+    return undefined;
+  }
+
+  const nodeId = templateId || template.id || template._id;
+  if (!nodeId) {
+    return undefined;
+  }
+
+  const nodeSteps = template.steps[String(nodeId)];
+  if (!nodeSteps || typeof nodeSteps !== 'object') {
+    return undefined;
+  }
+
+  // Filtra solo start, noInput, noMatch per sub-tasks
+  const filteredSteps = {};
+  const allowedStepTypes = ['start', 'noInput', 'noMatch'];
+
+  for (const stepType of allowedStepTypes) {
+    if (nodeSteps[stepType]) {
+      filteredSteps[stepType] = nodeSteps[stepType];
+    }
+  }
+
+  if (Object.keys(filteredSteps).length === 0) {
+    return undefined;
+  }
+
+  return {
+    [String(nodeId)]: filteredSteps
+  };
+}
+
+/**
  * Extracts template names mentioned in the description using synonyms.
  * @param {string} text - User description (e.g., "chiedi nome e telefono")
  * @param {Object} templates - Dictionary of available templates {name: template}
@@ -311,7 +352,7 @@ function buildHeuristicResponse(template, mentionedFields, templatesDict, target
     // ✅ PRIMA: Costruisci array di subData instances
     // Per ogni ID in subDataIds, cerca il template corrispondente e crea una sotto-istanza
     // NOTA: Un template alla radice non sa se sarà usato come sottodato o come main,
-    // quindi può avere tutti i 6 tipi di stepPrompts (start, noMatch, noInput, confirmation, notConfirmed, success).
+    // quindi può avere tutti i 6 tipi di steps (start, noMatch, noInput, confirmation, notConfirmed, success).
     // Quando lo usiamo come sottodato, filtriamo e prendiamo solo start, noInput, noMatch.
     // Ignoriamo confirmation, notConfirmed, success anche se presenti nel template sottodato.
     const subDataInstances = [];
@@ -328,28 +369,16 @@ function buildHeuristicResponse(template, mentionedFields, templatesDict, target
                            mentionedFields.includes(subTemplate.name) ||
                            mentionedFields.includes(subTemplate.label);
 
-        // ✅ Filtra stepPrompts: solo start, noInput, noMatch per sottodati
-        // Ignora confirmation, notConfirmed, success anche se presenti nel template sottodato
-        const filteredStepPrompts = {};
-        if (subTemplate.stepPrompts) {
-          if (subTemplate.stepPrompts.start) {
-            filteredStepPrompts.start = subTemplate.stepPrompts.start;
-          }
-          if (subTemplate.stepPrompts.noInput) {
-            filteredStepPrompts.noInput = subTemplate.stepPrompts.noInput;
-          }
-          if (subTemplate.stepPrompts.noMatch) {
-            filteredStepPrompts.noMatch = subTemplate.stepPrompts.noMatch;
-          }
-          // ❌ Ignoriamo: confirmation, notConfirmed, success
-        }
+        // ✅ Estrai steps filtrati per sub-tasks (solo start, noInput, noMatch)
+        const subTemplateId = subTemplate.id || subTemplate._id || subId;
+        const filteredSteps = extractFilteredStepsForSubTask(subTemplate, subTemplateId);
 
         // ✅ Usa la label del template trovato (non l'ID!)
         const subInstance = {
           label: subTemplate.label || subTemplate.name || 'Sub',
           type: subTemplate.type || subTemplate.name || 'generic',
           icon: subTemplate.icon || 'FileText',
-          stepPrompts: Object.keys(filteredStepPrompts).length > 0 ? filteredStepPrompts : null,
+          steps: filteredSteps || undefined, // ✅ Usa steps invece di steps
           constraints: subTemplate.dataContracts || subTemplate.constraints || [],
           examples: subTemplate.examples || [],
           subData: [],
@@ -359,8 +388,8 @@ function buildHeuristicResponse(template, mentionedFields, templatesDict, target
         console.log('[HEURISTIC][buildResponse] ✅ Creata istanza sottodato', {
           subId, // ID usato per cercare
           label: subInstance.label, // Label trovata nel template
-          hasStepPrompts: Object.keys(filteredStepPrompts).length > 0,
-          filteredSteps: Object.keys(filteredStepPrompts)
+          hasSteps: !!filteredSteps,
+          stepsKeys: filteredSteps ? Object.keys(filteredSteps) : []
         });
       } else {
         console.warn('[HEURISTIC][buildResponse] ⚠️ Template sottodato non trovato per ID', { subId });
@@ -368,12 +397,13 @@ function buildHeuristicResponse(template, mentionedFields, templatesDict, target
     }
 
     // ✅ POI: Crea UN SOLO mainData con subData[] popolato (non elementi separati!)
-    // L'istanza principale copia TUTTI i stepPrompts dal template (tutti e 6 i tipi)
+    // L'istanza principale copia TUTTI gli steps dal template (tutti i tipi)
+    const mainTemplateId = template.id || template._id;
     const mainInstance = {
       label: template.label || template.name || 'Data',
       type: template.type || template.name || 'generic',
       icon: template.icon || 'Calendar',
-      stepPrompts: template.stepPrompts || null, // ✅ Tutti e 6 i tipi per main
+      steps: mainTemplateId && template.steps ? { [String(mainTemplateId)]: template.steps[String(mainTemplateId)] } : undefined, // ✅ Usa steps invece di steps
       constraints: template.dataContracts || template.constraints || [],
       examples: template.examples || [],
       subData: subDataInstances, // ✅ Sottodati QUI dentro subData[], non in mainDataList[]
@@ -385,11 +415,12 @@ function buildHeuristicResponse(template, mentionedFields, templatesDict, target
     console.log('[HEURISTIC][buildResponse] 📄 Template semplice, creando istanza root', {
       templateLabel: template.label || template.name
     });
+    const mainTemplateId = template.id || template._id;
     const mainInstance = {
       label: template.label || template.name || 'Data',
       type: template.type || template.name || 'generic',
       icon: template.icon || 'FileText',
-      stepPrompts: template.stepPrompts || null,
+      steps: mainTemplateId && template.steps ? { [String(mainTemplateId)]: template.steps[String(mainTemplateId)] } : undefined, // ✅ Usa steps invece di steps
       constraints: template.dataContracts || template.constraints || [],
       examples: template.examples || [],
       subData: [],
@@ -403,9 +434,8 @@ function buildHeuristicResponse(template, mentionedFields, templatesDict, target
     icon: template.icon || 'FileText',
     schema: {
       label: template.label || 'Data',
-      mainData: mainDataList,
-      // Include stepPrompts a livello schema se presente
-      stepPrompts: template.stepPrompts || null
+      mainData: mainDataList
+      // ❌ RIMOSSO: steps - usa steps nei nodi invece
     }
   };
 }

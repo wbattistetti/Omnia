@@ -26,28 +26,28 @@ async function verify() {
     console.log(`   DataRequest tasks: ${dataRequestTasks.length}\n`);
 
     let tasksWithSteps = 0;
-    let tasksWithStepPrompts = 0;
+    let tasksWithsteps = 0;
     let tasksWithDataContracts = 0;
     let tasksWithFullDDT = 0;
 
     for (const task of dataRequestTasks) {
       const hasSteps = task.steps && typeof task.steps === 'object' && Object.keys(task.steps).length > 0;
-      const hasStepPrompts = task.stepPrompts && typeof task.stepPrompts === 'object' && Object.keys(task.stepPrompts).length > 0;
+      const hassteps = task.steps && typeof task.steps === 'object' && Object.keys(task.steps).length > 0;
       const hasDataContracts = task.dataContracts && Array.isArray(task.dataContracts) && task.dataContracts.length > 0;
 
       if (hasSteps) tasksWithSteps++;
-      if (hasStepPrompts) tasksWithStepPrompts++;
+      if (hassteps) tasksWithsteps++;
       if (hasDataContracts) tasksWithDataContracts++;
 
-      if (hasSteps && hasStepPrompts) {
+      if (hasSteps && hassteps) {
         tasksWithFullDDT++;
       }
     }
 
     console.log(`   Con steps (root level): ${tasksWithSteps}/${dataRequestTasks.length}`);
-    console.log(`   Con stepPrompts (root level): ${tasksWithStepPrompts}/${dataRequestTasks.length}`);
+    console.log(`   Con steps (root level): ${tasksWithsteps}/${dataRequestTasks.length}`);
     console.log(`   Con dataContracts: ${tasksWithDataContracts}/${dataRequestTasks.length}`);
-    console.log(`   Con DDT completo (steps + stepPrompts): ${tasksWithFullDDT}/${dataRequestTasks.length}\n`);
+    console.log(`   Con DDT completo (steps + steps): ${tasksWithFullDDT}/${dataRequestTasks.length}\n`);
 
     // ===================================
     // 2. ANALIZZA ddt_library
@@ -60,26 +60,26 @@ async function verify() {
 
     let ddtWithMainData = 0;
     let ddtWithSteps = 0;
-    let ddtWithStepPrompts = 0;
+    let ddtWithsteps = 0;
     let ddtWithFullDDT = 0;
 
     for (const ddt of ddtLibrary) {
       const hasMainData = ddt.ddt?.mainData && Array.isArray(ddt.ddt.mainData) && ddt.ddt.mainData.length > 0;
       const hasSteps = ddt.ddt?.steps && typeof ddt.ddt.steps === 'object' && Object.keys(ddt.ddt.steps || {}).length > 0;
-      const hasStepPrompts = ddt.ddt?.stepPrompts && typeof ddt.ddt.stepPrompts === 'object' && Object.keys(ddt.ddt.stepPrompts || {}).length > 0;
+      const hassteps = ddt.ddt?.steps && typeof ddt.ddt.steps === 'object' && Object.keys(ddt.ddt.steps || {}).length > 0;
 
       if (hasMainData) ddtWithMainData++;
       if (hasSteps) ddtWithSteps++;
-      if (hasStepPrompts) ddtWithStepPrompts++;
+      if (hassteps) ddtWithsteps++;
 
-      if (hasMainData || (hasSteps && hasStepPrompts)) {
+      if (hasMainData || (hasSteps && hassteps)) {
         ddtWithFullDDT++;
       }
     }
 
     console.log(`   Con mainData: ${ddtWithMainData}/${ddtLibrary.length}`);
     console.log(`   Con steps: ${ddtWithSteps}/${ddtLibrary.length}`);
-    console.log(`   Con stepPrompts: ${ddtWithStepPrompts}/${ddtLibrary.length}`);
+    console.log(`   Con steps: ${ddtWithsteps}/${ddtLibrary.length}`);
     console.log(`   Con DDT completo: ${ddtWithFullDDT}/${ddtLibrary.length}\n`);
 
     // ===================================
@@ -90,7 +90,7 @@ async function verify() {
 
     console.log('Task DataRequest (formato "flat"):');
     console.log('   - steps a root level (con escalations e tasks)');
-    console.log('   - stepPrompts a root level');
+    console.log('   - steps a root level');
     console.log('   - dataContracts a root level');
     console.log('   - NO mainData (struttura gerarchica)');
     console.log();
@@ -98,7 +98,7 @@ async function verify() {
     console.log('ddt_library (formato "gerarchico"):');
     console.log('   - mainData con struttura gerarchica');
     console.log('   - steps dentro i nodi mainData');
-    console.log('   - stepPrompts a root level o dentro nodi');
+    console.log('   - steps a root level o dentro nodi');
     console.log();
 
     // ===================================
@@ -110,11 +110,11 @@ async function verify() {
 
     console.log(`\n1. Task DataRequest hanno DDT: ${tasksWithFullDDT}/${dataRequestTasks.length}`);
     console.log(`   - Formato: "flat" (steps a root level)`);
-    console.log(`   - Struttura: steps + stepPrompts + dataContracts`);
+    console.log(`   - Struttura: steps + steps + dataContracts`);
 
     console.log(`\n2. ddt_library ha DDT: ${ddtWithFullDDT}/${ddtLibrary.length}`);
     console.log(`   - Formato: "gerarchico" (mainData con steps dentro)`);
-    console.log(`   - Struttura: mainData + steps + stepPrompts`);
+    console.log(`   - Struttura: mainData + steps + steps`);
 
     console.log('\n💡 ANALISI:');
 

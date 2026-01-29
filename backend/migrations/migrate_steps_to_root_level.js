@@ -6,7 +6,7 @@
  * 2. Extracts steps from mainData and subData
  * 3. Creates task.steps object with nodeId as keys
  * 4. Removes steps from mainData/subData
- * 5. Also migrates stepPrompts if present (legacy format)
+ * 5. Also migrates steps if present (legacy format)
  *
  * Structure:
  * - OLD: mainData[].steps = { start: {...}, noMatch: {...} }
@@ -52,12 +52,12 @@ async function migrateStepsToRootLevel() {
         needsUpdateRef.value = true;
       }
 
-      // Extract from node.stepPrompts (legacy format) - convert to steps structure
-      if (node.stepPrompts && typeof node.stepPrompts === 'object' && Object.keys(node.stepPrompts).length > 0) {
+      // Extract from node.steps (legacy format) - convert to steps structure
+      if (node.steps && typeof node.steps === 'object' && Object.keys(node.steps).length > 0) {
         const convertedSteps = {};
-        for (const [stepKey, stepValue] of Object.entries(node.stepPrompts)) {
+        for (const [stepKey, stepValue] of Object.entries(node.steps)) {
           if (Array.isArray(stepValue) && stepValue.length > 0) {
-            // stepPrompts format: { start: ['guid1', 'guid2'], noMatch: [...] }
+            // steps format: { start: ['guid1', 'guid2'], noMatch: [...] }
             // Convert to steps format: { start: { type: 'start', escalations: [{ tasks: [...] }] } }
             convertedSteps[stepKey] = {
               type: stepKey,
@@ -73,7 +73,7 @@ async function migrateStepsToRootLevel() {
         }
         if (Object.keys(convertedSteps).length > 0) {
           rootSteps[nodeId] = convertedSteps;
-          delete node.stepPrompts;
+          delete node.steps;
           needsUpdateRef.value = true;
         }
       }
@@ -166,14 +166,14 @@ async function migrateStepsToRootLevel() {
         });
       }
 
-      // Also check root level stepPrompts (legacy)
-      if (updatedTemplate.stepPrompts && typeof updatedTemplate.stepPrompts === 'object' && Object.keys(updatedTemplate.stepPrompts).length > 0) {
-        // Root level stepPrompts - need to find corresponding mainData nodeId
+      // Also check root level steps (legacy)
+      if (updatedTemplate.steps && typeof updatedTemplate.steps === 'object' && Object.keys(updatedTemplate.steps).length > 0) {
+        // Root level steps - need to find corresponding mainData nodeId
         if (updatedTemplate.mainData && Array.isArray(updatedTemplate.mainData) && updatedTemplate.mainData.length > 0) {
           const firstMainId = updatedTemplate.mainData[0]?.id;
           if (firstMainId) {
             const convertedSteps = {};
-            for (const [stepKey, stepValue] of Object.entries(updatedTemplate.stepPrompts)) {
+            for (const [stepKey, stepValue] of Object.entries(updatedTemplate.steps)) {
               if (Array.isArray(stepValue) && stepValue.length > 0) {
                 convertedSteps[stepKey] = {
                   type: stepKey,
@@ -189,7 +189,7 @@ async function migrateStepsToRootLevel() {
             }
             if (Object.keys(convertedSteps).length > 0) {
               rootSteps[firstMainId] = convertedSteps;
-              delete updatedTemplate.stepPrompts;
+              delete updatedTemplate.steps;
               needsUpdateRef.value = true;
             }
           }

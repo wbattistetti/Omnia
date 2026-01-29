@@ -6,6 +6,7 @@ Imports System.IO
 Imports System.Threading
 Imports System.Threading.Tasks
 Imports System.Collections.Generic
+Imports System.Net.Http
 Imports Microsoft.AspNetCore.Builder
 Imports Microsoft.AspNetCore.Hosting
 Imports Microsoft.AspNetCore.Http
@@ -90,6 +91,27 @@ Module Program
         app.MapPost("/api/runtime/compile/task", Function(context As HttpContext) As System.Threading.Tasks.Task(Of IResult)
                                                     Return HandleCompileTask(context)
                                                 End Function)
+
+        ' POST /api/runtime/task/session/start - Chat Simulator diretto (solo UtteranceInterpretation)
+        app.MapPost("/api/runtime/task/session/start", Async Function(context As HttpContext) As Task(Of IResult)
+                                                           Console.WriteLine("🔵 [MapPost] /api/runtime/task/session/start - Handler called")
+                                                           Return Await HandleTaskSessionStart(context)
+                                                       End Function)
+
+        ' GET /api/runtime/task/session/{id}/stream (SSE) - Chat Simulator diretto
+        app.MapGet("/api/runtime/task/session/{id}/stream", Function(context As HttpContext, id As String) As System.Threading.Tasks.Task
+                                                                Return HandleTaskSessionStream(context, id)
+                                                            End Function)
+
+        ' POST /api/runtime/task/session/{id}/input - Chat Simulator diretto
+        app.MapPost("/api/runtime/task/session/{id}/input", Function(context As HttpContext, id As String) As Task(Of IResult)
+                                                                Return HandleTaskSessionInput(context, id)
+                                                            End Function)
+
+        ' DELETE /api/runtime/task/session/{id} - Chat Simulator diretto
+        app.MapDelete("/api/runtime/task/session/{id}", Function(context As HttpContext, id As String) As Task(Of IResult)
+                                                            Return HandleTaskSessionDelete(context, id)
+                                                        End Function)
 
         ' POST /api/runtime/orchestrator/session/start
         app.MapPost("/api/runtime/orchestrator/session/start", Async Function(context As HttpContext) As Task(Of IResult)
@@ -1323,6 +1345,412 @@ Module Program
     End Function
 
     ''' <summary>
+    ''' Handles POST /api/runtime/task/session/start - Chat Simulator diretto
+    ''' </summary>
+    Private Async Function HandleTaskSessionStart(context As HttpContext) As Task(Of IResult)
+        Try
+            Console.WriteLine($"📥 [HandleTaskSessionStart] Received request")
+
+            ' Read request body
+            Dim body As String = Nothing
+            Try
+                Dim reader As New StreamReader(context.Request.Body)
+                body = Await reader.ReadToEndAsync()
+            Catch readEx As Exception
+                Console.WriteLine($"❌ [HandleTaskSessionStart] Error reading body: {readEx.Message}")
+                Return Results.BadRequest(New With {.error = "Failed to read request body"})
+            End Try
+
+            If String.IsNullOrEmpty(body) Then
+                Console.WriteLine("❌ [HandleTaskSessionStart] Empty body")
+                Return Results.BadRequest(New With {.error = "Empty request body"})
+            End If
+
+            ' Deserialize request
+            Dim request As TaskSessionStartRequest = Nothing
+            Try
+                request = JsonConvert.DeserializeObject(Of TaskSessionStartRequest)(body, New JsonSerializerSettings() With {
+                    .NullValueHandling = NullValueHandling.Ignore,
+                    .MissingMemberHandling = MissingMemberHandling.Ignore
+                })
+            Catch jsonEx As Exception
+                Console.WriteLine($"❌ [HandleTaskSessionStart] JSON error: {jsonEx.Message}")
+                Return Results.BadRequest(New With {.error = "Invalid JSON", .message = jsonEx.Message})
+            End Try
+
+            If request Is Nothing OrElse String.IsNullOrEmpty(request.TaskId) OrElse String.IsNullOrEmpty(request.ProjectId) Then
+                Console.WriteLine("❌ [HandleTaskSessionStart] Missing taskId or projectId")
+                Return Results.BadRequest(New With {.error = "Missing taskId or projectId"})
+            End If
+
+            Console.WriteLine($"🔍 [HandleTaskSessionStart] Request: taskId={request.TaskId}, projectId={request.ProjectId}")
+
+            ' Chiama Node.js per ottenere task e template
+            Dim taskJson As String = Nothing
+            Dim templateJson As String = Nothing
+            Try
+                Using httpClient As New HttpClient()
+                    httpClient.Timeout = TimeSpan.FromSeconds(30)
+
+                    ' ✅ Chiama GET /api/projects/{projectId}/tasks (restituisce tutti i task)
+                    Dim tasksUrl = $"http://localhost:3100/api/projects/{Uri.EscapeDataString(request.ProjectId)}/tasks"
+                    Console.WriteLine($"📡 [HandleTaskSessionStart] Calling Node.js: {tasksUrl}")
+
+                    Dim tasksResponse = Await httpClient.GetAsync(tasksUrl)
+                    If Not tasksResponse.IsSuccessStatusCode Then
+                        Console.WriteLine($"❌ [HandleTaskSessionStart] Node.js returned error: {tasksResponse.StatusCode}")
+                        Return Results.BadRequest(New With {.error = $"Failed to load tasks from Node.js: {tasksResponse.StatusCode}"})
+                    End If
+
+                    Dim tasksResponseJson = Await tasksResponse.Content.ReadAsStringAsync()
+                    Dim tasksResponseObj = JsonConvert.DeserializeObject(Of JObject)(tasksResponseJson)
+                    Dim tasksArray = If(tasksResponseObj("items"), New JArray())
+
+                    ' ✅ Trova task per id
+                    Dim taskObj As JObject = Nothing
+                    For Each item In tasksArray
+                        If item("id")?.ToString() = request.TaskId Then
+                            taskObj = CType(item, JObject)
+                            Exit For
+                        End If
+                    Next
+
+                    If taskObj Is Nothing Then
+                        Console.WriteLine($"❌ [HandleTaskSessionStart] Task not found: {request.TaskId}")
+                        Return Results.BadRequest(New With {.error = $"Task not found: {request.TaskId}"})
+                    End If
+
+                    taskJson = taskObj.ToString()
+                    Console.WriteLine($"✅ [HandleTaskSessionStart] Task loaded from Node.js: {taskJson.Length} chars")
+
+                    ' ✅ Ottieni templateId e carica template
+                    Dim templateId = If(taskObj("templateId")?.ToString(), taskObj("id")?.ToString())
+
+                    If Not String.IsNullOrEmpty(templateId) AndAlso templateId <> request.TaskId Then
+                        ' ✅ Trova template nella stessa lista
+                        Dim templateObj As JObject = Nothing
+                        For Each item In tasksArray
+                            If item("id")?.ToString() = templateId Then
+                                templateObj = CType(item, JObject)
+                                Exit For
+                            End If
+                        Next
+
+                        If templateObj IsNot Nothing Then
+                            templateJson = templateObj.ToString()
+                            Console.WriteLine($"✅ [HandleTaskSessionStart] Template loaded from Node.js: {templateJson.Length} chars")
+                        Else
+                            Console.WriteLine($"⚠️ [HandleTaskSessionStart] Template not found, using task as template")
+                            templateJson = taskJson
+                        End If
+                    Else
+                        Console.WriteLine($"⚠️ [HandleTaskSessionStart] No templateId or templateId = taskId, using task as template")
+                        templateJson = taskJson
+                    End If
+                End Using
+            Catch httpEx As Exception
+                Console.WriteLine($"❌ [HandleTaskSessionStart] HTTP error: {httpEx.Message}")
+                Return Results.BadRequest(New With {.error = $"Failed to call Node.js: {httpEx.Message}"})
+            End Try
+
+            ' Deserializza task e template
+            Dim task As Compiler.Task = Nothing
+            Dim template As Compiler.Task = Nothing
+            Try
+                Dim settings As New JsonSerializerSettings() With {
+                    .NullValueHandling = NullValueHandling.Ignore,
+                    .MissingMemberHandling = MissingMemberHandling.Ignore
+                }
+                ' ✅ NUOVO MODELLO: Task non ha più Data, quindi non serve MainDataNodeListConverter
+                ' MainDataNodeListConverter è usato solo per TaskTreeRuntime.Data
+                settings.Converters.Add(New DialogueStepListConverter())
+
+                task = JsonConvert.DeserializeObject(Of Compiler.Task)(taskJson, settings)
+                template = JsonConvert.DeserializeObject(Of Compiler.Task)(templateJson, settings)
+
+                If task Is Nothing OrElse template Is Nothing Then
+                    Console.WriteLine("❌ [HandleTaskSessionStart] Failed to deserialize task or template")
+                    Return Results.BadRequest(New With {.error = "Failed to deserialize task or template"})
+                End If
+
+                ' Se task non ha templateId, usa se stesso come template
+                If String.IsNullOrEmpty(task.TemplateId) Then
+                    task.TemplateId = template.Id
+                End If
+            Catch deserializeEx As Exception
+                Console.WriteLine($"❌ [HandleTaskSessionStart] Deserialization error: {deserializeEx.Message}")
+                Return Results.BadRequest(New With {.error = $"Failed to deserialize: {deserializeEx.Message}"})
+            End Try
+
+            ' Verifica che il task sia di tipo UtteranceInterpretation
+            If Not task.Type.HasValue OrElse task.Type.Value <> TaskTypes.UtteranceInterpretation Then
+                Console.WriteLine($"❌ [HandleTaskSessionStart] Task is not UtteranceInterpretation: {If(task.Type.HasValue, task.Type.Value.ToString(), "NULL")}")
+                Return Results.BadRequest(New With {.error = "Task must be of type UtteranceInterpretation"})
+            End If
+
+            ' Costruisci TaskTreeRuntime usando DataRequestTaskCompiler
+            Dim taskTreeRuntime As Compiler.TaskTreeRuntime = Nothing
+            Try
+                ' Crea Flow con task e template
+                Dim flow As New Compiler.Flow() With {
+                    .Tasks = New List(Of Compiler.Task) From {template, task}
+                }
+
+                ' Usa BuildTaskTreeRuntimeFromTemplate (metodo privato, dobbiamo usare il compilatore)
+                Dim compiler As New DataRequestTaskCompiler()
+                Dim compiledTask = compiler.Compile(task, Nothing, Nothing, task.Id, flow)
+
+                If compiledTask Is Nothing OrElse TypeOf compiledTask IsNot Compiler.CompiledTaskGetData Then
+                    Console.WriteLine("❌ [HandleTaskSessionStart] Failed to compile task")
+                    Return Results.BadRequest(New With {.error = "Failed to compile task"})
+                End If
+
+                Dim dataRequestTask = DirectCast(compiledTask, Compiler.CompiledTaskGetData)
+                If dataRequestTask.DDT Is Nothing Then
+                    Console.WriteLine("❌ [HandleTaskSessionStart] Compiled task has no DDT instance")
+                    Return Results.BadRequest(New With {.error = "Compiled task has no DDT instance"})
+                End If
+
+                ' Crea TaskSession
+                Dim sessionId = Guid.NewGuid().ToString()
+                Dim translations = If(request.Translations, New Dictionary(Of String, String)())
+
+                Dim session = SessionManager.CreateTaskSession(sessionId, dataRequestTask.DDT, translations)
+
+                Console.WriteLine($"✅ [HandleTaskSessionStart] TaskSession created: {sessionId}")
+
+                Return Results.Ok(New With {
+                    .sessionId = sessionId,
+                    .timestamp = DateTime.UtcNow.ToString("O")
+                })
+            Catch compileEx As Exception
+                Console.WriteLine($"❌ [HandleTaskSessionStart] Compilation error: {compileEx.Message}")
+                Console.WriteLine($"Stack trace: {compileEx.StackTrace}")
+                Return Results.BadRequest(New With {.error = $"Failed to compile task: {compileEx.Message}"})
+            End Try
+        Catch ex As Exception
+            Console.WriteLine($"❌ [HandleTaskSessionStart] Exception: {ex.Message}")
+            Console.WriteLine($"Stack trace: {ex.StackTrace}")
+            Return Results.Problem(
+                title:="Failed to start task session",
+                detail:=ex.Message,
+                statusCode:=500
+            )
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' Handles GET /api/runtime/task/session/{id}/stream (SSE) - Chat Simulator diretto
+    ''' </summary>
+    Private Async Function HandleTaskSessionStream(context As HttpContext, sessionId As String) As System.Threading.Tasks.Task
+        Try
+            Console.WriteLine($"📡 [HandleTaskSessionStream] SSE connection opened for TaskSession: {sessionId}")
+
+            ' Get session
+            Dim session = SessionManager.GetTaskSession(sessionId)
+            If session Is Nothing Then
+                Console.WriteLine($"❌ [HandleTaskSessionStream] TaskSession not found: {sessionId}")
+                context.Response.StatusCode = 404
+                Await context.Response.WriteAsync($"event: error\ndata: {JsonConvert.SerializeObject(New With {.error = "Session not found"})}\n\n")
+                Return
+            End If
+
+            Console.WriteLine($"✅ [HandleTaskSessionStream] TaskSession found: {sessionId}")
+
+            ' Setup SSE headers
+            context.Response.ContentType = "text/event-stream"
+            context.Response.Headers.Add("Cache-Control", "no-cache")
+            context.Response.Headers.Add("Connection", "keep-alive")
+            context.Response.Headers.Add("X-Accel-Buffering", "no")
+            Await context.Response.Body.FlushAsync()
+
+            Dim writer As New StreamWriter(context.Response.Body)
+
+            ' Send existing messages first
+            For Each msg In session.Messages
+                Await writer.WriteLineAsync($"event: message")
+                Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(msg)}")
+                Await writer.WriteLineAsync()
+                Await writer.FlushAsync()
+            Next
+
+            ' Send waitingForInput event if already waiting
+            If session.IsWaitingForInput Then
+                Await writer.WriteLineAsync($"event: waitingForInput")
+                Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(session.WaitingForInputData)}")
+                Await writer.WriteLineAsync()
+                Await writer.FlushAsync()
+            End If
+
+            ' Register event handlers
+            Dim onMessage As Action(Of Object) = Sub(data)
+                                                     System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
+                                                                                         Try
+                                                                                             Await writer.WriteLineAsync($"event: message")
+                                                                                             Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
+                                                                                             Await writer.WriteLineAsync()
+                                                                                             Await writer.FlushAsync()
+                                                                                         Catch ex As Exception
+                                                                                             Console.WriteLine($"❌ [SSE] Error sending message: {ex.Message}")
+                                                                                         End Try
+                                                                                     End Function)
+                                                 End Sub
+
+            Dim onWaitingForInput As Action(Of Object) = Sub(data)
+                                                             System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
+                                                                                                 Try
+                                                                                                     session.IsWaitingForInput = True
+                                                                                                     session.WaitingForInputData = data
+                                                                                                     Await writer.WriteLineAsync($"event: waitingForInput")
+                                                                                                     Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
+                                                                                                     Await writer.WriteLineAsync()
+                                                                                                     Await writer.FlushAsync()
+                                                                                                 Catch ex As Exception
+                                                                                                     Console.WriteLine($"❌ [SSE] Error sending waitingForInput: {ex.Message}")
+                                                                                                 End Try
+                                                                                             End Function)
+                                                         End Sub
+
+            Dim onComplete As Action(Of Object) = Sub(data)
+                                                      System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
+                                                                                          Try
+                                                                                              Await writer.WriteLineAsync($"event: complete")
+                                                                                              Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
+                                                                                              Await writer.WriteLineAsync()
+                                                                                              Await writer.FlushAsync()
+                                                                                              writer.Close()
+                                                                                          Catch ex As Exception
+                                                                                              Console.WriteLine($"❌ [SSE] Error sending complete: {ex.Message}")
+                                                                                          End Try
+                                                                                      End Function)
+                                                  End Sub
+
+            Dim onError As Action(Of Object) = Sub(data)
+                                                   System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
+                                                                                       Try
+                                                                                           Await writer.WriteLineAsync($"event: error")
+                                                                                           Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
+                                                                                           Await writer.WriteLineAsync()
+                                                                                           Await writer.FlushAsync()
+                                                                                           writer.Close()
+                                                                                       Catch ex As Exception
+                                                                                           Console.WriteLine($"❌ [SSE] Error sending error: {ex.Message}")
+                                                                                       End Try
+                                                                                   End Function)
+                                               End Sub
+
+            ' Register listeners
+            session.EventEmitter.[On]("message", onMessage)
+            session.EventEmitter.[On]("waitingForInput", onWaitingForInput)
+            session.EventEmitter.[On]("complete", onComplete)
+            session.EventEmitter.[On]("error", onError)
+
+            ' Cleanup on disconnect
+            context.RequestAborted.Register(Sub()
+                                                Console.WriteLine($"✅ [HandleTaskSessionStream] SSE connection closed for TaskSession: {sessionId}")
+                                                session.EventEmitter.RemoveListener("message", onMessage)
+                                                session.EventEmitter.RemoveListener("waitingForInput", onWaitingForInput)
+                                                session.EventEmitter.RemoveListener("complete", onComplete)
+                                                session.EventEmitter.RemoveListener("error", onError)
+                                            End Sub)
+
+            ' Keep connection alive (heartbeat every 30 seconds)
+            Dim heartbeatTimer As New System.Threading.Timer(Async Sub(state)
+                                                                 Try
+                                                                     Await writer.WriteLineAsync($"event: heartbeat")
+                                                                     Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(New With {.timestamp = DateTime.UtcNow.ToString("O")})}")
+                                                                     Await writer.WriteLineAsync()
+                                                                     Await writer.FlushAsync()
+                                                                 Catch ex As Exception
+                                                                     ' Connection closed
+                                                                 End Try
+                                                             End Sub, Nothing, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30))
+
+            ' Wait for connection to close
+            Try
+                Await System.Threading.Tasks.Task.Delay(Timeout.Infinite, context.RequestAborted)
+            Catch ex As System.Threading.Tasks.TaskCanceledException
+                ' Connection closed normally
+                Console.WriteLine($"✅ [HandleTaskSessionStream] Connection closed normally for TaskSession: {sessionId}")
+            Finally
+                heartbeatTimer.Dispose()
+            End Try
+        Catch ex As Exception
+            Console.WriteLine($"❌ [HandleTaskSessionStream] ERROR: {ex.Message}")
+            Console.WriteLine($"Stack trace: {ex.StackTrace}")
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' Handles POST /api/runtime/task/session/{id}/input - Chat Simulator diretto
+    ''' </summary>
+    Private Async Function HandleTaskSessionInput(context As HttpContext, sessionId As String) As Task(Of IResult)
+        Console.WriteLine($"📥 [HandleTaskSessionInput] Received input for TaskSession: {sessionId}")
+
+        Try
+            Dim reader As New StreamReader(context.Request.Body)
+            Dim body = Await reader.ReadToEndAsync()
+            Dim request = JsonConvert.DeserializeObject(Of TaskSessionInputRequest)(body)
+
+            If request Is Nothing OrElse String.IsNullOrEmpty(request.Input) Then
+                Console.WriteLine("❌ [HandleTaskSessionInput] Invalid request or empty input")
+                Return Results.BadRequest(New With {.error = "Input is required"})
+            End If
+
+            ' Get session
+            Dim session = SessionManager.GetTaskSession(sessionId)
+            If session Is Nothing Then
+                Console.WriteLine($"❌ [HandleTaskSessionInput] TaskSession not found: {sessionId}")
+                Return Results.NotFound(New With {.error = "Session not found"})
+            End If
+
+            Console.WriteLine($"✅ [HandleTaskSessionInput] Processing input: {request.Input.Substring(0, Math.Min(100, request.Input.Length))}")
+
+            ' TODO: Process input and continue DDT execution
+            ' Per ora, solo acknowledge receipt
+            ' In futuro, questo dovrebbe:
+            ' 1. Passare input al Parser
+            ' 2. Continuare esecuzione DDT
+
+            ' Clear waiting state
+            session.IsWaitingForInput = False
+            session.WaitingForInputData = Nothing
+
+            Return Results.Ok(New With {
+                .success = True,
+                .timestamp = DateTime.UtcNow.ToString("O")
+            })
+        Catch ex As Exception
+            Console.WriteLine($"❌ [HandleTaskSessionInput] Exception: {ex.Message}")
+            Console.WriteLine($"Stack trace: {ex.StackTrace}")
+            Return Results.Problem(
+                title:="Failed to provide input",
+                detail:=ex.Message,
+                statusCode:=500
+            )
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' Handles DELETE /api/runtime/task/session/{id} - Chat Simulator diretto
+    ''' </summary>
+    Private Async Function HandleTaskSessionDelete(context As HttpContext, sessionId As String) As Task(Of IResult)
+        Try
+            SessionManager.DeleteTaskSession(sessionId)
+            Return Results.Ok(New With {
+                .success = True,
+                .timestamp = DateTime.UtcNow.ToString("O")
+            })
+        Catch ex As Exception
+            Return Results.Problem(
+                title:="Failed to delete session",
+                detail:=ex.Message,
+                statusCode:=500
+            )
+        End Try
+    End Function
+
+    ''' <summary>
     ''' Handles DELETE /api/runtime/orchestrator/session/{id}
     ''' </summary>
     Private Async Function HandleOrchestratorSessionDelete(context As HttpContext, sessionId As String) As Task(Of IResult)
@@ -1400,6 +1828,28 @@ End Class
 ''' Orchestrator Session Input Request
 ''' </summary>
 Public Class OrchestratorSessionInputRequest
+    Public Property Input As String
+End Class
+
+''' <summary>
+''' Task Session Start Request (Chat Simulator diretto)
+''' </summary>
+Public Class TaskSessionStartRequest
+    <JsonProperty("taskId")>
+    Public Property TaskId As String
+
+    <JsonProperty("projectId")>
+    Public Property ProjectId As String
+
+    <JsonProperty("translations")>
+    Public Property Translations As Dictionary(Of String, String)
+End Class
+
+''' <summary>
+''' Task Session Input Request
+''' </summary>
+Public Class TaskSessionInputRequest
+    <JsonProperty("input")>
     Public Property Input As String
 End Class
 

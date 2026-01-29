@@ -670,18 +670,19 @@ export const AppContent: React.FC<AppContentProps> = ({
           let ddt = d.ddt; // ✅ Usa DDT dall'evento (se presente)
 
           if (ddt) {
-            // ✅ DDT presente nell'evento: salvalo nel task per persistenza
+            // ✅ NUOVO MODELLO: Usa extractTaskOverrides per salvare solo override
             // Assicurati che il task esista
             let task = taskRepository.getTask(instanceId);
             if (!task) {
               // ✅ Usa taskType da taskMeta
               task = taskRepository.createTask(taskMeta.type, null, undefined, instanceId);
             }
-            // ✅ Salva DDT nel task (campi diretti, niente wrapper)
-            // ✅ CRITICAL: Non salvare steps qui - steps sono gestiti da ResponseEditor/DDTHostAdapter
-            const { steps, ...ddtWithoutSteps } = ddt;
+            // ✅ NUOVO MODELLO: Estrai solo override (label, steps, introduction)
+            // ❌ NON salvare: data, constraints, dataContract (vengono dal template)
+            const { extractTaskOverrides } = await import('../utils/taskUtils');
+            const overrides = await extractTaskOverrides(task, ddt, pdUpdate?.getCurrentProjectId() || undefined);
             taskRepository.updateTask(instanceId, {
-              ...ddtWithoutSteps,  // Spread: label, data, ecc. (SENZA steps)
+              ...overrides,  // Solo override: label, steps, introduction
               templateId: d.templateId || task.templateId  // Mantieni templateId se presente
             }, pdUpdate?.getCurrentProjectId());
             preparedDDT = ddt;
@@ -690,12 +691,12 @@ export const AppContent: React.FC<AppContentProps> = ({
             let task = taskRepository.getTask(instanceId);
 
             if (!task) {
-              // Task doesn't exist, create it with empty DDT
+              // Task doesn't exist, create it
+              // ✅ NUOVO MODELLO: Crea task senza data (la struttura viene dal template)
               // ✅ Usa taskType da taskMeta
-              // ✅ Crea task con DDT vuoto (campi diretti, niente wrapper)
               task = taskRepository.createTask(taskMeta.type, null, {
-                label: d.label || 'New DDT',
-                data: []
+                label: d.label || 'New Task'
+                // ❌ NON salvare: data (viene dal template usando subTasksIds)
               }, instanceId);
             }
 
@@ -717,8 +718,7 @@ export const AppContent: React.FC<AppContentProps> = ({
               // Update task with empty label (structure comes from template)
               taskRepository.updateTask(instanceId, {
                 label: ddt.label
-                }, pdUpdate?.getCurrentProjectId());
-              }
+              }, pdUpdate?.getCurrentProjectId());
             }
 
             preparedDDT = ddt;

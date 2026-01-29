@@ -30,7 +30,7 @@ function getInstanceFromTask(taskId: string): { message?: { text?: string }; ddt
     instance.ddt = {
       label: task.label,
       data: task.data,
-      stepPrompts: task.stepPrompts,
+      steps: task.steps,
       constraints: task.constraints,
     };
   }

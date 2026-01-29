@@ -9,7 +9,7 @@ export interface TemplateMatchResult {
     schema: {
       label: string;
       data: any[];
-      stepPrompts?: any;
+      // ❌ RIMOSSO: steps - usa steps nei nodi invece
     };
     icon: string;
     translationGuids: string[];
@@ -18,19 +18,26 @@ export interface TemplateMatchResult {
 
 /**
  * Estrae i GUID delle traduzioni da data e subData
- * Cerca pattern UUID nei stepPrompts
+ * Cerca pattern UUID negli steps
  */
 export function extractTranslationGuids(data: any[]): string[] {
   const guids: string[] = [];
   const guidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-  const extractFromStepPrompts = (stepPrompts: any) => {
-    if (!stepPrompts) return;
-    Object.values(stepPrompts).forEach((guidsArray: any) => {
-      if (Array.isArray(guidsArray)) {
-        guidsArray.forEach((guid: string) => {
-          if (typeof guid === 'string' && guidRegex.test(guid)) {
-            guids.push(guid);
+  const extractFromSteps = (steps: any, nodeId: string) => {
+    if (!steps || !nodeId) return;
+    const nodeSteps = steps[nodeId];
+    if (!nodeSteps || typeof nodeSteps !== 'object') return;
+
+    Object.values(nodeSteps).forEach((step: any) => {
+      if (step && step.escalations && Array.isArray(step.escalations)) {
+        step.escalations.forEach((escalation: any) => {
+          if (escalation.tasks && Array.isArray(escalation.tasks)) {
+            escalation.tasks.forEach((task: any) => {
+              if (task.id && typeof task.id === 'string' && guidRegex.test(task.id)) {
+                guids.push(task.id);
+              }
+            });
           }
         });
       }
@@ -38,13 +45,15 @@ export function extractTranslationGuids(data: any[]): string[] {
   };
 
   data.forEach((main) => {
-    if (main.stepPrompts) {
-      extractFromStepPrompts(main.stepPrompts);
+    const mainNodeId = main.templateId || main.id;
+    if (main.steps && mainNodeId) {
+      extractFromSteps(main.steps, String(mainNodeId));
     }
     if (main.subData) {
       main.subData.forEach((sub: any) => {
-        if (sub.stepPrompts) {
-          extractFromStepPrompts(sub.stepPrompts);
+        const subNodeId = sub.templateId || sub.id;
+        if (sub.steps && subNodeId) {
+          extractFromSteps(sub.steps, String(subNodeId));
         }
       });
     }
@@ -55,22 +64,28 @@ export function extractTranslationGuids(data: any[]): string[] {
 
 /**
  * Crea un'istanza subData da un template
- * Filtra stepPrompts: solo start, noInput, noMatch per sottodati
+ * Filtra steps: solo start, noInput, noMatch per sottodati
  *
  * ✅ Design-time: referenceId viene dal template.data[0].id
  * Questo referenceId sarà scritto nell'istanza e usato a runtime
  */
 export function createSubDataInstance(subTemplate: any): any {
-  const filteredStepPrompts: any = {};
-  if (subTemplate.stepPrompts) {
-    if (subTemplate.stepPrompts.start) {
-      filteredStepPrompts.start = subTemplate.stepPrompts.start;
-    }
-    if (subTemplate.stepPrompts.noInput) {
-      filteredStepPrompts.noInput = subTemplate.stepPrompts.noInput;
-    }
-    if (subTemplate.stepPrompts.noMatch) {
-      filteredStepPrompts.noMatch = subTemplate.stepPrompts.noMatch;
+  const subTemplateId = subTemplate.id || subTemplate._id;
+  let filteredSteps = undefined;
+
+  if (subTemplate.steps && subTemplateId) {
+    const nodeSteps = subTemplate.steps[String(subTemplateId)];
+    if (nodeSteps && typeof nodeSteps === 'object') {
+      const filtered = {};
+      const allowedStepTypes = ['start', 'noInput', 'noMatch'];
+      for (const stepType of allowedStepTypes) {
+        if (nodeSteps[stepType]) {
+          filtered[stepType] = nodeSteps[stepType];
+        }
+      }
+      if (Object.keys(filtered).length > 0) {
+        filteredSteps = { [String(subTemplateId)]: filtered };
+      }
     }
   }
 
@@ -88,7 +103,7 @@ export function createSubDataInstance(subTemplate: any): any {
     label: subTemplate.label || subTemplate.name || 'Sub',
     type: subTemplate.type,
     icon: subTemplate.icon || 'FileText',
-    stepPrompts: Object.keys(filteredStepPrompts).length > 0 ? filteredStepPrompts : undefined,
+    steps: filteredSteps, // ✅ Usa steps invece di steps
     constraints: subTemplate.dataContracts || subTemplate.constraints || [],
     examples: subTemplate.examples || [],
     subData: [],
@@ -103,11 +118,12 @@ export function createSubDataInstance(subTemplate: any): any {
  * Crea un'istanza data da un template semplice (senza subDataIds)
  */
 export function createSimpledataInstance(template: any): any {
+  const templateId = template.id || template._id;
   return {
     label: template.label || template.name || 'Data',
     type: template.type,
     icon: template.icon || 'Calendar',
-    stepPrompts: template.stepPrompts || undefined,
+    steps: templateId && template.steps ? { [String(templateId)]: template.steps[String(templateId)] } : undefined, // ✅ Usa steps invece di steps
     constraints: template.dataContracts || template.constraints || [],
     examples: template.examples || [],
     subData: [],
@@ -131,11 +147,12 @@ export function createCompositedata(template: any): any[] {
     }
   }
 
+  const mainTemplateId = template.id || template._id;
   const mainInstance = {
     label: template.label || template.name || 'Data',
     type: template.type,
     icon: template.icon || 'Calendar',
-    stepPrompts: template.stepPrompts || undefined,
+    steps: mainTemplateId && template.steps ? { [String(mainTemplateId)]: template.steps[String(mainTemplateId)] } : undefined, // ✅ Usa steps invece di steps
     constraints: template.dataContracts || template.constraints || [],
     examples: template.examples || [],
     subData: subDataInstances,
@@ -163,8 +180,8 @@ export async function buildTemplateMatchResult(template: any): Promise<TemplateM
     ai: {
       schema: {
         label: template.label || template.name || 'Data',
-        data: data,
-        stepPrompts: template.stepPrompts || undefined
+        data: data
+        // ❌ RIMOSSO: steps - usa steps nei nodi invece
       },
       icon: template.icon || 'Calendar',
       translationGuids: translationGuids

@@ -2009,7 +2009,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
                   } else {
                     // FIX: Salva con projectId per garantire persistenza nel database
                     taskRepository.updateTask(key, {
-                      ...updatedTaskTree  // ✅ Spread: label, nodes, stepPrompts, ecc.
+                      ...updatedTaskTree  // ✅ Spread: label, nodes, steps, ecc.
                     }, currentProjectId || undefined);
                   }
 
@@ -2234,6 +2234,8 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
                     onStartResize={() => setDraggingPanel('left')}
                     dragging={draggingPanel === 'left'}
                     taskTree={taskTree}
+                    task={task && 'templateId' in task ? task : null}
+                    projectId={currentProjectId}
                     translations={localTranslations}
                     selectedNode={selectedNode}
                     onUpdateDDT={(updater) => {
@@ -2255,11 +2257,13 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
                       dragging={draggingPanel === 'test'}
                       hideSplitter={tasksPanelMode === 'actions' && tasksPanelWidth > 1} // ✅ Nascondi splitter se Tasks è visibile (usiamo quello condiviso)
                       taskTree={taskTree}
+                      task={task && 'templateId' in task ? task : null}
+                      projectId={currentProjectId}
                       translations={localTranslations}
                       selectedNode={selectedNode}
                       onUpdateDDT={(updater) => {
-                        const updated = updater(ddt);
-                        try { replaceSelectedDDT(updated); } catch { }
+                        const updated = updater(taskTree);
+                        try { replaceSelectedTaskTree(updated); } catch { }
                       }}
                       tasks={escalationTasks}
                     />

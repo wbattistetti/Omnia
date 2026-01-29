@@ -248,7 +248,7 @@ export function getRowData(row: NodeRowData): {
       ddt: (task.data && task.data.length > 0) ? {
         label: task.label,
         data: task.data,
-        stepPrompts: task.stepPrompts,
+        steps: task.steps,
         constraints: task.constraints,
       } : undefined,
       intents: task.intents
@@ -291,12 +291,9 @@ export function updateRowData(
     taskUpdates.text = data.message.text;
   }
   if (data.ddt !== undefined) {
-    // ✅ Spread DDT fields directly into task
+    // ✅ Solo label override (data, steps, constraints, examples vengono dal template)
     taskUpdates.label = data.ddt.label;
-    taskUpdates.data = data.ddt.data;
-    taskUpdates.stepPrompts = data.ddt.stepPrompts;
-    taskUpdates.constraints = data.ddt.constraints;
-    taskUpdates.examples = data.ddt.examples;
+    // ❌ RIMOSSO: data, steps, constraints, examples - vengono sempre dal template
   }
   if (data.intents !== undefined) {
     taskUpdates.intents = data.intents;

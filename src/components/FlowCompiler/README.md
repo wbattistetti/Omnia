@@ -35,7 +35,7 @@ const engine = new DialogueEngine(result, {
         return await startDataCollection({
           label: task.label,
           mainData: task.mainData,
-          stepPrompts: task.stepPrompts,
+          steps: task.steps,
           constraints: task.constraints,
           examples: task.examples
         });

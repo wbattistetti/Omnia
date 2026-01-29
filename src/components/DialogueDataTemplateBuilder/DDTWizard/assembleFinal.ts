@@ -6,6 +6,7 @@ import { getAllV2Draft } from './V2DraftStore';
 import { taskTemplateService } from '../../../services/TaskTemplateService';
 import { cloneAndAdaptContract, createSubIdMapping } from '../../../utils/contractUtils';
 import { TaskType, templateIdToTaskType } from '../../../types/taskTypes';
+import { extractTranslationKeysFromSteps } from '../../../utils/stepsConverter';
 
 // ✅ REMOVED: extractPromptsFromMainData - DEPRECATED
 // Ora usiamo extractStartPrompts da ddtPromptExtractor.ts direttamente
@@ -503,25 +504,27 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
       assembled.constraints.push(constraintObj);
     }
 
-    // ✅ CRITICAL: Check sub-data stepPrompts before processing
+    // ✅ CRITICAL: Check sub-data steps before processing
     // Create sub-instances first (needed for contract mapping)
     const subInstances: any[] = [];
     for (const s of node.subTasks || []) {
-      const subHasStepPrompts = !!(s as any).stepPrompts && typeof (s as any).stepPrompts === 'object' && Object.keys((s as any).stepPrompts).length > 0;
+      const subNodeId = (s as any).templateId || s.id;
+      const subHasSteps = !!(s as any).steps && typeof (s as any).steps === 'object' && subNodeId && (s as any).steps[subNodeId];
 
-      if (!subHasStepPrompts) {
-        console.error('❌ [assembleFinal] Sub missing stepPrompts', {
+      if (!subHasSteps) {
+        console.error('❌ [assembleFinal] Sub missing steps', {
           parent: node.label,
-          sub: s.label
+          sub: s.label,
+          subNodeId
         });
       }
 
-      // ✅ CRITICAL: Preserve stepPrompts when assembling subTasks
-      const subNodeWithStepPrompts = {
+      // ✅ Preserve steps when assembling subTasks
+      const subNodeWithSteps = {
         ...s,
-        stepPrompts: (s as any).stepPrompts || undefined
+        steps: (s as any).steps || undefined
       };
-      const subInstance = await assembleNode(subNodeWithStepPrompts, [...nodePath, s.label]);
+      const subInstance = await assembleNode(subNodeWithSteps, [...nodePath, s.label]);
       subInstances.push(subInstance);
       assembled.subTasks.push(subInstance);
     }
@@ -585,23 +588,30 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
     // Minimal base messages (ensure ResponseEditor displays steps)
     const baseSteps = (isSub ? ['start', 'noInput', 'noMatch'] : ['start', 'noInput', 'noMatch', 'confirmation', 'notConfirmed', 'success']);
 
-    // Check if node has stepPrompts from template match
-    const nodeStepPrompts = (node as any).stepPrompts || null;
+    // ✅ Leggi steps (formato nuovo)
+    const nodeId = (node as any).templateId || (node as any).id;
+    const nodeSteps = (node as any).steps;
+
+    // Estrai chiavi di traduzione da steps
+    let nodesteps: Record<string, string[]> | null = null;
+    if (nodeSteps && nodeId && nodeSteps[nodeId]) {
+      nodesteps = extractTranslationKeysFromSteps(nodeSteps, nodeId);
+    }
 
     // ✅ CRITICAL: Log for sub-data nodes
     if (isSub) {
-      if (!nodeStepPrompts) {
-        console.error('🔴 [CRITICAL] ASSEMBLE NODE - SUB-DATA NODE MISSING STEPPROMPTS', {
+      if (!nodesteps) {
+        console.error('🔴 [CRITICAL] ASSEMBLE NODE - SUB-DATA NODE MISSING steps', {
           path,
           label: node.label,
           nodeKeys: Object.keys(node),
-          hasProp: 'stepPrompts' in node
+          hasProp: 'steps' in node
         });
       } else {
-        console.log('✅ [CRITICAL] ASSEMBLE NODE - SUB-DATA NODE HAS STEPPROMPTS', {
+        console.log('✅ [CRITICAL] ASSEMBLE NODE - SUB-DATA NODE HAS steps', {
           path,
           label: node.label,
-          keys: Object.keys(nodeStepPrompts)
+          keys: Object.keys(nodesteps)
         });
       }
     }
@@ -610,22 +620,23 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
       let chosenKey: string;
       let templateKeyForTranslation: string | null = null; // Store template key to load translations later
 
-      // Priority 1: Use stepPrompts from template if available
-      // stepPrompts structure: { start: ['template.time.start.prompt1'], noMatch: [...], ... }
-      // nodeStepPrompts[stepKey] is already an array of keys, not an object with .keys property
-      if (nodeStepPrompts && nodeStepPrompts[stepKey] && Array.isArray(nodeStepPrompts[stepKey]) && nodeStepPrompts[stepKey].length > 0) {
+      // Priority 1: Use steps/steps from template if available
+      // ✅ NUOVO: steps viene convertito in formato steps compatibile (array di chiavi)
+      // steps structure: { start: ['template.time.start.prompt1'], noMatch: [...], ... }
+      // nodesteps[stepKey] is already an array of keys, not an object with .keys property
+      if (nodesteps && nodesteps[stepKey] && Array.isArray(nodesteps[stepKey]) && nodesteps[stepKey].length > 0) {
         // Store the template key to load translations later
-        templateKeyForTranslation = nodeStepPrompts[stepKey][0];
+        templateKeyForTranslation = nodesteps[stepKey][0];
         // Create a unique runtime key with GUID for this instance
         chosenKey = `runtime.${ddtId}.${uuidv4()}.text`;
-        console.log('[assembleFinalDDT] Using stepPrompts key', {
+        console.log('[assembleFinalDDT] Using steps/steps key', {
           path,
           stepKey,
           templateKey: templateKeyForTranslation,
           runtimeKey: chosenKey,
           fromTemplate: true,
           isTemplateKey: templateKeyForTranslation.startsWith('template.'),
-          allKeys: nodeStepPrompts[stepKey]
+          allKeys: nodesteps[stepKey]
         });
       } else {
         // Fallback: Use AI-provided key or default
@@ -645,11 +656,11 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
 
       const isAsk = ['text', 'email', 'number', 'date'].includes((node.type || '').toString());
 
-      // If using stepPrompts, use the number of prompts as escalations
+      // If using steps/steps, use the number of prompts as escalations
       let numEsc: number;
-      // nodeStepPrompts[stepKey] is already an array of keys
-      if (nodeStepPrompts && nodeStepPrompts[stepKey] && Array.isArray(nodeStepPrompts[stepKey])) {
-        numEsc = nodeStepPrompts[stepKey].length;
+      // nodesteps[stepKey] is already an array of keys (estratte da steps o da steps legacy)
+      if (nodesteps && nodesteps[stepKey] && Array.isArray(nodesteps[stepKey])) {
+        numEsc = nodesteps[stepKey].length;
       } else {
         numEsc = stepKey === 'notConfirmed' ? 2 : (counts[stepKey] || 1);
       }
@@ -658,10 +669,10 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
       const escalations = Array.from({ length: numEsc }).map((_, escIdx) => {
         let templateKeyForEsc: string | null = null;
 
-        // If using stepPrompts and there are multiple prompts, use the corresponding one
-        // nodeStepPrompts[stepKey] is already an array of keys
-        if (nodeStepPrompts && nodeStepPrompts[stepKey] && Array.isArray(nodeStepPrompts[stepKey]) && nodeStepPrompts[stepKey][escIdx]) {
-          templateKeyForEsc = nodeStepPrompts[stepKey][escIdx];
+        // If using steps/steps and there are multiple prompts, use the corresponding one
+        // nodesteps[stepKey] is already an array of keys (estratte da steps o da steps legacy)
+        if (nodesteps && nodesteps[stepKey] && Array.isArray(nodesteps[stepKey]) && nodesteps[stepKey][escIdx]) {
+          templateKeyForEsc = nodesteps[stepKey][escIdx];
         }
 
         // ✅ Generate new runtime GUID for instance (always generate new, even if template key exists)

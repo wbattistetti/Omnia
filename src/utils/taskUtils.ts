@@ -694,31 +694,30 @@ export async function buildTaskTree(
 }
 
 /**
- * Build data tree from template (dereference subTasks)
+ * Build data tree from template (dereference subTasksIds)
  * Returns only data structure (without steps)
+ * ✅ NUOVO MODELLO: Usa solo subTasksIds, non più template.data
  * ✅ NON inventa label: se manca, logga warning e lascia undefined
  */
 export function buildDataTree(template: any): any[] {
-  // Helper function to recursively dereference subTasks
-  const dereferenceSubData = (subNode: any): any => {
-    const subNodeId = subNode.id;
-    if (!subNodeId) {
-      return subNode;
-    }
-
-    // ✅ SEMPRE: subNode contiene solo { id } → carica task atomico completo
-    const subTemplate = DialogueTaskService.getTemplate(subNodeId);
+  // Helper function to recursively dereference subTasksIds
+  const buildNodeFromSubTasksIds = (subTaskId: string): any => {
+    const subTemplate = DialogueTaskService.getTemplate(subTaskId);
     if (!subTemplate) {
-      console.warn('[buildDataTree] Sub-template not found:', subNodeId);
-      return subNode;
+      console.warn('[buildDataTree] Sub-template not found:', subTaskId);
+      return {
+        id: subTaskId,
+        templateId: subTaskId,
+        label: undefined,
+        subTasks: []
+      };
     }
 
-    // ✅ Recursively dereference subTasks (support for arbitrary depth)
-    const dereferencedSubData = (subTemplate.data && Array.isArray(subTemplate.data) && subTemplate.data.length > 0 && subTemplate.data[0].subTasks)
-      ? (subTemplate.data[0].subTasks || []).map(dereferenceSubData)
-      : [];
+    // ✅ Recursively dereference subTasksIds (support for arbitrary depth)
+    const subTasksIds = subTemplate.subTasksIds || [];
+    const dereferencedSubTasks = subTasksIds.map(buildNodeFromSubTasksIds);
 
-    // ✅ Costruisci struttura completa dal task atomico - SOLO templateId (referenceId eliminato)
+    // ✅ Costruisci struttura completa dal template
     return {
       id: subTemplate.id || subTemplate._id,
       label: subTemplate.label, // ✅ NON inventare: se manca, sarà undefined
@@ -726,93 +725,19 @@ export function buildDataTree(template: any): any[] {
       icon: subTemplate.icon || 'FileText',
       constraints: subTemplate.dataContracts || subTemplate.constraints || [],
       dataContract: subTemplate.dataContract || undefined,
-      subTasks: dereferencedSubData, // ✅ Supporta profondità arbitraria
-      templateId: subTemplate.id || subTemplate._id, // ✅ Solo templateId (uguale a id per template atomici/compositi)
+      subTasks: dereferencedSubTasks, // ✅ Supporta profondità arbitraria
+      templateId: subTemplate.id || subTemplate._id, // ✅ Solo templateId
       kind: subTemplate.name || subTemplate.type || 'generic'
     };
   };
 
-  // ✅ Check if template has data structure
-  if (template.data && Array.isArray(template.data) && template.data.length > 0) {
-    // Template has data - dereference structure
-    const data = template.data.map((mainNode: any) => {
-      // ✅ Process subTasks recursively (support for arbitrary depth)
-      const subData = (mainNode.subTasks || []).map(dereferenceSubData);
-
-      // ✅ NON inventare label: se manca, logga warning
-      if (!mainNode.label && !template.label && !template.name) {
-        const labelForHeuristics = template.id || 'UNKNOWN';
-        console.warn('[buildDataTree] Label mancante nel template, uso ID come fallback tecnico per euristiche', {
-          templateId: template.id,
-          fallbackLabel: labelForHeuristics,
-          nodeId: mainNode.id
-        });
-      }
-
-      // ✅ CRITICAL: Determina templateId corretto
-      // Se template.data.length === 1 → dato principale → templateId = template.id
-      // Se template.data.length > 1 → template aggregato → ogni mainNode è un template referenziato → templateId = mainNode.id
-      const isAggregateTemplate = template.data.length > 1;
-      const nodeTemplateId = isAggregateTemplate
-        ? (mainNode.id || mainNode.templateId)  // ✅ Template aggregato: usa mainNode.id
-        : (template.id || template._id);        // ✅ Template atomico/composito: usa template.id
-
-      // ✅ CRITICAL: Copia dataContracts dal template se mainNode non li ha
-      // ✅ I dataContracts sono referenziati dal template, NON copiati nell'istanza
-      const nodeConstraints = mainNode.constraints || mainNode.dataContracts || template.dataContracts || template.constraints || [];
-
-      console.log('[🔍 buildDataTree] Main node constraints and contract', {
-        nodeLabel: mainNode.label || template.label,
-        nodeTemplateId: nodeTemplateId,
-        mainNodeHasConstraints: !!(mainNode.constraints && mainNode.constraints.length > 0),
-        mainNodeHasDataContracts: !!(mainNode.dataContracts && mainNode.dataContracts.length > 0),
-        templateHasDataContracts: !!(template.dataContracts && template.dataContracts.length > 0),
-        templateHasConstraints: !!(template.constraints && template.constraints.length > 0),
-        finalConstraints: nodeConstraints ? `Array(${nodeConstraints.length})` : 'undefined',
-        mainNodeHasDataContract: !!mainNode.dataContract,
-        templateHasDataContract: !!template.dataContract,
-        templateDataContractContractsCount: template.dataContract?.contracts?.length || 0,
-        finalDataContract: mainNode.dataContract || template.dataContract ? 'present' : 'undefined'
-      });
-
-      return {
-        ...mainNode,
-        id: mainNode.id || template.id || template._id, // ✅ Preserva id esistente o usa template.id
-        templateId: mainNode.templateId || nodeTemplateId, // ✅ CRITICAL: Imposta esplicitamente templateId
-        label: mainNode.label || template.label || template.name || undefined, // ✅ NON inventare: undefined se manca
-        constraints: nodeConstraints, // ✅ CRITICAL: Copia dataContracts dal template (referenza)
-        dataContract: mainNode.dataContract || template.dataContract || undefined, // ✅ CRITICAL: Copia dataContract dal template
-        subTasks: subData
-      };
-    });
-
-    return data;
-  }
-
-  // ✅ Build from subDataIds (composite template)
-  const subDataIds = template.subTasksIds || [];
-  if (subDataIds.length > 0) {
+  // ✅ NUOVO MODELLO: Build from subTasksIds (composite template)
+  const subTasksIds = template.subTasksIds || [];
+  if (subTasksIds.length > 0) {
     const subDataInstances: any[] = [];
-    for (const subId of subDataIds) {
-      const subTemplate = DialogueTaskService.getTemplate(subId);
-      if (subTemplate) {
-        // ✅ Recursively dereference subTasks
-        const dereferencedSubData = (subTemplate.data && Array.isArray(subTemplate.data) && subTemplate.data.length > 0 && subTemplate.data[0].subTasks)
-          ? (subTemplate.data[0].subTasks || []).map(dereferenceSubData)
-          : [];
-
-        subDataInstances.push({
-          id: subTemplate.id || subTemplate._id,
-          label: subTemplate.label, // ✅ NON inventare
-          type: subTemplate.type,
-          icon: subTemplate.icon || 'FileText',
-          constraints: subTemplate.dataContracts || subTemplate.constraints || [],
-          dataContract: subTemplate.dataContract || undefined,
-          subTasks: dereferencedSubData,
-          templateId: subTemplate.id || subTemplate._id, // ✅ Solo templateId (uguale a id per template atomici/compositi)
-          kind: subTemplate.name || subTemplate.type || 'generic'
-        });
-      }
+    for (const subId of subTasksIds) {
+      const node = buildNodeFromSubTasksIds(subId);
+      subDataInstances.push(node);
     }
 
     // ✅ NON inventare label per main node

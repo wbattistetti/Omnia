@@ -270,14 +270,16 @@ export interface Task {
   // ✅ Campi diretti (niente wrapper value):
   // Per DataRequest/UtteranceInterpretation:
   label?: string;                // Label override (se diversa dal template)
+  // ✅ NUOVO: subTasksIds - Solo per template: array di templateId che referenziano altri template
+  // Per istanze: sempre undefined (la struttura viene dal template)
+  subTasksIds?: string[];        // ✅ Array di templateId (solo per template, non per istanze)
   // ❌ RIMOSSO: data - Non più persistito. Costruisci TaskTree da templateId usando buildTaskTree()
   // ❌ RIMOSSO: constraints - Vengono sempre dal template, non dall'istanza
   // ❌ RIMOSSO: examples - Vengono sempre dal template, non dall'istanza
   // ❌ RIMOSSO: dataContract - Viene sempre dal template, non dall'istanza
   dialogueSteps?: any[];         // ✅ Flat dialogue steps array (replaces nested data[].steps) - DEPRECATED
   steps?: Record<string, any>;   // ✅ Steps override a root level: { "templateId": { start: {...}, noMatch: {...} } }
-  // ❌ DEPRECATED: stepPrompts - use steps instead
-  stepPrompts?: any;             // @deprecated Use steps instead
+  // ❌ RIMOSSO: steps - use steps instead
   introduction?: any;             // ✅ Introduction override (opzionale)
   // Per SayMessage:
   text?: string;                 // Message text

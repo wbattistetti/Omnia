@@ -3,7 +3,7 @@
  * 1. Rimuove dataType (ridondante)
  * 2. Rimuove metadata.isMainData / metadata.isSubData (ridondanti)
  * 3. Rimuove mainData[] dai template (solo subDataIds serve)
- * 4. Sposta stepPrompts da mainData[] a root level
+ * 4. Sposta steps da mainData[] a root level
  * 5. Assicura che subDataIds sia presente (vuoto per atomici, pieno per compositi)
  * 6. Struttura unificata per tutti i template
  */
@@ -48,23 +48,23 @@ async function simplifyTaskTemplates() {
         console.log(`  ✅ Removing metadata (including sourcePath)`);
       }
 
-      // 3. Gestisci mainData[] e stepPrompts
+      // 3. Gestisci mainData[] e steps
       if (template.mainData && Array.isArray(template.mainData) && template.mainData.length > 0) {
-        // Se c'è mainData, sposta stepPrompts a root level
+        // Se c'è mainData, sposta steps a root level
         const firstMain = template.mainData[0];
 
-        if (firstMain.stepPrompts) {
-          // Sposta stepPrompts a root level
-          update.stepPrompts = firstMain.stepPrompts;
-          console.log(`  ✅ Moved stepPrompts from mainData[0] to root level`);
+        if (firstMain.steps) {
+          // Sposta steps a root level
+          update.steps = firstMain.steps;
+          console.log(`  ✅ Moved steps from mainData[0] to root level`);
         }
 
         // Rimuovi mainData (non serve nei template, solo subDataIds)
         unset.mainData = '';
         console.log(`  ✅ Removing mainData[] (use subDataIds instead)`);
-      } else if (template.stepPrompts) {
-        // stepPrompts già a root level, mantienili
-        console.log(`  ✅ stepPrompts already at root level`);
+      } else if (template.steps) {
+        // steps già a root level, mantienili
+        console.log(`  ✅ steps already at root level`);
       }
 
       // 4. Assicura che subDataIds sia presente

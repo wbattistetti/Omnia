@@ -1,5 +1,5 @@
 import React from 'react';
-import type { AssembledDDT } from '../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { Task } from '../../../../types/taskTypes';
 import { AlertTriangle } from 'lucide-react';
 import UserMessage, { type Message } from '../../../ChatSimulator/UserMessage';
 import BotMessage from './BotMessage';
@@ -8,13 +8,15 @@ import { useFontContext } from '../../../../context/FontContext';
 import { useMessageEditing } from './hooks/useMessageEditing';
 
 export default function DDEBubbleChat({
-  currentDDT,
+  task,
+  projectId,
   translations,
-  onUpdateDDT
+  onUpdateTaskTree
 }: {
-  currentDDT: AssembledDDT;
+  task: Task | null;
+  projectId: string | null;
   translations?: Record<string, string>;
-  onUpdateDDT?: (updater: (ddt: AssembledDDT) => AssembledDDT) => void;
+  onUpdateTaskTree?: (updater: (taskTree: any) => any) => void;
 }) {
   const { combinedClass, fontSize } = useFontContext();
   const [messages, setMessages] = React.useState<Message[]>([]);
@@ -32,6 +34,7 @@ export default function DDEBubbleChat({
   };
 
   // Message editing state and handlers
+  // TODO: Update useMessageEditing to work with TaskTree instead of AssembledDDT
   const {
     hoveredId,
     setHoveredId,
@@ -48,16 +51,16 @@ export default function DDEBubbleChat({
   } = useMessageEditing({
     messages,
     setMessages,
-    currentDDT,
-    onUpdateDDT
+    currentDDT: null as any, // TODO: Remove when useMessageEditing is updated
+    onUpdateDDT: onUpdateTaskTree as any // TODO: Update when useMessageEditing is updated
   });
 
   // Connect to backend via SSE
   // ❌ CRITICAL: NO frontend dialogue logic - ALL messages come from backend via SSE
   // If backend is not reachable, NO messages should be shown, NO dialogue should start
   React.useEffect(() => {
-    if (!currentDDT) {
-      // Clear messages when DDT is not available - NO frontend logic
+    if (!task || !projectId || !task.id) {
+      // Clear messages when task is not available - NO frontend logic
       setMessages([]);
       setBackendError(null);
       setIsWaitingForInput(false);
@@ -70,24 +73,21 @@ export default function DDEBubbleChat({
     setBackendError(null);
     setIsWaitingForInput(false);
 
-    const baseUrl = 'http://localhost:3101';
+    const baseUrl = 'http://localhost:5000'; // ✅ VB.NET backend diretto
 
     const startSession = async () => {
       try {
         setBackendError(null);
-        const translationsData = ((currentDDT as any)?.translations && (((currentDDT as any).translations as any).en || (currentDDT as any).translations)) || {};
+        const translationsData = translations || {};
 
-        const startResponse = await fetch(`${baseUrl}/api/runtime/ddt/session/start`, {
+        // ✅ NUOVO: Invia solo { taskId, projectId, translations }
+        const startResponse = await fetch(`${baseUrl}/api/runtime/task/session/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            ddtInstance: currentDDT,
-            translations: translationsData,
-            limits: {
-              noMatchMax: 3,
-              noInputMax: 3,
-              notConfirmedMax: 2
-            }
+            taskId: task.id,
+            projectId: projectId,
+            translations: translationsData
           })
         });
 
@@ -102,10 +102,9 @@ export default function DDEBubbleChat({
         setSessionId(newSessionId);
         console.log('[DDEBubbleChat] ✅ Backend session created:', { sessionId: newSessionId });
 
-        // Open SSE stream via Ruby proxy (to avoid CORS issues)
-        // Ruby proxies /api/runtime/ddt/session/{id}/stream to VB.NET orchestrator
-        console.log('[DDEBubbleChat] Opening SSE stream via Ruby proxy:', `${baseUrl}/api/runtime/ddt/session/${newSessionId}/stream`);
-        const eventSource = new EventSource(`${baseUrl}/api/runtime/ddt/session/${newSessionId}/stream`);
+        // ✅ NUOVO: SSE stream diretto da VB.NET backend
+        console.log('[DDEBubbleChat] Opening SSE stream:', `${baseUrl}/api/runtime/task/session/${newSessionId}/stream`);
+        const eventSource = new EventSource(`${baseUrl}/api/runtime/task/session/${newSessionId}/stream`);
         eventSourceRef.current = eventSource;
 
         // Log connection state changes
@@ -231,13 +230,13 @@ export default function DDEBubbleChat({
         eventSourceRef.current = null;
       }
       if (sessionId) {
-        const baseUrl = 'http://localhost:3101';
-        fetch(`${baseUrl}/api/runtime/ddt/session/${sessionId}`, {
+        const baseUrl = 'http://localhost:5000';
+        fetch(`${baseUrl}/api/runtime/task/session/${sessionId}`, {
           method: 'DELETE'
         }).catch(() => { });
       }
     };
-  }, [currentDDT]);
+  }, [task?.id, projectId, translations]);
 
   // Clear input when sent text appears as a user message
   React.useEffect(() => {
@@ -282,9 +281,9 @@ export default function DDEBubbleChat({
       // Freeze text for input clearing
       sentTextRef.current = trimmed;
 
-      // Send input to backend (Ruby proxies to orchestrator)
-      const baseUrl = 'http://localhost:3101';
-      const response = await fetch(`${baseUrl}/api/runtime/ddt/session/${sessionId}/input`, {
+      // ✅ NUOVO: Send input to backend VB.NET direttamente
+      const baseUrl = 'http://localhost:5000';
+      const response = await fetch(`${baseUrl}/api/runtime/task/session/${sessionId}/input`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -304,81 +303,11 @@ export default function DDEBubbleChat({
     }
   };
 
-  // Compile function - Recompiles the DDT task using task-specific compiler
-  const [isCompiling, setIsCompiling] = React.useState(false);
-  const handleCompile = async () => {
-    if (!currentDDT) {
-      setBackendError('No DDT to compile');
-      return;
-    }
-
-    setIsCompiling(true);
-    setBackendError(null);
-
-    try {
-      const baseUrl = 'http://localhost:3101';
-      const translationsData = ((currentDDT as any)?.translations && (((currentDDT as any).translations as any).en || (currentDDT as any).translations)) || {};
-
-      // ✅ Extract task from DDT - DDT is a DataRequest task
-      // TaskType 3 = DataRequest (from TaskTypes enum)
-      // ✅ Constraints/examples/nlpContract are ALWAYS from template, NOT from instance
-      const task = {
-        id: currentDDT.id || `task-${Date.now()}`,
-        type: 3, // TaskTypes.DataRequest
-        templateId: null, // TODO: Should be set to actual templateId if task references a template
-        data: currentDDT.data || [],
-        label: currentDDT.label,
-        stepPrompts: currentDDT.stepPrompts
-        // ❌ REMOVED: constraints, examples - these should come from template, not instance
-      };
-
-      console.log('[DDEBubbleChat] 🔄 Compiling single task...', { taskId: task.id, taskType: task.type });
-
-      const response = await fetch(`${baseUrl}/api/runtime/compile/task`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          task: task,
-          ddts: [currentDDT], // Include DDT for reference
-          translations: translationsData
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || errorData.message || errorData.detail || 'Compilation failed');
-      }
-
-      const result = await response.json();
-      console.log('[DDEBubbleChat] ✅ Task compiled successfully', result);
-
-      // Show success message with compiler info
-      const compilerInfo = result.compiler ? ` using ${result.compiler}` : '';
-      const successMessage: Message = {
-        id: generateMessageId('compile-success'),
-        type: 'bot',
-        text: `✅ Task compiled successfully${compilerInfo} (${result.taskType || 'Unknown'})`,
-        timestamp: new Date().toISOString()
-      };
-      setMessages(prev => [...prev, successMessage]);
-
-      // Optionally reset and restart session after compilation
-      setTimeout(() => {
-        handleReset();
-      }, 500);
-    } catch (err: any) {
-      console.error('[DDEBubbleChat] Error compiling task', err);
-      setBackendError(err.message || 'Failed to compile task');
-    } finally {
-      setIsCompiling(false);
-    }
-  };
-
-  // Reset function
+  // Reset function - restart session with same task
   const handleReset = () => {
     if (sessionId) {
-      const baseUrl = 'http://localhost:3101';
-      fetch(`${baseUrl}/api/runtime/ddt/session/${sessionId}`, {
+      const baseUrl = 'http://localhost:5000';
+      fetch(`${baseUrl}/api/runtime/task/session/${sessionId}`, {
         method: 'DELETE'
       }).catch(() => { });
     }
@@ -387,48 +316,14 @@ export default function DDEBubbleChat({
     setBackendError(null);
     setIsWaitingForInput(false);
     sentTextRef.current = '';
+    setSessionId(null);
 
-    // Restart session
-    if (currentDDT) {
-      const baseUrl = 'http://localhost:3101';
-      const translationsData = ((currentDDT as any)?.translations && (((currentDDT as any).translations as any).en || (currentDDT as any).translations)) || {};
-
-      fetch(`${baseUrl}/api/runtime/ddt/session/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ddtInstance: currentDDT,
-          translations: translationsData,
-          limits: {
-            noMatchMax: 3,
-            noInputMax: 3,
-            notConfirmedMax: 2
-          }
-        })
-      })
-        .then(res => res.json())
-        .then(data => {
-          setSessionId(data.sessionId);
-          // SSE connection will be re-established by useEffect
-        })
-        .catch(err => {
-          console.error('[DDEBubbleChat] Error restarting session', err);
-          setBackendError(err.message);
-        });
-    }
+    // Session will be restarted automatically by useEffect when sessionId becomes null
   };
 
   return (
     <div className={`h-full flex flex-col bg-white ${combinedClass}`}>
       <div className="border-b p-3 bg-gray-50 flex items-center gap-2">
-        <button
-          onClick={handleCompile}
-          disabled={isCompiling}
-          className={`px-2 py-1 rounded border bg-blue-100 border-blue-300 text-blue-700 hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed ${combinedClass}`}
-          title="Recompile the DDT task"
-        >
-          {isCompiling ? 'Compiling...' : 'Compila'}
-        </button>
         <button
           onClick={handleReset}
           className={`px-2 py-1 rounded border bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200 ${combinedClass}`}

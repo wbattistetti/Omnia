@@ -289,8 +289,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           constraints: s.constraints || [],
           templateId: s.templateId,  // ✅ Preserve templateId
           nlpContract: s.nlpContract,  // ✅ Preserve contract
-          // ✅ Preserva stepPrompts per subTasks (solo start, noInput, noMatch)
-          stepPrompts: s.stepPrompts || null
+          // ✅ Preserva steps per subTasks (solo start, noInput, noMatch)
+          steps: s.steps || undefined // ✅ Usa steps invece di steps
         })) : (Array.isArray(m.subData) ? m.subData.map((s: any) => ({
           id: s.id,  // ✅ CRITICAL: Preserve subData node ID (GUID from template)
           label: s.label,
@@ -299,8 +299,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           constraints: s.constraints || [],
           templateId: s.templateId,  // ✅ Preserve templateId
           nlpContract: s.nlpContract,  // ✅ Preserve contract
-          // ✅ Preserva stepPrompts per subData (solo start, noInput, noMatch)
-          stepPrompts: s.stepPrompts || null
+          // ✅ Preserva steps per subData (solo start, noInput, noMatch)
+          steps: s.steps || undefined // ✅ Usa steps invece di steps
         })) : [])
       })) as SchemaNode[];
       return mains;
@@ -583,17 +583,21 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         const root = schema.label || 'Data';
         console.log('[AUTO_DETECT][PROCESS] Preparing match for confirmation', { root, mainsCount: schema.data.length });
 
-        // ✅ DEBUG: Log schema.data per vedere se stepPrompts arrivano dall'API
+        // ✅ DEBUG: Log schema.data per vedere se steps arrivano dall'API
         console.log('🔵 [AUTO_DETECT][MAINS0] Schema.data prima del map', {
           dataLength: schema.data?.length || 0,
           data: schema.data?.map((m: any) => ({
             label: m.label,
-            hasStepPrompts: !!m.stepPrompts,
-            stepPrompts: m.stepPrompts,
+            hasSteps: !!m.steps,
+            steps: m.steps,
             allKeys: Object.keys(m)
           })) || [],
-          schemaHasStepPrompts: !!schema.stepPrompts,
-          schemaStepPrompts: schema.stepPrompts
+          schemaHasSteps: schema.data?.some((m: any) => m.steps),
+          schemaSteps: schema.data?.map((m: any) => ({
+            label: m.label,
+            hasSteps: !!m.steps,
+            stepsKeys: m.steps ? Object.keys(m.steps) : []
+          }))
         });
 
         const mains0: SchemaNode[] = (schema.data || []).map((m: any) => {
@@ -604,22 +608,24 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             if (/phone|telephone|tel|cellulare|mobile/.test(l)) type = 'phone' as any;
           }
 
-          // ✅ CRITICAL: Process sub-data and preserve stepPrompts
+          // ✅ CRITICAL: Process sub-data and preserve steps
           const processedSubData = Array.isArray(m.subData) ? m.subData.map((s: any) => {
-            const hasStepPrompts = !!(s.stepPrompts && typeof s.stepPrompts === 'object' && Object.keys(s.stepPrompts).length > 0);
+            const subNodeId = s.templateId || s.id;
+            const hasSteps = !!(s.steps && subNodeId && s.steps[String(subNodeId)] && typeof s.steps[String(subNodeId)] === 'object' && Object.keys(s.steps[String(subNodeId)]).length > 0);
 
-            if (hasStepPrompts) {
-              console.log('✅ [CRITICAL] AUTO_DETECT - SUB-DATA HAS STEPPROMPTS', {
+            if (hasSteps) {
+              console.log('✅ [CRITICAL] AUTO_DETECT - SUB-DATA HAS STEPS', {
                 main: label,
                 sub: s.label,
-                keys: Object.keys(s.stepPrompts)
+                subNodeId,
+                keys: s.steps[String(subNodeId)] ? Object.keys(s.steps[String(subNodeId)]) : []
               });
             } else {
-              console.error('🔴 [CRITICAL] AUTO_DETECT - SUB-DATA MISSING STEPPROMPTS', {
+              console.error('🔴 [CRITICAL] AUTO_DETECT - SUB-DATA MISSING STEPS', {
                 main: label,
                 sub: s.label,
                 subKeys: Object.keys(s),
-                hasProp: 'stepPrompts' in s
+                hasProp: 'steps' in s
               });
             }
 
@@ -628,7 +634,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
               type: s.type,
               icon: s.icon,
               constraints: [],
-              stepPrompts: s.stepPrompts || undefined,
+              steps: s.steps || undefined, // ✅ Usa steps invece di steps
               // ✅ CRITICO: Preserva nlpContract, templateId, kind anche per sub
               nlpContract: (s as any).nlpContract || undefined,
               templateId: (s as any).templateId || undefined,
@@ -636,13 +642,13 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             };
           }) : [];
 
-          const finalStepPrompts = m.stepPrompts || schema.stepPrompts || null;
+          const finalsteps = m.steps || schema.steps || null;
           console.log('🔵 [AUTO_DETECT][MAINS0] Main', label, {
-            hasMStepPrompts: !!m.stepPrompts,
-            mStepPrompts: m.stepPrompts,
-            hasSchemaStepPrompts: !!schema.stepPrompts,
-            schemaStepPrompts: schema.stepPrompts,
-            finalStepPrompts: finalStepPrompts
+            hasMsteps: !!m.steps,
+            msteps: m.steps,
+            hasSchemasteps: !!schema.steps,
+            schemasteps: schema.steps,
+            finalsteps: finalsteps
           });
 
           return {
@@ -651,8 +657,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             icon: m.icon,
             constraints: [],
             subData: processedSubData,
-            // Include stepPrompts from template match if present
-            stepPrompts: finalStepPrompts,
+            // Include steps from template match if present
+            steps: finalsteps,
             // ✅ CRITICO: Preserva nlpContract, templateId, kind
             nlpContract: m.nlpContract || undefined,
             templateId: m.templateId || undefined,
@@ -1244,12 +1250,12 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
           console.log('[DDT][Constraints][enrich] 🔍 PROCESSING MAIN FOR CONSTRAINTS', {
             mainLabel: existing.label,
-            hasStepPrompts: !!(existing as any).stepPrompts,
+            hassteps: !!(existing as any).steps,
             subDataCount: nextSub.length,
             subDataItems: nextSub.map((s: any) => ({
               label: s.label,
-              hasStepPrompts: !!(s as any).stepPrompts,
-              stepPrompts: (s as any).stepPrompts
+              hassteps: !!(s as any).steps,
+              steps: (s as any).steps
             }))
           });
 
@@ -1262,37 +1268,37 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
               console.log('[DDT][Constraints][enrich] 🔍 PROCESSING SUB DATA FOR CONSTRAINTS', {
                 mainLabel: existing.label,
                 subLabel: sub.label,
-                hasExistingStepPrompts: !!(sub as any).stepPrompts,
-                existingStepPrompts: (sub as any).stepPrompts,
+                hasExistingsteps: !!(sub as any).steps,
+                existingsteps: (sub as any).steps,
                 hasEnrichedConstraints: Array.isArray(es?.constraints),
                 enrichedConstraintsCount: Array.isArray(es?.constraints) ? es.constraints.length : 0
               });
 
-              // Preserva stepPrompts se presenti, aggiungi solo i constraints dall'AI
-              const preservedStepPrompts = (sub as any).stepPrompts || undefined;
+              // Preserva steps se presenti, aggiungi solo i constraints dall'AI
+              const preservedsteps = (sub as any).steps || undefined;
               const result = {
                 ...sub,
                 constraints: Array.isArray(es?.constraints) ? es.constraints : [],
-                ...(preservedStepPrompts ? { stepPrompts: preservedStepPrompts } : {})
+                ...(preservedsteps ? { steps: preservedsteps } : {})
               };
 
               console.log('[DDT][Constraints][enrich] ✅ SUB DATA RESULT', {
                 mainLabel: existing.label,
                 subLabel: sub.label,
-                hasStepPrompts: !!(result as any).stepPrompts,
-                stepPrompts: (result as any).stepPrompts,
+                hassteps: !!(result as any).steps,
+                steps: (result as any).steps,
                 constraintsCount: Array.isArray(result.constraints) ? result.constraints.length : 0
               });
 
               return result;
             });
           } else {
-            // Anche se non ci sono enriched subData, preserva i stepPrompts esistenti
+            // Anche se non ci sono enriched subData, preserva i steps esistenti
             nextSub = nextSub.map((sub) => {
-              const preservedStepPrompts = (sub as any).stepPrompts || undefined;
+              const preservedsteps = (sub as any).steps || undefined;
               return {
                 ...sub,
-                ...(preservedStepPrompts ? { stepPrompts: preservedStepPrompts } : {})
+                ...(preservedsteps ? { steps: preservedsteps } : {})
               };
             });
           }
@@ -1310,9 +1316,9 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           const mainConstraints = Array.isArray(em?.constraints) ? dedupe(em!.constraints) : [];
           // Dedupe per i sub
           nextSub = nextSub.map(s => ({ ...s, constraints: dedupe((s as any).constraints) }));
-          // CRITICAL: Preserve stepPrompts if they exist
-          const preservedStepPrompts = (existing as any).stepPrompts || null;
-          return { ...existing, constraints: mainConstraints, subData: nextSub, ...(preservedStepPrompts ? { stepPrompts: preservedStepPrompts } : {}) };
+          // CRITICAL: Preserve steps if they exist
+          const preservedsteps = (existing as any).steps || null;
+          return { ...existing, constraints: mainConstraints, subData: nextSub, ...(preservedsteps ? { steps: preservedsteps } : {}) };
         });
         return { label: ((enriched as any).label || rootLabelIn) as string, mains: nextMains };
       }
@@ -1410,7 +1416,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       hasSubDataIds: !!template.subDataIds,
       subDataIdsLength: template.subDataIds?.length || 0,
       subDataIds: template.subDataIds,
-      hasStepPrompts: !!template.stepPrompts,
+      hassteps: !!template.steps,
       type: template.type,
       icon: template.icon,
       allKeys: Object.keys(template)
@@ -1418,7 +1424,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
     // ✅ NUOVA STRUTTURA: Costruisci istanza DDT dal template usando subDataIds
     // NOTA: Un template alla radice non sa se sarà usato come sottodato o come main,
-    // quindi può avere tutti i 6 tipi di stepPrompts (start, noMatch, noInput, confirmation, notConfirmed, success).
+    // quindi può avere tutti i 6 tipi di steps (start, noMatch, noInput, confirmation, notConfirmed, success).
     // Quando lo usiamo come sottodato, filtriamo e prendiamo solo start, noInput, noMatch.
     // Ignoriamo confirmation, notConfirmed, success anche se presenti nel template sottodato.
     const root = template.label || 'Data';
@@ -1460,20 +1466,24 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         });
 
         if (subTemplate) {
-          // ✅ Filtra stepPrompts: solo start, noInput, noMatch per sottodati
-          // Ignora confirmation, notConfirmed, success anche se presenti nel template sottodato
-          const filteredStepPrompts: any = {};
-          if (subTemplate.stepPrompts) {
-            if (subTemplate.stepPrompts.start) {
-              filteredStepPrompts.start = subTemplate.stepPrompts.start;
+          // ✅ Estrai steps filtrati per sub-tasks (solo start, noInput, noMatch)
+          const subTemplateId = subTemplate.id || subTemplate._id || subId;
+          let filteredSteps = undefined;
+
+          if (subTemplate.steps && subTemplateId) {
+            const nodeSteps = subTemplate.steps[String(subTemplateId)];
+            if (nodeSteps && typeof nodeSteps === 'object') {
+              const filtered = {};
+              const allowedStepTypes = ['start', 'noInput', 'noMatch'];
+              for (const stepType of allowedStepTypes) {
+                if (nodeSteps[stepType]) {
+                  filtered[stepType] = nodeSteps[stepType];
+                }
+              }
+              if (Object.keys(filtered).length > 0) {
+                filteredSteps = { [String(subTemplateId)]: filtered };
+              }
             }
-            if (subTemplate.stepPrompts.noInput) {
-              filteredStepPrompts.noInput = subTemplate.stepPrompts.noInput;
-            }
-            if (subTemplate.stepPrompts.noMatch) {
-              filteredStepPrompts.noMatch = subTemplate.stepPrompts.noMatch;
-            }
-            // ❌ Ignoriamo: confirmation, notConfirmed, success
           }
 
           // ✅ Usa la label del template trovato (non l'ID!)
@@ -1484,7 +1494,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             label: subTemplate.label || subTemplate.name || 'Sub',
             type: subTemplate.type || subTemplate.name || 'generic',
             icon: subTemplate.icon || 'FileText',
-            stepPrompts: Object.keys(filteredStepPrompts).length > 0 ? filteredStepPrompts : null,
+            steps: filteredSteps, // ✅ Usa steps invece di steps
             constraints: subTemplate.dataContracts || subTemplate.constraints || [],
             examples: subTemplate.examples || [],
             subData: [],
@@ -1495,12 +1505,12 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           });
         } else {
           console.warn('[DDT][Wizard][templateSelect] ⚠️ Template sottodato non trovato per ID', { subId });
-          // Fallback: crea placeholder senza stepPrompts
+          // Fallback: crea placeholder senza steps
           subDataInstances.push({
             label: subId,
             type: 'generic',
             icon: 'FileText',
-            stepPrompts: null,
+            steps: undefined, // ✅ Usa steps invece di steps
             constraints: [],
             examples: [],
             subData: []
@@ -1509,15 +1519,16 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       }
 
       // ✅ POI: Crea UN SOLO data con subData[] popolato (non elementi separati!)
-      // L'istanza principale copia TUTTI i stepPrompts dal template (tutti e 6 i tipi)
+      // L'istanza principale copia TUTTI gli steps dal template (tutti i tipi)
       // ✅ CRITICAL: Include node ID from template (preserve GUID)
       const mainTemplateNodeId = template.data?.[0]?.id || template.id || template._id;
+      const mainTemplateId = template.id || template._id;
       const mainInstance = {
         id: mainTemplateNodeId,  // ✅ CRITICAL: Preserve node ID (GUID from template)
         label: template.label || template.name || 'Data',
         type: template.type,
         icon: template.icon || 'Calendar',
-        stepPrompts: template.stepPrompts || null, // ✅ Tutti e 6 i tipi per main
+        steps: mainTemplateId && template.steps ? { [String(mainTemplateId)]: template.steps[String(mainTemplateId)] } : undefined, // ✅ Usa steps invece di steps
         constraints: template.dataContracts || template.constraints || [],
         examples: template.examples || [],
         subData: subDataInstances, // ✅ Sottodati QUI dentro subData[], non in data[]
@@ -1532,12 +1543,13 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       console.log('[DDT][Wizard][templateSelect] 📄 Template semplice, creando istanza root');
       // ✅ CRITICAL: Include node ID from template (preserve GUID)
       const mainTemplateNodeId = template.data?.[0]?.id || template.id || template._id;
+      const mainTemplateId = template.id || template._id;
       data.push({
         id: mainTemplateNodeId,  // ✅ CRITICAL: Preserve node ID (GUID from template)
         label: template.label || template.name || 'Data',
         type: template.type,
         icon: template.icon || 'FileText',
-        stepPrompts: template.stepPrompts || null,
+        steps: mainTemplateId && template.steps ? { [String(mainTemplateId)]: template.steps[String(mainTemplateId)] } : undefined, // ✅ Usa steps invece di steps
         constraints: template.dataContracts || template.constraints || [],
         examples: template.examples || [],
         subData: [],
@@ -1561,22 +1573,31 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         type,
         icon: m.icon,
         constraints: m.constraints || [],
-        // ✅ Preserva subData con i loro stepPrompts filtrati
+        // ✅ Preserva subData con i loro steps filtrati
         subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({
           id: s.id,  // ✅ CRITICAL: Preserve subData node ID (GUID from template)
           label: s.label || s.name || 'Field',
           type: s.type,
           icon: s.icon,
           constraints: s.constraints || [],
-          // ✅ Preserva stepPrompts filtrati (solo start, noInput, noMatch) per sottodati
-          stepPrompts: s.stepPrompts || null,
+          // ✅ Preserva steps filtrati (solo start, noInput, noMatch) per sottodati
+          steps: s.steps || undefined, // ✅ Usa steps invece di steps
           // ✅ CRITICO: Preserva nlpContract, templateId, kind anche per sub
           nlpContract: (s as any).nlpContract || undefined,
           templateId: (s as any).templateId || undefined,
           kind: (s as any).kind || undefined
         })) : [],
-        // ✅ Include stepPrompts completi (tutti e 6 i tipi) per main
-        stepPrompts: m.stepPrompts || template.stepPrompts || null,
+        // ✅ Include steps completi (tutti i tipi) per main
+        steps: (() => {
+          const mainNodeId = m.templateId || m.id || template.id || template._id;
+          if (mainNodeId) {
+            const mSteps = m.steps && mainNodeId ? m.steps[String(mainNodeId)] : undefined;
+            const tSteps = template.steps && mainNodeId ? template.steps[String(mainNodeId)] : undefined;
+            const finalSteps = mSteps || tSteps;
+            return finalSteps ? { [String(mainNodeId)]: finalSteps } : undefined;
+          }
+          return undefined;
+        })(), // ✅ Usa steps invece di steps
         // ✅ CRITICO: Preserva nlpContract, templateId, kind
         nlpContract: m.nlpContract || undefined,
         templateId: m.templateId || undefined,
@@ -1597,12 +1618,12 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         type: m.type,
         icon: m.icon,
         subDataCount: m.subData?.length || 0,
-        hasStepPrompts: !!(m as any).stepPrompts,
-        stepPromptsKeys: (m as any).stepPrompts ? Object.keys((m as any).stepPrompts) : [],
-        subDataWithStepPrompts: (m.subData || []).map((s: any) => ({
+        hassteps: !!(m as any).steps,
+        stepsKeys: (m as any).steps ? Object.keys((m as any).steps) : [],
+        subDataWithsteps: (m.subData || []).map((s: any) => ({
           label: s.label,
-          hasStepPrompts: !!s.stepPrompts,
-          stepPromptsKeys: s.stepPrompts ? Object.keys(s.stepPrompts) : []
+          hassteps: !!s.steps,
+          stepsKeys: s.steps ? Object.keys(s.steps) : []
         }))
       }))
     });
@@ -1672,7 +1693,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             const displayMains = mountedDataTree.length > 0 ? mountedDataTree : mains0;
             const displayRoot = schemaRootLabel || root;
 
-            // ✅ Estrai GUID dai stepPrompts per debug traduzioni (solo una volta, in useMemo)
+            // ✅ Estrai GUID dai steps per debug traduzioni (solo una volta, in useMemo)
             // ✅ RIMOSSO: Log infinito - l'estrazione GUID non è più necessaria qui
             // (viene fatta quando necessario, non ad ogni render)
 
@@ -1728,27 +1749,28 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                         setShowInputAlongsideConfirm(false);
                         setDetectTypeIcon(icon);
 
-                        // ✅ DEBUG: Log stepPrompts structure per capire perché hasStepPrompts è false
+                        // ✅ DEBUG: Log steps structure per capire perché hassteps è false
                         const debugMains0 = mains0.map((m: any) => ({
                           label: m.label,
-                          hasStepPrompts: !!m.stepPrompts,
-                          stepPromptsType: typeof m.stepPrompts,
-                          stepPromptsValue: m.stepPrompts,
-                          stepPromptsKeys: m.stepPrompts ? Object.keys(m.stepPrompts) : [],
+                          hassteps: !!m.steps,
+                          stepsType: typeof m.steps,
+                          stepsValue: m.steps,
+                          stepsKeys: m.steps ? Object.keys(m.steps) : [],
+                          nodeId: m.templateId || m.id,
                           allKeys: Object.keys(m),
                           subData: (m.subData || []).map((s: any) => ({
                             label: s.label,
-                            hasStepPrompts: !!(s as any).stepPrompts,
-                            stepPromptsType: typeof (s as any).stepPrompts,
-                            stepPromptsValue: (s as any).stepPrompts,
-                            stepPromptsKeys: (s as any).stepPrompts ? Object.keys((s as any).stepPrompts) : [],
+                            hassteps: !!(s as any).steps,
+                            stepsType: typeof (s as any).steps,
+                            stepsValue: (s as any).steps,
+                            stepsKeys: (s as any).steps ? Object.keys((s as any).steps) : [],
                             allKeys: Object.keys(s)
                           }))
                         }));
-                        console.log('🔵 [YES_BUTTON] DEBUG mains0 stepPrompts', JSON.stringify(debugMains0, null, 2));
+                        console.log('🔵 [YES_BUTTON] DEBUG mains0 steps', JSON.stringify(debugMains0, null, 2));
                         console.log('🔵 [YES_BUTTON] DEBUG schema', {
-                          schemaHasStepPrompts: !!(schema && schema.stepPrompts),
-                          schemaStepPrompts: schema?.stepPrompts,
+                          schemaHassteps: !!(schema && schema.steps),
+                          schemasteps: schema?.steps,
                           schemaKeys: schema ? Object.keys(schema) : []
                         });
 
@@ -1768,7 +1790,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                           console.log('[DDT][Wizard][heuristicMatch] steps found, going directly to Response Editor');
 
                           // ✅ Steps vengono gestiti da assembleFinalDDT che estrae i GUID dalle traduzioni
-                          // Non serve più estrarre GUID da stepPrompts dentro data
+                          // Non serve più estrarre GUID da steps dentro data
                           const t1 = performance.now();
                           console.log(`⏱️ [YES_BUTTON] Tempo fino a assembly: ${(t1 - t0).toFixed(2)}ms`);
 
@@ -1865,10 +1887,10 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                             console.log(`⏱️ [YES_BUTTON] 🏁 FINE TOTALE - Tempo totale: ${(tAfterClose - t0).toFixed(2)}ms`);
                           } catch (err) {
                             console.error('[DDT][Wizard][heuristicMatch] Failed to assemble DDT:', err);
-                            error('DDT_WIZARD', 'Failed to assemble DDT with stepPrompts', err);
+                            error('DDT_WIZARD', 'Failed to assemble DDT with steps', err);
                           }
                         } else {
-                          console.log('🔵 [YES_BUTTON] No stepPrompts, andando a pipeline');
+                          console.log('🔵 [YES_BUTTON] No steps, andando a pipeline');
 
                           const enrichedRes = await enrichConstraintsFor(root, mains0);
 
@@ -2030,8 +2052,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                   >
                     Cancel
                   </button>
-                  {/* Only show "Build Messages" if no stepPrompts are present (new DDT structure) */}
-                  {!mountedDataTree.some((m: any) => m.stepPrompts && Object.keys(m.stepPrompts).length > 0) && (
+                  {/* Only show "Build Messages" if no steps are present (new DDT structure) */}
+                  {!mountedDataTree.some((m: any) => m.steps && Object.keys(m.steps).length > 0) && (
                     <button
                       onClick={() => {
                         try { dlog('[DDT][UI] step → pipeline'); } catch { }
@@ -2050,38 +2072,46 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                       Build Messages
                     </button>
                   )}
-                  {/* If stepPrompts are present, automatically proceed to Response Editor when user clicks any action */}
-                  {mountedDataTree.some((m: any) => m.stepPrompts && Object.keys(m.stepPrompts).length > 0) && (
+                  {/* If steps are present, automatically proceed to Response Editor when user clicks any action */}
+                  {mountedDataTree.some((m: any) => {
+                    const nodeId = m.templateId || m.id;
+                    return m.steps && nodeId && m.steps[nodeId] && Object.keys(m.steps[nodeId]).length > 0;
+                  }) && (
                     <button
                       onClick={async () => {
                         try {
-                          dlog('[DDT][UI] step → complete with stepPrompts');
+                          dlog('[DDT][UI] step → complete with steps');
                         } catch { }
 
-                        // Assemble final DDT with stepPrompts
+                        // Assemble final DDT with steps
                         try {
-                          // Extract all translation keys from stepPrompts
+                          // Extract all translation keys from steps
+                          const { extractTranslationKeysFromSteps } = await import('../../../utils/stepsConverter');
                           const translationKeys: string[] = [];
                           mountedDataTree.forEach((m: any) => {
-                            if (m.stepPrompts && typeof m.stepPrompts === 'object') {
-                              Object.values(m.stepPrompts).forEach((stepPrompt: any) => {
-                                if (stepPrompt && Array.isArray(stepPrompt.keys)) {
-                                  translationKeys.push(...stepPrompt.keys);
-                                }
-                              });
+                            const nodeId = m.templateId || m.id;
+                            if (m.steps && nodeId) {
+                              const extracted = extractTranslationKeysFromSteps(m.steps, String(nodeId));
+                              if (extracted) {
+                                Object.values(extracted).forEach((keys: any) => {
+                                  if (Array.isArray(keys)) {
+                                    translationKeys.push(...keys);
+                                  }
+                                });
+                              }
                             }
                           });
 
-                          console.log('[DDT][Wizard][stepPrompts] Extracted translation keys:', translationKeys);
+                          console.log('[DDT][Wizard][steps] Extracted translation keys:', translationKeys);
 
                           // Load translations from database
                           let templateTranslations: Record<string, { en: string; it: string; pt: string }> = {};
                           if (translationKeys.length > 0) {
                             try {
                               templateTranslations = await getTemplateTranslations(translationKeys);
-                              console.log('[DDT][Wizard][stepPrompts] Loaded', Object.keys(templateTranslations).length, 'translations');
+                              console.log('[DDT][Wizard][steps] Loaded', Object.keys(templateTranslations).length, 'translations');
                             } catch (err) {
-                              console.error('[DDT][Wizard][stepPrompts] Failed to load template translations:', err);
+                              console.error('[DDT][Wizard][steps] Failed to load template translations:', err);
                             }
                           }
 
@@ -2104,7 +2134,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                           const firstMainId = finalDDT.data?.[0]?.id;
                           const firstMainSteps = firstMainId && finalDDT.steps?.[firstMainId] ? Object.keys(finalDDT.steps[firstMainId]) : [];
                           const firstMainMessages = finalDDT.data?.[0]?.messages ? Object.keys(finalDDT.data[0].messages) : [];
-                          console.log('[DDT][Wizard][stepPrompts] ✅ DDT assembled, translations added to global table', {
+                          console.log('[DDT][Wizard][steps] ✅ DDT assembled, translations added to global table', {
                             ddtId: finalDDT.id,
                             label: finalDDT.label,
                             mainsCount: finalDDT.data?.length || 0,
@@ -2117,14 +2147,14 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
                           // Verify DDT structure before passing to Response Editor
                           if (!finalDDT.data || finalDDT.data.length === 0) {
-                            console.error('[DDT][Wizard][stepPrompts] ERROR: DDT has no data!', finalDDT);
+                            console.error('[DDT][Wizard][steps] ERROR: DDT has no data!', finalDDT);
                             error('DDT_WIZARD', 'DDT has no data after assembly', new Error('DDT has no data'));
                             return;
                           }
 
                           // ✅ Check steps at root level (keyed by nodeId) - firstMainId already declared above
                           if (!firstMainId || !finalDDT.steps || !finalDDT.steps[firstMainId] || Object.keys(finalDDT.steps[firstMainId]).length === 0) {
-                            console.error('[DDT][Wizard][stepPrompts] ERROR: DDT has no steps at root level!', {
+                            console.error('[DDT][Wizard][steps] ERROR: DDT has no steps at root level!', {
                               ddtId: finalDDT.id,
                               firstMainId,
                               hasSteps: !!finalDDT.steps,
@@ -2134,14 +2164,14 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                             return;
                           }
 
-                          console.log('[DDT][Wizard][stepPrompts] ✅ DDT structure verified, calling handleClose');
+                          console.log('[DDT][Wizard][steps] ✅ DDT structure verified, calling handleClose');
 
                           // Call onComplete to open Response Editor
                           // ❌ REMOVED: finalDDT.translations - translations are now in global table
                           handleClose(finalDDT, {});
                         } catch (err) {
-                          console.error('[DDT][Wizard][stepPrompts] Failed to assemble DDT:', err);
-                          error('DDT_WIZARD', 'Failed to assemble DDT with stepPrompts', err);
+                            console.error('[DDT][Wizard][steps] Failed to assemble DDT:', err);
+                            error('DDT_WIZARD', 'Failed to assemble DDT with steps', err);
                         }
                       }}
                       style={{ background: '#22c55e', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, cursor: 'pointer' }}

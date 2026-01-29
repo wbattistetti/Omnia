@@ -88,7 +88,7 @@ export function useNewFlowOrchestrator({
       return {
         label: task.label,
         data: task.data,
-        stepPrompts: task.stepPrompts,
+        steps: task.steps,
         constraints: task.constraints,
       };
     }

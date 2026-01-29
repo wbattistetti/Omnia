@@ -82,10 +82,26 @@ Public Class EventEmitter
 End Class
 
 ''' <summary>
+''' Task Session: sessione per Chat Simulator diretto (solo UtteranceInterpretation)
+''' Più semplice di OrchestratorSession, usa solo DDTEngine
+''' </summary>
+Public Class TaskSession
+    Public Property SessionId As String
+    Public Property DDTInstance As DDTInstance
+    Public Property Translations As Dictionary(Of String, String)
+    Public Property DDTEngine As Motore
+    Public Property Messages As New List(Of Object)
+    Public Property EventEmitter As EventEmitter
+    Public Property IsWaitingForInput As Boolean
+    Public Property WaitingForInputData As Object
+End Class
+
+''' <summary>
 ''' SessionManager: gestisce tutte le sessioni attive
 ''' </summary>
 Public Class SessionManager
     Private Shared ReadOnly _sessions As New Dictionary(Of String, OrchestratorSession)
+    Private Shared ReadOnly _taskSessions As New Dictionary(Of String, TaskSession)
     Private Shared ReadOnly _lock As New Object
 
     ''' <summary>
@@ -265,6 +281,122 @@ Public Class SessionManager
                 End If
                 _sessions.Remove(sessionId)
                 Console.WriteLine($"🗑️ [RUNTIME][SessionManager] Session deleted: {sessionId}")
+            End If
+        End SyncLock
+    End Sub
+
+    ''' <summary>
+    ''' Crea una nuova TaskSession per Chat Simulator diretto
+    ''' </summary>
+    Public Shared Function CreateTaskSession(
+        sessionId As String,
+        ddtInstance As DDTInstance,
+        translations As Dictionary(Of String, String)
+    ) As TaskSession
+        SyncLock _lock
+            Console.WriteLine($"🔧 [RUNTIME][SessionManager] Creating TaskSession: {sessionId}")
+
+            ' Crea DDT Engine
+            Dim ddtEngine As New Motore()
+            Console.WriteLine($"✅ [RUNTIME][SessionManager] DDT Engine created for TaskSession")
+
+            ' Crea session
+            Dim session As New TaskSession() With {
+                .SessionId = sessionId,
+                .DDTInstance = ddtInstance,
+                .Translations = translations,
+                .EventEmitter = New EventEmitter(),
+                .DDTEngine = ddtEngine,
+                .IsWaitingForInput = False
+            }
+            Console.WriteLine($"✅ [RUNTIME][SessionManager] TaskSession object created")
+
+            ' Registra eventi DDTEngine
+            AddHandler ddtEngine.MessageToShow, Sub(sender, e)
+                                                      Dim msgId = $"{sessionId}-{DateTime.UtcNow.Ticks}-{Guid.NewGuid().ToString().Substring(0, 8)}"
+                                                      Dim msg = New With {
+                            .id = msgId,
+                            .text = e.Message,
+                            .stepType = "ask",
+                            .timestamp = DateTime.UtcNow.ToString("O")
+                        }
+                                                      session.Messages.Add(msg)
+                                                      Console.WriteLine($"📨 [RUNTIME][SessionManager] Message added to TaskSession {sessionId}: {e.Message.Substring(0, Math.Min(100, e.Message.Length))}")
+                                                      session.EventEmitter.Emit("message", msg)
+
+                                                      ' Dopo ogni messaggio, DDTEngine si ferma aspettando input
+                                                      session.IsWaitingForInput = True
+                                                      session.WaitingForInputData = New With {.nodeId = If(session.DDTInstance.MainDataList.Count > 0, session.DDTInstance.MainDataList(0).Id, "")}
+                                                      Console.WriteLine($"⏳ [RUNTIME][SessionManager] TaskSession {sessionId} waiting for input")
+                                                      session.EventEmitter.Emit("waitingForInput", session.WaitingForInputData)
+                                                  End Sub
+
+            _taskSessions(sessionId) = session
+            Console.WriteLine($"✅ [RUNTIME][SessionManager] TaskSession stored in dictionary: {sessionId}")
+
+            ' Avvia esecuzione in background
+            Console.WriteLine($"🚀 [RUNTIME][SessionManager] Starting DDT execution in background for TaskSession: {sessionId}")
+            Dim backgroundTask = System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
+                                                                      Try
+                                                                          ' Piccolo delay per permettere al SSE stream handler di connettersi
+                                                                          Await System.Threading.Tasks.Task.Delay(500)
+
+                                                                          Console.WriteLine($"🚀 [RUNTIME][SessionManager] Background task started for TaskSession: {sessionId}")
+                                                                          ddtEngine.ExecuteDDT(ddtInstance)
+                                                                          Console.WriteLine($"✅ [RUNTIME][SessionManager] DDT execution completed for TaskSession: {sessionId}")
+
+                                                                          ' Verifica se tutti i dati sono completati
+                                                                          Dim allCompleted = True
+                                                                          For Each mainData In ddtInstance.MainDataList
+                                                                              If mainData.State <> DialogueState.Success Then
+                                                                                  allCompleted = False
+                                                                                  Exit For
+                                                                              End If
+                                                                          Next
+
+                                                                          If allCompleted Then
+                                                                              Dim completeData = New With {
+                                                                                  .success = True,
+                                                                                  .timestamp = DateTime.UtcNow.ToString("O")
+                                                                              }
+                                                                              session.EventEmitter.Emit("complete", completeData)
+                                                                          End If
+                                                                      Catch ex As Exception
+                                                                          Console.WriteLine($"❌ [RUNTIME][SessionManager] DDT execution error for TaskSession {sessionId}: {ex.Message}")
+                                                                          Console.WriteLine($"Stack trace: {ex.StackTrace}")
+                                                                          Dim errorData = New With {
+                                                                              .error = ex.Message,
+                                                                              .timestamp = DateTime.UtcNow.ToString("O")
+                                                                          }
+                                                                          session.EventEmitter.Emit("error", errorData)
+                                                                      End Try
+                                                                  End Function)
+            Console.WriteLine($"✅ [RUNTIME][SessionManager] Background task scheduled for TaskSession: {sessionId}")
+
+            Return session
+        End SyncLock
+    End Function
+
+    ''' <summary>
+    ''' Recupera una TaskSession esistente
+    ''' </summary>
+    Public Shared Function GetTaskSession(sessionId As String) As TaskSession
+        SyncLock _lock
+            If _taskSessions.ContainsKey(sessionId) Then
+                Return _taskSessions(sessionId)
+            End If
+            Return Nothing
+        End SyncLock
+    End Function
+
+    ''' <summary>
+    ''' Elimina una TaskSession
+    ''' </summary>
+    Public Shared Sub DeleteTaskSession(sessionId As String)
+        SyncLock _lock
+            If _taskSessions.ContainsKey(sessionId) Then
+                _taskSessions.Remove(sessionId)
+                Console.WriteLine($"🗑️ [RUNTIME][SessionManager] TaskSession deleted: {sessionId}")
             End If
         End SyncLock
     End Sub

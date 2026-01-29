@@ -8,7 +8,7 @@
    - **Stato**: ✅ Attiva - Collection principale per task templates
    - **Documenti**: 75
    - **Uso**: Template catalog principale (migrata da Task_Templates)
-   - **Campi**: id, type, templateId, label, dataContracts, patterns, stepPrompts, contexts, name, steps
+   - **Campi**: id, type, templateId, label, dataContracts, patterns, steps, contexts, name, steps
 
 2. **`Heuristics`** (uppercase)
    - **Stato**: ✅ Attiva - Pattern euristiche per task type detection
@@ -56,7 +56,7 @@
 
 **Differenze:**
 - `task_templates` (lowercase): 108 documenti, ha `scope`, `contexts`, `isBuiltIn`
-- `Tasks` (uppercase): 75 documenti, ha `dataContracts`, `patterns`, `stepPrompts`, `steps`
+- `Tasks` (uppercase): 75 documenti, ha `dataContracts`, `patterns`, `steps`, `steps`
 
 **Possibili cause:**
 1. `task_templates` contiene template con scope filtering (client-specific, industry-specific)

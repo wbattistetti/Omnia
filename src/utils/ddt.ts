@@ -19,7 +19,7 @@ export function isTaskTreeEmpty(taskTree?: any): boolean {
  * ✅ Usa node.templateId come chiave (non node.id) perché task.steps[node.templateId] = steps clonati
  * Questo indica che la struttura esiste ma i messaggi devono ancora essere generati
  */
-export function hasdataButNoStepPrompts(taskTree?: any, task?: any): boolean {
+export function hasdataButNosteps(taskTree?: any, task?: any): boolean {
   try {
     if (!taskTree || typeof taskTree !== 'object') return false;
     // ✅ NUOVO: Usa TaskTree.nodes invece di data
@@ -39,13 +39,13 @@ export function hasdataButNoStepPrompts(taskTree?: any, task?: any): boolean {
     return mains.some((main: any) => {
       const mainId = main.id;
       if (!main.templateId) {
-        const errorMsg = `[hasdataButNoStepPrompts] Nodo senza templateId: ${main.label || main.id || 'unknown'}`;
+        const errorMsg = `[hasdataButNosteps] Nodo senza templateId: ${main.label || main.id || 'unknown'}`;
         console.error(errorMsg, { main, mainId });
         throw new Error(errorMsg);
       }
       const mainTemplateId = main.templateId;
       if (!mainTemplateId) {
-        console.log('[🔍 hasdataButNoStepPrompts] Main senza templateId/id', {
+        console.log('[🔍 hasdataButNosteps] Main senza templateId/id', {
           mainLabel: main.label,
           mainId,
           mainTemplateId
@@ -58,10 +58,10 @@ export function hasdataButNoStepPrompts(taskTree?: any, task?: any): boolean {
 
       const allTaskStepsKeys = Object.keys(task.steps);
       // ✅ CRITICAL: Stampa chiavi come stringhe per debug
-      console.log('[🔍 hasdataButNoStepPrompts] 🔑 CHIAVI IN task.steps:', allTaskStepsKeys);
-      console.log('[🔍 hasdataButNoStepPrompts] 🔍 CERCHIAMO CHIAVE:', mainTemplateId);
+      console.log('[🔍 hasdataButNosteps] 🔑 CHIAVI IN task.steps:', allTaskStepsKeys);
+      console.log('[🔍 hasdataButNosteps] 🔍 CERCHIAMO CHIAVE:', mainTemplateId);
 
-      console.log('[🔍 hasdataButNoStepPrompts] Verifica steps per main', {
+      console.log('[🔍 hasdataButNosteps] Verifica steps per main', {
         mainLabel: main.label,
         mainId,
         mainTemplateId,
@@ -95,7 +95,7 @@ export function hasdataButNoStepPrompts(taskTree?: any, task?: any): boolean {
       });
 
       if (!mainSteps || typeof mainSteps !== 'object') {
-        console.log('[🔍 hasdataButNoStepPrompts] ❌ Main non ha steps', {
+        console.log('[🔍 hasdataButNosteps] ❌ Main non ha steps', {
           mainLabel: main.label,
           mainTemplateId,
           mainStepsType: typeof mainSteps
@@ -105,7 +105,7 @@ export function hasdataButNoStepPrompts(taskTree?: any, task?: any): boolean {
 
       const stepKeys = Object.keys(mainSteps);
       if (stepKeys.length === 0) {
-        console.log('[🔍 hasdataButNoStepPrompts] ❌ Main ha steps vuoto', {
+        console.log('[🔍 hasdataButNosteps] ❌ Main ha steps vuoto', {
           mainLabel: main.label,
           mainTemplateId
         });
@@ -124,7 +124,7 @@ export function hasdataButNoStepPrompts(taskTree?: any, task?: any): boolean {
         );
       });
 
-      console.log('[🔍 hasdataButNoStepPrompts] Verifica messaggi', {
+      console.log('[🔍 hasdataButNosteps] Verifica messaggi', {
         mainLabel: main.label,
         mainTemplateId,
         stepKeys,

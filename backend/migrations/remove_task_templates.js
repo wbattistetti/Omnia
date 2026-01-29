@@ -43,7 +43,7 @@ async function removeTaskTemplates() {
     if (tasks.length > 0) {
       const sampleTask = tasks[0];
       const requiredFields = ['id', 'type', 'templateId', 'label'];
-      const optionalFields = ['dataContracts', 'patterns', 'stepPrompts', 'contexts', 'name', 'steps'];
+      const optionalFields = ['dataContracts', 'patterns', 'steps', 'contexts', 'name', 'steps'];
 
       const hasRequired = requiredFields.every(f => sampleTask[f] !== undefined);
       const hasOptional = optionalFields.filter(f => sampleTask[f] !== undefined);

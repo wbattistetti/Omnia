@@ -301,10 +301,10 @@ async function main() {
         // Build a map of GUID to field info from templates
         const guidToFieldInfo = new Map();
 
-        function extractStepPromptsFromTemplate(template, path = '') {
+        function extractstepsFromTemplate(template, path = '') {
             // Root level
-            if (template.stepPrompts && typeof template.stepPrompts === 'object') {
-                for (const [stepKey, stepValue] of Object.entries(template.stepPrompts)) {
+            if (template.steps && typeof template.steps === 'object') {
+                for (const [stepKey, stepValue] of Object.entries(template.steps)) {
                     if (Array.isArray(stepValue)) {
                         stepValue.forEach(guid => {
                             if (typeof guid === 'string' && guid.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
@@ -323,9 +323,9 @@ async function main() {
             // SubData at root
             if (Array.isArray(template.subData)) {
                 template.subData.forEach(subItem => {
-                    if (subItem.stepPrompts && typeof subItem.stepPrompts === 'object') {
+                    if (subItem.steps && typeof subItem.steps === 'object') {
                         const subPath = `${path || template.label || template.name}/${subItem.label || 'sub'}`;
-                        for (const [stepKey, stepValue] of Object.entries(subItem.stepPrompts)) {
+                        for (const [stepKey, stepValue] of Object.entries(subItem.steps)) {
                             if (Array.isArray(stepValue)) {
                                 stepValue.forEach(guid => {
                                     if (typeof guid === 'string' && guid.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
@@ -348,9 +348,9 @@ async function main() {
                 template.mainData.forEach(mainItem => {
                     const mainPath = `${path || template.label || template.name}/${mainItem.label || 'main'}`;
 
-                    // MainData stepPrompts
-                    if (mainItem.stepPrompts && typeof mainItem.stepPrompts === 'object') {
-                        for (const [stepKey, stepValue] of Object.entries(mainItem.stepPrompts)) {
+                    // MainData steps
+                    if (mainItem.steps && typeof mainItem.steps === 'object') {
+                        for (const [stepKey, stepValue] of Object.entries(mainItem.steps)) {
                             if (Array.isArray(stepValue)) {
                                 stepValue.forEach(guid => {
                                     if (typeof guid === 'string' && guid.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
@@ -369,9 +369,9 @@ async function main() {
                     // SubData within MainData
                     if (Array.isArray(mainItem.subData)) {
                         mainItem.subData.forEach(subItem => {
-                            if (subItem.stepPrompts && typeof subItem.stepPrompts === 'object') {
+                            if (subItem.steps && typeof subItem.steps === 'object') {
                                 const subPath = `${mainPath}/${subItem.label || 'sub'}`;
-                                for (const [stepKey, stepValue] of Object.entries(subItem.stepPrompts)) {
+                                for (const [stepKey, stepValue] of Object.entries(subItem.steps)) {
                                     if (Array.isArray(stepValue)) {
                                         stepValue.forEach(guid => {
                                             if (typeof guid === 'string' && guid.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
@@ -394,7 +394,7 @@ async function main() {
 
         // Extract GUID mappings from all templates
         templates.forEach(template => {
-            extractStepPromptsFromTemplate(template);
+            extractstepsFromTemplate(template);
         });
 
         console.log(`🔑 Mapped ${guidToFieldInfo.size} GUIDs to field info\n`);

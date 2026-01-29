@@ -74,7 +74,7 @@ console.log(`
     - Note: Usato per euristiche
 
 ⚠️  PROBLEMA IDENTIFICATO:
-- Task_Templates ha più campi di Tasks (dataContracts, subDataIds, patterns, stepPrompts, contexts)
+- Task_Templates ha più campi di Tasks (dataContracts, subDataIds, patterns, steps, contexts)
 - Prima di migrare, bisogna verificare che Tasks abbia tutti i campi necessari
 - Oppure aggiungere questi campi durante la migrazione
 

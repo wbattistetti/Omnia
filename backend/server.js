@@ -1453,14 +1453,18 @@ app.post('/api/projects/:pid/tasks', async (req, res) => {
     const projDb = await getProjectDb(client, projectId);
     const now = new Date();
 
-    // ✅ Extract all fields except id, templateId, createdAt, updatedAt
-    // ✅ Save fields directly (no value wrapper)
-    const { id, templateId: _templateId, createdAt, updatedAt, ...fields } = payload;
+    // ✅ Extract all fields except id, templateId, createdAt, updatedAt, and legacy fields
+    // ✅ NUOVO MODELLO: Rimuovi data, steps, constraints dalle istanze (non dai template)
+    const { id, templateId: _templateId, createdAt, updatedAt, data, steps, constraints, ...fields } = payload;
 
     // ✅ Determina allowedContexts in base al type (se non è già specificato nel payload)
     const allowedContextsValue = payload.allowedContexts !== undefined
       ? payload.allowedContexts
       : getAllowedContexts(type);
+
+    // ✅ Se è un template (templateId === null o templateId === id), può avere subTasksIds
+    // ✅ Se è un'istanza (templateId !== null e templateId !== id), NON deve avere data/steps/constraints
+    const isTemplate = templateId === null || templateId === payload.id;
 
     const task = {
       projectId,
@@ -1468,9 +1472,14 @@ app.post('/api/projects/:pid/tasks', async (req, res) => {
       type: type,              // ✅ type: enum numerico (0-19) - REQUIRED
       templateId: templateId ?? null,  // ✅ templateId: null (standalone) or GUID (reference)
       allowedContexts: allowedContextsValue,  // ✅ Imposta automaticamente in base al type
-      ...fields,  // ✅ Save all fields directly (mainData, label, stepPrompts, ecc.)
+      ...fields,  // ✅ Save all fields directly (label, steps, subTasksIds per template, ecc.)
       updatedAt: now
     };
+
+    // ✅ Rimuovi esplicitamente campi legacy se presenti (per sicurezza)
+    delete task.data;
+    delete task.steps;
+    delete task.constraints;
 
     // Upsert: create if not exists, update if exists
     const result = await projDb.collection('tasks').updateOne(
@@ -1554,7 +1563,7 @@ app.put('/api/projects/:pid/tasks/:taskId', async (req, res) => {
     const { id, createdAt, updatedAt, ...fields } = payload;
 
     const update = {
-      ...fields,  // ✅ Update all fields directly (mainData, label, stepPrompts, ecc.)
+      ...fields,  // ✅ Update all fields directly (mainData, label, steps, ecc.)
       updatedAt: new Date()
     };
 
@@ -1654,18 +1663,23 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
           return true;
         })
         .map(item => {
-          // ✅ Extract all fields except id, templateId, createdAt, updatedAt
-          // ✅ Save fields directly (no value wrapper)
-          const { id, templateId, createdAt, updatedAt, ...fields } = item;
+          // ✅ Extract all fields except id, templateId, createdAt, updatedAt, and legacy fields
+          // ✅ NUOVO MODELLO: Rimuovi data, steps, constraints dalle istanze
+          const { id, templateId, createdAt, updatedAt, data, steps, constraints, ...fields } = item;
 
           const task = {
             projectId,
             id: item.id,
             type: item.type,              // ✅ type: enum numerico (0-19) - REQUIRED
             templateId: item.templateId ?? null,  // ✅ templateId: null (standalone) or GUID (reference)
-            ...fields,  // ✅ Save all fields directly (mainData, label, stepPrompts, ecc.)
+            ...fields,  // ✅ Save all fields directly (label, steps, subTasksIds per template, ecc.)
             updatedAt: now
           };
+
+          // ✅ Rimuovi esplicitamente campi legacy se presenti (per sicurezza)
+          delete task.data;
+          delete task.steps;
+          delete task.constraints;
 
           return {
             updateOne: {
@@ -2351,7 +2365,7 @@ app.get('/api/factory/ide-translations', async (req, res) => {
   }
 });
 
-// Template translations (from stepPrompts)
+// Template translations (from steps)
 app.post('/api/factory/template-translations', async (req, res) => {
   const client = new MongoClient(uri);
   try {
@@ -3628,7 +3642,7 @@ async function useExistingTemplate(templateName, templates, userDesc) {
 
   // ✅ NUOVA STRUTTURA: Usa subTasksIds invece di subData
   // NOTA: Un template alla radice non sa se sarà usato come sottodato o come main,
-  // quindi può avere tutti i 6 tipi di stepPrompts (start, noMatch, noInput, confirmation, notConfirmed, success).
+  // quindi può avere tutti i 6 tipi di steps (start, noMatch, noInput, confirmation, notConfirmed, success).
   // Quando lo usiamo come sottodato, filtriamo e prendiamo solo start, noInput, noMatch.
   // Ignoriamo confirmation, notConfirmed, success anche se presenti nel template sottodato.
   const subTasksIds = template.subTasksIds || [];
@@ -3648,20 +3662,24 @@ async function useExistingTemplate(templateName, templates, userDesc) {
         );
 
       if (subTemplate) {
-        // ✅ Filtra stepPrompts: solo start, noInput, noMatch per sottodati
-        // Ignora confirmation, notConfirmed, success anche se presenti nel template sottodato
-        const filteredStepPrompts = {};
-        if (subTemplate.stepPrompts) {
-          if (subTemplate.stepPrompts.start) {
-            filteredStepPrompts.start = subTemplate.stepPrompts.start;
+        // ✅ Estrai steps filtrati per sub-tasks (solo start, noInput, noMatch)
+        const subTemplateId = subTemplate.id || subTemplate._id || subId;
+        let filteredSteps = undefined;
+
+        if (subTemplate.steps && subTemplateId) {
+          const nodeSteps = subTemplate.steps[String(subTemplateId)];
+          if (nodeSteps && typeof nodeSteps === 'object') {
+            const filtered = {};
+            const allowedStepTypes = ['start', 'noInput', 'noMatch'];
+            for (const stepType of allowedStepTypes) {
+              if (nodeSteps[stepType]) {
+                filtered[stepType] = nodeSteps[stepType];
+              }
+            }
+            if (Object.keys(filtered).length > 0) {
+              filteredSteps = { [String(subTemplateId)]: filtered };
+            }
           }
-          if (subTemplate.stepPrompts.noInput) {
-            filteredStepPrompts.noInput = subTemplate.stepPrompts.noInput;
-          }
-          if (subTemplate.stepPrompts.noMatch) {
-            filteredStepPrompts.noMatch = subTemplate.stepPrompts.noMatch;
-          }
-          // ❌ Ignoriamo: confirmation, notConfirmed, success
         }
 
         // ✅ Usa la label del template trovato (non l'ID!)
@@ -3669,7 +3687,7 @@ async function useExistingTemplate(templateName, templates, userDesc) {
           label: subTemplate.label || subTemplate.name || 'Sub',
           type: subTemplate.type || subTemplate.name || 'generic',
           icon: subTemplate.icon || 'FileText',
-          stepPrompts: Object.keys(filteredStepPrompts).length > 0 ? filteredStepPrompts : null,
+          steps: filteredSteps, // ✅ Usa steps invece di steps
           constraints: subTemplate.dataContracts || subTemplate.constraints || [],
           subTasks: []
         });
@@ -3677,22 +3695,24 @@ async function useExistingTemplate(templateName, templates, userDesc) {
     }
 
     // ✅ POI: Crea UN SOLO mainData con subTasks[] popolato (non elementi separati!)
-    // L'istanza principale copia TUTTI i stepPrompts dal template (tutti e 6 i tipi)
+    // L'istanza principale copia TUTTI gli steps dal template (tutti i tipi)
+    const mainTemplateId = template.id || template._id;
     mainDataList.push({
       label: template.label,
       type: template.type,
       icon: template.icon,
-      stepPrompts: template.stepPrompts || null, // ✅ Tutti e 6 i tipi per main
+      steps: mainTemplateId && template.steps ? { [String(mainTemplateId)]: template.steps[String(mainTemplateId)] } : undefined, // ✅ Usa steps invece di steps
       constraints: template.dataContracts || template.constraints || [],
       subTasks: subTasksInstances // ✅ Sottodati QUI dentro subTasks[], non in mainData[]
     }); // ✅ UN SOLO elemento in mainDataList
   } else {
     // ✅ Template semplice: crea istanza dal template root
+    const mainTemplateId = template.id || template._id;
     mainDataList.push({
       label: template.label,
       type: template.type,
       icon: template.icon,
-      stepPrompts: template.stepPrompts || null,
+      steps: mainTemplateId && template.steps ? { [String(mainTemplateId)]: template.steps[String(mainTemplateId)] } : undefined, // ✅ Usa steps invece di steps
       constraints: template.dataContracts || template.constraints || [],
       subTasks: []
     });
@@ -3709,8 +3729,8 @@ async function useExistingTemplate(templateName, templates, userDesc) {
       icon: template.icon,
       schema: {
         label: template.label,
-        mainData: mainDataList,
-        stepPrompts: template.stepPrompts || null
+        mainData: mainDataList
+        // ❌ RIMOSSO: steps - usa steps nei nodi invece
       }
     }
   };
@@ -3946,16 +3966,14 @@ app.post('/step2-with-provider', async (req, res) => {
         // Build response from matched template
         const heuristicResponse = buildHeuristicResponse(template, mentionedFields, templates, 'it');
 
-        // ✅ DEBUG: Log stepPrompts nella risposta
+        // ✅ DEBUG: Log steps nella risposta
         console.log('[STEP2][HEURISTIC] Response built:', JSON.stringify(heuristicResponse, null, 2));
-        console.log('[STEP2][HEURISTIC] DEBUG stepPrompts check:', {
-          schemaHasStepPrompts: !!(heuristicResponse.schema?.stepPrompts),
-          schemaStepPrompts: heuristicResponse.schema?.stepPrompts,
-          mainDataHasStepPrompts: heuristicResponse.schema?.mainData?.some(m => m.stepPrompts),
-          mainDataStepPrompts: heuristicResponse.schema?.mainData?.map(m => ({
+        console.log('[STEP2][HEURISTIC] DEBUG steps check:', {
+          mainDataHasSteps: heuristicResponse.schema?.mainData?.some(m => m.steps),
+          mainDataSteps: heuristicResponse.schema?.mainData?.map(m => ({
             label: m.label,
-            hasStepPrompts: !!m.stepPrompts,
-            stepPrompts: m.stepPrompts
+            hasSteps: !!m.steps,
+            stepsKeys: m.steps ? Object.keys(m.steps) : []
           }))
         });
 
@@ -3977,20 +3995,8 @@ app.post('/step2-with-provider', async (req, res) => {
     console.log('[STEP2] AI Analysis:', analysis.action, '- User requested', `"${userDesc}"`, '...');
     console.log('[STEP2] AI Response generated:', JSON.stringify(analysis, null, 2));
 
-    // If AI found a template match (use_existing), include stepPrompts from the matched template
-    if (analysis.action === 'use_existing' && analysis.template_source) {
-      const matchedTemplate = templates[analysis.template_source];
-      if (matchedTemplate && matchedTemplate.stepPrompts) {
-        console.log('[STEP2][AI_MATCH] Including stepPrompts from matched template:', analysis.template_source);
-        // Add stepPrompts to schema level and mainData level
-        if (analysis.schema) {
-          analysis.schema.stepPrompts = matchedTemplate.stepPrompts;
-          if (analysis.schema.mainData && analysis.schema.mainData.length > 0) {
-            analysis.schema.mainData[0].stepPrompts = matchedTemplate.stepPrompts;
-          }
-        }
-      }
-    }
+    // ❌ RIMOSSO: steps - usa steps nei nodi invece
+    // Se AI trova un template match, gli steps sono già inclusi nei nodi mainData
 
     res.json({
       ai: {
@@ -4287,7 +4293,7 @@ app.post('/api/runtime/compile', async (req, res) => {
         return {
           label: task.label,
           mainData: task.mainData,
-          stepPrompts: task.stepPrompts,
+          steps: task.steps,
           constraints: task.constraints,
           examples: task.examples
         };
@@ -4992,7 +4998,7 @@ app.get('/api/runtime/orchestrator/session/:id/stream', (req, res) => {
           ddtForEvent = {
             label: waitingTask.label,
             mainData: waitingTask.mainData,
-            stepPrompts: waitingTask.stepPrompts,
+            steps: waitingTask.steps, // ✅ Usa steps invece di steps
             constraints: waitingTask.constraints,
             examples: waitingTask.examples
           };

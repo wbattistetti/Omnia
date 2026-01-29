@@ -781,7 +781,7 @@ export async function getAllDialogueTemplates() {
     const snap = Array.isArray(data) ? data.map((d: any) => ({
       label: d?.label,
       subDataIds: d?.subDataIds || [],
-      hasStepPrompts: !!d?.stepPrompts
+      hassteps: !!d?.steps
     })) : [];
     // RIMOSSO: console.log che causava loop infinito
   } catch { }

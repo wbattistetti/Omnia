@@ -229,7 +229,7 @@ class TaskTemplateService {
         }
       };
     } else if (editorType === 'ddt') {
-      // GetData: data, label, stepPrompts, etc. (fields directly on task, no value wrapper)
+      // GetData: data, label, steps, etc. (fields directly on task, no value wrapper)
       keys.data = {
         type: 'ddt',
         required: true,

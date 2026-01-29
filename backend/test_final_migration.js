@@ -60,7 +60,7 @@ async function runFinalTest() {
             console.log(`  _id: ${sampleDataTemplate._id}`);
             console.log(`  name: ${sampleDataTemplate.name}`);
             console.log(`  label: ${sampleDataTemplate.label || 'N/A'}`);
-            console.log(`  Has 'stepPrompts': ${sampleDataTemplate.stepPrompts ? 'YES' : 'NO'}`);
+            console.log(`  Has 'steps': ${sampleDataTemplate.steps ? 'YES' : 'NO'}`);
             console.log(`  Fields: ${Object.keys(sampleDataTemplate).join(', ')}`);
         }
 

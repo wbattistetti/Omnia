@@ -203,7 +203,7 @@ async function executeGetData(  // ✅ Function name kept for backward compatibi
   // ❌ REMOVED: label non serve a runtime (solo per UI)
   const ddt = (task.mainData && task.mainData.length > 0) ? {
     mainData: task.mainData,
-    stepPrompts: task.stepPrompts,
+    steps: task.steps,
     constraints: task.constraints,
   } : null;
 
@@ -288,7 +288,7 @@ async function executeClassifyProblem(
   const ddt = (task.mainData && task.mainData.length > 0) ? {
     label: task.label,
     mainData: task.mainData,
-    stepPrompts: task.stepPrompts,
+    steps: task.steps,
     constraints: task.constraints,
   } : null;
 

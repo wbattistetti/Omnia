@@ -16,6 +16,8 @@ type Props = {
   onStartResize: () => void;
   dragging: boolean;
   taskTree?: any; // ✅ Renamed from ddt to taskTree
+  task?: any; // ✅ Task instance (for Chat Simulator)
+  projectId?: string | null; // ✅ Project ID (for Chat Simulator)
   translations: Record<string, string>;
   selectedNode: any;
   onUpdateDDT?: (updater: (taskTree: any) => any) => void;
@@ -145,7 +147,7 @@ function StylesView() {
   );
 }
 
-export default function RightPanel({ mode, width, onWidthChange, onStartResize, dragging, taskTree, translations, selectedNode, onUpdateDDT, hideSplitter = false, tasks = [], stepKey }: Props) {
+export default function RightPanel({ mode, width, onWidthChange, onStartResize, dragging, taskTree, task, projectId, translations, selectedNode, onUpdateDDT, hideSplitter = false, tasks = [], stepKey }: Props) {
   const { combinedClass } = useFontContext();
   const minWidth = 160;
   const [isHovered, setIsHovered] = React.useState(false);
@@ -198,7 +200,7 @@ export default function RightPanel({ mode, width, onWidthChange, onStartResize, 
                   <div style={{ fontWeight: 700, color: '#0b1220' }}>Chat Simulator</div>
                 </div>
                 <div style={{ flex: 1, minHeight: 0 }}>
-                  <DDEBubbleChat currentDDT={taskTree} translations={translations} onUpdateDDT={onUpdateDDT} />
+                  <DDEBubbleChat task={task} projectId={projectId} translations={translations} onUpdateTaskTree={onUpdateDDT} />
                 </div>
               </div>
             );

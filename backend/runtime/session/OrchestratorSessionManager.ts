@@ -92,7 +92,7 @@ export class OrchestratorSessionManager {
         return {
           label: task.label,
           mainData: task.mainData,
-          stepPrompts: task.stepPrompts,
+          steps: task.steps,
           constraints: task.constraints,
         };
       }
@@ -176,7 +176,7 @@ export class OrchestratorSessionManager {
             ddt: ddtParam || (task.mainData && task.mainData.length > 0 ? {
               label: task.label,
               mainData: task.mainData,
-              stepPrompts: task.stepPrompts,
+              steps: task.steps,
               constraints: task.constraints,
             } : null) // Include DDT in event
           });
@@ -204,7 +204,7 @@ export class OrchestratorSessionManager {
           const ddt = (task.mainData && task.mainData.length > 0) ? {
             label: task.label,
             mainData: task.mainData,
-            stepPrompts: task.stepPrompts,
+            steps: task.steps,
             constraints: task.constraints,
           } : null;
           if (ddt) {
