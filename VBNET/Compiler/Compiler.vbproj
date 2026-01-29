@@ -31,7 +31,7 @@
 
     <!-- Task Compiler (Polymorphic) -->
     <Compile Include="TaskCompiler\TaskCompilerBase.vb" />
-    <Compile Include="TaskCompiler\DataRequestTaskCompiler.vb" />
+    <Compile Include="TaskCompiler\UtteranceInterpretationTaskCompiler.vb" />
     <Compile Include="TaskCompiler\SimpleTaskCompiler.vb" />
     <Compile Include="TaskCompiler\TaskCompilerFactory.vb" />
 
@@ -45,7 +45,7 @@
     <Compile Include="DTO\IDE\FlowNode.vb" />
     <Compile Include="DTO\IDE\FlowEdge.vb" />
     <!-- NodeData.vb removed - FlowNode now has Label and Rows directly -->
-    <Compile Include="DTO\IDE\RowData.vb" />
+    <Compile Include="DTO\IDE\TaskRow.vb" />
     <Compile Include="DTO\IDE\EdgeData.vb" />
     <Compile Include="DTO\IDE\Task.vb" />
     <!-- TaskTypeConverter.vb (renamed from ActionTypeConverter) - kept for backward compatibility, not actively used -->

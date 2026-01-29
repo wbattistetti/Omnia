@@ -81,24 +81,77 @@ export default function DDEBubbleChat({
         const translationsData = translations || {};
 
         // ✅ NUOVO: Invia solo { taskId, projectId, translations }
+        const requestBody = {
+          taskId: task.id,
+          projectId: projectId,
+          translations: translationsData
+        };
+        console.log('[DDEBubbleChat] 📤 Sending request to backend:', {
+          url: `${baseUrl}/api/runtime/task/session/start`,
+          method: 'POST',
+          body: requestBody,
+          bodyString: JSON.stringify(requestBody)
+        });
+
         const startResponse = await fetch(`${baseUrl}/api/runtime/task/session/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            taskId: task.id,
-            projectId: projectId,
-            translations: translationsData
-          })
+          body: JSON.stringify(requestBody)
+        });
+
+        console.log('[DDEBubbleChat] 📥 Response received:', {
+          status: startResponse.status,
+          statusText: startResponse.statusText,
+          ok: startResponse.ok,
+          headers: Object.fromEntries(startResponse.headers.entries()),
+          url: startResponse.url
         });
 
         if (!startResponse.ok) {
           const errorText = await startResponse.text();
+          console.error('[DDEBubbleChat] ❌ Error response:', {
+            status: startResponse.status,
+            statusText: startResponse.statusText,
+            body: errorText,
+            bodyLength: errorText.length,
+            bodyPreview: errorText.substring(0, 200)
+          });
           // Clear any existing messages when backend is not available
           setMessages([]);
           throw new Error(`Backend server not available: ${startResponse.statusText} - ${errorText}`);
         }
 
-        const { sessionId: newSessionId } = await startResponse.json();
+        // ✅ Verifica che la risposta abbia contenuto prima di fare parsing JSON
+        const responseText = await startResponse.text();
+        console.log('[DDEBubbleChat] 📥 Response text:', {
+          length: responseText.length,
+          isEmpty: !responseText || responseText.trim().length === 0,
+          preview: responseText.substring(0, 200),
+          fullText: responseText
+        });
+
+        if (!responseText || responseText.trim().length === 0) {
+          console.error('[DDEBubbleChat] ❌ EMPTY RESPONSE DETECTED', {
+            status: startResponse.status,
+            statusText: startResponse.statusText,
+            headers: Object.fromEntries(startResponse.headers.entries()),
+            url: startResponse.url,
+            contentType: startResponse.headers.get('content-type'),
+            contentLength: startResponse.headers.get('content-length')
+          });
+          throw new Error('Backend returned empty response');
+        }
+
+        let responseData: any;
+        try {
+          responseData = JSON.parse(responseText);
+        } catch (parseError) {
+          console.error('[DDEBubbleChat] Failed to parse JSON response:', parseError);
+          console.error('[DDEBubbleChat] Response text:', responseText);
+          throw new Error(`Failed to parse backend response: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
+        }
+
+        const { sessionId: newSessionId } = responseData;
         setSessionId(newSessionId);
         console.log('[DDEBubbleChat] ✅ Backend session created:', { sessionId: newSessionId });
 

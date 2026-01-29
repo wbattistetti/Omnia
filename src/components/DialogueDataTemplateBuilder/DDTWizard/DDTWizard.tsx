@@ -2086,7 +2086,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                         // Assemble final DDT with steps
                         try {
                           // Extract all translation keys from steps
-                          const { extractTranslationKeysFromSteps } = await import('../../../utils/stepsConverter');
+                          const { extractTranslationKeysFromSteps } = await import('../../../utils/stepPromptsConverter');
                           const translationKeys: string[] = [];
                           mountedDataTree.forEach((m: any) => {
                             const nodeId = m.templateId || m.id;

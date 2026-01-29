@@ -6,7 +6,7 @@ import { getAllV2Draft } from './V2DraftStore';
 import { taskTemplateService } from '../../../services/TaskTemplateService';
 import { cloneAndAdaptContract, createSubIdMapping } from '../../../utils/contractUtils';
 import { TaskType, templateIdToTaskType } from '../../../types/taskTypes';
-import { extractTranslationKeysFromSteps } from '../../../utils/stepsConverter';
+import { extractTranslationKeysFromSteps } from '../../../utils/stepPromptsConverter';
 
 // ✅ REMOVED: extractPromptsFromMainData - DEPRECATED
 // Ora usiamo extractStartPrompts da ddtPromptExtractor.ts direttamente
@@ -588,8 +588,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
     // Minimal base messages (ensure ResponseEditor displays steps)
     const baseSteps = (isSub ? ['start', 'noInput', 'noMatch'] : ['start', 'noInput', 'noMatch', 'confirmation', 'notConfirmed', 'success']);
 
-    // ✅ Leggi steps (formato nuovo)
-    const nodeId = (node as any).templateId || (node as any).id;
+    // ✅ Leggi steps (formato nuovo) - nodeId già dichiarato sopra
     const nodeSteps = (node as any).steps;
 
     // Estrai chiavi di traduzione da steps

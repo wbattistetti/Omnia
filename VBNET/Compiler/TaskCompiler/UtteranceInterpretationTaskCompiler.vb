@@ -7,7 +7,7 @@ Imports Newtonsoft.Json
 Imports DDTEngine
 
 ''' <summary>
-''' Compiler per task di tipo DataRequest
+''' Compiler per task di tipo UtteranceInterpretation
 ''' Gestisce la logica complessa di caricamento e compilazione DDT
 '''
 ''' LOGICA CONCETTUALE DEI DATI:
@@ -22,14 +22,19 @@ Imports DDTEngine
 ''' - Performance: meno dati nel database, lookup template in memoria (O(1))
 ''' - Architettura pulita: istanza contiene solo steps, template contiene contracts
 ''' </summary>
-Public Class DataRequestTaskCompiler
+Public Class UtteranceInterpretationTaskCompiler
     Inherits TaskCompilerBase
 
-    Public Overrides Function Compile(task As Task, row As RowData, node As FlowNode, taskId As String, flow As Flow) As CompiledTask
-        Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] Compile called for task {taskId}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] Compile called for task {taskId}")
-        Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] task.TemplateId={task.TemplateId}, task.Id={task.Id}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] task.TemplateId={task.TemplateId}, task.Id={task.Id}")
+    Public Overrides Function Compile(task As Task, taskId As String, flow As Flow) As CompiledTask
+        Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] ========== COMPILE START ==========")
+        Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Compile called for task {taskId}")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Compile called for task {taskId}")
+        Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] task.TemplateId={task.TemplateId}, task.Id={task.Id}")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] task.TemplateId={task.TemplateId}, task.Id={task.Id}")
+        Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] flow.Tasks count: {If(flow IsNot Nothing AndAlso flow.Tasks IsNot Nothing, flow.Tasks.Count, 0)}")
+        If flow IsNot Nothing AndAlso flow.Tasks IsNot Nothing Then
+            Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Available template IDs in flow: {String.Join(", ", flow.Tasks.Select(Function(t) t.Id).Take(10))}")
+        End If
 
         Dim dataRequestTask As New CompiledTaskGetData()
 
@@ -41,69 +46,81 @@ Public Class DataRequestTaskCompiler
 
         ' ✅ NUOVO MODELLO: Costruisci SEMPRE da template usando subTasksIds
         If Not String.IsNullOrEmpty(task.TemplateId) Then
-            Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] Building TaskTreeRuntime from template {task.TemplateId}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] Building TaskTreeRuntime from template {task.TemplateId}")
+            Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Building TaskTreeRuntime from template {task.TemplateId}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Building TaskTreeRuntime from template {task.TemplateId}")
 
+            Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Searching for template {task.TemplateId} in flow.Tasks...")
             Dim template = flow.Tasks.FirstOrDefault(Function(t) t.Id = task.TemplateId)
             If template IsNot Nothing Then
+                Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Template {task.TemplateId} found: Label={template.Label}, SubTasksIds count={If(template.SubTasksIds IsNot Nothing, template.SubTasksIds.Count, 0)}")
                 Try
+                    Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Building TaskTreeRuntime from template {task.TemplateId}...")
                     taskTreeRuntime = BuildTaskTreeRuntimeFromTemplate(template, task, flow)
-                    Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] TaskTreeRuntime built from template {task.TemplateId}")
-                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] TaskTreeRuntime built from template {task.TemplateId}")
+                    Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime built successfully")
+                    Console.WriteLine($"   TaskTreeRuntime.Id={taskTreeRuntime.Id}")
+                    Console.WriteLine($"   TaskTreeRuntime.Label={taskTreeRuntime.Label}")
+                    Console.WriteLine($"   TaskTreeRuntime.Data count={If(taskTreeRuntime.Data IsNot Nothing, taskTreeRuntime.Data.Count, 0)}")
+                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime built from template {task.TemplateId}")
                 Catch ex As Exception
-                    Console.WriteLine($"❌ [COMPILER][DataRequestTaskCompiler] Failed to build TaskTreeRuntime from template: {ex.Message}")
-                    System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][DataRequestTaskCompiler] Exception details: {ex.ToString()}")
+                    Console.WriteLine($"❌ [COMPILER][UtteranceInterpretationTaskCompiler] Failed to build TaskTreeRuntime from template: {ex.Message}")
+                    Console.WriteLine($"   Exception type: {ex.GetType().Name}")
+                    Console.WriteLine($"   Stack trace: {ex.StackTrace}")
+                    If ex.InnerException IsNot Nothing Then
+                        Console.WriteLine($"   Inner exception: {ex.InnerException.Message}")
+                    End If
+                    System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][UtteranceInterpretationTaskCompiler] Exception details: {ex.ToString()}")
                     Throw New InvalidOperationException($"Failed to build TaskTreeRuntime from template {task.TemplateId}: {ex.Message}", ex)
                 End Try
             Else
-                Console.WriteLine($"❌ [COMPILER][DataRequestTaskCompiler] Template {task.TemplateId} not found in flow.Tasks")
-                System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][DataRequestTaskCompiler] Template {task.TemplateId} not found")
+                Console.WriteLine($"❌ [COMPILER][UtteranceInterpretationTaskCompiler] Template {task.TemplateId} NOT FOUND in flow.Tasks")
+                Console.WriteLine($"   Available template IDs: {String.Join(", ", flow.Tasks.Select(Function(t) t.Id))}")
+                System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][UtteranceInterpretationTaskCompiler] Template {task.TemplateId} not found")
                 Throw New InvalidOperationException($"Template {task.TemplateId} not found. Every task must have a valid templateId.")
             End If
         Else
             ' ❌ RIMOSSO: Fallback legacy a task.Data
             ' Ogni task DEVE avere templateId (viene creato automaticamente se mancante)
-            Console.WriteLine($"❌ [COMPILER][DataRequestTaskCompiler] Task {taskId} has no templateId. This is not supported.")
+            Console.WriteLine($"❌ [COMPILER][UtteranceInterpretationTaskCompiler] Task {taskId} has no templateId. This is not supported.")
             Throw New InvalidOperationException($"Task {taskId} must have a templateId. Legacy task.Data is not supported.")
         End If
 
         ' Compila TaskTreeRuntime se trovato
         If taskTreeRuntime IsNot Nothing Then
-            Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] TaskTreeRuntime found! Starting compilation...")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] TaskTreeRuntime found! Starting compilation...")
-            Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] TaskTreeRuntime.Id={taskTreeRuntime.Id}, Data IsNot Nothing={taskTreeRuntime.Data IsNot Nothing}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] TaskTreeRuntime.Id={taskTreeRuntime.Id}, Data IsNot Nothing={taskTreeRuntime.Data IsNot Nothing}")
+            Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime found! Starting compilation...")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime found! Starting compilation...")
+            Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime.Id={taskTreeRuntime.Id}, Data IsNot Nothing={taskTreeRuntime.Data IsNot Nothing}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime.Id={taskTreeRuntime.Id}, Data IsNot Nothing={taskTreeRuntime.Data IsNot Nothing}")
             If taskTreeRuntime.Data IsNot Nothing Then
-                Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] TaskTreeRuntime.Data.Count={taskTreeRuntime.Data.Count}")
-                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] TaskTreeRuntime.Data.Count={taskTreeRuntime.Data.Count}")
+                Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime.Data.Count={taskTreeRuntime.Data.Count}")
+                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime.Data.Count={taskTreeRuntime.Data.Count}")
             End If
             Try
                 Dim ddtCompiler As New DDTCompiler()
                 ' Serializza TaskTreeRuntime a JSON per DDTCompiler.Compile
                 Dim ddtJson = JsonConvert.SerializeObject(taskTreeRuntime)
-                Console.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] Calling DDTCompiler.Compile with JSON length={ddtJson.Length}")
-                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DataRequestTaskCompiler] Calling DDTCompiler.Compile with JSON length={ddtJson.Length}")
+                Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Calling DDTCompiler.Compile with JSON length={ddtJson.Length}")
+                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Calling DDTCompiler.Compile with JSON length={ddtJson.Length}")
                 Dim ddtResult = ddtCompiler.Compile(ddtJson)
                 If ddtResult IsNot Nothing AndAlso ddtResult.Instance IsNot Nothing Then
                     dataRequestTask.DDT = ddtResult.Instance
-                    Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] DDT compiled successfully for task {taskId}")
-                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] DDT compiled successfully for task {taskId}")
+                    Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] DDT compiled successfully for task {taskId}")
+                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] DDT compiled successfully for task {taskId}")
                 Else
-                    Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] DDT compilation returned no instance for task {taskId}")
-                    System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] DDT compilation returned no instance for task {taskId}")
+                    Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] DDT compilation returned no instance for task {taskId}")
+                    System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] DDT compilation returned no instance for task {taskId}")
                 End If
             Catch ex As Exception
-                Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Failed to compile DDT for task {taskId}: {ex.Message}")
-                System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Failed to compile DDT for task {taskId}: {ex.Message}")
-                System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Exception details: {ex.ToString()}")
+                Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Failed to compile DDT for task {taskId}: {ex.Message}")
+                System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Failed to compile DDT for task {taskId}: {ex.Message}")
+                System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Exception details: {ex.ToString()}")
             End Try
         Else
-            Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] No TaskTreeRuntime found for DataRequest task {taskId} - DDT will be Nothing")
-            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] No TaskTreeRuntime found for DataRequest task {taskId} - DDT will be Nothing")
+            Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] No TaskTreeRuntime found for DataRequest task {taskId} - DDT will be Nothing")
+            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] No TaskTreeRuntime found for DataRequest task {taskId} - DDT will be Nothing")
         End If
 
         ' Popola campi comuni
-        PopulateCommonFields(dataRequestTask, row, node, taskId)
+        PopulateCommonFields(dataRequestTask, taskId)
 
         Return dataRequestTask
     End Function
@@ -129,15 +146,15 @@ Public Class DataRequestTaskCompiler
             If Not String.IsNullOrEmpty(node.TemplateId) Then
                 ' Protezione contro riferimenti circolari
                 If visitedTemplates.Contains(node.TemplateId) Then
-                    Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Circular reference detected for templateId={node.TemplateId}, skipping dereferencing")
-                    System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Circular reference detected for templateId={node.TemplateId}")
+                    Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Circular reference detected for templateId={node.TemplateId}, skipping dereferencing")
+                    System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Circular reference detected for templateId={node.TemplateId}")
                     expandedNodes.Add(node)
                     Continue For
                 End If
 
                 visitedTemplates.Add(node.TemplateId)
-                Console.WriteLine($"🔄 [COMPILER][DataRequestTaskCompiler] Dereferencing templateId={node.TemplateId} for node Id={node.Id}")
-                System.Diagnostics.Debug.WriteLine($"🔄 [COMPILER][DataRequestTaskCompiler] Dereferencing templateId={node.TemplateId} for node Id={node.Id}")
+                Console.WriteLine($"🔄 [COMPILER][UtteranceInterpretationTaskCompiler] Dereferencing templateId={node.TemplateId} for node Id={node.Id}")
+                System.Diagnostics.Debug.WriteLine($"🔄 [COMPILER][UtteranceInterpretationTaskCompiler] Dereferencing templateId={node.TemplateId} for node Id={node.Id}")
 
                 ' ✅ NUOVO MODELLO: Cerca il template referenziato e usa subTasksIds
                 Dim referencedTemplate = allTemplates.FirstOrDefault(Function(t) t.Id = node.TemplateId)
@@ -147,8 +164,8 @@ Public Class DataRequestTaskCompiler
                         ' Se il nodo corrente non ha subTasks, costruiscili da subTasksIds
                         If node.SubTasks Is Nothing OrElse node.SubTasks.Count = 0 Then
                             node.SubTasks = BuildDataTreeFromSubTasksIds(referencedTemplate.SubTasksIds, allTemplates, visitedTemplates)
-                            Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Built {node.SubTasks.Count} subTasks from template {node.TemplateId} using subTasksIds")
-                            System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Built subTasks from template {node.TemplateId}")
+                            Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Built {node.SubTasks.Count} subTasks from template {node.TemplateId} using subTasksIds")
+                            System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Built subTasks from template {node.TemplateId}")
                         End If
                     End If
 
@@ -159,8 +176,8 @@ Public Class DataRequestTaskCompiler
 
                     visitedTemplates.Remove(node.TemplateId)
                 Else
-                    Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Template {node.TemplateId} not found - cannot dereference")
-                    System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Template {node.TemplateId} not found")
+                    Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Template {node.TemplateId} not found - cannot dereference")
+                    System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Template {node.TemplateId} not found")
                     visitedTemplates.Remove(node.TemplateId)
                 End If
             End If
@@ -223,7 +240,7 @@ Public Class DataRequestTaskCompiler
         Else
             ' ✅ Template atomico (nessun subTask) → struttura vuota
             taskTreeRuntime.Data = New List(Of MainDataNode)()
-            Console.WriteLine($"ℹ️ [COMPILER][DataRequestTaskCompiler] Template {template.Id} has no subTasksIds (atomic template)")
+            Console.WriteLine($"ℹ️ [COMPILER][UtteranceInterpretationTaskCompiler] Template {template.Id} has no subTasksIds (atomic template)")
         End If
 
         Return taskTreeRuntime
@@ -243,27 +260,42 @@ Public Class DataRequestTaskCompiler
         For Each subTaskId In subTasksIds
             ' Protezione contro riferimenti circolari
             If visitedTemplates.Contains(subTaskId) Then
-                Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Circular reference detected for subTaskId={subTaskId}, skipping")
+                Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Circular reference detected for subTaskId={subTaskId}, skipping")
                 Continue For
             End If
 
             visitedTemplates.Add(subTaskId)
-            Console.WriteLine($"🔄 [COMPILER][DataRequestTaskCompiler] Dereferencing subTaskId={subTaskId}")
+            Console.WriteLine($"🔄 [COMPILER][UtteranceInterpretationTaskCompiler] Dereferencing subTaskId={subTaskId}")
 
             ' Cerca il template referenziato
             Dim subTemplate = allTemplates.FirstOrDefault(Function(t) t.Id = subTaskId)
             If subTemplate IsNot Nothing Then
                 ' ✅ Crea MainDataNode dal template
+                ' NOTA: Steps vengono SOLO dall'istanza, non dal template
+                ' Template fornisce: struttura (subTasksIds), constraints, condition, metadata
+
+                ' ✅ Carica constraints dal template (priorità: dataContracts > constraints)
+                Dim templateConstraints As List(Of Object) = Nothing
+                If subTemplate.DataContracts IsNot Nothing AndAlso subTemplate.DataContracts.Count > 0 Then
+                    templateConstraints = subTemplate.DataContracts
+                ElseIf subTemplate.Constraints IsNot Nothing AndAlso subTemplate.Constraints.Count > 0 Then
+                    templateConstraints = subTemplate.Constraints
+                Else
+                    templateConstraints = New List(Of Object)()
+                End If
+
+                ' ✅ Crea MainDataNode dal template
+                ' NOTA: Steps vengono SOLO dall'istanza, non dal template
+                ' Template fornisce: struttura (subTasksIds), constraints, condition, metadata
+                ' Label, Type, Required, Synonyms non vengono impostati (non servono nel runtime)
                 Dim node As New MainDataNode() With {
                     .Id = subTemplate.Id,
                     .TemplateId = subTemplate.Id,
-                    .Label = subTemplate.Label,
-                    .Type = Nothing, ' Type viene dal template se presente
-                    .Required = False,
+                    .Name = If(String.IsNullOrEmpty(subTemplate.Label), subTemplate.Id, subTemplate.Label),
                     .Steps = New List(Of Compiler.DialogueStep)(),
                     .SubTasks = New List(Of Compiler.MainDataNode)(),
-                    .Synonyms = New List(Of String)(),
-                    .Constraints = New List(Of Object)()
+                    .Constraints = templateConstraints,
+                    .Condition = subTemplate.Condition
                 }
 
                 ' ✅ Se il sub-template ha a sua volta subTasksIds, dereferenzia ricorsivamente
@@ -272,9 +304,9 @@ Public Class DataRequestTaskCompiler
                 End If
 
                 nodes.Add(node)
-                Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Created node from subTemplate {subTaskId}, subTasksCount={node.SubTasks.Count}")
+                Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Created node from subTemplate {subTaskId}, subTasksCount={node.SubTasks.Count}")
             Else
-                Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] SubTemplate {subTaskId} not found")
+                Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] SubTemplate {subTaskId} not found")
             End If
 
             visitedTemplates.Remove(subTaskId)
@@ -309,13 +341,13 @@ Public Class DataRequestTaskCompiler
 
                         If overrideSteps IsNot Nothing AndAlso overrideSteps.Count > 0 Then
                             node.Steps = overrideSteps
-                            Console.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Applied {overrideSteps.Count} steps override for templateId={node.TemplateId}")
-                            System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DataRequestTaskCompiler] Applied steps override for templateId={node.TemplateId}")
+                            Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Applied {overrideSteps.Count} steps override for templateId={node.TemplateId}")
+                            System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Applied steps override for templateId={node.TemplateId}")
                         End If
                     End If
                 Catch ex As Exception
-                    Console.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Failed to apply steps override for templateId={node.TemplateId}: {ex.Message}")
-                    System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DataRequestTaskCompiler] Exception details: {ex.ToString()}")
+                    Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Failed to apply steps override for templateId={node.TemplateId}: {ex.Message}")
+                    System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Exception details: {ex.ToString()}")
                 End Try
             End If
 

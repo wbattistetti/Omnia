@@ -86,10 +86,10 @@ export function extractTranslationKeysFromSteps(
  * @returns Formato nuovo: { "nodeId": { start: {...}, noMatch: {...}, ... } }
  */
 export function convertstepsToSteps(
-  steps: any,
+  stepPromptsLegacy: any,
   nodeId: string
 ): Record<string, any> | undefined {
-  if (!steps || typeof steps !== 'object') {
+  if (!stepPromptsLegacy || typeof stepPromptsLegacy !== 'object') {
     return undefined;
   }
 
@@ -97,7 +97,7 @@ export function convertstepsToSteps(
   const stepTypes = ['start', 'noMatch', 'noInput', 'confirmation', 'notConfirmed', 'success', 'introduction'];
 
   for (const stepType of stepTypes) {
-    const stepsArray = steps[stepType];
+    const stepsArray = stepPromptsLegacy[stepType];
 
     if (Array.isArray(stepsArray) && stepsArray.length > 0) {
       // Crea escalations basate sul numero di chiavi in steps

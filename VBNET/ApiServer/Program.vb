@@ -3,6 +3,7 @@ Option Explicit On
 
 Imports System
 Imports System.IO
+Imports System.Linq
 Imports System.Threading
 Imports System.Threading.Tasks
 Imports System.Collections.Generic
@@ -89,8 +90,8 @@ Module Program
 
         ' POST /api/runtime/compile/task - Compile a single task (for chat simulator)
         app.MapPost("/api/runtime/compile/task", Function(context As HttpContext) As System.Threading.Tasks.Task(Of IResult)
-                                                    Return HandleCompileTask(context)
-                                                End Function)
+                                                     Return HandleCompileTask(context)
+                                                 End Function)
 
         ' POST /api/runtime/task/session/start - Chat Simulator diretto (solo UtteranceInterpretation)
         app.MapPost("/api/runtime/task/session/start", Async Function(context As HttpContext) As Task(Of IResult)
@@ -562,24 +563,16 @@ Module Program
             Dim compiler = TaskCompilerFactory.GetCompiler(taskType)
             Console.WriteLine($"✅ [HandleCompileTask] Using compiler: {compiler.GetType().Name}")
 
-            ' Create dummy row/node/flow for compilation (required by compiler interface)
-            Dim dummyRow As New Compiler.RowData() With {
-                .Id = task.Id,
-                .TaskId = task.Id
-            }
-            Dim dummyNode As New Compiler.FlowNode() With {
-                .Id = "dummy-node",
-                .Rows = New List(Of Compiler.RowData) From {dummyRow}
-            }
+            ' Create flow with task (no dummy row/node needed - compiler doesn't need them)
             Dim dummyFlow As New Compiler.Flow() With {
-                .Nodes = New List(Of Compiler.FlowNode) From {dummyNode},
                 .Tasks = New List(Of Compiler.Task) From {task},
+                .Nodes = New List(Of Compiler.FlowNode)(),
                 .Edges = New List(Of Compiler.FlowEdge)()
             }
 
-            ' Compile the task
+            ' Compile the task (Chat Simulator: no flowchart metadata)
             Console.WriteLine($"🔄 [HandleCompileTask] Calling compiler.Compile for task {task.Id}...")
-            Dim compiledTask = compiler.Compile(task, dummyRow, dummyNode, task.Id, dummyFlow)
+            Dim compiledTask = compiler.Compile(task, task.Id, dummyFlow)
             Console.WriteLine($"✅ [HandleCompileTask] Task compiled successfully: {compiledTask.GetType().Name}")
 
             ' Build response
@@ -1345,197 +1338,382 @@ Module Program
     End Function
 
     ''' <summary>
-    ''' Handles POST /api/runtime/task/session/start - Chat Simulator diretto
+    ''' Reads and parses the HTTP request body as a TaskSessionStartRequest.
+    ''' </summary>
+    ''' <param name="context">The HTTP context containing the request body.</param>
+    ''' <returns>A tuple containing: (Success As Boolean, Request As TaskSessionStartRequest, ErrorMessage As String)</returns>
+    Private Async Function ReadAndParseRequest(context As HttpContext) As Task(Of (Success As Boolean, Request As TaskSessionStartRequest, ErrorMessage As String))
+        Try
+            Dim reader As New StreamReader(context.Request.Body)
+            Dim body = Await reader.ReadToEndAsync()
+
+            If String.IsNullOrEmpty(body) Then
+                Return (False, Nothing, "Request body is empty. Expected JSON with taskId and projectId fields.")
+            End If
+
+            Dim request = JsonConvert.DeserializeObject(Of TaskSessionStartRequest)(body, New JsonSerializerSettings() With {
+                .NullValueHandling = NullValueHandling.Ignore,
+                .MissingMemberHandling = MissingMemberHandling.Ignore
+            })
+
+            Return (True, request, Nothing)
+        Catch ex As Exception
+            Return (False, Nothing, $"Failed to parse request body as JSON. Error: {ex.Message}")
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' Validates that the TaskSessionStartRequest contains all required fields (taskId and projectId).
+    ''' </summary>
+    ''' <param name="request">The request object to validate.</param>
+    ''' <returns>A tuple containing: (IsValid As Boolean, ErrorMessage As String)</returns>
+    Private Function ValidateRequest(request As TaskSessionStartRequest) As (IsValid As Boolean, ErrorMessage As String)
+        If request Is Nothing Then
+            Return (False, "Request object is null. Expected a valid TaskSessionStartRequest with taskId and projectId.")
+        End If
+
+        If String.IsNullOrEmpty(request.TaskId) Then
+            Return (False, "TaskId is missing or empty. The request must include a valid taskId field.")
+        End If
+
+        If String.IsNullOrEmpty(request.ProjectId) Then
+            Return (False, "ProjectId is missing or empty. The request must include a valid projectId field.")
+        End If
+
+        Return (True, Nothing)
+    End Function
+
+    ''' <summary>
+    ''' Fetches all tasks (project tasks + referenced factory templates) from the Node.js backend API.
+    ''' </summary>
+    ''' <param name="projectId">The project identifier to load tasks for.</param>
+    ''' <returns>A tuple containing: (Success As Boolean, TasksArray As JArray, ErrorMessage As String)</returns>
+    Private Async Function FetchTasksFromNodeJs(projectId As String) As Task(Of (Success As Boolean, TasksArray As JArray, ErrorMessage As String))
+        Try
+            Using httpClient As New HttpClient()
+                httpClient.Timeout = TimeSpan.FromSeconds(30)
+
+                Dim tasksUrl = $"http://localhost:3100/api/projects/{Uri.EscapeDataString(projectId)}/tasks"
+                Dim response = Await httpClient.GetAsync(tasksUrl)
+
+                If Not response.IsSuccessStatusCode Then
+                    Return (False, Nothing, $"Node.js API returned error status {response.StatusCode} when fetching tasks for project '{projectId}'. URL: {tasksUrl}")
+                End If
+
+                Dim responseJson = Await response.Content.ReadAsStringAsync()
+                Dim responseObj = JsonConvert.DeserializeObject(Of JObject)(responseJson)
+                Dim itemsToken = responseObj("items")
+                Dim tasksArray As JArray = If(itemsToken IsNot Nothing AndAlso TypeOf itemsToken Is JArray, CType(itemsToken, JArray), New JArray())
+
+                Return (True, tasksArray, Nothing)
+            End Using
+        Catch ex As Exception
+            Return (False, Nothing, $"Failed to fetch tasks from Node.js API for project '{projectId}'. Error: {ex.Message}")
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' Finds a task object by its ID within a JArray of tasks.
+    ''' </summary>
+    ''' <param name="tasksArray">The array of tasks to search in.</param>
+    ''' <param name="taskId">The task identifier to find.</param>
+    ''' <returns>The JObject representing the task, or Nothing if not found.</returns>
+    Private Function FindTaskById(tasksArray As JArray, taskId As String) As JObject
+        For Each item In tasksArray
+            Dim idToken = item("id")
+            If idToken IsNot Nothing AndAlso idToken.ToString() = taskId Then
+                Return CType(item, JObject)
+            End If
+        Next
+        Return Nothing
+    End Function
+
+    ''' <summary>
+    ''' Finds the template object for a given task. If the task has a templateId, searches for that template.
+    ''' Otherwise, uses the task itself as the template.
+    ''' </summary>
+    ''' <param name="tasksArray">The array of tasks to search in.</param>
+    ''' <param name="taskObj">The task object to find the template for.</param>
+    ''' <param name="taskId">The task identifier (used as fallback if templateId is missing).</param>
+    ''' <returns>A tuple containing: (TemplateObj As JObject, TemplateId As String)</returns>
+    Private Function FindTemplateForTask(tasksArray As JArray, taskObj As JObject, taskId As String) As (TemplateObj As JObject, TemplateId As String)
+        Dim templateIdToken = taskObj("templateId")
+        Dim templateId = If(templateIdToken IsNot Nothing, templateIdToken.ToString(), taskId)
+
+        If String.IsNullOrEmpty(templateId) OrElse templateId = taskId Then
+            ' Task is standalone, use itself as template
+            Return (taskObj, taskId)
+        End If
+
+        ' Search for template in tasks array
+        Dim templateObj = FindTaskById(tasksArray, templateId)
+        If templateObj IsNot Nothing Then
+            Return (templateObj, templateId)
+        End If
+
+        ' Template not found, fallback to task itself
+        Return (taskObj, taskId)
+    End Function
+
+    ''' <summary>
+    ''' Recursively loads all sub-templates referenced by a template's subTasksIds field.
+    ''' </summary>
+    ''' <param name="tasksArray">The array of all available tasks (project + factory).</param>
+    ''' <param name="rootTemplate">The root template to start loading from.</param>
+    ''' <param name="loadedTemplateIds">A set of already loaded template IDs to avoid duplicates.</param>
+    ''' <param name="allTemplatesList">The list to accumulate all loaded templates.</param>
+    Private Sub LoadSubTemplatesRecursively(tasksArray As JArray, rootTemplate As JObject, ByRef loadedTemplateIds As HashSet(Of String), ByRef allTemplatesList As List(Of JObject))
+        If rootTemplate Is Nothing Then Return
+
+        Dim subTasksIds = rootTemplate("subTasksIds")
+        If subTasksIds Is Nothing OrElse Not TypeOf subTasksIds Is JArray Then Return
+
+        For Each subTaskIdToken In CType(subTasksIds, JArray)
+            Dim subTaskId = If(subTaskIdToken IsNot Nothing, subTaskIdToken.ToString(), Nothing)
+            If String.IsNullOrEmpty(subTaskId) OrElse loadedTemplateIds.Contains(subTaskId) Then
+                Continue For
+            End If
+
+            Dim subTemplateObj = FindTaskById(tasksArray, subTaskId)
+            If subTemplateObj IsNot Nothing Then
+                allTemplatesList.Add(subTemplateObj)
+                loadedTemplateIds.Add(subTaskId)
+                ' Recursively load sub-templates of this sub-template
+                LoadSubTemplatesRecursively(tasksArray, subTemplateObj, loadedTemplateIds, allTemplatesList)
+            Else
+                Dim rootTemplateIdToken = rootTemplate("id")
+                Dim rootTemplateId = If(rootTemplateIdToken IsNot Nothing, rootTemplateIdToken.ToString(), "unknown")
+                Console.WriteLine($"⚠️ [LoadSubTemplatesRecursively] Sub-template with ID '{subTaskId}' referenced by template '{rootTemplateId}' was not found in tasks array. This may cause compilation errors.")
+            End If
+        Next
+    End Sub
+
+    ''' <summary>
+    ''' Deserializes a list of JObject tasks into Compiler.Task objects.
+    ''' </summary>
+    ''' <param name="templatesList">The list of JObject templates to deserialize.</param>
+    ''' <returns>A tuple containing: (Success As Boolean, Tasks As List(Of Compiler.Task), ErrorMessage As String)</returns>
+    Private Function DeserializeTasks(templatesList As List(Of JObject)) As (Success As Boolean, Tasks As List(Of Compiler.Task), ErrorMessage As String)
+        Dim settings As New JsonSerializerSettings() With {
+            .NullValueHandling = NullValueHandling.Ignore,
+            .MissingMemberHandling = MissingMemberHandling.Ignore
+        }
+        settings.Converters.Add(New DialogueStepListConverter())
+
+        Dim deserializedTasks As New List(Of Compiler.Task)()
+
+        For Each templateObj In templatesList
+            Try
+                Dim task = JsonConvert.DeserializeObject(Of Compiler.Task)(templateObj.ToString(), settings)
+                If task IsNot Nothing Then
+                    deserializedTasks.Add(task)
+                End If
+            Catch ex As Exception
+                Dim templateIdToken = templateObj("id")
+                Dim templateId = If(templateIdToken IsNot Nothing, templateIdToken.ToString(), "unknown")
+                Return (False, Nothing, $"Failed to deserialize template with ID '{templateId}'. Error: {ex.Message}")
+            End Try
+        Next
+
+        Return (True, deserializedTasks, Nothing)
+    End Function
+
+    ''' <summary>
+    ''' Validates that a task is of type UtteranceInterpretation, which is required for task session compilation.
+    ''' </summary>
+    ''' <param name="task">The task to validate.</param>
+    ''' <returns>A tuple containing: (IsValid As Boolean, ErrorMessage As String)</returns>
+    Private Function ValidateTaskType(task As Compiler.Task) As (IsValid As Boolean, ErrorMessage As String)
+        If task Is Nothing Then
+            Return (False, "Task object is null. Cannot validate task type.")
+        End If
+
+        If Not task.Type.HasValue Then
+            Return (False, $"Task with ID '{task.Id}' has no type specified. Expected type: UtteranceInterpretation.")
+        End If
+
+        If task.Type.Value <> TaskTypes.UtteranceInterpretation Then
+            Dim actualType = task.Type.Value.ToString()
+            Return (False, $"Task with ID '{task.Id}' has type '{actualType}', but expected type 'UtteranceInterpretation'. Only UtteranceInterpretation tasks can be compiled into task sessions.")
+        End If
+
+        Return (True, Nothing)
+    End Function
+
+    ''' <summary>
+    ''' Compiles a task into a TaskTreeRuntime using the UtteranceInterpretationTaskCompiler.
+    ''' Requires all referenced templates to be available in the Flow object.
+    ''' </summary>
+    ''' <param name="task">The task instance to compile.</param>
+    ''' <param name="allTemplates">All templates (main + sub-templates) needed for compilation.</param>
+    ''' <returns>A tuple containing: (Success As Boolean, CompiledTask As Compiler.CompiledTaskGetData, ErrorMessage As String)</returns>
+    Private Function CompileTaskToRuntime(task As Compiler.Task, allTemplates As List(Of Compiler.Task)) As (Success As Boolean, CompiledTask As Compiler.CompiledTaskGetData, ErrorMessage As String)
+        Try
+            Dim flow As New Compiler.Flow() With {
+                .Tasks = allTemplates
+            }
+
+            ' Compile task (Chat Simulator: no flowchart metadata needed)
+            Dim compiler As New UtteranceInterpretationTaskCompiler()
+            Dim compiledTask = compiler.Compile(task, task.Id, flow)
+
+            If compiledTask Is Nothing Then
+                Return (False, Nothing, $"Task compiler returned null for task '{task.Id}'. The task may be malformed or missing required fields.")
+            End If
+
+            If TypeOf compiledTask IsNot Compiler.CompiledTaskGetData Then
+                Dim actualType = compiledTask.GetType().Name
+                Return (False, Nothing, $"Task compiler returned unexpected type '{actualType}' for task '{task.Id}'. Expected CompiledTaskGetData.")
+            End If
+
+            Dim dataRequestTask = DirectCast(compiledTask, Compiler.CompiledTaskGetData)
+            If dataRequestTask.DDT Is Nothing Then
+                Return (False, Nothing, $"Compiled task for '{task.Id}' has no TaskTreeRuntime (DDT is null). The compilation may have failed silently.")
+            End If
+
+            Return (True, dataRequestTask, Nothing)
+        Catch ex As Exception
+            Return (False, Nothing, $"Failed to compile task '{task.Id}' into TaskTreeRuntime. Error: {ex.Message}")
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' Creates a new task session and registers it in the SessionManager.
+    ''' </summary>
+    ''' <param name="compiledTask">The compiled task containing the TaskTreeRuntime.</param>
+    ''' <param name="translations">Optional dictionary of translations for the session.</param>
+    ''' <returns>The session ID of the newly created session.</returns>
+    Private Function CreateTaskSession(compiledTask As Compiler.CompiledTaskGetData, translations As Dictionary(Of String, String)) As String
+        Dim sessionId = Guid.NewGuid().ToString()
+        Dim translationsDict = If(translations, New Dictionary(Of String, String)())
+        SessionManager.CreateTaskSession(sessionId, compiledTask.DDT, translationsDict)
+        Return sessionId
+    End Function
+
+    ''' <summary>
+    ''' Creates a standardized JSON error response.
+    ''' </summary>
+    ''' <param name="errorMessage">The error message to include in the response.</param>
+    ''' <param name="statusCode">The HTTP status code to return.</param>
+    ''' <returns>An IResult containing the error response.</returns>
+    Private Function CreateErrorResponse(errorMessage As String, statusCode As Integer) As IResult
+        Dim errorObj = New With {
+            .error = errorMessage,
+            .timestamp = DateTime.UtcNow.ToString("O")
+        }
+        Dim errorJson = JsonConvert.SerializeObject(errorObj, New JsonSerializerSettings() With {
+            .NullValueHandling = NullValueHandling.Ignore
+        })
+        Return Results.Content(errorJson, "application/json", Nothing, statusCode)
+    End Function
+
+    ''' <summary>
+    ''' Handles POST /api/runtime/task/session/start - Creates a new task session for the Chat Simulator.
+    ''' Orchestrates the entire flow: request parsing, task loading, template resolution, compilation, and session creation.
     ''' </summary>
     Private Async Function HandleTaskSessionStart(context As HttpContext) As Task(Of IResult)
         Try
-            Console.WriteLine($"📥 [HandleTaskSessionStart] Received request")
+            ' 1. Parse request
+            Dim parseResult = Await ReadAndParseRequest(context)
+            If Not parseResult.Success Then
+                Return CreateErrorResponse(parseResult.ErrorMessage, 400)
+            End If
+            Dim request = parseResult.Request
 
-            ' Read request body
-            Dim body As String = Nothing
-            Try
-                Dim reader As New StreamReader(context.Request.Body)
-                body = Await reader.ReadToEndAsync()
-            Catch readEx As Exception
-                Console.WriteLine($"❌ [HandleTaskSessionStart] Error reading body: {readEx.Message}")
-                Return Results.BadRequest(New With {.error = "Failed to read request body"})
-            End Try
-
-            If String.IsNullOrEmpty(body) Then
-                Console.WriteLine("❌ [HandleTaskSessionStart] Empty body")
-                Return Results.BadRequest(New With {.error = "Empty request body"})
+            ' 2. Validate request
+            Dim validationResult = ValidateRequest(request)
+            If Not validationResult.IsValid Then
+                Return CreateErrorResponse(validationResult.ErrorMessage, 400)
             End If
 
-            ' Deserialize request
-            Dim request As TaskSessionStartRequest = Nothing
-            Try
-                request = JsonConvert.DeserializeObject(Of TaskSessionStartRequest)(body, New JsonSerializerSettings() With {
-                    .NullValueHandling = NullValueHandling.Ignore,
-                    .MissingMemberHandling = MissingMemberHandling.Ignore
-                })
-            Catch jsonEx As Exception
-                Console.WriteLine($"❌ [HandleTaskSessionStart] JSON error: {jsonEx.Message}")
-                Return Results.BadRequest(New With {.error = "Invalid JSON", .message = jsonEx.Message})
-            End Try
+            ' 3. Fetch tasks from Node.js
+            Dim fetchResult = Await FetchTasksFromNodeJs(request.ProjectId)
+            If Not fetchResult.Success Then
+                Return CreateErrorResponse(fetchResult.ErrorMessage, 400)
+            End If
+            Dim tasksArray = fetchResult.TasksArray
 
-            If request Is Nothing OrElse String.IsNullOrEmpty(request.TaskId) OrElse String.IsNullOrEmpty(request.ProjectId) Then
-                Console.WriteLine("❌ [HandleTaskSessionStart] Missing taskId or projectId")
-                Return Results.BadRequest(New With {.error = "Missing taskId or projectId"})
+            ' 4. Find task by ID
+            Dim taskObj = FindTaskById(tasksArray, request.TaskId)
+            If taskObj Is Nothing Then
+                Return CreateErrorResponse($"Task with ID '{request.TaskId}' was not found in project '{request.ProjectId}'. The task may have been deleted or the ID may be incorrect.", 400)
             End If
 
-            Console.WriteLine($"🔍 [HandleTaskSessionStart] Request: taskId={request.TaskId}, projectId={request.ProjectId}")
+            ' 5. Find template for task
+            Dim templateResult = FindTemplateForTask(tasksArray, taskObj, request.TaskId)
+            Dim templateObj = templateResult.TemplateObj
+            Dim templateId = templateResult.TemplateId
 
-            ' Chiama Node.js per ottenere task e template
-            Dim taskJson As String = Nothing
-            Dim templateJson As String = Nothing
-            Try
-                Using httpClient As New HttpClient()
-                    httpClient.Timeout = TimeSpan.FromSeconds(30)
+            ' 6. Load all sub-templates recursively
+            Dim loadedTemplateIds As New HashSet(Of String)()
+            Dim allTemplatesList As New List(Of JObject)()
 
-                    ' ✅ Chiama GET /api/projects/{projectId}/tasks (restituisce tutti i task)
-                    Dim tasksUrl = $"http://localhost:3100/api/projects/{Uri.EscapeDataString(request.ProjectId)}/tasks"
-                    Console.WriteLine($"📡 [HandleTaskSessionStart] Calling Node.js: {tasksUrl}")
-
-                    Dim tasksResponse = Await httpClient.GetAsync(tasksUrl)
-                    If Not tasksResponse.IsSuccessStatusCode Then
-                        Console.WriteLine($"❌ [HandleTaskSessionStart] Node.js returned error: {tasksResponse.StatusCode}")
-                        Return Results.BadRequest(New With {.error = $"Failed to load tasks from Node.js: {tasksResponse.StatusCode}"})
-                    End If
-
-                    Dim tasksResponseJson = Await tasksResponse.Content.ReadAsStringAsync()
-                    Dim tasksResponseObj = JsonConvert.DeserializeObject(Of JObject)(tasksResponseJson)
-                    Dim tasksArray = If(tasksResponseObj("items"), New JArray())
-
-                    ' ✅ Trova task per id
-                    Dim taskObj As JObject = Nothing
-                    For Each item In tasksArray
-                        If item("id")?.ToString() = request.TaskId Then
-                            taskObj = CType(item, JObject)
-                            Exit For
-                        End If
-                    Next
-
-                    If taskObj Is Nothing Then
-                        Console.WriteLine($"❌ [HandleTaskSessionStart] Task not found: {request.TaskId}")
-                        Return Results.BadRequest(New With {.error = $"Task not found: {request.TaskId}"})
-                    End If
-
-                    taskJson = taskObj.ToString()
-                    Console.WriteLine($"✅ [HandleTaskSessionStart] Task loaded from Node.js: {taskJson.Length} chars")
-
-                    ' ✅ Ottieni templateId e carica template
-                    Dim templateId = If(taskObj("templateId")?.ToString(), taskObj("id")?.ToString())
-
-                    If Not String.IsNullOrEmpty(templateId) AndAlso templateId <> request.TaskId Then
-                        ' ✅ Trova template nella stessa lista
-                        Dim templateObj As JObject = Nothing
-                        For Each item In tasksArray
-                            If item("id")?.ToString() = templateId Then
-                                templateObj = CType(item, JObject)
-                                Exit For
-                            End If
-                        Next
-
-                        If templateObj IsNot Nothing Then
-                            templateJson = templateObj.ToString()
-                            Console.WriteLine($"✅ [HandleTaskSessionStart] Template loaded from Node.js: {templateJson.Length} chars")
-                        Else
-                            Console.WriteLine($"⚠️ [HandleTaskSessionStart] Template not found, using task as template")
-                            templateJson = taskJson
-                        End If
-                    Else
-                        Console.WriteLine($"⚠️ [HandleTaskSessionStart] No templateId or templateId = taskId, using task as template")
-                        templateJson = taskJson
-                    End If
-                End Using
-            Catch httpEx As Exception
-                Console.WriteLine($"❌ [HandleTaskSessionStart] HTTP error: {httpEx.Message}")
-                Return Results.BadRequest(New With {.error = $"Failed to call Node.js: {httpEx.Message}"})
-            End Try
-
-            ' Deserializza task e template
-            Dim task As Compiler.Task = Nothing
-            Dim template As Compiler.Task = Nothing
-            Try
-                Dim settings As New JsonSerializerSettings() With {
-                    .NullValueHandling = NullValueHandling.Ignore,
-                    .MissingMemberHandling = MissingMemberHandling.Ignore
-                }
-                ' ✅ NUOVO MODELLO: Task non ha più Data, quindi non serve MainDataNodeListConverter
-                ' MainDataNodeListConverter è usato solo per TaskTreeRuntime.Data
-                settings.Converters.Add(New DialogueStepListConverter())
-
-                task = JsonConvert.DeserializeObject(Of Compiler.Task)(taskJson, settings)
-                template = JsonConvert.DeserializeObject(Of Compiler.Task)(templateJson, settings)
-
-                If task Is Nothing OrElse template Is Nothing Then
-                    Console.WriteLine("❌ [HandleTaskSessionStart] Failed to deserialize task or template")
-                    Return Results.BadRequest(New With {.error = "Failed to deserialize task or template"})
-                End If
-
-                ' Se task non ha templateId, usa se stesso come template
-                If String.IsNullOrEmpty(task.TemplateId) Then
-                    task.TemplateId = template.Id
-                End If
-            Catch deserializeEx As Exception
-                Console.WriteLine($"❌ [HandleTaskSessionStart] Deserialization error: {deserializeEx.Message}")
-                Return Results.BadRequest(New With {.error = $"Failed to deserialize: {deserializeEx.Message}"})
-            End Try
-
-            ' Verifica che il task sia di tipo UtteranceInterpretation
-            If Not task.Type.HasValue OrElse task.Type.Value <> TaskTypes.UtteranceInterpretation Then
-                Console.WriteLine($"❌ [HandleTaskSessionStart] Task is not UtteranceInterpretation: {If(task.Type.HasValue, task.Type.Value.ToString(), "NULL")}")
-                Return Results.BadRequest(New With {.error = "Task must be of type UtteranceInterpretation"})
+            If templateObj IsNot Nothing Then
+                allTemplatesList.Add(templateObj)
+                loadedTemplateIds.Add(templateId)
             End If
 
-            ' Costruisci TaskTreeRuntime usando DataRequestTaskCompiler
-            Dim taskTreeRuntime As Compiler.TaskTreeRuntime = Nothing
-            Try
-                ' Crea Flow con task e template
-                Dim flow As New Compiler.Flow() With {
-                    .Tasks = New List(Of Compiler.Task) From {template, task}
-                }
+            If taskObj IsNot Nothing AndAlso Not loadedTemplateIds.Contains(request.TaskId) Then
+                allTemplatesList.Add(taskObj)
+                loadedTemplateIds.Add(request.TaskId)
+            End If
 
-                ' Usa BuildTaskTreeRuntimeFromTemplate (metodo privato, dobbiamo usare il compilatore)
-                Dim compiler As New DataRequestTaskCompiler()
-                Dim compiledTask = compiler.Compile(task, Nothing, Nothing, task.Id, flow)
+            If templateObj IsNot Nothing Then
+                LoadSubTemplatesRecursively(tasksArray, templateObj, loadedTemplateIds, allTemplatesList)
+            End If
 
-                If compiledTask Is Nothing OrElse TypeOf compiledTask IsNot Compiler.CompiledTaskGetData Then
-                    Console.WriteLine("❌ [HandleTaskSessionStart] Failed to compile task")
-                    Return Results.BadRequest(New With {.error = "Failed to compile task"})
-                End If
+            ' 7. Deserialize all templates
+            Dim deserializeResult = DeserializeTasks(allTemplatesList)
+            If Not deserializeResult.Success Then
+                Return CreateErrorResponse(deserializeResult.ErrorMessage, 400)
+            End If
+            Dim allTemplates = deserializeResult.Tasks
 
-                Dim dataRequestTask = DirectCast(compiledTask, Compiler.CompiledTaskGetData)
-                If dataRequestTask.DDT Is Nothing Then
-                    Console.WriteLine("❌ [HandleTaskSessionStart] Compiled task has no DDT instance")
-                    Return Results.BadRequest(New With {.error = "Compiled task has no DDT instance"})
-                End If
+            ' 8. Find main task and template in deserialized list
+            Dim task = allTemplates.FirstOrDefault(Function(t) t.Id = request.TaskId)
+            Dim template = allTemplates.FirstOrDefault(Function(t) t.Id = templateId)
 
-                ' Crea TaskSession
-                Dim sessionId = Guid.NewGuid().ToString()
-                Dim translations = If(request.Translations, New Dictionary(Of String, String)())
+            If task Is Nothing Then
+                Return CreateErrorResponse($"Failed to deserialize task with ID '{request.TaskId}'. The task JSON may be malformed.", 400)
+            End If
 
-                Dim session = SessionManager.CreateTaskSession(sessionId, dataRequestTask.DDT, translations)
+            If template Is Nothing Then
+                Return CreateErrorResponse($"Failed to deserialize template with ID '{templateId}' for task '{request.TaskId}'. The template JSON may be malformed.", 400)
+            End If
 
-                Console.WriteLine($"✅ [HandleTaskSessionStart] TaskSession created: {sessionId}")
+            ' Ensure task has templateId
+            If String.IsNullOrEmpty(task.TemplateId) Then
+                task.TemplateId = template.Id
+            End If
 
-                Return Results.Ok(New With {
-                    .sessionId = sessionId,
-                    .timestamp = DateTime.UtcNow.ToString("O")
-                })
-            Catch compileEx As Exception
-                Console.WriteLine($"❌ [HandleTaskSessionStart] Compilation error: {compileEx.Message}")
-                Console.WriteLine($"Stack trace: {compileEx.StackTrace}")
-                Return Results.BadRequest(New With {.error = $"Failed to compile task: {compileEx.Message}"})
-            End Try
+            ' 9. Validate task type
+            Dim typeValidationResult = ValidateTaskType(task)
+            If Not typeValidationResult.IsValid Then
+                Return CreateErrorResponse(typeValidationResult.ErrorMessage, 400)
+            End If
+
+            ' 10. Compile task
+            Dim compileResult = CompileTaskToRuntime(task, allTemplates)
+            If Not compileResult.Success Then
+                Return CreateErrorResponse(compileResult.ErrorMessage, 400)
+            End If
+            Dim compiledTask = compileResult.CompiledTask
+
+            ' 11. Create session
+            Dim sessionId = CreateTaskSession(compiledTask, request.Translations)
+
+            ' 12. Return success
+            Dim responseObj = New With {
+                .sessionId = sessionId,
+                .timestamp = DateTime.UtcNow.ToString("O")
+            }
+            Dim jsonResponse = JsonConvert.SerializeObject(responseObj, New JsonSerializerSettings() With {
+                .NullValueHandling = NullValueHandling.Ignore
+            })
+            Return Results.Content(jsonResponse, "application/json")
+
         Catch ex As Exception
-            Console.WriteLine($"❌ [HandleTaskSessionStart] Exception: {ex.Message}")
-            Console.WriteLine($"Stack trace: {ex.StackTrace}")
-            Return Results.Problem(
-                title:="Failed to start task session",
-                detail:=ex.Message,
-                statusCode:=500
-            )
+            Return CreateErrorResponse($"Unexpected error while starting task session: {ex.Message}", 500)
         End Try
     End Function
 

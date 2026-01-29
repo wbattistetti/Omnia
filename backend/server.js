@@ -946,10 +946,126 @@ app.get('/api/projects/:pid/tasks', async (req, res) => {
   try {
     await client.connect();
     const projDb = await getProjectDb(client, projectId);
+    const factoryDb = client.db(dbFactory);
+
+    // ✅ Carica task dal progetto
     const coll = projDb.collection('tasks');
-    const templates = await coll.find({}).toArray();
-    logInfo('TaskTemplates.get', { projectId, count: templates.length });
-    res.json({ items: templates });
+    const projectTasks = await coll.find({}).toArray();
+
+    // ✅ Raccogli tutti i templateId referenziati (ricorsivamente)
+    const referencedTemplateIds = new Set();
+
+    // Funzione per raccogliere templateId da un task
+    const collectTemplateIds = (tasks) => {
+      for (const task of tasks) {
+        // Aggiungi templateId del task stesso se presente
+        if (task.templateId) {
+          referencedTemplateIds.add(task.templateId);
+        }
+        // Aggiungi subTasksIds (sono già templateId)
+        if (task.subTasksIds && Array.isArray(task.subTasksIds)) {
+          task.subTasksIds.forEach(id => {
+            if (id) referencedTemplateIds.add(id);
+          });
+        }
+        // Supporto legacy: subDataIds
+        if (task.subDataIds && Array.isArray(task.subDataIds)) {
+          task.subDataIds.forEach(id => {
+            if (id) referencedTemplateIds.add(id);
+          });
+        }
+      }
+    };
+
+    // Raccogli templateId dai task del progetto
+    collectTemplateIds(projectTasks);
+
+    // ✅ Carica ricorsivamente tutti i template referenziati dal factory
+    const loadReferencedTemplatesRecursively = async (templateIds) => {
+      if (templateIds.length === 0) return [];
+
+      // Carica i template dal factory
+      const factoryTemplates = await factoryDb.collection('tasks')
+        .find({
+          $or: [
+            { id: { $in: templateIds } },
+            { _id: { $in: templateIds } }
+          ]
+        })
+        .toArray();
+
+      // Normalizza gli ID (usa id o _id)
+      const loadedTemplateIds = new Set();
+      factoryTemplates.forEach(t => {
+        const templateId = t.id || t._id?.toString();
+        if (templateId) loadedTemplateIds.add(templateId);
+      });
+
+      // Raccogli nuovi templateId dai sub-template appena caricati
+      const newTemplateIds = new Set();
+      factoryTemplates.forEach(template => {
+        if (template.subTasksIds && Array.isArray(template.subTasksIds)) {
+          template.subTasksIds.forEach(id => {
+            if (id && !referencedTemplateIds.has(id) && !loadedTemplateIds.has(id)) {
+              newTemplateIds.add(id);
+              referencedTemplateIds.add(id);
+            }
+          });
+        }
+        // Supporto legacy: subDataIds
+        if (template.subDataIds && Array.isArray(template.subDataIds)) {
+          template.subDataIds.forEach(id => {
+            if (id && !referencedTemplateIds.has(id) && !loadedTemplateIds.has(id)) {
+              newTemplateIds.add(id);
+              referencedTemplateIds.add(id);
+            }
+          });
+        }
+      });
+
+      // Carica ricorsivamente i sub-template
+      if (newTemplateIds.size > 0) {
+        const deeperTemplates = await loadReferencedTemplatesRecursively(Array.from(newTemplateIds));
+        factoryTemplates.push(...deeperTemplates);
+      }
+
+      return factoryTemplates;
+    };
+
+    // Carica tutti i template referenziati dal factory
+    const factoryTemplateIds = Array.from(referencedTemplateIds);
+    const factoryTemplates = await loadReferencedTemplatesRecursively(factoryTemplateIds);
+
+    // ✅ Rimuovi duplicati (usa id o _id come chiave)
+    const templateMap = new Map();
+
+    // Aggiungi prima i task del progetto (hanno priorità)
+    projectTasks.forEach(task => {
+      const taskId = task.id || task._id?.toString();
+      if (taskId) {
+        templateMap.set(taskId, task);
+      }
+    });
+
+    // Aggiungi i template del factory (solo se non già presenti)
+    factoryTemplates.forEach(template => {
+      const templateId = template.id || template._id?.toString();
+      if (templateId && !templateMap.has(templateId)) {
+        templateMap.set(templateId, template);
+      }
+    });
+
+    const allTasks = Array.from(templateMap.values());
+
+    logInfo('TaskTemplates.get', {
+      projectId,
+      projectTasksCount: projectTasks.length,
+      factoryTemplatesCount: factoryTemplates.length,
+      totalCount: allTasks.length,
+      referencedTemplateIdsCount: referencedTemplateIds.size
+    });
+
+    res.json({ items: allTasks });
   } catch (e) {
     logError('TaskTemplates.get', e, { projectId });
     res.status(500).json({ error: String(e?.message || e) });

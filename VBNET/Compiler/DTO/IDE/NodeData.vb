@@ -13,10 +13,10 @@ Public Class NodeData
     ''' Rows in the node
     ''' </summary>
     <JsonProperty("rows")>
-    Public Property Rows As List(Of RowData)
+    Public Property Rows As List(Of TaskRow)
 
     Public Sub New()
-        Rows = New List(Of RowData)()
+        Rows = New List(Of TaskRow)()
     End Sub
 End Class
 

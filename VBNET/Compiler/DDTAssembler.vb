@@ -3,6 +3,7 @@ Option Explicit On
 
 Imports System.Collections.Generic
 Imports System.Linq
+Imports Newtonsoft.Json
 Imports DDTEngine
 
 ''' <summary>
@@ -164,20 +165,37 @@ Public Class DDTAssembler
         ' ✅ Copia solo proprietà runtime essenziali:
         ' - Id: necessario per identificare il nodo
         ' - Name: usato per fallback regex hardcoded in Parser.vb
-        ' - Required: usato per determinare se il dato è obbligatorio
         ' - SubTasks: necessario per nodi compositi
         ' - Steps: necessario per i response del dialogo
         ' - State, Value, ParentData: gestiti a runtime
+        ' - ValidationConditions: derivati da Constraints del template (TODO: implementare conversione)
         ' ❌ Rimosse proprietà design-time non usate a runtime:
         ' - Label: solo per UI
-        ' - Type: non usato a runtime
-        ' - Condition: non usato a runtime
-        ' - Synonyms: non usato a runtime
-        ' - Constraints: non usato a runtime (si usa ValidationConditions)
+        ' - Type: non usato a runtime (se è constraint, va nei constraints)
+        ' - Required: non è un campo del nodo, va nei constraints
+        ' - Synonyms: legacy, non serve
+        ' - TemplateId: riferimento esterno, non serve a runtime
+        ' ✅ Constraints: devono essere convertiti in ValidationConditions (TODO: implementare)
+        ' ✅ Estrai Required dai constraints (se presente)
+        ' Required non è un campo del nodo, ma un constraint
+        ' Se presente nei constraints, viene estratto e impostato per compatibilità runtime
+        Dim isRequired As Boolean = False
+        If ideNode.Constraints IsNot Nothing Then
+            For Each constraintObj As Object In ideNode.Constraints
+                If TypeOf constraintObj Is Dictionary(Of String, Object) Then
+                    Dim constraintDict = CType(constraintObj, Dictionary(Of String, Object))
+                    If constraintDict.ContainsKey("required") AndAlso TypeOf constraintDict("required") Is Boolean Then
+                        isRequired = CBool(constraintDict("required"))
+                        Exit For
+                    End If
+                End If
+            Next
+        End If
+
         Dim runtimeNode As New DDTNode() With {
             .Id = ideNode.Id,
             .Name = ideNode.Name,
-            .Required = ideNode.Required,
+            .Required = isRequired, ' ✅ Estratto dai constraints, non hardcoded
             .Steps = New List(Of DDTEngine.DialogueStep)(),
             .SubTasks = New List(Of DDTNode)(),
             .State = DialogueState.Start,
@@ -202,6 +220,20 @@ Public Class DDTAssembler
             System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DDTAssembler] CompileNode: ideNode.Steps is Nothing!")
         End If
 
+        ' ✅ Compila Constraints in ValidationConditions
+        If ideNode.Constraints IsNot Nothing AndAlso ideNode.Constraints.Count > 0 Then
+            Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileNode: Converting {ideNode.Constraints.Count} constraints to ValidationConditions")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileNode: Converting {ideNode.Constraints.Count} constraints to ValidationConditions")
+            For Each constraintObj As Object In ideNode.Constraints
+                Dim validationCondition = ConvertConstraintToValidationCondition(constraintObj)
+                If validationCondition IsNot Nothing Then
+                    runtimeNode.ValidationConditions.Add(validationCondition)
+                End If
+            Next
+            Console.WriteLine($"✅ [COMPILER][DDTAssembler] CompileNode: Converted {runtimeNode.ValidationConditions.Count} constraints to ValidationConditions")
+            System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTAssembler] CompileNode: Converted {runtimeNode.ValidationConditions.Count} constraints to ValidationConditions")
+        End If
+
         ' Compila SubData (ricorsivo)
         If ideNode.SubTasks IsNot Nothing Then
             For Each subNode As Compiler.MainDataNode In ideNode.SubTasks
@@ -210,6 +242,63 @@ Public Class DDTAssembler
         End If
 
         Return runtimeNode
+    End Function
+
+    ''' <summary>
+    ''' Converte un constraint (Object) in ValidationCondition
+    ''' </summary>
+    Private Function ConvertConstraintToValidationCondition(constraintObj As Object) As ValidationCondition
+        If constraintObj Is Nothing Then
+            Return Nothing
+        End If
+
+        Try
+            ' Serializza e deserializza per convertire Object in ValidationCondition
+            Dim constraintJson = JsonConvert.SerializeObject(constraintObj)
+            Dim validationCondition = JsonConvert.DeserializeObject(Of ValidationCondition)(constraintJson)
+
+            ' Se la deserializzazione fallisce, prova a costruire manualmente
+            If validationCondition Is Nothing Then
+                ' Prova a estrarre campi da Dictionary
+                If TypeOf constraintObj Is Dictionary(Of String, Object) Then
+                    Dim constraintDict = CType(constraintObj, Dictionary(Of String, Object))
+                    Dim idValue As Object = Nothing
+                    If constraintDict.ContainsKey("id") Then
+                        idValue = constraintDict("id")
+                    End If
+
+                    Dim typeValue As Object = Nothing
+                    If constraintDict.ContainsKey("type") Then
+                        typeValue = constraintDict("type")
+                    End If
+
+                    Dim errorMessageValue As Object = Nothing
+                    If constraintDict.ContainsKey("errorMessage") Then
+                        errorMessageValue = constraintDict("errorMessage")
+                    End If
+
+                    validationCondition = New ValidationCondition() With {
+                        .Id = If(idValue IsNot Nothing, idValue.ToString(), Guid.NewGuid().ToString()),
+                        .Type = If(typeValue IsNot Nothing, typeValue.ToString(), "custom"),
+                        .ErrorMessage = If(errorMessageValue IsNot Nothing, errorMessageValue.ToString(), Nothing),
+                        .Parameters = New Dictionary(Of String, Object)()
+                    }
+
+                    ' Copia tutti gli altri campi come Parameters
+                    For Each kvp In constraintDict
+                        If kvp.Key <> "id" AndAlso kvp.Key <> "type" AndAlso kvp.Key <> "errorMessage" Then
+                            validationCondition.Parameters(kvp.Key) = kvp.Value
+                        End If
+                    Next
+                End If
+            End If
+
+            Return validationCondition
+        Catch ex As Exception
+            Console.WriteLine($"⚠️ [COMPILER][DDTAssembler] Failed to convert constraint to ValidationCondition: {ex.Message}")
+            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DDTAssembler] Failed to convert constraint: {ex.ToString()}")
+            Return Nothing
+        End Try
     End Function
 
     ''' <summary>

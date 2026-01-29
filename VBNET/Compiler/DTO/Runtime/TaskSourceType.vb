@@ -20,6 +20,11 @@ Public Enum TaskSourceType
     ''' Task da un'azione di recovery del DDT
     ''' </summary>
     DDTRecoveryAction = 3
+
+    ''' <summary>
+    ''' Task compilato direttamente (Chat Simulator, senza flowchart)
+    ''' </summary>
+    Direct = 4
 End Enum
 
 

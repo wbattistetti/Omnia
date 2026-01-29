@@ -74,11 +74,36 @@ Public Class Task
     <JsonProperty("steps")>
     Public Property Steps As Dictionary(Of String, Object)
 
+    ''' <summary>
+    ''' ✅ Constraints del template (priorità 1: dataContracts)
+    ''' Solo per template: constraints per validazione dati
+    ''' Per istanze: sempre null (constraints vengono dal template)
+    ''' </summary>
+    <JsonProperty("dataContracts")>
+    Public Property DataContracts As List(Of Object)
+
+    ''' <summary>
+    ''' ✅ Constraints del template (priorità 2: constraints, fallback)
+    ''' Solo per template: constraints per validazione dati
+    ''' Per istanze: sempre null (constraints vengono dal template)
+    ''' </summary>
+    <JsonProperty("constraints")>
+    Public Property Constraints As List(Of Object)
+
+    ''' <summary>
+    ''' ✅ Condition del template (condizione di esecuzione del nodo)
+    ''' Solo per template: quando il nodo è attivo/saltato
+    ''' </summary>
+    <JsonProperty("condition")>
+    Public Property Condition As String
+
     Public Sub New()
         Parameters = New List(Of TaskParameter)()
         Value = New Dictionary(Of String, Object)()
         SubTasksIds = New List(Of String)()
         Steps = New Dictionary(Of String, Object)()
+        DataContracts = New List(Of Object)()
+        Constraints = New List(Of Object)()
     End Sub
 End Class
 

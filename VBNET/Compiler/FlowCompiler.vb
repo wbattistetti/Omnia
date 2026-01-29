@@ -16,7 +16,7 @@ Public Class FlowCompiler
     ''' <summary>
     ''' Crea un CompiledTask type-safe in base al TaskType usando il factory pattern
     ''' </summary>
-    Private Function CreateTypedCompiledTask(taskType As TaskTypes, task As Task, row As RowData, node As FlowNode, taskId As String, flow As Flow) As CompiledTask
+    Private Function CreateTypedCompiledTask(taskType As TaskTypes, task As Task, row As TaskRow, node As FlowNode, taskId As String, flow As Flow) As CompiledTask
         Console.WriteLine($"🔍 [COMPILER][FlowCompiler] CreateTypedCompiledTask called: taskType={taskType}, taskId={taskId}")
         System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][FlowCompiler] CreateTypedCompiledTask called: taskType={taskType}, taskId={taskId}")
         ' Usa il factory per ottenere il compiler appropriato
@@ -25,7 +25,19 @@ Public Class FlowCompiler
         System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][FlowCompiler] Compiler obtained: type={compiler.GetType().Name}")
         Console.WriteLine($"🔍 [COMPILER][FlowCompiler] Calling compiler.Compile for task {taskId}...")
         System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][FlowCompiler] Calling compiler.Compile for task {taskId}...")
-        Dim result = compiler.Compile(task, row, node, taskId, flow)
+
+        ' Compila il task (senza metadata flowchart)
+        Dim result = compiler.Compile(task, taskId, flow)
+
+        ' Aggiungi metadata del flowchart dopo la compilazione
+        result.Id = row.Id
+        result.Debug = New TaskDebugInfo() With {
+            .SourceType = TaskSourceType.Flowchart,
+            .NodeId = node.Id,
+            .RowId = row.Id,
+            .OriginalTaskId = taskId
+        }
+
         Console.WriteLine($"✅ [COMPILER][FlowCompiler] compiler.Compile completed for task {taskId}, result type={result.GetType().Name}")
         System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][FlowCompiler] compiler.Compile completed for task {taskId}, result type={result.GetType().Name}")
         Return result
@@ -96,7 +108,7 @@ Public Class FlowCompiler
             System.Diagnostics.Debug.WriteLine($"   Processing node: {node.Id}")
 
             ' Get rows directly (no wrapper)
-            Dim rows = If(node.Rows, New List(Of RowData)())
+            Dim rows = If(node.Rows, New List(Of TaskRow)())
             Console.WriteLine($"     Node {node.Id} has {rows.Count} rows")
             System.Diagnostics.Debug.WriteLine($"     Node {node.Id} has {rows.Count} rows")
             If rows.Count = 0 Then

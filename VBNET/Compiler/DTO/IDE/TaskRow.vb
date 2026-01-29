@@ -4,12 +4,12 @@ Option Explicit On
 Imports Newtonsoft.Json
 
 ''' <summary>
-''' Row data in a node
+''' Task row in a flowchart node - represents a task instance within a FlowNode
 ''' Tipi del mondo IDE - usati solo per deserializzazione JSON
 ''' </summary>
-Public Class RowData
+Public Class TaskRow
     ''' <summary>
-    ''' Row ID
+    ''' Row ID (unique identifier for this task row in the flowchart)
     ''' </summary>
     <JsonProperty("id")>
     Public Property Id As String

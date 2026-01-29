@@ -23,13 +23,13 @@ Public Class FlowNode
     Public Property Label As String
 
     ''' <summary>
-    ''' Rows in the node (directly, no wrapper)
+    ''' Task rows in the node (directly, no wrapper)
     ''' </summary>
     <JsonProperty("rows")>
-    Public Property Rows As List(Of RowData)
+    Public Property Rows As List(Of TaskRow)
 
     Public Sub New()
-        Rows = New List(Of RowData)()
+        Rows = New List(Of TaskRow)()
     End Sub
 End Class
 

@@ -22,9 +22,9 @@ Public Class TaskCompilerFactory
             System.Diagnostics.Debug.WriteLine($"🔍 [TaskCompilerFactory] Compiler not in cache, creating new one for taskType={taskType}")
             Select Case taskType
                 Case TaskTypes.UtteranceInterpretation
-                    Console.WriteLine($"✅ [TaskCompilerFactory] Creating DataRequestTaskCompiler for taskType={taskType}")
-                    System.Diagnostics.Debug.WriteLine($"✅ [TaskCompilerFactory] Creating DataRequestTaskCompiler for taskType={taskType}")
-                    _compilerCache(taskType) = New DataRequestTaskCompiler()
+                    Console.WriteLine($"✅ [TaskCompilerFactory] Creating UtteranceInterpretationTaskCompiler for taskType={taskType}")
+                    System.Diagnostics.Debug.WriteLine($"✅ [TaskCompilerFactory] Creating UtteranceInterpretationTaskCompiler for taskType={taskType}")
+                    _compilerCache(taskType) = New UtteranceInterpretationTaskCompiler()
                 Case TaskTypes.SayMessage, TaskTypes.ClassifyProblem, TaskTypes.BackendCall, TaskTypes.CloseSession, TaskTypes.Transfer
                     Console.WriteLine($"✅ [TaskCompilerFactory] Creating SimpleTaskCompiler for taskType={taskType}")
                     System.Diagnostics.Debug.WriteLine($"✅ [TaskCompilerFactory] Creating SimpleTaskCompiler for taskType={taskType}")

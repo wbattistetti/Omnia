@@ -2037,6 +2037,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       } else {
                         ddt = null;
                       }
+                    }
                     // ✅ NON creare DDT vuoto se non c'è né templateId DataRequest né data
                     // ResponseEditor gestirà il caso di ddt === null aprendo il wizard (AI genererà DDT)
 
@@ -2044,7 +2045,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     const event = new CustomEvent('taskEditor:open', { // ✅ RINOMINATO: actEditor:open → taskEditor:open
                       detail: {
                         id: String(taskIdForType),
-                        type: taskType, // ✅ TaskType enum invece di stringa
+                        type: finalTaskType, // ✅ TaskType enum invece di stringa
                         label: row.text,
                         ddt: ddt,
                         instanceId: row.id, // Pass instanceId from row
@@ -2166,6 +2167,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       } else {
                         ddt = null;
                       }
+                    }
                     // ✅ NON creare DDT vuoto se non c'è né templateId DataRequest né data
                     // ResponseEditor gestirà il caso di ddt === null aprendo il wizard (AI genererà DDT)
 

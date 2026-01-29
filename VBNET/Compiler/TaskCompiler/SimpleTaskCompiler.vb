@@ -17,7 +17,7 @@ Public Class SimpleTaskCompiler
         _taskType = taskType
     End Sub
 
-    Public Overrides Function Compile(task As Task, row As RowData, node As FlowNode, taskId As String, flow As Flow) As CompiledTask
+    Public Overrides Function Compile(task As Task, taskId As String, flow As Flow) As CompiledTask
         Dim compiledTask As CompiledTask
 
         Select Case _taskType
@@ -83,7 +83,7 @@ Public Class SimpleTaskCompiler
         End Select
 
         ' Popola campi comuni
-        PopulateCommonFields(compiledTask, row, node, taskId)
+        PopulateCommonFields(compiledTask, taskId)
 
         Return compiledTask
     End Function
