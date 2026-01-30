@@ -349,6 +349,7 @@ export async function ensureTemplateExists(
     constraints: taskTree?.constraints || [],
     dataContract: taskTree?.dataContract || undefined,
     introduction: taskTree?.introduction || undefined,
+    valueSchema: {},  // ✅ Campo obbligatorio per compatibilità con vecchio endpoint (se presente)
     // ❌ NON salvare: data (usa subTasksIds)
   };
 
@@ -428,6 +429,7 @@ function cloneStepsWithNewTaskIds(steps: any): { cloned: any; guidMapping: Map<s
 /**
  * Clone escalation with new task IDs
  * Maintains mapping of old GUID -> new GUID for translation copying
+ * ✅ NEW: Adds templateTaskId and edited fields for template override tracking
  */
 function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string, string>): any {
   if (!escalation) return escalation;
@@ -444,6 +446,8 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
       return {
         ...task,
         id: newGuid,  // ✅ New ID for task instance
+        templateTaskId: oldGuid || null,  // ✅ Save original template task ID
+        edited: false,  // ✅ Mark as not edited (inherited from template)
         // Keep templateId, params, etc. from original
       };
     }),
@@ -456,6 +460,8 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
       return {
         ...action,
         actionInstanceId: newGuid,  // ✅ New ID for action instance (legacy)
+        templateTaskId: oldGuid || null,  // ✅ Save original template task ID
+        edited: false,  // ✅ Mark as not edited (inherited from template)
         // Keep actionId, parameters, etc. from original
       };
     })
@@ -464,6 +470,280 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
   return cloned;
 }
 
+/**
+ * Marks a task as edited when user modifies it
+ * This prevents the task from inheriting future template updates
+ */
+export function markTaskAsEdited(
+  steps: Record<string, any>,
+  templateId: string,
+  stepType: string,
+  escalationIndex: number,
+  taskIndex: number
+): void {
+  const nodeSteps = steps[templateId];
+  if (!nodeSteps) return;
+
+  // Case A: steps as object { start: { escalations: [...] } }
+  if (!Array.isArray(nodeSteps) && nodeSteps[stepType]) {
+    const step = nodeSteps[stepType];
+    if (step?.escalations?.[escalationIndex]?.tasks?.[taskIndex]) {
+      step.escalations[escalationIndex].tasks[taskIndex].edited = true;
+      return;
+    }
+    // Legacy: also check actions
+    if (step?.escalations?.[escalationIndex]?.actions?.[taskIndex]) {
+      step.escalations[escalationIndex].actions[taskIndex].edited = true;
+      return;
+    }
+  }
+
+  // Case B: steps as array [{ type: 'start', escalations: [...] }, ...]
+  if (Array.isArray(nodeSteps)) {
+    const group = nodeSteps.find((g: any) => g?.type === stepType);
+    if (group?.escalations?.[escalationIndex]?.tasks?.[taskIndex]) {
+      group.escalations[escalationIndex].tasks[taskIndex].edited = true;
+      return;
+    }
+    // Legacy: also check actions
+    if (group?.escalations?.[escalationIndex]?.actions?.[taskIndex]) {
+      group.escalations[escalationIndex].actions[taskIndex].edited = true;
+    }
+  }
+}
+
+/**
+ * Migrates existing tasks to include templateTaskId and edited fields
+ * Rule: if templateTaskId is missing → edited = true (cannot determine if inherited)
+ */
+export function migrateTaskOverrides(steps: Record<string, any>): void {
+  if (!steps || typeof steps !== 'object') return;
+
+  for (const templateId in steps) {
+    const nodeSteps = steps[templateId];
+    if (!nodeSteps || typeof nodeSteps !== 'object') continue;
+
+    // Case A: steps as object { start: { escalations: [...] } }
+    if (!Array.isArray(nodeSteps)) {
+      for (const stepType in nodeSteps) {
+        const step = nodeSteps[stepType];
+        if (step?.escalations && Array.isArray(step.escalations)) {
+          step.escalations.forEach((esc: any) => {
+            if (esc?.tasks && Array.isArray(esc.tasks)) {
+              esc.tasks.forEach((task: any) => {
+                if (task.templateTaskId === undefined) {
+                  task.templateTaskId = null;
+                  task.edited = true;  // ✅ Cannot determine if inherited
+                }
+              });
+            }
+            // Legacy: also check actions
+            if (esc?.actions && Array.isArray(esc.actions)) {
+              esc.actions.forEach((action: any) => {
+                if (action.templateTaskId === undefined) {
+                  action.templateTaskId = null;
+                  action.edited = true;
+                }
+              });
+            }
+          });
+        }
+      }
+    }
+
+    // Case B: steps as array [{ type: 'start', escalations: [...] }, ...]
+    if (Array.isArray(nodeSteps)) {
+      nodeSteps.forEach((group: any) => {
+        if (group?.escalations && Array.isArray(group.escalations)) {
+          group.escalations.forEach((esc: any) => {
+            if (esc?.tasks && Array.isArray(esc.tasks)) {
+              esc.tasks.forEach((task: any) => {
+                if (task.templateTaskId === undefined) {
+                  task.templateTaskId = null;
+                  task.edited = true;
+                }
+              });
+            }
+            if (esc?.actions && Array.isArray(esc.actions)) {
+              esc.actions.forEach((action: any) => {
+                if (action.templateTaskId === undefined) {
+                  action.templateTaskId = null;
+                  action.edited = true;
+                }
+              });
+            }
+          });
+        }
+      });
+    }
+  }
+}
+
+/**
+ * Compares instance tasks with template tasks and returns list of tasks that need sync
+ * Only checks tasks with edited = false and templateTaskId !== null
+ */
+export async function syncTasksWithTemplate(
+  instanceSteps: Record<string, any>,
+  template: any,
+  templateId: string
+): Promise<Array<{
+  templateId: string;
+  stepType: string;
+  escalationIndex: number;
+  taskIndex: number;
+  instanceTask: any;
+  templateTask: any;
+  differences: { field: string; instanceValue: any; templateValue: any }[];
+}>> {
+  const syncNeeded: Array<{
+    templateId: string;
+    stepType: string;
+    escalationIndex: number;
+    taskIndex: number;
+    instanceTask: any;
+    templateTask: any;
+    differences: { field: string; instanceValue: any; templateValue: any }[];
+  }> = [];
+
+  if (!instanceSteps || !template?.steps) return syncNeeded;
+
+  const nodeSteps = instanceSteps[templateId];
+  if (!nodeSteps) return syncNeeded;
+
+  const templateSteps = template.steps[templateId] || template.steps;
+  if (!templateSteps) return syncNeeded;
+
+  // Helper to compare task values
+  const compareTaskValues = (instanceTask: any, templateTask: any): Array<{ field: string; instanceValue: any; templateValue: any }> => {
+    const differences: Array<{ field: string; instanceValue: any; templateValue: any }> = [];
+
+    // Compare text
+    if (instanceTask.text !== templateTask.text) {
+      differences.push({
+        field: 'text',
+        instanceValue: instanceTask.text,
+        templateValue: templateTask.text
+      });
+    }
+
+    // Compare parameters[].value
+    const instanceParams = instanceTask.parameters || [];
+    const templateParams = templateTask.parameters || [];
+
+    // Compare by parameterId
+    const paramMap = new Map<string, any>();
+    templateParams.forEach((p: any) => {
+      const key = p.parameterId || p.key || p.id;
+      if (key) paramMap.set(key, p.value);
+    });
+
+    instanceParams.forEach((p: any) => {
+      const key = p.parameterId || p.key || p.id;
+      if (key) {
+        const templateValue = paramMap.get(key);
+        if (p.value !== templateValue) {
+          differences.push({
+            field: `parameters[${key}]`,
+            instanceValue: p.value,
+            templateValue: templateValue
+          });
+        }
+      }
+    });
+
+    return differences;
+  };
+
+  // Helper to find task in template by templateTaskId
+  const findTemplateTask = (templateTaskId: string, stepType: string, escalationIndex: number): any => {
+    const step = templateSteps[stepType];
+    if (!step) return null;
+
+    // Case A: steps as object
+    if (!Array.isArray(step) && step.escalations?.[escalationIndex]?.tasks) {
+      return step.escalations[escalationIndex].tasks.find((t: any) => t.id === templateTaskId);
+    }
+
+    // Case B: steps as array
+    if (Array.isArray(step)) {
+      const group = step.find((g: any) => g?.type === stepType);
+      if (group?.escalations?.[escalationIndex]?.tasks) {
+        return group.escalations[escalationIndex].tasks.find((t: any) => t.id === templateTaskId);
+      }
+    }
+
+    return null;
+  };
+
+  // Iterate through instance steps
+  // Case A: steps as object
+  if (!Array.isArray(nodeSteps)) {
+    for (const stepType in nodeSteps) {
+      const step = nodeSteps[stepType];
+      if (step?.escalations && Array.isArray(step.escalations)) {
+        step.escalations.forEach((esc: any, escIdx: number) => {
+          if (esc?.tasks && Array.isArray(esc.tasks)) {
+            esc.tasks.forEach((task: any, taskIdx: number) => {
+              // Only check tasks with edited = false and templateTaskId !== null
+              if (task.edited === false && task.templateTaskId) {
+                const templateTask = findTemplateTask(task.templateTaskId, stepType, escIdx);
+                if (templateTask) {
+                  const differences = compareTaskValues(task, templateTask);
+                  if (differences.length > 0) {
+                    syncNeeded.push({
+                      templateId,
+                      stepType,
+                      escalationIndex: escIdx,
+                      taskIndex: taskIdx,
+                      instanceTask: task,
+                      templateTask,
+                      differences
+                    });
+                  }
+                }
+              }
+            });
+          }
+        });
+      }
+    }
+  }
+
+  // Case B: steps as array
+  if (Array.isArray(nodeSteps)) {
+    nodeSteps.forEach((group: any) => {
+      const stepType = group?.type;
+      if (stepType && group?.escalations && Array.isArray(group.escalations)) {
+        group.escalations.forEach((esc: any, escIdx: number) => {
+          if (esc?.tasks && Array.isArray(esc.tasks)) {
+            esc.tasks.forEach((task: any, taskIdx: number) => {
+              if (task.edited === false && task.templateTaskId) {
+                const templateTask = findTemplateTask(task.templateTaskId, stepType, escIdx);
+                if (templateTask) {
+                  const differences = compareTaskValues(task, templateTask);
+                  if (differences.length > 0) {
+                    syncNeeded.push({
+                      templateId,
+                      stepType,
+                      escalationIndex: escIdx,
+                      taskIndex: taskIdx,
+                      instanceTask: task,
+                      templateTask,
+                      differences
+                    });
+                  }
+                }
+              }
+            });
+          }
+        });
+      }
+    });
+  }
+
+  return syncNeeded;
+}
 
 /**
  * Clone steps from template with new task IDs
@@ -682,6 +962,49 @@ export function buildTaskTreeNodes(template: any): TaskTreeNode[] {
 }
 
 /**
+ * Build templateExpanded (baseline) from template only
+ * Usato per confronti con working copy
+ *
+ * @param templateId - Template ID
+ * @param projectId - Project ID (opzionale, per caricare template dal progetto)
+ * @returns TaskTree espanso dal template (baseline per confronti)
+ */
+export async function buildTemplateExpanded(
+  templateId: string,
+  projectId?: string
+): Promise<TaskTree | null> {
+  if (!templateId) return null;
+
+  // ✅ Carica template
+  let template = DialogueTaskService.getTemplate(templateId);
+  if (!template && projectId) {
+    const projectTemplate = await loadTemplateFromProject(templateId, projectId);
+    if (projectTemplate) {
+      template = projectTemplate;
+    }
+  }
+
+  if (!template) {
+    throw new Error(`Template ${templateId} not found`);
+  }
+
+  // ✅ Costruisci nodes dal template
+  const nodes = buildTaskTreeNodes(template);
+
+  // ✅ Clona steps dal template (baseline, senza modifiche)
+  const { steps: clonedSteps } = cloneTemplateSteps(template, nodes);
+
+  return {
+    label: template.label,
+    nodes,
+    steps: clonedSteps,
+    constraints: template.dataContracts ?? template.constraints ?? undefined,
+    dataContract: template.dataContract ?? undefined,
+    introduction: template.introduction
+  };
+}
+
+/**
  * Build TaskTree from template and instance
  * TaskTree è una vista runtime costruita da Template + Instance
  * NON è un'entità persistita, è solo una vista in memoria per l'editor
@@ -737,6 +1060,9 @@ export async function buildTaskTree(
     // Prima creazione: clona steps dal template
     const { steps: clonedSteps } = cloneTemplateSteps(template, nodes);
     finalSteps = clonedSteps;
+  } else {
+    // ✅ Migrate existing steps to include templateTaskId and edited
+    migrateTaskOverrides(finalSteps);
   }
 
   return {
@@ -927,25 +1253,157 @@ function compareDataStructure(localdata: any[], templateData: any[]): boolean {
 }
 
 /**
- * Extract only task overrides from TaskTree (compared to template)
+ * Aggiorna flag edited confrontando workingCopy vs templateExpanded
+ * Regole:
+ * - Se templateTaskId != null e valori coincidono col template → edited = false
+ * - Se templateTaskId != null e valori differiscono → edited = true
+ * - Se templateTaskId = null → task nuovo → edited = true (già impostato)
+ */
+function updateEditedFlags(workingCopy: TaskTree, templateExpanded: TaskTree): void {
+  if (!workingCopy.steps || !templateExpanded.steps) return;
+
+  // Helper per confrontare valori di un task
+  const compareTaskValues = (instanceTask: any, templateTask: any): boolean => {
+    // Confronta text
+    if (instanceTask.text !== templateTask.text) {
+      return false;
+    }
+
+    // Confronta parameters[].value
+    const instanceParams = instanceTask.parameters || [];
+    const templateParams = templateTask.parameters || [];
+
+    const paramMap = new Map<string, any>();
+    templateParams.forEach((p: any) => {
+      const key = p.parameterId || p.key || p.id;
+      if (key) paramMap.set(key, p.value);
+    });
+
+    for (const p of instanceParams) {
+      const key = p.parameterId || p.key || p.id;
+      if (key) {
+        const templateValue = paramMap.get(key);
+        if (p.value !== templateValue) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  };
+
+  // Helper per trovare task nel template per templateTaskId
+  const findTemplateTask = (templateTaskId: string, templateSteps: Record<string, any>, workingTemplateId: string, stepType: string, escalationIndex: number): any => {
+    // ✅ Usa workingTemplateId (chiave negli steps della working copy) per trovare gli steps corrispondenti nel template
+    // templateSteps può avere la stessa chiave (workingTemplateId) o una struttura diversa
+    const nodeSteps = templateSteps[workingTemplateId] || templateSteps[Object.keys(templateSteps)[0]];
+    if (!nodeSteps) return null;
+
+    // Case A: steps as object
+    if (!Array.isArray(nodeSteps) && nodeSteps[stepType]) {
+      const step = nodeSteps[stepType];
+      if (step?.escalations?.[escalationIndex]?.tasks) {
+        return step.escalations[escalationIndex].tasks.find((t: any) => t.id === templateTaskId);
+      }
+    }
+
+    // Case B: steps as array
+    if (Array.isArray(nodeSteps)) {
+      const group = nodeSteps.find((g: any) => g?.type === stepType);
+      if (group?.escalations?.[escalationIndex]?.tasks) {
+        return group.escalations[escalationIndex].tasks.find((t: any) => t.id === templateTaskId);
+      }
+    }
+
+    return null;
+  };
+
+  // Itera su tutti gli steps della working copy
+  for (const templateId in workingCopy.steps) {
+    const workingSteps = workingCopy.steps[templateId];
+    const templateSteps = templateExpanded.steps[templateId] || templateExpanded.steps;
+    if (!workingSteps || !templateSteps) continue;
+
+    // Case A: steps as object { start: { escalations: [...] } }
+    if (!Array.isArray(workingSteps) && typeof workingSteps === 'object') {
+      for (const stepType in workingSteps) {
+        const step = workingSteps[stepType];
+        if (step?.escalations && Array.isArray(step.escalations)) {
+          step.escalations.forEach((esc: any, escIdx: number) => {
+            if (esc?.tasks && Array.isArray(esc.tasks)) {
+              esc.tasks.forEach((task: any) => {
+              if (task.templateTaskId !== null && task.templateTaskId !== undefined) {
+                // Task ereditato: confronta con template
+                const templateTask = findTemplateTask(task.templateTaskId, templateSteps, templateId, stepType, escIdx);
+                if (templateTask) {
+                  const valuesMatch = compareTaskValues(task, templateTask);
+                  task.edited = !valuesMatch;  // edited = false se coincidono, true se differiscono
+                } else {
+                  // Template task non trovato → consideralo modificato
+                  task.edited = true;
+                }
+              } else {
+                // Task nuovo → edited = true (già impostato, ma assicuriamoci)
+                task.edited = true;
+              }
+              });
+            }
+          });
+        }
+      }
+    }
+
+    // Case B: steps as array [{ type: 'start', escalations: [...] }, ...]
+    if (Array.isArray(workingSteps)) {
+      workingSteps.forEach((group: any) => {
+        const stepType = group?.type;
+        if (stepType && group?.escalations && Array.isArray(group.escalations)) {
+          group.escalations.forEach((esc: any, escIdx: number) => {
+            if (esc?.tasks && Array.isArray(esc.tasks)) {
+            esc.tasks.forEach((task: any) => {
+              if (task.templateTaskId !== null && task.templateTaskId !== undefined) {
+                const templateTask = findTemplateTask(task.templateTaskId, templateSteps, templateId, stepType, escIdx);
+                if (templateTask) {
+                  const valuesMatch = compareTaskValues(task, templateTask);
+                  task.edited = !valuesMatch;
+                } else {
+                  task.edited = true;
+                }
+              } else {
+                task.edited = true;
+              }
+            });
+            }
+          });
+        }
+      });
+    }
+  }
+}
+
+/**
+ * Salva TUTTA la working copy dell'istanza
  *
  * IMPORTANTE:
- * - Ogni task DEVE avere templateId (o viene creato automaticamente)
- * - L'istanza contiene SOLO override: steps, label, introduction
+ * - L'istanza è un CLONE TOTALE della working copy
+ * - Contiene TUTTI gli steps con TUTTI i task
+ * - Ogni task ha templateTaskId e flag edited
  * - La struttura (nodes, constraints, dataContract) viene sempre dal template
- * - NON salva più: data, constraints, dataContract, examples
+ * - NON salva: data, constraints, dataContract, examples (vengono dal template)
  *
  * @param instance - Task instance (DEVE avere templateId o viene creato automaticamente)
- * @param localTaskTree - TaskTree locale (vista runtime)
+ * @param workingCopy - TaskTree working copy (vista runtime modificata dall'utente)
+ * @param templateExpanded - TaskTree template espanso (baseline per confronti)
  * @param projectId - Project ID (obbligatorio per creare template se necessario)
- * @returns Solo override da salvare nell'istanza
+ * @returns Tutta la working copy da salvare nell'istanza
  */
 export async function extractTaskOverrides(
   instance: Task | null,
-  localTaskTree: TaskTree,
-  projectId?: string
+  workingCopy: TaskTree,
+  projectId?: string,
+  templateExpanded?: TaskTree
 ): Promise<Partial<Task>> {
-  if (!instance || !localTaskTree) {
+  if (!instance || !workingCopy) {
     return {};
   }
 
@@ -956,41 +1414,21 @@ export async function extractTaskOverrides(
     }
 
     // ✅ Crea template automaticamente nel progetto
-    const autoTemplate = await ensureTemplateExists(instance, localTaskTree, projectId);
+    const autoTemplate = await ensureTemplateExists(instance, workingCopy, projectId);
     instance.templateId = autoTemplate.id;
   }
 
-  // ✅ SEMPRE estrai solo override (non struttura)
-  let template = DialogueTaskService.getTemplate(instance.templateId);
-
-  // ✅ Se non è in cache, prova a caricarlo dal progetto
-  if (!template && projectId) {
-    const projectTemplate = await loadTemplateFromProject(instance.templateId, projectId);
-    if (projectTemplate) {
-      template = projectTemplate;
-    }
+  // ✅ Se templateExpanded è fornito, aggiorna flag edited confrontando workingCopy vs templateExpanded
+  if (templateExpanded) {
+    updateEditedFlags(workingCopy, templateExpanded);
   }
 
-  if (!template) {
-    throw new Error(`Template ${instance.templateId} not found`);
-  }
-
-  const result: Partial<Task> = {};
-
-  // ✅ Label override (solo se diversa dal template)
-  if (localTaskTree.label !== template.label) {
-    result.label = localTaskTree.label;
-  }
-
-  // ✅ Steps override (sempre salva)
-  result.steps = instance.steps || {};
-
-  // ✅ Introduction override (solo se diversa dal template)
-  if (localTaskTree.introduction !== template.introduction) {
-    result.introduction = localTaskTree.introduction;
-  }
-
-  // ❌ NON salvare: data, constraints, dataContract (vengono dal template)
+  // ✅ Salva TUTTA la working copy, non solo override
+  const result: Partial<Task> = {
+    label: workingCopy.label,
+    steps: workingCopy.steps || {},  // ✅ TUTTI gli steps della working copy
+    introduction: workingCopy.introduction
+  };
 
   return result;
 }

@@ -1546,8 +1546,8 @@ Module Program
     ''' </summary>
     ''' <param name="task">The task instance to compile.</param>
     ''' <param name="allTemplates">All templates (main + sub-templates) needed for compilation.</param>
-    ''' <returns>A tuple containing: (Success As Boolean, Result As Compiler.CompiledTaskGetData, ErrorMessage As String)</returns>
-    Private Function CompileTaskToRuntime(task As Compiler.Task, allTemplates As List(Of Compiler.Task)) As (Success As Boolean, Result As Compiler.CompiledTaskGetData, ErrorMessage As String)
+    ''' <returns>A tuple containing: (Success As Boolean, Result As Compiler.CompiledTaskUtteranceInterpretation, ErrorMessage As String)</returns>
+    Private Function CompileTaskToRuntime(task As Compiler.Task, allTemplates As List(Of Compiler.Task)) As (Success As Boolean, Result As Compiler.CompiledTaskUtteranceInterpretation, ErrorMessage As String)
         Try
             Dim flow As New Compiler.Flow() With {
                 .Tasks = allTemplates
@@ -1561,17 +1561,18 @@ Module Program
                 Return (False, Nothing, $"Task compiler returned null for task '{task.Id}'. The task may be malformed or missing required fields.")
             End If
 
-            If TypeOf compiledTask IsNot Compiler.CompiledTaskGetData Then
+            If TypeOf compiledTask IsNot Compiler.CompiledTaskUtteranceInterpretation Then
                 Dim actualType = compiledTask.GetType().Name
-                Return (False, Nothing, $"Task compiler returned unexpected type '{actualType}' for task '{task.Id}'. Expected CompiledTaskGetData.")
+                Return (False, Nothing, $"Task compiler returned unexpected type '{actualType}' for task '{task.Id}'. Expected CompiledTaskUtteranceInterpretation.")
             End If
 
-            Dim dataRequestTask = DirectCast(compiledTask, Compiler.CompiledTaskGetData)
-            If dataRequestTask.Task Is Nothing Then
-                Return (False, Nothing, $"Compiled task for '{task.Id}' has no RuntimeTask. The compilation may have failed silently.")
+            Dim utteranceTask = DirectCast(compiledTask, Compiler.CompiledTaskUtteranceInterpretation)
+            If (utteranceTask.Steps Is Nothing OrElse utteranceTask.Steps.Count = 0) AndAlso
+               Not utteranceTask.HasSubTasks() Then
+                Return (False, Nothing, $"Compiled task for '{task.Id}' has no Steps or SubTasks. The compilation may have failed silently.")
             End If
 
-            Return (True, dataRequestTask, Nothing)
+            Return (True, utteranceTask, Nothing)
         Catch ex As Exception
             Return (False, Nothing, $"Failed to compile task '{task.Id}' into TaskTreeRuntime. Error: {ex.Message}")
         End Try
@@ -1580,14 +1581,41 @@ Module Program
     ''' <summary>
     ''' Creates a new task session and registers it in the SessionManager.
     ''' </summary>
-    ''' <param name="compiledTask">The compiled task containing the TaskTreeRuntime.</param>
+    ''' <param name="compiledTask">The compiled task containing the runtime properties.</param>
     ''' <param name="translations">Optional dictionary of translations for the session.</param>
     ''' <returns>The session ID of the newly created session.</returns>
-    Private Function CreateTaskSession(compiledTask As Compiler.CompiledTaskGetData, translations As Dictionary(Of String, String)) As String
+    Private Function CreateTaskSession(compiledTask As Compiler.CompiledTaskUtteranceInterpretation, translations As Dictionary(Of String, String)) As String
         Dim sessionId = Guid.NewGuid().ToString()
         Dim translationsDict = If(translations, New Dictionary(Of String, String)())
-        SessionManager.CreateTaskSession(sessionId, compiledTask.Task, translationsDict)
+        ' ✅ TODO: SessionManager deve essere aggiornato per accettare CompiledTaskUtteranceInterpretation
+        ' Per ora convertiamo in RuntimeTask (temporaneo)
+        Dim runtimeTask = ConvertCompiledToRuntimeTask(compiledTask)
+        SessionManager.CreateTaskSession(sessionId, runtimeTask, translationsDict)
         Return sessionId
+    End Function
+
+    ''' <summary>
+    ''' Converte CompiledTaskUtteranceInterpretation in RuntimeTask (helper temporaneo)
+    ''' TODO: Aggiornare SessionManager per accettare direttamente CompiledTaskUtteranceInterpretation
+    ''' </summary>
+    Private Function ConvertCompiledToRuntimeTask(compiled As Compiler.CompiledTaskUtteranceInterpretation) As Compiler.RuntimeTask
+        Dim runtimeTask As New Compiler.RuntimeTask() With {
+            .Id = compiled.Id,
+            .Condition = compiled.Condition,
+            .Steps = compiled.Steps,
+            .Constraints = compiled.Constraints,
+            .NlpContract = compiled.NlpContract
+        }
+
+        ' ✅ Copia SubTasks ricorsivamente (solo se presenti)
+        If compiled.HasSubTasks() Then
+            runtimeTask.SubTasks = New List(Of Compiler.RuntimeTask)()
+            For Each subCompiled As Compiler.CompiledTaskUtteranceInterpretation In compiled.SubTasks
+                runtimeTask.SubTasks.Add(ConvertCompiledToRuntimeTask(subCompiled))
+            Next
+        End If
+
+        Return runtimeTask
     End Function
 
     ''' <summary>

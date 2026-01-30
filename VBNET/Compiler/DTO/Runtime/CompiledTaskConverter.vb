@@ -61,7 +61,7 @@ Public Class CompiledTaskConverter
             Case TaskTypes.SayMessage
                 task = New CompiledTaskSayMessage()
             Case TaskTypes.UtteranceInterpretation
-                task = New CompiledTaskGetData()
+                task = New CompiledTaskUtteranceInterpretation()
             Case TaskTypes.ClassifyProblem
                 task = New CompiledTaskClassifyProblem()
             Case TaskTypes.BackendCall

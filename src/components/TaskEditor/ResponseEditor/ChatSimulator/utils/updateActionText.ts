@@ -4,6 +4,7 @@ import type { AssembledDDT } from '../../../../DialogueDataTemplateBuilder/DDTAs
  * Finds and updates action.text in the DDT structure for a given textKey and stepType.
  * This ensures that when editing messages in Chat Simulator, we update the same source
  * of truth (action.text) that StepEditor uses.
+ * ✅ NEW: Marks task as edited when text is modified
  */
 export function updateActionTextInDDT(
   ddt: AssembledDDT,
@@ -49,7 +50,8 @@ export function updateActionTextInDDT(
               // Mutate the node (should be a clone)
               esc.actions[i] = {
                 ...action,
-                text: newText.length > 0 ? newText : undefined
+                text: newText.length > 0 ? newText : undefined,
+                edited: true  // ✅ Mark as edited when user modifies text
               };
               return true;
             }
@@ -75,7 +77,8 @@ export function updateActionTextInDDT(
               // Mutate the node (should be a clone)
               esc.actions[i] = {
                 ...action,
-                text: newText.length > 0 ? newText : undefined
+                text: newText.length > 0 ? newText : undefined,
+                edited: true  // ✅ Mark as edited when user modifies text
               };
               return true;
             }
@@ -145,7 +148,8 @@ export function updateActionTextInDDT(
                     ...esc.actions.slice(0, i),
                     {
                       ...action,
-                      text: newText.length > 0 ? newText : undefined
+                      text: newText.length > 0 ? newText : undefined,
+                      edited: true  // ✅ Mark as edited when user modifies text
                     },
                     ...esc.actions.slice(i + 1)
                   ]

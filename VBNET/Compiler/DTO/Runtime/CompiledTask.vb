@@ -59,21 +59,62 @@ Public Class CompiledTaskSayMessage
 End Class
 
 ''' <summary>
-''' Task per richiedere dati dall'utente usando un Task ricorsivo
+''' Task compilato per interpretazione utterance (richiesta dati ricorsiva)
+''' Contiene direttamente le proprietà runtime senza wrapper
 ''' </summary>
-Public Class CompiledTaskGetData
+Public Class CompiledTaskUtteranceInterpretation
     Inherits CompiledTask
 
     ''' <summary>
-    ''' RuntimeTask root ricorsivo da eseguire
+    ''' Steps di dialogo (solo se il task è atomico o aggregato)
+    ''' Provengono SOLO dall'istanza, non dal template
     ''' </summary>
-    Public Property Task As RuntimeTask
+    Public Property Steps As List(Of TaskEngine.DialogueStep)
+
+    ''' <summary>
+    ''' Constraints per validazione input
+    ''' Provengono dal template
+    ''' </summary>
+    Public Property Constraints As List(Of ValidationCondition)
+
+    ''' <summary>
+    ''' NLP Contract per match/retrieval/interpretazione input
+    ''' Opzionale, ma necessario per task che richiedono estrazione dati
+    ''' </summary>
+    Public Property NlpContract As CompiledNlpContract
+
+    ''' <summary>
+    ''' Lista di CompiledTaskUtteranceInterpretation figli (ricorsivo)
+    ''' Solo se il task è composito o aggregato
+    ''' </summary>
+    Public Property SubTasks As List(Of CompiledTaskUtteranceInterpretation)
 
     Public Overrides ReadOnly Property TaskType As TaskTypes
         Get
             Return TaskTypes.UtteranceInterpretation
         End Get
     End Property
+
+    Public Sub New()
+        MyBase.New()
+        Steps = Nothing ' ✅ Inizializzato solo se necessario
+        Constraints = Nothing ' ✅ Inizializzato solo se necessario
+        SubTasks = Nothing ' ✅ Inizializzato solo se necessario
+    End Sub
+
+    ''' <summary>
+    ''' Verifica se il task ha subTasks
+    ''' </summary>
+    Public Function HasSubTasks() As Boolean
+        Return SubTasks IsNot Nothing AndAlso SubTasks.Count > 0
+    End Function
+
+    ''' <summary>
+    ''' Verifica se il task è atomico (ha steps ma non subTasks)
+    ''' </summary>
+    Public Function IsAtomic() As Boolean
+        Return Steps IsNot Nothing AndAlso Steps.Count > 0 AndAlso Not HasSubTasks()
+    End Function
 End Class
 
 ''' <summary>

@@ -107,6 +107,8 @@ export default function useTaskCommands(
         } else {
           task.parameters = [...(task.parameters || []), { parameterId: 'text', value: trimmedText }];
         }
+        // ✅ Mark task as edited when user modifies it
+        task.edited = true;
       }
 
       esc.tasks = [...tasks];
@@ -239,6 +241,10 @@ export default function useTaskCommands(
       }
 
       const normalized = createTask(incoming);
+      // ✅ NEW: Mark new task as edited (not from template)
+      normalized.templateTaskId = null;
+      normalized.edited = true;
+
       const targetEsc = escalations[to.escalationIdx];
       const tasks = getTasks(targetEsc);
 
@@ -366,7 +372,9 @@ export default function useTaskCommands(
         params: parameters ? { text: parameters.find((p: any) => p.parameterId === 'text')?.value } : {},
         text: task.text,
         color: task.color,
-        label: task.label
+        label: task.label,
+        templateTaskId: null,  // ✅ New task, not from template
+        edited: true  // ✅ New task is always edited
       };
 
       tasks.push(newTask);

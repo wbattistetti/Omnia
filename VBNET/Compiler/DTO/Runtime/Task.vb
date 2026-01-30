@@ -48,7 +48,8 @@ Public Class RuntimeTask
     Public Sub New()
         Steps = New List(Of TaskEngine.DialogueStep)()
         Constraints = New List(Of ValidationCondition)()
-        SubTasks = New List(Of RuntimeTask)()
+        ' ✅ SubTasks inizializzato solo quando necessario (lazy initialization)
+        SubTasks = Nothing
     End Sub
 
     ''' <summary>

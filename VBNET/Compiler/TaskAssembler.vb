@@ -108,7 +108,7 @@ Public Class TaskAssembler
                     .Steps = New List(Of TaskEngine.DialogueStep)(),
                     .Constraints = New List(Of ValidationCondition)(),
                     .NlpContract = Nothing,
-                    .SubTasks = New List(Of RuntimeTask)()
+                    .SubTasks = New List(Of RuntimeTask)() ' ✅ Necessario perché ci sono più nodi
                 }
                 ' Compila ogni nodo come subTask
                 For Each taskNode As Compiler.TaskNode In assembled.Nodes
@@ -126,7 +126,7 @@ Public Class TaskAssembler
                 .Steps = New List(Of TaskEngine.DialogueStep)(),
                 .Constraints = New List(Of ValidationCondition)(),
                 .NlpContract = Nothing,
-                .SubTasks = New List(Of RuntimeTask)()
+                .SubTasks = Nothing ' ✅ Nessun subTask, quindi Nothing
             }
             Console.WriteLine($"⚠️ [COMPILER][TaskAssembler] assembled.Nodes is empty, created empty root Task")
             System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][TaskAssembler] assembled.Nodes is empty, created empty root Task")
@@ -175,7 +175,7 @@ Public Class TaskAssembler
             .Steps = New List(Of TaskEngine.DialogueStep)(),
             .Constraints = New List(Of ValidationCondition)(),
             .NlpContract = Nothing, ' Verrà caricato da DDTCompiler
-            .SubTasks = New List(Of RuntimeTask)()
+            .SubTasks = Nothing ' ✅ Inizializzato solo se ci sono subTasks
         }
 
         ' Compila Steps (DialogueStep[] → DialogueStep[])
@@ -209,8 +209,11 @@ Public Class TaskAssembler
             System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][TaskAssembler] CompileNode: Converted {task.Constraints.Count} constraints to ValidationConditions")
         End If
 
-        ' Compila SubTasks (ricorsivo)
-        If ideNode.SubTasks IsNot Nothing Then
+        ' Compila SubTasks (ricorsivo) - inizializza solo se ci sono subTasks
+        If ideNode.SubTasks IsNot Nothing AndAlso ideNode.SubTasks.Count > 0 Then
+            If task.SubTasks Is Nothing Then
+                task.SubTasks = New List(Of RuntimeTask)()
+            End If
             For Each subNode As Compiler.TaskNode In ideNode.SubTasks
                 Dim subTask = CompileNode(subNode, task)
                 task.SubTasks.Add(subTask)

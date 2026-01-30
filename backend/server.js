@@ -1074,47 +1074,11 @@ app.get('/api/projects/:pid/tasks', async (req, res) => {
   }
 });
 
-// POST /api/projects/:pid/tasks - Create/update task in project
-app.post('/api/projects/:pid/tasks', async (req, res) => {
-  const projectId = req.params.pid;
-  const payload = req.body || {};
-  if (!payload.id || !payload.label || !payload.valueSchema) {
-    return res.status(400).json({ error: 'id, label, and valueSchema are required' });
-  }
-  const client = new MongoClient(uri);
-  try {
-    await client.connect();
-    const projDb = await getProjectDb(client, projectId);
-    const coll = projDb.collection('tasks');
-    const now = new Date();
-    const doc = {
-      _id: payload.id,
-      id: payload.id,
-      label: payload.label,
-      description: payload.description || '',
-      icon: payload.icon || 'Circle',
-      color: payload.color || 'text-gray-500',
-      signature: payload.signature || undefined,
-      valueSchema: payload.valueSchema,
-      scope: payload.scope || 'client',
-      industry: payload.industry || undefined,
-      updatedAt: now
-    };
-    await coll.updateOne(
-      { _id: doc._id },
-      { $set: doc, $setOnInsert: { createdAt: now } },
-      { upsert: true }
-    );
-    const saved = await coll.findOne({ _id: doc._id });
-    logInfo('TaskTemplates.post', { projectId, id: doc._id });
-    res.json(saved);
-  } catch (e) {
-    logError('TaskTemplates.post', e, { projectId, id: payload?.id });
-    res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
-  }
-});
+// ❌ RIMOSSO: Vecchio endpoint duplicato che richiedeva valueSchema
+// ✅ Il nuovo endpoint alla riga 1533 gestisce correttamente i task senza valueSchema obbligatorio
+// POST /api/projects/:pid/tasks - Create/update task in project (LEGACY - RIMOSSO)
+// Questo endpoint è stato rimosso perché duplicato e obsoleto.
+// Usa il nuovo endpoint alla riga 1533 che supporta il nuovo modello Task.
 
 // -----------------------------
 // Endpoints: Task Heuristics per progetto

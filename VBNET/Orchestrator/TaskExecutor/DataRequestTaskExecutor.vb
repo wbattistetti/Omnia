@@ -16,12 +16,14 @@ Public Class DataRequestTaskExecutor
     End Sub
 
     Public Overrides Function Execute(task As CompiledTask, state As ExecutionState) As TaskExecutionResult
-        Dim dataRequestTask = DirectCast(task, CompiledTaskGetData)
+        Dim utteranceTask = DirectCast(task, CompiledTaskUtteranceInterpretation)
 
-        If dataRequestTask.Task Is Nothing Then
+        ' ✅ Verifica che abbia almeno Steps o SubTasks
+        If (utteranceTask.Steps Is Nothing OrElse utteranceTask.Steps.Count = 0) AndAlso
+           Not utteranceTask.HasSubTasks() Then
             Return New TaskExecutionResult() With {
                 .Success = False,
-                .Err = "RuntimeTask is Nothing"
+                .Err = "CompiledTaskUtteranceInterpretation has no Steps or SubTasks"
             }
         End If
 

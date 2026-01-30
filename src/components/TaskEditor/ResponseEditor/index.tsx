@@ -39,7 +39,7 @@ import { useDDTTranslations } from '../../../hooks/useDDTTranslations';
 import { ToolbarButton } from '../../../dock/types';
 import { taskTemplateService } from '../../../services/TaskTemplateService';
 import { mapNode, closeTab } from '../../../dock/ops';
-import { extractTaskOverrides, buildTaskTree } from '../../../utils/taskUtils';
+import { extractTaskOverrides, buildTaskTree, syncTasksWithTemplate, markTaskAsEdited } from '../../../utils/taskUtils';
 import { useWizardInference } from './hooks/useWizardInference';
 import { validateTaskStructure, getTaskSemantics } from '../../../utils/taskSemantics';
 import { getIsTesting } from './testingState';
@@ -230,6 +230,78 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     }
   }, [taskTree, (task as any)?.instanceId, task?.id]);
 
+  // ✅ Check for template sync when task is opened
+  React.useEffect(() => {
+    const checkTemplateSync = async () => {
+      if (!taskTree || !task?.templateId) return;
+
+      const template = DialogueTaskService.getTemplate(task.templateId);
+      if (!template) return;
+
+      try {
+        const syncNeeded = await syncTasksWithTemplate(
+          taskTree.steps,
+          template,
+          task.templateId
+        );
+
+        if (syncNeeded.length > 0) {
+          const shouldSync = window.confirm(
+            `Il template è stato aggiornato. Vuoi ereditare i nuovi valori per ${syncNeeded.length} task?`
+          );
+
+          if (shouldSync) {
+            // Apply template updates
+            syncNeeded.forEach(({ templateId, stepType, escalationIndex, taskIndex, templateTask }) => {
+              const nodeSteps = taskTree.steps[templateId];
+              if (!nodeSteps) return;
+
+              // Case A: steps as object
+              if (!Array.isArray(nodeSteps) && nodeSteps[stepType]) {
+                const step = nodeSteps[stepType];
+                if (step?.escalations?.[escalationIndex]?.tasks?.[taskIndex]) {
+                  const task = step.escalations[escalationIndex].tasks[taskIndex];
+                  task.text = templateTask.text;
+                  task.parameters = templateTask.parameters;
+                  task.edited = false;  // Keep as inherited
+                }
+              }
+
+              // Case B: steps as array
+              if (Array.isArray(nodeSteps)) {
+                const group = nodeSteps.find((g: any) => g?.type === stepType);
+                if (group?.escalations?.[escalationIndex]?.tasks?.[taskIndex]) {
+                  const task = group.escalations[escalationIndex].tasks[taskIndex];
+                  task.text = templateTask.text;
+                  task.parameters = templateTask.parameters;
+                  task.edited = false;  // Keep as inherited
+                }
+              }
+            });
+
+            // Update taskTreeRef and trigger re-render
+            taskTreeRef.current = { ...taskTree };
+            replaceSelectedTaskTree(taskTreeRef.current);
+          } else {
+            // Mark all as edited
+            syncNeeded.forEach(({ templateId, stepType, escalationIndex, taskIndex }) => {
+              markTaskAsEdited(taskTree.steps, templateId, stepType, escalationIndex, taskIndex);
+            });
+            taskTreeRef.current = { ...taskTree };
+            replaceSelectedTaskTree(taskTreeRef.current);
+          }
+        }
+      } catch (error) {
+        console.error('[ResponseEditor] Error checking template sync', error);
+      }
+    };
+
+    // Only check on initial load (when taskTree is first set)
+    if (taskTree && task?.templateId && prevInstanceRef.current === (task?.instanceId || task?.id)) {
+      checkTemplateSync();
+    }
+  }, [taskTree, task?.templateId, task?.instanceId, task?.id, replaceSelectedTaskTree]);
+
   // Debug logger gated by localStorage flag: set localStorage.setItem('debug.responseEditor','1') to enable
   const log = (...args: any[]) => {
     try { if (localStorage.getItem('debug.responseEditor') === '1') console.log(...args); } catch { }
@@ -320,35 +392,58 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
         const hasTaskTree = currentTaskTree && Object.keys(currentTaskTree).length > 0 && currentMainList && currentMainList.length > 0;
 
         if (hasTaskTree && taskInstance) {
-          // ✅ Estrai solo campi modificati rispetto al template (override)
-          // Questo evita duplicazione: constraints/examples/nlpContract vengono salvati
-          // solo se sono stati modificati rispetto al template
-          const { extractTaskOverrides } = await import('../../../utils/taskUtils');
-          const modifiedFields = await extractTaskOverrides(taskInstance, currentTaskTree, currentProjectId || undefined);
-
+          // ✅ NUOVO MODELLO: Salva TUTTA la working copy, non solo override
+          const { extractTaskOverrides, buildTemplateExpanded } = await import('../../../utils/taskUtils');
           const currentTemplateId = getTemplateId(taskInstance);
+
+          // ✅ Crea templateExpanded (baseline dal template attuale)
+          const templateExpanded = currentTemplateId
+            ? await buildTemplateExpanded(currentTemplateId, currentProjectId || undefined)
+            : null;
+
+          // ✅ Salva TUTTA la working copy (con flag edited aggiornate)
+          const modifiedFields = await extractTaskOverrides(
+            taskInstance,
+            currentTaskTree,
+            currentProjectId || undefined,
+            templateExpanded || undefined
+          );
 
           // ✅ Usa helper function invece di stringa hardcoded
           if (!isUtteranceInterpretationTemplateId(currentTemplateId)) {
             await taskRepository.updateTask(key, {
               type: TaskType.UtteranceInterpretation,  // ✅ type: enum numerico
               templateId: null,            // ✅ templateId: null (standalone)
-              ...modifiedFields  // ✅ Salva solo override, non tutto
+              ...modifiedFields  // ✅ Salva TUTTA la working copy
             }, currentProjectId || undefined);
           } else {
             await taskRepository.updateTask(key, modifiedFields, currentProjectId || undefined);
           }
         } else if (currentTaskTree) {
-          // ✅ Usa extractTaskOverrides per salvare solo override
-          const { extractTaskOverrides } = await import('../../../utils/taskUtils');
+          // ✅ NUOVO MODELLO: Salva TUTTA la working copy, non solo override
+          const { extractTaskOverrides, buildTemplateExpanded } = await import('../../../utils/taskUtils');
+          const currentTemplateId = currentTask.templateId || null;
+
+          // ✅ Crea templateExpanded (baseline dal template attuale)
+          const templateExpanded = currentTemplateId
+            ? await buildTemplateExpanded(currentTemplateId, currentProjectId || undefined)
+            : null;
+
           const tempTask: Task = {
             id: key,
             type: currentTask.type || TaskType.UtteranceInterpretation,
-            templateId: currentTask.templateId || null,
+            templateId: currentTemplateId,
             label: currentTaskTree.label,
             steps: currentTaskTree.steps
           };
-          const overrides = await extractTaskOverrides(tempTask, currentTaskTree, currentProjectId || undefined);
+
+          // ✅ Salva TUTTA la working copy (con flag edited aggiornate)
+          const overrides = await extractTaskOverrides(
+            tempTask,
+            currentTaskTree,
+            currentProjectId || undefined,
+            templateExpanded || undefined
+          );
           await taskRepository.updateTask(key, overrides, currentProjectId || undefined);
         }
       }
@@ -816,10 +911,12 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
           const currentTemplateId = getTemplateId(taskInstance);
 
           // ✅ CRITICAL: Aggiungi task.steps a finalTaskTree (unica fonte di verità per gli steps)
-          // Gli steps non sono in taskTreeRef.current perché vivono solo in task.steps[nodeId]
+          // Gli steps vengono salvati in task.steps[nodeTemplateId] quando si modifica un nodo (righe 1489-1492, 1506-1510)
+          // ✅ finalTaskTreeWithSteps è la WORKING COPY (modificata dall'utente)
+          // ✅ Usa task.steps come fonte di verità (contiene tutti gli steps aggiornati dai nodi)
           const finalTaskTreeWithSteps: TaskTree = {
             ...finalTaskTree,
-            steps: task?.steps || finalTaskTree.steps || {} // ✅ Preferisci task.steps (unica fonte di verità)
+            steps: task?.steps || taskTreeRef.current?.steps || finalTaskTree.steps || {} // ✅ task.steps è la working copy aggiornata
           };
 
           console.log('[ResponseEditor][CLOSE] 📦 Final TaskTree with steps prepared', {
@@ -835,19 +932,31 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
           // ✅ Usa helper function invece di stringa hardcoded - AWAIT OBBLIGATORIO: non chiudere finché non è salvato
           if (!isUtteranceInterpretationTemplateId(currentTemplateId)) {
             // ❌ DEPRECATED: Non salvare più data nell'istanza (viene dal template)
-            // ✅ Usa extractTaskOverrides per salvare solo override
-            // ✅ Usa direttamente finalTaskTreeWithSteps (già è un TaskTree)
+            // ✅ NUOVO MODELLO: Salva TUTTA la working copy, non solo override
+            // ✅ Crea templateExpanded (baseline) per confronto
+            const { extractTaskOverrides, buildTemplateExpanded } = await import('../../../utils/taskUtils');
+
+            // ✅ Crea templateExpanded (baseline dal template attuale)
+            const templateExpanded = currentTemplateId
+              ? await buildTemplateExpanded(currentTemplateId, currentProjectId || undefined)
+              : null;
 
             // ✅ Crea task temporaneo per extractTaskOverrides
             const tempTask: Task = {
               id: key,
               type: TaskType.UtteranceInterpretation,
-              templateId: null,  // Verrà creato automaticamente
+              templateId: currentTemplateId || null,
               label: finalTaskTreeWithSteps.label,
               steps: finalTaskTreeWithSteps.steps
             };
-            const { extractTaskOverrides } = await import('../../../utils/taskUtils');
-            const dataToSave = await extractTaskOverrides(tempTask, finalTaskTreeWithSteps, currentProjectId || undefined);
+
+            // ✅ Salva TUTTA la working copy (con flag edited aggiornate)
+            const dataToSave = await extractTaskOverrides(
+              tempTask,
+              finalTaskTreeWithSteps,
+              currentProjectId || undefined,
+              templateExpanded || undefined
+            );
 
             const dataToSaveMainList = getdataList(finalTaskTreeWithSteps);
             const dataToSaveFirstNode = dataToSaveMainList?.[0];
@@ -922,14 +1031,31 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
               savedFirstNodeNlpProfileExamples: savedTaskNlpProfileExamples?.slice(0, 3)
             });
           } else {
-            const dataToSave = {
+            // ✅ NUOVO MODELLO: Salva TUTTA la working copy anche per task con templateId
+            const { extractTaskOverrides, buildTemplateExpanded } = await import('../../../utils/taskUtils');
+
+            // ✅ Crea templateExpanded (baseline dal template attuale)
+            const templateExpanded = currentTemplateId
+              ? await buildTemplateExpanded(currentTemplateId, currentProjectId || undefined)
+              : null;
+
+            // ✅ Crea task temporaneo per extractTaskOverrides
+            const tempTask: Task = {
+              id: key,
+              type: TaskType.UtteranceInterpretation,
+              templateId: currentTemplateId || null,
               label: finalTaskTreeWithSteps.label,
-              nodes: finalTaskTreeWithSteps.nodes,
-              steps: finalTaskTreeWithSteps.steps,
-              constraints: finalTaskTreeWithSteps.constraints,
-              dataContract: finalTaskTreeWithSteps.dataContract,
-              introduction: finalTaskTreeWithSteps.introduction
+              steps: finalTaskTreeWithSteps.steps
             };
+
+            // ✅ Salva TUTTA la working copy (con flag edited aggiornate)
+            const dataToSave = await extractTaskOverrides(
+              tempTask,
+              finalTaskTreeWithSteps,
+              currentProjectId || undefined,
+              templateExpanded || undefined
+            );
+
             const regexPattern = dataToSave.data?.[0]?.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
             console.log('[REGEX] CLOSE - Saving to DB (with templateId)', {
               taskId: key,

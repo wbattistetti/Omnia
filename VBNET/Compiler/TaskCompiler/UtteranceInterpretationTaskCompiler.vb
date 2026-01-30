@@ -36,7 +36,7 @@ Public Class UtteranceInterpretationTaskCompiler
             Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Available template IDs in flow: {String.Join(", ", flow.Tasks.Select(Function(t) t.Id).Take(10))}")
         End If
 
-        Dim dataRequestTask As New CompiledTaskGetData()
+        Dim compiledTask As New CompiledTaskUtteranceInterpretation()
 
         ' ✅ NUOVO MODELLO: Costruisci TaskTreeRuntime dal template usando task.templateId e subTasksIds
         ' LOGICA:
@@ -102,7 +102,24 @@ Public Class UtteranceInterpretationTaskCompiler
                 System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Calling TaskCompiler.Compile with JSON length={taskJson.Length}")
                 Dim compileResult = taskCompiler.Compile(taskJson)
                 If compileResult IsNot Nothing AndAlso compileResult.Task IsNot Nothing Then
-                    dataRequestTask.Task = compileResult.Task
+                    ' ✅ Copia le proprietà direttamente da RuntimeTask a CompiledTaskUtteranceInterpretation
+                    Dim runtimeTask = compileResult.Task
+                    compiledTask.Steps = runtimeTask.Steps
+                    compiledTask.Constraints = runtimeTask.Constraints
+                    compiledTask.NlpContract = runtimeTask.NlpContract
+
+                    ' ✅ Copia SubTasks ricorsivamente (solo se presenti E non vuoti)
+                    If runtimeTask.HasSubTasks() Then
+                        compiledTask.SubTasks = New List(Of CompiledTaskUtteranceInterpretation)()
+                        For Each subTask As RuntimeTask In runtimeTask.SubTasks
+                            Dim subCompiled = ConvertRuntimeTaskToCompiled(subTask)
+                            compiledTask.SubTasks.Add(subCompiled)
+                        Next
+                    Else
+                        ' ✅ Assicura che SubTasks sia Nothing per task atomici
+                        compiledTask.SubTasks = Nothing
+                    End If
+
                     Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Task compiled successfully for task {taskId}")
                     System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Task compiled successfully for task {taskId}")
                 Else
@@ -120,9 +137,9 @@ Public Class UtteranceInterpretationTaskCompiler
         End If
 
         ' Popola campi comuni
-        PopulateCommonFields(dataRequestTask, taskId)
+        PopulateCommonFields(compiledTask, taskId)
 
-        Return dataRequestTask
+        Return compiledTask
     End Function
 
     ''' <summary>
@@ -261,9 +278,31 @@ Public Class UtteranceInterpretationTaskCompiler
             ' ✅ TaskTreeRuntime.Nodes contiene il nodo radice
             taskTreeRuntime.Nodes = New List(Of Compiler.TaskNode) From {rootNode}
         Else
-            ' ✅ Template atomico (nessun subTask) → struttura vuota
-            taskTreeRuntime.Nodes = New List(Of Compiler.TaskNode)()
-            Console.WriteLine($"ℹ️ [COMPILER][UtteranceInterpretationTaskCompiler] Template {template.Id} has no subTasksIds (atomic template)")
+            ' ✅ Template atomico → crea nodo root con steps dall'istanza
+            ' Un template atomico è un albero con un solo nodo root, non un albero vuoto
+            Dim rootNode As New Compiler.TaskNode() With {
+                .Id = template.Id,
+                .TemplateId = template.Id,
+                .Name = If(String.IsNullOrEmpty(template.Label), template.Id, template.Label),
+                .Steps = New List(Of Compiler.DialogueStep)(),
+                .SubTasks = New List(Of Compiler.TaskNode)(), ' ✅ Vuoto per template atomico
+                .Constraints = If(template.DataContracts IsNot Nothing AndAlso template.DataContracts.Count > 0,
+                                 template.DataContracts,
+                                 If(template.Constraints IsNot Nothing AndAlso template.Constraints.Count > 0,
+                                    template.Constraints,
+                                    New List(Of Object)())),
+                .Condition = template.Condition
+            }
+
+            ' ✅ Applica steps dall'istanza al nodo root (OBBLIGATORIO per task atomico)
+            If instance.Steps IsNot Nothing AndAlso instance.Steps.Count > 0 Then
+                If instance.Steps.ContainsKey(template.Id) Then
+                    ApplyStepsToNode(rootNode, instance.Steps(template.Id))
+                End If
+            End If
+
+            taskTreeRuntime.Nodes = New List(Of Compiler.TaskNode) From {rootNode}
+            Console.WriteLine($"ℹ️ [COMPILER][UtteranceInterpretationTaskCompiler] Template {template.Id} is atomic, created root node with steps")
         End If
 
         Return taskTreeRuntime
@@ -380,6 +419,32 @@ Public Class UtteranceInterpretationTaskCompiler
             End If
         Next
     End Sub
+
+    ''' <summary>
+    ''' Converte RuntimeTask in CompiledTaskUtteranceInterpretation (ricorsivo)
+    ''' </summary>
+    Private Function ConvertRuntimeTaskToCompiled(runtimeTask As RuntimeTask) As CompiledTaskUtteranceInterpretation
+        Dim compiled As New CompiledTaskUtteranceInterpretation() With {
+            .Id = runtimeTask.Id,
+            .Condition = runtimeTask.Condition,
+            .Steps = runtimeTask.Steps,
+            .Constraints = runtimeTask.Constraints,
+            .NlpContract = runtimeTask.NlpContract
+        }
+
+        ' ✅ Copia SubTasks ricorsivamente (solo se presenti E non vuoti)
+        If runtimeTask.HasSubTasks() Then
+            compiled.SubTasks = New List(Of CompiledTaskUtteranceInterpretation)()
+            For Each subTask As RuntimeTask In runtimeTask.SubTasks
+                compiled.SubTasks.Add(ConvertRuntimeTaskToCompiled(subTask))
+            Next
+        Else
+            ' ✅ Assicura che SubTasks sia Nothing per task atomici
+            compiled.SubTasks = Nothing
+        End If
+
+        Return compiled
+    End Function
 
     ''' <summary>
     ''' Applica steps override a un singolo nodo
