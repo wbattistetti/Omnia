@@ -3,11 +3,11 @@
 // ⚠️ NOTA: Chiamato SOLO se task.templateId NON esiste
 
 import { TaskType } from '../../../../../types/taskTypes';
-import DDTTemplateMatcherService from '../../../../../services/DDTTemplateMatcherService';
+import TaskTemplateMatcherService from '../../../../../services/TaskTemplateMatcherService';
 import { buildTemplateMatchResult, type TemplateMatchResult } from './templateBuilders';
 
 /**
- * Cerca un template DDT usando il matcher service
+ * Cerca un template Task usando il matcher service
  *
  * ⚠️ IMPORTANTE: Questa funzione NON dovrebbe essere chiamata se task.templateId esiste!
  * È solo per casi in cui l'euristica in NodeRow non ha trovato template.
@@ -21,7 +21,8 @@ export async function findLocalTemplate(
   taskType: TaskType
 ): Promise<TemplateMatchResult | null> {
   try {
-    const match = await DDTTemplateMatcherService.findDDTTemplate(label, taskType);
+    // ✅ Usa findTaskTemplate() (nuovo metodo) o findDDTTemplate() (deprecato, per compatibilità)
+    const match = await TaskTemplateMatcherService.findTaskTemplate(label, taskType);
     if (!match) {
       return null;
     }

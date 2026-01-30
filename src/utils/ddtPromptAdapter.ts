@@ -1,6 +1,6 @@
 import type { Task } from '../types/taskTypes';
 import { extractStartPrompts } from './ddtPromptExtractor';
-import { buildDataTree } from './taskUtils';
+import { buildTaskTreeNodes } from './taskUtils';
 import { DialogueTaskService } from '../services/DialogueTaskService';
 
 /**
@@ -76,9 +76,9 @@ export async function AdaptPromptToContext(
   });
 
   // ✅ Costruisci albero dati per estrazione prompt
-  const dataTree = buildDataTree(template);
-  console.log('[🔍 AdaptPromptToContext] DataTree costruito', {
-    dataTreeLength: dataTree.length
+  const nodes = buildTaskTreeNodes(template);
+  console.log('[🔍 AdaptPromptToContext] Nodes costruito', {
+    nodesLength: nodes.length
   });
 
   // ✅ Carica traduzioni del progetto (necessarie per estrarre i testi)
@@ -165,7 +165,7 @@ export async function AdaptPromptToContext(
   // ✅ Estrai prompt da adattare
   const promptsToAdapt = extractStartPrompts(
     task.steps,
-    dataTree,
+    nodes,
     projectTranslations,
     { onlyRootNodes: !adaptAllNormalSteps }
   );

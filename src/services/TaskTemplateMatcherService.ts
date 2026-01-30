@@ -1,11 +1,11 @@
-// DDTTemplateMatcherService.ts
-// Service per eseguire l'Euristica 2: match fuzzy dei template DDT dalla label della riga
+// TaskTemplateMatcherService.ts
+// Service per eseguire l'Euristica 2: match fuzzy dei Task Template dalla label della riga
 // Usato sia in ResponseEditor che in useNodeRowManagement quando la riga viene aggiornata
 
 import DialogueTaskService, { type DialogueTask } from './DialogueTaskService';
 import TemplateTranslationsService from './TemplateTranslationsService';
 
-export interface DDTTemplateMatch {
+export interface TaskTemplateMatch {
   template: DialogueTask;
   templateId: string;
   labelUsed: string;
@@ -13,7 +13,7 @@ export interface DDTTemplateMatch {
   matchType: 'exact' | 'keywords';
 }
 
-export class DDTTemplateMatcherService {
+export class TaskTemplateMatcherService {
   /**
    * Normalizza il testo per il matching (rimuove prefissi, articoli, stopwords)
    */
@@ -140,16 +140,16 @@ export class DDTTemplateMatcherService {
   }
 
   /**
-   * Trova un template DDT che matcha con il testo fornito
+   * Trova un template Task che matcha con il testo fornito
    *
    * @param text - Testo della label della riga
-   * @param currentTaskType - Tipo corrente del task (se UNDEFINED, cerca template DDT)
+   * @param currentTaskType - Tipo corrente del task (se UNDEFINED, cerca template Task)
    * @returns Match trovato o null
    */
-  static async findDDTTemplate(
+  static async findTaskTemplate(
     text: string,
     currentTaskType?: string
-  ): Promise<DDTTemplateMatch | null> {
+  ): Promise<TaskTemplateMatch | null> {
     try {
       // ✅ STEP 1: Verifica cache template
       if (!DialogueTaskService.isCacheLoaded()) {
@@ -171,7 +171,7 @@ export class DDTTemplateMatcherService {
           await TemplateTranslationsService.loadForLanguage(projectLang);
           await TemplateTranslationsService.loadHeuristicsSynonyms(projectLang); // Carica anche sinonimi euristici
         } catch (err) {
-          console.error('[DDTTemplateMatcherService] ❌ Errore caricamento traduzioni/sinonimi:', err);
+          console.error('[TaskTemplateMatcherService] ❌ Errore caricamento traduzioni/sinonimi:', err);
           return null;
         }
       }
@@ -188,31 +188,31 @@ export class DDTTemplateMatcherService {
         templates = templates.filter(t => t.type === 3);
         const afterFilter = templates.length;
         // ❌ RIMOSSO: log verbosi di filtro e debug template
-        // console.log(`[DDTTemplateMatcherService] 🔍 FILTRO DataRequest: ${beforeFilter} → ${afterFilter} template (solo type === 3)`);
+        // console.log(`[TaskTemplateMatcherService] 🔍 FILTRO DataRequest: ${beforeFilter} → ${afterFilter} template (solo type === 3)`);
       } else if (currentTaskType === 'UNDEFINED' || !currentTaskType || currentTaskType === 'Message') {
         // Se Euristica 1 ha trovato UNDEFINED o Message → cerca TUTTI i template
         // ❌ RIMOSSO: log verboso per ricerca senza filtro
-        // console.log(`[DDTTemplateMatcherService] 🔍 Nessun filtro: cerca TUTTI i ${templates.length} template`);
+        // console.log(`[TaskTemplateMatcherService] 🔍 Nessun filtro: cerca TUTTI i ${templates.length} template`);
       } else {
-        // Altri tipi (BackendCall, ProblemClassification, ecc.) → non cercare template DDT
+        // Altri tipi (BackendCall, ProblemClassification, ecc.) → non cercare template Task
         // ❌ RIMOSSO: log verboso per skip
-        // console.log(`[DDTTemplateMatcherService] ⏭️ Skip: tipo ${currentTaskType} non supporta template DDT`);
+        // console.log(`[TaskTemplateMatcherService] ⏭️ Skip: tipo ${currentTaskType} non supporta template Task`);
         return null;
       }
 
       // ✅ STEP 5: Rileva lingua del testo
       const detectedLang = this.detectLanguage(text);
       // ❌ RIMOSSO: log verboso per lingua rilevata
-      // console.log(`[DDTTemplateMatcherService] 🌐 Lingua rilevata: ${detectedLang} per testo: "${text}"`);
+      // console.log(`[TaskTemplateMatcherService] 🌐 Lingua rilevata: ${detectedLang} per testo: "${text}"`);
 
       // ✅ STEP 6: Normalizza testo della riga nodo
       const textNormalized = this.normalizeForMatch(text);
       // ❌ RIMOSSO: log verboso per normalizzazione
-      // console.log(`[DDTTemplateMatcherService] 📝 Testo normalizzato: "${text}" → "${textNormalized}"`);
+      // console.log(`[TaskTemplateMatcherService] 📝 Testo normalizzato: "${text}" → "${textNormalized}"`);
 
       if (!textNormalized || textNormalized.length === 0) {
         // ❌ RIMOSSO: log verboso per testo vuoto
-        // console.log(`[DDTTemplateMatcherService] ❌ Testo normalizzato vuoto, skip matching`);
+        // console.log(`[TaskTemplateMatcherService] ❌ Testo normalizzato vuoto, skip matching`);
         return null;
       }
 
@@ -240,7 +240,7 @@ export class DDTTemplateMatcherService {
 
         if (!labelUsed) {
           // ❌ RIMOSSO: log verboso per template senza label
-          // console.log(`[DDTTemplateMatcherService] ⚠️ Template ${templateId} senza label, skip`);
+          // console.log(`[TaskTemplateMatcherService] ⚠️ Template ${templateId} senza label, skip`);
           continue;
         }
 
@@ -280,17 +280,17 @@ export class DDTTemplateMatcherService {
 
       // ✅ STEP 8: Scegli il match con la label più lunga (più specifica)
       // ❌ RIMOSSO: log verboso per match totali
-      // console.log(`[DDTTemplateMatcherService] 📊 Trovati ${matches.length} match totali`);
+      // console.log(`[TaskTemplateMatcherService] 📊 Trovati ${matches.length} match totali`);
 
       if (matches.length === 0) {
         // ❌ RIMOSSO: log verboso per nessun match (normale, non è un errore)
-        // console.log(`[DDTTemplateMatcherService] ❌ Nessun match trovato per "${textNormalized}"`);
+        // console.log(`[TaskTemplateMatcherService] ❌ Nessun match trovato per "${textNormalized}"`);
         return null;
       }
 
       // ❌ RIMOSSO: log verboso per match trovati (manteniamo solo il miglior match)
       // if (matches.length > 0) {
-      //   console.log(`[DDTTemplateMatcherService] 📋 Match trovati:`, matches.map(m => ({...})));
+      //   console.log(`[TaskTemplateMatcherService] 📋 Match trovati:`, matches.map(m => ({...})));
       // }
 
       // Ordina: prima per tipo (exact > keywords), poi per score, poi per priorità (atomic > composite), poi per lunghezza label
@@ -303,8 +303,8 @@ export class DDTTemplateMatcherService {
         if (a.score !== b.score) return b.score - a.score;
 
         // 3. Priorità ai template atomici (più specifici) rispetto ai compositi (più generici)
-        const aIsAtomic = !a.template.subDataIds || a.template.subDataIds.length === 0;
-        const bIsAtomic = !b.template.subDataIds || b.template.subDataIds.length === 0;
+        const aIsAtomic = !a.template.subTasksIds || a.template.subTasksIds.length === 0;
+        const bIsAtomic = !b.template.subTasksIds || b.template.subTasksIds.length === 0;
         if (aIsAtomic && !bIsAtomic) return -1; // Atomic vince su composite
         if (!aIsAtomic && bIsAtomic) return 1;  // Composite perde contro atomic
 
@@ -327,7 +327,7 @@ export class DDTTemplateMatcherService {
             matchedPhrase: m.matchedPhrase
           };
         });
-        console.log('[DDT_MATCH]', {
+        console.log('[TASK_MATCH]', {
           text: textNormalized,
           candidates,
           match: {
@@ -346,11 +346,21 @@ export class DDTTemplateMatcherService {
         matchType: bestMatch.matchType
       };
     } catch (error) {
-      console.error('[DDTTemplateMatcherService] ❌ Errore in findDDTTemplate:', error);
+      console.error('[TaskTemplateMatcherService] ❌ Errore in findTaskTemplate:', error);
       return null;
     }
   }
+
+  /**
+   * @deprecated Usa findTaskTemplate() invece
+   * Mantenuto per compatibilità temporanea
+   */
+  static async findDDTTemplate(
+    text: string,
+    currentTaskType?: string
+  ): Promise<TaskTemplateMatch | null> {
+    return this.findTaskTemplate(text, currentTaskType);
+  }
 }
 
-export default DDTTemplateMatcherService;
-
+export default TaskTemplateMatcherService;

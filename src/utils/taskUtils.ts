@@ -218,7 +218,7 @@ import { v4 as uuidv4 } from 'uuid';
  *
  * Step 8.2: Ricostruzione dell'albero
  * - Prende task.templateId
- * - Chiama buildDataTree(templateId) → ricostruisce l'albero in memoria
+ * - Chiama buildTaskTreeNodes(template) → ricostruisce l'albero in memoria
  * - L'albero è identico a quello costruito in FASE 3
  *
  * Step 8.3: Caricamento degli steps
@@ -238,7 +238,7 @@ import { v4 as uuidv4 } from 'uuid';
  * ============================================================================
  *
  * 1. L'albero dereferenziato vive solo in memoria
- *    - Costruito runtime con buildDataTree(templateId)
+ *    - Costruito runtime con buildTaskTreeNodes(template)
  *    - Usato per sidebar e clonazione steps
  *    - NON viene salvato in task.data
  *
@@ -475,7 +475,7 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
  */
 export function cloneTemplateSteps(
   template: any,
-  data?: any[]  // ✅ Albero montato con templateId corretti (da buildDataTree)
+  nodes?: TaskTreeNode[]  // ✅ Albero montato con templateId corretti (da buildTaskTreeNodes)
 ): { steps: Record<string, any>; guidMapping: Map<string, string> } {
   const allGuidMappings = new Map<string, string>();
   const clonedSteps: Record<string, any> = {};
@@ -541,12 +541,10 @@ export function cloneTemplateSteps(
     });
   };
 
-  // ✅ Se data è fornito, usa i templateId dall'albero montato (PREFERRED)
-  if (data && Array.isArray(data) && data.length > 0) {
-
-
-    // ✅ Iterate over mounted tree - use templateId directly (referenceId eliminato)
-    const processNode = (node: any): void => {
+  // ✅ Se nodes è fornito, usa i templateId dall'albero montato (PREFERRED)
+  if (nodes && Array.isArray(nodes) && nodes.length > 0) {
+    // ✅ Iterate over mounted tree - use templateId directly
+    const processNode = (node: TaskTreeNode): void => {
       const templateId = node.templateId;
       if (!templateId) {
         console.warn('⚠️ [cloneTemplateSteps] Node senza templateId', { nodeId: node.id, nodeLabel: node.label });
@@ -569,16 +567,16 @@ export function cloneTemplateSteps(
         cloneStepsForNodeId(templateId, template); // ✅ Usa templateId direttamente
       }
 
-      // ✅ Process subData recursively (support for arbitrary depth)
-      if (node.subTasks && Array.isArray(node.subTasks)) {
-        node.subTasks.forEach((sub: any) => {
-          processNode(sub);
+      // ✅ Process subNodes recursively (support for arbitrary depth)
+      if (node.subNodes && Array.isArray(node.subNodes)) {
+        node.subNodes.forEach((sub: TaskTreeNode) => {
+          processNode(sub);  // ✅ Ricorsione su subNodes[]
         });
       }
     };
 
     // ✅ Process all nodes in mounted tree
-    data.forEach((mainNode: any) => {
+    nodes.forEach((mainNode: TaskTreeNode) => {
       processNode(mainNode);
     });
 
@@ -597,8 +595,8 @@ export function cloneTemplateSteps(
     return { steps: clonedSteps, guidMapping: allGuidMappings };
   }
 
-  // ❌ NO FALLBACK: data è richiesto
-  console.warn('⚠️ [cloneTemplateSteps] data non fornito - impossibile clonare steps', {
+  // ❌ NO FALLBACK: nodes è richiesto
+  console.warn('⚠️ [cloneTemplateSteps] nodes non fornito - impossibile clonare steps', {
     templateId: template.id || template._id,
     templateLabel: template.label || template.name
   });
@@ -606,20 +604,78 @@ export function cloneTemplateSteps(
 }
 
 /**
- * Converte un nodo da buildDataTree in TaskTreeNode (ricorsivo)
- * Garantisce che tutto il TaskTree sia nel formato corretto
+ * Build TaskTreeNode[] from template
+ * ✅ Restituisce direttamente TaskTreeNode[] con subNodes[] (non subTasks[])
+ * ✅ Elimina la doppia conversione: buildDataTree() → toTaskTreeNode()
+ * ✅ Esportato per uso in altri file che hanno bisogno solo della struttura
  */
-function toTaskTreeNode(node: any): TaskTreeNode {
-  return {
-    id: node.id,
-    templateId: node.templateId,
-    label: node.label,
-    type: node.type,
-    icon: node.icon,
-    constraints: node.constraints,
-    dataContract: node.dataContract,
-    subNodes: (node.subTasks || []).map(toTaskTreeNode)  // ✅ Ricorsione pulita
+export function buildTaskTreeNodes(template: any): TaskTreeNode[] {
+  // Helper function to recursively dereference subTasksIds
+  const buildNode = (subTaskId: string): TaskTreeNode => {
+    const subTemplate = DialogueTaskService.getTemplate(subTaskId);
+    if (!subTemplate) {
+      console.warn('[buildTaskTreeNodes] Sub-template not found:', subTaskId);
+      return {
+        id: subTaskId,
+        templateId: subTaskId,
+        label: undefined,
+        subNodes: []
+      };
+    }
+
+    // ✅ Recursively dereference subTasksIds (support for arbitrary depth)
+    const subTasksIds = subTemplate.subTasksIds || [];
+    const subNodes = subTasksIds.map(buildNode);
+
+    // ✅ Costruisci TaskTreeNode direttamente con subNodes[]
+    return {
+      id: subTemplate.id || subTemplate._id,
+      templateId: subTemplate.id || subTemplate._id,
+      label: subTemplate.label,
+      type: subTemplate.type,
+      icon: subTemplate.icon || 'FileText',
+      constraints: subTemplate.dataContracts || subTemplate.constraints || [],
+      dataContract: subTemplate.dataContract || undefined,
+      subNodes  // ✅ Direttamente subNodes[], non subTasks[]
+    };
   };
+
+  // ✅ NUOVO MODELLO: Build from subTasksIds (composite template)
+  const subTasksIds = template.subTasksIds || [];
+  if (subTasksIds.length > 0) {
+    const nodes = subTasksIds.map(buildNode);
+
+    // ✅ NON inventare label per main node
+    if (!template.label && !template.name) {
+      const labelForHeuristics = template.id || 'UNKNOWN';
+      console.warn('[buildTaskTreeNodes] Label mancante nel template composito, uso ID come fallback tecnico per euristiche', {
+        templateId: template.id,
+        fallbackLabel: labelForHeuristics
+      });
+    }
+
+    return nodes;
+  }
+
+  // Template semplice
+  if (!template.label && !template.name) {
+    const labelForHeuristics = template.id || 'UNKNOWN';
+    console.warn('[buildTaskTreeNodes] Label mancante nel template semplice, uso ID come fallback tecnico per euristiche', {
+      templateId: template.id,
+      fallbackLabel: labelForHeuristics
+    });
+  }
+
+  return [{
+    id: template.id || template._id,
+    templateId: template.id || template._id,
+    label: template.label || template.name || undefined,
+    type: template.type,
+    icon: template.icon || 'Calendar',
+    constraints: template.dataContracts || template.constraints || [],
+    dataContract: template.dataContract || undefined,
+    subNodes: []
+  }];
 }
 
 /**
@@ -669,23 +725,20 @@ export async function buildTaskTree(
     throw new Error(`Template ${instance.templateId} not found`);
   }
 
-  // ✅ Costruisci dataTree dal template
-  const dataTree = buildDataTree(template);
-
-  // ✅ Converti dataTree in TaskTree usando ricorsione pulita
-  const nodes: TaskTreeNode[] = dataTree.map(toTaskTreeNode);
+  // ✅ Usa buildTaskTreeNodes() per costruire direttamente TaskTreeNode[] con subNodes[]
+  const nodes = buildTaskTreeNodes(template);
 
   // ✅ Steps dall'istanza o clonati dal template
   let finalSteps: Record<string, any> = instance.steps || {};
   if (!finalSteps || Object.keys(finalSteps).length === 0) {
     // Prima creazione: clona steps dal template
-    const { steps: clonedSteps } = cloneTemplateSteps(template, dataTree);
+    const { steps: clonedSteps } = cloneTemplateSteps(template, nodes);
     finalSteps = clonedSteps;
   }
 
   return {
     label: instance.label ?? template.label,
-    nodes,  // ✅ nodes invece di data
+    nodes,  // ✅ Già TaskTreeNode[] con subNodes[]
     steps: finalSteps,
     constraints: template.dataContracts ?? template.constraints ?? undefined,
     dataContract: template.dataContract ?? undefined,
@@ -693,111 +746,8 @@ export async function buildTaskTree(
   };
 }
 
-/**
- * Build data tree from template (dereference subTasksIds)
- * Returns only data structure (without steps)
- * ✅ NUOVO MODELLO: Usa solo subTasksIds, non più template.data
- * ✅ NON inventa label: se manca, logga warning e lascia undefined
- */
-export function buildDataTree(template: any): any[] {
-  // Helper function to recursively dereference subTasksIds
-  const buildNodeFromSubTasksIds = (subTaskId: string): any => {
-    const subTemplate = DialogueTaskService.getTemplate(subTaskId);
-    if (!subTemplate) {
-      console.warn('[buildDataTree] Sub-template not found:', subTaskId);
-      return {
-        id: subTaskId,
-        templateId: subTaskId,
-        label: undefined,
-        subTasks: []
-      };
-    }
-
-    // ✅ Recursively dereference subTasksIds (support for arbitrary depth)
-    const subTasksIds = subTemplate.subTasksIds || [];
-    const dereferencedSubTasks = subTasksIds.map(buildNodeFromSubTasksIds);
-
-    // ✅ Costruisci struttura completa dal template
-    return {
-      id: subTemplate.id || subTemplate._id,
-      label: subTemplate.label, // ✅ NON inventare: se manca, sarà undefined
-      type: subTemplate.type,
-      icon: subTemplate.icon || 'FileText',
-      constraints: subTemplate.dataContracts || subTemplate.constraints || [],
-      dataContract: subTemplate.dataContract || undefined,
-      subTasks: dereferencedSubTasks, // ✅ Supporta profondità arbitraria
-      templateId: subTemplate.id || subTemplate._id, // ✅ Solo templateId
-      kind: subTemplate.name || subTemplate.type || 'generic'
-    };
-  };
-
-  // ✅ NUOVO MODELLO: Build from subTasksIds (composite template)
-  const subTasksIds = template.subTasksIds || [];
-  if (subTasksIds.length > 0) {
-    const subDataInstances: any[] = [];
-    for (const subId of subTasksIds) {
-      const node = buildNodeFromSubTasksIds(subId);
-      subDataInstances.push(node);
-    }
-
-    // ✅ NON inventare label per main node
-    if (!template.label && !template.name) {
-      const labelForHeuristics = template.id || 'UNKNOWN';
-      console.warn('[buildDataTree] Label mancante nel template composito, uso ID come fallback tecnico per euristiche', {
-        templateId: template.id,
-        fallbackLabel: labelForHeuristics
-      });
-    }
-
-    return [{
-      id: template.id || template._id,
-      label: template.label || template.name || undefined, // ✅ NON inventare
-      type: template.type,
-      icon: template.icon || 'Calendar',
-      constraints: template.dataContracts || template.constraints || [],
-      dataContract: template.dataContract || undefined,
-      subTasks: subDataInstances,
-      templateId: template.id || template._id,
-      kind: template.name || template.type || 'generic'
-    }];
-  }
-
-  // Template semplice
-  if (!template.label && !template.name) {
-    const labelForHeuristics = template.id || 'UNKNOWN';
-    console.warn('[buildDataTree] Label mancante nel template semplice, uso ID come fallback tecnico per euristiche', {
-      templateId: template.id,
-      fallbackLabel: labelForHeuristics
-    });
-  }
-
-  return [{
-    id: template.id || template._id,
-    label: template.label || template.name || undefined, // ✅ NON inventare
-    type: template.type,
-    icon: template.icon || 'Calendar',
-    constraints: template.dataContracts || template.constraints || [],
-    examples: template.examples || [],
-    dataContract: template.dataContract || undefined, // ✅ CRITICAL: Copia dataContract dal template
-    subTasks: [],
-    templateId: template.id || template._id,
-    kind: template.name || template.type || 'generic'
-  }];
-}
-
-/**
- * Build data structure from template (reference structure)
- * ✅ DEPRECATED: Usa cloneTemplateSteps + buildDataTree invece
- * Mantenuto per retrocompatibilità
- * Returns both data and guidMapping for translation copying
- */
-export function buildDataFromTemplate(template: any): { data: any[]; guidMapping: Map<string, string> } {
-  // ✅ Prima monta l'albero completo, poi clona gli steps usando i templateId dall'albero
-  const data = buildDataTree(template);
-  const { guidMapping } = cloneTemplateSteps(template, data);
-  return { data, guidMapping };
-
-}
+// ❌ RIMOSSO: buildDataTree() - sostituito da buildTaskTreeNodes()
+// ❌ RIMOSSO: buildDataFromTemplate() - deprecato, non più necessario
 
 /**
  * Copy translations for cloned steps

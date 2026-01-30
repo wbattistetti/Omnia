@@ -661,15 +661,15 @@ export const AppContent: React.FC<AppContentProps> = ({
         // Open as docking tab in bottom split (1/3 height)
         const tabId = `act_${d.id}`;
 
-        // ✅ Prepare DDT BEFORE calling setDockTree (all async work here)
-        let preparedDDT: any = null;
+        // ✅ Prepare TaskTree BEFORE calling setDockTree (all async work here)
+        let preparedTaskTree: any = null;
 
         if (editorKind === 'ddt') {
-          // Open ResponseEditor for DDT types (DataRequest, ProblemClassification, etc.)
-          // ✅ PRIORITÀ: Usa DDT dall'evento se presente (copia del template già costruita)
-          let ddt = d.ddt; // ✅ Usa DDT dall'evento (se presente)
+          // Open ResponseEditor for Task types (DataRequest, ProblemClassification, etc.)
+          // ✅ PRIORITÀ: Usa TaskTree dall'evento se presente (copia del template già costruita)
+          let taskTree = d.taskTree; // ✅ Usa TaskTree dall'evento (se presente)
 
-          if (ddt) {
+          if (taskTree) {
             // ✅ NUOVO MODELLO: Usa extractTaskOverrides per salvare solo override
             // Assicurati che il task esista
             let task = taskRepository.getTask(instanceId);
@@ -678,14 +678,14 @@ export const AppContent: React.FC<AppContentProps> = ({
               task = taskRepository.createTask(taskMeta.type, null, undefined, instanceId);
             }
             // ✅ NUOVO MODELLO: Estrai solo override (label, steps, introduction)
-            // ❌ NON salvare: data, constraints, dataContract (vengono dal template)
+            // ❌ NON salvare: nodes, constraints, dataContract (vengono dal template)
             const { extractTaskOverrides } = await import('../utils/taskUtils');
-            const overrides = await extractTaskOverrides(task, ddt, pdUpdate?.getCurrentProjectId() || undefined);
+            const overrides = await extractTaskOverrides(task, taskTree, pdUpdate?.getCurrentProjectId() || undefined);
             taskRepository.updateTask(instanceId, {
               ...overrides,  // Solo override: label, steps, introduction
               templateId: d.templateId || task.templateId  // Mantieni templateId se presente
             }, pdUpdate?.getCurrentProjectId());
-            preparedDDT = ddt;
+            preparedTaskTree = taskTree;
           } else {
             // Se non presente nell'evento, carica dal task
             let task = taskRepository.getTask(instanceId);
@@ -705,23 +705,23 @@ export const AppContent: React.FC<AppContentProps> = ({
               try {
                 const { buildTaskTree } = await import('../utils/taskUtils');
                 const projectId = currentProject?.id || undefined;
-                ddt = await buildTaskTree(task, projectId);
+                taskTree = await buildTaskTree(task, projectId);
               } catch (err) {
                 console.error('[AppContent] Error loading TaskTree from template:', err);
               }
             }
 
             // ✅ Fallback: if no TaskTree loaded, create empty one
-            if (!ddt) {
+            if (!taskTree) {
               // TaskTree doesn't exist, create empty one
-              ddt = { label: d.label || 'New Task', nodes: [] };
+              taskTree = { label: d.label || 'New Task', nodes: [] };
               // Update task with empty label (structure comes from template)
               taskRepository.updateTask(instanceId, {
-                label: ddt.label
+                label: taskTree.label
               }, pdUpdate?.getCurrentProjectId());
             }
 
-            preparedDDT = ddt;
+            preparedTaskTree = taskTree;
           }
         }
 
@@ -735,24 +735,24 @@ export const AppContent: React.FC<AppContentProps> = ({
           })(prev);
 
           if (existing) {
-            // Tab already open: per 'ddt', salva DDT nel taskRepository e attiva il tab
-            // TaskEditorHost leggerà il DDT dal taskRepository
-            if (editorKind === 'ddt' && preparedDDT) {
-              console.log('[DOCK_SYNC] 🔄 Updating taskRepository with DDT for existing tab', {
+            // Tab already open: per 'ddt', salva TaskTree nel taskRepository e attiva il tab
+            // TaskEditorHost leggerà il TaskTree dal taskRepository
+            if (editorKind === 'ddt' && preparedTaskTree) {
+              console.log('[DOCK_SYNC] 🔄 Updating taskRepository with TaskTree for existing tab', {
                 tabId,
                 instanceId,
-                dataLength: preparedDDT?.data?.length
+                nodesLength: preparedTaskTree?.nodes?.length
               });
 
-              // ✅ Salva DDT nel taskRepository (TaskEditorHost lo leggerà)
+              // ✅ Salva TaskTree nel taskRepository (TaskEditorHost lo leggerà)
               let task = taskRepository.getTask(instanceId);
               if (!task) {
                 task = taskRepository.createTask(taskMeta.type, null, undefined, instanceId);
               }
               // ✅ CRITICAL: Non salvare steps qui - steps sono gestiti da ResponseEditor/DDTHostAdapter
-              const { steps: _, ...preparedDDTWithoutSteps } = preparedDDT;
+              const { steps: _, ...preparedTaskTreeWithoutSteps } = preparedTaskTree;
               taskRepository.updateTask(instanceId, {
-                ...preparedDDTWithoutSteps,
+                ...preparedTaskTreeWithoutSteps,
                 templateId: d.templateId || task.templateId
               }, pdUpdate?.getCurrentProjectId());
             }
@@ -788,22 +788,22 @@ export const AppContent: React.FC<AppContentProps> = ({
             } as DockTabTaskEditor);
           } else if (editorKind === 'ddt') {
             // ✅ UNIFICATO: Usa TaskEditorHost anche per 'ddt' (come per 'message' e 'backend')
-            // TaskEditorHost → DDTHostAdapter → ResponseEditor gestirà il DDT
-            // Il DDT viene preparato e salvato nel taskRepository prima di aprire l'editor
-            const startStepTasksCount = preparedDDT?.data?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
-            // Creating new tab with DDT via TaskEditorHost
-            // ✅ Salva DDT nel taskRepository prima di aprire l'editor (TaskEditorHost lo leggerà)
-            if (preparedDDT) {
+            // TaskEditorHost → DDTHostAdapter → ResponseEditor gestirà il TaskTree
+            // Il TaskTree viene preparato e salvato nel taskRepository prima di aprire l'editor
+            const startStepTasksCount = preparedTaskTree?.nodes?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
+            // Creating new tab with TaskTree via TaskEditorHost
+            // ✅ Salva TaskTree nel taskRepository prima di aprire l'editor (TaskEditorHost lo leggerà)
+            if (preparedTaskTree) {
               let task = taskRepository.getTask(instanceId);
               if (!task) {
                 task = taskRepository.createTask(taskMeta.type, null, undefined, instanceId);
               }
               // ✅ CRITICAL: Non salvare steps qui - steps sono gestiti da ResponseEditor/DDTHostAdapter
               // ✅ Steps devono avere struttura corretta (chiavi = templateId, non step types)
-              // ✅ Se preparedDDT.steps ha struttura sbagliata, rimuovilo e lascia che DDTHostAdapter lo ricostruisca
-              const { steps: _, ...preparedDDTWithoutSteps } = preparedDDT;
+              // ✅ Se preparedTaskTree.steps ha struttura sbagliata, rimuovilo e lascia che DDTHostAdapter lo ricostruisca
+              const { steps: _, ...preparedTaskTreeWithoutSteps } = preparedTaskTree;
               taskRepository.updateTask(instanceId, {
-                ...preparedDDTWithoutSteps,  // Spread: label, data, ecc. (SENZA steps)
+                ...preparedTaskTreeWithoutSteps,  // Spread: label, nodes, ecc. (SENZA steps)
                 templateId: d.templateId || task.templateId  // Mantieni templateId se presente
               }, pdUpdate?.getCurrentProjectId());
             }

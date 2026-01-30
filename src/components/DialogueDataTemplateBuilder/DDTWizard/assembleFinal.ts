@@ -803,7 +803,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
 
     // ✅ REMOVED: Prompt adaptation logic from assembleFinalDDT
     // L'adattamento dei prompt è ora gestito da AdaptPromptToContext in ddtPromptAdapter.ts
-    // Questo viene chiamato da ddtOrchestrator.ts quando si crea un DDT da template
+    // Questo viene chiamato da taskOrchestrator.ts quando si crea un Task da template
     // assembleFinalDDT ora si limita ad assemblare la struttura, senza adattare i prompt
 
     // ✅ Add translations to global table (in memory only, not saved to DB yet)

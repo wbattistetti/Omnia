@@ -310,30 +310,30 @@ export async function loadDDTFromTemplate(instance: Task | null): Promise<any | 
     };
   }
 
-  // ✅ CRITICAL: Ricostruisci SEMPRE l'albero dal template (NON usare instance.data!)
-  const dataTree = buildDataTree(template);
-  // ✅ dataTree contiene:
+  // ✅ CRITICAL: Ricostruisci SEMPRE l'albero dal template usando buildTaskTreeNodes()
+  const nodes = buildTaskTreeNodes(template);
+  // ✅ nodes contiene:
   // - Tutti i nodi principali con templateId corretti
-  // - Tutti i subData dereferenziati con templateId corretti
-  // - Struttura completa del template
+  // - Tutti i subNodes dereferenziati con templateId corretti
+  // - Struttura completa del template (TaskTreeNode[] con subNodes[])
 
-  // ✅ Clone steps usando dataTree (albero montato con templateId corretti)
-  const { guidMapping: templateGuidMapping } = cloneTemplateSteps(template, dataTree);
+  // ✅ Clone steps usando nodes (albero montato con templateId corretti)
+  const { guidMapping: templateGuidMapping } = cloneTemplateSteps(template, nodes);
 
-  // ✅ Usa dataTree come struttura base (NON instance.data!)
+  // ✅ Usa nodes come struttura base (NON instance.data!)
   // ✅ IMPORTANTE: constraints/examples/nlpContract sono SEMPRE dal template, NON dall'istanza
   // ✅ L'istanza contiene solo steps clonati, constraints/examples vengono risolti dal template a compile-time
-  const enrichedData = dataTree.map((templateNode: any) => {
+  const enrichedData = nodes.map((templateNode: TaskTreeNode) => {
     return {
       ...templateNode, // ✅ Struttura dal template (include templateId!)
       // ✅ Override dall'istanza (solo label)
       label: instance.label || templateNode.label,
       // ✅ Constraints/examples/nlpContract SEMPRE dal template (NO override)
       constraints: templateNode.constraints,
-      examples: templateNode.examples,
-      nlpContract: templateNode.nlpContract,
-      // ✅ SubData viene dal template (già costruito da buildDataTree)
-      subData: templateNode.subTasks || []
+      examples: (templateNode as any).examples, // ✅ Esempi dal template se presenti
+      nlpContract: (templateNode as any).nlpContract, // ✅ Contract dal template se presente
+      // ✅ SubNodes viene dal template (già costruito da buildTaskTreeNodes)
+      subNodes: templateNode.subNodes || []
     };
   });
 
@@ -654,174 +654,8 @@ function convertPatternsToNlpContract(template: any): any | undefined {
   };
 }
 
-/**
- * Build data tree from template (dereference subTasks)
- * Returns only data structure (without steps)
- * ✅ NON inventa label: se manca, logga warning e lascia undefined
- */
-export function buildDataTree(template: any): any[] {
-  // Helper function to recursively dereference subTasks
-  const dereferenceSubData = (subNode: any): any => {
-    const subNodeId = subNode.id;
-    if (!subNodeId) {
-      return subNode;
-    }
-
-    // ✅ SEMPRE: subNode contiene solo { id } → carica task atomico completo
-    const subTemplate = DialogueTaskService.getTemplate(subNodeId);
-    if (!subTemplate) {
-      console.warn('[buildDataTree] Sub-template not found:', subNodeId);
-      return subNode;
-    }
-
-    // ✅ Recursively dereference subTasks (support for arbitrary depth)
-    const dereferencedSubData = (subTemplate.data && Array.isArray(subTemplate.data) && subTemplate.data.length > 0 && subTemplate.data[0].subTasks)
-      ? (subTemplate.data[0].subTasks || []).map(dereferenceSubData)
-      : [];
-
-    // ✅ Costruisci struttura completa dal task atomico - SOLO templateId (referenceId eliminato)
-    return {
-      id: subTemplate.id || subTemplate._id,
-      label: subTemplate.label, // ✅ NON inventare: se manca, sarà undefined
-      type: subTemplate.type,
-      icon: subTemplate.icon || 'FileText',
-      constraints: subTemplate.dataContracts || subTemplate.constraints || [],
-      examples: subTemplate.examples || [],
-      nlpContract: convertPatternsToNlpContract(subTemplate), // ✅ Converti patterns in nlpContract se necessario
-      subTasks: dereferencedSubData, // ✅ Supporta profondità arbitraria
-      templateId: subTemplate.id || subTemplate._id, // ✅ Solo templateId (uguale a id per template atomici/compositi)
-      kind: subTemplate.name || subTemplate.type || 'generic'
-    };
-  };
-
-  // ✅ Check if template has data structure
-  if (template.data && Array.isArray(template.data) && template.data.length > 0) {
-    // Template has data - dereference structure
-    const data = template.data.map((mainNode: any) => {
-      // ✅ Process subTasks recursively (support for arbitrary depth)
-      const subData = (mainNode.subTasks || []).map(dereferenceSubData);
-
-      // ✅ NON inventare label: se manca, logga warning
-      if (!mainNode.label && !template.label && !template.name) {
-        const labelForHeuristics = template.id || 'UNKNOWN';
-        console.warn('[buildDataTree] Label mancante nel template, uso ID come fallback tecnico per euristiche', {
-          templateId: template.id,
-          fallbackLabel: labelForHeuristics,
-          nodeId: mainNode.id
-        });
-      }
-
-      // ✅ CRITICAL: Determina templateId corretto
-      // Se template.data.length === 1 → dato principale → templateId = template.id
-      // Se template.data.length > 1 → template aggregato → ogni mainNode è un template referenziato → templateId = mainNode.id
-      const isAggregateTemplate = template.data.length > 1;
-      const nodeTemplateId = isAggregateTemplate
-        ? (mainNode.id || mainNode.templateId)  // ✅ Template aggregato: usa mainNode.id
-        : (template.id || template._id);        // ✅ Template atomico/composito: usa template.id
-
-      // ✅ CRITICAL: Copia dataContracts dal template se mainNode non li ha
-      // ✅ I dataContracts sono referenziati dal template, NON copiati nell'istanza
-      const nodeConstraints = mainNode.constraints || mainNode.dataContracts || template.dataContracts || template.constraints || [];
-
-      return {
-        ...mainNode,
-        id: mainNode.id || template.id || template._id, // ✅ Preserva id esistente o usa template.id
-        templateId: mainNode.templateId || nodeTemplateId, // ✅ CRITICAL: Imposta esplicitamente templateId
-        label: mainNode.label || template.label || template.name || undefined, // ✅ NON inventare: undefined se manca
-        constraints: nodeConstraints, // ✅ CRITICAL: Copia dataContracts dal template (referenza)
-        subTasks: subData
-      };
-    });
-
-    return data;
-  }
-
-  // ✅ Build from subDataIds (composite template)
-  const subDataIds = template.subTasksIds || [];
-  if (subDataIds.length > 0) {
-    const subDataInstances: any[] = [];
-    for (const subId of subDataIds) {
-      const subTemplate = DialogueTaskService.getTemplate(subId);
-      if (subTemplate) {
-        // ✅ Recursively dereference subTasks
-        const dereferencedSubData = (subTemplate.data && Array.isArray(subTemplate.data) && subTemplate.data.length > 0 && subTemplate.data[0].subTasks)
-          ? (subTemplate.data[0].subTasks || []).map(dereferenceSubData)
-          : [];
-
-        subDataInstances.push({
-          id: subTemplate.id || subTemplate._id,
-          label: subTemplate.label, // ✅ NON inventare
-          type: subTemplate.type,
-          icon: subTemplate.icon || 'FileText',
-          constraints: subTemplate.dataContracts || subTemplate.constraints || [],
-          examples: subTemplate.examples || [],
-          nlpContract: subTemplate.nlpContract || undefined,
-          subTasks: dereferencedSubData,
-          templateId: subTemplate.id || subTemplate._id, // ✅ Solo templateId (uguale a id per template atomici/compositi)
-          kind: subTemplate.name || subTemplate.type || 'generic'
-        });
-      }
-    }
-
-    // ✅ NON inventare label per main node
-    if (!template.label && !template.name) {
-      const labelForHeuristics = template.id || 'UNKNOWN';
-      console.warn('[buildDataTree] Label mancante nel template composito, uso ID come fallback tecnico per euristiche', {
-        templateId: template.id,
-        fallbackLabel: labelForHeuristics
-      });
-    }
-
-    return [{
-      id: template.id || template._id,
-      label: template.label || template.name || undefined, // ✅ NON inventare
-      type: template.type,
-      icon: template.icon || 'Calendar',
-      constraints: template.dataContracts || template.constraints || [],
-      examples: template.examples || [],
-      nlpContract: template.nlpContract || undefined,
-      subTasks: subDataInstances,
-      templateId: template.id || template._id,
-      kind: template.name || template.type || 'generic'
-    }];
-  }
-
-  // Template semplice
-  if (!template.label && !template.name) {
-    const labelForHeuristics = template.id || 'UNKNOWN';
-    console.warn('[buildDataTree] Label mancante nel template semplice, uso ID come fallback tecnico per euristiche', {
-      templateId: template.id,
-      fallbackLabel: labelForHeuristics
-    });
-  }
-
-  return [{
-    id: template.id || template._id,
-    label: template.label || template.name || undefined, // ✅ NON inventare
-    type: template.type,
-    icon: template.icon || 'Calendar',
-    constraints: template.dataContracts || template.constraints || [],
-    examples: template.examples || [],
-    nlpContract: template.nlpContract || undefined,
-    subTasks: [],
-    templateId: template.id || template._id,
-    kind: template.name || template.type || 'generic'
-  }];
-}
-
-/**
- * Build data structure from template (reference structure)
- * ✅ DEPRECATED: Usa cloneTemplateSteps + buildDataTree invece
- * Mantenuto per retrocompatibilità
- * Returns both data and guidMapping for translation copying
- */
-export function buildDataFromTemplate(template: any): { data: any[]; guidMapping: Map<string, string> } {
-  // ✅ Prima monta l'albero completo, poi clona gli steps usando i templateId dall'albero
-  const data = buildDataTree(template);
-  const { guidMapping } = cloneTemplateSteps(template, data);
-  return { data, guidMapping };
-
-}
+// ❌ RIMOSSO: buildDataTree() duplicato - usa buildTaskTreeNodes() da taskUtils.ts
+// ❌ RIMOSSO: buildDataFromTemplate() - deprecato, non più necessario
 
 /**
  * Copy translations for cloned steps
@@ -1154,20 +988,22 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
   }
 
   // ✅ Struttura identica → salva solo override (logica: steps, constraints, examples, nlpContract)
-  // Usa buildDataTree per ottenere templateNode con constraints/examples per confronto override
-  const templateDataForOverride = buildDataTree(template);
+  // Usa buildTaskTreeNodes per ottenere templateNode con constraints/examples per confronto override
+  const templateNodesForOverride = buildTaskTreeNodes(template);
 
   console.log('[extractModifiedDDTFields] ✅ Structure identical - extracting overrides only', {
-    localdataLength: localDDT.data?.length || 0,
-    templateDataForOverrideLength: templateDataForOverride.length
+    localNodesLength: localDDT.nodes?.length || 0,
+    templateNodesForOverrideLength: templateNodesForOverride.length
   });
 
-  if (localDDT.data && Array.isArray(localDDT.data) && templateDataForOverride.length > 0) {
+  // ✅ NUOVO MODELLO: Usa nodes[] invece di data[]
+  const localNodes = localDDT.nodes || localDDT.data || []; // Fallback per compatibilità temporanea
+  if (Array.isArray(localNodes) && localNodes.length > 0 && templateNodesForOverride.length > 0) {
     const dataOverrides: any[] = [];
 
-    for (let i = 0; i < localDDT.data.length; i++) {
-      const mainNode = localDDT.data[i];
-      const templateNode = templateDataForOverride[i] || templateDataForOverride[0]; // Fallback to first
+    for (let i = 0; i < localNodes.length; i++) {
+      const mainNode = localNodes[i];
+      const templateNode = templateNodesForOverride[i] || templateNodesForOverride[0]; // Fallback to first
 
       const templateNodeConstraints = templateNode?.dataContracts || templateNode?.constraints || [];
       const templateNodeNlpContract = templateNode?.nlpContract;
@@ -1225,11 +1061,13 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
         if (hasConstraintsOverride) overrideNode.constraints = mainNode.constraints;
         if (hasNlpContractOverride) overrideNode.nlpContract = mainNode.nlpContract;
 
-        // Check subTasks overrides (solo logica, non struttura)
-        if (mainNode.subTasks && Array.isArray(mainNode.subTasks) && templateNode.subTasks && Array.isArray(templateNode.subTasks)) {
+        // ✅ NUOVO MODELLO: Check subNodes overrides (solo logica, non struttura)
+        const mainSubNodes = mainNode.subNodes || mainNode.subTasks || []; // Fallback per compatibilità
+        const templateSubNodes = templateNode.subNodes || [];
+        if (Array.isArray(mainSubNodes) && mainSubNodes.length > 0 && templateSubNodes.length > 0) {
           const subDataOverrides: any[] = [];
-          for (const subNode of mainNode.subTasks) {
-            const templateSubNode = templateNode.subTasks.find((s: any) =>
+          for (const subNode of mainSubNodes) {
+            const templateSubNode = templateSubNodes.find((s: TaskTreeNode) =>
               s.templateId === subNode.templateId || s.label === subNode.label
             );
 
@@ -1273,7 +1111,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
             }
           }
           if (subDataOverrides.length > 0) {
-            overrideNode.subTasks = subDataOverrides;
+            overrideNode.subNodes = subDataOverrides; // ✅ NUOVO MODELLO: subNodes invece di subTasks
           }
         }
 
@@ -1282,7 +1120,8 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
     }
 
     if (dataOverrides.length > 0) {
-      result.data = dataOverrides;
+      // ✅ NUOVO MODELLO: Non salvare più .data, salva solo override necessari
+      // result.data è deprecato - gli override vengono salvati in result.steps e altri campi
       console.log('[extractModifiedDDTFields] ✅ Saving data overrides', {
         dataOverridesLength: dataOverrides.length,
         firstOverride: dataOverrides[0] ? {

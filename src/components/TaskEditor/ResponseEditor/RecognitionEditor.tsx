@@ -324,13 +324,11 @@ export default function RecognitionEditor({
           const currentTask = taskRepository.getTask(taskId);
           // ✅ NUOVO MODELLO: Task non ha più .data[], usa TaskTree.nodes[] costruito runtime
           // Non serve più aggiornare cache con .data[] - il TaskTree viene ricostruito da template + instance
-              console.log('[NOTES] Updated TaskRepository cache', {
-                taskId,
-                nodeIndex,
-                notesCount: Object.keys(notes).length
-              });
-            }
-          }
+          console.log('[NOTES] Updated TaskRepository cache', {
+            taskId,
+            nodeIndex,
+            notesCount: Object.keys(notes).length
+          });
         } catch (error) {
           console.error('[NOTES] Error updating TaskRepository cache', error);
         }

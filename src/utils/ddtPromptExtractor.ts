@@ -1,4 +1,5 @@
 import { TaskType } from '../types/taskTypes';
+import type { TaskTreeNode } from '../types/taskTypes';
 
 /**
  * ============================================================================
@@ -26,14 +27,14 @@ export interface ExtractedPrompt {
  * Estrae prompt da adattare dagli steps del task.
  *
  * @param steps - Steps del task (formato: { [nodeTemplateId]: { start: {...}, ... } })
- * @param data - Albero dati (array di nodi con templateId)
+ * @param nodes - Albero nodi (array di TaskTreeNode con templateId)
  * @param projectTranslations - Traduzioni del progetto
  * @param options - Opzioni di estrazione
  * @returns Array di prompt estratti con GUID, testo e nodeTemplateId
  */
 export function extractStartPrompts(
   steps: Record<string, any>,
-  data: any[],
+  nodes: TaskTreeNode[],
   projectTranslations: Record<string, string>,
   options: { onlyRootNodes?: boolean } = {}
 ): ExtractedPrompt[] {
@@ -41,32 +42,32 @@ export function extractStartPrompts(
   const onlyRootNodes = options.onlyRootNodes ?? true; // Default: solo nodi radice
 
   console.log('[🔍 extractStartPrompts] START', {
-    dataLength: data.length,
+    nodesLength: nodes.length,
     stepsKeys: Object.keys(steps),
     onlyRootNodes,
     translationsCount: Object.keys(projectTranslations).length
   });
 
   // ✅ Determina quali nodi processare
-  const nodesToProcess: any[] = [];
+  const nodesToProcess: TaskTreeNode[] = [];
 
   if (onlyRootNodes) {
     // Solo nodi radice (primo livello)
-    nodesToProcess.push(...data);
+    nodesToProcess.push(...nodes);
     console.log('[🔍 extractStartPrompts] Processing only root nodes', {
       rootNodesCount: nodesToProcess.length
     });
   } else {
     // Tutti i nodi (ricorsivo)
-    const collectAllNodes = (nodes: any[]) => {
-      for (const node of nodes) {
+    const collectAllNodes = (nodeList: TaskTreeNode[]) => {
+      for (const node of nodeList) {
         nodesToProcess.push(node);
-        if (node.subTasks && Array.isArray(node.subTasks)) {
-          collectAllNodes(node.subTasks);
+        if (node.subNodes && Array.isArray(node.subNodes)) {
+          collectAllNodes(node.subNodes); // ✅ Usa subNodes[]
         }
       }
     };
-    collectAllNodes(data);
+    collectAllNodes(nodes);
     console.log('[🔍 extractStartPrompts] Processing all nodes (recursive)', {
       totalNodesCount: nodesToProcess.length
     });

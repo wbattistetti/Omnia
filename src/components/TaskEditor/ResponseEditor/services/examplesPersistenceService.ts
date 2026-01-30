@@ -81,36 +81,20 @@ export class ExamplesPersistenceService {
       updated.nlpProfile.examples = newExamples;
 
       // Step 2: Update TaskRepository cache (if taskId provided)
-      // This ensures that when the editor reopens, taskRepository.getTask()
-      // returns the updated task with examplesList
+      // ✅ NUOVO MODELLO: Task non ha più .data[], usa TaskTree.nodes[] costruito runtime
+      // Non serve più aggiornare cache con .data[] - il TaskTree viene ricostruito da template + instance
+      // Examples vengono salvati nel template, non nell'istanza
       if (taskId) {
         try {
           const currentTask = taskRepository.getTask(taskId);
-          // ✅ NUOVO MODELLO: Task non ha più .data[], usa TaskTree.nodes[] costruito runtime
-          // Non serve più aggiornare cache con .data[] - il TaskTree viene ricostruito da template + instance
-          // Examples vengono salvati nel template, non nell'istanza
-              taskRepository.updateTask(taskId, { data: updatedData }, undefined);
-
-              // Log the cache update (for debugging)
-              console.log('[ExamplesPersistence] Updated TaskRepository cache', {
-                taskId,
-                nodeIndex,
-                examplesCount: newExamples?.length || 0,
-                nodeHasNlpProfile: !!nodeToSave.nlpProfile,
-                nodeHasExamples: !!nodeToSave.nlpProfile?.examples,
-                nodeExamplesCount: nodeToSave.nlpProfile?.examples?.length || 0
-              });
-            } else {
-              console.warn('[ExamplesPersistence] Node not found in task.data', {
-                taskId,
-                nodeId,
-                nodeTemplateId,
-                dataLength: currentTask.data.length
-              });
-            }
-          }
+          // ✅ Cache update non necessario - TaskTree viene ricostruito runtime da template + instance
+          console.log('[ExamplesPersistence] Examples saved to node (cache update not needed)', {
+            taskId,
+            nodeId,
+            examplesCount: newExamples?.length || 0
+          });
         } catch (error) {
-          console.error('[ExamplesPersistence] Error updating TaskRepository cache', error);
+          console.error('[ExamplesPersistence] Error accessing TaskRepository', error);
         }
       }
 

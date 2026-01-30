@@ -4,7 +4,7 @@
 
 import { inferTaskType } from '../nlp/taskType';
 import { TaskType, taskTypeToHeuristicString } from '../types/taskTypes';
-import DDTTemplateMatcherService, { type DDTTemplateMatch } from './DDTTemplateMatcherService';
+import TaskTemplateMatcherService, { type TaskTemplateMatch } from './TaskTemplateMatcherService';
 import { getRuleSet, getLanguageOrder } from '../nlp/taskType/registry';
 import type { CompiledCategoryPattern } from '../nlp/taskType/types';
 import { waitForCache } from '../nlp/taskType/patternLoader';
@@ -48,21 +48,21 @@ export class RowHeuristicsService {
     let taskType = heuristic1Result.type;
 
     // 2️⃣ EURISTICA 2: cerca template task che matcha la label
-    let matchedTemplate: DDTTemplateMatch | null = null;
+    let matchedTemplate: TaskTemplateMatch | null = null;
     let templateType: TaskType | null = null;
 
     if (taskType !== TaskType.UNDEFINED) {
       // Euristica 1 ha trovato un tipo → cerca template per quel tipo
       const typeForMatch = taskTypeToHeuristicString(taskType);
       if (typeForMatch) {
-        matchedTemplate = await DDTTemplateMatcherService.findDDTTemplate(trimmedLabel, typeForMatch);
+        matchedTemplate = await TaskTemplateMatcherService.findTaskTemplate(trimmedLabel, typeForMatch);
         if (matchedTemplate) {
           templateType = this.getTemplateType(matchedTemplate.template);
         }
       }
     } else {
       // Euristica 1 è UNDEFINED → cerca template generico (qualsiasi tipo)
-      matchedTemplate = await DDTTemplateMatcherService.findDDTTemplate(trimmedLabel, null);
+      matchedTemplate = await TaskTemplateMatcherService.findTaskTemplate(trimmedLabel, null);
       if (matchedTemplate) {
         templateType = this.getTemplateType(matchedTemplate.template);
       }

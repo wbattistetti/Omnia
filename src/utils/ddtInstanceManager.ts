@@ -1,6 +1,6 @@
 import type { Task } from '../types/taskTypes';
 import { DialogueTaskService } from '../services/DialogueTaskService';
-import { buildDataTree, cloneTemplateSteps } from './taskUtils';
+import { buildTaskTreeNodes, cloneTemplateSteps } from './taskUtils';
 import { TaskType } from '../types/taskTypes';
 import { taskRepository } from '../services/TaskRepository';
 import { extractStartPrompts } from './ddtPromptExtractor';
@@ -34,7 +34,7 @@ import { extractStartPrompts } from './ddtPromptExtractor';
 export async function loadAndAdaptDDTForExistingTask(
   task: Task,
   projectId: string | null
-): Promise<{ ddt: any; adapted: boolean }> {
+): Promise<{ taskTree: any; adapted: boolean }> {
 
   console.log('[🔍 ddtInstanceManager] START loadAndAdaptDDTForExistingTask', {
     taskId: task.id,
@@ -48,10 +48,11 @@ export async function loadAndAdaptDDTForExistingTask(
   // ✅ 1. Verifica se ha templateId
   if (!task.templateId || task.templateId === 'UNDEFINED') {
     console.log('[🔍 ddtInstanceManager] Task standalone (no templateId)');
+    // ✅ NUOVO MODELLO: Restituisci TaskTree con nodes invece di data
     return {
-      ddt: {
+      taskTree: {
         label: task.label,
-        data: task.data || [],
+        nodes: task.data || [], // ✅ Usa nodes invece di data
         steps: task.steps,
         constraints: task.constraints,
         dataContract: task.dataContract
@@ -64,10 +65,11 @@ export async function loadAndAdaptDDTForExistingTask(
   const template = DialogueTaskService.getTemplate(task.templateId);
   if (!template) {
     console.warn('[🔍 ddtInstanceManager] ❌ Template non trovato:', task.templateId);
+    // ✅ NUOVO MODELLO: Restituisci TaskTree con nodes invece di data
     return {
-      ddt: {
+      taskTree: {
         label: task.label,
-        data: task.data || [],
+        nodes: task.data || [], // ✅ Usa nodes invece di data
         steps: task.steps,
         constraints: task.constraints,
       },
@@ -161,9 +163,9 @@ export async function loadAndAdaptDDTForExistingTask(
     let finalSteps = hasTaskSteps ? task.steps : null;
 
     if (!finalSteps) {
-      // ✅ Solo se task.steps non esiste, costruisci dataTree e clona steps
-      const dataTree = buildDataTree(template);
-      const { steps: clonedSteps } = cloneTemplateSteps(template, dataTree);
+      // ✅ Solo se task.steps non esiste, costruisci nodes e clona steps
+      const nodes = buildTaskTreeNodes(template);
+      const { steps: clonedSteps } = cloneTemplateSteps(template, nodes);
       finalSteps = clonedSteps;
       console.log('[🔍 ddtInstanceManager] Steps clonati dal template (task.steps non esiste)', {
         clonedStepsKeys: Object.keys(clonedSteps),
@@ -179,11 +181,11 @@ export async function loadAndAdaptDDTForExistingTask(
     // ✅ Verifica se i prompt sono già stati adattati
     const promptsAlreadyAdapted = task.metadata?.promptsAdapted === true;
 
-    // ✅ Ritorna DDT usando task.data (fonte di verità)
+    // ✅ NUOVO MODELLO: Ritorna TaskTree usando task.data (fonte di verità) con nodes invece di data
     return {
-      ddt: {
+      taskTree: {
         label: task.label ?? template.label,
-        data: enrichedData, // ✅ Usa task.data (preserva examples, testNotes, ecc.)
+        nodes: enrichedData, // ✅ Usa nodes invece di data (preserva examples, testNotes, ecc.)
         steps: finalSteps,
         constraints: (task.constraints && task.constraints.length > 0)
           ? task.constraints
@@ -201,20 +203,20 @@ export async function loadAndAdaptDDTForExistingTask(
     templateId: template.id
   });
 
-  // ✅ 3. Costruisci dataTree (dereferenziazione ricorsiva)
-  const dataTree = buildDataTree(template);
-  console.log('[🔍 ddtInstanceManager] dataTree costruito', {
-    dataTreeLength: dataTree.length,
-    mainNodes: dataTree.map((n: any) => ({
+  // ✅ 3. Costruisci nodes (dereferenziazione ricorsiva)
+  const nodes = buildTaskTreeNodes(template);
+  console.log('[🔍 ddtInstanceManager] nodes costruito', {
+    nodesLength: nodes.length,
+    mainNodes: nodes.map((n: TaskTreeNode) => ({
       id: n.id,
       templateId: n.templateId,
       label: n.label,
-      subDataCount: n.subTasks?.length || 0
+      subNodesCount: n.subNodes?.length || 0
     }))
   });
 
-  // ✅ 4. Clona steps (usa dataTree con templateId corretti)
-  const { steps: clonedSteps, guidMapping } = cloneTemplateSteps(template, dataTree);
+  // ✅ 4. Clona steps (usa nodes con templateId corretti)
+  const { steps: clonedSteps, guidMapping } = cloneTemplateSteps(template, nodes);
   console.log('[🔍 ddtInstanceManager] Steps clonati', {
     clonedStepsKeys: Object.keys(clonedSteps),
     clonedStepsCount: Object.keys(clonedSteps).length,
@@ -231,7 +233,7 @@ export async function loadAndAdaptDDTForExistingTask(
   // ✅ Solo se l'istanza ha override espliciti (array non vuoto), usa quelli
   // ✅ CRITICAL: Il dataContract può essere salvato in task.data[0].dataContract (override) o task.dataContract (root)
   // ✅ Cerca prima negli override in task.data, poi a livello root, poi nel template
-  const enrichedData = dataTree.map((templateNode: any, index: number) => {
+  const enrichedNodes = nodes.map((templateNode: TaskTreeNode, index: number) => {
     // ✅ Cerca override nel task.data corrispondente (per templateId match)
     const taskDataOverride = task.data && Array.isArray(task.data)
       ? task.data.find((node: any) => node.templateId === templateNode.templateId) || task.data[index]
@@ -304,7 +306,7 @@ export async function loadAndAdaptDDTForExistingTask(
         : undefined,
       // ✅ CRITICAL: dataContract è sempre dal template, non più override
       dataContract: templateNode.dataContract,
-      subData: templateNode.subTasks || []
+      subNodes: templateNode.subNodes || [] // ✅ Usa subNodes invece di subData
     };
   });
 
@@ -411,9 +413,9 @@ export async function loadAndAdaptDDTForExistingTask(
         });
 
         return {
-          ddt: {
+          taskTree: {
             label: task.label ?? template.label,
-            data: enrichedData,
+            nodes: enrichedNodes, // ✅ Usa nodes invece di data
             steps: finalSteps,
             // ✅ Se task.constraints è array vuoto [], usa template (referenza)
             constraints: (task.constraints && task.constraints.length > 0)
@@ -439,11 +441,11 @@ export async function loadAndAdaptDDTForExistingTask(
     }
   }
 
-  // ✅ 9. Ritorna DDT (con o senza adattamento)
+  // ✅ 9. Ritorna TaskTree (con o senza adattamento)
   const result = {
-    ddt: {
+    taskTree: {
       label: task.label ?? template.label,
-      data: enrichedData,
+      nodes: enrichedNodes, // ✅ Usa nodes invece di data
       steps: finalSteps,
       // ✅ Se task.constraints è array vuoto [], usa template (referenza)
       constraints: (task.constraints && task.constraints.length > 0)

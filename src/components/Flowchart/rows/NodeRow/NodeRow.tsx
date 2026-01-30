@@ -1750,8 +1750,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       const finalTaskType = taskForType.type as TaskType;
                       taskEditorCtx.open({ id: String(taskIdForType), type: finalTaskType, label: row.text, instanceId: row.id });
 
-                      // Costruisci DDT se necessario
-                      let ddt: any = null;
+                      // Costruisci TaskTree se necessario
+                      let taskTree: any = null;
                       if (taskForType?.templateId && taskForType.templateId !== 'UNDEFINED') {
                         const DialogueTaskService = (await import('../../../../services/DialogueTaskService')).default;
                         const template = DialogueTaskService.getTemplate(taskForType.templateId);
@@ -1761,12 +1761,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                           if (templateType === TaskType.UtteranceInterpretation) {
                             const { buildTaskTree } = await import('../../../../utils/taskUtils');
                             const projectId = getProjectId?.() || undefined;
-                            ddt = await buildTaskTree(taskForType, projectId);
+                            taskTree = await buildTaskTree(taskForType, projectId);
                           }
                         }
                       } else {
                         // ✅ Task senza templateId - ResponseEditor gestirà creando template automaticamente
-                        ddt = null;
+                        taskTree = null;
                       }
 
                       const event = new CustomEvent('taskEditor:open', {
@@ -1774,7 +1774,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                           id: String(taskIdForType),
                           type: finalTaskType,
                           label: row.text,
-                          ddt: ddt,
+                          taskTree: taskTree,
                           instanceId: row.id,
                           templateId: taskForType?.templateId || undefined
                         },
@@ -1804,14 +1804,14 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         const template = DialogueTaskService.getTemplate(metaTemplateId);
 
                         if (template) {
-                          const { buildDataTree } = await import('../../../../utils/taskUtils');
-                          const dataTree = buildDataTree(template);
+                          const { buildTaskTreeNodes } = await import('../../../../utils/taskUtils');
+                          const nodes = buildTaskTreeNodes(template);
 
-                          // ✅ Map subTasks to subData for SchemaNode compatibility (buildDataTree returns subTasks from Task templates)
-                          const mappedDataTree = dataTree.map((node: any) => ({
+                          // ✅ NUOVO MODELLO: nodes già ha subNodes[], mappa per compatibilità SchemaNode se necessario
+                          const mappedDataTree = nodes.map((node: any) => ({
                             ...node,
-                            subData: node.subTasks || node.subData || [],
-                            subTasks: undefined // Remove subTasks to avoid confusion
+                            subData: node.subNodes || [], // ✅ Usa subNodes dal nuovo modello
+                            subNodes: undefined // Remove subNodes per compatibilità SchemaNode
                           }));
 
                           console.log('[🔍 NodeRow][onOpenDDT] 📋 Mostrando preview dialog (template)', {
@@ -1844,10 +1844,10 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                           labelLength: row.text.trim().length
                         });
 
-                        const { createDDTFromAI_GenerateStructure } = await import('../../../../utils/ddtOrchestrator');
+                        const { generateTaskStructureFromAI } = await import('../../../../utils/taskOrchestrator');
                         const provider = (localStorage.getItem('ai.provider') as 'groq' | 'openai') || 'groq';
 
-                        const dataTree = await createDDTFromAI_GenerateStructure(row.text, provider);
+                        const dataTree = await generateTaskStructureFromAI(row.text, provider);
 
                         console.log('[🔍 NodeRow][onOpenDDT] 📋 Mostrando preview dialog (AI)', {
                           dataTreeLength: dataTree.length,
@@ -1965,14 +1965,14 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         try {
                           const { loadAndAdaptDDTForExistingTask } = await import('../../../../utils/ddtInstanceManager');
 
-                          // ✅ Usa funzione centralizzata (gestisce tutto: buildDataTree, cloneSteps, adattamento)
-                          const { ddt, adapted } = await loadAndAdaptDDTForExistingTask(taskForType, projectId);
+                          // ✅ Usa funzione centralizzata (gestisce tutto: buildTaskTreeNodes, cloneSteps, adattamento)
+                          const { taskTree, adapted } = await loadAndAdaptDDTForExistingTask(taskForType, projectId);
 
-                          console.log('[🔍 NodeRow][LAZY] DDT ricevuto da loadAndAdaptDDTForExistingTask', {
+                          console.log('[🔍 NodeRow][LAZY] TaskTree ricevuto da loadAndAdaptDDTForExistingTask', {
                             taskId: taskIdForType,
-                            ddtStepsKeys: Object.keys(ddt.steps || {}),
-                            ddtStepsCount: Object.keys(ddt.steps || {}).length,
-                            mainNodesTemplateIds: ddt.data?.map((n: any) => ({
+                            taskTreeStepsKeys: Object.keys(taskTree.steps || {}),
+                            taskTreeStepsCount: Object.keys(taskTree.steps || {}).length,
+                            mainNodesTemplateIds: taskTree.nodes?.map((n: any) => ({
                               id: n.id,
                               templateId: n.templateId,
                               label: n.label
@@ -1982,14 +1982,14 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                           // ✅ Salva task con steps (NON salvare data - si ricostruisce runtime)
                           taskRepository.updateTask(taskIdForType, {
-                            steps: ddt.steps, // ✅ Steps con prompt adattati (solo main data)
+                            steps: taskTree.steps, // ✅ Steps con prompt adattati (solo main data)
                             metadata: { promptsAdapted: adapted || taskForType?.metadata?.promptsAdapted === true }
                           }, projectId);
 
                           console.log('[🔍 NodeRow][LAZY] ✅ Task salvato con steps', {
                             taskId: taskIdForType,
-                            stepsCount: Object.keys(ddt.steps || {}).length,
-                            stepsKeys: Object.keys(ddt.steps || {}),
+                            stepsCount: Object.keys(taskTree.steps || {}).length,
+                            stepsKeys: Object.keys(taskTree.steps || {}),
                             promptsAdapted: adapted || taskForType?.metadata?.promptsAdapted === true
                           });
                         } catch (err) {
@@ -2101,13 +2101,14 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       const template = DialogueTaskService.getTemplate(metaTemplateId);
 
                       if (template) {
-                          const { buildDataTree } = await import('../../../../utils/taskUtils');
-                          const data = buildDataTree(template);
+                          const { buildTaskTreeNodes } = await import('../../../../utils/taskUtils');
+                          const nodes = buildTaskTreeNodes(template);
 
-                        // ✅ Copia solo data con steps (escalations), non constraints/examples/nlpContract
-                        taskRepository.updateTask(taskIdForType, {
-                          data: data
-                        }, projectId);
+                        // ❌ DEPRECATED: Non salvare più .data - il modello Task non usa .data
+                        // ✅ La struttura viene ricostruita runtime da template.subTasksIds
+                        // taskRepository.updateTask(taskIdForType, {
+                        //   data: nodes
+                        // }, projectId);
 
                         console.log('✅ [LAZY] Steps copiati dal template', {
                           dataLength: data.length,
@@ -2132,16 +2133,16 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                   // ✅ Apri editor tramite context (gestisce automaticamente il tipo corretto)
                   taskEditorCtx.open({ id: String(taskIdForType), type: taskType, label: row.text, instanceId: row.id }); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx, type → taskType (enum)
 
-                  // ✅ Solo per DataRequest (editorKind === 'ddt'), prepara DDT ed emetti evento
-                  // ✅ Per altri tipi (SayMessage, BackendCall, AIAgent, Summarizer, Negotiation, ecc.), emetti evento senza DDT
+                  // ✅ Solo per DataRequest (editorKind === 'ddt'), prepara TaskTree ed emetti evento
+                  // ✅ Per altri tipi (SayMessage, BackendCall, AIAgent, Summarizer, Negotiation, ecc.), emetti evento senza TaskTree
                   if (editorKind === 'ddt' && taskType === TaskType.UtteranceInterpretation) {
-                    // ✅ SOLO per DataRequest: costruisci DDT solo se:
+                    // ✅ SOLO per DataRequest: costruisci TaskTree solo se:
                     // 1. C'è templateId E il template è di tipo DataRequest
-                    // 2. OPPURE c'è data esistente (DDT già salvato, standalone o con override)
-                    let ddt: any = null;
+                    // 2. OPPURE c'è data esistente (TaskTree già salvato, standalone o con override)
+                    let taskTree: any = null;
 
                     if (taskForType?.templateId && taskForType.templateId !== 'UNDEFINED') {
-                      // ✅ Verifica se il template è di tipo DataRequest prima di costruire DDT
+                      // ✅ Verifica se il template è di tipo DataRequest prima di costruire TaskTree
                       const DialogueTaskService = (await import('../../../../services/DialogueTaskService')).default;
                       const template = DialogueTaskService.getTemplate(taskForType.templateId);
 
@@ -2150,34 +2151,34 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         const { RowHeuristicsService } = await import('../../../../services/RowHeuristicsService');
                         const templateType = RowHeuristicsService.getTemplateType(template);
 
-                        // ✅ Costruisci DDT SOLO se il template è di tipo DataRequest
+                        // ✅ Costruisci TaskTree SOLO se il template è di tipo DataRequest
                         if (templateType === TaskType.UtteranceInterpretation) {
                           // ✅ buildTaskTree costruisce TaskTree da template + instance
                           const { buildTaskTree } = await import('../../../../utils/taskUtils');
                           const projectId = getProjectId?.() || undefined;
-                          ddt = await buildTaskTree(taskForType, projectId);
-                          if (!ddt) {
+                          taskTree = await buildTaskTree(taskForType, projectId);
+                          if (!taskTree) {
                             // Fallback: create empty TaskTree solo se template è DataRequest ma buildTaskTree fallisce
-                            ddt = { label: taskForType.label || row.text || 'New Task', nodes: [] };
+                            taskTree = { label: taskForType.label || row.text || 'New Task', nodes: [] };
                           }
                         } else {
-                          // ✅ NON costruire DDT se template non è DataRequest
-                          ddt = null;
+                          // ✅ NON costruire TaskTree se template non è DataRequest
+                          taskTree = null;
                         }
                       } else {
-                        ddt = null;
+                        taskTree = null;
                       }
                     }
-                    // ✅ NON creare DDT vuoto se non c'è né templateId DataRequest né data
-                    // ResponseEditor gestirà il caso di ddt === null aprendo il wizard (AI genererà DDT)
+                    // ✅ NON creare TaskTree vuoto se non c'è né templateId DataRequest né data
+                    // ResponseEditor gestirà il caso di taskTree === null aprendo il wizard (AI genererà TaskTree)
 
-                    // ✅ Emit event with DDT data so AppContent can open it as docking tab (solo per DataRequest)
+                    // ✅ Emit event with TaskTree data so AppContent can open it as docking tab (solo per DataRequest)
                     const event = new CustomEvent('taskEditor:open', { // ✅ RINOMINATO: actEditor:open → taskEditor:open
                       detail: {
                         id: String(taskIdForType),
                         type: taskType, // ✅ TaskType enum invece di stringa
                         label: row.text,
-                        ddt: ddt,
+                        taskTree: taskTree,
                         instanceId: row.id, // Pass instanceId from row
                         templateId: taskForType?.templateId || undefined
                       },
@@ -2186,7 +2187,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     document.dispatchEvent(event);
 
                   } else {
-                    // ✅ Per altri tipi (SayMessage, BackendCall, AIAgent, Summarizer, Negotiation, ecc.), emetti evento senza DDT
+                    // ✅ Per altri tipi (SayMessage, BackendCall, AIAgent, Summarizer, Negotiation, ecc.), emetti evento senza TaskTree
                     const event = new CustomEvent('taskEditor:open', {
                       detail: {
                         id: String(taskIdForType),
@@ -2302,7 +2303,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         });
 
                         // ✅ CASO 1: Template candidato → clona steps e adatta prompt
-                        const { createDDTFromTemplate } = await import('../../../../utils/ddtOrchestrator');
+                        const { createTaskFromTemplate } = await import('../../../../utils/taskOrchestrator');
 
                         // Crea task base (createTask salva automaticamente, ma senza steps è OK)
                         const task = taskRepository.createTask(
@@ -2314,25 +2315,26 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         );
 
                         // Clona steps e adatta prompt (modifica task.steps in-place)
-                        await createDDTFromTemplate(previewData.templateId, task, row.text || '', false);
+                        await createTaskFromTemplate(previewData.templateId, task, row.text || '', false);
 
                         // ✅ REMOVED: updateTask ridondante - task è già nella cache e modificato in-place
                         // ✅ task.steps e task.metadata sono già aggiornati direttamente nella cache
                         // ✅ updatedAt verrà aggiornato al salvataggio esplicito del progetto
 
+                        // ✅ CRITICAL: Costruisci taskTree PRIMA di aprire ResponseEditor
+                        const { buildTaskTree } = await import('../../../../utils/taskUtils');
+                        const taskTree = await buildTaskTree(task, projectId);
+
                         // Apri ResponseEditor
                         taskEditorCtx.open({ id: task.id, type: TaskType.UtteranceInterpretation, label: row.text, instanceId: row.id });
 
-                        const { buildTaskTree } = await import('../../../../utils/taskUtils');
-                        const projectId = getProjectId?.() || undefined;
-                        const ddt = await buildTaskTree(task, projectId);
-
+                        // Emetti evento con taskTree per aprire come docking tab
                         const event = new CustomEvent('taskEditor:open', {
                           detail: {
                             id: task.id,
                             type: TaskType.UtteranceInterpretation,
                             label: row.text,
-                            ddt: ddt,
+                            taskTree: taskTree,
                             instanceId: row.id,
                             templateId: previewData.templateId
                           },
@@ -2346,7 +2348,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         });
 
                         // ✅ CASO 2: Struttura AI → genera tutti gli steps
-                        const { createDDTFromAI_GenerateSteps } = await import('../../../../utils/ddtOrchestrator');
+                        const { generateTaskStepsFromAI } = await import('../../../../utils/taskOrchestrator');
                         const provider = (localStorage.getItem('ai.provider') as 'groq' | 'openai') || 'groq';
 
                         // Crea task base (senza templateId = standalone)
@@ -2359,7 +2361,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         );
 
                         // Genera tutti gli steps da AI
-                        const ddt = await createDDTFromAI_GenerateSteps(
+                        const taskTree = await generateTaskStepsFromAI(
                           previewData.dataTree,
                           previewData.rootLabel,
                           row.text || '',
@@ -2368,8 +2370,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                         // Salva task con steps
                         taskRepository.updateTask(task.id, {
-                          steps: ddt.steps,
-                          data: ddt.data
+                          steps: taskTree.steps,
+                          data: taskTree.data
                         }, projectId);
 
                         // Apri ResponseEditor
@@ -2380,7 +2382,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                             id: task.id,
                             type: TaskType.UtteranceInterpretation,
                             label: row.text,
-                            ddt: ddt,
+                            taskTree: taskTree,
                             instanceId: row.id
                           },
                           bubbles: true
@@ -2418,7 +2420,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         id: task.id,
                         type: TaskType.UtteranceInterpretation,
                         label: row.text,
-                        ddt: null, // ✅ null = ResponseEditor aprirà wizard
+                        taskTree: null, // ✅ null = ResponseEditor aprirà wizard
                         instanceId: row.id
                       },
                       bubbles: true
