@@ -643,18 +643,21 @@ export function buildTaskTreeNodes(template: any): TaskTreeNode[] {
   // ✅ NUOVO MODELLO: Build from subTasksIds (composite template)
   const subTasksIds = template.subTasksIds || [];
   if (subTasksIds.length > 0) {
-    const nodes = subTasksIds.map(buildNode);
+    const subNodes = subTasksIds.map(buildNode);
 
-    // ✅ NON inventare label per main node
-    if (!template.label && !template.name) {
-      const labelForHeuristics = template.id || 'UNKNOWN';
-      console.warn('[buildTaskTreeNodes] Label mancante nel template composito, uso ID come fallback tecnico per euristiche', {
-        templateId: template.id,
-        fallbackLabel: labelForHeuristics
-      });
-    }
-
-    return nodes;
+    // ✅ FIX: Ritorna nodo radice con subNodes (non solo sub-nodi)
+    // Questo permette a extractStartPrompts di identificare correttamente il nodo radice
+    // e adattare solo quello, lasciando i sub-nodi con i prompt originali del template
+    return [{
+      id: template.id || template._id,
+      templateId: template.id || template._id,
+      label: template.label || template.name || undefined,  // ✅ "Date" dal template
+      type: template.type,
+      icon: template.icon || 'Calendar',
+      constraints: template.dataContracts || template.constraints || [],
+      dataContract: template.dataContract || undefined,
+      subNodes  // ✅ Day, Month, Year come subNodes
+    }];
   }
 
   // Template semplice

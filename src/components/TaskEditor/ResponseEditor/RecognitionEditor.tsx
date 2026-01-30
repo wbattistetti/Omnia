@@ -339,7 +339,7 @@ export default function RecognitionEditor({
   }, [notes, editorProps?.node?.id, updateSelectedNode, editorProps?.task?.id, editorProps?.task?.instanceId]);
 
   // ✅ Use centralized service for examplesList persistence
-  // Single point of synchronization for examplesList across ddtRef and TaskRepository cache
+  // Single point of synchronization for examplesList across taskTreeRef and TaskRepository cache
   useEffect(() => {
     const node = editorProps?.node;
     if (!node || !updateSelectedNode) return;

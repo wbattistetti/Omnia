@@ -7,14 +7,14 @@ import { taskRepository } from '../../../../services/TaskRepository';
  * Centralized service for persisting examplesList to node.nlpProfile.examples
  *
  * This service ensures that examplesList is synchronized across:
- * - node.nlpProfile.examples (in ddtRef)
+ * - node.nlpProfile.examples (in taskTreeRef)
  * - TaskRepository cache (in-memory)
  *
  * The database is updated ONLY on explicit save (handleEditorClose).
  *
  * Architecture:
- * - Single source of truth: ddtRef.current.data (via updateSelectedNode)
- * - TaskRepository cache: mirror of ddtRef, updated synchronously
+ * - Single source of truth: taskTreeRef.current.nodes (via updateSelectedNode)
+ * - TaskRepository cache: mirror of taskTreeRef, updated synchronously
  * - Database: updated only on explicit save
  */
 export class ExamplesPersistenceService {
@@ -22,16 +22,16 @@ export class ExamplesPersistenceService {
    * Set examples for a node and synchronize across all layers
    *
    * This method:
-   * 1. Updates node.nlpProfile.examples in ddtRef (via updateSelectedNode)
+   * 1. Updates node.nlpProfile.examples in taskTreeRef (via updateSelectedNode)
    * 2. Updates TaskRepository cache (in-memory)
    *
    * The database is NOT updated here - it's updated only on explicit save.
    *
    * @param nodeId - The node ID
-   * @param nodeTemplateId - The node template ID (for finding in task.data)
+   * @param nodeTemplateId - The node template ID (for finding in taskTree.nodes)
    * @param taskId - The task ID (for TaskRepository cache)
    * @param examplesList - The new examples list
-   * @param updateSelectedNode - Callback to update the node in ddtRef
+   * @param updateSelectedNode - Callback to update the node in taskTreeRef
    * @returns void (updates are applied via callbacks)
    */
   static setExamplesForNode(
@@ -45,7 +45,7 @@ export class ExamplesPersistenceService {
       console.warn('[ExamplesPersistence] No taskId provided, skipping TaskRepository sync');
     }
 
-    // Step 1: Update node in ddtRef via updateSelectedNode
+    // Step 1: Update node in taskTreeRef via updateSelectedNode
     updateSelectedNode((prev: any) => {
       if (!prev) return prev;
 

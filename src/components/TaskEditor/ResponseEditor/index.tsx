@@ -643,7 +643,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
 
     // ✅ Salva selectedNode corrente nel ref prima di chiudere (se non già salvato)
     if (selectedNode && selectedNodePath) {
-      const mains = getdataList(ddtRef.current);
+      const mains = getdataList(taskTreeRef.current);
       const { mainIndex, subIndex } = selectedNodePath;
       const isRoot = selectedRoot || false;
 
@@ -676,7 +676,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
             nlpProfileExamples: nlpProfileExamples?.slice(0, 3)
           });
           mains[mainIndex] = selectedNode;
-          ddtRef.current.nodes = mains;
+          taskTreeRef.current.nodes = mains;
 
           // ✅ VERIFICA: Controlla se nlpProfile.examples è presente dopo il salvataggio
           const savedNode = taskTreeRef.current.nodes[mainIndex];
@@ -1060,10 +1060,10 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     } catch { }
 
     if (selectedRoot) {
-      const introStep = ddtRef.current?.introduction
-        ? { type: 'introduction', escalations: ddtRef.current.introduction.escalations }
+      const introStep = taskTreeRef.current?.introduction
+        ? { type: 'introduction', escalations: taskTreeRef.current.introduction.escalations }
         : { type: 'introduction', escalations: [] };
-      const newNode = { ...ddtRef.current, steps: [introStep] };
+      const newNode = { ...taskTreeRef.current, steps: [introStep] };
 
       try {
         if (localStorage.getItem('debug.nodeSync') === '1') {
@@ -1283,7 +1283,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   // ✅ Step keys e selectedStepKey sono ora gestiti internamente da BehaviourEditor
 
   // ✅ updateSelectedNode: SINGOLA FONTE DI VERITÀ = dockTree
-  // 1. Modifica ddtRef.current (buffer locale per editing)
+    // 1. Modifica taskTreeRef.current (buffer locale per editing)
   // 2. Aggiorna IMMEDIATAMENTE tab.taskTree nel dockTree (fonte di verità)
   // 3. React re-renderizza con tab.taskTree aggiornato
   //
@@ -1348,7 +1348,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
           // ✅ LOG: Verifica che nlpProfile.examples sia presente dopo l'aggiornamento
           const savedNlpProfileExamples = mains[mainIndex]?.nlpProfile?.examples;
           if (savedNlpProfileExamples) {
-            console.log('[EXAMPLES] UPDATE - Saved to ddtRef.data', {
+            console.log('[EXAMPLES] UPDATE - Saved to taskTreeRef.data', {
               nodeId: updated.id,
               mainIndex,
               hasNlpProfile: !!mains[mainIndex]?.nlpProfile,
