@@ -4,7 +4,7 @@ Option Explicit On
 Imports System.Collections.Generic
 Imports System.Linq
 Imports Newtonsoft.Json
-Imports DDTEngine
+Imports TaskEngine
 
 ''' <summary>
 ''' TaskAssembler: compila strutture IDE (TaskTreeRuntime) in strutture Runtime (Task ricorsivo)
@@ -97,7 +97,7 @@ Public Class TaskAssembler
         If assembled.Nodes IsNot Nothing AndAlso assembled.Nodes.Count > 0 Then
             If assembled.Nodes.Count = 1 Then
                 ' Un solo nodo: è il root
-                Dim taskNode = assembled.Nodes(0)
+                Dim taskNode As Compiler.TaskNode = assembled.Nodes(0)
                 rootTask = CompileNode(taskNode, Nothing)
                 rootTask.Id = assembled.Id ' Usa l'ID del TaskTreeRuntime come ID del root
             Else
@@ -105,7 +105,7 @@ Public Class TaskAssembler
                 rootTask = New RuntimeTask() With {
                     .Id = assembled.Id,
                     .Condition = Nothing,
-                    .Steps = New List(Of DDTEngine.DialogueStep)(),
+                    .Steps = New List(Of TaskEngine.DialogueStep)(),
                     .Constraints = New List(Of ValidationCondition)(),
                     .NlpContract = Nothing,
                     .SubTasks = New List(Of RuntimeTask)()
@@ -123,7 +123,7 @@ Public Class TaskAssembler
             rootTask = New RuntimeTask() With {
                 .Id = assembled.Id,
                 .Condition = Nothing,
-                .Steps = New List(Of DDTEngine.DialogueStep)(),
+                .Steps = New List(Of TaskEngine.DialogueStep)(),
                 .Constraints = New List(Of ValidationCondition)(),
                 .NlpContract = Nothing,
                 .SubTasks = New List(Of RuntimeTask)()
@@ -172,7 +172,7 @@ Public Class TaskAssembler
         Dim task As New RuntimeTask() With {
             .Id = ideNode.Id,
             .Condition = Nothing, ' Condition viene dall'istanza, non dal template
-            .Steps = New List(Of DDTEngine.DialogueStep)(),
+            .Steps = New List(Of TaskEngine.DialogueStep)(),
             .Constraints = New List(Of ValidationCondition)(),
             .NlpContract = Nothing, ' Verrà caricato da DDTCompiler
             .SubTasks = New List(Of RuntimeTask)()
@@ -280,10 +280,10 @@ Public Class TaskAssembler
     ''' <summary>
     ''' Compila DialogueStep (IDE) in DialogueStep (Runtime)
     ''' </summary>
-    Private Function CompileDialogueStep(ideStep As Compiler.DialogueStep) As DDTEngine.DialogueStep
-        Dim runtimeStep As New DDTEngine.DialogueStep() With {
+    Private Function CompileDialogueStep(ideStep As Compiler.DialogueStep) As TaskEngine.DialogueStep
+        Dim runtimeStep As New TaskEngine.DialogueStep() With {
             .Type = CompileStepType(ideStep.Type),
-            .Escalations = New List(Of DDTEngine.Escalation)()
+            .Escalations = New List(Of TaskEngine.Escalation)()
         }
 
         Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileDialogueStep: type={ideStep.Type}, escalations IsNot Nothing={ideStep.Escalations IsNot Nothing}")
@@ -348,8 +348,8 @@ Public Class TaskAssembler
     ''' <summary>
     ''' Compila Escalation (IDE) in Escalation (Runtime)
     ''' </summary>
-    Private Function CompileEscalation(ideEscalation As Compiler.Escalation) As DDTEngine.Escalation
-        Dim runtimeEscalation As New DDTEngine.Escalation() With {
+    Private Function CompileEscalation(ideEscalation As Compiler.Escalation) As TaskEngine.Escalation
+        Dim runtimeEscalation As New TaskEngine.Escalation() With {
             .EscalationId = ideEscalation.EscalationId,
             .Tasks = New List(Of ITask)()
         }
@@ -545,10 +545,10 @@ Public Class TaskAssembler
     ''' <summary>
     ''' Calcola FullLabel per tutti i nodi (compile-time)
     ''' </summary>
-    Private Sub CalculateFullLabels(instance As DDTInstance)
-        If instance.MainDataList IsNot Nothing Then
-            For Each mainData As DDTNode In instance.MainDataList
-                CalculateFullLabelForNode(mainData, "")
+    Private Sub CalculateFullLabels(instance As TaskInstance)
+        If instance.TaskList IsNot Nothing Then
+            For Each mainTask As TaskEngine.TaskNode In instance.TaskList
+                CalculateFullLabelForNode(mainTask, "")
             Next
         End If
     End Sub
@@ -556,7 +556,7 @@ Public Class TaskAssembler
     ''' <summary>
     ''' Calcola FullLabel ricorsivamente per un nodo
     ''' </summary>
-    Private Sub CalculateFullLabelForNode(node As DDTNode, parentPath As String)
+    Private Sub CalculateFullLabelForNode(node As TaskEngine.TaskNode, parentPath As String)
         Dim currentPath As String
         If String.IsNullOrEmpty(parentPath) Then
             currentPath = node.Name
@@ -566,9 +566,9 @@ Public Class TaskAssembler
 
         node.FullLabel = currentPath
 
-        ' Ricorsivo per subData
+        ' Ricorsivo per subTasks
         If node.SubTasks IsNot Nothing Then
-            For Each subNode As DDTNode In node.SubTasks
+            For Each subNode As TaskEngine.TaskNode In node.SubTasks
                 CalculateFullLabelForNode(subNode, currentPath)
             Next
         End If

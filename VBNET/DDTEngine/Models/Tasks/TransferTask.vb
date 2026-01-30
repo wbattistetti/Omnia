@@ -43,7 +43,7 @@ Option Explicit On
         ''' <summary>
         ''' Esegue il task: trasferisce all'operatore
         ''' </summary>
-        Public Overrides Sub Execute(dataNode As DDTNode, ddtInstance As DDTInstance, onMessage As Action(Of String))
+        Public Overrides Sub Execute(taskNode As TaskNode, taskInstance As TaskInstance, onMessage As Action(Of String))
             ' TODO: Implementare logica per trasferire all'operatore
             Dim transferInfo As String = "Trasferimento all'operatore"
             If Not String.IsNullOrEmpty(Me.OperatorId) Then

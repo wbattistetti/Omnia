@@ -3,17 +3,17 @@ Option Explicit On
 
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
-Imports DDTEngine
+Imports TaskEngine
 
 ''' <summary>
-''' Compilatore DDT: trasforma strutture IDE in strutture Runtime
-''' - Deserializza JSON in TaskTreeRuntime (IDE, ex AssembledDDT)
-''' - Trasforma TaskTreeRuntime in DDTInstance (Runtime)
+''' Compilatore Task: trasforma strutture IDE in strutture Runtime
+''' - Deserializza JSON in TaskTreeRuntime (IDE)
+''' - Trasforma TaskTreeRuntime in RuntimeTask (Runtime)
 ''' - Carica nlpContract per ogni nodo
 ''' - Valida struttura
 ''' - Pre-compila regex
 ''' </summary>
-Public Class DDTCompiler
+Public Class TaskCompiler
     Private ReadOnly _contractLoader As ContractLoader
     Private ReadOnly _assembler As TaskAssembler
 
@@ -23,19 +23,19 @@ Public Class DDTCompiler
     End Sub
 
     ''' <summary>
-    ''' Compila un DDT da stringa JSON
+    ''' Compila un Task da stringa JSON
     ''' </summary>
-    Public Function Compile(ddtJson As String) As DDTCompilationResult
-        Console.WriteLine($"🔍 [COMPILER][DDTCompiler] Compile called, ddtJson length={If(ddtJson IsNot Nothing, ddtJson.Length, 0)}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] Compile called, ddtJson length={If(ddtJson IsNot Nothing, ddtJson.Length, 0)}")
+    Public Function Compile(taskJson As String) As TaskCompilationResult
+        Console.WriteLine($"🔍 [COMPILER][TaskCompiler] Compile called, taskJson length={If(taskJson IsNot Nothing, taskJson.Length, 0)}")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskCompiler] Compile called, taskJson length={If(taskJson IsNot Nothing, taskJson.Length, 0)}")
 
-        If String.IsNullOrEmpty(ddtJson) Then
-            Throw New ArgumentException("DDT JSON cannot be null or empty", NameOf(ddtJson))
+        If String.IsNullOrEmpty(taskJson) Then
+            Throw New ArgumentException("Task JSON cannot be null or empty", NameOf(taskJson))
         End If
 
-        ' 1. Deserializza JSON in TaskTreeRuntime (struttura IDE tipizzata, ex AssembledDDT)
-        Console.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 1: Deserializing JSON to TaskTreeRuntime...")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 1: Deserializing JSON to TaskTreeRuntime...")
+        ' 1. Deserializza JSON in TaskTreeRuntime (struttura IDE tipizzata)
+        Console.WriteLine($"🔍 [COMPILER][TaskCompiler] Step 1: Deserializing JSON to TaskTreeRuntime...")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskCompiler] Step 1: Deserializing JSON to TaskTreeRuntime...")
         Dim settings As New JsonSerializerSettings() With {
             .NullValueHandling = NullValueHandling.Ignore,
             .MissingMemberHandling = MissingMemberHandling.Ignore
@@ -44,24 +44,24 @@ Public Class DDTCompiler
         settings.Converters.Add(New TaskNodeListConverter())
         settings.Converters.Add(New DialogueStepListConverter())
 
-        Dim assembled As Compiler.TaskTreeRuntime = JsonConvert.DeserializeObject(Of Compiler.TaskTreeRuntime)(ddtJson, settings)
+        Dim assembled As Compiler.TaskTreeRuntime = JsonConvert.DeserializeObject(Of Compiler.TaskTreeRuntime)(taskJson, settings)
         If assembled Is Nothing Then
             Throw New InvalidOperationException("Impossibile deserializzare TaskTreeRuntime dal JSON")
         End If
 
-        Console.WriteLine($"✅ [COMPILER][DDTCompiler] TaskTreeRuntime deserialized: Id={assembled.Id}, Nodes IsNot Nothing={assembled.Nodes IsNot Nothing}")
-        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTCompiler] TaskTreeRuntime deserialized: Id={assembled.Id}, Nodes IsNot Nothing={assembled.Nodes IsNot Nothing}")
+        Console.WriteLine($"✅ [COMPILER][TaskCompiler] TaskTreeRuntime deserialized: Id={assembled.Id}, Nodes IsNot Nothing={assembled.Nodes IsNot Nothing}")
+        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][TaskCompiler] TaskTreeRuntime deserialized: Id={assembled.Id}, Nodes IsNot Nothing={assembled.Nodes IsNot Nothing}")
         If assembled.Nodes IsNot Nothing Then
-            Console.WriteLine($"🔍 [COMPILER][DDTCompiler] TaskTreeRuntime.Nodes.Count={assembled.Nodes.Count}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] TaskTreeRuntime.Nodes.Count={assembled.Nodes.Count}")
+            Console.WriteLine($"🔍 [COMPILER][TaskCompiler] TaskTreeRuntime.Nodes.Count={assembled.Nodes.Count}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskCompiler] TaskTreeRuntime.Nodes.Count={assembled.Nodes.Count}")
         End If
 
         ' 2. Trasforma TaskTreeRuntime (IDE) → Task ricorsivo (Runtime)
-        Console.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 2: Compiling TaskTreeRuntime to Task using TaskAssembler.Compile...")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 2: Compiling TaskTreeRuntime to Task using TaskAssembler.Compile...")
+        Console.WriteLine($"🔍 [COMPILER][TaskCompiler] Step 2: Compiling TaskTreeRuntime to Task using TaskAssembler.Compile...")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskCompiler] Step 2: Compiling TaskTreeRuntime to Task using TaskAssembler.Compile...")
         Dim rootTask As RuntimeTask = _assembler.Compile(assembled)
-        Console.WriteLine($"✅ [COMPILER][DDTCompiler] Task created: Id={If(String.IsNullOrEmpty(rootTask.Id), "NULL", rootTask.Id)}, SubTasks.Count={If(rootTask.SubTasks IsNot Nothing, rootTask.SubTasks.Count, 0)}")
-        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTCompiler] Task created: Id={If(String.IsNullOrEmpty(rootTask.Id), "NULL", rootTask.Id)}, SubTasks.Count={If(rootTask.SubTasks IsNot Nothing, rootTask.SubTasks.Count, 0)}")
+        Console.WriteLine($"✅ [COMPILER][TaskCompiler] Task created: Id={If(String.IsNullOrEmpty(rootTask.Id), "NULL", rootTask.Id)}, SubTasks.Count={If(rootTask.SubTasks IsNot Nothing, rootTask.SubTasks.Count, 0)}")
+        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][TaskCompiler] Task created: Id={If(String.IsNullOrEmpty(rootTask.Id), "NULL", rootTask.Id)}, SubTasks.Count={If(rootTask.SubTasks IsNot Nothing, rootTask.SubTasks.Count, 0)}")
 
         ' 3. Carica nlpContract per tutti i nodi (ricorsivo)
         LoadContractsForTask(rootTask)
@@ -69,7 +69,7 @@ Public Class DDTCompiler
         ' 4. Valida struttura (placeholder, regex, ecc.)
         Dim validationErrors As List(Of String) = ValidateTask(rootTask)
 
-        Dim result As New DDTCompilationResult()
+        Dim result As New TaskCompilationResult()
         result.Task = rootTask
         result.ValidationErrors = validationErrors
         result.IsValid = (validationErrors.Count = 0)
@@ -88,9 +88,9 @@ Public Class DDTCompiler
     ''' </summary>
     Private Sub LoadContractForTask(task As RuntimeTask)
         ' Se il contract non è già presente, prova a caricarlo e compilarlo
-        ' TODO: ContractLoader deve essere modificato per accettare Task invece di DDTNode
+        ' TODO: ContractLoader deve essere modificato per accettare Task invece di TaskNode
         ' Per ora, se NlpContract è Nothing, non facciamo nulla (verrà caricato a runtime se necessario)
-        ' Il ContractLoader attuale usa DDTNode, quindi dobbiamo adattarlo o creare un nuovo loader
+        ' Il ContractLoader attuale usa TaskNode, quindi dobbiamo adattarlo o creare un nuovo loader
 
         ' Ricorsivo per subTasks
         If task.SubTasks IsNot Nothing Then
@@ -115,9 +115,9 @@ Public Class DDTCompiler
     Private Sub ValidateTaskRecursive(runtimeTask As RuntimeTask, errors As List(Of String))
         ' Valida placeholder nei messaggi
         If runtimeTask.Steps IsNot Nothing Then
-            For Each dstep As DDTEngine.DialogueStep In runtimeTask.Steps
+            For Each dstep As TaskEngine.DialogueStep In runtimeTask.Steps
                 If dstep.Escalations IsNot Nothing Then
-                    For Each escalation As DDTEngine.Escalation In dstep.Escalations
+                    For Each escalation As TaskEngine.Escalation In dstep.Escalations
                         If escalation.Tasks IsNot Nothing Then
                             For Each itask As ITask In escalation.Tasks
                                 If TypeOf itask Is MessageTask Then
@@ -178,9 +178,9 @@ Public Class DDTCompiler
 End Class
 
 ''' <summary>
-''' DDT Compilation Result: Output of DDTCompiler
+''' Task Compilation Result: Output of TaskCompiler
 ''' </summary>
-Public Class DDTCompilationResult
+Public Class TaskCompilationResult
     ''' <summary>
     ''' Task root compilato (struttura ricorsiva)
     ''' </summary>

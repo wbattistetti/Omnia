@@ -19,7 +19,7 @@ Option Explicit On
         ''' <summary>
         ''' Esegue il task: chiude la sessione
         ''' </summary>
-        Public Overrides Sub Execute(dataNode As DDTNode, ddtInstance As DDTInstance, onMessage As Action(Of String))
+        Public Overrides Sub Execute(taskNode As TaskNode, taskInstance As TaskInstance, onMessage As Action(Of String))
             ' TODO: Implementare logica per chiudere sessione
             ' Esempio: onMessage("Sessione chiusa")
             ' Oppure: sollevare evento specifico per chiusura sessione

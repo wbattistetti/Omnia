@@ -16,7 +16,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DDTEngine\DDTEngine.vbproj" />
+    <ProjectReference Include="..\DDTEngine\TaskEngine.vbproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -24,8 +24,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- DDT Compiler e Assembler -->
-    <Compile Include="DDTCompiler.vb" />
+    <!-- Task Compiler e Assembler -->
+    <Compile Include="TaskCompiler.vb" />
     <Compile Include="TaskAssembler.vb" />
     <Compile Include="ContractLoader.vb" />
 
@@ -61,6 +61,8 @@
     <!-- ❌ RIMOSSO: MainDataNode.vb - rinominato in TaskNode.vb -->
     <!-- ❌ RIMOSSO: MainDataNodeListConverter.vb - rinominato in TaskNodeListConverter.vb -->
     <Compile Include="DTO\IDE\TaskTreeRuntime.vb" />
+    <!-- ❌ RIMOSSO: DDTCompiler.vb - rinominato in TaskCompiler.vb -->
+    <!-- ❌ RIMOSSO: DDTLoader.vb - rinominato in TaskLoader.vb -->
     <!-- ❌ RIMOSSO: AssembledDDT.vb - rinominato in TaskTreeRuntime.vb -->
 
     <!-- Runtime Types (Output for execution) -->

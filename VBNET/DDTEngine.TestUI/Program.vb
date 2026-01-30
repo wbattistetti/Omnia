@@ -5,9 +5,9 @@ Option Strict On
 Option Explicit On
 
 Imports System.Windows.Forms
-Imports DDTEngine.TestUI
+Imports TaskEngine.TestUI
 
-Namespace DDTEngine.TestUI
+Namespace TaskEngine.TestUI
 
     Module Program
         ''' <summary>

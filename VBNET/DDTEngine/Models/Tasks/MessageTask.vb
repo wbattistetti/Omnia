@@ -45,7 +45,7 @@ Public Class MessageTask
     ''' <summary>
     ''' Esegue il task: processa i placeholder e mostra il messaggio
     ''' </summary>
-    Public Overrides Sub Execute(dataNode As DDTNode, ddtInstance As DDTInstance, onMessage As Action(Of String))
+    Public Overrides Sub Execute(taskNode As TaskNode, taskInstance As TaskInstance, onMessage As Action(Of String))
         Console.WriteLine($"[MessageTask] Execute called: Text='{Me.Text}', onMessage Is Nothing={onMessage Is Nothing}")
 
         If onMessage Is Nothing Then
@@ -53,7 +53,7 @@ Public Class MessageTask
             Return
         End If
 
-        Dim processedText As String = ProcessPlaceholders(Me.Text, ddtInstance, Nothing)
+        Dim processedText As String = ProcessPlaceholders(Me.Text, taskInstance, Nothing)
         Console.WriteLine($"[MessageTask] Processed text: '{processedText}'")
 
         If Not String.IsNullOrEmpty(processedText) Then

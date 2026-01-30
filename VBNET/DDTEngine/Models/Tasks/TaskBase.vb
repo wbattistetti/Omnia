@@ -15,6 +15,6 @@ Option Explicit On
         ''' <summary>
         ''' Esegue il task (implementazione di default: solleva eccezione)
         ''' </summary>
-        Public MustOverride Sub Execute(dataNode As DDTNode, ddtInstance As DDTInstance, onMessage As Action(Of String)) Implements ITask.Execute
+        Public MustOverride Sub Execute(taskNode As TaskNode, taskInstance As TaskInstance, onMessage As Action(Of String)) Implements ITask.Execute
     End Class
 

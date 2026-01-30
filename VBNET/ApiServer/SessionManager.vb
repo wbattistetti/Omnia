@@ -6,7 +6,7 @@ Imports System.Threading.Tasks
 Imports System.Runtime.CompilerServices
 Imports Newtonsoft.Json
 Imports Compiler
-Imports DDTEngine  ' ✅ NOTA: DDTEngine namespace è interno al runtime, non rinominato per non toccare logica funzionale
+Imports TaskEngine
 
 ''' <summary>
 ''' Orchestrator Session: contiene tutto lo stato di una sessione di esecuzione
@@ -17,8 +17,8 @@ Public Class OrchestratorSession
     Public Property Tasks As List(Of Object)
     ' ❌ RIMOSSO: DDTs property - non più usato, struttura costruita da template
     Public Property Translations As Dictionary(Of String, String)
-    Public Property Orchestrator As DDTEngine.Orchestrator.FlowOrchestrator  ' ✅ NOTA: DDTEngine namespace interno, non rinominato
-    Public Property DDTEngine As Motore  ' ✅ NOTA: Motore/DDTEngine sono interni al runtime, non rinominati per non toccare logica
+    Public Property Orchestrator As TaskEngine.Orchestrator.FlowOrchestrator
+    Public Property TaskEngine As Motore
     Public Property Messages As New List(Of Object)
     Public Property EventEmitter As EventEmitter
     Public Property IsWaitingForInput As Boolean
@@ -89,7 +89,7 @@ Public Class TaskSession
     Public Property SessionId As String
     Public Property RuntimeTask As Compiler.RuntimeTask
     Public Property Translations As Dictionary(Of String, String)
-    Public Property DDTEngine As Motore
+    Public Property TaskEngine As Motore
     Public Property Messages As New List(Of Object)
     Public Property EventEmitter As EventEmitter
     Public Property IsWaitingForInput As Boolean
@@ -137,7 +137,7 @@ Public Class SessionManager
                 .Tasks = tasks,
                 .Translations = translations,
                 .EventEmitter = New EventEmitter(),
-                .DDTEngine = ddtEngine,
+                .TaskEngine = ddtEngine,
                 .IsWaitingForInput = False
             }
             Console.WriteLine($"✅ [RUNTIME][SessionManager] Session object created")
@@ -149,7 +149,7 @@ Public Class SessionManager
             Console.WriteLine($"🔄 [RUNTIME][SessionManager] Flow mode: creating FlowOrchestrator...")
             System.Diagnostics.Debug.WriteLine($"🔄 [RUNTIME][SessionManager] Flow mode: creating FlowOrchestrator...")
             Console.Out.Flush()
-            session.Orchestrator = New DDTEngine.Orchestrator.FlowOrchestrator(compilationResult, ddtEngine)
+            session.Orchestrator = New TaskEngine.Orchestrator.FlowOrchestrator(compilationResult, ddtEngine)
             Console.WriteLine($"✅ [RUNTIME][SessionManager] FlowOrchestrator created")
 
             ' Registra eventi orchestrator
@@ -306,12 +306,12 @@ Public Class SessionManager
                 .RuntimeTask = runtimeTask,
                 .Translations = translations,
                 .EventEmitter = New EventEmitter(),
-                .DDTEngine = ddtEngine,
+                .TaskEngine = ddtEngine,
                 .IsWaitingForInput = False
             }
             Console.WriteLine($"✅ [RUNTIME][SessionManager] TaskSession object created")
 
-            ' Registra eventi DDTEngine
+            ' Registra eventi TaskEngine
             AddHandler ddtEngine.MessageToShow, Sub(sender, e)
                                                       Dim msgId = $"{sessionId}-{DateTime.UtcNow.Ticks}-{Guid.NewGuid().ToString().Substring(0, 8)}"
                                                       Dim msg = New With {
@@ -324,7 +324,7 @@ Public Class SessionManager
                                                       Console.WriteLine($"📨 [RUNTIME][SessionManager] Message added to TaskSession {sessionId}: {e.Message.Substring(0, Math.Min(100, e.Message.Length))}")
                                                       session.EventEmitter.Emit("message", msg)
 
-                                                      ' Dopo ogni messaggio, DDTEngine si ferma aspettando input
+                                                      ' Dopo ogni messaggio, TaskEngine si ferma aspettando input
                                                       session.IsWaitingForInput = True
                                                       ' TODO: Aggiornare per usare RuntimeTask invece di DDTInstance.MainDataList
                                                       ' Per ora usa il primo subTask se presente, altrimenti il root task

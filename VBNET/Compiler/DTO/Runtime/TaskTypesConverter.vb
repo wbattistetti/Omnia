@@ -4,7 +4,7 @@ Option Explicit On
 Imports System
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
-Imports DDTEngine
+Imports TaskEngine
 
 ''' <summary>
 ''' JsonConverter per convertire stringhe (es. "SayMessage", "DataRequest") in TaskTypes enum

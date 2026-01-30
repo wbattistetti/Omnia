@@ -13,9 +13,9 @@ Option Explicit On
     ''' <summary>
     ''' Esegue il task
     ''' </summary>
-    ''' <param name="dataNode">Il nodo dati corrente</param>
-    ''' <param name="ddtInstance">L'istanza DDT completa</param>
+    ''' <param name="taskNode">Il nodo task corrente</param>
+    ''' <param name="taskInstance">L'istanza Task completa</param>
     ''' <param name="onMessage">Handler per mostrare messaggi (per MessageTask) comunica all'UI se va mostrato qualcosa (serve non a runtime ma design time nel debugger </param>
-    Sub Execute(dataNode As DDTNode, ddtInstance As DDTInstance, onMessage As Action(Of String))
+    Sub Execute(taskNode As TaskNode, taskInstance As TaskInstance, onMessage As Action(Of String))
     End Interface
 

@@ -4,7 +4,7 @@ Option Explicit On
 Imports System.Collections.Generic
 Imports System.Linq
 Imports Newtonsoft.Json
-Imports DDTEngine
+Imports TaskEngine
 
 ''' <summary>
 ''' Compiler per task di tipo UtteranceInterpretation
@@ -95,14 +95,14 @@ Public Class UtteranceInterpretationTaskCompiler
                 System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime.Nodes.Count={taskTreeRuntime.Nodes.Count}")
             End If
             Try
-                Dim ddtCompiler As New DDTCompiler()
-                ' Serializza TaskTreeRuntime a JSON per DDTCompiler.Compile
-                Dim ddtJson = JsonConvert.SerializeObject(taskTreeRuntime)
-                Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Calling DDTCompiler.Compile with JSON length={ddtJson.Length}")
-                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Calling DDTCompiler.Compile with JSON length={ddtJson.Length}")
-                Dim ddtResult = ddtCompiler.Compile(ddtJson)
-                If ddtResult IsNot Nothing AndAlso ddtResult.Task IsNot Nothing Then
-                    dataRequestTask.Task = ddtResult.Task
+                Dim taskCompiler As New TaskCompiler()
+                ' Serializza TaskTreeRuntime a JSON per TaskCompiler.Compile
+                Dim taskJson = JsonConvert.SerializeObject(taskTreeRuntime)
+                Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Calling TaskCompiler.Compile with JSON length={taskJson.Length}")
+                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Calling TaskCompiler.Compile with JSON length={taskJson.Length}")
+                Dim compileResult = taskCompiler.Compile(taskJson)
+                If compileResult IsNot Nothing AndAlso compileResult.Task IsNot Nothing Then
+                    dataRequestTask.Task = compileResult.Task
                     Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Task compiled successfully for task {taskId}")
                     System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Task compiled successfully for task {taskId}")
                 Else
@@ -110,13 +110,13 @@ Public Class UtteranceInterpretationTaskCompiler
                     System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Task compilation returned no task for task {taskId}")
                 End If
             Catch ex As Exception
-                Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Failed to compile DDT for task {taskId}: {ex.Message}")
-                System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Failed to compile DDT for task {taskId}: {ex.Message}")
+                Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Failed to compile Task for task {taskId}: {ex.Message}")
+                System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Failed to compile Task for task {taskId}: {ex.Message}")
                 System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Exception details: {ex.ToString()}")
             End Try
         Else
-            Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] No TaskTreeRuntime found for DataRequest task {taskId} - DDT will be Nothing")
-            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] No TaskTreeRuntime found for DataRequest task {taskId} - DDT will be Nothing")
+            Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] No TaskTreeRuntime found for DataRequest task {taskId} - Task will be Nothing")
+            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] No TaskTreeRuntime found for DataRequest task {taskId} - Task will be Nothing")
         End If
 
         ' Popola campi comuni
@@ -385,7 +385,7 @@ Public Class UtteranceInterpretationTaskCompiler
     ''' Applica steps override a un singolo nodo
     ''' </summary>
     Private Sub ApplyStepsToNode(
-        node As TaskNode,
+        node As Compiler.TaskNode,
         stepsOverride As Object
     )
         If node Is Nothing OrElse stepsOverride Is Nothing Then

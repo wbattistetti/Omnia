@@ -6,20 +6,20 @@ Module Utils
     ' Pattern: trova tutto tra quadre, escludendo quadre annidate
     Private ReadOnly PlaceholderRegex As New Regex("\[([^\[\]]+)\]", RegexOptions.Compiled)
     <Extension>
-    Public Function IsEmpty(dataNode As DDTNode) As Boolean
-        If dataNode.SubTasks.Any Then
-            Return Not dataNode.SubTasks.Any(Function(sd) sd.Value IsNot Nothing)
+    Public Function IsEmpty(taskNode As TaskNode) As Boolean
+        If taskNode.SubTasks.Any Then
+            Return Not taskNode.SubTasks.Any(Function(st) st.Value IsNot Nothing)
         Else
-            Return dataNode.Value Is Nothing
+            Return taskNode.Value Is Nothing
         End If
     End Function
 
     <Extension>
-    Public Function IsFilled(dataNode As DDTNode) As Boolean
-        If dataNode.SubTasks.Any Then
-            Return Not dataNode.SubTasks.Any(Function(sd) sd.Value Is Nothing)
+    Public Function IsFilled(taskNode As TaskNode) As Boolean
+        If taskNode.SubTasks.Any Then
+            Return Not taskNode.SubTasks.Any(Function(st) st.Value Is Nothing)
         Else
-            Return dataNode.Value IsNot Nothing
+            Return taskNode.Value IsNot Nothing
         End If
     End Function
 
@@ -36,8 +36,8 @@ Module Utils
     End Function
 
     <Extension>
-    Public Function IsSubData(ddtNode As DDTNode) As Boolean
-        Return ddtNode.ParentData IsNot Nothing
+    Public Function IsSubData(taskNode As TaskNode) As Boolean
+        Return taskNode.ParentData IsNot Nothing
     End Function
 
     ''' <summary>
@@ -45,14 +45,14 @@ Module Utils
     ''' Usa FullLabel calcolato a compile-time per lookup diretto nel contesto globale
     ''' Gestisce placeholder annidati iterando finché non ci sono più match
     ''' </summary>
-    Public Function ProcessPlaceholders(text As String, ddtInstance As DDTInstance, Optional globalContext As IVariableContext = Nothing) As String
+    Public Function ProcessPlaceholders(text As String, taskInstance As TaskInstance, Optional globalContext As IVariableContext = Nothing) As String
         If String.IsNullOrEmpty(text) Then
             Return text
         End If
 
-        ' Crea contesto globale se non fornito (usa solo DDTInstance)
+        ' Crea contesto globale se non fornito (usa solo TaskInstance)
         If globalContext Is Nothing Then
-            globalContext = New GlobalVariableContext(ddtInstance)
+            globalContext = New GlobalVariableContext(taskInstance)
         End If
 
         Dim processedText As String = text

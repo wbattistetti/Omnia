@@ -9,9 +9,9 @@ Imports System.Drawing
 Imports System.IO
 Imports System.Threading
 Imports System.Linq
-Imports DDTEngine
+Imports TaskEngine
 
-Namespace DDTEngine.TestUI
+Namespace TaskEngine.TestUI
 
     ''' <summary>
     ''' Form principale con interfaccia chat per testare il DDT Engine
@@ -26,12 +26,12 @@ Namespace DDTEngine.TestUI
         Private _sendButton As Button
         Private _stateViewer As ListBox
         Friend WithEvents CmdRestart As Button
-        Private _ddtInstance As Global.DDTEngine.DDTInstance
+        Private _taskInstance As Global.TaskEngine.TaskInstance
         Private _engineThread As Thread
         Private _isEngineRunning As Boolean = False
 
         Public Sub New()
-            _engine = New Global.DDTEngine.Motore()
+            _engine = New Global.TaskEngine.Motore()
             InitializeComponent()
 
             ' Aggancia gli eventi del Motore
@@ -138,13 +138,13 @@ Namespace DDTEngine.TestUI
                 End If
 
                 ' Carica il DDT dal JSON
-                _ddtInstance = Global.DDTEngine.DDTLoader.LoadFromJson(jsonPath)
+                _taskInstance = Global.TaskEngine.TaskLoader.LoadFromJson(jsonPath)
             Catch ex As Exception
                 ' In caso di errore, mostra messaggio e usa DDT vuoto
                 MessageBox.Show("Errore nel caricamento del DDT: " & ex.Message & vbCrLf & vbCrLf & "Stack: " & ex.StackTrace, "Errore", MessageBoxButtons.OK, MessageBoxIcon.Error)
-                _ddtInstance = New Global.DDTEngine.DDTInstance() With {
+                _taskInstance = New Global.TaskEngine.TaskInstance() With {
                     .IsAggregate = True,
-                    .MainDataList = New List(Of Global.DDTEngine.DDTNode)()
+                    .TaskList = New List(Of Global.TaskEngine.TaskNode)()
                 }
             End Try
         End Sub
@@ -180,7 +180,7 @@ Namespace DDTEngine.TestUI
             _inputBox.Clear()
 
             ' Passa l'input al Parser (sveglia WaitForUserInput)
-            Global.DDTEngine.Parser.SetUserInput(userInput)
+            Global.TaskEngine.Parser.SetUserInput(userInput)
 
             ' TODO: Aggiornare state viewer
             UpdateStateViewer()
@@ -209,8 +209,8 @@ Namespace DDTEngine.TestUI
         ''' <summary>
         ''' Ottiene il valore di un nodo tramite path (es. "nominativo" o "nominativo.nome")
         ''' </summary>
-        'Private Function GetNodeValueByPath(path As String, currentDataNode As Global.DDTEngine.DDTNode) As String
-        '    If String.IsNullOrEmpty(path) OrElse _ddtInstance Is Nothing Then
+        'Private Function GetNodeValueByPath(path As String, currentDataNode As Global.TaskEngine.TaskNode) As String
+        '    If String.IsNullOrEmpty(path) OrElse _taskInstance Is Nothing Then
         '        Return ""
         '    End If
 
@@ -220,14 +220,14 @@ Namespace DDTEngine.TestUI
         '    Dim subDataId As String = If(pathParts.Length > 1, pathParts(1), Nothing)
 
         '    ' Cerca il mainData
-        '    Dim mainDataNode As Global.DDTEngine.DDTNode = _ddtInstance.MainDataList.FirstOrDefault(Function(m) m.Id = mainDataId)
+        '    Dim mainDataNode As Global.TaskEngine.TaskNode = _taskInstance.TaskList.FirstOrDefault(Function(m) m.Id = mainDataId)
         '    If mainDataNode Is Nothing Then
         '        Return ""
         '    End If
 
         '    ' Se c'è un subDataId, cerca il subData
         '    If Not String.IsNullOrEmpty(subDataId) Then
-        '        Dim subDataNode As Global.DDTEngine.DDTNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = subDataId)
+        '        Dim subDataNode As Global.TaskEngine.TaskNode = mainDataNode.SubData.FirstOrDefault(Function(s) s.Id = subDataId)
         '        If subDataNode IsNot Nothing AndAlso subDataNode.Value IsNot Nothing Then
         '            Return subDataNode.Value.ToString()
         '        End If
@@ -238,7 +238,7 @@ Namespace DDTEngine.TestUI
         '    If mainDataNode.HasSubData() Then
         '        ' Costruisci il valore dai subData
         '        Dim valueParts As New List(Of String)()
-        '        For Each subData As Global.DDTEngine.DDTNode In mainDataNode.SubData
+        '        For Each subData As Global.TaskEngine.TaskNode In mainDataNode.SubData
         '            If subData.Value IsNot Nothing Then
         '                valueParts.Add(subData.Value.ToString())
         '            End If
@@ -255,8 +255,8 @@ Namespace DDTEngine.TestUI
         ''' <summary>
         ''' Ottiene il valore di un nodo tramite path (es. "nominativo" o "nominativo.nome")
         ''' </summary>
-        Private Function GetNodeValueByPath(path As String, currentDataNode As Global.DDTEngine.DDTNode) As String
-            If String.IsNullOrEmpty(path) OrElse _ddtInstance Is Nothing Then
+        Private Function GetNodeValueByPath(path As String, currentDataNode As Global.TaskEngine.TaskNode) As String
+            If String.IsNullOrEmpty(path) OrElse _taskInstance Is Nothing Then
                 Return ""
             End If
 
@@ -266,14 +266,14 @@ Namespace DDTEngine.TestUI
             Dim subDataId As String = If(pathParts.Length > 1, pathParts(1), Nothing)
 
             ' Cerca il mainData
-            Dim mainDataNode As Global.DDTEngine.DDTNode = _ddtInstance.MainDataList.FirstOrDefault(Function(m) m.Id = mainDataId)
+            Dim mainDataNode As Global.TaskEngine.TaskNode = _taskInstance.TaskList.FirstOrDefault(Function(m) m.Id = mainDataId)
             If mainDataNode Is Nothing Then
                 Return ""
             End If
 
             ' Se c'è un subDataId, cerca il subData
             If Not String.IsNullOrEmpty(subDataId) Then
-                Dim subDataNode As Global.DDTEngine.DDTNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = subDataId)
+                Dim subDataNode As Global.TaskEngine.TaskNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = subDataId)
                 If subDataNode IsNot Nothing AndAlso subDataNode.Value IsNot Nothing Then
                     Return subDataNode.Value.ToString()
                 End If
@@ -284,7 +284,7 @@ Namespace DDTEngine.TestUI
             If mainDataNode.HasSubTasks() Then
                 ' Costruisci il valore dai subTasks
                 Dim valueParts As New List(Of String)()
-                For Each subData As Global.DDTEngine.DDTNode In mainDataNode.SubTasks
+                For Each subData As Global.TaskEngine.TaskNode In mainDataNode.SubTasks
                     If subData.Value IsNot Nothing Then
                         valueParts.Add(subData.Value.ToString())
                     End If
@@ -315,7 +315,7 @@ Namespace DDTEngine.TestUI
             _engine.Reset()
 
             ' Pulisce la coda di input
-            Global.DDTEngine.Parser.ClearInputQueue()
+            Global.TaskEngine.Parser.ClearInputQueue()
 
             ' Pulisce la chat
             _chatArea.Clear()
@@ -330,8 +330,8 @@ Namespace DDTEngine.TestUI
             LoadTestDDT()
 
             ' Resetta tutti i nodi del DDT (stati, valori, ecc.)
-            If _ddtInstance IsNot Nothing Then
-                _ddtInstance.Reset()
+            If _taskInstance IsNot Nothing Then
+                _taskInstance.Reset()
             End If
 
             ' Avvia il motore in un thread separato per non bloccare l'UI
@@ -339,7 +339,7 @@ Namespace DDTEngine.TestUI
             _engineThread = New Thread(
                 Sub()
                     Try
-                        _engine.ExecuteDDT(_ddtInstance)
+                        _engine.ExecuteTask(_taskInstance)
                     Catch ex As Exception
                         ' Gestisci errori nel thread
                         Me.Invoke(Sub() AddChatMessage("System", "Errore nel motore: " & ex.Message))
@@ -359,7 +359,7 @@ Namespace DDTEngine.TestUI
         ''' Gestisce l'evento MessageToShow dal ResponseManager
         ''' Mostra il messaggio nella chat
         ''' </summary>
-        Private Sub OnMessageToShow(sender As Object, e As Global.DDTEngine.MessageEventArgs)
+        Private Sub OnMessageToShow(sender As Object, e As Global.TaskEngine.MessageEventArgs)
             If e IsNot Nothing AndAlso Not String.IsNullOrEmpty(e.Message) Then
                 ' Usa Invoke per eseguire sul thread UI se necessario
                 If Me.InvokeRequired Then

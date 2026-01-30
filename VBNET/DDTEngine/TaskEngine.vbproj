@@ -6,7 +6,7 @@
     <OptionStrict>On</OptionStrict>
     <OptionExplicit>On</OptionExplicit>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
-    <RootNamespace>DDTEngine</RootNamespace>
+    <RootNamespace>TaskEngine</RootNamespace>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
@@ -34,17 +34,17 @@
     <Compile Include="Models\ValidationCondition.vb" />
     <Compile Include="Models\NLPContract.vb" />
     <Compile Include="Models\CompiledNlpContract.vb" />
-    <Compile Include="Models\DDTNode.vb" />
+    <Compile Include="Models\TaskNode.vb" />
     <Compile Include="Models\ParseResultType.vb" />
     <Compile Include="Models\ParseResult.vb" />
-    <Compile Include="Models\DDTInstance.vb" />
+    <Compile Include="Models\TaskInstance.vb" />
     <!-- DTO per deserializzazione JSON (solo per compatibilità con vecchie strutture) -->
     <Compile Include="Models\DTO\ResponseDTO.vb" />
     <Compile Include="Models\DTO\EscalationDTO.vb" />
     <Compile Include="Models\DTO\DialogueStepDTO.vb" />
     <!-- DDTNodeDTO e DDTInstanceDTO eliminati - ora si usano TaskTreeRuntime/MainDataNode (IDE, ex AssembledDDT) e DDTInstance/DDTNode (Runtime) -->
     <!-- Helpers -->
-    <Compile Include="Helpers\DDTLoader.vb" />
+    <Compile Include="Helpers\TaskLoader.vb" />
     <!-- Engine -->
     <Compile Include="Engine\MessageEventArgs.vb" />
     <Compile Include="Engine\Parser.vb" />

@@ -8,20 +8,20 @@ Imports System.Linq
 
 ''' <summary>
 ''' Implementazione del contesto globale delle variabili
-''' Cerca prima nel DDTInstance corrente, poi in altri contesti se disponibili
+''' Cerca prima nel TaskInstance corrente, poi in altri contesti se disponibili
 ''' </summary>
 Public Class GlobalVariableContext
     Implements IVariableContext
 
-    Private ReadOnly _ddtInstance As DDTInstance
+    Private ReadOnly _taskInstance As TaskInstance
     Private ReadOnly _additionalContexts As List(Of IVariableContext)
 
     ''' <summary>
     ''' Costruttore
     ''' </summary>
-    ''' <param name="ddtInstance">DDTInstance corrente (opzionale)</param>
-    Public Sub New(Optional ddtInstance As DDTInstance = Nothing)
-        Me._ddtInstance = ddtInstance
+    ''' <param name="taskInstance">TaskInstance corrente (opzionale)</param>
+    Public Sub New(Optional taskInstance As TaskInstance = Nothing)
+        Me._taskInstance = taskInstance
         Me._additionalContexts = New List(Of IVariableContext)()
     End Sub
 
@@ -42,9 +42,9 @@ Public Class GlobalVariableContext
             Return ""
         End If
 
-        ' 1. Cerca nel DDTInstance corrente
-        If _ddtInstance IsNot Nothing Then
-            Dim value As String = GetValueFromDDTInstance(fullLabel, _ddtInstance)
+        ' 1. Cerca nel TaskInstance corrente
+        If _taskInstance IsNot Nothing Then
+            Dim value As String = GetValueFromTaskInstance(fullLabel, _taskInstance)
             If Not String.IsNullOrEmpty(value) Then
                 Return value
             End If
@@ -71,9 +71,9 @@ Public Class GlobalVariableContext
             Return False
         End If
 
-        ' 1. Verifica nel DDTInstance corrente
-        If _ddtInstance IsNot Nothing Then
-            If HasVariableInDDTInstance(fullLabel, _ddtInstance) Then
+        ' 1. Verifica nel TaskInstance corrente
+        If _taskInstance IsNot Nothing Then
+            If HasVariableInTaskInstance(fullLabel, _taskInstance) Then
                 Return True
             End If
         End If
@@ -89,25 +89,25 @@ Public Class GlobalVariableContext
     End Function
 
     ''' <summary>
-    ''' Cerca una variabile nel DDTInstance usando FullLabel
+    ''' Cerca una variabile nel TaskInstance usando FullLabel
     ''' </summary>
-    Private Function GetValueFromDDTInstance(fullLabel As String, ddtInstance As DDTInstance) As String
-        If ddtInstance Is Nothing OrElse ddtInstance.MainDataList Is Nothing Then
+    Private Function GetValueFromTaskInstance(fullLabel As String, taskInstance As TaskInstance) As String
+        If taskInstance Is Nothing OrElse taskInstance.TaskList Is Nothing Then
             Return ""
         End If
 
         ' Cerca il nodo con questa FullLabel
-        Dim node As DDTNode = FindNodeByFullLabel(fullLabel, ddtInstance)
+        Dim node As TaskNode = FindNodeByFullLabel(fullLabel, taskInstance)
         If node Is Nothing Then
             Return ""
         End If
 
-        ' Se è un mainData composito, costruisci il valore dai subData
+        ' Se è un task composito, costruisci il valore dai subTasks
         If node.HasSubTasks() Then
             Dim valueParts As New List(Of String)()
-            For Each subData As DDTNode In node.SubTasks
-                If subData.Value IsNot Nothing Then
-                    valueParts.Add(subData.Value.ToString())
+            For Each subTask As TaskNode In node.SubTasks
+                If subTask.Value IsNot Nothing Then
+                    valueParts.Add(subTask.Value.ToString())
                 End If
             Next
             Return String.Join(" ", valueParts)
@@ -119,23 +119,23 @@ Public Class GlobalVariableContext
     End Function
 
     ''' <summary>
-    ''' Verifica se una variabile esiste nel DDTInstance
+    ''' Verifica se una variabile esiste nel TaskInstance
     ''' </summary>
-    Private Function HasVariableInDDTInstance(fullLabel As String, ddtInstance As DDTInstance) As Boolean
-        Return FindNodeByFullLabel(fullLabel, ddtInstance) IsNot Nothing
+    Private Function HasVariableInTaskInstance(fullLabel As String, taskInstance As TaskInstance) As Boolean
+        Return FindNodeByFullLabel(fullLabel, taskInstance) IsNot Nothing
     End Function
 
     ''' <summary>
-    ''' Trova un nodo nel DDTInstance usando FullLabel
+    ''' Trova un nodo nel TaskInstance usando FullLabel
     ''' </summary>
-    Private Function FindNodeByFullLabel(fullLabel As String, ddtInstance As DDTInstance) As DDTNode
-        If ddtInstance Is Nothing OrElse ddtInstance.MainDataList Is Nothing Then
+    Private Function FindNodeByFullLabel(fullLabel As String, taskInstance As TaskInstance) As TaskNode
+        If taskInstance Is Nothing OrElse taskInstance.TaskList Is Nothing Then
             Return Nothing
         End If
 
         ' Cerca ricorsivamente in tutti i nodi
-        For Each mainData As DDTNode In ddtInstance.MainDataList
-            Dim found As DDTNode = FindNodeRecursive(mainData, fullLabel)
+        For Each mainTask As TaskNode In taskInstance.TaskList
+            Dim found As TaskNode = FindNodeRecursive(mainTask, fullLabel)
             If found IsNot Nothing Then
                 Return found
             End If
@@ -147,7 +147,7 @@ Public Class GlobalVariableContext
     ''' <summary>
     ''' Cerca ricorsivamente un nodo con la FullLabel specificata
     ''' </summary>
-    Private Function FindNodeRecursive(node As DDTNode, fullLabel As String) As DDTNode
+    Private Function FindNodeRecursive(node As TaskNode, fullLabel As String) As TaskNode
         If node Is Nothing Then
             Return Nothing
         End If
@@ -157,10 +157,10 @@ Public Class GlobalVariableContext
             Return node
         End If
 
-        ' Cerca ricorsivamente nei subData
+        ' Cerca ricorsivamente nei subTasks
         If node.SubTasks IsNot Nothing Then
-            For Each subData As DDTNode In node.SubTasks
-                Dim found As DDTNode = FindNodeRecursive(subData, fullLabel)
+            For Each subTask As TaskNode In node.SubTasks
+                Dim found As TaskNode = FindNodeRecursive(subTask, fullLabel)
                 If found IsNot Nothing Then
                     Return found
                 End If

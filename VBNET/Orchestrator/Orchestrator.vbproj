@@ -6,7 +6,7 @@
     <OptionStrict>On</OptionStrict>
     <OptionExplicit>On</OptionExplicit>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
-    <RootNamespace>DDTEngine.Orchestrator</RootNamespace>
+    <RootNamespace>TaskEngine.Orchestrator</RootNamespace>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
@@ -16,7 +16,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DDTEngine\DDTEngine.vbproj" />
+    <ProjectReference Include="..\DDTEngine\TaskEngine.vbproj" />
     <ProjectReference Include="..\Compiler\Compiler.vbproj" />
   </ItemGroup>
 

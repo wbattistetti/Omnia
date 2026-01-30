@@ -2,7 +2,7 @@ Option Strict On
 Option Explicit On
 
 Imports System.Collections.Generic
-Imports DDTEngine
+Imports TaskEngine
 
 ''' <summary>
 ''' RuntimeTask: Struttura runtime ricorsiva per esecuzione
@@ -25,7 +25,7 @@ Public Class RuntimeTask
     ''' Steps di dialogo (solo se il task è atomico o aggregato)
     ''' Provengono SOLO dall'istanza, non dal template
     ''' </summary>
-    Public Property Steps As List(Of DDTEngine.DialogueStep)
+    Public Property Steps As List(Of TaskEngine.DialogueStep)
 
     ''' <summary>
     ''' Constraints per validazione input
@@ -46,7 +46,7 @@ Public Class RuntimeTask
     Public Property SubTasks As List(Of RuntimeTask)
 
     Public Sub New()
-        Steps = New List(Of DDTEngine.DialogueStep)()
+        Steps = New List(Of TaskEngine.DialogueStep)()
         Constraints = New List(Of ValidationCondition)()
         SubTasks = New List(Of RuntimeTask)()
     End Sub
