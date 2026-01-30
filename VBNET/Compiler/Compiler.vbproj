@@ -26,7 +26,7 @@
   <ItemGroup>
     <!-- DDT Compiler e Assembler -->
     <Compile Include="DDTCompiler.vb" />
-    <Compile Include="DDTAssembler.vb" />
+    <Compile Include="TaskAssembler.vb" />
     <Compile Include="ContractLoader.vb" />
 
     <!-- Task Compiler (Polymorphic) -->
@@ -56,8 +56,10 @@
     <Compile Include="DTO\IDE\Escalation.vb" />
     <Compile Include="DTO\IDE\DialogueStep.vb" />
     <Compile Include="DTO\IDE\DialogueStepListConverter.vb" />
-    <Compile Include="DTO\IDE\MainDataNode.vb" />
-    <Compile Include="DTO\IDE\MainDataNodeListConverter.vb" />
+    <Compile Include="DTO\IDE\TaskNode.vb" />
+    <Compile Include="DTO\IDE\TaskNodeListConverter.vb" />
+    <!-- ❌ RIMOSSO: MainDataNode.vb - rinominato in TaskNode.vb -->
+    <!-- ❌ RIMOSSO: MainDataNodeListConverter.vb - rinominato in TaskNodeListConverter.vb -->
     <Compile Include="DTO\IDE\TaskTreeRuntime.vb" />
     <!-- ❌ RIMOSSO: AssembledDDT.vb - rinominato in TaskTreeRuntime.vb -->
 

@@ -5,11 +5,11 @@ Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
 ''' <summary>
-''' TaskTreeRuntime: formato runtime per DDTEngine (ex AssembledDDT)
+''' TaskTreeRuntime: formato runtime per TaskEngine (ex AssembledDDT)
 ''' ✅ RINOMINATO: AssembledDDT → TaskTreeRuntime
 ''' Il frontend usa TaskTree, il compilatore converte TaskTree → TaskTreeRuntime per il runtime.
-''' NOTA: DDTEngine/DDTInstance/DDTNode sono interni al runtime e non vengono rinominati per non toccare la logica funzionale.
-''' data è sempre un array: data: MainDataNode[]
+''' NOTA: TaskEngine/TaskInstance/TaskNode sono interni al runtime.
+''' nodes è sempre un array: nodes: TaskNode[]
 ''' </summary>
 Public Class TaskTreeRuntime
     <JsonProperty("id")>
@@ -18,9 +18,9 @@ Public Class TaskTreeRuntime
     <JsonProperty("label")>
     Public Property Label As String
 
-    <JsonProperty("data")>
-    <JsonConverter(GetType(MainDataNodeListConverter))>
-    Public Property Data As List(Of Compiler.MainDataNode)
+    <JsonProperty("nodes")>
+    <JsonConverter(GetType(TaskNodeListConverter))>
+    Public Property Nodes As List(Of Compiler.TaskNode)
 
     <JsonProperty("translations")>
     Public Property Translations As Dictionary(Of String, String)
@@ -36,7 +36,7 @@ Public Class TaskTreeRuntime
 
     Public Sub New()
         Translations = New Dictionary(Of String, String)()
-        Data = New List(Of Compiler.MainDataNode)()
+        Nodes = New List(Of Compiler.TaskNode)()
         Constraints = New List(Of Object)()
     End Sub
 End Class

@@ -50,16 +50,16 @@ Public Class UtteranceInterpretationTaskCompiler
             System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Building TaskTreeRuntime from template {task.TemplateId}")
 
             Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Searching for template {task.TemplateId} in flow.Tasks...")
-            Dim template = flow.Tasks.FirstOrDefault(Function(t) t.Id = task.TemplateId)
+            Dim template As Compiler.Task = flow.Tasks.FirstOrDefault(Function(t As Compiler.Task) t.Id = task.TemplateId)
             If template IsNot Nothing Then
                 Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Template {task.TemplateId} found: Label={template.Label}, SubTasksIds count={If(template.SubTasksIds IsNot Nothing, template.SubTasksIds.Count, 0)}")
                 Try
                     Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Building TaskTreeRuntime from template {task.TemplateId}...")
-                    taskTreeRuntime = BuildTaskTreeRuntimeFromTemplate(template, task, flow)
+                    taskTreeRuntime = BuildTaskTreeRuntime(template, task, flow)
                     Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime built successfully")
                     Console.WriteLine($"   TaskTreeRuntime.Id={taskTreeRuntime.Id}")
                     Console.WriteLine($"   TaskTreeRuntime.Label={taskTreeRuntime.Label}")
-                    Console.WriteLine($"   TaskTreeRuntime.Data count={If(taskTreeRuntime.Data IsNot Nothing, taskTreeRuntime.Data.Count, 0)}")
+                    Console.WriteLine($"   TaskTreeRuntime.Nodes count={If(taskTreeRuntime.Nodes IsNot Nothing, taskTreeRuntime.Nodes.Count, 0)}")
                     System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime built from template {task.TemplateId}")
                 Catch ex As Exception
                     Console.WriteLine($"❌ [COMPILER][UtteranceInterpretationTaskCompiler] Failed to build TaskTreeRuntime from template: {ex.Message}")
@@ -88,11 +88,11 @@ Public Class UtteranceInterpretationTaskCompiler
         If taskTreeRuntime IsNot Nothing Then
             Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime found! Starting compilation...")
             System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime found! Starting compilation...")
-            Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime.Id={taskTreeRuntime.Id}, Data IsNot Nothing={taskTreeRuntime.Data IsNot Nothing}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime.Id={taskTreeRuntime.Id}, Data IsNot Nothing={taskTreeRuntime.Data IsNot Nothing}")
-            If taskTreeRuntime.Data IsNot Nothing Then
-                Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime.Data.Count={taskTreeRuntime.Data.Count}")
-                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime.Data.Count={taskTreeRuntime.Data.Count}")
+            Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime.Id={taskTreeRuntime.Id}, Nodes IsNot Nothing={taskTreeRuntime.Nodes IsNot Nothing}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime.Id={taskTreeRuntime.Id}, Nodes IsNot Nothing={taskTreeRuntime.Nodes IsNot Nothing}")
+            If taskTreeRuntime.Nodes IsNot Nothing Then
+                Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime.Nodes.Count={taskTreeRuntime.Nodes.Count}")
+                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime.Nodes.Count={taskTreeRuntime.Nodes.Count}")
             End If
             Try
                 Dim ddtCompiler As New DDTCompiler()
@@ -131,17 +131,17 @@ Public Class UtteranceInterpretationTaskCompiler
     ''' Supporta profondità arbitraria (ricorsione completa)
     ''' </summary>
     Private Function ExpandDataTreeRecursively(
-        nodes As List(Of Compiler.MainDataNode),
+        nodes As List(Of Compiler.TaskNode),
         allTemplates As List(Of Compiler.Task),
         visitedTemplates As HashSet(Of String)
-    ) As List(Of Compiler.MainDataNode)
+    ) As List(Of Compiler.TaskNode)
         If nodes Is Nothing OrElse nodes.Count = 0 Then
             Return nodes
         End If
 
-        Dim expandedNodes As New List(Of Compiler.MainDataNode)()
+        Dim expandedNodes As New List(Of Compiler.TaskNode)()
 
-        For Each node As Compiler.MainDataNode In nodes
+        For Each node As Compiler.TaskNode In nodes
             ' ✅ Se il nodo ha templateId, dereferenzia il template
             If Not String.IsNullOrEmpty(node.TemplateId) Then
                 ' Protezione contro riferimenti circolari
@@ -157,13 +157,13 @@ Public Class UtteranceInterpretationTaskCompiler
                 System.Diagnostics.Debug.WriteLine($"🔄 [COMPILER][UtteranceInterpretationTaskCompiler] Dereferencing templateId={node.TemplateId} for node Id={node.Id}")
 
                 ' ✅ NUOVO MODELLO: Cerca il template referenziato e usa subTasksIds
-                Dim referencedTemplate = allTemplates.FirstOrDefault(Function(t) t.Id = node.TemplateId)
+                Dim referencedTemplate As Compiler.Task = allTemplates.FirstOrDefault(Function(t As Compiler.Task) t.Id = node.TemplateId)
                 If referencedTemplate IsNot Nothing Then
                     ' ✅ Se il template ha subTasksIds, costruisci i subTasks
                     If referencedTemplate.SubTasksIds IsNot Nothing AndAlso referencedTemplate.SubTasksIds.Count > 0 Then
                         ' Se il nodo corrente non ha subTasks, costruiscili da subTasksIds
                         If node.SubTasks Is Nothing OrElse node.SubTasks.Count = 0 Then
-                            node.SubTasks = BuildDataTreeFromSubTasksIds(referencedTemplate.SubTasksIds, allTemplates, visitedTemplates)
+                            node.SubTasks = BuildTaskTreeFromSubTasksIds(referencedTemplate.SubTasksIds, allTemplates, visitedTemplates)
                             Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Built {node.SubTasks.Count} subTasks from template {node.TemplateId} using subTasksIds")
                             System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Built subTasks from template {node.TemplateId}")
                         End If
@@ -194,10 +194,10 @@ Public Class UtteranceInterpretationTaskCompiler
     End Function
 
     ''' <summary>
-    ''' Clona un MainDataNode (copia superficiale)
+    ''' Clona un TaskNode (copia superficiale)
     ''' </summary>
-    Private Function CloneMainDataNode(source As Compiler.MainDataNode) As Compiler.MainDataNode
-        Dim cloned As New Compiler.MainDataNode() With {
+    Private Function CloneTaskNode(source As Compiler.TaskNode) As Compiler.TaskNode
+        Dim cloned As New Compiler.TaskNode() With {
             .Id = source.Id,
             .Name = source.Name,
             .Label = source.Label,
@@ -206,7 +206,7 @@ Public Class UtteranceInterpretationTaskCompiler
             .Condition = source.Condition,
             .TemplateId = source.TemplateId,
             .Steps = If(source.Steps IsNot Nothing, New List(Of Compiler.DialogueStep)(source.Steps), New List(Of Compiler.DialogueStep)()),
-            .SubTasks = If(source.SubTasks IsNot Nothing, New List(Of Compiler.MainDataNode)(source.SubTasks), New List(Of Compiler.MainDataNode)()),
+            .SubTasks = If(source.SubTasks IsNot Nothing, New List(Of Compiler.TaskNode)(source.SubTasks), New List(Of Compiler.TaskNode)()),
             .Synonyms = If(source.Synonyms IsNot Nothing, New List(Of String)(source.Synonyms), New List(Of String)()),
             .Constraints = If(source.Constraints IsNot Nothing, New List(Of Object)(source.Constraints), New List(Of Object)())
         }
@@ -217,7 +217,7 @@ Public Class UtteranceInterpretationTaskCompiler
     ''' Costruisce TaskTreeRuntime dal template e applica gli override dall'istanza
     ''' ✅ NUOVO MODELLO: Usa subTasksIds invece di Data
     ''' </summary>
-    Private Function BuildTaskTreeRuntimeFromTemplate(
+    Private Function BuildTaskTreeRuntime(
         template As Task,
         instance As Task,
         flow As Flow
@@ -230,16 +230,39 @@ Public Class UtteranceInterpretationTaskCompiler
 
         ' ✅ NUOVO MODELLO: Costruisci struttura da subTasksIds (grafo di template)
         If template.SubTasksIds IsNot Nothing AndAlso template.SubTasksIds.Count > 0 Then
-            ' ✅ Dereferenzia ricorsivamente subTasksIds per costruire MainDataNode[]
-            taskTreeRuntime.Data = BuildDataTreeFromSubTasksIds(template.SubTasksIds, flow.Tasks, New HashSet(Of String)())
+            ' ✅ FIX: Costruisci sub-nodi
+            Dim subNodes = BuildTaskTreeFromSubTasksIds(template.SubTasksIds, flow.Tasks, New HashSet(Of String)())
 
-            ' ✅ Applica steps override dall'istanza
+            ' ✅ FIX: Crea nodo radice con sub-nodi come SubTasks
+            Dim rootNode As New Compiler.TaskNode() With {
+                .Id = template.Id,
+                .TemplateId = template.Id,
+                .Name = If(String.IsNullOrEmpty(template.Label), template.Id, template.Label),
+                .Steps = New List(Of Compiler.DialogueStep)(),
+                .SubTasks = subNodes,  ' ✅ Sub-nodi dentro SubTasks
+                .Constraints = If(template.DataContracts IsNot Nothing AndAlso template.DataContracts.Count > 0,
+                                 template.DataContracts,
+                                 If(template.Constraints IsNot Nothing AndAlso template.Constraints.Count > 0,
+                                    template.Constraints,
+                                    New List(Of Object)())),
+                .Condition = template.Condition
+            }
+
+            ' ✅ Applica steps override al nodo radice se presente
             If instance.Steps IsNot Nothing AndAlso instance.Steps.Count > 0 Then
-                ApplyStepsOverrides(taskTreeRuntime.Data, instance.Steps)
+                If instance.Steps.ContainsKey(template.Id) Then
+                    ' Applica steps al nodo radice
+                    ApplyStepsToNode(rootNode, instance.Steps(template.Id))
+                End If
+                ' Applica steps ai sub-nodi
+                ApplyStepsOverrides(rootNode.SubTasks, instance.Steps)
             End If
+
+            ' ✅ TaskTreeRuntime.Nodes contiene il nodo radice
+            taskTreeRuntime.Nodes = New List(Of Compiler.TaskNode) From {rootNode}
         Else
             ' ✅ Template atomico (nessun subTask) → struttura vuota
-            taskTreeRuntime.Data = New List(Of MainDataNode)()
+            taskTreeRuntime.Nodes = New List(Of Compiler.TaskNode)()
             Console.WriteLine($"ℹ️ [COMPILER][UtteranceInterpretationTaskCompiler] Template {template.Id} has no subTasksIds (atomic template)")
         End If
 
@@ -247,15 +270,15 @@ Public Class UtteranceInterpretationTaskCompiler
     End Function
 
     ''' <summary>
-    ''' ✅ NUOVO MODELLO: Costruisce MainDataNode[] da subTasksIds (grafo di template)
+    ''' ✅ NUOVO MODELLO: Costruisce TaskNode[] da subTasksIds (grafo di template)
     ''' Dereferenzia ricorsivamente ogni templateId in subTasksIds
     ''' </summary>
-    Private Function BuildDataTreeFromSubTasksIds(
+    Private Function BuildTaskTreeFromSubTasksIds(
         subTasksIds As List(Of String),
-        allTemplates As List(Of Task),
+        allTemplates As List(Of Compiler.Task),
         visitedTemplates As HashSet(Of String)
-    ) As List(Of MainDataNode)
-        Dim nodes As New List(Of MainDataNode)()
+    ) As List(Of Compiler.TaskNode)
+        Dim nodes As New List(Of Compiler.TaskNode)()
 
         For Each subTaskId In subTasksIds
             ' Protezione contro riferimenti circolari
@@ -268,7 +291,7 @@ Public Class UtteranceInterpretationTaskCompiler
             Console.WriteLine($"🔄 [COMPILER][UtteranceInterpretationTaskCompiler] Dereferencing subTaskId={subTaskId}")
 
             ' Cerca il template referenziato
-            Dim subTemplate = allTemplates.FirstOrDefault(Function(t) t.Id = subTaskId)
+            Dim subTemplate As Compiler.Task = allTemplates.FirstOrDefault(Function(t As Compiler.Task) t.Id = subTaskId)
             If subTemplate IsNot Nothing Then
                 ' ✅ Crea MainDataNode dal template
                 ' NOTA: Steps vengono SOLO dall'istanza, non dal template
@@ -284,23 +307,23 @@ Public Class UtteranceInterpretationTaskCompiler
                     templateConstraints = New List(Of Object)()
                 End If
 
-                ' ✅ Crea MainDataNode dal template
+                ' ✅ Crea TaskNode dal template
                 ' NOTA: Steps vengono SOLO dall'istanza, non dal template
                 ' Template fornisce: struttura (subTasksIds), constraints, condition, metadata
                 ' Label, Type, Required, Synonyms non vengono impostati (non servono nel runtime)
-                Dim node As New MainDataNode() With {
+                Dim node As New Compiler.TaskNode() With {
                     .Id = subTemplate.Id,
                     .TemplateId = subTemplate.Id,
                     .Name = If(String.IsNullOrEmpty(subTemplate.Label), subTemplate.Id, subTemplate.Label),
                     .Steps = New List(Of Compiler.DialogueStep)(),
-                    .SubTasks = New List(Of Compiler.MainDataNode)(),
+                    .SubTasks = New List(Of Compiler.TaskNode)(),
                     .Constraints = templateConstraints,
                     .Condition = subTemplate.Condition
                 }
 
                 ' ✅ Se il sub-template ha a sua volta subTasksIds, dereferenzia ricorsivamente
                 If subTemplate.SubTasksIds IsNot Nothing AndAlso subTemplate.SubTasksIds.Count > 0 Then
-                    node.SubTasks = BuildDataTreeFromSubTasksIds(subTemplate.SubTasksIds, allTemplates, visitedTemplates)
+                    node.SubTasks = BuildTaskTreeFromSubTasksIds(subTemplate.SubTasksIds, allTemplates, visitedTemplates)
                 End If
 
                 nodes.Add(node)
@@ -322,7 +345,7 @@ Public Class UtteranceInterpretationTaskCompiler
     ''' DialogueStepListConverter gestisce automaticamente la conversione da oggetto a lista
     ''' </summary>
     Private Sub ApplyStepsOverrides(
-        nodes As List(Of MainDataNode),
+        nodes As List(Of Compiler.TaskNode),
         stepsOverrides As Dictionary(Of String, Object)
     )
         For Each node In nodes
@@ -356,6 +379,32 @@ Public Class UtteranceInterpretationTaskCompiler
                 ApplyStepsOverrides(node.SubTasks, stepsOverrides)
             End If
         Next
+    End Sub
+
+    ''' <summary>
+    ''' Applica steps override a un singolo nodo
+    ''' </summary>
+    Private Sub ApplyStepsToNode(
+        node As TaskNode,
+        stepsOverride As Object
+    )
+        If node Is Nothing OrElse stepsOverride Is Nothing Then
+            Return
+        End If
+
+        Try
+            Dim overrideJson = JsonConvert.SerializeObject(stepsOverride)
+            Dim settings As New JsonSerializerSettings()
+            settings.Converters.Add(New DialogueStepListConverter())
+            Dim overrideSteps = JsonConvert.DeserializeObject(Of List(Of Compiler.DialogueStep))(overrideJson, settings)
+
+            If overrideSteps IsNot Nothing AndAlso overrideSteps.Count > 0 Then
+                node.Steps = overrideSteps
+                Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Applied {overrideSteps.Count} steps to root node {node.Id}")
+            End If
+        Catch ex As Exception
+            Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Failed to apply steps to node {node.Id}: {ex.Message}")
+        End Try
     End Sub
 End Class
 

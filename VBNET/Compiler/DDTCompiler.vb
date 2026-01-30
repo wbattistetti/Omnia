@@ -15,11 +15,11 @@ Imports DDTEngine
 ''' </summary>
 Public Class DDTCompiler
     Private ReadOnly _contractLoader As ContractLoader
-    Private ReadOnly _assembler As DDTAssembler
+    Private ReadOnly _assembler As TaskAssembler
 
     Public Sub New()
         _contractLoader = New ContractLoader()
-        _assembler = New DDTAssembler()
+        _assembler = New TaskAssembler()
     End Sub
 
     ''' <summary>
@@ -41,7 +41,7 @@ Public Class DDTCompiler
             .MissingMemberHandling = MissingMemberHandling.Ignore
         }
         ' ✅ Register custom converters (also specified as attributes, but explicit registration ensures they work)
-        settings.Converters.Add(New MainDataNodeListConverter())
+        settings.Converters.Add(New TaskNodeListConverter())
         settings.Converters.Add(New DialogueStepListConverter())
 
         Dim assembled As Compiler.TaskTreeRuntime = JsonConvert.DeserializeObject(Of Compiler.TaskTreeRuntime)(ddtJson, settings)
@@ -49,16 +49,16 @@ Public Class DDTCompiler
             Throw New InvalidOperationException("Impossibile deserializzare TaskTreeRuntime dal JSON")
         End If
 
-        Console.WriteLine($"✅ [COMPILER][DDTCompiler] TaskTreeRuntime deserialized: Id={assembled.Id}, Data IsNot Nothing={assembled.Data IsNot Nothing}")
-        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTCompiler] TaskTreeRuntime deserialized: Id={assembled.Id}, Data IsNot Nothing={assembled.Data IsNot Nothing}")
-        If assembled.Data IsNot Nothing Then
-            Console.WriteLine($"🔍 [COMPILER][DDTCompiler] TaskTreeRuntime.Data.Count={assembled.Data.Count}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] TaskTreeRuntime.Data.Count={assembled.Data.Count}")
+        Console.WriteLine($"✅ [COMPILER][DDTCompiler] TaskTreeRuntime deserialized: Id={assembled.Id}, Nodes IsNot Nothing={assembled.Nodes IsNot Nothing}")
+        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTCompiler] TaskTreeRuntime deserialized: Id={assembled.Id}, Nodes IsNot Nothing={assembled.Nodes IsNot Nothing}")
+        If assembled.Nodes IsNot Nothing Then
+            Console.WriteLine($"🔍 [COMPILER][DDTCompiler] TaskTreeRuntime.Nodes.Count={assembled.Nodes.Count}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] TaskTreeRuntime.Nodes.Count={assembled.Nodes.Count}")
         End If
 
         ' 2. Trasforma TaskTreeRuntime (IDE) → Task ricorsivo (Runtime)
-        Console.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 2: Compiling TaskTreeRuntime to Task using DDTAssembler.Compile...")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 2: Compiling TaskTreeRuntime to Task using DDTAssembler.Compile...")
+        Console.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 2: Compiling TaskTreeRuntime to Task using TaskAssembler.Compile...")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 2: Compiling TaskTreeRuntime to Task using TaskAssembler.Compile...")
         Dim rootTask As RuntimeTask = _assembler.Compile(assembled)
         Console.WriteLine($"✅ [COMPILER][DDTCompiler] Task created: Id={If(String.IsNullOrEmpty(rootTask.Id), "NULL", rootTask.Id)}, SubTasks.Count={If(rootTask.SubTasks IsNot Nothing, rootTask.SubTasks.Count, 0)}")
         System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTCompiler] Task created: Id={If(String.IsNullOrEmpty(rootTask.Id), "NULL", rootTask.Id)}, SubTasks.Count={If(rootTask.SubTasks IsNot Nothing, rootTask.SubTasks.Count, 0)}")
