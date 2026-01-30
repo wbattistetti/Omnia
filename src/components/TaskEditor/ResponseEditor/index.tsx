@@ -63,27 +63,7 @@ function safeDeepClone<T>(obj: T): T {
   }
 }
 
-// Helper: enforce phone kind by label when missing/mis-set
-function coercePhoneKind(src: any) {
-  if (!src) return src;
-  try {
-    const clone = safeDeepClone(src);
-    const mains = Array.isArray(clone?.data) ? clone.data : [];
-    for (const m of mains) {
-      const label = String(m?.label || '').toLowerCase();
-      if (/phone|telephone|tel|cellulare|mobile/.test(label)) {
-        if ((m?.kind || '').toLowerCase() !== 'phone') {
-          m.kind = 'phone';
-          (m as any)._kindManual = 'phone';
-        }
-      }
-    }
-    return clone;
-  } catch (err) {
-    console.warn('[coercePhoneKind] Failed to clone, returning original:', err);
-    return src;
-  }
-}
+// ❌ RIMOSSO: coercePhoneKind - non serve più backward compatibility con vecchio modello DDT (.data[])
 
 function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTaskTreeLoading, hideHeader, onToolbarUpdate, tabId, setDockTree, registerOnClose }: { taskTree?: TaskTree | null, onClose?: () => void, onWizardComplete?: (finalTaskTree: TaskTree) => void, task?: TaskMeta | Task, isTaskTreeLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void, registerOnClose?: (fn: () => Promise<boolean>) => void }) { // ✅ ARCHITETTURA ESPERTO: task può essere TaskMeta o Task completo
 
@@ -696,7 +676,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
             nlpProfileExamples: nlpProfileExamples?.slice(0, 3)
           });
           mains[mainIndex] = selectedNode;
-          ddtRef.current.data = mains;
+          ddtRef.current.nodes = mains;
 
           // ✅ VERIFICA: Controlla se nlpProfile.examples è presente dopo il salvataggio
           const savedNode = taskTreeRef.current.nodes[mainIndex];
@@ -772,8 +752,8 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
           key,
           hasTaskTree,
           finalTaskTreeKeys: finalTaskTree ? Object.keys(finalTaskTree) : [],
-          hasdata: !!finalMainList && finalMainList.length > 0,
-          dataLength: finalMainList?.length || 0
+            hasNodes: !!finalMainList && finalMainList.length > 0,
+            nodesLength: finalMainList?.length || 0
         });
 
         console.log('[ResponseEditor][CLOSE] 💾 Starting save process', {
@@ -820,8 +800,8 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
           console.log('[handleEditorClose] 💾 Saving complete TaskTree (SYNC - blocking close until saved)', {
             key,
             finalStartTasks,
-            hasdata: !!finaldata,
-            dataLength: finalMainList?.length || 0
+            hasNodes: !!finalMainList,
+            nodesLength: finalMainList?.length || 0
           });
 
           // ✅ Get or create task
@@ -968,7 +948,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
           console.log('[ResponseEditor][CLOSE] ✅ Save completed successfully', {
             taskId: task?.id || task?.instanceId,
             key,
-            dataLength: finalDDT.data?.length || 0,
+            nodesLength: finalDDT.nodes?.length || 0,
             finalStartTasks,
             savedStepsKeys: finalTaskTreeWithSteps.steps ? Object.keys(finalTaskTreeWithSteps.steps) : [],
             savedStepsCount: finalTaskTreeWithSteps.steps ? Object.keys(finalTaskTreeWithSteps.steps).length : 0,
@@ -1821,40 +1801,13 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
                           stepCount: stepKeys.length
                         };
                       }) : [],
-                      hasdata: !!finalDDT.data,
-                      dataLength: finalDDT.data?.length || 0,
-                      dataFirstId: finalDDT.data?.[0]?.id
+                      hasNodes: !!finalDDT.nodes,
+                      nodesLength: finalDDT.nodes?.length || 0,
+                      firstNodeId: finalDDT.nodes?.[0]?.id
                     });
 
-                    const coerced = coercePhoneKind(finalDDT);
-
-                    // ✅ DEBUG: Verifica cosa contiene coerced dopo coercePhoneKind
-                    console.log('[ResponseEditor][onComplete] 🔍 coerced after coercePhoneKind', {
-                      hasSteps: !!coerced.steps,
-                      stepsType: typeof coerced.steps,
-                      stepsKeys: coerced.steps ? Object.keys(coerced.steps) : [],
-                      stepsCount: coerced.steps ? Object.keys(coerced.steps).length : 0,
-                      stepsDetails: coerced.steps ? Object.keys(coerced.steps).map(nodeId => {
-                        const nodeSteps = coerced.steps[nodeId];
-                        const isArray = Array.isArray(nodeSteps);
-                        const isObject = typeof nodeSteps === 'object' && !Array.isArray(nodeSteps);
-                        let stepKeys: string[] = [];
-                        if (isArray) {
-                          stepKeys = nodeSteps.map((s: any) => s?.type || 'unknown');
-                        } else if (isObject) {
-                          stepKeys = Object.keys(nodeSteps || {});
-                        }
-                        return {
-                          nodeId: nodeId.substring(0, 20) + '...',
-                          stepsType: typeof nodeSteps,
-                          isArray,
-                          isObject,
-                          stepKeys,
-                          stepCount: stepKeys.length
-                        };
-                      }) : [],
-                      stepsPreserved: JSON.stringify(coerced.steps) === JSON.stringify(finalDDT.steps)
-                    });
+                    // ✅ NUOVO MODELLO: Usa direttamente finalDDT (TaskTree con nodes[])
+                    const coerced = finalDDT;
 
                     // Set flag to prevent auto-reopen IMMEDIATELY (before any state updates)
                     wizardOwnsDataRef.current = true;
@@ -1863,7 +1816,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
                     // Questo assicura che quando si riapre l'editor, i steps siano già salvati
                     if (task?.id || task?.instanceId) {
                       const key = (task?.instanceId || task?.id) as string;
-                      const hasDDT = coerced && Object.keys(coerced).length > 0 && coerced.data && coerced.data.length > 0;
+                      const hasDDT = coerced && Object.keys(coerced).length > 0 && coerced.nodes && coerced.nodes.length > 0;
 
                       if (hasDDT) {
                         let taskInstance = taskRepository.getTask(key);
@@ -1935,7 +1888,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
                           key,
                           hasSteps: !!coerced.steps,
                           stepsCount: coerced.steps ? Object.keys(coerced.steps).length : 0,
-                          dataLength: coerced.data?.length || 0,
+                          nodesLength: coerced.nodes?.length || 0,
                           savedTaskHasSteps: !!savedTask?.steps,
                           savedTaskStepsKeys: savedTask?.steps ? Object.keys(savedTask.steps) : [],
                           savedTaskStepsCount: savedTask?.steps ? Object.keys(savedTask.steps).length : 0,

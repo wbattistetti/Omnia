@@ -7,8 +7,8 @@ export function hasIntentMessages(ddt: any, task?: any): boolean {
     return false;
   }
 
-  // ✅ Verifica che ci sia data[0] con id
-  const mainList = Array.isArray(ddt.data) ? ddt.data : [];
+  // ✅ NUOVO MODELLO: Usa nodes[] invece di data[]
+  const mainList = Array.isArray(ddt.nodes) ? ddt.nodes : [];
   const firstMain = mainList[0];
 
   if (!firstMain || !firstMain.id) {

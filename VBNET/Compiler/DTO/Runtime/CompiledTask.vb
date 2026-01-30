@@ -59,15 +59,15 @@ Public Class CompiledTaskSayMessage
 End Class
 
 ''' <summary>
-''' Task per richiedere dati dall'utente usando un DDT
+''' Task per richiedere dati dall'utente usando un Task ricorsivo
 ''' </summary>
 Public Class CompiledTaskGetData
     Inherits CompiledTask
 
     ''' <summary>
-    ''' DDT instance da eseguire
+    ''' RuntimeTask root ricorsivo da eseguire
     ''' </summary>
-    Public Property DDT As DDTInstance
+    Public Property Task As RuntimeTask
 
     Public Overrides ReadOnly Property TaskType As TaskTypes
         Get

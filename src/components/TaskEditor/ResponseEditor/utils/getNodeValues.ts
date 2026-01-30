@@ -66,11 +66,13 @@ export function buildConditionName(dataLabel: string, valueLabel: string): strin
  * @param task - Task da cui estrarre i valori
  * @returns Array di valori predefiniti, o array vuoto se non ci sono
  */
-export function getValuesFromTask(task: any): NodeValue[] {
-  if (!task?.data || !Array.isArray(task.data)) return [];
+// ✅ NUOVO MODELLO: Task non ha più .data[], usa TaskTree.nodes[] costruito runtime
+// Questa funzione deve ricevere TaskTree invece di Task
+export function getValuesFromTask(taskTree: any): NodeValue[] {
+  if (!taskTree?.nodes || !Array.isArray(taskTree.nodes)) return [];
 
-  // Cerca il primo data con values[]
-  for (const main of task.data) {
+  // Cerca il primo node con values[]
+  for (const main of taskTree.nodes) {
     const values = getNodeValues(main);
     if (values.length > 0) {
       return values;

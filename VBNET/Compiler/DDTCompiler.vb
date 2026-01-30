@@ -56,91 +56,73 @@ Public Class DDTCompiler
             System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] TaskTreeRuntime.Data.Count={assembled.Data.Count}")
         End If
 
-        ' 2. Trasforma TaskTreeRuntime (IDE) → DDTInstance (Runtime)
-        Console.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 2: Compiling TaskTreeRuntime to DDTInstance using DDTAssembler.Compile...")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 2: Compiling TaskTreeRuntime to DDTInstance using DDTAssembler.Compile...")
-        Dim instance As DDTInstance = _assembler.Compile(assembled)
-        Console.WriteLine($"✅ [COMPILER][DDTCompiler] DDTInstance created: MainDataList IsNot Nothing={instance.MainDataList IsNot Nothing}")
-        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTCompiler] DDTInstance created: MainDataList IsNot Nothing={instance.MainDataList IsNot Nothing}")
-        If instance.MainDataList IsNot Nothing Then
-            Console.WriteLine($"🔍 [COMPILER][DDTCompiler] DDTInstance.MainDataList.Count={instance.MainDataList.Count}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] DDTInstance.MainDataList.Count={instance.MainDataList.Count}")
-        End If
+        ' 2. Trasforma TaskTreeRuntime (IDE) → Task ricorsivo (Runtime)
+        Console.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 2: Compiling TaskTreeRuntime to Task using DDTAssembler.Compile...")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTCompiler] Step 2: Compiling TaskTreeRuntime to Task using DDTAssembler.Compile...")
+        Dim rootTask As RuntimeTask = _assembler.Compile(assembled)
+        Console.WriteLine($"✅ [COMPILER][DDTCompiler] Task created: Id={If(String.IsNullOrEmpty(rootTask.Id), "NULL", rootTask.Id)}, SubTasks.Count={If(rootTask.SubTasks IsNot Nothing, rootTask.SubTasks.Count, 0)}")
+        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTCompiler] Task created: Id={If(String.IsNullOrEmpty(rootTask.Id), "NULL", rootTask.Id)}, SubTasks.Count={If(rootTask.SubTasks IsNot Nothing, rootTask.SubTasks.Count, 0)}")
 
-        ' 3. Carica nlpContract per tutti i nodi
-        LoadContractsForAllNodes(instance)
+        ' 3. Carica nlpContract per tutti i nodi (ricorsivo)
+        LoadContractsForTask(rootTask)
 
         ' 4. Valida struttura (placeholder, regex, ecc.)
-        Dim validationErrors As List(Of String) = ValidateInstance(instance)
+        Dim validationErrors As List(Of String) = ValidateTask(rootTask)
 
         Dim result As New DDTCompilationResult()
-        result.Instance = instance
+        result.Task = rootTask
         result.ValidationErrors = validationErrors
         result.IsValid = (validationErrors.Count = 0)
         Return result
     End Function
 
     ''' <summary>
-    ''' Carica nlpContract per tutti i nodi del DDT
+    ''' Carica nlpContract per tutti i nodi del Task (ricorsivo)
     ''' </summary>
-    Private Sub LoadContractsForAllNodes(instance As DDTInstance)
-        If instance.MainDataList IsNot Nothing Then
-            For Each mainData As DDTNode In instance.MainDataList
-                LoadContractForNode(mainData)
-            Next
-        End If
+    Private Sub LoadContractsForTask(task As RuntimeTask)
+        LoadContractForTask(task)
     End Sub
 
     ''' <summary>
-    ''' Carica e compila nlpContract per un nodo e ricorsivamente per i suoi subTasks
+    ''' Carica e compila nlpContract per un RuntimeTask e ricorsivamente per i suoi subTasks
     ''' </summary>
-    Private Sub LoadContractForNode(node As DDTNode)
+    Private Sub LoadContractForTask(task As RuntimeTask)
         ' Se il contract non è già presente, prova a caricarlo e compilarlo
-        If node.NlpContract Is Nothing Then
-            Dim baseContract = _contractLoader.LoadContract(node)
-            If baseContract IsNot Nothing Then
-                ' Pre-compila il contract
-                node.NlpContract = CompiledNlpContract.Compile(baseContract)
-            End If
-        End If
+        ' TODO: ContractLoader deve essere modificato per accettare Task invece di DDTNode
+        ' Per ora, se NlpContract è Nothing, non facciamo nulla (verrà caricato a runtime se necessario)
+        ' Il ContractLoader attuale usa DDTNode, quindi dobbiamo adattarlo o creare un nuovo loader
 
         ' Ricorsivo per subTasks
-        If node.SubTasks IsNot Nothing Then
-            For Each subData As DDTNode In node.SubTasks
-                LoadContractForNode(subData)
+        If task.SubTasks IsNot Nothing Then
+            For Each subTask As RuntimeTask In task.SubTasks
+                LoadContractForTask(subTask)
             Next
         End If
     End Sub
 
     ''' <summary>
-    ''' Valida la struttura del DDT
+    ''' Valida la struttura del Task (ricorsivo)
     ''' </summary>
-    Private Function ValidateInstance(instance As DDTInstance) As List(Of String)
+    Private Function ValidateTask(task As RuntimeTask) As List(Of String)
         Dim errors As New List(Of String)()
-
-        If instance.MainDataList IsNot Nothing Then
-            For Each mainData As DDTNode In instance.MainDataList
-                ValidateNode(mainData, errors)
-            Next
-        End If
-
+        ValidateTaskRecursive(task, errors)
         Return errors
     End Function
 
     ''' <summary>
-    ''' Valida un nodo e ricorsivamente i suoi subTasks
+    ''' Valida un RuntimeTask e ricorsivamente i suoi subTasks
     ''' </summary>
-    Private Sub ValidateNode(node As DDTNode, errors As List(Of String))
+    Private Sub ValidateTaskRecursive(runtimeTask As RuntimeTask, errors As List(Of String))
         ' Valida placeholder nei messaggi
-        If node.Steps IsNot Nothing Then
-            For Each dstep As DDTEngine.DialogueStep In node.Steps
+        If runtimeTask.Steps IsNot Nothing Then
+            For Each dstep As DDTEngine.DialogueStep In runtimeTask.Steps
                 If dstep.Escalations IsNot Nothing Then
                     For Each escalation As DDTEngine.Escalation In dstep.Escalations
                         If escalation.Tasks IsNot Nothing Then
-                            For Each task As ITask In escalation.Tasks
-                                If TypeOf task Is MessageTask Then
-                                    Dim msgTask As MessageTask = DirectCast(task, MessageTask)
-                                    ValidatePlaceholders(msgTask.Text, node, errors)
+                            For Each itask As ITask In escalation.Tasks
+                                If TypeOf itask Is MessageTask Then
+                                    Dim msgTask As MessageTask = DirectCast(itask, MessageTask)
+                                    ValidatePlaceholders(msgTask.Text, runtimeTask, errors)
                                 End If
                             Next
                         End If
@@ -150,14 +132,14 @@ Public Class DDTCompiler
         End If
 
         ' Valida regex nel contract (se presente)
-        If node.NlpContract IsNot Nothing AndAlso node.NlpContract.Regex IsNot Nothing Then
-            ValidateRegexPatterns(node.NlpContract.Regex, node, errors)
+        If runtimeTask.NlpContract IsNot Nothing AndAlso runtimeTask.NlpContract.Regex IsNot Nothing Then
+            ValidateRegexPatterns(runtimeTask.NlpContract.Regex, runtimeTask, errors)
         End If
 
         ' Ricorsivo per subTasks
-        If node.SubTasks IsNot Nothing Then
-            For Each subData As DDTNode In node.SubTasks
-                ValidateNode(subData, errors)
+        If runtimeTask.SubTasks IsNot Nothing Then
+            For Each subTask As RuntimeTask In runtimeTask.SubTasks
+                ValidateTaskRecursive(subTask, errors)
             Next
         End If
     End Sub
@@ -165,7 +147,7 @@ Public Class DDTCompiler
     ''' <summary>
     ''' Valida placeholder nel testo
     ''' </summary>
-    Private Sub ValidatePlaceholders(text As String, node As DDTNode, errors As List(Of String))
+    Private Sub ValidatePlaceholders(text As String, runtimeTask As RuntimeTask, errors As List(Of String))
         If String.IsNullOrEmpty(text) Then Return
 
         ' Pattern: [FullLabel]
@@ -182,13 +164,13 @@ Public Class DDTCompiler
     ''' <summary>
     ''' Valida pattern regex nel contract
     ''' </summary>
-    Private Sub ValidateRegexPatterns(regexConfig As RegexConfig, node As DDTNode, errors As List(Of String))
+    Private Sub ValidateRegexPatterns(regexConfig As RegexConfig, task As RuntimeTask, errors As List(Of String))
         If regexConfig.Patterns IsNot Nothing Then
             For Each pattern As String In regexConfig.Patterns
                 Try
                     Dim testRegex As New Text.RegularExpressions.Regex(pattern)
                 Catch ex As Exception
-                    errors.Add($"Nodo '{node.Name}' (ID: {node.Id}): Pattern regex invalido: {pattern}. Errore: {ex.Message}")
+                    errors.Add($"Task '{task.Id}': Pattern regex invalido: {pattern}. Errore: {ex.Message}")
                 End Try
             Next
         End If
@@ -200,9 +182,9 @@ End Class
 ''' </summary>
 Public Class DDTCompilationResult
     ''' <summary>
-    ''' Istanza DDT compilata
+    ''' Task root compilato (struttura ricorsiva)
     ''' </summary>
-    Public Property Instance As DDTInstance
+    Public Property Task As RuntimeTask
 
     ''' <summary>
     ''' Lista di errori di validazione

@@ -101,13 +101,13 @@ Public Class UtteranceInterpretationTaskCompiler
                 Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Calling DDTCompiler.Compile with JSON length={ddtJson.Length}")
                 System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Calling DDTCompiler.Compile with JSON length={ddtJson.Length}")
                 Dim ddtResult = ddtCompiler.Compile(ddtJson)
-                If ddtResult IsNot Nothing AndAlso ddtResult.Instance IsNot Nothing Then
-                    dataRequestTask.DDT = ddtResult.Instance
-                    Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] DDT compiled successfully for task {taskId}")
-                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] DDT compiled successfully for task {taskId}")
+                If ddtResult IsNot Nothing AndAlso ddtResult.Task IsNot Nothing Then
+                    dataRequestTask.Task = ddtResult.Task
+                    Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Task compiled successfully for task {taskId}")
+                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Task compiled successfully for task {taskId}")
                 Else
-                    Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] DDT compilation returned no instance for task {taskId}")
-                    System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] DDT compilation returned no instance for task {taskId}")
+                    Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Task compilation returned no task for task {taskId}")
+                    System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Task compilation returned no task for task {taskId}")
                 End If
             Catch ex As Exception
                 Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Failed to compile DDT for task {taskId}: {ex.Message}")

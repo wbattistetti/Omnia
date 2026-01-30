@@ -86,22 +86,9 @@ export class ExamplesPersistenceService {
       if (taskId) {
         try {
           const currentTask = taskRepository.getTask(taskId);
-          if (currentTask && currentTask.data && Array.isArray(currentTask.data)) {
-            const nodeIndex = currentTask.data.findIndex((n: any) =>
-              n.id === nodeId || n.templateId === nodeTemplateId
-            );
-
-            if (nodeIndex >= 0) {
-              const updatedData = [...currentTask.data];
-              const nodeToSave = {
-                ...updated, // Spread completo del node aggiornato
-                // Ensure nlpProfile exists and has examples
-                nlpProfile: {
-                  ...(updated.nlpProfile || {}),
-                  examples: newExamples // Override examples (source of truth)
-                }
-              };
-              updatedData[nodeIndex] = nodeToSave;
+          // ✅ NUOVO MODELLO: Task non ha più .data[], usa TaskTree.nodes[] costruito runtime
+          // Non serve più aggiornare cache con .data[] - il TaskTree viene ricostruito da template + instance
+          // Examples vengono salvati nel template, non nell'istanza
               taskRepository.updateTask(taskId, { data: updatedData }, undefined);
 
               // Log the cache update (for debugging)

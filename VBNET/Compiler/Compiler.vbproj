@@ -67,6 +67,7 @@
     <Compile Include="DTO\Runtime\TaskSourceType.vb" />
     <Compile Include="DTO\Runtime\TaskDebugInfo.vb" />
     <Compile Include="DTO\Runtime\TaskTypesConverter.vb" />
+    <Compile Include="DTO\Runtime\Task.vb" />
     <Compile Include="DTO\Runtime\CompiledTask.vb" />
     <Compile Include="DTO\Runtime\CompiledTaskConverter.vb" />
     <Compile Include="DTO\Runtime\CompiledTaskListConverter.vb" />

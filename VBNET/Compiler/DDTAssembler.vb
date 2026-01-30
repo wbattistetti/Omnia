@@ -7,12 +7,12 @@ Imports Newtonsoft.Json
 Imports DDTEngine
 
 ''' <summary>
-''' DDTAssembler: compila strutture IDE (TaskTreeRuntime, ex AssembledDDT) in strutture Runtime (DDTInstance)
+''' DDTAssembler: compila strutture IDE (TaskTreeRuntime) in strutture Runtime (Task ricorsivo)
 ''' Responsabilità:
 ''' - Mappare campi uno a uno
-''' - Normalizzare cardinalità (data singolo → MainDataList)
 ''' - Compilare tipi (DialogueStep IDE → DialogueStep Runtime)
-''' - Gestire default e validazioni
+''' - Convertire Constraints in ValidationConditions
+''' - Costruire struttura ricorsiva Task → Task → Task
 ''' - Sostituire GUID con testi tradotti nella lingua corrente
 ''' </summary>
 Public Class DDTAssembler
@@ -72,9 +72,10 @@ Public Class DDTAssembler
     End Function
 
     ''' <summary>
-    ''' Compila TaskTreeRuntime (IDE, ex AssembledDDT) in DDTInstance (Runtime)
+    ''' Compila TaskTreeRuntime (IDE) in RuntimeTask ricorsivo (Runtime)
+    ''' Restituisce il RuntimeTask root dell'albero ricorsivo
     ''' </summary>
-    Public Function Compile(assembled As Compiler.TaskTreeRuntime) As DDTInstance
+    Public Function Compile(assembled As Compiler.TaskTreeRuntime) As RuntimeTask
         Console.WriteLine($"🔍 [COMPILER][DDTAssembler] Compile called for TaskTreeRuntime Id={assembled.Id}")
         System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] Compile called for TaskTreeRuntime Id={assembled.Id}")
 
@@ -87,81 +88,72 @@ Public Class DDTAssembler
         Console.WriteLine($"🔍 [COMPILER][DDTAssembler] Loaded {translations.Count} translations for GUID resolution")
         System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] Loaded {translations.Count} translations for GUID resolution")
 
-        ' ❌ REMOVED: .Label = assembled.Label, (label non serve a runtime, solo per UI)
-        Dim instance As New DDTInstance() With {
-            .Id = assembled.Id,
-            .Translations = translations, ' ✅ Passa traduzioni all'istanza (per riferimento futuro se necessario)
-            .MainDataList = New List(Of DDTNode)(),
-            .IsAggregate = (assembled.Introduction IsNot Nothing)
-        }
-
         Console.WriteLine($"🔍 [COMPILER][DDTAssembler] assembled.Data IsNot Nothing={assembled.Data IsNot Nothing}")
         System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] assembled.Data IsNot Nothing={assembled.Data IsNot Nothing}")
-        ' ✅ FIX: data è sempre una lista (normalizzata dal converter)
-        If assembled.Data IsNot Nothing Then
-            Console.WriteLine($"🔍 [COMPILER][DDTAssembler] assembled.Data.Count={assembled.Data.Count}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] assembled.Data.Count={assembled.Data.Count}")
-            For Each mainDataNode In assembled.Data
-                If mainDataNode IsNot Nothing Then
-                    Console.WriteLine($"🔍 [COMPILER][DDTAssembler] Converting mainDataNode: Id={mainDataNode.Id}, Name={mainDataNode.Name}, Steps IsNot Nothing={mainDataNode.Steps IsNot Nothing}")
-                    System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] Converting mainDataNode: Id={mainDataNode.Id}, Name={mainDataNode.Name}, Steps IsNot Nothing={mainDataNode.Steps IsNot Nothing}")
-                    If mainDataNode.Steps IsNot Nothing Then
-                        Console.WriteLine($"🔍 [COMPILER][DDTAssembler] mainDataNode.Steps.Count={mainDataNode.Steps.Count}")
-                        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] mainDataNode.Steps.Count={mainDataNode.Steps.Count}")
+        ' ✅ NUOVO MODELLO: Costruisci RuntimeTask root ricorsivo
+        ' Se c'è un solo nodo, è il root; se ce ne sono più, creiamo un nodo aggregato
+        Dim rootTask As RuntimeTask = Nothing
+
+        If assembled.Data IsNot Nothing AndAlso assembled.Data.Count > 0 Then
+            If assembled.Data.Count = 1 Then
+                ' Un solo nodo: è il root
+                Dim mainDataNode = assembled.Data(0)
+                rootTask = CompileNode(mainDataNode, Nothing)
+                rootTask.Id = assembled.Id ' Usa l'ID del TaskTreeRuntime come ID del root
+            Else
+                ' Più nodi: crea un nodo aggregato root con subTasks
+                rootTask = New RuntimeTask() With {
+                    .Id = assembled.Id,
+                    .Condition = Nothing,
+                    .Steps = New List(Of DDTEngine.DialogueStep)(),
+                    .Constraints = New List(Of ValidationCondition)(),
+                    .NlpContract = Nothing,
+                    .SubTasks = New List(Of RuntimeTask)()
+                }
+                ' Compila ogni nodo come subTask
+                For Each mainDataNode As Compiler.MainDataNode In assembled.Data
+                    If mainDataNode IsNot Nothing Then
+                        Dim subTask = CompileNode(mainDataNode, Nothing)
+                        rootTask.SubTasks.Add(subTask)
                     End If
-                    Dim mainNode = CompileNode(mainDataNode, Nothing)
-                    instance.MainDataList.Add(mainNode)
-                    Console.WriteLine($"✅ [COMPILER][DDTAssembler] mainDataNode converted, runtimeNode.Steps.Count={mainNode.Steps.Count}")
-                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTAssembler] mainDataNode converted, runtimeNode.Steps.Count={mainNode.Steps.Count}")
-                End If
-            Next
+                Next
+            End If
         Else
-            Console.WriteLine($"⚠️ [COMPILER][DDTAssembler] assembled.Data is Nothing!")
-            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DDTAssembler] assembled.Data is Nothing!")
+            ' Nessun nodo: crea un task vuoto
+            rootTask = New RuntimeTask() With {
+                .Id = assembled.Id,
+                .Condition = Nothing,
+                .Steps = New List(Of DDTEngine.DialogueStep)(),
+                .Constraints = New List(Of ValidationCondition)(),
+                .NlpContract = Nothing,
+                .SubTasks = New List(Of RuntimeTask)()
+            }
+            Console.WriteLine($"⚠️ [COMPILER][DDTAssembler] assembled.Data is empty, created empty root Task")
+            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][DDTAssembler] assembled.Data is empty, created empty root Task")
         End If
 
-        ' Compila Introduction (DialogueStep → Response)
-        If assembled.Introduction IsNot Nothing Then
-            instance.Introduction = CompileDialogueStepToResponse(assembled.Introduction)
-        End If
-
-        ' Calcola FullLabel per tutti i nodi (compile-time)
-        CalculateFullLabels(instance)
-
-        ' ✅ DEBUG: Verifica istanza finale PRIMA di restituirla
+        ' ✅ DEBUG: Verifica Task finale
         Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-        Console.WriteLine($"🔍 [COMPILER][DDTAssembler] DEBUG: Final instance verification")
+        Console.WriteLine($"🔍 [COMPILER][DDTAssembler] DEBUG: Final Task verification")
         Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-        Console.WriteLine($"[COMPILER][DDTAssembler] instance.Id={If(String.IsNullOrEmpty(instance.Id), "NULL/EMPTY", instance.Id)}")
-        Console.WriteLine($"[COMPILER][DDTAssembler] instance.MainDataList IsNot Nothing={instance.MainDataList IsNot Nothing}")
-        Console.WriteLine($"[COMPILER][DDTAssembler] instance.MainDataList.Count={If(instance.MainDataList IsNot Nothing, instance.MainDataList.Count, 0)}")
-        Console.WriteLine($"[COMPILER][DDTAssembler] instance.IsAggregate={instance.IsAggregate}")
-        Console.WriteLine($"[COMPILER][DDTAssembler] instance.Introduction IsNot Nothing={instance.Introduction IsNot Nothing}")
-        Console.WriteLine($"[COMPILER][DDTAssembler] instance.SuccessResponse IsNot Nothing={instance.SuccessResponse IsNot Nothing}")
-        Console.WriteLine($"[COMPILER][DDTAssembler] instance.Translations IsNot Nothing={instance.Translations IsNot Nothing}")
-        If instance.Translations IsNot Nothing Then
-            Console.WriteLine($"[COMPILER][DDTAssembler] instance.Translations.Count={instance.Translations.Count}")
-        End If
-        If instance.MainDataList IsNot Nothing AndAlso instance.MainDataList.Count > 0 Then
-            Dim firstNode = instance.MainDataList(0)
-            Console.WriteLine($"[COMPILER][DDTAssembler] First node: Id={If(String.IsNullOrEmpty(firstNode.Id), "NULL", firstNode.Id)}, Name={If(String.IsNullOrEmpty(firstNode.Name), "NULL", firstNode.Name)}, Steps.Count={firstNode.Steps.Count}")
-        Else
-            Console.WriteLine($"[COMPILER][DDTAssembler] ⚠️ WARNING: instance.MainDataList is empty or Nothing!")
+        Console.WriteLine($"[COMPILER][DDTAssembler] rootTask.Id={If(String.IsNullOrEmpty(rootTask.Id), "NULL/EMPTY", rootTask.Id)}")
+        Console.WriteLine($"[COMPILER][DDTAssembler] rootTask.Steps.Count={If(rootTask.Steps IsNot Nothing, rootTask.Steps.Count, 0)}")
+        Console.WriteLine($"[COMPILER][DDTAssembler] rootTask.Constraints.Count={If(rootTask.Constraints IsNot Nothing, rootTask.Constraints.Count, 0)}")
+        Console.WriteLine($"[COMPILER][DDTAssembler] rootTask.SubTasks.Count={If(rootTask.SubTasks IsNot Nothing, rootTask.SubTasks.Count, 0)}")
+        If rootTask.SubTasks IsNot Nothing AndAlso rootTask.SubTasks.Count > 0 Then
+            Dim firstSubTask = rootTask.SubTasks(0)
+            Console.WriteLine($"[COMPILER][DDTAssembler] First subTask: Id={If(String.IsNullOrEmpty(firstSubTask.Id), "NULL", firstSubTask.Id)}, Steps.Count={If(firstSubTask.Steps IsNot Nothing, firstSubTask.Steps.Count, 0)}")
         End If
         Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-        System.Diagnostics.Debug.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] DEBUG: Final instance verification")
-        System.Diagnostics.Debug.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-        System.Diagnostics.Debug.WriteLine($"[COMPILER][DDTAssembler] instance.MainDataList.Count={If(instance.MainDataList IsNot Nothing, instance.MainDataList.Count, 0)}")
 
-        Return instance
+        Return rootTask
     End Function
 
     ''' <summary>
-    ''' Compila MainDataNode (IDE) in DDTNode (Runtime)
-    ''' Copia solo le proprietà necessarie per l'esecuzione runtime
+    ''' Compila MainDataNode (IDE) in RuntimeTask (Runtime)
+    ''' Costruisce struttura ricorsiva RuntimeTask → RuntimeTask → RuntimeTask
     ''' </summary>
-    Private Function CompileNode(ideNode As Compiler.MainDataNode, parentNode As DDTNode) As DDTNode
+    Private Function CompileNode(ideNode As Compiler.MainDataNode, parentTask As RuntimeTask) As RuntimeTask
         ' ✅ Copia solo proprietà runtime essenziali:
         ' - Id: necessario per identificare il nodo
         ' - Name: usato per fallback regex hardcoded in Parser.vb
@@ -176,31 +168,14 @@ Public Class DDTAssembler
         ' - Synonyms: legacy, non serve
         ' - TemplateId: riferimento esterno, non serve a runtime
         ' ✅ Constraints: devono essere convertiti in ValidationConditions (TODO: implementare)
-        ' ✅ Estrai Required dai constraints (se presente)
-        ' Required non è un campo del nodo, ma un constraint
-        ' Se presente nei constraints, viene estratto e impostato per compatibilità runtime
-        Dim isRequired As Boolean = False
-        If ideNode.Constraints IsNot Nothing Then
-            For Each constraintObj As Object In ideNode.Constraints
-                If TypeOf constraintObj Is Dictionary(Of String, Object) Then
-                    Dim constraintDict = CType(constraintObj, Dictionary(Of String, Object))
-                    If constraintDict.ContainsKey("required") AndAlso TypeOf constraintDict("required") Is Boolean Then
-                        isRequired = CBool(constraintDict("required"))
-                        Exit For
-                    End If
-                End If
-            Next
-        End If
-
-        Dim runtimeNode As New DDTNode() With {
+        ' ✅ Crea RuntimeTask ricorsivo
+        Dim task As New RuntimeTask() With {
             .Id = ideNode.Id,
-            .Name = ideNode.Name,
-            .Required = isRequired, ' ✅ Estratto dai constraints, non hardcoded
+            .Condition = Nothing, ' Condition viene dall'istanza, non dal template
             .Steps = New List(Of DDTEngine.DialogueStep)(),
-            .SubTasks = New List(Of DDTNode)(),
-            .State = DialogueState.Start,
-            .Value = Nothing,
-            .ParentData = parentNode
+            .Constraints = New List(Of ValidationCondition)(),
+            .NlpContract = Nothing, ' Verrà caricato da DDTCompiler
+            .SubTasks = New List(Of RuntimeTask)()
         }
 
         ' Compila Steps (DialogueStep[] → DialogueStep[])
@@ -213,7 +188,7 @@ Public Class DDTAssembler
                 Console.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileNode: compiling step type={ideStep.Type}")
                 System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][DDTAssembler] CompileNode: compiling step type={ideStep.Type}")
                 Dim runtimeStep = CompileDialogueStep(ideStep)
-                runtimeNode.Steps.Add(runtimeStep)
+                task.Steps.Add(runtimeStep)
             Next
         Else
             Console.WriteLine($"⚠️ [COMPILER][DDTAssembler] CompileNode: ideNode.Steps is Nothing!")
@@ -227,21 +202,22 @@ Public Class DDTAssembler
             For Each constraintObj As Object In ideNode.Constraints
                 Dim validationCondition = ConvertConstraintToValidationCondition(constraintObj)
                 If validationCondition IsNot Nothing Then
-                    runtimeNode.ValidationConditions.Add(validationCondition)
+                    task.Constraints.Add(validationCondition)
                 End If
             Next
-            Console.WriteLine($"✅ [COMPILER][DDTAssembler] CompileNode: Converted {runtimeNode.ValidationConditions.Count} constraints to ValidationConditions")
-            System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTAssembler] CompileNode: Converted {runtimeNode.ValidationConditions.Count} constraints to ValidationConditions")
+            Console.WriteLine($"✅ [COMPILER][DDTAssembler] CompileNode: Converted {task.Constraints.Count} constraints to ValidationConditions")
+            System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][DDTAssembler] CompileNode: Converted {task.Constraints.Count} constraints to ValidationConditions")
         End If
 
-        ' Compila SubData (ricorsivo)
+        ' Compila SubTasks (ricorsivo)
         If ideNode.SubTasks IsNot Nothing Then
             For Each subNode As Compiler.MainDataNode In ideNode.SubTasks
-                runtimeNode.SubTasks.Add(CompileNode(subNode, runtimeNode))
+                Dim subTask = CompileNode(subNode, task)
+                task.SubTasks.Add(subTask)
             Next
         End If
 
-        Return runtimeNode
+        Return task
     End Function
 
     ''' <summary>

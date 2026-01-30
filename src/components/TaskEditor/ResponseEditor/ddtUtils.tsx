@@ -13,10 +13,15 @@ export function getDDTIcon(type: string): JSX.Element {
   return <FileText className="w-5 h-5 text-fuchsia-100 mr-2" />;
 }
 
-export function getNodeByIndex(data: any, index: number | null) {
-  if (index == null) return data;
-  if (!data.subData || !data.subData[index]) return data;
-  return data.subData[index];
+// ✅ NUOVO MODELLO: Usa subNodes[] invece di subData[]
+// Questa funzione è deprecata - usa getdataList() e getSubDataList() da ddtSelectors.ts
+export function getNodeByIndex(taskTree: any, mainIndex: number | null, subIndex: number | null) {
+  if (!taskTree || !taskTree.nodes) return null;
+  if (mainIndex == null || mainIndex < 0 || mainIndex >= taskTree.nodes.length) return null;
+  const main = taskTree.nodes[mainIndex];
+  if (subIndex == null) return main;
+  if (!main.subNodes || subIndex < 0 || subIndex >= main.subNodes.length) return main;
+  return main.subNodes[subIndex];
 }
 
 export function ordinalIt(n: number): string {

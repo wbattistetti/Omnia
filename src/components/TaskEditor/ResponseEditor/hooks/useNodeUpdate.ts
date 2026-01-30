@@ -88,19 +88,20 @@ export function useNodeUpdate(
         const after = JSON.stringify(updated);
         if (before === after) return prev; // no content change
 
-        // Shallow copy: only copy data array and the specific main node
-        const newdata = [...mains];
-        newdata[selectedMainIndex] = updated;
-        const next = { ...prev, data: newdata };
+        // ✅ NUOVO MODELLO: Usa nodes[] invece di data[]
+        // Shallow copy: only copy nodes array and the specific main node
+        const newNodes = [...mains];
+        newNodes[selectedMainIndex] = updated;
+        const next = { ...prev, nodes: newNodes };
         pendingDDTRef.current = { ddt: next, notify: notifyProvider };
         return next;
       } else {
-        // Sub node update
+        // ✅ NUOVO MODELLO: Sub node update - usa subNodes[] invece di subData[]
         const subList = getSubDataList(main);
         const sub = subList[selectedSubIndex];
         if (!sub) return prev;
-        const subIdx = (main.subData || []).findIndex((s: any) => s.label === sub.label);
-        const before = JSON.stringify(main.subData[subIdx]);
+        const subIdx = (main.subNodes || []).findIndex((s: any) => s.label === sub.label);
+        const before = JSON.stringify(main.subNodes?.[subIdx]);
 
         const updated = updater(sub) || sub;
         const after = JSON.stringify(updated);
@@ -108,12 +109,12 @@ export function useNodeUpdate(
         if (before === after) return prev; // no content change
 
         // Shallow copy: only copy what's necessary
-        const newSubData = [...(main.subData || [])];
-        newSubData[subIdx] = updated;
-        const newMain = { ...main, subData: newSubData };
-        const newdata = [...mains];
-        newdata[selectedMainIndex] = newMain;
-        const next = { ...prev, data: newdata };
+        const newSubNodes = [...(main.subNodes || [])];
+        newSubNodes[subIdx] = updated;
+        const newMain = { ...main, subNodes: newSubNodes };
+        const newNodes = [...mains];
+        newNodes[selectedMainIndex] = newMain;
+        const next = { ...prev, nodes: newNodes };
         pendingDDTRef.current = { ddt: next, notify: notifyProvider };
         return next;
       }

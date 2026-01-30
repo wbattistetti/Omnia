@@ -18,10 +18,10 @@ Public Class DataRequestTaskExecutor
     Public Overrides Function Execute(task As CompiledTask, state As ExecutionState) As TaskExecutionResult
         Dim dataRequestTask = DirectCast(task, CompiledTaskGetData)
 
-        If dataRequestTask.DDT Is Nothing Then
+        If dataRequestTask.Task Is Nothing Then
             Return New TaskExecutionResult() With {
                 .Success = False,
-                .Err = "DDT instance is Nothing"
+                .Err = "RuntimeTask is Nothing"
             }
         End If
 
@@ -47,7 +47,10 @@ Public Class DataRequestTaskExecutor
                 ' - Parsing dell'input utente (Parser.InterpretUtterance)
                 ' - Transizioni di stato (SetState)
                 ' L'input utente deve essere fornito dall'esterno tramite Parser.SetUserInput()
-                _ddtEngine.ExecuteDDT(dataRequestTask.DDT)
+                ' TODO: Modificare ExecuteDDT per accettare RuntimeTask invece di DDTInstance
+                ' Per ora commentato - il runtime deve essere aggiornato
+                ' _ddtEngine.ExecuteDDT(dataRequestTask.Task)
+                Throw New NotImplementedException("ExecuteDDT must be updated to accept RuntimeTask instead of DDTInstance")
 
                 Console.WriteLine($"✅ [DataRequestTaskExecutor] DDT execution completed for task {task.Id}")
 

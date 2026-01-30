@@ -87,7 +87,7 @@ End Class
 ''' </summary>
 Public Class TaskSession
     Public Property SessionId As String
-    Public Property DDTInstance As DDTInstance
+    Public Property RuntimeTask As Compiler.RuntimeTask
     Public Property Translations As Dictionary(Of String, String)
     Public Property DDTEngine As Motore
     Public Property Messages As New List(Of Object)
@@ -290,7 +290,7 @@ Public Class SessionManager
     ''' </summary>
     Public Shared Function CreateTaskSession(
         sessionId As String,
-        ddtInstance As DDTInstance,
+        runtimeTask As Compiler.RuntimeTask,
         translations As Dictionary(Of String, String)
     ) As TaskSession
         SyncLock _lock
@@ -303,7 +303,7 @@ Public Class SessionManager
             ' Crea session
             Dim session As New TaskSession() With {
                 .SessionId = sessionId,
-                .DDTInstance = ddtInstance,
+                .RuntimeTask = runtimeTask,
                 .Translations = translations,
                 .EventEmitter = New EventEmitter(),
                 .DDTEngine = ddtEngine,
@@ -326,7 +326,17 @@ Public Class SessionManager
 
                                                       ' Dopo ogni messaggio, DDTEngine si ferma aspettando input
                                                       session.IsWaitingForInput = True
-                                                      session.WaitingForInputData = New With {.nodeId = If(session.DDTInstance.MainDataList.Count > 0, session.DDTInstance.MainDataList(0).Id, "")}
+                                                      ' TODO: Aggiornare per usare RuntimeTask invece di DDTInstance.MainDataList
+                                                      ' Per ora usa il primo subTask se presente, altrimenti il root task
+                                                      Dim firstNodeId As String = ""
+                                                      If session.RuntimeTask IsNot Nothing Then
+                                                          If session.RuntimeTask.SubTasks IsNot Nothing AndAlso session.RuntimeTask.SubTasks.Count > 0 Then
+                                                              firstNodeId = session.RuntimeTask.SubTasks(0).Id
+                                                          Else
+                                                              firstNodeId = session.RuntimeTask.Id
+                                                          End If
+                                                      End If
+                                                      session.WaitingForInputData = New With {.nodeId = firstNodeId}
                                                       Console.WriteLine($"⏳ [RUNTIME][SessionManager] TaskSession {sessionId} waiting for input")
                                                       session.EventEmitter.Emit("waitingForInput", session.WaitingForInputData)
                                                   End Sub
@@ -342,17 +352,16 @@ Public Class SessionManager
                                                                           Await System.Threading.Tasks.Task.Delay(500)
 
                                                                           Console.WriteLine($"🚀 [RUNTIME][SessionManager] Background task started for TaskSession: {sessionId}")
-                                                                          ddtEngine.ExecuteDDT(ddtInstance)
-                                                                          Console.WriteLine($"✅ [RUNTIME][SessionManager] DDT execution completed for TaskSession: {sessionId}")
+                                                                          ' TODO: Modificare ExecuteDDT per accettare RuntimeTask invece di DDTInstance
+                                                                          ' Per ora commentato - il runtime deve essere aggiornato
+                                                                          ' ddtEngine.ExecuteDDT(session.RuntimeTask)
+                                                                          Throw New NotImplementedException("ExecuteDDT must be updated to accept RuntimeTask instead of DDTInstance")
+                                                                          Console.WriteLine($"✅ [RUNTIME][SessionManager] Task execution completed for TaskSession: {sessionId}")
 
-                                                                          ' Verifica se tutti i dati sono completati
-                                                                          Dim allCompleted = True
-                                                                          For Each mainData In ddtInstance.MainDataList
-                                                                              If mainData.State <> DialogueState.Success Then
-                                                                                  allCompleted = False
-                                                                                  Exit For
-                                                                              End If
-                                                                          Next
+                                                                          ' TODO: Verifica se tutti i task sono completati (ricorsivo su RuntimeTask)
+                                                                          ' Per ora commentato - il runtime deve essere aggiornato
+                                                                          ' Dim allCompleted = CheckAllTasksCompleted(session.RuntimeTask)
+                                                                          Dim allCompleted = False
 
                                                                           If allCompleted Then
                                                                               Dim completeData = New With {

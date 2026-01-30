@@ -87,12 +87,11 @@ export function updateActionTextInDDT(
     return false;
   };
 
-  // Try to update in data nodes
+  // ✅ NUOVO MODELLO: Usa nodes[] e subNodes[] invece di data[] e subData[]
   // Create a deep clone to ensure React detects the change
-  const isArrayFormat = Array.isArray((ddt as any)?.data);
-  const mains = isArrayFormat
-    ? (ddt as any).data.map((m: any) => JSON.parse(JSON.stringify(m)))
-    : (ddt as any)?.data ? [JSON.parse(JSON.stringify((ddt as any).data))] : [];
+  const mains = Array.isArray((ddt as any)?.nodes)
+    ? (ddt as any).nodes.map((m: any) => JSON.parse(JSON.stringify(m)))
+    : [];
 
   let updated = false;
   for (let i = 0; i < mains.length; i++) {
@@ -104,9 +103,9 @@ export function updateActionTextInDDT(
       break;
     }
     // Try sub nodes
-    if (Array.isArray(main.subData)) {
-      for (let j = 0; j < main.subData.length; j++) {
-        const sub = main.subData[j];
+    if (Array.isArray(main.subNodes)) {
+      for (let j = 0; j < main.subNodes.length; j++) {
+        const sub = main.subNodes[j];
         if (updateActionInNode(sub)) {
           updated = true;
           break;
@@ -119,7 +118,7 @@ export function updateActionTextInDDT(
   if (updated) {
     return {
       ...ddt,
-      data: isArrayFormat ? mains : (mains.length > 0 ? mains[0] : undefined)
+      nodes: mains
     };
   }
 

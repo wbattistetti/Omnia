@@ -1,12 +1,12 @@
 /**
- * Migrazione: Converte task.intents in values[] nel DDT
+ * Migrazione: Converte task.intents in values[] nel TaskTree
  *
  * Questa funzione unifica la rappresentazione degli intenti:
  * - Prima: task.intents[] (array di ProblemIntent)
- * - Dopo: ddt.data[0].values[] (opzioni predefinite)
+ * - Dopo: taskTree.nodes[0].values[] (opzioni predefinite)
  *
  * IMPORTANTE: values[] sono opzioni predefinite (valori tra cui scegliere)
- * NON confondere con subData[] che sono parti composite (struttura del dato)
+ * NON confondere con subNodes[] che sono parti composite (struttura del dato)
  *
  * Le training phrases per embeddings vengono salvate nel contract NLP.
  */
@@ -15,32 +15,33 @@ import type { ProblemIntent } from '../../../types/project';
 import type { NLPContract } from '../../../components/DialogueDataEngine/contracts/contractLoader';
 
 export interface MigrateIntentsResult {
-  data: any[];
+  nodes: any[];
   contract?: NLPContract;
 }
 
 /**
- * Converte task.intents in values[] nel DDT
+ * Converte task.intents in values[] nel TaskTree
  *
  * @param intents - Array di ProblemIntent da task.intents
- * @param existingDDT - DDT esistente (opzionale, per preservare altri dati)
- * @returns DDT con data[0].values[] popolato dagli intenti
+ * @param existingTaskTree - TaskTree esistente (opzionale, per preservare altri dati)
+ * @returns TaskTree con nodes[0].values[] popolato dagli intenti
  */
 export function migrateIntentsToDDT(
   intents: ProblemIntent[],
-  existingDDT?: any
+  existingTaskTree?: any
 ): MigrateIntentsResult {
-  // ✅ Crea values[] dagli intenti (opzioni predefinite, NON subData[])
+  // ✅ Crea values[] dagli intenti (opzioni predefinite, NON subNodes[])
   const values = intents.map((intent) => ({
     id: intent.id,
     label: intent.name,
     value: intent.name, // ✅ Valore da usare nella condizione
   }));
 
-  // ✅ Crea o aggiorna data[0]
-  const data = existingDDT?.data || [];
-  const firstMain = data[0] || {
+  // ✅ NUOVO MODELLO: Usa nodes[] invece di data[]
+  const nodes = existingTaskTree?.nodes || [];
+  const firstMain = nodes[0] || {
     id: `main-${Date.now()}`,
+    templateId: `main-${Date.now()}`,
     label: 'Seleziona opzione',
     kind: 'generic' as const, // ✅ Non più 'intent'
     steps: {
@@ -52,18 +53,18 @@ export function migrateIntentsToDDT(
     },
   };
 
-  // ✅ Aggiorna values del primo main (NON subData)
+  // ✅ Aggiorna values del primo main (NON subNodes)
   firstMain.values = values;
 
-  // ✅ Aggiorna data
-  const updateddata = [firstMain, ...data.slice(1)];
+  // ✅ Aggiorna nodes
+  const updatedNodes = [firstMain, ...nodes.slice(1)];
 
   // ✅ Crea contract NLP con embeddings configurato
-  // NOTA: subDataMapping è vuoto perché values[] non sono subData (parti composite)
+  // NOTA: subDataMapping è vuoto perché values[] non sono subNodes (parti composite)
   const contract: NLPContract = {
     templateName: 'intent-classifier',
     templateId: `intent-${Date.now()}`,
-    subDataMapping: {}, // ✅ Vuoto: values[] non sono subData (parti composite)
+    subDataMapping: {}, // ✅ Vuoto: values[] non sono subNodes (parti composite)
     methods: {
       embeddings: {
         enabled: true,
@@ -84,7 +85,7 @@ export function migrateIntentsToDDT(
   };
 
   return {
-    data: updateddata,
+    nodes: updatedNodes,
     contract,
   };
 }

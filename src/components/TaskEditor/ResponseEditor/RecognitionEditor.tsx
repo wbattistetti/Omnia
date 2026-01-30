@@ -322,14 +322,8 @@ export default function RecognitionEditor({
       if (taskId) {
         try {
           const currentTask = taskRepository.getTask(taskId);
-          if (currentTask && currentTask.data && Array.isArray(currentTask.data)) {
-            const nodeIndex = currentTask.data.findIndex((n: any) =>
-              n.id === node.id || n.templateId === node.templateId
-            );
-            if (nodeIndex >= 0) {
-              const updatedData = [...currentTask.data];
-              updatedData[nodeIndex] = updated; // Node aggiornato con testNotes
-              taskRepository.updateTask(taskId, { data: updatedData }, undefined);
+          // ✅ NUOVO MODELLO: Task non ha più .data[], usa TaskTree.nodes[] costruito runtime
+          // Non serve più aggiornare cache con .data[] - il TaskTree viene ricostruito da template + instance
               console.log('[NOTES] Updated TaskRepository cache', {
                 taskId,
                 nodeIndex,

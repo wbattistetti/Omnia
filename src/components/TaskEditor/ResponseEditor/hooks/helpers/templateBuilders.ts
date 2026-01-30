@@ -89,15 +89,9 @@ export function createSubDataInstance(subTemplate: any): any {
     }
   }
 
-  // ✅ Get referenceId from the referenced template's data[0].id
-  // This is the dataId that will be used in memory at runtime
-  let referenceId: string | undefined;
-  if (subTemplate.data && Array.isArray(subTemplate.data) && subTemplate.data.length > 0) {
-    referenceId = subTemplate.data[0].id;
-  } else {
-    // Fallback: use template id if data structure not available
-    referenceId = subTemplate.id || subTemplate._id;
-  }
+  // ✅ NUOVO MODELLO: referenceId è sempre il templateId del subTemplate
+  // Non serve più cercare in .data[0].id - il templateId è sufficiente
+  const referenceId = subTemplate.id || subTemplate._id;
 
   return {
     label: subTemplate.label || subTemplate.name || 'Sub',

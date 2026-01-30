@@ -1546,8 +1546,8 @@ Module Program
     ''' </summary>
     ''' <param name="task">The task instance to compile.</param>
     ''' <param name="allTemplates">All templates (main + sub-templates) needed for compilation.</param>
-    ''' <returns>A tuple containing: (Success As Boolean, CompiledTask As Compiler.CompiledTaskGetData, ErrorMessage As String)</returns>
-    Private Function CompileTaskToRuntime(task As Compiler.Task, allTemplates As List(Of Compiler.Task)) As (Success As Boolean, CompiledTask As Compiler.CompiledTaskGetData, ErrorMessage As String)
+    ''' <returns>A tuple containing: (Success As Boolean, Result As Compiler.CompiledTaskGetData, ErrorMessage As String)</returns>
+    Private Function CompileTaskToRuntime(task As Compiler.Task, allTemplates As List(Of Compiler.Task)) As (Success As Boolean, Result As Compiler.CompiledTaskGetData, ErrorMessage As String)
         Try
             Dim flow As New Compiler.Flow() With {
                 .Tasks = allTemplates
@@ -1567,8 +1567,8 @@ Module Program
             End If
 
             Dim dataRequestTask = DirectCast(compiledTask, Compiler.CompiledTaskGetData)
-            If dataRequestTask.DDT Is Nothing Then
-                Return (False, Nothing, $"Compiled task for '{task.Id}' has no TaskTreeRuntime (DDT is null). The compilation may have failed silently.")
+            If dataRequestTask.Task Is Nothing Then
+                Return (False, Nothing, $"Compiled task for '{task.Id}' has no RuntimeTask. The compilation may have failed silently.")
             End If
 
             Return (True, dataRequestTask, Nothing)
@@ -1586,7 +1586,7 @@ Module Program
     Private Function CreateTaskSession(compiledTask As Compiler.CompiledTaskGetData, translations As Dictionary(Of String, String)) As String
         Dim sessionId = Guid.NewGuid().ToString()
         Dim translationsDict = If(translations, New Dictionary(Of String, String)())
-        SessionManager.CreateTaskSession(sessionId, compiledTask.DDT, translationsDict)
+        SessionManager.CreateTaskSession(sessionId, compiledTask.Task, translationsDict)
         Return sessionId
     End Function
 
@@ -1697,7 +1697,7 @@ Module Program
             If Not compileResult.Success Then
                 Return CreateErrorResponse(compileResult.ErrorMessage, 400)
             End If
-            Dim compiledTask = compileResult.CompiledTask
+            Dim compiledTask = compileResult.Result
 
             ' 11. Create session
             Dim sessionId = CreateTaskSession(compiledTask, request.Translations)
