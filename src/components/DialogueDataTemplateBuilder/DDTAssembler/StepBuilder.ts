@@ -28,13 +28,16 @@ export function buildTask(
   // Save translation key-value pair
   translations[valueKey] = message;
 
-  // ✅ Determina TaskType dal templateId
-  const taskType = templateIdToTaskType(templateId) || TaskType.SayMessage;
+  // ✅ CRITICAL: NO FALLBACK - type MUST be derived from templateId
+  const taskType = templateIdToTaskType(templateId);
+  if (taskType === TaskType.UNDEFINED) {
+    throw new Error(`[StepBuilder.buildTask] Cannot determine task type from templateId '${templateId}'. This is a bug in task creation.`);
+  }
 
   // Return complete Task object
   return {
     id: taskId,
-    type: taskType, // ✅ Aggiunto campo type (enum numerico)
+    type: taskType, // ✅ NO FALLBACK - must be present
     templateId: null, // Standalone task (not derived from template)
     text: message, // Direct text value
     // Store parameters for backward compatibility with old system

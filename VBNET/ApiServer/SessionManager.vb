@@ -124,9 +124,9 @@ Public Class SessionManager
             End If
             Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
 
-            ' Crea DDT Engine
-            Dim ddtEngine As New Motore()
-            Console.WriteLine($"✅ [RUNTIME][SessionManager] DDT Engine created")
+            ' Crea Task Engine
+            Dim taskEngine As New Motore()
+            Console.WriteLine($"✅ [RUNTIME][SessionManager] Task Engine created")
 
             ' TODO: Reimplementare Chat Simulator usando TaskTree invece di ddts array (quando necessario)
 
@@ -137,7 +137,7 @@ Public Class SessionManager
                 .Tasks = tasks,
                 .Translations = translations,
                 .EventEmitter = New EventEmitter(),
-                .TaskEngine = ddtEngine,
+                .TaskEngine = taskEngine,
                 .IsWaitingForInput = False
             }
             Console.WriteLine($"✅ [RUNTIME][SessionManager] Session object created")
@@ -149,7 +149,7 @@ Public Class SessionManager
             Console.WriteLine($"🔄 [RUNTIME][SessionManager] Flow mode: creating FlowOrchestrator...")
             System.Diagnostics.Debug.WriteLine($"🔄 [RUNTIME][SessionManager] Flow mode: creating FlowOrchestrator...")
             Console.Out.Flush()
-            session.Orchestrator = New TaskEngine.Orchestrator.FlowOrchestrator(compilationResult, ddtEngine)
+            session.Orchestrator = New TaskEngine.Orchestrator.FlowOrchestrator(compilationResult, taskEngine)
             Console.WriteLine($"✅ [RUNTIME][SessionManager] FlowOrchestrator created")
 
             ' Registra eventi orchestrator
@@ -296,9 +296,9 @@ Public Class SessionManager
         SyncLock _lock
             Console.WriteLine($"🔧 [RUNTIME][SessionManager] Creating TaskSession: {sessionId}")
 
-            ' Crea DDT Engine
-            Dim ddtEngine As New Motore()
-            Console.WriteLine($"✅ [RUNTIME][SessionManager] DDT Engine created for TaskSession")
+            ' Crea Task Engine
+            Dim taskEngine As New Motore()
+            Console.WriteLine($"✅ [RUNTIME][SessionManager] Task Engine created for TaskSession")
 
             ' Crea session
             Dim session As New TaskSession() With {
@@ -306,13 +306,13 @@ Public Class SessionManager
                 .RuntimeTask = runtimeTask,
                 .Translations = translations,
                 .EventEmitter = New EventEmitter(),
-                .TaskEngine = ddtEngine,
+                .TaskEngine = taskEngine,
                 .IsWaitingForInput = False
             }
             Console.WriteLine($"✅ [RUNTIME][SessionManager] TaskSession object created")
 
             ' Registra eventi TaskEngine
-            AddHandler ddtEngine.MessageToShow, Sub(sender, e)
+            AddHandler taskEngine.MessageToShow, Sub(sender, e)
                                                       Dim msgId = $"{sessionId}-{DateTime.UtcNow.Ticks}-{Guid.NewGuid().ToString().Substring(0, 8)}"
                                                       Dim msg = New With {
                             .id = msgId,
@@ -345,17 +345,16 @@ Public Class SessionManager
             Console.WriteLine($"✅ [RUNTIME][SessionManager] TaskSession stored in dictionary: {sessionId}")
 
             ' Avvia esecuzione in background
-            Console.WriteLine($"🚀 [RUNTIME][SessionManager] Starting DDT execution in background for TaskSession: {sessionId}")
+            Console.WriteLine($"🚀 [RUNTIME][SessionManager] Starting Task execution in background for TaskSession: {sessionId}")
             Dim backgroundTask = System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
                                                                       Try
                                                                           ' Piccolo delay per permettere al SSE stream handler di connettersi
                                                                           Await System.Threading.Tasks.Task.Delay(500)
 
                                                                           Console.WriteLine($"🚀 [RUNTIME][SessionManager] Background task started for TaskSession: {sessionId}")
-                                                                          ' TODO: Modificare ExecuteDDT per accettare RuntimeTask invece di DDTInstance
-                                                                          ' Per ora commentato - il runtime deve essere aggiornato
-                                                                          ' ddtEngine.ExecuteDDT(session.RuntimeTask)
-                                                                          Throw New NotImplementedException("ExecuteDDT must be updated to accept RuntimeTask instead of DDTInstance")
+                                                                          ' ✅ NUOVO: Converte RuntimeTask in TaskInstance e esegue
+                                                                          Dim taskInstance = ConvertRuntimeTaskToTaskInstance(session.RuntimeTask, session.Translations)
+                                                                          taskEngine.ExecuteTask(taskInstance)
                                                                           Console.WriteLine($"✅ [RUNTIME][SessionManager] Task execution completed for TaskSession: {sessionId}")
 
                                                                           ' TODO: Verifica se tutti i task sono completati (ricorsivo su RuntimeTask)
@@ -409,5 +408,74 @@ Public Class SessionManager
             End If
         End SyncLock
     End Sub
+
+    ''' <summary>
+    ''' ✅ Helper: Converte RuntimeTask in TaskInstance per compatibilità con ExecuteTask
+    ''' </summary>
+    Private Shared Function ConvertRuntimeTaskToTaskInstance(runtimeTask As Compiler.RuntimeTask, translations As Dictionary(Of String, String)) As TaskEngine.TaskInstance
+        Dim taskInstance As New TaskEngine.TaskInstance() With {
+            .Id = runtimeTask.Id,
+            .Label = "", ' Label non è disponibile in RuntimeTask
+            .Translations = If(translations, New Dictionary(Of String, String)()),
+            .IsAggregate = False, ' TODO: Determinare da RuntimeTask se è aggregato
+            .Introduction = Nothing, ' TODO: Estrarre da RuntimeTask.Steps se presente
+            .SuccessResponse = Nothing, ' TODO: Estrarre da RuntimeTask.Steps se presente
+            .TaskList = New List(Of TaskEngine.TaskNode)()
+        }
+
+        ' ✅ Converti RuntimeTask in TaskNode e aggiungi a TaskList
+        ' Se RuntimeTask ha SubTasks, crea un TaskNode per ogni SubTask
+        ' Se RuntimeTask ha solo Steps, crea un TaskNode root con Steps
+        If runtimeTask.HasSubTasks() Then
+            ' ✅ Caso composito: crea TaskNode per ogni SubTask
+            For Each subTask As Compiler.RuntimeTask In runtimeTask.SubTasks
+                Dim taskNode = ConvertRuntimeTaskToTaskNode(subTask)
+                taskInstance.TaskList.Add(taskNode)
+            Next
+        ElseIf runtimeTask.Steps IsNot Nothing AndAlso runtimeTask.Steps.Count > 0 Then
+            ' ✅ Caso atomico: crea un TaskNode root con Steps
+            Dim rootNode = ConvertRuntimeTaskToTaskNode(runtimeTask)
+            taskInstance.TaskList.Add(rootNode)
+        Else
+            ' ✅ Task vuoto: crea un TaskNode vuoto
+            Dim emptyNode As New TaskEngine.TaskNode() With {
+                .Id = runtimeTask.Id,
+                .Name = "",
+                .Steps = New List(Of TaskEngine.DialogueStep)(),
+                .State = TaskEngine.DialogueState.Start
+            }
+            taskInstance.TaskList.Add(emptyNode)
+        End If
+
+        Console.WriteLine($"[RUNTIME][SessionManager] ConvertRuntimeTaskToTaskInstance: Created TaskInstance with {taskInstance.TaskList.Count} nodes")
+        Return taskInstance
+    End Function
+
+    ''' <summary>
+    ''' ✅ Helper: Converte RuntimeTask in TaskNode (ricorsivo)
+    ''' </summary>
+    Private Shared Function ConvertRuntimeTaskToTaskNode(runtimeTask As Compiler.RuntimeTask) As TaskEngine.TaskNode
+        Dim taskNode As New TaskEngine.TaskNode() With {
+            .Id = runtimeTask.Id,
+            .Name = "", ' Name non è disponibile in RuntimeTask
+            .Steps = If(runtimeTask.Steps, New List(Of TaskEngine.DialogueStep)()),
+            .ValidationConditions = If(runtimeTask.Constraints, New List(Of TaskEngine.ValidationCondition)()),
+            .NlpContract = runtimeTask.NlpContract,
+            .State = TaskEngine.DialogueState.Start,
+            .Value = Nothing,
+            .SubTasks = New List(Of TaskEngine.TaskNode)()
+        }
+
+        ' ✅ Converti SubTasks ricorsivamente
+        If runtimeTask.HasSubTasks() Then
+            For Each subTask As Compiler.RuntimeTask In runtimeTask.SubTasks
+                Dim subNode = ConvertRuntimeTaskToTaskNode(subTask)
+                subNode.ParentData = taskNode
+                taskNode.SubTasks.Add(subNode)
+            Next
+        End If
+
+        Return taskNode
+    End Function
 End Class
 

@@ -94,8 +94,49 @@ export function EscalationTasksList({
       return;
     }
 
+    // ✅ Estrai il task dall'item (può essere in incoming.task o direttamente incoming)
     const task = incoming?.task || incoming;
-    const templateId = incoming?.templateId || task?.id || task?.templateId || '';
+
+    // ✅ Estrai templateId: se il task ha templateId, usalo; altrimenti usa id come templateId (per task dal pannello Tasks)
+    // I task dal pannello Tasks hanno id che è l'id del template, quindi usalo come templateId
+    // ✅ IMPORTANTE: templateId può essere null per task standalone, ma deve essere esplicitamente presente (non undefined)
+    const templateId = task?.templateId !== undefined
+      ? task.templateId
+      : (task?.id || null); // ✅ Usa id come templateId se templateId non è presente (per task dal pannello Tasks)
+
+    // ✅ Estrai type: deve essere presente (TaskType enum)
+    // Il type può essere in task.type (TaskType enum) o in incoming.type (ma questo è "TASK_VIEWER", non il TaskType)
+    const taskType = task?.type !== undefined && task?.type !== null
+      ? task.type
+      : null;
+
+    // ✅ Verifica che type sia presente (richiesto)
+    if (taskType === undefined || taskType === null) {
+      console.error('[handleDropFromViewer] Task is missing required field "type"', { incoming, task });
+      return;
+    }
+
+    // ✅ Costruisci il task normalizzato con type e templateId espliciti
+    // ✅ IMPORTANTE: templateId deve essere esplicitamente presente (può essere null, ma non undefined)
+    // ✅ IMPORTANTE: type e templateId devono essere impostati DOPO lo spread per evitare sovrascritture
+    const taskToNormalize = {
+      ...task,
+      type: taskType, // ✅ Imposta type esplicitamente (sovrascrive qualsiasi type da task)
+      templateId: templateId // ✅ Imposta templateId esplicitamente (sovrascrive qualsiasi templateId da task, o aggiunge se mancante)
+    };
+
+    // 🔍 DEBUG: Verifica che taskToNormalize abbia type e templateId corretti
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('debug.drop') === '1') {
+      console.log('[handleDropFromViewer] Task normalized', {
+        taskType,
+        templateId,
+        taskToNormalize: {
+          type: taskToNormalize.type,
+          templateId: taskToNormalize.templateId,
+          id: taskToNormalize.id
+        }
+      });
+    }
 
     if (allowedActions && allowedActions.length > 0) {
       if (!allowedActions.includes(templateId)) {
@@ -103,7 +144,7 @@ export function EscalationTasksList({
       }
     }
 
-    const normalized = normalizeTaskForEscalation(incoming, generateGuid);
+    const normalized = normalizeTaskForEscalation(taskToNormalize, generateGuid);
 
     const insertIdx = position === 'after' ? to.taskIdx + 1 : to.taskIdx;
 

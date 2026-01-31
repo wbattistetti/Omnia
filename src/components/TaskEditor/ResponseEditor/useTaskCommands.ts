@@ -1,8 +1,9 @@
 import React from 'react';
 import { info } from '../../../utils/logger';
-import type { Task } from '../../../types/taskTypes';
+import type { Task, MaterializedStep } from '../../../types/taskTypes';
 import { TaskType, templateIdToTaskType } from '../../../types/taskTypes';
 import { createTask } from './utils/normalize';
+import { v4 as uuidv4 } from 'uuid';
 
 export type Position = 'before' | 'after';
 
@@ -83,15 +84,24 @@ export default function useTaskCommands(
 
         // Update node structure
         const next = { ...node };
-        if (Array.isArray(next.steps)) {
-          const stepIdx = next.steps.findIndex((s: any) => s?.type === stepKey);
-          if (stepIdx >= 0) {
-            next.steps = [...next.steps];
-            next.steps[stepIdx] = { ...next.steps[stepIdx], escalations: [...escalations] };
-          }
+        // ✅ Sempre array MaterializedStep[]
+        if (!Array.isArray(next.steps)) {
+          next.steps = [];  // ✅ Inizializza come array vuoto se non è array
+        }
+        const stepIdx = next.steps.findIndex((s: any) => {
+          // ✅ Cerca step per templateStepId che termina con stepKey (formato: `${nodeTemplateId}:${stepKey}`)
+          return s?.templateStepId?.endsWith(`:${stepKey}`) || s?.type === stepKey;
+        });
+        if (stepIdx >= 0) {
+          next.steps = [...next.steps];
+          next.steps[stepIdx] = { ...next.steps[stepIdx], escalations: [...escalations] };
         } else {
-          next.steps = { ...(next.steps || {}) };
-          next.steps[stepKey] = { ...(next.steps[stepKey] || {}), escalations: [...escalations] };
+          // ✅ Step non trovato - crea nuovo step (step aggiunto dall'utente, senza templateStepId)
+          next.steps = [...next.steps, {
+            id: uuidv4(),
+            // ✅ NO templateStepId - step aggiunto dall'utente
+            escalations: [...escalations]
+          }];
         }
 
         try { info('RESPONSE_EDITOR', 'editTask (empty -> delete)', { escalationIdx, taskIdx }); } catch { }
@@ -115,15 +125,24 @@ export default function useTaskCommands(
 
       // Update node structure
       const next = { ...node };
-      if (Array.isArray(next.steps)) {
-        const stepIdx = next.steps.findIndex((s: any) => s?.type === stepKey);
-        if (stepIdx >= 0) {
-          next.steps = [...next.steps];
-          next.steps[stepIdx] = { ...next.steps[stepIdx], escalations: [...escalations] };
-        }
+      // ✅ Sempre array MaterializedStep[]
+      if (!Array.isArray(next.steps)) {
+        next.steps = [];  // ✅ Inizializza come array vuoto se non è array
+      }
+      const stepIdx = next.steps.findIndex((s: any) => {
+        // ✅ Cerca step per templateStepId che termina con stepKey (formato: `${nodeTemplateId}:${stepKey}`)
+        return s?.templateStepId?.endsWith(`:${stepKey}`) || s?.type === stepKey;
+      });
+      if (stepIdx >= 0) {
+        next.steps = [...next.steps];
+        next.steps[stepIdx] = { ...next.steps[stepIdx], escalations: [...escalations] };
       } else {
-        next.steps = { ...(next.steps || {}) };
-        next.steps[stepKey] = { ...(next.steps[stepKey] || {}), escalations: [...escalations] };
+        // ✅ Step non trovato - crea nuovo step (step aggiunto dall'utente, senza templateStepId)
+        next.steps = [...next.steps, {
+          id: uuidv4(),
+          // ✅ NO templateStepId - step aggiunto dall'utente
+          escalations: [...escalations]
+        }];
       }
 
       try { info('RESPONSE_EDITOR', 'editTask', { escalationIdx, taskIdx, newTextLen: trimmedText.length }); } catch { }
@@ -158,15 +177,24 @@ export default function useTaskCommands(
 
       // Update node structure
       const next = { ...node };
-      if (Array.isArray(next.steps)) {
-        const stepIdx = next.steps.findIndex((s: any) => s?.type === stepKey);
-        if (stepIdx >= 0) {
-          next.steps = [...next.steps];
-          next.steps[stepIdx] = { ...next.steps[stepIdx], escalations: [...escalations] };
-        }
+      // ✅ Sempre array MaterializedStep[]
+      if (!Array.isArray(next.steps)) {
+        next.steps = [];  // ✅ Inizializza come array vuoto se non è array
+      }
+      const stepIdx = next.steps.findIndex((s: any) => {
+        // ✅ Cerca step per templateStepId che termina con stepKey (formato: `${nodeTemplateId}:${stepKey}`)
+        return s?.templateStepId?.endsWith(`:${stepKey}`) || s?.type === stepKey;
+      });
+      if (stepIdx >= 0) {
+        next.steps = [...next.steps];
+        next.steps[stepIdx] = { ...next.steps[stepIdx], escalations: [...escalations] };
       } else {
-        next.steps = { ...(next.steps || {}) };
-        next.steps[stepKey] = { ...(next.steps[stepKey] || {}), escalations: [...escalations] };
+        // ✅ Step non trovato - crea nuovo step (step aggiunto dall'utente, senza templateStepId)
+        next.steps = [...next.steps, {
+          id: uuidv4(),
+          // ✅ NO templateStepId - step aggiunto dall'utente
+          escalations: [...escalations]
+        }];
       }
 
       try { info('RESPONSE_EDITOR', 'deleteTask', { escalationIdx, taskIdx }); } catch { }
@@ -207,15 +235,24 @@ export default function useTaskCommands(
 
       // Update node structure
       const next = { ...node };
-      if (Array.isArray(next.steps)) {
-        const stepIdx = next.steps.findIndex((s: any) => s?.type === stepKey);
-        if (stepIdx >= 0) {
-          next.steps = [...next.steps];
-          next.steps[stepIdx] = { ...next.steps[stepIdx], escalations: [...escalations] };
-        }
+      // ✅ Sempre array MaterializedStep[]
+      if (!Array.isArray(next.steps)) {
+        next.steps = [];  // ✅ Inizializza come array vuoto se non è array
+      }
+      const stepIdx = next.steps.findIndex((s: any) => {
+        // ✅ Cerca step per templateStepId che termina con stepKey (formato: `${nodeTemplateId}:${stepKey}`)
+        return s?.templateStepId?.endsWith(`:${stepKey}`) || s?.type === stepKey;
+      });
+      if (stepIdx >= 0) {
+        next.steps = [...next.steps];
+        next.steps[stepIdx] = { ...next.steps[stepIdx], escalations: [...escalations] };
       } else {
-        next.steps = { ...(next.steps || {}) };
-        next.steps[stepKey] = { ...(next.steps[stepKey] || {}), escalations: [...escalations] };
+        // ✅ Step non trovato - crea nuovo step (step aggiunto dall'utente, senza templateStepId)
+        next.steps = [...next.steps, {
+          id: uuidv4(),
+          // ✅ NO templateStepId - step aggiunto dall'utente
+          escalations: [...escalations]
+        }];
       }
 
       try { info('RESPONSE_EDITOR', 'moveTask', { fromEscIdx, fromTaskIdx, toEscIdx, toTaskIdx, position }); } catch { }
@@ -361,13 +398,15 @@ export default function useTaskCommands(
       }
       const taskId = task.id || `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-      // ✅ Determina TaskType dal templateId
-      const taskType = task.type ?? templateIdToTaskType(templateId) || TaskType.SayMessage;
+      // ✅ CRITICAL: NO FALLBACK - type MUST be present
+      if (task.type === undefined || task.type === null) {
+        throw new Error(`[useTaskCommands.appendTask] Task is missing required field 'type'. Task: ${JSON.stringify(task, null, 2)}`);
+      }
 
       const newTask: any = {
         id: taskId,
-        type: taskType, // ✅ Aggiunto campo type (enum numerico)
-        templateId: templateId,
+        type: task.type, // ✅ NO FALLBACK - must be present
+        templateId: templateId, // ✅ Must be explicitly set (can be null)
         // Store parameters in params for backward compatibility
         params: parameters ? { text: parameters.find((p: any) => p.parameterId === 'text')?.value } : {},
         text: task.text,

@@ -57,11 +57,16 @@ export function getNodeSteps(node: any): string[] {
     }
   }
 
-  // Variante B: steps come oggetto: { start: {...}, success: {...} }
-  if (node.steps && typeof node.steps === 'object' && !Array.isArray(node.steps)) {
-    for (const key of Object.keys(node.steps)) {
-      const val = node.steps[key];
-      if (val != null) present.add(key);
+  // ✅ Variante B: steps come array MaterializedStep[]
+  if (node.steps && Array.isArray(node.steps)) {
+    for (const step of node.steps) {
+      if (step && step.escalations && step.escalations.length > 0) {
+        // ✅ Aggiungi tipo step se presente (da templateStepId o altro)
+        if (step.templateStepId) {
+          const stepType = step.templateStepId.split(':').pop() || 'unknown';
+          present.add(stepType);
+        }
+      }
     }
   }
 

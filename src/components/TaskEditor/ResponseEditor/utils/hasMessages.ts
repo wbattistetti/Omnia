@@ -15,10 +15,34 @@ export function hasIntentMessages(ddt: any, task?: any): boolean {
     return false;
   }
 
-  // ✅ CRITICAL: Leggi steps usando templateId come chiave (non id)
-  // task.steps[node.templateId] = steps clonati
+  // ✅ CRITICAL: Leggi steps usando helper function (array MaterializedStep[])
   const firstMainTemplateId = firstMain.templateId || firstMain.id; // ✅ Fallback a id se templateId non presente
-  const steps = (task?.steps && task.steps[firstMainTemplateId]) || {};
+
+  // ✅ Helper function per ottenere steps per questo nodo
+  const getStepsForNode = (steps: any, nodeTemplateId: string): any[] => {
+    if (!steps) return [];
+    if (Array.isArray(steps)) {
+      return steps.filter((step: any) =>
+        step.templateStepId && step.templateStepId.startsWith(nodeTemplateId)
+      );
+    }
+    if (typeof steps === 'object' && steps[nodeTemplateId]) {
+      const nodeSteps = steps[nodeTemplateId];
+      return Array.isArray(nodeSteps) ? nodeSteps : [];
+    }
+    return [];
+  };
+
+  const nodeStepsArray = getStepsForNode(task?.steps, firstMainTemplateId);
+
+  // ✅ Converti array MaterializedStep[] in formato compatibile per la logica esistente
+  const steps: Record<string, any> = {};
+  nodeStepsArray.forEach((step: any) => {
+    if (step.templateStepId) {
+      const stepType = step.templateStepId.split(':').pop() || 'unknown';
+      steps[stepType] = { escalations: step.escalations || [] };
+    }
+  });
 
   // Required steps for intent classification
   const requiredSteps = ['start', 'noInput', 'noMatch', 'confirmation'];

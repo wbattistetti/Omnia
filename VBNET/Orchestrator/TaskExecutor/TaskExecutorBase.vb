@@ -9,11 +9,11 @@ Imports Compiler
 ''' Ogni tipo di task può avere il suo executor specifico
 ''' </summary>
 Public MustInherit Class TaskExecutorBase
-    Protected ReadOnly _ddtEngine As Motore
+    Protected ReadOnly _taskEngine As Motore
     Protected _messageCallback As Action(Of String, String, Integer)
 
-    Public Sub New(ddtEngine As Motore)
-        _ddtEngine = ddtEngine
+    Public Sub New(taskEngine As Motore)
+        _taskEngine = taskEngine
     End Sub
 
     ''' <summary>

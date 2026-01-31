@@ -85,7 +85,7 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
             })) || [],
             hasSteps: !!tree.steps,
             stepsType: typeof tree.steps,
-            stepsKeys: tree.steps ? Object.keys(tree.steps) : []
+            stepsCount: Array.isArray(tree.steps) ? tree.steps.length : 0
           });
         } else {
           setTaskTree(null);
@@ -123,7 +123,7 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
       hasTaskTree: !!finalTaskTree,
       nodesLength: finalTaskTree.nodes?.length || 0,
       hasSteps: !!finalTaskTree.steps,
-      stepsKeys: finalTaskTree.steps ? Object.keys(finalTaskTree.steps) : []
+      stepsCount: Array.isArray(finalTaskTree.steps) ? finalTaskTree.steps.length : 0
     });
 
     // ✅ Salva TaskTree nel Task usando extractTaskOverrides
@@ -135,8 +135,7 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
         instanceKey,
         hasTaskInstance: !!taskInstance,
         taskInstanceHasSteps: !!taskInstance?.steps,
-        taskInstanceStepsKeys: taskInstance?.steps ? Object.keys(taskInstance.steps) : [],
-        taskInstanceStepsCount: taskInstance?.steps ? Object.keys(taskInstance.steps).length : 0
+        taskInstanceStepsCount: Array.isArray(taskInstance?.steps) ? taskInstance.steps.length : 0
       });
 
       // ✅ NUOVO: Usa extractTaskOverrides per salvare solo override
@@ -181,8 +180,7 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
       console.log('[DDTHostAdapter][handleComplete] ✅ Task saved', {
         instanceKey,
         savedTaskHasSteps: !!savedTask?.steps,
-        savedTaskStepsKeys: savedTask?.steps ? Object.keys(savedTask.steps) : [],
-        savedTaskStepsCount: savedTask?.steps ? Object.keys(savedTask.steps).length : 0,
+        savedTaskStepsCount: Array.isArray(savedTask?.steps) ? savedTask.steps.length : 0,
         templateId: savedTask?.templateId
       });
     }

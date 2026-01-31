@@ -573,9 +573,12 @@ class FlowchartVariablesService {
       if (!response.ok) {
         if (response.status === 404) {
           // No mappings yet for this project (first time) - still mark as initialized
-          // Removed verbose logging
+          // This is expected for new projects, not an error
+          // Note: 404 errors are suppressed in console by fetchInterceptor
           return;
         }
+        // Only log non-404 errors
+        console.warn(`[FlowchartVariablesService] Failed to load variable mappings: ${response.status} ${response.statusText}`);
         throw new Error(`Failed to load: ${response.statusText}`);
       }
 

@@ -200,7 +200,13 @@ export default function RightPanel({ mode, width, onWidthChange, onStartResize, 
                   <div style={{ fontWeight: 700, color: '#0b1220' }}>Chat Simulator</div>
                 </div>
                 <div style={{ flex: 1, minHeight: 0 }}>
-                  <DDEBubbleChat task={task} projectId={projectId} translations={translations} onUpdateTaskTree={onUpdateDDT} />
+                  <DDEBubbleChat
+                    task={task}
+                    projectId={projectId}
+                    translations={translations}
+                    taskTree={taskTree}
+                    onUpdateTaskTree={onUpdateDDT}
+                  />
                 </div>
               </div>
             );

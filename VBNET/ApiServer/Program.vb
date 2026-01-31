@@ -1619,6 +1619,344 @@ Module Program
     End Function
 
     ''' <summary>
+    ''' ✅ NUOVO: Converte TaskTree (JSON dal frontend) in TaskTreeRuntime (per il compilatore)
+    ''' Applica gli steps ai nodi durante la conversione
+    ''' </summary>
+    ''' <param name="taskTreeJson">Il TaskTree come JObject dal frontend</param>
+    ''' <param name="taskId">L'ID del task (per identificazione)</param>
+    ''' <returns>TaskTreeRuntime pronto per la compilazione</returns>
+    Private Function ConvertTaskTreeToTaskTreeRuntime(taskTreeJson As JObject, taskId As String) As Compiler.TaskTreeRuntime
+        Try
+            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+            Console.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeRuntime] START - Converting TaskTree to TaskTreeRuntime (taskId={taskId})")
+            System.Diagnostics.Debug.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeRuntime] START - Converting TaskTree to TaskTreeRuntime")
+
+            ' ✅ Verifica che taskTreeJson non sia null
+            If taskTreeJson Is Nothing Then
+                Console.WriteLine($"❌ [ConvertTaskTreeToTaskTreeRuntime] taskTreeJson is Nothing")
+                Return Nothing
+            End If
+
+            ' ✅ Log struttura JSON
+            Dim jsonKeysList As New List(Of String)()
+            For Each prop In taskTreeJson.Properties()
+                jsonKeysList.Add(prop.Name)
+            Next
+            Dim jsonKeys = String.Join(", ", jsonKeysList)
+            Console.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeRuntime] TaskTree JSON keys: {jsonKeys}")
+
+            Dim jsonString = taskTreeJson.ToString()
+            Console.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeRuntime] JSON length: {jsonString.Length}")
+            Console.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeRuntime] JSON preview (first 1000 chars): {jsonString.Substring(0, Math.Min(1000, jsonString.Length))}")
+
+            ' ✅ Estrai steps dal TaskTree (keyed by templateId)
+            Dim stepsDict As Dictionary(Of String, Object) = Nothing
+            If taskTreeJson("steps") IsNot Nothing Then
+                Try
+                    Dim stepsJson = taskTreeJson("steps").ToString()
+                    Console.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeRuntime] Steps JSON found, length: {stepsJson.Length}")
+                    Console.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeRuntime] Steps JSON preview: {stepsJson.Substring(0, Math.Min(500, stepsJson.Length))}")
+
+                    stepsDict = JsonConvert.DeserializeObject(Of Dictionary(Of String, Object))(stepsJson)
+                    Console.WriteLine($"✅ [ConvertTaskTreeToTaskTreeRuntime] Found {If(stepsDict IsNot Nothing, stepsDict.Count, 0)} step overrides")
+                    If stepsDict IsNot Nothing Then
+                        For Each kvp In stepsDict
+                            Console.WriteLine($"   - templateId: {kvp.Key}, value type: {If(kvp.Value IsNot Nothing, kvp.Value.GetType().Name, "Nothing")}")
+                        Next
+                    End If
+                Catch ex As Exception
+                    Console.WriteLine($"❌ [ConvertTaskTreeToTaskTreeRuntime] Failed to parse steps: {ex.Message}")
+                    Console.WriteLine($"   Stack trace: {ex.StackTrace}")
+                End Try
+            Else
+                Console.WriteLine($"⚠️ [ConvertTaskTreeToTaskTreeRuntime] No 'steps' property found in TaskTree")
+            End If
+
+            ' Deserializza TaskTree JSON in TaskTreeRuntime (senza steps, che verranno applicati dopo)
+            Dim settings As New JsonSerializerSettings() With {
+                .NullValueHandling = NullValueHandling.Ignore,
+                .MissingMemberHandling = MissingMemberHandling.Ignore
+            }
+
+            ' ✅ TaskTree dal frontend ha: { label, nodes, steps, constraints, introduction }
+            ' ✅ TaskTreeRuntime ha: { id, label, nodes, translations, introduction, constraints }
+            ' La conversione è diretta, ma dobbiamo aggiungere l'id e applicare gli steps
+            Console.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeRuntime] Attempting deserialization...")
+            Dim taskTreeRuntime = JsonConvert.DeserializeObject(Of Compiler.TaskTreeRuntime)(taskTreeJson.ToString(), settings)
+            If taskTreeRuntime Is Nothing Then
+                Console.WriteLine($"❌ [ConvertTaskTreeToTaskTreeRuntime] Failed to deserialize TaskTree - returned Nothing")
+                Return Nothing
+            End If
+            Console.WriteLine($"✅ [ConvertTaskTreeToTaskTreeRuntime] Deserialization successful")
+
+            ' ✅ Imposta ID se mancante
+            If String.IsNullOrEmpty(taskTreeRuntime.Id) Then
+                taskTreeRuntime.Id = taskId
+                Console.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeRuntime] Set Id to: {taskId}")
+            Else
+                Console.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeRuntime] Id already set: {taskTreeRuntime.Id}")
+            End If
+
+            ' ✅ Inizializza collections se mancanti
+            If taskTreeRuntime.Nodes Is Nothing Then
+                taskTreeRuntime.Nodes = New List(Of Compiler.TaskNode)()
+                Console.WriteLine($"⚠️ [ConvertTaskTreeToTaskTreeRuntime] Nodes was Nothing, initialized empty list")
+            Else
+                Console.WriteLine($"✅ [ConvertTaskTreeToTaskTreeRuntime] Nodes count: {taskTreeRuntime.Nodes.Count}")
+                For i = 0 To taskTreeRuntime.Nodes.Count - 1
+                    Dim node = taskTreeRuntime.Nodes(i)
+                    Console.WriteLine($"   Node[{i}]: Id={node.Id}, TemplateId={node.TemplateId}, Name={node.Name}, Steps.Count={If(node.Steps IsNot Nothing, node.Steps.Count, 0)}, SubTasks.Count={If(node.SubTasks IsNot Nothing, node.SubTasks.Count, 0)}")
+                Next
+            End If
+            If taskTreeRuntime.Translations Is Nothing Then
+                taskTreeRuntime.Translations = New Dictionary(Of String, String)()
+            End If
+            If taskTreeRuntime.Constraints Is Nothing Then
+                taskTreeRuntime.Constraints = New List(Of Object)()
+            End If
+
+            ' ✅ Applica steps ai nodi (se presenti)
+            Console.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeRuntime] Checking if steps should be applied...")
+            Console.WriteLine($"   stepsDict IsNot Nothing: {stepsDict IsNot Nothing}")
+            Console.WriteLine($"   stepsDict.Count: {If(stepsDict IsNot Nothing, stepsDict.Count, 0)}")
+            Console.WriteLine($"   taskTreeRuntime.Nodes.Count: {taskTreeRuntime.Nodes.Count}")
+
+            If stepsDict IsNot Nothing AndAlso stepsDict.Count > 0 AndAlso taskTreeRuntime.Nodes.Count > 0 Then
+                Console.WriteLine($"✅ [ConvertTaskTreeToTaskTreeRuntime] Applying steps to nodes...")
+                ApplyStepsToTaskNodes(taskTreeRuntime.Nodes, stepsDict)
+            Else
+                Console.WriteLine($"⚠️ [ConvertTaskTreeToTaskTreeRuntime] Steps NOT applied - conditions not met")
+            End If
+
+            ' ✅ Log finale stato dei nodi dopo applicazione steps
+            Console.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeRuntime] Final node states after steps application:")
+            For i = 0 To taskTreeRuntime.Nodes.Count - 1
+                Dim node = taskTreeRuntime.Nodes(i)
+                Console.WriteLine($"   Node[{i}]: Id={node.Id}, TemplateId={node.TemplateId}, Steps.Count={If(node.Steps IsNot Nothing, node.Steps.Count, 0)}")
+                If node.Steps IsNot Nothing AndAlso node.Steps.Count > 0 Then
+                    For j = 0 To node.Steps.Count - 1
+                        Dim stepItem = node.Steps(j)
+                        Console.WriteLine($"      Step[{j}]: Type={stepItem.Type}, Escalations.Count={If(stepItem.Escalations IsNot Nothing, stepItem.Escalations.Count, 0)}")
+                    Next
+                End If
+            Next
+
+            Console.WriteLine($"✅ [ConvertTaskTreeToTaskTreeRuntime] Converted successfully: {taskTreeRuntime.Nodes.Count} nodes, {If(stepsDict IsNot Nothing, stepsDict.Count, 0)} step overrides applied")
+            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+            System.Diagnostics.Debug.WriteLine($"✅ [ConvertTaskTreeToTaskTreeRuntime] Converted successfully")
+
+            Return taskTreeRuntime
+        Catch ex As Exception
+            Console.WriteLine($"❌ [ConvertTaskTreeToTaskTreeRuntime] Error: {ex.Message}")
+            Console.WriteLine($"Stack trace: {ex.StackTrace}")
+            System.Diagnostics.Debug.WriteLine($"❌ [ConvertTaskTreeToTaskTreeRuntime] Error: {ex.ToString()}")
+            Return Nothing
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' ✅ Helper: Applica steps override ai TaskNode (ricorsivo)
+    ''' Usa la stessa logica di UtteranceInterpretationTaskCompiler.ApplyStepsOverrides
+    ''' </summary>
+    Private Sub ApplyStepsToTaskNodes(nodes As List(Of Compiler.TaskNode), stepsDict As Dictionary(Of String, Object))
+        Console.WriteLine($"🔍 [ApplyStepsToTaskNodes] START - Processing {nodes.Count} nodes, {stepsDict.Count} step overrides available")
+        For Each node In nodes
+            Console.WriteLine($"🔍 [ApplyStepsToTaskNodes] Processing node: Id={node.Id}, TemplateId={node.TemplateId}, CurrentSteps.Count={If(node.Steps IsNot Nothing, node.Steps.Count, 0)}")
+
+            ' ✅ Applica steps se presente override per questo templateId
+            If String.IsNullOrEmpty(node.TemplateId) Then
+                Console.WriteLine($"⚠️ [ApplyStepsToTaskNodes] Node {node.Id} has empty TemplateId, skipping")
+            ElseIf Not stepsDict.ContainsKey(node.TemplateId) Then
+                Console.WriteLine($"⚠️ [ApplyStepsToTaskNodes] Node {node.Id} (templateId={node.TemplateId}) not found in stepsDict")
+                Console.WriteLine($"   Available templateIds in stepsDict: {String.Join(", ", stepsDict.Keys)}")
+            Else
+                Console.WriteLine($"✅ [ApplyStepsToTaskNodes] Found override for node {node.Id} (templateId={node.TemplateId})")
+                Try
+                    Dim overrideValue As Object = stepsDict(node.TemplateId)
+                    Console.WriteLine($"🔍 [ApplyStepsToTaskNodes] Override value type: {If(overrideValue IsNot Nothing, overrideValue.GetType().Name, "Nothing")}")
+
+                    If overrideValue IsNot Nothing Then
+                        ' ✅ Usa DialogueStepListConverter per convertire oggetto → List(Of DialogueStep)
+                        Dim overrideJson = JsonConvert.SerializeObject(overrideValue)
+                        Console.WriteLine($"🔍 [ApplyStepsToTaskNodes] Serialized override JSON length: {overrideJson.Length}")
+                        Console.WriteLine($"🔍 [ApplyStepsToTaskNodes] Override JSON preview: {overrideJson.Substring(0, Math.Min(500, overrideJson.Length))}")
+
+                        Dim settings As New JsonSerializerSettings()
+                        settings.Converters.Add(New Compiler.DialogueStepListConverter())
+                        Dim overrideSteps = JsonConvert.DeserializeObject(Of List(Of Compiler.DialogueStep))(overrideJson, settings)
+
+                        If overrideSteps IsNot Nothing AndAlso overrideSteps.Count > 0 Then
+                            node.Steps = overrideSteps
+                            Console.WriteLine($"✅ [ApplyStepsToTaskNodes] Applied {overrideSteps.Count} steps to node {node.Id} (templateId={node.TemplateId})")
+                            For i = 0 To overrideSteps.Count - 1
+                                Dim stepItem = overrideSteps(i)
+                                Console.WriteLine($"   Step[{i}]: Type={stepItem.Type}, Escalations.Count={If(stepItem.Escalations IsNot Nothing, stepItem.Escalations.Count, 0)}")
+                            Next
+                        Else
+                            Console.WriteLine($"⚠️ [ApplyStepsToTaskNodes] Deserialized steps list is Nothing or empty for node {node.Id}")
+                        End If
+                    Else
+                        Console.WriteLine($"⚠️ [ApplyStepsToTaskNodes] Override value is Nothing for node {node.Id}")
+                    End If
+                Catch ex As Exception
+                    Console.WriteLine($"❌ [ApplyStepsToTaskNodes] Failed to apply steps to node {node.Id}: {ex.Message}")
+                    Console.WriteLine($"   Stack trace: {ex.StackTrace}")
+                End Try
+            End If
+
+            ' ✅ Ricorsione per subTasks
+            If node.SubTasks IsNot Nothing AndAlso node.SubTasks.Count > 0 Then
+                Console.WriteLine($"🔍 [ApplyStepsToTaskNodes] Recursing into {node.SubTasks.Count} subTasks of node {node.Id}")
+                ApplyStepsToTaskNodes(node.SubTasks, stepsDict)
+            End If
+        Next
+        Console.WriteLine($"✅ [ApplyStepsToTaskNodes] END - Processed {nodes.Count} nodes")
+    End Sub
+
+    ''' <summary>
+    ''' ✅ NUOVO: Compila TaskTreeRuntime in CompiledTaskUtteranceInterpretation
+    ''' Usa TaskAssembler per compilare TaskTreeRuntime → RuntimeTask, poi converte in CompiledTaskUtteranceInterpretation
+    ''' </summary>
+    ''' <param name="taskTreeRuntime">Il TaskTreeRuntime da compilare</param>
+    ''' <param name="translations">Le traduzioni per la risoluzione dei GUID</param>
+    ''' <returns>Risultato della compilazione</returns>
+    Private Function CompileTaskTreeRuntimeToRuntime(taskTreeRuntime As Compiler.TaskTreeRuntime, translations As Dictionary(Of String, String)) As (Success As Boolean, Result As Compiler.CompiledTaskUtteranceInterpretation, ErrorMessage As String)
+        Try
+            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+            Console.WriteLine($"🔍 [CompileTaskTreeRuntimeToRuntime] START - Compiling TaskTreeRuntime (id={taskTreeRuntime.Id})")
+            System.Diagnostics.Debug.WriteLine($"🔍 [CompileTaskTreeRuntimeToRuntime] START - Compiling TaskTreeRuntime")
+
+            ' ✅ Log stato iniziale TaskTreeRuntime
+            Console.WriteLine($"🔍 [CompileTaskTreeRuntimeToRuntime] TaskTreeRuntime state:")
+            Console.WriteLine($"   Id: {taskTreeRuntime.Id}")
+            Console.WriteLine($"   Label: {taskTreeRuntime.Label}")
+            Console.WriteLine($"   Nodes.Count: {If(taskTreeRuntime.Nodes IsNot Nothing, taskTreeRuntime.Nodes.Count, 0)}")
+            If taskTreeRuntime.Nodes IsNot Nothing Then
+                For i = 0 To taskTreeRuntime.Nodes.Count - 1
+                    Dim node = taskTreeRuntime.Nodes(i)
+                    Console.WriteLine($"   Node[{i}]: Id={node.Id}, TemplateId={node.TemplateId}, Steps.Count={If(node.Steps IsNot Nothing, node.Steps.Count, 0)}")
+                    If node.Steps IsNot Nothing AndAlso node.Steps.Count > 0 Then
+                        For j = 0 To node.Steps.Count - 1
+                            Dim stepItem = node.Steps(j)
+                            Console.WriteLine($"      Step[{j}]: Type={stepItem.Type}, Escalations.Count={If(stepItem.Escalations IsNot Nothing, stepItem.Escalations.Count, 0)}")
+                        Next
+                    End If
+                Next
+            End If
+
+            ' ✅ Usa TaskAssembler per compilare TaskTreeRuntime → RuntimeTask
+            Console.WriteLine($"🔍 [CompileTaskTreeRuntimeToRuntime] Creating TaskAssembler...")
+            Dim assembler As New Compiler.TaskAssembler()
+            If translations IsNot Nothing Then
+                assembler.SetTranslations(translations)
+                Console.WriteLine($"🔍 [CompileTaskTreeRuntimeToRuntime] Set {translations.Count} translations")
+            End If
+
+            ' ✅ Imposta traduzioni nel TaskTreeRuntime per la risoluzione GUID
+            If translations IsNot Nothing Then
+                taskTreeRuntime.Translations = translations
+            End If
+
+            Console.WriteLine($"🔍 [CompileTaskTreeRuntimeToRuntime] Calling assembler.Compile()...")
+            Dim runtimeTask = assembler.Compile(taskTreeRuntime)
+            If runtimeTask Is Nothing Then
+                Console.WriteLine($"❌ [CompileTaskTreeRuntimeToRuntime] TaskAssembler returned null")
+                Return (False, Nothing, $"TaskAssembler returned null for TaskTreeRuntime '{taskTreeRuntime.Id}'. The TaskTree may be malformed.")
+            End If
+            Console.WriteLine($"✅ [CompileTaskTreeRuntimeToRuntime] TaskAssembler.Compile() returned RuntimeTask")
+
+            ' ✅ Log stato RuntimeTask dopo compilazione
+            Console.WriteLine($"🔍 [CompileTaskTreeRuntimeToRuntime] RuntimeTask state:")
+            Console.WriteLine($"   Id: {runtimeTask.Id}")
+            Console.WriteLine($"   Steps.Count: {If(runtimeTask.Steps IsNot Nothing, runtimeTask.Steps.Count, 0)}")
+            If runtimeTask.Steps IsNot Nothing AndAlso runtimeTask.Steps.Count > 0 Then
+                For i = 0 To runtimeTask.Steps.Count - 1
+                    Dim stepItem = runtimeTask.Steps(i)
+                    Console.WriteLine($"   Step[{i}]: Type={stepItem.Type}, Escalations.Count={If(stepItem.Escalations IsNot Nothing, stepItem.Escalations.Count, 0)}")
+                Next
+            End If
+            Console.WriteLine($"   HasSubTasks: {runtimeTask.HasSubTasks()}")
+            If runtimeTask.HasSubTasks() Then
+                Console.WriteLine($"   SubTasks.Count: {runtimeTask.SubTasks.Count}")
+            End If
+
+            ' ✅ Converti RuntimeTask in CompiledTaskUtteranceInterpretation
+            Console.WriteLine($"🔍 [CompileTaskTreeRuntimeToRuntime] Converting RuntimeTask to CompiledTaskUtteranceInterpretation...")
+            Dim compiledTask As New Compiler.CompiledTaskUtteranceInterpretation() With {
+                .Id = runtimeTask.Id,
+                .Condition = runtimeTask.Condition,
+                .Steps = runtimeTask.Steps,
+                .Constraints = runtimeTask.Constraints,
+                .NlpContract = runtimeTask.NlpContract
+            }
+            Console.WriteLine($"✅ [CompileTaskTreeRuntimeToRuntime] Created CompiledTaskUtteranceInterpretation")
+            Console.WriteLine($"   Steps.Count: {If(compiledTask.Steps IsNot Nothing, compiledTask.Steps.Count, 0)}")
+
+            ' ✅ Copia SubTasks ricorsivamente (solo se presenti)
+            If runtimeTask.HasSubTasks() Then
+                Console.WriteLine($"🔍 [CompileTaskTreeRuntimeToRuntime] Copying {runtimeTask.SubTasks.Count} SubTasks...")
+                compiledTask.SubTasks = New List(Of Compiler.CompiledTaskUtteranceInterpretation)()
+                For Each subTask As Compiler.RuntimeTask In runtimeTask.SubTasks
+                    Dim subCompiled = ConvertRuntimeTaskToCompiledTaskUtteranceInterpretation(subTask)
+                    compiledTask.SubTasks.Add(subCompiled)
+                    Console.WriteLine($"   SubTask: Id={subCompiled.Id}, Steps.Count={If(subCompiled.Steps IsNot Nothing, subCompiled.Steps.Count, 0)}")
+                Next
+            Else
+                compiledTask.SubTasks = Nothing
+                Console.WriteLine($"🔍 [CompileTaskTreeRuntimeToRuntime] No SubTasks (atomic task)")
+            End If
+
+            ' ✅ Valida che abbia almeno Steps o SubTasks
+            Console.WriteLine($"🔍 [CompileTaskTreeRuntimeToRuntime] Validating compiled task...")
+            Console.WriteLine($"   Steps IsNot Nothing: {compiledTask.Steps IsNot Nothing}")
+            Console.WriteLine($"   Steps.Count: {If(compiledTask.Steps IsNot Nothing, compiledTask.Steps.Count, 0)}")
+            Console.WriteLine($"   HasSubTasks: {compiledTask.HasSubTasks()}")
+
+            If (compiledTask.Steps Is Nothing OrElse compiledTask.Steps.Count = 0) AndAlso
+               Not compiledTask.HasSubTasks() Then
+                Console.WriteLine($"❌ [CompileTaskTreeRuntimeToRuntime] Validation FAILED - no Steps and no SubTasks")
+                Return (False, Nothing, $"Compiled TaskTreeRuntime '{taskTreeRuntime.Id}' has no Steps or SubTasks. The compilation may have failed silently.")
+            End If
+
+            Console.WriteLine($"✅ [CompileTaskTreeRuntimeToRuntime] Compiled successfully: {If(compiledTask.Steps IsNot Nothing, compiledTask.Steps.Count, 0)} steps, {If(compiledTask.HasSubTasks(), compiledTask.SubTasks.Count, 0)} subTasks")
+            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+            System.Diagnostics.Debug.WriteLine($"✅ [CompileTaskTreeRuntimeToRuntime] Compiled successfully")
+
+            Return (True, compiledTask, Nothing)
+        Catch ex As Exception
+            Console.WriteLine($"❌ [CompileTaskTreeRuntimeToRuntime] Error: {ex.Message}")
+            Console.WriteLine($"Stack trace: {ex.StackTrace}")
+            System.Diagnostics.Debug.WriteLine($"❌ [CompileTaskTreeRuntimeToRuntime] Error: {ex.ToString()}")
+            Return (False, Nothing, $"Failed to compile TaskTreeRuntime. Error: {ex.Message}")
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' ✅ Helper: Converte RuntimeTask in CompiledTaskUtteranceInterpretation (ricorsivo)
+    ''' </summary>
+    Private Function ConvertRuntimeTaskToCompiledTaskUtteranceInterpretation(runtimeTask As Compiler.RuntimeTask) As Compiler.CompiledTaskUtteranceInterpretation
+        Dim compiled As New Compiler.CompiledTaskUtteranceInterpretation() With {
+            .Id = runtimeTask.Id,
+            .Condition = runtimeTask.Condition,
+            .Steps = runtimeTask.Steps,
+            .Constraints = runtimeTask.Constraints,
+            .NlpContract = runtimeTask.NlpContract
+        }
+
+        ' ✅ Copia SubTasks ricorsivamente (solo se presenti)
+        If runtimeTask.HasSubTasks() Then
+            compiled.SubTasks = New List(Of Compiler.CompiledTaskUtteranceInterpretation)()
+            For Each subTask As Compiler.RuntimeTask In runtimeTask.SubTasks
+                compiled.SubTasks.Add(ConvertRuntimeTaskToCompiledTaskUtteranceInterpretation(subTask))
+            Next
+        Else
+            compiled.SubTasks = Nothing
+        End If
+
+        Return compiled
+    End Function
+
+    ''' <summary>
     ''' Creates a standardized JSON error response.
     ''' </summary>
     ''' <param name="errorMessage">The error message to include in the response.</param>
@@ -1654,81 +1992,159 @@ Module Program
                 Return CreateErrorResponse(validationResult.ErrorMessage, 400)
             End If
 
-            ' 3. Fetch tasks from Node.js
-            Dim fetchResult = Await FetchTasksFromNodeJs(request.ProjectId)
-            If Not fetchResult.Success Then
-                Return CreateErrorResponse(fetchResult.ErrorMessage, 400)
+            ' ✅ NUOVO MODELLO: Se TaskTree è presente, usalo direttamente (working copy dalla memoria)
+            ' Altrimenti, carica dal database (fallback per compatibilità)
+            Dim compiledTask As Compiler.CompiledTaskUtteranceInterpretation = Nothing
+
+            If request.TaskTree IsNot Nothing Then
+                ' ✅ CASO A: Usa TaskTree dalla working copy (fonte di verità)
+                Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                Console.WriteLine($"✅ [HandleTaskSessionStart] Using TaskTree from working copy (taskId={request.TaskId})")
+                Console.WriteLine($"🔍 [HandleTaskSessionStart] TaskTree IsNot Nothing: {request.TaskTree IsNot Nothing}")
+                If request.TaskTree IsNot Nothing Then
+                    Dim taskTreeKeysList As New List(Of String)()
+                    For Each prop In request.TaskTree.Properties()
+                        taskTreeKeysList.Add(prop.Name)
+                    Next
+                    Dim taskTreeKeys = String.Join(", ", taskTreeKeysList)
+                    Console.WriteLine($"🔍 [HandleTaskSessionStart] TaskTree JSON keys: {taskTreeKeys}")
+                End If
+                System.Diagnostics.Debug.WriteLine($"✅ [HandleTaskSessionStart] Using TaskTree from working copy")
+
+                Try
+                    ' Converti TaskTree (JSON) in TaskTreeRuntime per il compilatore
+                    Console.WriteLine($"🔍 [HandleTaskSessionStart] Calling ConvertTaskTreeToTaskTreeRuntime...")
+                    Dim taskTreeRuntime = ConvertTaskTreeToTaskTreeRuntime(request.TaskTree, request.TaskId)
+                    If taskTreeRuntime Is Nothing Then
+                        Console.WriteLine($"❌ [HandleTaskSessionStart] ConvertTaskTreeToTaskTreeRuntime returned Nothing")
+                        Return CreateErrorResponse($"Failed to convert TaskTree to TaskTreeRuntime for task '{request.TaskId}'.", 400)
+                    End If
+                    Console.WriteLine($"✅ [HandleTaskSessionStart] ConvertTaskTreeToTaskTreeRuntime succeeded")
+
+                    ' Compila direttamente TaskTreeRuntime → CompiledTaskUtteranceInterpretation
+                    Console.WriteLine($"🔍 [HandleTaskSessionStart] Calling CompileTaskTreeRuntimeToRuntime...")
+                    Dim compileResult = CompileTaskTreeRuntimeToRuntime(taskTreeRuntime, request.Translations)
+                    If Not compileResult.Success Then
+                        Console.WriteLine($"❌ [HandleTaskSessionStart] CompileTaskTreeRuntimeToRuntime failed: {compileResult.ErrorMessage}")
+                        Return CreateErrorResponse(compileResult.ErrorMessage, 400)
+                    End If
+                    compiledTask = compileResult.Result
+                    Console.WriteLine($"✅ [HandleTaskSessionStart] CompileTaskTreeRuntimeToRuntime succeeded")
+                    Console.WriteLine($"   Compiled task Steps.Count: {If(compiledTask.Steps IsNot Nothing, compiledTask.Steps.Count, 0)}")
+                    Console.WriteLine($"   Compiled task HasSubTasks: {compiledTask.HasSubTasks()}")
+                Catch ex As Exception
+                    Console.WriteLine($"❌ [HandleTaskSessionStart] Exception processing TaskTree: {ex.Message}")
+                    Console.WriteLine($"   Exception type: {ex.GetType().Name}")
+                    Console.WriteLine($"   Stack trace: {ex.StackTrace}")
+                    If ex.InnerException IsNot Nothing Then
+                        Console.WriteLine($"   Inner exception: {ex.InnerException.Message}")
+                    End If
+                    Return CreateErrorResponse($"Failed to process TaskTree for task '{request.TaskId}'. Error: {ex.Message}", 400)
+                End Try
+            Else
+                ' ✅ CASO B: Fallback - carica dal database (compatibilità legacy)
+                Console.WriteLine($"⚠️ [HandleTaskSessionStart] TaskTree not provided, loading from database (taskId={request.TaskId})")
+                System.Diagnostics.Debug.WriteLine($"⚠️ [HandleTaskSessionStart] Loading from database (fallback)")
+
+                ' 3. Fetch tasks from Node.js
+                Dim fetchResult = Await FetchTasksFromNodeJs(request.ProjectId)
+                If Not fetchResult.Success Then
+                    Return CreateErrorResponse(fetchResult.ErrorMessage, 400)
+                End If
+                Dim tasksArray = fetchResult.TasksArray
+
+                ' 4. Find task by ID
+                Dim taskObj = FindTaskById(tasksArray, request.TaskId)
+                If taskObj Is Nothing Then
+                    Return CreateErrorResponse($"Task with ID '{request.TaskId}' was not found in project '{request.ProjectId}'. The task may have been deleted or the ID may be incorrect.", 400)
+                End If
+
+                ' 5. Find template for task
+                Dim templateResult = FindTemplateForTask(tasksArray, taskObj, request.TaskId)
+                Dim templateObj = templateResult.TemplateObj
+                Dim templateId = templateResult.TemplateId
+
+                ' 6. Load all sub-templates recursively
+                Dim loadedTemplateIds As New HashSet(Of String)()
+                Dim allTemplatesList As New List(Of JObject)()
+
+                If templateObj IsNot Nothing Then
+                    allTemplatesList.Add(templateObj)
+                    loadedTemplateIds.Add(templateId)
+                End If
+
+                If taskObj IsNot Nothing AndAlso Not loadedTemplateIds.Contains(request.TaskId) Then
+                    allTemplatesList.Add(taskObj)
+                    loadedTemplateIds.Add(request.TaskId)
+                End If
+
+                If templateObj IsNot Nothing Then
+                    LoadSubTemplatesRecursively(tasksArray, templateObj, loadedTemplateIds, allTemplatesList)
+                End If
+
+                ' 7. Deserialize all templates
+                Dim deserializeResult = DeserializeTasks(allTemplatesList)
+                If Not deserializeResult.Success Then
+                    Return CreateErrorResponse(deserializeResult.ErrorMessage, 400)
+                End If
+                Dim allTemplates = deserializeResult.Tasks
+
+                ' 8. Find main task and template in deserialized list
+                Dim task = allTemplates.FirstOrDefault(Function(t) t.Id = request.TaskId)
+                Dim template = allTemplates.FirstOrDefault(Function(t) t.Id = templateId)
+
+                If task Is Nothing Then
+                    Return CreateErrorResponse($"Failed to deserialize task with ID '{request.TaskId}'. The task JSON may be malformed.", 400)
+                End If
+
+                If template Is Nothing Then
+                    Return CreateErrorResponse($"Failed to deserialize template with ID '{templateId}' for task '{request.TaskId}'. The template JSON may be malformed.", 400)
+                End If
+
+                ' Ensure task has templateId
+                If String.IsNullOrEmpty(task.TemplateId) Then
+                    task.TemplateId = template.Id
+                End If
+
+                ' 9. Validate task type
+                Dim typeValidationResult = ValidateTaskType(task)
+                If Not typeValidationResult.IsValid Then
+                    Return CreateErrorResponse(typeValidationResult.ErrorMessage, 400)
+                End If
+
+                ' 10. Compile task
+                Dim compileResult = CompileTaskToRuntime(task, allTemplates)
+                If Not compileResult.Success Then
+                    Return CreateErrorResponse(compileResult.ErrorMessage, 400)
+                End If
+                compiledTask = compileResult.Result
             End If
-            Dim tasksArray = fetchResult.TasksArray
 
-            ' 4. Find task by ID
-            Dim taskObj = FindTaskById(tasksArray, request.TaskId)
-            If taskObj Is Nothing Then
-                Return CreateErrorResponse($"Task with ID '{request.TaskId}' was not found in project '{request.ProjectId}'. The task may have been deleted or the ID may be incorrect.", 400)
+            ' 11. Validate compiled task before creating session
+            If compiledTask Is Nothing Then
+                Console.WriteLine($"❌ [HandleTaskSessionStart] compiledTask is Nothing - cannot create session")
+                Return CreateErrorResponse("Compiled task is null. The compilation may have failed silently.", 500)
             End If
-
-            ' 5. Find template for task
-            Dim templateResult = FindTemplateForTask(tasksArray, taskObj, request.TaskId)
-            Dim templateObj = templateResult.TemplateObj
-            Dim templateId = templateResult.TemplateId
-
-            ' 6. Load all sub-templates recursively
-            Dim loadedTemplateIds As New HashSet(Of String)()
-            Dim allTemplatesList As New List(Of JObject)()
-
-            If templateObj IsNot Nothing Then
-                allTemplatesList.Add(templateObj)
-                loadedTemplateIds.Add(templateId)
-            End If
-
-            If taskObj IsNot Nothing AndAlso Not loadedTemplateIds.Contains(request.TaskId) Then
-                allTemplatesList.Add(taskObj)
-                loadedTemplateIds.Add(request.TaskId)
-            End If
-
-            If templateObj IsNot Nothing Then
-                LoadSubTemplatesRecursively(tasksArray, templateObj, loadedTemplateIds, allTemplatesList)
-            End If
-
-            ' 7. Deserialize all templates
-            Dim deserializeResult = DeserializeTasks(allTemplatesList)
-            If Not deserializeResult.Success Then
-                Return CreateErrorResponse(deserializeResult.ErrorMessage, 400)
-            End If
-            Dim allTemplates = deserializeResult.Tasks
-
-            ' 8. Find main task and template in deserialized list
-            Dim task = allTemplates.FirstOrDefault(Function(t) t.Id = request.TaskId)
-            Dim template = allTemplates.FirstOrDefault(Function(t) t.Id = templateId)
-
-            If task Is Nothing Then
-                Return CreateErrorResponse($"Failed to deserialize task with ID '{request.TaskId}'. The task JSON may be malformed.", 400)
-            End If
-
-            If template Is Nothing Then
-                Return CreateErrorResponse($"Failed to deserialize template with ID '{templateId}' for task '{request.TaskId}'. The template JSON may be malformed.", 400)
-            End If
-
-            ' Ensure task has templateId
-            If String.IsNullOrEmpty(task.TemplateId) Then
-                task.TemplateId = template.Id
-            End If
-
-            ' 9. Validate task type
-            Dim typeValidationResult = ValidateTaskType(task)
-            If Not typeValidationResult.IsValid Then
-                Return CreateErrorResponse(typeValidationResult.ErrorMessage, 400)
-            End If
-
-            ' 10. Compile task
-            Dim compileResult = CompileTaskToRuntime(task, allTemplates)
-            If Not compileResult.Success Then
-                Return CreateErrorResponse(compileResult.ErrorMessage, 400)
-            End If
-            Dim compiledTask = compileResult.Result
 
             ' 11. Create session
-            Dim sessionId = CreateTaskSession(compiledTask, request.Translations)
+            Console.WriteLine($"🔍 [HandleTaskSessionStart] Creating session for compiled task...")
+            Console.WriteLine($"   Compiled task Id: {compiledTask.Id}")
+            Console.WriteLine($"   Compiled task Steps.Count: {If(compiledTask.Steps IsNot Nothing, compiledTask.Steps.Count, 0)}")
+            Console.WriteLine($"   Compiled task HasSubTasks: {compiledTask.HasSubTasks()}")
+
+            Dim sessionId As String = Nothing
+            Try
+                sessionId = CreateTaskSession(compiledTask, request.Translations)
+                If String.IsNullOrEmpty(sessionId) Then
+                    Console.WriteLine($"❌ [HandleTaskSessionStart] CreateTaskSession returned empty sessionId")
+                    Return CreateErrorResponse("Failed to create session: sessionId is empty.", 500)
+                End If
+                Console.WriteLine($"✅ [HandleTaskSessionStart] Session created: {sessionId}")
+            Catch ex As Exception
+                Console.WriteLine($"❌ [HandleTaskSessionStart] Exception in CreateTaskSession: {ex.Message}")
+                Console.WriteLine($"   Stack trace: {ex.StackTrace}")
+                Return CreateErrorResponse($"Failed to create session: {ex.Message}", 500)
+            End Try
 
             ' 12. Return success
             Dim responseObj = New With {
@@ -1738,9 +2154,34 @@ Module Program
             Dim jsonResponse = JsonConvert.SerializeObject(responseObj, New JsonSerializerSettings() With {
                 .NullValueHandling = NullValueHandling.Ignore
             })
-            Return Results.Content(jsonResponse, "application/json")
+            Console.WriteLine($"✅ [HandleTaskSessionStart] Returning response: {jsonResponse}")
+            Console.WriteLine($"   Response length: {jsonResponse.Length}")
+            Console.WriteLine($"   SessionId: {sessionId}")
+            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+            Console.Out.Flush()
+            System.Diagnostics.Debug.WriteLine($"✅ [HandleTaskSessionStart] Returning response: {jsonResponse}")
+
+            ' ✅ Scrivi direttamente nel response stream (come HandleOrchestratorSessionStart)
+            ' Questo garantisce che la risposta venga inviata correttamente
+            context.Response.ContentType = "application/json; charset=utf-8"
+            context.Response.ContentLength = jsonResponse.Length
+            Await context.Response.WriteAsync(jsonResponse)
+            Console.WriteLine($"✅ [HandleTaskSessionStart] Response written to stream")
+            Console.Out.Flush()
+
+            ' ✅ Restituisci Results.Empty dopo aver scritto direttamente
+            Return Results.Empty
 
         Catch ex As Exception
+            Console.WriteLine($"❌ [HandleTaskSessionStart] UNEXPECTED EXCEPTION: {ex.Message}")
+            Console.WriteLine($"   Exception type: {ex.GetType().Name}")
+            Console.WriteLine($"   Stack trace: {ex.StackTrace}")
+            If ex.InnerException IsNot Nothing Then
+                Console.WriteLine($"   Inner exception: {ex.InnerException.Message}")
+                Console.WriteLine($"   Inner stack trace: {ex.InnerException.StackTrace}")
+            End If
+            Console.Out.Flush()
+            System.Diagnostics.Debug.WriteLine($"❌ [HandleTaskSessionStart] UNEXPECTED EXCEPTION: {ex.Message}")
             Return CreateErrorResponse($"Unexpected error while starting task session: {ex.Message}", 500)
         End Try
     End Function
@@ -2039,6 +2480,7 @@ End Class
 
 ''' <summary>
 ''' Task Session Start Request (Chat Simulator diretto)
+''' ✅ NUOVO MODELLO: Accetta TaskTree opzionale (working copy) invece di caricare dal database
 ''' </summary>
 Public Class TaskSessionStartRequest
     <JsonProperty("taskId")>
@@ -2049,6 +2491,13 @@ Public Class TaskSessionStartRequest
 
     <JsonProperty("translations")>
     Public Property Translations As Dictionary(Of String, String)
+
+    ''' <summary>
+    ''' ✅ NUOVO: TaskTree completo (working copy) dalla memoria frontend
+    ''' Se presente, viene usato direttamente invece di caricare dal database
+    ''' </summary>
+    <JsonProperty("taskTree")>
+    Public Property TaskTree As JObject
 End Class
 
 ''' <summary>

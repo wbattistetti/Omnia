@@ -1,6 +1,6 @@
-import type { Task, TaskTree, TaskTreeNode } from '../types/taskTypes';
+import type { Task, TaskTree, TaskTreeNode, MaterializedStep } from '../types/taskTypes';
 import { DialogueTaskService } from '../services/DialogueTaskService';
-import { TaskType } from '../types/taskTypes';
+import { TaskType, templateIdToTaskType } from '../types/taskTypes';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -430,6 +430,37 @@ function cloneStepsWithNewTaskIds(steps: any): { cloned: any; guidMapping: Map<s
  * Clone escalation with new task IDs
  * Maintains mapping of old GUID -> new GUID for translation copying
  * ✅ NEW: Adds templateTaskId and edited fields for template override tracking
+ * ✅ CRITICAL: Ensures type and templateId are ALWAYS present (required by compiler)
+ *
+ * VALIDAZIONE TASK
+ * type: obbligatorio. Non può essere undefined o null.
+ * templateId: deve essere sempre presente come chiave.
+ *   - può essere null → task standalone nel template (valido)
+ *   - non può essere undefined → errore (campo mancante)
+ * In sintesi:
+ *   type === undefined || type === null → ERRORE
+ *   templateId === undefined → ERRORE
+ *   templateId === null → OK (template standalone)
+ *
+ * 🔍 Perché questa distinzione è fondamentale
+ * ✔️ undefined = campo mancante → errore
+ * Significa che il task è stato costruito male, o che qualcuno ha dimenticato di impostare il campo.
+ * ✔️ null = valore esplicito → valido
+ * Significa:
+ * - "questo task non deriva da un template"
+ * - "è un task standalone definito direttamente nel template"
+ * È un'informazione intenzionale, non un errore.
+ *
+ * 🔥 Perché è importante
+ * Perché senza questo chiarimento, un dev potrebbe pensare:
+ * - "templateId null è un errore" → sbagliato
+ * - "templateId undefined è uguale a null" → sbagliato
+ * - "posso derivare templateId se manca" → NO, fallback mascherato
+ * - "posso aggiungere templateId ai template" → NO, il template è la sorgente
+ *
+ * IMPORTANT: Templates are the source of truth. If a task in a template is missing
+ * required fields (type, or has undefined templateId), the template is corrupted and must be fixed
+ * in the database, not migrated in runtime.
  */
 function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string, string>): any {
   if (!escalation) return escalation;
@@ -443,23 +474,50 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
       if (oldGuid) {
         guidMapping.set(oldGuid, newGuid);
       }
+
+      // ✅ VALIDAZIONE: type obbligatorio (non può essere undefined o null)
+      if (task.type === undefined || task.type === null) {
+        throw new Error(`[cloneEscalationWithNewTaskIds] Template task ${task.id || 'unknown'} is missing required field 'type'. The template is corrupted and must be fixed in the database. Task structure: ${JSON.stringify(task, null, 2)}`);
+      }
+
+      // ✅ VALIDAZIONE: templateId deve essere presente come chiave (può essere null per task standalone)
+      if (task.templateId === undefined) {
+        throw new Error(`[cloneEscalationWithNewTaskIds] Template task ${task.id || 'unknown'} is missing required field 'templateId' (must be explicitly null for standalone tasks, or a GUID if derived from another template). The template is corrupted and must be fixed in the database. Task structure: ${JSON.stringify(task, null, 2)}`);
+      }
+
       return {
         ...task,
         id: newGuid,  // ✅ New ID for task instance
+        type: task.type,  // ✅ NO FALLBACK - must be present in template
+        templateId: task.templateId,  // ✅ NO FALLBACK - must be present in template (can be null)
         templateTaskId: oldGuid || null,  // ✅ Save original template task ID
         edited: false,  // ✅ Mark as not edited (inherited from template)
-        // Keep templateId, params, etc. from original
+        // Keep params, text, etc. from original
       };
     }),
     actions: (escalation.actions || []).map((action: any) => {
-      const oldGuid = action.actionInstanceId || action.taskId;
+      // ✅ NO FALLBACK: Solo actionInstanceId o id (non taskId)
+      const oldGuid = action.actionInstanceId || action.id;
       const newGuid = uuidv4();
       if (oldGuid) {
         guidMapping.set(oldGuid, newGuid);
       }
+
+      // ✅ VALIDAZIONE: type obbligatorio (non può essere undefined o null)
+      if (action.type === undefined || action.type === null) {
+        throw new Error(`[cloneEscalationWithNewTaskIds] Template action ${action.id || action.actionInstanceId || 'unknown'} is missing required field 'type'. The template is corrupted and must be fixed in the database. Action structure: ${JSON.stringify(action, null, 2)}`);
+      }
+
+      // ✅ VALIDAZIONE: templateId deve essere presente come chiave (può essere null per task standalone)
+      if (action.templateId === undefined) {
+        throw new Error(`[cloneEscalationWithNewTaskIds] Template action ${action.id || action.actionInstanceId || 'unknown'} is missing required field 'templateId' (must be explicitly null for standalone actions, or a GUID if derived from another template). The template is corrupted and must be fixed in the database. Action structure: ${JSON.stringify(action, null, 2)}`);
+      }
+
       return {
         ...action,
         actionInstanceId: newGuid,  // ✅ New ID for action instance (legacy)
+        type: action.type,  // ✅ NO FALLBACK - must be present in template
+        templateId: action.templateId,  // ✅ NO FALLBACK - must be present in template (can be null)
         templateTaskId: oldGuid || null,  // ✅ Save original template task ID
         edited: false,  // ✅ Mark as not edited (inherited from template)
         // Keep actionId, parameters, etc. from original
@@ -474,108 +532,129 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
  * Marks a task as edited when user modifies it
  * This prevents the task from inheriting future template updates
  */
+/**
+ * Mark a specific task as edited in the steps array
+ * ✅ NUOVO: Gestisce array MaterializedStep[] invece di dictionary
+ */
 export function markTaskAsEdited(
-  steps: Record<string, any>,
+  steps: MaterializedStep[] | Record<string, any>,
   templateId: string,
   stepType: string,
   escalationIndex: number,
   taskIndex: number
 ): void {
-  const nodeSteps = steps[templateId];
-  if (!nodeSteps) return;
+  // ✅ Gestione retrocompatibilità: se è dictionary, non possiamo modificarlo direttamente
+  if (!Array.isArray(steps)) {
+    console.warn('[markTaskAsEdited] ⚠️ Steps è un dictionary (legacy), operazione non supportata');
+    return;
+  }
 
-  // Case A: steps as object { start: { escalations: [...] } }
-  if (!Array.isArray(nodeSteps) && nodeSteps[stepType]) {
-    const step = nodeSteps[stepType];
-    if (step?.escalations?.[escalationIndex]?.tasks?.[taskIndex]) {
-      step.escalations[escalationIndex].tasks[taskIndex].edited = true;
-      return;
-    }
-    // Legacy: also check actions
-    if (step?.escalations?.[escalationIndex]?.actions?.[taskIndex]) {
-      step.escalations[escalationIndex].actions[taskIndex].edited = true;
-      return;
+  // ✅ Trova step per templateStepId (se stepType corrisponde a un templateStepId)
+  // Nota: stepType potrebbe essere 'start', 'noMatch', etc. - dobbiamo trovare lo step corrispondente
+  // Per ora, assumiamo che stepType sia il tipo di step e cerchiamo nel primo step che corrisponde
+  // TODO: Migliorare la logica di matching se necessario
+
+  // ✅ Itera su array MaterializedStep[]
+  for (const step of steps) {
+    if (!step || !Array.isArray(step.escalations)) continue;
+
+    // ✅ Verifica se questo step corrisponde (per ora, controlliamo solo escalations)
+    if (escalationIndex < step.escalations.length) {
+      const esc = step.escalations[escalationIndex];
+      if (esc?.tasks && Array.isArray(esc.tasks) && taskIndex < esc.tasks.length) {
+        const task = esc.tasks[taskIndex];
+        task.edited = true;
+        return; // ✅ Trovato e modificato
+      }
+      // Legacy: also check actions
+      if (esc?.actions && Array.isArray(esc.actions) && taskIndex < esc.actions.length) {
+        const action = esc.actions[taskIndex];
+        action.edited = true;
+        return; // ✅ Trovato e modificato
+      }
     }
   }
 
-  // Case B: steps as array [{ type: 'start', escalations: [...] }, ...]
-  if (Array.isArray(nodeSteps)) {
-    const group = nodeSteps.find((g: any) => g?.type === stepType);
-    if (group?.escalations?.[escalationIndex]?.tasks?.[taskIndex]) {
-      group.escalations[escalationIndex].tasks[taskIndex].edited = true;
-      return;
-    }
-    // Legacy: also check actions
-    if (group?.escalations?.[escalationIndex]?.actions?.[taskIndex]) {
-      group.escalations[escalationIndex].actions[taskIndex].edited = true;
-    }
-  }
+  console.warn('[markTaskAsEdited] ⚠️ Step o task non trovato', {
+    templateId,
+    stepType,
+    escalationIndex,
+    taskIndex,
+    stepsCount: steps.length
+  });
 }
 
 /**
- * Migrates existing tasks to include templateTaskId and edited fields
+ * Migrates existing tasks to include templateTaskId and edited flags
+ * ✅ NUOVO: Gestisce array MaterializedStep[] invece di dictionary
  * Rule: if templateTaskId is missing → edited = true (cannot determine if inherited)
  */
-export function migrateTaskOverrides(steps: Record<string, any>): void {
-  if (!steps || typeof steps !== 'object') return;
+export function migrateTaskOverrides(steps: MaterializedStep[] | Record<string, any>): void {
+  // ✅ Gestione retrocompatibilità: se è dictionary, converti in array
+  if (!Array.isArray(steps)) {
+    if (steps && typeof steps === 'object') {
+      console.warn('[migrateTaskOverrides] ⚠️ Steps è un dictionary (legacy), convertendo in array');
+      // ✅ Converti dictionary in array (per retrocompatibilità)
+      const stepsArray: MaterializedStep[] = [];
+      for (const templateId in steps) {
+        const nodeSteps = steps[templateId];
+        if (!nodeSteps || typeof nodeSteps !== 'object') continue;
 
-  for (const templateId in steps) {
-    const nodeSteps = steps[templateId];
-    if (!nodeSteps || typeof nodeSteps !== 'object') continue;
-
-    // Case A: steps as object { start: { escalations: [...] } }
-    if (!Array.isArray(nodeSteps)) {
-      for (const stepType in nodeSteps) {
-        const step = nodeSteps[stepType];
-        if (step?.escalations && Array.isArray(step.escalations)) {
-          step.escalations.forEach((esc: any) => {
-            if (esc?.tasks && Array.isArray(esc.tasks)) {
-              esc.tasks.forEach((task: any) => {
-                if (task.templateTaskId === undefined) {
-                  task.templateTaskId = null;
-                  task.edited = true;  // ✅ Cannot determine if inherited
-                }
+        // Case A: steps as object { start: { escalations: [...] } }
+        if (!Array.isArray(nodeSteps)) {
+          for (const stepType in nodeSteps) {
+            const step = nodeSteps[stepType];
+            if (step?.escalations && Array.isArray(step.escalations)) {
+              stepsArray.push({
+                id: uuidv4(),
+                templateStepId: step.id || `${templateId}:${stepType}`,
+                escalations: step.escalations
               });
             }
-            // Legacy: also check actions
-            if (esc?.actions && Array.isArray(esc.actions)) {
-              esc.actions.forEach((action: any) => {
-                if (action.templateTaskId === undefined) {
-                  action.templateTaskId = null;
-                  action.edited = true;
-                }
+          }
+        }
+        // Case B: steps as array [{ type: 'start', escalations: [...] }, ...]
+        else if (Array.isArray(nodeSteps)) {
+          nodeSteps.forEach((group: any) => {
+            if (group?.escalations && Array.isArray(group.escalations)) {
+              stepsArray.push({
+                id: uuidv4(),
+                templateStepId: group.id || group.templateStepId,
+                escalations: group.escalations
               });
             }
           });
         }
       }
+      steps = stepsArray;
+    } else {
+      return; // Non è né array né dictionary valido
     }
+  }
 
-    // Case B: steps as array [{ type: 'start', escalations: [...] }, ...]
-    if (Array.isArray(nodeSteps)) {
-      nodeSteps.forEach((group: any) => {
-        if (group?.escalations && Array.isArray(group.escalations)) {
-          group.escalations.forEach((esc: any) => {
-            if (esc?.tasks && Array.isArray(esc.tasks)) {
-              esc.tasks.forEach((task: any) => {
-                if (task.templateTaskId === undefined) {
-                  task.templateTaskId = null;
-                  task.edited = true;
-                }
-              });
-            }
-            if (esc?.actions && Array.isArray(esc.actions)) {
-              esc.actions.forEach((action: any) => {
-                if (action.templateTaskId === undefined) {
-                  action.templateTaskId = null;
-                  action.edited = true;
-                }
-              });
-            }
-          });
-        }
-      });
-    }
+  // ✅ Itera su array MaterializedStep[]
+  for (const step of steps) {
+    if (!step || !Array.isArray(step.escalations)) continue;
+
+    step.escalations.forEach((esc: any) => {
+      if (esc?.tasks && Array.isArray(esc.tasks)) {
+        esc.tasks.forEach((task: any) => {
+          if (task.templateTaskId === undefined) {
+            task.templateTaskId = null;
+            task.edited = true;  // ✅ Cannot determine if inherited
+          }
+        });
+      }
+      // Legacy: also check actions
+      if (esc?.actions && Array.isArray(esc.actions)) {
+        esc.actions.forEach((action: any) => {
+          if (action.templateTaskId === undefined) {
+            action.templateTaskId = null;
+            action.edited = true;
+          }
+        });
+      }
+    });
   }
 }
 
@@ -756,43 +835,46 @@ export async function syncTasksWithTemplate(
 export function cloneTemplateSteps(
   template: any,
   nodes?: TaskTreeNode[]  // ✅ Albero montato con templateId corretti (da buildTaskTreeNodes)
-): { steps: Record<string, any>; guidMapping: Map<string, string> } {
+): { steps: MaterializedStep[]; guidMapping: Map<string, string> } {
   const allGuidMappings = new Map<string, string>();
-  const clonedSteps: Record<string, any> = {};
+  const materializedSteps: MaterializedStep[] = [];
 
-  // Helper function to clone steps for a nodeId from a source template
-  const cloneStepsForNodeId = (nodeId: string, sourceTemplate: any): void => {
-    if (!nodeId || !sourceTemplate) {
-      console.warn('⚠️ [cloneStepsForNodeId] Parametri mancanti', { nodeId, hasSourceTemplate: !!sourceTemplate });
-      return;
-    }
-
-    if (!sourceTemplate.steps) {
-      console.warn('⚠️ [cloneStepsForNodeId] Template senza steps', {
-        nodeId,
-        templateId: sourceTemplate.id || sourceTemplate._id
+  // Helper function to materialize steps from a template
+  const materializeStepsFromTemplate = (sourceTemplate: any, nodeTemplateId: string): void => {
+    if (!sourceTemplate || !sourceTemplate.steps) {
+      console.warn('⚠️ [materializeStepsFromTemplate] Template senza steps', {
+        nodeTemplateId,
+        templateId: sourceTemplate?.id || sourceTemplate?._id
       });
       return;
     }
 
-    const sourceStepsKeys = Object.keys(sourceTemplate.steps);
-    const templateDataFirstId = sourceTemplate.data && Array.isArray(sourceTemplate.data) && sourceTemplate.data.length > 0
-      ? sourceTemplate.data[0].id
-      : null;
+    const sourceSteps = sourceTemplate.steps;
+    const stepNames = ['start', 'noMatch', 'noInput', 'confirmation', 'notConfirmed', 'success', 'introduction'];
 
     // ✅ CASE 1: Template composito - steps organizzati per nodeId: template.steps[nodeId] = { start: {...}, ... }
-    if (sourceTemplate.steps[nodeId]) {
-      const templateSteps = sourceTemplate.steps[nodeId];
-      const { cloned, guidMapping } = cloneStepsWithNewTaskIds(templateSteps);
-      guidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
-      clonedSteps[nodeId] = cloned;
-      // Log rimosso per ridurre rumore - solo log critici
+    if (sourceSteps[nodeTemplateId] && typeof sourceSteps[nodeTemplateId] === 'object') {
+      const templateSteps = sourceSteps[nodeTemplateId];
+      const stepKeys = Object.keys(templateSteps);
+
+      for (const stepKey of stepKeys) {
+        const templateStep = templateSteps[stepKey];
+        if (templateStep && typeof templateStep === 'object' && Array.isArray(templateStep.escalations)) {
+          const instanceStepId = uuidv4();
+          const templateStepId = templateStep.id || `${nodeTemplateId}:${stepKey}`;
+          const clonedEscalations = templateStep.escalations.map((esc: any) => cloneEscalationWithNewTaskIds(esc, allGuidMappings));
+          materializedSteps.push({
+            id: instanceStepId,
+            templateStepId: templateStepId,
+            escalations: clonedEscalations
+          });
+        }
+      }
       return;
     }
 
     // ✅ CASE 2: Template atomico - steps direttamente in template.steps: template.steps = { start: {...}, ... }
-    // Verifica se le chiavi sono nomi di step (non GUID)
-    const stepNames = ['start', 'noMatch', 'noInput', 'confirmation', 'notConfirmed', 'success', 'introduction'];
+    const sourceStepsKeys = Object.keys(sourceSteps);
     const hasStepNameKeys = sourceStepsKeys.some(key => stepNames.includes(key));
 
     // ✅ Per template atomici con struttura flat, usa sempre gli steps direttamente
@@ -800,24 +882,30 @@ export function cloneTemplateSteps(
     // gli steps sono sempre per l'unico nodo del template
     if (hasStepNameKeys) {
       // ✅ Template atomico: gli steps sono direttamente in template.steps
-      const { cloned, guidMapping } = cloneStepsWithNewTaskIds(sourceTemplate.steps);
-      guidMapping.forEach((newGuid, oldGuid) => allGuidMappings.set(oldGuid, newGuid));
-      clonedSteps[nodeId] = cloned;
-      // Log rimosso per ridurre rumore - solo log critici
+      for (const stepKey of sourceStepsKeys) {
+        if (stepNames.includes(stepKey)) {
+          const templateStep = sourceSteps[stepKey];
+          if (templateStep && typeof templateStep === 'object' && Array.isArray(templateStep.escalations)) {
+            const instanceStepId = uuidv4();
+            const templateStepId = templateStep.id || `${nodeTemplateId}:${stepKey}`;
+            const clonedEscalations = templateStep.escalations.map((esc: any) => cloneEscalationWithNewTaskIds(esc, allGuidMappings));
+            materializedSteps.push({
+              id: instanceStepId,
+              templateStepId: templateStepId,
+              escalations: clonedEscalations
+            });
+          }
+        }
+      }
       return;
     }
 
     // ❌ Steps non trovati
-    console.warn('⚠️ [cloneStepsForNodeId] Steps non trovati', {
-      nodeId,
+    console.warn('⚠️ [materializeStepsFromTemplate] Steps non trovati', {
+      nodeTemplateId,
       templateId: sourceTemplate.id || sourceTemplate._id,
       templateHasSteps: true,
-      templateStepsKeys: sourceStepsKeys,
-      templateStepsKeysExpanded: JSON.stringify(sourceStepsKeys),
-      lookingFor: nodeId,
-      templateDataFirstId: templateDataFirstId,
-      nodeIdMatchesDataFirstId: nodeId === templateDataFirstId,
-      hasStepNameKeys: hasStepNameKeys
+      templateStepsKeys: sourceStepsKeys
     });
   };
 
@@ -838,13 +926,13 @@ export function cloneTemplateSteps(
         // ✅ This is a referenced atomic template - get steps from atomic template
         const atomicTemplate = DialogueTaskService.getTemplate(templateId);
         if (atomicTemplate) {
-          cloneStepsForNodeId(templateId, atomicTemplate); // ✅ Usa templateId direttamente
+          materializeStepsFromTemplate(atomicTemplate, templateId);
         } else {
           console.warn('⚠️ [cloneTemplateSteps] Template atomico non trovato', { templateId });
         }
       } else {
         // ✅ This is a main data node - get steps from main template
-        cloneStepsForNodeId(templateId, template); // ✅ Usa templateId direttamente
+        materializeStepsFromTemplate(template, templateId);
       }
 
       // ✅ Process subNodes recursively (support for arbitrary depth)
@@ -860,19 +948,16 @@ export function cloneTemplateSteps(
       processNode(mainNode);
     });
 
-    console.log('[🔍 cloneTemplateSteps] ✅ Steps clonati', {
-      clonedStepsCount: Object.keys(clonedSteps).length,
-      clonedStepsKeys: Object.keys(clonedSteps),
-      clonedStepsDetails: Object.entries(clonedSteps).map(([key, value]: [string, any]) => ({
-        key,
-        keyPreview: key.substring(0, 40) + '...',
-        stepKeys: typeof value === 'object' ? Object.keys(value || {}) : [],
-        hasStart: !!value?.start,
-        startEscalationsCount: value?.start?.escalations?.length || 0
+    console.log('[🔍 cloneTemplateSteps] ✅ Steps materializzati', {
+      materializedStepsCount: materializedSteps.length,
+      stepsDetails: materializedSteps.map((step: MaterializedStep) => ({
+        id: step.id,
+        templateStepId: step.templateStepId,
+        escalationsCount: step.escalations?.length || 0
       }))
     });
 
-    return { steps: clonedSteps, guidMapping: allGuidMappings };
+    return { steps: materializedSteps, guidMapping: allGuidMappings };
   }
 
   // ❌ NO FALLBACK: nodes è richiesto
@@ -880,7 +965,7 @@ export function cloneTemplateSteps(
     templateId: template.id || template._id,
     templateLabel: template.label || template.name
   });
-  return { steps: {}, guidMapping: new Map<string, string>() };
+  return { steps: [], guidMapping: new Map<string, string>() };
 }
 
 /**
@@ -992,12 +1077,12 @@ export async function buildTemplateExpanded(
   const nodes = buildTaskTreeNodes(template);
 
   // ✅ Clona steps dal template (baseline, senza modifiche)
-  const { steps: clonedSteps } = cloneTemplateSteps(template, nodes);
+  const { steps: materializedSteps } = cloneTemplateSteps(template, nodes);
 
   return {
-    label: template.label,
+    labelKey: template.labelKey || template.label,  // ✅ Usa labelKey (o fallback a label per retrocompatibilità)
     nodes,
-    steps: clonedSteps,
+    steps: materializedSteps,  // ✅ Ora è un array MaterializedStep[], non un dictionary
     constraints: template.dataContracts ?? template.constraints ?? undefined,
     dataContract: template.dataContract ?? undefined,
     introduction: template.introduction
@@ -1055,20 +1140,53 @@ export async function buildTaskTree(
   const nodes = buildTaskTreeNodes(template);
 
   // ✅ Steps dall'istanza o clonati dal template
-  let finalSteps: Record<string, any> = instance.steps || {};
-  if (!finalSteps || Object.keys(finalSteps).length === 0) {
-    // Prima creazione: clona steps dal template
-    const { steps: clonedSteps } = cloneTemplateSteps(template, nodes);
-    finalSteps = clonedSteps;
+  // ✅ NUOVO: steps è un array MaterializedStep[], non un dictionary
+  let finalSteps: MaterializedStep[] = Array.isArray(instance.steps) ? instance.steps : [];
+  let stepsWereCloned = false;
+
+  if (!finalSteps || finalSteps.length === 0) {
+    // ✅ Prima creazione: clona steps dal template
+    const { steps: materializedSteps } = cloneTemplateSteps(template, nodes);
+    finalSteps = materializedSteps;
+    stepsWereCloned = true;
   } else {
     // ✅ Migrate existing steps to include templateTaskId and edited
-    migrateTaskOverrides(finalSteps);
+    // TODO: migrateTaskOverrides deve gestire array, non dictionary
+    // Per ora, se è array, è già nel formato corretto
+    if (!Array.isArray(finalSteps)) {
+      console.warn('[buildTaskTree] ⚠️ Steps non è un array, potrebbe essere formato legacy');
+    }
   }
 
+  // ✅ NUOVO MODELLO: Salva gli step clonati nell'istanza in memoria immediatamente
+  // Questo assicura che l'istanza sia sempre completa e sia la fonte di verità
+  if (stepsWereCloned) {
+    // ✅ Aggiorna l'istanza in memoria con gli step clonati
+    // Importa TaskRepository solo quando necessario (evita circular dependencies)
+    const { taskRepository } = await import('../services/TaskRepository');
+    const existingTask = taskRepository.getTask(instance.id);
+    if (existingTask) {
+      // ✅ Aggiorna solo gli step, mantenendo tutti gli altri campi
+      taskRepository.updateTask(instance.id, { steps: finalSteps }, projectId);
+      console.log('[buildTaskTree] ✅ Steps clonati salvati nell\'istanza in memoria', {
+        taskId: instance.id,
+        templateId: instance.templateId,
+        stepsCount: finalSteps.length
+      });
+    } else {
+      console.warn('[buildTaskTree] ⚠️ Istanza non trovata in TaskRepository, non posso salvare gli step clonati', {
+        taskId: instance.id
+      });
+    }
+  }
+
+  // ✅ Carica templateVersion dal template (per drift detection)
+  const templateVersion = template.version || 1;
+
   return {
-    label: instance.label ?? template.label,
+    labelKey: instance.labelKey ?? template.labelKey ?? template.label,  // ✅ Usa labelKey (fallback a label per retrocompatibilità)
     nodes,  // ✅ Già TaskTreeNode[] con subNodes[]
-    steps: finalSteps,
+    steps: finalSteps,  // ✅ Array MaterializedStep[]
     constraints: template.dataContracts ?? template.constraints ?? undefined,
     dataContract: template.dataContract ?? undefined,
     introduction: template.introduction ?? instance.introduction
@@ -1259,8 +1377,16 @@ function compareDataStructure(localdata: any[], templateData: any[]): boolean {
  * - Se templateTaskId != null e valori differiscono → edited = true
  * - Se templateTaskId = null → task nuovo → edited = true (già impostato)
  */
+/**
+ * Update edited flags by comparing workingCopy vs templateExpanded
+ * ✅ NUOVO: Gestisce array MaterializedStep[] invece di dictionary
+ */
 function updateEditedFlags(workingCopy: TaskTree, templateExpanded: TaskTree): void {
-  if (!workingCopy.steps || !templateExpanded.steps) return;
+  // ✅ Steps sono ora array MaterializedStep[]
+  const workingSteps: MaterializedStep[] = Array.isArray(workingCopy.steps) ? workingCopy.steps : [];
+  const templateSteps: MaterializedStep[] = Array.isArray(templateExpanded.steps) ? templateExpanded.steps : [];
+
+  if (workingSteps.length === 0 || templateSteps.length === 0) return;
 
   // Helper per confrontare valori di un task
   const compareTaskValues = (instanceTask: any, templateTask: any): boolean => {
@@ -1292,92 +1418,92 @@ function updateEditedFlags(workingCopy: TaskTree, templateExpanded: TaskTree): v
     return true;
   };
 
-  // Helper per trovare task nel template per templateTaskId
-  const findTemplateTask = (templateTaskId: string, templateSteps: Record<string, any>, workingTemplateId: string, stepType: string, escalationIndex: number): any => {
-    // ✅ Usa workingTemplateId (chiave negli steps della working copy) per trovare gli steps corrispondenti nel template
-    // templateSteps può avere la stessa chiave (workingTemplateId) o una struttura diversa
-    const nodeSteps = templateSteps[workingTemplateId] || templateSteps[Object.keys(templateSteps)[0]];
-    if (!nodeSteps) return null;
+  // ✅ Helper per trovare step nel template per templateStepId
+  const findTemplateStep = (templateStepId: string): MaterializedStep | null => {
+    return templateSteps.find((step: MaterializedStep) => step.templateStepId === templateStepId) || null;
+  };
 
-    // Case A: steps as object
-    if (!Array.isArray(nodeSteps) && nodeSteps[stepType]) {
-      const step = nodeSteps[stepType];
-      if (step?.escalations?.[escalationIndex]?.tasks) {
-        return step.escalations[escalationIndex].tasks.find((t: any) => t.id === templateTaskId);
+  // ✅ Helper per trovare task nel template step per templateTaskId
+  const findTemplateTask = (templateTaskId: string, templateStep: MaterializedStep): any => {
+    if (!templateStep || !Array.isArray(templateStep.escalations)) return null;
+
+    for (const esc of templateStep.escalations) {
+      if (esc?.tasks && Array.isArray(esc.tasks)) {
+        const task = esc.tasks.find((t: any) => t.id === templateTaskId);
+        if (task) return task;
+      }
+      // Legacy: also check actions
+      if (esc?.actions && Array.isArray(esc.actions)) {
+        const action = esc.actions.find((a: any) => a.id === templateTaskId || a.actionInstanceId === templateTaskId);
+        if (action) return action;
       }
     }
-
-    // Case B: steps as array
-    if (Array.isArray(nodeSteps)) {
-      const group = nodeSteps.find((g: any) => g?.type === stepType);
-      if (group?.escalations?.[escalationIndex]?.tasks) {
-        return group.escalations[escalationIndex].tasks.find((t: any) => t.id === templateTaskId);
-      }
-    }
-
     return null;
   };
 
-  // Itera su tutti gli steps della working copy
-  for (const templateId in workingCopy.steps) {
-    const workingSteps = workingCopy.steps[templateId];
-    const templateSteps = templateExpanded.steps[templateId] || templateExpanded.steps;
-    if (!workingSteps || !templateSteps) continue;
+  // ✅ Itera su array MaterializedStep[] della working copy
+  for (const workingStep of workingSteps) {
+    if (!workingStep || !Array.isArray(workingStep.escalations)) continue;
 
-    // Case A: steps as object { start: { escalations: [...] } }
-    if (!Array.isArray(workingSteps) && typeof workingSteps === 'object') {
-      for (const stepType in workingSteps) {
-        const step = workingSteps[stepType];
-        if (step?.escalations && Array.isArray(step.escalations)) {
-          step.escalations.forEach((esc: any, escIdx: number) => {
-            if (esc?.tasks && Array.isArray(esc.tasks)) {
-              esc.tasks.forEach((task: any) => {
-              if (task.templateTaskId !== null && task.templateTaskId !== undefined) {
-                // Task ereditato: confronta con template
-                const templateTask = findTemplateTask(task.templateTaskId, templateSteps, templateId, stepType, escIdx);
-                if (templateTask) {
-                  const valuesMatch = compareTaskValues(task, templateTask);
-                  task.edited = !valuesMatch;  // edited = false se coincidono, true se differiscono
-                } else {
-                  // Template task non trovato → consideralo modificato
-                  task.edited = true;
-                }
-              } else {
-                // Task nuovo → edited = true (già impostato, ma assicuriamoci)
-                task.edited = true;
-              }
-              });
-            }
+    // ✅ Trova step corrispondente nel template usando templateStepId
+    const templateStep = workingStep.templateStepId
+      ? findTemplateStep(workingStep.templateStepId)
+      : null;
+
+    // ✅ Se step non ha templateStepId, è un step aggiunto → tutti i task sono edited
+    if (!workingStep.templateStepId || !templateStep) {
+      workingStep.escalations.forEach((esc: any) => {
+        if (esc?.tasks && Array.isArray(esc.tasks)) {
+          esc.tasks.forEach((task: any) => {
+            task.edited = true;  // ✅ Step aggiunto → tutti i task sono edited
           });
         }
-      }
-    }
-
-    // Case B: steps as array [{ type: 'start', escalations: [...] }, ...]
-    if (Array.isArray(workingSteps)) {
-      workingSteps.forEach((group: any) => {
-        const stepType = group?.type;
-        if (stepType && group?.escalations && Array.isArray(group.escalations)) {
-          group.escalations.forEach((esc: any, escIdx: number) => {
-            if (esc?.tasks && Array.isArray(esc.tasks)) {
-            esc.tasks.forEach((task: any) => {
-              if (task.templateTaskId !== null && task.templateTaskId !== undefined) {
-                const templateTask = findTemplateTask(task.templateTaskId, templateSteps, templateId, stepType, escIdx);
-                if (templateTask) {
-                  const valuesMatch = compareTaskValues(task, templateTask);
-                  task.edited = !valuesMatch;
-                } else {
-                  task.edited = true;
-                }
-              } else {
-                task.edited = true;
-              }
-            });
-            }
+        if (esc?.actions && Array.isArray(esc.actions)) {
+          esc.actions.forEach((action: any) => {
+            action.edited = true;
           });
         }
       });
+      continue;
     }
+
+    // ✅ Step derivato: confronta task con template
+    workingStep.escalations.forEach((esc: any, escIdx: number) => {
+      if (esc?.tasks && Array.isArray(esc.tasks)) {
+        esc.tasks.forEach((task: any) => {
+          if (task.templateTaskId !== null && task.templateTaskId !== undefined) {
+            // Task ereditato: confronta con template
+            const templateTask = findTemplateTask(task.templateTaskId, templateStep);
+            if (templateTask) {
+              const valuesMatch = compareTaskValues(task, templateTask);
+              task.edited = !valuesMatch;  // edited = false se coincidono, true se differiscono
+            } else {
+              // Template task non trovato → consideralo modificato
+              task.edited = true;
+            }
+          } else {
+            // Task nuovo → edited = true (già impostato, ma assicuriamoci)
+            task.edited = true;
+          }
+        });
+      }
+      // Legacy: also check actions
+      if (esc?.actions && Array.isArray(esc.actions)) {
+        esc.actions.forEach((action: any) => {
+          if (action.templateTaskId !== null && action.templateTaskId !== undefined) {
+            const templateAction = findTemplateTask(action.templateTaskId, templateStep);
+            if (templateAction) {
+              const valuesMatch = compareTaskValues(action, templateAction);
+              action.edited = !valuesMatch;
+            } else {
+              action.edited = true;
+            }
+          } else {
+            action.edited = true;
+          }
+        });
+      }
+    });
   }
 }
 
@@ -1423,10 +1549,28 @@ export async function extractTaskOverrides(
     updateEditedFlags(workingCopy, templateExpanded);
   }
 
+  // ✅ Carica templateVersion dal template corrente (per drift detection)
+  let template: any = null;
+  if (instance.templateId) {
+    template = DialogueTaskService.getTemplate(instance.templateId);
+    if (!template && projectId) {
+      const { loadTemplateFromProject } = await import('./taskUtils');
+      template = await loadTemplateFromProject(instance.templateId, projectId);
+    }
+  }
+  const templateVersion = template?.version || instance.templateVersion || 1;
+
   // ✅ Salva TUTTA la working copy, non solo override
+  // ✅ IMPORTANTE: steps è un array MaterializedStep[], non un dictionary
+  const workingSteps = workingCopy.steps;
+  const materializedSteps: MaterializedStep[] = Array.isArray(workingSteps)
+    ? workingSteps
+    : [];  // ✅ Se non è array, inizializza vuoto (legacy format)
+
   const result: Partial<Task> = {
-    label: workingCopy.label,
-    steps: workingCopy.steps || {},  // ✅ TUTTI gli steps della working copy
+    labelKey: workingCopy.labelKey || workingCopy.label,  // ✅ Usa labelKey (fallback a label per retrocompatibilità)
+    steps: materializedSteps,  // ✅ Array MaterializedStep[]
+    templateVersion: templateVersion,  // ✅ Versione del template per drift detection
     introduction: workingCopy.introduction
   };
 

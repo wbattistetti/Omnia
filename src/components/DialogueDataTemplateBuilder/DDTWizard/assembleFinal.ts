@@ -700,11 +700,16 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
 
         // ✅ Rimosso askQuestion, usa DataRequest per step 'start' quando isAsk
         const templateIdForTask = stepKey === 'start' && isAsk ? 'UtteranceInterpretation' : 'sayMessage';
-        const taskType = templateIdToTaskType(templateIdForTask) || TaskType.SayMessage;
+
+        // ✅ CRITICAL: NO FALLBACK - type MUST be derived from templateId
+        const taskType = templateIdToTaskType(templateIdForTask);
+        if (taskType === TaskType.UNDEFINED) {
+          throw new Error(`[assembleFinalDDT] Cannot determine task type from templateId '${templateIdForTask}'. This is a bug in template creation.`);
+        }
 
         const baseTask = {
           id: actionInstanceId,      // ✅ Standard: id (GUID univoco)
-          type: taskType,             // ✅ Aggiunto campo type (enum numerico)
+          type: taskType,             // ✅ NO FALLBACK - must be present
           templateId: null,           // ✅ null = standalone task (non deriva da altri Task)
           parameters: [{ parameterId: 'text', value: actionInstanceId }]
         };
@@ -715,9 +720,11 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
             ...baseTask,
             parameters: [{ parameterId: 'text', value: actionInstanceId }]
           }],
-          actions: [{  // ✅ Legacy alias for backward compatibility
+          actions: [{  // ✅ Legacy alias for backward compatibility - MUST have type and templateId
             actionId: templateIdForTask,
             actionInstanceId: actionInstanceId,
+            type: taskType,  // ✅ NO FALLBACK - must be present
+            templateId: null,  // ✅ NO FALLBACK - must be present (can be null)
             parameters: [{ parameterId: 'text', value: actionInstanceId }]
           }]
         };

@@ -76,31 +76,31 @@ export function CloneSteps(dataTree: any[], task: Task): void {
   const { steps: clonedSteps, guidMapping } = cloneTemplateSteps(mainTemplate, dataTree);
 
   console.log('[🔍 CloneSteps] Steps clonati da cloneTemplateSteps', {
-    clonedStepsKeys: Object.keys(clonedSteps),
-    clonedStepsCount: Object.keys(clonedSteps).length,
+    clonedStepsCount: Array.isArray(clonedSteps) ? clonedSteps.length : 0,
+    clonedStepsIsArray: Array.isArray(clonedSteps),
     guidMappingSize: guidMapping.size
   });
 
   // ✅ Aggiungi gli steps clonati a task.steps (modifica in-place)
-  for (const [nodeTemplateId, nodeSteps] of Object.entries(clonedSteps)) {
-    if (!nodeTemplateId) {
-      console.warn('[🔍 CloneSteps] ⚠️ Chiave vuota negli steps clonati, skip', {
-        nodeStepsKeys: Object.keys(nodeSteps || {})
-      });
-      continue;
-    }
-
-    task.steps[nodeTemplateId] = nodeSteps;
-    console.log('[🔍 CloneSteps] Steps aggiunti a task.steps', {
-      nodeTemplateId,
-      stepTypes: Object.keys(nodeSteps || {})
-    });
+  // ✅ NUOVO: clonedSteps è un array MaterializedStep[], non un dictionary
+  if (!Array.isArray(clonedSteps)) {
+    console.warn('[🔍 CloneSteps] ⚠️ clonedSteps non è un array, inizializzando come array vuoto');
+    task.steps = [];
+    return;
   }
+
+  // ✅ Inizializza task.steps come array se non esiste
+  if (!Array.isArray(task.steps)) {
+    task.steps = [];
+  }
+
+  // ✅ Aggiungi tutti gli steps clonati all'array
+  task.steps = [...task.steps, ...clonedSteps];
 
   console.log('[🔍 CloneSteps] COMPLETE', {
     taskId: task.id,
-    finalStepsKeys: Object.keys(task.steps),
-    finalStepsCount: Object.keys(task.steps).length,
+    finalStepsCount: task.steps.length,
+    clonedStepsCount: clonedSteps.length,
     guidMappingSize: guidMapping.size
   });
 }

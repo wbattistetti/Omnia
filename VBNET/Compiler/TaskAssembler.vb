@@ -419,13 +419,13 @@ Public Class TaskAssembler
             System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask: ideTask.Value is Nothing")
         End If
 
-        ' ✅ USA SOLO Type (enum numerico) - templateId è SOLO un GUID per riferimenti
+        ' ✅ NO FALLBACK - Type MUST be present and valid
         If Not ideTask.Type.HasValue Then
             Console.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: Type is missing, returning Nothing")
             Console.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: Task structure:")
             Console.WriteLine($"   - Id: {ideTask.Id}")
-            Console.WriteLine($"   - Type: NULL (REQUIRED)")
-            Console.WriteLine($"   - TemplateId: {If(String.IsNullOrEmpty(ideTask.TemplateId), "EMPTY", ideTask.TemplateId)} (GUID reference, not used for type)")
+            Console.WriteLine($"   - Type: NULL (REQUIRED - NO FALLBACK)")
+            Console.WriteLine($"   - TemplateId: {If(String.IsNullOrEmpty(ideTask.TemplateId), "EMPTY", ideTask.TemplateId)}")
             Console.WriteLine($"   - Text: {If(String.IsNullOrEmpty(ideTask.Text), "EMPTY", ideTask.Text)}")
             Console.WriteLine($"   - Parameters Count: {If(ideTask.Parameters IsNot Nothing, ideTask.Parameters.Count, 0)}")
             System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: Type is missing, returning Nothing")
@@ -437,7 +437,7 @@ Public Class TaskAssembler
             Console.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: Invalid Type enum value: {typeValue}, returning Nothing")
             Console.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: Task structure:")
             Console.WriteLine($"   - Id: {ideTask.Id}")
-            Console.WriteLine($"   - Type: {typeValue} (INVALID)")
+            Console.WriteLine($"   - Type: {typeValue} (INVALID - NO FALLBACK)")
             Console.WriteLine($"   - TemplateId: {If(String.IsNullOrEmpty(ideTask.TemplateId), "EMPTY", ideTask.TemplateId)}")
             System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: Invalid Type enum value: {typeValue}, returning Nothing")
             Return Nothing

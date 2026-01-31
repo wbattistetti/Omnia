@@ -691,7 +691,7 @@ export const AppContent: React.FC<AppContentProps> = ({
             let task = taskRepository.getTask(instanceId);
 
             if (!task) {
-              // Task doesn't exist, create it
+              // ✅ Task doesn't exist, create it
               // ✅ NUOVO MODELLO: Crea task senza data (la struttura viene dal template)
               // ✅ Usa taskType da taskMeta
               task = taskRepository.createTask(taskMeta.type, null, {
@@ -701,11 +701,15 @@ export const AppContent: React.FC<AppContentProps> = ({
             }
 
             // ✅ Load TaskTree async (if task has templateId, build from template)
+            // ✅ IMPORTANTE: buildTaskTree ora salva automaticamente gli step clonati nell'istanza in memoria
             if (task && task.templateId) {
               try {
                 const { buildTaskTree } = await import('../utils/taskUtils');
                 const projectId = currentProject?.id || undefined;
                 taskTree = await buildTaskTree(task, projectId);
+                // ✅ buildTaskTree ha già salvato gli step clonati nell'istanza in memoria se necessario
+                // Ricarica il task per avere la versione aggiornata con gli step
+                task = taskRepository.getTask(instanceId);
               } catch (err) {
                 console.error('[AppContent] Error loading TaskTree from template:', err);
               }
@@ -1176,7 +1180,17 @@ export const AppContent: React.FC<AppContentProps> = ({
           tenantId: 'tenant_default'
         })
       });
-      if (!resp.ok) throw new Error('bootstrap_failed');
+      if (!resp.ok) {
+        // Prova a leggere il messaggio di errore dal backend
+        let errorMessage = 'bootstrap_failed';
+        try {
+          const errorData = await resp.json();
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch {
+          // Se non riesce a parsare JSON, usa il messaggio di default
+        }
+        throw new Error(errorMessage);
+      }
       const boot = await resp.json();
       const projectId = boot.projectId;
 
@@ -1209,7 +1223,17 @@ export const AppContent: React.FC<AppContentProps> = ({
       setAppState('mainApp');
       return true;
     } catch (e) {
-      setCreateError('Errore nella creazione del progetto');
+      // Mostra il messaggio di errore specifico dal backend se disponibile
+      let errorMessage = 'Errore nella creazione del progetto';
+      if (e instanceof Error) {
+        errorMessage = e.message || errorMessage;
+        // Se il messaggio è troppo tecnico, usa un messaggio più user-friendly
+        if (errorMessage === 'bootstrap_failed') {
+          errorMessage = 'Errore nella creazione del progetto. Verifica i log del server per dettagli.';
+        }
+      }
+      console.error('[handleCreateProject] Errore:', e);
+      setCreateError(errorMessage);
       return false;
     } finally {
       setIsCreatingProject(false);

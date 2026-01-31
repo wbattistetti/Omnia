@@ -26,6 +26,7 @@ Public Class Motore
         _parser = New Parser()
     End Sub
 
+
     ''' <summary>
     ''' Funzione principale che coordina il processo di esecuzione di una serie di task
     ''' </summary>

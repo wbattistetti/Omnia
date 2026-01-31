@@ -62,13 +62,27 @@ export default function BehaviourEditor({
   const getEscalationsFromNode = (node: any, stepKey: string): any[] => {
     if (!node?.steps) return [{ tasks: [] }]; // Default: una escalation vuota
 
+    // ✅ RETROCOMPATIBILITÀ: Gestisce formato dictionary legacy
     if (!Array.isArray(node.steps) && node.steps[stepKey]) {
       const esc = node.steps[stepKey].escalations || [];
       return esc.length > 0 ? esc : [{ tasks: [] }];
     }
 
+    // ✅ NUOVO MODELLO: Array MaterializedStep[]
     if (Array.isArray(node.steps)) {
-      const step = node.steps.find((s: any) => s?.type === stepKey);
+      // Cerca step per type diretto (se presente)
+      let step = node.steps.find((s: any) => s?.type === stepKey);
+
+      // Se non trovato, estrai tipo da templateStepId (formato: `${nodeTemplateId}:${stepKey}`)
+      if (!step) {
+        step = node.steps.find((s: any) => {
+          if (!s?.templateStepId) return false;
+          // Estrai il tipo step da templateStepId (ultima parte dopo ':')
+          const stepType = s.templateStepId.split(':').pop();
+          return stepType === stepKey;
+        });
+      }
+
       const esc = step?.escalations || [];
       return esc.length > 0 ? esc : [{ tasks: [] }];
     }

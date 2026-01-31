@@ -26,13 +26,11 @@ export function useSelectedNode(
     const node = getNodeByIndex(ddt, mainIndex, subIndex);
 
     // Set the first step as selected, if available
-    if (node && node.steps) {
-      const stepKeys = Object.keys(node.steps);
-      if (stepKeys.length > 0) {
-        dispatch({ type: 'SET_STEP', step: stepKeys[0] });
-      } else {
-        dispatch({ type: 'SET_STEP', step: '' });
-      }
+    if (node && node.steps && Array.isArray(node.steps) && node.steps.length > 0) {
+      // ✅ Estrai tipo step da templateStepId (formato: `${nodeTemplateId}:${stepKey}`)
+      const firstStep = node.steps[0];
+      const stepType = firstStep.templateStepId?.split(':').pop() || 'start';
+      dispatch({ type: 'SET_STEP', step: stepType });
     } else {
       dispatch({ type: 'SET_STEP', step: '' });
     }
@@ -43,11 +41,10 @@ export function useSelectedNode(
   // Log selectedNodeIndex and selectedNode whenever they change
   useEffect(() => {
     const node = getNodeByIndex(ddt, selectedNodeIndex, null);
-    if (node && node.steps) {
-      const stepKeys = Object.keys(node.steps);
-      stepKeys.forEach((stepKey: string) => {
-        const step = node.steps[stepKey];
+    if (node && node.steps && Array.isArray(node.steps)) {
+      node.steps.forEach((step: any) => {
         if (step?.escalations) {
+          // ✅ Processa escalations
         }
       });
     }

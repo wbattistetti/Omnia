@@ -1,4 +1,4 @@
-import type { Task } from '../types/taskTypes';
+import type { Task, MaterializedStep } from '../types/taskTypes';
 import { DialogueTaskService } from '../services/DialogueTaskService';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -1043,19 +1043,28 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
           label: mainNode.label
         };
 
-        // ✅ CRITICAL: Salva steps usando templateId come chiave (non id)
-        // task.steps[node.templateId] = steps clonati
+        // ✅ CRITICAL: Salva steps come array MaterializedStep[]
+        // ✅ NUOVO: steps è un array, non un dictionary
         if (hasSteps && nodeTemplateId) {
-          if (!result.steps) result.steps = {};
-          result.steps[nodeTemplateId] = nodeSteps;
+          // ✅ Inizializza result.steps come array se non esiste
+          if (!result.steps) result.steps = [];
+
+          // ✅ Converti nodeSteps in MaterializedStep[] se necessario
+          const materializedSteps: MaterializedStep[] = Array.isArray(nodeSteps)
+            ? nodeSteps
+            : [];  // ✅ Se non è array, inizializza vuoto (legacy format)
+
+          // ✅ Aggiungi steps all'array (non sovrascrivere, ma unire)
+          result.steps = [...(result.steps as MaterializedStep[]), ...materializedSteps];
+
           console.log('[extractModifiedDDTFields] ✅ Including steps in override', {
             mainNodeIndex: i,
             nodeId: mainNode.id,
             nodeTemplateId,
             stepsType: typeof nodeSteps,
             stepsIsArray: Array.isArray(nodeSteps),
-            stepsKeys: typeof nodeSteps === 'object' ? Object.keys(nodeSteps || {}) : [],
-            stepsLength: Array.isArray(nodeSteps) ? nodeSteps.length : 0
+            stepsLength: materializedSteps.length,
+            totalStepsCount: (result.steps as MaterializedStep[]).length
           });
         }
         if (hasConstraintsOverride) overrideNode.constraints = mainNode.constraints;

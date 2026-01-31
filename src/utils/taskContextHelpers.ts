@@ -30,8 +30,14 @@ export function isTaskAllowedInContext(
   context: TaskContext,
   stepType?: EscalationStepType
 ): boolean {
+  // ✅ FALLBACK: Se allowedContexts non è specificato, permettere ESCALATION per retrocompatibilità
+  // Questo permette ai task legacy di essere mostrati nel pannello Tasks
   if (!task.allowedContexts || task.allowedContexts.length === 0) {
-    return false; // Default: not allowed if not specified
+    // Se il contesto è ESCALATION e non ci sono allowedContexts, assumi che sia permesso (retrocompatibilità)
+    if (context === TaskContext.ESCALATION) {
+      return true;
+    }
+    return false; // Default: not allowed if not specified for other contexts
   }
 
   // Check for generic context (e.g., 'escalation' allows all escalation steps)

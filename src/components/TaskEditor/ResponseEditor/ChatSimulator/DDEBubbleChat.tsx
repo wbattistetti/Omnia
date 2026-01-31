@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Task } from '../../../../types/taskTypes';
+import type { Task, TaskTree } from '../../../../types/taskTypes';
 import { AlertTriangle } from 'lucide-react';
 import UserMessage, { type Message } from '../../../ChatSimulator/UserMessage';
 import BotMessage from './BotMessage';
@@ -11,11 +11,13 @@ export default function DDEBubbleChat({
   task,
   projectId,
   translations,
+  taskTree,
   onUpdateTaskTree
 }: {
   task: Task | null;
   projectId: string | null;
   translations?: Record<string, string>;
+  taskTree?: TaskTree | null;
   onUpdateTaskTree?: (updater: (taskTree: any) => any) => void;
 }) {
   const { combinedClass, fontSize } = useFontContext();
@@ -80,17 +82,27 @@ export default function DDEBubbleChat({
         setBackendError(null);
         const translationsData = translations || {};
 
-        // ✅ NUOVO: Invia solo { taskId, projectId, translations }
+        // ✅ CRITICAL: TaskTree è OBBLIGATORIO - non inviare solo taskId
+        if (!taskTree) {
+          throw new Error('[DDEBubbleChat] TaskTree is required. Cannot start session without complete instance.');
+        }
+
+        // ✅ NUOVO MODELLO: Invia TaskTree completo (working copy) invece di solo taskId
+        // L'istanza in memoria è la fonte di verità, non il database
         const requestBody = {
-          taskId: task.id,
+          taskId: task.id,  // Mantieni per compatibilità/identificazione
           projectId: projectId,
-          translations: translationsData
+          translations: translationsData,
+          taskTree: taskTree  // ✅ OBBLIGATORIO: Working copy completa con steps
         };
-        console.log('[DDEBubbleChat] 📤 Sending request to backend:', {
+        console.log('[DDEBubbleChat] 📤 Sending request to backend with TaskTree:', {
           url: `${baseUrl}/api/runtime/task/session/start`,
           method: 'POST',
-          body: requestBody,
-          bodyString: JSON.stringify(requestBody)
+          taskId: task.id,
+          hasTaskTree: !!taskTree,
+          taskTreeNodesCount: taskTree?.nodes?.length || 0,
+          taskTreeStepsCount: Array.isArray(taskTree?.steps) ? taskTree.steps.length : 0,
+          bodyString: JSON.stringify(requestBody).substring(0, 500) + '...'
         });
 
         const startResponse = await fetch(`${baseUrl}/api/runtime/task/session/start`, {

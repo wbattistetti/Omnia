@@ -2315,7 +2315,16 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         );
 
                         // Clona steps e adatta prompt (modifica task.steps in-place)
-                        await createTaskFromTemplate(previewData.templateId, task, row.text || '', false);
+                        try {
+                          await createTaskFromTemplate(previewData.templateId, task, row.text || '', false);
+                          console.log('[🔍 NodeRow][PreviewConfirm] ✅ createTaskFromTemplate completato', {
+                            taskId: task.id,
+                            stepsCount: Object.keys(task.steps || {}).length
+                          });
+                        } catch (err) {
+                          console.error('[🔍 NodeRow][PreviewConfirm] ❌ Errore in createTaskFromTemplate:', err);
+                          throw err; // Rilancia per essere catturato dal catch esterno
+                        }
 
                         // ✅ REMOVED: updateTask ridondante - task è già nella cache e modificato in-place
                         // ✅ task.steps e task.metadata sono già aggiornati direttamente nella cache
@@ -2323,7 +2332,20 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                         // ✅ CRITICAL: Costruisci taskTree PRIMA di aprire ResponseEditor
                         const { buildTaskTree } = await import('../../../../utils/taskUtils');
-                        const taskTree = await buildTaskTree(task, projectId);
+                        let taskTree: any = null;
+                        try {
+                          taskTree = await buildTaskTree(task, projectId);
+                          console.log('[🔍 NodeRow][PreviewConfirm] ✅ buildTaskTree completato', {
+                            taskId: task.id,
+                            hasTaskTree: !!taskTree,
+                            nodesCount: taskTree?.nodes?.length || 0
+                          });
+                        } catch (err) {
+                          console.error('[🔍 NodeRow][PreviewConfirm] ❌ Errore in buildTaskTree:', err);
+                          // ✅ Se buildTaskTree fallisce (template corrotto), apri comunque l'editor
+                          // L'editor mostrerà il wizard per creare il task manualmente
+                          taskTree = null;
+                        }
 
                         // Apri ResponseEditor
                         taskEditorCtx.open({ id: task.id, type: TaskType.UtteranceInterpretation, label: row.text, instanceId: row.id });

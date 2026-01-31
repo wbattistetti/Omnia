@@ -126,7 +126,6 @@ export function extractStartPrompts(
       // ✅ Solo task di tipo SayMessage
       if (task.type === TaskType.SayMessage || task.type === 0 || !task.type) {
         const textGuid = task.parameters?.find((p: any) => p.parameterId === 'text')?.value ||
-                        task.taskId ||
                         task.id;
 
         if (textGuid && projectTranslations[textGuid]) {
@@ -134,7 +133,7 @@ export function extractStartPrompts(
             guid: textGuid,
             text: projectTranslations[textGuid],
             nodeTemplateId: nodeTemplateId,
-            taskKey: `${nodeTemplateId}:${task.taskId || task.id}` // Chiave per riassociazione
+            taskKey: `${nodeTemplateId}:${task.id}` // Chiave per riassociazione
           });
 
           console.log('[🔍 extractStartPrompts] Prompt estratto', {
@@ -147,7 +146,7 @@ export function extractStartPrompts(
         } else {
           console.warn('[🔍 extractStartPrompts] ⚠️ Task senza textGuid o traduzione', {
             nodeTemplateId,
-            taskId: task.taskId || task.id,
+            taskId: task.id,
             hasTextGuid: !!textGuid,
             textGuid: textGuid,
             hasTranslation: !!(textGuid && projectTranslations[textGuid]),

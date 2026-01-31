@@ -10,8 +10,8 @@ Imports Compiler
 Public Class TransferTaskExecutor
     Inherits TaskExecutorBase
 
-    Public Sub New(ddtEngine As Motore)
-        MyBase.New(ddtEngine)
+    Public Sub New(taskEngine As Motore)
+        MyBase.New(taskEngine)
     End Sub
 
     Public Overrides Function Execute(task As CompiledTask, state As ExecutionState) As TaskExecutionResult

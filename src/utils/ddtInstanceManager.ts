@@ -1,4 +1,4 @@
-import type { Task } from '../types/taskTypes';
+import type { Task, MaterializedStep } from '../types/taskTypes';
 import { DialogueTaskService } from '../services/DialogueTaskService';
 import { buildTaskTreeNodes, cloneTemplateSteps } from './taskUtils';
 import { TaskType } from '../types/taskTypes';
@@ -311,44 +311,36 @@ export async function loadAndAdaptDDTForExistingTask(
   });
 
   // ✅ 6. Usa steps dall'istanza (se esistono E hanno struttura corretta) o quelli clonati
-  // ✅ CRITICAL: Verifica che task.steps abbia la struttura corretta (chiavi = templateId, non step types)
-  const taskStepsKeys = task.steps ? Object.keys(task.steps) : [];
-  const stepTypeKeys = ['start', 'noMatch', 'noInput', 'confirmation', 'notConfirmed', 'success'];
-  const hasWrongStructure = taskStepsKeys.length === stepTypeKeys.length &&
-    taskStepsKeys.every(key => stepTypeKeys.includes(key));
+  // ✅ NUOVO: steps è un array MaterializedStep[], non un dictionary
+  const taskStepsArray: MaterializedStep[] = Array.isArray(task.steps) ? task.steps : [];
+  const clonedStepsArray: MaterializedStep[] = Array.isArray(clonedSteps) ? clonedSteps : [];
 
-  let finalSteps = (task.steps && Object.keys(task.steps).length > 0 && !hasWrongStructure)
-    ? task.steps  // ✅ Usa steps esistenti dal task (solo se struttura corretta)
-    : clonedSteps; // ✅ Altrimenti usa steps clonati dal template
+  // ✅ Verifica se task.steps è un array valido
+  const hasValidStepsArray = taskStepsArray.length > 0;
 
-  // ✅ CRITICAL: Se la struttura è sbagliata, correggila salvando i clonedSteps corretti
-  if (hasWrongStructure && Object.keys(clonedSteps).length > 0) {
-    console.warn('[🔍 ddtInstanceManager] ⚠️ Rilevata struttura sbagliata in task.steps, correggendo con clonedSteps', {
+  let finalSteps: MaterializedStep[] = hasValidStepsArray
+    ? taskStepsArray  // ✅ Usa steps esistenti dal task (se array valido)
+    : clonedStepsArray; // ✅ Altrimenti usa steps clonati dal template
+
+  // ✅ CRITICAL: Se task.steps non è un array, correggilo salvando i clonedSteps corretti
+  if (!Array.isArray(task.steps) && clonedStepsArray.length > 0) {
+    console.warn('[🔍 ddtInstanceManager] ⚠️ Rilevata struttura sbagliata in task.steps (non è array), correggendo con clonedSteps', {
       taskId: task.id,
-      wrongKeys: taskStepsKeys,
-      correctKeys: Object.keys(clonedSteps)
+      taskStepsType: typeof task.steps,
+      taskStepsIsArray: Array.isArray(task.steps),
+      clonedStepsCount: clonedStepsArray.length
     });
     // ✅ Correggi il task salvando i clonedSteps corretti
-    // ✅ REMOVED: updateTask ridondante - task è già nella cache, modifica direttamente
-    task.steps = clonedSteps;  // ✅ Modifica diretta nella cache
-    finalSteps = clonedSteps; // ✅ Usa clonedSteps come finalSteps
+    task.steps = clonedStepsArray;  // ✅ Modifica diretta nella cache
+    finalSteps = clonedStepsArray; // ✅ Usa clonedSteps come finalSteps
   }
-
-  // ✅ AGGIUNTO: Definisci finalStepsKeys e clonedStepsKeys PRIMA di usarle
-  const finalStepsKeys = finalSteps ? Object.keys(finalSteps) : [];
-  const clonedStepsKeys = Object.keys(clonedSteps);
 
   // ✅ Log ridotto (solo informazioni essenziali)
   console.log('[🔍 ddtInstanceManager] finalSteps determinato', {
-    usingTaskSteps: task.steps && Object.keys(task.steps).length > 0 && !hasWrongStructure,
-    hasWrongStructure: hasWrongStructure,
-    finalStepsKeys: finalStepsKeys,
-    finalStepsKeysAsStrings: finalStepsKeys.join(', '), // ✅ Stringa per vedere tutte le chiavi
-    finalStepsCount: finalStepsKeys.length,
-    taskStepsKeys: taskStepsKeys,
-    taskStepsKeysAsStrings: taskStepsKeys.join(', '), // ✅ Stringa per vedere tutte le chiavi
-    clonedStepsKeys: clonedStepsKeys,
-    clonedStepsKeysAsStrings: clonedStepsKeys.join(', ') // ✅ Stringa per vedere tutte le chiavi
+    usingTaskSteps: hasValidStepsArray,
+    taskStepsIsArray: Array.isArray(task.steps),
+    finalStepsCount: finalSteps.length,
+    clonedStepsCount: clonedStepsArray.length
   });
 
   // ✅ 7. Verifica se i prompt sono già stati adattati
@@ -373,7 +365,6 @@ export async function loadAndAdaptDDTForExistingTask(
         if (startStep?.escalations?.[0]?.tasks) {
           startStep.escalations[0].tasks.forEach((task: any) => {
             const textGuid = task.parameters?.find((p: any) => p.parameterId === 'text')?.value ||
-                            task.taskId ||
                             task.id;
             if (textGuid) allGuids.add(textGuid);
           });

@@ -10,13 +10,13 @@ Imports Compiler
 ''' Orchestrator che esegue un flow compilato
 ''' - Trova task eseguibili (condizione = true)
 ''' - Esegue task
-''' - Chiama DDT Engine per task GetData
+''' - Chiama Task Engine per task GetData
 ''' - Gestisce stato globale
 ''' </summary>
 Public Class FlowOrchestrator
     Private ReadOnly _compiledTasks As List(Of CompiledTask)
     Private ReadOnly _compilationResult As FlowCompilationResult
-    Private ReadOnly _ddtEngine As Motore
+    Private ReadOnly _taskEngine As Motore
     Private ReadOnly _taskExecutor As TaskExecutor
     Private ReadOnly _state As ExecutionState
     Private _isRunning As Boolean = False
@@ -42,18 +42,18 @@ Public Class FlowOrchestrator
     ''' </summary>
     Public Event ExecutionError As EventHandler(Of Exception)
 
-    Public Sub New(compiledTasks As List(Of CompiledTask), ddtEngine As Motore)
+    Public Sub New(compiledTasks As List(Of CompiledTask), taskEngine As Motore)
         _compiledTasks = compiledTasks
         _compilationResult = Nothing
-        _ddtEngine = ddtEngine
-        _taskExecutor = New TaskExecutor(ddtEngine)
+        _taskEngine = taskEngine
+        _taskExecutor = New TaskExecutor(taskEngine)
         _state = New ExecutionState()
 
-        ' Collega eventi DDT Engine
-        AddHandler _ddtEngine.MessageToShow, AddressOf OnDDTMessage
+        ' Collega eventi Task Engine
+        AddHandler _taskEngine.MessageToShow, AddressOf OnTaskEngineMessage
     End Sub
 
-    Public Sub New(compilationResult As FlowCompilationResult, ddtEngine As Motore)
+    Public Sub New(compilationResult As FlowCompilationResult, taskEngine As Motore)
         _compilationResult = compilationResult
         If compilationResult IsNot Nothing AndAlso compilationResult.Tasks IsNot Nothing Then
             _compiledTasks = compilationResult.Tasks
@@ -62,12 +62,12 @@ Public Class FlowOrchestrator
             _compiledTasks = New List(Of CompiledTask)()
             _entryTaskGroupId = Nothing
         End If
-        _ddtEngine = ddtEngine
-        _taskExecutor = New TaskExecutor(ddtEngine)
+        _taskEngine = taskEngine
+        _taskExecutor = New TaskExecutor(taskEngine)
         _state = New ExecutionState()
 
-        ' Collega eventi DDT Engine
-        AddHandler _ddtEngine.MessageToShow, AddressOf OnDDTMessage
+        ' Collega eventi Task Engine
+        AddHandler _taskEngine.MessageToShow, AddressOf OnTaskEngineMessage
     End Sub
 
     ''' <summary>
@@ -191,9 +191,9 @@ Public Class FlowOrchestrator
     End Function
 
     ''' <summary>
-    ''' Handler per messaggi dal DDT Engine
+    ''' Handler per messaggi dal Task Engine
     ''' </summary>
-    Private Sub OnDDTMessage(sender As Object, e As MessageEventArgs)
+    Private Sub OnTaskEngineMessage(sender As Object, e As MessageEventArgs)
         RaiseEvent MessageToShow(Me, e.Message)
     End Sub
 

@@ -110,18 +110,42 @@ export function useWizardInference({
     const empty = isTaskTreeEmpty(currentTaskTree);
     const hasStructureButNoMessages = hasdataButNosteps(currentTaskTree, task);
 
-    // ✅ CRITICAL: Leggi da task.steps usando templateId come chiave (non id)
-    // task.steps[node.templateId] = steps clonati
+    // ✅ CRITICAL: Leggi da task.steps usando helper function (array MaterializedStep[])
     if (!empty && currentTaskTree?.nodes && currentTaskTree.nodes.length > 0) {
       const firstMain = currentTaskTree.nodes[0];
       const firstMainId = firstMain?.id;
       const firstMainTemplateId = firstMain?.templateId || firstMain?.id; // ✅ Fallback a id se templateId non presente
-      const hasSteps = !!(firstMainTemplateId && task?.steps && task.steps[firstMainTemplateId]);
 
-      const allTaskStepsKeys = task?.steps ? Object.keys(task.steps) : [];
-      // ✅ CRITICAL: Stampa chiavi come stringhe per debug
-      console.log('[🔍 useWizardInference] 🔑 CHIAVI IN task.steps:', allTaskStepsKeys);
-      console.log('[🔍 useWizardInference] 🔍 CERCHIAMO CHIAVE:', firstMainTemplateId);
+      // ✅ Helper function per ottenere steps per questo nodo
+      const getStepsForNode = (steps: any, nodeTemplateId: string): any[] => {
+        if (!steps) return [];
+        if (Array.isArray(steps)) {
+          return steps.filter((step: any) =>
+            step.templateStepId && step.templateStepId.startsWith(nodeTemplateId)
+          );
+        }
+        if (typeof steps === 'object' && steps[nodeTemplateId]) {
+          const nodeSteps = steps[nodeTemplateId];
+          return Array.isArray(nodeSteps) ? nodeSteps : [];
+        }
+        return [];
+      };
+
+      const nodeStepsArray = getStepsForNode(task?.steps, firstMainTemplateId);
+      const hasSteps = nodeStepsArray.length > 0;
+
+      const taskStepsCount = Array.isArray(task?.steps) ? task.steps.length : 0;
+      console.log('[🔍 useWizardInference] 🔍 Steps for node', {
+        firstMainTemplateId,
+        hasSteps,
+        taskStepsCount,
+        nodeStepsCount: nodeStepsArray.length
+      });
+
+      // ✅ NUOVO: Con array MaterializedStep[], estrai templateStepIds per debug
+      const allTemplateStepIds = Array.isArray(task?.steps)
+        ? task.steps.map((step: any) => step.templateStepId).filter(Boolean)
+        : [];
 
       console.log('[🔍 useWizardInference] CRITICAL steps check', {
         nodesCount: currentTaskTree.nodes.length,
@@ -130,30 +154,17 @@ export function useWizardInference({
         firstMainTemplateId: firstMainTemplateId,
         hasSteps,
         stepsType: typeof task?.steps,
-        taskStepsKeys: allTaskStepsKeys,
-        taskStepsKeysAsStrings: allTaskStepsKeys.join(', '), // ✅ Stringa per vedere tutte le chiavi
-        taskStepsCount: allTaskStepsKeys.length,
-        lookingForKey: firstMainTemplateId,
-        keyExists: firstMainTemplateId ? !!(task?.steps?.[firstMainTemplateId]) : false,
-        keyMatchDetails: firstMainTemplateId && task?.steps ? {
-          exactMatch: task.steps[firstMainTemplateId] ? '✅ MATCH' : '❌ NO MATCH',
-          allKeys: allTaskStepsKeys,
-          keyComparison: allTaskStepsKeys.map(k => ({
-            key: k,
-            keyFull: k, // ✅ Mostra chiave completa
-            matches: k === firstMainTemplateId,
-            keyLength: k.length,
-            templateIdLength: firstMainTemplateId.length,
-            // ✅ Confronto carattere per carattere
-            charByChar: k.length === firstMainTemplateId.length ? Array.from(k).map((char, idx) => ({
-              pos: idx,
-              keyChar: char,
-              templateChar: firstMainTemplateId[idx],
-              matches: char === firstMainTemplateId[idx],
-              keyCode: char.charCodeAt(0),
-              templateCode: firstMainTemplateId[idx]?.charCodeAt(0)
-            })).filter(c => !c.matches).slice(0, 5) : 'LENGTH_MISMATCH'
-          }))
+        taskStepsIsArray: Array.isArray(task?.steps),
+        taskStepsCount: taskStepsCount,
+        nodeStepsCount: nodeStepsArray.length,
+        lookingForTemplateId: firstMainTemplateId,
+        hasSteps: hasSteps,
+        // ✅ NUOVO: Con array, verifichiamo se ci sono step con templateStepId che inizia con firstMainTemplateId
+        stepMatchDetails: firstMainTemplateId && task?.steps ? {
+          hasMatchingSteps: nodeStepsArray.length > 0,
+          matchingStepsCount: nodeStepsArray.length,
+          allTemplateStepIds: allTemplateStepIds.slice(0, 10), // Mostra solo i primi 10 per non intasare i log
+          templateStepIdsCount: allTemplateStepIds.length
         } : null,
         hasStructureButNoMessages
       });
@@ -173,8 +184,8 @@ export function useWizardInference({
         nodesCount: currentTaskTree?.nodes?.length || 0,
         taskType: stableTaskType,
         taskId: task?.id,
-        taskStepsCount: task?.steps ? Object.keys(task.steps).length : 0,
-        taskStepsKeys: task?.steps ? Object.keys(task.steps) : [],
+        taskStepsCount: Array.isArray(task?.steps) ? task.steps.length : (task?.steps ? Object.keys(task.steps).length : 0),
+        taskStepsIsArray: Array.isArray(task?.steps),
         firstMainTemplateId: currentTaskTree?.nodes?.[0]?.templateId || currentTaskTree?.nodes?.[0]?.id
       });
 
@@ -222,10 +233,18 @@ export function useWizardInference({
     }
 
     // ✅ EARLY EXIT: Se task ha già steps, non serve wizard
-    if (task?.steps && Object.keys(task.steps).length > 0) {
+    const hasSteps = Array.isArray(task?.steps)
+      ? task.steps.length > 0
+      : (task?.steps && Object.keys(task.steps).length > 0);
+
+    if (hasSteps) {
+      const stepsCount = Array.isArray(task?.steps)
+        ? task.steps.length
+        : (task?.steps ? Object.keys(task.steps).length : 0);
       console.log('[useWizardInference] Task con steps, non serve wizard', {
         taskId: task.id,
-        stepsCount: Object.keys(task.steps).length
+        stepsCount,
+        stepsIsArray: Array.isArray(task?.steps)
       });
       return; // ✅ Early exit - non serve wizard
     }

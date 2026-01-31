@@ -116,11 +116,27 @@ export function collectNodeMessages(
     let stepsToProcess: Array<{ stepKey: string; escalations: any[] }> = [];
 
     if (Array.isArray(steps)) {
-        // New format: steps is an array of step objects
-        stepsToProcess = steps.map((step: any) => ({
-            stepKey: step?.type || 'start',
-            escalations: Array.isArray(step?.escalations) ? step.escalations : []
-        }));
+        // ✅ NUOVO MODELLO: Array MaterializedStep[]
+        // Estrai stepKey da templateStepId (formato: `${nodeTemplateId}:${stepKey}`)
+        stepsToProcess = steps.map((step: any) => {
+            let stepKey = 'start'; // Default fallback
+
+            // Prova prima con type diretto (se presente per retrocompatibilità)
+            if (step?.type) {
+                stepKey = step.type;
+            } else if (step?.templateStepId) {
+                // Estrai il tipo step da templateStepId (ultima parte dopo ':')
+                const extractedKey = step.templateStepId.split(':').pop();
+                if (extractedKey) {
+                    stepKey = extractedKey;
+                }
+            }
+
+            return {
+                stepKey,
+                escalations: Array.isArray(step?.escalations) ? step.escalations : []
+            };
+        });
     } else {
         // Legacy format: steps is an object with stepKey as keys
         stepsToProcess = Object.keys(steps).map((stepKey) => {

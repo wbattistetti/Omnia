@@ -95,19 +95,23 @@ export function normalizeTaskForEscalation(
   task: any,
   generateGuidFn: () => string = generateGuid
 ): any {
-  // 🔍 DEBUG: Verifica se task.id è un GUID (non è un templateId valido)
-  const taskId = task?.id;
-  const taskTemplateId = task?.templateId;
-  const isTaskIdGuid = taskId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(taskId);
+  // ✅ CRITICAL: NO FALLBACK - type and templateId MUST be present
+  if (task?.type === undefined || task?.type === null) {
+    throw new Error(`[normalizeTaskForEscalation] Task is missing required field 'type'. Task: ${JSON.stringify(task, null, 2)}`);
+  }
 
-  // Se task.id è un GUID, non usarlo come templateId (probabilmente è l'id del DDT, non del task template)
-  const templateId = taskTemplateId || (isTaskIdGuid ? null : taskId) || 'sayMessage';
+  if (task?.templateId === undefined) {
+    // templateId can be null (standalone task), but must be explicitly set
+    throw new Error(`[normalizeTaskForEscalation] Task is missing required field 'templateId' (must be explicitly null for standalone tasks). Task: ${JSON.stringify(task, null, 2)}`);
+  }
 
+  const templateId = task.templateId; // ✅ NO FALLBACK - must be present (can be null)
 
   return {
-    templateId,
     id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,  // ✅ Standard: id (GUID univoco)
-    parameters: templateId === 'sayMessage'
+    type: task.type,  // ✅ NO FALLBACK - must be present
+    templateId,  // ✅ NO FALLBACK - must be present (can be null)
+    parameters: templateId === 'sayMessage' || templateId === null
       ? [{ parameterId: 'text', value: generateGuidFn() }]
       : (task.parameters || []),
     text: task.text,

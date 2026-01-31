@@ -4,6 +4,8 @@ import App from './components/App.tsx';
 import './index.css';
 // Import status checker for TaskTemplatesV2
 import './utils/showTaskTemplatesV2Status';
+// ✅ Import fetch interceptor to suppress 404 errors for expected endpoints
+import './utils/fetchInterceptor';
 
 // ✅ Silence Monaco Editor "Canceled" errors during cleanup (harmless in dev mode)
 const originalConsoleError = console.error;

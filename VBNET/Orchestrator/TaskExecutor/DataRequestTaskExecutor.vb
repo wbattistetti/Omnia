@@ -6,13 +6,13 @@ Imports Compiler
 
 ''' <summary>
 ''' Executor per task di tipo DataRequest
-''' Gestisce l'esecuzione completa del DDT Engine
+''' Gestisce l'esecuzione completa del Task Engine
 ''' </summary>
 Public Class DataRequestTaskExecutor
     Inherits TaskExecutorBase
 
-    Public Sub New(ddtEngine As Motore)
-        MyBase.New(ddtEngine)
+    Public Sub New(taskEngine As Motore)
+        MyBase.New(taskEngine)
     End Sub
 
     Public Overrides Function Execute(task As CompiledTask, state As ExecutionState) As TaskExecutionResult
@@ -28,7 +28,7 @@ Public Class DataRequestTaskExecutor
         End If
 
         Try
-            Console.WriteLine($"🚀 [DataRequestTaskExecutor] Starting DDT execution for task {task.Id}")
+            Console.WriteLine($"🚀 [DataRequestTaskExecutor] Starting Task execution for task {task.Id}")
 
             ' Collega l'evento MessageToShow del Motore al callback per i messaggi
             Dim messageHandler As EventHandler(Of MessageEventArgs) = Nothing
@@ -39,38 +39,38 @@ Public Class DataRequestTaskExecutor
                              End Sub
 
             ' Registra l'handler per l'evento
-            AddHandler _ddtEngine.MessageToShow, messageHandler
+            AddHandler _taskEngine.MessageToShow, messageHandler
 
             Try
-                ' Esegue il DDT: questa chiamata è sincrona e blocca finché il DDT non completa
+                ' Esegue il Task: questa chiamata è sincrona e blocca finché il Task non completa
                 ' Il Motore gestisce internamente:
-                ' - Navigazione attraverso i nodi (GetNextData)
+                ' - Navigazione attraverso i nodi (GetNextTask)
                 ' - Esecuzione dei response (ExecuteResponse)
                 ' - Parsing dell'input utente (Parser.InterpretUtterance)
                 ' - Transizioni di stato (SetState)
                 ' L'input utente deve essere fornito dall'esterno tramite Parser.SetUserInput()
-                ' TODO: Modificare ExecuteDDT per accettare RuntimeTask invece di DDTInstance
+                ' TODO: Modificare ExecuteRuntimeTask per accettare RuntimeTask invece di DDTInstance
                 ' Per ora commentato - il runtime deve essere aggiornato
-                ' _ddtEngine.ExecuteDDT(dataRequestTask.Task)
-                Throw New NotImplementedException("ExecuteDDT must be updated to accept RuntimeTask instead of DDTInstance")
+                ' _taskEngine.ExecuteRuntimeTask(dataRequestTask.Task)
+                Throw New NotImplementedException("ExecuteRuntimeTask must be updated to accept RuntimeTask instead of DDTInstance")
 
-                Console.WriteLine($"✅ [DataRequestTaskExecutor] DDT execution completed for task {task.Id}")
+                Console.WriteLine($"✅ [DataRequestTaskExecutor] Task execution completed for task {task.Id}")
 
                 Return New TaskExecutionResult() With {
                     .Success = True
                 }
             Finally
                 ' Rimuovi l'handler per evitare memory leak
-                RemoveHandler _ddtEngine.MessageToShow, messageHandler
+                RemoveHandler _taskEngine.MessageToShow, messageHandler
             End Try
 
         Catch ex As Exception
-            Console.WriteLine($"❌ [DataRequestTaskExecutor] DDT execution failed for task {task.Id}: {ex.Message}")
+            Console.WriteLine($"❌ [DataRequestTaskExecutor] Task execution failed for task {task.Id}: {ex.Message}")
             Console.WriteLine($"   Stack trace: {ex.StackTrace}")
 
             Return New TaskExecutionResult() With {
                 .Success = False,
-                .Err = $"DDT execution failed: {ex.Message}"
+                .Err = $"Task execution failed: {ex.Message}"
             }
         End Try
     End Function

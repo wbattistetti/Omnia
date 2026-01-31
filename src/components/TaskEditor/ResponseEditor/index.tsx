@@ -23,6 +23,8 @@ import {
   getdataList,
   getSubDataList
 } from './ddtSelectors';
+import type { MaterializedStep } from '../../../types/taskTypes';
+import { v4 as uuidv4 } from 'uuid';
 import { hasIntentMessages } from './utils/hasMessages';
 import IntentMessagesBuilder from './components/IntentMessagesBuilder';
 import { saveIntentMessagesToTaskTree } from './utils/saveIntentMessages';
@@ -342,7 +344,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   };
 
   // ✅ Load translations from global table using shared hook
-  // ✅ Pass task to extract GUIDs from task.steps[nodeId] (unified model)
+      // ✅ Pass task to extract GUIDs from task.steps (array MaterializedStep[])
   const localTranslations = useDDTTranslations(taskTree, task); // ✅ useDDTTranslations sarà aggiornato in futuro
 
   // 🔍 DEBUG: Log translations loading (rimosso - troppo verboso)
@@ -353,7 +355,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   //       sampleTranslations: Object.keys(localTranslations).slice(0, 10),
   //       hasTask: !!task,
   //       taskId: task?.id,
-  //       taskStepsCount: task?.steps ? Object.keys(task.steps).length : 0,
+      //       taskStepsCount: Array.isArray(task?.steps) ? task.steps.length : 0,
   //       ddtId: ddt?.id || ddt?._id,
   //       ddtLabel: ddt?.label
   //     });
@@ -560,7 +562,11 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   const [selectedIntentIdForTraining, setSelectedIntentIdForTraining] = useState<string | null>(null);
 
   // Header: icon, title, and toolbar
-  const taskType = task?.type ?? TaskType.UtteranceInterpretation; // ✅ RINOMINATO: actType → taskType, usa TaskType enum
+  // ✅ CRITICAL: NO FALLBACK - type MUST be present
+  if (!task?.type) {
+    throw new Error(`[ResponseEditor] Task is missing required field 'type'. Task: ${JSON.stringify(task, null, 2)}`);
+  }
+  const taskType = task.type; // ✅ NO FALLBACK - must be present
 
   // ✅ Verifica se kind === "intent" e non ha messaggi (mostra IntentMessagesBuilder se non ci sono)
   const needsIntentMessages = useMemo(() => {
@@ -817,14 +823,14 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
         const key = (task?.instanceId || task?.id) as string; // ✅ RINOMINATO: act → task
         const hasTaskTree = finalTaskTree && Object.keys(finalTaskTree).length > 0 && finalTaskTree.nodes && finalTaskTree.nodes.length > 0;
 
-        // ✅ CRITICAL: Aggiorna la cache del TaskRepository con il TaskTree finale
-        // Questo è ESSENZIALE per garantire che quando riapri l'editor,
-        // taskRepository.getTask() restituisca il task aggiornato con examplesList
+        // ✅ NUOVO MODELLO: Aggiorna solo la cache in memoria (NON salvataggio DB)
+        // Il salvataggio nel DB avviene solo su comando esplicito ("Salva progetto")
         const currentTask = taskRepository.getTask(key);
         if (currentTask && hasTaskTree) {
-          // ✅ Usa extractTaskOverrides per salvare solo override
+          // ✅ Usa extractTaskOverrides per estrarre solo override
           const { extractTaskOverrides } = await import('../../../utils/taskUtils');
           const overrides = await extractTaskOverrides(currentTask, finalTaskTree, currentProjectId || undefined);
+          // ✅ Aggiorna solo la cache in memoria
           taskRepository.updateTask(key, overrides, currentProjectId || undefined);
 
           const firstNodeTestNotes = firstNode?.testNotes;
@@ -855,52 +861,45 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
           taskId: task?.id || task?.instanceId,
           key,
           hasTask: !!task,
-          taskStepsKeys: task?.steps ? Object.keys(task.steps) : [],
-          taskStepsCount: task?.steps ? Object.keys(task.steps).length : 0,
-          taskStepsDetails: task?.steps ? Object.keys(task.steps).map(nodeId => {
-            const nodeSteps = task.steps[nodeId];
-            const isArray = Array.isArray(nodeSteps);
-            const isObject = typeof nodeSteps === 'object' && !Array.isArray(nodeSteps);
+          taskStepsCount: Array.isArray(task?.steps) ? task.steps.length : 0,
+          taskStepsIsArray: Array.isArray(task?.steps),
+          taskStepsDetails: Array.isArray(task?.steps) ? task.steps.map((step: MaterializedStep) => {
+            const nodeSteps = [step]; // ✅ Ogni step è un MaterializedStep
+            const isArray = true; // ✅ Sempre array nel nuovo modello
+            const isObject = false;
             let escalationsCount = 0;
             let tasksCount = 0;
 
-            if (isArray) {
-              escalationsCount = nodeSteps.length;
-              tasksCount = nodeSteps.reduce((acc: number, step: any) =>
-                acc + (step?.escalations?.reduce((a: number, esc: any) => a + (esc?.tasks?.length || 0), 0) || 0), 0);
-            } else if (isObject) {
-              escalationsCount = nodeSteps?.start?.escalations?.length || nodeSteps?.introduction?.escalations?.length || 0;
-              const startEscs = nodeSteps?.start?.escalations || [];
-              const introEscs = nodeSteps?.introduction?.escalations || [];
-              tasksCount = [...startEscs, ...introEscs].reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0);
-            }
-
+            escalationsCount = step.escalations?.length || 0;
+            tasksCount = step.escalations?.reduce((a: number, esc: any) => a + (esc?.tasks?.length || 0), 0) || 0;
             return {
-              nodeId,
-              stepsType: typeof nodeSteps,
-              isArray,
-              isObject,
-              stepsKeys: isObject ? Object.keys(nodeSteps || {}) : [],
+              stepId: step.id,
+              templateStepId: step.templateStepId,
+              stepsType: 'array',
+              isArray: true,
+              isObject: false,
               escalationsCount,
               tasksCount
             };
           }) : []
         });
 
+        // ✅ NUOVO MODELLO: Alla chiusura NON si salva automaticamente nel DB
+        // Il salvataggio avviene solo su comando esplicito ("Salva progetto")
+        // Qui aggiorniamo solo la cache in memoria per mantenere la working copy aggiornata
         if (hasTaskTree) {
           const finaldata = firstNode;
           const finalSubData = finaldata?.subTasks?.[0];
           const finalStartTasks = finalSubData?.steps?.start?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0;
 
-          console.log('[handleEditorClose] 💾 Saving complete TaskTree (SYNC - blocking close until saved)', {
+          console.log('[handleEditorClose] 🔄 Aggiornando cache in memoria (NON salvataggio DB)', {
             key,
             finalStartTasks,
             hasNodes: !!finalMainList,
             nodesLength: finalMainList?.length || 0
           });
 
-          // ✅ Get or create task
-          // ✅ LOGICA: Il task viene creato solo quando si apre ResponseEditor, dopo aver determinato il tipo
+          // ✅ Get or create task (solo in memoria, non nel DB)
           let taskInstance = taskRepository.getTask(key);
           if (!taskInstance) {
             // ✅ Usa direttamente task.type (TaskType enum) invece di convertire da stringa
@@ -971,64 +970,14 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
               firstNodeNlpProfileExamplesCount: Array.isArray(savedNlpProfileExamples) ? savedNlpProfileExamples.length : 0,
               firstNodeNlpProfileExamples: savedNlpProfileExamples?.slice(0, 3)
             });
-            // ✅ STEP 1: Salva in memoria
+            // ✅ NUOVO MODELLO: Aggiorna solo la cache in memoria (NON salvataggio DB)
+            // Il salvataggio nel DB avviene solo su comando esplicito ("Salva progetto")
             taskRepository.updateTask(key, dataToSave, currentProjectId || undefined);
 
-            // ✅ STEP 2: Salva IMMEDIATAMENTE nel database per preservare nlpProfile.examples
-            const finalProjectId = currentProjectId || undefined;
-            if (finalProjectId) {
-              const taskToSave = taskRepository.getTask(key);
-              if (taskToSave) {
-                try {
-                  const { id, _id, templateId, createdAt, updatedAt, ...fields } = taskToSave;
-                  const payload = {
-                    id: taskToSave.id,
-                    type: taskToSave.type,
-                    templateId: taskToSave.templateId ?? null,
-                    ...fields
-                  };
-
-                  const payloadString = JSON.stringify(payload);
-                  const response = await fetch(`/api/projects/${finalProjectId}/tasks`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: payloadString
-                  });
-
-                  if (!response.ok) {
-                    console.error('[EXAMPLES] CLOSE - Failed to save task to database', {
-                      taskId: key,
-                      status: response.status
-                    });
-                  } else {
-                    console.log('[EXAMPLES] CLOSE - Task saved to database', {
-                      taskId: key,
-                      hasFirstNodeNlpProfile: !!taskToSave.data?.[0]?.nlpProfile,
-                      hasFirstNodeNlpProfileExamples: !!taskToSave.data?.[0]?.nlpProfile?.examples,
-                      firstNodeNlpProfileExamplesCount: taskToSave.data?.[0]?.nlpProfile?.examples?.length || 0
-                    });
-                  }
-                } catch (error) {
-                  console.error('[EXAMPLES] CLOSE - Error saving task to database', {
-                    taskId: key,
-                    error
-                  });
-                }
-              }
-            }
-
-            // ✅ VERIFICA: Controlla se è stato salvato correttamente
-            const savedTask = taskRepository.getTask(key);
-            const savedTaskNlpProfileExamples = savedTask?.data?.[0]?.nlpProfile?.examples;
-            console.log('[EXAMPLES] CLOSE - Verifying saved task', {
+            console.log('[handleEditorClose] ✅ Cache in memoria aggiornata (salvataggio DB solo su comando esplicito)', {
               taskId: key,
-              hasSavedTask: !!savedTask,
-              hasSavedTaskData: !!savedTask?.data,
-              savedTaskDataLength: savedTask?.data?.length || 0,
-              hasFirstNodeNlpProfile: !!savedTask?.data?.[0]?.nlpProfile,
-              hasFirstNodeNlpProfileExamples: !!savedTaskNlpProfileExamples,
-              savedFirstNodeNlpProfileExamplesCount: Array.isArray(savedTaskNlpProfileExamples) ? savedTaskNlpProfileExamples.length : 0,
-              savedFirstNodeNlpProfileExamples: savedTaskNlpProfileExamples?.slice(0, 3)
+              hasDataToSave: !!dataToSave,
+              dataToSaveKeys: dataToSave ? Object.keys(dataToSave) : []
             });
           } else {
             // ✅ NUOVO MODELLO: Salva TUTTA la working copy anche per task con templateId
@@ -1166,6 +1115,24 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   // dockTree è la fonte di verità - le modifiche sono già salvate immediatamente in updateSelectedNode
 
   // ✅ Caricamento: legge da taskTreeRef.current (che contiene già le modifiche, come VB.NET)
+  // ✅ Helper function per ottenere steps per un nodo (gestisce sia array che oggetto)
+  const getStepsForNode = React.useCallback((steps: any, nodeTemplateId: string): any[] => {
+    if (!steps) return [];
+    if (Array.isArray(steps)) {
+      // ✅ NUOVO MODELLO: Array MaterializedStep[]
+      // Filtra gli step che hanno templateStepId che inizia con nodeTemplateId
+      return steps.filter((step: any) =>
+        step.templateStepId && step.templateStepId.startsWith(nodeTemplateId)
+      );
+    }
+    // ✅ RETROCOMPATIBILITÀ: Gestisce anche il formato dictionary legacy
+    if (typeof steps === 'object' && steps[nodeTemplateId]) {
+      const nodeSteps = steps[nodeTemplateId];
+      return Array.isArray(nodeSteps) ? nodeSteps : [];
+    }
+    return [];
+  }, []);
+
   useEffect(() => {
     // 🔴 LOG CHIRURGICO 3: Caricamento nodo
     const currentMainList = getdataList(taskTreeRef.current); // ✅ Leggi dal ref, non dal prop
@@ -1232,76 +1199,45 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
           });
         }
 
-        const allTaskStepsKeys = task?.steps ? Object.keys(task.steps) : [];
-        // ✅ CRITICAL: Stampa chiavi come stringhe per debug
-        console.log('[🔍 ResponseEditor][NODE_SELECT] 🔑 CHIAVI IN task.steps:', allTaskStepsKeys);
-        console.log('[🔍 ResponseEditor][NODE_SELECT] 🔍 CERCHIAMO CHIAVE:', nodeTemplateId);
+        // ✅ NUOVO: Usa helper function per ottenere steps per questo nodo
+        const nodeStepsArray = getStepsForNode(task?.steps, nodeTemplateId);
+        const taskStepsCount = Array.isArray(task?.steps) ? task.steps.length : 0;
 
-        console.log('[🔍 ResponseEditor][NODE_SELECT] CRITICAL - Loading steps for node', {
+        console.log('[🔍 ResponseEditor][NODE_SELECT] 🔍 Loading steps for node', {
           nodeId: node.id,
           nodeTemplateId,
           nodeLabel: node?.label,
-          hasTaskSteps: !!(nodeTemplateId && task?.steps?.[nodeTemplateId]),
-          taskStepsKeys: allTaskStepsKeys,
-          taskStepsKeysAsStrings: allTaskStepsKeys.join(', '), // ✅ Stringa per vedere tutte le chiavi
-          taskStepsCount: allTaskStepsKeys.length,
-          lookingForKey: nodeTemplateId,
-          keyExists: nodeTemplateId ? !!(task?.steps?.[nodeTemplateId]) : false,
-          keyMatchDetails: nodeTemplateId && task?.steps ? {
-            exactMatch: task.steps[nodeTemplateId] ? '✅ MATCH' : '❌ NO MATCH',
-            allKeys: allTaskStepsKeys,
-            keyComparison: allTaskStepsKeys.map(k => ({
-              key: k,
-              keyFull: k, // ✅ Mostra chiave completa
-              matches: k === nodeTemplateId,
-              keyLength: k.length,
-              templateIdLength: nodeTemplateId.length,
-              keyPreview: k.substring(0, 30) + '...',
-              templateIdPreview: nodeTemplateId.substring(0, 30) + '...',
-              // ✅ Confronto carattere per carattere
-              charByChar: k.length === nodeTemplateId.length ? Array.from(k).map((char, idx) => ({
-                pos: idx,
-                keyChar: char,
-                templateChar: nodeTemplateId[idx],
-                matches: char === nodeTemplateId[idx],
-                keyCode: char.charCodeAt(0),
-                templateCode: nodeTemplateId[idx]?.charCodeAt(0)
-              })).filter(c => !c.matches).slice(0, 5) : 'LENGTH_MISMATCH'
-            }))
-          } : null,
-          taskStepsForNode: nodeTemplateId && task?.steps?.[nodeTemplateId] ? (() => {
-            const nodeSteps = task.steps[nodeTemplateId];
-            const isArray = Array.isArray(nodeSteps);
-            const isObject = typeof nodeSteps === 'object' && !Array.isArray(nodeSteps);
-            let escalationsCount = 0;
-            let tasksCount = 0;
-
-            if (isArray) {
-              escalationsCount = nodeSteps.length;
-              tasksCount = nodeSteps.reduce((acc: number, step: any) =>
-                acc + (step?.escalations?.reduce((a: number, esc: any) => a + (esc?.tasks?.length || 0), 0) || 0), 0);
-            } else if (isObject) {
-              escalationsCount = nodeSteps?.start?.escalations?.length || nodeSteps?.introduction?.escalations?.length || 0;
-              const startEscs = nodeSteps?.start?.escalations || [];
-              const introEscs = nodeSteps?.introduction?.escalations || [];
-              tasksCount = [...startEscs, ...introEscs].reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0);
-            }
-
-            return {
-              stepsType: typeof nodeSteps,
-              isArray,
-              isObject,
-              stepsKeys: isObject ? Object.keys(nodeSteps || {}) : [],
-              escalationsCount,
-              tasksCount
-            };
-          })() : null,
-          nodeHasStepsBefore: !!node.steps,
-          nodeStepsType: typeof node.steps
+          hasTaskSteps: nodeStepsArray.length > 0,
+          taskStepsCount: taskStepsCount,
+          nodeStepsCount: nodeStepsArray.length,
+          taskStepsIsArray: Array.isArray(task?.steps)
         });
+        const nodeStepsDetails = nodeStepsArray.length > 0 ? (() => {
+          const nodeSteps = nodeStepsArray;
+          const isArray = true; // ✅ Sempre array nel nuovo modello
+          const isObject = false;
+          let escalationsCount = 0;
+          let tasksCount = 0;
 
-        if (nodeTemplateId && task?.steps?.[nodeTemplateId]) {
-          node.steps = task.steps[nodeTemplateId];
+          escalationsCount = nodeSteps.length;
+          tasksCount = nodeSteps.reduce((acc: number, step: MaterializedStep) =>
+            acc + (step?.escalations?.reduce((a: number, esc: any) => a + (esc?.tasks?.length || 0), 0) || 0), 0);
+
+          return {
+            stepsType: 'array',
+            isArray: true,
+            isObject: false,
+            stepsCount: nodeSteps.length,
+            escalationsCount,
+            tasksCount,
+            nodeHasStepsBefore: !!node.steps,
+            nodeStepsType: typeof node.steps
+          };
+        })() : null;
+
+        // ✅ Usa nodeStepsArray già dichiarato sopra
+        if (nodeStepsArray.length > 0) {
+          node.steps = nodeStepsArray;
 
           console.log('[ResponseEditor][NODE_SELECT] ✅ Steps copied to node', {
             nodeId: node.id,
@@ -1309,7 +1245,8 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
             nodeLabel: node?.label,
             stepsCopied: true,
             nodeStepsType: typeof node.steps,
-            nodeStepsKeys: typeof node.steps === 'object' && !Array.isArray(node.steps) ? Object.keys(node.steps || {}) : [],
+            nodeStepsIsArray: Array.isArray(node.steps),
+            nodeStepsCount: nodeStepsArray.length,
             escalationsCount: Array.isArray(node.steps)
               ? node.steps.length
               : (node.steps?.start?.escalations?.length || node.steps?.introduction?.escalations?.length || 0),
@@ -1484,13 +1421,26 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
             });
           }
 
-          // ✅ CRITICAL: Salva updated.steps usando templateId come chiave (non id)
-          // task.steps[node.templateId] = steps clonati
+          // ✅ CRITICAL: Salva updated.steps come array MaterializedStep[]
+          // ✅ NUOVO: steps è un array, non un dictionary
           const nodeTemplateId = updated.templateId || updated.id; // ✅ Fallback a id se templateId non presente
           if (nodeTemplateId && updated.steps && task) {
-            // Aggiorna task.steps immediatamente (unica fonte di verità)
-            if (!task.steps) task.steps = {};
-            task.steps[nodeTemplateId] = updated.steps;
+            // ✅ Inizializza task.steps come array se non esiste
+            if (!Array.isArray(task.steps)) {
+              task.steps = [];
+            }
+
+            // ✅ Converti updated.steps in MaterializedStep[] se necessario
+            const materializedSteps: MaterializedStep[] = Array.isArray(updated.steps)
+              ? updated.steps
+              : [];
+
+            // ✅ Rimuovi steps esistenti per questo nodo e aggiungi i nuovi
+            const otherSteps = (task.steps as MaterializedStep[]).filter((step: MaterializedStep) =>
+              !step.templateStepId || !step.templateStepId.startsWith(nodeTemplateId)
+            );
+
+            task.steps = [...otherSteps, ...materializedSteps];
           }
         } else {
           // Sub node
@@ -1502,13 +1452,26 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
             mains[mainIndex] = main;
             updatedTaskTree.nodes = mains;
 
-            // ✅ CRITICAL: Salva updated.steps usando templateId come chiave (non id)
-            // task.steps[node.templateId] = steps clonati
+            // ✅ CRITICAL: Salva updated.steps come array MaterializedStep[]
+            // ✅ NUOVO: steps è un array, non un dictionary
             const nodeTemplateId = updated.templateId || updated.id; // ✅ Fallback a id se templateId non presente
             if (nodeTemplateId && updated.steps && task) {
-              // Aggiorna task.steps immediatamente (unica fonte di verità)
-              if (!task.steps) task.steps = {};
-              task.steps[nodeTemplateId] = updated.steps;
+              // ✅ Inizializza task.steps come array se non esiste
+              if (!Array.isArray(task.steps)) {
+                task.steps = [];
+              }
+
+              // ✅ Converti updated.steps in MaterializedStep[] se necessario
+              const materializedSteps: MaterializedStep[] = Array.isArray(updated.steps)
+                ? updated.steps
+                : [];
+
+              // ✅ Rimuovi steps esistenti per questo nodo e aggiungi i nuovi
+              const otherSteps = (task.steps as MaterializedStep[]).filter((step: MaterializedStep) =>
+                !step.templateStepId || !step.templateStepId.startsWith(nodeTemplateId)
+              );
+
+              task.steps = [...otherSteps, ...materializedSteps];
             }
           }
         }
@@ -1569,9 +1532,13 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
 
         if (taskToSave?.id || (taskToSave as any)?.instanceId) {
           const key = ((taskToSave as any)?.instanceId || taskToSave?.id) as string;
-          const hasDDT = updatedDDT && Object.keys(updatedDDT).length > 0 && updatedDDT.data && updatedDDT.data.length > 0;
+          // ✅ Verifica che updatedTaskTree sia valido (ha nodes o steps)
+          const hasTaskTree = updatedTaskTree && (
+            (updatedTaskTree.nodes && updatedTaskTree.nodes.length > 0) ||
+            (updatedTaskTree.steps && Array.isArray(updatedTaskTree.steps) && updatedTaskTree.steps.length > 0)
+          );
 
-          if (hasDDT) {
+          if (hasTaskTree) {
             // Salva in modo asincrono (non bloccare l'UI)
             void (async () => {
               try {
@@ -1597,7 +1564,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       }
 
       // ✅ Solo invalidatore interno (non notificare provider per evitare re-mount)
-      setDDTVersion(v => v + 1);
+      setTaskTreeVersion(v => v + 1);
 
       try {
         if (localStorage.getItem('debug.nodeSync') === '1') {

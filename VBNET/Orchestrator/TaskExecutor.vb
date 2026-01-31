@@ -10,11 +10,11 @@ Imports Compiler
 ''' - Gestisce callback per messaggi
 ''' </summary>
 Public Class TaskExecutor
-    Private ReadOnly _ddtEngine As Motore
+    Private ReadOnly _taskEngine As Motore
     Private _messageCallback As Action(Of String, String, Integer)
 
-    Public Sub New(ddtEngine As Motore)
-        _ddtEngine = ddtEngine
+    Public Sub New(taskEngine As Motore)
+        _taskEngine = taskEngine
     End Sub
 
     ''' <summary>
@@ -37,7 +37,7 @@ Public Class TaskExecutor
 
         Try
             ' Ottieni l'executor appropriato per il tipo di task
-            Dim executor = TaskExecutorFactory.GetExecutor(task.TaskType, _ddtEngine)
+            Dim executor = TaskExecutorFactory.GetExecutor(task.TaskType, _taskEngine)
 
             If executor Is Nothing Then
                 Return New TaskExecutionResult() With {

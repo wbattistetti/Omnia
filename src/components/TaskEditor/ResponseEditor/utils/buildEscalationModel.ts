@@ -93,7 +93,24 @@ export function buildEscalationModel(
           }
         }
 
-        return { templateId: task.templateId, id: task.id, text, textKey, color: task.color, label: task.label };
+        // ✅ CRITICAL: NO FALLBACK - type and templateId MUST be present
+        if (task?.type === undefined || task?.type === null) {
+          throw new Error(`[buildEscalationModel] Task is missing required field 'type'. Task: ${JSON.stringify(task, null, 2)}`);
+        }
+
+        if (task?.templateId === undefined) {
+          throw new Error(`[buildEscalationModel] Task is missing required field 'templateId' (must be explicitly null for standalone tasks). Task: ${JSON.stringify(task, null, 2)}`);
+        }
+
+        return {
+          type: task.type,  // ✅ NO FALLBACK - must be present
+          templateId: task.templateId,  // ✅ NO FALLBACK - must be present (can be null)
+          id: task.id,
+          text,
+          textKey,
+          color: task.color,
+          label: task.label
+        };
       });
 
       if (shouldDebug()) {
@@ -129,15 +146,30 @@ export function buildEscalationModel(
       }
       return (group.escalations as any[]).map((esc: any) => ({
         tasks: (esc.tasks || []).map((task: any) => {
+          // ✅ CRITICAL: NO FALLBACK - type and templateId MUST be present
+          if (task?.type === undefined || task?.type === null) {
+            throw new Error(`[buildEscalationModel] Task is missing required field 'type'. Task: ${JSON.stringify(task, null, 2)}`);
+          }
+
+          if (task?.templateId === undefined) {
+            throw new Error(`[buildEscalationModel] Task is missing required field 'templateId' (must be explicitly null for standalone tasks). Task: ${JSON.stringify(task, null, 2)}`);
+          }
+
           const p = Array.isArray(task.parameters) ? task.parameters.find((x: any) => x?.parameterId === 'text') : undefined;
           const textKey = p?.value;
           const text = (typeof task.text === 'string' && task.text.length > 0)
             ? task.text
             : (typeof textKey === 'string' ? (translations[textKey] || textKey) : undefined);
-          // ✅ Ensure templateId is never undefined
-          const finalTemplateId = task.templateId || 'sayMessage';
 
-          return { templateId: finalTemplateId, id: task.id, text, textKey, color: task.color, label: task.label };
+          return {
+            type: task.type,  // ✅ NO FALLBACK - must be present
+            templateId: task.templateId,  // ✅ NO FALLBACK - must be present (can be null)
+            id: task.id,
+            text,
+            textKey,
+            color: task.color,
+            label: task.label
+          };
         })
       }));
     }
@@ -149,9 +181,23 @@ export function buildEscalationModel(
     const textKey = msg.textKey;
     const translationValue = translations[textKey];
     const text = translationValue || textKey;
+    // ✅ CRITICAL: Synthetic tasks must have type and templateId
+    const { TaskType, templateIdToTaskType } = require('../../../../types/taskTypes');
+    const templateId = 'sayMessage';
+    const taskType = templateIdToTaskType(templateId);
+    if (taskType === TaskType.UNDEFINED) {
+      throw new Error(`[buildEscalationModel] Cannot determine task type from templateId '${templateId}' for synthetic step.`);
+    }
     return [
       {
-        tasks: [{ templateId: 'sayMessage', id: `task-${Date.now()}`, parameters: textKey ? [{ parameterId: 'text', value: textKey }] : [], text, textKey }]
+        tasks: [{
+          type: taskType,  // ✅ NO FALLBACK - must be present
+          templateId: templateId,  // ✅ NO FALLBACK - must be present
+          id: `task-${Date.now()}`,
+          parameters: textKey ? [{ parameterId: 'text', value: textKey }] : [],
+          text,
+          textKey
+        }]
       }
     ];
   }

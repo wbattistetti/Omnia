@@ -46,14 +46,20 @@ export function saveIntentMessagesToTaskTree(taskTree: any, messages: IntentMess
   const createEscalation = (text: string): any => {
     const taskId = uuidv4();
     const templateId = 'sayMessage';
-    const taskType = templateIdToTaskType(templateId) || TaskType.SayMessage;
+
+    // ✅ CRITICAL: NO FALLBACK - type MUST be derived from templateId
+    const taskType = templateIdToTaskType(templateId);
+    if (taskType === TaskType.UNDEFINED) {
+      throw new Error(`[saveIntentMessagesToTaskTree] Cannot determine task type from templateId '${templateId}'. This is a bug in task creation.`);
+    }
+
     return {
       escalationId: uuidv4(),
       tasks: [  // ✅ New field
         {
           id: taskId,                 // ✅ Standard: id (GUID univoco)
-          type: taskType,             // ✅ Aggiunto campo type (enum numerico)
-          templateId: templateId,     // ✅ Renamed from actionId
+          type: taskType,             // ✅ NO FALLBACK - must be present
+          templateId: templateId,     // ✅ NO FALLBACK - must be present
           parameters: [
             {
               parameterId: 'text',
@@ -62,10 +68,12 @@ export function saveIntentMessagesToTaskTree(taskTree: any, messages: IntentMess
           ],
         }
       ],
-      actions: [  // ✅ Legacy alias for backward compatibility
+      actions: [  // ✅ Legacy alias for backward compatibility - MUST have type and templateId
         {
           actionId: 'sayMessage',
           actionInstanceId: taskId,
+          type: taskType,  // ✅ NO FALLBACK - must be present
+          templateId: templateId,  // ✅ NO FALLBACK - must be present
           parameters: [
             {
               parameterId: 'text',

@@ -159,7 +159,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     const uniqueAllProjects = Array.from(new Map(allProjects.map(p => [p._id || p.projectId, p])).values());
 
     // Traccia se abbiamo mai caricato progetti (per evitare di mostrare "Nessun progetto" prima del primo caricamento)
-    if (uniqueAllProjects.length > 0 && !hasEverLoadedProjects) {
+    // Imposta hasEverLoadedProjects a true anche se non ci sono progetti (il caricamento è comunque completato)
+    if (!hasEverLoadedProjects && initialLoadComplete) {
       setHasEverLoadedProjects(true);
     }
 
@@ -196,9 +197,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         }, 300);
       }, 100);
     } else {
-      // Se initialLoadComplete è già true ma allProjects cambia, aggiorna dataReady se necessario
-      if (allProjects.length > 0 && !dataReady) {
+      // Se initialLoadComplete è già true, assicurati che dataReady sia true
+      // (anche se non ci sono progetti, il caricamento è completato)
+      if (!dataReady) {
         setDataReady(true);
+      }
+      // Se non ci sono progetti ma abbiamo già caricato, imposta hasEverLoadedProjects
+      if (allProjects.length === 0 && !hasEverLoadedProjects) {
+        setHasEverLoadedProjects(true);
       }
     }
   }, [allProjects, initialLoadComplete]);

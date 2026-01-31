@@ -47,6 +47,13 @@ export function updateActionTextInDDT(
               : undefined;
             const actionTextKey = p?.value;
             if (actionTextKey === textKey) {
+              // ✅ CRITICAL: Verify type and templateId are present before modifying
+              if (action?.type === undefined || action?.type === null) {
+                throw new Error(`[updateActionTextInDDT] Action is missing required field 'type'. Action: ${JSON.stringify(action, null, 2)}`);
+              }
+              if (action?.templateId === undefined) {
+                throw new Error(`[updateActionTextInDDT] Action is missing required field 'templateId' (must be explicitly null for standalone actions). Action: ${JSON.stringify(action, null, 2)}`);
+              }
               // Mutate the node (should be a clone)
               esc.actions[i] = {
                 ...action,
@@ -74,6 +81,13 @@ export function updateActionTextInDDT(
               : undefined;
             const actionTextKey = p?.value;
             if (actionTextKey === textKey) {
+              // ✅ CRITICAL: Verify type and templateId are present before modifying
+              if (action?.type === undefined || action?.type === null) {
+                throw new Error(`[updateActionTextInDDT] Action is missing required field 'type'. Action: ${JSON.stringify(action, null, 2)}`);
+              }
+              if (action?.templateId === undefined) {
+                throw new Error(`[updateActionTextInDDT] Action is missing required field 'templateId' (must be explicitly null for standalone actions). Action: ${JSON.stringify(action, null, 2)}`);
+              }
               // Mutate the node (should be a clone)
               esc.actions[i] = {
                 ...action,
@@ -139,6 +153,13 @@ export function updateActionTextInDDT(
             : undefined;
           const actionTextKey = p?.value;
           if (actionTextKey === textKey) {
+            // ✅ CRITICAL: Verify type and templateId are present before modifying
+            if (action?.type === undefined || action?.type === null) {
+              throw new Error(`[updateActionTextInDDT] Action is missing required field 'type'. Action: ${JSON.stringify(action, null, 2)}`);
+            }
+            if (action?.templateId === undefined) {
+              throw new Error(`[updateActionTextInDDT] Action is missing required field 'templateId' (must be explicitly null for standalone actions). Action: ${JSON.stringify(action, null, 2)}`);
+            }
             const updatedIntro = {
               ...intro,
               escalations: [

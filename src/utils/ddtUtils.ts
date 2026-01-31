@@ -3,13 +3,15 @@
  */
 
 /**
- * Extracts all GUIDs (translation keys) from a DDT structure.
+ * Extracts all GUIDs (translation keys) from a DDT/TaskTree structure.
  * GUIDs are found in:
  * - node.messages[stepKey].textKey
  * - task.id (GUID of the task instance)
  * - task.params.text (translation key)
  *
- * @param ddt - The DDT object to extract GUIDs from
+ * ✅ UPDATED: Supports both old format (ddt.data) and new format (ddt.nodes)
+ *
+ * @param ddt - The DDT/TaskTree object to extract GUIDs from
  * @returns Array of unique GUID strings found in the DDT
  */
 export function extractGUIDsFromDDT(ddt: any): string[] {
@@ -23,8 +25,18 @@ export function extractGUIDsFromDDT(ddt: any): string[] {
     tasksProcessed: 0
   };
 
-  if (!ddt?.data) {
-    console.log('[extractGUIDsFromDDT] ❌ No data in DDT', { ddt: ddt ? Object.keys(ddt) : null });
+  // ✅ Support both old format (data) and new format (nodes)
+  const nodesArray = ddt?.nodes || ddt?.data;
+  if (!nodesArray || !Array.isArray(nodesArray) || nodesArray.length === 0) {
+    if (ddt) {
+      console.log('[extractGUIDsFromDDT] ❌ No nodes/data in DDT', {
+        ddt: Object.keys(ddt),
+        hasNodes: !!ddt.nodes,
+        hasData: !!ddt.data,
+        nodesType: typeof ddt.nodes,
+        dataType: typeof ddt.data
+      });
+    }
     return [];
   }
 
@@ -99,13 +111,14 @@ export function extractGUIDsFromDDT(ddt: any): string[] {
       });
     }
 
-    // Recursively process subTasks
-    if (node.subTasks && Array.isArray(node.subTasks)) {
-      node.subTasks.forEach((sub: any) => processNode(sub, currentNodePath));
+    // ✅ Recursively process subNodes (new format) or subTasks (old format)
+    const subNodes = node.subNodes || node.subTasks;
+    if (subNodes && Array.isArray(subNodes)) {
+      subNodes.forEach((sub: any) => processNode(sub, currentNodePath));
     }
   };
 
-  ddt.data.forEach((main: any) => processNode(main));
+  nodesArray.forEach((main: any) => processNode(main));
 
   const result = Array.from(guids);
 

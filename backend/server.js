@@ -804,6 +804,7 @@ app.post('/api/projects/bootstrap', async (req, res) => {
 
     // 2) Project DB handle
     const projDb = client.db(dbName);
+    const factoryDb = client.db(dbFactory);
 
     // 3) Scrivi metadati locali
     await projDb.collection('project_meta').updateOne(
@@ -829,54 +830,13 @@ app.post('/api/projects/bootstrap', async (req, res) => {
       { upsert: true }
     );
 
-    // 4) Clona Tasks dalla factory al progetto
-    const factoryDb = client.db(dbFactory);
-    const templatesColl = factoryDb.collection('tasks');  // ✅ Collection tasks (lowercase)
-
-    // Scope filtering: global + industry-specific
-    let templatesQuery = {};
-    if (industry) {
-      templatesQuery = { $or: [{ scope: 'global' }, { scope: 'industry', industry }] };
-    } else {
-      templatesQuery = { scope: 'global' };
-    }
-
-    let templates = await templatesColl.find(templatesQuery).toArray();
-    // Fallback: se il filtro non produce risultati, copia tutti i template globali
-    if (!templates || templates.length === 0) {
-      templates = await templatesColl.find({ scope: 'global' }).toArray();
-    }
-
-    let templatesInserted = 0;
-    if (templates && templates.length > 0) {
-      // Copy templates from Factory to Project DB
-      // Each template must have an 'id' field (used as _id in Project DB)
-      const mappedTemplates = templates
-        .filter(t => t.id || t._id) // Only copy templates with valid ID
-        .map(t => {
-          const doc = { ...t };
-          const templateId = doc.id || doc._id; // Use id field or _id as fallback
-          delete doc._id; // Remove MongoDB _id, will use id as _id
-          doc._id = templateId; // Set _id to template id
-          if (!doc.id) {
-            doc.id = templateId; // Ensure id field exists
-          }
-          doc.createdAt = now;
-          doc.updatedAt = now;
-          return doc;
-        });
-
-      if (mappedTemplates.length > 0) {
-        try {
-          const result = await projDb.collection('tasks').insertMany(mappedTemplates, { ordered: false });
-          templatesInserted = result.insertedCount || Object.keys(result.insertedIds || {}).length || 0;
-        } catch (insertError) {
-          console.error('[Bootstrap] Error inserting tasks:', insertError);
-          // Continue even if insert fails (collection might already exist or have duplicates)
-          templatesInserted = 0;
-        }
-      }
-    }
+    // 4) ✅ RIMOSSO: Non copiare template del Factory nel progetto
+    // I template del Factory devono essere caricati solo in memoria quando servono
+    // Il progetto contiene solo:
+    // - Task Instances (con templateId che referenzia Factory o progetto)
+    // - Template creati dall'utente (templateId: null = nuovo template locale)
+    console.log('[Bootstrap] ✅ Template Factory non vengono copiati nel progetto (caricati solo in memoria quando servono)');
+    const templatesInserted = 0; // ✅ Template non vengono più copiati, sempre 0
 
     // 5) Clona task_heuristics dalla factory al progetto
     const heuristicsColl = factoryDb.collection('task_heuristics');
@@ -1195,8 +1155,9 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
   const payload = req.body || {};
   const nodes = Array.isArray(payload.nodes) ? payload.nodes : [];
   const edges = Array.isArray(payload.edges) ? payload.edges : [];
-  await withMongoClient(async (client) => {
-    const db = await getProjectDb(client, pid);
+  try {
+    await withMongoClient(async (client) => {
+      const db = await getProjectDb(client, pid);
     const ncoll = db.collection('flow_nodes');
     const ecoll = db.collection('flow_edges');
     // Diff-only upsert per flowId: assume nodes/edges carry stable id fields
@@ -1268,17 +1229,18 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
       await ecoll.bulkWrite(edgeOps, { ordered: false });
     }
 
-    logInfo('Flow.put', {
-      projectId: pid,
-      flowId,
-      payload: { nodes: nodes.length, edges: edges.length },
-      result: { upserts: { nodes: nUpserts, edges: eUpserts }, deletes: { nodes: nDeletes, edges: eDeletes } }
+      logInfo('Flow.put', {
+        projectId: pid,
+        flowId,
+        payload: { nodes: nodes.length, edges: edges.length },
+        result: { upserts: { nodes: nUpserts, edges: eUpserts }, deletes: { nodes: nDeletes, edges: eDeletes } }
+      });
+      res.json({ ok: true, nodes: nodes.length, edges: edges.length });
     });
-    res.json({ ok: true, nodes: nodes.length, edges: edges.length });
-  }).catch((e) => {
+  } catch (e) {
     logError('Flow.put', e, { projectId: pid, flowId, payloadNodes: nodes.length, payloadEdges: edges.length });
     res.status(500).json({ error: String(e?.message || e) });
-  });
+  }
 });
 
 // List flows (by distinct flowId in flow_nodes)
@@ -1948,8 +1910,45 @@ app.get('/api/factory/tasks', async (req, res) => {
     await client.connect();
     const db = client.db(dbFactory);
 
-    // Parametri query per scope filtering
-    const { scopes, context, projectId, industry } = req.query;
+    // Parametri query per scope filtering e taskType
+    const { scopes, context, projectId, industry, taskType } = req.query;
+
+    // ✅ NUOVO: Gestisci taskType query parameter (es. taskType=Action)
+    // Se taskType è fornito, filtra per tipo di task
+    // Action types sono enum 6-19 (SendSMS=6, SendEmail=7, EscalateToHuman=8, ecc.)
+    if (taskType === 'Action') {
+      try {
+        // ✅ Query per Action tasks (type enum 6-19)
+        const actionTasks = await db.collection('tasks').find({
+          type: { $gte: 6, $lte: 19 }  // ✅ Action types: enum 6-19
+        }).toArray();
+
+        // Convert to old format for backward compatibility
+        const formattedActions = actionTasks.map(action => ({
+          id: action.id?.replace('-template', '') || action._id?.replace('-template', ''),
+          label: action.label || '',
+          description: action.description || '',
+          icon: action.icon || 'Circle',
+          color: action.color || 'text-gray-500',
+          params: action.structure || action.params || {},
+          type: action.type
+        }));
+
+        console.log(`[FactoryTasks] Found ${formattedActions.length} Action tasks`);
+        return res.json(formattedActions);
+      } catch (actionError) {
+        console.error('[FactoryTasks] Error querying Action tasks:', {
+          message: actionError.message,
+          stack: actionError.stack,
+          taskType
+        });
+        return res.status(500).json({
+          error: 'Failed to query Action tasks',
+          message: actionError.message,
+          stack: process.env.NODE_ENV === 'development' ? actionError.stack : undefined
+        });
+      }
+    }
 
     // Costruisci array di scope da cercare
     const scopeArray = [];
@@ -2023,7 +2022,7 @@ app.get('/api/factory/tasks', async (req, res) => {
 
   } catch (error) {
     console.error('[TaskTemplatesV2] Error:', error);
-    res.status(500).json({ error: 'Failed to fetch task templates' });
+    res.status(500).json({ error: 'Failed to fetch task templates', details: error.message });
   } finally {
     await client.close();
   }
@@ -2193,23 +2192,7 @@ app.put('/api/factory/conditions/:id', async (req, res) => {
   }
 });
 
-// Tasks - GET (legacy)
-app.get('/api/factory/tasks', async (req, res) => {
-  const client = new MongoClient(uri);
-  try {
-    await client.connect();
-    const db = client.db(dbFactory);
-    const coll = db.collection('tasks');
-    const docs = await coll.find({}).toArray();
-    console.log(`>>> Found ${docs.length} Tasks`);
-    res.json(docs);
-  } catch (error) {
-    console.error('Error fetching tasks:', error);
-    res.status(500).json({ error: 'Failed to fetch tasks' });
-  } finally {
-    await client.close();
-  }
-});
+// ❌ RIMOSSO: Tasks - GET (legacy) - Duplicato, gestito dall'endpoint sopra con scope filtering
 
 // Tasks - POST (with scope filtering)
 app.post('/api/factory/tasks', async (req, res) => {
@@ -2531,7 +2514,8 @@ app.post('/api/factory/template-translations', async (req, res) => {
       stack: err.stack,
       name: err.name,
       keysReceived: req.body?.keys,
-      keysCount: req.body?.keys?.length
+      keysCount: req.body?.keys?.length,
+      dbFactory: typeof dbFactory !== 'undefined' ? dbFactory : 'UNDEFINED'
     });
     res.status(500).json({
       error: err.message || 'Unknown error',
@@ -2540,7 +2524,11 @@ app.post('/api/factory/template-translations', async (req, res) => {
       keysCount: req.body?.keys?.length
     });
   } finally {
-    await client.close();
+    if (client) {
+      await client.close().catch(closeErr => {
+        console.error('[TEMPLATE_TRANSLATIONS] Error closing client:', closeErr);
+      });
+    }
   }
 });
 

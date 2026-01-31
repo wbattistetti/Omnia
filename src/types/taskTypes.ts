@@ -263,13 +263,27 @@ export interface TaskHeuristic {
  * - Task con template: { id: "guid", type: TaskType.UtteranceInterpretation, templateId: "template-guid", label: "...", steps: {...} }
  * - Task senza templateId: { id: "guid", type: TaskType.UtteranceInterpretation, templateId: null, ... } → viene creato template automaticamente
  */
+/**
+ * Materialized Step: Step materializzato nell'istanza
+ *
+ * Semantica:
+ * - Step derivato dal template: ha templateStepId → deriva da uno step del template
+ * - Step aggiunto dall'utente: ha solo id, senza templateStepId → aggiunto nell'istanza, non esiste nel template
+ */
+export interface MaterializedStep {
+  id: string;                    // ✅ Nuovo GUID per l'istanza
+  templateStepId?: string;        // ✅ GUID dello step del template (presente solo se step derivato dal template)
+  escalations: any[];             // ✅ Escalations (unica parte modificabile)
+}
+
 export interface Task {
   id: string;                    // ✅ GUID univoco
   type: TaskType;                 // ✅ Enum numerico (0-19) - Determina il comportamento del task
   templateId: string | null;      // ✅ null = crea template automaticamente, GUID = referenzia un template
+  templateVersion?: number;       // ✅ Versione del template usata per creare l'istanza (per drift detection)
   // ✅ Campi diretti (niente wrapper value):
   // Per DataRequest/UtteranceInterpretation:
-  label?: string;                // Label override (se diversa dal template)
+  labelKey?: string;              // ✅ Translation key per la label (es. "ask_patient_birthdate") - NON testo diretto
   // ✅ NUOVO: subTasksIds - Solo per template: array di templateId che referenziano altri template
   // Per istanze: sempre undefined (la struttura viene dal template)
   subTasksIds?: string[];        // ✅ Array di templateId (solo per template, non per istanze)
@@ -278,7 +292,7 @@ export interface Task {
   // ❌ RIMOSSO: examples - Vengono sempre dal template, non dall'istanza
   // ❌ RIMOSSO: dataContract - Viene sempre dal template, non dall'istanza
   dialogueSteps?: any[];         // ✅ Flat dialogue steps array (replaces nested data[].steps) - DEPRECATED
-  steps?: Record<string, any>;   // ✅ Steps override a root level: { "templateId": { start: {...}, noMatch: {...} } }
+  steps?: MaterializedStep[] | Record<string, any>;  // ✅ Steps materializzati come array piatto (nuovo) o dictionary (legacy)
   // ❌ RIMOSSO: steps - use steps instead
   introduction?: any;             // ✅ Introduction override (opzionale)
   // Per SayMessage:
@@ -329,9 +343,9 @@ export interface TaskTreeNode {
  * - TaskTree viene costruito ogni volta che si apre l'editor (non viene salvato)
  */
 export interface TaskTree {
-  label: string;                 // ✅ Label (da instance se override, altrimenti da template)
+  labelKey: string;              // ✅ Translation key (es. "ask_patient_birthdate") - NON testo diretto
   nodes: TaskTreeNode[];         // ✅ Nodi principali (costruiti da template.subTasksIds)
-  steps: Record<string, any>;     // ✅ Steps override per ogni nodo: { "templateId": { start: {...}, ... } }
+  steps: MaterializedStep[];     // ✅ Steps materializzati come array piatto
   constraints?: any[];           // ✅ Dal template (sempre)
   dataContract?: any;            // ✅ Dal template (sempre)
   introduction?: any;             // ✅ Opzionale (da instance se override)

@@ -72,8 +72,8 @@ export function expandDDT(
 
       for (let taskIndex = 0; taskIndex < taskRefs.length; taskIndex++) {
         const taskRef = taskRefs[taskIndex] as any;
-        // ✅ MIGRATION: Support both taskId (new) and actionInstanceId (legacy)
-        const taskId = taskRef.taskId || taskRef.actionInstanceId || taskRef.templateId || taskRef.actionId || `task-${recoveryId}-${taskIndex + 1}`;
+        // ✅ NO FALLBACK: Solo id per tasks, actionInstanceId per actions legacy
+        const taskId = taskRef.id || taskRef.actionInstanceId || taskRef.templateId || taskRef.actionId || `task-${recoveryId}-${taskIndex + 1}`;
 
         // Resolve task from taskId
         const task = getTask(taskId);
@@ -99,7 +99,7 @@ export function expandDDT(
         } else {
           // Subsequent tasks: previous task completed
           const prevTaskRef = taskRefs[taskIndex - 1] as any;
-          const prevTaskId = prevTaskRef.taskId || prevTaskRef.actionInstanceId || prevTaskRef.templateId || prevTaskRef.actionId || `task-${recoveryId}-${taskIndex}`;
+          const prevTaskId = prevTaskRef.id || prevTaskRef.actionInstanceId || prevTaskRef.templateId || prevTaskRef.actionId || `task-${recoveryId}-${taskIndex}`;
           condition = buildRecoverySequentialCondition(prevTaskId);
         }
 

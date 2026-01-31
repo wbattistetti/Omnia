@@ -29,7 +29,12 @@ export function useDDTTranslations(ddt: any | null | undefined, task?: any): Rec
 
   // Use stable dependencies: serialize ddt id, task steps, and translations keys
   const ddtId = ddt?.id || ddt?._id || null;
-  const taskStepsKeys = task?.steps ? Object.keys(task.steps).sort().join(',') : '';
+  // ✅ NUOVO: Gestisce sia array che dictionary per retrocompatibilità
+  const taskStepsKeys = task?.steps
+    ? (Array.isArray(task.steps)
+        ? `array:${task.steps.length}`
+        : Object.keys(task.steps).sort().join(','))
+    : '';
   const translationsKeys = Object.keys(globalTranslations).sort().join(',');
 
   return useMemo(() => {
@@ -40,29 +45,21 @@ export function useDDTTranslations(ddt: any | null | undefined, task?: any): Rec
     const guidsArray = extractGUIDsFromDDT(ddt);
     const guidsSet = new Set(guidsArray);
 
-    // ✅ Also extract GUIDs from task.steps[nodeId] (unified model)
+    // ✅ Also extract GUIDs from task.steps (unified model)
+    // ✅ NUOVO: Gestisce sia array MaterializedStep[] che dictionary legacy
     if (task?.steps) {
       const taskStepsGuids: string[] = [];
-      Object.entries(task.steps).forEach(([nodeId, steps]: [string, any]) => {
-        if (!steps || typeof steps !== 'object') {
-          if (typeof localStorage !== 'undefined' && localStorage.getItem('debug.useDDTTranslations') === '1') {
-            console.log('[useDDTTranslations] ⚠️ Invalid steps structure', { nodeId, steps, stepsType: typeof steps });
-          }
-          return;
-        }
 
-        // steps can be an array or an object with step keys
-        const stepEntries = Array.isArray(steps)
-          ? steps.map((s: any, idx: number) => [`step_${idx}`, s])
-          : Object.entries(steps);
-
-        stepEntries.forEach(([stepKey, step]: [string, any]) => {
-          if (step?.escalations) {
+      if (Array.isArray(task.steps)) {
+        // ✅ NUOVO MODELLO: Array MaterializedStep[]
+        // Ogni step è un MaterializedStep con escalations
+        task.steps.forEach((step: any) => {
+          if (step?.escalations && Array.isArray(step.escalations)) {
             step.escalations.forEach((esc: any) => {
-              if (esc?.tasks) {
-                esc.tasks.forEach((task: any) => {
+              if (esc?.tasks && Array.isArray(esc.tasks)) {
+                esc.tasks.forEach((taskItem: any) => {
                   // Extract text parameter GUID
-                  const textParam = task.parameters?.find((p: any) => p?.parameterId === 'text');
+                  const textParam = taskItem.parameters?.find((p: any) => p?.parameterId === 'text');
                   if (textParam?.value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textParam.value)) {
                     guidsSet.add(textParam.value);
                     taskStepsGuids.push(textParam.value);
@@ -72,11 +69,44 @@ export function useDDTTranslations(ddt: any | null | undefined, task?: any): Rec
             });
           }
         });
-      });
+      } else {
+        // ✅ RETROCOMPATIBILITÀ: Dictionary format { [nodeId]: steps }
+        Object.entries(task.steps).forEach(([nodeId, steps]: [string, any]) => {
+          if (!steps || typeof steps !== 'object') {
+            if (typeof localStorage !== 'undefined' && localStorage.getItem('debug.useDDTTranslations') === '1') {
+              console.log('[useDDTTranslations] ⚠️ Invalid steps structure', { nodeId, steps, stepsType: typeof steps });
+            }
+            return;
+          }
+
+          // steps can be an array or an object with step keys
+          const stepEntries = Array.isArray(steps)
+            ? steps.map((s: any, idx: number) => [`step_${idx}`, s])
+            : Object.entries(steps);
+
+          stepEntries.forEach(([stepKey, step]: [string, any]) => {
+            if (step?.escalations) {
+              step.escalations.forEach((esc: any) => {
+                if (esc?.tasks) {
+                  esc.tasks.forEach((taskItem: any) => {
+                    // Extract text parameter GUID
+                    const textParam = taskItem.parameters?.find((p: any) => p?.parameterId === 'text');
+                    if (textParam?.value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textParam.value)) {
+                      guidsSet.add(textParam.value);
+                      taskStepsGuids.push(textParam.value);
+                    }
+                  });
+                }
+              });
+            }
+          });
+        });
+      }
 
       if (typeof localStorage !== 'undefined' && localStorage.getItem('debug.useDDTTranslations') === '1' && taskStepsGuids.length > 0) {
         console.log('[useDDTTranslations] ✅ Extracted GUIDs from task.steps', {
-          nodeIds: Object.keys(task.steps),
+          taskStepsIsArray: Array.isArray(task.steps),
+          taskStepsCount: Array.isArray(task.steps) ? task.steps.length : Object.keys(task.steps).length,
           guidsFromTaskSteps: taskStepsGuids.length,
           sampleGuids: taskStepsGuids.slice(0, 5)
         });
@@ -90,7 +120,10 @@ export function useDDTTranslations(ddt: any | null | undefined, task?: any): Rec
         console.log('[useDDTTranslations] ⚠️ No GUIDs found', {
           ddtId: ddt?.id || ddt?._id,
           hasTask: !!task,
-          taskStepsCount: task?.steps ? Object.keys(task.steps).length : 0,
+          taskStepsIsArray: Array.isArray(task?.steps),
+          taskStepsCount: task?.steps
+            ? (Array.isArray(task.steps) ? task.steps.length : Object.keys(task.steps).length)
+            : 0,
           hasdata: !!ddt?.data,
           dataLength: ddt?.data?.length || 0
         });
@@ -124,9 +157,12 @@ export function useDDTTranslations(ddt: any | null | undefined, task?: any): Rec
         sampleGuids: guids.slice(0, 5),
         sampleFound: foundGuids.slice(0, 5),
         sampleMissing: missingGuids.slice(0, 5),
-        hasTask: !!task,
-        taskStepsCount: task?.steps ? Object.keys(task.steps).length : 0
-      });
+          hasTask: !!task,
+          taskStepsIsArray: Array.isArray(task?.steps),
+          taskStepsCount: task?.steps
+            ? (Array.isArray(task.steps) ? task.steps.length : Object.keys(task.steps).length)
+            : 0
+        });
     }
 
     // ✅ Log warning only if state actually changed (not just reference change)
