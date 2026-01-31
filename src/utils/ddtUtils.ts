@@ -67,8 +67,8 @@ export function extractGUIDsFromDDT(ddt: any): string[] {
                 nodePath: currentNodePath,
                 stepKey,
                 escIdx,
-                hasActions: !!esc.actions,
-                actionsCount: esc.actions?.length || 0
+                hasTasks: !!esc.tasks,
+                tasksCount: esc.tasks?.length || 0
               });
             }
             taskRefs.forEach((task: any, taskIdx: number) => {

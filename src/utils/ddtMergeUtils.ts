@@ -433,7 +433,7 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
   const cloned = {
     ...escalation,
     escalationId: escalation.escalationId ? `e_${uuidv4()}` : undefined,
-    tasks: (escalation.tasks || escalation.actions || []).map((task: any) => {
+    tasks: (escalation.tasks || []).map((task: any) => {
       const oldGuid = task.id;
       const newGuid = uuidv4();
       if (oldGuid) {
@@ -444,19 +444,8 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
         id: newGuid,  // ✅ New ID for task instance
         // Keep templateId, params, etc. from original
       };
-    }),
-    actions: (escalation.actions || []).map((action: any) => {
-      const oldGuid = action.actionInstanceId || action.taskId;
-      const newGuid = uuidv4();
-      if (oldGuid) {
-        guidMapping.set(oldGuid, newGuid);
-      }
-      return {
-        ...action,
-        actionInstanceId: newGuid,  // ✅ New ID for action instance (legacy)
-        // Keep actionId, parameters, etc. from original
-      };
     })
+    // ❌ RIMOSSO: actions - legacy field, non più necessario
   };
 
   return cloned;

@@ -1048,8 +1048,10 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
             const taskType = task?.type ?? TaskType.SayMessage; // ✅ Usa direttamente task.type (TaskType enum)
             taskInstance = taskRepository.createTask(taskType, null, undefined, key, currentProjectId || undefined);
           }
-          // ✅ AWAIT per garantire completamento
-          await taskRepository.updateTask(key, finalDDT, currentProjectId || undefined);
+          // ✅ CORRETTO: Usa extractTaskOverrides invece di salvare finalDDT direttamente
+          const { extractTaskOverrides } = await import('../../../utils/taskUtils');
+          const overrides = await extractTaskOverrides(taskInstance, finalDDT, currentProjectId || undefined);
+          await taskRepository.updateTask(key, overrides, currentProjectId || undefined);
           console.log('[handleEditorClose] ✅ Save completed (no data)', { key });
         }
 
@@ -1861,7 +1863,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
                     dataContract: taskTree.dataContract
                   } : taskTree)}
                   onCancel={onClose || (() => { })}
-                  onComplete={(finalDDT, messages) => {
+                  onComplete={async (finalDDT, messages) => {
                     if (!finalDDT) {
                       console.error('[ResponseEditor] onComplete called with null/undefined finalDDT');
                       return;
@@ -1928,17 +1930,21 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
                         });
 
                         const currentTemplateId = getTemplateId(taskInstance);
-                        const updateData: Partial<Task> = {
-                          label: coerced.label,
-                          // ❌ RIMOSSO: data: coerced.data,  // NON salvare data! (si ricostruisce runtime)
-                          steps: coerced.steps, // ✅ Salva steps a root level immediatamente
-                          constraints: coerced.constraints, // ✅ Override opzionali (solo se modificati)
-                          examples: coerced.examples, // ✅ Override opzionali (solo se modificati)
-                          dataContract: coerced.dataContract, // ✅ Override opzionali (solo se modificati)
-                          introduction: coerced.introduction
-                        };
 
-                        // ✅ CRITICAL: Preserva templateId
+                        // ✅ CORRETTO: Usa extractTaskOverrides invece di salvare campi del template
+                        const { extractTaskOverrides, buildTemplateExpanded } = await import('../../../utils/taskUtils');
+                        const templateExpanded = currentTemplateId
+                          ? await buildTemplateExpanded(currentTemplateId, currentProjectId || undefined)
+                          : null;
+
+                        const updateData = await extractTaskOverrides(
+                          taskInstance,
+                          coerced,
+                          currentProjectId || undefined,
+                          templateExpanded || undefined
+                        );
+
+                        // ✅ CRITICAL: Preserva templateId se necessario
                         if (currentTemplateId && currentTemplateId !== 'UNDEFINED') {
                           updateData.templateId = currentTemplateId; // ✅ Preserva templateId esistente
                         } else if (coerced.templateId) {
@@ -1947,30 +1953,21 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
                         // ❌ RIMOSSO: Non sovrascrivere templateId con null!
 
                         // ✅ DEBUG: Verifica updateData prima del salvataggio
+                        const stepsIsArray = Array.isArray(updateData.steps);
+                        const stepsCount = stepsIsArray ? updateData.steps.length : (updateData.steps ? Object.keys(updateData.steps).length : 0);
                         console.log('[ResponseEditor][onComplete] 🔍 updateData before save', {
                           key,
                           updateDataKeys: Object.keys(updateData),
                           hasSteps: !!updateData.steps,
                           stepsType: typeof updateData.steps,
-                          stepsKeys: updateData.steps ? Object.keys(updateData.steps) : [],
-                          stepsCount: updateData.steps ? Object.keys(updateData.steps).length : 0,
+                          stepsIsArray: stepsIsArray,
+                          stepsCount: stepsCount,
                           templateId: updateData.templateId, // ✅ Verifica templateId preservato
-                          stepsDetails: updateData.steps ? Object.keys(updateData.steps).map(nodeId => {
-                            const nodeSteps = updateData.steps[nodeId];
-                            const isArray = Array.isArray(nodeSteps);
-                            const isObject = typeof nodeSteps === 'object' && !Array.isArray(nodeSteps);
-                            let stepKeys: string[] = [];
-                            if (isArray) {
-                              stepKeys = nodeSteps.map((s: any) => s?.type || 'unknown');
-                            } else if (isObject) {
-                              stepKeys = Object.keys(nodeSteps || {});
-                            }
-                            return {
-                              nodeId: nodeId.substring(0, 20) + '...',
-                              stepKeys,
-                              stepCount: stepKeys.length
-                            };
-                          }) : []
+                          sampleSteps: stepsIsArray && updateData.steps ? updateData.steps.slice(0, 3).map((s: any) => ({
+                            id: s?.id,
+                            templateStepId: s?.templateStepId,
+                            escalationsCount: Array.isArray(s?.escalations) ? s.escalations.length : 0
+                          })) : []
                         });
 
                         taskRepository.updateTask(key, updateData, currentProjectId || undefined);

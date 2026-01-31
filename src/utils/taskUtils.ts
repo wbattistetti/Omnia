@@ -468,7 +468,7 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
   const cloned = {
     ...escalation,
     escalationId: escalation.escalationId ? `e_${uuidv4()}` : undefined,
-    tasks: (escalation.tasks || escalation.actions || []).map((task: any) => {
+    tasks: (escalation.tasks || []).map((task: any) => {
       const oldGuid = task.id;
       const newGuid = uuidv4();
       if (oldGuid) {
@@ -494,35 +494,8 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
         edited: false,  // ✅ Mark as not edited (inherited from template)
         // Keep params, text, etc. from original
       };
-    }),
-    actions: (escalation.actions || []).map((action: any) => {
-      // ✅ NO FALLBACK: Solo actionInstanceId o id (non taskId)
-      const oldGuid = action.actionInstanceId || action.id;
-      const newGuid = uuidv4();
-      if (oldGuid) {
-        guidMapping.set(oldGuid, newGuid);
-      }
-
-      // ✅ VALIDAZIONE: type obbligatorio (non può essere undefined o null)
-      if (action.type === undefined || action.type === null) {
-        throw new Error(`[cloneEscalationWithNewTaskIds] Template action ${action.id || action.actionInstanceId || 'unknown'} is missing required field 'type'. The template is corrupted and must be fixed in the database. Action structure: ${JSON.stringify(action, null, 2)}`);
-      }
-
-      // ✅ VALIDAZIONE: templateId deve essere presente come chiave (può essere null per task standalone)
-      if (action.templateId === undefined) {
-        throw new Error(`[cloneEscalationWithNewTaskIds] Template action ${action.id || action.actionInstanceId || 'unknown'} is missing required field 'templateId' (must be explicitly null for standalone actions, or a GUID if derived from another template). The template is corrupted and must be fixed in the database. Action structure: ${JSON.stringify(action, null, 2)}`);
-      }
-
-      return {
-        ...action,
-        actionInstanceId: newGuid,  // ✅ New ID for action instance (legacy)
-        type: action.type,  // ✅ NO FALLBACK - must be present in template
-        templateId: action.templateId,  // ✅ NO FALLBACK - must be present in template (can be null)
-        templateTaskId: oldGuid || null,  // ✅ Save original template task ID
-        edited: false,  // ✅ Mark as not edited (inherited from template)
-        // Keep actionId, parameters, etc. from original
-      };
     })
+    // ❌ RIMOSSO: actions - legacy field, non più necessario
   };
 
   return cloned;
@@ -566,12 +539,7 @@ export function markTaskAsEdited(
         task.edited = true;
         return; // ✅ Trovato e modificato
       }
-      // Legacy: also check actions
-      if (esc?.actions && Array.isArray(esc.actions) && taskIndex < esc.actions.length) {
-        const action = esc.actions[taskIndex];
-        action.edited = true;
-        return; // ✅ Trovato e modificato
-      }
+      // ❌ RIMOSSO: Legacy actions check - non più necessario
     }
   }
 
@@ -645,15 +613,7 @@ export function migrateTaskOverrides(steps: MaterializedStep[] | Record<string, 
           }
         });
       }
-      // Legacy: also check actions
-      if (esc?.actions && Array.isArray(esc.actions)) {
-        esc.actions.forEach((action: any) => {
-          if (action.templateTaskId === undefined) {
-            action.templateTaskId = null;
-            action.edited = true;
-          }
-        });
-      }
+      // ❌ RIMOSSO: Legacy actions check - non più necessario
     });
   }
 }
@@ -1432,11 +1392,7 @@ function updateEditedFlags(workingCopy: TaskTree, templateExpanded: TaskTree): v
         const task = esc.tasks.find((t: any) => t.id === templateTaskId);
         if (task) return task;
       }
-      // Legacy: also check actions
-      if (esc?.actions && Array.isArray(esc.actions)) {
-        const action = esc.actions.find((a: any) => a.id === templateTaskId || a.actionInstanceId === templateTaskId);
-        if (action) return action;
-      }
+      // ❌ RIMOSSO: Legacy actions check - non più necessario
     }
     return null;
   };
@@ -1458,11 +1414,7 @@ function updateEditedFlags(workingCopy: TaskTree, templateExpanded: TaskTree): v
             task.edited = true;  // ✅ Step aggiunto → tutti i task sono edited
           });
         }
-        if (esc?.actions && Array.isArray(esc.actions)) {
-          esc.actions.forEach((action: any) => {
-            action.edited = true;
-          });
-        }
+        // ❌ RIMOSSO: Legacy actions check - non più necessario
       });
       continue;
     }
@@ -1487,22 +1439,7 @@ function updateEditedFlags(workingCopy: TaskTree, templateExpanded: TaskTree): v
           }
         });
       }
-      // Legacy: also check actions
-      if (esc?.actions && Array.isArray(esc.actions)) {
-        esc.actions.forEach((action: any) => {
-          if (action.templateTaskId !== null && action.templateTaskId !== undefined) {
-            const templateAction = findTemplateTask(action.templateTaskId, templateStep);
-            if (templateAction) {
-              const valuesMatch = compareTaskValues(action, templateAction);
-              action.edited = !valuesMatch;
-            } else {
-              action.edited = true;
-            }
-          } else {
-            action.edited = true;
-          }
-        });
-      }
+      // ❌ RIMOSSO: Legacy actions check - non più necessario
     });
   }
 }
@@ -1567,11 +1504,14 @@ export async function extractTaskOverrides(
     ? workingSteps
     : [];  // ✅ Se non è array, inizializza vuoto (legacy format)
 
+  // ✅ CORRETTO: L'istanza contiene SOLO questi campi:
+  // - id, templateId, templateVersion, labelKey, steps, createdAt, updatedAt
+  // - introduction viene assorbito in uno step normale, non va salvato
   const result: Partial<Task> = {
     labelKey: workingCopy.labelKey || workingCopy.label,  // ✅ Usa labelKey (fallback a label per retrocompatibilità)
     steps: materializedSteps,  // ✅ Array MaterializedStep[]
-    templateVersion: templateVersion,  // ✅ Versione del template per drift detection
-    introduction: workingCopy.introduction
+    templateVersion: templateVersion  // ✅ Versione del template per drift detection
+    // ❌ RIMOSSO: introduction - viene assorbito in uno step normale
   };
 
   return result;

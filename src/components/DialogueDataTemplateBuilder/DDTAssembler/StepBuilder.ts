@@ -76,8 +76,8 @@ export function buildEscalation(
   );
   return {
     escalationId,
-    tasks,
-    actions: tasks  // ✅ Legacy alias for backward compatibility
+    tasks
+    // ❌ RIMOSSO: actions - legacy field, non più necessario
   };
 }
 

@@ -331,10 +331,10 @@ export async function adaptCurrentToV2(current: AssembledDDT, projectLanguage: s
   // Convert introduction StepGroup to StepMessages format for V2
   let introductionV2: any = undefined;
   if (current.introduction) {
-    // Extract text keys from introduction actions
-    const actions = current.introduction.escalations?.[0]?.actions || [];
-    const textKeys = actions
-      .map((a: any) => a?.parameters?.find((p: any) => p?.parameterId === 'text')?.value)
+    // Extract text keys from introduction tasks
+    const tasks = current.introduction.escalations?.[0]?.tasks || [];
+    const textKeys = tasks
+      .map((t: any) => t?.parameters?.find((p: any) => p?.parameterId === 'text')?.value)
       .filter(Boolean);
     if (textKeys.length > 0) {
       // Create a simple StepMessages structure for introduction

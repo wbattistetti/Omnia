@@ -55,8 +55,8 @@ export function useNodeUpdate(
 
         // Check if introduction actually changed
         const newIntroStep = updated?.steps?.find((s: any) => s.type === 'introduction');
-        const hasActions = newIntroStep?.escalations?.some((esc: any) =>
-              esc?.actions && Array.isArray(esc.actions) && esc.actions.length > 0
+        const hasTasks = newIntroStep?.escalations?.some((esc: any) =>
+              esc?.tasks && Array.isArray(esc.tasks) && esc.tasks.length > 0
             );
         const introChanged = JSON.stringify(prev.introduction) !== JSON.stringify(newIntroStep?.escalations);
 
@@ -64,7 +64,7 @@ export function useNodeUpdate(
 
         // Only create new DDT if introduction changed
         const next = { ...prev };
-            if (hasActions) {
+            if (hasTasks) {
               next.introduction = {
                 type: 'introduction',
             escalations: newIntroStep.escalations || []

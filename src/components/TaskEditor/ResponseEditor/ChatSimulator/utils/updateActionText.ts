@@ -39,24 +39,24 @@ export function updateActionTextInDDT(
       if (stepData?.escalations && Array.isArray(stepData.escalations)) {
         const escIndex = escalationNumber ? escalationNumber - 1 : 0; // escalationNumber is 1-indexed
         const esc = stepData.escalations[escIndex];
-        if (esc?.actions && Array.isArray(esc.actions)) {
-          for (let i = 0; i < esc.actions.length; i++) {
-            const action = esc.actions[i];
-            const p = Array.isArray(action?.parameters)
-              ? action.parameters.find((x: any) => (x?.parameterId || x?.key) === 'text')
+        if (esc?.tasks && Array.isArray(esc.tasks)) {
+          for (let i = 0; i < esc.tasks.length; i++) {
+            const task = esc.tasks[i];
+            const p = Array.isArray(task?.parameters)
+              ? task.parameters.find((x: any) => (x?.parameterId || x?.key) === 'text')
               : undefined;
-            const actionTextKey = p?.value;
-            if (actionTextKey === textKey) {
+            const taskTextKey = p?.value;
+            if (taskTextKey === textKey) {
               // ✅ CRITICAL: Verify type and templateId are present before modifying
-              if (action?.type === undefined || action?.type === null) {
-                throw new Error(`[updateActionTextInDDT] Action is missing required field 'type'. Action: ${JSON.stringify(action, null, 2)}`);
+              if (task?.type === undefined || task?.type === null) {
+                throw new Error(`[updateActionTextInDDT] Task is missing required field 'type'. Task: ${JSON.stringify(task, null, 2)}`);
               }
-              if (action?.templateId === undefined) {
-                throw new Error(`[updateActionTextInDDT] Action is missing required field 'templateId' (must be explicitly null for standalone actions). Action: ${JSON.stringify(action, null, 2)}`);
+              if (task?.templateId === undefined) {
+                throw new Error(`[updateActionTextInDDT] Task is missing required field 'templateId' (must be explicitly null for standalone tasks). Task: ${JSON.stringify(task, null, 2)}`);
               }
               // Mutate the node (should be a clone)
-              esc.actions[i] = {
-                ...action,
+              esc.tasks[i] = {
+                ...task,
                 text: newText.length > 0 ? newText : undefined,
                 edited: true  // ✅ Mark as edited when user modifies text
               };
@@ -73,24 +73,24 @@ export function updateActionTextInDDT(
       if (group?.escalations && Array.isArray(group.escalations)) {
         const escIndex = escalationNumber ? escalationNumber - 1 : 0;
         const esc = group.escalations[escIndex];
-        if (esc?.actions && Array.isArray(esc.actions)) {
-          for (let i = 0; i < esc.actions.length; i++) {
-            const action = esc.actions[i];
-            const p = Array.isArray(action?.parameters)
-              ? action.parameters.find((x: any) => (x?.parameterId || x?.key) === 'text')
+        if (esc?.tasks && Array.isArray(esc.tasks)) {
+          for (let i = 0; i < esc.tasks.length; i++) {
+            const task = esc.tasks[i];
+            const p = Array.isArray(task?.parameters)
+              ? task.parameters.find((x: any) => (x?.parameterId || x?.key) === 'text')
               : undefined;
-            const actionTextKey = p?.value;
-            if (actionTextKey === textKey) {
+            const taskTextKey = p?.value;
+            if (taskTextKey === textKey) {
               // ✅ CRITICAL: Verify type and templateId are present before modifying
-              if (action?.type === undefined || action?.type === null) {
-                throw new Error(`[updateActionTextInDDT] Action is missing required field 'type'. Action: ${JSON.stringify(action, null, 2)}`);
+              if (task?.type === undefined || task?.type === null) {
+                throw new Error(`[updateActionTextInDDT] Task is missing required field 'type'. Task: ${JSON.stringify(task, null, 2)}`);
               }
-              if (action?.templateId === undefined) {
-                throw new Error(`[updateActionTextInDDT] Action is missing required field 'templateId' (must be explicitly null for standalone actions). Action: ${JSON.stringify(action, null, 2)}`);
+              if (task?.templateId === undefined) {
+                throw new Error(`[updateActionTextInDDT] Task is missing required field 'templateId' (must be explicitly null for standalone tasks). Task: ${JSON.stringify(task, null, 2)}`);
               }
               // Mutate the node (should be a clone)
-              esc.actions[i] = {
-                ...action,
+              esc.tasks[i] = {
+                ...task,
                 text: newText.length > 0 ? newText : undefined,
                 edited: true  // ✅ Mark as edited when user modifies text
               };
@@ -145,34 +145,34 @@ export function updateActionTextInDDT(
     const intro = JSON.parse(JSON.stringify((ddt as any).introduction));
     if (intro?.escalations && Array.isArray(intro.escalations)) {
       const esc = intro.escalations[0];
-      if (esc?.actions && Array.isArray(esc.actions)) {
-        for (let i = 0; i < esc.actions.length; i++) {
-          const action = esc.actions[i];
-          const p = Array.isArray(action?.parameters)
-            ? action.parameters.find((x: any) => (x?.parameterId || x?.key) === 'text')
+      if (esc?.tasks && Array.isArray(esc.tasks)) {
+        for (let i = 0; i < esc.tasks.length; i++) {
+          const task = esc.tasks[i];
+          const p = Array.isArray(task?.parameters)
+            ? task.parameters.find((x: any) => (x?.parameterId || x?.key) === 'text')
             : undefined;
-          const actionTextKey = p?.value;
-          if (actionTextKey === textKey) {
+          const taskTextKey = p?.value;
+          if (taskTextKey === textKey) {
             // ✅ CRITICAL: Verify type and templateId are present before modifying
-            if (action?.type === undefined || action?.type === null) {
-              throw new Error(`[updateActionTextInDDT] Action is missing required field 'type'. Action: ${JSON.stringify(action, null, 2)}`);
+            if (task?.type === undefined || task?.type === null) {
+              throw new Error(`[updateActionTextInDDT] Task is missing required field 'type'. Task: ${JSON.stringify(task, null, 2)}`);
             }
-            if (action?.templateId === undefined) {
-              throw new Error(`[updateActionTextInDDT] Action is missing required field 'templateId' (must be explicitly null for standalone actions). Action: ${JSON.stringify(action, null, 2)}`);
+            if (task?.templateId === undefined) {
+              throw new Error(`[updateActionTextInDDT] Task is missing required field 'templateId' (must be explicitly null for standalone tasks). Task: ${JSON.stringify(task, null, 2)}`);
             }
             const updatedIntro = {
               ...intro,
               escalations: [
                 {
                   ...esc,
-                  actions: [
-                    ...esc.actions.slice(0, i),
+                  tasks: [
+                    ...esc.tasks.slice(0, i),
                     {
-                      ...action,
+                      ...task,
                       text: newText.length > 0 ? newText : undefined,
                       edited: true  // ✅ Mark as edited when user modifies text
                     },
-                    ...esc.actions.slice(i + 1)
+                    ...esc.tasks.slice(i + 1)
                   ]
                 },
                 ...intro.escalations.slice(1)

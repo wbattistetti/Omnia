@@ -55,7 +55,7 @@ export function saveIntentMessagesToTaskTree(taskTree: any, messages: IntentMess
 
     return {
       escalationId: uuidv4(),
-      tasks: [  // ✅ New field
+      tasks: [
         {
           id: taskId,                 // ✅ Standard: id (GUID univoco)
           type: taskType,             // ✅ NO FALLBACK - must be present
@@ -67,21 +67,8 @@ export function saveIntentMessagesToTaskTree(taskTree: any, messages: IntentMess
             },
           ],
         }
-      ],
-      actions: [  // ✅ Legacy alias for backward compatibility - MUST have type and templateId
-        {
-          actionId: 'sayMessage',
-          actionInstanceId: taskId,
-          type: taskType,  // ✅ NO FALLBACK - must be present
-          templateId: templateId,  // ✅ NO FALLBACK - must be present
-          parameters: [
-            {
-              parameterId: 'text',
-              value: text
-            }
-          ]
-        }
       ]
+      // ❌ RIMOSSO: actions - legacy field, non più necessario
     };
   };
 

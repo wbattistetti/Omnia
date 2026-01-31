@@ -716,17 +716,11 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
 
         const escalation = {
           escalationId: `e_${uuidv4()}`,
-          tasks: [{  // ✅ Renamed from actions
+          tasks: [{
             ...baseTask,
             parameters: [{ parameterId: 'text', value: actionInstanceId }]
-          }],
-          actions: [{  // ✅ Legacy alias for backward compatibility - MUST have type and templateId
-            actionId: templateIdForTask,
-            actionInstanceId: actionInstanceId,
-            type: taskType,  // ✅ NO FALLBACK - must be present
-            templateId: null,  // ✅ NO FALLBACK - must be present (can be null)
-            parameters: [{ parameterId: 'text', value: actionInstanceId }]
           }]
+          // ❌ RIMOSSO: actions - legacy field, non più necessario
         };
 
         // Store template key mapping for reference (not used for translation lookup)
@@ -739,7 +733,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
 
       // The main message uses the first escalation's taskId
       // ✅ UNIFIED MODEL: Use tasks (complete Task objects)
-      const firstTask = escalations[0]?.tasks?.[0] || escalations[0]?.actions?.[0];
+      const firstTask = escalations[0]?.tasks?.[0];
       if (escalations.length > 0 && firstTask?.id) {
         const firstEscalationTaskId = firstTask.id;
         const firstEscalationTemplateKey = (escalations[0] as any).__templateKey;

@@ -50,9 +50,8 @@ export function expandDDT(
 
       expansion.recoveryNodes.set(recoveryId, recoveryId);
 
-      // Process tasks in recovery (renamed from actions)
-      // ✅ MIGRATION: Support both tasks (new) and actions (legacy)
-      const tasks = escalation.tasks || escalation.actions || [];
+      // Process tasks in recovery
+      const tasks = escalation.tasks || [];
 
       for (let taskIndex = 0; taskIndex < tasks.length; taskIndex++) {
         const task = tasks[taskIndex];

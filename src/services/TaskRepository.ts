@@ -532,12 +532,31 @@ class TaskRepository {
       // ✅ Extract all fields except id, _id (MongoDB immutable), templateId, createdAt, updatedAt
       const { id, _id, templateId, createdAt, updatedAt, ...fields } = task;
 
-      const payload = {
-        id: task.id,
-        type: task.type,          // ✅ Enum numerico (0-19) - REQUIRED
-        templateId: task.templateId ?? null,
-        ...fields  // ✅ Save fields directly (no value wrapper, excluding _id)
-      };
+      // ✅ Se è un'istanza (templateId !== null), filtra solo campi permessi
+      // ✅ Campi permessi per istanze: id, templateId, templateVersion, labelKey, steps, createdAt, updatedAt
+      // ❌ NON salvare: type, nodes, subNodes, icon, constraints, dataContract, examples, nlpProfile, patterns, valueSchema, allowedContexts, introduction
+      const isInstance = task.templateId !== null && task.templateId !== undefined;
+
+      let payload;
+      if (isInstance) {
+        // ✅ ISTANZA: Salva SOLO campi permessi
+        payload = {
+          id: task.id,
+          templateId: task.templateId,  // ✅ OBBLIGATORIO per istanze
+          templateVersion: task.templateVersion || 1,  // ✅ Versione del template
+          labelKey: task.labelKey,  // ✅ Chiave di traduzione
+          steps: task.steps,  // ✅ Array MaterializedStep[]
+          // createdAt e updatedAt vengono gestiti dal backend
+        };
+      } else {
+        // ✅ TEMPLATE: Salva tutti i campi (struttura completa)
+        payload = {
+          id: task.id,
+          type: task.type,          // ✅ Enum numerico (0-19) - REQUIRED
+          templateId: null,        // ✅ Template ha sempre templateId = null
+          ...fields  // ✅ Save all fields directly (no value wrapper, excluding _id)
+        };
+      }
 
       // ✅ CRITICAL: Log steps structure only if wrong (reduce noise)
       if (payload.steps) {

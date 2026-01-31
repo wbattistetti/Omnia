@@ -22,8 +22,7 @@ export type ActionParameter = {
 export type Escalation = {
   escalationId: string;
   tasks: Task[];  // Complete Task objects (each escalation has its own tasks)
-  // Legacy alias for backward compatibility
-  actions?: Task[];  // @deprecated Use tasks instead
+  // ❌ RIMOSSO: actions - legacy field, non più necessario
 };
 
 // Legacy type aliases for backward compatibility

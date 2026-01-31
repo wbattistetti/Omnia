@@ -115,7 +115,7 @@ export function extractStartPrompts(
       continue;
     }
 
-    const tasks = firstEscalation.tasks || firstEscalation.actions || [];
+    const tasks = firstEscalation.tasks || [];
     console.log('[🔍 extractStartPrompts] Processing escalation', {
       nodeTemplateId,
       nodeLabel: node.label,

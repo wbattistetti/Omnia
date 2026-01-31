@@ -33,7 +33,7 @@ export function getStepGroup(node: any, stepType: string): StepGroup | undefined
 export function getEscalationActions(node: any, stepType: string, level: number): any[] {
   const sg = getStepGroup(node, stepType);
   const esc = sg?.escalations?.[level - 1];
-  return esc?.actions || [];
+  return esc?.tasks || [];
 }
 
 export function resolveActionText(action: any, dict: Record<string, string>): string | undefined {

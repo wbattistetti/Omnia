@@ -1505,23 +1505,49 @@ app.post('/api/projects/:pid/tasks', async (req, res) => {
       : getAllowedContexts(type);
 
     // ✅ Se è un template (templateId === null o templateId === id), può avere subTasksIds
-    // ✅ Se è un'istanza (templateId !== null e templateId !== id), NON deve avere data/steps/constraints
+    // ✅ Se è un'istanza (templateId !== null e templateId !== id), deve avere SOLO: id, templateId, templateVersion, labelKey, steps, createdAt, updatedAt
     const isTemplate = templateId === null || templateId === payload.id;
 
-    const task = {
-      projectId,
-      id: payload.id,
-      type: type,              // ✅ type: enum numerico (0-19) - REQUIRED
-      templateId: templateId ?? null,  // ✅ templateId: null (standalone) or GUID (reference)
-      allowedContexts: allowedContextsValue,  // ✅ Imposta automaticamente in base al type
-      ...fields,  // ✅ Save all fields directly (label, steps, subTasksIds per template, ecc.)
-      updatedAt: now
-    };
+    let task;
+    if (isTemplate) {
+      // ✅ TEMPLATE: Salva tutti i campi (struttura completa)
+      task = {
+        projectId,
+        id: payload.id,
+        type: type,              // ✅ type: enum numerico (0-19) - REQUIRED
+        templateId: null,        // ✅ Template ha sempre templateId = null
+        allowedContexts: allowedContextsValue,
+        ...fields,  // ✅ Save all fields directly (label, steps, subTasksIds, constraints, dataContract, ecc.)
+        updatedAt: now
+      };
+    } else {
+      // ✅ ISTANZA: Salva SOLO campi permessi (id, templateId, templateVersion, labelKey, steps, createdAt, updatedAt)
+      // ❌ NON salvare: type, nodes, subNodes, icon, constraints, dataContract, examples, nlpProfile, patterns, valueSchema, allowedContexts
+      task = {
+        projectId,
+        id: payload.id,
+        templateId: templateId,  // ✅ OBBLIGATORIO per istanze (non può essere null)
+        templateVersion: payload.templateVersion || 1,  // ✅ Versione del template
+        labelKey: payload.labelKey,  // ✅ Chiave di traduzione
+        steps: payload.steps,  // ✅ Array MaterializedStep[] (DEVE essere salvato!)
+        updatedAt: now
+      };
 
-    // ✅ Rimuovi esplicitamente campi legacy se presenti (per sicurezza)
-    delete task.data;
-    delete task.steps;
-    delete task.constraints;
+      // ✅ Rimuovi esplicitamente campi del template se presenti (per sicurezza)
+      delete task.type;
+      delete task.nodes;
+      delete task.subNodes;
+      delete task.icon;
+      delete task.constraints;
+      delete task.dataContract;
+      delete task.examples;
+      delete task.nlpProfile;
+      delete task.patterns;
+      delete task.valueSchema;
+      delete task.allowedContexts;
+      delete task.data;
+      delete task.introduction;
+    }
 
     // Upsert: create if not exists, update if exists
     const result = await projDb.collection('tasks').updateOne(
@@ -1706,22 +1732,52 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
         })
         .map(item => {
           // ✅ Extract all fields except id, templateId, createdAt, updatedAt, and legacy fields
-          // ✅ NUOVO MODELLO: Rimuovi data, steps, constraints dalle istanze
           const { id, templateId, createdAt, updatedAt, data, steps, constraints, ...fields } = item;
 
-          const task = {
-            projectId,
-            id: item.id,
-            type: item.type,              // ✅ type: enum numerico (0-19) - REQUIRED
-            templateId: item.templateId ?? null,  // ✅ templateId: null (standalone) or GUID (reference)
-            ...fields,  // ✅ Save all fields directly (label, steps, subTasksIds per template, ecc.)
-            updatedAt: now
-          };
+          // ✅ Se è un template (templateId === null o templateId === id), può avere subTasksIds
+          // ✅ Se è un'istanza (templateId !== null e templateId !== id), deve avere SOLO: id, templateId, templateVersion, labelKey, steps, createdAt, updatedAt
+          const isTemplate = templateId === null || templateId === item.id;
 
-          // ✅ Rimuovi esplicitamente campi legacy se presenti (per sicurezza)
-          delete task.data;
-          delete task.steps;
-          delete task.constraints;
+          let task;
+          if (isTemplate) {
+            // ✅ TEMPLATE: Salva tutti i campi (struttura completa)
+            task = {
+              projectId,
+              id: item.id,
+              type: item.type,              // ✅ type: enum numerico (0-19) - REQUIRED
+              templateId: null,        // ✅ Template ha sempre templateId = null
+              allowedContexts: item.allowedContexts || getAllowedContexts(item.type),
+              ...fields,  // ✅ Save all fields directly (label, steps, subTasksIds, constraints, dataContract, ecc.)
+              updatedAt: now
+            };
+          } else {
+            // ✅ ISTANZA: Salva SOLO campi permessi (id, templateId, templateVersion, labelKey, steps, createdAt, updatedAt)
+            // ❌ NON salvare: type, nodes, subNodes, icon, constraints, dataContract, examples, nlpProfile, patterns, valueSchema, allowedContexts
+            task = {
+              projectId,
+              id: item.id,
+              templateId: templateId,  // ✅ OBBLIGATORIO per istanze (non può essere null)
+              templateVersion: item.templateVersion || 1,  // ✅ Versione del template
+              labelKey: item.labelKey,  // ✅ Chiave di traduzione
+              steps: item.steps,  // ✅ Array MaterializedStep[] (DEVE essere salvato!)
+              updatedAt: now
+            };
+
+            // ✅ Rimuovi esplicitamente campi del template se presenti (per sicurezza)
+            delete task.type;
+            delete task.nodes;
+            delete task.subNodes;
+            delete task.icon;
+            delete task.constraints;
+            delete task.dataContract;
+            delete task.examples;
+            delete task.nlpProfile;
+            delete task.patterns;
+            delete task.valueSchema;
+            delete task.allowedContexts;
+            delete task.data;
+            delete task.introduction;
+          }
 
           return {
             updateOne: {

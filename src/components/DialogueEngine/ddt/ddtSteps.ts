@@ -128,17 +128,17 @@ export async function executeStep(
 
   const escalations = Array.isArray(stepOrEscalation.escalations) ? stepOrEscalation.escalations : [stepOrEscalation.escalations];
 
-  // Execute first escalation (usually the main action)
+  // Execute first escalation (usually the main task)
   if (escalations.length > 0) {
     const firstEscalation = escalations[0];
-    if (firstEscalation && firstEscalation.actions) {
-      const actions = Array.isArray(firstEscalation.actions) ? firstEscalation.actions : [firstEscalation.actions];
+    if (firstEscalation && firstEscalation.tasks) {
+      const tasks = Array.isArray(firstEscalation.tasks) ? firstEscalation.tasks : [firstEscalation.tasks];
 
-      for (const action of actions) {
-        await executeAction(action, callbacks, stepType, escalationNumber, inputValue);
+      for (const task of tasks) {
+        await executeAction(task, callbacks, stepType, escalationNumber, inputValue);
       }
     } else {
-      console.warn('[ddtSteps][executeStep] First escalation has no actions');
+      console.warn('[ddtSteps][executeStep] First escalation has no tasks');
     }
   } else {
     console.warn('[ddtSteps][executeStep] No escalations found');

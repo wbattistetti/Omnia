@@ -23,9 +23,9 @@ export default function NodeViewer({ node, stepKey, translations }: NodeViewerPr
     const escalations = stepObj?.escalations;
     if (Array.isArray(escalations)) {
       for (const esc of escalations) {
-        const actions = esc?.actions || [];
-        for (const act of actions) {
-          const params = act?.parameters || [];
+        const tasks = esc?.tasks || [];
+        for (const task of tasks) {
+          const params = task?.parameters || [];
           for (const p of params) {
             const key = p?.value;
             if (typeof key === 'string') {
