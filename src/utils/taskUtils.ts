@@ -507,114 +507,83 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
  */
 /**
  * Mark a specific task as edited in the steps array
- * ✅ NUOVO: Gestisce array MaterializedStep[] invece di dictionary
+ * ✅ NUOVO: Gestisce dictionary: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
  */
 export function markTaskAsEdited(
-  steps: MaterializedStep[] | Record<string, any>,
+  steps: Record<string, Record<string, any>>,
   templateId: string,
   stepType: string,
   escalationIndex: number,
   taskIndex: number
 ): void {
-  // ✅ Gestione retrocompatibilità: se è dictionary, non possiamo modificarlo direttamente
-  if (!Array.isArray(steps)) {
-    console.warn('[markTaskAsEdited] ⚠️ Steps è un dictionary (legacy), operazione non supportata');
+  // ✅ Lookup diretto: O(1) invece di O(n) filter
+  const nodeSteps = steps?.[templateId];
+  if (!nodeSteps || typeof nodeSteps !== 'object') {
+    console.warn('[markTaskAsEdited] ⚠️ TemplateId non trovato', { templateId, availableKeys: Object.keys(steps || {}) });
     return;
   }
 
-  // ✅ Trova step per templateStepId (se stepType corrisponde a un templateStepId)
-  // Nota: stepType potrebbe essere 'start', 'noMatch', etc. - dobbiamo trovare lo step corrispondente
-  // Per ora, assumiamo che stepType sia il tipo di step e cerchiamo nel primo step che corrisponde
-  // TODO: Migliorare la logica di matching se necessario
+  const step = nodeSteps[stepType];
+  if (!step || !Array.isArray(step.escalations)) {
+    console.warn('[markTaskAsEdited] ⚠️ StepType non trovato', { templateId, stepType, availableStepTypes: Object.keys(nodeSteps) });
+    return;
+  }
 
-  // ✅ Itera su array MaterializedStep[]
-  for (const step of steps) {
-    if (!step || !Array.isArray(step.escalations)) continue;
-
-    // ✅ Verifica se questo step corrisponde (per ora, controlliamo solo escalations)
-    if (escalationIndex < step.escalations.length) {
-      const esc = step.escalations[escalationIndex];
-      if (esc?.tasks && Array.isArray(esc.tasks) && taskIndex < esc.tasks.length) {
-        const task = esc.tasks[taskIndex];
-        task.edited = true;
-        return; // ✅ Trovato e modificato
-      }
-      // ❌ RIMOSSO: Legacy actions check - non più necessario
+  // ✅ Verifica escalation e task
+  if (escalationIndex < step.escalations.length) {
+    const esc = step.escalations[escalationIndex];
+    if (esc?.tasks && Array.isArray(esc.tasks) && taskIndex < esc.tasks.length) {
+      const task = esc.tasks[taskIndex];
+      task.edited = true;
+      return; // ✅ Trovato e modificato
     }
   }
 
-  console.warn('[markTaskAsEdited] ⚠️ Step o task non trovato', {
+  console.warn('[markTaskAsEdited] ⚠️ Escalation o task non trovato', {
     templateId,
     stepType,
     escalationIndex,
     taskIndex,
-    stepsCount: steps.length
+    escalationsCount: step.escalations.length
   });
 }
 
 /**
  * Migrates existing tasks to include templateTaskId and edited flags
- * ✅ NUOVO: Gestisce array MaterializedStep[] invece di dictionary
+ * ✅ NUOVO: Gestisce dictionary: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
  * Rule: if templateTaskId is missing → edited = true (cannot determine if inherited)
  */
-export function migrateTaskOverrides(steps: MaterializedStep[] | Record<string, any>): void {
-  // ✅ Gestione retrocompatibilità: se è dictionary, converti in array
-  if (!Array.isArray(steps)) {
-    if (steps && typeof steps === 'object') {
-      console.warn('[migrateTaskOverrides] ⚠️ Steps è un dictionary (legacy), convertendo in array');
-      // ✅ Converti dictionary in array (per retrocompatibilità)
-      const stepsArray: MaterializedStep[] = [];
-      for (const templateId in steps) {
-        const nodeSteps = steps[templateId];
-        if (!nodeSteps || typeof nodeSteps !== 'object') continue;
+export function migrateTaskOverrides(steps: Record<string, Record<string, any>>): void {
+  if (!steps || typeof steps !== 'object' || Array.isArray(steps)) {
+    return; // Non è un dictionary valido
+  }
 
-        // Case A: steps as object { start: { escalations: [...] } }
-        if (!Array.isArray(nodeSteps)) {
-          for (const stepType in nodeSteps) {
-            const step = nodeSteps[stepType];
-            if (step?.escalations && Array.isArray(step.escalations)) {
-              stepsArray.push({
-                id: uuidv4(),
-                templateStepId: step.id || `${templateId}:${stepType}`,
-                escalations: step.escalations
-              });
-            }
-          }
-        }
-        // Case B: steps as array [{ type: 'start', escalations: [...] }, ...]
-        else if (Array.isArray(nodeSteps)) {
-          nodeSteps.forEach((group: any) => {
-            if (group?.escalations && Array.isArray(group.escalations)) {
-              stepsArray.push({
-                id: uuidv4(),
-                templateStepId: group.id || group.templateStepId,
-                escalations: group.escalations
-              });
+  // ✅ Itera su dictionary: per ogni templateId
+  for (const templateId in steps) {
+    const nodeSteps = steps[templateId];
+    if (!nodeSteps || typeof nodeSteps !== 'object' || Array.isArray(nodeSteps)) {
+      continue;
+    }
+
+    // ✅ Per ogni stepType (start, noMatch, etc.)
+    for (const stepType in nodeSteps) {
+      const step = nodeSteps[stepType];
+      if (!step || !Array.isArray(step.escalations)) {
+        continue;
+      }
+
+      // ✅ Per ogni escalation
+      step.escalations.forEach((esc: any) => {
+        if (esc?.tasks && Array.isArray(esc.tasks)) {
+          esc.tasks.forEach((task: any) => {
+            if (task.templateTaskId === undefined) {
+              task.templateTaskId = null;
+              task.edited = true;  // ✅ Cannot determine if inherited
             }
           });
         }
-      }
-      steps = stepsArray;
-    } else {
-      return; // Non è né array né dictionary valido
+      });
     }
-  }
-
-  // ✅ Itera su array MaterializedStep[]
-  for (const step of steps) {
-    if (!step || !Array.isArray(step.escalations)) continue;
-
-    step.escalations.forEach((esc: any) => {
-      if (esc?.tasks && Array.isArray(esc.tasks)) {
-        esc.tasks.forEach((task: any) => {
-          if (task.templateTaskId === undefined) {
-            task.templateTaskId = null;
-            task.edited = true;  // ✅ Cannot determine if inherited
-          }
-        });
-      }
-      // ❌ RIMOSSO: Legacy actions check - non più necessario
-    });
   }
 }
 
@@ -795,9 +764,9 @@ export async function syncTasksWithTemplate(
 export function cloneTemplateSteps(
   template: any,
   nodes?: TaskTreeNode[]  // ✅ Albero montato con templateId corretti (da buildTaskTreeNodes)
-): { steps: MaterializedStep[]; guidMapping: Map<string, string> } {
+): { steps: Record<string, Record<string, any>>; guidMapping: Map<string, string> } {
   const allGuidMappings = new Map<string, string>();
-  const materializedSteps: MaterializedStep[] = [];
+  const stepsDict: Record<string, Record<string, any>> = {};
 
   // Helper function to materialize steps from a template
   const materializeStepsFromTemplate = (sourceTemplate: any, nodeTemplateId: string): void => {
@@ -817,17 +786,20 @@ export function cloneTemplateSteps(
       const templateSteps = sourceSteps[nodeTemplateId];
       const stepKeys = Object.keys(templateSteps);
 
+      // Inizializza dictionary per questo templateId
+      if (!stepsDict[nodeTemplateId]) {
+        stepsDict[nodeTemplateId] = {};
+      }
+
       for (const stepKey of stepKeys) {
         const templateStep = templateSteps[stepKey];
         if (templateStep && typeof templateStep === 'object' && Array.isArray(templateStep.escalations)) {
-          const instanceStepId = uuidv4();
-          const templateStepId = templateStep.id || `${nodeTemplateId}:${stepKey}`;
           const clonedEscalations = templateStep.escalations.map((esc: any) => cloneEscalationWithNewTaskIds(esc, allGuidMappings));
-          materializedSteps.push({
-            id: instanceStepId,
-            templateStepId: templateStepId,
-            escalations: clonedEscalations
-          });
+          stepsDict[nodeTemplateId][stepKey] = {
+            type: stepKey,
+            escalations: clonedEscalations,
+            id: templateStep.id || `${nodeTemplateId}:${stepKey}`
+          };
         }
       }
       return;
@@ -841,19 +813,22 @@ export function cloneTemplateSteps(
     // Non serve verificare nodeId === templateDataFirstId perché per template atomici
     // gli steps sono sempre per l'unico nodo del template
     if (hasStepNameKeys) {
+      // Inizializza dictionary per questo templateId
+      if (!stepsDict[nodeTemplateId]) {
+        stepsDict[nodeTemplateId] = {};
+      }
+
       // ✅ Template atomico: gli steps sono direttamente in template.steps
       for (const stepKey of sourceStepsKeys) {
         if (stepNames.includes(stepKey)) {
           const templateStep = sourceSteps[stepKey];
           if (templateStep && typeof templateStep === 'object' && Array.isArray(templateStep.escalations)) {
-            const instanceStepId = uuidv4();
-            const templateStepId = templateStep.id || `${nodeTemplateId}:${stepKey}`;
             const clonedEscalations = templateStep.escalations.map((esc: any) => cloneEscalationWithNewTaskIds(esc, allGuidMappings));
-            materializedSteps.push({
-              id: instanceStepId,
-              templateStepId: templateStepId,
-              escalations: clonedEscalations
-            });
+            stepsDict[nodeTemplateId][stepKey] = {
+              type: stepKey,
+              escalations: clonedEscalations,
+              id: templateStep.id || `${nodeTemplateId}:${stepKey}`
+            };
           }
         }
       }
@@ -909,15 +884,15 @@ export function cloneTemplateSteps(
     });
 
     console.log('[🔍 cloneTemplateSteps] ✅ Steps materializzati', {
-      materializedStepsCount: materializedSteps.length,
-      stepsDetails: materializedSteps.map((step: MaterializedStep) => ({
-        id: step.id,
-        templateStepId: step.templateStepId,
-        escalationsCount: step.escalations?.length || 0
+      templateIdsCount: Object.keys(stepsDict).length,
+      stepsDetails: Object.entries(stepsDict).map(([templateId, nodeSteps]) => ({
+        templateId,
+        stepTypes: Object.keys(nodeSteps),
+        totalSteps: Object.keys(nodeSteps).length
       }))
     });
 
-    return { steps: materializedSteps, guidMapping: allGuidMappings };
+    return { steps: stepsDict, guidMapping: allGuidMappings };
   }
 
   // ❌ NO FALLBACK: nodes è richiesto
@@ -925,7 +900,7 @@ export function cloneTemplateSteps(
     templateId: template.id || template._id,
     templateLabel: template.label || template.name
   });
-  return { steps: [], guidMapping: new Map<string, string>() };
+  return { steps: {}, guidMapping: new Map<string, string>() };
 }
 
 /**
@@ -1037,12 +1012,12 @@ export async function buildTemplateExpanded(
   const nodes = buildTaskTreeNodes(template);
 
   // ✅ Clona steps dal template (baseline, senza modifiche)
-  const { steps: materializedSteps } = cloneTemplateSteps(template, nodes);
+  const { steps: clonedSteps } = cloneTemplateSteps(template, nodes);
 
   return {
     labelKey: template.labelKey || template.label,  // ✅ Usa labelKey (o fallback a label per retrocompatibilità)
     nodes,
-    steps: materializedSteps,  // ✅ Ora è un array MaterializedStep[], non un dictionary
+    steps: clonedSteps,  // ✅ Dictionary: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
     constraints: template.dataContracts ?? template.constraints ?? undefined,
     dataContract: template.dataContract ?? undefined,
     introduction: template.introduction
@@ -1100,21 +1075,24 @@ export async function buildTaskTree(
   const nodes = buildTaskTreeNodes(template);
 
   // ✅ Steps dall'istanza o clonati dal template
-  // ✅ NUOVO: steps è un array MaterializedStep[], non un dictionary
-  let finalSteps: MaterializedStep[] = Array.isArray(instance.steps) ? instance.steps : [];
+  // ✅ NUOVO: steps è un dictionary: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
+  let finalSteps: Record<string, Record<string, any>> =
+    (instance.steps && typeof instance.steps === 'object' && !Array.isArray(instance.steps))
+      ? instance.steps
+      : {};
   let stepsWereCloned = false;
 
-  if (!finalSteps || finalSteps.length === 0) {
+  if (!finalSteps || Object.keys(finalSteps).length === 0) {
     // ✅ Prima creazione: clona steps dal template
-    const { steps: materializedSteps } = cloneTemplateSteps(template, nodes);
-    finalSteps = materializedSteps;
+    const { steps: clonedSteps } = cloneTemplateSteps(template, nodes);
+    finalSteps = clonedSteps;
     stepsWereCloned = true;
   } else {
-    // ✅ Migrate existing steps to include templateTaskId and edited
-    // TODO: migrateTaskOverrides deve gestire array, non dictionary
-    // Per ora, se è array, è già nel formato corretto
-    if (!Array.isArray(finalSteps)) {
-      console.warn('[buildTaskTree] ⚠️ Steps non è un array, potrebbe essere formato legacy');
+    // ✅ Verifica che sia dictionary (non array legacy)
+    if (Array.isArray(finalSteps)) {
+      console.warn('[buildTaskTree] ⚠️ Steps è un array (legacy), convertendo in dictionary');
+      // ✅ Converti array legacy in dictionary (se necessario)
+      finalSteps = {};
     }
   }
 
@@ -1131,7 +1109,7 @@ export async function buildTaskTree(
       console.log('[buildTaskTree] ✅ Steps clonati salvati nell\'istanza in memoria', {
         taskId: instance.id,
         templateId: instance.templateId,
-        stepsCount: finalSteps.length
+        templateIdsCount: Object.keys(finalSteps).length
       });
     } else {
       console.warn('[buildTaskTree] ⚠️ Istanza non trovata in TaskRepository, non posso salvare gli step clonati', {
@@ -1146,7 +1124,7 @@ export async function buildTaskTree(
   return {
     labelKey: instance.labelKey ?? template.labelKey ?? template.label,  // ✅ Usa labelKey (fallback a label per retrocompatibilità)
     nodes,  // ✅ Già TaskTreeNode[] con subNodes[]
-    steps: finalSteps,  // ✅ Array MaterializedStep[]
+    steps: finalSteps,  // ✅ Dictionary: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
     constraints: template.dataContracts ?? template.constraints ?? undefined,
     dataContract: template.dataContract ?? undefined,
     introduction: template.introduction ?? instance.introduction
@@ -1498,21 +1476,188 @@ export async function extractTaskOverrides(
   const templateVersion = template?.version || instance.templateVersion || 1;
 
   // ✅ Salva TUTTA la working copy, non solo override
-  // ✅ IMPORTANTE: steps è un array MaterializedStep[], non un dictionary
+  // ✅ IMPORTANTE: steps è un dictionary: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
   const workingSteps = workingCopy.steps;
-  const materializedSteps: MaterializedStep[] = Array.isArray(workingSteps)
-    ? workingSteps
-    : [];  // ✅ Se non è array, inizializza vuoto (legacy format)
+  const stepsDict: Record<string, Record<string, any>> =
+    (workingSteps && typeof workingSteps === 'object' && !Array.isArray(workingSteps))
+      ? workingSteps
+      : {};  // ✅ Se non è dictionary, inizializza vuoto (legacy format)
 
   // ✅ CORRETTO: L'istanza contiene SOLO questi campi:
   // - id, templateId, templateVersion, labelKey, steps, createdAt, updatedAt
   // - introduction viene assorbito in uno step normale, non va salvato
   const result: Partial<Task> = {
     labelKey: workingCopy.labelKey || workingCopy.label,  // ✅ Usa labelKey (fallback a label per retrocompatibilità)
-    steps: materializedSteps,  // ✅ Array MaterializedStep[]
+    steps: stepsDict,  // ✅ Dictionary: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
     templateVersion: templateVersion  // ✅ Versione del template per drift detection
     // ❌ RIMOSSO: introduction - viene assorbito in uno step normale
   };
+
+  return result;
+}
+
+/**
+ * ❌ DEPRECATED: Non serve più - gli steps sono già dictionary
+ * ✅ RIMOSSO: Gli steps sono già nel formato corretto: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
+ * Non serve più convertire da array a dictionary
+ */
+export function organizeStepsByTemplateId(
+  steps: MaterializedStep[],
+  nodes: TaskTreeNode[]
+): Record<string, Record<string, any>> {
+  const result: Record<string, Record<string, any>> = {};
+
+  if (!Array.isArray(steps) || steps.length === 0) {
+    return result;
+  }
+
+  // ✅ Crea mappa templateId -> node per lookup veloce
+  const templateIdToNode = new Map<string, TaskTreeNode>();
+  const collectNodes = (nodeList: TaskTreeNode[]) => {
+    for (const node of nodeList) {
+      if (node.templateId) {
+        templateIdToNode.set(node.templateId, node);
+      }
+      if (node.subNodes && Array.isArray(node.subNodes)) {
+        collectNodes(node.subNodes);
+      }
+    }
+  };
+  if (nodes && Array.isArray(nodes)) {
+    collectNodes(nodes);
+  }
+
+  // ✅ Organizza steps per templateId e tipo
+  // ✅ IMPORTANTE: Gli steps sono nell'ordine dei nodi (root first, poi subNodes)
+  // Quindi possiamo tracciare quale step appartiene a quale templateId usando l'ordine
+  let currentStepIndex = 0;
+
+  const processNode = (node: TaskTreeNode, parentTemplateId?: string): void => {
+    const nodeTemplateId = node.templateId || parentTemplateId;
+    if (!nodeTemplateId) return;
+
+    // ✅ Per ogni nodo, conta quanti steps dovrebbe avere (6 tipi standard)
+    const stepTypes = ['start', 'noMatch', 'noInput', 'confirmation', 'notConfirmed', 'success'];
+    const stepsForThisNode: MaterializedStep[] = [];
+
+    // ✅ Raccogli steps che appartengono a questo templateId
+    // Se hanno templateStepId, estrai templateId da lì
+    // Altrimenti, assumi che appartengano al nodo corrente se sono nell'ordine corretto
+    for (let i = currentStepIndex; i < steps.length; i++) {
+      const step = steps[i];
+      if (!step) continue;
+
+      let stepTemplateId: string | null = null;
+      let stepType: string = 'start';
+
+      // ✅ Estrai templateId da templateStepId (formato: "templateId:stepType")
+      if (step.templateStepId) {
+        const parts = step.templateStepId.split(':');
+        if (parts.length >= 2) {
+          stepTemplateId = parts[0];
+          stepType = parts[parts.length - 1];
+        } else {
+          stepType = parts[0] || 'start';
+        }
+      }
+
+      // ✅ Se non abbiamo templateId da templateStepId, usa il tipo dallo step
+      if (step.type) {
+        stepType = step.type;
+      }
+
+      // ✅ Se lo step ha templateStepId con templateId, verifica se corrisponde
+      if (stepTemplateId) {
+        if (stepTemplateId === nodeTemplateId) {
+          stepsForThisNode.push(step);
+          currentStepIndex = i + 1;
+        }
+        // Se non corrisponde, potrebbe essere per un altro nodo - continua
+      } else {
+        // ✅ Step senza templateStepId (aggiunto dall'utente) - assegna al nodo corrente
+        // Assumiamo che gli steps siano nell'ordine dei nodi
+        if (stepsForThisNode.length < stepTypes.length) {
+          stepsForThisNode.push(step);
+          currentStepIndex = i + 1;
+        } else {
+          // Abbiamo già raccolto abbastanza steps per questo nodo, passa al prossimo
+          break;
+        }
+      }
+    }
+
+    // ✅ Organizza steps per tipo e aggiungi al risultato
+    if (stepsForThisNode.length > 0) {
+      if (!result[nodeTemplateId]) {
+        result[nodeTemplateId] = {};
+      }
+
+      for (const step of stepsForThisNode) {
+        let stepType = 'start';
+        if (step.type) {
+          stepType = step.type;
+        } else if (step.templateStepId) {
+          const parts = step.templateStepId.split(':');
+          stepType = parts[parts.length - 1] || 'start';
+        }
+
+        const dialogueStep = {
+          id: step.id,
+          type: stepType,
+          escalations: step.escalations || [],
+          ...(step.templateStepId ? { templateStepId: step.templateStepId } : {})
+        };
+
+        result[nodeTemplateId][stepType] = dialogueStep;
+      }
+    }
+
+    // ✅ Processa subNodes ricorsivamente
+    if (node.subNodes && Array.isArray(node.subNodes)) {
+      for (const subNode of node.subNodes) {
+        processNode(subNode, nodeTemplateId);
+      }
+    }
+  };
+
+  // ✅ Processa tutti i nodi root
+  if (nodes && Array.isArray(nodes)) {
+    for (const node of nodes) {
+      processNode(node);
+    }
+  }
+
+  // ✅ Se ci sono ancora steps non assegnati, prova ad assegnarli al primo templateId
+  if (currentStepIndex < steps.length && nodes && nodes.length > 0) {
+    const firstNode = nodes[0];
+    if (firstNode.templateId) {
+      if (!result[firstNode.templateId]) {
+        result[firstNode.templateId] = {};
+      }
+
+      for (let i = currentStepIndex; i < steps.length; i++) {
+        const step = steps[i];
+        if (!step) continue;
+
+        let stepType = 'start';
+        if (step.type) {
+          stepType = step.type;
+        } else if (step.templateStepId) {
+          const parts = step.templateStepId.split(':');
+          stepType = parts[parts.length - 1] || 'start';
+        }
+
+        const dialogueStep = {
+          id: step.id,
+          type: stepType,
+          escalations: step.escalations || [],
+          ...(step.templateStepId ? { templateStepId: step.templateStepId } : {})
+        };
+
+        result[firstNode.templateId][stepType] = dialogueStep;
+      }
+    }
+  }
 
   return result;
 }

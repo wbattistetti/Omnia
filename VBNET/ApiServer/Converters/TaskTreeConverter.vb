@@ -44,23 +44,31 @@ Namespace Converters
                 Console.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeExpanded] JSON preview (first 1000 chars): {jsonString.Substring(0, Math.Min(1000, jsonString.Length))}")
 
                 ' ✅ Estrai steps dal TaskTree (keyed by templateId)
+                ' ✅ CORRETTO: Il frontend ora invia sempre steps come dictionary organizzato per templateId
                 Dim stepsDict As Dictionary(Of String, Object) = Nothing
                 If taskTreeJson("steps") IsNot Nothing Then
                     Try
-                        Dim stepsJson = taskTreeJson("steps").ToString()
-                        Console.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeExpanded] Steps JSON found, length: {stepsJson.Length}")
-                        Console.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeExpanded] Steps JSON preview: {stepsJson.Substring(0, Math.Min(500, stepsJson.Length))}")
+                        Dim stepsToken = taskTreeJson("steps")
+                        Console.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeExpanded] Steps found, type: {If(stepsToken IsNot Nothing, stepsToken.Type.ToString(), "Nothing")}")
 
-                        stepsDict = JsonConvert.DeserializeObject(Of Dictionary(Of String, Object))(stepsJson)
-                        Console.WriteLine($"✅ [ConvertTaskTreeToTaskTreeExpanded] Found {If(stepsDict IsNot Nothing, stepsDict.Count, 0)} step overrides")
-                        If stepsDict IsNot Nothing Then
-                            For Each kvp In stepsDict
-                                Console.WriteLine($"   - templateId: {kvp.Key}, value type: {If(kvp.Value IsNot Nothing, kvp.Value.GetType().Name, "Nothing")}")
-                            Next
+                        ' ✅ Steps deve essere un dictionary (formato corretto dal frontend)
+                        If stepsToken.Type = JTokenType.Object Then
+                            Dim stepsJson = stepsToken.ToString()
+                            stepsDict = JsonConvert.DeserializeObject(Of Dictionary(Of String, Object))(stepsJson)
+                            Console.WriteLine($"✅ [ConvertTaskTreeToTaskTreeExpanded] Found {If(stepsDict IsNot Nothing, stepsDict.Count, 0)} step overrides")
+                            If stepsDict IsNot Nothing Then
+                                For Each kvp In stepsDict
+                                    Console.WriteLine($"   - templateId: {kvp.Key}, value type: {If(kvp.Value IsNot Nothing, kvp.Value.GetType().Name, "Nothing")}")
+                                Next
+                            End If
+                        Else
+                            Console.WriteLine($"❌ [ConvertTaskTreeToTaskTreeExpanded] Steps has unexpected type: {stepsToken.Type} (expected Object/dictionary)")
+                            Console.WriteLine($"   Steps value: {stepsToken.ToString().Substring(0, Math.Min(200, stepsToken.ToString().Length))}")
                         End If
                     Catch ex As Exception
                         Console.WriteLine($"❌ [ConvertTaskTreeToTaskTreeExpanded] Failed to parse steps: {ex.Message}")
                         Console.WriteLine($"   Stack trace: {ex.StackTrace}")
+                        ' ✅ Non bloccare l'esecuzione se steps non può essere parsato
                     End Try
                 Else
                     Console.WriteLine($"⚠️ [ConvertTaskTreeToTaskTreeExpanded] No 'steps' property found in TaskTree")
@@ -76,7 +84,51 @@ Namespace Converters
                 ' ✅ TaskTreeExpanded ha: { id, label, nodes, translations, introduction, constraints }
                 ' La conversione è diretta, ma dobbiamo aggiungere l'id e applicare gli steps
                 Console.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeExpanded] Attempting deserialization...")
-                Dim taskTreeExpanded = JsonConvert.DeserializeObject(Of Compiler.TaskTreeExpanded)(taskTreeJson.ToString(), settings)
+
+                ' ✅ LOGGING DETTAGLIATO: JSON che verrà deserializzato
+                Dim jsonToDeserialize = taskTreeJson.ToString()
+                Console.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeExpanded] JSON to deserialize length: {jsonToDeserialize.Length}")
+                Console.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeExpanded] JSON preview (first 2000 chars): {jsonToDeserialize.Substring(0, Math.Min(2000, jsonToDeserialize.Length))}")
+
+                ' ✅ Rimuovi steps dal JSON prima di deserializzare (verranno applicati dopo)
+                Dim jsonWithoutSteps As String = jsonToDeserialize
+                Try
+                    Dim jsonObj = JObject.Parse(jsonToDeserialize)
+                    If jsonObj("steps") IsNot Nothing Then
+                        jsonObj.Remove("steps")
+                        jsonWithoutSteps = jsonObj.ToString()
+                        Console.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeExpanded] Removed 'steps' property before deserialization")
+                    End If
+                Catch parseEx As Exception
+                    Console.WriteLine($"⚠️ [ConvertTaskTreeToTaskTreeExpanded] Failed to parse JSON to remove steps: {parseEx.Message}")
+                    ' Continua con JSON originale
+                End Try
+
+                Dim taskTreeExpanded As Compiler.TaskTreeExpanded = Nothing
+                Try
+                    taskTreeExpanded = JsonConvert.DeserializeObject(Of Compiler.TaskTreeExpanded)(jsonWithoutSteps, settings)
+                Catch deserializeEx As JsonSerializationException
+                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                    Console.WriteLine($"❌ [ConvertTaskTreeToTaskTreeExpanded] JsonSerializationException during TaskTreeExpanded deserialization:")
+                    Console.WriteLine($"   Message: {deserializeEx.Message}")
+                    Console.WriteLine($"   Path: {deserializeEx.Path}")
+                    Console.WriteLine($"   LineNumber: {deserializeEx.LineNumber}")
+                    Console.WriteLine($"   LinePosition: {deserializeEx.LinePosition}")
+                    Console.WriteLine($"   Stack trace: {deserializeEx.StackTrace}")
+                    If deserializeEx.InnerException IsNot Nothing Then
+                        Console.WriteLine($"   Inner exception: {deserializeEx.InnerException.Message}")
+                        Console.WriteLine($"   Inner stack trace: {deserializeEx.InnerException.StackTrace}")
+                    End If
+                    Console.WriteLine($"   JSON that failed (first 2000 chars): {jsonWithoutSteps.Substring(0, Math.Min(2000, jsonWithoutSteps.Length))}")
+                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                    Throw
+                Catch ex As Exception
+                    Console.WriteLine($"❌ [ConvertTaskTreeToTaskTreeExpanded] General exception during deserialization: {ex.Message}")
+                    Console.WriteLine($"   Type: {ex.GetType().Name}")
+                    Console.WriteLine($"   Stack trace: {ex.StackTrace}")
+                    Throw
+                End Try
+
                 If taskTreeExpanded Is Nothing Then
                     Console.WriteLine($"❌ [ConvertTaskTreeToTaskTreeExpanded] Failed to deserialize TaskTree - returned Nothing")
                     Return Nothing
@@ -167,17 +219,117 @@ Namespace Converters
                     Console.WriteLine($"✅ [ApplyStepsToTaskNodes] Found override for node {node.Id} (templateId={node.TemplateId})")
                     Try
                         Dim overrideValue As Object = stepsDict(node.TemplateId)
-                        Console.WriteLine($"🔍 [ApplyStepsToTaskNodes] Override value type: {If(overrideValue IsNot Nothing, overrideValue.GetType().Name, "Nothing")}")
+
+                        ' ✅ LOGGING DETTAGLIATO: Ispeziona tipo e struttura reale
+                        Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                        Console.WriteLine($"🔍 [ApplyStepsToTaskNodes] CRITICAL INSPECTION - Node: {node.Id}, TemplateId: {node.TemplateId}")
+                        Console.WriteLine($"   overrideValue IsNot Nothing: {overrideValue IsNot Nothing}")
+                        If overrideValue IsNot Nothing Then
+                            Console.WriteLine($"   overrideValue.GetType().Name: {overrideValue.GetType().Name}")
+                            Console.WriteLine($"   overrideValue.GetType().FullName: {overrideValue.GetType().FullName}")
+
+                            ' ✅ Prova a vedere se è un JObject o Dictionary
+                            Dim asJObject = TryCast(overrideValue, JObject)
+                            If asJObject IsNot Nothing Then
+                                Console.WriteLine($"   ✅ overrideValue IS JObject")
+                                Dim propNames = asJObject.Properties().Select(Function(p) p.Name).ToArray()
+                                Console.WriteLine($"   JObject keys: {String.Join(", ", propNames)}")
+                                Console.WriteLine($"   JObject full JSON: {asJObject.ToString(Formatting.Indented)}")
+                            Else
+                                Dim asDict = TryCast(overrideValue, Dictionary(Of String, Object))
+                                If asDict IsNot Nothing Then
+                                    Console.WriteLine($"   ✅ overrideValue IS Dictionary(Of String, Object)")
+                                    Console.WriteLine($"   Dictionary keys: {String.Join(", ", asDict.Keys)}")
+                                    For Each kvp In asDict
+                                        Console.WriteLine($"     Key: {kvp.Key}, Value type: {If(kvp.Value IsNot Nothing, kvp.Value.GetType().Name, "Nothing")}")
+                                        If kvp.Value IsNot Nothing Then
+                                            Try
+                                                Dim valueAsJObject = TryCast(kvp.Value, JObject)
+                                                If valueAsJObject IsNot Nothing Then
+                                                    Console.WriteLine($"       Value JSON preview: {valueAsJObject.ToString(Formatting.None).Substring(0, Math.Min(200, valueAsJObject.ToString().Length))}")
+                                                End If
+                                            Catch
+                                            End Try
+                                        End If
+                                    Next
+                                Else
+                                    Console.WriteLine($"   ⚠️ overrideValue is NOT JObject or Dictionary - actual type: {overrideValue.GetType().Name}")
+                                End If
+                            End If
+                        End If
+                        Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
 
                         If overrideValue IsNot Nothing Then
-                            ' ✅ Usa DialogueStepListConverter per convertire oggetto → List(Of DialogueStep)
-                            Dim overrideJson = JsonConvert.SerializeObject(overrideValue)
-                            Console.WriteLine($"🔍 [ApplyStepsToTaskNodes] Serialized override JSON length: {overrideJson.Length}")
-                            Console.WriteLine($"🔍 [ApplyStepsToTaskNodes] Override JSON preview: {overrideJson.Substring(0, Math.Min(500, overrideJson.Length))}")
+                            Dim overrideSteps As List(Of Compiler.DialogueStep) = Nothing
 
-                            Dim settings As New JsonSerializerSettings()
-                            settings.Converters.Add(New Compiler.DialogueStepListConverter())
-                            Dim overrideSteps = JsonConvert.DeserializeObject(Of List(Of Compiler.DialogueStep))(overrideJson, settings)
+                            ' ✅ Verifica se è già JObject (evita doppia serializzazione)
+                            Dim asJObject = TryCast(overrideValue, JObject)
+                            If asJObject IsNot Nothing Then
+                                ' ✅ Usa direttamente JObject senza serializzare
+                                Console.WriteLine($"🔍 [ApplyStepsToTaskNodes] Using JObject directly (avoiding double serialization)")
+                                Dim settings As New JsonSerializerSettings()
+                                settings.Converters.Add(New Compiler.DialogueStepListConverter())
+                                overrideSteps = asJObject.ToObject(Of List(Of Compiler.DialogueStep))(JsonSerializer.Create(settings))
+                                Console.WriteLine($"✅ [ApplyStepsToTaskNodes] Deserialized {If(overrideSteps IsNot Nothing, overrideSteps.Count, 0)} steps from JObject")
+                            Else
+                                ' ✅ Fallback: serializza e deserializza
+                                Console.WriteLine($"🔍 [ApplyStepsToTaskNodes] Serializing overrideValue to JSON...")
+                                Dim overrideJson = JsonConvert.SerializeObject(overrideValue)
+
+                                ' ✅ LOGGING DETTAGLIATO: JSON serializzato
+                                Console.WriteLine($"🔍 [ApplyStepsToTaskNodes] Serialized JSON:")
+                                Console.WriteLine($"   Length: {overrideJson.Length}")
+                                Console.WriteLine($"   Full JSON: {overrideJson}")
+
+                                ' ✅ Prova a parsare come JObject per vedere la struttura
+                                Try
+                                    Dim parsedJson = JObject.Parse(overrideJson)
+                                    Dim propNames = parsedJson.Properties().Select(Function(p) p.Name).ToArray()
+                                    Console.WriteLine($"   ✅ Parsed as JObject - keys: {String.Join(", ", propNames)}")
+                                    For Each prop In parsedJson.Properties()
+                                        Console.WriteLine($"     Property: {prop.Name}")
+                                        If prop.Value.Type = JTokenType.Object Then
+                                            Dim stepObj = CType(prop.Value, JObject)
+                                            Dim stepPropNames = stepObj.Properties().Select(Function(p) p.Name).ToArray()
+                                            Console.WriteLine($"       Step object keys: {String.Join(", ", stepPropNames)}")
+                                            Console.WriteLine($"       Step object preview: {stepObj.ToString(Formatting.None).Substring(0, Math.Min(300, stepObj.ToString().Length))}")
+                                        End If
+                                    Next
+                                Catch parseEx As Exception
+                                    Console.WriteLine($"   ❌ Failed to parse as JObject: {parseEx.Message}")
+                                End Try
+
+                                Dim settings As New JsonSerializerSettings()
+                                settings.Converters.Add(New Compiler.DialogueStepListConverter())
+
+                                ' ✅ LOGGING DETTAGLIATO: Prima della deserializzazione
+                                Console.WriteLine($"🔍 [ApplyStepsToTaskNodes] About to deserialize with DialogueStepListConverter...")
+                                Console.WriteLine($"   Target type: List(Of DialogueStep)")
+
+                                Try
+                                    overrideSteps = JsonConvert.DeserializeObject(Of List(Of Compiler.DialogueStep))(overrideJson, settings)
+                                Catch deserializeEx As JsonSerializationException
+                                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                                    Console.WriteLine($"❌ [ApplyStepsToTaskNodes] JsonSerializationException DETAILS:")
+                                    Console.WriteLine($"   Message: {deserializeEx.Message}")
+                                    Console.WriteLine($"   Path: {deserializeEx.Path}")
+                                    Console.WriteLine($"   LineNumber: {deserializeEx.LineNumber}")
+                                    Console.WriteLine($"   LinePosition: {deserializeEx.LinePosition}")
+                                    Console.WriteLine($"   Stack trace: {deserializeEx.StackTrace}")
+                                    If deserializeEx.InnerException IsNot Nothing Then
+                                        Console.WriteLine($"   Inner exception: {deserializeEx.InnerException.Message}")
+                                        Console.WriteLine($"   Inner stack trace: {deserializeEx.InnerException.StackTrace}")
+                                    End If
+                                    Console.WriteLine($"   JSON that failed: {overrideJson}")
+                                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                                    Throw
+                                Catch ex As Exception
+                                    Console.WriteLine($"❌ [ApplyStepsToTaskNodes] General exception during deserialization: {ex.Message}")
+                                    Console.WriteLine($"   Type: {ex.GetType().Name}")
+                                    Console.WriteLine($"   Stack trace: {ex.StackTrace}")
+                                    Throw
+                                End Try
+                            End If
 
                             If overrideSteps IsNot Nothing AndAlso overrideSteps.Count > 0 Then
                                 node.Steps = overrideSteps
@@ -194,7 +346,13 @@ Namespace Converters
                         End If
                     Catch ex As Exception
                         Console.WriteLine($"❌ [ApplyStepsToTaskNodes] Failed to apply steps to node {node.Id}: {ex.Message}")
+                        Console.WriteLine($"   Exception type: {ex.GetType().Name}")
                         Console.WriteLine($"   Stack trace: {ex.StackTrace}")
+                        If ex.InnerException IsNot Nothing Then
+                            Console.WriteLine($"   Inner exception: {ex.InnerException.Message}")
+                            Console.WriteLine($"   Inner stack trace: {ex.InnerException.StackTrace}")
+                        End If
+                        ' ✅ Non bloccare l'esecuzione, continua con altri nodi
                     End Try
                 End If
 

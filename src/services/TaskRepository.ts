@@ -1,7 +1,8 @@
-import type { Task, TaskInstance } from '../types/taskTypes';
+import type { Task, TaskInstance, MaterializedStep } from '../types/taskTypes';
 import { TaskType } from '../types/taskTypes';
 import { generateId } from '../utils/idGenerator';
 import { getTemplateId } from '../utils/taskHelpers';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * TaskRepository: Primary repository for Task data
@@ -378,20 +379,46 @@ class TaskRepository {
           });
         }
 
-        // ✅ CRITICAL: Log steps structure only if wrong (reduce noise)
+        // ✅ CRITICAL: Verifica e converte steps structure se necessario
         if (task.steps) {
-          const stepsKeys = Object.keys(task.steps);
-          const stepTypeKeys = ['start', 'noMatch', 'noInput', 'confirmation', 'notConfirmed', 'success'];
-          const hasWrongStructure = stepsKeys.length === stepTypeKeys.length &&
-            stepsKeys.every(key => stepTypeKeys.includes(key));
+          // ✅ Se è già un array, è corretto - nessuna azione necessaria
+          if (Array.isArray(task.steps)) {
+            // Struttura corretta, nessun warning
+          } else if (typeof task.steps === 'object') {
+            // ✅ Verifica se è la vecchia struttura (dictionary)
+            const stepsKeys = Object.keys(task.steps);
+            const stepTypeKeys = ['start', 'noMatch', 'noInput', 'confirmation', 'notConfirmed', 'success', 'introduction'];
+            const hasWrongStructure = stepsKeys.length === stepTypeKeys.length &&
+              stepsKeys.every(key => stepTypeKeys.includes(key));
 
-          // ✅ Log solo se struttura sbagliata
-          if (hasWrongStructure) {
-            console.warn('[🔍 TaskRepository][LOAD] ⚠️ Wrong steps structure loaded from backend', {
-              taskId: task.id,
-              stepsKeys,
-              stepsKeysAsStrings: stepsKeys.join(', ')
-            });
+            if (hasWrongStructure) {
+              console.warn('[🔍 TaskRepository][LOAD] ⚠️ Wrong steps structure detected - converting automatically', {
+                taskId: task.id,
+                oldStepsKeys: stepsKeys
+              });
+
+              // ✅ CONVERSIONE AUTOMATICA: Converti dictionary in array MaterializedStep[]
+              const stepsDict = task.steps as Record<string, any>;
+              const materializedSteps: MaterializedStep[] = [];
+
+              for (const [stepType, stepData] of Object.entries(stepsDict)) {
+                if (stepData && typeof stepData === 'object') {
+                  materializedSteps.push({
+                    id: stepData.id || uuidv4(),
+                    templateStepId: stepData.templateStepId || undefined, // ✅ Solo se step derivato
+                    escalations: stepData.escalations || []
+                  });
+                }
+              }
+
+              // ✅ Sostituisci steps con la struttura corretta
+              task.steps = materializedSteps;
+
+              console.log('[🔍 TaskRepository][LOAD] ✅ Steps converted to array', {
+                taskId: task.id,
+                newStepsCount: materializedSteps.length
+              });
+            }
           }
         }
 

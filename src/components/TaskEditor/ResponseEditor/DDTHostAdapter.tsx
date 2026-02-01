@@ -71,6 +71,10 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
         // ✅ Usa buildTaskTree per costruire TaskTree da template + instance
         const tree = await buildTaskTree(fullTask, currentProjectId || undefined);
 
+        // ✅ CRITICAL: Ricarica task dal repository dopo buildTaskTree
+        // buildTaskTree clona gli step e li salva nel repository, ma fullTask non si aggiorna automaticamente
+        const updatedTask = taskRepository.getTask(instanceKey);
+
         // ✅ TaskTree caricato
         if (tree) {
           setTaskTree(tree);
@@ -85,7 +89,13 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
             })) || [],
             hasSteps: !!tree.steps,
             stepsType: typeof tree.steps,
-            stepsCount: Array.isArray(tree.steps) ? tree.steps.length : 0
+            stepsKeys: tree.steps && typeof tree.steps === 'object' && !Array.isArray(tree.steps)
+              ? Object.keys(tree.steps)
+              : [],
+            updatedTaskHasSteps: !!updatedTask?.steps,
+            updatedTaskStepsKeys: updatedTask?.steps && typeof updatedTask.steps === 'object' && !Array.isArray(updatedTask.steps)
+              ? Object.keys(updatedTask.steps)
+              : []
           });
         } else {
           setTaskTree(null);
@@ -99,7 +109,7 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
     };
 
     loadTaskTree();
-  }, [fullTask, currentProjectId]);
+  }, [fullTask, currentProjectId, instanceKey]);
 
   // ✅ ARCHITETTURA ESPERTO: Loading solo se serve async
   const loading = taskTreeLoading;
@@ -245,6 +255,17 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
   }, [taskMeta.instanceId, taskMeta.id]);
 
   // ✅ ARCHITETTURA ESPERTO: Passa Task completo invece di TaskMeta
+  // ✅ CRITICAL: Ricarica task dal repository per avere gli step aggiornati dopo buildTaskTree
+  const updatedFullTask = React.useMemo(() => {
+    if (!instanceKey) return null;
+    try {
+      return taskRepository.getTask(instanceKey);
+    } catch (error) {
+      console.error('[DDTHostAdapter] Error reloading task:', error);
+      return fullTask; // Fallback al task originale
+    }
+  }, [instanceKey, taskTree]); // ✅ Dipende da taskTree per ricaricare quando cambia
+
   // ✅ Stable callbacks per evitare re-render
   const stableOnClose = React.useCallback(() => {
     try {
@@ -262,7 +283,7 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
       taskTree={safeTaskTree}
       onClose={stableOnClose}
       onWizardComplete={stableOnWizardComplete}
-      task={fullTask} // ✅ ARCHITETTURA ESPERTO: Task completo, non TaskMeta
+      task={updatedFullTask || fullTask} // ✅ Usa task aggiornato con step clonati
       isTaskTreeLoading={loading} // ✅ ARCHITETTURA ESPERTO: Stato di loading
       hideHeader={hideHeader} // ✅ PATTERN CENTRALIZZATO: Passa hideHeader al wrapper
       onToolbarUpdate={onToolbarUpdate} // ✅ PATTERN CENTRALIZZATO: Passa onToolbarUpdate per ereditare header

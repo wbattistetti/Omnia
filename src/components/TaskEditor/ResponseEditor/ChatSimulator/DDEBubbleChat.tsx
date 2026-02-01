@@ -89,11 +89,20 @@ export default function DDEBubbleChat({
 
         // ✅ NUOVO MODELLO: Invia TaskTree completo (working copy) invece di solo taskId
         // L'istanza in memoria è la fonte di verità, non il database
+        // ✅ CRITICAL: Steps è già dictionary: { "templateId": { "start": {...}, "noMatch": {...} } }
+        // Il backend VB.NET si aspetta questa struttura (stessa del database)
+        const stepsDict = taskTree.steps && typeof taskTree.steps === 'object' && !Array.isArray(taskTree.steps)
+          ? taskTree.steps
+          : {};  // ✅ Se non è dictionary, usa vuoto (legacy format)
+
         const requestBody = {
           taskId: task.id,  // Mantieni per compatibilità/identificazione
           projectId: projectId,
           translations: translationsData,
-          taskTree: taskTree  // ✅ OBBLIGATORIO: Working copy completa con steps
+          taskTree: {
+            ...taskTree,
+            steps: stepsDict  // ✅ Dictionary: { "templateId": { "start": {...}, "noMatch": {...} } }
+          }
         };
         console.log('[DDEBubbleChat] 📤 Sending request to backend with TaskTree:', {
           url: `${baseUrl}/api/runtime/task/session/start`,
@@ -101,7 +110,24 @@ export default function DDEBubbleChat({
           taskId: task.id,
           hasTaskTree: !!taskTree,
           taskTreeNodesCount: taskTree?.nodes?.length || 0,
-          taskTreeStepsCount: Array.isArray(taskTree?.steps) ? taskTree.steps.length : 0,
+          // ✅ NUOVO: Mostra chiavi del dictionary invece di count array
+          taskTreeStepsType: typeof taskTree?.steps,
+          taskTreeStepsIsDictionary: taskTree?.steps && typeof taskTree.steps === 'object' && !Array.isArray(taskTree.steps),
+          taskTreeStepsKeys: taskTree?.steps && typeof taskTree.steps === 'object' && !Array.isArray(taskTree.steps)
+            ? Object.keys(taskTree.steps)
+            : [],
+          taskTreeStepsCount: taskTree?.steps && typeof taskTree.steps === 'object' && !Array.isArray(taskTree.steps)
+            ? Object.keys(taskTree.steps).length
+            : 0,
+          stepsDictKeys: stepsDict && typeof stepsDict === 'object' && !Array.isArray(stepsDict)
+            ? Object.keys(stepsDict)
+            : [],
+          stepsDictPreview: stepsDict && typeof stepsDict === 'object' && !Array.isArray(stepsDict)
+            ? Object.entries(stepsDict).slice(0, 2).map(([templateId, nodeSteps]) => ({
+                templateId,
+                stepTypes: typeof nodeSteps === 'object' && !Array.isArray(nodeSteps) ? Object.keys(nodeSteps) : []
+              }))
+            : [],
           bodyString: JSON.stringify(requestBody).substring(0, 500) + '...'
         });
 

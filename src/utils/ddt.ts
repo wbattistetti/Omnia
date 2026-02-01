@@ -27,28 +27,10 @@ export function hasdataButNosteps(taskTree?: any, task?: any): boolean {
 
     if (mains.length === 0) return false;
 
-    // ✅ CRITICAL: Leggi da task.steps, gestisce sia array che dictionary
-    if (!task?.steps) {
-      return true; // Non ha steps nel task
+    // ✅ CRITICAL: Leggi da task.steps (dictionary)
+    if (!task?.steps || typeof task.steps !== 'object' || Array.isArray(task.steps)) {
+      return true; // Non ha steps nel task o formato legacy
     }
-
-    // ✅ Helper function per ottenere steps per un nodo (gestisce sia array che dictionary)
-    const getStepsForNode = (steps: any, nodeTemplateId: string): any[] => {
-      if (!steps) return [];
-      if (Array.isArray(steps)) {
-        // ✅ NUOVO MODELLO: Array MaterializedStep[]
-        // Filtra gli step che hanno templateStepId che inizia con nodeTemplateId
-        return steps.filter((step: any) =>
-          step.templateStepId && step.templateStepId.startsWith(nodeTemplateId)
-        );
-      }
-      // ✅ RETROCOMPATIBILITÀ: Gestisce anche il formato dictionary legacy
-      if (typeof steps === 'object' && steps[nodeTemplateId]) {
-        const nodeSteps = steps[nodeTemplateId];
-        return Array.isArray(nodeSteps) ? nodeSteps : [];
-      }
-      return [];
-    };
 
     // Verifica se almeno un data ha steps corrispondenti
     // ✅ CRITICAL: Usa templateId come chiave (non id)
@@ -69,19 +51,20 @@ export function hasdataButNosteps(taskTree?: any, task?: any): boolean {
         return true; // Main senza ID/templateId non può avere steps
       }
 
-      // ✅ NUOVO: Usa helper function per ottenere steps (gestisce array e dictionary)
-      const nodeStepsArray = getStepsForNode(task.steps, mainTemplateId);
+      // ✅ Lookup diretto: O(1) invece di O(n) filter
+      const nodeSteps = task.steps[mainTemplateId] || {};
+      const nodeStepTypes = Object.keys(nodeSteps);
 
       console.log('[🔍 hasdataButNosteps] Verifica steps per main', {
         mainLabel: main.label,
         mainId,
         mainTemplateId,
-        taskStepsIsArray: Array.isArray(task.steps),
-        taskStepsCount: Array.isArray(task.steps) ? task.steps.length : Object.keys(task.steps || {}).length,
-        nodeStepsCount: nodeStepsArray.length
+        taskTemplateIdsCount: Object.keys(task.steps).length,
+        nodeStepTypes,
+        nodeStepsCount: nodeStepTypes.length
       });
 
-      if (nodeStepsArray.length === 0) {
+      if (nodeStepTypes.length === 0) {
         console.log('[🔍 hasdataButNosteps] ❌ Main non ha steps', {
           mainLabel: main.label,
           mainTemplateId,
@@ -91,7 +74,8 @@ export function hasdataButNosteps(taskTree?: any, task?: any): boolean {
       }
 
       // ✅ Verifica se almeno uno step ha escalations con tasks
-      const hasMessages = nodeStepsArray.some((step: any) => {
+      const hasMessages = nodeStepTypes.some((stepType: string) => {
+        const step = nodeSteps[stepType];
         if (!step || !step.escalations || !Array.isArray(step.escalations)) {
           return false;
         }
@@ -104,14 +88,15 @@ export function hasdataButNosteps(taskTree?: any, task?: any): boolean {
       console.log('[🔍 hasdataButNosteps] Verifica messaggi', {
         mainLabel: main.label,
         mainTemplateId,
-        nodeStepsCount: nodeStepsArray.length,
+        nodeStepTypes,
         hasMessages,
-        stepDetails: nodeStepsArray.map((step: any) => {
+        stepDetails: nodeStepTypes.map((stepType: string) => {
+          const step = nodeSteps[stepType];
           const escalationsCount = step?.escalations?.length || 0;
           const tasksCount = step?.escalations?.reduce((acc: number, esc: any) =>
             acc + (esc?.tasks?.length || 0), 0) || 0;
           return {
-            templateStepId: step.templateStepId,
+            stepType,
             escalationsCount,
             tasksCount,
             hasTasks: tasksCount > 0

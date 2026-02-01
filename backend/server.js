@@ -772,16 +772,21 @@ app.post('/api/projects/bootstrap', async (req, res) => {
     return res.status(400).json({ error: 'projectName_required' });
   }
 
+  console.log('[Bootstrap] 🚀 START - Creating project:', { projectName, clientName, industry, language });
   const client = new MongoClient(uri);
   try {
+    console.log('[Bootstrap] 📡 Connecting to MongoDB...');
     await client.connect();
+    console.log('[Bootstrap] ✅ Connected to MongoDB');
 
     // 1) Catalogo: crea record se non esiste
+    console.log('[Bootstrap] 📋 Step 1: Creating catalog entry...');
     const catalogDb = client.db(dbProjects);
     const cat = catalogDb.collection('projects_catalog');
     const now = new Date();
     const projectId = payload.projectId || makeProjectId();
     const dbName = payload.dbName || makeProjectDbName(clientName, projectName);
+    console.log('[Bootstrap] 📋 Generated projectId:', projectId, 'dbName:', dbName);
 
     const catalogDoc = {
       _id: projectId,
@@ -804,16 +809,22 @@ app.post('/api/projects/bootstrap', async (req, res) => {
     };
     try {
       await cat.insertOne(catalogDoc);
+      console.log('[Bootstrap] ✅ Catalog entry created');
     } catch (e) {
       // if already exists, update metadata (idempotent)
+      console.log('[Bootstrap] ⚠️ Catalog entry already exists, updating...');
       await cat.updateOne({ _id: projectId }, { $set: { ...catalogDoc, createdAt: undefined, updatedAt: now } }, { upsert: true });
+      console.log('[Bootstrap] ✅ Catalog entry updated');
     }
 
     // 2) Project DB handle
+    console.log('[Bootstrap] 📦 Step 2: Setting up project database...');
     const projDb = client.db(dbName);
     const factoryDb = client.db(dbFactory);
+    console.log('[Bootstrap] ✅ Project DB handle created');
 
     // 3) Scrivi metadati locali
+    console.log('[Bootstrap] 📝 Step 3: Writing project metadata...');
     await projDb.collection('project_meta').updateOne(
       { _id: 'meta' },
       {
@@ -836,6 +847,7 @@ app.post('/api/projects/bootstrap', async (req, res) => {
       },
       { upsert: true }
     );
+    console.log('[Bootstrap] ✅ Project metadata written');
 
     // 4) ✅ RIMOSSO: Non copiare template del Factory nel progetto
     // I template del Factory devono essere caricati solo in memoria quando servono
@@ -846,8 +858,10 @@ app.post('/api/projects/bootstrap', async (req, res) => {
     const templatesInserted = 0; // ✅ Template non vengono più copiati, sempre 0
 
     // 5) Clona task_heuristics dalla factory al progetto
+    console.log('[Bootstrap] 🔍 Step 5: Cloning task_heuristics from factory...');
     const heuristicsColl = factoryDb.collection('task_heuristics');
     const heuristics = await heuristicsColl.find({}).toArray();
+    console.log('[Bootstrap] 🔍 Found', heuristics.length, 'heuristics in factory');
 
     let heuristicsInserted = 0;
     if (heuristics && heuristics.length > 0) {
@@ -861,16 +875,20 @@ app.post('/api/projects/bootstrap', async (req, res) => {
       });
 
       try {
+        console.log('[Bootstrap] 💾 Inserting', mappedHeuristics.length, 'heuristics into project...');
         const result = await projDb.collection('task_heuristics').insertMany(mappedHeuristics, { ordered: false });
         heuristicsInserted = result.insertedCount || Object.keys(result.insertedIds || {}).length || 0;
+        console.log('[Bootstrap] ✅ Inserted', heuristicsInserted, 'heuristics');
       } catch (insertError) {
-        console.error('[Bootstrap] Error inserting task_heuristics:', insertError);
+        console.error('[Bootstrap] ⚠️ Error inserting task_heuristics:', insertError.message);
+        console.error('[Bootstrap] ⚠️ Stack:', insertError.stack);
         // Continue even if insert fails (collection might already exist)
         heuristicsInserted = 0;
       }
     }
 
     // 6) Collezioni vuote necessarie e indici per performance
+    console.log('[Bootstrap] 📊 Step 6: Creating indexes...');
     await projDb.collection('tasks').createIndex({ updatedAt: -1 }).catch(() => { });
     await projDb.collection('flow_nodes').createIndex({ updatedAt: -1 }).catch(() => { });
     await projDb.collection('flow_edges').createIndex({ updatedAt: -1 }).catch(() => { });
@@ -879,7 +897,9 @@ app.post('/api/projects/bootstrap', async (req, res) => {
     const translationsColl = projDb.collection('Translations');
     await translationsColl.createIndex({ language: 1, type: 1 }).catch(() => { });
     await translationsColl.createIndex({ guid: 1, language: 1 }).catch(() => { });
+    console.log('[Bootstrap] ✅ Indexes created');
 
+    console.log('[Bootstrap] ✅ SUCCESS - Project created:', { projectId, dbName, templatesInserted, heuristicsInserted });
     logInfo('Projects.bootstrap', {
       projectId,
       dbName,
@@ -896,10 +916,14 @@ app.post('/api/projects/bootstrap', async (req, res) => {
       }
     });
   } catch (e) {
+    console.error('[Bootstrap] ❌ ERROR:', e.message);
+    console.error('[Bootstrap] ❌ Stack:', e.stack);
     logError('Projects.bootstrap', e);
-    res.status(500).json({ ok: false, error: String(e?.message || e) });
+    res.status(500).json({ ok: false, error: String(e?.message || e), stack: e?.stack });
   } finally {
+    console.log('[Bootstrap] 🔌 Closing MongoDB connection...');
     await client.close();
+    console.log('[Bootstrap] 🔌 MongoDB connection closed');
   }
 });
 

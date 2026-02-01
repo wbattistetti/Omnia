@@ -126,6 +126,11 @@ Namespace Services
         ''' <param name="templatesList">The list of JObject templates to deserialize.</param>
         ''' <returns>A tuple containing: (Success As Boolean, Tasks As List(Of Compiler.Task), ErrorMessage As String)</returns>
         Public Function DeserializeTasks(templatesList As List(Of JObject)) As (Success As Boolean, Tasks As List(Of Compiler.Task), ErrorMessage As String)
+            Console.WriteLine("═══════════════════════════════════════════════════════════════")
+            Console.WriteLine($"🔍 [DeserializeTasks] START - Deserializing {templatesList.Count} templates")
+            Console.WriteLine("═══════════════════════════════════════════════════════════════")
+            Console.Out.Flush()
+
             Dim settings As New JsonSerializerSettings() With {
                 .NullValueHandling = NullValueHandling.Ignore,
                 .MissingMemberHandling = MissingMemberHandling.Ignore
@@ -135,18 +140,56 @@ Namespace Services
             Dim deserializedTasks As New List(Of Compiler.Task)()
 
             For Each templateObj In templatesList
+                Dim templateIdToken = templateObj("id")
+                Dim templateId = If(templateIdToken IsNot Nothing, templateIdToken.ToString(), "unknown")
+
+                Console.WriteLine($"🔍 [DeserializeTasks] About to deserialize template '{templateId}'...")
+                Console.Out.Flush()
+
                 Try
                     Dim task = JsonConvert.DeserializeObject(Of Compiler.Task)(templateObj.ToString(), settings)
                     If task IsNot Nothing Then
                         deserializedTasks.Add(task)
+                        Console.WriteLine($"✅ [DeserializeTasks] Template '{templateId}' deserialized successfully")
+                        Console.Out.Flush()
+                    Else
+                        Console.WriteLine($"⚠️ [DeserializeTasks] Template '{templateId}' deserialized to Nothing")
+                        Console.Out.Flush()
                     End If
                 Catch ex As Exception
-                    Dim templateIdToken = templateObj("id")
-                    Dim templateId = If(templateIdToken IsNot Nothing, templateIdToken.ToString(), "unknown")
+                    Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                    Console.WriteLine($"❌ [DeserializeTasks] UNHANDLED EXCEPTION for template '{templateId}'")
+                    Console.WriteLine($"   Type: {ex.GetType().FullName}")
+                    Console.WriteLine($"   Message: {ex.Message}")
+                    Console.WriteLine($"   StackTrace: {ex.StackTrace}")
+
+                    If ex.InnerException IsNot Nothing Then
+                        Console.WriteLine("   ── Inner Exception ──")
+                        Console.WriteLine($"   Type: {ex.InnerException.GetType().FullName}")
+                        Console.WriteLine($"   Message: {ex.InnerException.Message}")
+                        Console.WriteLine($"   StackTrace: {ex.InnerException.StackTrace}")
+                    End If
+
+                    ' ✅ Se è JsonSerializationException, logga dettagli aggiuntivi
+                    Dim jsonEx = TryCast(ex, JsonSerializationException)
+                    If jsonEx IsNot Nothing Then
+                        Console.WriteLine("   ── JSON Exception Details ──")
+                        Console.WriteLine($"   JSON Path: {jsonEx.Path}")
+                        Console.WriteLine($"   LineNumber: {jsonEx.LineNumber}")
+                        Console.WriteLine($"   LinePosition: {jsonEx.LinePosition}")
+                        Dim templateJson = templateObj.ToString()
+                        Console.WriteLine($"   JSON that failed (first 2000 chars): {templateJson.Substring(0, Math.Min(2000, templateJson.Length))}")
+                    End If
+
+                    Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                    Console.Out.Flush()
+
                     Return (False, Nothing, $"Failed to deserialize template with ID '{templateId}'. Error: {ex.Message}")
                 End Try
             Next
 
+            Console.WriteLine($"✅ [DeserializeTasks] END - Successfully deserialized {deserializedTasks.Count} templates")
+            Console.Out.Flush()
             Return (True, deserializedTasks, Nothing)
         End Function
 

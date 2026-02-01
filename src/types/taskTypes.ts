@@ -292,7 +292,7 @@ export interface Task {
   // ❌ RIMOSSO: examples - Vengono sempre dal template, non dall'istanza
   // ❌ RIMOSSO: dataContract - Viene sempre dal template, non dall'istanza
   dialogueSteps?: any[];         // ✅ Flat dialogue steps array (replaces nested data[].steps) - DEPRECATED
-  steps?: MaterializedStep[] | Record<string, any>;  // ✅ Steps materializzati come array piatto (nuovo) o dictionary (legacy)
+  steps?: Record<string, Record<string, any>>;  // ✅ Steps come dictionary: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
   // ❌ RIMOSSO: steps - use steps instead
   introduction?: any;             // ✅ Introduction override (opzionale)
   // Per SayMessage:
@@ -345,7 +345,7 @@ export interface TaskTreeNode {
 export interface TaskTree {
   labelKey: string;              // ✅ Translation key (es. "ask_patient_birthdate") - NON testo diretto
   nodes: TaskTreeNode[];         // ✅ Nodi principali (costruiti da template.subTasksIds)
-  steps: MaterializedStep[];     // ✅ Steps materializzati come array piatto
+  steps: Record<string, Record<string, any>>;  // ✅ Steps come dictionary: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
   constraints?: any[];           // ✅ Dal template (sempre)
   dataContract?: any;            // ✅ Dal template (sempre)
   introduction?: any;             // ✅ Opzionale (da instance se override)

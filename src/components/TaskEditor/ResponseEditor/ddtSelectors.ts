@@ -41,15 +41,41 @@ const DEFAULT_STEP_ORDER = [
 
 export function getNodeSteps(node: any): string[] {
   if (!node) {
-    // Removed verbose log
+    console.log('[🔍 getNodeSteps] ❌ Node is null/undefined');
     return [];
   }
 
-  // Removed verbose log
-
   const present = new Set<string>();
 
-  // Variante A: steps come array: [{ type: 'start', ... }, ...]
+  // ✅ Variante A: steps come dictionary: { "start": {...}, "noMatch": {...}, ... }
+  // ✅ NUOVO: Formato unificato dopo refactoring
+  if (node.steps && typeof node.steps === 'object' && !Array.isArray(node.steps)) {
+    const stepKeys = Object.keys(node.steps);
+    console.log('[🔍 getNodeSteps] ✅ Found dictionary steps', {
+      nodeId: node.id,
+      nodeLabel: node.label,
+      stepKeys,
+      stepKeysCount: stepKeys.length,
+      stepsPreview: stepKeys.slice(0, 5).map(k => ({
+        key: k,
+        hasEscalations: Array.isArray(node.steps[k]?.escalations) && node.steps[k].escalations.length > 0
+      }))
+    });
+
+    // ✅ Itera sulle chiavi del dictionary (start, noMatch, etc.)
+    for (const stepKey of stepKeys) {
+      const step = node.steps[stepKey];
+      // ✅ Verifica che lo step abbia escalations (non vuoto)
+      if (step && typeof step === 'object') {
+        // ✅ Aggiungi anche se non ha escalations (per permettere aggiunta di nuovi step)
+        if (stepKey && stepKey.trim()) {
+          present.add(stepKey);
+        }
+      }
+    }
+  }
+
+  // Variante B: steps come array: [{ type: 'start', ... }, ...]
   if (Array.isArray(node.steps)) {
     for (const s of node.steps) {
       const t = s?.type;
@@ -57,20 +83,7 @@ export function getNodeSteps(node: any): string[] {
     }
   }
 
-  // ✅ Variante B: steps come array MaterializedStep[]
-  if (node.steps && Array.isArray(node.steps)) {
-    for (const step of node.steps) {
-      if (step && step.escalations && step.escalations.length > 0) {
-        // ✅ Aggiungi tipo step se presente (da templateStepId o altro)
-        if (step.templateStepId) {
-          const stepType = step.templateStepId.split(':').pop() || 'unknown';
-          present.add(stepType);
-        }
-      }
-    }
-  }
-
-  // Variante C: messages annidati in node.messages
+  // Variante C: messages annidati in node.messages (legacy)
   if (node.messages && typeof node.messages === 'object') {
     for (const key of Object.keys(node.messages)) {
       const val = node.messages[key];

@@ -1117,22 +1117,13 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   // dockTree è la fonte di verità - le modifiche sono già salvate immediatamente in updateSelectedNode
 
   // ✅ Caricamento: legge da taskTreeRef.current (che contiene già le modifiche, come VB.NET)
-  // ✅ Helper function per ottenere steps per un nodo (gestisce sia array che oggetto)
-  const getStepsForNode = React.useCallback((steps: any, nodeTemplateId: string): any[] => {
-    if (!steps) return [];
-    if (Array.isArray(steps)) {
-      // ✅ NUOVO MODELLO: Array MaterializedStep[]
-      // Filtra gli step che hanno templateStepId che inizia con nodeTemplateId
-      return steps.filter((step: any) =>
-        step.templateStepId && step.templateStepId.startsWith(nodeTemplateId)
-      );
+  // ✅ Helper function per ottenere steps per un nodo (dictionary lookup diretto)
+  const getStepsForNode = React.useCallback((steps: any, nodeTemplateId: string): Record<string, any> => {
+    if (!steps || typeof steps !== 'object' || Array.isArray(steps)) {
+      return {}; // ✅ Ritorna dictionary vuoto se non valido
     }
-    // ✅ RETROCOMPATIBILITÀ: Gestisce anche il formato dictionary legacy
-    if (typeof steps === 'object' && steps[nodeTemplateId]) {
-      const nodeSteps = steps[nodeTemplateId];
-      return Array.isArray(nodeSteps) ? nodeSteps : [];
-    }
-    return [];
+    // ✅ Lookup diretto: O(1) invece di O(n) filter
+    return steps[nodeTemplateId] || {};
   }, []);
 
   useEffect(() => {
@@ -1201,35 +1192,46 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
           });
         }
 
-        // ✅ NUOVO: Usa helper function per ottenere steps per questo nodo
-        const nodeStepsArray = getStepsForNode(task?.steps, nodeTemplateId);
-        const taskStepsCount = Array.isArray(task?.steps) ? task.steps.length : 0;
+        // ✅ NUOVO: Usa lookup diretto per ottenere steps per questo nodo (dictionary)
+        // ✅ CRITICAL: Usa taskTree.steps come fonte primaria (più affidabile, costruito da buildTaskTree)
+        // Fallback a task.steps solo se taskTree.steps non è disponibile
+        const stepsSource = taskTreeRef.current?.steps || task?.steps;
+        const nodeStepsDict = getStepsForNode(stepsSource, nodeTemplateId);
+        const taskTemplateIdsCount = stepsSource && typeof stepsSource === 'object' && !Array.isArray(stepsSource)
+          ? Object.keys(stepsSource).length
+          : 0;
+        const nodeStepTypes = Object.keys(nodeStepsDict);
 
         console.log('[🔍 ResponseEditor][NODE_SELECT] 🔍 Loading steps for node', {
           nodeId: node.id,
           nodeTemplateId,
           nodeLabel: node?.label,
-          hasTaskSteps: nodeStepsArray.length > 0,
-          taskStepsCount: taskStepsCount,
-          nodeStepsCount: nodeStepsArray.length,
-          taskStepsIsArray: Array.isArray(task?.steps)
+          hasTaskSteps: nodeStepTypes.length > 0,
+          taskTemplateIdsCount,
+          nodeStepTypes,
+          nodeStepsCount: nodeStepTypes.length,
+          stepsSource: taskTreeRef.current?.steps ? 'taskTree.steps' : 'task.steps',
+          stepsIsDictionary: stepsSource && typeof stepsSource === 'object' && !Array.isArray(stepsSource)
         });
-        const nodeStepsDetails = nodeStepsArray.length > 0 ? (() => {
-          const nodeSteps = nodeStepsArray;
-          const isArray = true; // ✅ Sempre array nel nuovo modello
-          const isObject = false;
+        const nodeStepsDetails = nodeStepTypes.length > 0 ? (() => {
           let escalationsCount = 0;
           let tasksCount = 0;
 
-          escalationsCount = nodeSteps.length;
-          tasksCount = nodeSteps.reduce((acc: number, step: MaterializedStep) =>
-            acc + (step?.escalations?.reduce((a: number, esc: any) => a + (esc?.tasks?.length || 0), 0) || 0), 0);
+          for (const stepType in nodeStepsDict) {
+            const step = nodeStepsDict[stepType];
+            if (step?.escalations && Array.isArray(step.escalations)) {
+              escalationsCount += step.escalations.length;
+              tasksCount += step.escalations.reduce((acc: number, esc: any) =>
+                acc + (esc?.tasks?.length || 0), 0);
+            }
+          }
 
           return {
-            stepsType: 'array',
-            isArray: true,
-            isObject: false,
-            stepsCount: nodeSteps.length,
+            stepsType: 'dictionary',
+            isArray: false,
+            isObject: true,
+            stepTypes: nodeStepTypes,
+            stepTypesCount: nodeStepTypes.length,
             escalationsCount,
             tasksCount,
             nodeHasStepsBefore: !!node.steps,
@@ -1237,9 +1239,20 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
           };
         })() : null;
 
-        // ✅ Usa nodeStepsArray già dichiarato sopra
-        if (nodeStepsArray.length > 0) {
-          node.steps = nodeStepsArray;
+        // ✅ Usa nodeStepsDict già dichiarato sopra
+        if (nodeStepTypes.length > 0) {
+          node.steps = nodeStepsDict;
+
+          let totalEscalations = 0;
+          let totalTasks = 0;
+          for (const stepType in nodeStepsDict) {
+            const step = nodeStepsDict[stepType];
+            if (step?.escalations && Array.isArray(step.escalations)) {
+              totalEscalations += step.escalations.length;
+              totalTasks += step.escalations.reduce((acc: number, esc: any) =>
+                acc + (esc?.tasks?.length || 0), 0);
+            }
+          }
 
           console.log('[ResponseEditor][NODE_SELECT] ✅ Steps copied to node', {
             nodeId: node.id,
@@ -1247,30 +1260,31 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
             nodeLabel: node?.label,
             stepsCopied: true,
             nodeStepsType: typeof node.steps,
-            nodeStepsIsArray: Array.isArray(node.steps),
-            nodeStepsCount: nodeStepsArray.length,
-            escalationsCount: Array.isArray(node.steps)
-              ? node.steps.length
-              : (node.steps?.start?.escalations?.length || node.steps?.introduction?.escalations?.length || 0),
-            tasksCount: Array.isArray(node.steps)
-              ? node.steps.reduce((acc: number, step: any) =>
-                  acc + (step?.escalations?.reduce((a: number, esc: any) => a + (esc?.tasks?.length || 0), 0) || 0), 0)
-              : 0
+            nodeStepsIsDictionary: node.steps && typeof node.steps === 'object' && !Array.isArray(node.steps),
+            nodeStepTypes,
+            stepTypesCount: nodeStepTypes.length,
+            escalationsCount: totalEscalations,
+            tasksCount: totalTasks
           });
         } else {
           console.log('[🔍 ResponseEditor][NODE_SELECT] ❌ CRITICAL - No steps found for node', {
             nodeId: node.id,
             nodeTemplateId,
             nodeLabel: node?.label,
-            hasTaskSteps: !!(nodeTemplateId && task?.steps?.[nodeTemplateId]),
-            taskStepsKeys: task?.steps ? Object.keys(task.steps) : [],
-            taskStepsCount: task?.steps ? Object.keys(task.steps).length : 0,
+            stepsSource: taskTreeRef.current?.steps ? 'taskTree.steps' : 'task.steps',
+            hasTaskSteps: !!(nodeTemplateId && stepsSource?.[nodeTemplateId]),
+            taskStepsKeys: stepsSource && typeof stepsSource === 'object' && !Array.isArray(stepsSource)
+              ? Object.keys(stepsSource)
+              : [],
+            taskTemplateIdsCount: stepsSource && typeof stepsSource === 'object' && !Array.isArray(stepsSource)
+              ? Object.keys(stepsSource).length
+              : 0,
             nodeHasTemplateId: !!node.templateId,
-            nodeTemplateIdMatches: node.templateId ? task?.steps?.[node.templateId] : false,
-            keyMatchAnalysis: nodeTemplateId && task?.steps ? {
+            nodeTemplateIdMatches: node.templateId ? stepsSource?.[node.templateId] : false,
+            keyMatchAnalysis: nodeTemplateId && stepsSource && typeof stepsSource === 'object' && !Array.isArray(stepsSource) ? {
               lookingFor: nodeTemplateId,
-              availableKeys: Object.keys(task.steps),
-              keyComparison: Object.keys(task.steps).map(k => ({
+              availableKeys: Object.keys(stepsSource),
+              keyComparison: Object.keys(stepsSource).map(k => ({
                 key: k,
                 matches: k === nodeTemplateId,
                 keyPreview: k.substring(0, 40),
@@ -1423,26 +1437,44 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
             });
           }
 
-          // ✅ CRITICAL: Salva updated.steps come array MaterializedStep[]
-          // ✅ NUOVO: steps è un array, non un dictionary
+          // ✅ CRITICAL: Salva updated.steps come dictionary
+          // ✅ NUOVO: steps è un dictionary: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
           const nodeTemplateId = updated.templateId || updated.id; // ✅ Fallback a id se templateId non presente
           if (nodeTemplateId && updated.steps && task) {
-            // ✅ Inizializza task.steps come array se non esiste
-            if (!Array.isArray(task.steps)) {
-              task.steps = [];
+            // ✅ Inizializza task.steps come dictionary se non esiste
+            if (!task.steps || typeof task.steps !== 'object' || Array.isArray(task.steps)) {
+              task.steps = {};
             }
 
-            // ✅ Converti updated.steps in MaterializedStep[] se necessario
-            const materializedSteps: MaterializedStep[] = Array.isArray(updated.steps)
-              ? updated.steps
-              : [];
+            // ✅ updated.steps può essere dictionary o array (legacy)
+            let nodeStepsDict: Record<string, any> = {};
+            if (updated.steps && typeof updated.steps === 'object' && !Array.isArray(updated.steps)) {
+              // ✅ Già dictionary: usa direttamente
+              nodeStepsDict = updated.steps;
+            } else if (Array.isArray(updated.steps)) {
+              // ✅ Legacy array: converti in dictionary
+              console.warn('[updateSelectedNode] Converting legacy array to dictionary', { nodeTemplateId });
+              for (const step of updated.steps) {
+                if (step?.type) {
+                  nodeStepsDict[step.type] = {
+                    type: step.type,
+                    escalations: step.escalations || [],
+                    id: step.id
+                  };
+                }
+              }
+            }
 
-            // ✅ Rimuovi steps esistenti per questo nodo e aggiungi i nuovi
-            const otherSteps = (task.steps as MaterializedStep[]).filter((step: MaterializedStep) =>
-              !step.templateStepId || !step.templateStepId.startsWith(nodeTemplateId)
-            );
+            // ✅ Salva nel dictionary usando nodeTemplateId come chiave
+            task.steps[nodeTemplateId] = nodeStepsDict;
 
-            task.steps = [...otherSteps, ...materializedSteps];
+            // ✅ CRITICAL: Aggiorna anche taskTreeRef.current.steps per mantenere sincronizzazione
+            if (taskTreeRef.current) {
+              if (!taskTreeRef.current.steps || typeof taskTreeRef.current.steps !== 'object' || Array.isArray(taskTreeRef.current.steps)) {
+                taskTreeRef.current.steps = {};
+              }
+              taskTreeRef.current.steps[nodeTemplateId] = nodeStepsDict;
+            }
           }
         } else {
           // Sub node
@@ -1454,26 +1486,44 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
             mains[mainIndex] = main;
             updatedTaskTree.nodes = mains;
 
-            // ✅ CRITICAL: Salva updated.steps come array MaterializedStep[]
-            // ✅ NUOVO: steps è un array, non un dictionary
+            // ✅ CRITICAL: Salva updated.steps come dictionary
+            // ✅ NUOVO: steps è un dictionary: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
             const nodeTemplateId = updated.templateId || updated.id; // ✅ Fallback a id se templateId non presente
             if (nodeTemplateId && updated.steps && task) {
-              // ✅ Inizializza task.steps come array se non esiste
-              if (!Array.isArray(task.steps)) {
-                task.steps = [];
+              // ✅ Inizializza task.steps come dictionary se non esiste
+              if (!task.steps || typeof task.steps !== 'object' || Array.isArray(task.steps)) {
+                task.steps = {};
               }
 
-              // ✅ Converti updated.steps in MaterializedStep[] se necessario
-              const materializedSteps: MaterializedStep[] = Array.isArray(updated.steps)
-                ? updated.steps
-                : [];
+              // ✅ updated.steps può essere dictionary o array (legacy)
+              let nodeStepsDict: Record<string, any> = {};
+              if (updated.steps && typeof updated.steps === 'object' && !Array.isArray(updated.steps)) {
+                // ✅ Già dictionary: usa direttamente
+                nodeStepsDict = updated.steps;
+              } else if (Array.isArray(updated.steps)) {
+                // ✅ Legacy array: converti in dictionary
+                console.warn('[updateSelectedNode] Converting legacy array to dictionary (sub)', { nodeTemplateId });
+                for (const step of updated.steps) {
+                  if (step?.type) {
+                    nodeStepsDict[step.type] = {
+                      type: step.type,
+                      escalations: step.escalations || [],
+                      id: step.id
+                    };
+                  }
+                }
+              }
 
-              // ✅ Rimuovi steps esistenti per questo nodo e aggiungi i nuovi
-              const otherSteps = (task.steps as MaterializedStep[]).filter((step: MaterializedStep) =>
-                !step.templateStepId || !step.templateStepId.startsWith(nodeTemplateId)
-              );
+              // ✅ Salva nel dictionary usando nodeTemplateId come chiave
+              task.steps[nodeTemplateId] = nodeStepsDict;
 
-              task.steps = [...otherSteps, ...materializedSteps];
+              // ✅ CRITICAL: Aggiorna anche taskTreeRef.current.steps per mantenere sincronizzazione
+              if (taskTreeRef.current) {
+                if (!taskTreeRef.current.steps || typeof taskTreeRef.current.steps !== 'object' || Array.isArray(taskTreeRef.current.steps)) {
+                  taskTreeRef.current.steps = {};
+                }
+                taskTreeRef.current.steps[nodeTemplateId] = nodeStepsDict;
+              }
             }
           }
         }

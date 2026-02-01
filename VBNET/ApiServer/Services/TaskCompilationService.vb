@@ -3,6 +3,7 @@ Option Explicit On
 
 Imports System.Collections.Generic
 Imports System.Threading.Tasks
+Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 Imports Compiler
 Imports ApiServer.Models
@@ -50,6 +51,30 @@ Namespace Services
 
                 Return New CompileTaskResult(True, utteranceTask, Nothing)
             Catch ex As Exception
+                Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                Console.WriteLine("❌ [CompileTaskToRuntime] UNHANDLED EXCEPTION")
+                Console.WriteLine($"   Type: {ex.GetType().FullName}")
+                Console.WriteLine($"   Message: {ex.Message}")
+                Console.WriteLine($"   StackTrace: {ex.StackTrace}")
+
+                If ex.InnerException IsNot Nothing Then
+                    Console.WriteLine("   ── Inner Exception ──")
+                    Console.WriteLine($"   Type: {ex.InnerException.GetType().FullName}")
+                    Console.WriteLine($"   Message: {ex.InnerException.Message}")
+                    Console.WriteLine($"   StackTrace: {ex.InnerException.StackTrace}")
+                End If
+
+                ' ✅ Se è JsonSerializationException, logga dettagli aggiuntivi
+                Dim jsonEx = TryCast(ex, JsonSerializationException)
+                If jsonEx IsNot Nothing Then
+                    Console.WriteLine("   ── JSON Exception Details ──")
+                    Console.WriteLine($"   JSON Path: {jsonEx.Path}")
+                    Console.WriteLine($"   LineNumber: {jsonEx.LineNumber}")
+                    Console.WriteLine($"   LinePosition: {jsonEx.LinePosition}")
+                End If
+
+                Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                Console.Out.Flush()
                 Return New CompileTaskResult(False, Nothing, $"Failed to compile task '{task.Id}' into CompiledTaskUtteranceInterpretation. Error: {ex.Message}")
             End Try
         End Function
@@ -175,11 +200,30 @@ Namespace Services
 
                 Return New CompileTaskResult(True, compileResult.Result, Nothing)
             Catch ex As Exception
-                Console.WriteLine($"❌ [CompileTaskTreeExpandedToCompiledTask] Error: {ex.Message}")
-                Console.WriteLine($"   Stack trace: {ex.StackTrace}")
+                Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                Console.WriteLine("❌ [CompileTaskTreeExpandedToCompiledTask] UNHANDLED EXCEPTION")
+                Console.WriteLine($"   Type: {ex.GetType().FullName}")
+                Console.WriteLine($"   Message: {ex.Message}")
+                Console.WriteLine($"   StackTrace: {ex.StackTrace}")
+
                 If ex.InnerException IsNot Nothing Then
-                    Console.WriteLine($"   Inner exception: {ex.InnerException.Message}")
+                    Console.WriteLine("   ── Inner Exception ──")
+                    Console.WriteLine($"   Type: {ex.InnerException.GetType().FullName}")
+                    Console.WriteLine($"   Message: {ex.InnerException.Message}")
+                    Console.WriteLine($"   StackTrace: {ex.InnerException.StackTrace}")
                 End If
+
+                ' ✅ Se è JsonSerializationException, logga dettagli aggiuntivi
+                Dim jsonEx = TryCast(ex, JsonSerializationException)
+                If jsonEx IsNot Nothing Then
+                    Console.WriteLine("   ── JSON Exception Details ──")
+                    Console.WriteLine($"   JSON Path: {jsonEx.Path}")
+                    Console.WriteLine($"   LineNumber: {jsonEx.LineNumber}")
+                    Console.WriteLine($"   LinePosition: {jsonEx.LinePosition}")
+                End If
+
+                Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                Console.Out.Flush()
                 Return New CompileTaskResult(False, Nothing, $"Failed to compile TaskTreeExpanded. Error: {ex.Message}")
             End Try
         End Function

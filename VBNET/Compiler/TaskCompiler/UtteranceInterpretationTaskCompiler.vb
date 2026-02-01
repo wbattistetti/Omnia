@@ -127,9 +127,35 @@ Public Class UtteranceInterpretationTaskCompiler
                     System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Task compilation returned no task for task {taskId}")
                 End If
             Catch ex As Exception
-                Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Failed to compile Task for task {taskId}: {ex.Message}")
-                System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Failed to compile Task for task {taskId}: {ex.Message}")
-                System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Exception details: {ex.ToString()}")
+                Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                Console.WriteLine($"❌ [UtteranceInterpretationTaskCompiler] UNHANDLED EXCEPTION during compilation")
+                Console.WriteLine($"   Type: {ex.GetType().FullName}")
+                Console.WriteLine($"   Message: {ex.Message}")
+                Console.WriteLine($"   StackTrace: {ex.StackTrace}")
+
+                If ex.InnerException IsNot Nothing Then
+                    Console.WriteLine("   ── Inner Exception ──")
+                    Console.WriteLine($"   Type: {ex.InnerException.GetType().FullName}")
+                    Console.WriteLine($"   Message: {ex.InnerException.Message}")
+                    Console.WriteLine($"   StackTrace: {ex.InnerException.StackTrace}")
+                End If
+
+                ' ✅ Se è JsonSerializationException, logga dettagli aggiuntivi
+                Dim jsonEx = TryCast(ex, JsonSerializationException)
+                If jsonEx IsNot Nothing Then
+                    Console.WriteLine("   ── JSON Exception Details ──")
+                    Console.WriteLine($"   JSON Path: {jsonEx.Path}")
+                    Console.WriteLine($"   LineNumber: {jsonEx.LineNumber}")
+                    Console.WriteLine($"   LinePosition: {jsonEx.LinePosition}")
+                End If
+
+                Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                Console.Out.Flush()
+                System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][UtteranceInterpretationTaskCompiler] Exception details: {ex.ToString()}")
+
+                ' ⚠️ TEMPORANEO PER DEBUG: Rilancia l'eccezione invece di ingoiarla
+                ' Così vediamo finalmente i log dettagliati nei catch esterni
+                Throw
             End Try
         Else
             Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] No TaskTreeExpanded found for DataRequest task {taskId} - Task will be Nothing")

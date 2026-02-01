@@ -17,6 +17,7 @@ import { findLocalTemplate } from './helpers/templateMatcher';
 import { callAIInference } from './helpers/aiInference';
 import { preAssembleTaskTree } from './helpers/preAssembly';
 import { normalizeTemplateId, isValidTemplateId } from './helpers/templateIdUtils';
+import DialogueTaskService from '../../../../services/DialogueTaskService';
 
 interface UseWizardInferenceParams {
   taskTree: any; // ✅ Renamed from ddt to taskTree
@@ -110,42 +111,26 @@ export function useWizardInference({
     const empty = isTaskTreeEmpty(currentTaskTree);
     const hasStructureButNoMessages = hasdataButNosteps(currentTaskTree, task);
 
-    // ✅ CRITICAL: Leggi da task.steps usando helper function (array MaterializedStep[])
+    // ✅ CRITICAL: Leggi da task.steps usando lookup diretto (dictionary)
     if (!empty && currentTaskTree?.nodes && currentTaskTree.nodes.length > 0) {
       const firstMain = currentTaskTree.nodes[0];
       const firstMainId = firstMain?.id;
       const firstMainTemplateId = firstMain?.templateId || firstMain?.id; // ✅ Fallback a id se templateId non presente
 
-      // ✅ Helper function per ottenere steps per questo nodo
-      const getStepsForNode = (steps: any, nodeTemplateId: string): any[] => {
-        if (!steps) return [];
-        if (Array.isArray(steps)) {
-          return steps.filter((step: any) =>
-            step.templateStepId && step.templateStepId.startsWith(nodeTemplateId)
-          );
-        }
-        if (typeof steps === 'object' && steps[nodeTemplateId]) {
-          const nodeSteps = steps[nodeTemplateId];
-          return Array.isArray(nodeSteps) ? nodeSteps : [];
-        }
-        return [];
-      };
+      // ✅ Lookup diretto: O(1) invece di O(n) filter
+      const nodeSteps = task?.steps?.[firstMainTemplateId] || {};
+      const hasSteps = nodeSteps && typeof nodeSteps === 'object' && Object.keys(nodeSteps).length > 0;
 
-      const nodeStepsArray = getStepsForNode(task?.steps, firstMainTemplateId);
-      const hasSteps = nodeStepsArray.length > 0;
+      const taskTemplateIdsCount = task?.steps && typeof task?.steps === 'object' && !Array.isArray(task.steps)
+        ? Object.keys(task.steps).length
+        : 0;
 
-      const taskStepsCount = Array.isArray(task?.steps) ? task.steps.length : 0;
       console.log('[🔍 useWizardInference] 🔍 Steps for node', {
         firstMainTemplateId,
         hasSteps,
-        taskStepsCount,
-        nodeStepsCount: nodeStepsArray.length
+        taskTemplateIdsCount,
+        nodeStepTypes: hasSteps ? Object.keys(nodeSteps) : []
       });
-
-      // ✅ NUOVO: Con array MaterializedStep[], estrai templateStepIds per debug
-      const allTemplateStepIds = Array.isArray(task?.steps)
-        ? task.steps.map((step: any) => step.templateStepId).filter(Boolean)
-        : [];
 
       console.log('[🔍 useWizardInference] CRITICAL steps check', {
         nodesCount: currentTaskTree.nodes.length,
@@ -154,18 +139,10 @@ export function useWizardInference({
         firstMainTemplateId: firstMainTemplateId,
         hasSteps,
         stepsType: typeof task?.steps,
-        taskStepsIsArray: Array.isArray(task?.steps),
-        taskStepsCount: taskStepsCount,
-        nodeStepsCount: nodeStepsArray.length,
+        taskStepsIsDictionary: task?.steps && typeof task.steps === 'object' && !Array.isArray(task.steps),
+        taskTemplateIdsCount: taskTemplateIdsCount,
+        nodeStepTypes: hasSteps ? Object.keys(nodeSteps) : [],
         lookingForTemplateId: firstMainTemplateId,
-        hasSteps: hasSteps,
-        // ✅ NUOVO: Con array, verifichiamo se ci sono step con templateStepId che inizia con firstMainTemplateId
-        stepMatchDetails: firstMainTemplateId && task?.steps ? {
-          hasMatchingSteps: nodeStepsArray.length > 0,
-          matchingStepsCount: nodeStepsArray.length,
-          allTemplateStepIds: allTemplateStepIds.slice(0, 10), // Mostra solo i primi 10 per non intasare i log
-          templateStepIdsCount: allTemplateStepIds.length
-        } : null,
         hasStructureButNoMessages
       });
     }
@@ -233,20 +210,41 @@ export function useWizardInference({
     }
 
     // ✅ EARLY EXIT: Se task ha già steps, non serve wizard
-    const hasSteps = Array.isArray(task?.steps)
-      ? task.steps.length > 0
-      : (task?.steps && Object.keys(task.steps).length > 0);
+    const hasSteps = task?.steps && typeof task.steps === 'object' && !Array.isArray(task.steps)
+      ? Object.keys(task.steps).length > 0
+      : false;
 
     if (hasSteps) {
-      const stepsCount = Array.isArray(task?.steps)
-        ? task.steps.length
-        : (task?.steps ? Object.keys(task.steps).length : 0);
+      const templateIdsCount = Object.keys(task.steps).length;
       console.log('[useWizardInference] Task con steps, non serve wizard', {
         taskId: task.id,
-        stepsCount,
-        stepsIsArray: Array.isArray(task?.steps)
+        templateIdsCount
       });
       return; // ✅ Early exit - non serve wizard
+    }
+
+    // ✅ NUOVO: Se il task non ha steps ma ha templateId, verifica se il template ha steps
+    // Questo risolve il problema: euristica riconosce template → template ha steps → non aprire wizard
+    if (!hasSteps && task?.templateId && task.templateId !== 'UNDEFINED') {
+      try {
+        const template = DialogueTaskService.getTemplate(task.templateId);
+
+        if (template?.steps && typeof template.steps === 'object' && !Array.isArray(template.steps)) {
+          const templateHasSteps = Object.keys(template.steps).length > 0;
+
+          if (templateHasSteps) {
+            console.log('[useWizardInference] Template ha steps, non serve wizard', {
+              taskId: task.id,
+              templateId: task.templateId,
+              templateStepsKeys: Object.keys(template.steps)
+            });
+            return; // ✅ Early exit - non serve wizard, gli steps verranno clonati da buildTaskTree
+          }
+        }
+      } catch (e) {
+        console.warn('[useWizardInference] Errore verificando steps del template', e);
+        // Continua normalmente se c'è errore
+      }
     }
 
     // ========================================================================
