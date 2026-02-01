@@ -42,6 +42,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [dataReady, setDataReady] = useState(false);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [hasEverLoadedProjects, setHasEverLoadedProjects] = useState(false);
+  const [showDeletedToast, setShowDeletedToast] = useState(false);
+  const [previousProjectsCount, setPreviousProjectsCount] = useState<number | null>(null);
 
   // Stati per filtri combo box
   const [availableClients, setAvailableClients] = useState<string[]>([]);
@@ -217,6 +219,29 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
   // Controlla se ci sono progetti
   const hasProjects = uniqueAllProjects.length > 0;
+  const currentProjectsCount = uniqueAllProjects.length;
+
+  // Traccia se abbiamo appena eliminato l'ultimo progetto
+  useEffect(() => {
+    // Se abbiamo già caricato almeno una volta E i dati sono pronti
+    if (hasEverLoadedProjects && dataReady && !loadingProjects) {
+      // Se prima c'erano progetti (> 0) e ora non ce ne sono più (0)
+      if (previousProjectsCount !== null && previousProjectsCount > 0 && currentProjectsCount === 0) {
+        setShowDeletedToast(true);
+        // Chiudi il dropdown se era aperto
+        if (showDropdown) {
+          setShowDropdown(false);
+        }
+        // Nascondi il toast dopo 2 secondi
+        const timer = setTimeout(() => {
+          setShowDeletedToast(false);
+        }, 2000);
+        return () => clearTimeout(timer);
+      }
+      // Aggiorna il conteggio precedente
+      setPreviousProjectsCount(currentProjectsCount);
+    }
+  }, [currentProjectsCount, hasEverLoadedProjects, dataReady, loadingProjects, showDropdown, previousProjectsCount]);
 
   // Debug log per tracciare gli stati (solo quando cambiano valori significativi)
   // State update logging removed
@@ -299,121 +324,41 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         {/* Main action buttons */}
         <div className="flex flex-col items-center">
-          <div className="flex flex-col md:flex-row gap-6 justify-center items-center">
+          <div className={`flex flex-col md:flex-row gap-6 justify-center items-center ${!hasProjects ? 'flex-col' : ''}`}>
             <button
               onClick={() => { setShowDropdown(false); onNewProject(); }}
               className="bg-white text-emerald-800 px-10 py-4 rounded-full text-xl font-semibold hover:bg-emerald-50 hover:scale-105 transition-all duration-300 shadow-2xl hover:shadow-white/20"
             >
               Nuovo Progetto
             </button>
-            <div className="relative flex flex-col items-start">
-              <button
-                onClick={() => {
-                  const newValue = !showDropdown;
-                  setShowDropdown(newValue);
-                }}
-                className={`bg-white text-emerald-800 px-10 py-4 text-xl font-semibold flex items-center gap-2 shadow-2xl transition-all duration-300 rounded-full hover:bg-emerald-50 hover:scale-105`}
-              >
-                Progetti esistenti
-                {/* Spinner nel bottone solo se dropdown è aperto E progetti non sono pronti */}
-                {(showDropdown && (loadingProjects || !dataReady || (!hasEverLoadedProjects && allProjects.length === 0))) ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <ChevronDown className="w-5 h-5" />
-                )}
-              </button>
-
-              {/* Messaggio quando non ci sono progetti - solo se i dati sono pronti E non sta caricando E abbiamo già caricato almeno una volta */}
-              {(() => {
-                // Mostra "Nessun progetto" solo se:
-                // 1. Il dropdown è aperto
-                // 2. Non ci sono progetti
-                // 3. I dati sono pronti (caricamento completato)
-                // 4. NON sta ancora caricando
-                // 5. Abbiamo già caricato progetti almeno una volta (per evitare di mostrare "Nessun progetto" prima del primo caricamento)
-                const shouldShow = showDropdown && !hasProjects && dataReady && !loadingProjects && hasEverLoadedProjects;
-                if (shouldShow) {
-                }
-                return shouldShow ? (
-                  <div className="mt-2 text-emerald-100 text-lg">
-                    Nessun progetto
-                  </div>
-                ) : null;
-              })()}
-              {false && showDropdown && (
-                <div
-                  className="absolute left-0 right-0 top-full mt-0 bg-white rounded-b-lg shadow-2xl z-30 p-2 min-w-[320px] border-t border-emerald-100"
-                  style={{
-                    borderTopLeftRadius: 0,
-                    borderTopRightRadius: 0,
+            {/* Mostra "Progetti esistenti" solo se ci sono progetti */}
+            {hasProjects && (
+              <div className="relative flex flex-col items-start">
+                <button
+                  onClick={() => {
+                    const newValue = !showDropdown;
+                    setShowDropdown(newValue);
                   }}
+                  className={`bg-white text-emerald-800 px-10 py-4 text-xl font-semibold flex items-center gap-2 shadow-2xl transition-all duration-300 rounded-full hover:bg-emerald-50 hover:scale-105`}
                 >
-                  {/* Prima voce: Tutti i progetti */}
-                  <button
-                    className="w-full text-left px-4 py-2 font-semibold text-emerald-700 hover:bg-emerald-100 rounded flex items-center gap-2"
-                    onClick={() => { setShowDropdown(false); setProjectViewType('all'); }}
-                  >
-                    <span>Tutti i progetti</span>
-                  </button>
-                  <div className="my-2 border-t border-emerald-100" />
-                  {/* Ultimi 10 progetti */}
-                  {sortedRecentProjects.length === 0 && (
-                    <div className="text-slate-400 px-4 py-2">Nessun progetto recente</div>
+                  Progetti esistenti
+                  {/* Spinner nel bottone solo se dropdown è aperto E progetti non sono pronti */}
+                  {(showDropdown && (loadingProjects || !dataReady || (!hasEverLoadedProjects && allProjects.length === 0))) ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5" />
                   )}
-                  {sortedRecentProjects.map((proj) => {
-                    const clientInfo = formatClientName(proj.clientName);
-                    return (
-                      <div key={proj._id} className="flex items-center justify-between px-4 py-2 hover:bg-emerald-50 rounded group">
-                        <button
-                          className="text-left flex-1 truncate"
-                          title={`${clientInfo.text} — ${proj.projectName || proj.name || ''}`}
-                          onClick={async () => {
-                            const id = (proj._id || proj.projectId) as string;
-                            setLoadingProjectId(id);
-                            try {
-                              const maybe = onSelectProject(id);
-                              if ((maybe as any)?.then) await (maybe as any);
-                              // chiudi solo dopo che il caricamento ha completato
-                              setShowDropdown(false);
-                            } catch (e) {
-                              setLoadingProjectId(null);
-                            }
-                          }}
-                        >
-                          <span className="inline-flex items-center gap-4">
-                            <span className={`inline-flex items-center gap-2 font-semibold ${clientInfo.isGrey ? 'text-gray-500' : 'text-emerald-900'}`}>
-                              <Building2 className={`w-5 h-5 ${clientInfo.isGrey ? 'text-gray-400' : 'text-emerald-700'}`} />
-                              <span>{clientInfo.text}</span>
-                            </span>
-                            <span className="inline-flex items-center gap-2 text-emerald-900">
-                              {loadingProjectId === (proj._id || proj.projectId)
-                                ? <Loader2 className="w-5 h-5 animate-spin text-emerald-700" />
-                                : <Folder className="w-5 h-5 text-emerald-900" />}
-                              <span>{proj.projectName || proj.name || '(senza nome)'}</span>
-                            </span>
-                          </span>
-                        </button>
-                        <span className="text-xs text-slate-400 ml-2">{(proj.updatedAt || proj.createdAt) ? new Date(proj.updatedAt || proj.createdAt).toLocaleDateString() : ''}</span>
-                        <button
-                          className="ml-2 text-red-500 opacity-70 hover:opacity-100"
-                          title="Elimina progetto"
-                          onClick={async () => {
-                            const id = proj._id || proj.projectId;
-                            setDeletingId(id);
-                            try { await onDeleteProject(id); } finally { setDeletingId(null); }
-                          }}
-                        >
-                          {deletingId === (proj._id || proj.projectId)
-                            ? <Loader2 className="w-5 h-5 animate-spin" />
-                            : <XCircle className="w-5 h-5" />}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-                )}
-            </div>
+                </button>
+              </div>
+            )}
           </div>
+
+          {/* Toast "Tutti i progetti eliminati!" - appare nella posizione della lista quando viene eliminato l'ultimo progetto */}
+          {showDeletedToast && !hasProjects && (
+            <div className="mt-4 w-auto bg-emerald-700 text-white px-10 py-4 rounded-xl shadow-2xl relative animate-fade-in text-xl font-semibold">
+              Tutti i progetti eliminati!
+            </div>
+          )}
 
           {/* Pannello progetti visibile solo quando showDropdown è true, dati pronti E non sta caricando */}
           {hasProjects && showDropdown && dataReady && !loadingProjects && (
@@ -1200,7 +1145,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               )}
             </div>
           )}
-
         </div>
       </div>
 

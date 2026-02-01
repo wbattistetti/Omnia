@@ -60,10 +60,10 @@
     <Compile Include="DTO\IDE\TaskNodeListConverter.vb" />
     <!-- ❌ RIMOSSO: MainDataNode.vb - rinominato in TaskNode.vb -->
     <!-- ❌ RIMOSSO: MainDataNodeListConverter.vb - rinominato in TaskNodeListConverter.vb -->
-    <Compile Include="DTO\IDE\TaskTreeRuntime.vb" />
+    <Compile Include="DTO\IDE\TaskTreeExpanded.vb" />
     <!-- ❌ RIMOSSO: DDTCompiler.vb - rinominato in TaskCompiler.vb -->
     <!-- ❌ RIMOSSO: DDTLoader.vb - rinominato in TaskLoader.vb -->
-    <!-- ❌ RIMOSSO: AssembledDDT.vb - rinominato in TaskTreeRuntime.vb -->
+    <!-- ❌ RIMOSSO: AssembledDDT.vb - rinominato in TaskTreeRuntime.vb, poi TaskTreeExpanded.vb -->
 
     <!-- Runtime Types (Output for execution) -->
     <Compile Include="DTO\Runtime\TaskState.vb" />

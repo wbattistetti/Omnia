@@ -38,38 +38,38 @@ Public Class UtteranceInterpretationTaskCompiler
 
         Dim compiledTask As New CompiledTaskUtteranceInterpretation()
 
-        ' ✅ NUOVO MODELLO: Costruisci TaskTreeRuntime dal template usando task.templateId e subTasksIds
+        ' ✅ NUOVO MODELLO: Costruisci TaskTreeExpanded dal template usando task.templateId e subTasksIds
         ' LOGICA:
         ' 1. Se task.templateId esiste → carica template e costruisci struttura da subTasksIds
         ' 2. Applica task.steps come override
-        Dim taskTreeRuntime As Compiler.TaskTreeRuntime = Nothing
+        Dim taskTreeExpanded As Compiler.TaskTreeExpanded = Nothing
 
         ' ✅ NUOVO MODELLO: Costruisci SEMPRE da template usando subTasksIds
         If Not String.IsNullOrEmpty(task.TemplateId) Then
-            Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Building TaskTreeRuntime from template {task.TemplateId}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Building TaskTreeRuntime from template {task.TemplateId}")
+            Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Building TaskTreeExpanded from template {task.TemplateId}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Building TaskTreeExpanded from template {task.TemplateId}")
 
             Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Searching for template {task.TemplateId} in flow.Tasks...")
             Dim template As Compiler.Task = flow.Tasks.FirstOrDefault(Function(t As Compiler.Task) t.Id = task.TemplateId)
             If template IsNot Nothing Then
                 Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Template {task.TemplateId} found: Label={template.Label}, SubTasksIds count={If(template.SubTasksIds IsNot Nothing, template.SubTasksIds.Count, 0)}")
                 Try
-                    Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Building TaskTreeRuntime from template {task.TemplateId}...")
-                    taskTreeRuntime = BuildTaskTreeRuntime(template, task, flow)
-                    Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime built successfully")
-                    Console.WriteLine($"   TaskTreeRuntime.Id={taskTreeRuntime.Id}")
-                    Console.WriteLine($"   TaskTreeRuntime.Label={taskTreeRuntime.Label}")
-                    Console.WriteLine($"   TaskTreeRuntime.Nodes count={If(taskTreeRuntime.Nodes IsNot Nothing, taskTreeRuntime.Nodes.Count, 0)}")
-                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime built from template {task.TemplateId}")
+                    Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Building TaskTreeExpanded from template {task.TemplateId}...")
+                    taskTreeExpanded = BuildTaskTreeExpanded(template, task, flow)
+                    Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeExpanded built successfully")
+                    Console.WriteLine($"   TaskTreeExpanded.Id={taskTreeExpanded.Id}")
+                    Console.WriteLine($"   TaskTreeExpanded.Label={taskTreeExpanded.Label}")
+                    Console.WriteLine($"   TaskTreeExpanded.Nodes count={If(taskTreeExpanded.Nodes IsNot Nothing, taskTreeExpanded.Nodes.Count, 0)}")
+                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeExpanded built from template {task.TemplateId}")
                 Catch ex As Exception
-                    Console.WriteLine($"❌ [COMPILER][UtteranceInterpretationTaskCompiler] Failed to build TaskTreeRuntime from template: {ex.Message}")
+                    Console.WriteLine($"❌ [COMPILER][UtteranceInterpretationTaskCompiler] Failed to build TaskTreeExpanded from template: {ex.Message}")
                     Console.WriteLine($"   Exception type: {ex.GetType().Name}")
                     Console.WriteLine($"   Stack trace: {ex.StackTrace}")
                     If ex.InnerException IsNot Nothing Then
                         Console.WriteLine($"   Inner exception: {ex.InnerException.Message}")
                     End If
                     System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][UtteranceInterpretationTaskCompiler] Exception details: {ex.ToString()}")
-                    Throw New InvalidOperationException($"Failed to build TaskTreeRuntime from template {task.TemplateId}: {ex.Message}", ex)
+                    Throw New InvalidOperationException($"Failed to build TaskTreeExpanded from template {task.TemplateId}: {ex.Message}", ex)
                 End Try
             Else
                 Console.WriteLine($"❌ [COMPILER][UtteranceInterpretationTaskCompiler] Template {task.TemplateId} NOT FOUND in flow.Tasks")
@@ -84,20 +84,20 @@ Public Class UtteranceInterpretationTaskCompiler
             Throw New InvalidOperationException($"Task {taskId} must have a templateId. Legacy task.Data is not supported.")
         End If
 
-        ' Compila TaskTreeRuntime se trovato
-        If taskTreeRuntime IsNot Nothing Then
-            Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime found! Starting compilation...")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime found! Starting compilation...")
-            Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime.Id={taskTreeRuntime.Id}, Nodes IsNot Nothing={taskTreeRuntime.Nodes IsNot Nothing}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime.Id={taskTreeRuntime.Id}, Nodes IsNot Nothing={taskTreeRuntime.Nodes IsNot Nothing}")
-            If taskTreeRuntime.Nodes IsNot Nothing Then
-                Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime.Nodes.Count={taskTreeRuntime.Nodes.Count}")
-                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeRuntime.Nodes.Count={taskTreeRuntime.Nodes.Count}")
+        ' Compila TaskTreeExpanded se trovato
+        If taskTreeExpanded IsNot Nothing Then
+            Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeExpanded found! Starting compilation...")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeExpanded found! Starting compilation...")
+            Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeExpanded.Id={taskTreeExpanded.Id}, Nodes IsNot Nothing={taskTreeExpanded.Nodes IsNot Nothing}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeExpanded.Id={taskTreeExpanded.Id}, Nodes IsNot Nothing={taskTreeExpanded.Nodes IsNot Nothing}")
+            If taskTreeExpanded.Nodes IsNot Nothing Then
+                Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeExpanded.Nodes.Count={taskTreeExpanded.Nodes.Count}")
+                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeExpanded.Nodes.Count={taskTreeExpanded.Nodes.Count}")
             End If
             Try
                 Dim taskCompiler As New TaskCompiler()
-                ' Serializza TaskTreeRuntime a JSON per TaskCompiler.Compile
-                Dim taskJson = JsonConvert.SerializeObject(taskTreeRuntime)
+                ' Serializza TaskTreeExpanded a JSON per TaskCompiler.Compile
+                Dim taskJson = JsonConvert.SerializeObject(taskTreeExpanded)
                 Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Calling TaskCompiler.Compile with JSON length={taskJson.Length}")
                 System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Calling TaskCompiler.Compile with JSON length={taskJson.Length}")
                 Dim compileResult = taskCompiler.Compile(taskJson)
@@ -132,8 +132,8 @@ Public Class UtteranceInterpretationTaskCompiler
                 System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Exception details: {ex.ToString()}")
             End Try
         Else
-            Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] No TaskTreeRuntime found for DataRequest task {taskId} - Task will be Nothing")
-            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] No TaskTreeRuntime found for DataRequest task {taskId} - Task will be Nothing")
+            Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] No TaskTreeExpanded found for DataRequest task {taskId} - Task will be Nothing")
+            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] No TaskTreeExpanded found for DataRequest task {taskId} - Task will be Nothing")
         End If
 
         ' Popola campi comuni
@@ -231,15 +231,15 @@ Public Class UtteranceInterpretationTaskCompiler
     End Function
 
     ''' <summary>
-    ''' Costruisce TaskTreeRuntime dal template e applica gli override dall'istanza
+    ''' Costruisce TaskTreeExpanded dal template e applica gli override dall'istanza
     ''' ✅ NUOVO MODELLO: Usa subTasksIds invece di Data
     ''' </summary>
-    Private Function BuildTaskTreeRuntime(
+    Private Function BuildTaskTreeExpanded(
         template As Task,
         instance As Task,
         flow As Flow
-    ) As TaskTreeRuntime
-        Dim taskTreeRuntime As New TaskTreeRuntime() With {
+    ) As TaskTreeExpanded
+        Dim taskTreeExpanded As New TaskTreeExpanded() With {
             .Id = instance.Id,
             .Label = If(String.IsNullOrEmpty(instance.Label), template.Label, instance.Label),
             .Translations = New Dictionary(Of String, String)()
@@ -275,8 +275,8 @@ Public Class UtteranceInterpretationTaskCompiler
                 ApplyStepsOverrides(rootNode.SubTasks, instance.Steps)
             End If
 
-            ' ✅ TaskTreeRuntime.Nodes contiene il nodo radice
-            taskTreeRuntime.Nodes = New List(Of Compiler.TaskNode) From {rootNode}
+            ' ✅ TaskTreeExpanded.Nodes contiene il nodo radice
+            taskTreeExpanded.Nodes = New List(Of Compiler.TaskNode) From {rootNode}
         Else
             ' ✅ Template atomico → crea nodo root con steps dall'istanza
             ' Un template atomico è un albero con un solo nodo root, non un albero vuoto
@@ -301,11 +301,11 @@ Public Class UtteranceInterpretationTaskCompiler
                 End If
             End If
 
-            taskTreeRuntime.Nodes = New List(Of Compiler.TaskNode) From {rootNode}
+            taskTreeExpanded.Nodes = New List(Of Compiler.TaskNode) From {rootNode}
             Console.WriteLine($"ℹ️ [COMPILER][UtteranceInterpretationTaskCompiler] Template {template.Id} is atomic, created root node with steps")
         End If
 
-        Return taskTreeRuntime
+        Return taskTreeExpanded
     End Function
 
     ''' <summary>

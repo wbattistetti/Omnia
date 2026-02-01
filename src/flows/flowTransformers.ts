@@ -61,6 +61,21 @@ export function transformNodeToSimplified(node: Node<FlowNode>): SimplifiedNode 
     });
   }
 
+  // ✅ LOG: Traccia cosa viene salvato per ogni row
+  if (simplified.rows && simplified.rows.length > 0) {
+    console.log(`[SAVE][transformNodeToSimplified] Node ${simplified.id}`, {
+      nodeId: simplified.id,
+      label: simplified.label,
+      rowsCount: simplified.rows.length,
+      rows: simplified.rows.map((r: any) => ({
+        id: r.id,
+        text: r.text,
+        taskId: r.taskId,
+        hasTaskId: !!r.taskId
+      }))
+    });
+  }
+
   return simplified;
 }
 
@@ -90,6 +105,21 @@ export function transformNodeToReactFlow(simplified: SimplifiedNode): Node<FlowN
       }
     }
   });
+
+  // ✅ LOG: Traccia cosa viene caricato per ogni row
+  if (reactFlowNode.data.rows && reactFlowNode.data.rows.length > 0) {
+    console.log(`[LOAD][transformNodeToReactFlow] Node ${reactFlowNode.id}`, {
+      nodeId: reactFlowNode.id,
+      label: reactFlowNode.data.label,
+      rowsCount: reactFlowNode.data.rows.length,
+      rows: reactFlowNode.data.rows.map((r: any) => ({
+        id: r.id,
+        text: r.text,
+        taskId: r.taskId,
+        hasTaskId: !!r.taskId
+      }))
+    });
+  }
 
   return reactFlowNode;
 }

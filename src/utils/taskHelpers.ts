@@ -315,8 +315,9 @@ export function updateRowData(
 
 /**
  * Enrich loaded rows with taskId
- * This is called after loading instances from database to ensure rows have taskId
- * Auto-creates Task if missing (migration helper)
+ *
+ * ✅ REGOLA ARCHITETTURALE: task.id = row.id (sempre)
+ * Quindi: row.taskId = row.id (quando il task esiste)
  *
  * IMPORTANT: row.text is a descriptive label written by the user in the node row
  * It remains fixed and is NOT synchronized with task.text
@@ -324,32 +325,51 @@ export function updateRowData(
  * These are completely separate - row.text is just a label for the flowchart
  *
  * @param rows - Array of NodeRowData rows to enrich
- * @returns Array of rows with taskId set (row.text remains unchanged)
+ * @returns Array of rows with taskId set correctly (row.taskId = row.id if task exists)
  */
 export function enrichRowsWithTaskId(rows: NodeRowData[]): NodeRowData[] {
+  console.log(`[LOAD][enrichRowsWithTaskId] 🚀 START enriching ${rows.length} rows`);
+
   const result = rows.map(row => {
-    // If row already has taskId, just return it (row.text stays as is)
-    if (row.taskId) {
-      return row;
-    }
-
-    // Check if Task exists for this row (by row.id)
-    // Rule: row.id === task.id
-    // If task doesn't exist yet, return row without taskId - task will be created later when user clicks the gear icon
+    // ✅ REGOLA ARCHITETTURALE: task.id = row.id (sempre)
+    // Cerca il task con row.id
     const task = taskRepository.getTask(row.id);
-    if (!task) {
-      // Task doesn't exist yet - it will be created when user clicks the gear icon
-      // Return row without taskId - task will be created later with same ID as row.id
-      return row;
+
+    if (task) {
+      // ✅ Task esiste → row.taskId DEVE essere row.id
+      if (row.taskId !== row.id) {
+        console.log('[enrichRowsWithTaskId] ✅ FIX: Aggiorno row.taskId', {
+          rowId: row.id,
+          rowText: row.text,
+          oldTaskId: row.taskId,
+          newTaskId: row.id
+        });
+      }
+      return { ...row, taskId: row.id };
     }
 
-    // Row has a corresponding Task, add taskId
-    // row.text remains unchanged - it's the user's label, not synced with task.text
-    return {
-      ...row,
-      taskId: task.id
-      // row.text stays as written by user - no synchronization
-    };
+    // ✅ Nessun task → row.taskId deve essere undefined
+    if (row.taskId) {
+      console.log('[enrichRowsWithTaskId] ⚠️ WARNING: row.taskId presente ma task non trovato', {
+        rowId: row.id,
+        rowText: row.text,
+        rowTaskId: row.taskId
+      });
+    }
+    return { ...row, taskId: undefined };
+  });
+
+  const enrichedCount = result.filter(r => r.taskId).length;
+  console.log(`[LOAD][enrichRowsWithTaskId] ✅ END enriching`, {
+    totalRows: rows.length,
+    enrichedCount,
+    withoutTaskId: rows.length - enrichedCount,
+    rows: result.map((r: any) => ({
+      id: r.id,
+      text: r.text,
+      taskId: r.taskId,
+      hasTaskId: !!r.taskId
+    }))
   });
 
   return result;

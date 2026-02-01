@@ -1728,12 +1728,13 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       taskType: resolveTaskType(row)
                     });
 
-                    // ✅ NUOVO FLUSSO MODULARE: Verifica se task esiste
-                    let taskIdForType = (row as any)?.taskId || row.id;
-                    let taskForType = taskIdForType ? taskRepository.getTask(taskIdForType) : null;
+                    // ✅ REGOLA ARCHITETTURALE: task.id = row.id, quindi row.taskId = row.id
+                    // Se row.taskId è corretto, il task esiste e può essere trovato
+                    const taskForType = row.taskId ? taskRepository.getTask(row.taskId) : null;
 
                     console.log('[🔍 NodeRow][onOpenDDT] Task check', {
-                      taskId: taskIdForType,
+                      rowId: row.id,
+                      rowTaskId: row.taskId,
                       taskExists: !!taskForType,
                       hasTemplateId: !!taskForType?.templateId
                     });
@@ -1741,14 +1742,15 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     // ✅ CASO 1: Task esiste → apri direttamente (comportamento attuale)
                     if (taskForType) {
                       console.log('[🔍 NodeRow][onOpenDDT] ✅ CASO 1: Task esiste, aprendo direttamente ResponseEditor', {
-                        taskId: taskIdForType,
+                        rowId: row.id,
+                        rowTaskId: row.taskId,
                         taskType: taskForType.type,
                         hasTemplateId: !!taskForType.templateId
                       });
 
                       // Task già esiste, apri direttamente ResponseEditor
                       const finalTaskType = taskForType.type as TaskType;
-                      taskEditorCtx.open({ id: String(taskIdForType), type: finalTaskType, label: row.text, instanceId: row.id });
+                      taskEditorCtx.open({ id: String(row.taskId), type: finalTaskType, label: row.text, instanceId: row.id });
 
                       // Costruisci TaskTree se necessario
                       let taskTree: any = null;
@@ -1771,7 +1773,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                       const event = new CustomEvent('taskEditor:open', {
                         detail: {
-                          id: String(taskIdForType),
+                          id: String(row.taskId),
                           type: finalTaskType,
                           label: row.text,
                           taskTree: taskTree,
@@ -1951,13 +1953,14 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         row.id,
                         projectId
                       );
-                      taskIdForType = taskForType.id;
-                      (row as any).taskId = taskIdForType;
+                      // ✅ REGOLA ARCHITETTURALE: task.id = row.id, quindi row.taskId = row.id
+                      (row as any).taskId = row.id;
 
                       // ✅ Se c'è templateId, usa funzione centralizzata per clonare e adattare
                       if (metaTemplateId) {
                         console.log('[🔍 NodeRow][LAZY] Clonando struttura dal template', {
-                          taskId: taskIdForType,
+                          rowId: row.id,
+                          taskId: row.id,
                           templateId: metaTemplateId,
                           taskLabel: taskForType?.label
                         });
@@ -1969,7 +1972,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                           const { taskTree, adapted } = await loadAndAdaptDDTForExistingTask(taskForType, projectId);
 
                           console.log('[🔍 NodeRow][LAZY] TaskTree ricevuto da loadAndAdaptDDTForExistingTask', {
-                            taskId: taskIdForType,
+                            rowId: row.id,
+                            taskId: row.id,
                             taskTreeStepsKeys: Object.keys(taskTree.steps || {}),
                             taskTreeStepsCount: Object.keys(taskTree.steps || {}).length,
                             mainNodesTemplateIds: taskTree.nodes?.map((n: any) => ({
@@ -1981,13 +1985,14 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                           });
 
                           // ✅ Salva task con steps (NON salvare data - si ricostruisce runtime)
-                          taskRepository.updateTask(taskIdForType, {
+                          taskRepository.updateTask(row.id, {
                             steps: taskTree.steps, // ✅ Steps con prompt adattati (solo main data)
                             metadata: { promptsAdapted: adapted || taskForType?.metadata?.promptsAdapted === true }
                           }, projectId);
 
                           console.log('[🔍 NodeRow][LAZY] ✅ Task salvato con steps', {
-                            taskId: taskIdForType,
+                            rowId: row.id,
+                            taskId: row.id,
                             stepsCount: Object.keys(taskTree.steps || {}).length,
                             stepsKeys: Object.keys(taskTree.steps || {}),
                             promptsAdapted: adapted || taskForType?.metadata?.promptsAdapted === true
@@ -2003,7 +2008,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       ? (taskForType.type as TaskType)
                       : ((row as any)?.meta?.type || TaskType.UtteranceInterpretation);
 
-                    taskEditorCtx.open({ id: String(taskIdForType), type: finalTaskType, label: row.text, instanceId: row.id }); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx, type → taskType (enum)
+                    taskEditorCtx.open({ id: String(row.id), type: finalTaskType, label: row.text, instanceId: row.id }); // ✅ REGOLA ARCHITETTURALE: task.id = row.id
 
                     // ✅ SOLO per DataRequest: costruisci DDT solo se:
                     // 1. C'è templateId E il template è di tipo DataRequest
@@ -2044,7 +2049,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     // Emit event with DDT data so AppContent can open it as docking tab
                     const event = new CustomEvent('taskEditor:open', { // ✅ RINOMINATO: actEditor:open → taskEditor:open
                       detail: {
-                        id: String(taskIdForType),
+                        id: String(row.id), // ✅ REGOLA ARCHITETTURALE: task.id = row.id
                         type: finalTaskType, // ✅ TaskType enum invece di stringa
                         label: row.text,
                         ddt: ddt,
@@ -2065,9 +2070,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
               }
               return async () => {
                 try {
-                  // ✅ LAZY: Crea task se non esiste usando metadati della riga
-                  let taskIdForType = (row as any)?.taskId || getTaskIdFromRow(row);
-                  let taskForType = taskIdForType ? taskRepository.getTask(taskIdForType) : null;
+                  // ✅ REGOLA ARCHITETTURALE: task.id = row.id, quindi row.taskId = row.id
+                  // Cerca il task con row.id
+                  let taskForType = row.taskId ? taskRepository.getTask(row.taskId) : null;
 
                   // ✅ Se task non esiste, crealo usando metadati della riga
                   if (!taskForType) {
@@ -2083,7 +2088,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       metaTemplateId
                     });
 
-                    // ✅ Crea task base
+                    // ✅ Crea task base con row.id come ID
                     taskForType = taskRepository.createTask(
                       metaTaskType,
                       metaTemplateId,
@@ -2091,8 +2096,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       row.id,
                       projectId
                     );
-                    taskIdForType = taskForType.id;
-                    (row as any).taskId = taskIdForType;
+                    // ✅ REGOLA ARCHITETTURALE: task.id = row.id, quindi row.taskId = row.id
+                    (row as any).taskId = row.id;
 
                     // ✅ Se c'è templateId, copia steps (escalations) dal template
                     if (metaTemplateId) {
@@ -2106,7 +2111,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                         // ❌ DEPRECATED: Non salvare più .data - il modello Task non usa .data
                         // ✅ La struttura viene ricostruita runtime da template.subTasksIds
-                        // taskRepository.updateTask(taskIdForType, {
+                        // taskRepository.updateTask(row.id, {
                         //   data: nodes
                         // }, projectId);
 
@@ -2131,7 +2136,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
 
                   // ✅ Apri editor tramite context (gestisce automaticamente il tipo corretto)
-                  taskEditorCtx.open({ id: String(taskIdForType), type: taskType, label: row.text, instanceId: row.id }); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx, type → taskType (enum)
+                  taskEditorCtx.open({ id: String(row.id), type: taskType, label: row.text, instanceId: row.id }); // ✅ REGOLA ARCHITETTURALE: task.id = row.id
 
                   // ✅ Solo per DataRequest (editorKind === 'ddt'), prepara TaskTree ed emetti evento
                   // ✅ Per altri tipi (SayMessage, BackendCall, AIAgent, Summarizer, Negotiation, ecc.), emetti evento senza TaskTree
@@ -2175,7 +2180,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     // ✅ Emit event with TaskTree data so AppContent can open it as docking tab (solo per DataRequest)
                     const event = new CustomEvent('taskEditor:open', { // ✅ RINOMINATO: actEditor:open → taskEditor:open
                       detail: {
-                        id: String(taskIdForType),
+                        id: String(row.id), // ✅ REGOLA ARCHITETTURALE: task.id = row.id
                         type: taskType, // ✅ TaskType enum invece di stringa
                         label: row.text,
                         taskTree: taskTree,
@@ -2190,7 +2195,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     // ✅ Per altri tipi (SayMessage, BackendCall, AIAgent, Summarizer, Negotiation, ecc.), emetti evento senza TaskTree
                     const event = new CustomEvent('taskEditor:open', {
                       detail: {
-                        id: String(taskIdForType),
+                        id: String(row.id), // ✅ REGOLA ARCHITETTURALE: task.id = row.id
                         type: taskType,
                         label: row.text,
                         instanceId: row.id
@@ -2314,6 +2319,13 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                           projectId
                         );
 
+                        // ✅ REGOLA ARCHITETTURALE: task.id = row.id, quindi row.taskId = row.id
+                        (row as any).taskId = row.id;
+                        console.log('[🔍 NodeRow][PreviewConfirm] ✅ row.taskId impostato', {
+                          rowId: row.id,
+                          taskId: row.id
+                        });
+
                         // Clona steps e adatta prompt (modifica task.steps in-place)
                         try {
                           await createTaskFromTemplate(previewData.templateId, task, row.text || '', false);
@@ -2382,6 +2394,13 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                           projectId
                         );
 
+                        // ✅ REGOLA ARCHITETTURALE: task.id = row.id, quindi row.taskId = row.id
+                        (row as any).taskId = row.id;
+                        console.log('[🔍 NodeRow][PreviewConfirm] ✅ row.taskId impostato (AI)', {
+                          rowId: row.id,
+                          taskId: row.id
+                        });
+
                         // Genera tutti gli steps da AI
                         const taskTree = await generateTaskStepsFromAI(
                           previewData.dataTree,
@@ -2434,6 +2453,13 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       row.id,
                       projectId
                     );
+
+                    // ✅ REGOLA ARCHITETTURALE: task.id = row.id, quindi row.taskId = row.id
+                    (row as any).taskId = row.id;
+                    console.log('[🔍 NodeRow][PreviewReject] ✅ row.taskId impostato', {
+                      rowId: row.id,
+                      taskId: row.id
+                    });
 
                     taskEditorCtx.open({ id: task.id, type: TaskType.UtteranceInterpretation, label: row.text, instanceId: row.id });
 

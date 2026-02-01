@@ -9,13 +9,13 @@ Namespace Compiler
 
     ''' <summary>
     ''' Helper per caricare TaskInstance da vari formati (JSON, JObject, ecc.)
-    ''' Centralizza la logica di conversione: input → TaskTreeRuntime → RuntimeTask
+    ''' Centralizza la logica di conversione: input → TaskTreeExpanded → RuntimeTask
     ''' </summary>
     Public Class TaskLoader
 
         ''' <summary>
         ''' Carica RuntimeTask da un valore (JObject, JToken, o String JSON)
-        ''' Converte direttamente: JSON → TaskTreeRuntime → RuntimeTask usando TaskCompiler
+        ''' Converte direttamente: JSON → TaskTreeExpanded → RuntimeTask usando TaskCompiler
         ''' </summary>
         ''' <param name="taskValue">Valore da convertire (String JSON, JToken, JObject)</param>
         ''' <returns>RuntimeTask pronto per l'esecuzione</returns>
@@ -40,10 +40,10 @@ Namespace Compiler
 
             Console.WriteLine($"🔄 [TaskLoader] Loading Task from JSON ({jsonString.Length} chars)...")
 
-            ' ✅ Usa TaskCompiler per convertire direttamente: JSON → TaskTreeRuntime → RuntimeTask
+            ' ✅ Usa TaskCompiler per convertire direttamente: JSON → TaskTreeExpanded → RuntimeTask
             ' TaskCompiler gestisce internamente:
-            ' 1. Deserializza JSON in TaskTreeRuntime (IDE format)
-            ' 2. Converte TaskTreeRuntime in RuntimeTask (Runtime format) usando TaskAssembler
+            ' 1. Deserializza JSON in TaskTreeExpanded (IDE format - AST montato)
+            ' 2. Converte TaskTreeExpanded in RuntimeTask (Runtime format) usando TaskAssembler
             ' 3. Carica NLP contracts e valida la struttura
             Dim compiler As New TaskCompiler()
             Dim compileResult = compiler.Compile(jsonString)

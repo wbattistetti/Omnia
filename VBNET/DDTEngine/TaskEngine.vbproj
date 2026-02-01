@@ -42,7 +42,7 @@
     <Compile Include="Models\DTO\ResponseDTO.vb" />
     <Compile Include="Models\DTO\EscalationDTO.vb" />
     <Compile Include="Models\DTO\DialogueStepDTO.vb" />
-    <!-- DDTNodeDTO e DDTInstanceDTO eliminati - ora si usano TaskTreeRuntime/MainDataNode (IDE, ex AssembledDDT) e DDTInstance/DDTNode (Runtime) -->
+    <!-- DDTNodeDTO e DDTInstanceDTO eliminati - ora si usano TaskTreeExpanded/MainDataNode (IDE, ex AssembledDDT) e DDTInstance/DDTNode (Runtime) -->
     <!-- Helpers -->
     <Compile Include="Helpers\TaskLoader.vb" />
     <!-- Engine -->

@@ -6,11 +6,11 @@ Option Explicit On
 
     ''' <summary>
     ''' Rappresenta un'istanza di un Task - Struttura Runtime
-    ''' Contiene sia i campi design-time (dal frontend TaskTreeRuntime) che i campi runtime
+    ''' Contiene sia i campi design-time (dal frontend TaskTreeExpanded) che i campi runtime
     ''' </summary>
     Public Class TaskInstance
         ' ============================================================
-        ' CAMPI DESIGN-TIME (dal frontend TaskTreeRuntime)
+        ' CAMPI DESIGN-TIME (dal frontend TaskTreeExpanded - AST montato)
         ' ============================================================
 
         ''' <summary>

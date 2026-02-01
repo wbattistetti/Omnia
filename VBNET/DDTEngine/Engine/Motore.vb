@@ -31,6 +31,16 @@ Public Class Motore
     ''' Funzione principale che coordina il processo di esecuzione di una serie di task
     ''' </summary>
     Public Sub ExecuteTask(taskInstance As TaskInstance)
+        Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+        Console.WriteLine($"🔍 [RUNTIME][TaskEngine] ExecuteTask called")
+        Console.WriteLine($"   TaskInstance.Id: {taskInstance.Id}")
+        Console.WriteLine($"   TaskInstance.IsAggregate: {taskInstance.IsAggregate}")
+        Console.WriteLine($"   TaskInstance.TaskList.Count: {taskInstance.TaskList.Count}")
+        Console.WriteLine($"⚠️ [RUNTIME][TaskEngine] ExecuteTask: Using OLD engine (GetNextTask/GetResponse)")
+        Console.WriteLine($"   This bypasses the compiler (UtteranceInterpretationTaskCompiler)")
+        Console.WriteLine($"   The task was converted from CompiledTaskUtteranceInterpretation → RuntimeTask → TaskInstance")
+        Console.WriteLine($"   Flow: CompiledTask → ConvertCompiledToRuntimeTask → ConvertRuntimeTaskToTaskInstance → ExecuteTask")
+        Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
         Console.WriteLine($"[RUNTIME][TaskEngine] ExecuteTask started: TaskList.Count={taskInstance.TaskList.Count}, IsAggregate={taskInstance.IsAggregate}")
         Dim state As DialogueState = DialogueState.Start
 

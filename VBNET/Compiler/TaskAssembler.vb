@@ -7,7 +7,7 @@ Imports Newtonsoft.Json
 Imports TaskEngine
 
 ''' <summary>
-''' TaskAssembler: compila strutture IDE (TaskTreeRuntime) in strutture Runtime (Task ricorsivo)
+''' TaskAssembler: compila strutture IDE (TaskTreeExpanded - AST montato) in strutture Runtime (Task ricorsivo)
 ''' Responsabilità:
 ''' - Mappare campi uno a uno
 ''' - Compilare tipi (DialogueStep IDE → DialogueStep Runtime)
@@ -72,15 +72,15 @@ Public Class TaskAssembler
     End Function
 
     ''' <summary>
-    ''' Compila TaskTreeRuntime (IDE) in RuntimeTask ricorsivo (Runtime)
+    ''' Compila TaskTreeExpanded (IDE - AST montato) in RuntimeTask ricorsivo (Runtime)
     ''' Restituisce il RuntimeTask root dell'albero ricorsivo
     ''' </summary>
-    Public Function Compile(assembled As Compiler.TaskTreeRuntime) As RuntimeTask
-        Console.WriteLine($"🔍 [COMPILER][TaskAssembler] Compile called for TaskTreeRuntime Id={assembled.Id}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] Compile called for TaskTreeRuntime Id={assembled.Id}")
+    Public Function Compile(assembled As Compiler.TaskTreeExpanded) As RuntimeTask
+        Console.WriteLine($"🔍 [COMPILER][TaskAssembler] Compile called for TaskTreeExpanded Id={assembled.Id}")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] Compile called for TaskTreeExpanded Id={assembled.Id}")
 
         If assembled Is Nothing Then
-            Throw New ArgumentNullException(NameOf(assembled), "TaskTreeRuntime cannot be Nothing")
+            Throw New ArgumentNullException(NameOf(assembled), "TaskTreeExpanded cannot be Nothing")
         End If
 
         ' ✅ Salva traduzioni per uso durante la conversione
@@ -99,7 +99,7 @@ Public Class TaskAssembler
                 ' Un solo nodo: è il root
                 Dim taskNode As Compiler.TaskNode = assembled.Nodes(0)
                 rootTask = CompileNode(taskNode, Nothing)
-                rootTask.Id = assembled.Id ' Usa l'ID del TaskTreeRuntime come ID del root
+                rootTask.Id = assembled.Id ' Usa l'ID del TaskTreeExpanded come ID del root
             Else
                 ' Più nodi: crea un nodo aggregato root con subTasks
                 rootTask = New RuntimeTask() With {

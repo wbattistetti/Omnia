@@ -5,13 +5,15 @@ Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
 ''' <summary>
-''' TaskTreeRuntime: formato runtime per TaskEngine (ex AssembledDDT)
-''' ✅ RINOMINATO: AssembledDDT → TaskTreeRuntime
-''' Il frontend usa TaskTree, il compilatore converte TaskTree → TaskTreeRuntime per il runtime.
+''' TaskTreeExpanded: AST montato con template fusi e override applicati (ex TaskTreeRuntime)
+''' ✅ RINOMINATO: TaskTreeRuntime → TaskTreeExpanded (nome più accurato)
+''' Il frontend usa TaskTree, il loader converte TaskTree → TaskTreeExpanded (AST montato).
+''' TaskTreeExpanded NON è runtime, è un AST intermedio prima della compilazione.
+''' Flusso: Loader → TaskTreeExpanded → Task → Compilatore → CompiledTask → Motore
 ''' NOTA: TaskEngine/TaskInstance/TaskNode sono interni al runtime.
 ''' nodes è sempre un array: nodes: TaskNode[]
 ''' </summary>
-Public Class TaskTreeRuntime
+Public Class TaskTreeExpanded
     <JsonProperty("id")>
     Public Property Id As String
 

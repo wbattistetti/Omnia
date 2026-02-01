@@ -1131,26 +1131,32 @@ export const AppContent: React.FC<AppContentProps> = ({
   // Carica tutti i progetti
   const fetchAllProjects = React.useCallback(async () => {
     try {
-      setAllProjects(await ProjectService.getAllProjects());
+      const projects = await ProjectService.getAllProjects();
+      setAllProjects(projects);
+      return projects; // Restituisce i progetti per verificare se ce ne sono ancora
     } catch (e) {
       setAllProjects([]);
+      return [];
     }
   }, []);
 
   const handleDeleteProject = useCallback(async (id: string) => {
     await ProjectService.deleteProject(id);
-    setToast('Progetto eliminato!');
     await fetchRecentProjects();
-    await fetchAllProjects();
-    setTimeout(() => setToast(null), 2000);
+    const updatedProjects = await fetchAllProjects();
+    // Mostra toast solo se ci sono ancora progetti dopo l'eliminazione
+    // Se non ci sono più progetti, il toast verrà mostrato in LandingPage nella posizione della lista
+    if (updatedProjects && updatedProjects.length > 0) {
+      setToast('Progetto eliminato!');
+      setTimeout(() => setToast(null), 2000);
+    }
   }, [fetchRecentProjects, fetchAllProjects]);
 
   const handleDeleteAllProjects = useCallback(async () => {
     await ProjectService.deleteAllProjects();
-    setToast('Tutti i progetti eliminati!');
     await fetchRecentProjects();
     await fetchAllProjects();
-    setTimeout(() => setToast(null), 2000);
+    // Non mostrare toast qui: verrà mostrato in LandingPage nella posizione della lista quando non ci sono più progetti
   }, [fetchRecentProjects, fetchAllProjects]);
 
   // Callback per LandingPage
@@ -1297,6 +1303,25 @@ export const AppContent: React.FC<AppContentProps> = ({
             const flowRes = await fetch(`/api/projects/${encodeURIComponent(id)}/flow`);
             if (flowRes.ok) {
               const flow = await flowRes.json();
+
+              // ✅ LOG: Traccia cosa viene ricevuto dal backend
+              console.log(`[LOAD][AppContent] 📥 Flow received from backend`, {
+                projectId: id,
+                nodesCount: flow.nodes?.length || 0,
+                edgesCount: flow.edges?.length || 0,
+                nodes: flow.nodes?.map((n: any) => ({
+                  id: n.id,
+                  label: n.label,
+                  rowsCount: n.rows?.length || 0,
+                  rows: n.rows?.map((r: any) => ({
+                    id: r.id,
+                    text: r.text,
+                    taskId: r.taskId,
+                    hasTaskId: !!r.taskId
+                  })) || []
+                })) || []
+              });
+
               return {
                 nodes: Array.isArray(flow.nodes) ? flow.nodes : [],
                 edges: Array.isArray(flow.edges) ? flow.edges : []

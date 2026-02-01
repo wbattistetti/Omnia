@@ -7,8 +7,8 @@ Imports TaskEngine
 
 ''' <summary>
 ''' Compilatore Task: trasforma strutture IDE in strutture Runtime
-''' - Deserializza JSON in TaskTreeRuntime (IDE)
-''' - Trasforma TaskTreeRuntime in RuntimeTask (Runtime)
+''' - Deserializza JSON in TaskTreeExpanded (IDE - AST montato)
+''' - Trasforma TaskTreeExpanded in RuntimeTask (Runtime)
 ''' - Carica nlpContract per ogni nodo
 ''' - Valida struttura
 ''' - Pre-compila regex
@@ -33,9 +33,9 @@ Public Class TaskCompiler
             Throw New ArgumentException("Task JSON cannot be null or empty", NameOf(taskJson))
         End If
 
-        ' 1. Deserializza JSON in TaskTreeRuntime (struttura IDE tipizzata)
-        Console.WriteLine($"🔍 [COMPILER][TaskCompiler] Step 1: Deserializing JSON to TaskTreeRuntime...")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskCompiler] Step 1: Deserializing JSON to TaskTreeRuntime...")
+        ' 1. Deserializza JSON in TaskTreeExpanded (struttura IDE tipizzata - AST montato)
+        Console.WriteLine($"🔍 [COMPILER][TaskCompiler] Step 1: Deserializing JSON to TaskTreeExpanded...")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskCompiler] Step 1: Deserializing JSON to TaskTreeExpanded...")
         Dim settings As New JsonSerializerSettings() With {
             .NullValueHandling = NullValueHandling.Ignore,
             .MissingMemberHandling = MissingMemberHandling.Ignore
@@ -44,21 +44,21 @@ Public Class TaskCompiler
         settings.Converters.Add(New TaskNodeListConverter())
         settings.Converters.Add(New DialogueStepListConverter())
 
-        Dim assembled As Compiler.TaskTreeRuntime = JsonConvert.DeserializeObject(Of Compiler.TaskTreeRuntime)(taskJson, settings)
+        Dim assembled As Compiler.TaskTreeExpanded = JsonConvert.DeserializeObject(Of Compiler.TaskTreeExpanded)(taskJson, settings)
         If assembled Is Nothing Then
-            Throw New InvalidOperationException("Impossibile deserializzare TaskTreeRuntime dal JSON")
+            Throw New InvalidOperationException("Impossibile deserializzare TaskTreeExpanded dal JSON")
         End If
 
-        Console.WriteLine($"✅ [COMPILER][TaskCompiler] TaskTreeRuntime deserialized: Id={assembled.Id}, Nodes IsNot Nothing={assembled.Nodes IsNot Nothing}")
-        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][TaskCompiler] TaskTreeRuntime deserialized: Id={assembled.Id}, Nodes IsNot Nothing={assembled.Nodes IsNot Nothing}")
+        Console.WriteLine($"✅ [COMPILER][TaskCompiler] TaskTreeExpanded deserialized: Id={assembled.Id}, Nodes IsNot Nothing={assembled.Nodes IsNot Nothing}")
+        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][TaskCompiler] TaskTreeExpanded deserialized: Id={assembled.Id}, Nodes IsNot Nothing={assembled.Nodes IsNot Nothing}")
         If assembled.Nodes IsNot Nothing Then
-            Console.WriteLine($"🔍 [COMPILER][TaskCompiler] TaskTreeRuntime.Nodes.Count={assembled.Nodes.Count}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskCompiler] TaskTreeRuntime.Nodes.Count={assembled.Nodes.Count}")
+            Console.WriteLine($"🔍 [COMPILER][TaskCompiler] TaskTreeExpanded.Nodes.Count={assembled.Nodes.Count}")
+            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskCompiler] TaskTreeExpanded.Nodes.Count={assembled.Nodes.Count}")
         End If
 
-        ' 2. Trasforma TaskTreeRuntime (IDE) → Task ricorsivo (Runtime)
-        Console.WriteLine($"🔍 [COMPILER][TaskCompiler] Step 2: Compiling TaskTreeRuntime to Task using TaskAssembler.Compile...")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskCompiler] Step 2: Compiling TaskTreeRuntime to Task using TaskAssembler.Compile...")
+        ' 2. Trasforma TaskTreeExpanded (IDE - AST montato) → Task ricorsivo (Runtime)
+        Console.WriteLine($"🔍 [COMPILER][TaskCompiler] Step 2: Compiling TaskTreeExpanded to Task using TaskAssembler.Compile...")
+        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskCompiler] Step 2: Compiling TaskTreeExpanded to Task using TaskAssembler.Compile...")
         Dim rootTask As RuntimeTask = _assembler.Compile(assembled)
         Console.WriteLine($"✅ [COMPILER][TaskCompiler] Task created: Id={If(String.IsNullOrEmpty(rootTask.Id), "NULL", rootTask.Id)}, SubTasks.Count={If(rootTask.SubTasks IsNot Nothing, rootTask.SubTasks.Count, 0)}")
         System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][TaskCompiler] Task created: Id={If(String.IsNullOrEmpty(rootTask.Id), "NULL", rootTask.Id)}, SubTasks.Count={If(rootTask.SubTasks IsNot Nothing, rootTask.SubTasks.Count, 0)}")

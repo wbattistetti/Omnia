@@ -628,24 +628,24 @@ app.delete('/api/projects/catalog/:id', async (req, res) => {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    // ✅ Elimina anche il database MongoDB del progetto PRIMA di eliminare dal catalogo
-    // LOGICA: Elimina database prima del catalogo per evitare database orfani
+    // ✅ REGOLA: 1 progetto = 1 database, sempre insieme
+    // Elimina SEMPRE il database quando elimini il progetto, senza controlli
     let databaseDeleted = false;
     if (project.dbName) {
       try {
         const projectDb = client.db(project.dbName);
-        // Verifica che il database esista e abbia collezioni
-        const collections = await projectDb.listCollections().toArray();
-        if (collections.length > 0) {
-          await projectDb.dropDatabase();
-          databaseDeleted = true;
-          logInfo('Projects.delete', { projectId: id, dbName: project.dbName, deleted: true });
-        } else {
-          logInfo('Projects.delete', { projectId: id, dbName: project.dbName, skipped: 'empty database' });
-        }
+        // ✅ Elimina SEMPRE il database, senza controlli su collezioni
+        await projectDb.dropDatabase();
+        databaseDeleted = true;
+        logInfo('Projects.delete', { projectId: id, dbName: project.dbName, deleted: true });
       } catch (dbError) {
-        // Database non esiste o errore - logga ma continua (non bloccare la cancellazione)
-        logWarn('Projects.delete', { projectId: id, dbName: project.dbName, error: dbError.message });
+        // ✅ Se il database non esiste, è OK (non è un errore critico)
+        if (dbError.message?.includes('not found') || dbError.code === 26 || dbError.message?.includes('ns not found')) {
+          logInfo('Projects.delete', { projectId: id, dbName: project.dbName, skipped: 'database does not exist' });
+        } else {
+          // ✅ Solo errori reali sono problemi - logga ma continua
+          logWarn('Projects.delete', { projectId: id, dbName: project.dbName, error: dbError.message });
+        }
       }
     } else {
       // Se dbName non è presente, prova pattern legacy come fallback
@@ -657,15 +657,19 @@ app.delete('/api/projects/catalog/:id', async (req, res) => {
       for (const dbName of possibleDbNames) {
         try {
           const projectDb = client.db(dbName);
-          const collections = await projectDb.listCollections().toArray();
-          if (collections.length > 0) {
-            await projectDb.dropDatabase();
-            databaseDeleted = true;
-            logInfo('Projects.delete', { projectId: id, dbName, deleted: true, fallback: true });
-          }
+          // ✅ Elimina SEMPRE il database, senza controlli
+          await projectDb.dropDatabase();
+          databaseDeleted = true;
+          logInfo('Projects.delete', { projectId: id, dbName, deleted: true, fallback: true });
+          break; // Trovato e eliminato, esci dal loop
         } catch (dbError) {
-          // Database non esiste o errore - continua
-          logWarn('Projects.delete', { projectId: id, dbName, error: dbError.message, fallback: true });
+          // ✅ Se il database non esiste, continua con il prossimo pattern
+          if (dbError.message?.includes('not found') || dbError.code === 26 || dbError.message?.includes('ns not found')) {
+            // Database non esiste con questo pattern, continua
+            continue;
+          } else {
+            logWarn('Projects.delete', { projectId: id, dbName, error: dbError.message, fallback: true });
+          }
         }
       }
     }
@@ -709,15 +713,18 @@ app.delete('/api/projects/catalog', async (req, res) => {
       if (project.dbName) {
         try {
           const projectDb = client.db(project.dbName);
-          const collections = await projectDb.listCollections().toArray();
-          if (collections.length > 0) {
-            await projectDb.dropDatabase();
-            databasesDeleted++;
-            logInfo('Projects.deleteAll', { dbName: project.dbName, deleted: true });
-          }
+          // ✅ REGOLA: Elimina SEMPRE il database, senza controlli
+          await projectDb.dropDatabase();
+          databasesDeleted++;
+          logInfo('Projects.deleteAll', { dbName: project.dbName, deleted: true });
         } catch (dbError) {
-          databasesErrors++;
-          logWarn('Projects.deleteAll', { dbName: project.dbName, error: dbError.message });
+          // ✅ Se il database non esiste, è OK (non è un errore critico)
+          if (dbError.message?.includes('not found') || dbError.code === 26 || dbError.message?.includes('ns not found')) {
+            logInfo('Projects.deleteAll', { dbName: project.dbName, skipped: 'database does not exist' });
+          } else {
+            databasesErrors++;
+            logError('Projects.deleteAll', dbError, { dbName: project.dbName });
+          }
         }
       }
     }
@@ -1140,6 +1147,28 @@ app.get('/api/projects/:pid/flow', async (req, res) => {
     ]);
     const queryDuration = Date.now() - queryStart;
     const duration = Date.now() - startTime;
+
+    // ✅ LOG: Traccia cosa viene letto dal DB
+    console.log(`[LOAD][backend] 📥 Reading from DB`, {
+      projectId: pid,
+      flowId,
+      nodesCount: nodes?.length || 0,
+      edgesCount: edges?.length || 0,
+      duration: `${duration}ms`,
+      queryDuration: `${queryDuration}ms`,
+      nodes: nodes?.map((n) => ({
+        id: n.id,
+        label: n.label,
+        rowsCount: n.rows?.length || 0,
+        rows: n.rows?.map((r) => ({
+          id: r.id,
+          text: r.text,
+          taskId: r.taskId,
+          hasTaskId: !!r.taskId
+        })) || []
+      })) || []
+    });
+
     logInfo('Flow.get', { projectId: pid, flowId, nodesCount: nodes?.length || 0, edgesCount: edges?.length || 0, duration: `${duration}ms`, queryDuration: `${queryDuration}ms` });
     res.json({ nodes, edges });
   } catch (e) {
@@ -1155,6 +1184,26 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
   const payload = req.body || {};
   const nodes = Array.isArray(payload.nodes) ? payload.nodes : [];
   const edges = Array.isArray(payload.edges) ? payload.edges : [];
+
+  // ✅ LOG: Traccia cosa viene ricevuto dal frontend
+  console.log(`[SAVE][backend] 📥 Received from frontend`, {
+    projectId: pid,
+    flowId,
+    nodesCount: nodes.length,
+    edgesCount: edges.length,
+    nodes: nodes.map((n) => ({
+      id: n.id,
+      label: n.label,
+      rowsCount: n.rows?.length || 0,
+      rows: n.rows?.map((r) => ({
+        id: r.id,
+        text: r.text,
+        taskId: r.taskId,
+        hasTaskId: !!r.taskId
+      })) || []
+    }))
+  });
+
   try {
     await withMongoClient(async (client) => {
       const db = await getProjectDb(client, pid);
@@ -1228,6 +1277,27 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
     if (edgeOps.length > 0) {
       await ecoll.bulkWrite(edgeOps, { ordered: false });
     }
+
+      // ✅ LOG: Traccia cosa viene salvato nel DB
+      console.log(`[SAVE][backend] 💾 Saving to DB`, {
+        projectId: pid,
+        flowId,
+        nodesUpserts: nUpserts,
+        nodesDeletes: nDeletes,
+        edgesUpserts: eUpserts,
+        edgesDeletes: eDeletes,
+        nodes: nodes.map((n) => ({
+          id: n.id,
+          label: n.label,
+          rowsCount: n.rows?.length || 0,
+          rows: n.rows?.map((r) => ({
+            id: r.id,
+            text: r.text,
+            taskId: r.taskId,
+            hasTaskId: !!r.taskId
+          })) || []
+        }))
+      });
 
       logInfo('Flow.put', {
         projectId: pid,
@@ -1455,6 +1525,62 @@ function getAllowedContexts(type) {
   return [];
 }
 
+// ============================================================================
+// Task Classification Functions
+// ============================================================================
+/**
+ * Determines if a document is a task instance
+ * Instance: has templateId !== null (references a template)
+ */
+function isInstance(doc) {
+  return doc.templateId !== null && doc.templateId !== undefined;
+}
+
+/**
+ * Determines if a document is a Factory template
+ * Factory Template: templateId === null AND has Factory-specific fields
+ */
+function isFactoryTemplate(doc) {
+  if (doc.templateId !== null && doc.templateId !== undefined) {
+    return false; // Instances are not Factory templates
+  }
+
+  // Check for Factory-specific fields
+  return (
+    doc.version !== undefined ||
+    doc.versionNote !== undefined ||
+    doc.dataContract !== undefined ||
+    doc.dataContracts !== undefined ||
+    doc.patterns !== undefined ||
+    doc.valueSchema !== undefined ||
+    doc.subTasksIds !== undefined
+  );
+}
+
+/**
+ * Determines if a document is a local project template
+ * Local Template: templateId === null AND NOT a Factory template
+ */
+function isLocalTemplate(doc) {
+  return doc.templateId === null && !isFactoryTemplate(doc);
+}
+
+/**
+ * Removes Factory-specific fields from a document
+ * Used when saving Local Templates to ensure they don't have Factory fields
+ */
+function removeFactoryFields(doc) {
+  const cleaned = { ...doc };
+  delete cleaned.version;
+  delete cleaned.versionNote;
+  delete cleaned.dataContract;
+  delete cleaned.dataContracts;
+  delete cleaned.patterns;
+  delete cleaned.valueSchema;
+  // Note: subTasksIds is allowed in Local Templates (they can reference other templates)
+  return cleaned;
+}
+
 // POST /api/projects/:pid/tasks - Create or update task (upsert)
 app.post('/api/projects/:pid/tasks', async (req, res) => {
   const projectId = req.params.pid;
@@ -1504,28 +1630,16 @@ app.post('/api/projects/:pid/tasks', async (req, res) => {
       ? payload.allowedContexts
       : getAllowedContexts(type);
 
-    // ✅ Se è un template (templateId === null o templateId === id), può avere subTasksIds
-    // ✅ Se è un'istanza (templateId !== null e templateId !== id), deve avere SOLO: id, templateId, templateVersion, labelKey, steps, createdAt, updatedAt
-    const isTemplate = templateId === null || templateId === payload.id;
-
+    // ✅ CLASSIFICAZIONE: Determina il tipo di documento usando le funzioni di classificazione
     let task;
-    if (isTemplate) {
-      // ✅ TEMPLATE: Salva tutti i campi (struttura completa)
+    if (isInstance(payload)) {
+      // ✅ ISTANZA: Salva SOLO campi permessi (id, type, templateId, templateVersion, labelKey, steps, createdAt, updatedAt)
+      // ✅ type è OBBLIGATORIO anche per istanze (necessario per il caricamento)
+      // ❌ NON salvare: nodes, subNodes, icon, constraints, dataContract, examples, nlpProfile, patterns, valueSchema, allowedContexts
       task = {
         projectId,
         id: payload.id,
-        type: type,              // ✅ type: enum numerico (0-19) - REQUIRED
-        templateId: null,        // ✅ Template ha sempre templateId = null
-        allowedContexts: allowedContextsValue,
-        ...fields,  // ✅ Save all fields directly (label, steps, subTasksIds, constraints, dataContract, ecc.)
-        updatedAt: now
-      };
-    } else {
-      // ✅ ISTANZA: Salva SOLO campi permessi (id, templateId, templateVersion, labelKey, steps, createdAt, updatedAt)
-      // ❌ NON salvare: type, nodes, subNodes, icon, constraints, dataContract, examples, nlpProfile, patterns, valueSchema, allowedContexts
-      task = {
-        projectId,
-        id: payload.id,
+        type: type,  // ✅ OBBLIGATORIO: type è necessario per il caricamento (TaskRepository lo richiede)
         templateId: templateId,  // ✅ OBBLIGATORIO per istanze (non può essere null)
         templateVersion: payload.templateVersion || 1,  // ✅ Versione del template
         labelKey: payload.labelKey,  // ✅ Chiave di traduzione
@@ -1534,7 +1648,7 @@ app.post('/api/projects/:pid/tasks', async (req, res) => {
       };
 
       // ✅ Rimuovi esplicitamente campi del template se presenti (per sicurezza)
-      delete task.type;
+      // ❌ NON rimuovere type - è necessario per il caricamento
       delete task.nodes;
       delete task.subNodes;
       delete task.icon;
@@ -1547,6 +1661,32 @@ app.post('/api/projects/:pid/tasks', async (req, res) => {
       delete task.allowedContexts;
       delete task.data;
       delete task.introduction;
+    } else if (isLocalTemplate(payload)) {
+      // ✅ LOCAL TEMPLATE: Salva nel progetto, ma rimuovi campi da Factory
+      const cleanedFields = removeFactoryFields(fields);
+      task = {
+        projectId,
+        id: payload.id,
+        type: type,              // ✅ type: enum numerico (0-19) - REQUIRED
+        templateId: null,        // ✅ Local Template ha sempre templateId = null
+        allowedContexts: allowedContextsValue,
+        ...cleanedFields,  // ✅ Save fields without Factory-specific ones
+        updatedAt: now
+      };
+    } else {
+      // ❌ CASO NON VALIDO: templateId === null ma non è né Factory né Local Template
+      // (Questo caso non dovrebbe mai verificarsi se isFactoryTemplate è implementato correttamente)
+      logError('Tasks.post', new Error('Invalid task classification'), {
+        projectId,
+        taskId: payload.id,
+        templateId: payload.templateId,
+        hasVersion: payload.version !== undefined,
+        hasVersionNote: payload.versionNote !== undefined
+      });
+      return res.status(400).json({
+        error: 'invalid_task_classification',
+        message: 'Task cannot be classified as instance, Factory template, or local template'
+      });
     }
 
     // Upsert: create if not exists, update if exists
@@ -1638,6 +1778,52 @@ app.put('/api/projects/:pid/tasks/:taskId', async (req, res) => {
     // ✅ Normalize templateId: if provided, ensure it's null or valid GUID
     if (payload.templateId !== undefined) {
       update.templateId = payload.templateId ?? null;
+    }
+
+    // ✅ CLASSIFICAZIONE: Blocca Factory Template dopo merge con existing
+    const mergedDoc = { ...existing, ...update };
+    if (isFactoryTemplate(mergedDoc)) {
+      logError('Tasks.put', new Error('Factory template cannot be saved to project database'), {
+        projectId,
+        taskId,
+        reason: 'Factory templates must remain in Factory database only'
+      });
+      return res.status(400).json({
+        error: 'factory_template_not_allowed',
+        message: 'Factory templates cannot be saved to project database. They must remain in Factory database only.'
+      });
+    }
+
+    // ✅ Se è Local Template, rimuovi campi Factory
+    if (isLocalTemplate(mergedDoc)) {
+      const cleanedUpdate = removeFactoryFields(update);
+      Object.assign(update, cleanedUpdate);
+    }
+
+    // ✅ Se è Instance, filtra solo campi permessi
+    if (isInstance(mergedDoc)) {
+      // Mantieni solo campi permessi per istanze (incluso type che è necessario per il caricamento)
+      const allowedFields = ['type', 'templateId', 'templateVersion', 'labelKey', 'steps', 'updatedAt'];
+      const filteredUpdate = {};
+      for (const key of allowedFields) {
+        if (update[key] !== undefined) {
+          filteredUpdate[key] = update[key];
+        }
+      }
+      // ✅ type NON viene rimosso - è necessario per il caricamento
+      delete filteredUpdate.nodes;
+      delete filteredUpdate.subNodes;
+      delete filteredUpdate.icon;
+      delete filteredUpdate.constraints;
+      delete filteredUpdate.dataContract;
+      delete filteredUpdate.examples;
+      delete filteredUpdate.nlpProfile;
+      delete filteredUpdate.patterns;
+      delete filteredUpdate.valueSchema;
+      delete filteredUpdate.allowedContexts;
+      delete filteredUpdate.data;
+      delete filteredUpdate.introduction;
+      Object.assign(update, filteredUpdate);
     }
 
     await projDb.collection('tasks').updateOne(
@@ -1734,28 +1920,16 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
           // ✅ Extract all fields except id, templateId, createdAt, updatedAt, and legacy fields
           const { id, templateId, createdAt, updatedAt, data, steps, constraints, ...fields } = item;
 
-          // ✅ Se è un template (templateId === null o templateId === id), può avere subTasksIds
-          // ✅ Se è un'istanza (templateId !== null e templateId !== id), deve avere SOLO: id, templateId, templateVersion, labelKey, steps, createdAt, updatedAt
-          const isTemplate = templateId === null || templateId === item.id;
-
+          // ✅ CLASSIFICAZIONE: Determina il tipo di documento usando le funzioni di classificazione
           let task;
-          if (isTemplate) {
-            // ✅ TEMPLATE: Salva tutti i campi (struttura completa)
+          if (isInstance(item)) {
+            // ✅ ISTANZA: Salva SOLO campi permessi (id, type, templateId, templateVersion, labelKey, steps, createdAt, updatedAt)
+            // ✅ type è OBBLIGATORIO anche per istanze (necessario per il caricamento)
+            // ❌ NON salvare: nodes, subNodes, icon, constraints, dataContract, examples, nlpProfile, patterns, valueSchema, allowedContexts
             task = {
               projectId,
               id: item.id,
-              type: item.type,              // ✅ type: enum numerico (0-19) - REQUIRED
-              templateId: null,        // ✅ Template ha sempre templateId = null
-              allowedContexts: item.allowedContexts || getAllowedContexts(item.type),
-              ...fields,  // ✅ Save all fields directly (label, steps, subTasksIds, constraints, dataContract, ecc.)
-              updatedAt: now
-            };
-          } else {
-            // ✅ ISTANZA: Salva SOLO campi permessi (id, templateId, templateVersion, labelKey, steps, createdAt, updatedAt)
-            // ❌ NON salvare: type, nodes, subNodes, icon, constraints, dataContract, examples, nlpProfile, patterns, valueSchema, allowedContexts
-            task = {
-              projectId,
-              id: item.id,
+              type: item.type,  // ✅ OBBLIGATORIO: type è necessario per il caricamento (TaskRepository lo richiede)
               templateId: templateId,  // ✅ OBBLIGATORIO per istanze (non può essere null)
               templateVersion: item.templateVersion || 1,  // ✅ Versione del template
               labelKey: item.labelKey,  // ✅ Chiave di traduzione
@@ -1764,7 +1938,7 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
             };
 
             // ✅ Rimuovi esplicitamente campi del template se presenti (per sicurezza)
-            delete task.type;
+            // ❌ NON rimuovere type - è necessario per il caricamento
             delete task.nodes;
             delete task.subNodes;
             delete task.icon;
@@ -1777,7 +1951,36 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
             delete task.allowedContexts;
             delete task.data;
             delete task.introduction;
+          } else if (isLocalTemplate(item)) {
+            // ✅ LOCAL TEMPLATE: Salva nel progetto, ma rimuovi campi da Factory
+            const cleanedFields = removeFactoryFields(fields);
+            task = {
+              projectId,
+              id: item.id,
+              type: item.type,              // ✅ type: enum numerico (0-19) - REQUIRED
+              templateId: null,        // ✅ Local Template ha sempre templateId = null
+              allowedContexts: item.allowedContexts || getAllowedContexts(item.type),
+              ...cleanedFields,  // ✅ Save fields without Factory-specific ones
+              updatedAt: now
+            };
+          } else {
+            // ❌ CASO NON VALIDO: templateId === null ma non è né Factory né Local Template
+            // (Questo caso non dovrebbe mai verificarsi se isFactoryTemplate è implementato correttamente)
+            console.error('[💾 BACKEND_BULK] Invalid task classification', {
+              itemId: item.id,
+              templateId: item.templateId,
+              hasVersion: item.version !== undefined,
+              hasVersionNote: item.versionNote !== undefined
+            });
+            logWarn('Tasks.bulk', {
+              error: 'invalid_task_classification',
+              itemId: item.id
+            });
+            return null; // Return null to skip this item
           }
+
+          // ✅ Return null se task non è valido (verrà filtrato dopo)
+          if (!task) return null;
 
           return {
             updateOne: {
@@ -1789,7 +1992,8 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
               upsert: true
             }
           };
-        });
+        })
+        .filter(op => op !== null); // ✅ Rimuovi operazioni null (item saltati)
 
       let inserted = 0;
       let updated = 0;

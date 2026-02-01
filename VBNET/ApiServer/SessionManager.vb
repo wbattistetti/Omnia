@@ -353,9 +353,23 @@ Public Class SessionManager
 
                                                                           Console.WriteLine($"🚀 [RUNTIME][SessionManager] Background task started for TaskSession: {sessionId}")
                                                                           ' ✅ NUOVO: Converte RuntimeTask in TaskInstance e esegue
+                                                                          Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                                                                          Console.WriteLine($"🔍 [RUNTIME][SessionManager] Converting RuntimeTask to TaskInstance for TaskSession: {sessionId}")
+                                                                          Console.WriteLine($"   RuntimeTask.Id: {session.RuntimeTask.Id}")
+                                                                          Console.WriteLine($"   RuntimeTask.Steps.Count: {If(session.RuntimeTask.Steps IsNot Nothing, session.RuntimeTask.Steps.Count, 0)}")
+                                                                          Console.WriteLine($"   RuntimeTask.HasSubTasks: {session.RuntimeTask.HasSubTasks()}")
+                                                                          If session.RuntimeTask.HasSubTasks() Then
+                                                                              Console.WriteLine($"   RuntimeTask.SubTasks.Count: {session.RuntimeTask.SubTasks.Count}")
+                                                                          End If
                                                                           Dim taskInstance = ConvertRuntimeTaskToTaskInstance(session.RuntimeTask, session.Translations)
+                                                                          Console.WriteLine($"✅ [RUNTIME][SessionManager] ConvertRuntimeTaskToTaskInstance completed")
+                                                                          Console.WriteLine($"   TaskInstance.Id: {taskInstance.Id}")
+                                                                          Console.WriteLine($"   TaskInstance.IsAggregate: {taskInstance.IsAggregate}")
+                                                                          Console.WriteLine($"   TaskInstance.TaskList.Count: {taskInstance.TaskList.Count}")
+                                                                          Console.WriteLine($"🚀 [RUNTIME][SessionManager] Calling taskEngine.ExecuteTask(taskInstance)...")
+                                                                          Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
                                                                           taskEngine.ExecuteTask(taskInstance)
-                                                                          Console.WriteLine($"✅ [RUNTIME][SessionManager] Task execution completed for TaskSession: {sessionId}")
+                                                                          Console.WriteLine($"✅ [RUNTIME][SessionManager] taskEngine.ExecuteTask completed for TaskSession: {sessionId}")
 
                                                                           ' TODO: Verifica se tutti i task sono completati (ricorsivo su RuntimeTask)
                                                                           ' Per ora commentato - il runtime deve essere aggiornato
@@ -413,6 +427,15 @@ Public Class SessionManager
     ''' ✅ Helper: Converte RuntimeTask in TaskInstance per compatibilità con ExecuteTask
     ''' </summary>
     Private Shared Function ConvertRuntimeTaskToTaskInstance(runtimeTask As Compiler.RuntimeTask, translations As Dictionary(Of String, String)) As TaskEngine.TaskInstance
+        Console.WriteLine($"🔍 [RUNTIME][SessionManager] ConvertRuntimeTaskToTaskInstance START")
+        Console.WriteLine($"   RuntimeTask.Id: {runtimeTask.Id}")
+        Console.WriteLine($"   RuntimeTask.Steps.Count: {If(runtimeTask.Steps IsNot Nothing, runtimeTask.Steps.Count, 0)}")
+        Console.WriteLine($"   RuntimeTask.HasSubTasks: {runtimeTask.HasSubTasks()}")
+        If runtimeTask.HasSubTasks() Then
+            Console.WriteLine($"   RuntimeTask.SubTasks.Count: {runtimeTask.SubTasks.Count}")
+        End If
+        Console.WriteLine($"⚠️ [RUNTIME][SessionManager] ConvertRuntimeTaskToTaskInstance: Converting CompiledTask → RuntimeTask → TaskInstance (OLD format)")
+        Console.WriteLine($"   This conversion bypasses the compiler and uses the old engine (GetNextTask/GetResponse)")
         Dim taskInstance As New TaskEngine.TaskInstance() With {
             .Id = runtimeTask.Id,
             .Label = "", ' Label non è disponibile in RuntimeTask
@@ -447,7 +470,13 @@ Public Class SessionManager
             taskInstance.TaskList.Add(emptyNode)
         End If
 
-        Console.WriteLine($"[RUNTIME][SessionManager] ConvertRuntimeTaskToTaskInstance: Created TaskInstance with {taskInstance.TaskList.Count} nodes")
+        Console.WriteLine($"✅ [RUNTIME][SessionManager] ConvertRuntimeTaskToTaskInstance: Created TaskInstance with {taskInstance.TaskList.Count} nodes")
+        Console.WriteLine($"   TaskInstance.TaskList details:")
+        For i = 0 To taskInstance.TaskList.Count - 1
+            Dim node = taskInstance.TaskList(i)
+            Console.WriteLine($"     Node[{i}]: Id={node.Id}, Steps.Count={If(node.Steps IsNot Nothing, node.Steps.Count, 0)}, State={node.State}")
+        Next
+        Console.WriteLine($"🔍 [RUNTIME][SessionManager] ConvertRuntimeTaskToTaskInstance END")
         Return taskInstance
     End Function
 
