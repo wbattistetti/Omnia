@@ -547,10 +547,17 @@ Namespace ApiServer.Handlers
 
                 ' Send waitingForInput event if already waiting
                 If session.IsWaitingForInput Then
+                    Dim jsonData = JsonConvert.SerializeObject(session.WaitingForInputData)
+                    Console.WriteLine($"[API] Sending initial waitingForInput event (session already waiting)")
+                    Console.WriteLine($"[API] JSON data: {jsonData}")
+                    Console.WriteLine($"[API] JSON length: {jsonData.Length}")
+
                     Await writer.WriteLineAsync($"event: waitingForInput")
-                    Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(session.WaitingForInputData)}")
+                    Await writer.WriteLineAsync($"data: {jsonData}")
                     Await writer.WriteLineAsync()
                     Await writer.FlushAsync()
+
+                    Console.WriteLine($"[API] Initial waitingForInput event sent successfully")
                 End If
 
                 ' Register event handlers
@@ -572,12 +579,21 @@ Namespace ApiServer.Handlers
                                                                                                      Try
                                                                                                          session.IsWaitingForInput = True
                                                                                                          session.WaitingForInputData = data
+
+                                                                                                         Dim jsonData = JsonConvert.SerializeObject(data)
+                                                                                                         Console.WriteLine($"[API] Sending waitingForInput event")
+                                                                                                         Console.WriteLine($"[API] JSON data: {jsonData}")
+                                                                                                         Console.WriteLine($"[API] JSON length: {jsonData.Length}")
+
                                                                                                          Await writer.WriteLineAsync($"event: waitingForInput")
-                                                                                                         Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
+                                                                                                         Await writer.WriteLineAsync($"data: {jsonData}")
                                                                                                          Await writer.WriteLineAsync()
                                                                                                          Await writer.FlushAsync()
+
+                                                                                                         Console.WriteLine($"[API] waitingForInput event sent successfully")
                                                                                                      Catch ex As Exception
-                                                                                                         Console.WriteLine($"[API] ERROR: SSE error sending waitingForInput: {ex.Message}")
+                                                                                                         Console.WriteLine($"[API] ERROR: SSE error sending waitingForInput: {ex.GetType().Name} - {ex.Message}")
+                                                                                                         Console.WriteLine($"[API] ERROR: Stack trace: {ex.StackTrace}")
                                                                                                      End Try
                                                                                                  End Function)
                                                              End Sub

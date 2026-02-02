@@ -27,10 +27,10 @@ Public Class Motore
     ''' Funzione principale che coordina il processo di esecuzione di una serie di task
     ''' </summary>
     Public Sub ExecuteTask(taskInstance As TaskInstance)
-        Console.WriteLine($"[RUNTIME] ExecuteTask: TaskList.Count={taskInstance.TaskList.Count}")
-        System.Diagnostics.Debug.WriteLine($"[RUNTIME] ExecuteTask: TaskList.Count={taskInstance.TaskList.Count}")
+        Console.WriteLine($"[MOTORE] ExecuteTask START: TaskList.Count={taskInstance.TaskList.Count}")
 
         If taskInstance.IsAggregate AndAlso taskInstance.Introduction IsNot Nothing Then
+            Console.WriteLine($"[MOTORE] Executing introduction")
             ExecuteResponse(taskInstance.Introduction.Tasks, Nothing, taskInstance)
         End If
 
@@ -40,32 +40,42 @@ Public Class Motore
             Dim currTaskNode As TaskNode = GetNextTask(taskInstance)
 
             If currTaskNode Is Nothing Then
-                Console.WriteLine($"[RUNTIME] GetNextTask returned Nothing - all tasks completed")
-                System.Diagnostics.Debug.WriteLine($"[RUNTIME] GetNextTask returned Nothing - all tasks completed")
+                Console.WriteLine($"[MOTORE] GetNextTask returned Nothing - all tasks completed")
                 Exit While
             End If
 
-            Console.WriteLine($"[RUNTIME] Iteration {iterationCount}: Selected node Id={currTaskNode.Id}, State={currTaskNode.State}, IsEmpty={currTaskNode.IsEmpty()}")
-            System.Diagnostics.Debug.WriteLine($"[RUNTIME] Iteration {iterationCount}: Selected node Id={currTaskNode.Id}, State={currTaskNode.State}, IsEmpty={currTaskNode.IsEmpty()}")
+            Console.WriteLine($"[MOTORE] Iteration {iterationCount}: Selected node Id={currTaskNode.Id}, State={currTaskNode.State}, IsEmpty={currTaskNode.IsEmpty()}")
             Dim tasks = GetResponse(currTaskNode)
 
             If tasks.Count() = 0 Then
-                Console.WriteLine($"[RUNTIME] ERROR: GetResponse returned 0 tasks for node {currTaskNode.Id}")
+                Console.WriteLine($"[MOTORE] ERROR: GetResponse returned 0 tasks for node {currTaskNode.Id}")
             End If
 
             Dim isAterminationResponse As Boolean = ExecuteResponse(tasks, currTaskNode, taskInstance)
 
             If isAterminationResponse Then
+                Console.WriteLine($"[MOTORE] Termination response detected, marking as failed")
                 MarkAsAcquisitionFailed(currTaskNode)
                 Continue While
             End If
 
             ' Per Chat Simulator: fermati dopo il primo response, l'input arriverà via HTTP
+            Console.WriteLine($"[MOTORE] First response executed, waiting for user input")
             Exit While
         End While
 
-        If taskInstance.SuccessResponse IsNot Nothing Then
-            ExecuteResponse(taskInstance.SuccessResponse.Tasks, Nothing, taskInstance)
+        ' ✅ Check if all tasks are completed and execute SuccessResponse
+        Dim allCompleted = taskInstance.TaskList.All(Function(t) t.State = DialogueState.Success OrElse t.State = DialogueState.AcquisitionFailed)
+        If allCompleted Then
+            Console.WriteLine($"[MOTORE] All tasks completed, checking SuccessResponse")
+            If taskInstance.SuccessResponse IsNot Nothing Then
+                Console.WriteLine($"[MOTORE] Executing SuccessResponse")
+                ExecuteResponse(taskInstance.SuccessResponse.Tasks, Nothing, taskInstance)
+            Else
+                Console.WriteLine($"[MOTORE] No SuccessResponse defined")
+            End If
+        Else
+            Console.WriteLine($"[MOTORE] Tasks not all completed yet, skipping SuccessResponse")
         End If
     End Sub
 
@@ -74,18 +84,7 @@ Public Class Motore
     ''' lo step di dialogo dipende dallo stato di acquisizione del task (start, noMatch, NoInput, ecc)
     ''' </summary>
     Private Function GetResponse(currTaskNode As TaskNode) As IEnumerable(Of ITask)
-        Console.WriteLine($"[RUNTIME] GetResponse: node Id={currTaskNode.Id}, State={currTaskNode.State}, Steps.Count={currTaskNode.Steps.Count}")
-        System.Diagnostics.Debug.WriteLine($"[RUNTIME] GetResponse: node Id={currTaskNode.Id}, State={currTaskNode.State}, Steps.Count={currTaskNode.Steps.Count}")
-
-        ' Log strategico: mostra tutti gli step disponibili e i loro Type
-        If currTaskNode.Steps.Count > 0 Then
-            Dim stepTypes = String.Join(", ", currTaskNode.Steps.Select(Function(s) s.Type.ToString()))
-            Console.WriteLine($"[RUNTIME] Available step types: {stepTypes}")
-            System.Diagnostics.Debug.WriteLine($"[RUNTIME] Available step types: {stepTypes}")
-        Else
-            Console.WriteLine($"[RUNTIME] ERROR: Node {currTaskNode.Id} has NO steps!")
-            System.Diagnostics.Debug.WriteLine($"[RUNTIME] ERROR: Node {currTaskNode.Id} has NO steps!")
-        End If
+        Console.WriteLine($"[MOTORE] GetResponse: node Id={currTaskNode.Id}, State={currTaskNode.State}, Steps.Count={currTaskNode.Steps.Count}")
 
         Dim matchingSteps = currTaskNode.Steps.Where(Function(s) s.Type = currTaskNode.State).ToList()
 
@@ -97,8 +96,7 @@ Public Class Motore
         End If
 
         Dim dStep = matchingSteps.Single()
-        Console.WriteLine($"[RUNTIME] Found step Type={dStep.Type} for node {currTaskNode.Id}, Escalations.Count={If(dStep.Escalations IsNot Nothing, dStep.Escalations.Count, 0)}")
-        System.Diagnostics.Debug.WriteLine($"[RUNTIME] Found step Type={dStep.Type} for node {currTaskNode.Id}, Escalations.Count={If(dStep.Escalations IsNot Nothing, dStep.Escalations.Count, 0)}")
+        Console.WriteLine($"[MOTORE] Found step Type={dStep.Type}, Escalations.Count={If(dStep.Escalations IsNot Nothing, dStep.Escalations.Count, 0)}")
 
         ' ❌ ERRORE BLOCCANTE: nessun fallback per escalation vuote
         Select Case currTaskNode.State
@@ -128,7 +126,7 @@ Public Class Motore
             Throw New InvalidOperationException($"Invalid task model: Task {currTaskNode.Id} has escalation[{escalationCounter}] with no tasks. Tasks are mandatory.")
         End If
 
-        Console.WriteLine($"[RUNTIME] GetResponse: returning {escalation.Tasks.Count} tasks from escalation[{escalationCounter}] for node {currTaskNode.Id}")
+        Console.WriteLine($"[MOTORE] GetResponse: returning {escalation.Tasks.Count} tasks from escalation[{escalationCounter}]")
         Return escalation.Tasks
     End Function
 
@@ -136,22 +134,24 @@ Public Class Motore
     ''' Eseguire il response significa eseguire la serie di tasks di cui è composto
     ''' </summary>
     Private Function ExecuteResponse(tasks As IEnumerable(Of ITask), currTaskNode As TaskNode, taskInstance As TaskInstance) As Boolean
-        Console.WriteLine($"[RUNTIME] ExecuteResponse: {tasks.Count()} tasks to execute")
-        System.Diagnostics.Debug.WriteLine($"[RUNTIME] ExecuteResponse: {tasks.Count()} tasks to execute")
+        Console.WriteLine($"[MOTORE] ExecuteResponse: {tasks.Count()} tasks to execute")
 
         Dim taskIndex As Integer = 0
         For Each task As ITask In tasks
             taskIndex += 1
-            Console.WriteLine($"[RUNTIME] Executing task {taskIndex}/{tasks.Count()}: {task.GetType().Name}")
-            System.Diagnostics.Debug.WriteLine($"[RUNTIME] Executing task {taskIndex}/{tasks.Count()}: {task.GetType().Name}")
+            Console.WriteLine($"[MOTORE] Executing task {taskIndex}/{tasks.Count()}: {task.GetType().Name}")
             task.Execute(currTaskNode, taskInstance, Sub(msg As String)
-                                                         Console.WriteLine($"[RUNTIME] Message: {msg}")
+                                                         Console.WriteLine($"[MOTORE] Message emitted: {msg}")
                                                          RaiseEvent MessageToShow(Me, New MessageEventArgs(msg))
                                                      End Sub)
         Next
         If currTaskNode IsNot Nothing Then IncrementCounter(currTaskNode)
 
-        Return Utils.HasExitCondition(tasks)
+        Dim hasExitCondition = Utils.HasExitCondition(tasks)
+        If hasExitCondition Then
+            Console.WriteLine($"[MOTORE] ExecuteResponse: exit condition detected")
+        End If
+        Return hasExitCondition
     End Function
 
     ''' <summary>
@@ -195,42 +195,41 @@ Public Class Motore
 
 
     Private Function GetNextTask(taskInstance As TaskInstance) As TaskNode
-        Console.WriteLine($"[RUNTIME] GetNextTask: checking {taskInstance.TaskList.Count} main nodes")
-        System.Diagnostics.Debug.WriteLine($"[RUNTIME] GetNextTask: checking {taskInstance.TaskList.Count} main nodes")
+        Console.WriteLine($"[MOTORE] GetNextTask: checking {taskInstance.TaskList.Count} main nodes")
 
         For Each mainTask As TaskNode In taskInstance.TaskList.Where(Function(dt) dt.State <> DialogueState.AcquisitionFailed)
             Dim isEmpty = mainTask.IsEmpty()
-            Console.WriteLine($"[RUNTIME] Checking main node: Id={mainTask.Id}, State={mainTask.State}, IsEmpty={isEmpty}")
-            System.Diagnostics.Debug.WriteLine($"[RUNTIME] Checking main node: Id={mainTask.Id}, State={mainTask.State}, IsEmpty={isEmpty}")
+            Console.WriteLine($"[MOTORE] Checking main node: Id={mainTask.Id}, State={mainTask.State}, IsEmpty={isEmpty}, IsFilled={mainTask.IsFilled}")
 
             If isEmpty Then
-                Console.WriteLine($"[RUNTIME] Selected empty main node: {mainTask.Id}")
-                System.Diagnostics.Debug.WriteLine($"[RUNTIME] Selected empty main node: {mainTask.Id}")
+                Console.WriteLine($"[MOTORE] Selected empty main node: {mainTask.Id}")
                 Return mainTask
             End If
 
             If {DialogueState.Confirmation, DialogueState.Invalid, DialogueState.NoMatch, DialogueState.NoInput}.Contains(mainTask.State) Then
-                Console.WriteLine($"[RUNTIME] Selected main node with state {mainTask.State}: {mainTask.Id}")
-                System.Diagnostics.Debug.WriteLine($"[RUNTIME] Selected main node with state {mainTask.State}: {mainTask.Id}")
+                Console.WriteLine($"[MOTORE] Selected main node with state {mainTask.State}: {mainTask.Id}")
                 Return mainTask
             End If
 
+            ' ✅ Check for Success state - this means task is completed
+            If mainTask.State = DialogueState.Success Then
+                Console.WriteLine($"[MOTORE] Main node {mainTask.Id} is in Success state, checking subtasks")
+            End If
+
             For Each subTask As TaskNode In mainTask.SubTasks.Where(Function(st) st.State <> DialogueState.AcquisitionFailed)
+                Console.WriteLine($"[MOTORE] Checking subTask: Id={subTask.Id}, State={subTask.State}, IsEmpty={subTask.IsEmpty()}, IsFilled={subTask.IsFilled}")
                 If subTask.IsEmpty() Then
-                    Console.WriteLine($"[RUNTIME] Selected empty subTask: {subTask.Id} (parent: {mainTask.Id})")
-                    System.Diagnostics.Debug.WriteLine($"[RUNTIME] Selected empty subTask: {subTask.Id} (parent: {mainTask.Id})")
+                    Console.WriteLine($"[MOTORE] Selected empty subTask: {subTask.Id} (parent: {mainTask.Id})")
                     Return subTask
                 End If
                 If {DialogueState.Confirmation, DialogueState.Invalid, DialogueState.NoMatch, DialogueState.NoInput}.Contains(subTask.State) Then
-                    Console.WriteLine($"[RUNTIME] Selected subTask with state {subTask.State}: {subTask.Id} (parent: {mainTask.Id})")
-                    System.Diagnostics.Debug.WriteLine($"[RUNTIME] Selected subTask with state {subTask.State}: {subTask.Id} (parent: {mainTask.Id})")
+                    Console.WriteLine($"[MOTORE] Selected subTask with state {subTask.State}: {subTask.Id} (parent: {mainTask.Id})")
                     Return subTask
                 End If
             Next
         Next
 
-        Console.WriteLine($"[RUNTIME] GetNextTask: No suitable node found")
-        System.Diagnostics.Debug.WriteLine($"[RUNTIME] GetNextTask: No suitable node found")
+        Console.WriteLine($"[MOTORE] GetNextTask: No suitable node found")
         Return Nothing
     End Function
 
@@ -268,56 +267,77 @@ Public Class Motore
     ''' </summary>
 
     Public Sub SetState(parseResult As ParseResult, currentState As DialogueState, currTaskNode As TaskNode)
-        ' TODO: Implementare la logica completa basata su Motori.MD
+        Console.WriteLine($"[MOTORE] SetState CALLED: parseResult={parseResult.Result}, currentState={currentState}, nodeId={currTaskNode.Id}, IsSubData={currTaskNode.IsSubData}")
 
         Select Case parseResult.Result
             Case ParseResultType.Corrected
+                Console.WriteLine($"[MOTORE] SetState: Corrected - state remains Confirmation")
                 'vedi summary
 
             Case ParseResultType.Match
-                'vedi summary
+                Console.WriteLine($"[MOTORE] SetState: Match detected")
                 Dim taskNode = currTaskNode
-                If taskNode.IsSubData Then taskNode = currTaskNode.ParentData
+                If taskNode.IsSubData Then
+                    Console.WriteLine($"[MOTORE] SetState: Current node is SubData, switching to ParentData")
+                    taskNode = currTaskNode.ParentData
+                End If
 
+                Console.WriteLine($"[MOTORE] SetState: Checking if taskNode IsFilled: {taskNode.IsFilled}")
                 If taskNode.IsFilled Then
+                    Console.WriteLine($"[MOTORE] SetState: TaskNode is FILLED")
+                    Console.WriteLine($"[MOTORE] SetState: RequiresConfirmation={taskNode.RequiresConfirmation}, RequiresValidation={taskNode.RequiresValidation}")
                     ' Nota: se il currentNode è un subdata allora necessariamente il parentadata non era filled al turno precedente ma può esserlo diventato ora e se ne può chiedere la conferma
                     If taskNode.RequiresConfirmation Then
                         taskNode.State = DialogueState.Confirmation
+                        Console.WriteLine($"[MOTORE] SetState: Setting state to Confirmation")
                     ElseIf taskNode.RequiresValidation Then
                         taskNode.State = DialogueState.Invalid
+                        Console.WriteLine($"[MOTORE] SetState: Setting state to Invalid")
                     Else
                         taskNode.State = DialogueState.Success
+                        Console.WriteLine($"[MOTORE] SetState: ✅ Setting state to SUCCESS")
                     End If
                 Else
+                    Console.WriteLine($"[MOTORE] SetState: TaskNode is NOT filled, keeping state as Start")
                     ' MainTask parzialmente compilato: mantieni lo stato a Start
                     ' GetNextTask restituirà il prossimo subTask vuoto
                     taskNode.State = DialogueState.Start
                 End If
 
             Case ParseResultType.Confirmed
+                Console.WriteLine($"[MOTORE] SetState: Confirmed")
+                Console.WriteLine($"[MOTORE] SetState: RequiresValidation={currTaskNode.RequiresValidation}")
                 If currTaskNode.RequiresValidation Then
                     currTaskNode.State = DialogueState.Invalid
-
+                    Console.WriteLine($"[MOTORE] SetState: Setting state to Invalid")
                 Else
                     currTaskNode.State = DialogueState.Success
+                    Console.WriteLine($"[MOTORE] SetState: ✅ Setting state to SUCCESS")
                 End If
 
             Case ParseResultType.NotConfirmed
                 currTaskNode.State = DialogueState.NotConfirmed
+                Console.WriteLine($"[MOTORE] SetState: Setting state to NotConfirmed")
 
             Case ParseResultType.NoMatch
                 currTaskNode.State = DialogueState.NoMatch
+                Console.WriteLine($"[MOTORE] SetState: Setting state to NoMatch")
 
             Case ParseResultType.NoInput
                 currTaskNode.State = DialogueState.NoInput
+                Console.WriteLine($"[MOTORE] SetState: Setting state to NoInput")
 
             Case ParseResultType.IrrelevantMatch
                 currTaskNode.State = DialogueState.IrrelevantMatch
+                Console.WriteLine($"[MOTORE] SetState: Setting state to IrrelevantMatch")
 
             Case Else
+                Console.WriteLine($"[MOTORE] SetState: ⚠️ Unknown ParseResultType: {parseResult.Result}")
                 Debug.Assert(False, "Stato non gestito")
                 'non cambia lo stato ma non dovrebbe mai arrivare qui
         End Select
+
+        Console.WriteLine($"[MOTORE] SetState COMPLETE: nodeId={currTaskNode.Id}, newState={currTaskNode.State}")
     End Sub
 
     ''' <summary>

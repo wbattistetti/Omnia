@@ -230,9 +230,7 @@ Public Class SessionManager
         ' Qui assumiamo che le traduzioni siano già state validate
 
         SyncLock _lock
-            Console.WriteLine($"[API] CreateTaskSession CALLED: {sessionId}, Language={language}")
-            System.Diagnostics.Debug.WriteLine($"[API] CreateTaskSession CALLED: {sessionId}, Language={language}")
-            Console.Out.Flush()
+            Console.WriteLine($"[SESSION] CreateTaskSession: sessionId={sessionId}, Language={language}")
             Dim taskEngine As New Motore()
             Dim session As New TaskSession() With {
                 .SessionId = sessionId,
@@ -245,6 +243,7 @@ Public Class SessionManager
             }
 
             AddHandler taskEngine.MessageToShow, Sub(sender, e)
+                                                     Console.WriteLine($"[SESSION] MessageToShow event: {e.Message}")
                                                      Dim msgId = $"{sessionId}-{DateTime.UtcNow.Ticks}-{Guid.NewGuid().ToString().Substring(0, 8)}"
                                                      Dim msg = New With {
                            .id = msgId,
@@ -270,19 +269,17 @@ Public Class SessionManager
 
             _taskSessions(sessionId) = session
 
-            Console.WriteLine($"[API] Starting runtime execution for session: {sessionId}")
-            System.Diagnostics.Debug.WriteLine($"[API] Starting runtime execution for session: {sessionId}")
-            Console.Out.Flush()
+            Console.WriteLine($"[SESSION] Starting runtime execution for session: {sessionId}")
             Dim backgroundTask = System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
                                                                      Try
                                                                          Await System.Threading.Tasks.Task.Delay(100)
                                                                          Dim taskInstance = ConvertRuntimeTaskToTaskInstance(session.RuntimeTask, session.Translations)
-                                                                         Console.WriteLine($"[RUNTIME] Executing task for session: {sessionId}, TaskList.Count={taskInstance.TaskList.Count}")
-                                                                         System.Diagnostics.Debug.WriteLine($"[RUNTIME] Executing task for session: {sessionId}, TaskList.Count={taskInstance.TaskList.Count}")
-                                                                         Console.Out.Flush()
+                                                                         Console.WriteLine($"[SESSION] Converted to TaskInstance: TaskList.Count={taskInstance.TaskList.Count}")
                                                                          taskEngine.ExecuteTask(taskInstance)
 
-                                                                         Dim allCompleted = False
+                                                                         ' ✅ Check if all tasks are completed
+                                                                         Dim allCompleted = taskInstance.TaskList.All(Function(t) t.State = DialogueState.Success OrElse t.State = DialogueState.AcquisitionFailed)
+                                                                         Console.WriteLine($"[SESSION] All tasks completed: {allCompleted}")
                                                                          If allCompleted Then
                                                                              Dim completeData = New With {
                                                                                  .success = True,
@@ -291,11 +288,8 @@ Public Class SessionManager
                                                                              session.EventEmitter.Emit("complete", completeData)
                                                                          End If
                                                                      Catch ex As Exception
-                                                                         Console.WriteLine($"[API] ERROR: Runtime execution error for session {sessionId}: {ex.GetType().Name} - {ex.Message}")
-                                                                         Console.WriteLine($"[API] ERROR: Stack trace: {ex.StackTrace}")
-                                                                         System.Diagnostics.Debug.WriteLine($"[API] ERROR: Runtime execution error for session {sessionId}: {ex.GetType().Name} - {ex.Message}")
-                                                                         System.Diagnostics.Debug.WriteLine($"[API] ERROR: Stack trace: {ex.StackTrace}")
-                                                                         Console.Out.Flush()
+                                                                         Console.WriteLine($"[SESSION] ERROR: Runtime execution error: {ex.GetType().Name} - {ex.Message}")
+                                                                         Console.WriteLine($"[SESSION] ERROR: Stack trace: {ex.StackTrace}")
                                                                          Dim errorData = New With {
                                                                              .error = ex.Message,
                                                                              .timestamp = DateTime.UtcNow.ToString("O")
@@ -426,6 +420,8 @@ Public Class SessionManager
             Throw New ArgumentException("Translations dictionary cannot be Nothing or empty. TaskInstance requires translations for runtime execution.", NameOf(translations))
         End If
 
+        Console.WriteLine($"[SESSION] ConvertRuntimeTaskToTaskInstance: runtimeTaskId={runtimeTask.Id}, HasSubTasks={runtimeTask.HasSubTasks()}")
+
         Dim taskInstance As New TaskEngine.TaskInstance() With {
             .Id = runtimeTask.Id,
             .Label = "",
@@ -438,6 +434,7 @@ Public Class SessionManager
 
         Dim rootNode = ConvertRuntimeTaskToTaskNode(runtimeTask)
         taskInstance.TaskList.Add(rootNode)
+        Console.WriteLine($"[SESSION] ConvertRuntimeTaskToTaskInstance: rootNodeId={rootNode.Id}, Steps.Count={rootNode.Steps.Count}, SubTasks.Count={rootNode.SubTasks.Count}")
 
         Return taskInstance
     End Function

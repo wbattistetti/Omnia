@@ -75,15 +75,16 @@ export default function DDEBubbleChat({
 
     // ✅ Create a unique key for this task/project combination
     const sessionKey = `${task.id}-${projectId}`;
+    console.log('[DDEBubbleChat] Computed sessionKey:', sessionKey, 'lastSessionKeyRef:', lastSessionKeyRef.current);
 
     // ✅ Prevent duplicate session starts for the same task/project combination
     if (lastSessionKeyRef.current === sessionKey) {
-      console.log('[DDEBubbleChat] ⚠️ Session already started for this task/project combination, skipping duplicate call', {
-        sessionKey,
-        lastSessionKey: lastSessionKeyRef.current
-      });
+      console.log('[DDEBubbleChat] ⚠️ Session already started for this task/project combination, skipping');
       return;
     }
+
+    lastSessionKeyRef.current = sessionKey;
+    console.log('[DDEBubbleChat] ✅ Starting new session for key:', sessionKey);
 
     // ✅ Prevent multiple simultaneous session starts
     if (sessionStartingRef.current) {
@@ -300,11 +301,20 @@ export default function DDEBubbleChat({
         // Handle waiting for input
         eventSource.addEventListener('waitingForInput', (e: MessageEvent) => {
           try {
+            console.log('[DDEBubbleChat] waitingForInput event received');
+            console.log('[DDEBubbleChat] waitingForInput raw data:', e.data);
+            console.log('[DDEBubbleChat] waitingForInput data type:', typeof e.data);
+            console.log('[DDEBubbleChat] waitingForInput data length:', e.data?.length);
+            console.log('[DDEBubbleChat] waitingForInput data preview:', e.data?.substring(0, 100));
+            console.log('[DDEBubbleChat] waitingForInput data char codes:', Array.from(e.data || '').slice(0, 100).map(c => c.charCodeAt(0)));
+
             const data = JSON.parse(e.data);
             console.log('[DDEBubbleChat] Backend waiting for input:', data);
             setIsWaitingForInput(true);
           } catch (error) {
             console.error('[DDEBubbleChat] Error parsing waitingForInput', error);
+            console.error('[DDEBubbleChat] Raw data that failed:', JSON.stringify(e.data));
+            console.error('[DDEBubbleChat] Full event object:', e);
           }
         });
 
@@ -370,9 +380,9 @@ export default function DDEBubbleChat({
         setMessages([]);
         setBackendError(error instanceof Error ? error.message : 'Failed to connect to backend server. Is Ruby server running on port 3101?');
         setIsWaitingForInput(false);
-        // ✅ Reset flags on error to allow retry
+        // ✅ Reset sessionStartingRef on error to allow retry
         sessionStartingRef.current = false;
-        lastSessionKeyRef.current = null;
+        // ❌ NON resettare lastSessionKeyRef - deve persistere per bloccare duplicati
       }
     };
 
@@ -380,9 +390,10 @@ export default function DDEBubbleChat({
 
     // Cleanup on unmount
     return () => {
-      // ✅ Reset flags on cleanup to allow new session when dependencies change
+      // ✅ Reset sessionStartingRef (per permettere nuove sessioni)
       sessionStartingRef.current = false;
-      lastSessionKeyRef.current = null;
+      // ❌ NON resettare lastSessionKeyRef qui - deve persistere per bloccare duplicati
+      // Il ref verrà resettato solo quando task.id o projectId cambiano realmente
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
