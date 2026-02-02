@@ -63,11 +63,25 @@ Namespace Models
         <JsonProperty("taskId")>
         Public Property TaskId As String
 
+        ''' <summary>
+        ''' ✅ NUOVO: ID dell'istanza del task (taskInstanceId)
+        ''' Concettualmente separato da TaskTree: l'identità appartiene all'istanza, non all'albero.
+        ''' Se non presente, viene usato taskId come fallback.
+        ''' </summary>
+        <JsonProperty("taskInstanceId")>
+        Public Property TaskInstanceId As String
+
         <JsonProperty("projectId")>
         Public Property ProjectId As String
 
         <JsonProperty("translations")>
         Public Property Translations As Dictionary(Of String, String)
+
+        ''' <summary>
+        ''' Lingua della sessione (es. "it-IT", "en-US") - OBBLIGATORIA
+        ''' </summary>
+        <JsonProperty("language")>
+        Public Property Language As String
 
         ''' <summary>
         ''' ✅ NUOVO: TaskTree completo (working copy) dalla memoria frontend

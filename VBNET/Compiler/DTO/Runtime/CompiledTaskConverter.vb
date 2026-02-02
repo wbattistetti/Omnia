@@ -30,15 +30,10 @@ Public Class CompiledTaskConverter
         Dim jObject As JObject = JObject.Load(reader)
 
         ' Estrai il TaskType e convertilo in enum
-        ' ✅ FIX: Cerca "TaskType" invece di "templateId"
+        ' ❌ ERRORE BLOCCANTE: TaskType OBBLIGATORIO, nessun fallback
         Dim taskTypeToken = jObject("TaskType")
         If taskTypeToken Is Nothing Then
-            ' Fallback: prova con "templateId" per compatibilità
-            taskTypeToken = jObject("templateId")
-        End If
-
-        If taskTypeToken Is Nothing Then
-            Throw New JsonException("Missing 'TaskType' or 'templateId' field in CompiledTask JSON")
+            Throw New JsonException("Missing 'TaskType' field in CompiledTask JSON. TaskType is mandatory and cannot be missing.")
         End If
 
         Dim taskType As TaskTypes
@@ -86,8 +81,9 @@ Public Class CompiledTaskConverter
     ''' Converte templateId string in TaskTypes enum
     ''' </summary>
     Private Function ConvertStringToTaskType(templateId As String) As TaskTypes
+        ' ❌ ERRORE BLOCCANTE: templateId OBBLIGATORIO, nessun fallback
         If String.IsNullOrEmpty(templateId) Then
-            Return TaskTypes.SayMessage
+            Throw New JsonException("templateId cannot be null or empty when converting to TaskType. templateId is mandatory.")
         End If
 
         Dim normalized = templateId.Trim().ToLower()
@@ -106,8 +102,8 @@ Public Class CompiledTaskConverter
             Case "classifyproblem", "problemclassification"
                 Return TaskTypes.ClassifyProblem
             Case Else
-                Console.WriteLine($"⚠️ [CompiledTaskConverter] Unknown templateId: '{templateId}', defaulting to SayMessage")
-                Return TaskTypes.SayMessage
+                ' ❌ ERRORE BLOCCANTE: tipo sconosciuto, nessun fallback
+                Throw New JsonException($"Unknown templateId: '{templateId}'. Cannot convert to TaskType. Every templateId must map to a valid TaskType.")
         End Select
     End Function
 End Class

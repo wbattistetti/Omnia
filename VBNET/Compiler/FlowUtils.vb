@@ -24,19 +24,37 @@ Module FlowUtils
     End Function
 
     ''' <summary>
-    ''' Ottiene un nodo per ID
+    ''' Ottiene un nodo per ID - ERRORE BLOCCANTE se non trovato o duplicato
     ''' </summary>
     <Extension>
     Public Function GetNodeById(flow As Flow, nodeId As String) As FlowNode
-        Return flow.Nodes.FirstOrDefault(Function(n) n.Id = nodeId)
+        If String.IsNullOrEmpty(nodeId) Then
+            Throw New ArgumentException("nodeId cannot be null or empty.", NameOf(nodeId))
+        End If
+        Dim matchingNodes = flow.Nodes.Where(Function(n) n.Id = nodeId).ToList()
+        If matchingNodes.Count = 0 Then
+            Throw New InvalidOperationException($"Node with ID '{nodeId}' not found in flow. Every node reference must be valid.")
+        ElseIf matchingNodes.Count > 1 Then
+            Throw New InvalidOperationException($"Node with ID '{nodeId}' appears {matchingNodes.Count} times in flow. Each node ID must be unique.")
+        End If
+        Return matchingNodes.Single()
     End Function
 
     ''' <summary>
-    ''' Ottiene un task per ID
+    ''' Ottiene un task per ID - ERRORE BLOCCANTE se non trovato o duplicato
     ''' </summary>
     <Extension>
     Public Function GetTaskById(flow As Flow, taskId As String) As Task
-        Return flow.Tasks.FirstOrDefault(Function(t) t.Id = taskId)
+        If String.IsNullOrEmpty(taskId) Then
+            Throw New ArgumentException("taskId cannot be null or empty.", NameOf(taskId))
+        End If
+        Dim matchingTasks = flow.Tasks.Where(Function(t) t.Id = taskId).ToList()
+        If matchingTasks.Count = 0 Then
+            Throw New InvalidOperationException($"Task with ID '{taskId}' not found in flow. Every task reference must be valid.")
+        ElseIf matchingTasks.Count > 1 Then
+            Throw New InvalidOperationException($"Task with ID '{taskId}' appears {matchingTasks.Count} times in flow. Each task ID must be unique.")
+        End If
+        Return matchingTasks.Single()
     End Function
 
     ''' <summary>

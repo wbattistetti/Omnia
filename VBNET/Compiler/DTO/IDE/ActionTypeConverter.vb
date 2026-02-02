@@ -81,9 +81,8 @@ Public Class TaskTypeConverter
                 If Integer.TryParse(normalized, intValue) Then
                     Return intValue
                 End If
-                ' Default to SayMessage if unknown
-                Console.WriteLine($"⚠️ [TaskTypeConverter] Unknown task string: '{actionString}', defaulting to SayMessage (1)")
-                Return CInt(TaskTypes.SayMessage)
+                ' ❌ ERRORE BLOCCANTE: tipo sconosciuto, nessun fallback
+                Throw New InvalidOperationException($"Unknown action string: '{actionString}'. Cannot convert to TaskType. Every action string must map to a valid TaskType.")
         End Select
     End Function
 End Class

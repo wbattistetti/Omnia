@@ -101,7 +101,14 @@ Public Class TaskCompiler
                             For Each itask As ITask In escalation.Tasks
                                 If TypeOf itask Is MessageTask Then
                                     Dim msgTask As MessageTask = DirectCast(itask, MessageTask)
-                                    ValidatePlaceholders(msgTask.Text, runtimeTask, errors)
+
+                                    ' ❌ ERRORE: TextKey obbligatorio
+                                    If String.IsNullOrWhiteSpace(msgTask.TextKey) Then
+                                        errors.Add($"Task '{runtimeTask.Id}': MessageTask has empty or missing TextKey. TextKey is mandatory and cannot be empty.")
+                                    End If
+
+                                    ' ✅ Valida placeholder nel testo (dopo risoluzione a runtime)
+                                    ' Nota: il testo non è ancora disponibile a compile-time, quindi validiamo solo la struttura
                                 End If
                             Next
                         End If

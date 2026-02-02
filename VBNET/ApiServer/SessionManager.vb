@@ -66,12 +66,28 @@ End Class
 Public Class TaskSession
     Public Property SessionId As String
     Public Property RuntimeTask As Compiler.RuntimeTask
+    Public Property Language As String
     Public Property Translations As Dictionary(Of String, String)
     Public Property TaskEngine As Motore
     Public Property Messages As New List(Of Object)
     Public Property EventEmitter As EventEmitter
     Public Property IsWaitingForInput As Boolean
     Public Property WaitingForInputData As Object
+End Class
+
+''' <summary>
+''' Risultato della validazione traduzioni
+''' </summary>
+Public Class TranslationValidationResult
+    Public Property IsValid As Boolean
+    Public Property MissingKeys As List(Of String)
+    Public Property ErrorMessage As String
+
+    Public Sub New(isValid As Boolean, missingKeys As List(Of String), errorMessage As String)
+        Me.IsValid = isValid
+        Me.MissingKeys = If(missingKeys, New List(Of String)())
+        Me.ErrorMessage = errorMessage
+    End Sub
 End Class
 
 ''' <summary>
@@ -197,16 +213,31 @@ Public Class SessionManager
     Public Shared Function CreateTaskSession(
         sessionId As String,
         runtimeTask As Compiler.RuntimeTask,
+        language As String,
         translations As Dictionary(Of String, String)
     ) As TaskSession
+        ' ❌ ERRORE BLOCCANTE: lingua OBBLIGATORIA
+        If String.IsNullOrWhiteSpace(language) Then
+            Throw New ArgumentException("Language cannot be null, empty, or whitespace. Language is mandatory.", NameOf(language))
+        End If
+
+        ' ❌ ERRORE BLOCCANTE: traduzioni OBBLIGATORIE
+        If translations Is Nothing OrElse translations.Count = 0 Then
+            Throw New ArgumentException("Translations dictionary cannot be Nothing or empty. Translations are mandatory.", NameOf(translations))
+        End If
+
+        ' ✅ NOTA: La validazione traduzioni contro il grafo deve essere fatta PRIMA di chiamare questa funzione
+        ' Qui assumiamo che le traduzioni siano già state validate
+
         SyncLock _lock
-            Console.WriteLine($"[API] CreateTaskSession CALLED: {sessionId}")
-            System.Diagnostics.Debug.WriteLine($"[API] CreateTaskSession CALLED: {sessionId}")
+            Console.WriteLine($"[API] CreateTaskSession CALLED: {sessionId}, Language={language}")
+            System.Diagnostics.Debug.WriteLine($"[API] CreateTaskSession CALLED: {sessionId}, Language={language}")
             Console.Out.Flush()
             Dim taskEngine As New Motore()
             Dim session As New TaskSession() With {
                 .SessionId = sessionId,
                 .RuntimeTask = runtimeTask,
+                .Language = language.Trim(),
                 .Translations = translations,
                 .EventEmitter = New EventEmitter(),
                 .TaskEngine = taskEngine,
@@ -301,13 +332,104 @@ Public Class SessionManager
     End Sub
 
     ''' <summary>
+    ''' Raccoglie tutte le chiavi di traduzione usate nel grafo
+    ''' </summary>
+    Private Shared Function CollectTranslationKeys(runtimeTask As Compiler.RuntimeTask) As HashSet(Of String)
+        Dim keys As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        CollectTranslationKeysRecursive(runtimeTask, keys)
+        Return keys
+    End Function
+
+    ''' <summary>
+    ''' Raccoglie ricorsivamente tutte le chiavi di traduzione
+    ''' </summary>
+    Private Shared Sub CollectTranslationKeysRecursive(runtimeTask As Compiler.RuntimeTask, keys As HashSet(Of String))
+        ' ✅ Itera tutti gli step e escalation per trovare MessageTask
+        If runtimeTask.Steps IsNot Nothing Then
+            For Each dstep As TaskEngine.DialogueStep In runtimeTask.Steps
+                If dstep.Escalations IsNot Nothing Then
+                    For Each escalation As TaskEngine.Escalation In dstep.Escalations
+                        If escalation.Tasks IsNot Nothing Then
+                            For Each itask As ITask In escalation.Tasks
+                                If TypeOf itask Is MessageTask Then
+                                    Dim msgTask As MessageTask = DirectCast(itask, MessageTask)
+                                    If Not String.IsNullOrWhiteSpace(msgTask.TextKey) Then
+                                        keys.Add(msgTask.TextKey)
+                                    End If
+                                End If
+                            Next
+                        End If
+                    Next
+                End If
+            Next
+        End If
+
+        ' ✅ Ricorsivo per subTasks
+        If runtimeTask.SubTasks IsNot Nothing Then
+            For Each subTask As Compiler.RuntimeTask In runtimeTask.SubTasks
+                CollectTranslationKeysRecursive(subTask, keys)
+            Next
+        End If
+    End Sub
+
+    ''' <summary>
+    ''' Valida che tutte le chiavi usate nel grafo siano presenti nel dizionario traduzioni
+    ''' </summary>
+    Public Shared Function ValidateTranslations(
+        runtimeTask As Compiler.RuntimeTask,
+        translations As Dictionary(Of String, String)
+    ) As TranslationValidationResult
+        If runtimeTask Is Nothing Then
+            Return New TranslationValidationResult(False, Nothing, "RuntimeTask cannot be Nothing")
+        End If
+
+        If translations Is Nothing OrElse translations.Count = 0 Then
+            Return New TranslationValidationResult(False, Nothing, "Translations dictionary cannot be Nothing or empty")
+        End If
+
+        ' ✅ Raccogli tutte le chiavi usate nel grafo
+        Dim usedKeys = CollectTranslationKeys(runtimeTask)
+
+        If usedKeys.Count = 0 Then
+            ' Nessuna chiave usata: valido ma potrebbe essere un errore
+            Return New TranslationValidationResult(True, New List(Of String)(), Nothing)
+        End If
+
+        ' ✅ Verifica che tutte le chiavi siano presenti nel dizionario
+        Dim missingKeys As New List(Of String)()
+        For Each key In usedKeys
+            If Not translations.ContainsKey(key) Then
+                missingKeys.Add(key)
+            ElseIf String.IsNullOrWhiteSpace(translations(key)) Then
+                ' ✅ Chiave presente ma valore vuoto: anche questo è un errore
+                missingKeys.Add($"{key} (empty value)")
+            End If
+        Next
+
+        If missingKeys.Count > 0 Then
+            Dim errorMsg = $"Translation validation failed: {missingKeys.Count} missing or empty translation key(s): {String.Join(", ", missingKeys.Take(10))}"
+            If missingKeys.Count > 10 Then
+                errorMsg += $" ... and {missingKeys.Count - 10} more"
+            End If
+            Return New TranslationValidationResult(False, missingKeys, errorMsg)
+        End If
+
+        Return New TranslationValidationResult(True, New List(Of String)(), Nothing)
+    End Function
+
+    ''' <summary>
     ''' ✅ Helper: Converte RuntimeTask in TaskInstance per compatibilità con ExecuteTask
     ''' </summary>
     Private Shared Function ConvertRuntimeTaskToTaskInstance(runtimeTask As Compiler.RuntimeTask, translations As Dictionary(Of String, String)) As TaskEngine.TaskInstance
+        ' ❌ ERRORE BLOCCANTE: traduzioni OBBLIGATORIE
+        If translations Is Nothing OrElse translations.Count = 0 Then
+            Throw New ArgumentException("Translations dictionary cannot be Nothing or empty. TaskInstance requires translations for runtime execution.", NameOf(translations))
+        End If
+
         Dim taskInstance As New TaskEngine.TaskInstance() With {
             .Id = runtimeTask.Id,
             .Label = "",
-            .Translations = If(translations, New Dictionary(Of String, String)()),
+            .Translations = translations, ' ✅ Sempre presente
             .IsAggregate = False,
             .Introduction = Nothing,
             .SuccessResponse = Nothing,

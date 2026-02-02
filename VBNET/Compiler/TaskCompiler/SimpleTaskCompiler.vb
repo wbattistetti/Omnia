@@ -20,20 +20,9 @@ Public Class SimpleTaskCompiler
 
         Select Case _taskType
             Case TaskTypes.SayMessage
-                Dim sayMessageTask As New CompiledSayMessageTask()
-                ' ✅ Estrai text da task.Text (nuovo modello) o da task.Value("text") (vecchio modello)
-                Dim textValue As String = ""
-
-                ' Prova prima task.Text (proprietà diretta, nuovo modello)
-                If Not String.IsNullOrEmpty(task.Text) Then
-                    textValue = task.Text
-                ElseIf task.Value IsNot Nothing AndAlso task.Value.ContainsKey("text") Then
-                    ' Fallback: vecchio modello con text in value
-                    textValue = If(task.Value("text")?.ToString(), "")
-                End If
-
-                sayMessageTask.Text = If(String.IsNullOrEmpty(textValue), "", textValue)
-                compiledTask = sayMessageTask
+                ' ❌ ERRORE BLOCCANTE: SayMessage non è supportato nel modello rigoroso
+                ' SayMessage deve usare MessageTask con TextKey, non testo letterale
+                Throw New InvalidOperationException($"SayMessage task type is not supported in the rigorous model. Use UtteranceInterpretation with MessageTask and TextKey instead.")
 
             Case TaskTypes.ClassifyProblem
                 Dim classifyTask As New CompiledClassifyProblemTask()
@@ -75,9 +64,8 @@ Public Class SimpleTaskCompiler
                 compiledTask = transferTask
 
             Case Else
-                ' Fallback: crea SayMessage
-                Console.WriteLine($"⚠️ [COMPILER][SimpleTaskCompiler] Unknown TaskType {_taskType}, creating SayMessage fallback")
-                compiledTask = New CompiledSayMessageTask()
+                ' ❌ ERRORE BLOCCANTE: tipo task sconosciuto, nessun fallback
+                Throw New InvalidOperationException($"Unknown TaskType {_taskType}. The compiler cannot create a fallback task. Every task must have a valid, known type.")
         End Select
 
         ' Popola campi comuni

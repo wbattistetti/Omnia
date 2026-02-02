@@ -12,8 +12,13 @@ Imports Newtonsoft.Json
 ''' nodes è sempre un array: nodes: TaskNode[]
 ''' </summary>
 Public Class TaskTreeExpanded
-    <JsonProperty("id")>
-    Public Property Id As String
+    ''' <summary>
+    ''' ✅ RINOMINATO: Id → TaskInstanceId (concettualmente più corretto)
+    ''' L'identità appartiene all'istanza del task, non all'albero concettuale.
+    ''' Supporto retrocompatibilità: accetta sia "id" che "taskInstanceId" dal JSON.
+    ''' </summary>
+    <JsonProperty("taskInstanceId", Required:=Required.Default)>
+    Public Property TaskInstanceId As String
 
     <JsonProperty("label")>
     Public Property Label As String

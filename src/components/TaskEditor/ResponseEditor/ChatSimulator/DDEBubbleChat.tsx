@@ -27,6 +27,8 @@ export default function DDEBubbleChat({
   const [isWaitingForInput, setIsWaitingForInput] = React.useState(false);
   const eventSourceRef = React.useRef<EventSource | null>(null);
   const sentTextRef = React.useRef<string>('');
+  const sessionStartingRef = React.useRef<boolean>(false);
+  const lastSessionKeyRef = React.useRef<string | null>(null);
 
   // Message ID generator
   const messageIdCounter = React.useRef(0);
@@ -66,14 +68,38 @@ export default function DDEBubbleChat({
       setMessages([]);
       setBackendError(null);
       setIsWaitingForInput(false);
+      sessionStartingRef.current = false;
+      lastSessionKeyRef.current = null;
       return;
     }
+
+    // ✅ Create a unique key for this task/project combination
+    const sessionKey = `${task.id}-${projectId}`;
+
+    // ✅ Prevent duplicate session starts for the same task/project combination
+    if (lastSessionKeyRef.current === sessionKey) {
+      console.log('[DDEBubbleChat] ⚠️ Session already started for this task/project combination, skipping duplicate call', {
+        sessionKey,
+        lastSessionKey: lastSessionKeyRef.current
+      });
+      return;
+    }
+
+    // ✅ Prevent multiple simultaneous session starts
+    if (sessionStartingRef.current) {
+      console.log('[DDEBubbleChat] ⚠️ Session start already in progress, skipping duplicate call');
+      return;
+    }
+
+    // ✅ Mark this combination as started
+    lastSessionKeyRef.current = sessionKey;
 
     // Clear any existing messages when starting a new session - NO frontend logic
     setMessages([]);
     messageIdCounter.current = 0;
     setBackendError(null);
     setIsWaitingForInput(false);
+    sessionStartingRef.current = true;
 
     const baseUrl = 'http://localhost:5000'; // ✅ VB.NET backend diretto
 
@@ -87,6 +113,33 @@ export default function DDEBubbleChat({
           throw new Error('[DDEBubbleChat] TaskTree is required. Cannot start session without complete instance.');
         }
 
+        // ✅ Recupera la lingua del progetto dal database
+        let projectLanguage = 'it-IT'; // Fallback
+        if (projectId) {
+          try {
+            const projectResponse = await fetch(`/api/projects/${projectId}`);
+            if (projectResponse.ok) {
+              const project = await projectResponse.json();
+              if (project.language) {
+                // Converti formato breve (es. 'it', 'en', 'pt') a formato completo (es. 'it-IT', 'en-US', 'pt-BR')
+                const langMap: Record<string, string> = {
+                  'it': 'it-IT',
+                  'en': 'en-US',
+                  'pt': 'pt-BR',
+                  'es': 'es-ES',
+                  'fr': 'fr-FR'
+                };
+                projectLanguage = langMap[project.language] || `${project.language}-${project.language.toUpperCase()}` || 'it-IT';
+              }
+            } else {
+              console.warn(`[DDEBubbleChat] Failed to load project metadata: ${projectResponse.status}, using fallback language`);
+            }
+          } catch (error) {
+            console.error('[DDEBubbleChat] Error loading project language:', error);
+            // Usa fallback
+          }
+        }
+
         // ✅ NUOVO MODELLO: Invia TaskTree completo (working copy) invece di solo taskId
         // L'istanza in memoria è la fonte di verità, non il database
         // ✅ CRITICAL: Steps è già dictionary: { "templateId": { "start": {...}, "noMatch": {...} } }
@@ -97,10 +150,13 @@ export default function DDEBubbleChat({
 
         const requestBody = {
           taskId: task.id,  // Mantieni per compatibilità/identificazione
+          taskInstanceId: task.id, // ✅ NUOVO: ID dell'istanza del task (non parte del TaskTree concettuale)
           projectId: projectId,
+          language: projectLanguage, // ✅ Lingua del progetto dal database
           translations: translationsData,
           taskTree: {
             ...taskTree,
+            // ❌ NON aggiungere id qui - TaskTree non ha identità concettuale
             steps: stepsDict  // ✅ Dictionary: { "templateId": { "start": {...}, "noMatch": {...} } }
           }
         };
@@ -108,6 +164,9 @@ export default function DDEBubbleChat({
           url: `${baseUrl}/api/runtime/task/session/start`,
           method: 'POST',
           taskId: task.id,
+          taskInstanceId: task.id, // ✅ ID dell'istanza del task
+          projectId: projectId,
+          language: projectLanguage,
           hasTaskTree: !!taskTree,
           taskTreeNodesCount: taskTree?.nodes?.length || 0,
           // ✅ NUOVO: Mostra chiavi del dictionary invece di count array
@@ -201,6 +260,8 @@ export default function DDEBubbleChat({
         // Log connection state changes
         eventSource.onopen = () => {
           console.log('[DDEBubbleChat] ✅ SSE stream opened successfully');
+          // ✅ Reset flag when session is fully initialized
+          sessionStartingRef.current = false;
         };
 
         // Handle messages from backend
@@ -309,6 +370,9 @@ export default function DDEBubbleChat({
         setMessages([]);
         setBackendError(error instanceof Error ? error.message : 'Failed to connect to backend server. Is Ruby server running on port 3101?');
         setIsWaitingForInput(false);
+        // ✅ Reset flags on error to allow retry
+        sessionStartingRef.current = false;
+        lastSessionKeyRef.current = null;
       }
     };
 
@@ -316,6 +380,9 @@ export default function DDEBubbleChat({
 
     // Cleanup on unmount
     return () => {
+      // ✅ Reset flags on cleanup to allow new session when dependencies change
+      sessionStartingRef.current = false;
+      lastSessionKeyRef.current = null;
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
@@ -327,7 +394,7 @@ export default function DDEBubbleChat({
         }).catch(() => { });
       }
     };
-  }, [task?.id, projectId, translations]);
+  }, [task?.id, projectId]);
 
   // Clear input when sent text appears as a user message
   React.useEffect(() => {

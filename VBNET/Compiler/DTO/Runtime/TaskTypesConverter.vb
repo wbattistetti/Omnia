@@ -62,8 +62,8 @@ Public Class TaskTypesConverter
             Case "classifyproblem", "problemclassification"
                 Return TaskTypes.ClassifyProblem
             Case Else
-                Console.WriteLine($"⚠️ [TaskTypesConverter] Unknown templateId string: '{stringValue}', defaulting to SayMessage")
-                Return TaskTypes.SayMessage
+                ' ❌ ERRORE BLOCCANTE: tipo sconosciuto, nessun fallback
+                Throw New InvalidOperationException($"Unknown templateId string: '{stringValue}'. Cannot convert to TaskType. Every templateId must map to a valid TaskType.")
         End Select
     End Function
 End Class

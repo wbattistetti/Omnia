@@ -28,10 +28,8 @@ Public Class TaskCompilerFactory
                     System.Diagnostics.Debug.WriteLine($"✅ [TaskCompilerFactory] Creating SimpleTaskCompiler for taskType={taskType}")
                     _compilerCache(taskType) = New SimpleTaskCompiler(taskType)
                 Case Else
-                    ' Fallback: usa SimpleTaskCompiler con SayMessage
-                    Console.WriteLine($"⚠️ [TaskCompilerFactory] Unknown TaskType {taskType}, using SayMessage compiler as fallback")
-                    System.Diagnostics.Debug.WriteLine($"⚠️ [TaskCompilerFactory] Unknown TaskType {taskType}, using SayMessage compiler as fallback")
-                    _compilerCache(taskType) = New SimpleTaskCompiler(TaskTypes.SayMessage)
+                    ' ❌ ERRORE BLOCCANTE: tipo task sconosciuto, nessun fallback
+                    Throw New InvalidOperationException($"Unknown TaskType {taskType}. The compiler factory cannot create a fallback compiler. Every task must have a valid, known type.")
             End Select
         Else
             Console.WriteLine($"✅ [TaskCompilerFactory] Compiler found in cache for taskType={taskType}, type={_compilerCache(taskType).GetType().Name}")

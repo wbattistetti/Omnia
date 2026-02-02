@@ -6,34 +6,25 @@ Option Explicit On
 
 ''' <summary>
 ''' Task per inviare un messaggio all'utente
+''' MODELLO RIGOROSO: Usa SOLO chiavi di traduzione, nessun fallback
 ''' </summary>
 Public Class MessageTask
     Inherits TaskBase
 
     ''' <summary>
-    ''' Testo del messaggio da inviare
-    ''' </summary>
-    Public Property Text As String
-
-    ''' <summary>
-    ''' Chiave di traduzione per il testo (opzionale)
+    ''' Chiave di traduzione (GUID o nome simbolico) - OBBLIGATORIA
+    ''' NON può essere vuota, nulla o whitespace
     ''' </summary>
     Public Property TextKey As String
 
     ''' <summary>
-    ''' Costruttore
+    ''' Costruttore con chiave OBBLIGATORIA
     ''' </summary>
-    Public Sub New()
-        Text = ""
-        TextKey = ""
-    End Sub
-
-    ''' <summary>
-    ''' Costruttore con testo
-    ''' </summary>
-    Public Sub New(text As String)
-        Me.Text = text
-        Me.TextKey = ""
+    Public Sub New(textKey As String)
+        If String.IsNullOrWhiteSpace(textKey) Then
+            Throw New ArgumentException("TextKey cannot be null, empty, or whitespace. MessageTask requires a valid translation key.", NameOf(textKey))
+        End If
+        Me.TextKey = textKey
     End Sub
 
     Public Overrides ReadOnly Property Label As String
@@ -43,26 +34,52 @@ Public Class MessageTask
     End Property
 
     ''' <summary>
-    ''' Esegue il task: processa i placeholder e mostra il messaggio
+    ''' Esegue il task: risolve chiave → testo, poi processa placeholder
+    ''' ERRORE BLOCCANTE se chiave non risolvibile
     ''' </summary>
     Public Overrides Sub Execute(taskNode As TaskNode, taskInstance As TaskInstance, onMessage As Action(Of String))
-        Console.WriteLine($"[MessageTask] Execute called: Text='{Me.Text}', onMessage Is Nothing={onMessage Is Nothing}")
-
         If onMessage Is Nothing Then
-            Console.WriteLine($"[MessageTask] ERROR: onMessage is Nothing!")
-            Return
+            Throw New ArgumentNullException(NameOf(onMessage), "onMessage callback cannot be Nothing")
         End If
 
-        Dim processedText As String = ProcessPlaceholders(Me.Text, taskInstance, Nothing)
-        Console.WriteLine($"[MessageTask] Processed text: '{processedText}'")
+        ' ✅ STEP 1: Risolvi chiave → testo usando dizionario traduzioni
+        Dim text As String = ResolveTranslationKey(Me.TextKey, taskInstance)
 
-        If Not String.IsNullOrEmpty(processedText) Then
-            Console.WriteLine($"[MessageTask] Calling onMessage with: '{processedText}'")
-            onMessage(processedText)
-            Console.WriteLine($"[MessageTask] onMessage called successfully")
-        Else
-            Console.WriteLine($"[MessageTask] WARNING: Processed text is empty!")
+        ' ❌ ERRORE BLOCCANTE: nessun fallback
+        If String.IsNullOrEmpty(text) Then
+            Throw New InvalidOperationException($"Translation key '{Me.TextKey}' not found in translations dictionary for task '{taskInstance.Id}'. The session cannot continue without this translation.")
         End If
+
+        ' ✅ STEP 2: Processa placeholder nel testo tradotto
+        Dim processedText As String = ProcessPlaceholders(text, taskInstance, Nothing)
+
+        ' ❌ ERRORE BLOCCANTE: testo processato non può essere vuoto
+        If String.IsNullOrEmpty(processedText) Then
+            Throw New InvalidOperationException($"Processed text for translation key '{Me.TextKey}' is empty after placeholder resolution for task '{taskInstance.Id}'.")
+        End If
+
+        onMessage(processedText)
     End Sub
+
+    ''' <summary>
+    ''' Risolve una chiave di traduzione nel testo usando il dizionario traduzioni
+    ''' </summary>
+    Private Function ResolveTranslationKey(key As String, taskInstance As TaskInstance) As String
+        If String.IsNullOrWhiteSpace(key) Then
+            Throw New ArgumentException("Translation key cannot be null, empty, or whitespace.", NameOf(key))
+        End If
+
+        ' ✅ Lookup nel dizionario traduzioni del TaskInstance
+        If taskInstance.Translations IsNot Nothing AndAlso taskInstance.Translations.ContainsKey(key) Then
+            Dim translatedText = taskInstance.Translations(key)
+            If String.IsNullOrEmpty(translatedText) Then
+                Throw New InvalidOperationException($"Translation for key '{key}' exists but is empty in translations dictionary for task '{taskInstance.Id}'.")
+            End If
+            Return translatedText
+        End If
+
+        ' ❌ Chiave non trovata: ERRORE BLOCCANTE
+        Return Nothing
+    End Function
 End Class
 

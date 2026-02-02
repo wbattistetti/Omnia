@@ -2,6 +2,7 @@ Option Strict On
 Option Explicit On
 Imports System.IO
 Imports System.Threading
+Imports ApiServer.Helpers
 Imports ApiServer.Models
 Imports Microsoft.AspNetCore.Builder
 Imports Microsoft.AspNetCore.Hosting
@@ -135,45 +136,43 @@ Module Program
 
         ' POST /api/runtime/task/session/start - Chat Simulator diretto (solo UtteranceInterpretation)
         Console.WriteLine("🔥 REGISTERING ENDPOINT: /api/runtime/task/session/start")
+        System.Diagnostics.Debug.WriteLine("🔥 REGISTERING ENDPOINT: /api/runtime/task/session/start")
         Console.Out.Flush()
         app.MapPost("/api/runtime/task/session/start", Async Function(context As HttpContext) As Task(Of IResult)
+                                                           Console.WriteLine("═══════════════════════════════════════════════════════════════")
                                                            Console.WriteLine("🔵 [MapPost] /api/runtime/task/session/start - ENTRY POINT")
+                                                           System.Diagnostics.Debug.WriteLine("🔵 [MapPost] /api/runtime/task/session/start - ENTRY POINT")
                                                            Console.Out.Flush()
                                                            Try
                                                                Console.WriteLine("🔵 [MapPost] About to call HandleTaskSessionStart...")
+                                                               System.Diagnostics.Debug.WriteLine("🔵 [MapPost] About to call HandleTaskSessionStart...")
                                                                Console.Out.Flush()
+
                                                                Dim result = Await ApiServer.Handlers.TaskSessionHandlers.HandleTaskSessionStart(context)
+
                                                                Console.WriteLine($"🔵 [MapPost] HandleTaskSessionStart returned, result type: {If(result IsNot Nothing, result.GetType().Name, "Nothing")}")
+                                                               System.Diagnostics.Debug.WriteLine($"🔵 [MapPost] HandleTaskSessionStart returned, result type: {If(result IsNot Nothing, result.GetType().Name, "Nothing")}")
                                                                Console.Out.Flush()
-                                                               Return result
+
+                                                               ' ✅ Esegui esplicitamente l'IResult per scrivere nel context.Response
+                                                               If result IsNot Nothing Then
+                                                                   Console.WriteLine("🔵 [MapPost] Executing IResult explicitly...")
+                                                                   System.Diagnostics.Debug.WriteLine("🔵 [MapPost] Executing IResult explicitly...")
+                                                                   Console.Out.Flush()
+
+                                                                   Await result.ExecuteAsync(context)
+
+                                                                   Console.WriteLine("🔵 [MapPost] IResult executed successfully")
+                                                                   System.Diagnostics.Debug.WriteLine("🔵 [MapPost] IResult executed successfully")
+                                                                   Console.Out.Flush()
+                                                               End If
+
+                                                               Return Results.Empty
                                                            Catch ex As Exception
-                                                               Console.WriteLine("═══════════════════════════════════════════════════════════════")
-                                                               Console.WriteLine("❌ [Program] UNHANDLED EXCEPTION in /api/runtime/task/session/start")
-                                                               Console.WriteLine($"   Type: {ex.GetType().FullName}")
-                                                               Console.WriteLine($"   Message: {ex.Message}")
-                                                               Console.WriteLine($"   StackTrace: {ex.StackTrace}")
-                                                               If ex.InnerException IsNot Nothing Then
-                                                                   Console.WriteLine("   ── Inner Exception ──")
-                                                                   Console.WriteLine($"   Type: {ex.InnerException.GetType().FullName}")
-                                                                   Console.WriteLine($"   Message: {ex.InnerException.Message}")
-                                                                   Console.WriteLine($"   StackTrace: {ex.InnerException.StackTrace}")
-                                                               End If
-
-                                                               ' ✅ Se è JsonSerializationException, logga dettagli aggiuntivi
-                                                               Dim jsonEx = TryCast(ex, JsonSerializationException)
-                                                               If jsonEx IsNot Nothing Then
-                                                                   Console.WriteLine("   ── JSON Exception Details ──")
-                                                                   Console.WriteLine($"   JSON Path: {jsonEx.Path}")
-                                                                   Console.WriteLine($"   LineNumber: {jsonEx.LineNumber}")
-                                                                   Console.WriteLine($"   LinePosition: {jsonEx.LinePosition}")
-                                                               End If
-
-                                                               Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                                                               Console.WriteLine($"🔴 [MapPost] Exception: {ex}")
+                                                               System.Diagnostics.Debug.WriteLine($"🔴 [MapPost] Exception: {ex}")
                                                                Console.Out.Flush()
-                                                               Return Results.Problem(
-                                                                    detail:=$"Unhandled exception in /api/runtime/task/session/start: {ex.Message}",
-                                                                    statusCode:=500
-                                                                )
+                                                               Throw
                                                            End Try
                                                        End Function)
 
@@ -360,19 +359,8 @@ Module Program
                         .MissingMemberHandling = MissingMemberHandling.Ignore
                     })
                 Else
-                    ' Fallback: serialize and deserialize
-                    Dim compilationResultJson = JsonConvert.SerializeObject(request.CompilationResult)
-                    Console.WriteLine($"🔍 [API][OrchestratorSession] Serialized CompilationResult JSON length: {compilationResultJson.Length}")
-                    System.Diagnostics.Debug.WriteLine($"🔍 [API][OrchestratorSession] Serialized JSON length: {compilationResultJson.Length}")
-
-                    ' Log first 500 chars of JSON to see structure
-                    Console.WriteLine($"   JSON preview: {compilationResultJson.Substring(0, Math.Min(500, compilationResultJson.Length))}")
-                    System.Diagnostics.Debug.WriteLine($"   JSON preview: {compilationResultJson.Substring(0, Math.Min(500, compilationResultJson.Length))}")
-
-                    compilationResult = JsonConvert.DeserializeObject(Of Compiler.FlowCompilationResult)(compilationResultJson, New JsonSerializerSettings() With {
-                        .NullValueHandling = NullValueHandling.Ignore,
-                        .MissingMemberHandling = MissingMemberHandling.Ignore
-                    })
+                    ' ❌ ERRORE BLOCCANTE: CompilationResult OBBLIGATORIO, nessun fallback
+                    Throw New InvalidOperationException("CompilationResult is required and cannot be null. The session cannot start without a valid CompilationResult.")
                 End If
 
                 Console.WriteLine($"✅ [API][OrchestratorSession] CompilationResult deserialized: {If(compilationResult IsNot Nothing, compilationResult.TaskGroups.Count, 0)} task groups")
@@ -427,21 +415,17 @@ Module Program
                 Return Results.Problem(title:="Failed to create session", detail:=sessionEx.Message, statusCode:=500)
             End Try
 
-            ' Return response
+            ' ✅ UNIFICA: Usa CreateSuccessResponse invece di scrivere direttamente
             Dim responseObj = New With {
                 .sessionId = sessionId,
                 .timestamp = DateTime.UtcNow.ToString("O")
             }
 
-            Dim jsonResponse = JsonConvert.SerializeObject(responseObj)
-            context.Response.ContentType = "application/json; charset=utf-8"
-            Await context.Response.WriteAsync(jsonResponse)
-
-            Console.WriteLine($"✅ [API][OrchestratorSession] Response sent: {jsonResponse}")
-            System.Diagnostics.Debug.WriteLine($"✅ [API][OrchestratorSession] Response sent: {jsonResponse}")
+            Console.WriteLine($"✅ [API][OrchestratorSession] Returning success response")
+            System.Diagnostics.Debug.WriteLine($"✅ [API][OrchestratorSession] Returning success response")
             Console.Out.Flush()
 
-            Return Results.Empty
+            Return ResponseHelpers.CreateSuccessResponse(responseObj)
         Catch ex As Exception
             Console.WriteLine($"❌ [API][OrchestratorSession] ERROR: {ex.Message}")
             Console.WriteLine($"Stack trace: {ex.StackTrace}")

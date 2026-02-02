@@ -124,18 +124,11 @@ Public Class FlowCompiler
 
             ' Processa tutte le righe del nodo (task in sequenza)
             For Each row In rows
-                ' ✅ FIX: Use row.TaskId if present, otherwise fallback to row.Id
-                ' Frontend may send taskId separately from row.Id
-                Dim taskId As String = Nothing
-                If Not String.IsNullOrEmpty(row.TaskId) Then
-                    taskId = row.TaskId
-                    Console.WriteLine($"     ✅ [COMPILER][FlowCompiler] Using row.TaskId: {taskId}")
-                    System.Diagnostics.Debug.WriteLine($"     ✅ [COMPILER][FlowCompiler] Using row.TaskId: {taskId}")
-                Else
-                    taskId = row.Id
-                    Console.WriteLine($"     ⚠️ [COMPILER][FlowCompiler] row.TaskId not found, using row.Id: {taskId}")
-                    System.Diagnostics.Debug.WriteLine($"     ⚠️ [COMPILER][FlowCompiler] row.TaskId not found, using row.Id: {taskId}")
+                ' ❌ ERRORE BLOCCANTE: row.TaskId OBBLIGATORIO, nessun fallback a row.Id
+                If String.IsNullOrEmpty(row.TaskId) Then
+                    Throw New InvalidOperationException($"Row '{row.Id}' has no TaskId. TaskId is mandatory and cannot be empty. The frontend must provide a valid TaskId for each row.")
                 End If
+                Dim taskId As String = row.TaskId
 
                 ' ✅ DEBUG: Log available task IDs before lookup
                 Console.WriteLine($"     🔍 [COMPILER][FlowCompiler] Looking for task: taskId={taskId}, row.Id={row.Id}")

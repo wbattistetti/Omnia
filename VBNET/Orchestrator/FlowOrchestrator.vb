@@ -124,8 +124,14 @@ Public Class FlowOrchestrator
 
             ' Check entry TaskGroup first if it exists
             If Not String.IsNullOrEmpty(_entryTaskGroupId) Then
-                Dim entryTaskGroup = _compilationResult.TaskGroups.FirstOrDefault(Function(tg) tg.NodeId = _entryTaskGroupId)
-                If entryTaskGroup IsNot Nothing AndAlso Not entryTaskGroup.Executed Then
+                Dim matchingTaskGroups = _compilationResult.TaskGroups.Where(Function(tg) tg.NodeId = _entryTaskGroupId).ToList()
+                If matchingTaskGroups.Count = 0 Then
+                    Throw New InvalidOperationException($"Entry TaskGroup with NodeId '{_entryTaskGroupId}' not found in compilation result. The entry TaskGroup must exist.")
+                ElseIf matchingTaskGroups.Count > 1 Then
+                    Throw New InvalidOperationException($"Entry TaskGroup with NodeId '{_entryTaskGroupId}' appears {matchingTaskGroups.Count} times. Each TaskGroup NodeId must be unique.")
+                End If
+                Dim entryTaskGroup = matchingTaskGroups.Single()
+                If Not entryTaskGroup.Executed Then
                     taskGroupsToCheck.Add(entryTaskGroup)
                 End If
 

@@ -1,4 +1,4 @@
-﻿Imports System.Runtime.CompilerServices
+Imports System.Runtime.CompilerServices
 Imports System.Text.RegularExpressions
 
 Module Utils
@@ -74,10 +74,12 @@ Module Utils
                 Dim fullLabel As String = match.Groups(1).Value.Trim()  ' Es. "Nominativo.Nome"
                 Dim value As String = globalContext.GetValue(fullLabel)
 
-                ' Se trovato, sostituisci; altrimenti il placeholder rimane nel testo
-                If Not String.IsNullOrEmpty(value) Then
-                    processedText = processedText.Replace(match.Value, value)
+                ' ❌ ERRORE BLOCCANTE: placeholder deve essere risolto, nessun fallback
+                If String.IsNullOrEmpty(value) Then
+                    Throw New InvalidOperationException($"Placeholder '[{fullLabel}]' could not be resolved in task '{taskInstance.Id}'. The placeholder must exist in the global context. This indicates a missing variable or incorrect placeholder name.")
                 End If
+
+                processedText = processedText.Replace(match.Value, value)
             Next
         End While
 

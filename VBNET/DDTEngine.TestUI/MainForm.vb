@@ -265,15 +265,25 @@ Namespace TaskEngine.TestUI
             Dim subDataId As String = If(pathParts.Length > 1, pathParts(1), Nothing)
 
             ' Cerca il mainData
-            Dim mainDataNode As Global.TaskEngine.TaskNode = _taskInstance.TaskList.FirstOrDefault(Function(m) m.Id = mainDataId)
-            If mainDataNode Is Nothing Then
-                Return ""
+            Dim matchingNodes = _taskInstance.TaskList.Where(Function(m) m.Id = mainDataId).ToList()
+            If matchingNodes.Count = 0 Then
+                Throw New InvalidOperationException($"MainDataNode with Id '{mainDataId}' not found in TaskInstance. Every main data reference must be valid.")
+            ElseIf matchingNodes.Count > 1 Then
+                Throw New InvalidOperationException($"MainDataNode with Id '{mainDataId}' appears {matchingNodes.Count} times. Each node ID must be unique.")
             End If
+            Dim mainDataNode = matchingNodes.Single()
+            ' ❌ RIMOSSO: Single() non può restituire Nothing, validazione già fatta sopra
 
             ' Se c'è un subDataId, cerca il subData
             If Not String.IsNullOrEmpty(subDataId) Then
-                Dim subDataNode As Global.TaskEngine.TaskNode = mainDataNode.SubTasks.FirstOrDefault(Function(s) s.Id = subDataId)
-                If subDataNode IsNot Nothing AndAlso subDataNode.Value IsNot Nothing Then
+                Dim matchingSubTasks = mainDataNode.SubTasks.Where(Function(s) s.Id = subDataId).ToList()
+                If matchingSubTasks.Count = 0 Then
+                    Throw New InvalidOperationException($"SubDataNode with Id '{subDataId}' not found in MainDataNode '{mainDataId}'. Every sub data reference must be valid.")
+                ElseIf matchingSubTasks.Count > 1 Then
+                    Throw New InvalidOperationException($"SubDataNode with Id '{subDataId}' appears {matchingSubTasks.Count} times in MainDataNode '{mainDataId}'. Each sub data ID must be unique.")
+                End If
+                Dim subDataNode = matchingSubTasks.Single()
+                If subDataNode.Value IsNot Nothing Then
                     Return subDataNode.Value.ToString()
                 End If
                 Return ""

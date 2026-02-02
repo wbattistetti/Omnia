@@ -87,50 +87,45 @@ Public Class Motore
             System.Diagnostics.Debug.WriteLine($"[RUNTIME] ERROR: Node {currTaskNode.Id} has NO steps!")
         End If
 
-        Dim dStep = currTaskNode.Steps.FirstOrDefault(Function(s) s.Type = currTaskNode.State)
+        Dim matchingSteps = currTaskNode.Steps.Where(Function(s) s.Type = currTaskNode.State).ToList()
 
-        If dStep Is Nothing Then
-            Console.WriteLine($"[RUNTIME] ERROR: No step found for state {currTaskNode.State} in node {currTaskNode.Id}")
-            System.Diagnostics.Debug.WriteLine($"[RUNTIME] ERROR: No step found for state {currTaskNode.State} in node {currTaskNode.Id}")
-            Console.WriteLine($"[RUNTIME] Looking for fallback to Start step...")
-            System.Diagnostics.Debug.WriteLine($"[RUNTIME] Looking for fallback to Start step...")
-            dStep = currTaskNode.Steps.FirstOrDefault(Function(s) s.Type = DialogueState.Start)
-            If dStep Is Nothing Then
-                Console.WriteLine($"[RUNTIME] ERROR: No Start step found either! Node {currTaskNode.Id} has no valid steps.")
-                System.Diagnostics.Debug.WriteLine($"[RUNTIME] ERROR: No Start step found either! Node {currTaskNode.Id} has no valid steps.")
-                Return New List(Of ITask)()
-            End If
-            Console.WriteLine($"[RUNTIME] Using Start step as fallback for node {currTaskNode.Id}")
-            System.Diagnostics.Debug.WriteLine($"[RUNTIME] Using Start step as fallback for node {currTaskNode.Id}")
-            currTaskNode.State = DialogueState.Start
-        Else
-            Console.WriteLine($"[RUNTIME] Found step Type={dStep.Type} for node {currTaskNode.Id}, Escalations.Count={If(dStep.Escalations IsNot Nothing, dStep.Escalations.Count, 0)}")
-            System.Diagnostics.Debug.WriteLine($"[RUNTIME] Found step Type={dStep.Type} for node {currTaskNode.Id}, Escalations.Count={If(dStep.Escalations IsNot Nothing, dStep.Escalations.Count, 0)}")
+        ' ❌ ERRORE BLOCCANTE: nessun fallback, step deve esistere
+        If matchingSteps.Count = 0 Then
+            Throw New InvalidOperationException($"Invalid task model: Task {currTaskNode.Id} has no step for state {currTaskNode.State}. Each Type must appear exactly once. This indicates a compiler or conversion error.")
+        ElseIf matchingSteps.Count > 1 Then
+            Throw New InvalidOperationException($"Invalid task model: Task {currTaskNode.Id} has {matchingSteps.Count} steps with Type={currTaskNode.State}. Each Type must appear exactly once.")
         End If
 
+        Dim dStep = matchingSteps.Single()
+        Console.WriteLine($"[RUNTIME] Found step Type={dStep.Type} for node {currTaskNode.Id}, Escalations.Count={If(dStep.Escalations IsNot Nothing, dStep.Escalations.Count, 0)}")
+        System.Diagnostics.Debug.WriteLine($"[RUNTIME] Found step Type={dStep.Type} for node {currTaskNode.Id}, Escalations.Count={If(dStep.Escalations IsNot Nothing, dStep.Escalations.Count, 0)}")
+
+        ' ❌ ERRORE BLOCCANTE: nessun fallback per escalation vuote
         Select Case currTaskNode.State
             Case DialogueState.NoMatch, DialogueState.IrrelevantMatch, DialogueState.NoInput, DialogueState.NotConfirmed
-                If Not dStep.Escalations?.Any Then
-                    currTaskNode.State = DialogueState.Start
-                    dStep = currTaskNode.Steps.FirstOrDefault(Function(s) s.Type = DialogueState.Start)
+                If dStep.Escalations Is Nothing OrElse dStep.Escalations.Count = 0 Then
+                    Throw New InvalidOperationException($"Invalid task model: Task {currTaskNode.Id} has step Type={currTaskNode.State} with no escalations. Escalations are mandatory for this step type.")
                 End If
         End Select
 
-        If dStep Is Nothing OrElse dStep.Escalations Is Nothing OrElse dStep.Escalations.Count = 0 Then
-            Console.WriteLine($"[RUNTIME] ERROR: Step has no escalations for node {currTaskNode.Id}")
-            Return New List(Of ITask)()
+        ' ❌ ERRORE BLOCCANTE: step deve avere escalations
+        If dStep.Escalations Is Nothing OrElse dStep.Escalations.Count = 0 Then
+            Throw New InvalidOperationException($"Invalid task model: Task {currTaskNode.Id} has step Type={dStep.Type} with no escalations. Escalations are mandatory.")
         End If
 
         Dim escalationCounter = GetEscalationCounter(dStep, currTaskNode.State)
+        ' ❌ ERRORE BLOCCANTE: escalation counter deve essere valido
         If escalationCounter < 0 OrElse escalationCounter >= dStep.Escalations.Count Then
-            Console.WriteLine($"[RUNTIME] ERROR: Invalid escalation counter: {escalationCounter}, Escalations.Count={dStep.Escalations.Count}")
-            Return New List(Of ITask)()
+            Throw New InvalidOperationException($"Invalid escalation counter: {escalationCounter} for task {currTaskNode.Id}, step Type={dStep.Type}. Escalations.Count={dStep.Escalations.Count}. This indicates a counter management error.")
         End If
 
         Dim escalation = dStep.Escalations(escalationCounter)
-        If escalation Is Nothing OrElse escalation.Tasks Is Nothing Then
-            Console.WriteLine($"[RUNTIME] ERROR: Escalation[{escalationCounter}] or Tasks is Nothing for node {currTaskNode.Id}")
-            Return New List(Of ITask)()
+        ' ❌ ERRORE BLOCCANTE: escalation e tasks devono esistere
+        If escalation Is Nothing Then
+            Throw New InvalidOperationException($"Invalid task model: Task {currTaskNode.Id} has escalation[{escalationCounter}] that is Nothing.")
+        End If
+        If escalation.Tasks Is Nothing OrElse escalation.Tasks.Count = 0 Then
+            Throw New InvalidOperationException($"Invalid task model: Task {currTaskNode.Id} has escalation[{escalationCounter}] with no tasks. Tasks are mandatory.")
         End If
 
         Console.WriteLine($"[RUNTIME] GetResponse: returning {escalation.Tasks.Count} tasks from escalation[{escalationCounter}] for node {currTaskNode.Id}")

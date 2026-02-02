@@ -46,8 +46,13 @@ Public Class ConditionBuilder
                 Continue For
             End If
 
-            Dim parentNode = nodes.FirstOrDefault(Function(n) n.Id = edge.Source)
-            If parentNode Is Nothing Then Continue For
+            Dim matchingNodes = nodes.Where(Function(n) n.Id = edge.Source).ToList()
+            If matchingNodes.Count = 0 Then
+                Throw New InvalidOperationException($"Edge '{edge.Id}' references Source node '{edge.Source}' that does not exist in the flow. Every edge must reference a valid source node.")
+            ElseIf matchingNodes.Count > 1 Then
+                Throw New InvalidOperationException($"Edge '{edge.Id}' references Source node '{edge.Source}' that appears {matchingNodes.Count} times. Each node ID must be unique.")
+            End If
+            Dim parentNode = matchingNodes.Single()
 
             Dim rows = If(parentNode.Rows, New List(Of TaskRow)())
             If rows.Count = 0 Then Continue For
@@ -95,8 +100,13 @@ Public Class ConditionBuilder
         ' Second pass: handle Else edges
         ' For each Else edge, build: (Parent.Executed AND NOT(OR of all other conditions from same source))
         For Each elseEdge In elseEdges
-            Dim parentNode = nodes.FirstOrDefault(Function(n) n.Id = elseEdge.Source)
-            If parentNode Is Nothing Then Continue For
+            Dim matchingNodes = nodes.Where(Function(n) n.Id = elseEdge.Source).ToList()
+            If matchingNodes.Count = 0 Then
+                Throw New InvalidOperationException($"ElseEdge '{elseEdge.Id}' references Source node '{elseEdge.Source}' that does not exist in the flow. Every edge must reference a valid source node.")
+            ElseIf matchingNodes.Count > 1 Then
+                Throw New InvalidOperationException($"ElseEdge '{elseEdge.Id}' references Source node '{elseEdge.Source}' that appears {matchingNodes.Count} times. Each node ID must be unique.")
+            End If
+            Dim parentNode = matchingNodes.Single()
 
             Dim rows = If(parentNode.Rows, New List(Of TaskRow)())
             If rows.Count = 0 Then Continue For

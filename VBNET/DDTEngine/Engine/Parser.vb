@@ -56,10 +56,14 @@ Public Class Parser
                     If extractedData IsNot Nothing AndAlso extractedData.Count > 0 Then
                         ' Aggiorna i subData estratti
                         For Each kvp As KeyValuePair(Of String, Object) In extractedData
-                            Dim subTaskNode As TaskNode = currTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = kvp.Key)
-                            If subTaskNode IsNot Nothing Then
-                                subTaskNode.Value = kvp.Value
+                            Dim matchingSubTasks = currTaskNode.SubTasks.Where(Function(s) s.Id = kvp.Key).ToList()
+                            If matchingSubTasks.Count = 0 Then
+                                Throw New InvalidOperationException($"SubTask with Id '{kvp.Key}' not found in TaskNode '{currTaskNode.Id}'. The extracted data references a SubTask that does not exist in the task model.")
+                            ElseIf matchingSubTasks.Count > 1 Then
+                                Throw New InvalidOperationException($"TaskNode '{currTaskNode.Id}' has {matchingSubTasks.Count} SubTasks with Id '{kvp.Key}'. Each SubTask Id must be unique.")
                             End If
+                            Dim subTaskNode = matchingSubTasks.Single()
+                            subTaskNode.Value = kvp.Value
                         Next
                         Return New ParseResult() With {.Result = ParseResultType.Corrected}
                     End If
@@ -79,10 +83,14 @@ Public Class Parser
                     Dim extractedData As Dictionary(Of String, Object) = TryExtractCompositeData(valueInput, currTaskNode)
                     If extractedData IsNot Nothing AndAlso extractedData.Count > 0 Then
                         For Each kvp As KeyValuePair(Of String, Object) In extractedData
-                            Dim subTaskNode As TaskNode = currTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = kvp.Key)
-                            If subTaskNode IsNot Nothing Then
-                                subTaskNode.Value = kvp.Value
+                            Dim matchingSubTasks = currTaskNode.SubTasks.Where(Function(s) s.Id = kvp.Key).ToList()
+                            If matchingSubTasks.Count = 0 Then
+                                Throw New InvalidOperationException($"SubTask with Id '{kvp.Key}' not found in TaskNode '{currTaskNode.Id}'. The extracted data references a SubTask that does not exist in the task model.")
+                            ElseIf matchingSubTasks.Count > 1 Then
+                                Throw New InvalidOperationException($"TaskNode '{currTaskNode.Id}' has {matchingSubTasks.Count} SubTasks with Id '{kvp.Key}'. Each SubTask Id must be unique.")
                             End If
+                            Dim subTaskNode = matchingSubTasks.Single()
+                            subTaskNode.Value = kvp.Value
                         Next
                         Return New ParseResult() With {.Result = ParseResultType.Corrected}
                     End If
@@ -99,10 +107,14 @@ Public Class Parser
                     Dim extractedData As Dictionary(Of String, Object) = TryExtractCompositeData(cleanedInput, currTaskNode)
                     If extractedData IsNot Nothing AndAlso extractedData.Count > 0 Then
                         For Each kvp As KeyValuePair(Of String, Object) In extractedData
-                            Dim subTaskNode As TaskNode = currTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = kvp.Key)
-                            If subTaskNode IsNot Nothing Then
-                                subTaskNode.Value = kvp.Value
+                            Dim matchingSubTasks = currTaskNode.SubTasks.Where(Function(s) s.Id = kvp.Key).ToList()
+                            If matchingSubTasks.Count = 0 Then
+                                Throw New InvalidOperationException($"SubTask with Id '{kvp.Key}' not found in TaskNode '{currTaskNode.Id}'. The extracted data references a SubTask that does not exist in the task model.")
+                            ElseIf matchingSubTasks.Count > 1 Then
+                                Throw New InvalidOperationException($"TaskNode '{currTaskNode.Id}' has {matchingSubTasks.Count} SubTasks with Id '{kvp.Key}'. Each SubTask Id must be unique.")
                             End If
+                            Dim subTaskNode = matchingSubTasks.Single()
+                            subTaskNode.Value = kvp.Value
                         Next
                         Return New ParseResult() With {.Result = ParseResultType.Corrected}
                     End If
@@ -137,10 +149,14 @@ Public Class Parser
 
             ' Match riuscito: popola i subTasks corrispondenti
             For Each kvp As KeyValuePair(Of String, Object) In extractedData
-                Dim subTaskNode As TaskNode = currTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = kvp.Key)
-                If subTaskNode IsNot Nothing Then
-                    subTaskNode.Value = kvp.Value
+                Dim matchingSubTasks = currTaskNode.SubTasks.Where(Function(s) s.Id = kvp.Key).ToList()
+                If matchingSubTasks.Count = 0 Then
+                    Throw New InvalidOperationException($"SubTask with Id '{kvp.Key}' not found in TaskNode '{currTaskNode.Id}'. The extracted data references a SubTask that does not exist in the task model.")
+                ElseIf matchingSubTasks.Count > 1 Then
+                    Throw New InvalidOperationException($"TaskNode '{currTaskNode.Id}' has {matchingSubTasks.Count} SubTasks with Id '{kvp.Key}'. Each SubTask Id must be unique.")
                 End If
+                Dim subTaskNode = matchingSubTasks.Single()
+                subTaskNode.Value = kvp.Value
             Next
 
             Return New ParseResult() With {
@@ -229,119 +245,58 @@ Public Class Parser
     End Sub
 
     ''' <summary>
-    ''' Prova a estrarre dati dall'input usando regex dal contract o fallback a regex hardcoded
+    ''' Estrae dati dall'input usando SOLO regex pre-compilato dal contract
+    ''' ❌ ZERO FALLBACK: se il contract non ha regex o non matcha → ERRORE BLOCCANTE
     ''' </summary>
     Private Function TryExtractData(input As String, taskNode As TaskNode) As String
         If taskNode Is Nothing OrElse String.IsNullOrEmpty(taskNode.Name) Then
-            Return ""
+            Throw New ArgumentException("taskNode cannot be Nothing and must have a Name. TryExtractData requires a valid task node.")
         End If
 
         Dim trimmedInput As String = input.Trim()
-
-        ' PRIORITÀ 1: Usa regex pre-compilato dal contract se disponibile
-        If taskNode.NlpContract IsNot Nothing AndAlso
-           TypeOf taskNode.NlpContract Is CompiledNlpContract Then
-            Dim compiledContract = CType(taskNode.NlpContract, CompiledNlpContract)
-
-            ' Usa il main regex pre-compilato
-            If compiledContract.CompiledMainRegex IsNot Nothing Then
-                Try
-                    Dim match As Match = compiledContract.CompiledMainRegex.Match(trimmedInput)
-                    If match.Success Then
-                        ' Se ci sono gruppi named, cerca il valore principale
-                        If match.Groups.Count > 1 Then
-                            ' Preferisci il primo gruppo con valore
-                            For i As Integer = 1 To match.Groups.Count - 1
-                                If Not String.IsNullOrEmpty(match.Groups(i).Value) Then
-                                    Return match.Groups(i).Value
-                                End If
-                            Next
-                        End If
-                        ' Altrimenti ritorna il match completo
-                        Return match.Value
-                    End If
-                Catch
-                    ' Pattern invalido, fallback a regex hardcoded
-                End Try
-            End If
+        If String.IsNullOrEmpty(trimmedInput) Then
+            Throw New ArgumentException("input cannot be empty. TryExtractData requires non-empty input.")
         End If
 
-        ' PRIORITÀ 2: Fallback a regex hardcoded (retrocompatibilità)
-        Dim nodeName As String = taskNode.Name.ToLower().Trim()
+        ' ❌ ERRORE BLOCCANTE: contract OBBLIGATORIO
+        If taskNode.NlpContract Is Nothing Then
+            Throw New InvalidOperationException($"Task node '{taskNode.Id}' has no NlpContract. NlpContract is mandatory for data extraction.")
+        End If
 
-        ' Regex per diversi tipi di dati basati sul nome del nodo
-        Select Case nodeName
-            Case "nome", "cognome", "nominativo"
-                ' Regex "passa tutto" per nome/cognome (almeno 2 caratteri)
-                If Regex.IsMatch(trimmedInput, "^.{2,}$") Then
-                    Return trimmedInput
-                End If
+        If TypeOf taskNode.NlpContract IsNot CompiledNlpContract Then
+            Throw New InvalidOperationException($"Task node '{taskNode.Id}' has invalid NlpContract type. Expected CompiledNlpContract.")
+        End If
 
-            Case "telefono"
-                ' Regex per telefono: solo numeri, 10-15 cifre
-                Dim phoneMatch As Match = Regex.Match(trimmedInput, "(\d{10,15})")
-                If phoneMatch.Success Then
-                    Return phoneMatch.Groups(1).Value
-                End If
-                ' Fallback: qualsiasi sequenza di numeri
-                Dim numbersOnly As String = Regex.Replace(trimmedInput, "[^\d]", "")
-                If numbersOnly.Length >= 10 Then
-                    Return numbersOnly
-                End If
+        Dim compiledContract = CType(taskNode.NlpContract, CompiledNlpContract)
 
-            Case "data di nascita", "data"
-                ' Regex per data: formato giorno/mese/anno o giorno-mese-anno
-                Dim dateMatch As Match = Regex.Match(trimmedInput, "(\d{1,2})[/-](\d{1,2})[/-](\d{4})")
-                If dateMatch.Success Then
-                    Return dateMatch.Value
-                End If
-                ' Fallback: qualsiasi sequenza di numeri che sembra una data
-                If Regex.IsMatch(trimmedInput, "\d{1,2}[/-]\d{1,2}[/-]\d{4}") Then
-                    Return trimmedInput
-                End If
+        ' ❌ ERRORE BLOCCANTE: regex OBBLIGATORIA
+        If compiledContract.CompiledMainRegex Is Nothing Then
+            Throw New InvalidOperationException($"Task node '{taskNode.Id}' has no CompiledMainRegex in NlpContract. CompiledMainRegex is mandatory for data extraction.")
+        End If
 
-            Case "giorno"
-                ' Regex per giorno: numero 1-31
-                Dim dayMatch As Match = Regex.Match(trimmedInput, "(\d{1,2})")
-                If dayMatch.Success Then
-                    Dim day As Integer = Integer.Parse(dayMatch.Groups(1).Value)
-                    If day >= 1 AndAlso day <= 31 Then
-                        Return dayMatch.Groups(1).Value
-                    End If
+        ' ✅ Usa SOLO il regex pre-compilato dal contract
+        Try
+            Dim match As Match = compiledContract.CompiledMainRegex.Match(trimmedInput)
+            If match.Success Then
+                ' Se ci sono gruppi named, cerca il valore principale
+                If match.Groups.Count > 1 Then
+                    ' Preferisci il primo gruppo con valore
+                    For i As Integer = 1 To match.Groups.Count - 1
+                        If Not String.IsNullOrEmpty(match.Groups(i).Value) Then
+                            Return match.Groups(i).Value
+                        End If
+                    Next
                 End If
-
-            Case "mese"
-                ' Regex per mese: numero 1-12
-                Dim monthMatch As Match = Regex.Match(trimmedInput, "(\d{1,2})")
-                If monthMatch.Success Then
-                    Dim month As Integer = Integer.Parse(monthMatch.Groups(1).Value)
-                    If month >= 1 AndAlso month <= 12 Then
-                        Return monthMatch.Groups(1).Value
-                    End If
-                End If
-
-            Case "anno"
-                ' Regex per anno: 4 cifre
-                Dim yearMatch As Match = Regex.Match(trimmedInput, "(\d{4})")
-                If yearMatch.Success Then
-                    Return yearMatch.Groups(1).Value
-                End If
-
-            Case "indirizzo", "tipo via", "nome via", "numero civico"
-                ' Regex "passa tutto" per indirizzo (almeno 2 caratteri)
-                If Regex.IsMatch(trimmedInput, "^.{2,}$") Then
-                    Return trimmedInput
-                End If
-
-            Case Else
-                ' Default: regex "passa tutto" per dati generici (almeno 1 carattere)
-                If Regex.IsMatch(trimmedInput, "^.+$") Then
-                    Return trimmedInput
-                End If
-        End Select
-
-        ' Nessun match trovato
-        Return ""
+                ' Altrimenti ritorna il match completo
+                Return match.Value
+            Else
+                ' ❌ ERRORE BLOCCANTE: nessun match, nessun fallback
+                Throw New InvalidOperationException($"Input '{trimmedInput}' does not match the CompiledMainRegex for task node '{taskNode.Id}'. The input must match the contract regex pattern.")
+            End If
+        Catch ex As Exception
+            ' ❌ ERRORE BLOCCANTE: pattern invalido o errore di matching
+            Throw New InvalidOperationException($"Failed to match input '{trimmedInput}' against CompiledMainRegex for task node '{taskNode.Id}'. Error: {ex.Message}", ex)
+        End Try
     End Function
 
     ''' <summary>
@@ -429,39 +384,54 @@ Public Class Parser
                     matched = True
                     ' Pattern 1: giorno/mese/anno o varianti
                     If Not String.IsNullOrEmpty(dateMatch1.Groups(1).Value) Then
-                        Dim giornoNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "giorno")
-                        If giornoNode IsNot Nothing Then
-                            extractedData("giorno") = dateMatch1.Groups(1).Value
+                        Dim matchingNodes = mainTaskNode.SubTasks.Where(Function(s) s.Id = "giorno").ToList()
+                        If matchingNodes.Count = 0 Then
+                            Throw New InvalidOperationException($"SubTask with Id 'giorno' not found in TaskNode '{mainTaskNode.Id}'. The extracted date data references a SubTask that does not exist.")
+                        ElseIf matchingNodes.Count > 1 Then
+                            Throw New InvalidOperationException($"TaskNode '{mainTaskNode.Id}' has {matchingNodes.Count} SubTasks with Id 'giorno'. Each SubTask Id must be unique.")
                         End If
+                        extractedData("giorno") = dateMatch1.Groups(1).Value
                     End If
 
                     If Not String.IsNullOrEmpty(dateMatch1.Groups(2).Value) Then
-                        Dim meseNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "mese")
-                        If meseNode IsNot Nothing Then
-                            extractedData("mese") = dateMatch1.Groups(2).Value
+                        Dim matchingNodes = mainTaskNode.SubTasks.Where(Function(s) s.Id = "mese").ToList()
+                        If matchingNodes.Count = 0 Then
+                            Throw New InvalidOperationException($"SubTask with Id 'mese' not found in TaskNode '{mainTaskNode.Id}'. The extracted date data references a SubTask that does not exist.")
+                        ElseIf matchingNodes.Count > 1 Then
+                            Throw New InvalidOperationException($"TaskNode '{mainTaskNode.Id}' has {matchingNodes.Count} SubTasks with Id 'mese'. Each SubTask Id must be unique.")
                         End If
+                        extractedData("mese") = dateMatch1.Groups(2).Value
                     End If
 
                     If Not String.IsNullOrEmpty(dateMatch1.Groups(3).Value) Then
-                        Dim annoNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "anno")
-                        If annoNode IsNot Nothing Then
-                            extractedData("anno") = dateMatch1.Groups(3).Value
+                        Dim matchingNodes = mainTaskNode.SubTasks.Where(Function(s) s.Id = "anno").ToList()
+                        If matchingNodes.Count = 0 Then
+                            Throw New InvalidOperationException($"SubTask with Id 'anno' not found in TaskNode '{mainTaskNode.Id}'. The extracted date data references a SubTask that does not exist.")
+                        ElseIf matchingNodes.Count > 1 Then
+                            Throw New InvalidOperationException($"TaskNode '{mainTaskNode.Id}' has {matchingNodes.Count} SubTasks with Id 'anno'. Each SubTask Id must be unique.")
                         End If
+                        extractedData("anno") = dateMatch1.Groups(3).Value
                     End If
 
                     ' Pattern 2: mese/anno (gruppi 4 e 5)
                     If Not String.IsNullOrEmpty(dateMatch1.Groups(4).Value) AndAlso String.IsNullOrEmpty(dateMatch1.Groups(1).Value) Then
-                        Dim meseNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "mese")
-                        If meseNode IsNot Nothing Then
-                            extractedData("mese") = dateMatch1.Groups(4).Value
+                        Dim matchingNodes = mainTaskNode.SubTasks.Where(Function(s) s.Id = "mese").ToList()
+                        If matchingNodes.Count = 0 Then
+                            Throw New InvalidOperationException($"SubTask with Id 'mese' not found in TaskNode '{mainTaskNode.Id}'. The extracted date data references a SubTask that does not exist.")
+                        ElseIf matchingNodes.Count > 1 Then
+                            Throw New InvalidOperationException($"TaskNode '{mainTaskNode.Id}' has {matchingNodes.Count} SubTasks with Id 'mese'. Each SubTask Id must be unique.")
                         End If
+                        extractedData("mese") = dateMatch1.Groups(4).Value
                     End If
 
                     If Not String.IsNullOrEmpty(dateMatch1.Groups(5).Value) AndAlso String.IsNullOrEmpty(dateMatch1.Groups(3).Value) Then
-                        Dim annoNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "anno")
-                        If annoNode IsNot Nothing Then
-                            extractedData("anno") = dateMatch1.Groups(5).Value
+                        Dim matchingNodes = mainTaskNode.SubTasks.Where(Function(s) s.Id = "anno").ToList()
+                        If matchingNodes.Count = 0 Then
+                            Throw New InvalidOperationException($"SubTask with Id 'anno' not found in TaskNode '{mainTaskNode.Id}'. The extracted date data references a SubTask that does not exist.")
+                        ElseIf matchingNodes.Count > 1 Then
+                            Throw New InvalidOperationException($"TaskNode '{mainTaskNode.Id}' has {matchingNodes.Count} SubTasks with Id 'anno'. Each SubTask Id must be unique.")
                         End If
+                        extractedData("anno") = dateMatch1.Groups(5).Value
                     End If
 
                     ' Pattern 3: solo numero (può essere giorno, mese o anno - prova in ordine)
@@ -473,16 +443,22 @@ Public Class Parser
 
                         ' Prova giorno (1-31)
                         If num >= 1 AndAlso num <= 31 Then
-                            Dim giornoNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "giorno")
-                            If giornoNode IsNot Nothing Then
-                                extractedData("giorno") = numValue
+                            Dim matchingNodes = mainTaskNode.SubTasks.Where(Function(s) s.Id = "giorno").ToList()
+                            If matchingNodes.Count = 0 Then
+                                Throw New InvalidOperationException($"SubTask with Id 'giorno' not found in TaskNode '{mainTaskNode.Id}'. The extracted date data references a SubTask that does not exist.")
+                            ElseIf matchingNodes.Count > 1 Then
+                                Throw New InvalidOperationException($"TaskNode '{mainTaskNode.Id}' has {matchingNodes.Count} SubTasks with Id 'giorno'. Each SubTask Id must be unique.")
                             End If
+                            extractedData("giorno") = numValue
                             ' Prova mese (1-12)
                         ElseIf num >= 1 AndAlso num <= 12 Then
-                            Dim meseNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "mese")
-                            If meseNode IsNot Nothing Then
-                                extractedData("mese") = numValue
+                            Dim matchingNodes = mainTaskNode.SubTasks.Where(Function(s) s.Id = "mese").ToList()
+                            If matchingNodes.Count = 0 Then
+                                Throw New InvalidOperationException($"SubTask with Id 'mese' not found in TaskNode '{mainTaskNode.Id}'. The extracted date data references a SubTask that does not exist.")
+                            ElseIf matchingNodes.Count > 1 Then
+                                Throw New InvalidOperationException($"TaskNode '{mainTaskNode.Id}' has {matchingNodes.Count} SubTasks with Id 'mese'. Each SubTask Id must be unique.")
                             End If
+                            extractedData("mese") = numValue
                         End If
                     End If
                 End If
@@ -492,10 +468,8 @@ Public Class Parser
                     matched = True
                     ' Giorno (gruppo 1)
                     If Not String.IsNullOrEmpty(dateMatch2.Groups(1).Value) Then
-                        Dim giornoNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "giorno")
-                        If giornoNode IsNot Nothing Then
-                            extractedData("giorno") = dateMatch2.Groups(1).Value
-                        End If
+                        GetSubTaskById(mainTaskNode, "giorno") ' Validazione deterministica
+                        extractedData("giorno") = dateMatch2.Groups(1).Value
                     End If
 
                     ' Mese (nome o numero, gruppo 2)
@@ -512,18 +486,14 @@ Public Class Parser
                             meseValue = monthMap(meseLower)
                         End If
 
-                        Dim meseNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "mese")
-                        If meseNode IsNot Nothing Then
-                            extractedData("mese") = meseValue
-                        End If
+                        GetSubTaskById(mainTaskNode, "mese") ' Validazione deterministica
+                        extractedData("mese") = meseValue
                     End If
 
                     ' Anno (gruppo 3)
                     If Not String.IsNullOrEmpty(dateMatch2.Groups(3).Value) Then
-                        Dim annoNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "anno")
-                        If annoNode IsNot Nothing Then
-                            extractedData("anno") = dateMatch2.Groups(3).Value
-                        End If
+                        GetSubTaskById(mainTaskNode, "anno") ' Validazione deterministica
+                        extractedData("anno") = dateMatch2.Groups(3).Value
                     End If
                 End If
 
@@ -544,10 +514,8 @@ Public Class Parser
                             meseValue = monthMap(meseLower)
                         End If
 
-                        Dim meseNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "mese")
-                        If meseNode IsNot Nothing Then
-                            extractedData("mese") = meseValue
-                        End If
+                        GetSubTaskById(mainTaskNode, "mese") ' Validazione deterministica
+                        extractedData("mese") = meseValue
                     End If
 
                     ' Anno (gruppo 2 o 3)
@@ -559,10 +527,8 @@ Public Class Parser
                     End If
 
                     If Not String.IsNullOrEmpty(annoValue) Then
-                        Dim annoNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "anno")
-                        If annoNode IsNot Nothing Then
-                            extractedData("anno") = annoValue
-                        End If
+                        GetSubTaskById(mainTaskNode, "anno") ' Validazione deterministica
+                        extractedData("anno") = annoValue
                     End If
                 End If
 
@@ -571,10 +537,8 @@ Public Class Parser
                     matched = True
                     ' Giorno (gruppo 1)
                     If Not String.IsNullOrEmpty(dateMatch4.Groups(1).Value) Then
-                        Dim giornoNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "giorno")
-                        If giornoNode IsNot Nothing Then
-                            extractedData("giorno") = dateMatch4.Groups(1).Value
-                        End If
+                        GetSubTaskById(mainTaskNode, "giorno") ' Validazione deterministica
+                        extractedData("giorno") = dateMatch4.Groups(1).Value
                     End If
 
                     ' Mese (nome o numero, gruppo 2)
@@ -591,10 +555,8 @@ Public Class Parser
                             meseValue = monthMap(meseLower)
                         End If
 
-                        Dim meseNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "mese")
-                        If meseNode IsNot Nothing Then
-                            extractedData("mese") = meseValue
-                        End If
+                        GetSubTaskById(mainTaskNode, "mese") ' Validazione deterministica
+                        extractedData("mese") = meseValue
                     End If
                 End If
 
@@ -608,18 +570,14 @@ Public Class Parser
                 If nameMatch.Success Then
                     ' Nome (sempre presente)
                     If Not String.IsNullOrEmpty(nameMatch.Groups(1).Value) Then
-                        Dim nomeNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "nome")
-                        If nomeNode IsNot Nothing Then
-                            extractedData("nome") = nameMatch.Groups(1).Value
-                        End If
+                        GetSubTaskById(mainTaskNode, "nome") ' Validazione deterministica
+                        extractedData("nome") = nameMatch.Groups(1).Value
                     End If
 
                     ' Cognome (opzionale)
                     If Not String.IsNullOrEmpty(nameMatch.Groups(2).Value) Then
-                        Dim cognomeNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "cognome")
-                        If cognomeNode IsNot Nothing Then
-                            extractedData("cognome") = nameMatch.Groups(2).Value
-                        End If
+                        GetSubTaskById(mainTaskNode, "cognome") ' Validazione deterministica
+                        extractedData("cognome") = nameMatch.Groups(2).Value
                     End If
 
                     ' Terza parola (opzionale, ignorata per ora)
@@ -661,31 +619,23 @@ Public Class Parser
                     matched = True
                     ' Tipo via (gruppo 1)
                     If Not String.IsNullOrEmpty(addressMatch1.Groups(1).Value) Then
-                        Dim tipoViaNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "tipoVia")
-                        If tipoViaNode IsNot Nothing Then
-                            extractedData("tipoVia") = addressMatch1.Groups(1).Value
-                        End If
+                        GetSubTaskById(mainTaskNode, "tipoVia") ' Validazione deterministica
+                        extractedData("tipoVia") = addressMatch1.Groups(1).Value
                     End If
                     ' Nome via (gruppo 2)
                     If Not String.IsNullOrEmpty(addressMatch1.Groups(2).Value) Then
-                        Dim nomeViaNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "nomeVia")
-                        If nomeViaNode IsNot Nothing Then
-                            extractedData("nomeVia") = addressMatch1.Groups(2).Value
-                        End If
+                        GetSubTaskById(mainTaskNode, "nomeVia") ' Validazione deterministica
+                        extractedData("nomeVia") = addressMatch1.Groups(2).Value
                     End If
                     ' Numero civico (gruppo 3)
                     If Not String.IsNullOrEmpty(addressMatch1.Groups(3).Value) Then
-                        Dim numeroCivicoNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "numeroCivico")
-                        If numeroCivicoNode IsNot Nothing Then
-                            extractedData("numeroCivico") = addressMatch1.Groups(3).Value
-                        End If
+                        GetSubTaskById(mainTaskNode, "numeroCivico") ' Validazione deterministica
+                        extractedData("numeroCivico") = addressMatch1.Groups(3).Value
                     End If
                     ' CAP (gruppo 4)
                     If Not String.IsNullOrEmpty(addressMatch1.Groups(4).Value) Then
-                        Dim capNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "cap")
-                        If capNode IsNot Nothing Then
-                            extractedData("cap") = addressMatch1.Groups(4).Value
-                        End If
+                        GetSubTaskById(mainTaskNode, "cap") ' Validazione deterministica
+                        extractedData("cap") = addressMatch1.Groups(4).Value
                     End If
                     ' Città (gruppo 5 o 6)
                     Dim cittaValue As String = ""
@@ -695,10 +645,8 @@ Public Class Parser
                         cittaValue = addressMatch1.Groups(6).Value
                     End If
                     If Not String.IsNullOrEmpty(cittaValue) Then
-                        Dim cittaNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "citta")
-                        If cittaNode IsNot Nothing Then
-                            extractedData("citta") = cittaValue
-                        End If
+                        GetSubTaskById(mainTaskNode, "citta") ' Validazione deterministica
+                        extractedData("citta") = cittaValue
                     End If
                 End If
 
@@ -707,24 +655,18 @@ Public Class Parser
                     matched = True
                     ' Tipo via (gruppo 1)
                     If Not String.IsNullOrEmpty(addressMatch2.Groups(1).Value) Then
-                        Dim tipoViaNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "tipoVia")
-                        If tipoViaNode IsNot Nothing Then
-                            extractedData("tipoVia") = addressMatch2.Groups(1).Value
-                        End If
+                        GetSubTaskById(mainTaskNode, "tipoVia") ' Validazione deterministica
+                        extractedData("tipoVia") = addressMatch2.Groups(1).Value
                     End If
                     ' Nome via (gruppo 2)
                     If Not String.IsNullOrEmpty(addressMatch2.Groups(2).Value) Then
-                        Dim nomeViaNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "nomeVia")
-                        If nomeViaNode IsNot Nothing Then
-                            extractedData("nomeVia") = addressMatch2.Groups(2).Value
-                        End If
+                        GetSubTaskById(mainTaskNode, "nomeVia") ' Validazione deterministica
+                        extractedData("nomeVia") = addressMatch2.Groups(2).Value
                     End If
                     ' Città (gruppo 3)
                     If Not String.IsNullOrEmpty(addressMatch2.Groups(3).Value) Then
-                        Dim cittaNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "citta")
-                        If cittaNode IsNot Nothing Then
-                            extractedData("citta") = addressMatch2.Groups(3).Value
-                        End If
+                        GetSubTaskById(mainTaskNode, "citta") ' Validazione deterministica
+                        extractedData("citta") = addressMatch2.Groups(3).Value
                     End If
                 End If
 
@@ -733,24 +675,18 @@ Public Class Parser
                     matched = True
                     ' Nome via (gruppo 1)
                     If Not String.IsNullOrEmpty(addressMatch3.Groups(1).Value) Then
-                        Dim nomeViaNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "nomeVia")
-                        If nomeViaNode IsNot Nothing Then
-                            extractedData("nomeVia") = addressMatch3.Groups(1).Value
-                        End If
+                        GetSubTaskById(mainTaskNode, "nomeVia") ' Validazione deterministica
+                        extractedData("nomeVia") = addressMatch3.Groups(1).Value
                     End If
                     ' Numero civico (gruppo 2)
                     If Not String.IsNullOrEmpty(addressMatch3.Groups(2).Value) Then
-                        Dim numeroCivicoNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "numeroCivico")
-                        If numeroCivicoNode IsNot Nothing Then
-                            extractedData("numeroCivico") = addressMatch3.Groups(2).Value
-                        End If
+                        GetSubTaskById(mainTaskNode, "numeroCivico") ' Validazione deterministica
+                        extractedData("numeroCivico") = addressMatch3.Groups(2).Value
                     End If
                     ' CAP (gruppo 3)
                     If Not String.IsNullOrEmpty(addressMatch3.Groups(3).Value) Then
-                        Dim capNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "cap")
-                        If capNode IsNot Nothing Then
-                            extractedData("cap") = addressMatch3.Groups(3).Value
-                        End If
+                        GetSubTaskById(mainTaskNode, "cap") ' Validazione deterministica
+                        extractedData("cap") = addressMatch3.Groups(3).Value
                     End If
                     ' Città (gruppo 4 o 5)
                     Dim cittaValue As String = ""
@@ -760,10 +696,8 @@ Public Class Parser
                         cittaValue = addressMatch3.Groups(5).Value
                     End If
                     If Not String.IsNullOrEmpty(cittaValue) Then
-                        Dim cittaNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "citta")
-                        If cittaNode IsNot Nothing Then
-                            extractedData("citta") = cittaValue
-                        End If
+                        GetSubTaskById(mainTaskNode, "citta") ' Validazione deterministica
+                        extractedData("citta") = cittaValue
                     End If
                 End If
 
@@ -772,17 +706,13 @@ Public Class Parser
                     matched = True
                     ' Nome via (gruppo 1)
                     If Not String.IsNullOrEmpty(addressMatch4.Groups(1).Value) Then
-                        Dim nomeViaNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "nomeVia")
-                        If nomeViaNode IsNot Nothing Then
-                            extractedData("nomeVia") = addressMatch4.Groups(1).Value
-                        End If
+                        GetSubTaskById(mainTaskNode, "nomeVia") ' Validazione deterministica
+                        extractedData("nomeVia") = addressMatch4.Groups(1).Value
                     End If
                     ' Città (gruppo 2)
                     If Not String.IsNullOrEmpty(addressMatch4.Groups(2).Value) Then
-                        Dim cittaNode As TaskNode = mainTaskNode.SubTasks.FirstOrDefault(Function(s) s.Id = "citta")
-                        If cittaNode IsNot Nothing Then
-                            extractedData("citta") = addressMatch4.Groups(2).Value
-                        End If
+                        GetSubTaskById(mainTaskNode, "citta") ' Validazione deterministica
+                        extractedData("citta") = addressMatch4.Groups(2).Value
                     End If
                 End If
 
@@ -802,6 +732,19 @@ Public Class Parser
         ' TODO: Implementare estrazione generica basata sui nomi dei subData
         ' Per ora ritorna Nothing
         Return Nothing
+    End Function
+
+    ''' <summary>
+    ''' Helper: Valida e ottiene SubTask per ID con validazione deterministica
+    ''' </summary>
+    Private Function GetSubTaskById(mainTaskNode As TaskNode, subTaskId As String) As TaskNode
+        Dim matchingSubTasks = mainTaskNode.SubTasks.Where(Function(s) s.Id = subTaskId).ToList()
+        If matchingSubTasks.Count = 0 Then
+            Throw New InvalidOperationException($"SubTask with Id '{subTaskId}' not found in TaskNode '{mainTaskNode.Id}'. The extracted data references a SubTask that does not exist in the task model.")
+        ElseIf matchingSubTasks.Count > 1 Then
+            Throw New InvalidOperationException($"TaskNode '{mainTaskNode.Id}' has {matchingSubTasks.Count} SubTasks with Id '{subTaskId}'. Each SubTask Id must be unique.")
+        End If
+        Return matchingSubTasks.Single()
     End Function
 
     ''' <summary>

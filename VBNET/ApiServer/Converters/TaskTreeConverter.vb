@@ -133,25 +133,37 @@ Namespace Converters
                 End If
                 Console.WriteLine($"✅ [ConvertTaskTreeToTaskTreeExpanded] Deserialization successful")
 
-                ' ✅ Imposta ID se mancante
-                If String.IsNullOrEmpty(taskTreeExpanded.Id) Then
-                    taskTreeExpanded.Id = taskId
-                    Console.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeExpanded] Set Id to: {taskId}")
-                Else
-                    Console.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeExpanded] Id already set: {taskTreeExpanded.Id}")
+                ' ✅ RETROCOMPATIBILITÀ: Se TaskInstanceId è vuoto, prova a leggere "id" dal JSON originale
+                If String.IsNullOrEmpty(taskTreeExpanded.TaskInstanceId) Then
+                    Dim idFromJson = taskTreeJson("id")
+                    If idFromJson IsNot Nothing AndAlso idFromJson.Type = JTokenType.String Then
+                        taskTreeExpanded.TaskInstanceId = idFromJson.ToString()
+                        Console.WriteLine($"✅ [ConvertTaskTreeToTaskTreeExpanded] TaskInstanceId not found, using 'id' from JSON: {taskTreeExpanded.TaskInstanceId}")
+                    End If
                 End If
 
-                ' ✅ Inizializza collections se mancanti
-                If taskTreeExpanded.Nodes Is Nothing Then
-                    taskTreeExpanded.Nodes = New List(Of Compiler.TaskNode)()
-                    Console.WriteLine($"⚠️ [ConvertTaskTreeToTaskTreeExpanded] Nodes was Nothing, initialized empty list")
-                Else
-                    Console.WriteLine($"✅ [ConvertTaskTreeToTaskTreeExpanded] Nodes count: {taskTreeExpanded.Nodes.Count}")
-                    For i = 0 To taskTreeExpanded.Nodes.Count - 1
-                        Dim node = taskTreeExpanded.Nodes(i)
-                        Console.WriteLine($"   Node[{i}]: Id={node.Id}, TemplateId={node.TemplateId}, Name={node.Name}, Steps.Count={If(node.Steps IsNot Nothing, node.Steps.Count, 0)}, SubTasks.Count={If(node.SubTasks IsNot Nothing, node.SubTasks.Count, 0)}")
-                    Next
+                ' ✅ ASSEGNA taskInstanceId se ancora vuoto (fallback da taskId parametro)
+                If String.IsNullOrEmpty(taskTreeExpanded.TaskInstanceId) Then
+                    taskTreeExpanded.TaskInstanceId = taskId
+                    Console.WriteLine($"✅ [ConvertTaskTreeToTaskTreeExpanded] TaskInstanceId not in JSON, using taskId parameter as fallback: {taskId}")
                 End If
+
+                ' ❌ ERRORE BLOCCANTE: TaskInstanceId OBBLIGATORIO, nessun fallback
+                If String.IsNullOrEmpty(taskTreeExpanded.TaskInstanceId) Then
+                    Throw New InvalidOperationException($"TaskTreeExpanded.TaskInstanceId is required and cannot be empty. The request must include a valid taskInstanceId.")
+                End If
+                Console.WriteLine($"✅ [ConvertTaskTreeToTaskTreeExpanded] TaskInstanceId validated: {taskTreeExpanded.TaskInstanceId}")
+
+                ' ❌ ERRORE BLOCCANTE: Nodes OBBLIGATORIO, nessun fallback
+                If taskTreeExpanded.Nodes Is Nothing Then
+                    Throw New InvalidOperationException($"TaskTreeExpanded.Nodes is required and cannot be Nothing. The TaskTree must have a valid Nodes list (even if empty).")
+                End If
+
+                Console.WriteLine($"✅ [ConvertTaskTreeToTaskTreeExpanded] Nodes count: {taskTreeExpanded.Nodes.Count}")
+                For i = 0 To taskTreeExpanded.Nodes.Count - 1
+                    Dim node = taskTreeExpanded.Nodes(i)
+                    Console.WriteLine($"   Node[{i}]: Id={node.Id}, TemplateId={node.TemplateId}, Name={node.Name}, Steps.Count={If(node.Steps IsNot Nothing, node.Steps.Count, 0)}, SubTasks.Count={If(node.SubTasks IsNot Nothing, node.SubTasks.Count, 0)}")
+                Next
                 If taskTreeExpanded.Translations Is Nothing Then
                     taskTreeExpanded.Translations = New Dictionary(Of String, String)()
                 End If
@@ -207,10 +219,13 @@ Namespace Converters
             For Each node As Compiler.TaskNode In nodes
                 Console.WriteLine($"🔍 [ApplyStepsToTaskNodes] Processing node: Id={node.Id}, TemplateId={node.TemplateId}, CurrentSteps.Count={If(node.Steps IsNot Nothing, node.Steps.Count, 0)}")
 
-                ' ✅ Applica steps se presente override per questo templateId
+                ' ❌ ERRORE BLOCCANTE: node deve avere templateId, nessun fallback
                 If String.IsNullOrEmpty(node.TemplateId) Then
-                    Console.WriteLine($"⚠️ [ApplyStepsToTaskNodes] Node {node.Id} has empty TemplateId, skipping")
-                ElseIf Not stepsDict.ContainsKey(node.TemplateId) Then
+                    Throw New InvalidOperationException($"Node '{node.Id}' has empty TemplateId. TemplateId is mandatory and cannot be empty. The node must reference a valid template.")
+                End If
+
+                ' ✅ Applica steps se presente override per questo templateId
+                If Not stepsDict.ContainsKey(node.TemplateId) Then
                     Console.WriteLine($"⚠️ [ApplyStepsToTaskNodes] Node {node.Id} (templateId={node.TemplateId}) not found in stepsDict")
                     Console.WriteLine($"   Available templateIds in stepsDict: {String.Join(", ", stepsDict.Keys)}")
                 Else

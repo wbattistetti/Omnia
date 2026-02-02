@@ -101,7 +101,7 @@ Namespace Services
             Try
                 Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
                 Console.WriteLine($"🔍 [CompileTaskTreeExpandedToCompiledTask] START - Using UtteranceTaskCompiler")
-                Console.WriteLine($"   taskTreeExpanded.Id: {taskTreeExpanded.Id}")
+                Console.WriteLine($"   taskTreeExpanded.TaskInstanceId: {taskTreeExpanded.TaskInstanceId}")
                 Console.WriteLine($"   projectId: {projectId}")
                 Console.WriteLine($"   taskId: {taskId}")
                 Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
@@ -109,7 +109,7 @@ Namespace Services
                 ' 1. Estrai templateId dal primo nodo di TaskTreeExpanded
                 Dim templateId = TaskTreeConverter.ExtractTemplateIdFromTaskTreeExpanded(taskTreeExpanded, taskId)
                 If String.IsNullOrEmpty(templateId) Then
-                    Return New CompileTaskResult(False, Nothing, $"Cannot extract templateId from TaskTreeExpanded '{taskTreeExpanded.Id}'. The TaskTree may be malformed.")
+                    Return New CompileTaskResult(False, Nothing, $"Cannot extract templateId from TaskTreeExpanded '{taskTreeExpanded.TaskInstanceId}'. The TaskTree may be malformed.")
                 End If
                 Console.WriteLine($"✅ [CompileTaskTreeExpandedToCompiledTask] Extracted templateId: {templateId}")
 
@@ -157,20 +157,26 @@ Namespace Services
                 Dim allTemplates = deserializeResult.Tasks
 
                 ' 6. Trova task e template nella lista deserializzata
-                Dim task = allTemplates.FirstOrDefault(Function(t) t.Id = taskId)
-                Dim template = allTemplates.FirstOrDefault(Function(t) t.Id = templateId)
-
-                If task Is Nothing Then
-                    Return New CompileTaskResult(False, Nothing, $"Failed to deserialize task with ID '{taskId}'.")
+                Dim matchingTasks = allTemplates.Where(Function(t) t.Id = taskId).ToList()
+                If matchingTasks.Count = 0 Then
+                    Return New CompileTaskResult(False, Nothing, $"Task with ID '{taskId}' not found in deserialized templates. The task must exist exactly once.")
+                ElseIf matchingTasks.Count > 1 Then
+                    Return New CompileTaskResult(False, Nothing, $"Task with ID '{taskId}' appears {matchingTasks.Count} times in deserialized templates. Each task ID must be unique.")
                 End If
+                Dim task = matchingTasks.Single()
 
-                If template Is Nothing Then
-                    Return New CompileTaskResult(False, Nothing, $"Failed to deserialize template with ID '{templateId}'.")
+                Dim matchingTemplates = allTemplates.Where(Function(t) t.Id = templateId).ToList()
+                If matchingTemplates.Count = 0 Then
+                    Return New CompileTaskResult(False, Nothing, $"Template with ID '{templateId}' not found in deserialized templates. The template must exist exactly once.")
+                ElseIf matchingTemplates.Count > 1 Then
+                    Return New CompileTaskResult(False, Nothing, $"Template with ID '{templateId}' appears {matchingTemplates.Count} times in deserialized templates. Each template ID must be unique.")
                 End If
+                Dim template = matchingTemplates.Single()
 
                 ' 7. Assicura che task abbia templateId
+                ' ❌ ERRORE BLOCCANTE: task deve avere templateId, nessun fallback
                 If String.IsNullOrEmpty(task.TemplateId) Then
-                    task.TemplateId = templateId
+                    Throw New InvalidOperationException($"Task '{task.Id}' has no TemplateId. TemplateId is mandatory and cannot be empty. The task must reference a valid template.")
                 End If
 
                 ' 8. Costruisci steps override da TaskTreeExpanded

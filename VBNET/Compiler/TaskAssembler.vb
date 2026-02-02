@@ -10,19 +10,9 @@ Imports TaskEngine
 ''' - Compilare tipi (DialogueStep IDE → DialogueStep Runtime)
 ''' - Convertire Constraints in ValidationConditions
 ''' - Costruire struttura ricorsiva Task → Task → Task
-''' - Sostituire GUID con testi tradotti nella lingua corrente
+''' MODELLO RIGOROSO: Passa SOLO chiavi di traduzione, NON risolve testo
 ''' </summary>
 Public Class TaskAssembler
-
-    ' ✅ Traduzioni per sostituire GUID con testi durante la compilazione
-    Private translations As Dictionary(Of String, String)
-
-    ''' <summary>
-    ''' Imposta le traduzioni per la risoluzione dei GUID
-    ''' </summary>
-    Public Sub SetTranslations(translationsDict As Dictionary(Of String, String))
-        translations = translationsDict
-    End Sub
 
     ''' <summary>
     ''' Verifica se una stringa è un GUID valido
@@ -37,30 +27,6 @@ Public Class TaskAssembler
     End Function
 
     ''' <summary>
-    ''' Risolve un valore: se è un GUID, cerca la traduzione; altrimenti usa il valore originale
-    ''' Se il valore sembra essere una chiave non risolta (es. "ask.base"), restituisce stringa vuota
-    ''' </summary>
-    Private Function ResolveText(value As String) As String
-        If String.IsNullOrEmpty(value) Then
-            Return value
-        End If
-
-        If IsGuid(value) AndAlso translations IsNot Nothing AndAlso translations.ContainsKey(value) Then
-            Dim translatedText = translations(value)
-            If Not String.IsNullOrEmpty(translatedText) Then
-                Return translatedText
-            End If
-        End If
-
-        If value.Contains(".") AndAlso (value.StartsWith("ask.") OrElse value.StartsWith("confirm.") OrElse value.StartsWith("success.") OrElse value.StartsWith("noMatch.") OrElse value.StartsWith("noInput.")) Then
-            Return $"Messaggio non trovato: {value}"
-        End If
-
-        ' Altrimenti usa il valore originale (non è un GUID o traduzione non trovata, ma sembra essere testo valido)
-        Return value
-    End Function
-
-    ''' <summary>
     ''' Compila TaskTreeExpanded (IDE - AST montato) in RuntimeTask ricorsivo (Runtime)
     ''' Restituisce il RuntimeTask root dell'albero ricorsivo
     ''' </summary>
@@ -69,7 +35,7 @@ Public Class TaskAssembler
             Throw New ArgumentNullException(NameOf(assembled), "TaskTreeExpanded cannot be Nothing")
         End If
 
-        translations = If(assembled.Translations, New Dictionary(Of String, String)())
+        ' ❌ RIMOSSO: translations - il compilatore NON deve più gestire traduzioni
         ' ✅ NUOVO MODELLO: Costruisci RuntimeTask root ricorsivo
         ' Se c'è un solo nodo, è il root; se ce ne sono più, creiamo un nodo aggregato
         Dim rootTask As RuntimeTask = Nothing
@@ -79,11 +45,11 @@ Public Class TaskAssembler
                 ' Un solo nodo: è il root
                 Dim taskNode As Compiler.TaskNode = assembled.Nodes(0)
                 rootTask = CompileNode(taskNode, Nothing)
-                rootTask.Id = assembled.Id ' Usa l'ID del TaskTreeExpanded come ID del root
+                rootTask.Id = assembled.TaskInstanceId ' ✅ Usa TaskInstanceId del TaskTreeExpanded come ID del root
             Else
                 ' Più nodi: crea un nodo aggregato root con subTasks
                 rootTask = New RuntimeTask() With {
-                    .Id = assembled.Id,
+                    .Id = assembled.TaskInstanceId, ' ✅ Usa TaskInstanceId invece di Id
                     .Condition = Nothing,
                     .Steps = New List(Of TaskEngine.DialogueStep)(),
                     .Constraints = New List(Of ValidationCondition)(),
@@ -101,7 +67,7 @@ Public Class TaskAssembler
         Else
             ' Nessun nodo: crea un task vuoto
             rootTask = New RuntimeTask() With {
-                .Id = assembled.Id,
+                .Id = assembled.TaskInstanceId, ' ✅ Usa TaskInstanceId invece di Id
                 .Condition = Nothing,
                 .Steps = New List(Of TaskEngine.DialogueStep)(),
                 .Constraints = New List(Of ValidationCondition)(),
@@ -353,30 +319,54 @@ Public Class TaskAssembler
 
         Select Case taskType
             Case TaskTypes.SayMessage
-                If Not String.IsNullOrEmpty(ideTask.Text) Then
-                    Return New MessageTask(ResolveText(ideTask.Text))
-                End If
-                If ideTask.Parameters IsNot Nothing Then
-                    Dim textParam = ideTask.Parameters.FirstOrDefault(Function(p) p.ParameterId = "text")
-                    If textParam IsNot Nothing AndAlso Not String.IsNullOrEmpty(textParam.Value) Then
-                        Return New MessageTask(ResolveText(textParam.Value))
+                ' ✅ Estrai SOLO la chiave, NON risolvere
+                Dim textKey As String = ""
+
+                If Not String.IsNullOrWhiteSpace(ideTask.Text) Then
+                    textKey = ideTask.Text.Trim()
+                ElseIf ideTask.Parameters IsNot Nothing Then
+                    Dim textParams = ideTask.Parameters.Where(Function(p) p.ParameterId = "text").ToList()
+                    If textParams.Count = 0 Then
+                        Throw New InvalidOperationException($"SayMessage task '{ideTask.Id}' has no parameter with ParameterId='text'. The 'text' parameter is mandatory for MessageTask.")
+                    ElseIf textParams.Count > 1 Then
+                        Throw New InvalidOperationException($"SayMessage task '{ideTask.Id}' has {textParams.Count} parameters with ParameterId='text'. Each parameter ID must be unique.")
                     End If
-                End If
-                If ideTask.Value IsNot Nothing AndAlso ideTask.Value.ContainsKey("parameters") Then
+                    Dim textParam = textParams.Single()
+                    If String.IsNullOrWhiteSpace(textParam.Value) Then
+                        Throw New InvalidOperationException($"SayMessage task '{ideTask.Id}' has parameter 'text' with empty value. TextKey cannot be empty.")
+                    End If
+                    textKey = textParam.Value.Trim()
+                ElseIf ideTask.Value IsNot Nothing AndAlso ideTask.Value.ContainsKey("parameters") Then
                     Dim parameters = ideTask.Value("parameters")
                     If TypeOf parameters Is List(Of Object) Then
                         Dim paramsList = CType(parameters, List(Of Object))
-                        Dim textParam = paramsList.FirstOrDefault(Function(p) TypeOf p Is Dictionary(Of String, Object) AndAlso CType(p, Dictionary(Of String, Object)).ContainsKey("parameterId") AndAlso CType(p, Dictionary(Of String, Object))("parameterId")?.ToString() = "text")
-                        If textParam IsNot Nothing Then
-                            Dim textValue = CType(textParam, Dictionary(Of String, Object))("value")?.ToString()
-                            If Not String.IsNullOrEmpty(textValue) Then
-                                Return New MessageTask(ResolveText(textValue))
-                            End If
+                        Dim textParams = paramsList.Where(Function(p) TypeOf p Is Dictionary(Of String, Object) AndAlso CType(p, Dictionary(Of String, Object)).ContainsKey("parameterId") AndAlso CType(p, Dictionary(Of String, Object))("parameterId")?.ToString() = "text").ToList()
+                        If textParams.Count = 0 Then
+                            Throw New InvalidOperationException($"SayMessage task '{ideTask.Id}' has no parameter with ParameterId='text' in Value.parameters. The 'text' parameter is mandatory for MessageTask.")
+                        ElseIf textParams.Count > 1 Then
+                            Throw New InvalidOperationException($"SayMessage task '{ideTask.Id}' has {textParams.Count} parameters with ParameterId='text' in Value.parameters. Each parameter ID must be unique.")
                         End If
+                        Dim textParam = CType(textParams.Single(), Dictionary(Of String, Object))
+                        Dim textValue = textParam("value")?.ToString()
+                        If String.IsNullOrWhiteSpace(textValue) Then
+                            Throw New InvalidOperationException($"SayMessage task '{ideTask.Id}' has parameter 'text' with empty value in Value.parameters. TextKey cannot be empty.")
+                        End If
+                        textKey = textValue.Trim()
                     End If
                 End If
-                Console.WriteLine($"[COMPILER] ERROR: SayMessage task {ideTask.Id} has no text")
-                Return Nothing
+
+                ' ❌ ERRORE DI COMPILAZIONE: TextKey obbligatorio
+                If String.IsNullOrWhiteSpace(textKey) Then
+                    Throw New InvalidOperationException($"SayMessage task '{ideTask.Id}' has no TextKey. The IDE must provide a translation key (GUID or symbolic name), not literal text. TextKey is mandatory.")
+                End If
+
+                ' ✅ Verifica che non sia testo letterale (euristica: se contiene spazi e non è un GUID, probabilmente è testo)
+                If Not IsGuid(textKey) AndAlso textKey.Contains(" ") Then
+                    Throw New InvalidOperationException($"SayMessage task '{ideTask.Id}' has TextKey '{textKey}' which appears to be literal text. The IDE must provide only translation keys (GUID or symbolic names), not literal text.")
+                End If
+
+                ' ✅ Crea MessageTask con SOLO la chiave
+                Return New MessageTask(textKey)
             Case TaskTypes.CloseSession
                 Return New CloseSessionTask()
             Case TaskTypes.Transfer
@@ -456,4 +446,6 @@ Public Class TaskAssembler
         End If
     End Sub
 End Class
+
+
 

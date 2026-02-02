@@ -31,18 +31,19 @@ Public Class UtteranceTaskCompiler
         Dim taskTreeExpanded As Compiler.TaskTreeExpanded = Nothing
 
         If Not String.IsNullOrEmpty(task.TemplateId) Then
-            Dim template As Compiler.Task = flow.Tasks.FirstOrDefault(Function(t As Compiler.Task) t.Id = task.TemplateId)
-            If template IsNot Nothing Then
-                Try
-                    taskTreeExpanded = BuildTaskTreeExpanded(template, task, flow)
-                Catch ex As Exception
-                    Console.WriteLine($"[COMPILER] ERROR: Failed to build TaskTreeExpanded from template {task.TemplateId}: {ex.Message}")
-                    Throw New InvalidOperationException($"Failed to build TaskTreeExpanded from template {task.TemplateId}: {ex.Message}", ex)
-                End Try
-            Else
-                Console.WriteLine($"[COMPILER] ERROR: Template {task.TemplateId} not found for task {taskId}")
-                Throw New InvalidOperationException($"Template {task.TemplateId} not found. Every task must have a valid templateId.")
+            Dim matchingTemplates = flow.Tasks.Where(Function(t As Compiler.Task) t.Id = task.TemplateId).ToList()
+            If matchingTemplates.Count = 0 Then
+                Throw New InvalidOperationException($"Template with ID '{task.TemplateId}' not found in flow.Tasks for task '{taskId}'. Every task must reference a valid template.")
+            ElseIf matchingTemplates.Count > 1 Then
+                Throw New InvalidOperationException($"Template with ID '{task.TemplateId}' appears {matchingTemplates.Count} times in flow.Tasks. Each template ID must be unique.")
             End If
+            Dim template = matchingTemplates.Single()
+            Try
+                taskTreeExpanded = BuildTaskTreeExpanded(template, task, flow)
+            Catch ex As Exception
+                Console.WriteLine($"[COMPILER] ERROR: Failed to build TaskTreeExpanded from template {task.TemplateId}: {ex.Message}")
+                Throw New InvalidOperationException($"Failed to build TaskTreeExpanded from template {task.TemplateId}: {ex.Message}", ex)
+            End Try
         Else
             Console.WriteLine($"[COMPILER] ERROR: Task {taskId} has no templateId")
             Throw New InvalidOperationException($"Task {taskId} must have a templateId. Legacy task.Data is not supported.")
@@ -100,30 +101,33 @@ Public Class UtteranceTaskCompiler
         For Each node As Compiler.TaskNode In nodes
             ' ✅ Se il nodo ha templateId, dereferenzia il template
             If Not String.IsNullOrEmpty(node.TemplateId) Then
-            If visitedTemplates.Contains(node.TemplateId) Then
-                expandedNodes.Add(node)
-                Continue For
-            End If
+                If visitedTemplates.Contains(node.TemplateId) Then
+                    expandedNodes.Add(node)
+                    Continue For
+                End If
 
-            visitedTemplates.Add(node.TemplateId)
+                visitedTemplates.Add(node.TemplateId)
 
                 ' ✅ NUOVO MODELLO: Cerca il template referenziato e usa subTasksIds
-                Dim referencedTemplate As Compiler.Task = allTemplates.FirstOrDefault(Function(t As Compiler.Task) t.Id = node.TemplateId)
-                If referencedTemplate IsNot Nothing Then
-                    If referencedTemplate.SubTasksIds IsNot Nothing AndAlso referencedTemplate.SubTasksIds.Count > 0 Then
-                        If node.SubTasks Is Nothing OrElse node.SubTasks.Count = 0 Then
-                            node.SubTasks = BuildTaskTreeFromSubTasksIds(referencedTemplate.SubTasksIds, allTemplates, visitedTemplates)
-                        End If
-                    End If
-
-                    If String.IsNullOrEmpty(node.Label) AndAlso Not String.IsNullOrEmpty(referencedTemplate.Label) Then
-                        node.Label = referencedTemplate.Label
-                    End If
-
-                    visitedTemplates.Remove(node.TemplateId)
-                Else
-                    visitedTemplates.Remove(node.TemplateId)
+                Dim matchingTemplates = allTemplates.Where(Function(t As Compiler.Task) t.Id = node.TemplateId).ToList()
+                If matchingTemplates.Count = 0 Then
+                    Throw New InvalidOperationException($"Template with ID '{node.TemplateId}' not found in allTemplates for node '{node.Id}'. Every node must reference a valid template.")
+                ElseIf matchingTemplates.Count > 1 Then
+                    Throw New InvalidOperationException($"Template with ID '{node.TemplateId}' appears {matchingTemplates.Count} times in allTemplates. Each template ID must be unique.")
                 End If
+                Dim referencedTemplate = matchingTemplates.Single()
+
+                If referencedTemplate.SubTasksIds IsNot Nothing AndAlso referencedTemplate.SubTasksIds.Count > 0 Then
+                    If node.SubTasks Is Nothing OrElse node.SubTasks.Count = 0 Then
+                        node.SubTasks = BuildTaskTreeFromSubTasksIds(referencedTemplate.SubTasksIds, allTemplates, visitedTemplates)
+                    End If
+                End If
+
+                If String.IsNullOrEmpty(node.Label) AndAlso Not String.IsNullOrEmpty(referencedTemplate.Label) Then
+                    node.Label = referencedTemplate.Label
+                End If
+
+                visitedTemplates.Remove(node.TemplateId)
             End If
 
             ' ✅ Espandi ricorsivamente i subTasks del nodo corrente
@@ -167,7 +171,7 @@ Public Class UtteranceTaskCompiler
         flow As Flow
     ) As TaskTreeExpanded
         Dim taskTreeExpanded As New TaskTreeExpanded() With {
-            .Id = instance.Id,
+            .TaskInstanceId = instance.Id, ' ✅ Usa TaskInstanceId invece di Id
             .Label = If(String.IsNullOrEmpty(instance.Label), template.Label, instance.Label),
             .Translations = New Dictionary(Of String, String)()
         }
@@ -253,43 +257,48 @@ Public Class UtteranceTaskCompiler
             visitedTemplates.Add(subTaskId)
 
             ' Cerca il template referenziato
-            Dim subTemplate As Compiler.Task = allTemplates.FirstOrDefault(Function(t As Compiler.Task) t.Id = subTaskId)
-            If subTemplate IsNot Nothing Then
-                ' ✅ Crea MainDataNode dal template
-                ' NOTA: Steps vengono SOLO dall'istanza, non dal template
-                ' Template fornisce: struttura (subTasksIds), constraints, condition, metadata
-
-                ' ✅ Carica constraints dal template (priorità: dataContracts > constraints)
-                Dim templateConstraints As List(Of Object) = Nothing
-                If subTemplate.DataContracts IsNot Nothing AndAlso subTemplate.DataContracts.Count > 0 Then
-                    templateConstraints = subTemplate.DataContracts
-                ElseIf subTemplate.Constraints IsNot Nothing AndAlso subTemplate.Constraints.Count > 0 Then
-                    templateConstraints = subTemplate.Constraints
-                Else
-                    templateConstraints = New List(Of Object)()
-                End If
-
-                ' ✅ Crea TaskNode dal template
-                ' NOTA: Steps vengono SOLO dall'istanza, non dal template
-                ' Template fornisce: struttura (subTasksIds), constraints, condition, metadata
-                ' Label, Type, Required, Synonyms non vengono impostati (non servono nel runtime)
-                Dim node As New Compiler.TaskNode() With {
-                    .Id = subTemplate.Id,
-                    .TemplateId = subTemplate.Id,
-                    .Name = If(String.IsNullOrEmpty(subTemplate.Label), subTemplate.Id, subTemplate.Label),
-                    .Steps = New List(Of Compiler.DialogueStep)(),
-                    .SubTasks = New List(Of Compiler.TaskNode)(),
-                    .Constraints = templateConstraints,
-                    .Condition = subTemplate.Condition
-                }
-
-                ' ✅ Se il sub-template ha a sua volta subTasksIds, dereferenzia ricorsivamente
-                If subTemplate.SubTasksIds IsNot Nothing AndAlso subTemplate.SubTasksIds.Count > 0 Then
-                    node.SubTasks = BuildTaskTreeFromSubTasksIds(subTemplate.SubTasksIds, allTemplates, visitedTemplates)
-                End If
-
-                nodes.Add(node)
+            Dim matchingTemplates = allTemplates.Where(Function(t As Compiler.Task) t.Id = subTaskId).ToList()
+            If matchingTemplates.Count = 0 Then
+                Throw New InvalidOperationException($"SubTemplate with ID '{subTaskId}' not found in allTemplates. Every subtask must reference a valid template.")
+            ElseIf matchingTemplates.Count > 1 Then
+                Throw New InvalidOperationException($"SubTemplate with ID '{subTaskId}' appears {matchingTemplates.Count} times in allTemplates. Each template ID must be unique.")
             End If
+            Dim subTemplate = matchingTemplates.Single()
+
+            ' ✅ Crea MainDataNode dal template
+            ' NOTA: Steps vengono SOLO dall'istanza, non dal template
+            ' Template fornisce: struttura (subTasksIds), constraints, condition, metadata
+
+            ' ✅ Carica constraints dal template (priorità: dataContracts > constraints)
+            Dim templateConstraints As List(Of Object) = Nothing
+            If subTemplate.DataContracts IsNot Nothing AndAlso subTemplate.DataContracts.Count > 0 Then
+                templateConstraints = subTemplate.DataContracts
+            ElseIf subTemplate.Constraints IsNot Nothing AndAlso subTemplate.Constraints.Count > 0 Then
+                templateConstraints = subTemplate.Constraints
+            Else
+                templateConstraints = New List(Of Object)()
+            End If
+
+            ' ✅ Crea TaskNode dal template
+            ' NOTA: Steps vengono SOLO dall'istanza, non dal template
+            ' Template fornisce: struttura (subTasksIds), constraints, condition, metadata
+            ' Label, Type, Required, Synonyms non vengono impostati (non servono nel runtime)
+            Dim node As New Compiler.TaskNode() With {
+                .Id = subTemplate.Id,
+                .TemplateId = subTemplate.Id,
+                .Name = If(String.IsNullOrEmpty(subTemplate.Label), subTemplate.Id, subTemplate.Label),
+                .Steps = New List(Of Compiler.DialogueStep)(),
+                .SubTasks = New List(Of Compiler.TaskNode)(),
+                .Constraints = templateConstraints,
+                .Condition = subTemplate.Condition
+            }
+
+            ' ✅ Se il sub-template ha a sua volta subTasksIds, dereferenzia ricorsivamente
+            If subTemplate.SubTasksIds IsNot Nothing AndAlso subTemplate.SubTasksIds.Count > 0 Then
+                node.SubTasks = BuildTaskTreeFromSubTasksIds(subTemplate.SubTasksIds, allTemplates, visitedTemplates)
+            End If
+
+            nodes.Add(node)
 
             visitedTemplates.Remove(subTaskId)
         Next
