@@ -18,12 +18,6 @@ Public Class TaskNode
     Public Property Id As String
 
     ''' <summary>
-    ''' Nome del dato (es. "Nome", "Cognome", "Indirizzo")
-    ''' Usato per fallback regex hardcoded in Parser.vb
-    ''' </summary>
-    Public Property Name As String
-
-    ''' <summary>
     ''' Indica se il dato è obbligatorio
     ''' </summary>
     Public Property Required As Boolean

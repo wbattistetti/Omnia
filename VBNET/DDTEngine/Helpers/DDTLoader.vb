@@ -89,12 +89,11 @@ Imports System.Text.Json.Serialization
         ''' Calcola il FullLabel per un singolo nodo e i suoi subTasks (ricorsivo)
         ''' </summary>
         Private Shared Sub CalculateFullLabelForNode(node As TaskNode, parentPath As String)
-            ' Calcola FullLabel: se è root, usa solo Name, altrimenti parentPath.Name
+            ' Calcola FullLabel: usa sempre Id
             If String.IsNullOrEmpty(parentPath) Then
-                node.FullLabel = If(String.IsNullOrEmpty(node.Name), node.Id, node.Name)
+                node.FullLabel = node.Id
             Else
-                Dim nodeName As String = If(String.IsNullOrEmpty(node.Name), node.Id, node.Name)
-                node.FullLabel = parentPath & "." & nodeName
+                node.FullLabel = parentPath & "." & node.Id
             End If
 
             ' Calcola ricorsivamente per subTasks

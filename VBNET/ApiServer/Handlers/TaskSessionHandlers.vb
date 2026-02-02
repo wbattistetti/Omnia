@@ -11,6 +11,7 @@ Imports Compiler
 Imports Microsoft.AspNetCore.Http
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
+Imports TaskEngine
 
 Namespace ApiServer.Handlers
     ''' <summary>
@@ -669,10 +670,13 @@ Namespace ApiServer.Handlers
         ''' Handles POST /api/runtime/task/session/{id}/input - Chat Simulator diretto
         ''' </summary>
         Public Async Function HandleTaskSessionInput(context As HttpContext, sessionId As String) As Task(Of IResult)
+            Console.WriteLine($"[DIAG] HandleTaskSessionInput ENTRY: sessionId={sessionId}")
             Try
                 Dim reader As New StreamReader(context.Request.Body)
                 Dim body = Await reader.ReadToEndAsync()
                 Dim request = JsonConvert.DeserializeObject(Of TaskSessionInputRequest)(body)
+
+                Console.WriteLine($"[DIAG] Request parsed: Input='{If(request IsNot Nothing, request.Input, "Nothing")}'")
 
                 If request Is Nothing OrElse String.IsNullOrEmpty(request.Input) Then
                     Console.WriteLine($"[API] ERROR: Invalid request or empty input for session {sessionId}")
@@ -680,18 +684,47 @@ Namespace ApiServer.Handlers
                 End If
 
                 Dim session = SessionManager.GetTaskSession(sessionId)
+                Console.WriteLine($"[DIAG] Session found: IsNothing={session Is Nothing}, TaskEngine IsNothing={If(session IsNot Nothing, session.TaskEngine Is Nothing, True)}")
+
                 If session Is Nothing Then
                     Console.WriteLine($"[API] ERROR: Session not found: {sessionId}")
                     Return Results.NotFound(New With {.error = "Session not found"})
                 End If
 
-                Console.WriteLine($"[API] Processing input for session {sessionId}")
+                Console.WriteLine($"[DIAG] HandleTaskSessionInput: Input received='{request.Input}', SessionId={sessionId}")
+                Console.WriteLine($"[DIAG] HandleTaskSessionInput: IsWaitingForInput={session.IsWaitingForInput}")
 
-                ' TODO: Process input and continue DDT execution
-                ' Per ora, solo acknowledge receipt
-                ' In futuro, questo dovrebbe:
-                ' 1. Passare input al Parser
-                ' 2. Continuare esecuzione DDT
+                ' ✅ STEP 1: Verifica che TaskInstance esista
+                If session.TaskInstance Is Nothing Then
+                    Console.WriteLine($"[DIAG] HandleTaskSessionInput: ERROR - TaskInstance is Nothing")
+                    Return Results.BadRequest(New With {.error = "TaskInstance not initialized"})
+                End If
+                Console.WriteLine($"[DIAG] HandleTaskSessionInput: TaskInstance found, TaskList.Count={session.TaskInstance.TaskList.Count}")
+
+                ' ✅ STEP 2: Ottieni il task corrente (quello che sta aspettando input)
+                Dim currTaskNode = session.TaskEngine.GetNextTask(session.TaskInstance)
+                If currTaskNode Is Nothing Then
+                    Console.WriteLine($"[DIAG] HandleTaskSessionInput: ERROR - GetNextTask returned Nothing (no task waiting for input)")
+                    Return Results.BadRequest(New With {.error = "No task waiting for input"})
+                End If
+                Console.WriteLine($"[DIAG] HandleTaskSessionInput: Current task node: Id={currTaskNode.Id}, State={currTaskNode.State}")
+
+                ' ✅ STEP 3: Invia input al Parser (thread-safe, Shared method)
+                Parser.SetUserInput(request.Input)
+                Console.WriteLine($"[DIAG] HandleTaskSessionInput: Input sent to Parser via SetUserInput")
+
+                ' ✅ STEP 4: Processa l'input con il Parser
+                Dim parseResult = session.TaskEngine.Parser.InterpretUtterance(currTaskNode)
+                Console.WriteLine($"[DIAG] HandleTaskSessionInput: ParseResult received: {parseResult.Result}")
+
+                ' ✅ STEP 5: Aggiorna lo stato del task
+                session.TaskEngine.SetState(parseResult, currTaskNode.State, currTaskNode)
+                Console.WriteLine($"[DIAG] HandleTaskSessionInput: Task state updated: {currTaskNode.State}")
+
+                ' ✅ STEP 6: Continua l'esecuzione del motore
+                Console.WriteLine($"[DIAG] HandleTaskSessionInput: About to call ExecuteTask to continue execution")
+                session.TaskEngine.ExecuteTask(session.TaskInstance)
+                Console.WriteLine($"[DIAG] HandleTaskSessionInput: ExecuteTask completed")
 
                 ' Clear waiting state
                 session.IsWaitingForInput = False

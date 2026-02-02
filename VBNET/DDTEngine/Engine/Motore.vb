@@ -9,7 +9,7 @@ Option Explicit On
 ''' Implementa la funzione Execute che coordina il processo di esecuzione task
 ''' </summary>
 Public Class Motore
-    Private ReadOnly _parser As Parser
+    Public ReadOnly Property Parser As Parser
     Private ReadOnly _counters As New Dictionary(Of DialogueState, Integer)()
     Private ReadOnly _maxRecovery As New Dictionary(Of DialogueState, Integer)()
 
@@ -19,7 +19,7 @@ Public Class Motore
     Public Event MessageToShow As EventHandler(Of MessageEventArgs)
 
     Public Sub New()
-        _parser = New Parser()
+        Parser = New Parser()
     End Sub
 
 
@@ -194,7 +194,7 @@ Public Class Motore
     End Sub
 
 
-    Private Function GetNextTask(taskInstance As TaskInstance) As TaskNode
+    Public Function GetNextTask(taskInstance As TaskInstance) As TaskNode
         Console.WriteLine($"[MOTORE] GetNextTask: checking {taskInstance.TaskList.Count} main nodes")
 
         For Each mainTask As TaskNode In taskInstance.TaskList.Where(Function(dt) dt.State <> DialogueState.AcquisitionFailed)

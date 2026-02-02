@@ -43,6 +43,9 @@ Public Class TaskNode
     <JsonProperty("templateId")>
     Public Property TemplateId As String
 
+    <JsonProperty("dataContract")>
+    Public Property DataContract As Object
+
     Public Sub New()
         Steps = New List(Of Compiler.DialogueStep)()
         SubTasks = New List(Of Compiler.TaskNode)()

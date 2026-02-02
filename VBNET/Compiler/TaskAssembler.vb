@@ -1,6 +1,7 @@
 Option Strict On
 Option Explicit On
 Imports Newtonsoft.Json
+Imports Newtonsoft.Json.Linq
 Imports TaskEngine
 
 ''' <summary>
@@ -152,6 +153,45 @@ Public Class TaskAssembler
                     task.Constraints.Add(validationCondition)
                 End If
             Next
+        End If
+
+        ' ✅ DIAG: Verifica dataContract quando arriva a CompileNode
+        Console.WriteLine($"[DIAG] TaskAssembler.CompileNode: ideNode.Id={ideNode.Id}, ideNode.DataContract IsNothing={ideNode.DataContract Is Nothing}")
+        If ideNode.DataContract IsNot Nothing Then
+            Console.WriteLine($"[DIAG] TaskAssembler.CompileNode: ideNode.DataContract type: {ideNode.DataContract.GetType().Name}")
+            Try
+                Dim dataContractJson = JsonConvert.SerializeObject(ideNode.DataContract)
+                Console.WriteLine($"[DIAG] TaskAssembler.CompileNode: ideNode.DataContract JSON (first 200 chars): {dataContractJson.Substring(0, Math.Min(200, dataContractJson.Length))}")
+            Catch ex As Exception
+                Console.WriteLine($"[DIAG] TaskAssembler.CompileNode: ideNode.DataContract JSON serialization failed: {ex.Message}")
+            End Try
+        Else
+            Console.WriteLine($"[DIAG] TaskAssembler.CompileNode: ideNode.DataContract is Nothing - checking if it should be present")
+        End If
+
+        ' ✅ Converti dataContract in CompiledNlpContract se presente
+        If ideNode.DataContract IsNot Nothing Then
+            Try
+                Console.WriteLine($"[TaskAssembler] Compiling dataContract for node {ideNode.Id}")
+                Dim baseContract = ConvertDataContractToNlpContract(ideNode.DataContract)
+                If baseContract IsNot Nothing Then
+                    task.NlpContract = CompiledNlpContract.Compile(baseContract)
+                    If task.NlpContract.IsValid Then
+                        Console.WriteLine($"[TaskAssembler] Successfully compiled NlpContract for node {ideNode.Id}, main regex compiled: {task.NlpContract.CompiledMainRegex IsNot Nothing}")
+                    Else
+                        Console.WriteLine($"[TaskAssembler] WARNING: NlpContract compiled with errors for node {ideNode.Id}: {String.Join(", ", task.NlpContract.ValidationErrors)}")
+                        Throw New InvalidOperationException($"NlpContract compilation failed for node {ideNode.Id}: {String.Join(", ", task.NlpContract.ValidationErrors)}")
+                    End If
+                Else
+                    Console.WriteLine($"[TaskAssembler] WARNING: Failed to convert dataContract to NLPContract for node {ideNode.Id}")
+                End If
+            Catch ex As Exception
+                Console.WriteLine($"[TaskAssembler] ERROR: Failed to compile dataContract for node {ideNode.Id}: {ex.GetType().Name} - {ex.Message}")
+                Console.WriteLine($"[TaskAssembler] ERROR: Stack trace: {ex.StackTrace}")
+                Throw New InvalidOperationException($"Failed to compile dataContract for node {ideNode.Id}: {ex.Message}", ex)
+            End Try
+        Else
+            Console.WriteLine($"[TaskAssembler] No dataContract found for node {ideNode.Id}, NlpContract will remain Nothing")
         End If
 
         ' Compila SubTasks (ricorsivo) - inizializza solo se ci sono subTasks
@@ -431,9 +471,9 @@ Public Class TaskAssembler
     Private Sub CalculateFullLabelForNode(node As TaskEngine.TaskNode, parentPath As String)
         Dim currentPath As String
         If String.IsNullOrEmpty(parentPath) Then
-            currentPath = node.Name
+            currentPath = node.Id
         Else
-            currentPath = $"{parentPath}.{node.Name}"
+            currentPath = $"{parentPath}.{node.Id}"
         End If
 
         node.FullLabel = currentPath
@@ -445,6 +485,233 @@ Public Class TaskAssembler
             Next
         End If
     End Sub
+
+    ''' <summary>
+    ''' Converte dataContract (JObject o Object) in NLPContract
+    ''' Gestisce il formato dataContract con array "contracts" e lo converte in NLPContract con oggetti "regex", "rules", ecc.
+    ''' </summary>
+    Private Function ConvertDataContractToNlpContract(dataContract As Object) As NLPContract
+        If dataContract Is Nothing Then
+            Return Nothing
+        End If
+
+        ' Se è già NLPContract, ritorna direttamente
+        If TypeOf dataContract Is NLPContract Then
+            Return CType(dataContract, NLPContract)
+        End If
+
+        Try
+            ' Converti in JObject se necessario
+            Dim contractObj As JObject = Nothing
+            If TypeOf dataContract Is JObject Then
+                contractObj = CType(dataContract, JObject)
+            ElseIf TypeOf dataContract Is String Then
+                contractObj = JObject.Parse(CType(dataContract, String))
+            Else
+                ' Serializza e deserializza per convertire Object generico in JObject
+                Dim jsonString = JsonConvert.SerializeObject(dataContract)
+                contractObj = JObject.Parse(jsonString)
+            End If
+
+            If contractObj Is Nothing Then
+                Console.WriteLine($"[TaskAssembler] ERROR: Failed to convert dataContract to JObject")
+                Return Nothing
+            End If
+
+            ' Crea NLPContract base
+            Dim nlpContract As New NLPContract()
+
+            ' Estrai campi base
+            If contractObj("templateName") IsNot Nothing Then
+                nlpContract.TemplateName = contractObj("templateName").ToString()
+            End If
+            If contractObj("templateId") IsNot Nothing Then
+                nlpContract.TemplateId = contractObj("templateId").ToString()
+            End If
+            If contractObj("sourceTemplateId") IsNot Nothing Then
+                nlpContract.SourceTemplateId = contractObj("sourceTemplateId").ToString()
+            End If
+
+            ' Estrai subDataMapping
+            If contractObj("subDataMapping") IsNot Nothing Then
+                Try
+                    Dim subDataMappingJson = contractObj("subDataMapping").ToString()
+                    Dim subDataMappingDict = JsonConvert.DeserializeObject(Of Dictionary(Of String, SubDataMappingInfo))(subDataMappingJson)
+                    If subDataMappingDict IsNot Nothing Then
+                        nlpContract.SubDataMapping = subDataMappingDict
+                    End If
+                Catch ex As Exception
+                    Console.WriteLine($"[TaskAssembler] WARNING: Failed to deserialize subDataMapping: {ex.Message}")
+                End Try
+            End If
+
+            ' ✅ CONVERSIONE CHIAVE: Converti array "contracts" in oggetti "regex", "rules", ecc.
+            If contractObj("contracts") IsNot Nothing AndAlso contractObj("contracts").Type = JTokenType.Array Then
+                Dim contractsArray = CType(contractObj("contracts"), JArray)
+
+                For Each contractItem As JObject In contractsArray
+                    Dim contractType = If(contractItem("type")?.ToString(), "")
+                    Dim contractEnabled = If(contractItem("enabled")?.ToObject(Of Boolean?)(), True)
+
+                    If Not contractEnabled Then
+                        Continue For ' Salta contract disabilitati
+                    End If
+
+                    Select Case contractType.ToLower()
+                        Case "regex"
+                            ' Crea RegexConfig
+                            nlpContract.Regex = New RegexConfig()
+
+                            ' Estrai patterns
+                            If contractItem("patterns") IsNot Nothing AndAlso contractItem("patterns").Type = JTokenType.Array Then
+                                Dim patternsArray = CType(contractItem("patterns"), JArray)
+                                nlpContract.Regex.Patterns = New List(Of String)()
+                                For Each patternToken In patternsArray
+                                    If patternToken.Type = JTokenType.String Then
+                                        nlpContract.Regex.Patterns.Add(patternToken.ToString())
+                                    End If
+                                Next
+                            End If
+
+                            ' Estrai patternModes (opzionale)
+                            If contractItem("patternModes") IsNot Nothing AndAlso contractItem("patternModes").Type = JTokenType.Array Then
+                                Dim patternModesArray = CType(contractItem("patternModes"), JArray)
+                                nlpContract.Regex.PatternModes = New List(Of String)()
+                                For Each modeToken In patternModesArray
+                                    If modeToken.Type = JTokenType.String Then
+                                        nlpContract.Regex.PatternModes.Add(modeToken.ToString())
+                                    End If
+                                Next
+                            End If
+
+                            ' Estrai ambiguityPattern (opzionale)
+                            If contractItem("ambiguityPattern") IsNot Nothing Then
+                                nlpContract.Regex.AmbiguityPattern = contractItem("ambiguityPattern").ToString()
+                            End If
+
+                            ' Estrai ambiguity config (opzionale)
+                            If contractItem("ambiguity") IsNot Nothing Then
+                                Try
+                                    Dim ambiguityJson = contractItem("ambiguity").ToString()
+                                    Dim ambiguity = JsonConvert.DeserializeObject(Of AmbiguityConfig)(ambiguityJson)
+                                    If ambiguity IsNot Nothing Then
+                                        nlpContract.Regex.Ambiguity = ambiguity
+                                    End If
+                                Catch ex As Exception
+                                    Console.WriteLine($"[TaskAssembler] WARNING: Failed to deserialize ambiguity config: {ex.Message}")
+                                End Try
+                            End If
+
+                            ' Estrai testCases (opzionale)
+                            If contractItem("testCases") IsNot Nothing AndAlso contractItem("testCases").Type = JTokenType.Array Then
+                                Dim testCasesArray = CType(contractItem("testCases"), JArray)
+                                nlpContract.Regex.TestCases = New List(Of String)()
+                                For Each testCaseToken In testCasesArray
+                                    If testCaseToken.Type = JTokenType.String Then
+                                        nlpContract.Regex.TestCases.Add(testCaseToken.ToString())
+                                    End If
+                                Next
+                            End If
+
+                        Case "rules"
+                            ' Crea RulesConfig
+                            nlpContract.Rules = New RulesConfig()
+
+                            ' Estrai extractorCode (opzionale)
+                            If contractItem("extractorCode") IsNot Nothing Then
+                                nlpContract.Rules.ExtractorCode = contractItem("extractorCode").ToString()
+                            End If
+
+                            ' Estrai validators (opzionale)
+                            If contractItem("validators") IsNot Nothing AndAlso contractItem("validators").Type = JTokenType.Array Then
+                                Dim validatorsArray = CType(contractItem("validators"), JArray)
+                                nlpContract.Rules.Validators = New List(Of Object)()
+                                For Each validatorToken In validatorsArray
+                                    nlpContract.Rules.Validators.Add(validatorToken.ToObject(Of Object)())
+                                Next
+                            End If
+
+                            ' Estrai testCases (opzionale)
+                            If contractItem("testCases") IsNot Nothing AndAlso contractItem("testCases").Type = JTokenType.Array Then
+                                Dim testCasesArray = CType(contractItem("testCases"), JArray)
+                                nlpContract.Rules.TestCases = New List(Of String)()
+                                For Each testCaseToken In testCasesArray
+                                    If testCaseToken.Type = JTokenType.String Then
+                                        nlpContract.Rules.TestCases.Add(testCaseToken.ToString())
+                                    End If
+                                Next
+                            End If
+
+                        Case "ner"
+                            ' Crea NERConfig
+                            nlpContract.Ner = New NERConfig()
+
+                            ' Estrai entityTypes (opzionale)
+                            If contractItem("entityTypes") IsNot Nothing AndAlso contractItem("entityTypes").Type = JTokenType.Array Then
+                                Dim entityTypesArray = CType(contractItem("entityTypes"), JArray)
+                                nlpContract.Ner.EntityTypes = New List(Of String)()
+                                For Each entityTypeToken In entityTypesArray
+                                    If entityTypeToken.Type = JTokenType.String Then
+                                        nlpContract.Ner.EntityTypes.Add(entityTypeToken.ToString())
+                                    End If
+                                Next
+                            End If
+
+                            ' Estrai confidence (opzionale)
+                            If contractItem("confidence") IsNot Nothing Then
+                                Dim confidenceValue = contractItem("confidence").ToObject(Of Double?)()
+                                If confidenceValue.HasValue Then
+                                    nlpContract.Ner.Confidence = confidenceValue.Value
+                                End If
+                            End If
+
+                            ' Estrai enabled (opzionale)
+                            If contractItem("enabled") IsNot Nothing Then
+                                Dim enabledValue = contractItem("enabled").ToObject(Of Boolean?)()
+                                If enabledValue.HasValue Then
+                                    nlpContract.Ner.Enabled = enabledValue.Value
+                                End If
+                            End If
+
+                        Case "llm"
+                            ' Crea LLMConfig
+                            nlpContract.Llm = New LLMConfig()
+
+                            ' Estrai systemPrompt (opzionale)
+                            If contractItem("systemPrompt") IsNot Nothing Then
+                                nlpContract.Llm.SystemPrompt = contractItem("systemPrompt").ToString()
+                            End If
+
+                            ' Estrai userPromptTemplate (opzionale)
+                            If contractItem("userPromptTemplate") IsNot Nothing Then
+                                nlpContract.Llm.UserPromptTemplate = contractItem("userPromptTemplate").ToString()
+                            End If
+
+                            ' Estrai responseSchema (opzionale)
+                            If contractItem("responseSchema") IsNot Nothing Then
+                                nlpContract.Llm.ResponseSchema = contractItem("responseSchema").ToObject(Of Object)()
+                            End If
+
+                            ' Estrai enabled (opzionale)
+                            If contractItem("enabled") IsNot Nothing Then
+                                Dim enabledValue = contractItem("enabled").ToObject(Of Boolean?)()
+                                If enabledValue.HasValue Then
+                                    nlpContract.Llm.Enabled = enabledValue.Value
+                                End If
+                            End If
+
+                    End Select
+                Next
+            End If
+
+            Return nlpContract
+
+        Catch ex As Exception
+            Console.WriteLine($"[TaskAssembler] ERROR: Exception converting dataContract to NLPContract: {ex.GetType().Name} - {ex.Message}")
+            Console.WriteLine($"[TaskAssembler] ERROR: Stack trace: {ex.StackTrace}")
+            Throw New InvalidOperationException($"Failed to convert dataContract to NLPContract: {ex.Message}", ex)
+        End Try
+    End Function
 End Class
 
 

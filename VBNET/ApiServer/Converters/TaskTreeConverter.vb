@@ -162,7 +162,19 @@ Namespace Converters
                 Console.WriteLine($"✅ [ConvertTaskTreeToTaskTreeExpanded] Nodes count: {taskTreeExpanded.Nodes.Count}")
                 For i = 0 To taskTreeExpanded.Nodes.Count - 1
                     Dim node = taskTreeExpanded.Nodes(i)
-                    Console.WriteLine($"   Node[{i}]: Id={node.Id}, TemplateId={node.TemplateId}, Name={node.Name}, Steps.Count={If(node.Steps IsNot Nothing, node.Steps.Count, 0)}, SubTasks.Count={If(node.SubTasks IsNot Nothing, node.SubTasks.Count, 0)}")
+                    Console.WriteLine($"   Node[{i}]: Id={node.Id}, TemplateId={node.TemplateId}, Steps.Count={If(node.Steps IsNot Nothing, node.Steps.Count, 0)}, SubTasks.Count={If(node.SubTasks IsNot Nothing, node.SubTasks.Count, 0)}")
+
+                    ' ✅ DIAG: Verifica dataContract dopo deserializzazione
+                    Console.WriteLine($"   [DIAG] Node[{i}] DataContract: IsNothing={node.DataContract Is Nothing}")
+                    If node.DataContract IsNot Nothing Then
+                        Console.WriteLine($"   [DIAG] Node[{i}] DataContract type: {node.DataContract.GetType().Name}")
+                        Try
+                            Dim dataContractJson = JsonConvert.SerializeObject(node.DataContract)
+                            Console.WriteLine($"   [DIAG] Node[{i}] DataContract JSON (first 200 chars): {dataContractJson.Substring(0, Math.Min(200, dataContractJson.Length))}")
+                        Catch ex As Exception
+                            Console.WriteLine($"   [DIAG] Node[{i}] DataContract JSON serialization failed: {ex.Message}")
+                        End Try
+                    End If
                 Next
                 If taskTreeExpanded.Translations Is Nothing Then
                     taskTreeExpanded.Translations = New Dictionary(Of String, String)()

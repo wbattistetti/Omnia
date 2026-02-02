@@ -69,6 +69,7 @@ Public Class TaskSession
     Public Property Language As String
     Public Property Translations As Dictionary(Of String, String)
     Public Property TaskEngine As Motore
+    Public Property TaskInstance As TaskEngine.TaskInstance
     Public Property Messages As New List(Of Object)
     Public Property EventEmitter As EventEmitter
     Public Property IsWaitingForInput As Boolean
@@ -243,6 +244,7 @@ Public Class SessionManager
             }
 
             AddHandler taskEngine.MessageToShow, Sub(sender, e)
+                                                     Console.WriteLine($"[DIAG] MessageToShow event raised: message='{e.Message}', sessionId={sessionId}")
                                                      Console.WriteLine($"[SESSION] MessageToShow event: {e.Message}")
                                                      Dim msgId = $"{sessionId}-{DateTime.UtcNow.Ticks}-{Guid.NewGuid().ToString().Substring(0, 8)}"
                                                      Dim msg = New With {
@@ -275,6 +277,8 @@ Public Class SessionManager
                                                                          Await System.Threading.Tasks.Task.Delay(100)
                                                                          Dim taskInstance = ConvertRuntimeTaskToTaskInstance(session.RuntimeTask, session.Translations)
                                                                          Console.WriteLine($"[SESSION] Converted to TaskInstance: TaskList.Count={taskInstance.TaskList.Count}")
+                                                                         session.TaskInstance = taskInstance
+                                                                         Console.WriteLine($"[SESSION] TaskInstance saved to session")
                                                                          taskEngine.ExecuteTask(taskInstance)
 
                                                                          ' ✅ Check if all tasks are completed
@@ -445,7 +449,6 @@ Public Class SessionManager
     Private Shared Function ConvertRuntimeTaskToTaskNode(runtimeTask As Compiler.RuntimeTask) As TaskEngine.TaskNode
         Dim taskNode As New TaskEngine.TaskNode() With {
             .Id = runtimeTask.Id,
-            .Name = "",
             .Steps = If(runtimeTask.Steps, New List(Of TaskEngine.DialogueStep)()),
             .ValidationConditions = If(runtimeTask.Constraints, New List(Of TaskEngine.ValidationCondition)()),
             .NlpContract = runtimeTask.NlpContract,

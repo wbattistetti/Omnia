@@ -81,6 +81,16 @@ Public Class Task
     Public Property DataContracts As List(Of Object)
 
     ''' <summary>
+    ''' ✅ OBBLIGATORIO: dataContract (singolare) - Contratto NLP per estrazione dati
+    ''' Solo per template: contiene la struttura NLP completa (regex, rules, ner, llm)
+    ''' Formato: { templateName, templateId, contracts: [{ type: "regex", patterns: [...] }] }
+    ''' Il compilatore richiede questo campo per materializzare il grafo runtime.
+    ''' Se manca → errore esplicito (nessun fallback).
+    ''' </summary>
+    <JsonProperty("dataContract")>
+    Public Property DataContract As Object
+
+    ''' <summary>
     ''' ✅ Constraints del template (priorità 2: constraints, fallback)
     ''' Solo per template: constraints per validazione dati
     ''' Per istanze: sempre null (constraints vengono dal template)

@@ -51,8 +51,28 @@ Public Class UtteranceTaskCompiler
 
         If taskTreeExpanded IsNot Nothing Then
             Try
+                ' ✅ DIAG: Verifica dataContract prima di serializzare
+                If taskTreeExpanded.Nodes IsNot Nothing AndAlso taskTreeExpanded.Nodes.Count > 0 Then
+                    Dim firstNode = taskTreeExpanded.Nodes(0)
+                    Console.WriteLine($"[DIAG] UtteranceTaskCompiler: First node DataContract before serialization: IsNothing={firstNode.DataContract Is Nothing}")
+                    If firstNode.DataContract IsNot Nothing Then
+                        Console.WriteLine($"[DIAG] UtteranceTaskCompiler: First node DataContract type: {firstNode.DataContract.GetType().Name}")
+                    End If
+                End If
+
                 Dim taskCompiler As New TaskCompiler()
                 Dim taskJson = JsonConvert.SerializeObject(taskTreeExpanded)
+
+                ' ✅ DIAG: Verifica se dataContract è presente nel JSON serializzato
+                Console.WriteLine($"[DIAG] UtteranceTaskCompiler: Serialized JSON length: {taskJson.Length}")
+                Dim containsDataContract = taskJson.Contains("dataContract")
+                Console.WriteLine($"[DIAG] UtteranceTaskCompiler: Serialized JSON contains 'dataContract': {containsDataContract}")
+                If containsDataContract Then
+                    Dim dataContractIndex = taskJson.IndexOf("dataContract")
+                    Dim preview = taskJson.Substring(dataContractIndex, Math.Min(300, taskJson.Length - dataContractIndex))
+                    Console.WriteLine($"[DIAG] UtteranceTaskCompiler: dataContract preview in JSON: {preview}")
+                End If
+
                 Dim compileResult = taskCompiler.Compile(taskJson)
                 If compileResult IsNot Nothing AndAlso compileResult.Task IsNot Nothing Then
                     Dim runtimeTask = compileResult.Task
@@ -147,7 +167,6 @@ Public Class UtteranceTaskCompiler
     Private Function CloneTaskNode(source As Compiler.TaskNode) As Compiler.TaskNode
         Dim cloned As New Compiler.TaskNode() With {
             .Id = source.Id,
-            .Name = source.Name,
             .Label = source.Label,
             .Type = source.Type,
             .Required = source.Required,
@@ -181,18 +200,26 @@ Public Class UtteranceTaskCompiler
             ' ✅ FIX: Costruisci sub-nodi
             Dim subNodes = BuildTaskTreeFromSubTasksIds(template.SubTasksIds, flow.Tasks, New HashSet(Of String)())
 
+            ' ✅ OBBLIGATORIO: dataContract (singolare) dal template - nessun fallback
+            If template.DataContract Is Nothing Then
+                Throw New InvalidOperationException(
+                    $"Template '{template.Id}' is missing required 'dataContract' (singolare). " &
+                    "The compiler requires this field to materialize the NLP contract. " &
+                    "Every template must have a valid dataContract with NLP structure (regex, rules, ner, llm)."
+                )
+            End If
+            Console.WriteLine($"[BuildTaskTreeExpanded] Using dataContract from template {template.Id}, type: {template.DataContract.GetType().Name}")
+
             ' ✅ FIX: Crea nodo radice con sub-nodi come SubTasks
             Dim rootNode As New Compiler.TaskNode() With {
                 .Id = template.Id,
                 .TemplateId = template.Id,
-                .Name = If(String.IsNullOrEmpty(template.Label), template.Id, template.Label),
                 .Steps = New List(Of Compiler.DialogueStep)(),
                 .SubTasks = subNodes,  ' ✅ Sub-nodi dentro SubTasks
-                .Constraints = If(template.DataContracts IsNot Nothing AndAlso template.DataContracts.Count > 0,
-                                 template.DataContracts,
-                                 If(template.Constraints IsNot Nothing AndAlso template.Constraints.Count > 0,
-                                    template.Constraints,
-                                    New List(Of Object)())),
+                .Constraints = If(template.Constraints IsNot Nothing AndAlso template.Constraints.Count > 0,
+                                 template.Constraints,
+                                 New List(Of Object)()), ' ✅ Solo Constraints, non DataContracts
+                .DataContract = template.DataContract, ' ✅ Usa DataContract (singolare) direttamente
                 .Condition = template.Condition
             }
 
@@ -211,17 +238,26 @@ Public Class UtteranceTaskCompiler
         Else
             ' ✅ Template atomico → crea nodo root con steps dall'istanza
             ' Un template atomico è un albero con un solo nodo root, non un albero vuoto
+
+            ' ✅ OBBLIGATORIO: dataContract (singolare) dal template - nessun fallback
+            If template.DataContract Is Nothing Then
+                Throw New InvalidOperationException(
+                    $"Template '{template.Id}' is missing required 'dataContract' (singolare). " &
+                    "The compiler requires this field to materialize the NLP contract. " &
+                    "Every template must have a valid dataContract with NLP structure (regex, rules, ner, llm)."
+                )
+            End If
+            Console.WriteLine($"[BuildTaskTreeExpanded] Using dataContract from template {template.Id}, type: {template.DataContract.GetType().Name}")
+
             Dim rootNode As New Compiler.TaskNode() With {
                 .Id = template.Id,
                 .TemplateId = template.Id,
-                .Name = If(String.IsNullOrEmpty(template.Label), template.Id, template.Label),
                 .Steps = New List(Of Compiler.DialogueStep)(),
                 .SubTasks = New List(Of Compiler.TaskNode)(), ' ✅ Vuoto per template atomico
-                .Constraints = If(template.DataContracts IsNot Nothing AndAlso template.DataContracts.Count > 0,
-                                 template.DataContracts,
-                                 If(template.Constraints IsNot Nothing AndAlso template.Constraints.Count > 0,
-                                    template.Constraints,
-                                    New List(Of Object)())),
+                .Constraints = If(template.Constraints IsNot Nothing AndAlso template.Constraints.Count > 0,
+                                 template.Constraints,
+                                 New List(Of Object)()), ' ✅ Solo Constraints, non DataContracts
+                .DataContract = template.DataContract, ' ✅ Usa DataContract (singolare) direttamente
                 .Condition = template.Condition
             }
 
@@ -269,11 +305,19 @@ Public Class UtteranceTaskCompiler
             ' NOTA: Steps vengono SOLO dall'istanza, non dal template
             ' Template fornisce: struttura (subTasksIds), constraints, condition, metadata
 
-            ' ✅ Carica constraints dal template (priorità: dataContracts > constraints)
+            ' ✅ OBBLIGATORIO: dataContract (singolare) dal template - nessun fallback
+            If subTemplate.DataContract Is Nothing Then
+                Throw New InvalidOperationException(
+                    $"SubTemplate '{subTemplate.Id}' is missing required 'dataContract' (singolare). " &
+                    "The compiler requires this field to materialize the NLP contract. " &
+                    "Every template must have a valid dataContract with NLP structure (regex, rules, ner, llm)."
+                )
+            End If
+            Console.WriteLine($"[BuildTaskTreeFromSubTasksIds] Using dataContract from subTemplate {subTemplate.Id}, type: {subTemplate.DataContract.GetType().Name}")
+
+            ' ✅ Carica constraints dal template (solo Constraints, non DataContracts)
             Dim templateConstraints As List(Of Object) = Nothing
-            If subTemplate.DataContracts IsNot Nothing AndAlso subTemplate.DataContracts.Count > 0 Then
-                templateConstraints = subTemplate.DataContracts
-            ElseIf subTemplate.Constraints IsNot Nothing AndAlso subTemplate.Constraints.Count > 0 Then
+            If subTemplate.Constraints IsNot Nothing AndAlso subTemplate.Constraints.Count > 0 Then
                 templateConstraints = subTemplate.Constraints
             Else
                 templateConstraints = New List(Of Object)()
@@ -286,10 +330,10 @@ Public Class UtteranceTaskCompiler
             Dim node As New Compiler.TaskNode() With {
                 .Id = subTemplate.Id,
                 .TemplateId = subTemplate.Id,
-                .Name = If(String.IsNullOrEmpty(subTemplate.Label), subTemplate.Id, subTemplate.Label),
                 .Steps = New List(Of Compiler.DialogueStep)(),
                 .SubTasks = New List(Of Compiler.TaskNode)(),
-                .Constraints = templateConstraints,
+                .Constraints = templateConstraints, ' ✅ Solo Constraints
+                .DataContract = subTemplate.DataContract, ' ✅ Usa DataContract (singolare) direttamente
                 .Condition = subTemplate.Condition
             }
 

@@ -25,10 +25,13 @@ Public Class Parser
     ''' Interpreta l'input utente (solo parsing, nessuna gestione di response)
     ''' </summary>
     Public Function InterpretUtterance(currTaskNode As TaskNode) As ParseResult
+        Console.WriteLine($"[DIAG] Parser.InterpretUtterance CALLED: nodeId={currTaskNode.Id}, State={currTaskNode.State}, IsSubData={currTaskNode.IsSubData}")
         Dim userInput As String = WaitForUserInput()
+        Console.WriteLine($"[DIAG] Parser.InterpretUtterance: userInput received='{userInput}'")
 
         ' Se input vuoto o timeout → NoInput
         If String.IsNullOrEmpty(userInput) Then
+            Console.WriteLine($"[DIAG] Parser.InterpretUtterance: Returning NoInput (empty or timeout)")
             Return New ParseResult() With {.Result = ParseResultType.NoInput}
         End If
         ' Se siamo in stato di conferma, gestisci sì/no o correzione implicita
@@ -169,6 +172,7 @@ Public Class Parser
 
             ' Se non è stato estratto nulla → NoMatch
             If String.IsNullOrEmpty(extractedValue) Then
+                Console.WriteLine($"[DIAG] Parser.InterpretUtterance: Returning NoMatch (no data extracted)")
                 Return New ParseResult() With {.Result = ParseResultType.NoMatch}
             End If
 
@@ -177,6 +181,7 @@ Public Class Parser
             extractedData(currTaskNode.Id) = extractedValue
             currTaskNode.Value = extractedValue
 
+            Console.WriteLine($"[DIAG] Parser.InterpretUtterance: Returning Match, extractedValue='{extractedValue}', nodeValue set to '{currTaskNode.Value}'")
             Return New ParseResult() With {
                     .Result = ParseResultType.Match,
                     .ExtractedData = extractedData
@@ -210,17 +215,21 @@ Public Class Parser
     ''' Attende l'input dell'utente usando BlockingCollection (thread-safe)
     ''' </summary>
     Private Function WaitForUserInput() As String
+        Console.WriteLine($"[DIAG] Parser.WaitForUserInput CALLED: QueueCount={_inputQueue.Count}, Timeout={INPUT_TIMEOUT_SECONDS}s")
         Try
             Dim input As String = Nothing
             ' Aspetta fino a INPUT_TIMEOUT_SECONDS per l'input
             If _inputQueue.TryTake(input, TimeSpan.FromSeconds(INPUT_TIMEOUT_SECONDS)) Then
+                Console.WriteLine($"[DIAG] Parser.WaitForUserInput: Input received from queue: '{input}'")
                 Return input
             Else
                 ' Timeout: nessun input ricevuto
+                Console.WriteLine($"[DIAG] Parser.WaitForUserInput: TIMEOUT - no input received after {INPUT_TIMEOUT_SECONDS}s")
                 Return ""
             End If
         Catch ex As OperationCanceledException
             ' Operazione cancellata
+            Console.WriteLine($"[DIAG] Parser.WaitForUserInput: OperationCanceledException - {ex.Message}")
             Return ""
         End Try
     End Function
@@ -229,8 +238,12 @@ Public Class Parser
     ''' Metodo pubblico per inviare input dall'UI (thread-safe)
     ''' </summary>
     Public Shared Sub SetUserInput(input As String)
+        Console.WriteLine($"[DIAG] Parser.SetUserInput CALLED: input='{input}', QueueCount before={_inputQueue.Count}")
         If Not String.IsNullOrEmpty(input) Then
             _inputQueue.TryAdd(input)
+            Console.WriteLine($"[DIAG] Parser.SetUserInput: Input added to queue, QueueCount after={_inputQueue.Count}")
+        Else
+            Console.WriteLine($"[DIAG] Parser.SetUserInput: Input is empty, NOT added to queue")
         End If
     End Sub
 
@@ -249,8 +262,8 @@ Public Class Parser
     ''' ❌ ZERO FALLBACK: se il contract non ha regex o non matcha → ERRORE BLOCCANTE
     ''' </summary>
     Private Function TryExtractData(input As String, taskNode As TaskNode) As String
-        If taskNode Is Nothing OrElse String.IsNullOrEmpty(taskNode.Name) Then
-            Throw New ArgumentException("taskNode cannot be Nothing and must have a Name. TryExtractData requires a valid task node.")
+        If taskNode Is Nothing Then
+            Throw New ArgumentException("taskNode cannot be Nothing. TryExtractData requires a valid task node.")
         End If
 
         Dim trimmedInput As String = input.Trim()
@@ -343,386 +356,14 @@ Public Class Parser
                         Return extractedData
                     End If
                 End If
-            Catch
-                ' Pattern invalido, fallback a regex hardcoded
+            Catch ex As Exception
+                ' Pattern invalido o errore di matching: NlpContract è obbligatorio
+                Throw New InvalidOperationException($"Failed to extract composite data from input '{trimmedInput}' for task node '{mainTaskNode.Id}'. NlpContract is mandatory and must have valid regex patterns with SubDataMapping. Error: {ex.Message}", ex)
             End Try
         End If
 
-        ' PRIORITÀ 2: Fallback a regex hardcoded (retrocompatibilità)
-        Dim nodeName As String = mainTaskNode.Name.ToLower().Trim()
-
-        ' Costruisci regex basata sul tipo di mainData
-        Select Case nodeName
-            Case "data di nascita", "data"
-                ' Regex migliorata per riconoscere:
-                ' - Formati numerici: "15/03/1990", "15/03", "03/1990", "15", "03", "1990"
-                ' - Formati testuali: "dicembre 1980", "12 1980", "1980"
-                ' - Nomi di mesi in italiano
-
-                ' Pattern 1: formato numerico con separatori (giorno/mese/anno o varianti)
-                Dim datePattern1 As String = "^(?:(\d{1,2})[/-])?(?:(\d{1,2})[/-])?(\d{4})?$|^(\d{1,2})[/-](\d{1,2})$|^(\d{1,2})$"
-                Dim dateMatch1 As Match = Regex.Match(trimmedInput, datePattern1)
-
-                ' Pattern 2: formato "giorno mese anno" con spazi (giorno + nome mese + anno o giorno + numero mese + anno)
-                Dim monthNames As String = "gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre"
-                Dim monthNumbers As String = "(?:0?[1-9]|1[0-2])"
-                Dim datePattern2 As String = $"^(\d{{1,2}})\s+({monthNames}|{monthNumbers})\s+(\d{{4}})$"
-                Dim dateMatch2 As Match = Regex.Match(trimmedInput, datePattern2, RegexOptions.IgnoreCase)
-
-                ' Pattern 3: formato "mese anno" o "anno" (senza giorno)
-                Dim datePattern3 As String = $"^({monthNames}|{monthNumbers})\s+(\d{{4}})$|^(\d{{4}})$"
-                Dim dateMatch3 As Match = Regex.Match(trimmedInput, datePattern3, RegexOptions.IgnoreCase)
-
-                ' Pattern 4: formato "giorno mese" senza anno
-                Dim datePattern4 As String = $"^(\d{{1,2}})\s+({monthNames}|{monthNumbers})$"
-                Dim dateMatch4 As Match = Regex.Match(trimmedInput, datePattern4, RegexOptions.IgnoreCase)
-
-                Dim matched As Boolean = False
-
-                ' Prova Pattern 1 (formato numerico)
-                If dateMatch1.Success Then
-                    matched = True
-                    ' Pattern 1: giorno/mese/anno o varianti
-                    If Not String.IsNullOrEmpty(dateMatch1.Groups(1).Value) Then
-                        Dim matchingNodes = mainTaskNode.SubTasks.Where(Function(s) s.Id = "giorno").ToList()
-                        If matchingNodes.Count = 0 Then
-                            Throw New InvalidOperationException($"SubTask with Id 'giorno' not found in TaskNode '{mainTaskNode.Id}'. The extracted date data references a SubTask that does not exist.")
-                        ElseIf matchingNodes.Count > 1 Then
-                            Throw New InvalidOperationException($"TaskNode '{mainTaskNode.Id}' has {matchingNodes.Count} SubTasks with Id 'giorno'. Each SubTask Id must be unique.")
-                        End If
-                        extractedData("giorno") = dateMatch1.Groups(1).Value
-                    End If
-
-                    If Not String.IsNullOrEmpty(dateMatch1.Groups(2).Value) Then
-                        Dim matchingNodes = mainTaskNode.SubTasks.Where(Function(s) s.Id = "mese").ToList()
-                        If matchingNodes.Count = 0 Then
-                            Throw New InvalidOperationException($"SubTask with Id 'mese' not found in TaskNode '{mainTaskNode.Id}'. The extracted date data references a SubTask that does not exist.")
-                        ElseIf matchingNodes.Count > 1 Then
-                            Throw New InvalidOperationException($"TaskNode '{mainTaskNode.Id}' has {matchingNodes.Count} SubTasks with Id 'mese'. Each SubTask Id must be unique.")
-                        End If
-                        extractedData("mese") = dateMatch1.Groups(2).Value
-                    End If
-
-                    If Not String.IsNullOrEmpty(dateMatch1.Groups(3).Value) Then
-                        Dim matchingNodes = mainTaskNode.SubTasks.Where(Function(s) s.Id = "anno").ToList()
-                        If matchingNodes.Count = 0 Then
-                            Throw New InvalidOperationException($"SubTask with Id 'anno' not found in TaskNode '{mainTaskNode.Id}'. The extracted date data references a SubTask that does not exist.")
-                        ElseIf matchingNodes.Count > 1 Then
-                            Throw New InvalidOperationException($"TaskNode '{mainTaskNode.Id}' has {matchingNodes.Count} SubTasks with Id 'anno'. Each SubTask Id must be unique.")
-                        End If
-                        extractedData("anno") = dateMatch1.Groups(3).Value
-                    End If
-
-                    ' Pattern 2: mese/anno (gruppi 4 e 5)
-                    If Not String.IsNullOrEmpty(dateMatch1.Groups(4).Value) AndAlso String.IsNullOrEmpty(dateMatch1.Groups(1).Value) Then
-                        Dim matchingNodes = mainTaskNode.SubTasks.Where(Function(s) s.Id = "mese").ToList()
-                        If matchingNodes.Count = 0 Then
-                            Throw New InvalidOperationException($"SubTask with Id 'mese' not found in TaskNode '{mainTaskNode.Id}'. The extracted date data references a SubTask that does not exist.")
-                        ElseIf matchingNodes.Count > 1 Then
-                            Throw New InvalidOperationException($"TaskNode '{mainTaskNode.Id}' has {matchingNodes.Count} SubTasks with Id 'mese'. Each SubTask Id must be unique.")
-                        End If
-                        extractedData("mese") = dateMatch1.Groups(4).Value
-                    End If
-
-                    If Not String.IsNullOrEmpty(dateMatch1.Groups(5).Value) AndAlso String.IsNullOrEmpty(dateMatch1.Groups(3).Value) Then
-                        Dim matchingNodes = mainTaskNode.SubTasks.Where(Function(s) s.Id = "anno").ToList()
-                        If matchingNodes.Count = 0 Then
-                            Throw New InvalidOperationException($"SubTask with Id 'anno' not found in TaskNode '{mainTaskNode.Id}'. The extracted date data references a SubTask that does not exist.")
-                        ElseIf matchingNodes.Count > 1 Then
-                            Throw New InvalidOperationException($"TaskNode '{mainTaskNode.Id}' has {matchingNodes.Count} SubTasks with Id 'anno'. Each SubTask Id must be unique.")
-                        End If
-                        extractedData("anno") = dateMatch1.Groups(5).Value
-                    End If
-
-                    ' Pattern 3: solo numero (può essere giorno, mese o anno - prova in ordine)
-                    If Not String.IsNullOrEmpty(dateMatch1.Groups(6).Value) AndAlso
-                       String.IsNullOrEmpty(dateMatch1.Groups(1).Value) AndAlso
-                       String.IsNullOrEmpty(dateMatch1.Groups(4).Value) Then
-                        Dim numValue As String = dateMatch1.Groups(6).Value
-                        Dim num As Integer = Integer.Parse(numValue)
-
-                        ' Prova giorno (1-31)
-                        If num >= 1 AndAlso num <= 31 Then
-                            Dim matchingNodes = mainTaskNode.SubTasks.Where(Function(s) s.Id = "giorno").ToList()
-                            If matchingNodes.Count = 0 Then
-                                Throw New InvalidOperationException($"SubTask with Id 'giorno' not found in TaskNode '{mainTaskNode.Id}'. The extracted date data references a SubTask that does not exist.")
-                            ElseIf matchingNodes.Count > 1 Then
-                                Throw New InvalidOperationException($"TaskNode '{mainTaskNode.Id}' has {matchingNodes.Count} SubTasks with Id 'giorno'. Each SubTask Id must be unique.")
-                            End If
-                            extractedData("giorno") = numValue
-                            ' Prova mese (1-12)
-                        ElseIf num >= 1 AndAlso num <= 12 Then
-                            Dim matchingNodes = mainTaskNode.SubTasks.Where(Function(s) s.Id = "mese").ToList()
-                            If matchingNodes.Count = 0 Then
-                                Throw New InvalidOperationException($"SubTask with Id 'mese' not found in TaskNode '{mainTaskNode.Id}'. The extracted date data references a SubTask that does not exist.")
-                            ElseIf matchingNodes.Count > 1 Then
-                                Throw New InvalidOperationException($"TaskNode '{mainTaskNode.Id}' has {matchingNodes.Count} SubTasks with Id 'mese'. Each SubTask Id must be unique.")
-                            End If
-                            extractedData("mese") = numValue
-                        End If
-                    End If
-                End If
-
-                ' Prova Pattern 2 (formato "giorno mese anno" con spazi)
-                If dateMatch2.Success Then
-                    matched = True
-                    ' Giorno (gruppo 1)
-                    If Not String.IsNullOrEmpty(dateMatch2.Groups(1).Value) Then
-                        GetSubTaskById(mainTaskNode, "giorno") ' Validazione deterministica
-                        extractedData("giorno") = dateMatch2.Groups(1).Value
-                    End If
-
-                    ' Mese (nome o numero, gruppo 2)
-                    If Not String.IsNullOrEmpty(dateMatch2.Groups(2).Value) Then
-                        Dim meseValue As String = dateMatch2.Groups(2).Value
-                        ' Se è un nome di mese, convertilo in numero
-                        Dim monthMap As New Dictionary(Of String, String) From {
-                            {"gennaio", "1"}, {"febbraio", "2"}, {"marzo", "3"}, {"aprile", "4"},
-                            {"maggio", "5"}, {"giugno", "6"}, {"luglio", "7"}, {"agosto", "8"},
-                            {"settembre", "9"}, {"ottobre", "10"}, {"novembre", "11"}, {"dicembre", "12"}
-                        }
-                        Dim meseLower As String = meseValue.ToLower()
-                        If monthMap.ContainsKey(meseLower) Then
-                            meseValue = monthMap(meseLower)
-                        End If
-
-                        GetSubTaskById(mainTaskNode, "mese") ' Validazione deterministica
-                        extractedData("mese") = meseValue
-                    End If
-
-                    ' Anno (gruppo 3)
-                    If Not String.IsNullOrEmpty(dateMatch2.Groups(3).Value) Then
-                        GetSubTaskById(mainTaskNode, "anno") ' Validazione deterministica
-                        extractedData("anno") = dateMatch2.Groups(3).Value
-                    End If
-                End If
-
-                ' Prova Pattern 3 (formato "mese anno" o "anno" senza giorno)
-                If dateMatch3.Success AndAlso Not matched Then
-                    matched = True
-                    ' Mese (nome o numero, gruppo 1)
-                    If Not String.IsNullOrEmpty(dateMatch3.Groups(1).Value) Then
-                        Dim meseValue As String = dateMatch3.Groups(1).Value
-                        ' Se è un nome di mese, convertilo in numero
-                        Dim monthMap As New Dictionary(Of String, String) From {
-                            {"gennaio", "1"}, {"febbraio", "2"}, {"marzo", "3"}, {"aprile", "4"},
-                            {"maggio", "5"}, {"giugno", "6"}, {"luglio", "7"}, {"agosto", "8"},
-                            {"settembre", "9"}, {"ottobre", "10"}, {"novembre", "11"}, {"dicembre", "12"}
-                        }
-                        Dim meseLower As String = meseValue.ToLower()
-                        If monthMap.ContainsKey(meseLower) Then
-                            meseValue = monthMap(meseLower)
-                        End If
-
-                        GetSubTaskById(mainTaskNode, "mese") ' Validazione deterministica
-                        extractedData("mese") = meseValue
-                    End If
-
-                    ' Anno (gruppo 2 o 3)
-                    Dim annoValue As String = ""
-                    If Not String.IsNullOrEmpty(dateMatch3.Groups(2).Value) Then
-                        annoValue = dateMatch3.Groups(2).Value
-                    ElseIf Not String.IsNullOrEmpty(dateMatch3.Groups(3).Value) Then
-                        annoValue = dateMatch3.Groups(3).Value
-                    End If
-
-                    If Not String.IsNullOrEmpty(annoValue) Then
-                        GetSubTaskById(mainTaskNode, "anno") ' Validazione deterministica
-                        extractedData("anno") = annoValue
-                    End If
-                End If
-
-                ' Prova Pattern 4 (formato "giorno mese" senza anno)
-                If dateMatch4.Success AndAlso Not matched Then
-                    matched = True
-                    ' Giorno (gruppo 1)
-                    If Not String.IsNullOrEmpty(dateMatch4.Groups(1).Value) Then
-                        GetSubTaskById(mainTaskNode, "giorno") ' Validazione deterministica
-                        extractedData("giorno") = dateMatch4.Groups(1).Value
-                    End If
-
-                    ' Mese (nome o numero, gruppo 2)
-                    If Not String.IsNullOrEmpty(dateMatch4.Groups(2).Value) Then
-                        Dim meseValue As String = dateMatch4.Groups(2).Value
-                        ' Se è un nome di mese, convertilo in numero
-                        Dim monthMap As New Dictionary(Of String, String) From {
-                            {"gennaio", "1"}, {"febbraio", "2"}, {"marzo", "3"}, {"aprile", "4"},
-                            {"maggio", "5"}, {"giugno", "6"}, {"luglio", "7"}, {"agosto", "8"},
-                            {"settembre", "9"}, {"ottobre", "10"}, {"novembre", "11"}, {"dicembre", "12"}
-                        }
-                        Dim meseLower As String = meseValue.ToLower()
-                        If monthMap.ContainsKey(meseLower) Then
-                            meseValue = monthMap(meseLower)
-                        End If
-
-                        GetSubTaskById(mainTaskNode, "mese") ' Validazione deterministica
-                        extractedData("mese") = meseValue
-                    End If
-                End If
-
-            Case "nominativo"
-                ' Regex per nominativo: (nome) (cognome)? (terza parola opzionale)?
-                ' Esempi: "Mario", "Mario Rossi", "Mario Rossi Bianchi"
-                ' Almeno 2 parole, terza opzionale
-                Dim namePattern As String = "^(\w+)(?:\s+(\w+))?(?:\s+(\w+))?$"
-                Dim nameMatch As Match = Regex.Match(trimmedInput, namePattern, RegexOptions.IgnoreCase)
-
-                If nameMatch.Success Then
-                    ' Nome (sempre presente)
-                    If Not String.IsNullOrEmpty(nameMatch.Groups(1).Value) Then
-                        GetSubTaskById(mainTaskNode, "nome") ' Validazione deterministica
-                        extractedData("nome") = nameMatch.Groups(1).Value
-                    End If
-
-                    ' Cognome (opzionale)
-                    If Not String.IsNullOrEmpty(nameMatch.Groups(2).Value) Then
-                        GetSubTaskById(mainTaskNode, "cognome") ' Validazione deterministica
-                        extractedData("cognome") = nameMatch.Groups(2).Value
-                    End If
-
-                    ' Terza parola (opzionale, ignorata per ora)
-                End If
-
-            Case "indirizzo"
-                ' Regex migliorata per riconoscere indirizzi con subData opzionali
-                ' Pattern 1: tipoVia + nomeVia + numeroCivico + (CAP)? + (città)? + (stato)?
-                ' Pattern 2: tipoVia + nomeVia + (città)? (senza numero civico)
-                ' Pattern 3: nomeVia + numeroCivico + (CAP)? + (città)? + (stato)? (senza tipo via)
-                ' Pattern 4: nomeVia + (città)? (senza tipo via e numero civico)
-
-                Dim tipoViaPattern As String = "(Via|Viale|Piazza|Corso|Largo|Piazzale|Strada|Vicolo)"
-                Dim nomeViaPattern As String = "([A-Za-z]+(?:\s+[A-Za-z]+)*)"
-                Dim numeroCivicoPattern As String = "(\d+)"
-                Dim capPattern As String = "(\d{5})"
-                Dim cittaPattern As String = "([A-Za-z]+(?:\s+[A-Za-z]+)*)"
-
-                ' Pattern 1: tipoVia + nomeVia + numeroCivico + (CAP)? + (città)? + (stato)?
-                Dim addressPattern1 As String = $"^({tipoViaPattern})\s+{nomeViaPattern}\s+{numeroCivicoPattern}(?:\s+{capPattern})?(?:\s+{cittaPattern})?(?:\s+{cittaPattern})?$"
-                Dim addressMatch1 As Match = Regex.Match(trimmedInput, addressPattern1, RegexOptions.IgnoreCase)
-
-                ' Pattern 2: tipoVia + nomeVia + (città)? (senza numero civico)
-                Dim addressPattern2 As String = $"^({tipoViaPattern})\s+{nomeViaPattern}(?:\s+{cittaPattern})?$"
-                Dim addressMatch2 As Match = Regex.Match(trimmedInput, addressPattern2, RegexOptions.IgnoreCase)
-
-                ' Pattern 3: nomeVia + numeroCivico + (CAP)? + (città)? + (stato)? (senza tipo via)
-                Dim addressPattern3 As String = $"^{nomeViaPattern}\s+{numeroCivicoPattern}(?:\s+{capPattern})?(?:\s+{cittaPattern})?(?:\s+{cittaPattern})?$"
-                Dim addressMatch3 As Match = Regex.Match(trimmedInput, addressPattern3, RegexOptions.IgnoreCase)
-
-                ' Pattern 4: nomeVia + (città)? (senza tipo via e numero civico)
-                Dim addressPattern4 As String = $"^{nomeViaPattern}(?:\s+{cittaPattern})?$"
-                Dim addressMatch4 As Match = Regex.Match(trimmedInput, addressPattern4, RegexOptions.IgnoreCase)
-
-                Dim matched As Boolean = False
-
-                ' Prova Pattern 1 (tipoVia + nomeVia + numeroCivico + opzionali)
-                If addressMatch1.Success Then
-                    matched = True
-                    ' Tipo via (gruppo 1)
-                    If Not String.IsNullOrEmpty(addressMatch1.Groups(1).Value) Then
-                        GetSubTaskById(mainTaskNode, "tipoVia") ' Validazione deterministica
-                        extractedData("tipoVia") = addressMatch1.Groups(1).Value
-                    End If
-                    ' Nome via (gruppo 2)
-                    If Not String.IsNullOrEmpty(addressMatch1.Groups(2).Value) Then
-                        GetSubTaskById(mainTaskNode, "nomeVia") ' Validazione deterministica
-                        extractedData("nomeVia") = addressMatch1.Groups(2).Value
-                    End If
-                    ' Numero civico (gruppo 3)
-                    If Not String.IsNullOrEmpty(addressMatch1.Groups(3).Value) Then
-                        GetSubTaskById(mainTaskNode, "numeroCivico") ' Validazione deterministica
-                        extractedData("numeroCivico") = addressMatch1.Groups(3).Value
-                    End If
-                    ' CAP (gruppo 4)
-                    If Not String.IsNullOrEmpty(addressMatch1.Groups(4).Value) Then
-                        GetSubTaskById(mainTaskNode, "cap") ' Validazione deterministica
-                        extractedData("cap") = addressMatch1.Groups(4).Value
-                    End If
-                    ' Città (gruppo 5 o 6)
-                    Dim cittaValue As String = ""
-                    If Not String.IsNullOrEmpty(addressMatch1.Groups(5).Value) Then
-                        cittaValue = addressMatch1.Groups(5).Value
-                    ElseIf Not String.IsNullOrEmpty(addressMatch1.Groups(6).Value) Then
-                        cittaValue = addressMatch1.Groups(6).Value
-                    End If
-                    If Not String.IsNullOrEmpty(cittaValue) Then
-                        GetSubTaskById(mainTaskNode, "citta") ' Validazione deterministica
-                        extractedData("citta") = cittaValue
-                    End If
-                End If
-
-                ' Prova Pattern 2 (tipoVia + nomeVia + città, senza numero civico)
-                If addressMatch2.Success AndAlso Not matched Then
-                    matched = True
-                    ' Tipo via (gruppo 1)
-                    If Not String.IsNullOrEmpty(addressMatch2.Groups(1).Value) Then
-                        GetSubTaskById(mainTaskNode, "tipoVia") ' Validazione deterministica
-                        extractedData("tipoVia") = addressMatch2.Groups(1).Value
-                    End If
-                    ' Nome via (gruppo 2)
-                    If Not String.IsNullOrEmpty(addressMatch2.Groups(2).Value) Then
-                        GetSubTaskById(mainTaskNode, "nomeVia") ' Validazione deterministica
-                        extractedData("nomeVia") = addressMatch2.Groups(2).Value
-                    End If
-                    ' Città (gruppo 3)
-                    If Not String.IsNullOrEmpty(addressMatch2.Groups(3).Value) Then
-                        GetSubTaskById(mainTaskNode, "citta") ' Validazione deterministica
-                        extractedData("citta") = addressMatch2.Groups(3).Value
-                    End If
-                End If
-
-                ' Prova Pattern 3 (nomeVia + numeroCivico + opzionali, senza tipo via)
-                If addressMatch3.Success AndAlso Not matched Then
-                    matched = True
-                    ' Nome via (gruppo 1)
-                    If Not String.IsNullOrEmpty(addressMatch3.Groups(1).Value) Then
-                        GetSubTaskById(mainTaskNode, "nomeVia") ' Validazione deterministica
-                        extractedData("nomeVia") = addressMatch3.Groups(1).Value
-                    End If
-                    ' Numero civico (gruppo 2)
-                    If Not String.IsNullOrEmpty(addressMatch3.Groups(2).Value) Then
-                        GetSubTaskById(mainTaskNode, "numeroCivico") ' Validazione deterministica
-                        extractedData("numeroCivico") = addressMatch3.Groups(2).Value
-                    End If
-                    ' CAP (gruppo 3)
-                    If Not String.IsNullOrEmpty(addressMatch3.Groups(3).Value) Then
-                        GetSubTaskById(mainTaskNode, "cap") ' Validazione deterministica
-                        extractedData("cap") = addressMatch3.Groups(3).Value
-                    End If
-                    ' Città (gruppo 4 o 5)
-                    Dim cittaValue As String = ""
-                    If Not String.IsNullOrEmpty(addressMatch3.Groups(4).Value) Then
-                        cittaValue = addressMatch3.Groups(4).Value
-                    ElseIf Not String.IsNullOrEmpty(addressMatch3.Groups(5).Value) Then
-                        cittaValue = addressMatch3.Groups(5).Value
-                    End If
-                    If Not String.IsNullOrEmpty(cittaValue) Then
-                        GetSubTaskById(mainTaskNode, "citta") ' Validazione deterministica
-                        extractedData("citta") = cittaValue
-                    End If
-                End If
-
-                ' Prova Pattern 4 (nomeVia + città, senza tipo via e numero civico)
-                If addressMatch4.Success AndAlso Not matched Then
-                    matched = True
-                    ' Nome via (gruppo 1)
-                    If Not String.IsNullOrEmpty(addressMatch4.Groups(1).Value) Then
-                        GetSubTaskById(mainTaskNode, "nomeVia") ' Validazione deterministica
-                        extractedData("nomeVia") = addressMatch4.Groups(1).Value
-                    End If
-                    ' Città (gruppo 2)
-                    If Not String.IsNullOrEmpty(addressMatch4.Groups(2).Value) Then
-                        GetSubTaskById(mainTaskNode, "citta") ' Validazione deterministica
-                        extractedData("citta") = addressMatch4.Groups(2).Value
-                    End If
-                End If
-
-            Case Else
-                ' Per altri tipi compositi, usa regex generica basata sui subData
-                Return TryExtractGenericCompositeData(trimmedInput, mainTaskNode)
-        End Select
-
-        ' Ritorna i dati estratti (anche se parziali)
-        Return If(extractedData.Count > 0, extractedData, Nothing)
+        ' ❌ ERRORE BLOCCANTE: NlpContract obbligatorio, nessun fallback
+        Throw New InvalidOperationException($"Task node '{mainTaskNode.Id}' has no valid NlpContract for composite data extraction. NlpContract with regex patterns and SubDataMapping is mandatory.")
     End Function
 
     ''' <summary>
