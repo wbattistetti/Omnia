@@ -1,13 +1,11 @@
 Option Strict On
 Option Explicit On
-
-Imports TaskEngine
 Imports Compiler
 
 ''' <summary>
 ''' Executor per task di tipo BackendCall
 ''' </summary>
-Public Class BackendTaskExecutor
+Public Class BackendCallTaskExecutor
     Inherits TaskExecutorBase
 
     Public Sub New(taskEngine As Motore)
@@ -16,7 +14,7 @@ Public Class BackendTaskExecutor
 
     Public Overrides Function Execute(task As CompiledTask, state As ExecutionState) As TaskExecutionResult
         ' TODO: Implementare chiamata backend
-        Console.WriteLine($"⚠️ [BackendTaskExecutor] Task type BackendCall not yet implemented, returning success")
+        Console.WriteLine($"⚠️ [BackendCallTaskExecutor] Task type BackendCall not yet implemented, returning success")
 
         Return New TaskExecutionResult() With {
             .Success = True

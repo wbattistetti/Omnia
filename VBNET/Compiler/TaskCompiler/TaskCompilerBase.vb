@@ -1,9 +1,6 @@
 Option Strict On
 Option Explicit On
 
-Imports System.Collections.Generic
-Imports TaskEngine
-
 ''' <summary>
 ''' Base class astratta per tutti i task compiler
 ''' Ogni tipo di task può avere il suo compiler specifico

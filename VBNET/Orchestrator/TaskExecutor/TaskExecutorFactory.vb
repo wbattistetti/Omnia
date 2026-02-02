@@ -1,10 +1,6 @@
 Option Strict On
 Option Explicit On
 
-Imports TaskEngine
-Imports Compiler
-Imports System.Collections.Generic
-
 ''' <summary>
 ''' Factory per creare l'executor corretto in base al tipo di task
 ''' </summary>
@@ -17,9 +13,9 @@ Public Class TaskExecutorFactory
             Case TaskTypes.ClassifyProblem
                 Return New ClassifyProblemTaskExecutor(taskEngine)
             Case TaskTypes.BackendCall
-                Return New BackendTaskExecutor(taskEngine)
+                Return New BackendCallTaskExecutor(taskEngine)
             Case TaskTypes.UtteranceInterpretation
-                Return New DataRequestTaskExecutor(taskEngine)
+                Return New UtteranceTaskExecutor(taskEngine)
             Case TaskTypes.SayMessage
                 Return New SayMessageTaskExecutor(taskEngine)
             Case TaskTypes.CloseSession

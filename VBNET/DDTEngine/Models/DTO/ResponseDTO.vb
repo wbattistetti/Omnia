@@ -6,23 +6,23 @@ Option Explicit On
 
 Imports System.Text.Json.Serialization
 
+''' <summary>
+''' DTO per deserializzare Response dal JSON
+''' Il JSON usa "text" invece di "actions"
+''' </summary>
+Public Class ResponseDTO
     ''' <summary>
-    ''' DTO per deserializzare Response dal JSON
-    ''' Il JSON usa "text" invece di "actions"
+    ''' Testo del response (dal JSON)
     ''' </summary>
-    Public Class ResponseDTO
-        ''' <summary>
-        ''' Testo del response (dal JSON)
-        ''' </summary>
-        <JsonPropertyName("text")>
-        Public Property Text As String
+    <JsonPropertyName("text")>
+    Public Property Text As String
 
-        ''' <summary>
-        ''' Tasks (per compatibilità futura se il JSON le include)
-        ''' </summary>
-        <JsonPropertyName("tasks")>
-        Public Property Tasks As List(Of Object)
-    End Class
+    ''' <summary>
+    ''' Tasks (per compatibilità futura se il JSON le include)
+    ''' </summary>
+    <JsonPropertyName("tasks")>
+    Public Property Tasks As List(Of Object)
+End Class
 
 
 

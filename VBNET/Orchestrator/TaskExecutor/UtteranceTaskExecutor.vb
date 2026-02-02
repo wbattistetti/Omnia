@@ -1,14 +1,12 @@
 Option Strict On
 Option Explicit On
-
-Imports TaskEngine
 Imports Compiler
 
 ''' <summary>
-''' Executor per task di tipo DataRequest
+''' Executor per task di tipo UtteranceInterpretation
 ''' Gestisce l'esecuzione completa del Task Engine
 ''' </summary>
-Public Class DataRequestTaskExecutor
+Public Class UtteranceTaskExecutor
     Inherits TaskExecutorBase
 
     Public Sub New(taskEngine As Motore)
@@ -16,19 +14,19 @@ Public Class DataRequestTaskExecutor
     End Sub
 
     Public Overrides Function Execute(task As CompiledTask, state As ExecutionState) As TaskExecutionResult
-        Dim utteranceTask = DirectCast(task, CompiledTaskUtteranceInterpretation)
+        Dim utteranceTask = DirectCast(task, CompiledUtteranceTask)
 
         ' ✅ Verifica che abbia almeno Steps o SubTasks
         If (utteranceTask.Steps Is Nothing OrElse utteranceTask.Steps.Count = 0) AndAlso
            Not utteranceTask.HasSubTasks() Then
             Return New TaskExecutionResult() With {
                 .Success = False,
-                .Err = "CompiledTaskUtteranceInterpretation has no Steps or SubTasks"
+                .Err = "CompiledUtteranceTask has no Steps or SubTasks"
             }
         End If
 
         Try
-            Console.WriteLine($"🚀 [DataRequestTaskExecutor] Starting Task execution for task {task.Id}")
+            Console.WriteLine($"🚀 [UtteranceTaskExecutor] Starting Task execution for task {task.Id}")
 
             ' Collega l'evento MessageToShow del Motore al callback per i messaggi
             Dim messageHandler As EventHandler(Of MessageEventArgs) = Nothing
@@ -54,7 +52,7 @@ Public Class DataRequestTaskExecutor
                 ' _taskEngine.ExecuteRuntimeTask(dataRequestTask.Task)
                 Throw New NotImplementedException("ExecuteRuntimeTask must be updated to accept RuntimeTask instead of DDTInstance")
 
-                Console.WriteLine($"✅ [DataRequestTaskExecutor] Task execution completed for task {task.Id}")
+                Console.WriteLine($"✅ [UtteranceTaskExecutor] Task execution completed for task {task.Id}")
 
                 Return New TaskExecutionResult() With {
                     .Success = True
@@ -65,7 +63,7 @@ Public Class DataRequestTaskExecutor
             End Try
 
         Catch ex As Exception
-            Console.WriteLine($"❌ [DataRequestTaskExecutor] Task execution failed for task {task.Id}: {ex.Message}")
+            Console.WriteLine($"❌ [UtteranceTaskExecutor] Task execution failed for task {task.Id}: {ex.Message}")
             Console.WriteLine($"   Stack trace: {ex.StackTrace}")
 
             Return New TaskExecutionResult() With {

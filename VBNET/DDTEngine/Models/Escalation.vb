@@ -4,16 +4,16 @@
 Option Strict On
 Option Explicit On
 
+''' <summary>
+''' Rappresenta una escalation (recovery) per un DialogueStep
+''' Corrisponde a Escalation nel frontend TypeScript
+''' </summary>
+Public Class Escalation
     ''' <summary>
-    ''' Rappresenta una escalation (recovery) per un DialogueStep
-    ''' Corrisponde a Escalation nel frontend TypeScript
+    ''' ID univoco dell'escalation (opzionale, usato principalmente per editor/compatibilità JSON)
+    ''' Nel runtime viene usato l'indice dell'array invece dell'ID
     ''' </summary>
-    Public Class Escalation
-        ''' <summary>
-        ''' ID univoco dell'escalation (opzionale, usato principalmente per editor/compatibilità JSON)
-        ''' Nel runtime viene usato l'indice dell'array invece dell'ID
-        ''' </summary>
-        Public Property EscalationId As String
+    Public Property EscalationId As String
 
     ''' <summary>
     ''' Lista di tasks da eseguire per questa escalation
@@ -24,10 +24,10 @@ Option Explicit On
     ''' Costruttore
     ''' </summary>
     Public Sub New()
-            EscalationId = ""
-            Tasks = New List(Of ITask)()
-        End Sub
-    End Class
+        EscalationId = ""
+        Tasks = New List(Of ITask)()
+    End Sub
+End Class
 
 
 

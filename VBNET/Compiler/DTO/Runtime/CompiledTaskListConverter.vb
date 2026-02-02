@@ -1,11 +1,7 @@
 Option Strict On
 Option Explicit On
-
-Imports System
-Imports System.Collections.Generic
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
-Imports Compiler
 
 ''' <summary>
 ''' JsonConverter per deserializzare List(Of CompiledTask) polimorfico

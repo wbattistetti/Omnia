@@ -1,7 +1,5 @@
 Option Strict On
 Option Explicit On
-
-Imports TaskEngine
 Imports Compiler
 
 ''' <summary>
@@ -15,7 +13,7 @@ Public Class SayMessageTaskExecutor
     End Sub
 
     Public Overrides Function Execute(task As CompiledTask, state As ExecutionState) As TaskExecutionResult
-        Dim sayMessageTask = DirectCast(task, CompiledTaskSayMessage)
+        Dim sayMessageTask = DirectCast(task, CompiledSayMessageTask)
 
         If String.IsNullOrEmpty(sayMessageTask.Text) Then
             Return New TaskExecutionResult() With {

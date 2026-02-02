@@ -1,8 +1,6 @@
 Option Strict On
 Option Explicit On
 
-Imports System.Collections.Generic
-
 ''' <summary>
 ''' Condition: Defines when a task can be executed
 ''' Tipi del mondo Runtime - usati durante l'esecuzione

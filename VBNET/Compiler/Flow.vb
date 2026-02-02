@@ -1,9 +1,6 @@
 Option Strict On
 Option Explicit On
 
-Imports System.Collections.Generic
-Imports System.Linq
-
 ''' <summary>
 ''' Flow structure: contiene nodes, edges, tasks
 ''' Helper per navigare struttura IDE durante la compilazione

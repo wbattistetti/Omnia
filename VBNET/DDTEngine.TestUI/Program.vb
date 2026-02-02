@@ -5,7 +5,6 @@ Option Strict On
 Option Explicit On
 
 Imports System.Windows.Forms
-Imports TaskEngine.TestUI
 
 Namespace TaskEngine.TestUI
 

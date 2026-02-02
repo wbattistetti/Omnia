@@ -1,22 +1,15 @@
 Option Strict On
 Option Explicit On
-
-Imports System
 Imports System.IO
-Imports System.Linq
-Imports System.Threading.Tasks
-Imports System.Collections.Generic
+Imports ApiServer.Converters
+Imports ApiServer.Helpers
+Imports ApiServer.Models
+Imports ApiServer.Services
+Imports ApiServer.Validators
+Imports Compiler
 Imports Microsoft.AspNetCore.Http
-Imports Microsoft.AspNetCore.Mvc
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
-Imports Compiler
-Imports TaskEngine
-Imports ApiServer.Models
-Imports ApiServer.Helpers
-Imports ApiServer.Validators
-Imports ApiServer.Converters
-Imports ApiServer.Services
 
 Namespace ApiServer.Handlers
     ''' <summary>
@@ -52,37 +45,26 @@ Namespace ApiServer.Handlers
         ''' <param name="compiledTask">The compiled task containing the runtime properties.</param>
         ''' <param name="translations">Optional dictionary of translations for the session.</param>
         ''' <returns>The session ID of the newly created session.</returns>
-        Private Function CreateTaskSession(compiledTask As Compiler.CompiledTaskUtteranceInterpretation, translations As Dictionary(Of String, String)) As String
-            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-            Console.WriteLine($"🔍 [CreateTaskSession] START")
-            Console.WriteLine($"   compiledTask IsNot Nothing: {compiledTask IsNot Nothing}")
-            If compiledTask IsNot Nothing Then
-                Console.WriteLine($"   compiledTask.Id: {compiledTask.Id}")
-                Console.WriteLine($"   compiledTask.Steps IsNot Nothing: {compiledTask.Steps IsNot Nothing}")
-                Console.WriteLine($"   compiledTask.Steps.Count: {If(compiledTask.Steps IsNot Nothing, compiledTask.Steps.Count, 0)}")
-                Console.WriteLine($"   compiledTask.HasSubTasks: {compiledTask.HasSubTasks()}")
-            End If
-            Console.WriteLine($"   translations IsNot Nothing: {translations IsNot Nothing}")
-            Console.WriteLine($"   translations.Count: {If(translations IsNot Nothing, translations.Count, 0)}")
-            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-
+        Private Function CreateTaskSession(compiledTask As Compiler.CompiledUtteranceTask, translations As Dictionary(Of String, String)) As String
+            Console.WriteLine($"[API] CreateTaskSession ENTRY: TaskId={compiledTask.Id}")
+            System.Diagnostics.Debug.WriteLine($"[API] CreateTaskSession ENTRY: TaskId={compiledTask.Id}")
+            Console.Out.Flush()
             Dim sessionId = Guid.NewGuid().ToString()
-            Console.WriteLine($"🔍 [CreateTaskSession] Generated sessionId: {sessionId}")
-
+            Console.WriteLine($"[API] CreateTaskSession: Generated sessionId={sessionId}")
+            System.Diagnostics.Debug.WriteLine($"[API] CreateTaskSession: Generated sessionId={sessionId}")
+            Console.Out.Flush()
             Dim translationsDict = If(translations, New Dictionary(Of String, String)())
-            Console.WriteLine($"🔍 [CreateTaskSession] Converting CompiledTaskUtteranceInterpretation to RuntimeTask...")
-            ' ✅ TODO: SessionManager deve essere aggiornato per accettare CompiledTaskUtteranceInterpretation
-            ' Per ora convertiamo in RuntimeTask (temporaneo)
+            Console.WriteLine($"[API] CreateTaskSession: Converting CompiledTask to RuntimeTask...")
+            System.Diagnostics.Debug.WriteLine($"[API] CreateTaskSession: Converting CompiledTask to RuntimeTask...")
+            Console.Out.Flush()
             Dim runtimeTask = RuntimeTaskConverter.ConvertCompiledToRuntimeTask(compiledTask)
-            Console.WriteLine($"✅ [CreateTaskSession] ConvertCompiledToRuntimeTask completed")
-            Console.WriteLine($"   runtimeTask.Id: {runtimeTask.Id}")
-            Console.WriteLine($"   runtimeTask.Steps.Count: {If(runtimeTask.Steps IsNot Nothing, runtimeTask.Steps.Count, 0)}")
-            Console.WriteLine($"   runtimeTask.HasSubTasks: {runtimeTask.HasSubTasks()}")
-
-            Console.WriteLine($"🔍 [CreateTaskSession] Calling SessionManager.CreateTaskSession...")
+            Console.WriteLine($"[API] CreateTaskSession: Calling SessionManager.CreateTaskSession...")
+            System.Diagnostics.Debug.WriteLine($"[API] CreateTaskSession: Calling SessionManager.CreateTaskSession...")
+            Console.Out.Flush()
             SessionManager.CreateTaskSession(sessionId, runtimeTask, translationsDict)
-            Console.WriteLine($"✅ [CreateTaskSession] SessionManager.CreateTaskSession completed")
-            Console.WriteLine($"🔍 [CreateTaskSession] END - Returning sessionId: {sessionId}")
+            Console.WriteLine($"[API] Session created: {sessionId}, TaskId={compiledTask.Id}")
+            System.Diagnostics.Debug.WriteLine($"[API] Session created: {sessionId}, TaskId={compiledTask.Id}")
+            Console.Out.Flush()
             Return sessionId
         End Function
 
@@ -91,132 +73,62 @@ Namespace ApiServer.Handlers
         ''' Orchestrates the entire flow: request parsing, task loading, template resolution, compilation, and session creation.
         ''' </summary>
         Public Async Function HandleTaskSessionStart(context As HttpContext) As Task(Of IResult)
-            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-            Console.WriteLine($"🚀 [HandleTaskSessionStart] FUNCTION CALLED")
-            Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-            Console.Out.Flush()
-            System.Diagnostics.Debug.WriteLine($"🚀 [HandleTaskSessionStart] FUNCTION CALLED")
             Try
-                ' 1. Parse request
-                Console.WriteLine($"🔍 [HandleTaskSessionStart] Step 1: Parsing request...")
-                Console.Out.Flush()
                 Dim parseResult = Await ReadAndParseRequest(context)
                 If Not parseResult.Success Then
                     Return ResponseHelpers.CreateErrorResponse(parseResult.ErrorMessage, 400)
                 End If
                 Dim request = parseResult.Request
 
-                ' 2. Validate request
                 Dim validationResult = RequestValidators.ValidateRequest(request)
                 If Not validationResult.IsValid Then
                     Return ResponseHelpers.CreateErrorResponse(validationResult.ErrorMessage, 400)
                 End If
 
-                ' ✅ NUOVO MODELLO: Se TaskTree è presente, usalo direttamente (working copy dalla memoria)
-                ' Altrimenti, carica dal database (fallback per compatibilità)
-                Dim compiledTask As Compiler.CompiledTaskUtteranceInterpretation = Nothing
+                Dim compiledTask As Compiler.CompiledUtteranceTask = Nothing
 
                 If request.TaskTree IsNot Nothing Then
-                    ' ✅ CASO A: Usa TaskTree dalla working copy (fonte di verità)
-                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-                    Console.WriteLine($"✅ [HandleTaskSessionStart] Using TaskTree from working copy (taskId={request.TaskId})")
-                    Console.WriteLine($"🔍 [HandleTaskSessionStart] TaskTree IsNot Nothing: {request.TaskTree IsNot Nothing}")
-                    If request.TaskTree IsNot Nothing Then
-                        Dim taskTreeKeysList As New List(Of String)()
-                        For Each prop In request.TaskTree.Properties()
-                            taskTreeKeysList.Add(prop.Name)
-                        Next
-                        Dim taskTreeKeys = String.Join(", ", taskTreeKeysList)
-                        Console.WriteLine($"🔍 [HandleTaskSessionStart] TaskTree JSON keys: {taskTreeKeys}")
-                    End If
-                    System.Diagnostics.Debug.WriteLine($"✅ [HandleTaskSessionStart] Using TaskTree from working copy")
-
+                    Console.WriteLine($"[API] Starting session for taskId={request.TaskId} using TaskTree")
                     Try
-                        ' Converti TaskTree (JSON) in TaskTreeExpanded (AST montato) per il compilatore
-                        Console.WriteLine($"🔍 [HandleTaskSessionStart] Calling ConvertTaskTreeToTaskTreeExpanded...")
                         Dim taskTreeExpanded = TaskTreeConverter.ConvertTaskTreeToTaskTreeExpanded(request.TaskTree, request.TaskId)
                         If taskTreeExpanded Is Nothing Then
-                            Console.WriteLine($"❌ [HandleTaskSessionStart] ConvertTaskTreeToTaskTreeExpanded returned Nothing")
                             Return ResponseHelpers.CreateErrorResponse($"Failed to convert TaskTree to TaskTreeExpanded for task '{request.TaskId}'.", 400)
                         End If
-                        Console.WriteLine($"✅ [HandleTaskSessionStart] ConvertTaskTreeToTaskTreeExpanded succeeded")
-                        Console.WriteLine($"🔍 [HandleTaskSessionStart] taskTreeExpanded IsNot Nothing: {taskTreeExpanded IsNot Nothing}")
-                        Console.Out.Flush()
 
-                        ' ✅ CORRETTO: Usa UtteranceInterpretationTaskCompiler (compilazione completa)
-                        ' Compila TaskTreeExpanded → CompiledTaskUtteranceInterpretation
-                        Console.WriteLine($"🔍 [HandleTaskSessionStart] About to Await CompileTaskTreeExpandedToCompiledTask...")
-                        Console.WriteLine($"🔍 [HandleTaskSessionStart] Parameters: projectId={request.ProjectId}, taskId={request.TaskId}")
-                        Console.Out.Flush()
-                        Dim compileResult = Await TaskCompilationService.CompileTaskTreeExpandedToCompiledTask(taskTreeExpanded, request.Translations, request.ProjectId, request.TaskId)
-                        Console.WriteLine($"🔍 [HandleTaskSessionStart] Await CompileTaskTreeExpandedToCompiledTask completed")
-                        Console.Out.Flush()
-
-                        ' ✅ LOGGING BRUTALE del risultato
-                        Console.WriteLine("═══════════════════════════════════════════════════════════════")
-                        Console.WriteLine("🔍 [HandleTaskSessionStart] CompileTaskTreeExpandedToCompiledTask result:")
-                        Console.WriteLine($"   Success: {compileResult IsNot Nothing AndAlso compileResult.Success}")
-                        Console.WriteLine($"   ErrorMessage: {If(compileResult IsNot Nothing, compileResult.ErrorMessage, "compileResult is Nothing")}")
-                        Console.WriteLine($"   HasResult: {compileResult IsNot Nothing AndAlso compileResult.Result IsNot Nothing}")
-                        If compileResult IsNot Nothing AndAlso compileResult.Result IsNot Nothing Then
-                            Console.WriteLine($"   Result Type: {compileResult.Result.GetType().FullName}")
-                            Dim utteranceTask = TryCast(compileResult.Result, Compiler.CompiledTaskUtteranceInterpretation)
-                            If utteranceTask IsNot Nothing Then
-                                Console.WriteLine($"   Steps Count: {If(utteranceTask.Steps IsNot Nothing, utteranceTask.Steps.Count, 0)}")
-                                Console.WriteLine($"   HasSubTasks: {utteranceTask.HasSubTasks()}")
+                        ' ✅ Aggiungi traduzioni al TaskTreeExpanded per la risoluzione dei GUID
+                        If request.Translations IsNot Nothing AndAlso request.Translations.Count > 0 Then
+                            If taskTreeExpanded.Translations Is Nothing Then
+                                taskTreeExpanded.Translations = New Dictionary(Of String, String)()
                             End If
+                            For Each kvp In request.Translations
+                                taskTreeExpanded.Translations(kvp.Key) = kvp.Value
+                            Next
+                            Console.WriteLine($"[API] Added {request.Translations.Count} translations to TaskTreeExpanded")
                         End If
-                        Console.WriteLine("═══════════════════════════════════════════════════════════════")
-                        Console.Out.Flush()
+
+                        Dim compileResult = Await TaskCompilationService.CompileTaskTreeExpandedToCompiledTask(taskTreeExpanded, request.Translations, request.ProjectId, request.TaskId)
 
                         If compileResult Is Nothing Then
                             Return ResponseHelpers.CreateErrorResponse("Compilation failed: compileResult is Nothing", 500)
                         End If
 
                         If Not compileResult.Success Then
-                            Console.WriteLine($"❌ [HandleTaskSessionStart] Compilation failed: {compileResult.ErrorMessage}")
+                            Console.WriteLine($"[API] ERROR: Compilation failed for task {request.TaskId}: {compileResult.ErrorMessage}")
                             Return ResponseHelpers.CreateErrorResponse($"Compilation failed for task '{request.TaskId}'. Error: {compileResult.ErrorMessage}", 500)
                         End If
 
                         If compileResult.Result Is Nothing Then
-                            Console.WriteLine($"❌ [HandleTaskSessionStart] Compilation succeeded but Result is Nothing")
+                            Console.WriteLine($"[API] ERROR: Compilation succeeded but Result is Nothing for task {request.TaskId}")
                             Return ResponseHelpers.CreateErrorResponse($"Compilation succeeded but returned no task for task '{request.TaskId}'.", 500)
                         End If
 
                         compiledTask = compileResult.Result
                     Catch ex As Exception
-                        Console.WriteLine("═══════════════════════════════════════════════════════════════")
-                        Console.WriteLine("❌ [HandleTaskSessionStart] UNHANDLED EXCEPTION processing TaskTree")
-                        Console.WriteLine($"   Type: {ex.GetType().FullName}")
-                        Console.WriteLine($"   Message: {ex.Message}")
-                        Console.WriteLine($"   StackTrace: {ex.StackTrace}")
-
-                        If ex.InnerException IsNot Nothing Then
-                            Console.WriteLine("   ── Inner Exception ──")
-                            Console.WriteLine($"   Type: {ex.InnerException.GetType().FullName}")
-                            Console.WriteLine($"   Message: {ex.InnerException.Message}")
-                            Console.WriteLine($"   StackTrace: {ex.InnerException.StackTrace}")
-                        End If
-
-                        ' ✅ Se è JsonSerializationException, logga dettagli aggiuntivi
-                        Dim jsonEx = TryCast(ex, JsonSerializationException)
-                        If jsonEx IsNot Nothing Then
-                            Console.WriteLine("   ── JSON Exception Details ──")
-                            Console.WriteLine($"   JSON Path: {jsonEx.Path}")
-                            Console.WriteLine($"   LineNumber: {jsonEx.LineNumber}")
-                            Console.WriteLine($"   LinePosition: {jsonEx.LinePosition}")
-                        End If
-
-                        Console.WriteLine("═══════════════════════════════════════════════════════════════")
-                        Console.Out.Flush()
+                        Console.WriteLine($"[API] ERROR: Exception processing TaskTree for task {request.TaskId}: {ex.GetType().Name} - {ex.Message}")
                         Return ResponseHelpers.CreateErrorResponse($"Failed to process TaskTree for task '{request.TaskId}'. Error: {ex.Message}", 400)
                     End Try
-                    Console.WriteLine($"🔍 [HandleTaskSessionStart] After Try-Catch block, compiledTask IsNot Nothing: {compiledTask IsNot Nothing}")
-                    Console.Out.Flush()
                 Else
-                    ' ✅ CASO B: Fallback - carica dal database (compatibilità legacy)
-                    Console.WriteLine($"⚠️ [HandleTaskSessionStart] TaskTree not provided, loading from database (taskId={request.TaskId})")
-                    System.Diagnostics.Debug.WriteLine($"⚠️ [HandleTaskSessionStart] Loading from database (fallback)")
+                    Console.WriteLine($"[API] Loading task {request.TaskId} from database (fallback)")
 
                     ' 3. Fetch tasks from Node.js
                     Dim fetchResult = Await TaskDataService.FetchTasksFromNodeJs(request.ProjectId)
@@ -292,33 +204,35 @@ Namespace ApiServer.Handlers
                     compiledTask = compileResult.Result
                 End If
 
-                ' 11. Validate compiled task before creating session
                 If compiledTask Is Nothing Then
-                    Console.WriteLine($"❌ [HandleTaskSessionStart] compiledTask is Nothing - cannot create session")
+                    Console.WriteLine($"[API] ERROR: compiledTask is Nothing - cannot create session")
                     Return ResponseHelpers.CreateErrorResponse("Compiled task is null. The compilation may have failed silently.", 500)
                 End If
 
-                ' 12. Create session
                 Dim sessionId As String = Nothing
                 Try
+                    Console.WriteLine($"[API] About to call CreateTaskSession for taskId={request.TaskId}")
+                    System.Diagnostics.Debug.WriteLine($"[API] About to call CreateTaskSession for taskId={request.TaskId}")
+                    Console.Out.Flush()
                     sessionId = CreateTaskSession(compiledTask, request.Translations)
+                    Console.WriteLine($"[API] CreateTaskSession returned: sessionId={If(String.IsNullOrEmpty(sessionId), "EMPTY", sessionId)}")
+                    System.Diagnostics.Debug.WriteLine($"[API] CreateTaskSession returned: sessionId={If(String.IsNullOrEmpty(sessionId), "EMPTY", sessionId)}")
+                    Console.Out.Flush()
                     If String.IsNullOrEmpty(sessionId) Then
-                        Console.WriteLine($"❌ [HandleTaskSessionStart] CreateTaskSession returned empty sessionId")
+                        Console.WriteLine($"[API] ERROR: CreateTaskSession returned empty sessionId")
+                        System.Diagnostics.Debug.WriteLine($"[API] ERROR: CreateTaskSession returned empty sessionId")
+                        Console.Out.Flush()
                         Return ResponseHelpers.CreateErrorResponse("Failed to create session: sessionId is empty.", 500)
                     End If
-                    Console.WriteLine($"✅ [HandleTaskSessionStart] Session created successfully: {sessionId}")
                 Catch ex As Exception
-                    Console.WriteLine($"❌ [HandleTaskSessionStart] Exception in CreateTaskSession: {ex.Message}")
-                    Console.WriteLine($"   Exception type: {ex.GetType().Name}")
-                    Console.WriteLine($"   Stack trace: {ex.StackTrace}")
-                    If ex.InnerException IsNot Nothing Then
-                        Console.WriteLine($"   Inner exception: {ex.InnerException.Message}")
-                    End If
+                    Console.WriteLine($"[API] ERROR: Exception in CreateTaskSession: {ex.GetType().Name} - {ex.Message}")
+                    Console.WriteLine($"[API] ERROR: Stack trace: {ex.StackTrace}")
+                    System.Diagnostics.Debug.WriteLine($"[API] ERROR: Exception in CreateTaskSession: {ex.GetType().Name} - {ex.Message}")
+                    System.Diagnostics.Debug.WriteLine($"[API] ERROR: Stack trace: {ex.StackTrace}")
                     Console.Out.Flush()
                     Return ResponseHelpers.CreateErrorResponse($"Failed to create session: {ex.Message}", 500)
                 End Try
 
-                ' 12. Return success
                 Dim responseObj = New With {
                     .sessionId = sessionId,
                     .timestamp = DateTime.UtcNow.ToString("O")
@@ -326,43 +240,15 @@ Namespace ApiServer.Handlers
                 Dim jsonResponse = JsonConvert.SerializeObject(responseObj, New JsonSerializerSettings() With {
                     .NullValueHandling = NullValueHandling.Ignore
                 })
-                Console.WriteLine($"✅ [HandleTaskSessionStart] Session created: {sessionId}")
 
-                ' ✅ Scrivi direttamente nel response stream (come HandleOrchestratorSessionStart)
-                ' Questo garantisce che la risposta venga inviata correttamente
                 context.Response.ContentType = "application/json; charset=utf-8"
                 context.Response.ContentLength = jsonResponse.Length
                 Await context.Response.WriteAsync(jsonResponse)
 
-                ' ✅ Restituisci Results.Empty dopo aver scritto direttamente
                 Return Results.Empty
 
             Catch ex As Exception
-                Console.WriteLine("═══════════════════════════════════════════════════════════════")
-                Console.WriteLine("❌ [HandleTaskSessionStart] UNHANDLED EXCEPTION")
-                Console.WriteLine($"   Type: {ex.GetType().FullName}")
-                Console.WriteLine($"   Message: {ex.Message}")
-                Console.WriteLine($"   StackTrace: {ex.StackTrace}")
-
-                If ex.InnerException IsNot Nothing Then
-                    Console.WriteLine("   ── Inner Exception ──")
-                    Console.WriteLine($"   Type: {ex.InnerException.GetType().FullName}")
-                    Console.WriteLine($"   Message: {ex.InnerException.Message}")
-                    Console.WriteLine($"   StackTrace: {ex.InnerException.StackTrace}")
-                End If
-
-                ' ✅ Se è JsonSerializationException, logga dettagli aggiuntivi
-                Dim jsonEx = TryCast(ex, JsonSerializationException)
-                If jsonEx IsNot Nothing Then
-                    Console.WriteLine("   ── JSON Exception Details ──")
-                    Console.WriteLine($"   JSON Path: {jsonEx.Path}")
-                    Console.WriteLine($"   LineNumber: {jsonEx.LineNumber}")
-                    Console.WriteLine($"   LinePosition: {jsonEx.LinePosition}")
-                End If
-
-                Console.WriteLine("═══════════════════════════════════════════════════════════════")
-                Console.Out.Flush()
-                System.Diagnostics.Debug.WriteLine($"❌ [HandleTaskSessionStart] UNHANDLED EXCEPTION: {ex.GetType().FullName} - {ex.Message}")
+                Console.WriteLine($"[API] ERROR: Unhandled exception in HandleTaskSessionStart: {ex.GetType().Name} - {ex.Message}")
                 Return ResponseHelpers.CreateErrorResponse($"Unexpected error while starting task session: {ex.Message}", 500)
             End Try
         End Function
@@ -372,18 +258,15 @@ Namespace ApiServer.Handlers
         ''' </summary>
         Public Async Function HandleTaskSessionStream(context As HttpContext, sessionId As String) As System.Threading.Tasks.Task
             Try
-                Console.WriteLine($"📡 [HandleTaskSessionStream] SSE connection opened for TaskSession: {sessionId}")
+                Console.WriteLine($"[API] SSE connection opened for session: {sessionId}")
 
-                ' Get session
                 Dim session = SessionManager.GetTaskSession(sessionId)
                 If session Is Nothing Then
-                    Console.WriteLine($"❌ [HandleTaskSessionStream] TaskSession not found: {sessionId}")
+                    Console.WriteLine($"[API] ERROR: Session not found: {sessionId}")
                     context.Response.StatusCode = 404
                     Await context.Response.WriteAsync($"event: error\ndata: {JsonConvert.SerializeObject(New With {.error = "Session not found"})}\n\n")
                     Return
                 End If
-
-                Console.WriteLine($"✅ [HandleTaskSessionStream] TaskSession found: {sessionId}")
 
                 ' Setup SSE headers
                 context.Response.ContentType = "text/event-stream"
@@ -419,7 +302,7 @@ Namespace ApiServer.Handlers
                                                                                                  Await writer.WriteLineAsync()
                                                                                                  Await writer.FlushAsync()
                                                                                              Catch ex As Exception
-                                                                                                 Console.WriteLine($"❌ [SSE] Error sending message: {ex.Message}")
+                                                                                                 Console.WriteLine($"[API] ERROR: SSE error sending message: {ex.Message}")
                                                                                              End Try
                                                                                          End Function)
                                                      End Sub
@@ -434,7 +317,7 @@ Namespace ApiServer.Handlers
                                                                                                          Await writer.WriteLineAsync()
                                                                                                          Await writer.FlushAsync()
                                                                                                      Catch ex As Exception
-                                                                                                         Console.WriteLine($"❌ [SSE] Error sending waitingForInput: {ex.Message}")
+                                                                                                         Console.WriteLine($"[API] ERROR: SSE error sending waitingForInput: {ex.Message}")
                                                                                                      End Try
                                                                                                  End Function)
                                                              End Sub
@@ -448,7 +331,7 @@ Namespace ApiServer.Handlers
                                                                                                   Await writer.FlushAsync()
                                                                                                   writer.Close()
                                                                                               Catch ex As Exception
-                                                                                                  Console.WriteLine($"❌ [SSE] Error sending complete: {ex.Message}")
+                                                                                                  Console.WriteLine($"[API] ERROR: SSE error sending complete: {ex.Message}")
                                                                                               End Try
                                                                                           End Function)
                                                       End Sub
@@ -462,7 +345,7 @@ Namespace ApiServer.Handlers
                                                                                                Await writer.FlushAsync()
                                                                                                writer.Close()
                                                                                            Catch ex As Exception
-                                                                                               Console.WriteLine($"❌ [SSE] Error sending error: {ex.Message}")
+                                                                                               Console.WriteLine($"[API] ERROR: SSE error sending error: {ex.Message}")
                                                                                            End Try
                                                                                        End Function)
                                                    End Sub
@@ -473,9 +356,8 @@ Namespace ApiServer.Handlers
                 session.EventEmitter.[On]("complete", onComplete)
                 session.EventEmitter.[On]("error", onError)
 
-                ' Cleanup on disconnect
                 context.RequestAborted.Register(Sub()
-                                                    Console.WriteLine($"✅ [HandleTaskSessionStream] SSE connection closed for TaskSession: {sessionId}")
+                                                    Console.WriteLine($"[API] SSE connection closed for session: {sessionId}")
                                                     session.EventEmitter.RemoveListener("message", onMessage)
                                                     session.EventEmitter.RemoveListener("waitingForInput", onWaitingForInput)
                                                     session.EventEmitter.RemoveListener("complete", onComplete)
@@ -499,13 +381,11 @@ Namespace ApiServer.Handlers
                     Await System.Threading.Tasks.Task.Delay(System.Threading.Timeout.Infinite, context.RequestAborted)
                 Catch ex As System.Threading.Tasks.TaskCanceledException
                     ' Connection closed normally
-                    Console.WriteLine($"✅ [HandleTaskSessionStream] Connection closed normally for TaskSession: {sessionId}")
                 Finally
                     heartbeatTimer.Dispose()
                 End Try
             Catch ex As Exception
-                Console.WriteLine($"❌ [HandleTaskSessionStream] ERROR: {ex.Message}")
-                Console.WriteLine($"Stack trace: {ex.StackTrace}")
+                Console.WriteLine($"[API] ERROR: HandleTaskSessionStream exception: {ex.GetType().Name} - {ex.Message}")
             End Try
         End Function
 
@@ -513,26 +393,23 @@ Namespace ApiServer.Handlers
         ''' Handles POST /api/runtime/task/session/{id}/input - Chat Simulator diretto
         ''' </summary>
         Public Async Function HandleTaskSessionInput(context As HttpContext, sessionId As String) As Task(Of IResult)
-            Console.WriteLine($"📥 [HandleTaskSessionInput] Received input for TaskSession: {sessionId}")
-
             Try
                 Dim reader As New StreamReader(context.Request.Body)
                 Dim body = Await reader.ReadToEndAsync()
                 Dim request = JsonConvert.DeserializeObject(Of TaskSessionInputRequest)(body)
 
                 If request Is Nothing OrElse String.IsNullOrEmpty(request.Input) Then
-                    Console.WriteLine("❌ [HandleTaskSessionInput] Invalid request or empty input")
+                    Console.WriteLine($"[API] ERROR: Invalid request or empty input for session {sessionId}")
                     Return Results.BadRequest(New With {.error = "Input is required"})
                 End If
 
-                ' Get session
                 Dim session = SessionManager.GetTaskSession(sessionId)
                 If session Is Nothing Then
-                    Console.WriteLine($"❌ [HandleTaskSessionInput] TaskSession not found: {sessionId}")
+                    Console.WriteLine($"[API] ERROR: Session not found: {sessionId}")
                     Return Results.NotFound(New With {.error = "Session not found"})
                 End If
 
-                Console.WriteLine($"✅ [HandleTaskSessionInput] Processing input: {request.Input.Substring(0, Math.Min(100, request.Input.Length))}")
+                Console.WriteLine($"[API] Processing input for session {sessionId}")
 
                 ' TODO: Process input and continue DDT execution
                 ' Per ora, solo acknowledge receipt
@@ -549,8 +426,7 @@ Namespace ApiServer.Handlers
                     .timestamp = DateTime.UtcNow.ToString("O")
                 })
             Catch ex As Exception
-                Console.WriteLine($"❌ [HandleTaskSessionInput] Exception: {ex.Message}")
-                Console.WriteLine($"Stack trace: {ex.StackTrace}")
+                Console.WriteLine($"[API] ERROR: HandleTaskSessionInput exception: {ex.GetType().Name} - {ex.Message}")
                 Return Results.Problem(
                     title:="Failed to provide input",
                     detail:=ex.Message,

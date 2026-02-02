@@ -1,8 +1,6 @@
 Option Strict On
 Option Explicit On
 
-Imports System.Collections.Generic
-
 ''' <summary>
 ''' Stato di esecuzione del flow orchestrator
 ''' </summary>

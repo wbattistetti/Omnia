@@ -1,11 +1,8 @@
 Option Strict On
 Option Explicit On
-
-Imports System
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 Imports TaskEngine
-Imports System.Collections.Generic
 
 ''' <summary>
 ''' JsonConverter per deserializzare CompiledTask polimorfico
@@ -59,17 +56,17 @@ Public Class CompiledTaskConverter
         Dim task As CompiledTask
         Select Case taskType
             Case TaskTypes.SayMessage
-                task = New CompiledTaskSayMessage()
+                task = New CompiledSayMessageTask()
             Case TaskTypes.UtteranceInterpretation
-                task = New CompiledTaskUtteranceInterpretation()
+                task = New CompiledUtteranceTask()
             Case TaskTypes.ClassifyProblem
-                task = New CompiledTaskClassifyProblem()
+                task = New CompiledClassifyProblemTask()
             Case TaskTypes.BackendCall
-                task = New CompiledTaskBackendCall()
+                task = New CompiledBackendCallTask()
             Case TaskTypes.CloseSession
-                task = New CompiledTaskCloseSession()
+                task = New CompiledCloseSessionTask()
             Case TaskTypes.Transfer
-                task = New CompiledTaskTransfer()
+                task = New CompiledTransferTask()
             Case Else
                 Throw New JsonException($"Unknown TaskType: {taskType}")
         End Select

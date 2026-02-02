@@ -1,10 +1,6 @@
 Option Strict On
 Option Explicit On
-
-Imports System.Collections.Generic
-Imports System.Linq
 Imports Newtonsoft.Json
-Imports TaskEngine
 
 ''' <summary>
 ''' Compiler per task di tipo UtteranceInterpretation
@@ -22,21 +18,11 @@ Imports TaskEngine
 ''' - Performance: meno dati nel database, lookup template in memoria (O(1))
 ''' - Architettura pulita: istanza contiene solo steps, template contiene contracts
 ''' </summary>
-Public Class UtteranceInterpretationTaskCompiler
+Public Class UtteranceTaskCompiler
     Inherits TaskCompilerBase
 
     Public Overrides Function Compile(task As Task, taskId As String, flow As Flow) As CompiledTask
-        Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] ========== COMPILE START ==========")
-        Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Compile called for task {taskId}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Compile called for task {taskId}")
-        Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] task.TemplateId={task.TemplateId}, task.Id={task.Id}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] task.TemplateId={task.TemplateId}, task.Id={task.Id}")
-        Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] flow.Tasks count: {If(flow IsNot Nothing AndAlso flow.Tasks IsNot Nothing, flow.Tasks.Count, 0)}")
-        If flow IsNot Nothing AndAlso flow.Tasks IsNot Nothing Then
-            Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Available template IDs in flow: {String.Join(", ", flow.Tasks.Select(Function(t) t.Id).Take(10))}")
-        End If
-
-        Dim compiledTask As New CompiledTaskUtteranceInterpretation()
+        Dim compiledTask As New CompiledUtteranceTask()
 
         ' ✅ NUOVO MODELLO: Costruisci TaskTreeExpanded dal template usando task.templateId e subTasksIds
         ' LOGICA:
@@ -44,122 +30,49 @@ Public Class UtteranceInterpretationTaskCompiler
         ' 2. Applica task.steps come override
         Dim taskTreeExpanded As Compiler.TaskTreeExpanded = Nothing
 
-        ' ✅ NUOVO MODELLO: Costruisci SEMPRE da template usando subTasksIds
         If Not String.IsNullOrEmpty(task.TemplateId) Then
-            Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Building TaskTreeExpanded from template {task.TemplateId}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Building TaskTreeExpanded from template {task.TemplateId}")
-
-            Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Searching for template {task.TemplateId} in flow.Tasks...")
             Dim template As Compiler.Task = flow.Tasks.FirstOrDefault(Function(t As Compiler.Task) t.Id = task.TemplateId)
             If template IsNot Nothing Then
-                Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Template {task.TemplateId} found: Label={template.Label}, SubTasksIds count={If(template.SubTasksIds IsNot Nothing, template.SubTasksIds.Count, 0)}")
                 Try
-                    Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Building TaskTreeExpanded from template {task.TemplateId}...")
                     taskTreeExpanded = BuildTaskTreeExpanded(template, task, flow)
-                    Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeExpanded built successfully")
-                    Console.WriteLine($"   TaskTreeExpanded.Id={taskTreeExpanded.Id}")
-                    Console.WriteLine($"   TaskTreeExpanded.Label={taskTreeExpanded.Label}")
-                    Console.WriteLine($"   TaskTreeExpanded.Nodes count={If(taskTreeExpanded.Nodes IsNot Nothing, taskTreeExpanded.Nodes.Count, 0)}")
-                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeExpanded built from template {task.TemplateId}")
                 Catch ex As Exception
-                    Console.WriteLine($"❌ [COMPILER][UtteranceInterpretationTaskCompiler] Failed to build TaskTreeExpanded from template: {ex.Message}")
-                    Console.WriteLine($"   Exception type: {ex.GetType().Name}")
-                    Console.WriteLine($"   Stack trace: {ex.StackTrace}")
-                    If ex.InnerException IsNot Nothing Then
-                        Console.WriteLine($"   Inner exception: {ex.InnerException.Message}")
-                    End If
-                    System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][UtteranceInterpretationTaskCompiler] Exception details: {ex.ToString()}")
+                    Console.WriteLine($"[COMPILER] ERROR: Failed to build TaskTreeExpanded from template {task.TemplateId}: {ex.Message}")
                     Throw New InvalidOperationException($"Failed to build TaskTreeExpanded from template {task.TemplateId}: {ex.Message}", ex)
                 End Try
             Else
-                Console.WriteLine($"❌ [COMPILER][UtteranceInterpretationTaskCompiler] Template {task.TemplateId} NOT FOUND in flow.Tasks")
-                Console.WriteLine($"   Available template IDs: {String.Join(", ", flow.Tasks.Select(Function(t) t.Id))}")
-                System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][UtteranceInterpretationTaskCompiler] Template {task.TemplateId} not found")
+                Console.WriteLine($"[COMPILER] ERROR: Template {task.TemplateId} not found for task {taskId}")
                 Throw New InvalidOperationException($"Template {task.TemplateId} not found. Every task must have a valid templateId.")
             End If
         Else
-            ' ❌ RIMOSSO: Fallback legacy a task.Data
-            ' Ogni task DEVE avere templateId (viene creato automaticamente se mancante)
-            Console.WriteLine($"❌ [COMPILER][UtteranceInterpretationTaskCompiler] Task {taskId} has no templateId. This is not supported.")
+            Console.WriteLine($"[COMPILER] ERROR: Task {taskId} has no templateId")
             Throw New InvalidOperationException($"Task {taskId} must have a templateId. Legacy task.Data is not supported.")
         End If
 
-        ' Compila TaskTreeExpanded se trovato
         If taskTreeExpanded IsNot Nothing Then
-            Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeExpanded found! Starting compilation...")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeExpanded found! Starting compilation...")
-            Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeExpanded.Id={taskTreeExpanded.Id}, Nodes IsNot Nothing={taskTreeExpanded.Nodes IsNot Nothing}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeExpanded.Id={taskTreeExpanded.Id}, Nodes IsNot Nothing={taskTreeExpanded.Nodes IsNot Nothing}")
-            If taskTreeExpanded.Nodes IsNot Nothing Then
-                Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeExpanded.Nodes.Count={taskTreeExpanded.Nodes.Count}")
-                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] TaskTreeExpanded.Nodes.Count={taskTreeExpanded.Nodes.Count}")
-            End If
             Try
                 Dim taskCompiler As New TaskCompiler()
-                ' Serializza TaskTreeExpanded a JSON per TaskCompiler.Compile
                 Dim taskJson = JsonConvert.SerializeObject(taskTreeExpanded)
-                Console.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Calling TaskCompiler.Compile with JSON length={taskJson.Length}")
-                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][UtteranceInterpretationTaskCompiler] Calling TaskCompiler.Compile with JSON length={taskJson.Length}")
                 Dim compileResult = taskCompiler.Compile(taskJson)
                 If compileResult IsNot Nothing AndAlso compileResult.Task IsNot Nothing Then
-                    ' ✅ Copia le proprietà direttamente da RuntimeTask a CompiledTaskUtteranceInterpretation
                     Dim runtimeTask = compileResult.Task
                     compiledTask.Steps = runtimeTask.Steps
                     compiledTask.Constraints = runtimeTask.Constraints
                     compiledTask.NlpContract = runtimeTask.NlpContract
 
-                    ' ✅ Copia SubTasks ricorsivamente (solo se presenti E non vuoti)
                     If runtimeTask.HasSubTasks() Then
-                        compiledTask.SubTasks = New List(Of CompiledTaskUtteranceInterpretation)()
+                        compiledTask.SubTasks = New List(Of CompiledUtteranceTask)()
                         For Each subTask As RuntimeTask In runtimeTask.SubTasks
                             Dim subCompiled = ConvertRuntimeTaskToCompiled(subTask)
                             compiledTask.SubTasks.Add(subCompiled)
                         Next
                     Else
-                        ' ✅ Assicura che SubTasks sia Nothing per task atomici
                         compiledTask.SubTasks = Nothing
                     End If
-
-                    Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Task compiled successfully for task {taskId}")
-                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Task compiled successfully for task {taskId}")
-                Else
-                    Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Task compilation returned no task for task {taskId}")
-                    System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Task compilation returned no task for task {taskId}")
                 End If
             Catch ex As Exception
-                Console.WriteLine("═══════════════════════════════════════════════════════════════")
-                Console.WriteLine($"❌ [UtteranceInterpretationTaskCompiler] UNHANDLED EXCEPTION during compilation")
-                Console.WriteLine($"   Type: {ex.GetType().FullName}")
-                Console.WriteLine($"   Message: {ex.Message}")
-                Console.WriteLine($"   StackTrace: {ex.StackTrace}")
-
-                If ex.InnerException IsNot Nothing Then
-                    Console.WriteLine("   ── Inner Exception ──")
-                    Console.WriteLine($"   Type: {ex.InnerException.GetType().FullName}")
-                    Console.WriteLine($"   Message: {ex.InnerException.Message}")
-                    Console.WriteLine($"   StackTrace: {ex.InnerException.StackTrace}")
-                End If
-
-                ' ✅ Se è JsonSerializationException, logga dettagli aggiuntivi
-                Dim jsonEx = TryCast(ex, JsonSerializationException)
-                If jsonEx IsNot Nothing Then
-                    Console.WriteLine("   ── JSON Exception Details ──")
-                    Console.WriteLine($"   JSON Path: {jsonEx.Path}")
-                    Console.WriteLine($"   LineNumber: {jsonEx.LineNumber}")
-                    Console.WriteLine($"   LinePosition: {jsonEx.LinePosition}")
-                End If
-
-                Console.WriteLine("═══════════════════════════════════════════════════════════════")
-                Console.Out.Flush()
-                System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][UtteranceInterpretationTaskCompiler] Exception details: {ex.ToString()}")
-
-                ' ⚠️ TEMPORANEO PER DEBUG: Rilancia l'eccezione invece di ingoiarla
-                ' Così vediamo finalmente i log dettagliati nei catch esterni
+                Console.WriteLine($"[COMPILER] ERROR: Exception during compilation for task {taskId}: {ex.GetType().Name} - {ex.Message}")
                 Throw
             End Try
-        Else
-            Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] No TaskTreeExpanded found for DataRequest task {taskId} - Task will be Nothing")
-            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] No TaskTreeExpanded found for DataRequest task {taskId} - Task will be Nothing")
         End If
 
         ' Popola campi comuni
@@ -187,40 +100,28 @@ Public Class UtteranceInterpretationTaskCompiler
         For Each node As Compiler.TaskNode In nodes
             ' ✅ Se il nodo ha templateId, dereferenzia il template
             If Not String.IsNullOrEmpty(node.TemplateId) Then
-                ' Protezione contro riferimenti circolari
-                If visitedTemplates.Contains(node.TemplateId) Then
-                    Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Circular reference detected for templateId={node.TemplateId}, skipping dereferencing")
-                    System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Circular reference detected for templateId={node.TemplateId}")
-                    expandedNodes.Add(node)
-                    Continue For
-                End If
+            If visitedTemplates.Contains(node.TemplateId) Then
+                expandedNodes.Add(node)
+                Continue For
+            End If
 
-                visitedTemplates.Add(node.TemplateId)
-                Console.WriteLine($"🔄 [COMPILER][UtteranceInterpretationTaskCompiler] Dereferencing templateId={node.TemplateId} for node Id={node.Id}")
-                System.Diagnostics.Debug.WriteLine($"🔄 [COMPILER][UtteranceInterpretationTaskCompiler] Dereferencing templateId={node.TemplateId} for node Id={node.Id}")
+            visitedTemplates.Add(node.TemplateId)
 
                 ' ✅ NUOVO MODELLO: Cerca il template referenziato e usa subTasksIds
                 Dim referencedTemplate As Compiler.Task = allTemplates.FirstOrDefault(Function(t As Compiler.Task) t.Id = node.TemplateId)
                 If referencedTemplate IsNot Nothing Then
-                    ' ✅ Se il template ha subTasksIds, costruisci i subTasks
                     If referencedTemplate.SubTasksIds IsNot Nothing AndAlso referencedTemplate.SubTasksIds.Count > 0 Then
-                        ' Se il nodo corrente non ha subTasks, costruiscili da subTasksIds
                         If node.SubTasks Is Nothing OrElse node.SubTasks.Count = 0 Then
                             node.SubTasks = BuildTaskTreeFromSubTasksIds(referencedTemplate.SubTasksIds, allTemplates, visitedTemplates)
-                            Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Built {node.SubTasks.Count} subTasks from template {node.TemplateId} using subTasksIds")
-                            System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Built subTasks from template {node.TemplateId}")
                         End If
                     End If
 
-                    ' ✅ Copia Label se mancante (per completezza)
                     If String.IsNullOrEmpty(node.Label) AndAlso Not String.IsNullOrEmpty(referencedTemplate.Label) Then
                         node.Label = referencedTemplate.Label
                     End If
 
                     visitedTemplates.Remove(node.TemplateId)
                 Else
-                    Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Template {node.TemplateId} not found - cannot dereference")
-                    System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Template {node.TemplateId} not found")
                     visitedTemplates.Remove(node.TemplateId)
                 End If
             End If
@@ -328,7 +229,6 @@ Public Class UtteranceInterpretationTaskCompiler
             End If
 
             taskTreeExpanded.Nodes = New List(Of Compiler.TaskNode) From {rootNode}
-            Console.WriteLine($"ℹ️ [COMPILER][UtteranceInterpretationTaskCompiler] Template {template.Id} is atomic, created root node with steps")
         End If
 
         Return taskTreeExpanded
@@ -346,14 +246,11 @@ Public Class UtteranceInterpretationTaskCompiler
         Dim nodes As New List(Of Compiler.TaskNode)()
 
         For Each subTaskId In subTasksIds
-            ' Protezione contro riferimenti circolari
             If visitedTemplates.Contains(subTaskId) Then
-                Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Circular reference detected for subTaskId={subTaskId}, skipping")
                 Continue For
             End If
 
             visitedTemplates.Add(subTaskId)
-            Console.WriteLine($"🔄 [COMPILER][UtteranceInterpretationTaskCompiler] Dereferencing subTaskId={subTaskId}")
 
             ' Cerca il template referenziato
             Dim subTemplate As Compiler.Task = allTemplates.FirstOrDefault(Function(t As Compiler.Task) t.Id = subTaskId)
@@ -392,9 +289,6 @@ Public Class UtteranceInterpretationTaskCompiler
                 End If
 
                 nodes.Add(node)
-                Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Created node from subTemplate {subTaskId}, subTasksCount={node.SubTasks.Count}")
-            Else
-                Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] SubTemplate {subTaskId} not found")
             End If
 
             visitedTemplates.Remove(subTaskId)
@@ -428,14 +322,32 @@ Public Class UtteranceInterpretationTaskCompiler
                         Dim overrideSteps = JsonConvert.DeserializeObject(Of List(Of Compiler.DialogueStep))(overrideJson, settings)
 
                         If overrideSteps IsNot Nothing AndAlso overrideSteps.Count > 0 Then
+                            ' ✅ Validazione: verifica che non ci siano step duplicati con lo stesso Type
+                            Dim seenTypes As New HashSet(Of String)()
+                            For Each stepItem As Compiler.DialogueStep In overrideSteps
+                                If stepItem IsNot Nothing AndAlso Not String.IsNullOrEmpty(stepItem.Type) Then
+                                    If seenTypes.Contains(stepItem.Type) Then
+                                        Console.WriteLine($"═══════════════════════════════════════════════════════════════")
+                                        Console.WriteLine($"❌ [UtteranceTaskCompiler.ApplyStepsOverrides] DUPLICATE STEP DETECTED")
+                                        Console.WriteLine($"   Node.Id: {node.Id}")
+                                        Console.WriteLine($"   Node.TemplateId: {node.TemplateId}")
+                                        Console.WriteLine($"   Duplicate Type: {stepItem.Type}")
+                                        Dim allStepTypes = overrideSteps.Where(Function(s) s IsNot Nothing AndAlso Not String.IsNullOrEmpty(s.Type)).Select(Function(s) s.Type).ToList()
+                                        Console.WriteLine($"   All step types: {String.Join(", ", allStepTypes)}")
+                                        Console.WriteLine($"═══════════════════════════════════════════════════════════════")
+                                        Console.Out.Flush()
+                                        System.Diagnostics.Debug.WriteLine($"❌ [UtteranceTaskCompiler] DUPLICATE STEP: Node.Id={node.Id}, Type={stepItem.Type}")
+                                        Throw New InvalidOperationException($"Invalid task model: Node {node.Id} has duplicate steps with Type={stepItem.Type}. Each Type must appear exactly once.")
+                                    End If
+                                    seenTypes.Add(stepItem.Type)
+                                End If
+                            Next
+
                             node.Steps = overrideSteps
-                            Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Applied {overrideSteps.Count} steps override for templateId={node.TemplateId}")
-                            System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Applied steps override for templateId={node.TemplateId}")
                         End If
                     End If
                 Catch ex As Exception
-                    Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Failed to apply steps override for templateId={node.TemplateId}: {ex.Message}")
-                    System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Exception details: {ex.ToString()}")
+                    Console.WriteLine($"[COMPILER] ERROR: Failed to apply steps override for templateId={node.TemplateId}: {ex.Message}")
                 End Try
             End If
 
@@ -447,10 +359,10 @@ Public Class UtteranceInterpretationTaskCompiler
     End Sub
 
     ''' <summary>
-    ''' Converte RuntimeTask in CompiledTaskUtteranceInterpretation (ricorsivo)
+    ''' Converte RuntimeTask in CompiledUtteranceTask (ricorsivo)
     ''' </summary>
-    Private Function ConvertRuntimeTaskToCompiled(runtimeTask As RuntimeTask) As CompiledTaskUtteranceInterpretation
-        Dim compiled As New CompiledTaskUtteranceInterpretation() With {
+    Private Function ConvertRuntimeTaskToCompiled(runtimeTask As RuntimeTask) As CompiledUtteranceTask
+        Dim compiled As New CompiledUtteranceTask() With {
             .Id = runtimeTask.Id,
             .Condition = runtimeTask.Condition,
             .Steps = runtimeTask.Steps,
@@ -460,7 +372,7 @@ Public Class UtteranceInterpretationTaskCompiler
 
         ' ✅ Copia SubTasks ricorsivamente (solo se presenti E non vuoti)
         If runtimeTask.HasSubTasks() Then
-            compiled.SubTasks = New List(Of CompiledTaskUtteranceInterpretation)()
+            compiled.SubTasks = New List(Of CompiledUtteranceTask)()
             For Each subTask As RuntimeTask In runtimeTask.SubTasks
                 compiled.SubTasks.Add(ConvertRuntimeTaskToCompiled(subTask))
             Next
@@ -490,11 +402,30 @@ Public Class UtteranceInterpretationTaskCompiler
             Dim overrideSteps = JsonConvert.DeserializeObject(Of List(Of Compiler.DialogueStep))(overrideJson, settings)
 
             If overrideSteps IsNot Nothing AndAlso overrideSteps.Count > 0 Then
+                ' ✅ Validazione: verifica che non ci siano step duplicati con lo stesso Type
+                Dim seenTypes As New HashSet(Of String)()
+                For Each stepItem As Compiler.DialogueStep In overrideSteps
+                    If stepItem IsNot Nothing AndAlso Not String.IsNullOrEmpty(stepItem.Type) Then
+                        If seenTypes.Contains(stepItem.Type) Then
+                            Console.WriteLine($"═══════════════════════════════════════════════════════════════")
+                            Console.WriteLine($"❌ [UtteranceTaskCompiler.ApplyStepsToNode] DUPLICATE STEP DETECTED")
+                            Console.WriteLine($"   Node.Id: {node.Id}")
+                            Console.WriteLine($"   Duplicate Type: {stepItem.Type}")
+                            Dim allStepTypes = overrideSteps.Where(Function(s) s IsNot Nothing AndAlso Not String.IsNullOrEmpty(s.Type)).Select(Function(s) s.Type).ToList()
+                            Console.WriteLine($"   All step types: {String.Join(", ", allStepTypes)}")
+                            Console.WriteLine($"═══════════════════════════════════════════════════════════════")
+                            Console.Out.Flush()
+                            System.Diagnostics.Debug.WriteLine($"❌ [UtteranceTaskCompiler.ApplyStepsToNode] DUPLICATE STEP: Node.Id={node.Id}, Type={stepItem.Type}")
+                            Throw New InvalidOperationException($"Invalid task model: Node {node.Id} has duplicate steps with Type={stepItem.Type}. Each Type must appear exactly once.")
+                        End If
+                        seenTypes.Add(stepItem.Type)
+                    End If
+                Next
+
                 node.Steps = overrideSteps
-                Console.WriteLine($"✅ [COMPILER][UtteranceInterpretationTaskCompiler] Applied {overrideSteps.Count} steps to root node {node.Id}")
             End If
         Catch ex As Exception
-            Console.WriteLine($"⚠️ [COMPILER][UtteranceInterpretationTaskCompiler] Failed to apply steps to node {node.Id}: {ex.Message}")
+            Console.WriteLine($"[COMPILER] ERROR: Failed to apply steps to node {node.Id}: {ex.Message}")
         End Try
     End Sub
 End Class

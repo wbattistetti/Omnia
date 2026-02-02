@@ -1,7 +1,5 @@
 Option Strict On
 Option Explicit On
-
-Imports System.Collections.Generic
 Imports Newtonsoft.Json
 Imports TaskEngine
 
@@ -26,21 +24,14 @@ Public Class TaskCompiler
     ''' Compila un Task da stringa JSON
     ''' </summary>
     Public Function Compile(taskJson As String) As TaskCompilationResult
-        Console.WriteLine($"🔍 [COMPILER][TaskCompiler] Compile called, taskJson length={If(taskJson IsNot Nothing, taskJson.Length, 0)}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskCompiler] Compile called, taskJson length={If(taskJson IsNot Nothing, taskJson.Length, 0)}")
-
         If String.IsNullOrEmpty(taskJson) Then
             Throw New ArgumentException("Task JSON cannot be null or empty", NameOf(taskJson))
         End If
 
-        ' 1. Deserializza JSON in TaskTreeExpanded (struttura IDE tipizzata - AST montato)
-        Console.WriteLine($"🔍 [COMPILER][TaskCompiler] Step 1: Deserializing JSON to TaskTreeExpanded...")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskCompiler] Step 1: Deserializing JSON to TaskTreeExpanded...")
         Dim settings As New JsonSerializerSettings() With {
             .NullValueHandling = NullValueHandling.Ignore,
             .MissingMemberHandling = MissingMemberHandling.Ignore
         }
-        ' ✅ Register custom converters (also specified as attributes, but explicit registration ensures they work)
         settings.Converters.Add(New TaskNodeListConverter())
         settings.Converters.Add(New DialogueStepListConverter())
 
@@ -49,19 +40,7 @@ Public Class TaskCompiler
             Throw New InvalidOperationException("Impossibile deserializzare TaskTreeExpanded dal JSON")
         End If
 
-        Console.WriteLine($"✅ [COMPILER][TaskCompiler] TaskTreeExpanded deserialized: Id={assembled.Id}, Nodes IsNot Nothing={assembled.Nodes IsNot Nothing}")
-        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][TaskCompiler] TaskTreeExpanded deserialized: Id={assembled.Id}, Nodes IsNot Nothing={assembled.Nodes IsNot Nothing}")
-        If assembled.Nodes IsNot Nothing Then
-            Console.WriteLine($"🔍 [COMPILER][TaskCompiler] TaskTreeExpanded.Nodes.Count={assembled.Nodes.Count}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskCompiler] TaskTreeExpanded.Nodes.Count={assembled.Nodes.Count}")
-        End If
-
-        ' 2. Trasforma TaskTreeExpanded (IDE - AST montato) → Task ricorsivo (Runtime)
-        Console.WriteLine($"🔍 [COMPILER][TaskCompiler] Step 2: Compiling TaskTreeExpanded to Task using TaskAssembler.Compile...")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskCompiler] Step 2: Compiling TaskTreeExpanded to Task using TaskAssembler.Compile...")
         Dim rootTask As RuntimeTask = _assembler.Compile(assembled)
-        Console.WriteLine($"✅ [COMPILER][TaskCompiler] Task created: Id={If(String.IsNullOrEmpty(rootTask.Id), "NULL", rootTask.Id)}, SubTasks.Count={If(rootTask.SubTasks IsNot Nothing, rootTask.SubTasks.Count, 0)}")
-        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][TaskCompiler] Task created: Id={If(String.IsNullOrEmpty(rootTask.Id), "NULL", rootTask.Id)}, SubTasks.Count={If(rootTask.SubTasks IsNot Nothing, rootTask.SubTasks.Count, 0)}")
 
         ' 3. Carica nlpContract per tutti i nodi (ricorsivo)
         LoadContractsForTask(rootTask)

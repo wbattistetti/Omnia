@@ -4,10 +4,6 @@
 Option Strict On
 Option Explicit On
 
-Imports System.IO
-Imports System.Linq
-Imports System.Reflection.PortableExecutable
-
 ''' <summary>
 ''' Classe principale del Task Engine (runtime)
 ''' Implementa la funzione Execute che coordina il processo di esecuzione task
@@ -31,68 +27,46 @@ Public Class Motore
     ''' Funzione principale che coordina il processo di esecuzione di una serie di task
     ''' </summary>
     Public Sub ExecuteTask(taskInstance As TaskInstance)
-        Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-        Console.WriteLine($"🔍 [RUNTIME][TaskEngine] ExecuteTask called")
-        Console.WriteLine($"   TaskInstance.Id: {taskInstance.Id}")
-        Console.WriteLine($"   TaskInstance.IsAggregate: {taskInstance.IsAggregate}")
-        Console.WriteLine($"   TaskInstance.TaskList.Count: {taskInstance.TaskList.Count}")
-        Console.WriteLine($"⚠️ [RUNTIME][TaskEngine] ExecuteTask: Using OLD engine (GetNextTask/GetResponse)")
-        Console.WriteLine($"   This bypasses the compiler (UtteranceInterpretationTaskCompiler)")
-        Console.WriteLine($"   The task was converted from CompiledTaskUtteranceInterpretation → RuntimeTask → TaskInstance")
-        Console.WriteLine($"   Flow: CompiledTask → ConvertCompiledToRuntimeTask → ConvertRuntimeTaskToTaskInstance → ExecuteTask")
-        Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-        Console.WriteLine($"[RUNTIME][TaskEngine] ExecuteTask started: TaskList.Count={taskInstance.TaskList.Count}, IsAggregate={taskInstance.IsAggregate}")
-        Dim state As DialogueState = DialogueState.Start
+        Console.WriteLine($"[RUNTIME] ExecuteTask: TaskList.Count={taskInstance.TaskList.Count}")
+        System.Diagnostics.Debug.WriteLine($"[RUNTIME] ExecuteTask: TaskList.Count={taskInstance.TaskList.Count}")
 
         If taskInstance.IsAggregate AndAlso taskInstance.Introduction IsNot Nothing Then
-            Console.WriteLine($"[RUNTIME][TaskEngine] Executing introduction tasks")
             ExecuteResponse(taskInstance.Introduction.Tasks, Nothing, taskInstance)
         End If
 
         Dim iterationCount As Integer = 0
         While True
             iterationCount += 1
-            Console.WriteLine($"[RUNTIME][TaskEngine] Iteration {iterationCount}: Calling GetNextTask...")
             Dim currTaskNode As TaskNode = GetNextTask(taskInstance)
 
             If currTaskNode Is Nothing Then
-                Console.WriteLine($"[RUNTIME][TaskEngine] GetNextTask returned Nothing - exiting loop")
-                Exit While  ' Tutti i task completati o acquisitionFailed
+                Console.WriteLine($"[RUNTIME] GetNextTask returned Nothing - all tasks completed")
+                System.Diagnostics.Debug.WriteLine($"[RUNTIME] GetNextTask returned Nothing - all tasks completed")
+                Exit While
             End If
 
-            Dim isEmpty = currTaskNode.IsEmpty()
-            Console.WriteLine($"[RUNTIME][TaskEngine] GetNextTask returned node: Id={currTaskNode.Id}, State={currTaskNode.State}, IsEmpty={isEmpty}")
+            Console.WriteLine($"[RUNTIME] Iteration {iterationCount}: Selected node Id={currTaskNode.Id}, State={currTaskNode.State}, IsEmpty={currTaskNode.IsEmpty()}")
+            System.Diagnostics.Debug.WriteLine($"[RUNTIME] Iteration {iterationCount}: Selected node Id={currTaskNode.Id}, State={currTaskNode.State}, IsEmpty={currTaskNode.IsEmpty()}")
             Dim tasks = GetResponse(currTaskNode)
-            Console.WriteLine($"[RUNTIME][TaskEngine] GetResponse returned {tasks.Count()} tasks")
+
+            If tasks.Count() = 0 Then
+                Console.WriteLine($"[RUNTIME] ERROR: GetResponse returned 0 tasks for node {currTaskNode.Id}")
+            End If
 
             Dim isAterminationResponse As Boolean = ExecuteResponse(tasks, currTaskNode, taskInstance)
-            Console.WriteLine($"[RUNTIME][TaskEngine] ExecuteResponse completed, isTermination={isAterminationResponse}")
 
             If isAterminationResponse Then
-                ' Exit condition attivata: marca il task come acquisitionFailed
-                ' e continua se ce ne sono con altri task (partial failure)
                 MarkAsAcquisitionFailed(currTaskNode)
-                Continue While  ' GetNextTask prenderà il prossimo task
+                Continue While
             End If
 
-            ' ✅ Per Chat Simulator: fermati dopo il primo response, non aspettare input
-            ' L'input arriverà via HTTP, non dalla coda locale
-            Console.WriteLine($"[RUNTIME][TaskEngine] First response executed - stopping execution (waiting for HTTP input)")
-            Exit While  ' Fermati qui, l'input arriverà via HTTP dal frontend
-
-            ' ❌ CODICE ORIGINALE (non usato per Chat Simulator):
-            ' Interpreta l'input utente (solo parsing, nessuna gestione di response)
-            ' NOTA: Questo blocca aspettando input dalla coda locale - non usato per Chat Simulator
-            ' Dim parseResult As ParseResult = _parser.InterpretUtterance(currTaskNode)
-            ' SetState(parseResult, state, currTaskNode)
-
+            ' Per Chat Simulator: fermati dopo il primo response, l'input arriverà via HTTP
+            Exit While
         End While
 
         If taskInstance.SuccessResponse IsNot Nothing Then
-            Console.WriteLine($"[RUNTIME][TaskEngine] Executing success response")
             ExecuteResponse(taskInstance.SuccessResponse.Tasks, Nothing, taskInstance)
         End If
-        Console.WriteLine($"[RUNTIME][TaskEngine] ExecuteTask completed")
     End Sub
 
 
@@ -100,49 +74,66 @@ Public Class Motore
     ''' lo step di dialogo dipende dallo stato di acquisizione del task (start, noMatch, NoInput, ecc)
     ''' </summary>
     Private Function GetResponse(currTaskNode As TaskNode) As IEnumerable(Of ITask)
-        Console.WriteLine($"[RUNTIME][TaskEngine] GetResponse: node State={currTaskNode.State}, Steps.Count={currTaskNode.Steps.Count}")
+        Console.WriteLine($"[RUNTIME] GetResponse: node Id={currTaskNode.Id}, State={currTaskNode.State}, Steps.Count={currTaskNode.Steps.Count}")
+        System.Diagnostics.Debug.WriteLine($"[RUNTIME] GetResponse: node Id={currTaskNode.Id}, State={currTaskNode.State}, Steps.Count={currTaskNode.Steps.Count}")
+
+        ' Log strategico: mostra tutti gli step disponibili e i loro Type
+        If currTaskNode.Steps.Count > 0 Then
+            Dim stepTypes = String.Join(", ", currTaskNode.Steps.Select(Function(s) s.Type.ToString()))
+            Console.WriteLine($"[RUNTIME] Available step types: {stepTypes}")
+            System.Diagnostics.Debug.WriteLine($"[RUNTIME] Available step types: {stepTypes}")
+        Else
+            Console.WriteLine($"[RUNTIME] ERROR: Node {currTaskNode.Id} has NO steps!")
+            System.Diagnostics.Debug.WriteLine($"[RUNTIME] ERROR: Node {currTaskNode.Id} has NO steps!")
+        End If
 
         Dim dStep = currTaskNode.Steps.FirstOrDefault(Function(s) s.Type = currTaskNode.State)
 
         If dStep Is Nothing Then
-            Console.WriteLine($"[RUNTIME][TaskEngine] ERROR: No step found for state {currTaskNode.State}")
-            ' Prova fallback a Start
+            Console.WriteLine($"[RUNTIME] ERROR: No step found for state {currTaskNode.State} in node {currTaskNode.Id}")
+            System.Diagnostics.Debug.WriteLine($"[RUNTIME] ERROR: No step found for state {currTaskNode.State} in node {currTaskNode.Id}")
+            Console.WriteLine($"[RUNTIME] Looking for fallback to Start step...")
+            System.Diagnostics.Debug.WriteLine($"[RUNTIME] Looking for fallback to Start step...")
             dStep = currTaskNode.Steps.FirstOrDefault(Function(s) s.Type = DialogueState.Start)
             If dStep Is Nothing Then
-                Console.WriteLine($"[RUNTIME][TaskEngine] ERROR: No Start step found either!")
-                Return New List(Of ITask)()  ' Ritorna lista vuota invece di lanciare eccezione
+                Console.WriteLine($"[RUNTIME] ERROR: No Start step found either! Node {currTaskNode.Id} has no valid steps.")
+                System.Diagnostics.Debug.WriteLine($"[RUNTIME] ERROR: No Start step found either! Node {currTaskNode.Id} has no valid steps.")
+                Return New List(Of ITask)()
             End If
-            Console.WriteLine($"[RUNTIME][TaskEngine] Using Start step as fallback")
+            Console.WriteLine($"[RUNTIME] Using Start step as fallback for node {currTaskNode.Id}")
+            System.Diagnostics.Debug.WriteLine($"[RUNTIME] Using Start step as fallback for node {currTaskNode.Id}")
             currTaskNode.State = DialogueState.Start
+        Else
+            Console.WriteLine($"[RUNTIME] Found step Type={dStep.Type} for node {currTaskNode.Id}, Escalations.Count={If(dStep.Escalations IsNot Nothing, dStep.Escalations.Count, 0)}")
+            System.Diagnostics.Debug.WriteLine($"[RUNTIME] Found step Type={dStep.Type} for node {currTaskNode.Id}, Escalations.Count={If(dStep.Escalations IsNot Nothing, dStep.Escalations.Count, 0)}")
         End If
 
         Select Case currTaskNode.State
             Case DialogueState.NoMatch, DialogueState.IrrelevantMatch, DialogueState.NoInput, DialogueState.NotConfirmed
                 If Not dStep.Escalations?.Any Then
-                    ' Fallback a Start
                     currTaskNode.State = DialogueState.Start
                     dStep = currTaskNode.Steps.FirstOrDefault(Function(s) s.Type = DialogueState.Start)
                 End If
         End Select
 
         If dStep Is Nothing OrElse dStep.Escalations Is Nothing OrElse dStep.Escalations.Count = 0 Then
-            Console.WriteLine($"[RUNTIME][TaskEngine] ERROR: Step has no escalations!")
+            Console.WriteLine($"[RUNTIME] ERROR: Step has no escalations for node {currTaskNode.Id}")
             Return New List(Of ITask)()
         End If
 
         Dim escalationCounter = GetEscalationCounter(dStep, currTaskNode.State)
         If escalationCounter < 0 OrElse escalationCounter >= dStep.Escalations.Count Then
-            Console.WriteLine($"[RUNTIME][TaskEngine] ERROR: Invalid escalation counter: {escalationCounter}, Escalations.Count={dStep.Escalations.Count}")
+            Console.WriteLine($"[RUNTIME] ERROR: Invalid escalation counter: {escalationCounter}, Escalations.Count={dStep.Escalations.Count}")
             Return New List(Of ITask)()
         End If
 
         Dim escalation = dStep.Escalations(escalationCounter)
         If escalation Is Nothing OrElse escalation.Tasks Is Nothing Then
-            Console.WriteLine($"[RUNTIME][TaskEngine] ERROR: Escalation or Tasks is Nothing!")
+            Console.WriteLine($"[RUNTIME] ERROR: Escalation[{escalationCounter}] or Tasks is Nothing for node {currTaskNode.Id}")
             Return New List(Of ITask)()
         End If
 
-        Console.WriteLine($"[RUNTIME][TaskEngine] GetResponse: returning {escalation.Tasks.Count} tasks from escalation {escalationCounter}")
+        Console.WriteLine($"[RUNTIME] GetResponse: returning {escalation.Tasks.Count} tasks from escalation[{escalationCounter}] for node {currTaskNode.Id}")
         Return escalation.Tasks
     End Function
 
@@ -150,20 +141,21 @@ Public Class Motore
     ''' Eseguire il response significa eseguire la serie di tasks di cui è composto
     ''' </summary>
     Private Function ExecuteResponse(tasks As IEnumerable(Of ITask), currTaskNode As TaskNode, taskInstance As TaskInstance) As Boolean
-        Console.WriteLine($"[RUNTIME][TaskEngine] ExecuteResponse: {tasks.Count()} tasks to execute")
+        Console.WriteLine($"[RUNTIME] ExecuteResponse: {tasks.Count()} tasks to execute")
+        System.Diagnostics.Debug.WriteLine($"[RUNTIME] ExecuteResponse: {tasks.Count()} tasks to execute")
+
         Dim taskIndex As Integer = 0
         For Each task As ITask In tasks
             taskIndex += 1
-            Console.WriteLine($"[RUNTIME][TaskEngine] Executing task {taskIndex}/{tasks.Count()}: {task.GetType().Name}")
-            ' Passa un lambda che solleva l'evento MessageToShow
+            Console.WriteLine($"[RUNTIME] Executing task {taskIndex}/{tasks.Count()}: {task.GetType().Name}")
+            System.Diagnostics.Debug.WriteLine($"[RUNTIME] Executing task {taskIndex}/{tasks.Count()}: {task.GetType().Name}")
             task.Execute(currTaskNode, taskInstance, Sub(msg As String)
-                                                        Console.WriteLine($"[RUNTIME][TaskEngine] Task generated message: '{msg}'")
-                                                        RaiseEvent MessageToShow(Me, New MessageEventArgs(msg))
-                                                    End Sub)
+                                                         Console.WriteLine($"[RUNTIME] Message: {msg}")
+                                                         RaiseEvent MessageToShow(Me, New MessageEventArgs(msg))
+                                                     End Sub)
         Next
-        If currTaskNode IsNot Nothing Then IncrementCounter(currTaskNode) 'eccezione in caso si introduction o success di un aggregato
+        If currTaskNode IsNot Nothing Then IncrementCounter(currTaskNode)
 
-        ' Controlla se c'è una exit condition che rende il response un termination response
         Return Utils.HasExitCondition(tasks)
     End Function
 
@@ -187,7 +179,18 @@ Public Class Motore
     ''' Incrementa il counter per uno stato
     ''' </summary>
     Private Sub IncrementCounter(taskNode As TaskNode)
-        Dim dStep = taskNode.Steps.SingleOrDefault(Function(s) s.Type = taskNode.State)
+        Dim matchingSteps = taskNode.Steps.Where(Function(s) s.Type = taskNode.State).ToList()
+
+        If matchingSteps.Count = 0 Then
+            Throw New InvalidOperationException($"Invalid task model: Task {taskNode.Id} has no step for state {taskNode.State}. Each Type must appear exactly once.")
+        End If
+
+        If matchingSteps.Count > 1 Then
+            Throw New InvalidOperationException($"Invalid task model: Task {taskNode.Id} has {matchingSteps.Count} steps with Type={taskNode.State}. Each Type must appear exactly once.")
+        End If
+
+        Dim dStep = matchingSteps.Single()
+
         Dim escalationsCount As Integer = If(dStep.Escalations Is Nothing, 0, dStep.Escalations.Count)
         If Not _counters.ContainsKey(taskNode.State) Then
             _counters(taskNode.State) = 0
@@ -197,27 +200,42 @@ Public Class Motore
 
 
     Private Function GetNextTask(taskInstance As TaskInstance) As TaskNode
-        Console.WriteLine($"[RUNTIME][TaskEngine] GetNextTask: checking {taskInstance.TaskList.Count} main nodes")
-        Dim allCandidates As New List(Of TaskNode)()
+        Console.WriteLine($"[RUNTIME] GetNextTask: checking {taskInstance.TaskList.Count} main nodes")
+        System.Diagnostics.Debug.WriteLine($"[RUNTIME] GetNextTask: checking {taskInstance.TaskList.Count} main nodes")
 
         For Each mainTask As TaskNode In taskInstance.TaskList.Where(Function(dt) dt.State <> DialogueState.AcquisitionFailed)
             Dim isEmpty = mainTask.IsEmpty()
-            Console.WriteLine($"[RUNTIME][TaskEngine] Checking main node: Id={mainTask.Id}, State={mainTask.State}, IsEmpty={isEmpty}, Value={If(mainTask.Value Is Nothing, "Nothing", mainTask.Value.ToString())}")
+            Console.WriteLine($"[RUNTIME] Checking main node: Id={mainTask.Id}, State={mainTask.State}, IsEmpty={isEmpty}")
+            System.Diagnostics.Debug.WriteLine($"[RUNTIME] Checking main node: Id={mainTask.Id}, State={mainTask.State}, IsEmpty={isEmpty}")
+
             If isEmpty Then
-                Console.WriteLine($"[RUNTIME][TaskEngine] Returning empty main node")
+                Console.WriteLine($"[RUNTIME] Selected empty main node: {mainTask.Id}")
+                System.Diagnostics.Debug.WriteLine($"[RUNTIME] Selected empty main node: {mainTask.Id}")
                 Return mainTask
             End If
+
             If {DialogueState.Confirmation, DialogueState.Invalid, DialogueState.NoMatch, DialogueState.NoInput}.Contains(mainTask.State) Then
-                Console.WriteLine($"[RUNTIME][TaskEngine] Returning main node with state {mainTask.State}")
+                Console.WriteLine($"[RUNTIME] Selected main node with state {mainTask.State}: {mainTask.Id}")
+                System.Diagnostics.Debug.WriteLine($"[RUNTIME] Selected main node with state {mainTask.State}: {mainTask.Id}")
                 Return mainTask
             End If
 
             For Each subTask As TaskNode In mainTask.SubTasks.Where(Function(st) st.State <> DialogueState.AcquisitionFailed)
-                If subTask.IsEmpty() Then Return subTask
-                If {DialogueState.Confirmation, DialogueState.Invalid, DialogueState.NoMatch, DialogueState.NoInput}.Contains(subTask.State) Then Return subTask
+                If subTask.IsEmpty() Then
+                    Console.WriteLine($"[RUNTIME] Selected empty subTask: {subTask.Id} (parent: {mainTask.Id})")
+                    System.Diagnostics.Debug.WriteLine($"[RUNTIME] Selected empty subTask: {subTask.Id} (parent: {mainTask.Id})")
+                    Return subTask
+                End If
+                If {DialogueState.Confirmation, DialogueState.Invalid, DialogueState.NoMatch, DialogueState.NoInput}.Contains(subTask.State) Then
+                    Console.WriteLine($"[RUNTIME] Selected subTask with state {subTask.State}: {subTask.Id} (parent: {mainTask.Id})")
+                    System.Diagnostics.Debug.WriteLine($"[RUNTIME] Selected subTask with state {subTask.State}: {subTask.Id} (parent: {mainTask.Id})")
+                    Return subTask
+                End If
             Next
         Next
-        Console.WriteLine($"[RUNTIME][TaskEngine] GetNextTask: No suitable node found, returning Nothing")
+
+        Console.WriteLine($"[RUNTIME] GetNextTask: No suitable node found")
+        System.Diagnostics.Debug.WriteLine($"[RUNTIME] GetNextTask: No suitable node found")
         Return Nothing
     End Function
 

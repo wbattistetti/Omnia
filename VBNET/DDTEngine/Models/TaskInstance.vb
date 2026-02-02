@@ -4,71 +4,71 @@
 Option Strict On
 Option Explicit On
 
+''' <summary>
+''' Rappresenta un'istanza di un Task - Struttura Runtime
+''' Contiene sia i campi design-time (dal frontend TaskTreeExpanded) che i campi runtime
+''' </summary>
+Public Class TaskInstance
+    ' ============================================================
+    ' CAMPI DESIGN-TIME (dal frontend TaskTreeExpanded - AST montato)
+    ' ============================================================
+
     ''' <summary>
-    ''' Rappresenta un'istanza di un Task - Struttura Runtime
-    ''' Contiene sia i campi design-time (dal frontend TaskTreeExpanded) che i campi runtime
+    ''' ID univoco del Task
     ''' </summary>
-    Public Class TaskInstance
-        ' ============================================================
-        ' CAMPI DESIGN-TIME (dal frontend TaskTreeExpanded - AST montato)
-        ' ============================================================
+    Public Property Id As String
 
-        ''' <summary>
-        ''' ID univoco del Task
-        ''' </summary>
-        Public Property Id As String
+    ''' <summary>
+    ''' Label/nome del Task
+    ''' </summary>
+    Public Property Label As String
 
-        ''' <summary>
-        ''' Label/nome del Task
-        ''' </summary>
-        Public Property Label As String
+    ''' <summary>
+    ''' Traduzioni (chiave → testo tradotto)
+    ''' </summary>
+    Public Property Translations As Dictionary(Of String, String)
 
-        ''' <summary>
-        ''' Traduzioni (chiave → testo tradotto)
-        ''' </summary>
-        Public Property Translations As Dictionary(Of String, String)
+    ' ============================================================
+    ' CAMPI RUNTIME
+    ' ============================================================
 
-        ' ============================================================
-        ' CAMPI RUNTIME
-        ' ============================================================
+    ''' <summary>
+    ''' Indica se il Task è aggregato (ha introduction)
+    ''' </summary>
+    Public Property IsAggregate As Boolean
 
-        ''' <summary>
-        ''' Indica se il Task è aggregato (ha introduction)
-        ''' </summary>
-        Public Property IsAggregate As Boolean
+    ''' <summary>
+    ''' Response di introduzione (opzionale, mostrato all'inizio)
+    ''' </summary>
+    Public Property Introduction As Response
 
-        ''' <summary>
-        ''' Response di introduzione (opzionale, mostrato all'inizio)
-        ''' </summary>
-        Public Property Introduction As Response
+    ''' <summary>
+    ''' Response di success (opzionale, mostrato alla fine)
+    ''' </summary>
+    Public Property SuccessResponse As Response
 
-        ''' <summary>
-        ''' Response di success (opzionale, mostrato alla fine)
-        ''' </summary>
-        Public Property SuccessResponse As Response
+    ''' <summary>
+    ''' Lista dei task da eseguire
+    ''' </summary>
+    Public Property TaskList As List(Of TaskNode)
 
-        ''' <summary>
-        ''' Lista dei task da eseguire
-        ''' </summary>
-        Public Property TaskList As List(Of TaskNode)
+    ''' <summary>
+    ''' Costruttore
+    ''' </summary>
+    Public Sub New()
+        Translations = New Dictionary(Of String, String)()
+        TaskList = New List(Of TaskNode)()
+    End Sub
 
-        ''' <summary>
-        ''' Costruttore
-        ''' </summary>
-        Public Sub New()
-            Translations = New Dictionary(Of String, String)()
-            TaskList = New List(Of TaskNode)()
-        End Sub
-
-        ''' <summary>
-        ''' Resetta tutti i nodi del Task
-        ''' </summary>
-        Public Sub Reset()
-            If TaskList IsNot Nothing Then
-                For Each taskNode As TaskNode In TaskList
-                    taskNode.Reset()
-                Next
-            End If
-        End Sub
-    End Class
+    ''' <summary>
+    ''' Resetta tutti i nodi del Task
+    ''' </summary>
+    Public Sub Reset()
+        If TaskList IsNot Nothing Then
+            For Each taskNode As TaskNode In TaskList
+                taskNode.Reset()
+            Next
+        End If
+    End Sub
+End Class
 

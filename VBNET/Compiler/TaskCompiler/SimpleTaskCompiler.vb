@@ -1,7 +1,5 @@
 Option Strict On
 Option Explicit On
-
-Imports System.Collections.Generic
 Imports TaskEngine
 
 ''' <summary>
@@ -22,7 +20,7 @@ Public Class SimpleTaskCompiler
 
         Select Case _taskType
             Case TaskTypes.SayMessage
-                Dim sayMessageTask As New CompiledTaskSayMessage()
+                Dim sayMessageTask As New CompiledSayMessageTask()
                 ' ✅ Estrai text da task.Text (nuovo modello) o da task.Value("text") (vecchio modello)
                 Dim textValue As String = ""
 
@@ -38,7 +36,7 @@ Public Class SimpleTaskCompiler
                 compiledTask = sayMessageTask
 
             Case TaskTypes.ClassifyProblem
-                Dim classifyTask As New CompiledTaskClassifyProblem()
+                Dim classifyTask As New CompiledClassifyProblemTask()
                 ' Estrai intents da value
                 If task.Value IsNot Nothing AndAlso task.Value.ContainsKey("intents") Then
                     Dim intentsValue = task.Value("intents")
@@ -51,7 +49,7 @@ Public Class SimpleTaskCompiler
                 compiledTask = classifyTask
 
             Case TaskTypes.BackendCall
-                Dim backendTask As New CompiledTaskBackendCall()
+                Dim backendTask As New CompiledBackendCallTask()
                 If task.Value IsNot Nothing Then
                     If task.Value.ContainsKey("endpoint") Then
                         backendTask.Endpoint = If(task.Value("endpoint")?.ToString(), "")
@@ -67,10 +65,10 @@ Public Class SimpleTaskCompiler
                 compiledTask = backendTask
 
             Case TaskTypes.CloseSession
-                compiledTask = New CompiledTaskCloseSession()
+                compiledTask = New CompiledCloseSessionTask()
 
             Case TaskTypes.Transfer
-                Dim transferTask As New CompiledTaskTransfer()
+                Dim transferTask As New CompiledTransferTask()
                 If task.Value IsNot Nothing AndAlso task.Value.ContainsKey("target") Then
                     transferTask.Target = If(task.Value("target")?.ToString(), "")
                 End If
@@ -79,7 +77,7 @@ Public Class SimpleTaskCompiler
             Case Else
                 ' Fallback: crea SayMessage
                 Console.WriteLine($"⚠️ [COMPILER][SimpleTaskCompiler] Unknown TaskType {_taskType}, creating SayMessage fallback")
-                compiledTask = New CompiledTaskSayMessage()
+                compiledTask = New CompiledSayMessageTask()
         End Select
 
         ' Popola campi comuni

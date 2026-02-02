@@ -4,11 +4,10 @@
 Option Strict On
 Option Explicit On
 
-Imports System.Windows.Forms
 Imports System.Drawing
 Imports System.IO
 Imports System.Threading
-Imports System.Linq
+Imports System.Windows.Forms
 Imports TaskEngine
 
 Namespace TaskEngine.TestUI

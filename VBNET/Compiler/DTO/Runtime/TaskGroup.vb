@@ -1,7 +1,5 @@
 Option Strict On
 Option Explicit On
-
-Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
 ''' <summary>

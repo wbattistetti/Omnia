@@ -1,8 +1,5 @@
 Option Strict On
 Option Explicit On
-
-Imports System.Collections.Generic
-Imports System.Linq
 Imports Newtonsoft.Json
 Imports TaskEngine
 
@@ -48,23 +45,15 @@ Public Class TaskAssembler
             Return value
         End If
 
-        ' Se è un GUID e abbiamo traduzioni, cerca la traduzione
         If IsGuid(value) AndAlso translations IsNot Nothing AndAlso translations.ContainsKey(value) Then
             Dim translatedText = translations(value)
             If Not String.IsNullOrEmpty(translatedText) Then
-                Console.WriteLine($"✅ [COMPILER][TaskAssembler] Resolved GUID to text: {value.Substring(0, 8)}... -> '{translatedText.Substring(0, Math.Min(50, translatedText.Length))}...'")
-                System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][TaskAssembler] Resolved GUID to text: {value} -> '{translatedText}'")
                 Return translatedText
             End If
         End If
 
-        ' ❌ Se il valore sembra essere una chiave non risolta (es. "ask.base", "confirm.base", ecc.), restituisci messaggio di errore con la chiave
-        ' Questi valori indicano che il frontend ha inviato una chiave invece di un GUID o testo tradotto
         If value.Contains(".") AndAlso (value.StartsWith("ask.") OrElse value.StartsWith("confirm.") OrElse value.StartsWith("success.") OrElse value.StartsWith("noMatch.") OrElse value.StartsWith("noInput.")) Then
-            Dim errorMessage = $"Messaggio non trovato: {value}"
-            Console.WriteLine($"⚠️ [COMPILER][TaskAssembler] ResolveText: Detected unresolved key '{value}', returning error message")
-            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][TaskAssembler] ResolveText: Detected unresolved key '{value}', returning error message: '{errorMessage}'")
-            Return errorMessage
+            Return $"Messaggio non trovato: {value}"
         End If
 
         ' Altrimenti usa il valore originale (non è un GUID o traduzione non trovata, ma sembra essere testo valido)
@@ -76,20 +65,11 @@ Public Class TaskAssembler
     ''' Restituisce il RuntimeTask root dell'albero ricorsivo
     ''' </summary>
     Public Function Compile(assembled As Compiler.TaskTreeExpanded) As RuntimeTask
-        Console.WriteLine($"🔍 [COMPILER][TaskAssembler] Compile called for TaskTreeExpanded Id={assembled.Id}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] Compile called for TaskTreeExpanded Id={assembled.Id}")
-
         If assembled Is Nothing Then
             Throw New ArgumentNullException(NameOf(assembled), "TaskTreeExpanded cannot be Nothing")
         End If
 
-        ' ✅ Salva traduzioni per uso durante la conversione
         translations = If(assembled.Translations, New Dictionary(Of String, String)())
-        Console.WriteLine($"🔍 [COMPILER][TaskAssembler] Loaded {translations.Count} translations for GUID resolution")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] Loaded {translations.Count} translations for GUID resolution")
-
-        Console.WriteLine($"🔍 [COMPILER][TaskAssembler] assembled.Nodes IsNot Nothing={assembled.Nodes IsNot Nothing}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] assembled.Nodes IsNot Nothing={assembled.Nodes IsNot Nothing}")
         ' ✅ NUOVO MODELLO: Costruisci RuntimeTask root ricorsivo
         ' Se c'è un solo nodo, è il root; se ce ne sono più, creiamo un nodo aggregato
         Dim rootTask As RuntimeTask = Nothing
@@ -126,25 +106,9 @@ Public Class TaskAssembler
                 .Steps = New List(Of TaskEngine.DialogueStep)(),
                 .Constraints = New List(Of ValidationCondition)(),
                 .NlpContract = Nothing,
-                .SubTasks = Nothing ' ✅ Nessun subTask, quindi Nothing
+                .SubTasks = Nothing
             }
-            Console.WriteLine($"⚠️ [COMPILER][TaskAssembler] assembled.Nodes is empty, created empty root Task")
-            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][TaskAssembler] assembled.Nodes is empty, created empty root Task")
         End If
-
-        ' ✅ DEBUG: Verifica Task finale
-        Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-        Console.WriteLine($"🔍 [COMPILER][TaskAssembler] DEBUG: Final Task verification")
-        Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-        Console.WriteLine($"[COMPILER][TaskAssembler] rootTask.Id={If(String.IsNullOrEmpty(rootTask.Id), "NULL/EMPTY", rootTask.Id)}")
-        Console.WriteLine($"[COMPILER][TaskAssembler] rootTask.Steps.Count={If(rootTask.Steps IsNot Nothing, rootTask.Steps.Count, 0)}")
-        Console.WriteLine($"[COMPILER][TaskAssembler] rootTask.Constraints.Count={If(rootTask.Constraints IsNot Nothing, rootTask.Constraints.Count, 0)}")
-        Console.WriteLine($"[COMPILER][TaskAssembler] rootTask.SubTasks.Count={If(rootTask.SubTasks IsNot Nothing, rootTask.SubTasks.Count, 0)}")
-        If rootTask.SubTasks IsNot Nothing AndAlso rootTask.SubTasks.Count > 0 Then
-            Dim firstSubTask = rootTask.SubTasks(0)
-            Console.WriteLine($"[COMPILER][TaskAssembler] First subTask: Id={If(String.IsNullOrEmpty(firstSubTask.Id), "NULL", firstSubTask.Id)}, Steps.Count={If(firstSubTask.Steps IsNot Nothing, firstSubTask.Steps.Count, 0)}")
-        End If
-        Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
 
         Return rootTask
     End Function
@@ -178,35 +142,50 @@ Public Class TaskAssembler
             .SubTasks = Nothing ' ✅ Inizializzato solo se ci sono subTasks
         }
 
-        ' Compila Steps (DialogueStep[] → DialogueStep[])
-        Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileNode: ideNode.Steps IsNot Nothing={ideNode.Steps IsNot Nothing}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileNode: ideNode.Steps IsNot Nothing={ideNode.Steps IsNot Nothing}")
         If ideNode.Steps IsNot Nothing Then
-            Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileNode: ideNode.Steps.Count={ideNode.Steps.Count}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileNode: ideNode.Steps.Count={ideNode.Steps.Count}")
+            ' ✅ Log dettagliato: mostra tutti gli step prima della validazione
+            Console.WriteLine($"[DEBUG] TaskAssembler.CompileNode: Node.Id={ideNode.Id}, ideNode.Steps.Count={ideNode.Steps.Count}")
+            System.Diagnostics.Debug.WriteLine($"[DEBUG] TaskAssembler.CompileNode: Node.Id={ideNode.Id}, ideNode.Steps.Count={ideNode.Steps.Count}")
+
+            For i = 0 To ideNode.Steps.Count - 1
+                Dim ideStep = ideNode.Steps(i)
+                Console.WriteLine($"[DEBUG]   Step[{i}]: ideStep.Type='{ideStep.Type}', ideStep.Escalations.Count={If(ideStep.Escalations IsNot Nothing, ideStep.Escalations.Count, 0)}")
+                System.Diagnostics.Debug.WriteLine($"[DEBUG]   Step[{i}]: ideStep.Type='{ideStep.Type}'")
+            Next
+
+            ' ✅ Validazione: verifica che non ci siano step duplicati con lo stesso Type
+            Dim seenTypes As New HashSet(Of DialogueState)()
             For Each ideStep As Compiler.DialogueStep In ideNode.Steps
-                Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileNode: compiling step type={ideStep.Type}")
-                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileNode: compiling step type={ideStep.Type}")
                 Dim runtimeStep = CompileDialogueStep(ideStep)
+                Console.WriteLine($"[DEBUG] Compiling step: ideStep.Type='{ideStep.Type}' -> runtimeStep.Type={runtimeStep.Type}")
+                System.Diagnostics.Debug.WriteLine($"[DEBUG] Compiling step: ideStep.Type='{ideStep.Type}' -> runtimeStep.Type={runtimeStep.Type}")
+
+                If seenTypes.Contains(runtimeStep.Type) Then
+                    Console.WriteLine($"═══════════════════════════════════════════════════════════════")
+                    Console.WriteLine($"❌ [TaskAssembler.CompileNode] DUPLICATE STEP DETECTED")
+                    Console.WriteLine($"   Node.Id: {ideNode.Id}")
+                    Console.WriteLine($"   Duplicate Type: {runtimeStep.Type}")
+                    Console.WriteLine($"   ideStep.Type (original): {ideStep.Type}")
+                    Dim allStepTypes = ideNode.Steps.Select(Function(s) $"{s.Type}->{CompileStepType(s.Type)}").ToList()
+                    Console.WriteLine($"   All step types (ide->runtime): {String.Join(", ", allStepTypes)}")
+                    Console.WriteLine($"   Already seen types: {String.Join(", ", seenTypes.Select(Function(t) t.ToString()))}")
+                    Console.WriteLine($"═══════════════════════════════════════════════════════════════")
+                    Console.Out.Flush()
+                    System.Diagnostics.Debug.WriteLine($"❌ [TaskAssembler.CompileNode] DUPLICATE STEP: Node.Id={ideNode.Id}, Type={runtimeStep.Type}")
+                    Throw New InvalidOperationException($"Invalid task model: Node {ideNode.Id} has duplicate steps with Type={runtimeStep.Type}. Each Type must appear exactly once.")
+                End If
+                seenTypes.Add(runtimeStep.Type)
                 task.Steps.Add(runtimeStep)
             Next
-        Else
-            Console.WriteLine($"⚠️ [COMPILER][TaskAssembler] CompileNode: ideNode.Steps is Nothing!")
-            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][TaskAssembler] CompileNode: ideNode.Steps is Nothing!")
         End If
 
-        ' ✅ Compila Constraints in ValidationConditions
         If ideNode.Constraints IsNot Nothing AndAlso ideNode.Constraints.Count > 0 Then
-            Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileNode: Converting {ideNode.Constraints.Count} constraints to ValidationConditions")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileNode: Converting {ideNode.Constraints.Count} constraints to ValidationConditions")
             For Each constraintObj As Object In ideNode.Constraints
                 Dim validationCondition = ConvertConstraintToValidationCondition(constraintObj)
                 If validationCondition IsNot Nothing Then
                     task.Constraints.Add(validationCondition)
                 End If
             Next
-            Console.WriteLine($"✅ [COMPILER][TaskAssembler] CompileNode: Converted {task.Constraints.Count} constraints to ValidationConditions")
-            System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][TaskAssembler] CompileNode: Converted {task.Constraints.Count} constraints to ValidationConditions")
         End If
 
         ' Compila SubTasks (ricorsivo) - inizializza solo se ci sono subTasks
@@ -274,8 +253,7 @@ Public Class TaskAssembler
 
             Return validationCondition
         Catch ex As Exception
-            Console.WriteLine($"⚠️ [COMPILER][TaskAssembler] Failed to convert constraint to ValidationCondition: {ex.Message}")
-            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][TaskAssembler] Failed to convert constraint: {ex.ToString()}")
+            Console.WriteLine($"[COMPILER] ERROR: Failed to convert constraint to ValidationCondition: {ex.Message}")
             Return Nothing
         End Try
     End Function
@@ -289,45 +267,26 @@ Public Class TaskAssembler
             .Escalations = New List(Of TaskEngine.Escalation)()
         }
 
-        Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileDialogueStep: type={ideStep.Type}, escalations IsNot Nothing={ideStep.Escalations IsNot Nothing}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileDialogueStep: type={ideStep.Type}, escalations IsNot Nothing={ideStep.Escalations IsNot Nothing}")
-
         If ideStep.Escalations IsNot Nothing Then
-            Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileDialogueStep: escalations.Count={ideStep.Escalations.Count}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileDialogueStep: escalations.Count={ideStep.Escalations.Count}")
             For Each ideEscalation As Compiler.Escalation In ideStep.Escalations
-                Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileDialogueStep: compiling escalation {ideEscalation.EscalationId}, tasks IsNot Nothing={ideEscalation.Tasks IsNot Nothing}")
-                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileDialogueStep: compiling escalation {ideEscalation.EscalationId}, tasks IsNot Nothing={ideEscalation.Tasks IsNot Nothing}")
-                If ideEscalation.Tasks IsNot Nothing Then
-                    Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileDialogueStep: escalation.Tasks.Count={ideEscalation.Tasks.Count}")
-                    System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileDialogueStep: escalation.Tasks.Count={ideEscalation.Tasks.Count}")
-                End If
                 Dim runtimeEscalation = CompileEscalation(ideEscalation)
                 If runtimeEscalation IsNot Nothing Then
-                    Console.WriteLine($"✅ [COMPILER][TaskAssembler] CompileDialogueStep: escalation compiled, runtime.Tasks.Count={runtimeEscalation.Tasks.Count}")
-                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][TaskAssembler] CompileDialogueStep: escalation compiled, runtime.Tasks.Count={runtimeEscalation.Tasks.Count}")
                     runtimeStep.Escalations.Add(runtimeEscalation)
-                Else
-                    Console.WriteLine($"❌ [COMPILER][TaskAssembler] CompileDialogueStep: escalation compilation returned Nothing")
-                    System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][TaskAssembler] CompileDialogueStep: escalation compilation returned Nothing")
                 End If
             Next
-        Else
-            Console.WriteLine($"⚠️ [COMPILER][TaskAssembler] CompileDialogueStep: ideStep.Escalations is Nothing")
-            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][TaskAssembler] CompileDialogueStep: ideStep.Escalations is Nothing")
         End If
 
-        Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileDialogueStep: final runtimeStep.Escalations.Count={runtimeStep.Escalations.Count}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileDialogueStep: final runtimeStep.Escalations.Count={runtimeStep.Escalations.Count}")
         Return runtimeStep
     End Function
 
     ''' <summary>
     ''' Compila stringa step type in DialogueState enum
+    ''' Il compilatore NON fa fallback: se il tipo è invalido, fallisce immediatamente.
+    ''' Fallback comportamentali sono gestiti dal motore runtime, non dal compilatore.
     ''' </summary>
     Private Function CompileStepType(typeStr As String) As DialogueState
         If String.IsNullOrEmpty(typeStr) Then
-            Return DialogueState.Start
+            Throw New InvalidOperationException($"Step type cannot be null or empty. This indicates a structural error in the task model. Every DialogueStep must have a valid type.")
         End If
 
         Select Case typeStr.ToLower()
@@ -339,12 +298,18 @@ Public Class TaskAssembler
                 Return DialogueState.NoInput
             Case "confirmation"
                 Return DialogueState.Confirmation
+            Case "notconfirmed"
+                Return DialogueState.NotConfirmed
             Case "success"
                 Return DialogueState.Success
             Case "introduction"
+                ' ✅ "introduction" è un alias valido per "start" nel modello IDE
+                ' Usato per step introduttivi che si comportano come Start
                 Return DialogueState.Start
             Case Else
-                Return DialogueState.Start
+                ' ❌ RIMOSSO FALLBACK: Il compilatore NON deve indovinare o correggere errori strutturali
+                ' Se il tipo è sconosciuto, il modello è invalido e deve essere corretto a monte
+                Throw New InvalidOperationException($"Unknown step type '{typeStr}'. Valid types are: start, noMatch, noInput, confirmation, notConfirmed, success, introduction. This indicates a structural error in the task model that must be fixed at the source.")
         End Select
     End Function
 
@@ -357,33 +322,15 @@ Public Class TaskAssembler
             .Tasks = New List(Of ITask)()
         }
 
-        Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileEscalation: escalationId={ideEscalation.EscalationId}, tasks IsNot Nothing={ideEscalation.Tasks IsNot Nothing}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileEscalation: escalationId={ideEscalation.EscalationId}, tasks IsNot Nothing={ideEscalation.Tasks IsNot Nothing}")
-
-        ' Compila Tasks (Task[] → ITask[])
         If ideEscalation.Tasks IsNot Nothing Then
-            Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileEscalation: ideEscalation.Tasks.Count={ideEscalation.Tasks.Count}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileEscalation: ideEscalation.Tasks.Count={ideEscalation.Tasks.Count}")
             For Each ideTask As Compiler.Task In ideEscalation.Tasks
-                Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileEscalation: compiling task id={ideTask.Id}, templateId={ideTask.TemplateId}, text={ideTask.Text}")
-                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileEscalation: compiling task id={ideTask.Id}, templateId={ideTask.TemplateId}, text={ideTask.Text}")
                 Dim runtimeTask = CompileTask(ideTask)
                 If runtimeTask IsNot Nothing Then
-                    Console.WriteLine($"✅ [COMPILER][TaskAssembler] CompileEscalation: task compiled successfully")
-                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][TaskAssembler] CompileEscalation: task compiled successfully")
                     runtimeEscalation.Tasks.Add(runtimeTask)
-                Else
-                    Console.WriteLine($"❌ [COMPILER][TaskAssembler] CompileEscalation: task compilation returned Nothing for templateId={ideTask.TemplateId}")
-                    System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][TaskAssembler] CompileEscalation: task compilation returned Nothing for templateId={ideTask.TemplateId}")
                 End If
             Next
-        Else
-            Console.WriteLine($"⚠️ [COMPILER][TaskAssembler] CompileEscalation: ideEscalation.Tasks is Nothing")
-            System.Diagnostics.Debug.WriteLine($"⚠️ [COMPILER][TaskAssembler] CompileEscalation: ideEscalation.Tasks is Nothing")
         End If
 
-        Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileEscalation: final runtimeEscalation.Tasks.Count={runtimeEscalation.Tasks.Count}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileEscalation: final runtimeEscalation.Tasks.Count={runtimeEscalation.Tasks.Count}")
         Return runtimeEscalation
     End Function
 
@@ -391,93 +338,31 @@ Public Class TaskAssembler
     ''' Compila Task (IDE) in ITask (Runtime)
     ''' </summary>
     Private Function CompileTask(ideTask As Compiler.Task) As ITask
-        Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask called: id={ideTask.Id}, type={If(ideTask.Type.HasValue, ideTask.Type.Value.ToString(), "NULL")}, templateId={If(String.IsNullOrEmpty(ideTask.TemplateId), "EMPTY", ideTask.TemplateId)}, text={If(String.IsNullOrEmpty(ideTask.Text), "EMPTY", ideTask.Text)}")
-        System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask called: id={ideTask.Id}, type={If(ideTask.Type.HasValue, ideTask.Type.Value.ToString(), "NULL")}, templateId={If(String.IsNullOrEmpty(ideTask.TemplateId), "EMPTY", ideTask.TemplateId)}, text={If(String.IsNullOrEmpty(ideTask.Text), "EMPTY", ideTask.Text)}")
-
-        ' ✅ DEBUG: Log Parameters array e Value dictionary
-        If ideTask.Parameters IsNot Nothing Then
-            Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask: ideTask.Parameters IsNot Nothing, Count={ideTask.Parameters.Count}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask: ideTask.Parameters IsNot Nothing, Count={ideTask.Parameters.Count}")
-            For Each param In ideTask.Parameters
-                Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask: Parameter parameterId={param.ParameterId}, value={param.Value}")
-                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask: Parameter parameterId={param.ParameterId}, value={param.Value}")
-            Next
-        Else
-            Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask: ideTask.Parameters is Nothing")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask: ideTask.Parameters is Nothing")
-        End If
-
-        If ideTask.Value IsNot Nothing Then
-            Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask: ideTask.Value IsNot Nothing, keys={String.Join(", ", ideTask.Value.Keys)}")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask: ideTask.Value IsNot Nothing, keys={String.Join(", ", ideTask.Value.Keys)}")
-            If ideTask.Value.ContainsKey("parameters") Then
-                Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask: Found 'parameters' key in Value")
-                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask: Found 'parameters' key in Value")
-            End If
-        Else
-            Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask: ideTask.Value is Nothing")
-            System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask: ideTask.Value is Nothing")
-        End If
-
-        ' ✅ NO FALLBACK - Type MUST be present and valid
         If Not ideTask.Type.HasValue Then
-            Console.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: Type is missing, returning Nothing")
-            Console.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: Task structure:")
-            Console.WriteLine($"   - Id: {ideTask.Id}")
-            Console.WriteLine($"   - Type: NULL (REQUIRED - NO FALLBACK)")
-            Console.WriteLine($"   - TemplateId: {If(String.IsNullOrEmpty(ideTask.TemplateId), "EMPTY", ideTask.TemplateId)}")
-            Console.WriteLine($"   - Text: {If(String.IsNullOrEmpty(ideTask.Text), "EMPTY", ideTask.Text)}")
-            Console.WriteLine($"   - Parameters Count: {If(ideTask.Parameters IsNot Nothing, ideTask.Parameters.Count, 0)}")
-            System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: Type is missing, returning Nothing")
+            Console.WriteLine($"[COMPILER] ERROR: Task {ideTask.Id} has no Type")
             Return Nothing
         End If
 
         Dim typeValue = ideTask.Type.Value
         If Not [Enum].IsDefined(GetType(TaskTypes), typeValue) Then
-            Console.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: Invalid Type enum value: {typeValue}, returning Nothing")
-            Console.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: Task structure:")
-            Console.WriteLine($"   - Id: {ideTask.Id}")
-            Console.WriteLine($"   - Type: {typeValue} (INVALID - NO FALLBACK)")
-            Console.WriteLine($"   - TemplateId: {If(String.IsNullOrEmpty(ideTask.TemplateId), "EMPTY", ideTask.TemplateId)}")
-            System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: Invalid Type enum value: {typeValue}, returning Nothing")
+            Console.WriteLine($"[COMPILER] ERROR: Task {ideTask.Id} has invalid Type: {typeValue}")
             Return Nothing
         End If
 
         Dim taskType = CType(typeValue, TaskTypes)
-        Console.WriteLine($"✅ [COMPILER][TaskAssembler] CompileTask: Using Type enum: {taskType} (value={typeValue})")
-        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][TaskAssembler] CompileTask: Using Type enum: {taskType} (value={typeValue})")
 
-        ' ✅ Usa taskType per determinare il tipo di task
         Select Case taskType
             Case TaskTypes.SayMessage
-                Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask: Matched SayMessage/Message, checking for text...")
-                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask: Matched SayMessage/Message, checking for text...")
-                ' ✅ Nuovo modello: text come proprietà diretta
                 If Not String.IsNullOrEmpty(ideTask.Text) Then
-                    Dim resolvedText = ResolveText(ideTask.Text)
-                    Console.WriteLine($"✅ [COMPILER][TaskAssembler] CompileTask: Creating MessageTask with direct text: '{resolvedText.Substring(0, Math.Min(50, resolvedText.Length))}...'")
-                    System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][TaskAssembler] CompileTask: Creating MessageTask with direct text: '{resolvedText}'")
-                    Return New MessageTask(resolvedText)
+                    Return New MessageTask(ResolveText(ideTask.Text))
                 End If
-                ' ✅ Nuovo modello: text in Parameters array (proprietà diretta)
-                Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask: Direct text not found, checking Parameters array...")
-                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask: Direct text not found, checking Parameters array...")
                 If ideTask.Parameters IsNot Nothing Then
                     Dim textParam = ideTask.Parameters.FirstOrDefault(Function(p) p.ParameterId = "text")
                     If textParam IsNot Nothing AndAlso Not String.IsNullOrEmpty(textParam.Value) Then
-                        Dim resolvedText = ResolveText(textParam.Value)
-                        Console.WriteLine($"✅ [COMPILER][TaskAssembler] CompileTask: Creating MessageTask with text from Parameters array: '{resolvedText.Substring(0, Math.Min(50, resolvedText.Length))}...'")
-                        System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][TaskAssembler] CompileTask: Creating MessageTask with text from Parameters array: '{resolvedText}'")
-                        Return New MessageTask(resolvedText)
+                        Return New MessageTask(ResolveText(textParam.Value))
                     End If
                 End If
-
-                ' ✅ Vecchio modello: text in value.parameters (backward compatibility)
-                Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask: Parameters array not found, checking value.parameters...")
-                System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask: Parameters array not found, checking value.parameters...")
                 If ideTask.Value IsNot Nothing AndAlso ideTask.Value.ContainsKey("parameters") Then
-                    Console.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask: Found 'parameters' in Value, extracting text...")
-                    System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][TaskAssembler] CompileTask: Found 'parameters' in Value, extracting text...")
                     Dim parameters = ideTask.Value("parameters")
                     If TypeOf parameters Is List(Of Object) Then
                         Dim paramsList = CType(parameters, List(Of Object))
@@ -485,20 +370,14 @@ Public Class TaskAssembler
                         If textParam IsNot Nothing Then
                             Dim textValue = CType(textParam, Dictionary(Of String, Object))("value")?.ToString()
                             If Not String.IsNullOrEmpty(textValue) Then
-                                Dim resolvedText = ResolveText(textValue)
-                                Console.WriteLine($"✅ [COMPILER][TaskAssembler] CompileTask: Creating MessageTask with text from value.parameters: '{resolvedText.Substring(0, Math.Min(50, resolvedText.Length))}...'")
-                                System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][TaskAssembler] CompileTask: Creating MessageTask with text from value.parameters: '{resolvedText}'")
-                                Return New MessageTask(resolvedText)
+                                Return New MessageTask(ResolveText(textValue))
                             End If
                         End If
                     End If
                 End If
-                Console.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: No text found for SayMessage task, returning Nothing")
-                System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: No text found for SayMessage task, returning Nothing")
+                Console.WriteLine($"[COMPILER] ERROR: SayMessage task {ideTask.Id} has no text")
                 Return Nothing
             Case TaskTypes.CloseSession
-                Console.WriteLine($"✅ [COMPILER][TaskAssembler] CompileTask: Creating CloseSessionTask")
-                System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][TaskAssembler] CompileTask: Creating CloseSessionTask")
                 Return New CloseSessionTask()
             Case TaskTypes.Transfer
                 Console.WriteLine($"✅ [COMPILER][TaskAssembler] CompileTask: Creating TransferTask")

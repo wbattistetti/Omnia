@@ -1,10 +1,8 @@
 Option Strict On
 Option Explicit On
-
-Imports System.Collections.Generic
+Imports Compiler
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
-Imports Compiler
 
 ''' <summary>
 ''' Converter utilities for TaskTree transformations
@@ -202,7 +200,7 @@ Namespace Converters
 
         ''' <summary>
         ''' ✅ Helper: Applica steps override ai TaskNode (ricorsivo)
-        ''' Usa la stessa logica di UtteranceInterpretationTaskCompiler.ApplyStepsOverrides
+        ''' Usa la stessa logica di UtteranceTaskCompiler.ApplyStepsOverrides
         ''' </summary>
         Public Sub ApplyStepsToTaskNodes(nodes As List(Of Compiler.TaskNode), stepsDict As Dictionary(Of String, Object))
             Console.WriteLine($"🔍 [ApplyStepsToTaskNodes] START - Processing {nodes.Count} nodes, {stepsDict.Count} step overrides available")
@@ -332,6 +330,27 @@ Namespace Converters
                             End If
 
                             If overrideSteps IsNot Nothing AndAlso overrideSteps.Count > 0 Then
+                                ' ✅ Validazione: verifica che non ci siano step duplicati con lo stesso Type
+                                Dim seenTypes As New HashSet(Of String)()
+                                For Each stepItem As Compiler.DialogueStep In overrideSteps
+                                    If stepItem IsNot Nothing AndAlso Not String.IsNullOrEmpty(stepItem.Type) Then
+                                        If seenTypes.Contains(stepItem.Type) Then
+                                            Console.WriteLine($"═══════════════════════════════════════════════════════════════")
+                                            Console.WriteLine($"❌ [TaskTreeConverter.ApplyStepsToTaskNodes] DUPLICATE STEP DETECTED")
+                                            Console.WriteLine($"   Node.Id: {node.Id}")
+                                            Console.WriteLine($"   Node.TemplateId: {node.TemplateId}")
+                                            Console.WriteLine($"   Duplicate Type: {stepItem.Type}")
+                                            Dim allStepTypes = overrideSteps.Where(Function(s) s IsNot Nothing AndAlso Not String.IsNullOrEmpty(s.Type)).Select(Function(s) s.Type).ToList()
+                                            Console.WriteLine($"   All step types: {String.Join(", ", allStepTypes)}")
+                                            Console.WriteLine($"═══════════════════════════════════════════════════════════════")
+                                            Console.Out.Flush()
+                                            System.Diagnostics.Debug.WriteLine($"❌ [TaskTreeConverter] DUPLICATE STEP: Node.Id={node.Id}, Type={stepItem.Type}")
+                                            Throw New InvalidOperationException($"Invalid task model: Node {node.Id} (templateId={node.TemplateId}) has duplicate steps with Type={stepItem.Type}. Each Type must appear exactly once.")
+                                        End If
+                                        seenTypes.Add(stepItem.Type)
+                                    End If
+                                Next
+
                                 node.Steps = overrideSteps
                                 Console.WriteLine($"✅ [ApplyStepsToTaskNodes] Applied {overrideSteps.Count} steps to node {node.Id} (templateId={node.TemplateId})")
                                 For i = 0 To overrideSteps.Count - 1
@@ -387,7 +406,7 @@ Namespace Converters
         ''' <summary>
         ''' Costruisce steps override da TaskTreeExpanded per l'istanza
         ''' Formato: { "templateId": { "start": {...}, "noMatch": {...} } }
-        ''' UtteranceInterpretationTaskCompiler serializza e deserializza usando DialogueStepListConverter
+        ''' UtteranceTaskCompiler serializza e deserializza usando DialogueStepListConverter
         ''' </summary>
         Public Function BuildStepsOverrideFromTaskTreeExpanded(taskTreeExpanded As Compiler.TaskTreeExpanded) As Dictionary(Of String, Object)
             Dim stepsOverride As New Dictionary(Of String, Object)()

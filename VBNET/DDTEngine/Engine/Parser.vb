@@ -6,8 +6,6 @@ Option Explicit On
 
 Imports System.Collections.Concurrent
 Imports System.Text.RegularExpressions
-Imports System.Threading
-Imports System.Linq
 
 ''' <summary>
 ''' Gestisce il parsing dell'input utente

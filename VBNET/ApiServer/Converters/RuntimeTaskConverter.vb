@@ -1,7 +1,5 @@
 Option Strict On
 Option Explicit On
-
-Imports System.Collections.Generic
 Imports Compiler
 
 ''' <summary>
@@ -10,12 +8,12 @@ Imports Compiler
 Namespace Converters
 
     ''' <summary>
-    ''' Converte CompiledTaskUtteranceInterpretation in RuntimeTask (helper temporaneo)
-    ''' TODO: Aggiornare SessionManager per accettare direttamente CompiledTaskUtteranceInterpretation
+    ''' Converte CompiledUtteranceTask in RuntimeTask (helper temporaneo)
+    ''' TODO: Aggiornare SessionManager per accettare direttamente CompiledUtteranceTask
     ''' </summary>
     Public Module RuntimeTaskConverter
 
-        Public Function ConvertCompiledToRuntimeTask(compiled As Compiler.CompiledTaskUtteranceInterpretation) As Compiler.RuntimeTask
+        Public Function ConvertCompiledToRuntimeTask(compiled As Compiler.CompiledUtteranceTask) As Compiler.RuntimeTask
             Console.WriteLine($"🔍 [ConvertCompiledToRuntimeTask] START")
             Console.WriteLine($"   compiled.Id: {compiled.Id}")
             Console.WriteLine($"   compiled.Steps.Count: {If(compiled.Steps IsNot Nothing, compiled.Steps.Count, 0)}")
@@ -32,7 +30,7 @@ Namespace Converters
             If compiled.HasSubTasks() Then
                 Console.WriteLine($"🔍 [ConvertCompiledToRuntimeTask] Copying {compiled.SubTasks.Count} SubTasks...")
                 runtimeTask.SubTasks = New List(Of Compiler.RuntimeTask)()
-                For Each subCompiled As Compiler.CompiledTaskUtteranceInterpretation In compiled.SubTasks
+                For Each subCompiled As Compiler.CompiledUtteranceTask In compiled.SubTasks
                     runtimeTask.SubTasks.Add(ConvertCompiledToRuntimeTask(subCompiled))
                 Next
                 Console.WriteLine($"✅ [ConvertCompiledToRuntimeTask] Copied {runtimeTask.SubTasks.Count} SubTasks")
@@ -45,10 +43,10 @@ Namespace Converters
         End Function
 
         ''' <summary>
-        ''' ✅ Helper: Converte RuntimeTask in CompiledTaskUtteranceInterpretation (ricorsivo)
+        ''' ✅ Helper: Converte RuntimeTask in CompiledUtteranceTask (ricorsivo)
         ''' </summary>
-        Public Function ConvertRuntimeTaskToCompiledTaskUtteranceInterpretation(runtimeTask As Compiler.RuntimeTask) As Compiler.CompiledTaskUtteranceInterpretation
-            Dim compiled As New Compiler.CompiledTaskUtteranceInterpretation() With {
+        Public Function ConvertRuntimeTaskToCompiledUtteranceTask(runtimeTask As Compiler.RuntimeTask) As Compiler.CompiledUtteranceTask
+            Dim compiled As New Compiler.CompiledUtteranceTask() With {
                 .Id = runtimeTask.Id,
                 .Condition = runtimeTask.Condition,
                 .Steps = runtimeTask.Steps,
@@ -58,9 +56,9 @@ Namespace Converters
 
             ' ✅ Copia SubTasks ricorsivamente (solo se presenti)
             If runtimeTask.HasSubTasks() Then
-                compiled.SubTasks = New List(Of Compiler.CompiledTaskUtteranceInterpretation)()
+                compiled.SubTasks = New List(Of Compiler.CompiledUtteranceTask)()
                 For Each subTask As Compiler.RuntimeTask In runtimeTask.SubTasks
-                    compiled.SubTasks.Add(ConvertRuntimeTaskToCompiledTaskUtteranceInterpretation(subTask))
+                    compiled.SubTasks.Add(ConvertRuntimeTaskToCompiledUtteranceTask(subTask))
                 Next
             Else
                 compiled.SubTasks = Nothing

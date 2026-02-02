@@ -1,7 +1,5 @@
 Option Strict On
 Option Explicit On
-
-Imports System.Collections.Generic
 Imports TaskEngine
 
 ''' <summary>
@@ -43,7 +41,7 @@ End Class
 ''' <summary>
 ''' Task per inviare un messaggio all'utente
 ''' </summary>
-Public Class CompiledTaskSayMessage
+Public Class CompiledSayMessageTask
     Inherits CompiledTask
 
     ''' <summary>
@@ -62,7 +60,7 @@ End Class
 ''' Task compilato per interpretazione utterance (richiesta dati ricorsiva)
 ''' Contiene direttamente le proprietà runtime senza wrapper
 ''' </summary>
-Public Class CompiledTaskUtteranceInterpretation
+Public Class CompiledUtteranceTask
     Inherits CompiledTask
 
     ''' <summary>
@@ -84,10 +82,10 @@ Public Class CompiledTaskUtteranceInterpretation
     Public Property NlpContract As CompiledNlpContract
 
     ''' <summary>
-    ''' Lista di CompiledTaskUtteranceInterpretation figli (ricorsivo)
+    ''' Lista di CompiledUtteranceTask figli (ricorsivo)
     ''' Solo se il task è composito o aggregato
     ''' </summary>
-    Public Property SubTasks As List(Of CompiledTaskUtteranceInterpretation)
+    Public Property SubTasks As List(Of CompiledUtteranceTask)
 
     Public Overrides ReadOnly Property TaskType As TaskTypes
         Get
@@ -120,7 +118,7 @@ End Class
 ''' <summary>
 ''' Task per classificare il problema/intent dell'utente
 ''' </summary>
-Public Class CompiledTaskClassifyProblem
+Public Class CompiledClassifyProblemTask
     Inherits CompiledTask
 
     ''' <summary>
@@ -143,7 +141,7 @@ End Class
 ''' <summary>
 ''' Task per chiamare un backend API
 ''' </summary>
-Public Class CompiledTaskBackendCall
+Public Class CompiledBackendCallTask
     Inherits CompiledTask
 
     ''' <summary>
@@ -176,7 +174,7 @@ End Class
 ''' <summary>
 ''' Task per chiudere la sessione
 ''' </summary>
-Public Class CompiledTaskCloseSession
+Public Class CompiledCloseSessionTask
     Inherits CompiledTask
 
     Public Overrides ReadOnly Property TaskType As TaskTypes
@@ -189,7 +187,7 @@ End Class
 ''' <summary>
 ''' Task per trasferire la conversazione
 ''' </summary>
-Public Class CompiledTaskTransfer
+Public Class CompiledTransferTask
     Inherits CompiledTask
 
     ''' <summary>

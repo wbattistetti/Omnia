@@ -7,101 +7,100 @@ Option Explicit On
 
 Imports System.IO
 Imports System.Text.Json
-Imports System.Text.Json.Serialization
+
+''' <summary>
+''' Helper per caricare TaskInstance da file JSON (Runtime)
+''' Usa deserializzazione diretta in TaskInstance
+''' </summary>
+Public Class TaskLoader
+    ''' <summary>
+    ''' Carica un TaskInstance da un file JSON
+    ''' </summary>
+    Public Shared Function LoadFromJson(filePath As String) As TaskInstance
+        If Not File.Exists(filePath) Then
+            Throw New FileNotFoundException("File JSON non trovato: " & filePath)
+        End If
+
+        Dim jsonText As String = File.ReadAllText(filePath)
+        Return LoadFromJsonString(jsonText)
+    End Function
 
     ''' <summary>
-    ''' Helper per caricare TaskInstance da file JSON (Runtime)
-    ''' Usa deserializzazione diretta in TaskInstance
+    ''' Carica un TaskInstance da una stringa JSON (deserializzazione diretta)
     ''' </summary>
-    Public Class TaskLoader
-        ''' <summary>
-        ''' Carica un TaskInstance da un file JSON
-        ''' </summary>
-        Public Shared Function LoadFromJson(filePath As String) As TaskInstance
-            If Not File.Exists(filePath) Then
-                Throw New FileNotFoundException("File JSON non trovato: " & filePath)
-            End If
+    Public Shared Function LoadFromJsonString(jsonText As String) As TaskInstance
+        If String.IsNullOrEmpty(jsonText) Then
+            Throw New ArgumentException("JSON text cannot be null or empty", NameOf(jsonText))
+        End If
 
-            Dim jsonText As String = File.ReadAllText(filePath)
-            Return LoadFromJsonString(jsonText)
-        End Function
+        ' Opzioni per la deserializzazione (case-insensitive, permette commenti)
+        Dim options As New JsonSerializerOptions() With {
+            .PropertyNameCaseInsensitive = True,
+            .ReadCommentHandling = JsonCommentHandling.Skip,
+            .AllowTrailingCommas = True
+        }
 
-        ''' <summary>
-        ''' Carica un TaskInstance da una stringa JSON (deserializzazione diretta)
-        ''' </summary>
-        Public Shared Function LoadFromJsonString(jsonText As String) As TaskInstance
-            If String.IsNullOrEmpty(jsonText) Then
-                Throw New ArgumentException("JSON text cannot be null or empty", NameOf(jsonText))
-            End If
+        Dim instance As TaskInstance = JsonSerializer.Deserialize(Of TaskInstance)(jsonText, options)
 
-            ' Opzioni per la deserializzazione (case-insensitive, permette commenti)
-            Dim options As New JsonSerializerOptions() With {
-                .PropertyNameCaseInsensitive = True,
-                .ReadCommentHandling = JsonCommentHandling.Skip,
-                .AllowTrailingCommas = True
-            }
+        If instance Is Nothing Then
+            Throw New InvalidOperationException("Impossibile deserializzare il JSON")
+        End If
 
-            Dim instance As TaskInstance = JsonSerializer.Deserialize(Of TaskInstance)(jsonText, options)
+        ' Calcola FullLabel per tutti i nodi (se non già calcolato)
+        CalculateFullLabels(instance)
 
-            If instance Is Nothing Then
-                Throw New InvalidOperationException("Impossibile deserializzare il JSON")
-            End If
+        Return instance
+    End Function
 
-            ' Calcola FullLabel per tutti i nodi (se non già calcolato)
-            CalculateFullLabels(instance)
+    ''' <summary>
+    ''' Carica un TaskInstance direttamente da un oggetto .NET
+    ''' </summary>
+    Public Shared Function LoadFromObject(taskObj As TaskInstance) As TaskInstance
+        If taskObj Is Nothing Then
+            Throw New ArgumentNullException(NameOf(taskObj), "Task object cannot be null")
+        End If
 
-            Return instance
-        End Function
+        ' Calcola FullLabel se non già calcolato
+        If taskObj.TaskList IsNot Nothing Then
+            For Each mainTask As TaskNode In taskObj.TaskList
+                If String.IsNullOrEmpty(mainTask.FullLabel) Then
+                    CalculateFullLabels(taskObj)
+                    Exit For
+                End If
+            Next
+        End If
 
-        ''' <summary>
-        ''' Carica un TaskInstance direttamente da un oggetto .NET
-        ''' </summary>
-        Public Shared Function LoadFromObject(taskObj As TaskInstance) As TaskInstance
-            If taskObj Is Nothing Then
-                Throw New ArgumentNullException(NameOf(taskObj), "Task object cannot be null")
-            End If
+        Return taskObj
+    End Function
 
-            ' Calcola FullLabel se non già calcolato
-            If taskObj.TaskList IsNot Nothing Then
-                For Each mainTask As TaskNode In taskObj.TaskList
-                    If String.IsNullOrEmpty(mainTask.FullLabel) Then
-                        CalculateFullLabels(taskObj)
-                        Exit For
-                    End If
-                Next
-            End If
+    ''' <summary>
+    ''' Calcola FullLabel per tutti i nodi (compile-time)
+    ''' </summary>
+    Private Shared Sub CalculateFullLabels(instance As TaskInstance)
+        If instance.TaskList IsNot Nothing Then
+            For Each mainTask As TaskNode In instance.TaskList
+                CalculateFullLabelForNode(mainTask, "")
+            Next
+        End If
+    End Sub
 
-            Return taskObj
-        End Function
+    ''' <summary>
+    ''' Calcola il FullLabel per un singolo nodo e i suoi subTasks (ricorsivo)
+    ''' </summary>
+    Private Shared Sub CalculateFullLabelForNode(node As TaskNode, parentPath As String)
+        ' Calcola FullLabel: se è root, usa solo Name, altrimenti parentPath.Name
+        If String.IsNullOrEmpty(parentPath) Then
+            node.FullLabel = If(String.IsNullOrEmpty(node.Name), node.Id, node.Name)
+        Else
+            Dim nodeName As String = If(String.IsNullOrEmpty(node.Name), node.Id, node.Name)
+            node.FullLabel = parentPath & "." & nodeName
+        End If
 
-        ''' <summary>
-        ''' Calcola FullLabel per tutti i nodi (compile-time)
-        ''' </summary>
-        Private Shared Sub CalculateFullLabels(instance As TaskInstance)
-            If instance.TaskList IsNot Nothing Then
-                For Each mainTask As TaskNode In instance.TaskList
-                    CalculateFullLabelForNode(mainTask, "")
-                Next
-            End If
-        End Sub
-
-        ''' <summary>
-        ''' Calcola il FullLabel per un singolo nodo e i suoi subTasks (ricorsivo)
-        ''' </summary>
-        Private Shared Sub CalculateFullLabelForNode(node As TaskNode, parentPath As String)
-            ' Calcola FullLabel: se è root, usa solo Name, altrimenti parentPath.Name
-            If String.IsNullOrEmpty(parentPath) Then
-                node.FullLabel = If(String.IsNullOrEmpty(node.Name), node.Id, node.Name)
-            Else
-                Dim nodeName As String = If(String.IsNullOrEmpty(node.Name), node.Id, node.Name)
-                node.FullLabel = parentPath & "." & nodeName
-            End If
-
-            ' Calcola ricorsivamente per subTasks
-            If node.SubTasks IsNot Nothing Then
-                For Each subTask As TaskNode In node.SubTasks
-                    CalculateFullLabelForNode(subTask, node.FullLabel)
-                Next
-            End If
-        End Sub
-    End Class
+        ' Calcola ricorsivamente per subTasks
+        If node.SubTasks IsNot Nothing Then
+            For Each subTask As TaskNode In node.SubTasks
+                CalculateFullLabelForNode(subTask, node.FullLabel)
+            Next
+        End If
+    End Sub
+End Class

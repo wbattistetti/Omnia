@@ -4,8 +4,6 @@
 Option Strict On
 Option Explicit On
 
-Imports System.Linq
-
 ''' <summary>
 ''' Implementazione del contesto globale delle variabili
 ''' Cerca prima nel TaskInstance corrente, poi in altri contesti se disponibili

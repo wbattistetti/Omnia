@@ -1,10 +1,7 @@
 Option Strict On
 Option Explicit On
-
-Imports System.Collections.Generic
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
-Imports Compiler
 
 ''' <summary>
 ''' API Data Models - Request and Response classes for API endpoints
@@ -93,7 +90,7 @@ Namespace Models
     ''' </summary>
     Public Class CompileTaskResult
         Public Property Success As Boolean
-        Public Property Result As Compiler.CompiledTaskUtteranceInterpretation
+        Public Property Result As Compiler.CompiledUtteranceTask
         Public Property ErrorMessage As String
 
         Public Sub New()
@@ -102,7 +99,7 @@ Namespace Models
             ErrorMessage = String.Empty
         End Sub
 
-        Public Sub New(success As Boolean, result As Compiler.CompiledTaskUtteranceInterpretation, errorMessage As String)
+        Public Sub New(success As Boolean, result As Compiler.CompiledUtteranceTask, errorMessage As String)
             Me.Success = success
             Me.Result = result
             Me.ErrorMessage = errorMessage

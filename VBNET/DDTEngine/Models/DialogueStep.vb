@@ -4,16 +4,16 @@
 Option Strict On
 Option Explicit On
 
+''' <summary>
+''' Rappresenta uno step di dialogo
+''' Corrisponde a StepGroup nel frontend TypeScript
+''' Ogni DialogueStep corrisponde a un DialogueState e contiene multiple escalation (recovery)
+''' </summary>
+Public Class DialogueStep
     ''' <summary>
-    ''' Rappresenta uno step di dialogo
-    ''' Corrisponde a StepGroup nel frontend TypeScript
-    ''' Ogni DialogueStep corrisponde a un DialogueState e contiene multiple escalation (recovery)
+    ''' Tipo di step (corrisponde a DialogueState)
     ''' </summary>
-    Public Class DialogueStep
-        ''' <summary>
-        ''' Tipo di step (corrisponde a DialogueState)
-        ''' </summary>
-        Public Property Type As DialogueState
+    Public Property Type As DialogueState
 
     ''' <summary>
     ''' Lista di escalation (recovery) per questo step
@@ -25,9 +25,9 @@ Option Explicit On
     ''' Costruttore
     ''' </summary>
     Public Sub New()
-            Escalations = New List(Of Escalation)()
-        End Sub
-    End Class
+        Escalations = New List(Of Escalation)()
+    End Sub
+End Class
 
 
 

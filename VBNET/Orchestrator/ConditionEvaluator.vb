@@ -1,8 +1,6 @@
 Option Strict On
 Option Explicit On
 
-Imports System.Collections.Generic
-
 ''' <summary>
 ''' Valuta condizioni per determinare quale task eseguire
 ''' </summary>

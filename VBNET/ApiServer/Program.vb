@@ -1,13 +1,8 @@
 Option Strict On
 Option Explicit On
-
-Imports System
 Imports System.IO
-Imports System.Linq
 Imports System.Threading
-Imports System.Threading.Tasks
-Imports System.Collections.Generic
-Imports System.Net.Http
+Imports ApiServer.Models
 Imports Microsoft.AspNetCore.Builder
 Imports Microsoft.AspNetCore.Hosting
 Imports Microsoft.AspNetCore.Http
@@ -15,14 +10,6 @@ Imports Microsoft.Extensions.DependencyInjection
 Imports Microsoft.Extensions.Hosting
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
-Imports Compiler
-Imports TaskEngine
-Imports ApiServer.Models
-Imports ApiServer.Helpers
-Imports ApiServer.Validators
-Imports ApiServer.Converters
-Imports ApiServer.Services
-Imports ApiServer.Handlers
 
 Module Program
     ''' <summary>
@@ -71,38 +58,38 @@ Module Program
             ' Add global exception handler
             app.UseExceptionHandler(Sub(appBuilder)
                                         appBuilder.Run(Async Function(context As HttpContext) As System.Threading.Tasks.Task
-                                                        Dim exceptionHandlerPathFeature = context.Features.Get(Of Microsoft.AspNetCore.Diagnostics.IExceptionHandlerPathFeature)()
-                                                        Dim ex = exceptionHandlerPathFeature?.Error
-                                                        If ex IsNot Nothing Then
-                                                            Console.WriteLine("═══════════════════════════════════════════════════════════════")
-                                                            Console.WriteLine("❌ [GlobalExceptionHandler] UNHANDLED EXCEPTION")
-                                                            Console.WriteLine($"   Path: {context.Request.Path}")
-                                                            Console.WriteLine($"   Method: {context.Request.Method}")
-                                                            Console.WriteLine($"   Type: {ex.GetType().FullName}")
-                                                            Console.WriteLine($"   Message: {ex.Message}")
-                                                            Console.WriteLine($"   StackTrace: {ex.StackTrace}")
+                                                           Dim exceptionHandlerPathFeature = context.Features.Get(Of Microsoft.AspNetCore.Diagnostics.IExceptionHandlerPathFeature)()
+                                                           Dim ex = exceptionHandlerPathFeature?.Error
+                                                           If ex IsNot Nothing Then
+                                                               Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                                                               Console.WriteLine("❌ [GlobalExceptionHandler] UNHANDLED EXCEPTION")
+                                                               Console.WriteLine($"   Path: {context.Request.Path}")
+                                                               Console.WriteLine($"   Method: {context.Request.Method}")
+                                                               Console.WriteLine($"   Type: {ex.GetType().FullName}")
+                                                               Console.WriteLine($"   Message: {ex.Message}")
+                                                               Console.WriteLine($"   StackTrace: {ex.StackTrace}")
 
-                                                            If ex.InnerException IsNot Nothing Then
-                                                                Console.WriteLine("   ── Inner Exception ──")
-                                                                Console.WriteLine($"   Type: {ex.InnerException.GetType().FullName}")
-                                                                Console.WriteLine($"   Message: {ex.InnerException.Message}")
-                                                                Console.WriteLine($"   StackTrace: {ex.InnerException.StackTrace}")
-                                                            End If
+                                                               If ex.InnerException IsNot Nothing Then
+                                                                   Console.WriteLine("   ── Inner Exception ──")
+                                                                   Console.WriteLine($"   Type: {ex.InnerException.GetType().FullName}")
+                                                                   Console.WriteLine($"   Message: {ex.InnerException.Message}")
+                                                                   Console.WriteLine($"   StackTrace: {ex.InnerException.StackTrace}")
+                                                               End If
 
-                                                            Dim jsonEx = TryCast(ex, JsonSerializationException)
-                                                            If jsonEx IsNot Nothing Then
-                                                                Console.WriteLine("   ── JSON Exception Details ──")
-                                                                Console.WriteLine($"   JSON Path: {jsonEx.Path}")
-                                                                Console.WriteLine($"   LineNumber: {jsonEx.LineNumber}")
-                                                                Console.WriteLine($"   LinePosition: {jsonEx.LinePosition}")
-                                                            End If
+                                                               Dim jsonEx = TryCast(ex, JsonSerializationException)
+                                                               If jsonEx IsNot Nothing Then
+                                                                   Console.WriteLine("   ── JSON Exception Details ──")
+                                                                   Console.WriteLine($"   JSON Path: {jsonEx.Path}")
+                                                                   Console.WriteLine($"   LineNumber: {jsonEx.LineNumber}")
+                                                                   Console.WriteLine($"   LinePosition: {jsonEx.LinePosition}")
+                                                               End If
 
-                                                            Console.WriteLine("═══════════════════════════════════════════════════════════════")
-                                                            Console.Out.Flush()
-                                                        End If
-                                                        context.Response.StatusCode = 500
-                                                        Await context.Response.WriteAsync("Internal Server Error")
-                                                    End Function)
+                                                               Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                                                               Console.Out.Flush()
+                                                           End If
+                                                           context.Response.StatusCode = 500
+                                                           Await context.Response.WriteAsync("Internal Server Error")
+                                                       End Function)
                                     End Sub)
 
             app.UseRouting()

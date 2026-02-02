@@ -31,7 +31,7 @@
 
     <!-- Task Compiler (Polymorphic) -->
     <Compile Include="TaskCompiler\TaskCompilerBase.vb" />
-    <Compile Include="TaskCompiler\UtteranceInterpretationTaskCompiler.vb" />
+    <Compile Include="TaskCompiler\UtteranceTaskCompiler.vb" />
     <Compile Include="TaskCompiler\SimpleTaskCompiler.vb" />
     <Compile Include="TaskCompiler\TaskCompilerFactory.vb" />
 

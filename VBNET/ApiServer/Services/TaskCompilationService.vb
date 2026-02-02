@@ -1,14 +1,11 @@
 Option Strict On
 Option Explicit On
-
-Imports System.Collections.Generic
-Imports System.Threading.Tasks
+Imports ApiServer.Converters
+Imports ApiServer.Models
+Imports ApiServer.Validators
+Imports Compiler
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
-Imports Compiler
-Imports ApiServer.Models
-Imports ApiServer.Converters
-Imports ApiServer.Validators
 
 ''' <summary>
 ''' Service for task compilation logic
@@ -16,7 +13,7 @@ Imports ApiServer.Validators
 Namespace Services
 
     ''' <summary>
-    ''' Compiles a task into a CompiledTaskUtteranceInterpretation using the UtteranceInterpretationTaskCompiler.
+    ''' Compiles a task into a CompiledUtteranceTask using the UtteranceTaskCompiler.
     ''' Requires all referenced templates to be available in the Flow object.
     ''' </summary>
     ''' <param name="task">The task instance to compile.</param>
@@ -31,19 +28,19 @@ Namespace Services
                 }
 
                 ' Compile task (Chat Simulator: no flowchart metadata needed)
-                Dim compiler As New UtteranceInterpretationTaskCompiler()
+                Dim compiler As New UtteranceTaskCompiler()
                 Dim compiledTask = compiler.Compile(task, task.Id, flow)
 
                 If compiledTask Is Nothing Then
                     Return New CompileTaskResult(False, Nothing, $"Task compiler returned null for task '{task.Id}'. The task may be malformed or missing required fields.")
                 End If
 
-                If TypeOf compiledTask IsNot Compiler.CompiledTaskUtteranceInterpretation Then
+                If TypeOf compiledTask IsNot Compiler.CompiledUtteranceTask Then
                     Dim actualType = compiledTask.GetType().Name
-                    Return New CompileTaskResult(False, Nothing, $"Task compiler returned unexpected type '{actualType}' for task '{task.Id}'. Expected CompiledTaskUtteranceInterpretation.")
+                    Return New CompileTaskResult(False, Nothing, $"Task compiler returned unexpected type '{actualType}' for task '{task.Id}'. Expected CompiledUtteranceTask.")
                 End If
 
-                Dim utteranceTask = DirectCast(compiledTask, Compiler.CompiledTaskUtteranceInterpretation)
+                Dim utteranceTask = DirectCast(compiledTask, Compiler.CompiledUtteranceTask)
                 If (utteranceTask.Steps Is Nothing OrElse utteranceTask.Steps.Count = 0) AndAlso
                    Not utteranceTask.HasSubTasks() Then
                     Return New CompileTaskResult(False, Nothing, $"Compiled task for '{task.Id}' has no Steps or SubTasks. The compilation may have failed silently.")
@@ -75,18 +72,20 @@ Namespace Services
 
                 Console.WriteLine("═══════════════════════════════════════════════════════════════")
                 Console.Out.Flush()
-                Return New CompileTaskResult(False, Nothing, $"Failed to compile task '{task.Id}' into CompiledTaskUtteranceInterpretation. Error: {ex.Message}")
+                System.Diagnostics.Debug.WriteLine($"❌ [CompileTaskToRuntime] Exception: {ex.GetType().Name} - {ex.Message}")
+                System.Diagnostics.Debug.WriteLine($"❌ [CompileTaskToRuntime] StackTrace: {ex.StackTrace}")
+                Return New CompileTaskResult(False, Nothing, $"Failed to compile task '{task.Id}' into CompiledUtteranceTask. Error: {ex.Message}")
             End Try
         End Function
 
         ''' <summary>
-        ''' ✅ CORRETTO: Compila TaskTreeExpanded in CompiledTaskUtteranceInterpretation
-        ''' Usa UtteranceInterpretationTaskCompiler per compilazione completa:
+        ''' ✅ CORRETTO: Compila TaskTreeExpanded in CompiledUtteranceTask
+        ''' Usa UtteranceTaskCompiler per compilazione completa:
         ''' - Estrae templateId da TaskTreeExpanded
         ''' - Carica task e template dal database
         ''' - Costruisce Task dall'istanza con steps override
         ''' - Carica tutti i template necessari ricorsivamente
-        ''' - Chiama UtteranceInterpretationTaskCompiler.Compile (compilazione completa)
+        ''' - Chiama UtteranceTaskCompiler.Compile (compilazione completa)
         ''' </summary>
         ''' <param name="taskTreeExpanded">Il TaskTreeExpanded (AST montato) da compilare</param>
         ''' <param name="translations">Le traduzioni per la risoluzione dei GUID</param>
@@ -101,7 +100,7 @@ Namespace Services
         ) As Task(Of CompileTaskResult)
             Try
                 Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-                Console.WriteLine($"🔍 [CompileTaskTreeExpandedToCompiledTask] START - Using UtteranceInterpretationTaskCompiler")
+                Console.WriteLine($"🔍 [CompileTaskTreeExpandedToCompiledTask] START - Using UtteranceTaskCompiler")
                 Console.WriteLine($"   taskTreeExpanded.Id: {taskTreeExpanded.Id}")
                 Console.WriteLine($"   projectId: {projectId}")
                 Console.WriteLine($"   taskId: {taskId}")
@@ -187,13 +186,13 @@ Namespace Services
                     Return New CompileTaskResult(False, Nothing, typeValidationResult.ErrorMessage)
                 End If
 
-                ' 10. Compila usando UtteranceInterpretationTaskCompiler
+                ' 10. Compila usando UtteranceTaskCompiler
                 Dim compileResult = CompileTaskToRuntime(task, allTemplates)
                 If Not compileResult.Success Then
                     Return New CompileTaskResult(False, Nothing, compileResult.ErrorMessage)
                 End If
 
-                Console.WriteLine($"✅ [CompileTaskTreeExpandedToCompiledTask] Compiled successfully using UtteranceInterpretationTaskCompiler")
+                Console.WriteLine($"✅ [CompileTaskTreeExpandedToCompiledTask] Compiled successfully using UtteranceTaskCompiler")
                 Console.WriteLine($"   Steps count: {If(compileResult.Result.Steps IsNot Nothing, compileResult.Result.Steps.Count, 0)}")
                 Console.WriteLine($"   HasSubTasks: {compileResult.Result.HasSubTasks()}")
                 Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
@@ -224,6 +223,8 @@ Namespace Services
 
                 Console.WriteLine("═══════════════════════════════════════════════════════════════")
                 Console.Out.Flush()
+                System.Diagnostics.Debug.WriteLine($"❌ [CompileTaskTreeExpandedToCompiledTask] Exception: {ex.GetType().Name} - {ex.Message}")
+                System.Diagnostics.Debug.WriteLine($"❌ [CompileTaskTreeExpandedToCompiledTask] StackTrace: {ex.StackTrace}")
                 Return New CompileTaskResult(False, Nothing, $"Failed to compile TaskTreeExpanded. Error: {ex.Message}")
             End Try
         End Function

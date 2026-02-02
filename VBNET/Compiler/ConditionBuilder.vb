@@ -1,9 +1,6 @@
 Option Strict On
 Option Explicit On
 
-Imports System.Collections.Generic
-Imports System.Linq
-
 ''' <summary>
 ''' Condition Builder: Constructs conditions from flowchart topology
 ''' Trasforma condizioni IDE (Edge) in condizioni Runtime (Condition)
