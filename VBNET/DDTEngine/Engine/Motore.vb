@@ -206,14 +206,10 @@ Public Class Motore
                 Return mainTask
             End If
 
-            If {DialogueState.Confirmation, DialogueState.Invalid, DialogueState.NoMatch, DialogueState.NoInput}.Contains(mainTask.State) Then
+            ' ✅ Include Success state so that success step can be executed
+            If {DialogueState.Confirmation, DialogueState.Invalid, DialogueState.NoMatch, DialogueState.NoInput, DialogueState.Success}.Contains(mainTask.State) Then
                 Console.WriteLine($"[MOTORE] Selected main node with state {mainTask.State}: {mainTask.Id}")
                 Return mainTask
-            End If
-
-            ' ✅ Check for Success state - this means task is completed
-            If mainTask.State = DialogueState.Success Then
-                Console.WriteLine($"[MOTORE] Main node {mainTask.Id} is in Success state, checking subtasks")
             End If
 
             For Each subTask As TaskNode In mainTask.SubTasks.Where(Function(st) st.State <> DialogueState.AcquisitionFailed)
@@ -222,7 +218,8 @@ Public Class Motore
                     Console.WriteLine($"[MOTORE] Selected empty subTask: {subTask.Id} (parent: {mainTask.Id})")
                     Return subTask
                 End If
-                If {DialogueState.Confirmation, DialogueState.Invalid, DialogueState.NoMatch, DialogueState.NoInput}.Contains(subTask.State) Then
+                ' ✅ Include Success state for subtasks too
+                If {DialogueState.Confirmation, DialogueState.Invalid, DialogueState.NoMatch, DialogueState.NoInput, DialogueState.Success}.Contains(subTask.State) Then
                     Console.WriteLine($"[MOTORE] Selected subTask with state {subTask.State}: {subTask.Id} (parent: {mainTask.Id})")
                     Return subTask
                 End If
