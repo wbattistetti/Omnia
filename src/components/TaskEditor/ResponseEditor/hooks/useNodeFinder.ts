@@ -1,0 +1,45 @@
+// Please write clean, production-grade TypeScript code.
+// Avoid non-ASCII characters, Chinese symbols, or multilingual output.
+
+import { useCallback } from 'react';
+import { getdataList, getSubDataList } from '../ddtSelectors';
+import type { TaskTree } from '../../../../types/taskTypes';
+
+export interface UseNodeFinderParams {
+  taskTree: TaskTree | null | undefined;
+  taskTreeRef: React.MutableRefObject<TaskTree | null | undefined>;
+  handleSelectMain: (idx: number) => void;
+  handleSelectSub: (idx: number | undefined, mainIdx?: number) => void;
+}
+
+/**
+ * Hook that provides findAndSelectNodeById function for finding and selecting nodes by ID.
+ */
+export function useNodeFinder(params: UseNodeFinderParams) {
+  const { taskTree, taskTreeRef, handleSelectMain, handleSelectSub } = params;
+
+  const findAndSelectNodeById = useCallback((nodeId: string) => {
+    const mains = getdataList(taskTreeRef.current || taskTree);
+    for (let mIdx = 0; mIdx < mains.length; mIdx++) {
+      const main = mains[mIdx];
+      const mainNodeId = main.id || main.templateId || main._id;
+      if (mainNodeId === nodeId) {
+        handleSelectMain(mIdx);
+        handleSelectSub(undefined);
+        return;
+      }
+      const subs = getSubDataList(main) || [];
+      for (let sIdx = 0; sIdx < subs.length; sIdx++) {
+        const sub = subs[sIdx];
+        const subNodeId = sub.id || sub.templateId || sub._id;
+        if (subNodeId === nodeId) {
+          handleSelectMain(mIdx);
+          handleSelectSub(sIdx, mIdx);
+          return;
+        }
+      }
+    }
+  }, [taskTree, taskTreeRef, handleSelectMain, handleSelectSub]);
+
+  return findAndSelectNodeById;
+}
