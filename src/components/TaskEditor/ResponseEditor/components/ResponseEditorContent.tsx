@@ -80,13 +80,15 @@ export function ResponseEditorContent({
   // Contract Wizard
   if (showContractWizard) {
     return (
-      <ContractWizard
-        taskTree={taskTreeRef.current}
-        integrated={true}
-        onClose={handleContractWizardClose}
-        onNodeUpdate={handleContractWizardNodeUpdate}
-        onComplete={handleContractWizardComplete}
-      />
+      <div style={{ flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
+        <ContractWizard
+          taskTree={taskTreeRef.current}
+          integrated={true}
+          onClose={handleContractWizardClose}
+          onNodeUpdate={handleContractWizardNodeUpdate}
+          onComplete={handleContractWizardComplete}
+        />
+      </div>
     );
   }
 
@@ -122,7 +124,7 @@ export function ResponseEditorContent({
   // Intent Messages Builder
   if (needsIntentMessages) {
     return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start', padding: '16px 20px' }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start', padding: '16px 20px' }}>
         <IntentMessagesBuilder
           intentLabel={task?.label || taskTree?.label || 'chiedi il problema'}
           onComplete={onIntentMessagesComplete}
@@ -132,5 +134,9 @@ export function ResponseEditorContent({
   }
 
   // Normal editor layout
-  return <>{normalEditorLayout}</>;
+  return (
+    <div style={{ flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
+      {normalEditorLayout}
+    </div>
+  );
 }

@@ -7,13 +7,10 @@
 
 import React from 'react';
 import Sidebar from '../Sidebar';
-import BehaviourEditor from '../BehaviourEditor';
-import RightPanel, { RightPanelMode } from '../RightPanel';
-import MessageReviewView from '../MessageReview/MessageReviewView';
-import DataExtractionEditor from '../DataExtractionEditor';
+import { RightPanelMode } from '../RightPanel';
 import IntentListEditorWrapper from './IntentListEditorWrapper';
-import { getdataList, getSubDataList } from '../ddtSelectors';
-import { getIsTesting } from '../testingState';
+import { MainContentArea } from './MainContentArea';
+import { PanelContainer } from './PanelContainer';
 import type { Task, TaskTree } from '../../../../types/taskTypes';
 
 export interface ResponseEditorNormalLayoutProps {
@@ -30,7 +27,6 @@ export interface ResponseEditorNormalLayoutProps {
   selectedSubIndex: number | null | undefined;
   selectedRoot: boolean;
   selectedNode: any;
-  selectedNodePath: { mainIndex: number; subIndex?: number } | null;
   handleSelectMain: (idx: number) => void;
   handleSelectSub: (idx: number | undefined, mainIdx?: number) => void;
   handleSelectAggregator: () => void;
@@ -90,7 +86,6 @@ export interface ResponseEditorNormalLayoutProps {
 
   // Tree operations
   replaceSelectedTaskTree: (taskTree: TaskTree) => void;
-  replaceSelectedDDT: (taskTree: TaskTree) => void;
 }
 
 /**
@@ -107,7 +102,6 @@ export function ResponseEditorNormalLayout({
   selectedSubIndex,
   selectedRoot,
   selectedNode,
-  selectedNodePath,
   handleSelectMain,
   handleSelectSub,
   handleSelectAggregator,
@@ -151,12 +145,43 @@ export function ResponseEditorNormalLayout({
   tasksStartWidthRef,
   tasksStartXRef,
   replaceSelectedTaskTree,
-  replaceSelectedDDT,
 }: ResponseEditorNormalLayoutProps) {
+  // ✅ Determina la struttura del grid in base alle condizioni
+  const hasIntentEditor = mainList[0]?.kind === 'intent' && task;
+  const hasSidebar = mainList[0]?.kind !== 'intent';
+
+  // ✅ Calcola gridTemplateColumns in base alle condizioni
+  const gridTemplateColumns = hasSidebar
+    ? 'auto 8px 1fr'  // Sidebar + Resizer + Content
+    : hasIntentEditor
+      ? 'auto 1fr'     // IntentEditor + Content
+      : '1fr';         // Solo Content
+
+  // ✅ Container principale con CSS Grid
+  const gridContainerStyle: React.CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns,
+    gridTemplateRows: '1fr',
+    height: '100%',
+    minHeight: 0,
+    overflow: 'hidden',
+    flex: 1,
+  };
+
+  // ✅ Stile per l'area del contenuto centrale (MainContentArea + PanelContainer)
+  const contentAreaStyle: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'row',
+    minHeight: 0,
+    height: '100%',
+    overflow: 'hidden',
+    gridColumn: hasSidebar ? '3' : hasIntentEditor ? '2' : '1',
+  };
+
   return (
-    <>
-      {/* Left navigation - IntentListEditor quando kind === "intent", Sidebar altrimenti */}
-      {mainList[0]?.kind === 'intent' && task && (
+    <div style={gridContainerStyle}>
+      {/* Left navigation - IntentListEditor quando kind === "intent" */}
+      {hasIntentEditor && (
         <IntentListEditorWrapper
           act={task as any}
           onIntentSelect={(intentId) => {
@@ -164,7 +189,9 @@ export function ResponseEditorNormalLayout({
           }}
         />
       )}
-      {mainList[0]?.kind !== 'intent' && (
+
+      {/* Sidebar quando kind !== "intent" */}
+      {hasSidebar && (
         <>
           <Sidebar
             ref={sidebarRef}
@@ -210,176 +237,50 @@ export function ResponseEditorNormalLayout({
           />
         </>
       )}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100%', overflow: 'hidden' }}>
-        {/* Content */}
-        <div style={{ display: 'flex', minHeight: 0, flex: 1, height: '100%', overflow: 'hidden' }}>
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, padding: showMessageReview ? '8px' : '8px 8px 0 8px', height: '100%', overflow: 'hidden' }}>
-            {showMessageReview ? (
-              <div style={{ flex: 1, minHeight: 0, background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #e0d7f7', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                  <MessageReviewView node={selectedNode} translations={localTranslations} updateSelectedNode={updateSelectedNode} />
-                </div>
-              </div>
-            ) : (
-              <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
-                {showSynonyms ? (
-                  <div style={{ padding: 6, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-                    <DataExtractionEditor
-                      node={selectedNode}
-                      taskType={taskType}
-                      locale={'it-IT'}
-                      intentSelected={mainList[0]?.kind === 'intent' ? selectedIntentIdForTraining || undefined : undefined}
-                      task={task}
-                      updateSelectedNode={updateSelectedNode}
-                      contractChangeRef={contractChangeRef}
-                      initialEditor={
-                        pendingEditorOpen &&
-                        selectedNode &&
-                        (selectedNode.id === pendingEditorOpen.nodeId ||
-                         selectedNode.templateId === pendingEditorOpen.nodeId)
-                          ? pendingEditorOpen.editorType
-                          : undefined
-                      }
-                      onChange={(profile) => {
-                        if (getIsTesting()) {
-                          return;
-                        }
-                        handleProfileUpdate({
-                          ...profile,
-                          ...(profile.kind && profile.kind !== 'auto' ? { _kindManual: profile.kind } : {}),
-                        });
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <BehaviourEditor
-                    node={selectedNode}
-                    translations={localTranslations}
-                    updateSelectedNode={updateSelectedNode}
-                    selectedRoot={selectedRoot}
-                    selectedSubIndex={selectedSubIndex}
-                  />
-                )}
-              </div>
-            )}
-          </div>
-          {/* Pannello sinistro: Behaviour/Personality/Recognition */}
-          {!showSynonyms && !showMessageReview && leftPanelMode !== 'none' && leftPanelMode !== 'chat' && leftPanelMode !== 'actions' && rightWidth > 1 && (
-            <RightPanel
-              mode={leftPanelMode}
-              width={rightWidth}
-              onWidthChange={setRightWidth}
-              onStartResize={() => setDraggingPanel('left')}
-              dragging={draggingPanel === 'left'}
-              taskTree={taskTree}
-              task={task && 'templateId' in task ? task : null}
-              projectId={currentProjectId}
-              translations={localTranslations}
-              selectedNode={selectedNode}
-              onUpdateDDT={(updater) => {
-                const updated = updater(taskTree);
-                try { replaceSelectedTaskTree(updated); } catch { }
-              }}
-              tasks={escalationTasks}
-            />
-          )}
-          {/* Pannello destro: Test */}
-          {testPanelMode === 'chat' && testPanelWidth > 1 && (
-            <>
-              <RightPanel
-                mode="chat"
-                width={testPanelWidth}
-                onWidthChange={setTestPanelWidth}
-                onStartResize={() => setDraggingPanel('test')}
-                dragging={draggingPanel === 'test'}
-                hideSplitter={tasksPanelMode === 'actions' && tasksPanelWidth > 1}
-                taskTree={taskTree}
-                task={task && 'templateId' in task ? task : null}
-                projectId={currentProjectId}
-                translations={localTranslations}
-                selectedNode={selectedNode}
-                onUpdateDDT={(updater) => {
-                  const updated = updater(taskTree);
-                  try { replaceSelectedTaskTree(updated); } catch { }
-                }}
-                tasks={escalationTasks}
-              />
-              {/* Splitter condiviso tra Test e Tasks */}
-              {tasksPanelMode === 'actions' && tasksPanelWidth > 1 && (
-                <div
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setDraggingPanel('shared');
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = '#fb923c55';
-                  }}
-                  onMouseLeave={(e) => {
-                    if (draggingPanel !== 'shared') {
-                      (e.currentTarget as HTMLElement).style.background = 'transparent';
-                    }
-                  }}
-                  style={{
-                    width: 6,
-                    cursor: 'col-resize',
-                    background: draggingPanel === 'shared' ? '#fb923c55' : 'transparent',
-                    transition: 'background 0.1s ease',
-                    flexShrink: 0,
-                    zIndex: draggingPanel === 'shared' ? 10 : 1,
-                  }}
-                  aria-label="Resize test and tasks panels"
-                  role="separator"
-                />
-              )}
-            </>
-          )}
-          {/* Splitter esterno tra contenuto principale e pannello Tasks */}
-          {tasksPanelMode === 'actions' && tasksPanelWidth > 1 && (
-            <>
-              <div
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  tasksStartWidthRef.current = tasksPanelWidth;
-                  tasksStartXRef.current = e.clientX;
-                  setDraggingPanel('tasks');
-                }}
-                style={{
-                  width: 8,
-                  cursor: 'col-resize',
-                  background: draggingPanel === 'tasks' ? '#fb923c' : '#fb923c22',
-                  transition: 'background 0.15s ease',
-                  flexShrink: 0,
-                  position: 'relative',
-                  zIndex: draggingPanel === 'tasks' ? 100 : 10,
-                  userSelect: 'none',
-                  WebkitUserSelect: 'none',
-                  touchAction: 'none',
-                }}
-                aria-label="Resize tasks panel"
-                role="separator"
-              />
-              <RightPanel
-                mode="actions"
-                width={tasksPanelWidth}
-                onWidthChange={setTasksPanelWidth}
-                onStartResize={() => setDraggingPanel('tasks')}
-                dragging={draggingPanel === 'tasks'}
-                hideSplitter={true}
-                taskTree={taskTree}
-                tasks={escalationTasks}
-                translations={localTranslations}
-                selectedNode={selectedNode}
-                onUpdateDDT={(updater) => {
-                  const updated = updater(taskTree);
-                  try { replaceSelectedTaskTree(updated); } catch { }
-                }}
-              />
-            </>
-          )}
-        </div>
+
+      {/* Content Area: MainContentArea + PanelContainer */}
+      <div style={contentAreaStyle}>
+        <MainContentArea
+          showMessageReview={showMessageReview}
+          showSynonyms={showSynonyms}
+          selectedNode={selectedNode}
+          selectedRoot={selectedRoot}
+          selectedSubIndex={selectedSubIndex}
+          localTranslations={localTranslations}
+          task={task}
+          taskType={taskType}
+          mainList={mainList}
+          selectedIntentIdForTraining={selectedIntentIdForTraining}
+          updateSelectedNode={updateSelectedNode}
+          handleProfileUpdate={handleProfileUpdate}
+          contractChangeRef={contractChangeRef}
+          pendingEditorOpen={pendingEditorOpen}
+        />
+        <PanelContainer
+          leftPanelMode={leftPanelMode}
+          testPanelMode={testPanelMode}
+          tasksPanelMode={tasksPanelMode}
+          rightWidth={rightWidth}
+          testPanelWidth={testPanelWidth}
+          tasksPanelWidth={tasksPanelWidth}
+          draggingPanel={draggingPanel}
+          setDraggingPanel={setDraggingPanel}
+          setRightWidth={setRightWidth}
+          setTestPanelWidth={setTestPanelWidth}
+          setTasksPanelWidth={setTasksPanelWidth}
+          tasksStartWidthRef={tasksStartWidthRef}
+          tasksStartXRef={tasksStartXRef}
+          showSynonyms={showSynonyms}
+          showMessageReview={showMessageReview}
+          taskTree={taskTree}
+          task={task}
+          currentProjectId={currentProjectId}
+          translations={localTranslations}
+          selectedNode={selectedNode}
+          escalationTasks={escalationTasks}
+          replaceSelectedTaskTree={replaceSelectedTaskTree}
+        />
       </div>
-    </>
+    </div>
   );
 }

@@ -1,8 +1,10 @@
 import React from 'react';
-import EscalationEditor from './EscalationEditor';
 import { Plus } from 'lucide-react';
 import { stepMeta, hasEscalationCard } from './ddtUtils';
 import { updateStepEscalations } from './utils/stepHelpers';
+import { EscalationCard } from './components/EscalationCard/EscalationCard';
+import { useEscalationUpdate } from './hooks/useEscalationUpdate';
+import { getEscalationName } from './utils/escalationHelpers';
 
 type Props = {
   escalations: any[];
@@ -12,6 +14,53 @@ type Props = {
   updateSelectedNode: (updater: (node: any) => any, notifyProvider?: boolean) => void;
   stepKey: string;
 };
+
+// Componente interno per gestire il hook useEscalationUpdate
+function EscalationCardWrapper({
+  escalation,
+  escalationIdx,
+  stepLabel,
+  color,
+  translations,
+  allowedActions,
+  updateSelectedNode,
+  stepKey,
+  onDeleteEscalation,
+  autoEditTarget,
+  onAutoEditTargetChange,
+}: {
+  escalation: any;
+  escalationIdx: number;
+  stepLabel: string;
+  color: string;
+  translations: Record<string, string>;
+  allowedActions?: string[];
+  updateSelectedNode: (updater: (node: any) => any, notifyProvider?: boolean) => void;
+  stepKey: string;
+  onDeleteEscalation?: (escalationIdx: number) => void;
+  autoEditTarget: { escIdx: number; taskIdx: number } | null;
+  onAutoEditTargetChange: (target: { escIdx: number; taskIdx: number } | null) => void;
+}) {
+  const { updateEscalation } = useEscalationUpdate(updateSelectedNode, stepKey, escalationIdx);
+  const escalationName = getEscalationName(stepLabel, escalationIdx);
+
+  return (
+    <EscalationCard
+      escalation={escalation}
+      escalationIdx={escalationIdx}
+      escalationName={escalationName}
+      color={color}
+      translations={translations}
+      allowedActions={allowedActions}
+      updateEscalation={updateEscalation}
+      updateSelectedNode={updateSelectedNode}
+      onDeleteEscalation={onDeleteEscalation ? () => onDeleteEscalation(escalationIdx) : undefined}
+      autoEditTarget={autoEditTarget}
+      onAutoEditTargetChange={onAutoEditTargetChange}
+      stepKey={stepKey}
+    />
+  );
+}
 
 export default function StepEditor({
   escalations,
@@ -46,35 +95,48 @@ export default function StepEditor({
   const showEscalationCard = hasEscalationCard(stepKey);
 
   return (
-    <div className="step-editor" style={{ padding: showEscalationCard ? '1rem' : '0' }}>
-      {escalations.length === 0 ? (
-        <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
-          No escalations
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: showEscalationCard ? '1rem' : '0' }}>
-          {escalations.map((esc, idx) => (
-            <EscalationEditor
-              key={idx}
-              escalation={esc}
-              escalationIdx={idx}
-              translations={translations}
-              color={color}
-              allowedActions={allowedActions}
-              updateSelectedNode={updateSelectedNode}
-              stepKey={stepKey}
-              stepLabel={stepLabel}
-              onDeleteEscalation={handleDeleteEscalation}
-              autoEditTarget={autoEditTarget}
-              onAutoEditTargetChange={setAutoEditTarget}
-            />
-          ))}
-        </div>
-      )}
+    <div
+      className="step-editor"
+      style={{
+        padding: showEscalationCard ? '1rem' : '0',
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        minHeight: 0,
+        overflow: 'hidden',
+      }}
+    >
+      {/* ✅ Contenuto scrollabile: escalations */}
+      <div style={{ flex: 1, minHeight: 0, height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+        {escalations.length === 0 ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
+            No escalations
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: showEscalationCard ? '1rem' : '0', flex: 1, minHeight: 0 }}>
+            {escalations.map((esc, idx) => (
+              <EscalationCardWrapper
+                key={idx}
+                escalation={esc}
+                escalationIdx={idx}
+                stepLabel={stepLabel}
+                color={color}
+                translations={translations}
+                allowedActions={allowedActions}
+                updateSelectedNode={updateSelectedNode}
+                stepKey={stepKey}
+                onDeleteEscalation={handleDeleteEscalation}
+                autoEditTarget={autoEditTarget}
+                onAutoEditTargetChange={setAutoEditTarget}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
-      {/* ✅ Pulsante "+" per aggiungere escalation - mostrato solo se lo step supporta escalation multiple */}
+      {/* ✅ Pulsante "+" fisso in fondo (fuori dall'area scrollabile) */}
       {showEscalationCard && (
-        <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'center' }}>
+        <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
           <button
             onClick={handleAddEscalation}
             style={{

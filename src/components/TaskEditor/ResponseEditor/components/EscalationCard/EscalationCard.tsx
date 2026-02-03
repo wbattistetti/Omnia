@@ -65,6 +65,11 @@ export function EscalationCard({
         padding: '1rem',
         backgroundColor: `${color}08`,
         transition: 'all 0.2s',
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        minHeight: 0,
+        overflow: 'hidden',
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -78,18 +83,20 @@ export function EscalationCard({
         onDelete={onDeleteEscalation}
       />
       {isExpanded && (
-        <EscalationTasksList
-          escalation={escalation}
-          escalationIdx={escalationIdx}
-          color={color}
-          translations={translations}
-          allowedActions={allowedActions}
-          updateEscalation={updateEscalation}
-          updateSelectedNode={updateSelectedNode}
-          autoEditTarget={autoEditTarget}
-          onAutoEditTargetChange={onAutoEditTargetChange}
-          stepKey={stepKey}
-        />
+        <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+          <EscalationTasksList
+            escalation={escalation}
+            escalationIdx={escalationIdx}
+            color={color}
+            translations={translations}
+            allowedActions={allowedActions}
+            updateEscalation={updateEscalation}
+            updateSelectedNode={updateSelectedNode}
+            autoEditTarget={autoEditTarget}
+            onAutoEditTargetChange={onAutoEditTargetChange}
+            stepKey={stepKey}
+          />
+        </div>
       )}
     </div>
   );

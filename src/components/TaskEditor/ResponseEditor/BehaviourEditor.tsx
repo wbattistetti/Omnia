@@ -114,7 +114,7 @@ export default function BehaviourEditor({
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
       {/* StepsStrip in alto */}
       <div style={{ borderBottom: '1px solid #1f2340', background: '#0f1422' }}>
         <StepsStrip
@@ -126,16 +126,14 @@ export default function BehaviourEditor({
       </div>
 
       {/* StepEditor sotto */}
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-        <StepEditor
-          escalations={escalations}
-          translations={translations}
-          color={color}
-          allowedActions={allowedActions}
-          updateSelectedNode={updateSelectedNode}
-          stepKey={selectedStepKey}
-        />
-      </div>
+      <StepEditor
+        escalations={escalations}
+        translations={translations}
+        color={color}
+        allowedActions={allowedActions}
+        updateSelectedNode={updateSelectedNode}
+        stepKey={selectedStepKey}
+      />
     </div>
   );
 }

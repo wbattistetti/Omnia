@@ -30,7 +30,7 @@ const CanvasDropWrapper: React.FC<CanvasDropWrapperProps> = ({ onDropTask, onDro
   }), [handleDrop]);
 
   return (
-    <div ref={drop} style={{ position: 'relative' }}>
+    <div ref={drop} style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}>
       {children}
     </div>
   );

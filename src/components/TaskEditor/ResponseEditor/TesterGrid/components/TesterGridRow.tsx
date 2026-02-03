@@ -302,12 +302,10 @@ function TesterGridRowComponent({
               expectedKeysForKind={expectedKeysForKind}
               enabled={enabledMethods.regex}
               isRunning={rowResult.running}
-              cellOverrides={cellOverrides}
               editingCell={editingCell}
               editingText={editingText}
               setEditingCell={setEditingCell}
               setEditingText={setEditingText}
-              setCellOverrides={setCellOverrides}
               // ✅ REMOVED: Notes props - now managed via Zustand store
             />
           </td>
@@ -344,12 +342,10 @@ function TesterGridRowComponent({
                 expectedKeysForKind={expectedKeysForKind}
                 enabled={enabledMethods.deterministic}
                 isRunning={rowResult.detRunning}
-                cellOverrides={cellOverrides}
                 editingCell={editingCell}
                 editingText={editingText}
                 setEditingCell={setEditingCell}
                 setEditingText={setEditingText}
-                setCellOverrides={setCellOverrides}
                 // ✅ REMOVED: Notes props - now managed via Zustand store
               />
             </td>
@@ -387,12 +383,10 @@ function TesterGridRowComponent({
                 expectedKeysForKind={expectedKeysForKind}
                 enabled={enabledMethods.ner}
                 isRunning={rowResult.nerRunning}
-                cellOverrides={cellOverrides}
                 editingCell={editingCell}
                 editingText={editingText}
                 setEditingCell={setEditingCell}
                 setEditingText={setEditingText}
-                setCellOverrides={setCellOverrides}
                 // ✅ REMOVED: Notes props - now managed via Zustand store
               />
             </td>
@@ -487,12 +481,10 @@ function TesterGridRowComponent({
               expectedKeysForKind={expectedKeysForKind}
               enabled={enabledMethods.llm}
               isRunning={rowResult.llmRunning}
-              cellOverrides={cellOverrides}
               editingCell={editingCell}
               editingText={editingText}
               setEditingCell={setEditingCell}
               setEditingText={setEditingText}
-              setCellOverrides={setCellOverrides}
               // ✅ REMOVED: Notes props - now managed via Zustand store
             />
           </td>
