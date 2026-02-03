@@ -5,6 +5,7 @@ import nlpTypesConfig from '../../../../../config/nlp-types.json';
 import { mapLabelToStandardKey } from './useRegexValidation';
 import * as testingState from '../testingState';
 import { loadContractFromNode } from '../ContractSelector/contractHelpers';
+import { TestExtractionService } from '../../../../services/TestExtractionService';
 
 export interface RowResult {
   regex?: string;
@@ -314,8 +315,20 @@ export function useExtractionTesting({
         if (bestMatch) {
           value = bestMatch[0]; // ✅ Usa il match più lungo
 
-          // Extract capture groups and map them to sub-data
-          if (bestMatch.length > 1 && node) {
+          // ✅ Extract named groups from match.groups (if available)
+          if (bestMatch.groups && node) {
+            // Use named groups directly
+            Object.entries(bestMatch.groups).forEach(([groupName, groupValue]) => {
+              if (groupValue !== undefined && groupValue !== null) {
+                const trimmedValue = String(groupValue).trim();
+                if (trimmedValue !== '') {
+                  // ✅ Use groupName directly as key (should match subTaskKey)
+                  extractedGroups[groupName] = trimmedValue;
+                }
+              }
+            });
+          } else if (bestMatch.length > 1 && node) {
+            // ✅ Fallback: numeric groups (backward compatibility)
             const allSubs = [...(node.subSlots || []), ...(node.subData || [])];
 
             // Iterate through capture groups (m[1], m[2], m[3], ...)
@@ -394,13 +407,58 @@ export function useExtractionTesting({
     }));
   }, []);
 
-  // ✅ STEP 1: Run test for a single row - solo regex reale (sync), resto dummy
+  // ✅ STEP 1: Run test for a single row - uses backend runtime (engine + contract)
   const runRowTest = useCallback(async (idx: number, isBatch: boolean = false) => {
     const phrase = examplesList[idx] || '';
     if (!phrase) {
       return;
     }
 
+    // ✅ Use backend runtime if node.id is available
+    if (node?.id && enabledMethods.regex) {
+      const t0Regex = performance.now();
+      try {
+        const result = await TestExtractionService.testExtraction(node.id, phrase);
+        const regexMs = Math.round(performance.now() - t0Regex);
+
+        // Convert ExtractionResult to RowResult format
+        const summary = Object.keys(result.values).length > 0
+          ? summarizeVars(result.values, result.values.value || '')
+          : (result.hasMatch ? 'value=matched' : '—');
+
+        setRowResults(prev => {
+          const next = [...prev];
+          next[idx] = {
+            regex: enabledMethods.regex ? summary : '—',
+            regexMs: enabledMethods.regex ? regexMs : undefined,
+            spans: result.hasMatch ? [] : undefined, // TODO: Calculate spans from match
+            deterministic: `dummy-det-${idx}`,
+            ner: `dummy-ner-${idx}`,
+            llm: `dummy-llm-${idx}`,
+            running: false,
+            detRunning: false,
+            nerRunning: false,
+            llmRunning: false,
+            variables: result.values
+          };
+          return next;
+        });
+
+        if (!isBatch) {
+          setSelectedRow(idx);
+          testingRef.current = false;
+          setTesting(false);
+          testingState.stopTesting();
+        }
+
+        return;
+      } catch (error) {
+        console.error('[TEST] Error calling backend test extraction:', error);
+        // Fallback to local extraction
+      }
+    }
+
+    // ✅ FALLBACK: Local extraction (backward compatibility)
     // ✅ DIAGNOSTIC LOG: Verifica profile.regex prima del test
     console.log('[TEST] runRowTest - Diagnostic', {
       idx,

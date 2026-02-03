@@ -904,6 +904,55 @@ export function cloneTemplateSteps(
 }
 
 /**
+ * Derive subTaskKey from node properties
+ * Priority: subTaskKey → labelKey → label → name → id
+ * Normalizes: lowercase, replaces non-alphanumeric with _, removes leading numbers
+ * Validates: must start with letter or _ and contain only [a-z0-9_]
+ */
+export function deriveSubTaskKey(node: { subTaskKey?: string; labelKey?: string; label?: string; name?: string; id?: string }): string {
+  // Use explicit subTaskKey if present
+  if (node.subTaskKey) {
+    return node.subTaskKey;
+  }
+
+  // Fallback chain: labelKey → label → name → id
+  let source = node.labelKey || node.label || node.name || node.id || 'unknown';
+
+  // Normalize: lowercase
+  let normalized = String(source).toLowerCase();
+
+  // Replace non-alphanumeric characters with underscore
+  normalized = normalized.replace(/[^a-z0-9_]/g, '_');
+
+  // Remove leading numbers
+  normalized = normalized.replace(/^\d+/, '');
+
+  // Ensure it starts with letter or underscore
+  if (!/^[a-z_]/.test(normalized)) {
+    normalized = '_' + normalized;
+  }
+
+  // Remove consecutive underscores
+  normalized = normalized.replace(/_+/g, '_');
+
+  // Remove leading/trailing underscores
+  normalized = normalized.replace(/^_+|_+$/g, '');
+
+  // Final validation: must contain only [a-z0-9_]
+  if (!/^[a-z0-9_]+$/.test(normalized)) {
+    // Fallback to safe default
+    normalized = 'subtask';
+  }
+
+  // Ensure it's not empty
+  if (!normalized || normalized.length === 0) {
+    normalized = 'subtask';
+  }
+
+  return normalized;
+}
+
+/**
  * Build TaskTreeNode[] from template
  * ✅ Restituisce direttamente TaskTreeNode[] con subNodes[] (non subTasks[])
  * ✅ Elimina la doppia conversione: buildDataTree() → toTaskTreeNode()
@@ -928,7 +977,7 @@ export function buildTaskTreeNodes(template: any): TaskTreeNode[] {
     const subNodes = subTasksIds.map(buildNode);
 
     // ✅ Costruisci TaskTreeNode direttamente con subNodes[]
-    return {
+    const node: TaskTreeNode = {
       id: subTemplate.id || subTemplate._id,
       templateId: subTemplate.id || subTemplate._id,
       label: subTemplate.label,
@@ -938,6 +987,16 @@ export function buildTaskTreeNodes(template: any): TaskTreeNode[] {
       dataContract: subTemplate.dataContract || undefined,
       subNodes  // ✅ Direttamente subNodes[], non subTasks[]
     };
+
+    // ✅ Derive and set subTaskKey
+    node.subTaskKey = deriveSubTaskKey({
+      labelKey: subTemplate.labelKey,
+      label: subTemplate.label,
+      name: subTemplate.name,
+      id: subTemplate.id || subTemplate._id
+    });
+
+    return node;
   };
 
   // ✅ NUOVO MODELLO: Build from subTasksIds (composite template)
@@ -948,7 +1007,7 @@ export function buildTaskTreeNodes(template: any): TaskTreeNode[] {
     // ✅ FIX: Ritorna nodo radice con subNodes (non solo sub-nodi)
     // Questo permette a extractStartPrompts di identificare correttamente il nodo radice
     // e adattare solo quello, lasciando i sub-nodi con i prompt originali del template
-    return [{
+    const rootNode: TaskTreeNode = {
       id: template.id || template._id,
       templateId: template.id || template._id,
       label: template.label || template.name || undefined,  // ✅ "Date" dal template
@@ -957,7 +1016,17 @@ export function buildTaskTreeNodes(template: any): TaskTreeNode[] {
       constraints: template.dataContracts || template.constraints || [],
       dataContract: template.dataContract || undefined,
       subNodes  // ✅ Day, Month, Year come subNodes
-    }];
+    };
+
+    // ✅ Derive and set subTaskKey for root node
+    rootNode.subTaskKey = deriveSubTaskKey({
+      labelKey: template.labelKey,
+      label: template.label,
+      name: template.name,
+      id: template.id || template._id
+    });
+
+    return [rootNode];
   }
 
   // Template semplice
@@ -969,7 +1038,7 @@ export function buildTaskTreeNodes(template: any): TaskTreeNode[] {
     });
   }
 
-  return [{
+  const simpleNode: TaskTreeNode = {
     id: template.id || template._id,
     templateId: template.id || template._id,
     label: template.label || template.name || undefined,
@@ -978,7 +1047,17 @@ export function buildTaskTreeNodes(template: any): TaskTreeNode[] {
     constraints: template.dataContracts || template.constraints || [],
     dataContract: template.dataContract || undefined,
     subNodes: []
-  }];
+  };
+
+  // ✅ Derive and set subTaskKey for simple node
+  simpleNode.subTaskKey = deriveSubTaskKey({
+    labelKey: template.labelKey,
+    label: template.label,
+    name: template.name,
+    id: template.id || template._id
+  });
+
+  return [simpleNode];
 }
 
 /**

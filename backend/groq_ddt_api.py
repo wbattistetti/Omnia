@@ -1817,6 +1817,13 @@ def generate_regex(body: dict = Body(...)):
 
         # Build AI prompt for regex generation
         capture_groups_instructions = ""
+        # ✅ Check if subData contains subTaskKey (new format) or index (old format)
+        uses_named_groups = False
+        if sub_data is not None and isinstance(sub_data, list) and len(sub_data) > 0:
+            # Check if first item has subTaskKey (new format)
+            if isinstance(sub_data[0], dict) and "subTaskKey" in sub_data[0]:
+                uses_named_groups = True
+
         if sub_data is not None and isinstance(sub_data, list) and len(sub_data) > 0:
             # Enrich prompt with sub-data information for capture groups
             groups_info = []
@@ -1828,13 +1835,21 @@ def generate_regex(body: dict = Body(...)):
                         continue
                     sub_id = str(sub.get("id", "") or "").strip()
                     sub_label = str(sub.get("label", "") or "").strip()
-                    group_index = sub.get("index")
-                    if group_index is None:
-                        group_index = len(valid_sub_data) + 1
+                    sub_task_key = sub.get("subTaskKey", "")  # ✅ NEW: Get subTaskKey if available
+
+                    if uses_named_groups and sub_task_key:
+                        # ✅ NEW: Use subTaskKey for named groups
+                        valid_sub_data.append(sub)
+                        groups_info.append(f"  - Named group '{sub_task_key}': maps to sub-data ID '{sub_id}' (label: '{sub_label}')")
                     else:
-                        group_index = int(group_index)
-                    valid_sub_data.append(sub)
-                    groups_info.append(f"  - Group {group_index}: maps to sub-data ID '{sub_id}' (label: '{sub_label}')")
+                        # ✅ OLD: Backward compatibility - numeric groups
+                        group_index = sub.get("index")
+                        if group_index is None:
+                            group_index = len(valid_sub_data) + 1
+                        else:
+                            group_index = int(group_index)
+                        valid_sub_data.append(sub)
+                        groups_info.append(f"  - Group {group_index}: maps to sub-data ID '{sub_id}' (label: '{sub_label}')")
             except Exception as sub_data_error:
                 print(f"[generate-regex] Error processing sub_data: {sub_data_error}")
                 # Continue without sub-data instructions if there's an error
@@ -1844,7 +1859,50 @@ def generate_regex(body: dict = Body(...)):
             # Only add instructions if we have valid sub-data
             if len(valid_sub_data) > 0 and len(groups_info) > 0:
                 try:
-                    capture_groups_instructions = f"""
+                    if uses_named_groups:
+                        # ✅ NEW: Generate named groups using subTaskKey
+                        named_groups_list = []
+                        for sub_item in valid_sub_data:
+                            sub_task_key = sub_item.get("subTaskKey", "")
+                            label = sub_item.get("label", "")
+                            if sub_task_key:
+                                named_groups_list.append(f"- (?<{sub_task_key}>...) for \"{label}\"")
+
+                        required_group_names = [item.get("subTaskKey", "") for item in valid_sub_data if item.get("subTaskKey")]
+
+                        capture_groups_instructions = f"""
+
+CRITICAL REQUIREMENT: This field contains sub-data components. You MUST create NAMED GROUPS using these EXACT group names.
+
+The regex MUST contain these exact named groups (all optional):
+{chr(10).join(named_groups_list)}
+
+Use ONLY these exact group names: {', '.join(required_group_names)}.
+Do NOT invent group names.
+
+Named Group Requirements:
+1. Use named groups ONLY: (?<name>pattern) - NOT numeric groups like (pattern)
+2. All groups must be OPTIONAL: (?<name>pattern)? - because optionality is about user input, not task structure
+3. The number of named groups must match the number of sub-data fields ({len(valid_sub_data)} groups)
+4. Each component must be in its OWN separate named group - do NOT wrap the entire pattern in a single group
+5. Accept variations in separators and formats as described by the user
+6. Escape special characters properly for JavaScript (use \\\\ for backslashes)
+7. The regex must match realistic examples of the described format
+
+OPTIONAL GROUPS STRATEGY:
+- All groups must be optional: (?<name>pattern)? syntax
+- This allows the regex to match partial inputs and extract available components, while missing components will be requested later
+- Example for date with optional year: (?<day>\\d{{1,2}})[/-](?<month>\\d{{1,2}})(?:[/-](?<year>\\d{{2,4}}))?  ← Year group is optional, can match "16/12" or "16/12/61" or "16/12/1961"
+- Example for date with all optional: (?<day>\\d{{1,2}})?[/-]?(?<month>\\d{{1,2}})?[/-]?(?<year>\\d{{2,4}})?  ← All groups optional, allows flexible input
+
+CRITICAL: Each sub-data component needs its own named group with the EXACT name specified above.
+- WRONG: (?<date>\\d{{1,2}}[/-]\\d{{1,2}}[/-]\\d{{4}})  ← This captures the entire date as ONE group
+- CORRECT: (?<day>\\d{{1,2}})[/-](?<month>\\d{{1,2}})[/-](?<year>\\d{{4}})  ← This creates 3 separate named groups
+- CORRECT WITH OPTIONAL: (?<day>\\d{{1,2}})?[/-]?(?<month>\\d{{1,2}})?[/-]?(?<year>\\d{{2,4}})?  ← All groups optional, allows partial matches
+"""
+                    else:
+                        # ✅ OLD: Backward compatibility - numeric groups
+                        capture_groups_instructions = f"""
 
 IMPORTANT: This field contains sub-data components. You MUST create NUMERIC CAPTURE GROUPS (not named groups) that map to each sub-data component.
 

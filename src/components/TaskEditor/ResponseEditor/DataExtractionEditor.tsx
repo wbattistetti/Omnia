@@ -78,6 +78,7 @@ export default function DataExtractionEditor({
   task,
   updateSelectedNode,
   contractChangeRef,
+  initialEditor, // ✅ NEW: Editor to open on mount (from Sidebar chip click)
 }: {
   node: any;
   taskType?: TaskType; // ✅ Type del task per determinare classification vs extraction mode
@@ -92,6 +93,7 @@ export default function DataExtractionEditor({
     nodeTemplateId: string | undefined;
     nodeLabel: string | undefined;
   }>;
+  initialEditor?: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings'; // ✅ NEW: Editor to open on mount
 }) {
   // Profile state management (extracted to hook)
   const {
@@ -169,6 +171,13 @@ export default function DataExtractionEditor({
     isEditorOpen,
     isAnyEditorOpen
   } = useEditorState();
+
+  // ✅ Open initial editor if specified (from Sidebar chip click)
+  React.useEffect(() => {
+    if (initialEditor && !activeEditor) {
+      openEditor(initialEditor);
+    }
+  }, [initialEditor, activeEditor, openEditor]);
 
   // Extraction testing (extracted to hook)
   const {

@@ -14,6 +14,7 @@ import MessageReviewView from './MessageReview/MessageReviewView';
 // import SynonymsEditor from './SynonymsEditor';
 import DataExtractionEditor from './DataExtractionEditor';
 import { ContractUpdateDialog } from './ContractUpdateDialog';
+import ContractWizard from './ContractWizard/ContractWizard';
 import { updateTemplateContract, createNewTemplateFrom } from '../../../services/TemplateUpdateService';
 import DialogueTaskService from '../../../services/DialogueTaskService';
 import EditorHeader from '../../common/EditorHeader';
@@ -193,6 +194,92 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     handleSelectAggregator,
   } = useNodeSelection(0); // Initial main index
 
+  // ✅ State declarations (must be declared before useCallback hooks that use them)
+  const [pendingEditorOpen, setPendingEditorOpen] = useState<{
+    editorType: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings';
+    nodeId: string;
+  } | null>(null);
+  const [showSynonyms, setShowSynonyms] = useState(false);
+  const [showMessageReview, setShowMessageReview] = useState(false);
+  const [selectedIntentIdForTraining, setSelectedIntentIdForTraining] = useState<string | null>(null);
+  const [showContractWizard, setShowContractWizard] = useState(false);
+  // ✅ selectedNode è uno stato separato (fonte di verità durante l'editing)
+  // NON è una derivazione da localTaskTree - questo elimina race conditions e dipendenze circolari
+  const [selectedNode, setSelectedNode] = useState<any>(null);
+  const [selectedNodePath, setSelectedNodePath] = useState<{
+    mainIndex: number;
+    subIndex?: number;
+  } | null>(null);
+
+  // ✅ Helper to find and select node by ID
+  const findAndSelectNodeById = useCallback((nodeId: string) => {
+    const mains = getdataList(taskTreeRef.current || taskTree);
+    for (let mIdx = 0; mIdx < mains.length; mIdx++) {
+      const main = mains[mIdx];
+      const mainNodeId = main.id || main.templateId || main._id;
+      if (mainNodeId === nodeId) {
+        handleSelectMain(mIdx);
+        handleSelectSub(undefined);
+        return;
+      }
+      const subs = getSubDataList(main) || [];
+      for (let sIdx = 0; sIdx < subs.length; sIdx++) {
+        const sub = subs[sIdx];
+        const subNodeId = sub.id || sub.templateId || sub._id;
+        if (subNodeId === nodeId) {
+          handleSelectMain(mIdx);
+          handleSelectSub(sIdx, mIdx);
+          return;
+        }
+      }
+    }
+  }, [taskTree, handleSelectMain, handleSelectSub]);
+
+  // ✅ Handler for parser create/modify
+  const handleParserCreate = useCallback((nodeId: string, node: any) => {
+    findAndSelectNodeById(nodeId);
+    setShowSynonyms(true);
+    // TODO: Open parser creation dialog or wizard
+  }, [findAndSelectNodeById]);
+
+  const handleParserModify = useCallback((nodeId: string, node: any) => {
+    findAndSelectNodeById(nodeId);
+    setShowSynonyms(true);
+    // Editor will open automatically when Recognition panel opens
+  }, [findAndSelectNodeById]);
+
+  // ✅ Handler for engine chip click
+  const handleEngineChipClick = useCallback((
+    nodeId: string,
+    node: any,
+    editorType: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings'
+  ) => {
+    findAndSelectNodeById(nodeId);
+    setShowSynonyms(true);
+    // Set pending editor to open after Recognition panel is ready
+    setPendingEditorOpen({ editorType, nodeId });
+  }, [findAndSelectNodeById]);
+
+  // ✅ Handler for Generate All button
+  const handleGenerateAll = useCallback(() => {
+    setShowContractWizard(true);
+  }, []);
+
+  // ✅ Clear pending editor after it's been opened
+  React.useEffect(() => {
+    if (pendingEditorOpen && showSynonyms && selectedNode) {
+      const nodeId = selectedNode.id || selectedNode.templateId;
+      if (nodeId === pendingEditorOpen.nodeId) {
+        // Editor will be opened by DataExtractionEditor via initialEditor prop
+        // Clear pending after a short delay to allow editor to open
+        const timer = setTimeout(() => {
+          setPendingEditorOpen(null);
+        }, 100);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [pendingEditorOpen, showSynonyms, selectedNode]);
+
   // ✅ TaskTree come ref mutabile (simula VB.NET: modifica diretta sulla struttura in memoria)
   const taskTreeRef = useRef(taskTree);
 
@@ -364,14 +451,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
 
   // ❌ REMOVED: Sync from ddt.translations - translations are now in global table only
   // Translations are updated via the effect above that watches globalTranslations
-
-  // ✅ selectedNode è uno stato separato (fonte di verità durante l'editing)
-  // NON è una derivazione da localTaskTree - questo elimina race conditions e dipendenze circolari
-  const [selectedNode, setSelectedNode] = useState<any>(null);
-  const [selectedNodePath, setSelectedNodePath] = useState<{
-    mainIndex: number;
-    subIndex?: number;
-  } | null>(null);
 
   // ✅ Quando chiudi, usa direttamente taskTreeRef.current (già contiene tutte le modifiche)
   // Non serve più buildTaskTree perché le modifiche sono già nel ref
@@ -557,9 +636,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   const rightMode: RightPanelMode = testPanelMode === 'chat' ? 'chat' : leftPanelMode;
   // ✅ Stati di dragging separati per ogni pannello
   const [draggingPanel, setDraggingPanel] = useState<'left' | 'test' | 'tasks' | 'shared' | null>(null);
-  const [showSynonyms, setShowSynonyms] = useState(false);
-  const [showMessageReview, setShowMessageReview] = useState(false);
-  const [selectedIntentIdForTraining, setSelectedIntentIdForTraining] = useState<string | null>(null);
 
   // Header: icon, title, and toolbar
   // ✅ CRITICAL: NO FALLBACK - type MUST be present
@@ -649,6 +725,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     onTasksPanelModeChange: saveTasksPanelMode, // Nuovo handler
     onToggleSynonyms: () => setShowSynonyms(v => !v),
     onToggleMessageReview: () => setShowMessageReview(v => !v),
+    onOpenContractWizard: () => setShowContractWizard(true), // Nuovo: apri wizard contract
     rightWidth,
     onRightWidthChange: setRightWidth,
     testPanelWidth,
@@ -1866,6 +1943,26 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
               <div style={{ fontSize: '14px', color: '#94a3b8' }}>Un attimo solo...</div>
             </div>
           </div>
+        ) : showContractWizard ? (
+          /* Contract & Parser Generation Wizard - Integrated Mode */
+          <ContractWizard
+            taskTree={taskTreeRef.current}
+            integrated={true}
+            onClose={() => setShowContractWizard(false)}
+            onNodeUpdate={(nodeId) => {
+              // ✅ Trigger refresh of parser status in Sidebar
+              // This will be handled by ParserStatusRow's internal refresh
+              console.log('[ResponseEditor] Node updated:', nodeId);
+              // Force re-render of Sidebar to show updated parser status
+              setTaskTreeVersion(v => v + 1);
+            }}
+            onComplete={(results) => {
+              console.log('[ResponseEditor] Contract wizard completed:', results);
+              setShowContractWizard(false);
+              // Force re-render of Sidebar to show updated parser status
+              setTaskTreeVersion(v => v + 1);
+            }}
+          />
         ) : showWizard ? (
           /* Full-screen wizard without RightPanel */
           /* ✅ FIX: Non montare wizard se dovrebbe avere inferenceResult ma non ce l'ha ancora */
@@ -2243,6 +2340,10 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
                     try { replaceSelectedTaskTree(next); } catch { }
                   }}
                   onSelectAggregator={handleSelectAggregator}
+                  onParserCreate={handleParserCreate}
+                  onParserModify={handleParserModify}
+                  onEngineChipClick={handleEngineChipClick}
+                  onGenerateAll={handleGenerateAll}
                 />
                 {/* ✅ REFACTOR: Resizer verticale tra Sidebar e contenuto principale - sempre visibile */}
                 <div
@@ -2289,6 +2390,14 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
                             task={task}
                             updateSelectedNode={updateSelectedNode}
                             contractChangeRef={contractChangeRef}
+                            initialEditor={
+                              pendingEditorOpen &&
+                              selectedNode &&
+                              (selectedNode.id === pendingEditorOpen.nodeId ||
+                               selectedNode.templateId === pendingEditorOpen.nodeId)
+                                ? pendingEditorOpen.editorType
+                                : undefined
+                            }
                             onChange={(profile) => {
                               // ✅ CRITICAL: Block onChange during batch testing per prevenire feedback loop
                               if (getIsTesting()) {

@@ -327,6 +327,7 @@ export interface TaskTreeNode {
   constraints?: any[];            // ✅ Dal template (sempre, non dall'istanza)
   dataContract?: any;             // ✅ Dal template (sempre, non dall'istanza)
   subNodes?: TaskTreeNode[];     // ✅ Nodi figli (ricorsivo)
+  subTaskKey?: string;            // ✅ Chiave tecnica stabile per named groups regex (derivata da labelKey/label/name/id)
 }
 
 /**

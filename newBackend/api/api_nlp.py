@@ -39,13 +39,36 @@ def refine_extractor(body: dict = Body(...)):
 @router.post("/api/nlp/generate-regex")
 def generate_regex(body: dict = Body(...)):
     """
-    Generate a regex pattern from a natural language description
+    Generate a regex pattern using fixed template and semantic contract
     """
     from newBackend.services.svc_ai_client import chat_json
     from newBackend.core.core_settings import OPENAI_KEY
+    import json
 
-    description = (body or {}).get("description", "").strip()
-    feedback = (body or {}).get("feedback", [])  # ✅ NEW: Feedback items from test notes
+    description = (body or {}).get("description", "").strip()  # ✅ Full prompt from fixed template
+    tree_structure = (body or {}).get("treeStructure")  # ✅ Semantic contract
+    tester_feedback = (body or {}).get("testerFeedback", [])  # ✅ Tester feedback in correct format
+    engine = (body or {}).get("engine", "regex")  # ✅ Engine type
+    provider = (body or {}).get("provider", "openai")
+    model = (body or {}).get("model")
+
+    # ✅ LOG DETTAGLIATO DEL MESSAGGIO COMPLETO ALL'AI
+    print("\n" + "="*60)
+    print("[apiNew] MESSAGGIO COMPLETO ALL'AI (Refine Regex)")
+    print("="*60)
+    print(f"[apiNew] PROMPT (from fixed template):")
+    print(f"[apiNew] {description[:200]}...")  # First 200 chars
+    print("-"*60)
+    print(f"[apiNew] REQUEST BODY COMPLETO:")
+    print(f"[apiNew] {json.dumps(body, indent=2, ensure_ascii=False)}")
+    print("-"*60)
+    print(f"[apiNew] CONFIGURAZIONE:")
+    print(f"[apiNew]   - Provider: {provider}")
+    print(f"[apiNew]   - Model: {model or '(default)'}")
+    print(f"[apiNew]   - Engine: {engine}")
+    print(f"[apiNew]   - Has Contract: {tree_structure is not None}")
+    print(f"[apiNew]   - Tester Feedback: {len(tester_feedback) if isinstance(tester_feedback, list) else 0} items")
+    print("="*60)
 
     if not description:
         return {"error": "Description is required"}
@@ -53,66 +76,23 @@ def generate_regex(body: dict = Body(...)):
     if not OPENAI_KEY:
         return {"error": "OPENAI_KEY not configured"}
 
-    # ✅ Build feedback section if available
-    feedback_section = ""
-    if feedback and isinstance(feedback, list) and len(feedback) > 0:
-        feedback_items = []
-        for fb in feedback:
-            if isinstance(fb, dict):
-                test_phrase = fb.get("testPhrase", "")
-                extracted_value = fb.get("extractedValue", "")
-                user_note = fb.get("userNote", "")
-                if test_phrase and user_note:
-                    feedback_items.append(f"- Test phrase: \"{test_phrase}\"\n  Current extraction: \"{extracted_value}\"\n  User feedback: \"{user_note}\"")
+    # ✅ Prompt is already built with fixed template in frontend
+    # description contains the complete prompt from buildAIPrompt()
+    prompt = description
 
-        if feedback_items:
-            feedback_section = f"""
+    # ✅ Get system message based on engine
+    system_message = get_system_message_for_engine(engine)
 
-User feedback from test results:
-{chr(10).join(feedback_items)}
-
-Please refine the regex to address all the user feedback above. The regex should extract the correct values as described in the user notes.
-"""
-
-    prompt = f"""
-You are a regex expert. Generate a JavaScript-compatible regular expression pattern based on the user's description.
-
-User description: "{description}"{feedback_section}
-
-Requirements:
-1. Generate a regex pattern that matches the described pattern
-2. Escape special characters properly for JavaScript (use \\\\ for backslashes)
-3. Provide a clear explanation of what the regex matches
-4. Include 2-3 realistic examples that match the pattern
-5. Consider edge cases and common variations
-6. For Italian contexts, consider Italian formats (phone numbers, postal codes, etc.)
-
-Return ONLY a strict JSON object with this format (no markdown, no extra text):
-{{
-  "regex": "your-regex-pattern-here",
-  "explanation": "Clear explanation of what this regex matches",
-  "examples": ["example1", "example2", "example3"],
-  "flags": "gi"
-}}
-
-Common patterns for reference:
-- Email: [a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{{2,}}
-- Italian phone: \\\\+39\\\\s?\\\\d{{3}}\\\\s?\\\\d{{3}}\\\\s?\\\\d{{4}}
-- Italian postal code (CAP): \\\\d{{5}}
-- Italian tax code (CF): [A-Z]{{6}}\\\\d{{2}}[A-Z]\\\\d{{2}}[A-Z]\\\\d{{3}}[A-Z]
-- Date (dd/mm/yyyy): \\\\d{{2}}/\\\\d{{2}}/\\\\d{{4}}
-- Number: -?\\\\d+(?:[.,]\\\\d+)?
-- URL: https?://[^\\\\s/$.?#].[^\\\\s]*
-- Italian VAT (P.IVA): \\\\d{{11}}
-
-Be precise and practical. Test mentally that your regex works correctly.
-"""
+    # ✅ LOG DEL PROMPT COMPLETO PRIMA DELL'INVIO
+    print(f"[apiNew] PROMPT COMPLETO PRIMA DELL'INVIO ALL'AI:")
+    print(f"[apiNew] {prompt}")
+    print("="*60 + "\n")
 
     try:
         ai_response = chat_json([
-            {"role": "system", "content": "You are a regex expert. Always return valid JSON."},
+            {"role": "system", "content": system_message},
             {"role": "user", "content": prompt}
-        ], provider="openai")
+        ], provider=provider if provider else "openai")
 
         # Parse response
         if isinstance(ai_response, str):
@@ -137,6 +117,97 @@ Be precise and practical. Test mentally that your regex works correctly.
 
     except Exception as e:
         return {"error": f"Error generating regex: {str(e)}"}
+
+def get_system_message_for_engine(engine: str) -> str:
+    """Get system message based on engine type"""
+    if engine == 'regex':
+        return 'You are a regex expert. Always return valid JSON.'
+    elif engine == 'llm':
+        return 'You are an information extraction expert. Always return valid JSON.'
+    elif engine == 'rule_based':
+        return 'You are a rule-based extraction expert. Always return valid JSON.'
+    else:
+        return 'You are a data extraction expert. Always return valid JSON.'
+
+@router.post("/api/task/{task_id}/test-extraction")
+async def test_extraction(task_id: str, body: dict = Body(...)):
+    """
+    Test extraction using full runtime (engine + contract)
+    Backend executes engine and applies contract for normalization/validation
+    """
+    try:
+        text = body.get("text", "")
+        if not text:
+            return {
+                "values": {},
+                "hasMatch": False,
+                "source": None,
+                "errors": ["Text is required"],
+                "confidence": 0
+            }
+
+        # Load contract and engine from template
+        from newBackend.services.database_service import databaseService
+
+        # Load task from database
+        collection = databaseService.db["Tasks"]
+        task = collection.find_one({
+            "$or": [
+                {"id": task_id},
+                {"_id": task_id}
+            ]
+        })
+
+        if not task:
+            return {
+                "values": {},
+                "hasMatch": False,
+                "source": None,
+                "errors": [f"Task not found: {task_id}"],
+                "confidence": 0
+            }
+
+        # Extract semantic contract and engine
+        contract = task.get("semanticContract")
+        engine = task.get("engine")
+
+        if not contract:
+            return {
+                "values": {},
+                "hasMatch": False,
+                "source": None,
+                "errors": [f"Semantic contract not found for task: {task_id}"],
+                "confidence": 0
+            }
+
+        if not engine:
+            return {
+                "values": {},
+                "hasMatch": False,
+                "source": None,
+                "errors": [f"Engine not found for task: {task_id}"],
+                "confidence": 0
+            }
+
+        # Create ContractExtractor and extract
+        from newBackend.services.contract_extractor import ContractExtractor
+
+        extractor = ContractExtractor(contract, engine)
+        result = extractor.extract(text)
+
+        return result
+
+    except Exception as e:
+        import traceback
+        print(f"[TEST_EXTRACTION] Error: {str(e)}")
+        traceback.print_exc()
+        return {
+            "values": {},
+            "hasMatch": False,
+            "source": None,
+            "errors": [str(e)],
+            "confidence": 0
+        }
 
 @router.post("/api/ner/extract")
 def ner_extract(body: dict = Body(...)):

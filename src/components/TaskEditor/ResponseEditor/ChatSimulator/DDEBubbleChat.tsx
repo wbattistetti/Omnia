@@ -465,10 +465,14 @@ export default function DDEBubbleChat({
         throw new Error(`Failed to send input: ${response.statusText} - ${errorText}`);
       }
 
-      setIsWaitingForInput(false);
+      // ✅ Lo stato isWaitingForInput verrà gestito dall'evento SSE waitingForInput
+      // Non impostiamo false qui perché il backend potrebbe ancora processare l'input
+      // e inviare un nuovo evento waitingForInput dopo aver eseguito il messaggio di risposta
     } catch (error) {
       console.error('[DDEBubbleChat] Error sending input', error);
       setBackendError(error instanceof Error ? error.message : 'Failed to send input to backend');
+      // ✅ In caso di errore, riabilita l'input per permettere un nuovo tentativo
+      setIsWaitingForInput(true);
     }
   };
 

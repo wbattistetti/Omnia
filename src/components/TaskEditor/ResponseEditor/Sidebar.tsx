@@ -7,6 +7,8 @@ import getIconComponent from './icons';
 import styles from './ResponseEditor.module.css';
 import { useFontContext } from '../../../context/FontContext';
 import { useProjectTranslations } from '../../../context/ProjectTranslationsContext';
+import ParserStatusRow from './Sidebar/ParserStatusRow';
+import type { EngineType } from '../../../types/semanticContract';
 
 interface SidebarProps {
   mainList: any[];
@@ -27,9 +29,38 @@ interface SidebarProps {
   onDeleteSub?: (mainIdx: number, subIdx: number) => void;
   onWidthChange?: (width: number) => void; // ✅ Nuova prop per resize manuale
   style?: React.CSSProperties; // ✅ Prop per larghezza manuale
+  // ✅ NEW: Parser-related props
+  onParserCreate?: (nodeId: string, node: any) => void;
+  onParserModify?: (nodeId: string, node: any) => void;
+  onEngineChipClick?: (nodeId: string, node: any, engineType: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings') => void;
+  onGenerateAll?: () => void; // ✅ Pulsante globale Generate All
 }
 
-const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ mainList, selectedMainIndex, onSelectMain, selectedSubIndex, onSelectSub, aggregated, rootLabel = 'Data', onSelectAggregator, onChangeSubRequired, onReorderSub, onAddMain, onRenameMain, onDeleteMain, onAddSub, onRenameSub, onDeleteSub, onWidthChange, style }, ref) {
+function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivElement>) {
+  // Destructure props to avoid Babel parser issues with long parameter lists
+  const mainList = props.mainList;
+  const selectedMainIndex = props.selectedMainIndex;
+  const onSelectMain = props.onSelectMain;
+  const selectedSubIndex = props.selectedSubIndex;
+  const onSelectSub = props.onSelectSub;
+  const aggregated = props.aggregated;
+  const rootLabel = props.rootLabel || 'Data';
+  const onSelectAggregator = props.onSelectAggregator;
+  const onChangeSubRequired = props.onChangeSubRequired;
+  const onReorderSub = props.onReorderSub;
+  const onAddMain = props.onAddMain;
+  const onRenameMain = props.onRenameMain;
+  const onDeleteMain = props.onDeleteMain;
+  const onAddSub = props.onAddSub;
+  const onRenameSub = props.onRenameSub;
+  const onDeleteSub = props.onDeleteSub;
+  const onWidthChange = props.onWidthChange;
+  const style = props.style;
+  const onParserCreate = props.onParserCreate;
+  const onParserModify = props.onParserModify;
+  const onEngineChipClick = props.onEngineChipClick;
+  const onGenerateAll = props.onGenerateAll;
+
   const { combinedClass } = useFontContext();
   const { translations } = useProjectTranslations(); // ✅ Get translations for node labels
   const dbg = (...args: any[]) => { try { if (localStorage.getItem('debug.sidebar') === '1') console.log(...args); } catch {} };
@@ -666,6 +697,31 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
                 </span>
               )}
             </button>
+            {/* ✅ Parser status row for main node */}
+            <ParserStatusRow
+              node={main}
+              onCreateClick={() => {
+                const nodeId = main.id || main.templateId || main._id;
+                onParserCreate?.(nodeId, main);
+              }}
+              onModifyClick={() => {
+                const nodeId = main.id || main.templateId || main._id;
+                onParserModify?.(nodeId, main);
+              }}
+              onEngineChipClick={(engineType) => {
+                const nodeId = main.id || main.templateId || main._id;
+                // Map EngineType to editor type
+                const editorTypeMap: Record<EngineType, 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings'> = {
+                  regex: 'regex',
+                  rule_based: 'extractor',
+                  ner: 'ner',
+                  llm: 'llm',
+                  embedding: 'embeddings',
+                };
+                const editorType = editorTypeMap[engineType] || 'regex';
+                onEngineChipClick?.(nodeId, main, editorType);
+              }}
+            />
             {editingMainIdx === idx && (
               <div style={{ marginLeft: 36, marginTop: 6 }}>
                 <input
@@ -690,75 +746,101 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
                   const disabledSub = (!isMainIncluded(idx)) || (!reqEffective);
                   const SubIcon = getIconComponent(sub?.icon || 'FileText');
                   return (
-                    <button
-                      key={sidx}
-                      draggable
-                      onDragStart={(e) => {
-                        dragStateRef.current = { mainIdx: idx, fromIdx: sidx };
-                        try { e.dataTransfer?.setData('text/plain', String(sidx)); e.dataTransfer.dropEffect = 'move'; e.dataTransfer.effectAllowed = 'move'; } catch {}
-                        try { if (localStorage.getItem('debug.sidebar')==='1') console.log('[DDT][sub.dragStart]', { main: getLabel(main, translations), from: sidx }); } catch {}
-                      }}
-                      onDragEnter={(e) => {
-                        // same-main only
-                        if (dragStateRef.current.mainIdx === idx) {
-                          e.preventDefault();
-                        }
-                      }}
-                      onDragOver={(e) => {
-                        if (dragStateRef.current.mainIdx === idx) {
-                          e.preventDefault();
-                          e.dataTransfer.dropEffect = 'move';
-                        }
-                      }}
-                      onDrop={(e) => {
-                        const st = dragStateRef.current;
-                        if (st.mainIdx === idx && st.fromIdx !== null && typeof onReorderSub === 'function') {
-                          if (st.fromIdx !== sidx) {
-                            onReorderSub(idx, st.fromIdx, sidx);
-                            try { if (localStorage.getItem('debug.sidebar')==='1') console.log('[DDT][sub.drop]', { main: getLabel(main, translations), from: st.fromIdx, to: sidx }); } catch {}
+                    <React.Fragment key={sidx}>
+                      <button
+                        draggable
+                        onDragStart={(e) => {
+                          dragStateRef.current = { mainIdx: idx, fromIdx: sidx };
+                          try { e.dataTransfer?.setData('text/plain', String(sidx)); e.dataTransfer.dropEffect = 'move'; e.dataTransfer.effectAllowed = 'move'; } catch {}
+                          try { if (localStorage.getItem('debug.sidebar')==='1') console.log('[DDT][sub.dragStart]', { main: getLabel(main, translations), from: sidx }); } catch {}
+                        }}
+                        onDragEnter={(e) => {
+                          // same-main only
+                          if (dragStateRef.current.mainIdx === idx) {
+                            e.preventDefault();
                           }
-                        }
-                        dragStateRef.current = { mainIdx: null, fromIdx: null };
-                        try { e.preventDefault(); } catch {}
-                      }}
-                      onDragEnd={() => { dragStateRef.current = { mainIdx: null, fromIdx: null }; }}
-                      onClick={(e) => {
-                        e.stopPropagation(); // ✅ Prevent event bubbling
-                        // ✅ Select both main and sub atomically to prevent race condition
-                        onSelectSub && onSelectSub(sidx, idx);
-                        (e.currentTarget as HTMLButtonElement).blur();
-                        ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus();
-                      }}
-                      onMouseEnter={(ev) => {
-                        setHoverSub({ mainIdx: idx, subIdx: sidx });
-                        const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
-                        setOverlay({ type: 'sub', mainIdx: idx, subIdx: sidx, left: rect.right + 6, top: rect.top + rect.height / 2 });
-                      }}
-                      onMouseLeave={() => {
-                        setHoverSub(curr => (curr && curr.mainIdx === idx && curr.subIdx === sidx ? null : curr));
-                        maybeHideOverlay(320);
-                      }}
-                      style={{ ...itemStyle(activeSub, true, disabledSub), ...(activeSub ? {} : { background: bgGroup }), cursor: 'grab' }}
-                      className={`sb-item ${activeSub ? styles.sidebarSelected : ''}`}
-                    >
-                      <span
-                        role="checkbox"
-                        aria-checked={reqEffective}
-                        title={reqEffective ? 'Required' : 'Optional'}
-                        onClick={(e) => { e.stopPropagation(); const next = !reqEffective; onChangeSubRequired && onChangeSubRequired(idx, sidx, next); }}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const next = !reqEffective; onChangeSubRequired && onChangeSubRequired(idx, sidx, next); } }}
-                        style={{ display: 'inline-flex', alignItems: 'center', marginRight: 6, cursor: 'pointer' }}
-                        tabIndex={0}
+                        }}
+                        onDragOver={(e) => {
+                          if (dragStateRef.current.mainIdx === idx) {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = 'move';
+                          }
+                        }}
+                        onDrop={(e) => {
+                          const st = dragStateRef.current;
+                          if (st.mainIdx === idx && st.fromIdx !== null && typeof onReorderSub === 'function') {
+                            if (st.fromIdx !== sidx) {
+                              onReorderSub(idx, st.fromIdx, sidx);
+                              try { if (localStorage.getItem('debug.sidebar')==='1') console.log('[DDT][sub.drop]', { main: getLabel(main, translations), from: st.fromIdx, to: sidx }); } catch {}
+                            }
+                          }
+                          dragStateRef.current = { mainIdx: null, fromIdx: null };
+                          try { e.preventDefault(); } catch {}
+                        }}
+                        onDragEnd={() => { dragStateRef.current = { mainIdx: null, fromIdx: null }; }}
+                        onClick={(e) => {
+                          e.stopPropagation(); // ✅ Prevent event bubbling
+                          // ✅ Select both main and sub atomically to prevent race condition
+                          onSelectSub && onSelectSub(sidx, idx);
+                          (e.currentTarget as HTMLButtonElement).blur();
+                          ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus();
+                        }}
+                        onMouseEnter={(ev) => {
+                          setHoverSub({ mainIdx: idx, subIdx: sidx });
+                          const rect = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+                          setOverlay({ type: 'sub', mainIdx: idx, subIdx: sidx, left: rect.right + 6, top: rect.top + rect.height / 2 });
+                        }}
+                        onMouseLeave={() => {
+                          setHoverSub(curr => (curr && curr.mainIdx === idx && curr.subIdx === sidx ? null : curr));
+                          maybeHideOverlay(320);
+                        }}
+                        style={{ ...itemStyle(activeSub, true, disabledSub), ...(activeSub ? {} : { background: bgGroup }), cursor: 'grab' }}
+                        className={`sb-item ${activeSub ? styles.sidebarSelected : ''}`}
                       >
-                        {reqEffective ? (
-                          <Check size={14} color="#e5e7eb" />
-                        ) : (
-                          <span style={{ width: 14, height: 14, display: 'inline-block', border: '1px solid #9ca3af', borderRadius: 3 }} />
-                        )}
-                      </span>
-                      <span style={{ display: 'inline-flex', alignItems: 'center' }}>{SubIcon}</span>
-                      <span style={{ whiteSpace: 'nowrap' }}>{getLabel(sub, translations)}</span>
-                    </button>
+                        <span
+                          role="checkbox"
+                          aria-checked={reqEffective}
+                          title={reqEffective ? 'Required' : 'Optional'}
+                          onClick={(e) => { e.stopPropagation(); const next = !reqEffective; onChangeSubRequired && onChangeSubRequired(idx, sidx, next); }}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const next = !reqEffective; onChangeSubRequired && onChangeSubRequired(idx, sidx, next); } }}
+                          style={{ display: 'inline-flex', alignItems: 'center', marginRight: 6, cursor: 'pointer' }}
+                          tabIndex={0}
+                        >
+                          {reqEffective ? (
+                            <Check size={14} color="#e5e7eb" />
+                          ) : (
+                            <span style={{ width: 14, height: 14, display: 'inline-block', border: '1px solid #9ca3af', borderRadius: 3 }} />
+                          )}
+                        </span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center' }}>{SubIcon}</span>
+                        <span style={{ whiteSpace: 'nowrap' }}>{getLabel(sub, translations)}</span>
+                      </button>
+                      {/* ✅ Parser status row for sub node */}
+                      <ParserStatusRow
+                        node={sub}
+                        onCreateClick={() => {
+                          const nodeId = sub.id || sub.templateId || sub._id;
+                          onParserCreate?.(nodeId, sub);
+                        }}
+                        onModifyClick={() => {
+                          const nodeId = sub.id || sub.templateId || sub._id;
+                          onParserModify?.(nodeId, sub);
+                        }}
+                        onEngineChipClick={(engineType) => {
+                          const nodeId = sub.id || sub.templateId || sub._id;
+                          // Map EngineType to editor type
+                          const editorTypeMap: Record<EngineType, 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings'> = {
+                            regex: 'regex',
+                            rule_based: 'extractor',
+                            ner: 'ner',
+                            llm: 'llm',
+                            embedding: 'embeddings',
+                          };
+                          const editorType = editorTypeMap[engineType] || 'regex';
+                          onEngineChipClick?.(nodeId, sub, editorType);
+                        }}
+                      />
+                    </React.Fragment>
                   );
                 })}
                 {addingSubFor === idx && (
@@ -796,6 +878,32 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
           </div>
         );
       })}
+      {/* ✅ Global Generate All button */}
+      {onGenerateAll && (
+        <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: `1px solid ${borderColor}` }}>
+          <button
+            onClick={onGenerateAll}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              fontSize: '12px',
+              fontWeight: 600,
+              background: 'rgba(96, 165, 250, 0.2)',
+              border: '1px solid rgba(96, 165, 250, 0.5)',
+              color: '#60a5fa',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+            }}
+          >
+            <Plus size={14} />
+            Genera automaticamente i parser mancanti
+          </button>
+        </div>
+      )}
       {/* floating overlay */}
       {overlay && createPortal(
         <div
@@ -834,6 +942,8 @@ const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar({ main
         </div>, document.body)}
     </div>
   );
-});
+}
+
+const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(SidebarComponent);
 export default Sidebar;
 

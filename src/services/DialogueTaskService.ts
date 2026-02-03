@@ -1,6 +1,8 @@
 // DialogueTaskService.ts
 // Service per gestire i Task di dialogo (DDT tasks) con cache in memoria
 
+import type { SemanticContract, EngineConfig, EngineEscalation } from '../types/semanticContract';
+
 export interface DialogueTask {
   _id?: string;
   id?: string;
@@ -20,6 +22,11 @@ export interface DialogueTask {
     EN?: string[];
     PT?: string[];
   };
+  // ✅ NEW: Semantic contract and engine (persisted in template)
+  semanticContract?: SemanticContract;  // Semantic contract (source of truth)
+  engine?: EngineConfig;                // Extraction engine configuration (legacy: single engine)
+  engineVersion?: number;               // Engine version for versioning
+  engineEscalations?: EngineEscalation[]; // Engine escalation configurations (per-node)
   [key: string]: any;
 }
 
@@ -296,6 +303,13 @@ export class DialogueTaskService {
     }
 
     return { saved, failed };
+  }
+
+  /**
+   * Mark a template as modified (for persistence tracking)
+   */
+  static markTemplateModified(templateId: string): void {
+    this.modifiedTemplates.add(templateId);
   }
 
   /**

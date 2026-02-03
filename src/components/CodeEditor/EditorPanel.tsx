@@ -38,9 +38,10 @@ interface EditorPanelProps {
   customLanguage?: CustomLanguage;
   useTemplate?: boolean; // Whether to inject template for empty code (default: true for conditions)
   onEditorMount?: (editor: any) => void; // ✅ Callback quando l'editor è montato
+  renderWhitespace?: 'none' | 'boundary' | 'selection' | 'trailing' | 'all'; // ✅ Render whitespace characters
 }
 
-const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>(({ code, onChange, fontSize: propFontSize, varKeys = [], language = 'javascript', customLanguage, useTemplate = true, onEditorMount }, ref) => {
+const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>(({ code, onChange, fontSize: propFontSize, varKeys = [], language = 'javascript', customLanguage, useTemplate = true, onEditorMount, renderWhitespace = 'none' }, ref) => {
   // Use font from Context if available, otherwise fallback to prop
   let fontSize: number;
   try {
@@ -277,6 +278,7 @@ const EditorPanel = React.forwardRef<{ format: () => void }, EditorPanelProps>((
           formatOnType: false,
           tabSize: 2,
           insertSpaces: true,
+          renderWhitespace: renderWhitespace, // ✅ Render whitespace characters (spaces, tabs)
         }}
         editorDidMount={(editor: any, monaco: any) => {
           // Store refs for useEffect

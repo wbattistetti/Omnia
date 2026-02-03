@@ -10,6 +10,9 @@ import { useRegexAIGeneration } from '../hooks/useRegexAIGeneration';
 import { NLPProfile } from '../DataExtractionEditor';
 import { getIsTesting } from '../testingState';
 import { useNotesStore } from '../stores/notesStore';
+import { generateBaseRegexWithNamedGroups, generateBaseRegexSimple } from '../utils/regexGroupUtils';
+import type { TaskTreeNode } from '../../../../types/taskTypes';
+import { useRegexState } from '../hooks/useRegexState';
 
 import { RowResult } from '../hooks/useExtractionTesting';
 
@@ -52,7 +55,18 @@ export default function RegexInlineEditor({
 }: RegexInlineEditorProps) {
   // ✅ Use Zustand store for notes
   const getNote = useNotesStore((s) => s.getNote);
-  const [hasUserEdited, setHasUserEdited] = React.useState(false);
+
+  // ✅ Simple state management: baselineRegex, currentText, dirty flag
+  const {
+    baselineRegex,
+    currentText,
+    isDirty,
+    updateBaseline,
+    updateCurrentText,
+  } = useRegexState({
+    initialRegex: regex || '',
+    examplesList,
+  });
 
   // Debounce timer for profile updates to avoid too many calls
   const profileUpdateTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -114,13 +128,11 @@ export default function RegexInlineEditor({
     };
   }, []);
 
-  // Use unified editor mode hook
-  const { currentValue: currentRegexValue, setCurrentValue: setCurrentRegexValue, getButtonLabel } = useEditorMode({
-    initialValue: regex,
-    templateValue: '',
-    hasUserEdited,
-    extractorType: 'regex',
-  });
+  // ✅ Use currentText from simple state model
+  const currentRegexValue = currentText;
+  const setCurrentRegexValue = (newValue: string) => {
+    updateCurrentText(newValue);
+  };
 
   // ✅ Testo guida placeholder
   const PLACEHOLDER_TEXT = "scrivi l'espressione regolare che ti serve";
@@ -134,8 +146,41 @@ export default function RegexInlineEditor({
     hasEverWritten,
   } = usePlaceholderSelection({
     placeholderText: PLACEHOLDER_TEXT,
-    currentValue: currentRegexValue,
+    currentValue: currentText,
   });
+
+  // ✅ Auto-generate base regex when editor opens and baselineRegex is empty
+  React.useEffect(() => {
+    // Only generate if baselineRegex is empty (not dirty)
+    if (baselineRegex === '' && !isDirty && node) {
+      // Get subNodes from node (support both subNodes and subData/subSlots for backward compatibility)
+      const subNodes = (node as TaskTreeNode).subNodes || node.subData || node.subSlots || [];
+
+      let baseRegex = '';
+      if (subNodes.length > 0) {
+        // Task with subTasks: generate named groups
+        baseRegex = generateBaseRegexWithNamedGroups(subNodes as TaskTreeNode[]);
+      } else {
+        // Task without subTasks: generate simple regex
+        baseRegex = generateBaseRegexSimple(kind);
+      }
+
+      if (baseRegex && baseRegex.trim().length > 0) {
+        console.log('[RegexEditor] Auto-generating base regex:', baseRegex);
+        updateBaseline(baseRegex);
+        setRegex(baseRegex);
+
+        // Save to profile if available
+        if (onProfileUpdate && profile) {
+          const updatedProfile = {
+            ...profile,
+            regex: baseRegex
+          };
+          onProfileUpdate(updatedProfile);
+        }
+      }
+    }
+  }, [baselineRegex, isDirty, node, kind, updateBaseline, setRegex, onProfileUpdate, profile]); // Run when baselineRegex changes
 
   // ✅ AI generation hook (must be before validation to get generatingRegex state)
   const {
@@ -150,8 +195,9 @@ export default function RegexInlineEditor({
     rowResults,
     // ✅ REMOVED: getNote prop - now managed via Zustand store
     onSuccess: (newRegex: string) => {
+      // ✅ Update baseline after AI generation
+      updateBaseline(newRegex);
       setRegex(newRegex);
-      setCurrentRegexValue(newRegex);
       // ✅ Save regex to profile immediately
       if (onProfileUpdate && profile) {
         const updatedProfile = {
@@ -160,8 +206,6 @@ export default function RegexInlineEditor({
         };
         onProfileUpdate(updatedProfile);
       }
-      // Reset hasUserEdited since we now have a new generated regex
-      setHasUserEdited(false);
     },
     onError: (error: Error) => {
       alert(`Error generating regex: ${error.message}`);
@@ -169,9 +213,9 @@ export default function RegexInlineEditor({
   });
 
   // ✅ Debounced value for validation (prevents flickering)
-  const debouncedRegexRef = React.useRef<string>(currentRegexValue);
+  const debouncedRegexRef = React.useRef<string>(currentText);
   const debouncedRegexTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [debouncedRegex, setDebouncedRegex] = React.useState<string>(currentRegexValue);
+  const [debouncedRegex, setDebouncedRegex] = React.useState<string>(currentText);
 
   // ✅ Update debounced value after user stops typing (300ms delay)
   React.useEffect(() => {
@@ -185,8 +229,8 @@ export default function RegexInlineEditor({
         debouncedRegexTimeoutRef.current = null;
         return;
       }
-      debouncedRegexRef.current = currentRegexValue;
-      setDebouncedRegex(currentRegexValue);
+      debouncedRegexRef.current = currentText;
+      setDebouncedRegex(currentText);
       debouncedRegexTimeoutRef.current = null;
     }, 300);
 
@@ -196,7 +240,7 @@ export default function RegexInlineEditor({
         debouncedRegexTimeoutRef.current = null;
       }
     };
-  }, [currentRegexValue]);
+  }, [currentText]);
 
   // ✅ Regex validation hook (validates on manual changes AND when AI finishes)
   // ✅ Use debounced value to prevent flickering
@@ -212,24 +256,22 @@ export default function RegexInlineEditor({
     generatingRegex, // ✅ Now correctly passed from useRegexAIGeneration
   });
 
-  // ✅ Button mode hook (determines Create vs Refine based on regex state and validation errors)
+  // ✅ Simple button mode: one button with dynamic caption
   const {
+    buttonCaption,
+    buttonEnabled,
     isCreateMode,
-    shouldShowButton,
-    isRegexEmpty,
-    hasValidationErrors,
   } = useRegexButtonMode({
-    regex: currentRegexValue,
-    hasUserEdited,
-    validationResult,
-    placeholderText: PLACEHOLDER_TEXT,
+    baselineRegex,
+    isDirty,
+    hasValidationErrors: validationResult !== null && !validationResult.valid && validationResult.errors.length > 0, // ✅ Include validation errors
   });
 
   // ✅ Verifica se c'è contenuto reale (non solo placeholder)
   const hasRealContent = React.useMemo(() => {
-    if (!currentRegexValue || currentRegexValue.trim() === '') return false;
-    return currentRegexValue.trim() !== PLACEHOLDER_TEXT;
-  }, [currentRegexValue]);
+    if (!currentText || currentText.trim() === '') return false;
+    return currentText.trim() !== PLACEHOLDER_TEXT;
+  }, [currentText]);
 
   // ✅ Verifica se ci sono test values definiti
   const hasTestValues = React.useMemo(() => {
@@ -237,14 +279,14 @@ export default function RegexInlineEditor({
   }, [testCases]);
 
 
-  // Update current value when regex prop changes
+  // Update currentText when regex prop changes (sync with external changes)
   React.useEffect(() => {
     // ✅ Se regex è vuoto E l'utente non ha mai scritto, usa placeholder
     // Altrimenti usa regex (anche se vuoto, per non mostrare placeholder dopo cancellazione)
     if (!regex || regex.trim() === '') {
       if (!hasEverWritten()) {
         // Prima volta: mostra placeholder
-        setCurrentRegexValue(PLACEHOLDER_TEXT);
+        updateCurrentText(PLACEHOLDER_TEXT);
         // ✅ Seleziona il placeholder quando viene impostato (dopo che l'editor è montato)
         requestAnimationFrame(() => {
           setTimeout(() => {
@@ -253,27 +295,27 @@ export default function RegexInlineEditor({
         });
       } else {
         // Dopo che ha scritto: mostra vuoto (non placeholder)
-        setCurrentRegexValue('');
+        updateCurrentText('');
       }
     } else {
-      setCurrentRegexValue(regex);
+      updateCurrentText(regex);
       markAsWritten(); // L'utente ha scritto qualcosa
     }
-  }, [regex, selectPlaceholderIfNeeded, hasEverWritten, markAsWritten]);
+  }, [regex, selectPlaceholderIfNeeded, hasEverWritten, markAsWritten, updateCurrentText]);
 
-  // ✅ Seleziona il placeholder quando currentRegexValue cambia e diventa il placeholder
+  // ✅ Seleziona il placeholder quando currentText cambia e diventa il placeholder
   React.useEffect(() => {
-    if (currentRegexValue === PLACEHOLDER_TEXT && !hasEverWritten()) {
+    if (currentText === PLACEHOLDER_TEXT && !hasEverWritten()) {
       requestAnimationFrame(() => {
         setTimeout(() => {
           selectPlaceholderIfNeeded();
         }, 150);
       });
     }
-  }, [currentRegexValue, selectPlaceholderIfNeeded, hasEverWritten]);
+  }, [currentText, selectPlaceholderIfNeeded, hasEverWritten]);
 
-  // ✅ Final shouldShowButton: consider generating state and content
-  const finalShouldShowButton = !generatingRegex && shouldShowButton && (hasRealContent || hasTestValues || isRegexEmpty);
+  // ✅ Button enabled: simple model - enabled only if dirty and not generating
+  const finalShouldShowButton = !generatingRegex && buttonEnabled;
 
   // Custom language configuration for regex
   const regexCustomLanguage: CustomLanguage = React.useMemo(() => ({
@@ -319,9 +361,10 @@ export default function RegexInlineEditor({
 
   // ✅ Unified button click handler - delegates to AI generation hook
   const handleButtonClick = React.useCallback(async () => {
-    console.log('[AI Regex] 🔵 ' + getButtonLabel() + ' clicked, starting generation');
-    await generateRegex(currentRegexValue, validationResult);
-  }, [currentRegexValue, validationResult, generateRegex, getButtonLabel]);
+    if (!buttonEnabled) return; // Don't generate if not dirty
+    console.log('[AI Regex] 🔵 ' + buttonCaption + ' clicked, starting generation');
+    await generateRegex(currentText, validationResult);
+  }, [currentText, validationResult, generateRegex, buttonCaption, buttonEnabled]);
 
   // ✅ Debounce timer for error message updates to prevent flickering
   const errorRenderTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -345,44 +388,67 @@ export default function RegexInlineEditor({
 
       if (shouldShowValidation && validationResult) {
         if (validationResult.valid) {
-          // Messaggio di successo con bordino verde
+          // ✅ Messaggio di successo sintetico - solo "OK"
           onErrorRender(
-            <span style={{
-              color: '#10b981',
-              fontWeight: 600,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '4px 10px',
-              border: '1px solid #10b981',
-              borderRadius: 4,
-              background: 'transparent',
-              whiteSpace: 'nowrap'
-            }}>
-              <CheckCircle2 size={16} />
-              <span>Gruppi corretti</span>
+            <span
+              style={{
+                color: '#10b981',
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '2px 8px',
+                border: '1px solid #10b981',
+                borderRadius: 4,
+                background: 'transparent',
+                whiteSpace: 'nowrap',
+                fontSize: '11px',
+                fontFamily: 'system-ui, -apple-system, sans-serif',
+                letterSpacing: '-0.01em',
+                marginLeft: '12px', // ✅ Staccato dalla parte sinistra
+              }}
+              title="Gruppi corretti"
+            >
+              <CheckCircle2 size={12} />
+              <span>OK</span>
             </span>
           );
         } else {
-          // Messaggio di errore con bordino rosso
-          const groupsText = `${validationResult.groupsFound}/${validationResult.groupsExpected} gruppi`;
-          const errorsText = validationResult.errors.length > 0 ? validationResult.errors.join('. ') : '';
-          const errorMsg = errorsText ? `${groupsText}. ${errorsText}` : groupsText;
+          // ✅ Messaggio di errore sintetico - solo conteggio gruppi
+          const groupsText = `${validationResult.groupsFound}/${validationResult.groupsExpected}`;
+          const fullErrorText = validationResult.errors.length > 0
+            ? `${groupsText} gruppi. ${validationResult.errors.join('. ')}`
+            : groupsText;
+
+          // Estrai i nomi mancanti per il tooltip
+          const missingGroupsMatch = validationResult.errors.find(e => e.includes('Missing named groups'));
+          const missingGroups = missingGroupsMatch
+            ? missingGroupsMatch.match(/Missing named groups: ([^.]+)/)?.[1] || ''
+            : '';
+
           onErrorRender(
-            <span style={{
-              color: '#ef4444',
-              fontWeight: 600,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '4px 10px',
-              border: '1px solid #ef4444',
-              borderRadius: 4,
-              background: 'transparent',
-              whiteSpace: 'nowrap'
-            }}>
-              <AlertTriangle size={16} />
-              <span>{errorMsg}</span>
+            <span
+              style={{
+                color: '#ef4444',
+                fontWeight: 600,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '2px 8px',
+                border: '1px solid #ef4444',
+                borderRadius: 4,
+                background: 'transparent',
+                whiteSpace: 'nowrap',
+                fontSize: '11px',
+                fontFamily: 'system-ui, -apple-system, sans-serif',
+                letterSpacing: '-0.01em',
+                marginLeft: '12px', // ✅ Staccato dalla parte sinistra
+              }}
+              title={fullErrorText} // ✅ Tooltip con messaggio completo
+            >
+              <AlertTriangle size={12} />
+              <span>{groupsText}</span>
+              {missingGroups && <span style={{ marginLeft: 4, opacity: 0.8 }}>• {missingGroups}</span>}
             </span>
           );
         }
@@ -426,6 +492,7 @@ export default function RegexInlineEditor({
         onButtonRender={onButtonRender}
         validationBadge={undefined} // ✅ Non mostrare più il validationBadge nell'EditorHeader, lo mostriamo nell'overlay header
         errorMessage={undefined} // ✅ Non mostrare più l'errorMessage nell'EditorHeader, lo mostriamo nell'overlay header
+        buttonCaption={buttonCaption} // ✅ Pass custom caption
       />
 
       <div style={{
@@ -496,7 +563,8 @@ export default function RegexInlineEditor({
               </div>
             )}
             <EditorPanel
-              code={currentRegexValue || (hasEverWritten() ? '' : PLACEHOLDER_TEXT)}
+              code={currentText || (hasEverWritten() ? '' : PLACEHOLDER_TEXT)}
+              renderWhitespace="all" // ✅ Show all whitespace characters (spaces, tabs)
               onChange={(v: string) => {
                 if (!generatingRegex) {
                   // ✅ Rimuovi placeholder se l'utente inizia a scrivere
@@ -514,7 +582,7 @@ export default function RegexInlineEditor({
                   } else if (newValue.trim() !== '' && newValue !== PLACEHOLDER_TEXT) {
                     // L'utente ha scritto qualcosa di reale (non placeholder)
                     // Se il valore precedente era il placeholder, significa che l'utente ha iniziato a scrivere
-                    if (currentRegexValue === PLACEHOLDER_TEXT) {
+                    if (currentText === PLACEHOLDER_TEXT) {
                       markAsWritten();
                     }
                   } else if (newValue === '' && hasEverWritten()) {
@@ -522,7 +590,8 @@ export default function RegexInlineEditor({
                     // Flag già settato, non serve fare nulla
                   }
 
-                  setCurrentRegexValue(newValue);
+                  // ✅ Update currentText (this will trigger dirty flag calculation)
+                  updateCurrentText(newValue);
 
                   // ✅ Salva solo se non è vuoto (non salvare il placeholder)
                   if (newValue !== PLACEHOLDER_TEXT && newValue.trim() !== '') {
@@ -532,13 +601,6 @@ export default function RegexInlineEditor({
                     setRegex('');
                   }
 
-                  // Mark as edited if different from original value (e non è placeholder/vuoto)
-                  if (newValue !== regex && newValue !== PLACEHOLDER_TEXT && newValue.trim() !== '') {
-                    setHasUserEdited(true);
-                  } else if (newValue === '' && regex && regex.trim() !== '') {
-                    // Se l'utente ha cancellato tutto, considera come modifica
-                    setHasUserEdited(true);
-                  }
                   // ✅ Debounce profile update to avoid too many calls and prevent editor freezing
                   if (profileUpdateTimeoutRef.current) {
                     clearTimeout(profileUpdateTimeoutRef.current);

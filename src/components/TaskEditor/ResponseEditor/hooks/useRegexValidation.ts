@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import nlpTypesConfig from '../../../../config/nlp-types.json';
 import { getIsTesting } from '../testingState';
+import { validateNamedGroups, extractNamedGroupsFromRegex } from '../utils/regexGroupUtils';
+import type { TaskTreeNode } from '../../../../types/taskTypes';
 
 // Validate regex capture groups against expected sub-data
 export interface ValidationResult {
@@ -47,32 +49,26 @@ function validateRegexGroups(regex: string | undefined, node: any): ValidationRe
     return result;
   }
 
-  // Get all sub-data/subSlots
-  const allSubs = [...(node.subSlots || []), ...(node.subData || [])];
-  result.groupsExpected = allSubs.length;
+  // ✅ Use subNodes if available, otherwise fallback to subData/subSlots for backward compatibility
+  const subNodes = (node as TaskTreeNode).subNodes || node.subData || node.subSlots || [];
+  result.groupsExpected = subNodes.length;
 
-  if (allSubs.length === 0) {
+  if (subNodes.length === 0) {
     // No sub-data, regex doesn't need capture groups
     result.valid = true;
     return result;
   }
 
   try {
-    // Count capture groups in regex (excluding non-capturing groups like (?: ...))
-    // Pattern: ( ... ) but not (?: ...) or (?= ...) or (?! ...)
-    const capturingGroupPattern = /\((?!\?[:=!])[^)]*\)/g;
-    const matches = regex.match(capturingGroupPattern);
+    // ✅ Validate named groups using regexGroupUtils
+    const namedGroupsValidation = validateNamedGroups(regex, subNodes as TaskTreeNode[]);
 
-    if (!matches || matches.length === 0) {
-      result.valid = false;
-      result.errors.push(`No capture groups found. Expected ${allSubs.length} capture groups for: ${allSubs.map((s: any) => s.label || s.name || 'sub-data').join(', ')}`);
-      return result;
-    }
+    result.groupsFound = namedGroupsValidation.groupsFound;
+    result.valid = namedGroupsValidation.valid;
+    result.errors = [...namedGroupsValidation.errors];
+    result.warnings = [...namedGroupsValidation.warnings];
 
-    result.groupsFound = matches.length;
-
-    // Test regex with a sample input to see what groups actually match
-    // For dates, try a sample date string
+    // ✅ Additional validation: test regex with sample input
     let testString = '';
     if (node.kind === 'date' || (node.label && /date|data/i.test(node.label))) {
       testString = '16/12/1980'; // Sample date
@@ -85,53 +81,14 @@ function validateRegexGroups(regex: string | undefined, node: any): ValidationRe
     const testMatch = testString.match(regexObj);
 
     if (!testMatch) {
-      result.warnings.push('Regex does not match test input - cannot validate capture groups');
-      // Still validate structure
-    } else {
-      // Filter out undefined/null groups
-      const actualGroups = testMatch.slice(1).filter((g: string | undefined) => g !== undefined && g !== null && String(g).trim().length > 0);
-      result.groupsFound = actualGroups.length;
-    }
+      result.warnings.push('Regex does not match test input - cannot validate extraction');
+    } else if (testMatch.groups) {
+      // ✅ Validate that named groups can extract values
+      const extractedGroups = testMatch.groups;
+      const extractedCount = Object.keys(extractedGroups).filter(key => extractedGroups[key] !== undefined && extractedGroups[key] !== null && String(extractedGroups[key]).trim().length > 0).length;
 
-    // Validate group count
-    if (result.groupsFound < result.groupsExpected) {
-      result.valid = false;
-      const expectedLabels = allSubs.slice(result.groupsFound).map((s: any) => {
-        const standardKey = mapLabelToStandardKey(s.label || s.name || '');
-        return standardKey || (s.label || s.name || 'sub-data');
-      }).join(', ');
-      result.errors.push(`Found ${result.groupsFound} capture groups but need ${result.groupsExpected}. Missing groups for: ${expectedLabels}`);
-    } else if (result.groupsFound > result.groupsExpected) {
-      result.warnings.push(`Found ${result.groupsFound} capture groups but only ${result.groupsExpected} sub-data expected. Extra groups may cause mapping issues.`);
-    }
-
-    // Validate group positions (if we have a test match)
-    if (testMatch && result.groupsFound > 0) {
-      const actualGroups = testMatch.slice(1).filter((g: string | undefined) => g !== undefined && g !== null);
-
-      for (let i = 0; i < Math.min(actualGroups.length, allSubs.length); i++) {
-        const groupValue = actualGroups[i]?.trim() || '';
-        const subData = allSubs[i];
-        const subLabel = String(subData.label || subData.name || '');
-        const standardKey = mapLabelToStandardKey(subLabel);
-
-        if (standardKey === 'day' || standardKey === 'month' || standardKey === 'year') {
-          // Should be numeric
-          const numValue = parseInt(groupValue, 10);
-          if (isNaN(numValue)) {
-            result.errors.push(`Group ${i + 1} (for '${subLabel}') contains '${groupValue}' which is not numeric. Expected number for ${standardKey}.`);
-            result.valid = false;
-          }
-        }
-
-        // Check for separators in wrong positions
-        if (groupValue.length === 1 && /[-/.\s]/.test(groupValue)) {
-          const expectedStandardKey = mapLabelToStandardKey(subLabel);
-          if (expectedStandardKey && (expectedStandardKey === 'day' || expectedStandardKey === 'month' || expectedStandardKey === 'year')) {
-            result.errors.push(`Group ${i + 1} contains separator '${groupValue}' instead of value for '${subLabel}' (${expectedStandardKey})`);
-            result.valid = false;
-          }
-        }
+      if (extractedCount === 0 && subNodes.length > 0) {
+        result.warnings.push('Named groups are present but no values were extracted from test input');
       }
     }
 

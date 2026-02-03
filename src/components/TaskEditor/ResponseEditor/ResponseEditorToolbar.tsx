@@ -1,5 +1,5 @@
 import React from 'react';
-import { Undo2, Redo2, MessageSquare, Rocket, BookOpen, List, CheckSquare } from 'lucide-react';
+import { Undo2, Redo2, MessageSquare, Rocket, BookOpen, List, CheckSquare, Sparkles } from 'lucide-react';
 import { RightPanelMode } from './RightPanel';
 
 interface ResponseEditorToolbarProps {
@@ -16,6 +16,7 @@ interface ResponseEditorToolbarProps {
   onTasksPanelModeChange: (mode: RightPanelMode) => void; // Nuovo handler
   onToggleSynonyms: () => void;
   onToggleMessageReview: () => void;
+  onOpenContractWizard?: () => void; // Nuovo: handler per aprire wizard contract
   rightWidth?: number;
   onRightWidthChange?: (width: number) => void;
   testPanelWidth?: number;
@@ -42,6 +43,7 @@ export function useResponseEditorToolbar({
   onTasksPanelModeChange, // Nuovo
   onToggleSynonyms,
   onToggleMessageReview,
+  onOpenContractWizard, // Nuovo
   rightWidth = 360,
   onRightWidthChange,
   testPanelWidth = 360,
@@ -191,6 +193,13 @@ export function useResponseEditorToolbar({
   return [
     { icon: <Undo2 size={16} />, onClick: () => { }, title: "Undo" },
     { icon: <Redo2 size={16} />, onClick: () => { }, title: "Redo" },
+    {
+      icon: <Sparkles size={16} />,
+      label: "Generate Contracts",
+      onClick: onOpenContractWizard || (() => {}),
+      title: "Automatically generate semantic contracts and parser engines for all nodes in the task tree.",
+      active: false
+    },
     {
       icon: <Rocket size={16} />,
       label: "Behaviour",

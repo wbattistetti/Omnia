@@ -14,6 +14,7 @@ interface EditorHeaderProps {
   errorMessage?: string; // Optional error message
   hideButton?: boolean; // Hide button (for overlay header)
   onButtonRender?: (button: React.ReactNode) => void; // Callback to render button elsewhere
+  buttonCaption?: string; // Optional custom button caption
 }
 
 /**
@@ -32,8 +33,13 @@ export default function EditorHeader({
   errorMessage,
   hideButton = false,
   onButtonRender,
+  buttonCaption,
 }: EditorHeaderProps) {
   const getButtonLabel = () => {
+    // Use custom caption if provided, otherwise use default
+    if (buttonCaption) {
+      return buttonCaption;
+    }
     const typeLabels: Record<ExtractorType, string> = {
       regex: 'Regex',
       extractor: 'Extractor',
@@ -87,6 +93,9 @@ export default function EditorHeader({
             alignItems: 'center',
             gap: 6,
             opacity: isGenerating ? 0.7 : 1,
+            whiteSpace: 'nowrap', // ✅ Prevent wrapping
+            minWidth: 'fit-content', // ✅ Ensure button doesn't shrink
+            flexShrink: 0, // ✅ Prevent shrinking in flex layout
           }}
         >
           {isGenerating && <Loader2 size={14} className="animate-spin" />}

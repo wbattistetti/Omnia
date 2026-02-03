@@ -2,6 +2,14 @@ import { useState, useCallback } from 'react';
 import { ValidationResult } from './useRegexValidation';
 import { RowResult } from './useExtractionTesting';
 import { useNotesStore, getCellKeyFromPhrase } from '../stores/notesStore';
+import { getSubTasksInfo } from '../utils/regexGroupUtils';
+import { deriveSubTaskKey } from '../../../../utils/taskUtils';
+import type { TaskTreeNode } from '../../../../types/taskTypes';
+import { buildSemanticContract } from '../../../../utils/semanticContractBuilder';
+import { buildAIPrompt, getSystemMessageForEngine } from '../../../../utils/aiPromptTemplates';
+import { SemanticContractService } from '../../../../services/SemanticContractService';
+import { EngineService } from '../../../../services/EngineService';
+import type { EngineConfig } from '../../../../types/semanticContract';
 
 interface FeedbackItem {
   testPhrase: string;
@@ -41,126 +49,65 @@ export function useRegexAIGeneration({
   const [regexBackup, setRegexBackup] = useState('');
 
   const generateRegex = useCallback(async (
-    currentRegex: string,
+    currentText: string, // ✅ Changed: now accepts currentText (regex + comments)
     validationResult: ValidationResult | null
   ) => {
-    let prompt = currentRegex || '';
-
-    // ✅ Collect feedback items from notes
-    const feedbackItems: FeedbackItem[] = [];
-    if (examplesList && rowResults && examplesList.length > 0) {
-      examplesList.forEach((phrase, index) => {
-        // ✅ Use phrase-based key (stable, not index-based)
-        const note = getNote(getCellKeyFromPhrase(phrase, 'regex'));
-        if (note && note.trim()) {
-          const result = rowResults[index];
-          // Extract value from result - rowResults[index].regex contains the summary (e.g., "value=1" or "day=12, month=3")
-          // For feedback, we use the summary as-is since it represents what was actually extracted
-          let extractedValue = '—';
-          if (result?.regex) {
-            extractedValue = result.regex; // This is the summary, e.g., "value=1" or "day=12, month=3"
-          }
-
-          feedbackItems.push({
-            testPhrase: phrase,
-            extractedValue: extractedValue || '—',
-            userNote: note.trim(),
-            groupKey: '0', // Default groupKey, can be extended in future
-          });
-        }
-      });
+    if (!node?.id) {
+      console.error('[AI Regex] Cannot generate: node.id is missing');
+      return;
     }
 
-    // ✅ Find test cases that don't match the current regex
-    const unmatchedTestCases: string[] = [];
-    if (currentRegex && currentRegex.trim() && testCases.length > 0) {
-      try {
-        const regexObj = new RegExp(currentRegex, 'g');
-        testCases.forEach((testCase) => {
-          const match = testCase.match(regexObj);
-          if (!match) {
-            unmatchedTestCases.push(testCase);
-          }
-        });
-      } catch (e) {
-        // Invalid regex - will be handled by validation errors
+    // ✅ Load or build semantic contract
+    let contract = await SemanticContractService.load(node.id);
+    if (!contract) {
+      // Build contract from node if not persisted
+      contract = buildSemanticContract(node as TaskTreeNode | null);
+      if (!contract) {
+        console.error('[AI Regex] Cannot generate: semantic contract is null');
+        return;
       }
+      // Save contract for future use
+      await SemanticContractService.save(node.id, contract);
+      console.log('[AI Regex] Built and saved new semantic contract');
     }
 
-    // ✅ Build prompt with feedback items if available
-    const hasFeedback = feedbackItems.length > 0;
-    const hasValidationErrors = validationResult && !validationResult.valid && validationResult.errors.length > 0;
-    const hasUnmatchedTestCases = unmatchedTestCases.length > 0;
+    // ✅ Build tester feedback in correct format
+    const testerFeedback = examplesList.map((phrase, index) => {
+      const result = rowResults?.[index];
+      const note = getNote(getCellKeyFromPhrase(phrase, 'regex'));
+      const matched = result?.regex && result.regex !== '—';
 
-    // ✅ If regex is invalid, include validation errors in the prompt
-    if (hasValidationErrors) {
-      const errorsText = validationResult!.errors.join('. ');
-      const warningsText = validationResult!.warnings.length > 0 ? ' Warnings: ' + validationResult!.warnings.join('. ') : '';
-      prompt = `Current regex: ${currentRegex}\n\nErrors found: ${errorsText}${warningsText}\n\nPlease fix the regex to include the correct capture groups. Expected ${validationResult!.groupsExpected} capture groups for: ${(() => {
-        const allSubs = [...((node?.subSlots || [])), ...(node?.subTasks || [])];
-        return allSubs.map((s: any) => s.label || s.name || 'sub-data').join(', ');
-      })()}`;
+      return {
+        value: phrase,
+        expected: (matched ? 'match' : 'no_match') as 'match' | 'no_match',
+        note: note || undefined
+      };
+    });
 
-      // ✅ Add feedback items to the prompt (priority over unmatched test cases)
-      if (hasFeedback) {
-        const feedbackText = feedbackItems.map((fb, idx) => {
-          return `${idx + 1}. Test phrase: "${fb.testPhrase}"\n   Current extraction: "${fb.extractedValue}"\n   User feedback: "${fb.userNote}"`;
-        }).join('\n\n');
-        prompt += `\n\nUser feedback from test results:\n${feedbackText}\n\nPlease refine the regex to address all the user feedback above.`;
-        console.log('[AI Regex] 🔵 Including user feedback in prompt:', feedbackItems.length, 'items');
-      } else if (hasUnmatchedTestCases) {
-        // ✅ Add unmatched test cases to the prompt (only if no feedback)
-        prompt += `\n\nIMPORTANT: The following test values should be matched by the regex but are currently NOT matching:\n${unmatchedTestCases.map(tc => `- "${tc}"`).join('\n')}\n\nPlease fix the regex so it matches all these values.`;
-      }
-
-      console.log('[AI Regex] 🔵 Refine Regex clicked with validation errors, enhancing prompt');
-    } else if (hasFeedback) {
-      // ✅ If regex is valid but has feedback items, use them for refinement
-      const allSubs = [...((node?.subSlots || [])), ...(node?.subData || [])];
-      const subLabels = allSubs.length > 0
-        ? allSubs.map((s: any) => s.label || s.name || 'sub-data').join(', ')
-        : 'the sub-data components';
-
-      const feedbackText = feedbackItems.map((fb, idx) => {
-        return `${idx + 1}. Test phrase: "${fb.testPhrase}"\n   Current extraction: "${fb.extractedValue}"\n   User feedback: "${fb.userNote}"`;
-      }).join('\n\n');
-
-      prompt = `Current regex: ${currentRegex}\n\nUser feedback from test results:\n${feedbackText}\n\nPlease refine the regex to address all the user feedback above while maintaining the existing capture groups for: ${subLabels}`;
-      console.log('[AI Regex] 🔵 Refine Regex clicked with user feedback:', feedbackItems.length, 'items');
-    } else if (hasUnmatchedTestCases) {
-      // ✅ If regex is valid but has unmatched test cases, enhance the prompt
-      const allSubs = [...((node?.subSlots || [])), ...(node?.subData || [])];
-      const subLabels = allSubs.length > 0
-        ? allSubs.map((s: any) => s.label || s.name || 'sub-data').join(', ')
-        : 'the sub-data components';
-
-      prompt = `Current regex: ${currentRegex}\n\nThe following test values should be matched by the regex but are currently NOT matching:\n${unmatchedTestCases.map(tc => `- "${tc}"`).join('\n')}\n\nPlease refine the regex so it matches all these values while maintaining the existing capture groups for: ${subLabels}`;
-      console.log('[AI Regex] 🔵 Refine Regex clicked with unmatched test cases:', unmatchedTestCases);
-    }
+    // ✅ Build prompt using fixed template
+    const prompt = buildAIPrompt({
+      contract,
+      currentText: currentText || '',
+      testerFeedback,
+      engine: 'regex'
+    });
 
     if (!prompt.trim() || prompt.trim().length < 5) {
       console.log('[AI Regex] ❌ Prompt too short, cannot generate');
       return;
     }
 
-    console.log('[AI Regex] 🔵 Starting generation with prompt:', prompt);
-    console.log('[AI Regex] 🔵 Unmatched test cases count:', unmatchedTestCases.length);
+    console.log('[AI Regex] 🔵 Starting generation with fixed template prompt');
+    console.log('[AI Regex] 🔵 Contract version:', contract.version);
+    console.log('[AI Regex] 🔵 Tester feedback count:', testerFeedback.length);
 
     // Save backup
-    setRegexBackup(currentRegex);
+    setRegexBackup(currentText);
 
     // Start generation
     setGeneratingRegex(true);
 
     try {
-      // Extract sub-data from node if available
-      const subData = (node?.subData || node?.subSlots || []) as any[];
-      const subDataInfo = subData.map((sub: any, index: number) => ({
-        id: sub.id || `sub-${index}`,
-        label: sub.label || sub.name || '',
-        index: index + 1 // Position in capture groups (1, 2, 3...)
-      }));
-
       // Get AI provider and model from localStorage
       let provider = 'groq';
       let model: string | undefined = undefined;
@@ -173,27 +120,36 @@ export function useRegexAIGeneration({
         console.warn('[AI Regex] Could not read AI config from localStorage:', e);
       }
 
+      // ✅ Build request body with contract (treeStructure) and tester feedback
       const requestBody: any = {
-        description: prompt,
-        subData: subDataInfo.length > 0 ? subDataInfo : undefined,
-        kind: kind || undefined,
+        description: prompt, // ✅ Full prompt from fixed template
+        treeStructure: contract, // ✅ Semantic contract (source of truth)
+        testerFeedback: testerFeedback, // ✅ Tester feedback in correct format
+        engine: 'regex', // ✅ Engine type
         provider,
         model
       };
 
-      // ✅ Include feedback items in request body if available
-      if (feedbackItems.length > 0) {
-        requestBody.feedback = feedbackItems.map(fb => ({
-          testPhrase: fb.testPhrase,
-          extractedValue: fb.extractedValue,
-          userNote: fb.userNote,
-          groupKey: fb.groupKey,
-        }));
-        console.log('[AI Regex] 🟢 Including feedback items in request:', feedbackItems.length);
-      }
+      // ✅ LOG DETTAGLIATO DEL MESSAGGIO COMPLETO ALL'AI
+      console.group('%c[AI Regex] MESSAGGIO COMPLETO ALL\'AI (Refine Regex)', 'color: #00ff00; font-size: 14px; font-weight: bold; background: #000; padding: 4px;');
+      console.log('%cPROMPT DESCRIPTION:', 'color: #00aaff; font-weight: bold;');
+      console.log(prompt);
+      console.log('%cREQUEST BODY COMPLETO:', 'color: #00aaff; font-weight: bold;');
+      console.log(JSON.stringify(requestBody, null, 2));
+      console.log('%cCONFIGURAZIONE:', 'color: #00aaff; font-weight: bold;');
+      console.table({
+        'Provider': provider,
+        'Model': model || '(default)',
+        'Current Regex': currentRegex || '(empty)',
+        'SubTasks': subDataInfo.length,
+        'Kind': kind || '(none)',
+        'Feedback Items': feedbackItems.length,
+        'Unmatched Test Cases': unmatchedTestCases.length,
+        'Has Validation Errors': hasValidationErrors
+      });
+      console.groupEnd();
 
       console.log('[AI Regex] 🟢 Calling API /api/nlp/generate-regex');
-      console.log('[AI Regex] 🟢 Request body:', JSON.stringify(requestBody, null, 2));
 
       const response = await fetch('/api/nlp/generate-regex', {
         method: 'POST',
@@ -218,6 +174,20 @@ export function useRegexAIGeneration({
       if (data.success && data.regex) {
         const newRegex = data.regex.trim();
         console.log('[AI Regex] ✅ Regex generated successfully:', newRegex);
+
+        // ✅ Save engine configuration
+        const engineConfig: EngineConfig = {
+          type: 'regex',
+          config: {
+            regex: newRegex
+          },
+          version: 1,
+          generatedAt: new Date(),
+          generatedBy: 'ai'
+        };
+
+        await EngineService.save(node.id, engineConfig);
+        console.log('[AI Regex] ✅ Engine saved to template');
 
         // Call success callback
         if (onSuccess) {

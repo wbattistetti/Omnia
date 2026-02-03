@@ -303,11 +303,12 @@ Public Class Parser
                 ' Altrimenti ritorna il match completo
                 Return match.Value
             Else
-                ' ❌ ERRORE BLOCCANTE: nessun match, nessun fallback
-                Throw New InvalidOperationException($"Input '{trimmedInput}' does not match the CompiledMainRegex for task node '{taskNode.Id}'. The input must match the contract regex pattern.")
+                ' ✅ CONVERSATIONAL FALLBACK: input non matcha → restituisci Nothing per permettere NoMatch
+                ' Questo è un caso conversazionale normale, non un errore strutturale
+                Return Nothing
             End If
         Catch ex As Exception
-            ' ❌ ERRORE BLOCCANTE: pattern invalido o errore di matching
+            ' ❌ ERRORE BLOCCANTE: pattern invalido o errore di matching (errore strutturale)
             Throw New InvalidOperationException($"Failed to match input '{trimmedInput}' against CompiledMainRegex for task node '{taskNode.Id}'. Error: {ex.Message}", ex)
         End Try
     End Function
@@ -356,13 +357,15 @@ Public Class Parser
                         Return extractedData
                     End If
                 End If
+                ' ✅ CONVERSATIONAL FALLBACK: match non riuscito o nessun dato estratto → restituisci Nothing per permettere NoMatch
+                Return Nothing
             Catch ex As Exception
-                ' Pattern invalido o errore di matching: NlpContract è obbligatorio
+                ' ❌ ERRORE BLOCCANTE: pattern invalido o errore di matching (errore strutturale)
                 Throw New InvalidOperationException($"Failed to extract composite data from input '{trimmedInput}' for task node '{mainTaskNode.Id}'. NlpContract is mandatory and must have valid regex patterns with SubDataMapping. Error: {ex.Message}", ex)
             End Try
         End If
 
-        ' ❌ ERRORE BLOCCANTE: NlpContract obbligatorio, nessun fallback
+        ' ❌ ERRORE BLOCCANTE: NlpContract obbligatorio, nessun fallback (errore strutturale)
         Throw New InvalidOperationException($"Task node '{mainTaskNode.Id}' has no valid NlpContract for composite data extraction. NlpContract with regex patterns and SubDataMapping is mandatory.")
     End Function
 
