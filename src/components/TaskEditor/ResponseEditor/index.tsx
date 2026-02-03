@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useMemo, useEffect, useRef, useCallback } from 'react';
 import { info } from '../../../utils/logger';
 import DDTWizard from '../../DialogueDataTemplateBuilder/DDTWizard/DDTWizard';
 import { isTaskTreeEmpty } from '../../../utils/ddt';
@@ -46,6 +46,7 @@ import { buildTaskTree } from '../../../utils/taskUtils';
 import { saveTaskOnProjectSave, saveTaskOnEditorClose, checkAndApplyTemplateSync, saveTaskToRepository } from './modules/ResponseEditor/persistence/ResponseEditorPersistence';
 import { useWizardInference } from './hooks/useWizardInference';
 import { useResponseEditorSideEffects } from './hooks/useResponseEditorSideEffects';
+import { useResponseEditorState } from './hooks/useResponseEditorState';
 import { validateTaskStructure, getTaskSemantics } from '../../../utils/taskSemantics';
 import { getIsTesting } from './testingState';
 
@@ -84,21 +85,46 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   // ✅ AI Provider per inferenza pre-wizard
   const { provider: selectedProvider, model: selectedModel } = useAIProvider();
 
-  // ✅ Service unavailable warning state (centered overlay in ResponseEditor)
-  const [serviceUnavailable, setServiceUnavailable] = React.useState<{
-    service: string;
-    message: string;
-    endpoint?: string;
-    onRetry?: () => void;
-  } | null>(null);
-
-  // ✅ Contract change dialog state
-  const [showContractDialog, setShowContractDialog] = React.useState(false);
-  const [pendingContractChange, setPendingContractChange] = React.useState<{
-    templateId: string;
-    templateLabel: string;
-    modifiedContract: any;
-  } | null>(null);
+  // ✅ All state managed by useResponseEditorState hook
+  const state = useResponseEditorState();
+  const {
+    serviceUnavailable,
+    setServiceUnavailable,
+    showContractDialog,
+    setShowContractDialog,
+    pendingContractChange,
+    setPendingContractChange,
+    escalationTasks,
+    setEscalationTasks,
+    pendingEditorOpen,
+    setPendingEditorOpen,
+    showSynonyms,
+    setShowSynonyms,
+    showMessageReview,
+    setShowMessageReview,
+    selectedIntentIdForTraining,
+    setSelectedIntentIdForTraining,
+    showContractWizard,
+    setShowContractWizard,
+    selectedNode,
+    setSelectedNode,
+    selectedNodePath,
+    setSelectedNodePath,
+    taskTreeVersion,
+    setTaskTreeVersion,
+    leftPanelMode,
+    setLeftPanelMode,
+    testPanelMode,
+    setTestPanelMode,
+    tasksPanelMode,
+    setTasksPanelMode,
+    sidebarManualWidth,
+    setSidebarManualWidth,
+    isDraggingSidebar,
+    setIsDraggingSidebar,
+    draggingPanel,
+    setDraggingPanel,
+  } = state;
 
   // ✅ Ref per accedere allo stato delle modifiche da RecognitionEditor
   const contractChangeRef = React.useRef<{
@@ -115,8 +141,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     nodeLabel: undefined
   });
 
-  // ✅ Load tasks for escalation palette
-  const [escalationTasks, setEscalationTasks] = React.useState<any[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
   const wizardOwnsDataRef = useRef(false); // Flag: wizard has control over data lifecycle
 
@@ -147,22 +171,9 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     handleSelectAggregator,
   } = useNodeSelection(0); // Initial main index
 
-  // ✅ State declarations (must be declared before useCallback hooks that use them)
-  const [pendingEditorOpen, setPendingEditorOpen] = useState<{
-    editorType: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings';
-    nodeId: string;
-  } | null>(null);
-  const [showSynonyms, setShowSynonyms] = useState(false);
-  const [showMessageReview, setShowMessageReview] = useState(false);
-  const [selectedIntentIdForTraining, setSelectedIntentIdForTraining] = useState<string | null>(null);
-  const [showContractWizard, setShowContractWizard] = useState(false);
   // ✅ selectedNode è uno stato separato (fonte di verità durante l'editing)
   // NON è una derivazione da localTaskTree - questo elimina race conditions e dipendenze circolari
-  const [selectedNode, setSelectedNode] = useState<any>(null);
-  const [selectedNodePath, setSelectedNodePath] = useState<{
-    mainIndex: number;
-    subIndex?: number;
-  } | null>(null);
+  // (selectedNode e selectedNodePath sono già estratti in useResponseEditorState)
 
   // ✅ Helper to find and select node by ID
   const findAndSelectNodeById = useCallback((nodeId: string) => {
@@ -290,7 +301,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
 
   // ✅ Usa taskTreeRef.current per mainList (contiene già le modifiche)
   // Forza re-render quando taskTreeRef cambia usando uno stato trigger
-  const [taskTreeVersion, setTaskTreeVersion] = useState(0);
+  // (taskTreeVersion è già estratto in useResponseEditorState)
   // ✅ ARCHITETTURA ESPERTO: Stabilizza isTaskTreeLoading per evitare problemi con dipendenze undefined
   const stableIsTaskTreeLoading = isTaskTreeLoading ?? false;
   const mainList = useMemo(() => {
@@ -304,12 +315,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   const isAggregatedAtomic = useMemo(() => (
     Array.isArray(mainList) && mainList.length > 1
   ), [mainList]);
-  // ✅ Stato separato per Behaviour/Personality/Recognition (mutualmente esclusivi)
-  const [leftPanelMode, setLeftPanelMode] = useState<RightPanelMode>('actions'); // Always start with tasks panel visible
-  // ✅ Stato separato per Test (indipendente)
-  const [testPanelMode, setTestPanelMode] = useState<RightPanelMode>('none'); // Test inizia chiuso
-  // ✅ Stato separato per Tasks (indipendente)
-  const [tasksPanelMode, setTasksPanelMode] = useState<RightPanelMode>('none'); // Tasks inizia chiuso
+  // ✅ Panel modes (già estratti in useResponseEditorState)
 
   const { width: rightWidth, setWidth: setRightWidth } = useRightPanelWidth(360);
 
@@ -318,10 +324,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   // ✅ Larghezza separata per il pannello Tasks (indipendente)
   const { width: tasksPanelWidth, setWidth: setTasksPanelWidth } = useRightPanelWidth(360, 'responseEditor.tasksPanelWidth');
 
-  // ✅ REFACTOR: Sidebar resize manuale solo durante la sessione (senza persistenza)
-  // L'autosize prevale sempre all'apertura
-  const [sidebarManualWidth, setSidebarManualWidth] = React.useState<number | null>(null);
-  const [isDraggingSidebar, setIsDraggingSidebar] = React.useState(false);
+  // ✅ Sidebar drag state (già estratto in useResponseEditorState)
   const sidebarStartWidthRef = React.useRef<number>(0);
   const sidebarStartXRef = React.useRef<number>(0);
 
@@ -347,8 +350,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
 
   // ✅ Mantieni rightMode per compatibilità (combinazione di leftPanelMode e testPanelMode)
   const rightMode: RightPanelMode = testPanelMode === 'chat' ? 'chat' : leftPanelMode;
-  // ✅ Stati di dragging separati per ogni pannello
-  const [draggingPanel, setDraggingPanel] = useState<'left' | 'test' | 'tasks' | 'shared' | null>(null);
+  // ✅ Splitter drag state (già estratto in useResponseEditorState)
 
   // Header: icon, title, and toolbar
   // ✅ CRITICAL: NO FALLBACK - type MUST be present
