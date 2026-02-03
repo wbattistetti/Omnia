@@ -37,6 +37,7 @@ import { ResponseEditorNormalLayout } from './components/ResponseEditorNormalLay
 import { useSidebarHandlers } from './hooks/useSidebarHandlers';
 import { validateTaskStructure, getTaskSemantics } from '../../../utils/taskSemantics';
 import { getIsTesting } from './testingState';
+import { useUpdateSelectedNode } from './modules/ResponseEditor/core/node/useUpdateSelectedNode';
 
 import type { TaskMeta } from '../EditorHost/types';
 import type { Task } from '../../../types/taskTypes';
@@ -1081,273 +1082,24 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   // ✅ Step keys e selectedStepKey sono ora gestiti internamente da BehaviourEditor
 
   // ✅ updateSelectedNode: SINGOLA FONTE DI VERITÀ = dockTree
-    // 1. Modifica taskTreeRef.current (buffer locale per editing)
+  // 1. Modifica taskTreeRef.current (buffer locale per editing)
   // 2. Aggiorna IMMEDIATAMENTE tab.taskTree nel dockTree (fonte di verità)
   // 3. React re-renderizza con tab.taskTree aggiornato
   //
   // ✅ BATCH TESTING: During batch testing, node structure is IMMUTABLE
   // This prevents feedback loops: updateSelectedNode → re-render → onChange → handleProfileUpdate → ...
-  const updateSelectedNode = useCallback((updater: (node: any) => any, notifyProvider: boolean = true) => {
-    // ✅ CRITICAL: Block structural mutations during batch testing
-    if (getIsTesting()) {
-      console.log('[updateSelectedNode] Blocked: batch testing active');
-      return;
-    }
-
-    try {
-    } catch { }
-
-    setSelectedNode((prev: any) => {
-      if (!prev || !selectedNodePath) {
-        return prev;
-      }
-
-      const updated = updater(prev) || prev;
-
-      // ✅ LOG: Always log dataContract comparison (even if unchanged)
-      const dataContractChanged = updated.dataContract !== prev.dataContract;
-      const dataContractDeepChanged = JSON.stringify(updated.dataContract) !== JSON.stringify(prev.dataContract);
-
-      const updatedRegex = updated.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
-      if (dataContractChanged && updatedRegex) {
-        console.log('[REGEX] UPDATE - updateSelectedNode', {
-          nodeId: updated.id,
-          regexPattern: updatedRegex
-        });
-      }
-
-      const { mainIndex, subIndex } = selectedNodePath;
-      const isRoot = selectedRoot || false;
-
-      // ✅ STEP 1: Costruisci il TaskTree completo aggiornato
-      const currentTaskTree = taskTreeRef.current || taskTree;
-      const updatedTaskTree = { ...currentTaskTree };
-      const mains = [...(currentTaskTree.nodes || [])];
-
-      if (mainIndex < mains.length) {
-        const main = { ...mains[mainIndex] };
-
-        if (isRoot) {
-          // Root node (introduction)
-          const newIntroStep = updated?.steps?.find((s: any) => s.type === 'introduction');
-          if (newIntroStep?.escalations?.some((esc: any) => esc?.tasks?.length > 0)) {
-            updatedTaskTree.introduction = {
-              type: 'introduction',
-              escalations: newIntroStep.escalations || []
-            };
-          } else {
-            delete updatedTaskTree.introduction;
-          }
-        } else if (subIndex === undefined) {
-          // Main node
-          mains[mainIndex] = updated;
-          updatedTaskTree.nodes = mains;
-
-          // ✅ LOG: Verifica che nlpProfile.examples sia presente dopo l'aggiornamento
-          const savedNlpProfileExamples = mains[mainIndex]?.nlpProfile?.examples;
-          if (savedNlpProfileExamples) {
-            console.log('[EXAMPLES] UPDATE - Saved to taskTreeRef.data', {
-              nodeId: updated.id,
-              mainIndex,
-              hasNlpProfile: !!mains[mainIndex]?.nlpProfile,
-              hasNlpProfileExamples: !!savedNlpProfileExamples,
-              nlpProfileExamplesCount: savedNlpProfileExamples.length,
-              nlpProfileExamples: savedNlpProfileExamples.slice(0, 3)
-            });
-          }
-
-          // ✅ CRITICAL: Salva updated.steps come dictionary
-          // ✅ NUOVO: steps è un dictionary: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
-          const nodeTemplateId = updated.templateId || updated.id; // ✅ Fallback a id se templateId non presente
-          if (nodeTemplateId && updated.steps && task) {
-            // ✅ Inizializza task.steps come dictionary se non esiste
-            if (!task.steps || typeof task.steps !== 'object' || Array.isArray(task.steps)) {
-              task.steps = {};
-            }
-
-            // ✅ updated.steps può essere dictionary o array (legacy)
-            let nodeStepsDict: Record<string, any> = {};
-            if (updated.steps && typeof updated.steps === 'object' && !Array.isArray(updated.steps)) {
-              // ✅ Già dictionary: usa direttamente
-              nodeStepsDict = updated.steps;
-            } else if (Array.isArray(updated.steps)) {
-              // ✅ Legacy array: converti in dictionary
-              console.warn('[updateSelectedNode] Converting legacy array to dictionary', { nodeTemplateId });
-              for (const step of updated.steps) {
-                if (step?.type) {
-                  nodeStepsDict[step.type] = {
-                    type: step.type,
-                    escalations: step.escalations || [],
-                    id: step.id
-                  };
-                }
-              }
-            }
-
-            // ✅ Salva nel dictionary usando nodeTemplateId come chiave
-            task.steps[nodeTemplateId] = nodeStepsDict;
-
-            // ✅ CRITICAL: Aggiorna anche taskTreeRef.current.steps per mantenere sincronizzazione
-            if (taskTreeRef.current) {
-              if (!taskTreeRef.current.steps || typeof taskTreeRef.current.steps !== 'object' || Array.isArray(taskTreeRef.current.steps)) {
-                taskTreeRef.current.steps = {};
-              }
-              taskTreeRef.current.steps[nodeTemplateId] = nodeStepsDict;
-            }
-          }
-        } else {
-          // Sub node
-          const subList = [...(main.subTasks || [])];
-          const subIdx = subList.findIndex((s: any, idx: number) => idx === subIndex);
-          if (subIdx >= 0) {
-            subList[subIdx] = updated;
-            main.subTasks = subList;
-            mains[mainIndex] = main;
-            updatedTaskTree.nodes = mains;
-
-            // ✅ CRITICAL: Salva updated.steps come dictionary
-            // ✅ NUOVO: steps è un dictionary: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
-            const nodeTemplateId = updated.templateId || updated.id; // ✅ Fallback a id se templateId non presente
-            if (nodeTemplateId && updated.steps && task) {
-              // ✅ Inizializza task.steps come dictionary se non esiste
-              if (!task.steps || typeof task.steps !== 'object' || Array.isArray(task.steps)) {
-                task.steps = {};
-              }
-
-              // ✅ updated.steps può essere dictionary o array (legacy)
-              let nodeStepsDict: Record<string, any> = {};
-              if (updated.steps && typeof updated.steps === 'object' && !Array.isArray(updated.steps)) {
-                // ✅ Già dictionary: usa direttamente
-                nodeStepsDict = updated.steps;
-              } else if (Array.isArray(updated.steps)) {
-                // ✅ Legacy array: converti in dictionary
-                console.warn('[updateSelectedNode] Converting legacy array to dictionary (sub)', { nodeTemplateId });
-                for (const step of updated.steps) {
-                  if (step?.type) {
-                    nodeStepsDict[step.type] = {
-                      type: step.type,
-                      escalations: step.escalations || [],
-                      id: step.id
-                    };
-                  }
-                }
-              }
-
-              // ✅ Salva nel dictionary usando nodeTemplateId come chiave
-              task.steps[nodeTemplateId] = nodeStepsDict;
-
-              // ✅ CRITICAL: Aggiorna anche taskTreeRef.current.steps per mantenere sincronizzazione
-              if (taskTreeRef.current) {
-                if (!taskTreeRef.current.steps || typeof taskTreeRef.current.steps !== 'object' || Array.isArray(taskTreeRef.current.steps)) {
-                  taskTreeRef.current.steps = {};
-                }
-                taskTreeRef.current.steps[nodeTemplateId] = nodeStepsDict;
-              }
-            }
-          }
-        }
-
-        // ✅ STEP 2: Valida struttura TaskTree
-        const validation = validateTaskStructure(updatedTaskTree);
-        if (!validation.valid) {
-          console.error('[ResponseEditor] Invalid TaskTree structure:', validation.error);
-          // Mostra errore all'utente (puoi aggiungere un toast/alert qui)
-          alert(`Invalid structure: ${validation.error}`);
-          return prev; // Non aggiornare se struttura invalida
-        }
-
-        // ✅ STEP 3: Aggiorna taskTreeRef.current (buffer locale)
-        taskTreeRef.current = updatedTaskTree;
-
-        // ✅ LOG: Verifica che nlpProfile.examples sia presente in taskTreeRef.current dopo l'aggiornamento
-        const taskTreeRefNlpProfileExamples = taskTreeRef.current?.nodes?.[mainIndex]?.nlpProfile?.examples;
-        if (taskTreeRefNlpProfileExamples) {
-          console.log('[EXAMPLES] UPDATE - Verified in taskTreeRef.current', {
-            nodeId: updated.id,
-            mainIndex,
-            hasNlpProfile: !!taskTreeRef.current?.nodes?.[mainIndex]?.nlpProfile,
-            hasNlpProfileExamples: !!taskTreeRefNlpProfileExamples,
-            nlpProfileExamplesCount: taskTreeRefNlpProfileExamples.length,
-            nlpProfileExamples: taskTreeRefNlpProfileExamples.slice(0, 3)
-          });
-        }
-
-        // ✅ STEP 4: Aggiorna IMMEDIATAMENTE tab.taskTree nel dockTree (FONTE DI VERITÀ) - solo se disponibili
-        if (tabId && setDockTree) {
-          setDockTree(prev =>
-            mapNode(prev, n => {
-              if (n.kind === 'tabset') {
-                const idx = n.tabs.findIndex(t => t.id === tabId);
-                if (idx !== -1 && n.tabs[idx].type === 'responseEditor') {
-                  const updatedTab = { ...n.tabs[idx], taskTree: updatedTaskTree };
-                  return {
-                    ...n,
-                    tabs: [
-                      ...n.tabs.slice(0, idx),
-                      updatedTab,
-                      ...n.tabs.slice(idx + 1)
-                    ]
-                  };
-                }
-              }
-              return n;
-            })
-          );
-        }
-
-        // ✅ STEP 5: Salvataggio implicito e immediato (SEMPRE, anche senza tabId/setDockTree)
-        // Ogni modifica viene salvata immediatamente nel taskRepository per garantire persistenza
-        // NOTA: task viene letto dal closure del useCallback, quindi è disponibile
-        const taskToSave = task; // Cattura task dal closure
-        const projectIdToSave = currentProjectId; // Cattura currentProjectId dal closure
-
-        if (taskToSave?.id || (taskToSave as any)?.instanceId) {
-          const key = ((taskToSave as any)?.instanceId || taskToSave?.id) as string;
-          // ✅ Verifica che updatedTaskTree sia valido (ha nodes o steps)
-          const hasTaskTree = updatedTaskTree && (
-            (updatedTaskTree.nodes && updatedTaskTree.nodes.length > 0) ||
-            (updatedTaskTree.steps && Array.isArray(updatedTaskTree.steps) && updatedTaskTree.steps.length > 0)
-          );
-
-          if (hasTaskTree) {
-            // Salva in modo asincrono (non bloccare l'UI)
-            void (async () => {
-              try {
-                const taskInstance = taskRepository.getTask(key);
-                const currentTemplateId = getTemplateId(taskInstance);
-
-                // ✅ Usa funzione di persistenza per salvare
-                await saveTaskToRepository(key, updatedTaskTree, taskInstance, projectIdToSave);
-              } catch (err) {
-                console.error('[ResponseEditor] Failed to save task:', err);
-              }
-            })();
-          }
-        }
-      }
-
-      // ✅ Solo invalidatore interno (non notificare provider per evitare re-mount)
-      setTaskTreeVersion(v => v + 1);
-
-      try {
-        if (localStorage.getItem('debug.nodeSync') === '1') {
-          const steps = updated?.steps || [];
-          const escalationsCount = steps.reduce((acc: number, step: any) =>
-            acc + (step?.escalations?.length || 0), 0);
-          const tasksCount = steps.reduce((acc: number, step: any) =>
-            acc + (step?.escalations?.reduce((a: number, esc: any) =>
-              a + (esc?.tasks?.length || 0), 0) || 0), 0);
-          console.log('[NODE_SYNC][UPDATE] ✅ selectedNode updated + dockTree updated', {
-            stepsCount: steps.length,
-            escalationsCount,
-            tasksCount
-          });
-        }
-      } catch { }
-
-      return updated;
-    });
-  }, [selectedNodePath, selectedRoot, tabId, setDockTree, taskTree?.label, taskTree?.nodes?.length ?? 0, task, currentProjectId]);
+  const updateSelectedNode = useUpdateSelectedNode({
+    selectedNodePath,
+    selectedRoot,
+    taskTreeRef,
+    taskTree,
+    task,
+    currentProjectId,
+    tabId,
+    setDockTree,
+    setSelectedNode,
+    setTaskTreeVersion,
+  });
 
   // ✅ NON serve più persistenza asincrona
   // Quando chiudi l'editor, costruisci il TaskTree da selectedNode e salva
