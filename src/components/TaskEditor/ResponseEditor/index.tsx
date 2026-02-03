@@ -45,6 +45,7 @@ import { mapNode, closeTab } from '../../../dock/ops';
 import { buildTaskTree } from '../../../utils/taskUtils';
 import { saveTaskOnProjectSave, saveTaskOnEditorClose, checkAndApplyTemplateSync, saveTaskToRepository } from './modules/ResponseEditor/persistence/ResponseEditorPersistence';
 import { useWizardInference } from './hooks/useWizardInference';
+import { useResponseEditorSideEffects } from './hooks/useResponseEditorSideEffects';
 import { validateTaskStructure, getTaskSemantics } from '../../../utils/taskSemantics';
 import { getIsTesting } from './testingState';
 
@@ -114,57 +115,8 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     nodeLabel: undefined
   });
 
-  // ✅ Listen for service unavailable events
-  React.useEffect(() => {
-    const handleServiceUnavailable = (event: CustomEvent) => {
-      const { service, message, endpoint, onRetry } = event.detail || {};
-      setServiceUnavailable({ service, message, endpoint, onRetry });
-      // ✅ Modal: NO auto-hide, l'utente deve chiudere manualmente con OK
-    };
-
-    window.addEventListener('service:unavailable' as any, handleServiceUnavailable);
-    return () => {
-      window.removeEventListener('service:unavailable' as any, handleServiceUnavailable);
-    };
-  }, []);
-
   // ✅ Load tasks for escalation palette
   const [escalationTasks, setEscalationTasks] = React.useState<any[]>([]);
-  React.useEffect(() => {
-    fetch('/api/factory/tasks?taskType=Action')
-      .then(res => {
-        if (!res.ok) {
-          console.warn('[ResponseEditor] Failed to load escalation tasks: HTTP', res.status);
-          return [];
-        }
-        return res.json();
-      })
-      .then(templates => {
-        // ✅ CRITICAL: Verifica che templates sia un array
-        if (!Array.isArray(templates)) {
-          console.warn('[ResponseEditor] Invalid response format, expected array, got:', typeof templates, templates);
-          setEscalationTasks([]);
-          return;
-        }
-
-        const tasks = templates.map((template: any) => ({
-          id: template.id || template._id,
-          label: template.label || '',
-          description: template.description || '',
-          icon: template.icon || 'Circle',
-          color: template.color || 'text-gray-500',
-          params: template.structure || template.params || {},
-          type: template.type,
-          allowedContexts: template.allowedContexts || []
-        }));
-
-        setEscalationTasks(tasks);
-      })
-      .catch(err => {
-        console.error('[ResponseEditor] Failed to load escalation tasks', err);
-        setEscalationTasks([]);
-      });
-  }, []);
   const rootRef = useRef<HTMLDivElement>(null);
   const wizardOwnsDataRef = useRef(false); // Flag: wizard has control over data lifecycle
 
@@ -266,93 +218,16 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     setShowContractWizard(true);
   }, []);
 
-  // ✅ Clear pending editor after it's been opened
-  React.useEffect(() => {
-    if (pendingEditorOpen && showSynonyms && selectedNode) {
-      const nodeId = selectedNode.id || selectedNode.templateId;
-      if (nodeId === pendingEditorOpen.nodeId) {
-        // Editor will be opened by DataExtractionEditor via initialEditor prop
-        // Clear pending after a short delay to allow editor to open
-        const timer = setTimeout(() => {
-          setPendingEditorOpen(null);
-        }, 100);
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [pendingEditorOpen, showSynonyms, selectedNode]);
-
   // ✅ TaskTree come ref mutabile (simula VB.NET: modifica diretta sulla struttura in memoria)
   const taskTreeRef = useRef(taskTree);
 
   // ✅ Inizializza taskTreeRef.current solo su cambio istanza (non ad ogni re-render)
   const prevInstanceRef = useRef<string | undefined>(undefined);
 
-  // ✅ Sincronizza taskTreeRef.current con taskTree prop (fonte di verità dal dockTree)
-  // Quando taskTree prop cambia (dal dockTree), aggiorna il buffer locale
-  useEffect(() => {
-    const instance = task?.instanceId || task?.id;
-    const isNewInstance = prevInstanceRef.current !== instance;
-
-    if (isNewInstance) {
-      // Nuova istanza → inizializza dal prop taskTree (fonte di verità)
-      taskTreeRef.current = taskTree;
-      prevInstanceRef.current = instance;
-      // ✅ ARCHITETTURA ESPERTO: Forza aggiornamento mainList quando TaskTree viene caricato
-      const currentList = getdataList(taskTree);
-      if (currentList && currentList.length > 0) {
-        setTaskTreeVersion(v => v + 1);
-      }
-    } else if (taskTree && taskTree !== taskTreeRef.current) {
-      // ✅ Safe comparison: check reference and nodes length instead of JSON.stringify
-      // (JSON.stringify can fail on circular references)
-      const currentList = getdataList(taskTree);
-      const prevList = getdataList(taskTreeRef.current);
-      const taskTreeChanged = taskTree !== taskTreeRef.current ||
-        (currentList?.length !== prevList?.length);
-      if (taskTreeChanged) {
-        // Stessa istanza ma taskTree prop è cambiato → sincronizza (dockTree è stato aggiornato esternamente)
-        taskTreeRef.current = taskTree;
-        // ✅ ARCHITETTURA ESPERTO: Forza aggiornamento mainList quando TaskTree viene caricato
-        if (currentList && currentList.length > 0) {
-          setTaskTreeVersion(v => v + 1);
-        }
-      }
-    }
-  }, [taskTree, (task as any)?.instanceId, task?.id]);
-
-  // ✅ Check for template sync when task is opened
-  React.useEffect(() => {
-    const checkTemplateSync = async () => {
-      if (!taskTree || !task?.templateId) return;
-
-      const syncApplied = await checkAndApplyTemplateSync(taskTree, task, currentProjectId);
-      if (syncApplied) {
-        // Update taskTreeRef and trigger re-render
-        taskTreeRef.current = { ...taskTree };
-        replaceSelectedTaskTree(taskTreeRef.current);
-      }
-    };
-
-    // Only check on initial load (when taskTree is first set)
-    if (taskTree && task?.templateId && prevInstanceRef.current === (task?.instanceId || task?.id)) {
-      checkTemplateSync();
-    }
-  }, [taskTree, task?.templateId, task?.instanceId, task?.id, replaceSelectedTaskTree, currentProjectId]);
-
   // Debug logger gated by localStorage flag: set localStorage.setItem('debug.responseEditor','1') to enable
   const log = (...args: any[]) => {
     try { if (localStorage.getItem('debug.responseEditor') === '1') console.log(...args); } catch { }
   };
-  // Removed verbose translation sources log
-  // Ensure debug flag is set once to avoid asking again
-  useEffect(() => {
-    try { localStorage.setItem('debug.responseEditor', '1'); } catch { }
-    try { localStorage.setItem('debug.reopen', '1'); } catch { }
-    try { localStorage.setItem('debug.nodeSelection', '1'); } catch { }
-    try { localStorage.setItem('debug.nodeSync', '1'); } catch { }
-    try { localStorage.setItem('debug.useDDTTranslations', '1'); } catch { }
-    try { localStorage.setItem('debug.getTaskText', '1'); } catch { }
-  }, []);
   // Get project language from localStorage (set when project is created/loaded)
   const projectLocale = useMemo<'en' | 'it' | 'pt'>(() => {
     try {
@@ -411,20 +286,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   // - Istanza: contiene SOLO override (modifiche rispetto al template)
   // - extractTaskOverrides confronta istanza con template e salva solo differenze
   // - A runtime: se mancante nell'istanza → risoluzione lazy dal template (backend VB.NET)
-  React.useEffect(() => {
-    const handleProjectSave = async () => {
-      if (task?.id || task?.instanceId) {
-        const key = (task?.instanceId || task?.id) as string;
-        const currentTaskTree = taskTreeRef.current;
-        await saveTaskOnProjectSave(key, currentTaskTree, task, currentProjectId);
-      }
-    };
-
-    window.addEventListener('project:save', handleProjectSave);
-    return () => {
-      window.removeEventListener('project:save', handleProjectSave);
-    };
-  }, [task?.id, (task as any)?.instanceId, currentProjectId]);
 
 
   // ✅ Usa taskTreeRef.current per mainList (contiene già le modifiche)
@@ -468,13 +329,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   const tasksStartWidthRef = React.useRef<number>(0);
   const tasksStartXRef = React.useRef<number>(0);
 
-  // ✅ Pulisci localStorage all'avvio per garantire che autosize prevalga
-  React.useEffect(() => {
-    try {
-      localStorage.removeItem('responseEditor.sidebarWidth');
-    } catch { }
-  }, []);
-
   const handleSidebarResizeStart = React.useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation(); // ✅ CRITICO: previeni che altri handler interferiscano
@@ -490,37 +344,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
 
     setIsDraggingSidebar(true);
   }, [sidebarRef]);
-
-  React.useEffect(() => {
-    if (!isDraggingSidebar) {
-      return;
-    }
-
-    const handleMove = (e: MouseEvent) => {
-      const deltaX = e.clientX - sidebarStartXRef.current;
-      // ✅ FIX: Aumenta maxWidth a 1000px per permettere sidebar più larghe
-      // Il minWidth rimane 160px, ma il maxWidth deve essere sufficientemente alto
-      const MIN_WIDTH = 160;
-      const MAX_WIDTH = 1000;
-      const calculatedWidth = sidebarStartWidthRef.current + deltaX;
-      const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, calculatedWidth));
-
-      setSidebarManualWidth(newWidth);
-      // ✅ NON salvare in localStorage - solo durante la sessione
-    };
-
-    const handleUp = () => {
-      setIsDraggingSidebar(false);
-    };
-
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
-
-    return () => {
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
-    };
-  }, [isDraggingSidebar]);
 
   // ✅ Mantieni rightMode per compatibilità (combinazione di leftPanelMode e testPanelMode)
   const rightMode: RightPanelMode = testPanelMode === 'chat' ? 'chat' : leftPanelMode;
@@ -792,13 +615,9 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
 
         // ✅ NUOVO MODELLO: Aggiorna solo la cache in memoria (NON salvataggio DB)
         // Il salvataggio nel DB avviene solo su comando esplicito ("Salva progetto")
-        const currentTask = taskRepository.getTask(key);
-        if (currentTask && hasTaskTree) {
-          // ✅ Usa extractTaskOverrides per estrarre solo override
-          const { extractTaskOverrides } = await import('../../../utils/taskUtils');
-          const overrides = await extractTaskOverrides(currentTask, finalTaskTree, currentProjectId || undefined);
-          // ✅ Aggiorna solo la cache in memoria
-          taskRepository.updateTask(key, overrides, currentProjectId || undefined);
+        if (hasTaskTree) {
+          // ✅ Usa funzione di persistenza per salvare
+          await saveTaskToRepository(key, finalTaskTree, task, currentProjectId);
 
           const firstNodeTestNotes = firstNode?.testNotes;
           console.log('[EXAMPLES] CLOSE - Updated TaskRepository cache with final TaskTree', {
@@ -928,23 +747,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     // DockManager chiuderà il tab solo se tab.onClose ritorna true
     return true;
   }, [replaceSelectedDDT, onClose, task?.id, (task as any)?.instanceId, currentProjectId]);
-
-  // ✅ Ref per evitare re-registrazioni quando handleEditorClose cambia
-  const handleEditorCloseRef = React.useRef(handleEditorClose);
-  React.useEffect(() => {
-    handleEditorCloseRef.current = handleEditorClose;
-  }, [handleEditorClose]);
-
-  // ✅ Registra handleEditorClose nel ref per permettere a tab.onClose di chiamarlo
-  React.useEffect(() => {
-    if (registerOnClose) {
-      // ✅ Usa ref per evitare dipendenza da handleEditorClose (evita re-registrazioni)
-      registerOnClose(() => handleEditorCloseRef.current());
-      console.log('[ResponseEditor] ✅ Registered handleEditorClose');
-    } else {
-      console.warn('[ResponseEditor] ⚠️ registerOnClose not provided');
-    }
-  }, [registerOnClose]); // ✅ Solo registerOnClose nelle dipendenze
 
   // ✅ NON serve più tracciare sincronizzazioni - selectedNode è l'unica fonte di verità
   // Helper per convertire steps (oggetto o array) in array
@@ -1442,16 +1244,8 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
                 const taskInstance = taskRepository.getTask(key);
                 const currentTemplateId = getTemplateId(taskInstance);
 
-                // ✅ NUOVO: Usa extractTaskOverrides (sempre, anche se templateId è null)
-                // Se templateId è null, viene creato automaticamente un template
-                // ✅ updatedTaskTree è già un TaskTree
-
-                // ✅ SEMPRE estrai solo override (non struttura)
-                const fieldsToSave = await extractTaskOverrides(taskInstance, updatedTaskTree, projectIdToSave || undefined);
-
-                // ✅ Aggiorna task con override (sempre, anche se templateId era null)
-                // Se templateId era null, extractTaskOverrides ha già creato il template
-                await taskRepository.updateTask(key, fieldsToSave, projectIdToSave || undefined);
+                // ✅ Usa funzione di persistenza per salvare
+                await saveTaskToRepository(key, updatedTaskTree, taskInstance, projectIdToSave);
               } catch (err) {
                 console.error('[ResponseEditor] Failed to save task:', err);
               }
@@ -1490,70 +1284,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
 
   // kept for future translation edits in StepEditor
 
-  // ✅ Splitter drag handlers - gestisce tutti i pannelli in base a draggingPanel
-  useEffect(() => {
-    if (!draggingPanel) return;
-
-    const onMove = (e: MouseEvent) => {
-      const total = window.innerWidth;
-      const minWidth = 160;
-      const leftMin = 320;
-
-      if (draggingPanel === 'left') {
-        // Pannello sinistro: calcola dalla posizione del mouse (da sinistra)
-        const maxRight = Math.max(minWidth, total - leftMin);
-        const newWidth = Math.max(minWidth, Math.min(maxRight, total - e.clientX));
-        setRightWidth(newWidth);
-      } else if (draggingPanel === 'test') {
-        // Pannello Test: calcola dalla posizione del mouse
-        // Quando ridimensiono Test, Tasks viene spinto a destra (flexbox gestisce automaticamente)
-        const contentLeft = total - (rightWidth || 360);
-        if (tasksPanelMode === 'actions' && tasksPanelWidth > 1) {
-          // Test finisce dove inizia Tasks
-          // La larghezza di Test = posizione mouse - inizio contenuto
-          // Ma devo rispettare la larghezza minima di Tasks
-          const maxTestWidth = total - contentLeft - tasksPanelWidth; // Massima larghezza Test (rispetta Tasks)
-          const newTestWidth = Math.max(minWidth, Math.min(maxTestWidth, e.clientX - contentLeft));
-          setTestPanelWidth(newTestWidth);
-          // Tasks mantiene la sua larghezza, si sposta solo a destra (gestito da flexbox)
-        } else {
-          // Test è l'unico pannello a destra
-          const maxRight = Math.max(minWidth, total - leftMin);
-          const newWidth = Math.max(minWidth, Math.min(maxRight, total - e.clientX));
-          setTestPanelWidth(newWidth);
-        }
-      } else if (draggingPanel === 'tasks') {
-        // Pannello Tasks: calcola dal delta del mouse rispetto alla posizione iniziale
-        const deltaX = tasksStartXRef.current - e.clientX; // Negativo quando si trascina a destra (allarga)
-        const newWidth = tasksStartWidthRef.current + deltaX;
-
-        if (testPanelMode === 'chat' && testPanelWidth > 1) {
-          // Tasks inizia dove finisce Test
-          // Devo rispettare la larghezza minima di Test
-          const contentLeft = total - (rightWidth || 360);
-          const maxTasksWidth = total - contentLeft - testPanelWidth; // Massima larghezza Tasks (rispetta Test)
-          const clampedWidth = Math.max(minWidth, Math.min(maxTasksWidth, newWidth));
-          setTasksPanelWidth(clampedWidth);
-          // Test mantiene la sua larghezza, si sposta solo a sinistra (gestito da flexbox)
-        } else {
-          // Tasks è l'unico pannello a destra
-          const maxTasksWidth = total - (rightWidth || 360) - 320; // Lascia spazio minimo per il contenuto principale
-          const clampedWidth = Math.max(minWidth, Math.min(maxTasksWidth, newWidth));
-          setTasksPanelWidth(clampedWidth);
-        }
-      }
-    };
-
-    const onUp = () => setDraggingPanel(null);
-
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-
-    return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-  }, [draggingPanel, setRightWidth, setTestPanelWidth, setTasksPanelWidth, rightWidth, tasksPanelWidth, tasksPanelMode, testPanelMode, testPanelWidth]);
 
   // ✅ handleProfileUpdate: aggiorna selectedNode (UI immediata) e salva override
   const handleProfileUpdate = useCallback((partialProfile: any) => {
@@ -1616,13 +1346,46 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
 
   // Esponi toolbar tramite callback quando in docking mode
   const headerColor = '#9a4f00'; // Orange color from EditorHeader theme
-  React.useEffect(() => {
-    if (hideHeader && onToolbarUpdate) {
-      // Always call onToolbarUpdate when toolbarButtons changes, even if empty
-      // This ensures the tab header is updated with the latest toolbar state
-      onToolbarUpdate(toolbarButtons, headerColor);
-    }
-  }, [hideHeader, toolbarButtons, onToolbarUpdate, headerColor]);
+
+  // ✅ Use side-effects hook to manage all side-effects
+  useResponseEditorSideEffects({
+    task,
+    taskTree,
+    taskTreeRef,
+    currentProjectId,
+    setTaskTreeVersion,
+    prevInstanceRef,
+    setServiceUnavailable,
+    setEscalationTasks,
+    pendingEditorOpen,
+    showSynonyms,
+    selectedNode,
+    setPendingEditorOpen,
+    replaceSelectedTaskTree,
+    sidebarRef,
+    isDraggingSidebar,
+    setIsDraggingSidebar,
+    sidebarStartWidthRef,
+    sidebarStartXRef,
+    setSidebarManualWidth,
+    handleEditorClose,
+    registerOnClose,
+    draggingPanel,
+    setDraggingPanel,
+    rightWidth,
+    setRightWidth,
+    testPanelWidth,
+    setTestPanelWidth,
+    tasksPanelWidth,
+    setTasksPanelWidth,
+    tasksPanelMode,
+    testPanelMode,
+    tasksStartWidthRef,
+    tasksStartXRef,
+    hideHeader,
+    onToolbarUpdate,
+    toolbarButtons,
+  });
 
   // Layout
   return (
@@ -1844,48 +1607,8 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
                           taskInstanceStepsCount: taskInstance.steps ? Object.keys(taskInstance.steps).length : 0
                         });
 
-                        const currentTemplateId = getTemplateId(taskInstance);
-
-                        // ✅ CORRETTO: Usa extractTaskOverrides invece di salvare campi del template
-                        const { extractTaskOverrides, buildTemplateExpanded } = await import('../../../utils/taskUtils');
-                        const templateExpanded = currentTemplateId
-                          ? await buildTemplateExpanded(currentTemplateId, currentProjectId || undefined)
-                          : null;
-
-                        const updateData = await extractTaskOverrides(
-                          taskInstance,
-                          coerced,
-                          currentProjectId || undefined,
-                          templateExpanded || undefined
-                        );
-
-                        // ✅ CRITICAL: Preserva templateId se necessario
-                        if (currentTemplateId && currentTemplateId !== 'UNDEFINED') {
-                          updateData.templateId = currentTemplateId; // ✅ Preserva templateId esistente
-                        } else if (coerced.templateId) {
-                          updateData.templateId = coerced.templateId; // ✅ Usa templateId dal wizard
-                        }
-                        // ❌ RIMOSSO: Non sovrascrivere templateId con null!
-
-                        // ✅ DEBUG: Verifica updateData prima del salvataggio
-                        const stepsIsArray = Array.isArray(updateData.steps);
-                        const stepsCount = stepsIsArray ? updateData.steps.length : (updateData.steps ? Object.keys(updateData.steps).length : 0);
-                        console.log('[ResponseEditor][onComplete] 🔍 updateData before save', {
-                          key,
-                          updateDataKeys: Object.keys(updateData),
-                          hasSteps: !!updateData.steps,
-                          stepsType: typeof updateData.steps,
-                          stepsIsArray: stepsIsArray,
-                          stepsCount: stepsCount,
-                          templateId: updateData.templateId, // ✅ Verifica templateId preservato
-                          sampleSteps: stepsIsArray && updateData.steps ? updateData.steps.slice(0, 3).map((s: any) => ({
-                            id: s?.id,
-                            templateStepId: s?.templateStepId,
-                            escalationsCount: Array.isArray(s?.escalations) ? s.escalations.length : 0
-                          })) : []
-                        });
-
-                        taskRepository.updateTask(key, updateData, currentProjectId || undefined);
+                        // ✅ Usa funzione di persistenza per salvare
+                        await saveTaskToRepository(key, coerced, taskInstance, currentProjectId || undefined);
 
                         // ✅ DEBUG: Verifica task salvato dopo il salvataggio
                         const savedTask = taskRepository.getTask(key);
