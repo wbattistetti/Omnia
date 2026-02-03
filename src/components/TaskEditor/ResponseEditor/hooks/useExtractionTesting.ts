@@ -6,6 +6,7 @@ import { mapLabelToStandardKey } from './useRegexValidation';
 import * as testingState from '../testingState';
 import { loadContractFromNode } from '../ContractSelector/contractHelpers';
 import { TestExtractionService } from '../../../../services/TestExtractionService';
+import { useCellOverridesStore } from '../stores/cellOverridesStore';
 
 export interface RowResult {
   regex?: string;
@@ -143,26 +144,70 @@ export function useExtractionTesting({
 
   // ✅ Initialize rowResults when examplesList changes
   // ✅ CRITICAL: NON includere rowResults.length nelle dipendenze per evitare loop infiniti
+  const prevExamplesLengthRef = React.useRef<number>(examplesList.length);
   React.useEffect(() => {
+    const prevLength = prevExamplesLengthRef.current;
+    const currentLength = examplesList.length;
+
     setRowResults(prev => {
       // ✅ Solo se la lunghezza è diversa, aggiorna
-      if (prev.length === examplesList.length) {
+      if (prev.length === currentLength) {
         return prev; // Nessun cambiamento necessario
       }
 
       const next = [...prev];
       // Extend array if needed
-      while (next.length < examplesList.length) {
+      while (next.length < currentLength) {
         next.push({});
       }
       // Truncate array if needed
-      if (next.length > examplesList.length) {
-        next.splice(examplesList.length);
+      if (next.length > currentLength) {
+        next.splice(currentLength);
       }
       return next;
     });
+
+    // ✅ FASE 2 - CRITICAL FIX: Clean up overrides for removed rows
+    // When examplesList shrinks, remove overrides for rows that no longer exist
+    if (prevLength > currentLength) {
+      const cellOverridesStoreState = useCellOverridesStore.getState();
+      const allOverrides = cellOverridesStoreState.getAllOverrides();
+      const cleanedOverrides: Record<string, string> = {};
+
+      // Keep only overrides for rows that still exist
+      Object.keys(allOverrides).forEach((key) => {
+        const match = key.match(/^(\d+):/);
+        if (match) {
+          const rowIdx = parseInt(match[1], 10);
+          if (rowIdx < currentLength) {
+            cleanedOverrides[key] = allOverrides[key];
+          }
+        }
+      });
+
+      cellOverridesStoreState.setOverrides(cleanedOverrides);
+      console.log('[CELL_OVERRIDES] Cleaned up overrides for removed rows', {
+        prevLength,
+        currentLength,
+        removedRows: prevLength - currentLength,
+        overridesBefore: Object.keys(allOverrides).length,
+        overridesAfter: Object.keys(cleanedOverrides).length,
+      });
+    }
+
+    prevExamplesLengthRef.current = currentLength;
   }, [examplesList.length]); // ✅ SOLO examplesList.length, NON rowResults.length!
-  const [cellOverrides, setCellOverrides] = useState<Record<string, string>>({});
+
+  // ✅ FASE 2 - OPTIMIZATION: Use Zustand store instead of useState for cellOverrides
+  // This eliminates prop drilling and reduces re-renders
+  const cellOverridesStore = useCellOverridesStore();
+  const cellOverrides = cellOverridesStore.getAllOverrides();
+  const setCellOverrides = (updater: React.SetStateAction<Record<string, string>>) => {
+    const current = cellOverridesStore.getAllOverrides();
+    const next = typeof updater === 'function' ? updater(current) : updater;
+    cellOverridesStore.setOverrides(next);
+  };
+
   const [editingCell, setEditingCell] = useState<{
     row: number;
     col: 'det' | 'ner' | 'llm';
@@ -649,7 +694,8 @@ export function useExtractionTesting({
       const ner = parseSummary(rr.ner);
       const llm = parseSummary(rr.llm);
       keys.forEach((kKey) => {
-        const gt = cellOverrides[`${rowIdx}:det:${kKey}`];
+        // ✅ FASE 2 - OPTIMIZATION: Use Zustand store directly
+        const gt = cellOverridesStore.getOverride(rowIdx, 'det', kKey);
         if (typeof gt === 'undefined') return;
         totalGt += 1;
         const pred = det[kKey] ?? ner[kKey] ?? llm[kKey];
@@ -658,7 +704,7 @@ export function useExtractionTesting({
       });
     });
     return { matched, falseAccept, totalGt };
-  }, [examplesList, kind, rowResults, cellOverrides, expectedKeysForKind]);
+  }, [examplesList, kind, rowResults, cellOverridesStore, expectedKeysForKind]);
 
   // Run all rows
   const cancelTesting = useCallback(() => {

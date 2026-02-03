@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Plus, ChevronsRight, Wrench, BarChart2, X } from 'lucide-react';
+import { useCellOverridesStore } from './stores/cellOverridesStore';
 
 interface TesterControlsProps {
   newExample: string;
@@ -20,7 +21,7 @@ interface TesterControlsProps {
   regex: string;
   postProcessText: string;
   rowResults: Array<any>;
-  cellOverrides: Record<string, string>;
+  // ✅ FASE 2 - REMOVED: cellOverrides - now managed via Zustand store
   expectedKeysForKind: (k?: string) => string[];
   setSynonymsText: React.Dispatch<React.SetStateAction<string>>;
   setFormatText: React.Dispatch<React.SetStateAction<string>>;
@@ -71,7 +72,7 @@ export default function TesterControls({
   regex,
   postProcessText,
   rowResults,
-  cellOverrides,
+  // ✅ FASE 2 - REMOVED: cellOverrides - now managed via Zustand store
   expectedKeysForKind,
   setSynonymsText,
   setFormatText,
@@ -80,6 +81,8 @@ export default function TesterControls({
   baselineStats,
   lastStats,
 }: TesterControlsProps) {
+  // ✅ FASE 2 - OPTIMIZATION: Use Zustand store directly instead of props
+  const cellOverridesStore = useCellOverridesStore();
   const [reportOpen, setReportOpen] = useState<boolean>(false);
 
   // Handler for adding new example
@@ -112,7 +115,8 @@ export default function TesterControls({
       ];
       const keys = expectedKeysForKind(kind);
       keys.forEach((kKey) => {
-        const gt = cellOverrides[`${rowIdx}:det:${kKey}`];
+        // ✅ FASE 2 - OPTIMIZATION: Use Zustand store directly
+        const gt = cellOverridesStore.getOverride(rowIdx, 'det', kKey);
         cols.forEach(({ id, src }) => {
           const predMap: Record<string, string | undefined> = {};
           const t = (src || '').toString();

@@ -12,6 +12,7 @@ import { useNotes } from './hooks/useNotes';
 import { useEditorState } from './hooks/useEditorState';
 import { useProfileState } from './hooks/useProfileState';
 import { useExtractionTesting } from './hooks/useExtractionTesting';
+import { useCellOverridesStore } from './stores/cellOverridesStore';
 
 // 🎨 Config Components
 import RecognitionEditor from './RecognitionEditor';
@@ -124,6 +125,16 @@ export default function DataExtractionEditor({
     profile,
   } = useProfileState(node, locale, onChange);
 
+  // ✅ FASE 1 - OPTIMIZATION: Memoize examplesList to prevent unnecessary re-renders
+  // This ensures TesterGrid only re-renders when the actual content changes, not when the array reference changes
+  const memoizedExamplesList = React.useMemo(() => {
+    return examplesList;
+  }, [
+    examplesList.length,
+    // Create stable key for content comparison
+    examplesList.join('|')
+  ]);
+
   // Testing state (managed by hook)
   const [newExample, setNewExample] = React.useState<string>('');
   const [baselineStats, setBaselineStats] = React.useState<{ matched: number; falseAccept: number; totalGt: number } | null>(null);
@@ -179,14 +190,32 @@ export default function DataExtractionEditor({
     }
   }, [initialEditor, activeEditor, openEditor]);
 
+  // ✅ FASE 2 - CRITICAL FIX: Reset cellOverrides store when node changes
+  // This prevents overrides from "bleeding" between different nodes
+  const cellOverridesStore = useCellOverridesStore();
+  const prevNodeIdRef = React.useRef<string | undefined>(node?.id);
+  React.useEffect(() => {
+    const currentNodeId = node?.id;
+    const nodeIdChanged = currentNodeId !== prevNodeIdRef.current;
+
+    if (nodeIdChanged) {
+      prevNodeIdRef.current = currentNodeId;
+      // Reset store when node changes
+      cellOverridesStore.reset();
+      console.log('[CELL_OVERRIDES] Store reset due to node change', {
+        prevNodeId: prevNodeIdRef.current,
+        currentNodeId,
+      });
+    }
+  }, [node?.id, cellOverridesStore]);
+
   // Extraction testing (extracted to hook)
   const {
     rowResults,
     selectedRow,
     setSelectedRow,
     testing,
-    cellOverrides,
-    setCellOverrides,
+    // ✅ FASE 2 - REMOVED: cellOverrides, setCellOverrides - now managed via Zustand store
     editingCell,
     setEditingCell,
     editingText,
@@ -204,7 +233,7 @@ export default function DataExtractionEditor({
     spansFromScalar,
     expectedKeysForKind,
   } = useExtractionTesting({
-    examplesList,
+    examplesList: memoizedExamplesList,
     kind,
     synonymsText,
     formatText,
@@ -215,6 +244,22 @@ export default function DataExtractionEditor({
       if (!baselineStats) setBaselineStats(stats);
     },
   });
+
+  // ✅ FASE 1 - OPTIMIZATION: Memoize expectedKeysForKind to prevent function recreation
+  // This ensures TesterGrid only re-renders when kind actually changes, not when the function reference changes
+  const memoizedExpectedKeysForKind = React.useCallback(
+    (k?: string) => expectedKeysForKind(k),
+    [kind] // The function depends only on kind
+  );
+
+  // ✅ FASE 1 - OPTIMIZATION: Memoize enabledMethods to prevent object recreation
+  // This ensures TesterGrid only re-renders when method states actually change
+  const memoizedEnabledMethods = React.useMemo(() => enabledMethods, [
+    enabledMethods.regex,
+    enabledMethods.deterministic,
+    enabledMethods.ner,
+    enabledMethods.llm,
+  ]);
 
   const [endpointBase] = React.useState<string>(() => {
     try {
@@ -312,6 +357,34 @@ export default function DataExtractionEditor({
     };
   }, [task?.instanceId, nodeKind, updateExamplesList]);
 
+  // ✅ FASE 1 - OPTIMIZATION: Memoize editorProps to prevent object recreation on every render
+  // This ensures TesterGrid's EditorOverlay only re-renders when actual editor props change
+  const memoizedEditorProps = React.useMemo(() => ({
+    regex,
+    setRegex,
+    node,
+    kind,
+    profile,
+    testCases,
+    setTestCases,
+    onProfileUpdate: (updatedProfile: any) => {
+      onChange?.(updatedProfile);
+    },
+    task,
+  }), [
+    regex,
+    setRegex, // setRegex is stable, but include for safety
+    node?.id, // Use only node.id instead of entire node object
+    kind,
+    profile?.slotId, // Use only key identifiers instead of entire profile
+    profile?.regex,
+    profile?.testCases,
+    testCases,
+    setTestCases, // setTestCases is stable
+    onChange, // onChange is stable
+    task?.id, // Use only task.id instead of entire task object
+  ]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
       {/* ✅ Toolbar per kind === 'intent' - spostata sopra RecognitionEditor */}
@@ -401,16 +474,15 @@ export default function DataExtractionEditor({
         setWaitingEsc2={setWaitingEsc2}
         isIntentKind={isIntentKind}
         // TesterGrid props
-        examplesList={examplesList}
+        examplesList={memoizedExamplesList}
         rowResults={rowResults}
         selectedRow={selectedRow}
         setSelectedRow={setSelectedRow}
-        enabledMethods={enabledMethods}
+        enabledMethods={memoizedEnabledMethods}
         toggleMethod={toggleMethod}
         runRowTest={runRowTest}
-        expectedKeysForKind={expectedKeysForKind}
-        cellOverrides={cellOverrides}
-        setCellOverrides={setCellOverrides}
+        expectedKeysForKind={memoizedExpectedKeysForKind}
+        // ✅ FASE 2 - REMOVED: cellOverrides, setCellOverrides - now managed via Zustand store
         editingCell={editingCell}
         setEditingCell={setEditingCell}
         editingText={editingText}
@@ -424,19 +496,7 @@ export default function DataExtractionEditor({
         setNewExample={setNewExample}
         setExamplesList={setExamplesList}
         onCloseEditor={closeEditor}
-        editorProps={{
-          regex,
-          setRegex,
-          node,
-          kind,
-          profile,
-          testCases,
-          setTestCases,
-          onProfileUpdate: (updatedProfile) => {
-            onChange?.(updatedProfile);
-          },
-          task, // ✅ FIX: Pass task directly in editorProps for embeddings editor
-        }}
+        editorProps={memoizedEditorProps}
         contractChangeRef={contractChangeRef} // ✅ FIX: Pass contractChangeRef to RecognitionEditor
         runAllRows={runAllRows}
         testing={testing}

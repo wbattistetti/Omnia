@@ -1,184 +1,180 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
-import ResponseEditor from '../ResponseEditor';
+// Please write clean, production-grade TypeScript code.
+// Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-// Mock dei moduli
-vi.mock('../ResponseEditorUI', () => ({
-  default: ({ onSelectNode, editorState }: any) => (
-    <div data-testid="response-editor-ui">
-      <button 
-        data-testid="select-data" 
-        onClick={() => onSelectNode(null)}
-      >
-        data
-      </button>
-      <button 
-        data-testid="select-subdata-0" 
-        onClick={() => onSelectNode(0)}
-      >
-        SubData 0
-      </button>
-      <button 
-        data-testid="select-subdata-1" 
-        onClick={() => onSelectNode(1)}
-      >
-        SubData 1
-      </button>
-      <div data-testid="selected-step">{editorState.selectedStep}</div>
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import React from 'react';
+import ResponseEditor from '../index';
+import type { Task, TaskTree } from '../../../../types/taskTypes';
+
+// Import real providers for integration testing
+import { ProjectDataProvider } from '../../../../context/ProjectDataContext';
+import { DDTManagerProvider } from '../../../../context/DDTManagerContext';
+import { AIProviderProvider } from '../../../../context/AIProviderContext';
+import { ProjectTranslationsProvider } from '../../../../context/ProjectTranslationsContext';
+
+// Mock services that ProjectDataProvider depends on
+vi.mock('../../../../services/ProjectDataService', () => ({
+  ProjectDataService: {
+    loadProjectData: vi.fn(() => Promise.resolve({
+      name: '',
+      industry: '',
+      agentActs: [],
+      userActs: [],
+      backendActions: [],
+      tasks: [],
+      conditions: [],
+      macroTasks: [],
+    })),
+    addCategory: vi.fn(),
+    deleteCategory: vi.fn(),
+    updateCategory: vi.fn(),
+    addItem: vi.fn(),
+    deleteItem: vi.fn(),
+    updateItem: vi.fn(),
+  },
+}));
+
+vi.mock('../../../../state/runtime', () => ({
+  setCurrentProjectId: vi.fn(),
+}));
+
+// Mock child components to avoid deep rendering
+vi.mock('../components/ResponseEditorContent', () => ({
+  ResponseEditorContent: ({ normalEditorLayout }: any) => (
+    <div data-testid="response-editor-content">
+      {normalEditorLayout}
     </div>
-  )
+  ),
 }));
 
-vi.mock('../treeFactories', () => ({
-  estraiNodiDaDDT: vi.fn(() => []),
-  insertNodeAt: vi.fn(),
-  removeNodePure: vi.fn(),
-  addNode: vi.fn()
+vi.mock('../components/ResponseEditorNormalLayout', () => ({
+  ResponseEditorNormalLayout: () => (
+    <div data-testid="response-editor-normal-layout">Normal Layout</div>
+  ),
 }));
 
-vi.mock('../useResponseEditorState', () => ({
-  useResponseEditorState: vi.fn(() => ({
-    state: {
-      selectedStep: 'start',
-      actionCatalog: [],
-      showLabel: false,
-      activeDragAction: null,
-      nodes: []
-    },
-    dispatch: vi.fn(),
-    canUndo: false,
-    canRedo: false,
-    undo: vi.fn(),
-    redo: vi.fn()
-  }))
+vi.mock('../components/ServiceUnavailableModal', () => ({
+  ServiceUnavailableModal: () => <div data-testid="service-unavailable-modal" />,
 }));
 
-describe('ResponseEditor', () => {
-  const mockDDT = {
-    label: 'Date of birth',
-    dataType: { type: 'date' },
-    data: {
-      steps: [
-        { type: 'start', escalations: [] },
-        { type: 'noMatch', escalations: [] },
-        { type: 'success', escalations: [] }
-      ],
-      subData: [
-        {
-          label: 'Day',
-          steps: [
-            { type: 'start', escalations: [] },
-            { type: 'noMatch', escalations: [] },
-            { type: 'success', escalations: [] }
-          ]
-        },
-        {
-          label: 'Month',
-          steps: [
-            { type: 'start', escalations: [] },
-            { type: 'noMatch', escalations: [] },
-            { type: 'success', escalations: [] }
-          ]
-        }
-      ]
-    }
-  };
+vi.mock('../ContractUpdateDialog', () => ({
+  ContractUpdateDialog: () => <div data-testid="contract-update-dialog" />,
+}));
 
-  const mockTranslations = {};
+vi.mock('../../common/EditorHeader', () => ({
+  default: () => <div data-testid="editor-header" />,
+}));
+
+vi.mock('../TaskDragLayer', () => ({
+  default: () => <div data-testid="task-drag-layer" />,
+}));
+
+/**
+ * Light integration tests for ResponseEditor
+ *
+ * These tests verify that the component integrates correctly with providers
+ * and renders without crashing when given valid data.
+ *
+ * WHAT WE TEST:
+ * - Component mounts correctly with valid task and taskTree
+ * - Component doesn't crash when all providers are present
+ * - Basic rendering scenarios with valid data
+ *
+ * WHY IT'S IMPORTANT:
+ * - Verifies integration with context providers
+ * - Catches critical mounting/rendering issues
+ * - Ensures component works in realistic scenarios
+ */
+
+// Helper to render component with all required providers
+const renderWithProviders = (ui: React.ReactElement) => {
+  return render(
+    <ProjectDataProvider>
+      <DDTManagerProvider>
+        <AIProviderProvider>
+          <ProjectTranslationsProvider>
+            {ui}
+          </ProjectTranslationsProvider>
+        </AIProviderProvider>
+      </DDTManagerProvider>
+    </ProjectDataProvider>
+  );
+};
+
+describe('ResponseEditor - Integration Tests', () => {
+  let mockTaskTree: TaskTree;
+  let mockTask: Task;
 
   beforeEach(() => {
     vi.clearAllMocks();
+
+    mockTaskTree = {
+      label: 'Test TaskTree',
+      nodes: [{ id: 'node-1', templateId: 'tpl-1', label: 'Node 1' }],
+      steps: {},
+    } as TaskTree;
+
+    mockTask = {
+      id: 'task-1',
+      type: 1,
+      label: 'Test Task',
+      templateId: 'template-1', // Required for getTaskMeta to return non-null
+    } as Task;
   });
 
-  it('should select first step automatically when opened', () => {
-    render(
-      <ResponseEditor 
-        ddt={mockDDT} 
-        translations={mockTranslations} 
-        lang="it" 
-      />
-    );
+  it('should mount correctly with valid task and taskTree', () => {
+    expect(() => {
+      renderWithProviders(<ResponseEditor taskTree={mockTaskTree} task={mockTask} />);
+    }).not.toThrow();
 
-    expect(screen.getByTestId('selected-step')).toHaveTextContent('start');
+    expect(screen.getByTestId('response-editor-content')).toBeInTheDocument();
   });
 
-  it('should not reset step when switching from data to subData with same step available', () => {
-    render(
-      <ResponseEditor 
-        ddt={mockDDT} 
-        translations={mockTranslations} 
-        lang="it" 
-      />
-    );
-
-    // Verifica che lo step iniziale sia 'start'
-    expect(screen.getByTestId('selected-step')).toHaveTextContent('start');
-
-    // Cambia a subData 0 (che ha lo stesso step 'start')
-    fireEvent.click(screen.getByTestId('select-subdata-0'));
-
-    // Lo step dovrebbe rimanere 'start'
-    expect(screen.getByTestId('selected-step')).toHaveTextContent('start');
+  it('should not crash when all providers are present', () => {
+    expect(() => {
+      renderWithProviders(<ResponseEditor taskTree={mockTaskTree} task={mockTask} />);
+    }).not.toThrow();
   });
 
-  it('should select first available step when switching to node without current step', () => {
-    // Mock DDT con subData che non ha lo step 'start'
-    const ddtWithoutStart = {
-      ...mockDDT,
-      data: {
-        ...mockDDT.data,
-        subData: [
-          {
-            label: 'Day',
-            steps: [
-              { type: 'noMatch', escalations: [] },
-              { type: 'success', escalations: [] }
-            ]
-          }
-        ]
-      }
-    };
+  it('should render with valid task only', () => {
+    renderWithProviders(<ResponseEditor task={mockTask} />);
 
-    render(
-      <ResponseEditor 
-        ddt={ddtWithoutStart} 
-        translations={mockTranslations} 
-        lang="it" 
-      />
-    );
-
-    // Verifica che lo step iniziale sia 'start'
-    expect(screen.getByTestId('selected-step')).toHaveTextContent('start');
-
-    // Cambia a subData 0 (che non ha lo step 'start')
-    fireEvent.click(screen.getByTestId('select-subdata-0'));
-
-    // Lo step dovrebbe cambiare al primo disponibile ('noMatch')
-    expect(screen.getByTestId('selected-step')).toHaveTextContent('noMatch');
+    expect(screen.getByTestId('response-editor-content')).toBeInTheDocument();
   });
 
-  it('should maintain step when switching between nodes with same step available', () => {
-    render(
-      <ResponseEditor 
-        ddt={mockDDT} 
-        translations={mockTranslations} 
-        lang="it" 
-      />
-    );
+  it('should render with valid taskTree and task', () => {
+    renderWithProviders(<ResponseEditor taskTree={mockTaskTree} task={mockTask} />);
 
-    // Verifica che lo step iniziale sia 'start'
-    expect(screen.getByTestId('selected-step')).toHaveTextContent('start');
-
-    // Cambia a subData 0
-    fireEvent.click(screen.getByTestId('select-subdata-0'));
-    expect(screen.getByTestId('selected-step')).toHaveTextContent('start');
-
-    // Cambia a subData 1
-    fireEvent.click(screen.getByTestId('select-subdata-1'));
-    expect(screen.getByTestId('selected-step')).toHaveTextContent('start');
-
-    // Torna a data
-    fireEvent.click(screen.getByTestId('select-data'));
-    expect(screen.getByTestId('selected-step')).toHaveTextContent('start');
+    expect(screen.getByTestId('response-editor-content')).toBeInTheDocument();
+    expect(screen.getByTestId('response-editor-normal-layout')).toBeInTheDocument();
   });
-}); 
+
+  it('should render with hideHeader prop', () => {
+    renderWithProviders(<ResponseEditor taskTree={mockTaskTree} task={mockTask} hideHeader={true} />);
+
+    expect(screen.getByTestId('response-editor-content')).toBeInTheDocument();
+    expect(screen.queryByTestId('editor-header')).not.toBeInTheDocument();
+  });
+
+  it('should handle optional props without crashing', () => {
+    expect(() => {
+      renderWithProviders(
+        <ResponseEditor
+          taskTree={mockTaskTree}
+          task={mockTask}
+          onClose={undefined}
+          onWizardComplete={undefined}
+          isTaskTreeLoading={undefined}
+          hideHeader={undefined}
+          onToolbarUpdate={undefined}
+          tabId={undefined}
+          setDockTree={undefined}
+          registerOnClose={undefined}
+        />
+      );
+    }).not.toThrow();
+
+    expect(screen.getByTestId('response-editor-content')).toBeInTheDocument();
+  });
+});

@@ -42,8 +42,7 @@ interface RecognitionEditorProps {
   toggleMethod: (method: keyof RecognitionEditorProps['enabledMethods']) => void;
   runRowTest: (idx: number) => Promise<void>;
   expectedKeysForKind: (k?: string) => string[];
-  cellOverrides: Record<string, string>;
-  setCellOverrides: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  // ✅ FASE 2 - REMOVED: cellOverrides, setCellOverrides - now managed via Zustand store
   editingCell: { row: number; col: 'det' | 'ner' | 'llm'; key: string } | null;
   setEditingCell: React.Dispatch<React.SetStateAction<{ row: number; col: 'det' | 'ner' | 'llm'; key: string } | null>>;
   editingText: string;
@@ -111,8 +110,7 @@ export default function RecognitionEditor({
   toggleMethod,
   runRowTest,
   expectedKeysForKind,
-  cellOverrides,
-  setCellOverrides,
+  // ✅ FASE 2 - REMOVED: cellOverrides, setCellOverrides - now managed via Zustand store
   editingCell,
   setEditingCell,
   editingText,
@@ -688,8 +686,7 @@ export default function RecognitionEditor({
           runRowTest={runRowTest}
           kind={kind}
           expectedKeysForKind={expectedKeysForKind}
-          cellOverrides={cellOverrides}
-          setCellOverrides={setCellOverrides}
+          // ✅ FASE 2 - REMOVED: cellOverrides, setCellOverrides - now managed via Zustand store
           editingCell={editingCell}
           setEditingCell={setEditingCell}
           editingText={editingText}

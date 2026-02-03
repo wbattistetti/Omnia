@@ -1,5 +1,6 @@
 import React from 'react';
 import { parseSummaryToGroups } from '../helpers/parseSummaryToGroups';
+import { useCellOverridesStore } from '../../stores/cellOverridesStore';
 
 interface GroupDetailsExpanderProps {
   summary: string | undefined;
@@ -7,12 +8,12 @@ interface GroupDetailsExpanderProps {
   col: 'det' | 'ner' | 'llm' | 'regex';
   kind: string;
   expectedKeysForKind: (k?: string) => string[];
-  cellOverrides: Record<string, string>;
+  // ✅ FASE 2 - REMOVED: cellOverrides, setCellOverrides - now managed via Zustand store
   editingCell: { row: number; col: 'det' | 'ner' | 'llm'; key: string } | null;
   editingText: string;
   setEditingCell: React.Dispatch<React.SetStateAction<{ row: number; col: 'det' | 'ner' | 'llm'; key: string } | null>>;
   setEditingText: React.Dispatch<React.SetStateAction<string>>;
-  setCellOverrides: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  // ✅ FASE 2 - REMOVED: setCellOverrides - now managed via Zustand store
 }
 
 /**
@@ -24,13 +25,14 @@ export default function GroupDetailsExpander({
   col,
   kind,
   expectedKeysForKind,
-  cellOverrides,
+  // ✅ FASE 2 - REMOVED: cellOverrides, setCellOverrides - now managed via Zustand store
   editingCell,
   editingText,
   setEditingCell,
   setEditingText,
-  setCellOverrides,
 }: GroupDetailsExpanderProps) {
+  // ✅ FASE 2 - OPTIMIZATION: Use Zustand store directly instead of props
+  const cellOverridesStore = useCellOverridesStore();
   const kv = parseSummaryToGroups(summary);
   const keys = expectedKeysForKind(kind);
 
@@ -79,8 +81,8 @@ export default function GroupDetailsExpander({
       }}
     >
           {keysToShow.map((k) => {
-            const overrideKey = `${rowIdx}:${col}:${k}`;
-            const overridden = cellOverrides[overrideKey];
+            // ✅ FASE 2 - OPTIMIZATION: Use Zustand store directly
+            const overridden = cellOverridesStore.getOverride(rowIdx, col as 'det' | 'ner' | 'llm', k);
             // ✅ Se stiamo mostrando 'value', prendilo da kv invece di filteredKv
             const baseVal = k === 'value' ? kv[k] : filteredKv[k];
             const value = typeof overridden !== 'undefined' ? overridden : baseVal;
@@ -111,16 +113,16 @@ export default function GroupDetailsExpander({
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();
-                          const k2 = `${rowIdx}:${col}:${k}`;
-                          setCellOverrides((prev) => ({ ...prev, [k2]: editingText }));
+                          // ✅ FASE 2 - OPTIMIZATION: Use Zustand store directly
+                          cellOverridesStore.setOverride(rowIdx, col as 'det' | 'ner' | 'llm', k, editingText);
                           setEditingCell(null);
                         } else if (e.key === 'Escape') {
                           setEditingCell(null);
                         }
                       }}
                       onBlur={() => {
-                        const k2 = `${rowIdx}:${col}:${k}`;
-                        setCellOverrides((prev) => ({ ...prev, [k2]: editingText }));
+                        // ✅ FASE 2 - OPTIMIZATION: Use Zustand store directly
+                        cellOverridesStore.setOverride(rowIdx, col as 'det' | 'ner' | 'llm', k, editingText);
                         setEditingCell(null);
                       }}
                       ref={(el) => {

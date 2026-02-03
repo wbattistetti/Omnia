@@ -33,8 +33,7 @@ interface TesterGridRowProps {
   activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'post' | 'embeddings' | null;
   contract?: DataContract | null;
   // Cell editing
-  cellOverrides: Record<string, string>;
-  setCellOverrides: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  // ✅ FASE 2 - REMOVED: cellOverrides, setCellOverrides - now managed via Zustand store
   editingCell: { row: number; col: 'det' | 'ner' | 'llm'; key: string } | null;
   setEditingCell: React.Dispatch<React.SetStateAction<{ row: number; col: 'det' | 'ner' | 'llm'; key: string } | null>>;
   editingText: string;
@@ -74,8 +73,7 @@ function TesterGridRowComponent({
   showEmbeddings,
   activeEditor,
   contract, // ✅ FIX: Contract per colonne dinamiche
-  cellOverrides,
-  setCellOverrides,
+  // ✅ FASE 2 - REMOVED: cellOverrides, setCellOverrides - now managed via Zustand store
   editingCell,
   setEditingCell,
   editingText,
@@ -259,12 +257,11 @@ function TesterGridRowComponent({
                 expectedKeysForKind={expectedKeysForKind}
                 enabled={enabled}
                 isRunning={isRunning}
-                cellOverrides={cellOverrides}
+                // ✅ FASE 2 - REMOVED: cellOverrides, setCellOverrides - now managed via Zustand store
                 editingCell={editingCell}
                 editingText={editingText}
                 setEditingCell={setEditingCell}
                 setEditingText={setEditingText}
-                setCellOverrides={setCellOverrides}
                 // ✅ REMOVED: Notes props - now managed via Zustand store
               />
             </td>

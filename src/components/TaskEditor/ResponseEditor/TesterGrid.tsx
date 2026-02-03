@@ -65,8 +65,7 @@ interface TesterGridProps {
   kind: string;
   expectedKeysForKind: (k?: string) => string[];
   // Cell editing
-  cellOverrides: Record<string, string>;
-  setCellOverrides: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  // ✅ FASE 2 - REMOVED: cellOverrides, setCellOverrides - now managed via Zustand store
   editingCell: { row: number; col: 'det' | 'ner' | 'llm'; key: string } | null;
   setEditingCell: React.Dispatch<React.SetStateAction<{ row: number; col: 'det' | 'ner' | 'llm'; key: string } | null>>;
   editingText: string;
@@ -118,8 +117,7 @@ function TesterGridComponent({
   runRowTest,
   kind,
   expectedKeysForKind,
-  cellOverrides,
-  setCellOverrides,
+  // ✅ FASE 2 - REMOVED: cellOverrides, setCellOverrides - now managed via Zustand store
   editingCell,
   setEditingCell,
   editingText,
@@ -345,8 +343,7 @@ function TesterGridComponent({
                   showEmbeddings={showEmbeddings}
                   activeEditor={activeEditor}
                   contract={contract}
-                  cellOverrides={cellOverrides}
-                  setCellOverrides={setCellOverrides}
+                  // ✅ FASE 2 - REMOVED: cellOverrides, setCellOverrides - now managed via Zustand store
                   editingCell={editingCell}
                   setEditingCell={setEditingCell}
                   editingText={editingText}

@@ -8,6 +8,7 @@ import NoteEditor from '../../CellNote/NoteEditor';
 import NoteDisplay from '../../CellNote/NoteDisplay';
 import NoteSeparator from '../../CellNote/NoteSeparator';
 import { useNotesStore, getCellKeyFromPhrase } from '../../stores/notesStore';
+import { useCellOverridesStore } from '../../stores/cellOverridesStore';
 
 interface ExtractionResultCellProps {
   summary: string | undefined;
@@ -20,12 +21,11 @@ interface ExtractionResultCellProps {
   expectedKeysForKind: (k?: string) => string[];
   enabled: boolean;
   isRunning?: boolean;
-  cellOverrides: Record<string, string>;
+  // ✅ FASE 2 - REMOVED: cellOverrides, setCellOverrides - now managed via Zustand store
   editingCell: { row: number; col: 'det' | 'ner' | 'llm'; key: string } | null;
   editingText: string;
   setEditingCell: React.Dispatch<React.SetStateAction<{ row: number; col: 'det' | 'ner' | 'llm'; key: string } | null>>;
   setEditingText: React.Dispatch<React.SetStateAction<string>>;
-  setCellOverrides: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   // ✅ REMOVED: Notes props - now managed via Zustand store (stores/notesStore.ts)
 }
 
@@ -48,13 +48,14 @@ function ExtractionResultCellComponent({
   expectedKeysForKind,
   enabled,
   isRunning,
-  cellOverrides,
+  // ✅ FASE 2 - REMOVED: cellOverrides, setCellOverrides - now managed via Zustand store
   editingCell,
   editingText,
   setEditingCell,
   setEditingText,
-  setCellOverrides,
 }: ExtractionResultCellProps) {
+  // ✅ FASE 2 - OPTIMIZATION: Use Zustand store directly instead of props
+  const cellOverridesStore = useCellOverridesStore();
   const [isExpanded, setIsExpanded] = React.useState(false);
 
   // ✅ Use Zustand store for notes - zero prop drilling!
@@ -196,12 +197,11 @@ function ExtractionResultCellComponent({
                   col={col}
                   kind={kind}
                   expectedKeysForKind={expectedKeysForKind}
-                  cellOverrides={cellOverrides}
+                  // ✅ FASE 2 - REMOVED: cellOverrides, setCellOverrides - now managed via Zustand store
                   editingCell={editingCell}
                   editingText={editingText}
                   setEditingCell={setEditingCell}
                   setEditingText={setEditingText}
-                  setCellOverrides={setCellOverrides}
                 />
               )}
             </>
