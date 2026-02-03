@@ -338,19 +338,19 @@ export async function ensureTemplateExists(
   const newTemplateId = uuidv4();
 
   // Costruisci struttura template da taskTree o da instance (legacy)
+  // ✅ IMPORTANTE: Local Template NON deve avere campi Factory (dataContract, valueSchema, subTasksIds)
+  // Il backend classifica come Factory Template se ha questi campi, e rifiuta di salvarli nel progetto
   const templateData: any = {
     id: newTemplateId,
     type: instance.type || TaskType.UtteranceInterpretation,
     templateId: null,  // ✅ Template ha sempre templateId === null
     label: instance.label || taskTree?.label || 'New Template',
     icon: 'FileText',
-    subTasksIds: taskTree?.nodes?.map(n => n.templateId).filter(Boolean) || [],
     steps: {},  // Steps vuoti nel template (saranno clonati nelle istanze)
-    constraints: taskTree?.constraints || [],
-    dataContract: taskTree?.dataContract || undefined,
-    introduction: taskTree?.introduction || undefined,
-    valueSchema: {},  // ✅ Campo obbligatorio per compatibilità con vecchio endpoint (se presente)
-    // ❌ NON salvare: data (usa subTasksIds)
+    // ❌ RIMOSSO: subTasksIds, dataContract, valueSchema (campi Factory che causano classificazione errata)
+    // ❌ RIMOSSO: constraints (campo Factory)
+    // ❌ RIMOSSO: introduction (non necessario per Local Template)
+    // ❌ NON salvare: data (usa subTasksIds solo se necessario, ma non qui)
   };
 
   // ✅ Salva template nel progetto usando /api/projects/:pid/tasks

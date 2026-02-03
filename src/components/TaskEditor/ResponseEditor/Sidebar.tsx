@@ -142,7 +142,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
     display: 'flex',
     alignItems: 'center',
     gap: 10,
-    width: 'fit-content',
+    width: '100%',
     whiteSpace: 'nowrap',
     background: disabled ? 'rgba(75,85,99,0.25)' : (active ? bgActive : bgBase),
     color: disabled ? '#9ca3af' : textBase,
@@ -658,7 +658,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                 </span>
               )}
               <span style={{ display: 'inline-flex', alignItems: 'center' }}>{Icon}</span>
-              <span style={{ whiteSpace: 'nowrap' }}>{getLabel(main, translations)}</span>
+              <span style={{ whiteSpace: 'nowrap', flex: 1 }}>{getLabel(main, translations)}</span>
               {(subs.length > 0) && (
                 <span
                   role="button"
@@ -696,32 +696,33 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                   </svg>
                 </span>
               )}
+              {/* ✅ Parser icon inline in button (right side) */}
+              <ParserStatusRow
+                node={main}
+                inline={true}
+                onCreateClick={() => {
+                  const nodeId = main.id || main.templateId || main._id;
+                  onParserCreate?.(nodeId, main);
+                }}
+                onModifyClick={() => {
+                  const nodeId = main.id || main.templateId || main._id;
+                  onParserModify?.(nodeId, main);
+                }}
+                onEngineChipClick={(engineType) => {
+                  const nodeId = main.id || main.templateId || main._id;
+                  // Map EngineType to editor type
+                  const editorTypeMap: Record<EngineType, 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings'> = {
+                    regex: 'regex',
+                    rule_based: 'extractor',
+                    ner: 'ner',
+                    llm: 'llm',
+                    embedding: 'embeddings',
+                  };
+                  const editorType = editorTypeMap[engineType] || 'regex';
+                  onEngineChipClick?.(nodeId, main, editorType);
+                }}
+              />
             </button>
-            {/* ✅ Parser status row for main node */}
-            <ParserStatusRow
-              node={main}
-              onCreateClick={() => {
-                const nodeId = main.id || main.templateId || main._id;
-                onParserCreate?.(nodeId, main);
-              }}
-              onModifyClick={() => {
-                const nodeId = main.id || main.templateId || main._id;
-                onParserModify?.(nodeId, main);
-              }}
-              onEngineChipClick={(engineType) => {
-                const nodeId = main.id || main.templateId || main._id;
-                // Map EngineType to editor type
-                const editorTypeMap: Record<EngineType, 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings'> = {
-                  regex: 'regex',
-                  rule_based: 'extractor',
-                  ner: 'ner',
-                  llm: 'llm',
-                  embedding: 'embeddings',
-                };
-                const editorType = editorTypeMap[engineType] || 'regex';
-                onEngineChipClick?.(nodeId, main, editorType);
-              }}
-            />
             {editingMainIdx === idx && (
               <div style={{ marginLeft: 36, marginTop: 6 }}>
                 <input
@@ -813,33 +814,34 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                           )}
                         </span>
                         <span style={{ display: 'inline-flex', alignItems: 'center' }}>{SubIcon}</span>
-                        <span style={{ whiteSpace: 'nowrap' }}>{getLabel(sub, translations)}</span>
+                        <span style={{ whiteSpace: 'nowrap', flex: 1 }}>{getLabel(sub, translations)}</span>
+                        {/* ✅ Parser icon inline in button (right side) */}
+                        <ParserStatusRow
+                          node={sub}
+                          inline={true}
+                          onCreateClick={() => {
+                            const nodeId = sub.id || sub.templateId || sub._id;
+                            onParserCreate?.(nodeId, sub);
+                          }}
+                          onModifyClick={() => {
+                            const nodeId = sub.id || sub.templateId || sub._id;
+                            onParserModify?.(nodeId, sub);
+                          }}
+                          onEngineChipClick={(engineType) => {
+                            const nodeId = sub.id || sub.templateId || sub._id;
+                            // Map EngineType to editor type
+                            const editorTypeMap: Record<EngineType, 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings'> = {
+                              regex: 'regex',
+                              rule_based: 'extractor',
+                              ner: 'ner',
+                              llm: 'llm',
+                              embedding: 'embeddings',
+                            };
+                            const editorType = editorTypeMap[engineType] || 'regex';
+                            onEngineChipClick?.(nodeId, sub, editorType);
+                          }}
+                        />
                       </button>
-                      {/* ✅ Parser status row for sub node */}
-                      <ParserStatusRow
-                        node={sub}
-                        onCreateClick={() => {
-                          const nodeId = sub.id || sub.templateId || sub._id;
-                          onParserCreate?.(nodeId, sub);
-                        }}
-                        onModifyClick={() => {
-                          const nodeId = sub.id || sub.templateId || sub._id;
-                          onParserModify?.(nodeId, sub);
-                        }}
-                        onEngineChipClick={(engineType) => {
-                          const nodeId = sub.id || sub.templateId || sub._id;
-                          // Map EngineType to editor type
-                          const editorTypeMap: Record<EngineType, 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings'> = {
-                            regex: 'regex',
-                            rule_based: 'extractor',
-                            ner: 'ner',
-                            llm: 'llm',
-                            embedding: 'embeddings',
-                          };
-                          const editorType = editorTypeMap[engineType] || 'regex';
-                          onEngineChipClick?.(nodeId, sub, editorType);
-                        }}
-                      />
                     </React.Fragment>
                   );
                 })}

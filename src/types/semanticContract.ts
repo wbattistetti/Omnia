@@ -70,6 +70,7 @@ export interface SemanticContract {
     format: 'object' | 'value'; // Output format: 'object' for composite, 'value' for simple
     keys?: string[];           // Canonical output keys (e.g., ["day", "month", "year"]) - only for 'object'
   };
+  canonicalExamples?: import('./canonicalValueSets').CanonicalValueSets; // Canonical value sets (engine-agnostic examples)
   version?: number;           // Contract version for versioning
   createdAt?: Date;           // Creation date
   updatedAt?: Date;           // Last update date

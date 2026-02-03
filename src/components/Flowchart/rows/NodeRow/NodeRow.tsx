@@ -385,8 +385,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           if (!row.taskId) {
             // Create Task for this row (default to Message type)
             const newTask = createRowWithTask(instanceId, TaskType.SayMessage, label, projectId); // ✅ TaskType enum invece di stringa
-            // Update row to include taskId (will be persisted via onUpdate)
-            (row as any).taskId = newTask.taskId;
+            // ✅ REGOLA ARCHITETTURALE: task.id = row.id (newTask.id === instanceId === row.id)
+            // ✅ NON modificare row.taskId direttamente (row è una prop immutabile)
+            // ✅ Il task è già stato creato con instanceId come ID, quindi newTask.id === instanceId è sempre vero
           } else {
             // Row already has Task, update it
             taskRepository.updateTask(row.taskId, { text: label }, projectId);
@@ -863,7 +864,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           if (!row.taskId) {
             // Create Task for this row
             const task = createRowWithTask(instanceId, taskType, '', projectId); // ✅ TaskType enum
-            (row as any).taskId = task.id;  // NodeRowData.taskId = Task.id
+            // ✅ REGOLA ARCHITETTURALE: task.id = row.id (task.id === instanceId === row.id)
+            // ✅ NON modificare row.taskId direttamente (row è una prop immutabile)
+            // ✅ Il task è già stato creato con instanceId come ID, quindi task.id === instanceId è sempre vero
           } else {
             // Update Task type
             updateRowTaskType(row, taskType, projectId); // ✅ RINOMINATO: updateRowTaskAction → updateRowTaskType
@@ -978,7 +981,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     if (!row.taskId) {
       // Create Task for this row
       const task = createRowWithTask(instanceId, taskType, row.text || '', projectId); // ✅ TaskType enum
-      (row as any).taskId = task.id;  // NodeRowData.taskId = Task.id
+      // ✅ REGOLA ARCHITETTURALE: task.id = row.id (task.id === instanceId === row.id)
+      // ✅ NON modificare row.taskId direttamente (row è una prop immutabile)
+      // ✅ Il task è già stato creato con instanceId come ID, quindi task.id === instanceId è sempre vero
     } else {
       // Update Task type
       updateRowTaskType(row, taskType, projectId); // ✅ RINOMINATO: updateRowTaskAction → updateRowTaskType
@@ -1174,7 +1179,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           if (initialIntents.length > 0) {
             taskRepository.updateTask(task.id, { intents: initialIntents }, projectId);
           }
-          (row as any).taskId = task.id;
+          // ✅ REGOLA ARCHITETTURALE: task.id = row.id (task.id === instanceId === row.id)
+          // ✅ NON modificare row.taskId direttamente (row è una prop immutabile)
+          // ✅ Il task è già stato creato con instanceId come ID, quindi task.id === instanceId è sempre vero
         } else {
           // Update Task type
           updateRowTaskType(row, taskTypeEnum, projectId); // ✅ RINOMINATO: updateRowTaskAction → updateRowTaskType
@@ -1730,7 +1737,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                     // ✅ REGOLA ARCHITETTURALE: task.id = row.id, quindi row.taskId = row.id
                     // Se row.taskId è corretto, il task esiste e può essere trovato
-                    const taskForType = row.taskId ? taskRepository.getTask(row.taskId) : null;
+                    // ✅ FIX: taskForType deve essere let perché può essere riassegnato nel fallback
+                    let taskForType = row.taskId ? taskRepository.getTask(row.taskId) : null;
 
                     console.log('[🔍 NodeRow][onOpenDDT] Task check', {
                       rowId: row.id,
@@ -1946,15 +1954,20 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       }
 
                       // ✅ Crea task base (con DDT se inferreddata presente)
-                      taskForType = taskRepository.createTask(
+                      // ✅ FIX: taskForType è già dichiarato come const sopra, quindi usiamo una nuova variabile
+                      const newTask = taskRepository.createTask(
                         metaTaskType,
                         metaTemplateId,
                         initialTaskData,
                         row.id,
                         projectId
                       );
-                      // ✅ REGOLA ARCHITETTURALE: task.id = row.id, quindi row.taskId = row.id
-                      (row as any).taskId = row.id;
+                      // ✅ REGOLA ARCHITETTURALE: task.id = row.id
+                      // ✅ NON modificare row.taskId direttamente (row è una prop immutabile)
+                      // ✅ Il task è già stato creato con row.id come ID, quindi task.id === row.id è sempre vero
+
+                      // ✅ Assegna newTask a taskForType (ora taskForType punta al nuovo task)
+                      taskForType = newTask;
 
                       // ✅ Se c'è templateId, usa funzione centralizzata per clonare e adattare
                       if (metaTemplateId) {
@@ -2096,8 +2109,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       row.id,
                       projectId
                     );
-                    // ✅ REGOLA ARCHITETTURALE: task.id = row.id, quindi row.taskId = row.id
-                    (row as any).taskId = row.id;
+                    // ✅ REGOLA ARCHITETTURALE: task.id = row.id
+                    // ✅ NON modificare row.taskId direttamente (row è una prop immutabile)
+                    // ✅ Il task è già stato creato con row.id come ID, quindi task.id === row.id è sempre vero
 
                     // ✅ Se c'è templateId, copia steps (escalations) dal template
                     if (metaTemplateId) {
@@ -2319,11 +2333,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                           projectId
                         );
 
-                        // ✅ REGOLA ARCHITETTURALE: task.id = row.id, quindi row.taskId = row.id
-                        (row as any).taskId = row.id;
-                        console.log('[🔍 NodeRow][PreviewConfirm] ✅ row.taskId impostato', {
+                        // ✅ REGOLA ARCHITETTURALE: task.id = row.id
+                        // ✅ NON modificare row.taskId direttamente (row è una prop immutabile)
+                        // ✅ Il task è già stato creato con row.id come ID, quindi task.id === row.id è sempre vero
+                        console.log('[🔍 NodeRow][PreviewConfirm] ✅ Task creato', {
                           rowId: row.id,
-                          taskId: row.id
+                          taskId: task.id
                         });
 
                         // Clona steps e adatta prompt (modifica task.steps in-place)
@@ -2394,11 +2409,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                           projectId
                         );
 
-                        // ✅ REGOLA ARCHITETTURALE: task.id = row.id, quindi row.taskId = row.id
-                        (row as any).taskId = row.id;
-                        console.log('[🔍 NodeRow][PreviewConfirm] ✅ row.taskId impostato (AI)', {
+                        // ✅ REGOLA ARCHITETTURALE: task.id = row.id
+                        // ✅ NON modificare row.taskId direttamente (row è una prop immutabile)
+                        // ✅ Il task è già stato creato con row.id come ID, quindi task.id === row.id è sempre vero
+                        console.log('[🔍 NodeRow][PreviewConfirm] ✅ Task creato (AI)', {
                           rowId: row.id,
-                          taskId: row.id
+                          taskId: task.id
                         });
 
                         // Genera tutti gli steps da AI
@@ -2454,11 +2470,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       projectId
                     );
 
-                    // ✅ REGOLA ARCHITETTURALE: task.id = row.id, quindi row.taskId = row.id
-                    (row as any).taskId = row.id;
-                    console.log('[🔍 NodeRow][PreviewReject] ✅ row.taskId impostato', {
+                    // ✅ REGOLA ARCHITETTURALE: task.id = row.id
+                    // ✅ NON modificare row.taskId direttamente (row è una prop immutabile)
+                    // ✅ Il task è già stato creato con row.id come ID, quindi task.id === row.id è sempre vero
+                    console.log('[🔍 NodeRow][PreviewReject] ✅ Task creato', {
                       rowId: row.id,
-                      taskId: row.id
+                      taskId: task.id
                     });
 
                     taskEditorCtx.open({ id: task.id, type: TaskType.UtteranceInterpretation, label: row.text, instanceId: row.id });

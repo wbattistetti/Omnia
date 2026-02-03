@@ -163,18 +163,40 @@ export async function generateStructureFromAI(
     throw new Error('[taskOrchestrator] AI call failed o restituito null');
   }
 
+  // ✅ Log completo della risposta per debugging
+  console.log('[taskOrchestrator] 📥 Risposta AI ricevuta', {
+    hasResult: !!result,
+    resultKeys: result ? Object.keys(result) : [],
+    resultType: typeof result,
+    resultPreview: JSON.stringify(result).substring(0, 500)
+  });
+
   const ai = result.ai || result;
 
-  if (!ai.schema || !Array.isArray(ai.schema.data) || ai.schema.data.length === 0) {
+  // ✅ Supporta sia schema.mainData (nuovo formato) che schema.data (vecchio formato)
+  const mainData = ai.schema?.mainData || ai.schema?.data;
+
+  if (!ai.schema || !Array.isArray(mainData) || mainData.length === 0) {
+    console.error('[taskOrchestrator] ❌ Risposta AI non valida', {
+      hasSchema: !!ai.schema,
+      hasMainData: !!ai.schema?.mainData,
+      hasData: !!ai.schema?.data,
+      mainDataLength: ai.schema?.mainData?.length || 0,
+      dataLength: ai.schema?.data?.length || 0,
+      aiKeys: Object.keys(ai),
+      schemaKeys: ai.schema ? Object.keys(ai.schema) : [],
+      fullResult: JSON.stringify(result, null, 2).substring(0, 1000),
+      fullAi: JSON.stringify(ai, null, 2).substring(0, 1000)
+    });
     throw new Error('[taskOrchestrator] AI non ha restituito struttura dati valida');
   }
 
   // Converti in SchemaNode[]
-  const nodes: SchemaNode[] = ai.schema.data.map((m: any) => ({
+  const nodes: SchemaNode[] = mainData.map((m: any) => ({
     label: m.label || m.name || 'Field',
     type: m.type || 'text',
     constraints: m.constraints || [],
-    subTasks: (m.subTasks || []).map((s: any) => ({
+    subTasks: (m.subData || m.subTasks || []).map((s: any) => ({
       label: s.label || s.name || 'Field',
       type: s.type || 'text',
       constraints: s.constraints || [],

@@ -40,6 +40,7 @@ interface ParserStatusRowProps {
   onCreateClick: () => void;
   onModifyClick: () => void;
   onEngineChipClick: (engineType: EngineType) => void;
+  inline?: boolean; // If true, render only the icon (for inline use in button)
 }
 
 type ParserStatus = 'missing' | 'incomplete' | 'configured';
@@ -47,6 +48,7 @@ type ParserStatus = 'missing' | 'incomplete' | 'configured';
 interface ParserState {
   status: ParserStatus;
   engines: EngineType[];
+  escalation: any | null; // EngineEscalation | null
 }
 
 export default function ParserStatusRow({
@@ -54,6 +56,7 @@ export default function ParserStatusRow({
   onCreateClick,
   onModifyClick,
   onEngineChipClick,
+  inline = false,
 }: ParserStatusRowProps) {
   const [parserState, setParserState] = React.useState<ParserState | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -91,6 +94,7 @@ export default function ParserStatusRow({
         setParserState({
           status,
           engines: enabledEngines,
+          escalation,
         });
       } catch (error) {
         console.error('[ParserStatusRow] Error loading state:', error);
@@ -98,6 +102,7 @@ export default function ParserStatusRow({
           setParserState({
             status: 'missing',
             engines: [],
+            escalation: null,
           });
         }
       } finally {
@@ -135,6 +140,7 @@ export default function ParserStatusRow({
     setParserState({
       status,
       engines: enabledEngines,
+      escalation,
     });
   }, [node.id, node.templateId]);
 
@@ -156,112 +162,114 @@ export default function ParserStatusRow({
     );
   }
 
-  const { status, engines } = parserState;
+  const { status, engines, escalation } = parserState;
   const hasParser = status !== 'missing';
 
+  // Build tooltip text
+  const buildTooltip = () => {
+    if (status === 'missing') {
+      return 'Parser non creato. Clicca per creare.';
+    }
+
+    const parts: string[] = [];
+
+    // Active engines
+    if (engines.length > 0) {
+      const engineLabels = engines.map(e => ENGINE_LABELS[e] || e).join(', ');
+      parts.push(`Motori attivi: ${engineLabels}`);
+    } else {
+      parts.push('Nessun motore attivo');
+    }
+
+    // Escalation order
+    if (escalation?.engines && escalation.engines.length > 0) {
+      const escalationOrder = escalation.engines
+        .filter((e: any) => e.enabled)
+        .map((e: any, idx: number) => `${idx + 1}. ${ENGINE_LABELS[e.type] || e.type}`)
+        .join(', ');
+      if (escalationOrder) {
+        parts.push(`Escalation: ${escalationOrder}`);
+      }
+    }
+
+    return parts.join('\n');
+  };
+
+  const handleIconClick = () => {
+    if (status === 'missing') {
+      onCreateClick();
+    } else {
+      onModifyClick();
+    }
+  };
+
+  // Icon color: grey if missing, blue if exists
+  const iconColor = hasParser ? '#60a5fa' : '#6b7280';
+  const IconComponent = hasParser ? Code : Code2;
+
+  // Inline mode: render only the icon (for use inside button)
+  if (inline) {
+    return (
+      <div
+        onClick={(e) => {
+          e.stopPropagation(); // Prevent button click
+          handleIconClick();
+        }}
+        style={{
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          transition: 'opacity 0.2s',
+          marginLeft: 'auto', // Push to right
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.opacity = '0.7';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.opacity = '1';
+        }}
+        title={buildTooltip()}
+      >
+        <IconComponent
+          size={14}
+          color={iconColor}
+          style={{ opacity: hasParser ? 1 : 0.5 }}
+        />
+      </div>
+    );
+  }
+
+  // Default mode: render as separate row (backward compatibility)
   return (
     <div style={{
       display: 'flex',
-      flexDirection: 'column',
-      gap: '4px',
+      alignItems: 'center',
+      gap: '8px',
       padding: '4px 8px',
       marginTop: '4px',
     }}>
-      {/* Status row: icon + state/chips */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        flexWrap: 'wrap',
-      }}>
-        {/* Parser icon */}
-        {hasParser ? (
-          <Code size={14} color="#60a5fa" />
-        ) : (
-          <Code2 size={14} color="#6b7280" style={{ opacity: 0.5 }} />
-        )}
-
-        {/* Status text or engine chips */}
-        {status === 'missing' && (
-          <span style={{
-            fontSize: '12px',
-            color: '#9ca3af',
-          }}>
-            parser mancante
-          </span>
-        )}
-
-        {status === 'incomplete' && (
-          <>
-            <span style={{
-              fontSize: '12px',
-              color: '#fbbf24',
-            }}>
-              parser incompleto
-            </span>
-            {/* Show available engines even if incomplete */}
-            {engines.length > 0 && (
-              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                {engines.map((engineType) => (
-                  <EngineChip
-                    key={engineType}
-                    engineType={engineType}
-                    onClick={() => onEngineChipClick(engineType)}
-                  />
-                ))}
-              </div>
-            )}
-          </>
-        )}
-
-        {status === 'configured' && (
-          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-            {engines.map((engineType) => (
-              <EngineChip
-                key={engineType}
-                engineType={engineType}
-                onClick={() => onEngineChipClick(engineType)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Action button */}
-      <div>
-        {status === 'missing' ? (
-          <button
-            onClick={onCreateClick}
-            style={{
-              padding: '2px 8px',
-              fontSize: '11px',
-              background: 'rgba(96, 165, 250, 0.2)',
-              border: '1px solid rgba(96, 165, 250, 0.5)',
-              color: '#60a5fa',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontWeight: 500,
-            }}
-          >
-            Crea
-          </button>
-        ) : (
-          <button
-            onClick={onModifyClick}
-            style={{
-              padding: '2px 8px',
-              fontSize: '11px',
-              background: 'rgba(156, 163, 175, 0.2)',
-              border: '1px solid rgba(156, 163, 175, 0.5)',
-              color: '#e5e7eb',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontWeight: 500,
-            }}
-          >
-            Modifica
-          </button>
-        )}
+      {/* Clickable parser icon */}
+      <div
+        onClick={handleIconClick}
+        style={{
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          transition: 'opacity 0.2s',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.opacity = '0.7';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.opacity = '1';
+        }}
+        title={buildTooltip()}
+      >
+        <IconComponent
+          size={14}
+          color={iconColor}
+          style={{ opacity: hasParser ? 1 : 0.5 }}
+        />
       </div>
     </div>
   );
