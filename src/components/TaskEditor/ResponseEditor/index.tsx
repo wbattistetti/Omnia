@@ -1,33 +1,17 @@
-import React, { useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useMemo, useRef, useCallback, useEffect } from 'react';
 import { info } from '../../../utils/logger';
-import DDTWizard from '../../DialogueDataTemplateBuilder/DDTWizard/DDTWizard';
-import { isTaskTreeEmpty } from '../../../utils/ddt';
 import { useDDTManager } from '../../../context/DDTManagerContext';
 import { taskRepository } from '../../../services/TaskRepository';
 import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
 import { getTemplateId } from '../../../utils/taskHelpers';
-import { TaskType, isUtteranceInterpretationTemplateId, isUtteranceInterpretationTask } from '../../../types/taskTypes'; // ✅ Helper functions per evitare stringhe hardcoded
-import Sidebar from './Sidebar';
-import BehaviourEditor from './BehaviourEditor';
-import RightPanel, { useRightPanelWidth, RightPanelMode } from './RightPanel';
-import MessageReviewView from './MessageReview/MessageReviewView';
-// import SynonymsEditor from './SynonymsEditor';
-import DataExtractionEditor from './DataExtractionEditor';
+import { TaskType, isUtteranceInterpretationTemplateId } from '../../../types/taskTypes';
+import { useRightPanelWidth, RightPanelMode } from './RightPanel';
 import { ContractUpdateDialog } from './ContractUpdateDialog';
-import ContractWizard from './ContractWizard/ContractWizard';
-import { updateTemplateContract, createNewTemplateFrom } from '../../../services/TemplateUpdateService';
-import DialogueTaskService from '../../../services/DialogueTaskService';
 import EditorHeader from '../../common/EditorHeader';
 import { getTaskVisualsByType } from '../../Flowchart/utils/taskVisuals';
 import TaskDragLayer from './TaskDragLayer';
-import {
-  getdataList,
-  getSubDataList
-} from './ddtSelectors';
-import type { MaterializedStep } from '../../../types/taskTypes';
-import { v4 as uuidv4 } from 'uuid';
+import { getdataList, getSubDataList } from './ddtSelectors';
 import { hasIntentMessages } from './utils/hasMessages';
-import IntentMessagesBuilder from './components/IntentMessagesBuilder';
 import { saveIntentMessagesToTaskTree } from './utils/saveIntentMessages';
 import { useNodeSelection } from './hooks/useNodeSelection';
 import { useNodeUpdate } from './hooks/useNodeUpdate';
@@ -47,6 +31,10 @@ import { saveTaskOnProjectSave, saveTaskOnEditorClose, checkAndApplyTemplateSync
 import { useWizardInference } from './hooks/useWizardInference';
 import { useResponseEditorSideEffects } from './hooks/useResponseEditorSideEffects';
 import { useResponseEditorState } from './hooks/useResponseEditorState';
+import { useResponseEditorWizard } from './hooks/useResponseEditorWizard';
+import { ResponseEditorContent } from './components/ResponseEditorContent';
+import { ResponseEditorNormalLayout } from './components/ResponseEditorNormalLayout';
+import { useSidebarHandlers } from './hooks/useSidebarHandlers';
 import { validateTaskStructure, getTaskSemantics } from '../../../utils/taskSemantics';
 import { getIsTesting } from './testingState';
 
@@ -142,7 +130,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   });
 
   const rootRef = useRef<HTMLDivElement>(null);
-  const wizardOwnsDataRef = useRef(false); // Flag: wizard has control over data lifecycle
 
   // ✅ Cache globale per TaskTree pre-assemblati (per templateId)
   // Key: templateId (es. "723a1aa9-a904-4b55-82f3-a501dfbe0351")
@@ -224,10 +211,57 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     setPendingEditorOpen({ editorType, nodeId });
   }, [findAndSelectNodeById]);
 
-  // ✅ Handler for Generate All button
-  const handleGenerateAll = useCallback(() => {
-    setShowContractWizard(true);
-  }, []);
+  // ✅ Handler for Intent Messages Complete
+  const handleIntentMessagesComplete = useCallback((messages: any) => {
+    const updatedTaskTree = saveIntentMessagesToTaskTree(taskTree, messages);
+
+    // ✅ CRITICO: Salva il DDT nell'istanza IMMEDIATAMENTE quando si completano i messaggi
+    // Questo assicura che quando si fa "Save" globale, l'istanza abbia il DDT aggiornato
+    if (task?.id || (task as any)?.instanceId) {
+      const key = ((task as any)?.instanceId || task?.id) as string;
+      // ✅ MIGRATION: Use getTemplateId() helper
+      // ✅ FIX: Se c'è un DDT, assicurati che il templateId sia 'UtteranceInterpretation'
+      const taskInstance = taskRepository.getTask(key);
+      const hasTaskTree = updatedTaskTree && Object.keys(updatedTaskTree).length > 0 && updatedTaskTree.nodes && updatedTaskTree.nodes.length > 0;
+      if (hasTaskTree && taskInstance) {
+        const currentTemplateId = getTemplateId(taskInstance);
+        // ✅ Usa helper function invece di stringa hardcoded
+        // ✅ Update task con campi TaskTree direttamente (niente wrapper value)
+        if (!isUtteranceInterpretationTemplateId(currentTemplateId)) {
+          taskRepository.updateTask(key, {
+            type: TaskType.UtteranceInterpretation,  // ✅ type: enum numerico
+            templateId: null,            // ✅ templateId: null (standalone)
+            ...updatedTaskTree  // ✅ Spread: label, nodes, steps, ecc.
+          }, currentProjectId || undefined);
+        } else {
+          taskRepository.updateTask(key, {
+            ...updatedTaskTree  // ✅ Spread: label, nodes, steps, ecc.
+          }, currentProjectId || undefined);
+        }
+      } else if (hasTaskTree) {
+        // Task doesn't exist, create it with UtteranceInterpretation type
+        taskRepository.createTask(TaskType.UtteranceInterpretation, null, updatedTaskTree, key, currentProjectId || undefined);
+      } else {
+        // FIX: Salva con projectId per garantire persistenza nel database
+        taskRepository.updateTask(key, {
+          ...updatedTaskTree  // ✅ Spread: label, nodes, steps, ecc.
+        }, currentProjectId || undefined);
+      }
+
+      // ✅ FIX: Notifica il parent (DDTHostAdapter) che il TaskTree è stato aggiornato
+      onWizardComplete?.(updatedTaskTree);
+    }
+
+    try {
+      replaceSelectedTaskTree(updatedTaskTree);
+    } catch (err) {
+      console.error('[ResponseEditor][replaceSelectedDDT] FAILED', err);
+    }
+
+    // After saving, show normal editor (needsIntentMessages will become false)
+  }, [task, taskTree, currentProjectId, onWizardComplete, replaceSelectedTaskTree]);
+
+  // ✅ Wizard logic managed by useResponseEditorWizard hook
 
   // ✅ TaskTree come ref mutabile (simula VB.NET: modifica diretta sulla struttura in memoria)
   const taskTreeRef = useRef(taskTree);
@@ -327,10 +361,14 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   // ✅ Sidebar drag state (già estratto in useResponseEditorState)
   const sidebarStartWidthRef = React.useRef<number>(0);
   const sidebarStartXRef = React.useRef<number>(0);
-
-  // ✅ Ref per il resize del pannello Tasks
   const tasksStartWidthRef = React.useRef<number>(0);
   const tasksStartXRef = React.useRef<number>(0);
+
+  // ✅ Sidebar handlers managed by useSidebarHandlers hook
+  const sidebarHandlers = useSidebarHandlers({
+    taskTree,
+    replaceSelectedTaskTree,
+  });
 
   const handleSidebarResizeStart = React.useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -366,6 +404,9 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     return firstMain?.kind === 'intent' && !hasMessages;
   }, [mainList, taskTree, task]); // ✅ CORRETTO: Passa task a hasIntentMessages
 
+  // ✅ Ref per controllare ownership del wizard sui dati (creato prima per essere passato a entrambi gli hook)
+  const wizardOwnsDataRef = useRef(false);
+
   // ✅ Usa hook custom per gestire wizard e inferenza (estratto per migliorare manutenibilità)
   const {
     showWizard,
@@ -384,6 +425,35 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     selectedModel,
     preAssembledTaskTreeCache,
     wizardOwnsDataRef,
+  });
+
+  // ✅ Wizard handlers and logic managed by useResponseEditorWizard hook
+  const {
+    handleGenerateAll,
+    handleContractWizardClose,
+    handleContractWizardNodeUpdate,
+    handleContractWizardComplete,
+    handleDDTWizardCancel,
+    handleDDTWizardComplete,
+    getInitialDDT,
+    shouldShowInferenceLoading,
+  } = useResponseEditorWizard({
+    task: task && 'templateId' in task ? task : null,
+    taskTree,
+    taskTreeRef,
+    currentProjectId,
+    showWizard,
+    showContractWizard,
+    isInferring,
+    inferenceResult,
+    setShowWizard,
+    setShowContractWizard,
+    setTaskTreeVersion,
+    setLeftPanelMode,
+    replaceSelectedDDT: replaceSelectedTaskTree,
+    wizardOwnsDataRef,
+    onClose,
+    onWizardComplete,
   });
   // ✅ TODO FUTURO: Category System (vedi documentation/TODO_NUOVO.md)
   // Aggiornare per usare getTaskVisuals(taskType, task?.category, task?.categoryCustom, !!taskTree)
@@ -440,7 +510,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     onTasksPanelModeChange: saveTasksPanelMode, // Nuovo handler
     onToggleSynonyms: () => setShowSynonyms(v => !v),
     onToggleMessageReview: () => setShowMessageReview(v => !v),
-    onOpenContractWizard: () => setShowContractWizard(true), // Nuovo: apri wizard contract
+    onOpenContractWizard: handleGenerateAll, // Nuovo: apri wizard contract
     rightWidth,
     onRightWidthChange: setRightWidth,
     testPanelWidth,
@@ -1405,642 +1475,83 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       )}
 
       {/* Contenuto */}
-      {(() => {
-        return null;
-      })()}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
-        {false && isTaskTreeEmpty(taskTree) ? ( // Summarizer not yet implemented
-          /* Placeholder for Summarizer when TaskTree is empty */
-          <div className={combinedClass} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '24px', color: '#e2e8f0', lineHeight: 1.6 }}>
-            <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-              <h2 className={combinedClass} style={{ fontWeight: 700, marginBottom: '16px', color: '#fb923c', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                🧠 Summarizing (in arrivo)
-              </h2>
-              <p className={combinedClass} style={{ marginBottom: '16px' }}>
-                Questo modulo (generale) riepiloga dati raccolti e chiede conferma (opzionale) con gestione delle correzioni.
-              </p>
-              <p className={combinedClass} style={{ marginBottom: '16px' }}>
-                Il designer deve solo specificare quali dati vanno riepilogati.
-              </p>
-              <p className={combinedClass} style={{ marginBottom: '16px', fontWeight: 600 }}>📌 Esempio:</p>
-              <div className={combinedClass} style={{ marginBottom: '16px', padding: '16px', background: '#1e293b', borderRadius: '8px', lineHeight: 1.8 }}>
-                <div style={{ marginBottom: '8px' }}><strong>👤 Utente:</strong> Salve, buongiorno.</div>
-                <div style={{ marginBottom: '8px' }}><strong>🤖 Agente:</strong> Buongiorno! Riepilogo i dati: Mario Rossi, nato a Milano il 17 maggio 1980, residente in via Ripamonti numero 13. Giusto?</div>
-                <div style={{ marginBottom: '8px' }}><strong>👤 Utente:</strong> No, l'indirizzo esatto è via RI-GA-MON-TI non Ripamonti e sono nato il 18 maggio non il 17</div>
-                <div style={{ marginBottom: '8px' }}><strong>🤖 Agente:</strong> Certo. Mario Rossi, nato a Milano il 18 maggio 1980, residente in via Rigamonti al numero 17. Giusto?</div>
-                <div style={{ marginBottom: '8px' }}><strong>👤 Utente:</strong> Giusto!</div>
-                <div><strong>🤖 Agente:</strong> Perfetto.</div>
-              </div>
-            </div>
-          </div>
-        ) : false && isTaskTreeEmpty(taskTree) ? ( // Negotiation not yet implemented
-          /* Placeholder for Negotiation when TaskTree is empty */
-          <div className={combinedClass} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '24px', color: '#e2e8f0', lineHeight: 1.6 }}>
-            <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-              <h2 className={combinedClass} style={{ fontWeight: 700, marginBottom: '16px', color: '#fb923c', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                Negotiation (in arrivo)
-              </h2>
-              <p className={combinedClass} style={{ marginBottom: '16px' }}>
-                Questo modulo gestisce la negoziazione di una serie di "estrazioni con vincoli" da una insieme di opzioni. Vale per date, orari, o in generale insieme di opzioni.
-              </p>
-              <p className={combinedClass} style={{ marginBottom: '16px', fontWeight: 600 }}>Il modulo supporta:</p>
-              <ul className={combinedClass} style={{ marginBottom: '16px', paddingLeft: '24px' }}>
-                <li>Proposte e controproposte</li>
-                <li>Riformulazioni e chiarimenti</li>
-                <li>Ripetizione delle opzioni</li>
-                <li>Navigazione avanti e indietro tra le alternative</li>
-                <li>Impostazione di vincoli o preferenze (es. "solo dopo le 17", "non il lunedì")</li>
-              </ul>
-              <p className={combinedClass} style={{ marginBottom: '16px', fontWeight: 600 }}>📌 Esempio di dialogo di negoziazione (data appuntamento):</p>
-              <div className={combinedClass} style={{ marginBottom: '16px', padding: '16px', background: '#1e293b', borderRadius: '8px', lineHeight: 1.8 }}>
-                <div style={{ marginBottom: '8px' }}><strong>👤 Utente:</strong> Salve, buongiorno.</div>
-                <div style={{ marginBottom: '8px' }}><strong>🤖 Agente:</strong> Buongiorno! Abbiamo disponibilità per dopodomani alle 12, le andrebbe bene?</div>
-                <div style={{ marginBottom: '8px' }}><strong>👤 Utente:</strong> No, guardi, dopodomani non va bene. La settimana prossima? Ci sono date? Io potrei da giovedì.</div>
-                <div style={{ marginBottom: '8px' }}><strong>🤖 Agente:</strong> Certo! Giovedì abbiamo alle 17:45, poi venerdì alle 12. Altrimenti possiamo andare a lunedì successivo alle 14:00.</div>
-                <div style={{ marginBottom: '8px' }}><strong>👤 Utente:</strong> Mi scusi, mi può ripetere gli orari di giovedì?</div>
-                <div style={{ marginBottom: '8px' }}><strong>🤖 Agente:</strong> Certamente. Giovedì alle 17:45.</div>
-                <div style={{ marginBottom: '8px' }}><strong>👤 Utente:</strong> Mmm, è troppo tardi. Invece lunedi?</div>
-                <div style={{ marginBottom: '8px' }}><strong>🤖 Agente:</strong> Martedi 23?</div>
-                <div style={{ marginBottom: '8px' }}><strong>🤖 Agente:</strong> Martedi 23 abbiamo disponibilita alle 19.</div>
-                <div style={{ marginBottom: '8px' }}><strong>👤 Utente:</strong> Ancora peggio. Allora facciamo gioved' alle 17:45.</div>
-                <div style={{ marginBottom: '8px' }}><strong>🤖 Agente:</strong> Ok Va bene per giovedi alle 17:45 allora?</div>
-                <div><strong>👤 Utente:</strong> Si va bene.</div>
-              </div>
-            </div>
-          </div>
-        ) : isInferring ? (
-          /* Mostra loading durante ricerca modello */
-          <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e2e8f0' }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '18px', marginBottom: '16px' }}>🔍 Sto cercando se ho già un modello per il tipo di dato che ti serve.</div>
-              <div style={{ fontSize: '14px', color: '#94a3b8' }}>Un attimo solo...</div>
-            </div>
-          </div>
-        ) : showContractWizard ? (
-          /* Contract & Parser Generation Wizard - Integrated Mode */
-          <ContractWizard
-            taskTree={taskTreeRef.current}
-            integrated={true}
-            onClose={() => setShowContractWizard(false)}
-            onNodeUpdate={(nodeId) => {
-              // ✅ Trigger refresh of parser status in Sidebar
-              // This will be handled by ParserStatusRow's internal refresh
-              console.log('[ResponseEditor] Node updated:', nodeId);
-              // Force re-render of Sidebar to show updated parser status
-              setTaskTreeVersion(v => v + 1);
-            }}
-            onComplete={(results) => {
-              console.log('[ResponseEditor] Contract wizard completed:', results);
-              setShowContractWizard(false);
-              // Force re-render of Sidebar to show updated parser status
-              setTaskTreeVersion(v => v + 1);
-            }}
-          />
-        ) : showWizard ? (
-          /* Full-screen wizard without RightPanel */
-          /* ✅ FIX: Non montare wizard se dovrebbe avere inferenceResult ma non ce l'ha ancora */
-          (() => {
-            // Se abbiamo task.label e dovremmo aver fatto inferenza, aspetta inferenceResult // ✅ RINOMINATO: act → task
-            // ✅ MA solo se l'inferenza è ancora in corso (isInferring === true)
-            // ✅ Se l'inferenza è finita ma non c'è risultato, apri comunque il wizard
-            const taskLabel = task?.label?.trim(); // ✅ RINOMINATO: actLabel → taskLabel, act → task
-            const shouldHaveInference = taskLabel && taskLabel.length >= 3;
-
-            // ✅ Mostra loading solo se l'inferenza è ancora in corso
-            if (shouldHaveInference && !inferenceResult && isInferring) {
-              return (
-                <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e2e8f0' }}>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '18px', marginBottom: '16px' }}>🔍 Sto cercando se ho già un modello per il tipo di dato che ti serve.</div>
-                    <div style={{ fontSize: '14px', color: '#94a3b8' }}>Un attimo solo...</div>
-                  </div>
-                </div>
-              );
-            }
-
-            // ✅ Se l'inferenza è finita ma non c'è risultato, apri comunque il wizard
-            // (l'inferenza potrebbe essere fallita o non necessaria)
-
-            return (
-              <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                <DDTWizard
-                  taskType={task?.type ? String(task.type) : undefined} // ✅ Convert TaskType enum to string
-                  taskLabel={task?.label || ''} // ✅ Passa il label del task (testo della riga di nodo) come fallback
-                  initialDDT={inferenceResult?.ai?.schema ? {
-                    // ✅ Pre-compila con il risultato dell'inferenza
-                    id: taskTree?.id || `temp_taskTree_${task?.id}`,
-                    label: inferenceResult.ai.schema.label || task?.label || 'Data',
-                    nodes: inferenceResult.ai.schema.nodes || [],
-                    _inferenceResult: inferenceResult // Passa anche il risultato completo per riferimento (con traduzioni se disponibili)
-                  } : (taskTree && taskTree.nodes && taskTree.nodes.length > 0 ? {
-                    // ✅ Se taskTree ha nodes (creato da categoria), passalo come initialDDT
-                    // Il wizard andrà direttamente a 'structure' e mostrerà "Build Messages"
-                    id: taskTree?.id || `temp_taskTree_${task?.id}`,
-                    label: taskTree?.label || task?.label || 'Data',
-                    nodes: taskTree.nodes,
-                    steps: taskTree.steps,  // ✅ Steps a root level
-                    constraints: taskTree.constraints,
-                    dataContract: taskTree.dataContract
-                  } : taskTree)}
-                  onCancel={onClose || (() => { })}
-                  onComplete={async (finalDDT, messages) => {
-                    if (!finalDDT) {
-                      console.error('[ResponseEditor] onComplete called with null/undefined finalDDT');
-                      return;
-                    }
-
-                    // ✅ DEBUG: Verifica cosa contiene finalDDT dal wizard
-                    console.log('[ResponseEditor][onComplete] 🔍 finalDDT from wizard', {
-                      hasFinalDDT: !!finalDDT,
-                      finalDDTKeys: Object.keys(finalDDT || {}),
-                      hasSteps: !!finalDDT.steps,
-                      stepsType: typeof finalDDT.steps,
-                      stepsKeys: finalDDT.steps ? Object.keys(finalDDT.steps) : [],
-                      stepsCount: finalDDT.steps ? Object.keys(finalDDT.steps).length : 0,
-                      stepsDetails: finalDDT.steps ? Object.keys(finalDDT.steps).map(nodeId => {
-                        const nodeSteps = finalDDT.steps[nodeId];
-                        const isArray = Array.isArray(nodeSteps);
-                        const isObject = typeof nodeSteps === 'object' && !Array.isArray(nodeSteps);
-                        let stepKeys: string[] = [];
-                        if (isArray) {
-                          stepKeys = nodeSteps.map((s: any) => s?.type || 'unknown');
-                        } else if (isObject) {
-                          stepKeys = Object.keys(nodeSteps || {});
-                        }
-                        return {
-                          nodeId: nodeId.substring(0, 20) + '...',
-                          stepsType: typeof nodeSteps,
-                          isArray,
-                          isObject,
-                          stepKeys,
-                          stepCount: stepKeys.length
-                        };
-                      }) : [],
-                      hasNodes: !!finalDDT.nodes,
-                      nodesLength: finalDDT.nodes?.length || 0,
-                      firstNodeId: finalDDT.nodes?.[0]?.id
-                    });
-
-                    // ✅ NUOVO MODELLO: Usa direttamente finalDDT (TaskTree con nodes[])
-                    const coerced = finalDDT;
-
-                    // Set flag to prevent auto-reopen IMMEDIATELY (before any state updates)
-                    wizardOwnsDataRef.current = true;
-
-                    // ✅ CRITICAL: Salva immediatamente il task con steps per evitare perdita dati
-                    // Questo assicura che quando si riapre l'editor, i steps siano già salvati
-                    if (task?.id || task?.instanceId) {
-                      const key = (task?.instanceId || task?.id) as string;
-                      const hasDDT = coerced && Object.keys(coerced).length > 0 && coerced.nodes && coerced.nodes.length > 0;
-
-                      if (hasDDT) {
-                        let taskInstance = taskRepository.getTask(key);
-                        if (!taskInstance) {
-                          const taskType = task?.type ?? TaskType.UtteranceInterpretation;
-                          taskInstance = taskRepository.createTask(taskType, null, undefined, key, currentProjectId || undefined);
-                        }
-
-                        // ✅ DEBUG: Verifica taskInstance prima del salvataggio
-                        console.log('[ResponseEditor][onComplete] 🔍 taskInstance before save', {
-                          key,
-                          hasTaskInstance: !!taskInstance,
-                          taskInstanceHasSteps: !!taskInstance.steps,
-                          taskInstanceStepsKeys: taskInstance.steps ? Object.keys(taskInstance.steps) : [],
-                          taskInstanceStepsCount: taskInstance.steps ? Object.keys(taskInstance.steps).length : 0
-                        });
-
-                        // ✅ Usa funzione di persistenza per salvare
-                        await saveTaskToRepository(key, coerced, taskInstance, currentProjectId || undefined);
-
-                        // ✅ DEBUG: Verifica task salvato dopo il salvataggio
-                        const savedTask = taskRepository.getTask(key);
-                        console.log('[ResponseEditor][onComplete] ✅ Task saved with steps', {
-                          key,
-                          hasSteps: !!coerced.steps,
-                          stepsCount: coerced.steps ? Object.keys(coerced.steps).length : 0,
-                          nodesLength: coerced.nodes?.length || 0,
-                          savedTaskHasSteps: !!savedTask?.steps,
-                          savedTaskStepsKeys: savedTask?.steps ? Object.keys(savedTask.steps) : [],
-                          savedTaskStepsCount: savedTask?.steps ? Object.keys(savedTask.steps).length : 0,
-                          stepsWereSaved: savedTask?.steps && Object.keys(savedTask.steps).length > 0,
-                          stepsMatch: JSON.stringify(savedTask?.steps || {}) === JSON.stringify(coerced.steps || {})
-                        });
-                      }
-                    }
-
-                    // Update DDT state
-                    try {
-                      replaceSelectedDDT(coerced);
-                    } catch (err) {
-                      console.error('[ResponseEditor] replaceSelectedDDT FAILED', err);
-                    }
-
-                    // ✅ IMPORTANTE: Chiudi SEMPRE il wizard quando onComplete viene chiamato
-                    // Il wizard ha già assemblato il DDT, quindi non deve riaprirsi
-                    // Non controllare isEmpty qui perché potrebbe causare race conditions
-                    setShowWizard(false);
-                    // ✅ NOTE: inferenceStartedRef è gestito internamente da useWizardInference
-
-                    setLeftPanelMode('actions'); // Force show TaskList (now in Tasks panel)
-                    // ✅ selectedStepKey è ora gestito internamente da BehaviourEditor
-
-                    // If parent provided onWizardComplete, notify it after updating UI
-                    // (but don't close the overlay - let user see the editor)
-                    if (onWizardComplete) {
-                      onWizardComplete(coerced);
-                    }
-                  }}
-                  startOnStructure={false}
-                />
-              </div>
-            );
-          })()
-        ) : needsIntentMessages ? (
-          /* Build Messages UI for ProblemClassification without messages */
-          <div style={{ flex: 1, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start', padding: '16px 20px' }}>
-            <IntentMessagesBuilder
-              intentLabel={task?.label || taskTree?.label || 'chiedi il problema'}
-              onComplete={(messages) => {
-                const updatedTaskTree = saveIntentMessagesToTaskTree(taskTree, messages);
-
-                // ✅ CRITICO: Salva il DDT nell'istanza IMMEDIATAMENTE quando si completano i messaggi
-                // Questo assicura che quando si fa "Save" globale, l'istanza abbia il DDT aggiornato
-                if (task?.id || (task as any)?.instanceId) {
-                  const key = ((task as any)?.instanceId || task?.id) as string;
-                  // ✅ MIGRATION: Use getTemplateId() helper
-                  // ✅ FIX: Se c'è un DDT, assicurati che il templateId sia 'UtteranceInterpretation'
-                  const taskInstance = taskRepository.getTask(key);
-                  const hasTaskTree = updatedTaskTree && Object.keys(updatedTaskTree).length > 0 && updatedTaskTree.nodes && updatedTaskTree.nodes.length > 0;
-                  if (hasTaskTree && taskInstance) {
-                    const currentTemplateId = getTemplateId(taskInstance);
-                    // ✅ Usa helper function invece di stringa hardcoded
-                    // ✅ Update task con campi TaskTree direttamente (niente wrapper value)
-                    if (!isUtteranceInterpretationTemplateId(currentTemplateId)) {
-                      taskRepository.updateTask(key, {
-                        type: TaskType.UtteranceInterpretation,  // ✅ type: enum numerico
-                        templateId: null,            // ✅ templateId: null (standalone)
-                        ...updatedTaskTree  // ✅ Spread: label, nodes, steps, ecc.
-                      }, currentProjectId || undefined);
-                    } else {
-                      taskRepository.updateTask(key, {
-                        ...updatedTaskTree  // ✅ Spread: label, nodes, steps, ecc.
-                      }, currentProjectId || undefined);
-                    }
-                  } else if (hasTaskTree) {
-                    // Task doesn't exist, create it with UtteranceInterpretation type
-                    taskRepository.createTask(TaskType.UtteranceInterpretation, null, updatedTaskTree, key, currentProjectId || undefined);
-                  } else {
-                    // FIX: Salva con projectId per garantire persistenza nel database
-                    taskRepository.updateTask(key, {
-                      ...updatedTaskTree  // ✅ Spread: label, nodes, steps, ecc.
-                    }, currentProjectId || undefined);
-                  }
-
-                  // ✅ FIX: Notifica il parent (DDTHostAdapter) che il TaskTree è stato aggiornato
-                  onWizardComplete?.(updatedTaskTree);
-                }
-
-                try {
-                  replaceSelectedTaskTree(updatedTaskTree);
-                } catch (err) {
-                  console.error('[ResponseEditor][replaceSelectedDDT] FAILED', err);
-                }
-
-                // After saving, show normal editor (needsIntentMessages will become false)
-              }}
+        <ResponseEditorContent
+          isInferring={isInferring}
+          showContractWizard={showContractWizard}
+          showWizard={showWizard}
+          shouldShowInferenceLoading={shouldShowInferenceLoading}
+          needsIntentMessages={needsIntentMessages}
+          task={task && 'templateId' in task ? task : null}
+          taskTree={taskTree}
+          taskTreeRef={taskTreeRef}
+          handleContractWizardClose={handleContractWizardClose}
+          handleContractWizardNodeUpdate={handleContractWizardNodeUpdate}
+          handleContractWizardComplete={handleContractWizardComplete}
+          handleDDTWizardCancel={handleDDTWizardCancel}
+          handleDDTWizardComplete={handleDDTWizardComplete}
+          getInitialDDT={getInitialDDT}
+          onIntentMessagesComplete={handleIntentMessagesComplete}
+          normalEditorLayout={
+            <ResponseEditorNormalLayout
+              mainList={mainList}
+              taskTree={taskTree}
+              task={task && 'templateId' in task ? task : null}
+              currentProjectId={currentProjectId}
+              localTranslations={localTranslations}
+              escalationTasks={escalationTasks}
+              selectedMainIndex={selectedMainIndex}
+              selectedSubIndex={selectedSubIndex}
+              selectedRoot={selectedRoot}
+              selectedNode={selectedNode}
+              selectedNodePath={selectedNodePath}
+              handleSelectMain={handleSelectMain}
+              handleSelectSub={handleSelectSub}
+              handleSelectAggregator={handleSelectAggregator}
+              sidebarRef={sidebarRef}
+              onChangeSubRequired={sidebarHandlers.onChangeSubRequired}
+              onReorderSub={sidebarHandlers.onReorderSub}
+              onAddMain={sidebarHandlers.onAddMain}
+              onRenameMain={sidebarHandlers.onRenameMain}
+              onDeleteMain={sidebarHandlers.onDeleteMain}
+              onAddSub={sidebarHandlers.onAddSub}
+              onRenameSub={sidebarHandlers.onRenameSub}
+              onDeleteSub={sidebarHandlers.onDeleteSub}
+              handleParserCreate={handleParserCreate}
+              handleParserModify={handleParserModify}
+              handleEngineChipClick={handleEngineChipClick}
+              handleGenerateAll={handleGenerateAll}
+              isAggregatedAtomic={isAggregatedAtomic}
+              sidebarManualWidth={sidebarManualWidth}
+              isDraggingSidebar={isDraggingSidebar}
+              handleSidebarResizeStart={handleSidebarResizeStart}
+              showMessageReview={showMessageReview}
+              showSynonyms={showSynonyms}
+              selectedIntentIdForTraining={selectedIntentIdForTraining}
+              setSelectedIntentIdForTraining={setSelectedIntentIdForTraining}
+              pendingEditorOpen={pendingEditorOpen}
+              contractChangeRef={contractChangeRef}
+              taskType={taskType}
+              handleProfileUpdate={handleProfileUpdate}
+              updateSelectedNode={updateSelectedNode}
+              leftPanelMode={leftPanelMode}
+              testPanelMode={testPanelMode}
+              tasksPanelMode={tasksPanelMode}
+              rightWidth={rightWidth}
+              testPanelWidth={testPanelWidth}
+              tasksPanelWidth={tasksPanelWidth}
+              draggingPanel={draggingPanel}
+              setDraggingPanel={setDraggingPanel}
+              setRightWidth={setRightWidth}
+              setTestPanelWidth={setTestPanelWidth}
+              setTasksPanelWidth={setTasksPanelWidth}
+              tasksStartWidthRef={tasksStartWidthRef}
+              tasksStartXRef={tasksStartXRef}
+              replaceSelectedTaskTree={replaceSelectedTaskTree}
+              replaceSelectedDDT={replaceSelectedDDT}
             />
-          </div>
-        ) : (
-          /* Normal editor layout with 3 panels (no header, already shown above) */
-          <>
-            {/* ✅ Left navigation - IntentListEditor quando kind === "intent", Sidebar altrimenti */}
-            {/* ✅ ARCHITETTURA ESPERTO: Mostra Sidebar anche se mainList è vuoto inizialmente (DDT in loading) */}
-            {mainList[0]?.kind === 'intent' && task && (
-              <IntentListEditorWrapper
-                act={task as any}
-                onIntentSelect={(intentId) => {
-                  // Store selected intent ID in state to pass to EmbeddingEditor
-                  setSelectedIntentIdForTraining(intentId);
-                }}
-              />
-            )}
-            {/* ✅ ARCHITETTURA ESPERTO: Mostra Sidebar anche durante loading (mostrerà placeholder se mainList vuoto) */}
-            {mainList[0]?.kind !== 'intent' && (
-              <>
-                <Sidebar
-                  ref={sidebarRef}
-                  mainList={mainList} // ✅ mainList viene calcolato da ddt prop quando disponibile
-                  selectedMainIndex={selectedMainIndex}
-                  onSelectMain={handleSelectMain}
-                  selectedSubIndex={selectedSubIndex}
-                  onSelectSub={handleSelectSub}
-                  aggregated={isAggregatedAtomic}
-                  rootLabel={taskTree?.label || 'Data'}
-                  style={sidebarManualWidth ? { width: sidebarManualWidth, flexShrink: 0 } : { flexShrink: 0 }} // ✅ FIX: passa sempre style, ma width solo se c'è manualWidth
-                  onChangeSubRequired={(mIdx: number, sIdx: number, required: boolean) => {
-                    // Persist required flag on the exact sub (by indices), independent of current selection
-                    const next = JSON.parse(JSON.stringify(taskTree));
-                    const mains = getdataList(next);
-                    const main = mains[mIdx];
-                    if (!main) return;
-                    const subList = Array.isArray(main.subTasks) ? main.subTasks : [];
-                    if (sIdx < 0 || sIdx >= subList.length) return;
-                    subList[sIdx] = { ...subList[sIdx], required };
-                    main.subTasks = subList;
-                    mains[mIdx] = main;
-                    next.nodes = mains;
-                    try {
-                      const subs = getSubDataList(main) || [];
-                      const target = subs[sIdx];
-                      if (localStorage.getItem('debug.responseEditor') === '1') console.log('[DDT][subRequiredToggle][persist]', { main: main?.label, label: target?.label, required });
-                    } catch { }
-                    try { replaceSelectedTaskTree(next); } catch { }
-                  }}
-                  onReorderSub={(mIdx: number, fromIdx: number, toIdx: number) => {
-                    const next = JSON.parse(JSON.stringify(taskTree));
-                    const mains = getdataList(next);
-                    const main = mains[mIdx];
-                    if (!main) return;
-                    const subList = Array.isArray(main.subTasks) ? main.subTasks : [];
-                    if (fromIdx < 0 || fromIdx >= subList.length || toIdx < 0 || toIdx >= subList.length) return;
-                    const [moved] = subList.splice(fromIdx, 1);
-                    subList.splice(toIdx, 0, moved);
-                    main.subTasks = subList;
-                    mains[mIdx] = main;
-                    next.nodes = mains;
-                    try { if (localStorage.getItem('debug.responseEditor') === '1') console.log('[DDT][subReorder][persist]', { main: main?.label, fromIdx, toIdx }); } catch { }
-                    try { replaceSelectedTaskTree(next); } catch { }
-                  }}
-                  onAddMain={(label: string) => {
-                    const next = JSON.parse(JSON.stringify(taskTree));
-                    const mains = getdataList(next);
-                    mains.push({ label, subTasks: [] });
-                    next.nodes = mains;
-                    try { replaceSelectedTaskTree(next); } catch { }
-                  }}
-                  onRenameMain={(mIdx: number, label: string) => {
-                    const next = JSON.parse(JSON.stringify(taskTree));
-                    const mains = getdataList(next);
-                    if (!mains[mIdx]) return;
-                    mains[mIdx].label = label;
-                    next.nodes = mains;
-                    try { replaceSelectedTaskTree(next); } catch { }
-                  }}
-                  onDeleteMain={(mIdx: number) => {
-                    const next = JSON.parse(JSON.stringify(taskTree));
-                    const mains = getdataList(next);
-                    if (mIdx < 0 || mIdx >= mains.length) return;
-                    mains.splice(mIdx, 1);
-                    next.nodes = mains;
-                    try { replaceSelectedTaskTree(next); } catch { }
-                  }}
-                  onAddSub={(mIdx: number, label: string) => {
-                    const next = JSON.parse(JSON.stringify(taskTree));
-                    const mains = getdataList(next);
-                    const main = mains[mIdx];
-                    if (!main) return;
-                    const list = Array.isArray(main.subTasks) ? main.subTasks : [];
-                    list.push({ label, required: true });
-                    main.subTasks = list;
-                    mains[mIdx] = main;
-                    next.nodes = mains;
-                    try { replaceSelectedTaskTree(next); } catch { }
-                  }}
-                  onRenameSub={(mIdx: number, sIdx: number, label: string) => {
-                    const next = JSON.parse(JSON.stringify(taskTree));
-                    const mains = getdataList(next);
-                    const main = mains[mIdx];
-                    if (!main) return;
-                    const list = Array.isArray(main.subTasks) ? main.subTasks : [];
-                    if (sIdx < 0 || sIdx >= list.length) return;
-                    list[sIdx] = { ...(list[sIdx] || {}), label };
-                    main.subTasks = list;
-                    mains[mIdx] = main;
-                    next.nodes = mains;
-                    try { replaceSelectedTaskTree(next); } catch { }
-                  }}
-                  onDeleteSub={(mIdx: number, sIdx: number) => {
-                    const next = JSON.parse(JSON.stringify(taskTree));
-                    const mains = getdataList(next);
-                    const main = mains[mIdx];
-                    if (!main) return;
-                    const list = Array.isArray(main.subTasks) ? main.subTasks : [];
-                    if (sIdx < 0 || sIdx >= list.length) return;
-                    list.splice(sIdx, 1);
-                    main.subTasks = list;
-                    mains[mIdx] = main;
-                    next.nodes = mains;
-                    try { replaceSelectedTaskTree(next); } catch { }
-                  }}
-                  onSelectAggregator={handleSelectAggregator}
-                  onParserCreate={handleParserCreate}
-                  onParserModify={handleParserModify}
-                  onEngineChipClick={handleEngineChipClick}
-                  onGenerateAll={handleGenerateAll}
-                />
-                {/* ✅ REFACTOR: Resizer verticale tra Sidebar e contenuto principale - sempre visibile */}
-                <div
-                  onMouseDown={(e) => {
-                    handleSidebarResizeStart(e);
-                  }}
-                  style={{
-                    width: 8,
-                    cursor: 'col-resize',
-                    background: isDraggingSidebar ? '#fb923c' : '#fb923c22',
-                    transition: 'background 0.15s ease',
-                    flexShrink: 0,
-                    position: 'relative',
-                    zIndex: isDraggingSidebar ? 100 : 10, // ✅ z-index più alto
-                    userSelect: 'none',
-                    WebkitUserSelect: 'none',
-                    touchAction: 'none',
-                  }}
-                  aria-label="Resize sidebar"
-                  role="separator"
-                />
-              </>
-            )}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100%', overflow: 'hidden' }}>
-              {/* Content */}
-              <div style={{ display: 'flex', minHeight: 0, flex: 1, height: '100%', overflow: 'hidden' }}>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, padding: showMessageReview ? '8px' : '8px 8px 0 8px', height: '100%', overflow: 'hidden' }}>
-                  {showMessageReview ? (
-                    <div style={{ flex: 1, minHeight: 0, background: '#fff', borderRadius: 16, boxShadow: '0 2px 8px #e0d7f7', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                        <MessageReviewView node={selectedNode} translations={localTranslations} updateSelectedNode={updateSelectedNode} />
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
-                      {showSynonyms ? (
-                        <div style={{ padding: 6, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-                          {/* ✅ TesterGrid deve rimanere visibile durante batch per mostrare risultati e permettere input */}
-                          <DataExtractionEditor
-                            node={selectedNode}
-                            taskType={taskType}
-                            locale={'it-IT'}
-                            intentSelected={mainList[0]?.kind === 'intent' ? selectedIntentIdForTraining || undefined : undefined}
-                            task={task}
-                            updateSelectedNode={updateSelectedNode}
-                            contractChangeRef={contractChangeRef}
-                            initialEditor={
-                              pendingEditorOpen &&
-                              selectedNode &&
-                              (selectedNode.id === pendingEditorOpen.nodeId ||
-                               selectedNode.templateId === pendingEditorOpen.nodeId)
-                                ? pendingEditorOpen.editorType
-                                : undefined
-                            }
-                            onChange={(profile) => {
-                              // ✅ CRITICAL: Block onChange during batch testing per prevenire feedback loop
-                              if (getIsTesting()) {
-                                return;
-                              }
-                              // ✅ Usa handleProfileUpdate invece di updateSelectedNode
-                              handleProfileUpdate({
-                                ...profile,
-                                // Assicura che kind e synonyms siano aggiornati anche in node root
-                                ...(profile.kind && profile.kind !== 'auto' ? { _kindManual: profile.kind } : {}),
-                              });
-                            }}
-                          />
-                        </div>
-                      ) : (
-                        // ✅ Nuovo componente BehaviourEditor che contiene StepsStrip + StepEditor
-                        <BehaviourEditor
-                          node={selectedNode}
-                          translations={localTranslations}
-                          updateSelectedNode={updateSelectedNode}
-                          selectedRoot={selectedRoot}
-                          selectedSubIndex={selectedSubIndex}
-                        />
-                      )}
-                    </div>
-                  )}
-                </div>
-                {/* ✅ Pannello sinistro: Behaviour/Personality/Recognition (mutualmente esclusivi) */}
-                {/* ✅ NON mostrare il pannello quando Behaviour è attivo (leftPanelMode === 'actions')
-                    perché TaskList è ora nel pannello Tasks separato */}
-                {!showSynonyms && !showMessageReview && leftPanelMode !== 'none' && leftPanelMode !== 'chat' && leftPanelMode !== 'actions' && rightWidth > 1 && (
-                  <RightPanel
-                    mode={leftPanelMode}
-                    width={rightWidth}
-                    onWidthChange={setRightWidth}
-                    onStartResize={() => setDraggingPanel('left')}
-                    dragging={draggingPanel === 'left'}
-                    taskTree={taskTree}
-                    task={task && 'templateId' in task ? task : null}
-                    projectId={currentProjectId}
-                    translations={localTranslations}
-                    selectedNode={selectedNode}
-                    onUpdateDDT={(updater) => {
-                      const updated = updater(taskTree);
-                      try { replaceSelectedTaskTree(updated); } catch { }
-                    }}
-                    tasks={escalationTasks}
-                  />
-                )}
-
-                {/* ✅ Pannello destro: Test (indipendente, può essere mostrato insieme agli altri) */}
-                {testPanelMode === 'chat' && testPanelWidth > 1 && (
-                  <>
-                    <RightPanel
-                      mode="chat"
-                      width={testPanelWidth}
-                      onWidthChange={setTestPanelWidth}
-                      onStartResize={() => setDraggingPanel('test')}
-                      dragging={draggingPanel === 'test'}
-                      hideSplitter={tasksPanelMode === 'actions' && tasksPanelWidth > 1} // ✅ Nascondi splitter se Tasks è visibile (usiamo quello condiviso)
-                      taskTree={taskTree}
-                      task={task && 'templateId' in task ? task : null}
-                      projectId={currentProjectId}
-                      translations={localTranslations}
-                      selectedNode={selectedNode}
-                      onUpdateDDT={(updater) => {
-                        const updated = updater(taskTree);
-                        try { replaceSelectedTaskTree(updated); } catch { }
-                      }}
-                      tasks={escalationTasks}
-                    />
-                    {/* ✅ Splitter condiviso tra Test e Tasks - ridimensiona entrambi i pannelli */}
-                    {tasksPanelMode === 'actions' && tasksPanelWidth > 1 && (
-                      <div
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setDraggingPanel('shared'); // ✅ Usa 'shared' per indicare che stiamo ridimensionando entrambi
-                        }}
-                        onMouseEnter={(e) => {
-                          (e.currentTarget as HTMLElement).style.background = '#fb923c55';
-                        }}
-                        onMouseLeave={(e) => {
-                          if (draggingPanel !== 'shared') {
-                            (e.currentTarget as HTMLElement).style.background = 'transparent';
-                          }
-                        }}
-                        style={{
-                          width: 6,
-                          cursor: 'col-resize',
-                          background: draggingPanel === 'shared' ? '#fb923c55' : 'transparent',
-                          transition: 'background 0.1s ease',
-                          flexShrink: 0,
-                          zIndex: draggingPanel === 'shared' ? 10 : 1,
-                        }}
-                        aria-label="Resize test and tasks panels"
-                        role="separator"
-                      />
-                    )}
-                  </>
-                )}
-
-                {/* ✅ Splitter esterno tra contenuto principale e pannello Tasks - sempre visibile quando Tasks è attivo */}
-                {tasksPanelMode === 'actions' && tasksPanelWidth > 1 && (
-                  <>
-                    <div
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        tasksStartWidthRef.current = tasksPanelWidth;
-                        tasksStartXRef.current = e.clientX;
-                        setDraggingPanel('tasks');
-                      }}
-                      style={{
-                        width: 8,
-                        cursor: 'col-resize',
-                        background: draggingPanel === 'tasks' ? '#fb923c' : '#fb923c22',
-                        transition: 'background 0.15s ease',
-                        flexShrink: 0,
-                        position: 'relative',
-                        zIndex: draggingPanel === 'tasks' ? 100 : 10,
-                        userSelect: 'none',
-                        WebkitUserSelect: 'none',
-                        touchAction: 'none',
-                      }}
-                      aria-label="Resize tasks panel"
-                      role="separator"
-                    />
-                    <RightPanel
-                      mode="actions"
-                      width={tasksPanelWidth}
-                      onWidthChange={setTasksPanelWidth}
-                      onStartResize={() => setDraggingPanel('tasks')}
-                      dragging={draggingPanel === 'tasks'}
-                      hideSplitter={true} // ✅ Nascondi splitter interno, usiamo quello esterno
-                      taskTree={taskTree}
-                      tasks={escalationTasks}
-                      translations={localTranslations}
-                      selectedNode={selectedNode}
-                      onUpdateDDT={(updater) => {
-                        const updated = updater(ddt);
-                        try { replaceSelectedDDT(updated); } catch { }
-                      }}
-                    />
-                  </>
-                )}
-              </div>
-            </div>
-          </>
-        )}
+          }
+        />
       </div>
 
       {/* Drag layer for visual feedback when dragging tasks */}
