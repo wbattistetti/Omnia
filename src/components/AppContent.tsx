@@ -35,7 +35,7 @@ import ResizableTaskEditorHost from './TaskEditor/EditorHost/ResizableTaskEditor
 import { useTaskEditor } from './TaskEditor/EditorHost/TaskEditorContext'; // ✅ RINOMINATO: ActEditor → TaskEditor, useActEditor → useTaskEditor
 import ConditionEditor from './conditions/ConditionEditor';
 import DDEBubbleChat from './ChatSimulator/DDEBubbleChat';
-import { useDDTContext } from '../context/DDTContext';
+import { useTaskTreeContext } from '../context/DDTContext';
 import { SIDEBAR_TYPE_COLORS, SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS } from './Sidebar/sidebarTheme';
 // FASE 2: InstanceRepository import removed - using TaskRepository instead
 // TaskRepository automatically syncs with InstanceRepository for backward compatibility
@@ -581,9 +581,9 @@ export const AppContent: React.FC<AppContentProps> = ({
   try {
     projectData = useProjectData().data;
   } catch { }
-  const ddtContext = useDDTContext();
-  const getTranslationsForDDT = ddtContext.getTranslationsForDDT;
-  // const setTranslationsForDDT = ddtContext.setTranslationsForDDT;
+  const taskTreeContext = useTaskTreeContext();
+  const getTranslationsForTaskTree = taskTreeContext.getTranslationsForTaskTree;
+  // const setTranslationsForTaskTree = taskTreeContext.setTranslationsForTaskTree;
 
   // Usa ActEditor context invece di selectedDDT per unificare l'apertura editor
   const taskEditorCtx = useTaskEditor(); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx, useActEditor → useTaskEditor
@@ -881,7 +881,7 @@ export const AppContent: React.FC<AppContentProps> = ({
     };
     document.addEventListener('taskEditor:open', h as any); // ✅ RINOMINATO: actEditor:open → taskEditor:open
     return () => document.removeEventListener('taskEditor:open', h as any); // ✅ RINOMINATO: actEditor:open → taskEditor:open
-  }, [taskEditorCtx, getTranslationsForDDT]); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx
+  }, [taskEditorCtx, getTranslationsForTaskTree]); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx
 
   // Note: nodes/edges are read directly from window.__flowNodes by DDEBubbleChat in flow mode
   // No local state needed to avoid flickering and synchronization issues

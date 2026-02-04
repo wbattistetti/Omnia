@@ -292,7 +292,21 @@ async function loadTemplateFromProject(templateId: string, projectId: string): P
     const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/tasks`);
     if (!response.ok) return null;
 
-    const tasks = await response.json();
+    const data = await response.json();
+    // ✅ L'endpoint restituisce { count: number, items: Task[] }
+    const tasks = Array.isArray(data) ? data : (data.items || []);
+
+    if (!Array.isArray(tasks)) {
+      console.error('[loadTemplateFromProject] Invalid response format - tasks is not an array', {
+        dataType: typeof data,
+        dataKeys: Object.keys(data || {}),
+        hasItems: !!data?.items,
+        itemsType: typeof data?.items,
+        itemsIsArray: Array.isArray(data?.items)
+      });
+      return null;
+    }
+
     // ✅ Template ha templateId === null (sono template, non istanze)
     const template = tasks.find((t: any) => t.id === templateId && t.templateId === null);
     return template || null;
@@ -1548,7 +1562,7 @@ export async function extractTaskOverrides(
   if (instance.templateId) {
     template = DialogueTaskService.getTemplate(instance.templateId);
     if (!template && projectId) {
-      const { loadTemplateFromProject } = await import('./taskUtils');
+      // ✅ loadTemplateFromProject è nello stesso file, non serve importarla
       template = await loadTemplateFromProject(instance.templateId, projectId);
     }
   }

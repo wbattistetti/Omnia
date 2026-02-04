@@ -173,21 +173,52 @@ export async function generateStructureFromAI(
 
   const ai = result.ai || result;
 
-  // ✅ Supporta sia schema.mainData (nuovo formato) che schema.data (vecchio formato)
-  const mainData = ai.schema?.mainData || ai.schema?.data;
+  // ✅ Log dettagliato per debugging
+  console.log('[taskOrchestrator] 🔍 Analisi risposta AI', {
+    hasAi: !!ai,
+    action: ai?.action,
+    hasSchema: !!ai?.schema,
+    schemaKeys: ai?.schema ? Object.keys(ai.schema) : [],
+    hasMainData: !!ai?.schema?.mainData,
+    hasData: !!ai?.schema?.data,
+    hasMains: !!ai?.mains,
+    mainsLength: Array.isArray(ai?.mains) ? ai.mains.length : 0,
+    mainDataLength: Array.isArray(ai?.schema?.mainData) ? ai.schema.mainData.length : 0,
+    dataLength: Array.isArray(ai?.schema?.data) ? ai.schema.data.length : 0
+  });
 
-  if (!ai.schema || !Array.isArray(mainData) || mainData.length === 0) {
+  // ✅ Supporta sia schema.mainData (nuovo formato) che schema.data (vecchio formato)
+  // ✅ Fallback: se action è "use_existing" e non c'è schema, usa mains direttamente
+  let mainData = ai.schema?.mainData || ai.schema?.data;
+
+  // ✅ Fallback: se non c'è mainData ma c'è mains, usa mains
+  if ((!mainData || mainData.length === 0) && Array.isArray(ai.mains) && ai.mains.length > 0) {
+    console.log('[taskOrchestrator] ⚠️ Usando ai.mains come fallback (schema.mainData non disponibile)');
+    mainData = ai.mains;
+  }
+
+  if (!mainData || !Array.isArray(mainData) || mainData.length === 0) {
     console.error('[taskOrchestrator] ❌ Risposta AI non valida', {
-      hasSchema: !!ai.schema,
-      hasMainData: !!ai.schema?.mainData,
-      hasData: !!ai.schema?.data,
-      mainDataLength: ai.schema?.mainData?.length || 0,
-      dataLength: ai.schema?.data?.length || 0,
-      aiKeys: Object.keys(ai),
-      schemaKeys: ai.schema ? Object.keys(ai.schema) : [],
-      fullResult: JSON.stringify(result, null, 2).substring(0, 1000),
-      fullAi: JSON.stringify(ai, null, 2).substring(0, 1000)
+      action: ai?.action,
+      templateSource: ai?.template_source,
+      hasSchema: !!ai?.schema,
+      hasMainData: !!ai?.schema?.mainData,
+      hasData: !!ai?.schema?.data,
+      hasMains: !!ai?.mains,
+      mainDataLength: ai?.schema?.mainData?.length || 0,
+      dataLength: ai?.schema?.data?.length || 0,
+      mainsLength: Array.isArray(ai?.mains) ? ai.mains.length : 0,
+      aiKeys: Object.keys(ai || {}),
+      schemaKeys: ai?.schema ? Object.keys(ai.schema) : [],
+      fullResult: JSON.stringify(result, null, 2).substring(0, 2000),
+      fullAi: JSON.stringify(ai, null, 2).substring(0, 2000)
     });
+
+    // ✅ Se action è "use_existing" ma non c'è schema, potrebbe essere un errore del backend
+    if (ai?.action === 'use_existing') {
+      throw new Error(`[taskOrchestrator] Template "${ai.template_source || 'unknown'}" non trovato o schema mancante. Verifica che il template esista nel database.`);
+    }
+
     throw new Error('[taskOrchestrator] AI non ha restituito struttura dati valida');
   }
 

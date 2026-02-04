@@ -9,7 +9,7 @@ import { buildTaskTree } from '../../../utils/taskUtils';
 import { TaskType, taskIdToTaskType, getEditorFromTaskType } from '../../../types/taskTypes';
 import type { TaskTree } from '../../../types/taskTypes';
 
-export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, onToolbarUpdate, registerOnClose }: EditorProps) { // ✅ PATTERN CENTRALIZZATO: Accetta hideHeader e onToolbarUpdate
+export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeader, onToolbarUpdate, registerOnClose }: EditorProps) { // ✅ PATTERN CENTRALIZZATO: Accetta hideHeader e onToolbarUpdate
   // ✅ ARCHITETTURA ESPERTO: Verifica che questo componente sia usato solo per TaskTree
   // Se il task è di tipo Message, questo componente NON dovrebbe essere montato
   if (taskMeta?.type !== undefined && taskMeta.type !== null) {
@@ -115,20 +115,20 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
   const loading = taskTreeLoading;
 
   // 3. Quando completi il wizard, salva nel Task E aggiorna lo state
-  const handleComplete = React.useCallback(async (finalTaskTreeOrDDT: any) => {
-    // ✅ NUOVO: Supporta sia TaskTree (nuovo formato) che DDT (backward compatibility)
-    const finalTaskTree: TaskTree = finalTaskTreeOrDDT.nodes
-      ? finalTaskTreeOrDDT as TaskTree
+  const handleComplete = React.useCallback(async (finalTaskTreeOrLegacy: any) => {
+    // ✅ NUOVO: Supporta sia TaskTree (nuovo formato) che formato legacy (backward compatibility)
+    const finalTaskTree: TaskTree = finalTaskTreeOrLegacy.nodes
+      ? finalTaskTreeOrLegacy as TaskTree
       : {
-          label: finalTaskTreeOrDDT.label || '',
-          nodes: finalTaskTreeOrDDT.data || [],
-          steps: finalTaskTreeOrDDT.steps || {},
-          constraints: finalTaskTreeOrDDT.constraints,
-          dataContract: finalTaskTreeOrDDT.dataContract,
-          introduction: finalTaskTreeOrDDT.introduction
+          label: finalTaskTreeOrLegacy.label || '',
+          nodes: finalTaskTreeOrLegacy.data || [],
+          steps: finalTaskTreeOrLegacy.steps || {},
+          constraints: finalTaskTreeOrLegacy.constraints,
+          dataContract: finalTaskTreeOrLegacy.dataContract,
+          introduction: finalTaskTreeOrLegacy.introduction
         };
 
-    console.log('[DDTHostAdapter][handleComplete] 🔍 finalTaskTree received', {
+    console.log('[TaskTreeHostAdapter][handleComplete] 🔍 finalTaskTree received', {
       instanceKey,
       hasTaskTree: !!finalTaskTree,
       nodesLength: finalTaskTree.nodes?.length || 0,
@@ -141,7 +141,7 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
     if (hasTaskTree) {
       // ✅ DEBUG: Verifica taskInstance prima del salvataggio
       let taskInstance = taskRepository.getTask(instanceKey);
-      console.log('[DDTHostAdapter][handleComplete] 🔍 taskInstance before save', {
+      console.log('[TaskTreeHostAdapter][handleComplete] 🔍 taskInstance before save', {
         instanceKey,
         hasTaskInstance: !!taskInstance,
         taskInstanceHasSteps: !!taskInstance?.steps,
@@ -187,7 +187,7 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
 
       // ✅ DEBUG: Verifica task salvato dopo il salvataggio
       const savedTask = taskRepository.getTask(instanceKey);
-      console.log('[DDTHostAdapter][handleComplete] ✅ Task saved', {
+      console.log('[TaskTreeHostAdapter][handleComplete] ✅ Task saved', {
         instanceKey,
         savedTaskHasSteps: !!savedTask?.steps,
         savedTaskStepsCount: Array.isArray(savedTask?.steps) ? savedTask.steps.length : 0,
@@ -204,7 +204,7 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
         const taskInstance = taskRepository.getTask(instanceKey);
         const rowText = taskInstance?.text || taskMeta.label || 'Task';
 
-        // ✅ BACKWARD COMPATIBILITY: Converti TaskTree in formato DDT per extractVariablesFromDDT
+        // ✅ BACKWARD COMPATIBILITY: Converti TaskTree in formato legacy per extractVariablesFromDDT
         const taskTreeForVariables = {
           label: finalTaskTree.label,
           data: finalTaskTree.nodes,

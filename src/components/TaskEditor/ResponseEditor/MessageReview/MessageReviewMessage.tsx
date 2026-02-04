@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Check, X } from 'lucide-react';
-import { useDDTManager } from '../../../../context/DDTManagerContext';
+import { useTaskTreeManager } from '../../../../context/DDTManagerContext';
 import { ReviewItem } from './types';
 import { getTaskIconNode, getTaskMeta } from '../taskMeta';
 import { ensureHexColor, tailwindToHex } from '../utils/color';
@@ -15,7 +15,7 @@ type Props = {
 
 export default function MessageReviewMessage({ item, onSave, updateSelectedNode }: Props) {
     const { combinedClass } = useFontContext();
-    const { updateTranslation } = useDDTManager();
+    const { updateTranslation } = useTaskTreeManager();
     const [editing, setEditing] = useState(false);
     const [editValue, setEditValue] = useState(item.text);
     const inputRef = useRef<HTMLInputElement>(null);

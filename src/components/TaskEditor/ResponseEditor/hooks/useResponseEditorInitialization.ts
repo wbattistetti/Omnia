@@ -2,7 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useCallback } from 'react';
-import { useDDTManager } from '../../../../context/DDTManagerContext';
+import { useTaskTreeManager } from '../../../../context/DDTManagerContext';
 import { useWizardInference } from './useWizardInference';
 import { useResponseEditorWizard } from './useResponseEditorWizard';
 import { useResponseEditorToolbar } from '../ResponseEditorToolbar';
@@ -105,11 +105,11 @@ export function useResponseEditorInitialization(params: UseResponseEditorInitial
     showWizard: showWizardParam,
   } = params;
 
-  const { replaceSelectedDDT } = useDDTManager();
+  const { replaceSelectedTaskTree: replaceSelectedTaskTreeFromContext } = useTaskTreeManager();
 
   const replaceSelectedTaskTree = useCallback((taskTree: TaskTree) => {
-    replaceSelectedDDT(taskTree);
-  }, [replaceSelectedDDT]);
+    replaceSelectedTaskTreeFromContext(taskTree);
+  }, [replaceSelectedTaskTreeFromContext]);
 
   const {
     showWizard,
@@ -152,7 +152,7 @@ export function useResponseEditorInitialization(params: UseResponseEditorInitial
     setShowContractWizard,
     setTaskTreeVersion,
     setLeftPanelMode,
-    replaceSelectedDDT: replaceSelectedTaskTree,
+    replaceSelectedTaskTree: replaceSelectedTaskTree,
     wizardOwnsDataRef,
     onClose,
     onWizardComplete,

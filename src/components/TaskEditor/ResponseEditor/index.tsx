@@ -1,5 +1,5 @@
 import React from 'react';
-import { useDDTManager } from '../../../context/DDTManagerContext';
+import { useTaskTreeManager } from '../../../context/DDTManagerContext';
 import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
 import { ContractUpdateDialog } from './ContractUpdateDialog';
 import EditorHeader from '../../common/EditorHeader';
@@ -96,10 +96,10 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     tasksStartXRef,
   } = useResponseEditorRefs({ taskTree, task });
 
-  const { replaceSelectedDDT } = useDDTManager();
+  const { replaceSelectedTaskTree: replaceSelectedTaskTreeFromContext } = useTaskTreeManager();
   const replaceSelectedTaskTree = React.useCallback((taskTree: any) => {
-    replaceSelectedDDT(taskTree);
-  }, [replaceSelectedDDT]);
+    replaceSelectedTaskTreeFromContext(taskTree);
+  }, [replaceSelectedTaskTreeFromContext]);
   const {
     selectedMainIndex,
     selectedSubIndex,
@@ -227,7 +227,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     setShowContractWizard,
     setTaskTreeVersion,
     setLeftPanelMode,
-    replaceSelectedDDT: replaceSelectedTaskTree,
+    replaceSelectedTaskTree: replaceSelectedTaskTree,
     wizardOwnsDataRef,
     onClose,
     onWizardComplete,
@@ -280,7 +280,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     tabId,
     setDockTree,
     onClose,
-    replaceSelectedDDT,
+    replaceSelectedTaskTree,
   });
 
   useNodeLoading({
@@ -447,7 +447,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
               tasksStartWidthRef={tasksStartWidthRef}
               tasksStartXRef={tasksStartXRef}
               replaceSelectedTaskTree={replaceSelectedTaskTree}
-              replaceSelectedDDT={replaceSelectedDDT}
+              replaceSelectedTaskTree={replaceSelectedTaskTree}
             />
           }
         />

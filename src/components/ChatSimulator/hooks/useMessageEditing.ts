@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Message } from '../UserMessage';
-import { useDDTManager } from '../../../context/DDTManagerContext';
+import { useTaskTreeManager } from '../../../context/DDTManagerContext';
 import type { AssembledDDT } from '../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
 import { updateActionTextInDDT } from '../utils/updateActionText';
 
@@ -12,7 +12,7 @@ interface UseMessageEditingProps {
 }
 
 export function useMessageEditing({ messages, setMessages, currentDDT, onUpdateDDT }: UseMessageEditingProps) {
-  const { updateTranslation } = useDDTManager();
+  const { updateTranslation } = useTaskTreeManager();
 
   // State for hover and editing
   const [hoveredId, setHoveredId] = React.useState<string | null>(null);

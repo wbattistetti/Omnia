@@ -1,69 +1,69 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
-interface DDTContextType {
-  ddt: any;
+interface TaskTreeContextType {
+  taskTree: any;
   actionsCatalog: any[];
-  translationsByDDT: { [ddtId: string]: any };
+  translationsByTaskTree: { [taskTreeId: string]: any };
   lang: string;
-  setTranslationsForDDT: (ddtId: string, translations: any) => void;
-  getTranslationsForDDT: (ddtId: string) => any;
+  setTranslationsForTaskTree: (taskTreeId: string, translations: any) => void;
+  getTranslationsForTaskTree: (taskTreeId: string) => any;
 }
 
-interface SetDDTContextType {
-  setDDT: (ddt: any) => void;
+interface SetTaskTreeContextType {
+  setTaskTree: (taskTree: any) => void;
   setActionsCatalog: (actionsCatalog: any[]) => void;
   setLang: (lang: string) => void;
 }
 
-const DDTContext = createContext<DDTContextType | undefined>(undefined);
-const SetDDTContext = createContext<SetDDTContextType | undefined>(undefined);
+const TaskTreeContext = createContext<TaskTreeContextType | undefined>(undefined);
+const SetTaskTreeContext = createContext<SetTaskTreeContextType | undefined>(undefined);
 
-export const useDDTContext = () => {
-  const context = useContext(DDTContext);
+export const useTaskTreeContext = () => {
+  const context = useContext(TaskTreeContext);
   if (context === undefined) {
-    throw new Error('useDDTContext must be used within a DDTProvider');
+    throw new Error('useTaskTreeContext must be used within a TaskTreeProvider');
   }
   return context;
 };
 
-export const useSetDDTContext = () => {
-  const context = useContext(SetDDTContext);
+export const useSetTaskTreeContext = () => {
+  const context = useContext(SetTaskTreeContext);
   if (context === undefined) {
-    throw new Error('useSetDDTContext must be used within a DDTProvider');
+    throw new Error('useSetTaskTreeContext must be used within a TaskTreeProvider');
   }
   return context;
 };
 
-interface DDTProviderProps {
+interface TaskTreeProviderProps {
   children: ReactNode;
-  initialDDT?: any;
+  initialTaskTree?: any;
   initialActionsCatalog?: any[];
-  initialTranslationsByDDT?: { [ddtId: string]: any };
+  initialTranslationsByTaskTree?: { [taskTreeId: string]: any };
   initialLang?: string;
 }
 
-export const DDTProvider: React.FC<DDTProviderProps> = ({
+export const TaskTreeProvider: React.FC<TaskTreeProviderProps> = ({
   children,
-  initialDDT = null,
+  initialTaskTree = null,
   initialActionsCatalog = [],
-  initialTranslationsByDDT = {},
+  initialTranslationsByTaskTree = {},
   initialLang = 'it',
 }) => {
-  const [ddt, setDDT] = useState<any>(initialDDT);
+  const [taskTree, setTaskTree] = useState<any>(initialTaskTree);
   const [actionsCatalog, setActionsCatalog] = useState<any[]>(initialActionsCatalog);
-  const [translationsByDDT, setTranslationsByDDT] = useState<{ [ddtId: string]: any }>(initialTranslationsByDDT);
+  const [translationsByTaskTree, setTranslationsByTaskTree] = useState<{ [taskTreeId: string]: any }>(initialTranslationsByTaskTree);
   const [lang, setLang] = useState<string>(initialLang);
 
-  const setTranslationsForDDT = (ddtId: string, translations: any) => {
-    setTranslationsByDDT(prev => ({ ...prev, [ddtId]: translations }));
+  const setTranslationsForTaskTree = (taskTreeId: string, translations: any) => {
+    setTranslationsByTaskTree(prev => ({ ...prev, [taskTreeId]: translations }));
   };
-  const getTranslationsForDDT = (ddtId: string) => translationsByDDT[ddtId] || {};
+  const getTranslationsForTaskTree = (taskTreeId: string) => translationsByTaskTree[taskTreeId] || {};
 
   return (
-    <DDTContext.Provider value={{ ddt, actionsCatalog, translationsByDDT, lang, setTranslationsForDDT, getTranslationsForDDT }}>
-      <SetDDTContext.Provider value={{ setDDT, setActionsCatalog, setLang }}>
+    <TaskTreeContext.Provider value={{ taskTree, actionsCatalog, translationsByTaskTree, lang, setTranslationsForTaskTree, getTranslationsForTaskTree }}>
+      <SetTaskTreeContext.Provider value={{ setTaskTree, setActionsCatalog, setLang }}>
         {children}
-      </SetDDTContext.Provider>
-    </DDTContext.Provider>
+      </SetTaskTreeContext.Provider>
+    </TaskTreeContext.Provider>
   );
-}; 
+};

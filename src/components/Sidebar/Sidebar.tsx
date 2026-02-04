@@ -4,7 +4,7 @@ import SidebarHeader from './SidebarHeader';
 import EntityAccordion from './EntityAccordion';
 import { useSidebarState } from './SidebarState';
 import { useProjectData, useProjectDataUpdate } from '../../context/ProjectDataContext';
-import { useDDTManager } from '../../context/DDTManagerContext';
+import { useTaskTreeManager } from '../../context/DDTManagerContext';
 import { TemplateTranslationsService } from '../../services/TemplateTranslationsService';
 import { EntityType } from '../../types/project';
 import { sidebarTheme } from './sidebarTheme';
@@ -49,7 +49,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   } = useProjectDataUpdate();
 
   // Usa il nuovo hook per DDT
-  const { ddtList, loadDDTError } = useDDTManager();
+  const { taskTreeList, loadTaskTreeError } = useTaskTreeManager();
   const taskEditorCtx = useTaskEditor(); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx, useActEditor → useTaskEditor
   const [search, setSearch] = useState('');
   const [industryFilter, setIndustryFilter] = useState<string>('all');
@@ -163,10 +163,10 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   // Open Response Editor from DDT id (clicking gear icon in DDT list)
   const handleOpenEditor = (id: string) => {
     try {
-      // Find Task from list (ddtList contains full Task objects)
-      const task = ddtList.find(dt => dt.id === id || dt._id === id);
+      // Find Task from list (taskTreeList contains full Task objects)
+      const task = taskTreeList.find(dt => dt.id === id || dt._id === id);
       if (!task) {
-        console.warn('[Sidebar][handleOpenEditor] Task not found', { id, ddtListLength: ddtList.length });
+        console.warn('[Sidebar][handleOpenEditor] Task not found', { id, taskTreeListLength: taskTreeList.length });
         return;
       }
 
@@ -214,7 +214,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
 
   const hasDDTFor = (label: string) => {
     const norm = (s: string) => (s || '').toLowerCase().trim();
-    return ddtList.some(dt => norm(dt?.label) === norm(label));
+    return taskTreeList.some(dt => norm(dt?.label) === norm(label));
   };
 
   const handleSaveDDT = async () => {
@@ -223,7 +223,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
     try {
       const startedAt = Date.now();
       // Save DDTs (strip heavy fields not needed by factory DB)
-      const payload = (ddtList || []).map((d: any) => {
+      const payload = (taskTreeList || []).map((d: any) => {
         const { translations, ...rest } = d || {};
         return rest; // translations are saved separately
       });
@@ -241,9 +241,9 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
 
       // ✅ Aggiorna cache traduzioni label per ogni template salvato
       const projectLang = (localStorage.getItem('project.lang') || 'it') as 'it' | 'en' | 'pt';
-      (ddtList || []).forEach((ddt: any) => {
-        const templateId = ddt.id || ddt._id?.toString();
-        const label = ddt.label;
+      (taskTreeList || []).forEach((taskTree: any) => {
+        const templateId = taskTree.id || taskTree._id?.toString();
+        const label = taskTree.label;
         if (templateId && label) {
           TemplateTranslationsService.addLabel(templateId, label, projectLang);
         }
@@ -274,10 +274,10 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
 
   // Mostra errori di caricamento
   useEffect(() => {
-    if (loadDDTError) {
+    if (loadTaskTreeError) {
       // TODO: Mostrare toast/alert con l'errore
     }
-  }, [loadDDTError]);
+  }, [loadTaskTreeError]);
 
   // Listener per aprire accordion e evidenziare elementi
   useEffect(() => {

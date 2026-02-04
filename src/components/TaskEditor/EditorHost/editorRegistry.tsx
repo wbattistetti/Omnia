@@ -1,6 +1,6 @@
 import React, { lazy } from 'react';
 import type { EditorKind, EditorProps } from './types';
-import DDTEditor from '../ResponseEditor/DDTHostAdapter';
+import TaskTreeEditor from '../ResponseEditor/DDTHostAdapter';
 import IntentEditor from '../../../features/intent-editor/HostAdapter';
 import TextMessageEditor from './editors/TextMessageEditor';
 import BackendCallEditor from './editors/BackendCallEditor';
@@ -23,14 +23,14 @@ const SimpleEditor: React.FC<EditorProps> = ({ task, onClose }) => {
   );
 };
 
-// ✅ BackendCallEditor ora importato direttamente per aprire istantaneamente (come DDTEditor, IntentEditor, TextMessageEditor)
+// ✅ BackendCallEditor ora importato direttamente per aprire istantaneamente (come TaskTreeEditor, IntentEditor, TextMessageEditor)
 
 export const registry: Record<EditorKind, LazyComp | DirectComp> = {
   message: TextMessageEditor, // Import diretto per aprire istantaneamente l'editor Message
-  ddt: DDTEditor, // Import diretto per evitare lazy loading delay
+  ddt: TaskTreeEditor, // Import diretto per evitare lazy loading delay
   intent: IntentEditor, // ✅ LEGACY: Mantenuto per retrocompatibilità, ma ClassifyProblem ora usa 'ddt'
   backend: BackendCallEditor, // ✅ Import diretto per aprire istantaneamente l'editor BackendCall
-  problem: DDTEditor, // ✅ LEGACY: ClassifyProblem ora mappa a 'ddt', questo è solo per retrocompatibilità
+  problem: TaskTreeEditor, // ✅ LEGACY: ClassifyProblem ora mappa a 'ddt', questo è solo per retrocompatibilità
   aiagent: AIAgentEditor, // ✅ Editor dedicato per AIAgent
   summarizer: SummarizerEditor, // ✅ Editor dedicato per Summarizer
   negotiation: NegotiationEditor, // ✅ Editor dedicato per Negotiation

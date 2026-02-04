@@ -1,52 +1,52 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { getAllDialogueTemplates, getIDETranslations } from '../services/ProjectDataService';
 
-interface DDTManagerContextType {
-  ddtList: any[];
-  selectedDDT: any | null;
-  isLoadingDDT: boolean;
-  loadDDTError: string | null;
+interface TaskTreeManagerContextType {
+  taskTreeList: any[];
+  selectedTaskTree: any | null;
+  isLoadingTaskTree: boolean;
+  loadTaskTreeError: string | null;
   ideTranslations: Record<string, string>;
-  createDDT: (ddt: any) => void;
-  openDDT: (ddt: any) => void;
-  closeDDT: () => void;
-  deleteDDT: (id: string) => void;
-  loadDDT: () => Promise<void>;
+  createTaskTree: (taskTree: any) => void;
+  openTaskTree: (taskTree: any) => void;
+  closeTaskTree: () => void;
+  deleteTaskTree: (id: string) => void;
+  loadTaskTree: () => Promise<void>;
   updateTranslation: (key: string, value: string) => void;
-  replaceSelectedDDT: (next: any) => void;
+  replaceSelectedTaskTree: (next: any) => void;
 }
 
-const DDTManagerContext = createContext<DDTManagerContextType | null>(null);
+const TaskTreeManagerContext = createContext<TaskTreeManagerContextType | null>(null);
 
-export const useDDTManager = () => {
-  const context = useContext(DDTManagerContext);
+export const useTaskTreeManager = () => {
+  const context = useContext(TaskTreeManagerContext);
   if (!context) {
-    throw new Error('useDDTManager must be used within a DDTManagerProvider');
+    throw new Error('useTaskTreeManager must be used within a TaskTreeManagerProvider');
   }
   return context;
 };
 
-interface DDTManagerProviderProps {
+interface TaskTreeManagerProviderProps {
   children: ReactNode;
 }
 
-export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children }) => {
-  const [ddtList, setDDTList] = useState<any[]>([]);
-  const [selectedDDT, setSelectedDDT] = useState<any | null>(null);
-  const [isLoadingDDT, setIsLoadingDDT] = useState(false);
-  const [loadDDTError, setLoadDDTError] = useState<string | null>(null);
+export const TaskTreeManagerProvider: React.FC<TaskTreeManagerProviderProps> = ({ children }) => {
+  const [taskTreeList, setTaskTreeList] = useState<any[]>([]);
+  const [selectedTaskTree, setSelectedTaskTree] = useState<any | null>(null);
+  const [isLoadingTaskTree, setIsLoadingTaskTree] = useState(false);
+  const [loadTaskTreeError, setLoadTaskTreeError] = useState<string | null>(null);
   const [ideTranslations, setIdeTranslations] = useState<Record<string, string>>({});
 
-  const createDDT = (ddt: any) => {
+  const createTaskTree = (taskTree: any) => {
     // ensure has id for future lookups
-    const withId = ddt.id ? ddt : { ...ddt, id: ddt._id || `${(ddt.label || 'DDT').replace(/\s+/g, '_')}_${crypto?.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}` };
-    try { console.log('[KindPersist][DDTManager][createDDT]', { label: withId?.label, mains: (withId?.data || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch { }
-    setDDTList(prev => [...prev, withId]);
-    setSelectedDDT(withId);
+    const withId = taskTree.id ? taskTree : { ...taskTree, id: taskTree._id || `${(taskTree.label || 'TaskTree').replace(/\s+/g, '_')}_${crypto?.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}` };
+    try { console.log('[KindPersist][TaskTreeManager][createTaskTree]', { label: withId?.label, nodes: (withId?.nodes || withId?.data || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch { }
+    setTaskTreeList(prev => [...prev, withId]);
+    setSelectedTaskTree(withId);
   };
 
-  const openDDT = (ddt: any) => {
-    try { console.log('[KindPersist][DDTManager][openDDT]', { label: ddt?.label, mains: (ddt?.data || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch { }
+  const openTaskTree = (taskTree: any) => {
+    try { console.log('[KindPersist][TaskTreeManager][openTaskTree]', { label: taskTree?.label, nodes: (taskTree?.nodes || taskTree?.data || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch { }
     // Preserve steps if we already have an enriched copy of the same DDT in memory
     const sameId = (a: any, b: any) => !!a && !!b && ((a.id && b.id && a.id === b.id) || (a._id && b._id && a._id === b._id));
     const byLabel = (arr: any[]) => {
@@ -76,29 +76,29 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
       });
       return next;
     };
-    setSelectedDDT((prev) => {
-      const existing = ddtList.find((x) => sameId(x, ddt));
-      const merged = existing ? mergeSteps(existing, ddt) : ddt;
+    setSelectedTaskTree((prev) => {
+      const existing = taskTreeList.find((x) => sameId(x, taskTree));
+      const merged = existing ? mergeSteps(existing, taskTree) : taskTree;
       // keep list in sync with merged instance
-      setDDTList((list) => list.map((x) => (sameId(x, merged) ? merged : x)));
+      setTaskTreeList((list) => list.map((x) => (sameId(x, merged) ? merged : x)));
       return merged;
     });
   };
 
-  const closeDDT = () => {
-    setSelectedDDT(null);
+  const closeTaskTree = () => {
+    setSelectedTaskTree(null);
   };
 
-  const deleteDDT = (id: string) => {
-    setDDTList(prev => prev.filter(ddt => ddt.id !== id && ddt._id !== id));
-    if (selectedDDT && (selectedDDT.id === id || selectedDDT._id === id)) {
-      setSelectedDDT(null);
+  const deleteTaskTree = (id: string) => {
+    setTaskTreeList(prev => prev.filter(taskTree => taskTree.id !== id && taskTree._id !== id));
+    if (selectedTaskTree && (selectedTaskTree.id === id || selectedTaskTree._id === id)) {
+      setSelectedTaskTree(null);
     }
   };
 
-  // Aggiorna una traduzione per il DDT selezionato e sincronizza la lista
+  // Aggiorna una traduzione per il TaskTree selezionato e sincronizza la lista
   const updateTranslation = (key: string, value: string) => {
-    setSelectedDDT((prev: any) => {
+    setSelectedTaskTree((prev: any) => {
       if (!prev) return prev;
       const prevTrans = (prev.translations && (prev.translations.en || prev.translations)) || {};
       const nextTranslations = {
@@ -106,63 +106,63 @@ export const DDTManagerProvider: React.FC<DDTManagerProviderProps> = ({ children
         en: { ...prevTrans, [key]: value }
       };
       const next = { ...prev, translations: nextTranslations };
-      setDDTList(list => list.map(d => (d.id === prev.id || d._id === prev._id ? next : d)));
+      setTaskTreeList(list => list.map(d => (d.id === prev.id || d._id === prev._id ? next : d)));
       return next;
     });
   };
 
-  const loadDDT = async () => {
-    setIsLoadingDDT(true);
-    setLoadDDTError(null);
+  const loadTaskTree = async () => {
+    setIsLoadingTaskTree(true);
+    setLoadTaskTreeError(null);
     try {
-      const [ddtTemplates, ide] = await Promise.all([
+      const [taskTreeTemplates, ide] = await Promise.all([
         getAllDialogueTemplates(),
         getIDETranslations().catch(() => ({}))
       ]);
-      setDDTList(ddtTemplates);
+      setTaskTreeList(taskTreeTemplates);
       setIdeTranslations(ide || {});
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Errore nel caricamento DDT';
-      setLoadDDTError(errorMessage);
-      console.error('[DDTManagerContext] Errore caricamento DDT:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Errore nel caricamento TaskTree';
+      setLoadTaskTreeError(errorMessage);
+      console.error('[TaskTreeManagerContext] Errore caricamento TaskTree:', err);
     } finally {
-      setIsLoadingDDT(false);
+      setIsLoadingTaskTree(false);
     }
   };
 
-  const replaceSelectedDDT = (next: any) => {
+  const replaceSelectedTaskTree = (next: any) => {
     if (!next) return;
-    try { console.log('[KindPersist][DDTManager][replaceSelectedDDT]', { label: next?.label, mains: (next?.data || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch { }
-    setSelectedDDT(next);
-    setDDTList(list => list.map(d => (d.id === next.id || d._id === next._id ? next : d)));
+    try { console.log('[KindPersist][TaskTreeManager][replaceSelectedTaskTree]', { label: next?.label, nodes: (next?.nodes || next?.data || []).map((m: any) => ({ label: m?.label, kind: m?.kind, manual: (m as any)?._kindManual })) }); } catch { }
+    setSelectedTaskTree(next);
+    setTaskTreeList(list => list.map(d => (d.id === next.id || d._id === next._id ? next : d)));
   };
 
-  // DEBUG: Track every selectedDDT change
-  // Track selectedDDT changes if needed for analytics
+  // DEBUG: Track every selectedTaskTree change
+  // Track selectedTaskTree changes if needed for analytics
 
-  // Carica i DDT all'inizializzazione
+  // Carica i TaskTree all'inizializzazione
   useEffect(() => {
-    loadDDT();
+    loadTaskTree();
   }, []);
 
   const value = {
-    ddtList,
-    selectedDDT,
-    isLoadingDDT,
-    loadDDTError,
+    taskTreeList,
+    selectedTaskTree,
+    isLoadingTaskTree,
+    loadTaskTreeError,
     ideTranslations,
-    createDDT,
-    openDDT,
-    closeDDT,
-    deleteDDT,
-    loadDDT,
+    createTaskTree,
+    openTaskTree,
+    closeTaskTree,
+    deleteTaskTree,
+    loadTaskTree,
     updateTranslation,
-    replaceSelectedDDT
+    replaceSelectedTaskTree
   };
 
   return (
-    <DDTManagerContext.Provider value={value}>
+    <TaskTreeManagerContext.Provider value={value}>
       {children}
-    </DDTManagerContext.Provider>
+    </TaskTreeManagerContext.Provider>
   );
 };

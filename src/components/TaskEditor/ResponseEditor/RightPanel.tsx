@@ -4,7 +4,7 @@ import TaskList from '../TaskPalette/TaskList';
 // ✅ Using clean DDEBubbleChat from ResponseEditor (SSE-only, no runtime logic)
 import DDEBubbleChat from './ChatSimulator/DDEBubbleChat';
 import { stepMeta } from './ddtUtils';
-import { useDDTManager } from '../../../context/DDTManagerContext';
+import { useTaskTreeManager } from '../../../context/DDTManagerContext';
 import { useFontContext } from '../../../context/FontContext';
 
 export type RightPanelMode = 'actions' | 'validator' | 'testset' | 'chat' | 'styles' | 'none';

@@ -8,8 +8,8 @@ import { AppContent } from './AppContent';
 // ✅ REMOVED: ActionsCatalogContext - tasks are now loaded directly in ResponseEditor
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
-import { DDTProvider } from '../context/DDTContext';
-import { DDTManagerProvider } from '../context/DDTManagerContext';
+import { TaskTreeProvider } from '../context/DDTContext';
+import { TaskTreeManagerProvider } from '../context/DDTManagerContext';
 import { ProjectTranslationsProvider } from '../context/ProjectTranslationsContext';
 import { ThemeProvider } from '../theme/components/ThemeProvider';
 import { TaskEditorProvider } from './TaskEditor/EditorHost/TaskEditorContext'; // ✅ RINOMINATO: ActEditor → TaskEditor, ActEditorProvider → TaskEditorProvider
@@ -151,8 +151,8 @@ export default function App() {
           <AIProviderProvider>
             <DndProvider backend={HTML5Backend}>
               <SpeechRecognitionProvider>
-                <DDTProvider>
-                  <DDTManagerProvider>
+                <TaskTreeProvider>
+                  <TaskTreeManagerProvider>
                     <TaskEditorProvider> {/* ✅ RINOMINATO: ActEditorProvider → TaskEditorProvider */}
                       <InMemoryConditionsProvider>
                         <BackendTypeProvider>
@@ -160,8 +160,8 @@ export default function App() {
                         </BackendTypeProvider>
                       </InMemoryConditionsProvider>
                     </TaskEditorProvider> {/* ✅ RINOMINATO: ActEditorProvider → TaskEditorProvider */}
-                  </DDTManagerProvider>
-                </DDTProvider>
+                  </TaskTreeManagerProvider>
+                </TaskTreeProvider>
               </SpeechRecognitionProvider>
             </DndProvider>
         </AIProviderProvider>

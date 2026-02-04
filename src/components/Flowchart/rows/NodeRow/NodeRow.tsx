@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useProjectData } from '../../../../context/ProjectDataContext';
-import { useDDTManager } from '../../../../context/DDTManagerContext';
-import { useDDTContext } from '../../../../context/DDTContext';
+import { useTaskTreeManager } from '../../../../context/DDTManagerContext';
+import { useTaskTreeContext } from '../../../../context/DDTContext';
 import { ProjectDataService } from '../../../../services/ProjectDataService';
 import { EntityCreationService } from '../../../../services/EntityCreationService';
 import { createAndAttachTask } from '../../../../services/TaskFactory';
@@ -72,8 +72,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   ref
 ) => {
   const { data: projectDataCtx } = useProjectData();
-  const ddtContext = useDDTContext();
-  const getTranslationsForDDT = ddtContext.getTranslationsForDDT;
+  const taskTreeContext = useTaskTreeContext();
+  const getTranslationsForTaskTree = taskTreeContext.getTranslationsForTaskTree;
   // Debug gate for icon/flow logs (enable with localStorage.setItem('debug.flowIcons','1'))
   const debugFlowIcons = (() => { try { return Boolean(localStorage.getItem('debug.flowIcons')); } catch { return false; } })();
 
@@ -232,7 +232,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   useEffect(() => {
     if (!isEditing) suppressIntellisenseRef.current = false;
   }, [isEditing]);
-  const { openDDT } = useDDTManager();
+  const { openTaskTree } = useTaskTreeManager();
   const hoverHideTimerRef = useRef<number | null>(null);
 
   // Calcola la posizione e dimensione della zona buffer (already computed above)
