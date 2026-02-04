@@ -58,7 +58,7 @@ export interface UseResponseEditorInitializationResult {
   handleContractWizardComplete: (results: any) => void;
   handleDDTWizardCancel: () => void;
   handleDDTWizardComplete: (finalDDT: TaskTree, messages?: any) => Promise<void>;
-  getInitialDDT: () => TaskTree | undefined;
+  getInitialTaskTree: () => TaskTree | undefined;
   shouldShowInferenceLoading: boolean;
   saveLeftPanelMode: (m: RightPanelMode) => void;
   saveTestPanelMode: (m: RightPanelMode) => void;
@@ -137,7 +137,7 @@ export function useResponseEditorInitialization(params: UseResponseEditorInitial
     handleContractWizardComplete,
     handleDDTWizardCancel,
     handleDDTWizardComplete,
-    getInitialDDT,
+    getInitialTaskTree,
     shouldShowInferenceLoading,
   } = useResponseEditorWizard({
     task: task && 'templateId' in task ? task : null,
@@ -206,7 +206,7 @@ export function useResponseEditorInitialization(params: UseResponseEditorInitial
     handleContractWizardComplete,
     handleDDTWizardCancel,
     handleDDTWizardComplete,
-    getInitialDDT,
+    getInitialTaskTree,
     shouldShowInferenceLoading,
     saveLeftPanelMode,
     saveTestPanelMode,

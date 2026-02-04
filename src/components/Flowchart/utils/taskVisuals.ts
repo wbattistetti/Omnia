@@ -80,10 +80,10 @@ export function resolveTaskType(row: any): TaskType {
 }
 
 /**
- * ✅ NUOVO: Controlla se il task ha un DDT usando solo TaskRepository
+ * ✅ NUOVO: Controlla se il task ha un TaskTree usando solo TaskRepository
  * ❌ RIMOSSO: parametro act (non esiste più il concetto di Act)
  */
-export function hasTaskDDT(row: any): boolean {
+export function hasTaskTree(row: any): boolean {
   // NodeRowData.taskId is separate field, not Task.taskId
   const taskId = row?.taskId || row?.id;
 
@@ -106,15 +106,15 @@ export function hasTaskDDT(row: any): boolean {
     }
 
     // Per DataRequest/ProblemClassification: controlla se c'è templateId o data
-    // ✅ Per DataRequest, permettere sempre l'apertura (può essere creato un DDT vuoto)
+    // ✅ Per DataRequest, permettere sempre l'apertura (può essere creato un TaskTree vuoto)
     if (taskType === TaskType.UtteranceInterpretation || taskType === TaskType.ClassifyProblem) {
       // ✅ Controlla templateId (riferimento a template) o data (struttura diretta)
-      // ✅ Per DataRequest, ritorna true anche se templateId è null (può essere creato un DDT vuoto)
+      // ✅ Per DataRequest, ritorna true anche se templateId è null (può essere creato un TaskTree vuoto)
       const hasTemplateId = task?.templateId && task.templateId !== 'UNDEFINED' && task.templateId !== null;
       const hasdata = task?.data && task.data.length > 0;
-      // ✅ Per DataRequest, permettere sempre l'apertura (anche con DDT vuoto)
+      // ✅ Per DataRequest, permettere sempre l'apertura (anche con TaskTree vuoto)
       if (taskType === TaskType.UtteranceInterpretation) {
-        return true; // ✅ Sempre permesso per DataRequest (può essere creato un DDT vuoto)
+        return true; // ✅ Sempre permesso per DataRequest (può essere creato un TaskTree vuoto)
       }
       // Per ProblemClassification, richiedi templateId o data
       return Boolean(hasTemplateId || hasdata);
@@ -133,11 +133,11 @@ export function hasTaskDDT(row: any): boolean {
  * ✅ Accetta TaskType enum invece di ActType stringa
  *
  * ✅ TODO FUTURO: Category System (vedi documentation/TODO_NUOVO.md)
- * Estendere questa funzione a getTaskVisuals(type, category?, customCategory?, hasDDT?)
+ * Estendere questa funzione a getTaskVisuals(type, category?, customCategory?, hasTaskTree?)
  * per supportare preset categories e custom categories.
  * Priorità: customCategory > preset category > base type
  */
-export function getTaskVisualsByType(type: TaskType, hasDDT: boolean) {
+export function getTaskVisualsByType(type: TaskType, hasTaskTree: boolean) {
   const green = '#22c55e';
   const blue = '#3b82f6';
   const indigo = '#6366f1';
@@ -154,38 +154,38 @@ export function getTaskVisualsByType(type: TaskType, hasDDT: boolean) {
     case TaskType.AIAgent:
       Icon = Bot;
       labelColor = purple;
-      iconColor = hasDDT ? purple : gray;
+      iconColor = hasTaskTree ? purple : gray;
       break;
     case TaskType.UtteranceInterpretation:
       Icon = Ear;
       labelColor = blue;
-      iconColor = hasDDT ? blue : gray;
+      iconColor = hasTaskTree ? blue : gray;
       break;
     case TaskType.ClassifyProblem:
       Icon = GitBranch;
       labelColor = amber;
-      iconColor = hasDDT ? amber : gray;
+      iconColor = hasTaskTree ? amber : gray;
       break;
     case TaskType.Summarizer:
       Icon = FileText;
       labelColor = cyan;
-      iconColor = hasDDT ? cyan : gray;
+      iconColor = hasTaskTree ? cyan : gray;
       break;
     case TaskType.Negotiation:
       Icon = CheckCircle2;
       labelColor = indigo;
-      iconColor = hasDDT ? indigo : gray;
+      iconColor = hasTaskTree ? indigo : gray;
       break;
     case TaskType.BackendCall:
       Icon = Server;
       labelColor = green;
-      iconColor = hasDDT ? green : gray;
+      iconColor = hasTaskTree ? green : gray;
       break;
     case TaskType.SayMessage:
     default:
       Icon = Megaphone;
       labelColor = green;
-      iconColor = hasDDT ? green : gray;
+      iconColor = hasTaskTree ? green : gray;
   }
 
   return {
@@ -206,14 +206,14 @@ export function getTaskVisualsByType(type: TaskType, hasDDT: boolean) {
  * @param type - TaskType enum
  * @param category - ID categoria preset (opzionale)
  * @param customCategory - Custom category object (opzionale)
- * @param hasDDT - Se il task ha un DDT
+ * @param hasTaskTree - Se il task ha un TaskTree
  * @returns Oggetto con Icon, labelColor, iconColor
  */
 export function getTaskVisuals(
   type: TaskType,
   category?: string,
   customCategory?: CustomCategory,
-  hasDDT?: boolean
+  hasTaskTree?: boolean
 ) {
   // ✅ Priorità 1: Custom category (ha la precedenza)
   if (customCategory) {
@@ -262,5 +262,5 @@ export function getTaskVisuals(
   }
 
   // ✅ Priorità 3: Base da type (senza categoria)
-  return getTaskVisualsByType(type, hasDDT ?? false);
+  return getTaskVisualsByType(type, hasTaskTree ?? false);
 }

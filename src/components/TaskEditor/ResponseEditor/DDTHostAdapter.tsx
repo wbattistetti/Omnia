@@ -10,12 +10,12 @@ import { TaskType, taskIdToTaskType, getEditorFromTaskType } from '../../../type
 import type { TaskTree } from '../../../types/taskTypes';
 
 export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, onToolbarUpdate, registerOnClose }: EditorProps) { // ✅ PATTERN CENTRALIZZATO: Accetta hideHeader e onToolbarUpdate
-  // ✅ ARCHITETTURA ESPERTO: Verifica che questo componente sia usato solo per DDT
+  // ✅ ARCHITETTURA ESPERTO: Verifica che questo componente sia usato solo per TaskTree
   // Se il task è di tipo Message, questo componente NON dovrebbe essere montato
   if (taskMeta?.type !== undefined && taskMeta.type !== null) {
     const editorKind = getEditorFromTaskType(taskMeta.type);
     if (editorKind === 'message') {
-      console.error('❌ [DDTHostAdapter] ERRORE CRITICO: Questo componente è stato montato per un task Message!', {
+      console.error('❌ [TaskTreeHostAdapter] ERRORE CRITICO: Questo componente è stato montato per un task Message!', {
         taskId: taskMeta.id,
         taskType: taskMeta.type,
         taskTypeName: TaskType[taskMeta.type],
@@ -26,7 +26,7 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
         <div className="h-full w-full bg-red-900 text-white p-4 flex items-center justify-center">
           <div className="text-center">
             <h2 className="text-xl font-bold mb-2">Errore Architetturale</h2>
-            <p>DDTHostAdapter montato per task Message</p>
+            <p>TaskTreeHostAdapter montato per task Message</p>
             <p className="text-sm mt-2">Task Type: {TaskType[taskMeta.type]} ({taskMeta.type})</p>
             <p className="text-sm">Dovrebbe usare TextMessageEditor invece</p>
           </div>
@@ -48,7 +48,7 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
 
       return loaded;
     } catch (error) {
-      console.error('[DDTHostAdapter] Error loading task:', error);
+      console.error('[TaskTreeHostAdapter] Error loading task:', error);
       return null;
     }
   }, [instanceKey]);
@@ -79,7 +79,7 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
         if (tree) {
           setTaskTree(tree);
 
-          console.log('[🔍 DDTHostAdapter] ✅ TaskTree caricato', {
+          console.log('[🔍 TaskTreeHostAdapter] ✅ TaskTree caricato', {
             taskId: fullTask.id,
             taskTreeNodesLength: tree.nodes?.length || 0,
             mainNodesTemplateIds: tree.nodes?.map((n: any) => ({
@@ -101,7 +101,7 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
           setTaskTree(null);
         }
       } catch (error) {
-        console.error('[DDTHostAdapter] Error loading TaskTree:', error);
+        console.error('[TaskTreeHostAdapter] Error loading TaskTree:', error);
         setTaskTree(null);
       } finally {
         setTaskTreeLoading(false);
@@ -115,17 +115,17 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
   const loading = taskTreeLoading;
 
   // 3. Quando completi il wizard, salva nel Task E aggiorna lo state
-  const handleComplete = React.useCallback(async (finalDDTOrTaskTree: any) => {
-    // ✅ NUOVO: Supporta sia DDT (backward compatibility) che TaskTree
-    const finalTaskTree: TaskTree = finalDDTOrTaskTree.nodes
-      ? finalDDTOrTaskTree as TaskTree
+  const handleComplete = React.useCallback(async (finalTaskTreeOrDDT: any) => {
+    // ✅ NUOVO: Supporta sia TaskTree (nuovo formato) che DDT (backward compatibility)
+    const finalTaskTree: TaskTree = finalTaskTreeOrDDT.nodes
+      ? finalTaskTreeOrDDT as TaskTree
       : {
-          label: finalDDTOrTaskTree.label || '',
-          nodes: finalDDTOrTaskTree.data || [],
-          steps: finalDDTOrTaskTree.steps || {},
-          constraints: finalDDTOrTaskTree.constraints,
-          dataContract: finalDDTOrTaskTree.dataContract,
-          introduction: finalDDTOrTaskTree.introduction
+          label: finalTaskTreeOrDDT.label || '',
+          nodes: finalTaskTreeOrDDT.data || [],
+          steps: finalTaskTreeOrDDT.steps || {},
+          constraints: finalTaskTreeOrDDT.constraints,
+          dataContract: finalTaskTreeOrDDT.dataContract,
+          introduction: finalTaskTreeOrDDT.introduction
         };
 
     console.log('[DDTHostAdapter][handleComplete] 🔍 finalTaskTree received', {
@@ -204,16 +204,16 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
         const taskInstance = taskRepository.getTask(instanceKey);
         const rowText = taskInstance?.text || taskMeta.label || 'Task';
 
-        // ✅ BACKWARD COMPATIBILITY: Converti TaskTree in DDT per extractVariablesFromDDT
-        const ddtForVariables = {
+        // ✅ BACKWARD COMPATIBILITY: Converti TaskTree in formato DDT per extractVariablesFromDDT
+        const taskTreeForVariables = {
           label: finalTaskTree.label,
           data: finalTaskTree.nodes,
           steps: finalTaskTree.steps
         };
 
-        // Extract variables from DDT using row text and DDT labels
+        // Extract variables from TaskTree using row text and TaskTree labels
         const varNames = await flowchartVariablesService.extractVariablesFromDDT(
-          ddtForVariables,
+          taskTreeForVariables,
           instanceKey, // taskId
           instanceKey, // rowId (same as taskId)
           rowText, // Row text (e.g., "chiedi data di nascita")
@@ -231,7 +231,7 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
       // Failed to extract variables from TaskTree
     }
 
-    // ✅ ARCHITETTURA ESPERTO: Aggiorna immediatamente taskTree e ddt per aggiornare i props
+    // ✅ ARCHITETTURA ESPERTO: Aggiorna immediatamente taskTree per aggiornare i props
     // ✅ Aggiorna taskTree
     setTaskTree(finalTaskTree);
   }, [instanceKey, currentProjectId, taskMeta.label]);
@@ -261,7 +261,7 @@ export default function DDTHostAdapter({ task: taskMeta, onClose, hideHeader, on
     try {
       return taskRepository.getTask(instanceKey);
     } catch (error) {
-      console.error('[DDTHostAdapter] Error reloading task:', error);
+      console.error('[TaskTreeHostAdapter] Error reloading task:', error);
       return fullTask; // Fallback al task originale
     }
   }, [instanceKey, taskTree]); // ✅ Dipende da taskTree per ricaricare quando cambia

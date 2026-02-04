@@ -153,7 +153,7 @@ export const AppContent: React.FC<AppContentProps> = ({
           };
         }, [tab.id]);
 
-        // ✅ Stabilizza key, task, ddt, onToolbarUpdate per evitare re-mount
+        // ✅ Stabilizza key, task, taskTree, onToolbarUpdate per evitare re-mount
         const editorKey = useMemo(() => {
           const instanceKey = tab.task?.instanceId || tab.task?.id || tab.id;
           const key = `response-editor-${instanceKey}`;
@@ -172,15 +172,15 @@ export const AppContent: React.FC<AppContentProps> = ({
           return tab.task; // ✅ Restituisce direttamente TaskMeta (già con TaskType enum)
         }, [tab.task?.id, tab.task?.type, tab.task?.label, tab.task?.instanceId]); // ✅ RINOMINATO: act → task
 
-        const stableDDT = useMemo(() => {
-          const startStepTasksCount = (tab as any).ddt?.data?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
-          console.log('[STABLE_DDT] Memoizing DDT', {
+        const stableTaskTree = useMemo(() => {
+          const startStepTasksCount = (tab as any).taskTree?.nodes?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
+          console.log('[STABLE_TASKTREE] Memoizing TaskTree', {
             tabId: tab.id,
-            dataLength: (tab as any).ddt?.data?.length,
+            nodesLength: (tab as any).taskTree?.nodes?.length,
             startStepTasksCount
           });
-          return tab.ddt;
-        }, [tab.ddt, tab.id]);
+          return tab.taskTree;
+        }, [tab.taskTree, tab.id]);
 
         const stableOnToolbarUpdate = useCallback(
           (toolbar: ToolbarButton[], color: string) => {
@@ -268,7 +268,7 @@ export const AppContent: React.FC<AppContentProps> = ({
           <div style={{ width: '100%', flex: 1, minHeight: 0, backgroundColor: '#0b1220', display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100%' }}>
             <ResponseEditor
               key={editorKey}
-              ddt={stableDDT}
+              taskTree={stableTaskTree}
               task={stableTask} // ✅ RINOMINATO: act → task (ResponseEditor si aspetta task, non act)
               tabId={tab.id}
               setDockTree={setDockTree}
@@ -393,9 +393,9 @@ export const AppContent: React.FC<AppContentProps> = ({
       // Task Editor tab (BackendCall, etc.)
       if (tab.type === 'taskEditor') { // ✅ RINOMINATO: 'actEditor' → 'taskEditor'
         const taskEditorTab = tab as DockTabTaskEditor; // ✅ RINOMINATO: actEditorTab → taskEditorTab, DockTabActEditor → DockTabTaskEditor
-        // ✅ Verifica se questo taskEditor contiene un ResponseEditor (editorKind === 'ddt')
+        // ✅ Verifica se questo taskEditor contiene un ResponseEditor (editorKind === 'taskTree')
         const editorKind = resolveEditorKind(tab.task || { id: '', type: TaskType.SayMessage, label: '' });
-        const isDDTEditor = editorKind === 'ddt';
+        const isTaskTreeEditor = editorKind === 'ddt'; // ✅ 'ddt' è ancora il valore enum, ma il concetto è TaskTree
 
         // ✅ Reset ref nel Map quando cambia il tab
         React.useEffect(() => {
@@ -406,7 +406,7 @@ export const AppContent: React.FC<AppContentProps> = ({
 
         // ✅ Funzione event-driven: imposta tab.onClose immediatamente quando registerOnClose viene chiamato
         const handleRegisterOnClose = React.useCallback((fn: () => Promise<boolean>) => {
-          if (!isDDTEditor || !tab.id || !setDockTree) {
+          if (!isTaskTreeEditor || !tab.id || !setDockTree) {
             return;
           }
 
@@ -448,14 +448,14 @@ export const AppContent: React.FC<AppContentProps> = ({
               return n;
             })
           );
-        }, [tab.id, setDockTree, isDDTEditor]);
+        }, [tab.id, setDockTree, isTaskTreeEditor]);
 
         return (
           <div style={{ width: '100%', flex: 1, minHeight: 0, backgroundColor: '#0b1220', display: 'flex', flexDirection: 'column' }}>
             <ResizableTaskEditorHost // ✅ RINOMINATO: ResizableActEditorHost → ResizableTaskEditorHost
               task={tab.task || { id: '', type: TaskType.SayMessage, label: '' }} // ✅ RINOMINATO: act → task, usa TaskMeta con TaskType enum
               onClose={() => {
-                // ✅ NON chiudere il tab qui - la chiusura è gestita da tab.onClose (solo per DDT editor)
+                // ✅ NON chiudere il tab qui - la chiusura è gestita da tab.onClose (solo per TaskTree editor)
               }}
               onToolbarUpdate={(toolbar, color) => {
                 // Update tab with toolbar and color
@@ -473,7 +473,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                 });
               }}
               hideHeader={true}
-              registerOnClose={isDDTEditor ? handleRegisterOnClose : undefined}
+              registerOnClose={isTaskTreeEditor ? handleRegisterOnClose : undefined}
             />
           </div>
         );
@@ -491,8 +491,8 @@ export const AppContent: React.FC<AppContentProps> = ({
       //   nextToolbar: next.tab.toolbarButtons,
       //   prevHeader: prev.tab.headerColor,
       //   nextHeader: next.tab.headerColor,
-      //   prevDDT: prev.tab.ddt,
-      //   nextDDT: next.tab.ddt,
+      //   prevTaskTree: prev.tab.taskTree,
+      //   nextTaskTree: next.tab.taskTree,
       //   sameTabObject: prev.tab === next.tab
       // });
 
@@ -505,17 +505,17 @@ export const AppContent: React.FC<AppContentProps> = ({
       //   nextId: nextTab.id,
       //   prevType: prevTab.type,
       //   nextType: nextTab.type,
-      //   prevDDTRef: prevTab.ddt,
-      //   nextDDTRef: nextTab.ddt,
-      //   ddtRefChanged: prevTab.ddt !== nextTab.ddt,
+      //   prevTaskTreeRef: prevTab.taskTree,
+      //   nextTaskTreeRef: nextTab.taskTree,
+      //   taskTreeRefChanged: prevTab.taskTree !== nextTab.taskTree,
       //   prevTaskId: prevTab.task?.id,
       //   nextTaskId: nextTab.task?.id,
       //   prevInstanceId: prevTab.task?.instanceId,
       //   nextInstanceId: nextTab.task?.instanceId,
-      //   prevDDTdataLength: prevTab.ddt?.data?.length,
-      //   nextDDTdataLength: nextTab.ddt?.data?.length,
-      //   prevDDTdataFirstLabel: prevTab.ddt?.data?.[0]?.label,
-      //   nextDDTdataFirstLabel: nextTab.ddt?.data?.[0]?.label
+      //   prevTaskTreeNodesLength: prevTab.taskTree?.nodes?.length,
+      //   nextTaskTreeNodesLength: nextTab.taskTree?.nodes?.length,
+      //   prevTaskTreeNodesFirstLabel: prevTab.taskTree?.nodes?.[0]?.label,
+      //   nextTaskTreeNodesFirstLabel: nextTab.taskTree?.nodes?.[0]?.label
       // });
 
       // Se cambia id o type, re-render sempre
@@ -524,18 +524,18 @@ export const AppContent: React.FC<AppContentProps> = ({
         return false; // Re-render
       }
 
-      // ✅ Per responseEditor: dockTree è la fonte di verità - se ddt cambia, re-render
+      // ✅ Per responseEditor: dockTree è la fonte di verità - se taskTree cambia, re-render
       if (prevTab.type === 'responseEditor' && nextTab.type === 'responseEditor') {
-        // ✅ Se ddt cambia reference, re-render SEMPRE (dockTree è stato aggiornato)
-        if (prevTab.ddt !== nextTab.ddt) {
-          const prevStartTasksCount = prevTab.ddt?.data?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
-          const nextStartTasksCount = nextTab.ddt?.data?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
-          // console.log('[DEBUG_MEMO] DECISIONE: re-render (ddt changed from dockTree)', {
+        // ✅ Se taskTree cambia reference, re-render SEMPRE (dockTree è stato aggiornato)
+        if (prevTab.taskTree !== nextTab.taskTree) {
+          const prevStartTasksCount = prevTab.taskTree?.nodes?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
+          const nextStartTasksCount = nextTab.taskTree?.nodes?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
+          // console.log('[DEBUG_MEMO] DECISIONE: re-render (taskTree changed from dockTree)', {
           //   prevStartTasksCount,
           //   nextStartTasksCount,
-          //   ddtRefChanged: true
+          //   taskTreeRefChanged: true
           // });
-          return false; // Re-render (ddt cambiato dal dockTree)
+          return false; // Re-render (taskTree cambiato dal dockTree)
         }
 
         // Se cambia task (id o instanceId), re-render
@@ -664,7 +664,7 @@ export const AppContent: React.FC<AppContentProps> = ({
         // ✅ Prepare TaskTree BEFORE calling setDockTree (all async work here)
         let preparedTaskTree: any = null;
 
-        if (editorKind === 'ddt') {
+        if (editorKind === 'ddt') { // ✅ 'ddt' è ancora il valore enum, ma il concetto è TaskTree
           // Open ResponseEditor for Task types (DataRequest, ProblemClassification, etc.)
           // ✅ PRIORITÀ: Usa TaskTree dall'evento se presente (copia del template già costruita)
           let taskTree = d.taskTree; // ✅ Usa TaskTree dall'evento (se presente)
@@ -739,7 +739,7 @@ export const AppContent: React.FC<AppContentProps> = ({
           })(prev);
 
           if (existing) {
-            // Tab already open: per 'ddt', salva TaskTree nel taskRepository e attiva il tab
+            // Tab already open: per 'ddt' (TaskTree), salva TaskTree nel taskRepository e attiva il tab
             // TaskEditorHost leggerà il TaskTree dal taskRepository
             if (editorKind === 'ddt' && preparedTaskTree) {
               console.log('[DOCK_SYNC] 🔄 Updating taskRepository with TaskTree for existing tab', {
@@ -790,8 +790,8 @@ export const AppContent: React.FC<AppContentProps> = ({
               headerColor: '#059669', // Green color for SayMessage
               toolbarButtons: []
             } as DockTabTaskEditor);
-          } else if (editorKind === 'ddt') {
-            // ✅ UNIFICATO: Usa TaskEditorHost anche per 'ddt' (come per 'message' e 'backend')
+          } else if (editorKind === 'ddt') { // ✅ 'ddt' è ancora il valore enum, ma il concetto è TaskTree
+            // ✅ UNIFICATO: Usa TaskEditorHost anche per 'ddt' (TaskTree) (come per 'message' e 'backend')
             // TaskEditorHost → DDTHostAdapter → ResponseEditor gestirà il TaskTree
             // Il TaskTree viene preparato e salvato nel taskRepository prima di aprire l'editor
             const startStepTasksCount = preparedTaskTree?.nodes?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
@@ -940,7 +940,7 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   // Open ConditionEditor as docking tab
   React.useEffect(() => {
-    // Helper: build static variables from all Agent Acts' DDT structure
+    // Helper: build static variables from all Agent Tasks' TaskTree structure
     const buildStaticVars = (): Record<string, any> => {
       const vars: Record<string, any> = {};
       const data = projectData as any;
@@ -951,12 +951,12 @@ export const AppContent: React.FC<AppContentProps> = ({
           for (const it of items) {
             const taskName: string = String(it?.name || it?.label || '').trim(); // ✅ RINOMINATO: actName → taskName
             if (!taskName) continue;
-            const ddt: any = it?.ddt;
-            if (!ddt) continue;
-            // Support assembled shape (data) and snapshot shape (mains)
-            const mains: any[] = Array.isArray(ddt?.data)
-              ? ddt.data
-              : (ddt?.data ? [ddt.data] : (Array.isArray(ddt?.mains) ? ddt.mains : []));
+            const taskTree: any = it?.ddt || it?.taskTree; // ✅ Support both old 'ddt' and new 'taskTree' property names
+            if (!taskTree) continue;
+            // Support assembled shape (nodes) and snapshot shape (data/mains)
+            const mains: any[] = Array.isArray(taskTree?.nodes)
+              ? taskTree.nodes
+              : (Array.isArray(taskTree?.data) ? taskTree.data : (taskTree?.data ? [taskTree.data] : (Array.isArray(taskTree?.mains) ? taskTree.mains : [])));
             for (const m of (mains || [])) {
               const mainLabel: string = String(m?.labelKey || m?.label || m?.name || 'Data').trim();
               const mainKey = `${taskName}.${mainLabel}`; // ✅ RINOMINATO: actName → taskName
@@ -988,11 +988,11 @@ export const AppContent: React.FC<AppContentProps> = ({
           for (const it of items) {
             const taskName: string = String(it?.name || it?.label || '').trim(); // ✅ RINOMINATO: actName → taskName
             if (!taskName) continue;
-            const ddt: any = it?.ddt;
-            if (!ddt) continue;
-            const mains: any[] = Array.isArray(ddt?.data)
-              ? ddt.data
-              : (ddt?.data ? [ddt.data] : (Array.isArray(ddt?.mains) ? ddt.mains : []));
+            const taskTree: any = it?.ddt || it?.taskTree; // ✅ Support both old 'ddt' and new 'taskTree' property names
+            if (!taskTree) continue;
+            const mains: any[] = Array.isArray(taskTree?.nodes)
+              ? taskTree.nodes
+              : (Array.isArray(taskTree?.data) ? taskTree.data : (taskTree?.data ? [taskTree.data] : (Array.isArray(taskTree?.mains) ? taskTree.mains : [])));
             const mainsOut: any[] = [];
             for (const m of (mains || [])) {
               const mainLabel: string = String(m?.labelKey || m?.label || m?.name || 'Data').trim();
@@ -1092,7 +1092,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   // ✅ REMOVED: Service unavailable listener - now handled in ResponseEditor with centered overlay
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Stato per finestre editor DDT aperte (ora con react-mosaic)
+  // Stato per finestre editor TaskTree aperte (ora con react-mosaic)
   // const [mosaicNodes, setMosaicNodes] = useState<any>(null);
   // const dockablePanelsRef = React.useRef<DockablePanelsHandle>(null);
 
@@ -1113,7 +1113,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   //     dockablePanelsRef.current.openPanel({
   //       id: 'test-panel',
   //       title: 'Test Panel',
-  //       ddt: { label: 'Test Panel' },
+      //       taskTree: { label: 'Test Panel' },
   //       translations: {},
   //       lang: 'it'
   //     });

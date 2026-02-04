@@ -11,7 +11,7 @@ import { buildStepPlan, buildPartialPlanForChanges } from './stepPlan';
 import { taskCounter } from '../../../utils/TaskCounter';
 import { PlanRunResult } from './planRunner';
 import { buildArtifactStore, mergeArtifactStores, moveArtifactsPath } from './artifactStore';
-import { assembleFinalDDT } from './assembleFinal';
+import { assembleFinalTaskTree } from './assembleFinal';
 import { Hourglass, Bell } from 'lucide-react';
 import { useAIProvider } from '../../../context/AIProviderContext';
 import { debug, error } from '../../../utils/logger';
@@ -33,8 +33,8 @@ interface FieldProcessingState {
 }
 
 // DEBUG (toggle)
-const __DEBUG_DDT_UI__ = false;
-const dlog = (...a: any[]) => { if (__DEBUG_DDT_UI__) debug('DDT_WIZARD', a.join(' ')); };
+const __DEBUG_TASKTREE_UI__ = false;
+const dlog = (...a: any[]) => { if (__DEBUG_TASKTREE_UI__) debug('TASKTREE_WIZARD', a.join(' ')); };
 
 // Piccolo componente per i puntini animati
 const AnimatedDots: React.FC<{ intervalMs?: number }> = ({ intervalMs = 450 }) => {
@@ -95,7 +95,7 @@ class AutoMappingService {
       if (response.ok) {
         const data = await response.json();
         this.templates = data.templates || [];
-        debug('DDT_WIZARD', 'Loaded templates', { count: this.templates.length });
+        debug('TASKTREE_WIZARD', 'Loaded templates', { count: this.templates.length });
       }
     } catch (error) {
       console.warn('[AUTO_MAPPING] Failed to load templates:', error);
@@ -178,16 +178,16 @@ class AutoMappingService {
 
 const autoMappingService = new AutoMappingService();
 
-const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, messages?: any) => void; initialDDT?: any; startOnStructure?: boolean; onSeePrompts?: () => void; taskType?: string; taskLabel?: string }> = ({ onCancel, onComplete, initialDDT, startOnStructure, onSeePrompts, taskType, taskLabel }) => {
+const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: any, messages?: any) => void; initialTaskTree?: any; startOnStructure?: boolean; onSeePrompts?: () => void; taskType?: string; taskLabel?: string }> = ({ onCancel, onComplete, initialTaskTree, startOnStructure, onSeePrompts, taskType, taskLabel }) => {
   const API_BASE = '';
   // Ensure accent is inherited in nested components
   React.useEffect(() => {
     try {
-      const el = document.querySelector('[data-ddt-section]') as HTMLElement | null;
+      const el = document.querySelector('[data-tasktree-section]') as HTMLElement | null;
       if (el) {
-        const accent = getComputedStyle(el).getPropertyValue('--ddt-accent');
+        const accent = getComputedStyle(el).getPropertyValue('--tasktree-accent');
         if (accent) {
-          (document.body.style as any).setProperty('--ddt-accent', accent.trim());
+          (document.body.style as any).setProperty('--tasktree-accent', accent.trim());
         }
       }
     } catch { }
@@ -205,16 +205,16 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const { addTranslations: addTranslationsToGlobal } = useProjectTranslations();
 
   const [step, setStep] = useState<string>(() => {
-    if (initialDDT?._inferenceResult?.ai?.schema && initialDDT.data?.length > 0) {
+    if (initialTaskTree?._inferenceResult?.ai?.schema && initialTaskTree.data?.length > 0) {
       return 'heuristic-confirm';
     }
-    // ✅ NUOVO: Se initialDDT ha data ma senza steps → vai direttamente a 'structure'
+    // ✅ NUOVO: Se initialTaskTree ha data ma senza steps → vai direttamente a 'structure'
     // Il bottone "Build Messages" sarà visibile e porterà a 'pipeline'
-    if (initialDDT?.data && Array.isArray(initialDDT.data) && initialDDT.data.length > 0) {
+    if (initialTaskTree?.data && Array.isArray(initialTaskTree.data) && initialTaskTree.data.length > 0) {
       // ✅ Controlla solo steps a root level
-      const hasStepsAtRoot = initialDDT.steps && typeof initialDDT.steps === 'object' && Object.keys(initialDDT.steps).length > 0;
+      const hasStepsAtRoot = initialTaskTree.steps && typeof initialTaskTree.steps === 'object' && Object.keys(initialTaskTree.steps).length > 0;
       if (!hasStepsAtRoot) {
-        console.log('[DDTWizard] data presente ma senza steps, andando a structure per generare messaggi');
+        console.log('[TaskTreeWizard] data presente ma senza steps, andando a structure per generare messaggi');
         return 'structure';
       }
     }
@@ -228,8 +228,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     mains0: SchemaNode[];
     root: string;
   } | null>(() => {
-    if (initialDDT?._inferenceResult?.ai?.schema && initialDDT.data?.length > 0) {
-      const mains = (initialDDT.data as any[]).map((m: any) => ({
+    if (initialTaskTree?._inferenceResult?.ai?.schema && initialTaskTree.data?.length > 0) {
+      const mains = (initialTaskTree.data as any[]).map((m: any) => ({
         id: m.id,  // ✅ CRITICAL: Preserve node ID (GUID from template)
         label: m.label,
         type: m.type,
@@ -255,10 +255,10 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       }));
 
       return {
-        schema: initialDDT._inferenceResult.ai.schema,
-        icon: initialDDT._inferenceResult.ai.icon || null,
+        schema: initialTaskTree._inferenceResult.ai.schema,
+        icon: initialTaskTree._inferenceResult.ai.icon || null,
         mains0: mains,
-        root: initialDDT.label || 'Data'
+        root: initialTaskTree.label || 'Data'
       };
     }
     return null;
@@ -268,10 +268,10 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const [showInputAlongsideConfirm, setShowInputAlongsideConfirm] = useState(false);
 
   // Schema editing state (from detect schema)
-  const [schemaRootLabel, setSchemaRootLabel] = useState<string>(initialDDT?.label || '');
+  const [schemaRootLabel, setSchemaRootLabel] = useState<string>(initialTaskTree?.label || '');
   const [mountedDataTree, setMountedDataTree] = useState<SchemaNode[]>(() => {
-    if (initialDDT?.data && Array.isArray(initialDDT.data) && initialDDT.data.length > 0) {
-      const mains = (initialDDT.data as any[]).map((m: any) => ({
+    if (initialTaskTree?.data && Array.isArray(initialTaskTree.data) && initialTaskTree.data.length > 0) {
+      const mains = (initialTaskTree.data as any[]).map((m: any) => ({
         id: m.id,  // ✅ CRITICAL: Preserve node ID (GUID from template)
         label: m.label,
         type: m.type,
@@ -308,8 +308,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     return [];
   });
 
-  // Check if DDT is composite (has multiple data or is explicitly composite)
-  const isCompositeDDT = useMemo(() => {
+  // Check if TaskTree is composite (has multiple data or is explicitly composite)
+  const isCompositeTaskTree = useMemo(() => {
     return mountedDataTree.length > 1 ||
       (mountedDataTree.length === 1 && ((mountedDataTree[0] as any)?.subTasks && (mountedDataTree[0] as any).subTasks.length > 0) || (mountedDataTree[0]?.subData && mountedDataTree[0].subData.length > 0));
   }, [mountedDataTree]);
@@ -317,7 +317,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   // Save template to Factory (global)
   const handleSaveToFactory = async () => {
     if (!schemaRootLabel || mountedDataTree.length === 0) {
-      alert('Please complete the DDT structure before saving');
+      alert('Please complete the TaskTree structure before saving');
       return;
     }
 
@@ -326,7 +326,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       const templateData = {
         name: schemaRootLabel.toLowerCase().replace(/\s+/g, '_'),
         label: schemaRootLabel,
-        type: isCompositeDDT ? 'composite' : 'atomic',
+        type: isCompositeTaskTree ? 'composite' : 'atomic',
         icon: 'Folder',
         data: mountedDataTree.map(main => ({
           templateRef: main.type,
@@ -352,10 +352,10 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       }
 
       const saved = await response.json();
-      console.log('[DDTWizard] Saved to Factory:', saved);
+      console.log('[TaskTreeWizard] Saved to Factory:', saved);
       alert('Template saved to Factory successfully!');
     } catch (error: any) {
-      console.error('[DDTWizard] Error saving to Factory:', error);
+      console.error('[TaskTreeWizard] Error saving to Factory:', error);
       alert(`Error saving to Factory: ${error.message}`);
     } finally {
       setSaving(null);
@@ -370,7 +370,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     }
 
     if (!schemaRootLabel || mountedDataTree.length === 0) {
-      alert('Please complete the DDT structure before saving');
+      alert('Please complete the TaskTree structure before saving');
       return;
     }
 
@@ -379,7 +379,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       const templateData = {
         name: schemaRootLabel.toLowerCase().replace(/\s+/g, '_'),
         label: schemaRootLabel,
-        type: isCompositeDDT ? 'composite' : 'atomic',
+        type: isCompositeTaskTree ? 'composite' : 'atomic',
         icon: 'Folder',
         data: mountedDataTree.map(main => ({
           templateRef: main.type,
@@ -405,10 +405,10 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       }
 
       const saved = await response.json();
-      console.log('[DDTWizard] Saved to Project:', saved);
+      console.log('[TaskTreeWizard] Saved to Project:', saved);
       alert('Template saved to Project successfully!');
     } catch (error: any) {
-      console.error('[DDTWizard] Error saving to Project:', error);
+      console.error('[TaskTreeWizard] Error saving to Project:', error);
       alert(`Error saving to Project: ${error.message}`);
     } finally {
       setSaving(null);
@@ -463,12 +463,12 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const [userDesc, setUserDesc] = useState('');
   // Use global AI provider and model from context
   const { provider: selectedProvider, model: selectedModel } = useAIProvider();
-  const [detectTypeIcon, setDetectTypeIcon] = useState<string | null>(() => initialDDT?._inferenceResult?.ai?.icon || null);
+  const [detectTypeIcon, setDetectTypeIcon] = useState<string | null>(() => initialTaskTree?._inferenceResult?.ai?.icon || null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  // ✅ FIX: Assicura che name sia sempre una stringa, anche se initialDDT?.label è un oggetto
-  // ✅ Usa taskLabel come fallback se initialDDT?.label non è disponibile
+  // ✅ FIX: Assicura che name sia sempre una stringa, anche se initialTaskTree?.label è un oggetto
+  // ✅ Usa taskLabel come fallback se initialTaskTree?.label non è disponibile
   const [dataNode, setDataNode] = useState<DataNode | null>(() => {
-    const label = initialDDT?.label || taskLabel || '';
+    const label = initialTaskTree?.label || taskLabel || '';
     return {
       name: typeof label === 'string'
         ? label
@@ -482,7 +482,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       const label = String(taskLabel || '').trim();
       if (label) {
         setDataNode({ name: label });
-        console.log('[DDTWizard] ✅ Aggiornato dataNode.name con taskLabel:', label);
+        console.log('[TaskTreeWizard] ✅ Aggiornato dataNode.name con taskLabel:', label);
       }
     }
   }, [taskLabel, dataNode?.name]);
@@ -695,7 +695,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         timestamp: new Date().toISOString()
       });
       console.log('[AUTO_DETECT][START] ════════════════════════════════════════');
-      debug('DDT_WIZARD', 'No heuristic match, AI will be called on submit');
+      debug('TASKTREE_WIZARD', 'No heuristic match, AI will be called on submit');
 
     } catch (error) {
       // Silently fail - user can still use "Invia" button for AI
@@ -708,7 +708,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         timestamp: new Date().toISOString()
       });
       console.log('[AUTO_DETECT][START] ════════════════════════════════════════');
-      debug('DDT_WIZARD', 'Auto-detect error (non-blocking)', error);
+      debug('TASKTREE_WIZARD', 'Auto-detect error (non-blocking)', error);
     }
   }, [step, closed, selectedProvider, selectedModel]);
   // removed unused refs
@@ -725,7 +725,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
   // 🚀 NEW: Handle retry for a specific field
   const handleRetryField = async (fieldId: string) => {
-    console.log('[DDTWizard] Retry requested for field:', fieldId);
+    console.log('[TaskTreeWizard] Retry requested for field:', fieldId);
     const parts = fieldId.split('/');
     const mainLabel = parts[0];
     const subLabel = parts.length > 1 ? parts[1] : undefined;
@@ -733,7 +733,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     // Find the main node
     const mainNode = mountedDataTree.find(m => m.label === mainLabel);
     if (!mainNode) {
-      console.error('[DDTWizard] Main node not found:', mainLabel);
+      console.error('[TaskTreeWizard] Main node not found:', mainLabel);
       return;
     }
 
@@ -743,14 +743,14 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       : mainNode;
 
     if (!targetNode) {
-      console.error('[DDTWizard] Target node not found:', fieldId);
+      console.error('[TaskTreeWizard] Target node not found:', fieldId);
       return;
     }
 
     // Update state to processing, preserving retryCount
     setFieldProcessingStates(prev => {
       const currentRetryCount = prev[fieldId]?.retryCount ?? 0;
-      console.log('[DDTWizard] Starting retry for field:', fieldId, 'preserving retryCount:', currentRetryCount);
+      console.log('[TaskTreeWizard] Starting retry for field:', fieldId, 'preserving retryCount:', currentRetryCount);
       return {
         ...prev,
         [fieldId]: {
@@ -832,15 +832,15 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         }
       }));
 
-      console.log('[DDTWizard] Retry completed successfully for field:', fieldId);
+      console.log('[TaskTreeWizard] Retry completed successfully for field:', fieldId);
     } catch (error: any) {
-      console.error('[DDTWizard] Retry failed for field:', fieldId, error);
+      console.error('[TaskTreeWizard] Retry failed for field:', fieldId, error);
 
       // Update to error state with incremented retryCount
       setFieldProcessingStates(prev => {
         const currentRetryCount = prev[fieldId]?.retryCount ?? 0;
         const newRetryCount = currentRetryCount + 1;
-        console.log('[DDTWizard] Retry failed, incrementing retryCount:', fieldId, 'from', currentRetryCount, 'to', newRetryCount);
+        console.log('[TaskTreeWizard] Retry failed, incrementing retryCount:', fieldId, 'from', currentRetryCount, 'to', newRetryCount);
         return {
           ...prev,
           [fieldId]: {
@@ -856,24 +856,24 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     }
   };
 
-  // 🚀 NEW: Handle manual creation - assemble DDT with existing messages and open editor
+  // 🚀 NEW: Handle manual creation - assemble TaskTree with existing messages and open editor
   const handleCreateManually = () => {
-    console.log('[DDTWizard] Manual creation requested - assembling DDT and opening editor');
+    console.log('[TaskTreeWizard] Manual creation requested - assembling TaskTree and opening editor');
 
-    // Assemble minimal DDT from current structure
-    const minimalDDT = assembleMinimalDDT();
+    // Assemble minimal TaskTree from current structure
+    const minimalTaskTree = assembleMinimalTaskTree();
 
-    // Call onComplete to open the editor with the minimal DDT
+    // Call onComplete to open the editor with the minimal TaskTree
     // The user can then manually add messages in the Response Editor
     if (onComplete) {
-      handleClose(minimalDDT);
+      handleClose(minimalTaskTree);
     } else {
       handleClose();
     }
   };
   const [playChime, setPlayChime] = useState<boolean>(() => {
     try {
-      const v = localStorage.getItem('ddtWizard.playChime');
+      const v = localStorage.getItem('taskTreeWizard.playChime');
       if (v === null) return true; // default true
       return v === '1';
     } catch {
@@ -888,10 +888,10 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     constraints: new Set(),
   });
   const [currentProcessingLabel, setCurrentProcessingLabel] = useState<string>('');
-  // Parallel processing: accumulate partial DDT results for each main
+  // Parallel processing: accumulate partial TaskTree results for each main
   const [partialResults, setPartialResults] = useState<Record<number, any>>({});
   // Ref to track when all mains are completed and we should close
-  const pendingCloseRef = React.useRef<{ ddt: any; translations: any } | null>(null);
+  const pendingCloseRef = React.useRef<{ taskTree: any; translations: any } | null>(null);
   // Persisted artifacts across runs for incremental assemble
   const [artifactStore, setArtifactStore] = useState<any | null>(null);
   // Track pending renames to relocate artifacts keys between normalized paths
@@ -906,7 +906,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   }, []);
 
   const [showRight, setShowRight] = useState<boolean>(() => {
-    if (initialDDT?._inferenceResult?.ai?.schema && initialDDT.data?.length > 0) return true;
+    if (initialTaskTree?._inferenceResult?.ai?.schema && initialTaskTree.data?.length > 0) return true;
     return startOnStructure ? true : false;
   });
 
@@ -929,7 +929,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       if (nextIdx !== -1) {
         // Auto-espandi il prossimo main data
         try {
-          console.log(`[DDT][auto-advance] ${currentMain.label} completed (${Math.round(currentMainProgress * 100)}%) → opening ${mountedDataTree[nextIdx].label}`);
+          console.log(`[TaskTree][auto-advance] ${currentMain.label} completed (${Math.round(currentMainProgress * 100)}%) → opening ${mountedDataTree[nextIdx].label}`);
         } catch { }
         setSelectedIdx(nextIdx);
       }
@@ -944,11 +944,11 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       const completedCount = Object.keys(partialResults).length;
       // Only close if all mains are completed
       if (completedCount === mountedDataTree.length) {
-        const { ddt, translations } = pendingCloseRef.current;
+        const { taskTree, translations } = pendingCloseRef.current;
         pendingCloseRef.current = null; // Clear before calling to avoid re-triggering
         // Use setTimeout to defer to next tick, avoiding setState during render
         setTimeout(() => {
-          handleClose(ddt, translations);
+          handleClose(taskTree, translations);
         }, 0);
       }
     }
@@ -1011,7 +1011,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     if (step === 'pipeline' || closed) return; // Blocca ogni setState durante la pipeline
     setShowRight(true);
     setStep('loading');
-    try { dlog('[DDT][UI] step → loading'); } catch { }
+    try { dlog('[TaskTree][UI] step → loading'); } catch { }
     setErrorMsg(null);
     try {
       // ✅ Deterministico: usa textToUse se fornito, altrimenti userDesc dallo stato
@@ -1023,7 +1023,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
       // ✅ Validazione: se reqBody è vuoto o è "[object Object]", logga errore
       if (!reqBody || reqBody === '[object Object]') {
-        console.error('[DDT][DetectType] ❌ Invalid input:', {
+        console.error('[TaskTree][DetectType] ❌ Invalid input:', {
           textToUse,
           userDesc,
           textInput,
@@ -1036,16 +1036,16 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         return;
       }
 
-      console.log('[DDT][DetectType] 🚀 Starting detection for:', reqBody);
-      console.log('[DDT][DetectType] 📊 Current state:', { step, closed, userDesc: reqBody, textToUse });
+      console.log('[TaskTree][DetectType] 🚀 Starting detection for:', reqBody);
+      console.log('[TaskTree][DetectType] 📊 Current state:', { step, closed, userDesc: reqBody, textToUse });
 
       // Clean path via Vite proxy
       const urlPrimary = `/step2-with-provider`;
       const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-      console.log('[DDT][DetectType][request]', { url: urlPrimary, body: reqBody, provider: selectedProvider, providerLower: selectedProvider.toLowerCase() });
+      console.log('[TaskTree][DetectType][request]', { url: urlPrimary, body: reqBody, provider: selectedProvider, providerLower: selectedProvider.toLowerCase() });
       const ctrl = new AbortController();
       const timeoutMs = 60000; // 60 seconds - increased for enterprise AI
-      const timeoutId = setTimeout(() => { try { ctrl.abort(); console.warn('[DDT][DetectType][timeout]', { url: urlPrimary, timeoutMs }); } catch { } }, timeoutMs);
+      const timeoutId = setTimeout(() => { try { ctrl.abort(); console.warn('[TaskTree][DetectType][timeout]', { url: urlPrimary, timeoutMs }); } catch { } }, timeoutMs);
       let res = await fetch(urlPrimary, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1056,13 +1056,13 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       const elapsed = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - t0;
       let raw = '';
       try { raw = await res.clone().text(); } catch { }
-      console.log('[DDT][DetectType][response]', { status: res.status, ok: res.ok, ms: Math.round(elapsed), preview: (raw || '').slice(0, 400) });
+      console.log('[TaskTree][DetectType][response]', { status: res.status, ok: res.ok, ms: Math.round(elapsed), preview: (raw || '').slice(0, 400) });
       if (!res.ok) throw new Error('Errore comunicazione IA');
       const result = await res.json();
-      console.log('[DDT][DetectType][parsed]', result);
+      console.log('[TaskTree][DetectType][parsed]', result);
       const ai = result.ai || result;
 
-      console.log('[DDT][DetectType] 🤖 AI Response analysis:', {
+      console.log('[TaskTree][DetectType] 🤖 AI Response analysis:', {
         action: ai.action,
         label: ai.label,
         type: ai.type,
@@ -1079,19 +1079,19 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       if (ai.schema && Array.isArray(ai.schema.data)) {
         // Old structure: ai.schema.data
         schema = ai.schema;
-        console.log('[DDT][DetectType] 📋 Using schema.data structure');
+        console.log('[TaskTree][DetectType] 📋 Using schema.data structure');
       } else if (Array.isArray(ai.mains)) {
         // New structure: ai.mains directly
         schema = {
           label: ai.label || 'Data',
           data: ai.mains
         };
-        console.log('[DDT][DetectType] 📋 Using ai.mains structure');
+        console.log('[TaskTree][DetectType] 📋 Using ai.mains structure');
       } else {
         throw new Error('Schema non valido');
       }
 
-      console.log('[DDT][DetectType][schema]', schema);
+      console.log('[TaskTree][DetectType][schema]', schema);
       if (schema && Array.isArray(schema.data)) {
         const root = schema.label || 'Data';
         const mains0: SchemaNode[] = (schema.data || []).map((m: any) => {
@@ -1125,9 +1125,9 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         });
         setDetectTypeIcon(ai.icon || null);
         // Enrich constraints immediately, then show structure step
-        console.log('[DDT][DetectType] → enrichConstraints', { root, mainsCount: mains0.length });
+        console.log('[TaskTree][DetectType] → enrichConstraints', { root, mainsCount: mains0.length });
         const enrichedRes = await enrichConstraintsFor(root, mains0);
-        console.log('[DDT][DetectType][enrich.done]', enrichedRes);
+        console.log('[TaskTree][DetectType][enrich.done]', enrichedRes);
         const finalRoot = (enrichedRes && (enrichedRes as any).label) ? (enrichedRes as any).label : root;
         let finalMains: any[] = (enrichedRes && (enrichedRes as any).mains) ? (enrichedRes as any).mains as any[] : mains0 as any[];
         // Fallback: se nessuna subData proposta, inferisci dal testo utente
@@ -1141,18 +1141,18 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         const allAtomic = Array.isArray(finalMains) && finalMains.length > 1 && finalMains.every((m: any) => !Array.isArray((m as any)?.subData) || (m as any).subData.length === 0);
         if (allAtomic) {
           finalMains = [{ label: finalRoot, type: 'object', icon: 'Folder', subData: finalMains }];
-          debug('DDT_WIZARD', 'Wrapped atomic mains into aggregator', { finalRoot, count: finalMains[0].subData.length });
+          debug('TASKTREE_WIZARD', 'Wrapped atomic mains into aggregator', { finalRoot, count: finalMains[0].subData.length });
         }
         setSchemaRootLabel(finalRoot);
         setMountedDataTree(finalMains);
         setStep('structure');
-        try { dlog('[DDT][UI] step → structure', { root: finalRoot, mains: finalMains.length }); } catch { }
+        try { dlog('[TaskTree][UI] step → structure', { root: finalRoot, mains: finalMains.length }); } catch { }
         return;
       }
-      console.warn('[DDT][DetectType][invalidSchema]', { schema });
+      console.warn('[TaskTree][DetectType][invalidSchema]', { schema });
       throw new Error('Schema non valido');
     } catch (err: any) {
-      console.error('[DDT][Wizard][error]', err);
+      console.error('[TaskTree][Wizard][error]', err);
 
       // ✅ Enhanced error message with reason
       let msg = '';
@@ -1170,14 +1170,14 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
       setErrorMsg('Errore IA: ' + msg);
       setStep('error');
-      try { dlog('[DDT][UI] step → error'); } catch { }
+      try { dlog('[TaskTree][UI] step → error'); } catch { }
     }
   };
 
   // removed old continue
 
-  // Assembla un DDT minimale dalla struttura corrente (root + mains + subData)
-  const assembleMinimalDDT = () => {
+  // Assembla un TaskTree minimale dalla struttura corrente (root + mains + subData)
+  const assembleMinimalTaskTree = () => {
     const root = (schemaRootLabel || 'Data');
     const mains = (mountedDataTree || []).map((m) => ({
       label: m.label || 'Field',
@@ -1191,19 +1191,19 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
         constraints: (s as any).constraints,
       }))
     }));
-    // preserva id/_id e translations dall'initialDDT per evitare rimbalzi
-    const baseId = (initialDDT as any)?.id || (initialDDT as any)?._id;
-    const ddt = {
-      ...(baseId ? { id: (initialDDT as any)?.id || baseId } : {}),
-      ...(((initialDDT as any)?._id && !(initialDDT as any)?.id) ? { _id: (initialDDT as any)._id } : {}),
+    // preserva id/_id e translations dall'initialTaskTree per evitare rimbalzi
+    const baseId = (initialTaskTree as any)?.id || (initialTaskTree as any)?._id;
+    const taskTree = {
+      ...(baseId ? { id: (initialTaskTree as any)?.id || baseId } : {}),
+      ...(((initialTaskTree as any)?._id && !(initialTaskTree as any)?.id) ? { _id: (initialTaskTree as any)._id } : {}),
       label: root,
       data: mains,
-      ...(initialDDT && (initialDDT as any).translations ? { translations: (initialDDT as any).translations } : {}),
+      ...(initialTaskTree && (initialTaskTree as any).translations ? { translations: (initialTaskTree as any).translations } : {}),
     } as any;
     try {
-      debug('DDT_WIZARD', 'Assembling DDT', { root, mainsCount: mains.length, mainsLabels: mains.map(m => m.label), preservedId: baseId });
+      debug('TASKTREE_WIZARD', 'Assembling TaskTree', { root, mainsCount: mains.length, mainsLabels: mains.map(m => m.label), preservedId: baseId });
     } catch { }
-    return ddt;
+    return taskTree;
   };
 
   // Heuristic: infer simple subData list from user description when AI doesn't provide it
@@ -1226,14 +1226,14 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   const enrichConstraintsFor = async (rootLabelIn: string, mainsIn: SchemaNode[]) => {
     try {
       const schema = { label: rootLabelIn || 'Data', mains: mainsIn.map((m) => ({ label: m.label, type: m.type, icon: m.icon, subData: (m.subData || []).map(s => ({ label: s.label, type: s.type, icon: s.icon })) })), text: userDesc };
-      try { console.log('[DDT][Constraints][request]', { url: '/step3', body: schema }); } catch { }
+      try { console.log('[TaskTree][Constraints][request]', { url: '/step3', body: schema }); } catch { }
       const res = await fetch(`/step3`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(schema)
       });
       if (!res.ok) {
-        console.warn('[DDT][Constraints][response.notOk]', { status: res.status });
+        console.warn('[TaskTree][Constraints][response.notOk]', { status: res.status });
         return;
       }
       const result = await res.json();
@@ -1248,7 +1248,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
           const em = enrichedMap.get(norm(existing.label));
           let nextSub = existing.subData || [];
 
-          console.log('[DDT][Constraints][enrich] 🔍 PROCESSING MAIN FOR CONSTRAINTS', {
+          console.log('[TaskTree][Constraints][enrich] 🔍 PROCESSING MAIN FOR CONSTRAINTS', {
             mainLabel: existing.label,
             hassteps: !!(existing as any).steps,
             subDataCount: nextSub.length,
@@ -1265,7 +1265,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             nextSub = nextSub.map((sub) => {
               const es = subMap.get(norm(sub.label));
 
-              console.log('[DDT][Constraints][enrich] 🔍 PROCESSING SUB DATA FOR CONSTRAINTS', {
+              console.log('[TaskTree][Constraints][enrich] 🔍 PROCESSING SUB DATA FOR CONSTRAINTS', {
                 mainLabel: existing.label,
                 subLabel: sub.label,
                 hasExistingsteps: !!(sub as any).steps,
@@ -1282,7 +1282,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                 ...(preservedsteps ? { steps: preservedsteps } : {})
               };
 
-              console.log('[DDT][Constraints][enrich] ✅ SUB DATA RESULT', {
+              console.log('[TaskTree][Constraints][enrich] ✅ SUB DATA RESULT', {
                 mainLabel: existing.label,
                 subLabel: sub.label,
                 hassteps: !!(result as any).steps,
@@ -1345,7 +1345,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   };
 
   const handleChangeEvent = (e: { type: string; path: string; payload?: any }) => {
-    console.log('[DDT_WIZARD] 🔔 handleChangeEvent called:', {
+    console.log('[TaskTree_WIZARD] 🔔 handleChangeEvent called:', {
       type: e.type,
       path: e.path,
       payload: e.payload
@@ -1380,13 +1380,13 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
   // Handler per chiusura (annulla o completamento)
   const handleClose = (result?: any, messages?: any) => {
-    debug('DDT_WIZARD', 'Handle close', { hasResult: !!result, hasOnComplete: !!onComplete, resultId: result?.id, resultLabel: result?.label, mainsCount: Array.isArray(result?.data) ? result.data.length : 'not-array' });
+    debug('TASKTREE_WIZARD', 'Handle close', { hasResult: !!result, hasOnComplete: !!onComplete, resultId: result?.id, resultLabel: result?.label, mainsCount: Array.isArray(result?.data) ? result.data.length : 'not-array' });
     setClosed(true);
     if (result && onComplete) {
-      debug('DDT_WIZARD', 'Calling onComplete callback');
+      debug('TASKTREE_WIZARD', 'Calling onComplete callback');
       onComplete(result, messages);
     } else {
-      debug('DDT_WIZARD', 'Calling onCancel');
+      debug('TASKTREE_WIZARD', 'Calling onCancel');
       onCancel();
     }
   };
@@ -1409,8 +1409,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
   // Handle manual template selection
   const handleTemplateSelect = React.useCallback((template: any) => {
-    console.log('[DDT][Wizard][templateSelect] Template selected manually:', template.label);
-    console.log('[DDT][Wizard][templateSelect] Full template structure:', {
+    console.log('[TaskTree][Wizard][templateSelect] Template selected manually:', template.label);
+    console.log('[TaskTree][Wizard][templateSelect] Full template structure:', {
       label: template.label,
       name: template.name,
       hasSubDataIds: !!template.subDataIds,
@@ -1422,7 +1422,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       allKeys: Object.keys(template)
     });
 
-    // ✅ NUOVA STRUTTURA: Costruisci istanza DDT dal template usando subDataIds
+    // ✅ NUOVA STRUTTURA: Costruisci istanza TaskTree dal template usando subDataIds
     // NOTA: Un template alla radice non sa se sarà usato come sottodato o come main,
     // quindi può avere tutti i 6 tipi di steps (start, noMatch, noInput, confirmation, notConfirmed, success).
     // Quando lo usiamo come sottodato, filtriamo e prendiamo solo start, noInput, noMatch.
@@ -1433,7 +1433,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
     if (subDataIds.length > 0) {
       // ✅ Template composito: crea UN SOLO data con subData[] popolato
-      console.log('[DDT][Wizard][templateSelect] 📦 Template composito, creando istanze per sottodati', {
+      console.log('[TaskTree][Wizard][templateSelect] 📦 Template composito, creando istanze per sottodati', {
         subDataIds,
         count: subDataIds.length
       });
@@ -1504,7 +1504,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             kind: subTemplate.name || subTemplate.type || undefined
           });
         } else {
-          console.warn('[DDT][Wizard][templateSelect] ⚠️ Template sottodato non trovato per ID', { subId });
+          console.warn('[TaskTree][Wizard][templateSelect] ⚠️ Template sottodato non trovato per ID', { subId });
           // Fallback: crea placeholder senza steps
           subDataInstances.push({
             label: subId,
@@ -1540,7 +1540,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       data.push(mainInstance); // ✅ UN SOLO elemento in data
     } else {
       // ✅ Template semplice: crea istanza dal template root
-      console.log('[DDT][Wizard][templateSelect] 📄 Template semplice, creando istanza root');
+      console.log('[TaskTree][Wizard][templateSelect] 📄 Template semplice, creando istanza root');
       // ✅ CRITICAL: Include node ID from template (preserve GUID)
       const mainTemplateNodeId = template.data?.[0]?.id || template.id || template._id;
       const mainTemplateId = template.id || template._id;
@@ -1611,7 +1611,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
       data: mains0
     };
 
-    console.log('[DDT][Wizard][templateSelect] Processed mains0:', {
+    console.log('[TaskTree][Wizard][templateSelect] Processed mains0:', {
       count: mains0.length,
       mains: mains0.map(m => ({
         label: m.label,
@@ -1636,7 +1636,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
     setDetectTypeIcon(template.icon || null);
     setShowRight(true);
     setStep('heuristic-confirm');
-    console.log('[DDT][Wizard][templateSelect] Template processed, showing confirmation', {
+    console.log('[TaskTree][Wizard][templateSelect] Template processed, showing confirmation', {
       root,
       mainsCount: mains0.length,
       schema,
@@ -1677,7 +1677,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             onNext={handleDetectType}
             onCancel={handleClose}
             dataNode={stableDataNode || undefined}
-            onAutoDetect={initialDDT?._inferenceResult ? undefined : handleAutoDetect}
+            onAutoDetect={initialTaskTree?._inferenceResult ? undefined : handleAutoDetect}
             onTemplateSelect={handleTemplateSelect}
             taskType={taskType}
             taskLabel={taskLabel} // ✅ LOGICA CORRETTA: nello step 'input', dataNode è vuoto, quindi taskLabel è la fonte primaria
@@ -1776,7 +1776,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
                         // ✅ Controlla solo steps a root level (non più dentro data)
                         // Nota: durante il wizard, steps vengono ancora creati dentro data temporaneamente
-                        // ma vengono estratti a root level da assembleFinalDDT
+                        // ma vengono estratti a root level da assembleFinalTaskTree
                         // Qui controlliamo se il template ha già steps (dal database)
                         const hasSteps = !!(schema && schema.steps && typeof schema.steps === 'object' && Object.keys(schema.steps).length > 0);
 
@@ -1787,25 +1787,25 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
 
                         if (hasSteps) {
                           // If steps are present, go directly to Response Editor
-                          console.log('[DDT][Wizard][heuristicMatch] steps found, going directly to Response Editor');
+                          console.log('[TaskTree][Wizard][heuristicMatch] steps found, going directly to Response Editor');
 
-                          // ✅ Steps vengono gestiti da assembleFinalDDT che estrae i GUID dalle traduzioni
+                          // ✅ Steps vengono gestiti da assembleFinalTaskTree che estrae i GUID dalle traduzioni
                           // Non serve più estrarre GUID da steps dentro data
                           const t1 = performance.now();
                           console.log(`⏱️ [YES_BUTTON] Tempo fino a assembly: ${(t1 - t0).toFixed(2)}ms`);
 
-                          // ✅ SUPER-OTTIMIZZAZIONE: Usa DDT pre-assemblato se disponibile (ISTANTANEO!)
-                          const preAssembledDDT = (initialDDT as any)?._inferenceResult?.ai?.preAssembledDDT;
-                          if (preAssembledDDT) {
+                          // ✅ SUPER-OTTIMIZZAZIONE: Usa TaskTree pre-assemblato se disponibile (ISTANTANEO!)
+                          const preAssembledTaskTree = (initialTaskTree as any)?._inferenceResult?.ai?.preAssembledTaskTree;
+                          if (preAssembledTaskTree) {
                             const t2 = performance.now();
-                            console.log(`⏱️ [YES_BUTTON] ✅ DDT pre-assemblato trovato - ISTANTANEO! Tempo: ${(t2 - t0).toFixed(2)}ms`);
+                            console.log(`⏱️ [YES_BUTTON] ✅ TaskTree pre-assemblato trovato - ISTANTANEO! Tempo: ${(t2 - t0).toFixed(2)}ms`);
 
                             // Set schema for consistency
                             setSchemaRootLabel(root);
                             setMountedDataTree(mains0);
 
-                            // ✅ Usa il DDT già assemblato in background!
-                            handleClose(preAssembledDDT, {});
+                            // ✅ Usa il TaskTree già assemblato in background!
+                            handleClose(preAssembledTaskTree, {});
 
                             const tAfterClose = performance.now();
                             console.log(`⏱️ [YES_BUTTON] 🏁 FINE TOTALE (pre-assembled) - Tempo: ${(tAfterClose - t0).toFixed(2)}ms`);
@@ -1813,7 +1813,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                           }
 
                           const t3 = performance.now();
-                          console.log(`⏱️ [YES_BUTTON] Prima di assembleFinalDDT - Tempo: ${(t3 - t0).toFixed(2)}ms`);
+                          console.log(`⏱️ [YES_BUTTON] Prima di assembleFinalTaskTree - Tempo: ${(t3 - t0).toFixed(2)}ms`);
 
                           // Set schema for assembly
                           setSchemaRootLabel(root);
@@ -1822,13 +1822,13 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                           try {
                             const emptyStore = buildArtifactStore([]);
                             const projectLang = (localStorage.getItem('project.lang') || 'pt') as 'en' | 'it' | 'pt';
-                            // ✅ assembleFinalDDT now adds translations to global table via addTranslations callback
-                            // Translations are NOT stored in finalDDT.translations anymore
+                            // ✅ assembleFinalTaskTree now adds translations to global table via addTranslations callback
+                            // Translations are NOT stored in finalTaskTree.translations anymore
                             // Translations will be saved to database only on explicit save
                             const tAssemblyStart = performance.now();
-                            console.log(`⏱️ [YES_BUTTON] Inizio assembleFinalDDT - Tempo: ${(tAssemblyStart - t0).toFixed(2)}ms`);
+                            console.log(`⏱️ [YES_BUTTON] Inizio assembleFinalTaskTree - Tempo: ${(tAssemblyStart - t0).toFixed(2)}ms`);
 
-                            const finalDDT = await assembleFinalDDT(
+                            const finalTaskTree = await assembleFinalTaskTree(
                               root || 'Data',
                               mains0,
                               emptyStore,
@@ -1844,50 +1844,50 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                             );
 
                             const tAssemblyEnd = performance.now();
-                            console.log(`⏱️ [YES_BUTTON] Fine assembleFinalDDT - Tempo assembly: ${(tAssemblyEnd - tAssemblyStart).toFixed(2)}ms, Tempo totale: ${(tAssemblyEnd - t0).toFixed(2)}ms`);
+                            console.log(`⏱️ [YES_BUTTON] Fine assembleFinalTaskTree - Tempo assembly: ${(tAssemblyEnd - tAssemblyStart).toFixed(2)}ms, Tempo totale: ${(tAssemblyEnd - t0).toFixed(2)}ms`);
 
-                            // ✅ Translations are now in global table, not in finalDDT.translations
+                            // ✅ Translations are now in global table, not in finalTaskTree.translations
                             // action.text will be resolved from global table when needed (in Chat Simulator, etc.)
-                            console.log('[DDT][Wizard][heuristicMatch] ✅ DDT assembled, translations in global table', {
-                              ddtId: finalDDT.id,
-                              label: finalDDT.label,
-                              mainsCount: finalDDT.data?.length || 0,
+                            console.log('[TaskTree][Wizard][heuristicMatch] ✅ TaskTree assembled, translations in global table', {
+                              taskTreeId: finalTaskTree.id,
+                              label: finalTaskTree.label,
+                              nodesLength: finalTaskTree.nodes?.length || finalTaskTree.data?.length || 0,
                               templateTranslationsCount: Object.keys(templateTranslations).length
                             });
 
-                            // Verify DDT structure before passing to Response Editor
-                            if (!finalDDT.data || finalDDT.data.length === 0) {
-                              console.error('[DDT][Wizard][heuristicMatch] ERROR: DDT has no data!', finalDDT);
-                              error('DDT_WIZARD', 'DDT has no data after assembly', new Error('DDT has no data'));
+                            // Verify TaskTree structure before passing to Response Editor
+                            if (!finalTaskTree.data || finalTaskTree.data.length === 0) {
+                              console.error('[TaskTree][Wizard][heuristicMatch] ERROR: TaskTree has no data!', finalTaskTree);
+                              error('TASKTREE_WIZARD', 'TaskTree has no data after assembly', new Error('TaskTree has no data'));
                               return;
                             }
 
                             // ✅ Check steps at root level (keyed by nodeId)
-                            const firstMainId = finalDDT.data[0]?.id;
-                            if (!firstMainId || !finalDDT.steps || !finalDDT.steps[firstMainId] || Object.keys(finalDDT.steps[firstMainId]).length === 0) {
-                              console.error('[DDT][Wizard][heuristicMatch] ERROR: DDT has no steps at root level!', {
-                                ddtId: finalDDT.id,
+                            const firstMainId = finalTaskTree.data[0]?.id;
+                            if (!firstMainId || !finalTaskTree.steps || !finalTaskTree.steps[firstMainId] || Object.keys(finalTaskTree.steps[firstMainId]).length === 0) {
+                              console.error('[TaskTree][Wizard][heuristicMatch] ERROR: TaskTree has no steps at root level!', {
+                                taskTreeId: finalTaskTree.id,
                                 firstMainId,
-                                hasSteps: !!finalDDT.steps,
-                                stepsKeys: finalDDT.steps ? Object.keys(finalDDT.steps) : []
+                                hasSteps: !!finalTaskTree.steps,
+                                stepsKeys: finalTaskTree.steps ? Object.keys(finalTaskTree.steps) : []
                               });
-                              error('DDT_WIZARD', 'DDT has no steps at root level after assembly', new Error('DDT has no steps at root level'));
+                              error('TASKTREE_WIZARD', 'TaskTree has no steps at root level after assembly', new Error('TaskTree has no steps at root level'));
                               return;
                             }
 
                             const tBeforeClose = performance.now();
                             console.log(`⏱️ [YES_BUTTON] Prima di handleClose - Tempo totale: ${(tBeforeClose - t0).toFixed(2)}ms`);
-                            console.log('[DDT][Wizard][heuristicMatch] ✅ DDT structure verified, calling handleClose');
+                            console.log('[TaskTree][Wizard][heuristicMatch] ✅ TaskTree structure verified, calling handleClose');
 
                             // Call onComplete to open Response Editor directly
-                            // ❌ REMOVED: finalDDT.translations - translations are now in global table
-                            handleClose(finalDDT, {});
+                            // ❌ REMOVED: finalTaskTree.translations - translations are now in global table
+                            handleClose(finalTaskTree, {});
 
                             const tAfterClose = performance.now();
                             console.log(`⏱️ [YES_BUTTON] 🏁 FINE TOTALE - Tempo totale: ${(tAfterClose - t0).toFixed(2)}ms`);
                           } catch (err) {
-                            console.error('[DDT][Wizard][heuristicMatch] Failed to assemble DDT:', err);
-                            error('DDT_WIZARD', 'Failed to assemble DDT with steps', err);
+                            console.error('[TaskTree][Wizard][heuristicMatch] Failed to assemble TaskTree:', err);
+                            error('TASKTREE_WIZARD', 'Failed to assemble TaskTree with steps', err);
                           }
                         } else {
                           console.log('🔵 [YES_BUTTON] No steps, andando a pipeline');
@@ -1900,13 +1900,13 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                           // Fallback: infer subData from text if missing
                           try {
                             const inferred = inferSubDataFromText(userDesc);
-                            console.log('[DDT][Wizard][heuristicMatch] Inferred subData', { inferredCount: inferred.length, inferred });
+                            console.log('[TaskTree][Wizard][heuristicMatch] Inferred subData', { inferredCount: inferred.length, inferred });
                             if (Array.isArray(finalMains) && finalMains.length > 0 && (!finalMains[0].subData || finalMains[0].subData.length === 0) && inferred.length > 0) {
                               finalMains = [{ ...finalMains[0], subData: inferred }];
-                              console.log('[DDT][Wizard][heuristicMatch] Applied inferred subData', { finalMainsCount: finalMains.length });
+                              console.log('[TaskTree][Wizard][heuristicMatch] Applied inferred subData', { finalMainsCount: finalMains.length });
                             }
                           } catch (err) {
-                            console.log('[DDT][Wizard][heuristicMatch] Inference failed', { error: err });
+                            console.log('[TaskTree][Wizard][heuristicMatch] Inference failed', { error: err });
                           }
 
                           setSchemaRootLabel(finalRoot);
@@ -1940,7 +1940,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                     </button>
                     <button
                       onClick={() => {
-                        console.log('[DDT][Wizard][heuristicMatch] User rejected, showing input alongside');
+                        console.log('[TaskTree][Wizard][heuristicMatch] User rejected, showing input alongside');
                         setShowInputAlongsideConfirm(true); // Show input alongside, DON'T hide confirmation
                         // DON'T remove pendingHeuristicMatch, DON'T hide right panel
                       }}
@@ -1999,8 +1999,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
               </div>
               {step === 'structure' && (
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-                  {/* Save buttons - only show for composite DDTs */}
-                  {isCompositeDDT && (
+                  {/* Save buttons - only show for composite TaskTrees */}
+                  {isCompositeTaskTree && (
                     <>
                       <button
                         onClick={handleSaveToFactory}
@@ -2041,7 +2041,7 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                     onClick={() => {
                       if (step === 'structure') {
                         // Torna al passo input per permettere all'utente di aggiungere dettagli
-                        console.log('[DDT][Wizard] Cancel clicked in structure step, returning to input');
+                        console.log('[TaskTree][Wizard] Cancel clicked in structure step, returning to input');
                         setStep('input');
                         setShowRight(false);
                       } else {
@@ -2052,11 +2052,11 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                   >
                     Cancel
                   </button>
-                  {/* Only show "Build Messages" if no steps are present (new DDT structure) */}
+                  {/* Only show "Build Messages" if no steps are present (new TaskTree structure) */}
                   {!mountedDataTree.some((m: any) => m.steps && Object.keys(m.steps).length > 0) && (
                     <button
                       onClick={() => {
-                        try { dlog('[DDT][UI] step → pipeline'); } catch { }
+                        try { dlog('[TaskTree][UI] step → pipeline'); } catch { }
                         // Avvia pipeline generativa mantenendo visibile la struttura (progress in-place)
                         setShowRight(true);
                         // reset progress state to avoid stale 100%
@@ -2080,10 +2080,10 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                     <button
                       onClick={async () => {
                         try {
-                          dlog('[DDT][UI] step → complete with steps');
+                          dlog('[TaskTree][UI] step → complete with steps');
                         } catch { }
 
-                        // Assemble final DDT with steps
+                        // Assemble final TaskTree with steps
                         try {
                           // Extract all translation keys from steps
                           const { extractTranslationKeysFromSteps } = await import('../../../utils/stepPromptsConverter');
@@ -2102,23 +2102,23 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                             }
                           });
 
-                          console.log('[DDT][Wizard][steps] Extracted translation keys:', translationKeys);
+                          console.log('[TaskTree][Wizard][steps] Extracted translation keys:', translationKeys);
 
                           // Load translations from database
                           let templateTranslations: Record<string, { en: string; it: string; pt: string }> = {};
                           if (translationKeys.length > 0) {
                             try {
                               templateTranslations = await getTemplateTranslations(translationKeys);
-                              console.log('[DDT][Wizard][steps] Loaded', Object.keys(templateTranslations).length, 'translations');
+                              console.log('[TaskTree][Wizard][steps] Loaded', Object.keys(templateTranslations).length, 'translations');
                             } catch (err) {
-                              console.error('[DDT][Wizard][steps] Failed to load template translations:', err);
+                              console.error('[TaskTree][Wizard][steps] Failed to load template translations:', err);
                             }
                           }
 
                           const emptyStore = buildArtifactStore([]);
                           const projectLang = (localStorage.getItem('project.lang') || 'pt') as 'en' | 'it' | 'pt';
-                          // ✅ assembleFinalDDT now adds translations to global table via addTranslations callback
-                          const finalDDT = await assembleFinalDDT(
+                          // ✅ assembleFinalTaskTree now adds translations to global table via addTranslations callback
+                          const finalTaskTree = await assembleFinalTaskTree(
                             schemaRootLabel || 'Data',
                             mountedDataTree,
                             emptyStore,
@@ -2131,47 +2131,47 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                           );
 
                           // ✅ Get first main nodeId for steps lookup
-                          const firstMainId = finalDDT.data?.[0]?.id;
-                          const firstMainSteps = firstMainId && finalDDT.steps?.[firstMainId] ? Object.keys(finalDDT.steps[firstMainId]) : [];
-                          const firstMainMessages = finalDDT.data?.[0]?.messages ? Object.keys(finalDDT.data[0].messages) : [];
-                          console.log('[DDT][Wizard][steps] ✅ DDT assembled, translations added to global table', {
-                            ddtId: finalDDT.id,
-                            label: finalDDT.label,
-                            mainsCount: finalDDT.data?.length || 0,
+                          const firstMainId = finalTaskTree.data?.[0]?.id;
+                          const firstMainSteps = firstMainId && finalTaskTree.steps?.[firstMainId] ? Object.keys(finalTaskTree.steps[firstMainId]) : [];
+                          const firstMainMessages = finalTaskTree.data?.[0]?.messages ? Object.keys(finalTaskTree.data[0].messages) : [];
+                          console.log('[TaskTree][Wizard][steps] ✅ TaskTree assembled, translations added to global table', {
+                            taskTreeId: finalTaskTree.id,
+                            label: finalTaskTree.label,
+                            nodesLength: finalTaskTree.nodes?.length || finalTaskTree.data?.length || 0,
                             templateTranslationsCount: Object.keys(templateTranslations).length,
                             firstMainId,
                             firstMainSteps,
                             firstMainMessages,
-                            allStepsKeys: finalDDT.steps ? Object.keys(finalDDT.steps) : []
+                            allStepsKeys: finalTaskTree.steps ? Object.keys(finalTaskTree.steps) : []
                           });
 
-                          // Verify DDT structure before passing to Response Editor
-                          if (!finalDDT.data || finalDDT.data.length === 0) {
-                            console.error('[DDT][Wizard][steps] ERROR: DDT has no data!', finalDDT);
-                            error('DDT_WIZARD', 'DDT has no data after assembly', new Error('DDT has no data'));
+                          // Verify TaskTree structure before passing to Response Editor
+                          if (!finalTaskTree.data || finalTaskTree.data.length === 0) {
+                            console.error('[TaskTree][Wizard][steps] ERROR: TaskTree has no data!', finalTaskTree);
+                            error('TASKTREE_WIZARD', 'TaskTree has no data after assembly', new Error('TaskTree has no data'));
                             return;
                           }
 
                           // ✅ Check steps at root level (keyed by nodeId) - firstMainId already declared above
-                          if (!firstMainId || !finalDDT.steps || !finalDDT.steps[firstMainId] || Object.keys(finalDDT.steps[firstMainId]).length === 0) {
-                            console.error('[DDT][Wizard][steps] ERROR: DDT has no steps at root level!', {
-                              ddtId: finalDDT.id,
+                          if (!firstMainId || !finalTaskTree.steps || !finalTaskTree.steps[firstMainId] || Object.keys(finalTaskTree.steps[firstMainId]).length === 0) {
+                            console.error('[TaskTree][Wizard][steps] ERROR: TaskTree has no steps at root level!', {
+                              taskTreeId: finalTaskTree.id,
                               firstMainId,
-                              hasSteps: !!finalDDT.steps,
-                              stepsKeys: finalDDT.steps ? Object.keys(finalDDT.steps) : []
+                              hasSteps: !!finalTaskTree.steps,
+                              stepsKeys: finalTaskTree.steps ? Object.keys(finalTaskTree.steps) : []
                             });
-                            error('DDT_WIZARD', 'DDT has no steps at root level after assembly', new Error('DDT has no steps at root level'));
+                            error('TASKTREE_WIZARD', 'TaskTree has no steps at root level after assembly', new Error('TaskTree has no steps at root level'));
                             return;
                           }
 
-                          console.log('[DDT][Wizard][steps] ✅ DDT structure verified, calling handleClose');
+                          console.log('[TaskTree][Wizard][steps] ✅ TaskTree structure verified, calling handleClose');
 
                           // Call onComplete to open Response Editor
-                          // ❌ REMOVED: finalDDT.translations - translations are now in global table
-                          handleClose(finalDDT, {});
+                          // ❌ REMOVED: finalTaskTree.translations - translations are now in global table
+                          handleClose(finalTaskTree, {});
                         } catch (err) {
-                            console.error('[DDT][Wizard][steps] Failed to assemble DDT:', err);
-                            error('DDT_WIZARD', 'Failed to assemble DDT with steps', err);
+                          console.error('[TaskTree][Wizard][steps] Failed to assemble TaskTree:', err);
+                          error('TASKTREE_WIZARD', 'Failed to assemble TaskTree with steps', err);
                         }
                       }}
                       style={{ background: '#22c55e', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, cursor: 'pointer' }}
@@ -2208,30 +2208,30 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                         setFieldProcessingStates={handleFieldProcessingStates}
                         progressByPath={taskProgress}
                         onProgress={handleProgress}
-                        onComplete={(partialDDT) => {
+                        onComplete={(partialTaskTree) => {
                           // Accumulate partial result
                           setPartialResults(prev => {
-                            const updated = { ...prev, [mainIdx]: partialDDT };
+                            const updated = { ...prev, [mainIdx]: partialTaskTree };
 
                             // Check if all mains completed
                             const completedCount = Object.keys(updated).length;
 
                             if (completedCount === mountedDataTree.length) {
-                              // All mains completed - assemble final DDT
+                              // All mains completed - assemble final TaskTree
 
                               try {
                                 // ✅ Merge all data from partial results, PRESERVING templateId from mountedDataTree
                                 const dataWithMessages = mountedDataTree.map((mountedMain, idx) => {
                                   const partial = updated[idx];
                                   if (!partial || !partial.data || partial.data.length === 0) {
-                                    console.warn(`[DDT][Wizard][parallel] Missing data for idx ${idx}:`, mountedMain.label);
+                                    console.warn(`[TaskTree][Wizard][parallel] Missing data for idx ${idx}:`, mountedMain.label);
                                     return null;
                                   }
                                   const partialData = partial.data[0]; // Each partial has 1 main
 
                                   // ✅ CRITICAL: Preserve templateId and id from mountedDataTree
                                   return {
-                                    ...partialData, // Messages and structure from buildDDT
+                                    ...partialData, // Messages and structure from buildTaskTree
                                     templateId: mountedMain.templateId, // ✅ Preserve templateId from mounted tree
                                     id: mountedMain.id || partialData.id, // ✅ Preserve original node ID
                                     // ✅ Preserve templateId for subData recursively
@@ -2269,41 +2269,41 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
                                       // ✅ CRITICAL: Usa mountedDataTree (albero montato con templateId corretti), NON dataWithMessages
                                       const { steps } = cloneTemplateSteps(template, mountedDataTree);
                                       clonedSteps = steps;
-                                      console.log('✅ [DDT][Wizard][parallel] Steps clonati dal template', {
+                                      console.log('✅ [TaskTree][Wizard][parallel] Steps clonati dal template', {
                                         templateId: mainTemplateId,
                                         stepsCount: Object.keys(clonedSteps).length
                                       });
                                     }
                                   } catch (err) {
-                                    console.warn('[DDT][Wizard][parallel] Failed to clone steps from template:', err);
+                                    console.warn('[TaskTree][Wizard][parallel] Failed to clone steps from template:', err);
                                   }
                                 }
 
-                                const finalDDT = {
+                                const finalTaskTree = {
                                   id: schemaRootLabel || 'Data',
                                   label: schemaRootLabel || 'Data',
                                   data: dataWithMessages,
                                   steps: clonedSteps, // ✅ Include cloned steps
                                   translations: mergedTranslations,
-                                  _fromWizard: true  // Flag to identify wizard-generated DDTs
+                                  _fromWizard: true  // Flag to identify wizard-generated TaskTrees
                                 };
 
                                 // Preserve _userLabel and _sourceAct
-                                if ((dataNode as any)?._userLabel && !(finalDDT as any)._userLabel) {
-                                  (finalDDT as any)._userLabel = (dataNode as any)._userLabel;
+                                if ((dataNode as any)?._userLabel && !(finalTaskTree as any)._userLabel) {
+                                  (finalTaskTree as any)._userLabel = (dataNode as any)._userLabel;
                                 }
                                 if ((dataNode as any)?._sourceAct) {
-                                  (finalDDT as any)._sourceAct = (dataNode as any)._sourceAct;
+                                  (finalTaskTree as any)._sourceAct = (dataNode as any)._sourceAct;
                                 }
 
                                 // Store in ref instead of calling handleClose directly
-                                // ❌ REMOVED: finalDDT.translations - translations are now in global table
+                                // ❌ REMOVED: finalTaskTree.translations - translations are now in global table
                                 pendingCloseRef.current = {
-                                  ddt: finalDDT,
-                                  translations: {} // Translations are in global table, not in DDT
+                                  taskTree: finalTaskTree,
+                                  translations: {} // Translations are in global table, not in TaskTree
                                 };
                               } catch (err) {
-                                console.error('[DDT][Wizard][parallel] Failed to assemble final DDT:', err);
+                                console.error('[TaskTree][Wizard][parallel] Failed to assemble final TaskTree:', err);
                               }
                             }
 
@@ -2318,8 +2318,8 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
             );
           })()}
 
-          {/* Contenuto “normale” del pannello destro (solo quando non in pipeline) */}
-          {(() => { try { dlog('[DDT][UI] render TogglePanel?', { render: renderTogglePanel }); } catch { }; return null; })()}
+          {/* Contenuto "normale" del pannello destro (solo quando non in pipeline) */}
+          {(() => { try { dlog('[TaskTree][UI] render TogglePanel?', { render: renderTogglePanel }); } catch { }; return null; })()}
           {renderTogglePanel && <V2TogglePanel />}
           {/* CTA moved next to Cancel above */}
         </div>
@@ -2328,4 +2328,4 @@ const DDTWizard: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, mes
   );
 };
 
-export default DDTWizard;
+export default TaskTreeWizard;

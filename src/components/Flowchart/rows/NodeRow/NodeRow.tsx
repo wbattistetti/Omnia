@@ -25,7 +25,7 @@ import { useRowState } from './hooks/useRowState';
 import { useIntellisensePosition } from './hooks/useIntellisensePosition';
 import { useRowRegistry } from './hooks/useRowRegistry';
 import { isInsideWithPadding, getToolbarRect } from './utils/geometry';
-import { getTaskVisualsByType, getTaskVisuals, resolveTaskType, hasTaskDDT } from '../../utils/taskVisuals';
+import { getTaskVisualsByType, getTaskVisuals, resolveTaskType, hasTaskTree } from '../../utils/taskVisuals';
 import { TaskType, taskTypeToTemplateId, taskTypeToHeuristicString, taskIdToTaskType } from '../../../../types/taskTypes'; // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
 import getIconComponent from '../../../TaskEditor/ResponseEditor/icons';
 import { ensureHexColor } from '../../../TaskEditor/ResponseEditor/utils/color';
@@ -1531,7 +1531,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             // ✅ Usa direttamente task.type (enum) per visuals invece di resolveTaskType
             // Questo garantisce che i visuals siano sempre aggiornati con il tipo corretto
             const taskTypeEnum = task.type;
-            const has = hasTaskDDT(row);
+            const has = hasTaskTree(row);
             // ✅ NUOVO: Usa getTaskVisuals con supporto per categorie
             // ✅ Leggi categoria da task.category OPPURE da row.meta.inferredCategory (se task non esiste ancora)
             const taskCategory = task.category || ((row as any)?.meta?.inferredCategory) || null;
@@ -1585,7 +1585,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
     // ✅ Se il tipo è stato risolto dai metadati, usa i visuals corretti
     if (resolvedType !== TaskType.UNDEFINED) {
-      const has = hasTaskDDT(row);
+      const has = hasTaskTree(row);
       // ✅ Leggi categoria da row.meta.inferredCategory (per lazy creation)
       const rowCategory = (row as any)?.meta?.inferredCategory || null;
       const visuals = getTaskVisuals(
@@ -1709,25 +1709,25 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             bgColor={bgColor}
             labelTextColor={labelTextColor}
             iconColor={iconColor}
-            hasDDT={isUndefined ? false : hasTaskDDT(row)} // ✅ Usa hasTaskDDT senza actFound
+            hasTaskTree={isUndefined ? false : hasTaskTree(row)} // ✅ Usa hasTaskTree senza actFound
             gearColor={isUndefined ? '#94a3b8' : labelTextColor} // Se undefined, gear grigio
-            // ✅ Disabilita ingranaggio se tipo UNDEFINED e non c'è template match (nessun DDT salvato)
-            // ✅ Per DataRequest, sempre abilitato (può essere creato un DDT vuoto)
+            // ✅ Disabilita ingranaggio se tipo UNDEFINED e non c'è template match (nessun TaskTree salvato)
+            // ✅ Per DataRequest, sempre abilitato (può essere creato un TaskTree vuoto)
             gearDisabled={(() => {
               const taskType = resolveTaskType(row);
               if (taskType === TaskType.UtteranceInterpretation) {
                 return false; // ✅ Sempre abilitato per DataRequest
               }
-              return isUndefined && !hasTaskDDT(row); // Disabilitato se undefined e nessun DDT
+              return isUndefined && !hasTaskTree(row); // Disabilitato se undefined e nessun TaskTree
             })()}
-            onOpenDDT={(() => {
-              // ✅ Permetti sempre l'apertura per DataRequest (può essere creato un DDT vuoto)
+            onOpenTaskTree={(() => {
+              // ✅ Permetti sempre l'apertura per DataRequest (può essere creato un TaskTree vuoto)
               const taskType = resolveTaskType(row);
               if (taskType === TaskType.UtteranceInterpretation) {
-                // ✅ Sempre permesso per DataRequest, anche se isUndefined o !hasTaskDDT
+                // ✅ Sempre permesso per DataRequest, anche se isUndefined o !hasTaskTree
                 return async () => {
                   try {
-                    console.log('[🔍 NodeRow][onOpenDDT] START', {
+                    console.log('[🔍 NodeRow][onOpenTaskTree] START', {
                       rowId: row.id,
                       rowText: row.text,
                       hasTaskId: !!(row as any)?.taskId,
@@ -1740,7 +1740,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     // ✅ FIX: taskForType deve essere let perché può essere riassegnato nel fallback
                     let taskForType = row.taskId ? taskRepository.getTask(row.taskId) : null;
 
-                    console.log('[🔍 NodeRow][onOpenDDT] Task check', {
+                    console.log('[🔍 NodeRow][onOpenTaskTree] Task check', {
                       rowId: row.id,
                       rowTaskId: row.taskId,
                       taskExists: !!taskForType,
@@ -1749,7 +1749,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                     // ✅ CASO 1: Task esiste → apri direttamente (comportamento attuale)
                     if (taskForType) {
-                      console.log('[🔍 NodeRow][onOpenDDT] ✅ CASO 1: Task esiste, aprendo direttamente ResponseEditor', {
+                      console.log('[🔍 NodeRow][onOpenTaskTree] ✅ CASO 1: Task esiste, aprendo direttamente ResponseEditor', {
                         rowId: row.id,
                         rowTaskId: row.taskId,
                         taskType: taskForType.type,
@@ -1805,7 +1805,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     // ✅ Sotto-caso 2a: C'è templateId → mostra preview struttura template
                     if (metaTemplateId && metaTaskType === TaskType.UtteranceInterpretation) {
                       try {
-                        console.log('[🔍 NodeRow][onOpenDDT] ✅ CASO 2a: Template candidato trovato, mostrando preview', {
+                        console.log('[🔍 NodeRow][onOpenTaskTree] ✅ CASO 2a: Template candidato trovato, mostrando preview', {
                           templateId: metaTemplateId,
                           rowText: row.text
                         });
@@ -1824,7 +1824,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                             subNodes: undefined // Remove subNodes per compatibilità SchemaNode
                           }));
 
-                          console.log('[🔍 NodeRow][onOpenDDT] 📋 Mostrando preview dialog (template)', {
+                          console.log('[🔍 NodeRow][onOpenTaskTree] 📋 Mostrando preview dialog (template)', {
                             templateId: metaTemplateId,
                             templateLabel: template.label || template.name,
                             dataTreeLength: mappedDataTree.length
@@ -1842,14 +1842,14 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                           return;
                         }
                       } catch (err) {
-                        console.error('[🔍 NodeRow][onOpenDDT] ❌ Errore caricamento template per preview:', err);
+                        console.error('[🔍 NodeRow][onOpenTaskTree] ❌ Errore caricamento template per preview:', err);
                       }
                     }
 
                     // ✅ Sotto-caso 2b: NON c'è templateId → genera struttura da AI, poi mostra preview
                     if (!metaTemplateId && metaTaskType === TaskType.UtteranceInterpretation && row.text && row.text.trim().length >= 3) {
                       try {
-                        console.log('[🔍 NodeRow][onOpenDDT] ✅ CASO 2b: Nessun template, generando struttura da AI', {
+                        console.log('[🔍 NodeRow][onOpenTaskTree] ✅ CASO 2b: Nessun template, generando struttura da AI', {
                           label: row.text,
                           labelLength: row.text.trim().length
                         });
@@ -1859,7 +1859,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                         const dataTree = await generateTaskStructureFromAI(row.text, provider);
 
-                        console.log('[🔍 NodeRow][onOpenDDT] 📋 Mostrando preview dialog (AI)', {
+                        console.log('[🔍 NodeRow][onOpenTaskTree] 📋 Mostrando preview dialog (AI)', {
                           dataTreeLength: dataTree.length,
                           rootLabel: row.text
                         });
@@ -1873,7 +1873,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         setShowPreviewDialog(true);
                         return;
                       } catch (err) {
-                        console.error('[🔍 NodeRow][onOpenDDT] ❌ Errore generazione struttura AI:', err);
+                        console.error('[🔍 NodeRow][onOpenTaskTree] ❌ Errore generazione struttura AI:', err);
                         // Fallback: crea task vuoto e apri wizard
                       }
                     }
@@ -1932,7 +1932,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                             }
                           }];
 
-                          console.log('✅ [LAZY] DDT creato automaticamente da inferredCategory', {
+                          console.log('✅ [LAZY] TaskTree creato automaticamente da inferredCategory', {
                             category: inferredCategory,
                             dataLabel: categorydataLabel,
                             hasDefaultValues: !!defaultValues
@@ -1953,7 +1953,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         console.log('✅ [LAZY] Task creato senza data, l\'utente creerà manualmente');
                       }
 
-                      // ✅ Crea task base (con DDT se inferreddata presente)
+                      // ✅ Crea task base (con TaskTree se inferreddata presente)
                       // ✅ FIX: taskForType è già dichiarato come const sopra, quindi usiamo una nuova variabile
                       const newTask = taskRepository.createTask(
                         metaTaskType,
@@ -1979,12 +1979,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         });
 
                         try {
-                          const { loadAndAdaptDDTForExistingTask } = await import('../../../../utils/ddtInstanceManager');
+                          const { loadAndAdaptTaskTreeForExistingTask } = await import('../../../../utils/ddtInstanceManager');
 
                           // ✅ Usa funzione centralizzata (gestisce tutto: buildTaskTreeNodes, cloneSteps, adattamento)
-                          const { taskTree, adapted } = await loadAndAdaptDDTForExistingTask(taskForType, projectId);
+                          const { taskTree, adapted } = await loadAndAdaptTaskTreeForExistingTask(taskForType, projectId);
 
-                          console.log('[🔍 NodeRow][LAZY] TaskTree ricevuto da loadAndAdaptDDTForExistingTask', {
+                          console.log('[🔍 NodeRow][LAZY] TaskTree ricevuto da loadAndAdaptTaskTreeForExistingTask', {
                             rowId: row.id,
                             taskId: row.id,
                             taskTreeStepsKeys: Object.keys(taskTree.steps || {}),
@@ -2023,13 +2023,13 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                     taskEditorCtx.open({ id: String(row.id), type: finalTaskType, label: row.text, instanceId: row.id }); // ✅ REGOLA ARCHITETTURALE: task.id = row.id
 
-                    // ✅ SOLO per DataRequest: costruisci DDT solo se:
+                    // ✅ SOLO per DataRequest: costruisci TaskTree solo se:
                     // 1. C'è templateId E il template è di tipo DataRequest
-                    // 2. OPPURE c'è data esistente (DDT già salvato, standalone o con override)
-                    let ddt: any = null;
+                    // 2. OPPURE c'è data esistente (TaskTree già salvato, standalone o con override)
+                    let taskTree: any = null;
 
                     if (taskForType?.templateId && taskForType.templateId !== 'UNDEFINED') {
-                      // ✅ Verifica se il template è di tipo DataRequest prima di costruire DDT
+                      // ✅ Verifica se il template è di tipo DataRequest prima di costruire TaskTree
                       const DialogueTaskService = (await import('../../../../services/DialogueTaskService')).default;
                       const template = DialogueTaskService.getTemplate(taskForType.templateId);
 
@@ -2038,34 +2038,34 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         const { RowHeuristicsService } = await import('../../../../services/RowHeuristicsService');
                         const templateType = RowHeuristicsService.getTemplateType(template);
 
-                        // ✅ Costruisci DDT SOLO se il template è di tipo DataRequest
+                        // ✅ Costruisci TaskTree SOLO se il template è di tipo DataRequest
                         if (templateType === TaskType.UtteranceInterpretation) {
                           // ✅ buildTaskTree costruisce TaskTree da template + instance
                           const { buildTaskTree } = await import('../../../../utils/taskUtils');
                           const projectId = getProjectId?.() || undefined;
-                          ddt = await buildTaskTree(taskForType, projectId);
-                          if (!ddt) {
+                          taskTree = await buildTaskTree(taskForType, projectId);
+                          if (!taskTree) {
                             // Fallback: create empty TaskTree solo se template è DataRequest ma buildTaskTree fallisce
-                            ddt = { label: taskForType.label || row.text || 'New Task', nodes: [] };
+                            taskTree = { label: taskForType.label || row.text || 'New Task', nodes: [] };
                           }
                         } else {
-                          // ✅ NON costruire DDT se template non è DataRequest
-                          ddt = null;
+                          // ✅ NON costruire TaskTree se template non è DataRequest
+                          taskTree = null;
                         }
                       } else {
-                        ddt = null;
+                        taskTree = null;
                       }
                     }
-                    // ✅ NON creare DDT vuoto se non c'è né templateId DataRequest né data
-                    // ResponseEditor gestirà il caso di ddt === null aprendo il wizard (AI genererà DDT)
+                    // ✅ NON creare TaskTree vuoto se non c'è né templateId DataRequest né data
+                    // ResponseEditor gestirà il caso di taskTree === null aprendo il wizard (AI genererà TaskTree)
 
-                    // Emit event with DDT data so AppContent can open it as docking tab
+                    // Emit event with TaskTree data so AppContent can open it as docking tab
                     const event = new CustomEvent('taskEditor:open', { // ✅ RINOMINATO: actEditor:open → taskEditor:open
                       detail: {
                         id: String(row.id), // ✅ REGOLA ARCHITETTURALE: task.id = row.id
                         type: finalTaskType, // ✅ TaskType enum invece di stringa
                         label: row.text,
-                        ddt: ddt,
+                        taskTree: taskTree,
                         instanceId: row.id, // Pass instanceId from row
                         templateId: taskForType?.templateId || undefined
                       },
@@ -2077,8 +2077,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                   }
                 };
               }
-              // ✅ Per altri tipi, disabilita solo se undefined e nessun DDT
-              if (isUndefined && !hasTaskDDT(row)) {
+              // ✅ Per altri tipi, disabilita solo se undefined e nessun TaskTree
+              if (isUndefined && !hasTaskTree(row)) {
                 return undefined;
               }
               return async () => {
@@ -2219,7 +2219,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     document.dispatchEvent(event);
                   }
                 } catch (e) {
-                  console.error('[NodeRow][onOpenDDT] Failed to open editor', e);
+                  console.error('[NodeRow][onOpenTaskTree] Failed to open editor', e);
                 }
               };
             })()}

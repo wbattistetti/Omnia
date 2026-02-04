@@ -212,7 +212,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     handleContractWizardComplete,
     handleDDTWizardCancel,
     handleDDTWizardComplete,
-    getInitialDDT,
+    getInitialTaskTree,
     shouldShowInferenceLoading,
   } = useResponseEditorWizard({
     task: taskMeta,
@@ -389,7 +389,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
           handleContractWizardComplete={handleContractWizardComplete}
           handleDDTWizardCancel={handleDDTWizardCancel}
           handleDDTWizardComplete={handleDDTWizardComplete}
-          getInitialDDT={getInitialDDT}
+          getInitialTaskTree={getInitialTaskTree}
           onIntentMessagesComplete={handleIntentMessagesComplete}
           normalEditorLayout={
             <ResponseEditorNormalLayout

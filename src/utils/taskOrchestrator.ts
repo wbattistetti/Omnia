@@ -7,8 +7,8 @@
  */
 
 import { buildTaskTreeNodes, cloneTemplateSteps } from './taskUtils';
-import { AdaptPromptToContext } from './ddtPromptAdapter';
-import { generateAllStepsFromAI } from './ddtStepGenerator';
+import { AdaptTaskTreePromptToContext } from './ddtPromptAdapter';
+import { generateAllTaskTreeStepsFromAI } from './ddtStepGenerator';
 import { DialogueTaskService } from '../services/DialogueTaskService';
 import type { Task, TaskTreeNode } from '../types/taskTypes';
 import type { SchemaNode } from '../components/DialogueDataTemplateBuilder/DDTWizard/types';
@@ -59,7 +59,7 @@ export async function createTaskFromTemplate(
   });
 
   // 4. Adatta prompt al contesto
-  await AdaptPromptToContext(task, contextLabel, adaptAllNormalSteps);
+  await AdaptTaskTreePromptToContext(task, contextLabel, adaptAllNormalSteps);
   console.log('[🔍 taskOrchestrator] Prompt adattati');
 
   console.log('[🔍 taskOrchestrator] createTaskFromTemplate COMPLETE', {
@@ -118,7 +118,7 @@ export async function generateTaskStepsFromAI(
     mainNodes: nodes.map((n: any) => ({ label: n.label, type: n.type }))
   });
 
-  const task = await generateAllStepsFromAI(
+  const task = await generateAllTaskTreeStepsFromAI(
     nodes,
     rootLabel,
     contextLabel,

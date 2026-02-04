@@ -7,13 +7,13 @@ import { extractStartPrompts } from './ddtPromptExtractor';
 
 /**
  * ============================================================================
- * DDT Instance Manager - Logica Centralizzata
+ * TaskTree Instance Manager - Logica Centralizzata
  * ============================================================================
  *
- * Gestisce il caricamento e l'adattamento del DDT per un task esistente.
+ * Gestisce il caricamento e l'adattamento del TaskTree per un task esistente.
  *
  * SPECIFICHE:
- * 1. Costruisce dataTree (dereferenziazione ricorsiva)
+ * 1. Costruisce taskTree (dereferenziazione ricorsiva)
  * 2. Clona steps dal template
  * 3. Estrae task message dalla PRIMA escalation dello step "start" dei nodi radice
  * 4. Adatta prompt al contesto (solo se non già adattato)
@@ -25,18 +25,18 @@ import { extractStartPrompts } from './ddtPromptExtractor';
 // ✅ Funzione rimossa: ora usa extractStartPrompts da ddtPromptExtractor.ts
 
 /**
- * Gestisce il caricamento e l'adattamento del DDT per un task esistente
+ * Gestisce il caricamento e l'adattamento del TaskTree per un task esistente
  *
  * @param task - Task esistente
  * @param projectId - ID del progetto corrente
- * @returns DDT caricato e adattato (se necessario)
+ * @returns TaskTree caricato e adattato (se necessario)
  */
-export async function loadAndAdaptDDTForExistingTask(
+export async function loadAndAdaptTaskTreeForExistingTask(
   task: Task,
   projectId: string | null
 ): Promise<{ taskTree: any; adapted: boolean }> {
 
-  console.log('[🔍 ddtInstanceManager] START loadAndAdaptDDTForExistingTask', {
+  console.log('[🔍 taskTreeManager] START loadAndAdaptTaskTreeForExistingTask', {
     taskId: task.id,
     taskLabel: task.label,
     taskTemplateId: task.templateId,
@@ -392,11 +392,11 @@ export async function loadAndAdaptDDTForExistingTask(
       }
 
       // ✅ 8.2. Adatta prompt al contesto usando la nuova funzione centralizzata
-      // ✅ Usa AdaptPromptToContext che gestisce tutto: estrazione, chiamata API, salvataggio
-      const { AdaptPromptToContext } = await import('./ddtPromptAdapter');
+      // ✅ Usa AdaptTaskTreePromptToContext che gestisce tutto: estrazione, chiamata API, salvataggio
+      const { AdaptTaskTreePromptToContext } = await import('./ddtPromptAdapter');
 
       try {
-        await AdaptPromptToContext(task, task.label || '', false); // false = solo nodi radice
+        await AdaptTaskTreePromptToContext(task, task.label || '', false); // false = solo nodi radice
 
         console.log('[🔍 ddtInstanceManager] ✅ Prompts adattati', {
           taskId: task.id,
@@ -454,10 +454,10 @@ export async function loadAndAdaptDDTForExistingTask(
   };
 
   // ✅ Log ridotto (solo informazioni essenziali)
-  console.log('[🔍 ddtInstanceManager] ✅ COMPLETE', {
+  console.log('[🔍 taskTreeManager] ✅ COMPLETE', {
     taskId: task.id,
-    ddtLabel: result.ddt.label,
-    ddtStepsCount: Object.keys(result.ddt.steps || {}).length,
+    taskTreeLabel: result.taskTree.label,
+    taskTreeStepsCount: Array.isArray(result.taskTree.steps) ? result.taskTree.steps.length : Object.keys(result.taskTree.steps || {}).length,
     adapted: result.adapted
   });
 

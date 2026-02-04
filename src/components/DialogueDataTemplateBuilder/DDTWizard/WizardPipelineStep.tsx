@@ -13,8 +13,8 @@ import ProgressBar from '../../Common/ProgressBar';
 import StructurePreviewModal from './StructurePreviewModal';
 import { useAIProvider } from '../../../context/AIProviderContext';
 
-const __DEBUG_DDT_UI__ = true; // 🚀 ENABLED for debugging
-const dlog = (...a: any[]) => { if (__DEBUG_DDT_UI__) console.log(...a); };
+const __DEBUG_TASKTREE_UI__ = true; // 🚀 ENABLED for debugging
+const dlog = (...a: any[]) => { if (__DEBUG_TASKTREE_UI__) console.log(...a); };
 
 interface DataNode {
   name: string;
@@ -26,7 +26,7 @@ interface Props {
   dataNode: DataNode;
   detectTypeIcon: string | null;
   onCancel: () => void;
-  onComplete?: (finalDDT: any) => void;
+  onComplete?: (finalTaskTree: any) => void;
   skipDetectType?: boolean;
   confirmedLabel?: string;
   contextLabel: string; // ✅ Context label for prompt generation (e.g., "Chiedi la data di nascita del paziente") - REQUIRED
@@ -48,7 +48,7 @@ function normalizeStructure(node: any) {
 const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCancel, onComplete, skipDetectType, confirmedLabel, contextLabel, onProgress, headless, setFieldProcessingStates, progressByPath }) => {
   const { provider: selectedProvider } = useAIProvider();
   const orchestrator = useOrchestrator(dataNode, (data) => generateStepsSkipDetectType(data, !!skipDetectType, selectedProvider, contextLabel), headless);
-  const [finalDDT, setFinalDDT] = useState<any>(null);
+  const [finalTaskTree, setFinalTaskTree] = useState<any>(null);
   const [totalSteps, setTotalSteps] = useState(0);
   const [currentStep, setCurrentStep] = useState(1);
   const alreadyStartedRef = useRef(false);
@@ -182,12 +182,12 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
   useEffect(() => {
     const structureResult = orchestrator.state.stepResults.find(r => r.stepKey === 'suggestStructureAndConstraints');
     const data = structureResult?.payload?.data || structureResult?.payload;
-    if (data && !showStructureModal && !finalDDT) {
+    if (data && !showStructureModal && !finalTaskTree) {
       const normalized = normalizeStructure(data);
       setStructurePreview(normalized);
       setShowStructureModal(true);
     }
-  }, [orchestrator.state.stepResults, showStructureModal, finalDDT]);
+  }, [orchestrator.state.stepResults, showStructureModal, finalTaskTree]);
 
   // When pipeline done, assemble
   useEffect(() => {
@@ -196,7 +196,7 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
 
     if (
       orchestrator.state.currentStepIndex >= orchestrator.state.steps.length &&
-      !finalDDT
+      !finalTaskTree
     ) {
       let stepResults = orchestrator.state.stepResults;
       if (confirmedLabel) {
@@ -206,17 +206,17 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
       const stepMessages = buildSteps(stepResults);
 
       // ✅ SOLUZIONE PULITA: Usa stableDataNode che è memoizzato solo quando i valori cambiano
-      const ddtId = stableDataNode.label || stableDataNode.name || 'ddt_unknown';
+      const taskTreeId = stableDataNode.label || stableDataNode.name || 'tasktree_unknown';
 
       try {
         // ✅ Pass stableDataNode - ha tutte le proprietà necessarie e riferimento stabile
-        const final = buildDDT(ddtId, stableDataNode, stepResults);
-        setFinalDDT(final);
+        const final = buildDDT(taskTreeId, stableDataNode, stepResults);
+        setFinalTaskTree(final);
         if (onComplete) {
           onComplete(final);
         }
       } catch (err) {
-        console.error('[WizardPipelineStep][buildDDT] Assembly FAILED', err);
+        console.error('[WizardPipelineStep][buildTaskTree] Assembly FAILED', err);
         throw err;
       }
     }
@@ -224,7 +224,7 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
     orchestrator.state.currentStepIndex,
     orchestrator.state.steps.length,
     orchestrator.state.stepResults,
-    finalDDT,
+    finalTaskTree,
     onComplete,
     confirmedLabel,
     stableDataNode // ✅ Ora è stabile e non causa loop

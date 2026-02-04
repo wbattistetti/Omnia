@@ -266,22 +266,22 @@ import { v4 as uuidv4 } from 'uuid';
  */
 
 /**
- * Load DDT from template (reference) and instance (steps + overrides)
+ * Load TaskTree from template (reference) and instance (steps + overrides)
  *
- * This function loads the DDT structure for the editor by combining:
- * - Template structure (data, constraints, examples, nlpContract) - source of truth
+ * This function loads the TaskTree structure for the editor by combining:
+ * - Template structure (nodes, constraints, examples, nlpContract) - source of truth
  * - Instance overrides (steps with cloned task IDs, modified constraints/examples)
  *
  * Rules:
  * - label, steps: Always from instance (always editable)
- * - data structure: From template (reference), but allows instance additions
+ * - nodes structure: From template (reference), but allows instance additions
  * - constraints, examples, nlpContract: ALWAYS from template (reference) - NO overrides allowed
  *
  * Structure:
  * - Nodes with templateId !== null: Structure from template, steps cloned with new task IDs, contracts from template
  * - Nodes with templateId === null: Complete structure from instance (added nodes)
  */
-export async function loadDDTFromTemplate(instance: Task | null): Promise<any | null> {
+export async function loadTaskTreeFromTemplate(instance: Task | null): Promise<any | null> {
   if (!instance) return null;
 
   // If no templateId or templateId is "UNDEFINED", this is a standalone instance (has full structure)
@@ -856,20 +856,20 @@ function compareDataStructure(localdata: any[], templateData: any[]): boolean {
  * - Override legittimi: step/escalation possono divergere senza rompere derivazione
  * - Performance: meno dati nel database, lookup template in memoria (O(1))
  */
-export async function extractModifiedDDTFields(instance: Task | null, localDDT: any): Promise<Partial<Task>> {
-  if (!instance || !localDDT) {
-    return localDDT || {};
+export async function extractModifiedTaskTreeFields(instance: Task | null, localTaskTree: any): Promise<Partial<Task>> {
+  if (!instance || !localTaskTree) {
+    return localTaskTree || {};
   }
 
   // ✅ Se no templateId, questo è un template o istanza standalone → salva tutto
   if (!instance.templateId) {
     return {
-      label: localDDT.label,
-      data: localDDT.data,
+      label: localTaskTree.label,
+      data: localTaskTree.data,
       steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
-      constraints: localDDT.constraints,
-      nlpContract: localDDT.nlpContract,
-      introduction: localDDT.introduction
+      constraints: localTaskTree.constraints,
+      nlpContract: localTaskTree.nlpContract,
+      introduction: localTaskTree.introduction
     };
   }
 
@@ -877,20 +877,20 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
   const template = DialogueTaskService.getTemplate(instance.templateId);
   if (!template) {
     // ❌ Template non trovato → salva tutto (non può risolvere lazy)
-    console.warn(`[extractModifiedDDTFields] Template ${instance.templateId} not found - saving everything (cannot resolve lazy)`);
+    console.warn(`[extractModifiedTaskTreeFields] Template ${instance.templateId} not found - saving everything (cannot resolve lazy)`);
     return {
-      label: localDDT.label,
-      data: localDDT.data,
+      label: localTaskTree.label,
+      data: localTaskTree.data,
       steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
-      constraints: localDDT.constraints,
-      nlpContract: localDDT.nlpContract,
-      introduction: localDDT.introduction
+      constraints: localTaskTree.constraints,
+      nlpContract: localTaskTree.nlpContract,
+      introduction: localTaskTree.introduction
     };
   }
 
   // ✅ Salva sempre label (sempre modificabile)
   const result: Partial<Task> = {
-    label: localDDT.label,
+    label: localTaskTree.label,
     steps: {} // ✅ CORRETTO: Inizializza steps a root level (unica fonte di verità)
   };
 
@@ -931,8 +931,8 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
     }];
   }
 
-  // ✅ Normalizza localDDT.data per confronto (solo struttura, senza step, constraints, etc.)
-  const localStructureForCompare = (localDDT.data || []).map((main: any) => ({
+  // ✅ Normalizza localTaskTree.data per confronto (solo struttura, senza step, constraints, etc.)
+  const localStructureForCompare = (localTaskTree.data || []).map((main: any) => ({
     id: main.id,
     label: main.label,
     type: main.type,
@@ -943,8 +943,8 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
     }))
   }));
 
-  console.log('[extractModifiedDDTFields] 🔍 Comparing structure', {
-    localdataLength: localDDT.data?.length || 0,
+  console.log('[extractModifiedTaskTreeFields] 🔍 Comparing structure', {
+    localdataLength: localTaskTree.data?.length || 0,
     templateDataLength: templateStructureForCompare.length,
     localStructure: JSON.stringify(localStructureForCompare, null, 2).substring(0, 500),
     templateStructure: JSON.stringify(templateStructureForCompare, null, 2).substring(0, 500)
@@ -955,24 +955,24 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
     templateStructureForCompare
   );
 
-  console.log('[extractModifiedDDTFields] ✅ Structure comparison result', {
+  console.log('[extractModifiedTaskTreeFields] ✅ Structure comparison result', {
     structureIdentical,
-    localdataLength: localDDT.data?.length || 0
+    localdataLength: localTaskTree.data?.length || 0
   });
 
   if (!structureIdentical) {
     // ✅ Struttura diversa → derivazione rotta → salva tutto (diventa standalone)
-    console.log('[extractModifiedDDTFields] ⚠️ Structure changed - saving full data (derivation broken)', {
-      localdataLength: localDDT.data?.length || 0,
+    console.log('[extractModifiedTaskTreeFields] ⚠️ Structure changed - saving full data (derivation broken)', {
+      localdataLength: localTaskTree.data?.length || 0,
       templateDataLength: templateStructureForCompare.length
     });
     return {
-      label: localDDT.label,
-      data: localDDT.data, // ✅ Salva struttura completa
+      label: localTaskTree.label,
+      data: localTaskTree.data, // ✅ Salva struttura completa
       steps: instance.steps || {}, // ✅ CORRETTO: Salva steps da task (unica fonte di verità)
-      constraints: localDDT.constraints,
-      nlpContract: localDDT.nlpContract,
-      introduction: localDDT.introduction
+      constraints: localTaskTree.constraints,
+      nlpContract: localTaskTree.nlpContract,
+      introduction: localTaskTree.introduction
     };
   }
 
@@ -980,13 +980,13 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
   // Usa buildTaskTreeNodes per ottenere templateNode con constraints/examples per confronto override
   const templateNodesForOverride = buildTaskTreeNodes(template);
 
-  console.log('[extractModifiedDDTFields] ✅ Structure identical - extracting overrides only', {
-    localNodesLength: localDDT.nodes?.length || 0,
+  console.log('[extractModifiedTaskTreeFields] ✅ Structure identical - extracting overrides only', {
+    localNodesLength: localTaskTree.nodes?.length || 0,
     templateNodesForOverrideLength: templateNodesForOverride.length
   });
 
   // ✅ NUOVO MODELLO: Usa nodes[] invece di data[]
-  const localNodes = localDDT.nodes || localDDT.data || []; // Fallback per compatibilità temporanea
+  const localNodes = localTaskTree.nodes || localTaskTree.data || []; // Fallback per compatibilità temporanea
   if (Array.isArray(localNodes) && localNodes.length > 0 && templateNodesForOverride.length > 0) {
     const dataOverrides: any[] = [];
 
@@ -1000,7 +1000,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
       // ✅ CRITICAL: Leggi steps usando templateId come chiave (non id)
       // task.steps[node.templateId] = steps clonati
       if (!mainNode.templateId) {
-        const errorMsg = `[extractModifiedDDTFields] Nodo senza templateId: ${mainNode.label || mainNode.id || 'unknown'}`;
+        const errorMsg = `[extractModifiedTaskTreeFields] Nodo senza templateId: ${mainNode.label || mainNode.id || 'unknown'}`;
         console.error(errorMsg, { mainNode });
         throw new Error(errorMsg);
       }
@@ -1013,7 +1013,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
       const hasConstraintsOverride = JSON.stringify(mainNode.constraints || []) !== JSON.stringify(templateNodeConstraints);
       const hasNlpContractOverride = JSON.stringify(mainNode.nlpContract) !== JSON.stringify(templateNodeNlpContract);
 
-      console.log('[extractModifiedDDTFields] 🔍 Checking overrides for mainNode', {
+      console.log('[extractModifiedTaskTreeFields] 🔍 Checking overrides for mainNode', {
         mainNodeIndex: i,
         mainNodeId: mainNode.id,
         mainNodeTemplateId: nodeTemplateId,
@@ -1046,7 +1046,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
           // ✅ Aggiungi steps all'array (non sovrascrivere, ma unire)
           result.steps = [...(result.steps as MaterializedStep[]), ...materializedSteps];
 
-          console.log('[extractModifiedDDTFields] ✅ Including steps in override', {
+          console.log('[extractModifiedTaskTreeFields] ✅ Including steps in override', {
             mainNodeIndex: i,
             nodeId: mainNode.id,
             nodeTemplateId,
@@ -1087,7 +1087,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
 
               if (hasSubSteps || hasSubConstraintsOverride || hasSubExamplesOverride || hasSubNlpContractOverride) {
                 if (!subNode.templateId && !templateSubNode.templateId) {
-                  const errorMsg = `[extractModifiedDDTFields] Sub-nodo senza templateId: ${subNode.label || subNode.id || 'unknown'}`;
+                  const errorMsg = `[extractModifiedTaskTreeFields] Sub-nodo senza templateId: ${subNode.label || subNode.id || 'unknown'}`;
                   console.error(errorMsg, { subNode, templateSubNode });
                   throw new Error(errorMsg);
                 }
@@ -1120,7 +1120,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
     if (dataOverrides.length > 0) {
       // ✅ NUOVO MODELLO: Non salvare più .data, salva solo override necessari
       // result.data è deprecato - gli override vengono salvati in result.steps e altri campi
-      console.log('[extractModifiedDDTFields] ✅ Saving data overrides', {
+      console.log('[extractModifiedTaskTreeFields] ✅ Saving data overrides', {
         dataOverridesLength: dataOverrides.length,
         firstOverride: dataOverrides[0] ? {
           templateId: dataOverrides[0].templateId,
@@ -1131,7 +1131,7 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
         } : null
       });
     } else {
-      console.log('[extractModifiedDDTFields] ⚠️ No data overrides found - saving empty data array');
+      console.log('[extractModifiedTaskTreeFields] ⚠️ No data overrides found - saving empty data array');
     }
   }
 
@@ -1141,19 +1141,19 @@ export async function extractModifiedDDTFields(instance: Task | null, localDDT: 
   const templateNlpContract = template.nlpContract;
   const templateIntroduction = template.introduction;
 
-  if (JSON.stringify(localDDT.constraints || []) !== JSON.stringify(templateConstraints)) {
-    result.constraints = localDDT.constraints;
+  if (JSON.stringify(localTaskTree.constraints || []) !== JSON.stringify(templateConstraints)) {
+    result.constraints = localTaskTree.constraints;
   }
 
-  if (JSON.stringify(localDDT.nlpContract) !== JSON.stringify(templateNlpContract)) {
-    result.nlpContract = localDDT.nlpContract;
+  if (JSON.stringify(localTaskTree.nlpContract) !== JSON.stringify(templateNlpContract)) {
+    result.nlpContract = localTaskTree.nlpContract;
   }
 
-  if (localDDT.introduction !== templateIntroduction) {
-    result.introduction = localDDT.introduction;
+  if (localTaskTree.introduction !== templateIntroduction) {
+    result.introduction = localTaskTree.introduction;
   }
 
-  console.log('[extractModifiedDDTFields] ✅ Final result', {
+  console.log('[extractModifiedTaskTreeFields] ✅ Final result', {
     hasLabel: !!result.label,
     hasdata: !!result.data,
     dataLength: result.data?.length || 0,

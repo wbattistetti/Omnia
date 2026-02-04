@@ -8,10 +8,10 @@ function ensureId(label: string, fallback: string) {
 }
 
 /**
- * Normalize DDT main nodes - AI is the source of truth
+ * Normalize TaskTree main nodes - AI is the source of truth
  * Only adds 'generic' as fallback if type is completely missing
  */
-export function normalizeDDTMainNodes(mains: Node[]): Node[] {
+export function normalizeTaskTreeMainNodes(mains: Node[]): Node[] {
   return (mains || []).map((main) => {
     const label = String(main?.label || '').trim();
     const existingKind = String(main?.kind || '').trim();

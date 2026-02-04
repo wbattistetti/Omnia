@@ -14,15 +14,15 @@ interface NodeRowActionsOverlayProps {
   labelRef: React.RefObject<HTMLSpanElement>;
   onHoverChange?: (v: boolean) => void;
   iconSize?: number;
-  hasDDT?: boolean;
+  hasTaskTree?: boolean;
   gearColor?: string;
   gearDisabled?: boolean; // ✅ Disabilita ingranaggio se tipo UNDEFINED e nessun template match
   isCondition?: boolean;
   onWrenchClick?: () => void;
-  onOpenDDT?: () => void;
+  onOpenTaskTree?: () => void;
   // NEW: task type icon and handler to open inline picker
   TaskIcon?: React.ComponentType<any> | null; // ✅ RINOMINATO: ActIcon → TaskIcon
-  taskColor?: string; // ✅ RINOMINATO: actColor → taskColor - iconColor della riga (grigio se no DDT/messaggio, colorato se ha DDT/messaggio)
+  taskColor?: string; // ✅ RINOMINATO: actColor → taskColor - iconColor della riga (grigio se no TaskTree/messaggio, colorato se ha TaskTree/messaggio)
   onTypeChangeRequest?: (anchor: DOMRect) => void;
   onRequestClosePicker?: () => void;
   buttonCloseTimeoutRef?: React.MutableRefObject<NodeJS.Timeout | null>;
@@ -43,12 +43,12 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
   labelRef,
   onHoverChange,
   iconSize,
-  hasDDT,
+  hasTaskTree,
   gearColor,
   gearDisabled,
   isCondition,
   onWrenchClick,
-  onOpenDDT,
+  onOpenTaskTree,
   TaskIcon, // ✅ RINOMINATO: ActIcon → TaskIcon
   taskColor, // ✅ RINOMINATO: actColor → taskColor
   onTypeChangeRequest,
@@ -210,7 +210,7 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
           </button>
         </SmartTooltip>
       )}
-      {/* Gear (DDT) */}
+      {/* Gear (TaskTree) */}
       <SmartTooltip
         text={gearDisabled ? "You must first choose the task type" : "Manually define this task's behavior using the rule editor."}
         tutorId="gear_tooltip_help"
@@ -240,35 +240,35 @@ export const NodeRowActionsOverlay: React.FC<NodeRowActionsOverlayProps> = ({
             e.preventDefault();
             e.stopPropagation();
             // ✅ Se gearDisabled è true (tipo UNDEFINED), apri il picker del tipo
-            // ✅ Gestisci anche il caso in cui gearDisabled è undefined ma onOpenDDT non è disponibile
+            // ✅ Gestisci anche il caso in cui gearDisabled è undefined ma onOpenTaskTree non è disponibile
             const isDisabled = gearDisabled === true;
-            const hasOpenDDT = typeof onOpenDDT === 'function';
-            const shouldOpenPicker = isDisabled || (!hasOpenDDT && onTypeChangeRequest);
+            const hasOpenTaskTree = typeof onOpenTaskTree === 'function';
+            const shouldOpenPicker = isDisabled || (!hasOpenTaskTree && onTypeChangeRequest);
 
             if (shouldOpenPicker && onTypeChangeRequest) {
-              // ✅ Se tipo UNDEFINED o se onOpenDDT non disponibile, apri il picker del tipo (come se cliccassi sul primo pulsante)
+              // ✅ Se tipo UNDEFINED o se onOpenTaskTree non disponibile, apri il picker del tipo (come se cliccassi sul primo pulsante)
               // ✅ Usa la posizione del pulsante ingranaggio stesso per aprire il picker
               const gearRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
               if (gearRect && onTypeChangeRequest) {
                 onTypeChangeRequest(gearRect);
               }
-            } else if (onOpenDDT) {
+            } else if (onOpenTaskTree) {
               try {
-                onOpenDDT();
+                onOpenTaskTree();
               } catch (error) {
-                console.error('[NodeRowActionsOverlay] Error calling onOpenDDT:', error);
+                console.error('[NodeRowActionsOverlay] Error calling onOpenTaskTree:', error);
               }
             } else {
               console.warn('[NodeRowActionsOverlay] No action available', {
                 gearDisabled,
-                hasOnOpenDDT: !!onOpenDDT,
+                hasOnOpenTaskTree: !!onOpenTaskTree,
                 hasOnTypeChangeRequest: !!onTypeChangeRequest
               });
             }
           }}
           // ✅ NON usare disabled - vogliamo che il click funzioni anche quando è "disabilitato" per aprire il picker
         >
-          <Settings style={{ width: size, height: size, color: hasDDT ? (gearColor || '#fbbf24') : '#9ca3af', filter: hasDDT ? 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' : undefined }} />
+          <Settings style={{ width: size, height: size, color: hasTaskTree ? (gearColor || '#fbbf24') : '#9ca3af', filter: hasTaskTree ? 'drop-shadow(0 0 2px rgba(251,191,36,0.6))' : undefined }} />
         </button>
       </SmartTooltip>
       {/* Checkbox: moved from left side to toolbar, before trash icon */}

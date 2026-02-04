@@ -44,7 +44,7 @@ export interface UseResponseEditorWizardResult {
   handleContractWizardComplete: (results: any) => void;
   handleDDTWizardCancel: () => void;
   handleDDTWizardComplete: (finalDDT: TaskTree, messages?: any) => Promise<void>;
-  getInitialDDT: () => TaskTree | undefined;
+  getInitialTaskTree: () => TaskTree | undefined;
   shouldShowInferenceLoading: boolean;
 }
 
@@ -186,8 +186,8 @@ export function useResponseEditorWizard({
     }
   }, [task, currentProjectId, setShowWizard, setLeftPanelMode, replaceSelectedDDT, onWizardComplete]);
 
-  // ✅ Get initial DDT for wizard
-  const getInitialDDT = useCallback((): TaskTree | undefined => {
+  // ✅ Get initial TaskTree for wizard
+  const getInitialTaskTree = useCallback((): TaskTree | undefined => {
     if (inferenceResult?.ai?.schema) {
       // ✅ Pre-compila con il risultato dell'inferenza
       return {
@@ -197,7 +197,7 @@ export function useResponseEditorWizard({
         _inferenceResult: inferenceResult // Passa anche il risultato completo per riferimento (con traduzioni se disponibili)
       } as TaskTree;
     } else if (taskTree && taskTree.nodes && taskTree.nodes.length > 0) {
-      // ✅ Se taskTree ha nodes (creato da categoria), passalo come initialDDT
+      // ✅ Se taskTree ha nodes (creato da categoria), passalo come initialTaskTree
       // Il wizard andrà direttamente a 'structure' e mostrerà "Build Messages"
       return {
         id: taskTree?.id || `temp_taskTree_${task?.id}`,
@@ -226,7 +226,7 @@ export function useResponseEditorWizard({
     handleContractWizardComplete,
     handleDDTWizardCancel,
     handleDDTWizardComplete,
-    getInitialDDT,
+    getInitialTaskTree,
     shouldShowInferenceLoading,
   };
 }

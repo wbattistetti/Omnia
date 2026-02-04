@@ -1,5 +1,5 @@
 /**
- * ddtStepGenerator.ts - Modulo per generare tutti gli steps da AI (standalone)
+ * taskTreeStepGenerator.ts - Modulo per generare tutti gli steps da AI (standalone)
  *
  * Usato quando non c'è un template candidato e dobbiamo generare tutto da zero.
  */
@@ -31,7 +31,7 @@ function schemaNodeToDataNode(node: SchemaNode): any {
 /**
  * Esegue un singolo step
  */
-async function runStep(step: Step): Promise<StepResult> {
+async function runTaskTreeStep(step: Step): Promise<StepResult> {
   try {
     const payload = await step.run();
     return {
@@ -40,7 +40,7 @@ async function runStep(step: Step): Promise<StepResult> {
       translations: (payload as any).translations || {}
     };
   } catch (error) {
-    console.error(`[ddtStepGenerator] Error running step ${step.key}:`, error);
+    console.error(`[taskTreeStepGenerator] Error running step ${step.key}:`, error);
     throw error;
   }
 }
@@ -53,16 +53,16 @@ async function runStep(step: Step): Promise<StepResult> {
  * @param contextLabel - Label contestuale (es. "Chiedi la data di nascita del paziente")
  * @param provider - AI provider ('groq' | 'openai')
  * @param onProgress - Callback opzionale per progresso
- * @returns DDT completo con tutti gli steps generati
+ * @returns TaskTree completo con tutti gli steps generati
  */
-export async function generateAllStepsFromAI(
+export async function generateAllTaskTreeStepsFromAI(
   dataTree: SchemaNode[],
   rootLabel: string,
   contextLabel: string,
   provider: 'groq' | 'openai' = 'groq',
   onProgress?: (current: number, total: number, stepLabel: string) => void
 ): Promise<any> {
-  console.log('[🔍 ddtStepGenerator] generateAllStepsFromAI START', {
+  console.log('[🔍 taskTreeStepGenerator] generateAllTaskTreeStepsFromAI START', {
     dataTreeLength: dataTree.length,
     rootLabel,
     contextLabel,
@@ -71,7 +71,7 @@ export async function generateAllStepsFromAI(
   });
 
   if (!dataTree || dataTree.length === 0) {
-    throw new Error('[ddtStepGenerator] dataTree è obbligatorio e deve essere un array non vuoto');
+    throw new Error('[taskTreeStepGenerator] dataTree è obbligatorio e deve essere un array non vuoto');
   }
 
   // Converti SchemaNode[] in DataNode per l'orchestrator
@@ -80,7 +80,7 @@ export async function generateAllStepsFromAI(
 
   // Genera tutti gli step da eseguire
   const steps = generateStepsSkipDetectType(mainDataNode, true, provider, contextLabel);
-  console.log('[🔍 ddtStepGenerator] Steps generati', {
+  console.log('[🔍 taskTreeStepGenerator] Steps generati', {
     stepsCount: steps.length,
     stepKeys: steps.map(s => s.key),
     stepTypes: steps.map(s => s.type)
@@ -98,17 +98,17 @@ export async function generateAllStepsFromAI(
       onProgress(currentStep, steps.length, stepLabel);
     }
 
-    console.log(`[🔍 ddtStepGenerator] Eseguendo step ${currentStep}/${steps.length}`, {
+    console.log(`[🔍 taskTreeStepGenerator] Eseguendo step ${currentStep}/${steps.length}`, {
       stepKey: step.key,
       stepType: step.type,
       stepLabel: stepLabel
     });
 
     try {
-      const result = await runStep(step);
+      const result = await runTaskTreeStep(step);
       stepResults.push(result);
 
-      console.log(`[🔍 ddtStepGenerator] Step ${currentStep}/${steps.length} completato`, {
+      console.log(`[🔍 taskTreeStepGenerator] Step ${currentStep}/${steps.length} completato`, {
         stepKey: step.key,
         hasPayload: !!result.payload,
         hasTranslations: !!result.translations && Object.keys(result.translations).length > 0
@@ -117,35 +117,35 @@ export async function generateAllStepsFromAI(
       // Se questo è suggestStructureAndConstraints, aggiorna la struttura
       if (step.key === 'suggestStructureAndConstraints' && result.payload?.data) {
         // La struttura è già stata aggiornata, continua
-        console.log('[🔍 ddtStepGenerator] Struttura aggiornata da suggestStructureAndConstraints');
+        console.log('[🔍 taskTreeStepGenerator] Struttura aggiornata da suggestStructureAndConstraints');
       }
     } catch (error) {
-      console.error(`[🔍 ddtStepGenerator] ❌ Errore nello step ${step.key}:`, error);
+      console.error(`[🔍 taskTreeStepGenerator] ❌ Errore nello step ${step.key}:`, error);
       throw error;
     }
   }
 
-  console.log('[🔍 ddtStepGenerator] Tutti gli step completati', {
+  console.log('[🔍 taskTreeStepGenerator] Tutti gli step completati', {
     resultsCount: stepResults.length,
     totalSteps: steps.length
   });
 
-  // Costruisci il DDT finale usando buildDDT
-  // buildDDT prende: ddtId, inputDataNode (singolo nodo), stepResults (array di StepResult)
-  const ddtId = uuidv4();
-  const finalDDT = buildDDT(
-    ddtId,
+  // Costruisci il TaskTree finale usando buildDDT
+  // buildDDT prende: taskTreeId, inputDataNode (singolo nodo), stepResults (array di StepResult)
+  const taskTreeId = uuidv4();
+  const finalTaskTree = buildDDT(
+    taskTreeId,
     mainDataNode, // Singolo nodo principale, non array
     stepResults // Array di StepResult
   );
 
-  console.log('[🔍 ddtStepGenerator] generateAllStepsFromAI COMPLETE', {
-    ddtId: finalDDT.id,
-    ddtLabel: finalDDT.label,
-    dataLength: finalDDT.data?.length || 0,
-    hasSteps: !!finalDDT.steps,
-    stepsCount: finalDDT.steps ? Object.keys(finalDDT.steps).length : 0
+  console.log('[🔍 taskTreeStepGenerator] generateAllTaskTreeStepsFromAI COMPLETE', {
+    taskTreeId: finalTaskTree.id,
+    taskTreeLabel: finalTaskTree.label,
+    nodesLength: finalTaskTree.nodes?.length || finalTaskTree.data?.length || 0,
+    hasSteps: !!finalTaskTree.steps,
+    stepsCount: finalTaskTree.steps ? Object.keys(finalTaskTree.steps).length : 0
   });
 
-  return finalDDT;
+  return finalTaskTree;
 }

@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { SchemaNode } from './dataCollection';
-import { normalizeDDTMainNodes } from './normalizeKinds';
+import { normalizeTaskTreeMainNodes } from './normalizeKinds';
 import type { ArtifactStore } from './artifactStore';
 import { getAllV2Draft } from './V2DraftStore';
 import { taskTemplateService } from '../../../services/TaskTemplateService';
@@ -9,12 +9,12 @@ import { TaskType, templateIdToTaskType } from '../../../types/taskTypes';
 import { extractTranslationKeysFromSteps } from '../../../utils/stepPromptsConverter';
 
 // ✅ REMOVED: extractPromptsFromMainData - DEPRECATED
-// Ora usiamo extractStartPrompts da ddtPromptExtractor.ts direttamente
+// Ora usiamo extractStartPrompts da taskTreePromptExtractor.ts direttamente
 
 // ✅ REMOVED: adaptStartPromptsToContext - DEPRECATED
-// Ora usiamo AdaptPromptToContext da ddtPromptAdapter.ts che gestisce tutto in modo centralizzato
+// Ora usiamo AdaptTaskTreePromptToContext da taskTreePromptAdapter.ts che gestisce tutto in modo centralizzato
 
-export interface AssembledDDT {
+export interface AssembledTaskTree {
   id: string;
   label: string;
   data: any[];  // ✅ Solo struttura dati (senza steps)
@@ -231,8 +231,8 @@ type AssembleOptions = {
   aiProvider?: 'groq' | 'openai'; // ✅ AI provider for prompt adaptation
 };
 
-export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], store: ArtifactStore, options?: AssembleOptions): Promise<AssembledDDT> {
-  const ddtId = `${rootLabel || 'DDT'}_${uuidv4()}`;
+export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode[], store: ArtifactStore, options?: AssembleOptions): Promise<AssembledTaskTree> {
+  const taskTreeId = `${rootLabel || 'TaskTree'}_${uuidv4()}`;
   const translations: Translations = { en: {}, it: {}, pt: {} };
   // Limit AI-driven re-asks to max 2
   const defaultEscalations = { noMatch: 2, noInput: 2, confirmation: 2 } as Record<string, number>;
@@ -240,7 +240,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
 
   // ✅ projectLocale è OBBLIGATORIO - nessun fallback
   if (!options?.projectLocale) {
-    throw new Error('[assembleFinalDDT] projectLocale is REQUIRED in options. Cannot assemble DDT without project language.');
+    throw new Error('[assembleFinalTaskTree] projectLocale is REQUIRED in options. Cannot assemble TaskTree without project language.');
   }
   const projectLocale = options.projectLocale;
 
@@ -325,7 +325,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
         if (payload) {
           const pairs = extractBasePromptKeys(payload);
           for (const [k, v] of Object.entries(pairs)) {
-            const key = `runtime.${ddtId}.${path}.${t}.${k}`;
+            const key = `runtime.${taskTreeId}.${path}.${t}.${k}`;
             pushTranslation(translations, key, String(v));
           }
         }
@@ -350,11 +350,11 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
     };
 
     // ✅ Save node label to Translations (for current project locale)
-    // This will be saved to DB when the DDT is saved
+    // This will be saved to DB when the TaskTree is saved
     // Use resolved label (from template if deriving, otherwise from node)
     if (nodeLabel && nodeId) {
       projectTranslations[nodeId] = nodeLabel;
-      console.log('[assembleFinalDDT] ✅ Saved node label to translations', {
+      console.log('[assembleFinalTaskTree] ✅ Saved node label to translations', {
         nodeId: nodeId.substring(0, 20) + '...',
         label: nodeLabel,
         locale: projectLocale,
@@ -370,8 +370,8 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
       const cPath = path;
       const bucket = store.byPath[cPath]?.constraints?.[c.kind];
       // i18n keys for title/payoff
-      const titleKey = `runtime.${ddtId}.${path}.constraint.${c.kind}.title`;
-      const payoffKey = `runtime.${ddtId}.${path}.constraint.${c.kind}.payoff`;
+      const titleKey = `runtime.${taskTreeId}.${path}.constraint.${c.kind}.title`;
+      const payoffKey = `runtime.${taskTreeId}.${path}.constraint.${c.kind}.payoff`;
       if (c.title) pushTranslation(translations, titleKey, String(c.title));
       if (c.payoff) pushTranslation(translations, payoffKey, String(c.payoff));
 
@@ -391,8 +391,8 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
         // Expect [{ constraintId?, r1: {title,payoff,messageKey?}, r2: {...} }]
         const first = messages[0];
         if (first?.r1) {
-          const r1Key = `runtime.${ddtId}.${path}.constraint.${c.kind}.r1`;
-          const r2Key = `runtime.${ddtId}.${path}.constraint.${c.kind}.r2`;
+          const r1Key = `runtime.${taskTreeId}.${path}.constraint.${c.kind}.r1`;
+          const r2Key = `runtime.${taskTreeId}.${path}.constraint.${c.kind}.r2`;
           if (first.r1.payoff) pushTranslation(translations, r1Key, String(first.r1.payoff));
           if (first.r2?.payoff) pushTranslation(translations, r2Key, String(first.r2.payoff));
           constraintObj.messages = { r1: r1Key, r2: r2Key };
@@ -443,8 +443,8 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
         }
       } else {
         // No AI messages: create placeholders so steps appear in the UI
-        const r1Key = `runtime.${ddtId}.${path}.constraint.${c.kind}.r1`;
-        const r2Key = `runtime.${ddtId}.${path}.constraint.${c.kind}.r2`;
+        const r1Key = `runtime.${taskTreeId}.${path}.constraint.${c.kind}.r1`;
+        const r2Key = `runtime.${taskTreeId}.${path}.constraint.${c.kind}.r2`;
         pushTranslation(translations, r1Key, `${node.label} · ${c.title || c.kind} · recovery 1`);
         pushTranslation(translations, r2Key, `${node.label} · ${c.title || c.kind} · recovery 2`);
         constraintObj.messages = { r1: r1Key, r2: r2Key };
@@ -627,8 +627,8 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
         // Store the template key to load translations later
         templateKeyForTranslation = nodesteps[stepKey][0];
         // Create a unique runtime key with GUID for this instance
-        chosenKey = `runtime.${ddtId}.${uuidv4()}.text`;
-        console.log('[assembleFinalDDT] Using steps/steps key', {
+        chosenKey = `runtime.${taskTreeId}.${uuidv4()}.text`;
+        console.log('[assembleFinalTaskTree] Using steps/steps key', {
           path,
           stepKey,
           templateKey: templateKeyForTranslation,
@@ -639,9 +639,9 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
         });
       } else {
         // Fallback: Use AI-provided key or default
-        const defaultKey = `runtime.${ddtId}.${path}.${stepKey}.text`;
+        const defaultKey = `runtime.${taskTreeId}.${path}.${stepKey}.text`;
         // Prefer AI-provided key if present (ai.0). We already pushed translations for it above.
-        const ai0Key = `runtime.${ddtId}.${path}.${stepKey}.ai.0`;
+        const ai0Key = `runtime.${taskTreeId}.${path}.${stepKey}.ai.0`;
         chosenKey = translations[ai0Key] ? ai0Key : defaultKey;
         if (chosenKey === defaultKey && !translations[defaultKey]) {
           pushTranslation(translations, defaultKey, `${node.label} · ${stepKey}`);
@@ -649,7 +649,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
         // Debug to understand which key is used
         try {
           // eslint-disable-next-line no-console
-          console.log('[assembleFinalDDT] step', path, stepKey, 'key', chosenKey, 'hasAI', Boolean(translations[ai0Key]));
+          console.log('[assembleFinalTaskTree] step', path, stepKey, 'key', chosenKey, 'hasAI', Boolean(translations[ai0Key]));
         } catch { }
       }
 
@@ -687,7 +687,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
             // ✅ Add translation to projectTranslations (flat dictionary for project locale only)
             projectTranslations[actionInstanceId] = templateText;
 
-            console.log('[assembleFinalDDT] Copied translation from template', {
+            console.log('[assembleFinalTaskTree] Copied translation from template', {
               path,
               stepKey,
               templateGuid: templateKeyForEsc,
@@ -704,7 +704,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
         // ✅ CRITICAL: NO FALLBACK - type MUST be derived from templateId
         const taskType = templateIdToTaskType(templateIdForTask);
         if (taskType === TaskType.UNDEFINED) {
-          throw new Error(`[assembleFinalDDT] Cannot determine task type from templateId '${templateIdForTask}'. This is a bug in template creation.`);
+          throw new Error(`[assembleFinalTaskTree] Cannot determine task type from templateId '${templateIdForTask}'. This is a bug in template creation.`);
         }
 
         const baseTask = {
@@ -742,7 +742,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
         if (firstEscalationTemplateKey) {
           (assembled.messages[stepKey] as any).__templateKey = firstEscalationTemplateKey;
         }
-        console.log('[assembleFinalDDT] Main message key set from first escalation', {
+        console.log('[assembleFinalTaskTree] Main message key set from first escalation', {
           path,
           stepKey,
           firstEscalationTaskId,
@@ -756,7 +756,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
         if (templateKeyForTranslation) {
           (assembled.messages[stepKey] as any).__templateKey = templateKeyForTranslation;
         }
-        console.log('[assembleFinalDDT] Main message key set from chosenKey (fallback)', {
+        console.log('[assembleFinalTaskTree] Main message key set from chosenKey (fallback)', {
           path,
           stepKey,
           chosenKey,
@@ -776,62 +776,62 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
 
   // Normalize kinds/subs deterministically so extractors work out of the box
   try {
-    console.log('[assembleFinalDDT][START]', { rootLabel, mainsCount: mains.length, mainLabels: mains.map(m => m.label) });
+    console.log('[assembleFinalTaskTree][START]', { rootLabel, mainsCount: mains.length, mainLabels: mains.map(m => m.label) });
 
-    const normalizedMains = normalizeDDTMainNodes(mains as any);
-    console.log('[assembleFinalDDT][NORMALIZED]', { count: normalizedMains?.length || 0, labels: (normalizedMains || []).map((m: any) => m.label) });
+    const normalizedMains = normalizeTaskTreeMainNodes(mains as any);
+    console.log('[assembleFinalTaskTree][NORMALIZED]', { count: normalizedMains?.length || 0, labels: (normalizedMains || []).map((m: any) => m.label) });
 
     // ✅ Use for...of loop to handle async assembleNode
     const assembledMains: any[] = [];
     for (let idx = 0; idx < (normalizedMains || []).length; idx++) {
       const m = normalizedMains![idx];
-      console.log(`[assembleFinalDDT][ASSEMBLING] Main ${idx + 1}/${normalizedMains?.length}:`, m.label, '| subTasks:', (m.subTasks || []).length);
+      console.log(`[assembleFinalTaskTree][ASSEMBLING] Main ${idx + 1}/${normalizedMains?.length}:`, m.label, '| subTasks:', (m.subTasks || []).length);
       try {
         const assembled = await assembleNode(m, [m.label]);
-        console.log(`[assembleFinalDDT][ASSEMBLED] Main ${idx + 1}/${normalizedMains?.length}:`, m.label, '✓');
+        console.log(`[assembleFinalTaskTree][ASSEMBLED] Main ${idx + 1}/${normalizedMains?.length}:`, m.label, '✓');
         assembledMains.push(assembled);
       } catch (err) {
-        console.error(`[assembleFinalDDT][ERROR] Failed to assemble main ${idx + 1}:`, m.label, err);
+        console.error(`[assembleFinalTaskTree][ERROR] Failed to assemble main ${idx + 1}:`, m.label, err);
         throw err;
       }
     }
 
-    console.log('[assembleFinalDDT][COMPLETE]', {
+    console.log('[assembleFinalTaskTree][COMPLETE]', {
       mainsCount: assembledMains.length,
       projectTranslationsCount: Object.keys(projectTranslations).length,
       projectLocale
     });
 
-    // ✅ REMOVED: Prompt adaptation logic from assembleFinalDDT
-    // L'adattamento dei prompt è ora gestito da AdaptPromptToContext in ddtPromptAdapter.ts
+    // ✅ REMOVED: Prompt adaptation logic from assembleFinalTaskTree
+    // L'adattamento dei prompt è ora gestito da AdaptTaskTreePromptToContext in taskTreePromptAdapter.ts
     // Questo viene chiamato da taskOrchestrator.ts quando si crea un Task da template
-    // assembleFinalDDT ora si limita ad assemblare la struttura, senza adattare i prompt
+    // assembleFinalTaskTree ora si limita ad assemblare la struttura, senza adattare i prompt
 
     // ✅ Add translations to global table (in memory only, not saved to DB yet)
     if (addTranslations && Object.keys(projectTranslations).length > 0) {
       addTranslations(projectTranslations);
-      console.log('[assembleFinalDDT] ✅ Added translations to global table', {
+      console.log('[assembleFinalTaskTree] ✅ Added translations to global table', {
         count: Object.keys(projectTranslations).length,
         sampleGuids: Object.keys(projectTranslations).slice(0, 5)
       });
     }
 
     // ✅ Steps are already at root level (created directly in rootSteps during assembleNode)
-    console.log('[assembleFinalDDT] ✅ Steps created directly at root level', {
+    console.log('[assembleFinalTaskTree] ✅ Steps created directly at root level', {
       rootStepsCount: Object.keys(rootSteps).length,
       rootStepsKeys: Object.keys(rootSteps)
     });
 
     // ❌ REMOVED: translations from result - translations are now in global ProjectTranslationsContext
-    const result: AssembledDDT = {
-      id: ddtId,
+    const result: AssembledTaskTree = {
+      id: taskTreeId,
       label: rootLabel || 'Data',
       data: assembledMains,  // ✅ data ora senza steps (solo struttura dati)
       steps: Object.keys(rootSteps).length > 0 ? rootSteps : undefined,  // ✅ Steps a root level
       v2Draft: getAllV2Draft(),
     };
 
-    console.log('[assembleFinalDDT][RESULT]', {
+    console.log('[assembleFinalTaskTree][RESULT]', {
       id: result.id,
       label: result.label,
       mainsCount: result.data.length,
@@ -840,7 +840,7 @@ export async function assembleFinalDDT(rootLabel: string, mains: SchemaNode[], s
     });
     return result;
   } catch (err) {
-    console.error('[assembleFinalDDT][FATAL_ERROR]', err);
+    console.error('[assembleFinalTaskTree][FATAL_ERROR]', err);
     throw err;
   }
 }

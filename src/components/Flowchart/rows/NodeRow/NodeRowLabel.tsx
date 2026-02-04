@@ -252,11 +252,11 @@ interface NodeRowLabelProps {
   setIsEditing: (val: boolean) => void;
   bgColor: string;
   labelTextColor: string;
-  iconColor?: string; // Colore dell'icona (grigio se no DDT, colore del tipo se ha DDT)
+  iconColor?: string; // Colore dell'icona (grigio se no TaskTree, colore del tipo se ha TaskTree)
   iconSize?: number;
-  hasDDT?: boolean;
+  hasTaskTree?: boolean;
   gearColor?: string;
-  onOpenDDT?: () => void;
+  onOpenTaskTree?: () => void;
   onDoubleClick: () => void;
   onIconsHoverChange?: (v: boolean) => void;
   onLabelHoverChange?: (v: boolean) => void;
@@ -285,9 +285,9 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
   labelTextColor,
   iconColor,
   iconSize,
-  hasDDT,
+  hasTaskTree,
   gearColor,
-  onOpenDDT,
+  onOpenTaskTree,
   onDoubleClick,
   onIconsHoverChange,
   onLabelHoverChange,
@@ -373,9 +373,9 @@ export const NodeRowLabel: React.FC<NodeRowLabelProps> = ({
           labelRef={labelRef}
           onHoverChange={(v) => { onIconsHoverChange && onIconsHoverChange(v); }}
           iconSize={iconSize}
-          hasDDT={hasDDT}
+          hasTaskTree={hasTaskTree}
           gearColor={gearColor || labelTextColor}
-          onOpenDDT={onOpenDDT}
+          onOpenTaskTree={onOpenTaskTree}
           isCondition={String((row as any)?.categoryType || '').toLowerCase() === 'conditions'}
           onWrenchClick={async () => {
             try {

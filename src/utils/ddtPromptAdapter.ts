@@ -5,7 +5,7 @@ import { DialogueTaskService } from '../services/DialogueTaskService';
 
 /**
  * ============================================================================
- * DDT Prompt Adapter - Adattamento Prompt al Contesto
+ * TaskTree Prompt Adapter - Adattamento Prompt al Contesto
  * ============================================================================
  *
  * Adatta i prompt al contesto usando AI.
@@ -27,12 +27,12 @@ import { DialogueTaskService } from '../services/DialogueTaskService';
  * @param adaptAllNormalSteps - Se false, adatta solo nodi radice; se true, adatta tutti i nodi
  * @throws Error se task non ha templateId o se l'API fallisce
  */
-export async function AdaptPromptToContext(
+export async function AdaptTaskTreePromptToContext(
   task: Task,
   contextLabel: string,
   adaptAllNormalSteps: boolean = false
 ): Promise<void> {
-  console.log('[🔍 AdaptPromptToContext] START', {
+  console.log('[🔍 AdaptTaskTreePromptToContext] START', {
     taskId: task.id,
     taskLabel: task.label,
     contextLabel,
@@ -43,19 +43,19 @@ export async function AdaptPromptToContext(
 
   // ✅ Validazione input
   if (!task) {
-    const errorMsg = '[AdaptPromptToContext] task è obbligatorio';
+    const errorMsg = '[AdaptTaskTreePromptToContext] task è obbligatorio';
     console.error(errorMsg);
     throw new Error(errorMsg);
   }
 
   if (!task.templateId) {
-    const errorMsg = `[AdaptPromptToContext] Task senza templateId: ${task.id}`;
+    const errorMsg = `[AdaptTaskTreePromptToContext] Task senza templateId: ${task.id}`;
     console.error(errorMsg, { taskId: task.id });
     throw new Error(errorMsg);
   }
 
   if (!task.steps || Object.keys(task.steps).length === 0) {
-    console.warn('[🔍 AdaptPromptToContext] ⚠️ Task senza steps, niente da adattare', {
+    console.warn('[🔍 AdaptTaskTreePromptToContext] ⚠️ Task senza steps, niente da adattare', {
       taskId: task.id
     });
     return;
@@ -64,20 +64,20 @@ export async function AdaptPromptToContext(
   // ✅ Carica template per ottenere label template
   const template = DialogueTaskService.getTemplate(task.templateId);
   if (!template) {
-    const errorMsg = `[AdaptPromptToContext] Template non trovato: ${task.templateId}`;
+    const errorMsg = `[AdaptTaskTreePromptToContext] Template non trovato: ${task.templateId}`;
     console.error(errorMsg, { taskId: task.id, templateId: task.templateId });
     throw new Error(errorMsg);
   }
 
   const templateLabel = template.label || template.name || 'Unknown';
-  console.log('[🔍 AdaptPromptToContext] Template caricato', {
+  console.log('[🔍 AdaptTaskTreePromptToContext] Template caricato', {
     templateId: template.id || template._id,
     templateLabel
   });
 
   // ✅ Costruisci albero dati per estrazione prompt
   const nodes = buildTaskTreeNodes(template);
-  console.log('[🔍 AdaptPromptToContext] Nodes costruito', {
+  console.log('[🔍 AdaptTaskTreePromptToContext] Nodes costruito', {
     nodesLength: nodes.length
   });
 
@@ -114,13 +114,13 @@ export async function AdaptPromptToContext(
       }
     } catch (err) {
       const errorMsg = 'Could not adapt prompts because template translations were not reachable.';
-      console.error('[🔍 AdaptPromptToContext] ❌ ' + errorMsg, {
+      console.error('[🔍 AdaptTaskTreePromptToContext] ❌ ' + errorMsg, {
         error: err instanceof Error ? err.message : String(err),
         guidsCount: allGuids.size
       });
 
       if (typeof window !== 'undefined') {
-        const retry = () => AdaptPromptToContext(task, contextLabel, adaptAllNormalSteps);
+        const retry = () => AdaptTaskTreePromptToContext(task, contextLabel, adaptAllNormalSteps);
         const event = new CustomEvent('service:unavailable', {
           detail: {
             service: 'Template translations',
@@ -136,14 +136,14 @@ export async function AdaptPromptToContext(
     }
   }
 
-  console.log('[🔍 AdaptPromptToContext] Traduzioni caricate', {
+  console.log('[🔍 AdaptTaskTreePromptToContext] Traduzioni caricate', {
     guidsCount: allGuids.size,
     translationsLoaded: Object.keys(projectTranslations).length
   });
 
   if (allGuids.size > 0 && Object.keys(projectTranslations).length === 0) {
     const errorMsg = 'No template translations found for the prompt GUIDs. Cannot adapt prompts.';
-    console.error('[🔍 AdaptPromptToContext] ❌ ' + errorMsg, {
+    console.error('[🔍 AdaptTaskTreePromptToContext] ❌ ' + errorMsg, {
       guidsCount: allGuids.size
     });
     if (typeof window !== 'undefined') {
@@ -171,13 +171,13 @@ export async function AdaptPromptToContext(
   );
 
   if (promptsToAdapt.length === 0) {
-    console.log('[🔍 AdaptPromptToContext] Nessun prompt da adattare', {
+    console.log('[🔍 AdaptTaskTreePromptToContext] Nessun prompt da adattare', {
       taskId: task.id
     });
     return;
   }
 
-  console.log('[🔍 AdaptPromptToContext] Prompt estratti', {
+  console.log('[🔍 AdaptTaskTreePromptToContext] Prompt estratti', {
     promptsCount: promptsToAdapt.length,
     prompts: promptsToAdapt.map(p => ({
       nodeTemplateId: p.nodeTemplateId,
@@ -216,7 +216,7 @@ export async function AdaptPromptToContext(
   const provider = (localStorage.getItem('ai.provider') as 'groq' | 'openai') || 'groq';
 
   try {
-    console.log('[🔍 AdaptPromptToContext] Chiamata API adattamento prompt', {
+    console.log('[🔍 AdaptTaskTreePromptToContext] Chiamata API adattamento prompt', {
       promptsCount: originalTexts.length,
       contextLabel,
       normalizedContextLabel,
@@ -238,7 +238,7 @@ export async function AdaptPromptToContext(
     });
 
     if (!res.ok) {
-      const errorMsg = `[AdaptPromptToContext] API returned ${res.status}: ${res.statusText}`;
+      const errorMsg = `[AdaptTaskTreePromptToContext] API returned ${res.status}: ${res.statusText}`;
       console.error(errorMsg, {
         status: res.status,
         statusText: res.statusText,
@@ -249,7 +249,7 @@ export async function AdaptPromptToContext(
       // ✅ Se 404, mostra messaggio di servizio e continua senza adattamento
       if (res.status === 404) {
         const errorMsg = 'Prompt adaptation service not reachable. Original template prompts will be used.';
-        console.error('[🔍 AdaptPromptToContext] ❌ ' + errorMsg, {
+        console.error('[🔍 AdaptTaskTreePromptToContext] ❌ ' + errorMsg, {
           endpoint: '/api/ddt/adapt-prompts',
           backendUrl: 'http://localhost:8000',
           possibleCauses: [
@@ -261,7 +261,7 @@ export async function AdaptPromptToContext(
 
         // ✅ Mostra messaggio di servizio all'utente
         if (typeof window !== 'undefined') {
-          const retry = () => AdaptPromptToContext(task, contextLabel, adaptAllNormalSteps);
+          const retry = () => AdaptTaskTreePromptToContext(task, contextLabel, adaptAllNormalSteps);
           const event = new CustomEvent('service:unavailable', {
             detail: {
               service: 'Prompt adaptation',
@@ -285,12 +285,12 @@ export async function AdaptPromptToContext(
     const data = await res.json();
 
     if (!data.adaptedTexts || !Array.isArray(data.adaptedTexts) || data.adaptedTexts.length !== promptsToAdapt.length) {
-      const errorMsg = '[AdaptPromptToContext] AI returned unexpected format';
+      const errorMsg = '[AdaptTaskTreePromptToContext] AI returned unexpected format';
       console.error(errorMsg, { response: data });
       throw new Error(errorMsg);
     }
 
-    console.log('[🔍 AdaptPromptToContext] Prompt adattati ricevuti', {
+    console.log('[🔍 AdaptTaskTreePromptToContext] Prompt adattati ricevuti', {
       adaptedCount: data.adaptedTexts.length
     });
 
@@ -300,7 +300,7 @@ export async function AdaptPromptToContext(
       adaptedTranslations[p.guid] = data.adaptedTexts[idx];
     });
 
-    console.log('[🔍 AdaptPromptToContext] Riassociazione prompt', {
+    console.log('[🔍 AdaptTaskTreePromptToContext] Riassociazione prompt', {
       adaptedCount: Object.keys(adaptedTranslations).length,
       guids: Object.keys(adaptedTranslations)
     });
@@ -333,7 +333,7 @@ export async function AdaptPromptToContext(
       }
     });
 
-    console.log('[🔍 AdaptPromptToContext] ✅ task.steps aggiornato in-place', {
+    console.log('[🔍 AdaptTaskTreePromptToContext] ✅ task.steps aggiornato in-place', {
       taskId: task.id,
       promptsUpdated: Object.keys(adaptedTranslations).length
     });
@@ -341,7 +341,7 @@ export async function AdaptPromptToContext(
     // ✅ 2. Aggiungi traduzioni al ProjectTranslationsContext in memoria (NO salvataggio DB)
     if (typeof window !== 'undefined' && (window as any).__projectTranslationsContext) {
       (window as any).__projectTranslationsContext.addTranslations(adaptedTranslations);
-      console.log('[🔍 AdaptPromptToContext] ✅ Traduzioni aggiunte al context (in memoria)', {
+      console.log('[🔍 AdaptTaskTreePromptToContext] ✅ Traduzioni aggiunte al context (in memoria)', {
         count: Object.keys(adaptedTranslations).length,
         guids: Object.keys(adaptedTranslations),
         sampleTexts: Object.entries(adaptedTranslations).slice(0, 3).map(([guid, text]) => ({
@@ -350,7 +350,7 @@ export async function AdaptPromptToContext(
         }))
       });
     } else {
-      console.warn('[🔍 AdaptPromptToContext] ⚠️ ProjectTranslationsContext non disponibile', {
+      console.warn('[🔍 AdaptTaskTreePromptToContext] ⚠️ ProjectTranslationsContext non disponibile', {
         hasWindow: typeof window !== 'undefined',
         hasContext: typeof window !== 'undefined' && !!(window as any).__projectTranslationsContext
       });
@@ -359,14 +359,14 @@ export async function AdaptPromptToContext(
     // ✅ 3. Aggiorna metadata task in memoria (NO salvataggio DB)
     task.metadata = { ...task.metadata, promptsAdapted: true };
 
-    console.log('[🔍 AdaptPromptToContext] COMPLETE', {
+    console.log('[🔍 AdaptTaskTreePromptToContext] COMPLETE', {
       taskId: task.id,
       promptsAdapted: data.adaptedTexts.length,
       taskStepsUpdated: true
     });
 
   } catch (err) {
-    const errorMsg = `[AdaptPromptToContext] ❌ Errore durante adattamento prompt: ${err instanceof Error ? err.message : String(err)}`;
+    const errorMsg = `[AdaptTaskTreePromptToContext] ❌ Errore durante adattamento prompt: ${err instanceof Error ? err.message : String(err)}`;
     console.error(errorMsg, err);
     throw new Error(errorMsg);
   }

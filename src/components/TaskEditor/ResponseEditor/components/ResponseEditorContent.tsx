@@ -35,7 +35,7 @@ export interface ResponseEditorContentProps {
   handleContractWizardComplete: (results: any) => void;
   handleDDTWizardCancel: () => void;
   handleDDTWizardComplete: (finalDDT: TaskTree, messages?: any) => Promise<void>;
-  getInitialDDT: () => TaskTree | undefined;
+  getInitialTaskTree: () => TaskTree | undefined;
 
   // Intent messages handler
   onIntentMessagesComplete: (messages: any) => void;
@@ -61,7 +61,7 @@ export function ResponseEditorContent({
   handleContractWizardComplete,
   handleDDTWizardCancel,
   handleDDTWizardComplete,
-  getInitialDDT,
+  getInitialTaskTree,
   onIntentMessagesComplete,
   normalEditorLayout,
 }: ResponseEditorContentProps) {
@@ -112,7 +112,7 @@ export function ResponseEditorContent({
         <DDTWizard
           taskType={task?.type ? String(task.type) : undefined}
           taskLabel={task?.label || ''}
-          initialDDT={getInitialDDT()}
+          initialTaskTree={getInitialTaskTree()}
           onCancel={handleDDTWizardCancel}
           onComplete={handleDDTWizardComplete}
           startOnStructure={false}
