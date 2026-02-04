@@ -35,25 +35,34 @@ import { EngineEscalationService } from '../../services/EngineEscalationService'
 import type { GenerationPlan } from './buildGenerationPlan';
 import type { GenerationProgress } from './types';
 import { generateContractForNode } from './generateContract';
-import { generateEngineForNode } from './generateEngines';
+import { refineContract } from './refineContract';
+import { generateCanonicalValuesForNode } from './generateCanonicalValues';
+import { generateConstraintsForNode } from './generateConstraints';
+import { generateEnginesForNode } from './generateEnginesUnified';
+import { generateEscalationForNode } from './generateEscalation';
 import { generateTestExamplesForNode } from './generateTestExamples';
+import { generateAIMessagesForNode, AIMessages } from './generateAIMessages';
 
 /**
  * Generation result for a node
  *
- * Contains all artifacts generated for a single node:
- * - Contract: Semantic contract definition
- * - Engines: Recognition engines (regex, NER, LLM, heuristic)
- * - Escalation: Fallback strategy when no engine matches
- * - TestExamples: Validation test cases
+ * Contains all artifacts generated for a single node (STEP 1-7):
+ * - Contract: Semantic contract definition (STEP 1: refined)
+ * - CanonicalValues: Canonical value sets (STEP 2)
+ * - Constraints: Enhanced constraints (STEP 3)
+ * - Engines: All extraction engines (STEP 4)
+ * - Escalation: Engine escalation strategy (STEP 5)
+ * - TestExamples: Validation test cases (STEP 6)
+ * - AIMessages: Dialogue messages (STEP 7)
  */
 export interface NodeGenerationResult {
   nodeId: string;
   success: boolean;
-  contract?: SemanticContract;
-  engines?: Map<EngineType, EngineConfig>;
-  escalation?: EngineEscalation;
-  testExamples?: string[];
+  contract?: SemanticContract; // STEP 1: Refined contract
+  engines?: EngineConfig[]; // STEP 4: All engines (unified)
+  escalation?: EngineEscalation; // STEP 5: Escalation strategy
+  testExamples?: string[]; // STEP 6: Test examples
+  aiMessages?: AIMessages; // STEP 7: AI dialogue messages
   errors?: string[];
 }
 
@@ -84,25 +93,33 @@ function findNode(nodeId: string, nodes: TaskTreeNode[]): TaskTreeNode | null {
  * Execute generation plan
  *
  * ORCHESTRATOR FUNCTION - This is the main entry point for generation.
- * Coordinates all layers in the correct order:
+ * Coordinates all 7 steps of the internal pipeline in the correct order:
  *
- * 1. Contract Layer: Generate semantic contract
- * 2. Engine Layer: Generate recognition engines
- * 3. Test Layer: Generate test examples
- * 4. Persistence: Save all artifacts
+ * STEP 1: Contract Refinement - Refine semantic contract
+ * STEP 2: Canonical Values - Generate canonical value sets
+ * STEP 3: Constraints - Generate enhanced constraints
+ * STEP 4: Engines Unificati - Generate all extraction engines
+ * STEP 5: Escalation - Generate engine escalation strategy
+ * STEP 6: Test Examples - Generate test examples
+ * STEP 7: Messaggi AI - Generate AI dialogue messages
  *
  * Execution Flow:
  * - For each node in plan:
- *   - Generate contract (Contract Layer)
- *   - Generate engines (Engine Layer)
- *   - Generate tests (Test Layer)
+ *   - STEP 1: Refine contract (if needed)
+ *   - STEP 2: Generate canonical values
+ *   - STEP 3: Generate constraints
+ *   - STEP 4: Generate all engines (unified)
+ *   - STEP 5: Generate escalation
+ *   - STEP 6: Generate test examples
+ *   - STEP 7: Generate AI messages
  *   - Save to database (Persistence)
  *   - Report progress (UI callback)
  *
  * Error Handling:
- * - Continues on individual node failures
- * - Collects errors per node
+ * - Continues on individual step failures
+ * - Collects errors per step
  * - Returns partial results
+ * - Each step has safe fallback (returns original if generation fails)
  *
  * Progress Reporting:
  * - Calls progressCallback for each step
@@ -148,15 +165,16 @@ export async function executeGenerationPlan(
     const nodeResult: NodeGenerationResult = {
       nodeId: nodePlan.nodeId,
       success: true,
-      engines: new Map()
+      engines: []
     };
 
     const errors: string[] = [];
 
-    // Generate contract
+    // STEP 1: Generate or load contract
+    let contract: SemanticContract | undefined;
     if (nodePlan.generateContract) {
       currentStep++;
-      const contract = await generateContractForNode(node, (progress) => {
+      contract = await generateContractForNode(node, (progress) => {
         if (onProgress) {
           onProgress({
             ...progress,
@@ -166,31 +184,97 @@ export async function executeGenerationPlan(
         }
       });
 
-      if (contract) {
-        nodeResult.contract = contract;
-      } else {
+      if (!contract) {
         errors.push('Failed to generate contract');
         nodeResult.success = false;
       }
     } else {
       // Load existing contract
-      nodeResult.contract = await SemanticContractService.load(nodePlan.nodeId) || undefined;
+      contract = await SemanticContractService.load(nodePlan.nodeId) || undefined;
     }
 
-    if (!nodeResult.contract) {
+    if (!contract) {
       nodeResult.success = false;
       nodeResult.errors = ['Contract is required but not available'];
       results.set(nodePlan.nodeId, nodeResult);
       continue;
     }
 
-    // Generate engines
-    for (const engineType of nodePlan.generateEngines) {
+    nodeResult.contract = contract;
+
+    // STEP 1 (continued): Refine contract
+    currentStep++;
+    contract = await refineContract(contract, node.label, (progress) => {
+      if (onProgress) {
+        onProgress({
+          ...progress,
+          currentStep,
+          totalSteps: plan.totalSteps
+        });
+      }
+    });
+    nodeResult.contract = contract; // Update with refined contract
+
+    // STEP 2: Generate canonical values
+    currentStep++;
+    contract = await generateCanonicalValuesForNode(contract, node.label, (progress) => {
+      if (onProgress) {
+        onProgress({
+          ...progress,
+          currentStep,
+          totalSteps: plan.totalSteps
+        });
+      }
+    });
+    nodeResult.contract = contract; // Update with canonical values
+
+    // STEP 3: Generate constraints
+    currentStep++;
+    contract = await generateConstraintsForNode(contract, node.label, (progress) => {
+      if (onProgress) {
+        onProgress({
+          ...progress,
+          currentStep,
+          totalSteps: plan.totalSteps
+        });
+      }
+    });
+    nodeResult.contract = contract; // Update with constraints
+
+    // STEP 4: Generate all engines (unified)
+    currentStep++;
+    const enginesResult = await generateEnginesForNode(contract, node.label, (progress) => {
+      if (onProgress) {
+        onProgress({
+          ...progress,
+          currentStep,
+          totalSteps: plan.totalSteps
+        });
+      }
+    });
+    contract = enginesResult.contract; // Update contract (metadata only)
+    nodeResult.contract = contract;
+    nodeResult.engines = enginesResult.engines; // Store engines separately
+
+    // Save engines to service (if needed)
+    if (enginesResult.engines.length > 0) {
+      // TODO: Save engines to EngineService if needed
+      // for (const engine of enginesResult.engines) {
+      //   await EngineService.save(nodePlan.nodeId, engine);
+      // }
+    }
+
+    // STEP 5: Generate escalation
+    if (enginesResult.engines.length > 0) {
       currentStep++;
-      const engine = await generateEngineForNode(
-        node,
-        engineType,
-        nodeResult.contract,
+      // Load existing escalation if any
+      const existingEscalation = await EngineEscalationService.load(nodePlan.nodeId) || null;
+      const escalation = await generateEscalationForNode(
+        contract,
+        enginesResult.engines,
+        nodePlan.nodeId,
+        node.label,
+        existingEscalation,
         (progress) => {
           if (onProgress) {
             onProgress({
@@ -202,55 +286,67 @@ export async function executeGenerationPlan(
         }
       );
 
-      if (engine) {
-        nodeResult.engines!.set(engineType, engine);
-      } else {
-        errors.push(`Failed to generate ${engineType} engine`);
-      }
-    }
-
-    // Generate escalation
-    if (nodePlan.generateEscalation) {
-      currentStep++;
-      const proposal = plan.nodesToGenerate.find(p => p.nodeId === nodePlan.nodeId);
-      if (proposal) {
-        const escalation: EngineEscalation = {
-          nodeId: nodePlan.nodeId,
-          engines: proposal.generateEngines.map((type, idx) => ({
-            type,
-            priority: idx + 1,
-            enabled: true
-          })),
-          defaultEngine: proposal.generateEngines[0]
-        };
-
+      if (escalation) {
         await EngineEscalationService.save(nodePlan.nodeId, escalation);
         nodeResult.escalation = escalation;
+      } else {
+        errors.push('Failed to generate escalation');
       }
     }
 
-    // Generate test examples
-    if (nodePlan.generateTests && nodeResult.contract) {
-      currentStep++;
-      const examples = await generateTestExamplesForNode(
-        node,
-        nodeResult.contract,
-        (progress) => {
-          if (onProgress) {
-            onProgress({
-              ...progress,
-              currentStep,
-              totalSteps: plan.totalSteps
-            });
-          }
+    // STEP 6: Generate test examples
+    currentStep++;
+    // Load existing test examples if any
+    const existingExamples: string[] = []; // TODO: Load from node or service if needed
+    const examples = await generateTestExamplesForNode(
+      node,
+      contract,
+      existingExamples,
+      (progress) => {
+        if (onProgress) {
+          onProgress({
+            ...progress,
+            currentStep,
+            totalSteps: plan.totalSteps
+          });
         }
-      );
-      nodeResult.testExamples = examples;
+      }
+    );
+    nodeResult.testExamples = examples;
+
+    // STEP 7: Generate AI messages
+    currentStep++;
+    // Load existing AI messages if any
+    const existingMessages: AIMessages | null = null; // TODO: Load from node or service if needed
+    const aiMessages = await generateAIMessagesForNode(
+      contract,
+      node.label,
+      existingMessages,
+      (progress) => {
+        if (onProgress) {
+          onProgress({
+            ...progress,
+            currentStep,
+            totalSteps: plan.totalSteps
+          });
+        }
+      }
+    );
+    if (aiMessages) {
+      nodeResult.aiMessages = aiMessages;
+    } else {
+      errors.push('Failed to generate AI messages');
+    }
+
+    // Save final contract to service
+    if (nodeResult.contract) {
+      await SemanticContractService.save(nodePlan.nodeId, nodeResult.contract);
     }
 
     if (errors.length > 0) {
       nodeResult.errors = errors;
-      if (errors.length === nodePlan.generateEngines.length) {
+      // Don't mark as failed if only optional steps failed
+      if (errors.length > 3) { // More than 3 errors = significant failure
         nodeResult.success = false;
       }
     }

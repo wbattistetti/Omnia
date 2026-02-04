@@ -1087,6 +1087,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   const [recentProjects, setRecentProjects] = useState<any[]>([]);
   const [allProjects, setAllProjects] = useState<any[]>([]);
   const [showAllProjectsModal, setShowAllProjectsModal] = useState(false);
+  const [projectsLoadError, setProjectsLoadError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   // ✅ REMOVED: Service unavailable listener - now handled in ResponseEditor with centered overlay
@@ -1123,19 +1124,44 @@ export const AppContent: React.FC<AppContentProps> = ({
   // Carica progetti recenti (ultimi 10)
   const fetchRecentProjects = React.useCallback(async () => {
     try {
-      setRecentProjects(await ProjectService.getRecentProjects());
+      setProjectsLoadError(null);
+      console.log('[AppContent] Fetching recent projects...');
+      const projects = await ProjectService.getRecentProjects();
+      console.log('[AppContent] Recent projects loaded:', projects.length);
+      setRecentProjects(projects);
     } catch (e) {
+      console.error('[AppContent] Error loading recent projects:', e);
       setRecentProjects([]);
+      // Show error to user
+      if (e instanceof Error) {
+        const errorMsg = e.message.includes('fetch') || e.message.includes('network')
+          ? 'Backend non raggiungibile. Assicurati che il server sia avviato.'
+          : e.message;
+        setProjectsLoadError(errorMsg);
+        console.error('[AppContent] Error details:', e.message);
+      }
     }
   }, []);
   // Carica tutti i progetti
   const fetchAllProjects = React.useCallback(async () => {
     try {
+      setProjectsLoadError(null);
+      console.log('[AppContent] Fetching all projects...');
       const projects = await ProjectService.getAllProjects();
+      console.log('[AppContent] All projects loaded:', projects.length);
       setAllProjects(projects);
       return projects; // Restituisce i progetti per verificare se ce ne sono ancora
     } catch (e) {
+      console.error('[AppContent] Error loading all projects:', e);
       setAllProjects([]);
+      // Show error to user
+      if (e instanceof Error) {
+        const errorMsg = e.message.includes('fetch') || e.message.includes('network')
+          ? 'Backend non raggiungibile. Assicurati che il server sia avviato.'
+          : e.message;
+        setProjectsLoadError(errorMsg);
+        console.error('[AppContent] Error details:', e.message);
+      }
       return [];
     }
   }, []);
@@ -1505,6 +1531,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   // Carica progetti recenti e tutti i progetti ogni volta che si entra nella landing
   useEffect(() => {
     if (appState === 'landing') {
+      console.log('[AppContent] Landing page active, loading projects...');
       fetchRecentProjects();
       fetchAllProjects(); // Carica anche tutti i progetti per la vista "tutti"
     }
@@ -1535,6 +1562,7 @@ export const AppContent: React.FC<AppContentProps> = ({
             onDeleteAllProjects={handleDeleteAllProjects}
             showAllProjectsModal={showAllProjectsModal}
             setShowAllProjectsModal={setShowAllProjectsModal}
+            loadError={projectsLoadError}
             searchTerm={searchTerm}
             setSearchTerm={setSearchTerm}
             onSelectProject={async (id: string) => {

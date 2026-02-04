@@ -53,13 +53,25 @@ export function buildGenerationPlan(
     });
   }
 
-  // Calculate total steps (contract + engines + escalation + tests for each node)
+  // Calculate total steps for internal pipeline (STEP 1-7)
+  // Each node goes through: Contract → Refinement → Canonical → Constraints → Engines → Escalation → Tests → AI Messages
   const totalSteps = nodesToGenerate.reduce((sum, node) => {
     let steps = 0;
-    if (node.generateContract) steps += 1;
-    steps += node.generateEngines.length;
+    // STEP 1: Contract generation (if needed) + Contract refinement (always)
+    if (node.generateContract) steps += 1; // Contract generation
+    steps += 1; // Contract refinement (always)
+    // STEP 2: Canonical values (always)
+    steps += 1;
+    // STEP 3: Constraints (always)
+    steps += 1;
+    // STEP 4: Engines unified (always, replaces individual engine generation)
+    steps += 1;
+    // STEP 5: Escalation (if needed)
     if (node.generateEscalation) steps += 1;
+    // STEP 6: Test examples (always)
     if (node.generateTests) steps += 1;
+    // STEP 7: AI messages (always)
+    steps += 1;
     return sum + steps;
   }, 0);
 

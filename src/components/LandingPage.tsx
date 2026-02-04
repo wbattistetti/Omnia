@@ -14,6 +14,7 @@ interface LandingPageProps {
   searchTerm: string;
   setSearchTerm: (v: string) => void;
   onSelectProject: (id: string) => void | Promise<void>;
+  loadError?: string | null;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
@@ -27,6 +28,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   searchTerm,
   setSearchTerm,
   onSelectProject,
+  loadError = null,
 }) => {
   const [showHelp, setShowHelp] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -585,8 +587,22 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     </div>
                   )}
                 </div>
+                {/* Error state */}
+                {loadError && (
+                  <div className="col-span-6 p-6 bg-red-900/20 border border-red-700 rounded-lg text-center">
+                    <XCircle className="mx-auto mb-2 text-red-400" size={32} />
+                    <p className="text-red-300 font-semibold mb-1">Errore nel caricamento progetti</p>
+                    <p className="text-red-200 text-sm">{loadError}</p>
+                    <button
+                      onClick={() => window.location.reload()}
+                      className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold"
+                    >
+                      Ricarica pagina
+                    </button>
+                  </div>
+                )}
                 {/* Empty state */}
-                {sortedFilteredProjects.length === 0 && (
+                {!loadError && sortedFilteredProjects.length === 0 && (
                   <>
                     <div className="col-span-6 text-center py-4 text-slate-400 border border-emerald-200">
                       Nessun progetto trovato

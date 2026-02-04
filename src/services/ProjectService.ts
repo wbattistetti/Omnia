@@ -4,16 +4,102 @@ import { ProjectData } from '../types/project';
 
 const API = '';
 
+/**
+ * Retry a fetch request with exponential backoff
+ */
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit = {},
+  maxRetries: number = 3,
+  retryDelay: number = 1000
+): Promise<Response> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: AbortSignal.timeout(10000) // 10 second timeout
+      });
+
+      if (response.ok) {
+        return response;
+      }
+
+      // If it's a server error (5xx), retry
+      if (response.status >= 500 && attempt < maxRetries - 1) {
+        console.warn(`[ProjectService] Server error ${response.status}, retrying... (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay * Math.pow(2, attempt)));
+        continue;
+      }
+
+      // If it's a client error (4xx), don't retry
+      return response;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      // If it's a network error and we have retries left, retry
+      if (attempt < maxRetries - 1) {
+        console.warn(`[ProjectService] Network error, retrying... (attempt ${attempt + 1}/${maxRetries}):`, lastError.message);
+        await new Promise(resolve => setTimeout(resolve, retryDelay * Math.pow(2, attempt)));
+        continue;
+      }
+    }
+  }
+
+  throw lastError || new Error('Failed to fetch after retries');
+}
+
 export const ProjectService = {
   async getRecentProjects(): Promise<ProjectData[]> {
-    const res = await fetch(`/api/projects/catalog`);
-    if (!res.ok) throw new Error('Errore nel recupero progetti recenti');
-    return await res.json();
+    try {
+      console.log('[ProjectService] Fetching recent projects from /api/projects/catalog');
+      const res = await fetchWithRetry(`/api/projects/catalog`);
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('[ProjectService] Error fetching recent projects:', res.status, errorText);
+        throw new Error(`Errore nel recupero progetti recenti: ${res.status} ${errorText}`);
+      }
+      const data = await res.json();
+      if (!Array.isArray(data)) {
+        console.warn('[ProjectService] Response is not an array:', typeof data, data);
+        return [];
+      }
+      console.log('[ProjectService] Loaded recent projects:', data.length);
+      return data;
+    } catch (error) {
+      console.error('[ProjectService] Exception fetching recent projects:', error);
+      // Check if backend is reachable
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        console.error('[ProjectService] Backend might not be running or not reachable');
+      }
+      throw error;
+    }
   },
   async getAllProjects(): Promise<ProjectData[]> {
-    const res = await fetch(`/api/projects/catalog`);
-    if (!res.ok) throw new Error('Errore nel recupero di tutti i progetti');
-    return await res.json();
+    try {
+      console.log('[ProjectService] Fetching all projects from /api/projects/catalog');
+      const res = await fetchWithRetry(`/api/projects/catalog`);
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('[ProjectService] Error fetching all projects:', res.status, errorText);
+        throw new Error(`Errore nel recupero di tutti i progetti: ${res.status} ${errorText}`);
+      }
+      const data = await res.json();
+      if (!Array.isArray(data)) {
+        console.warn('[ProjectService] Response is not an array:', typeof data, data);
+        return [];
+      }
+      console.log('[ProjectService] Loaded all projects:', data.length);
+      return data;
+    } catch (error) {
+      console.error('[ProjectService] Exception fetching all projects:', error);
+      // Check if backend is reachable
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        console.error('[ProjectService] Backend might not be running or not reachable');
+      }
+      throw error;
+    }
   },
   async getProjectByName(name: string): Promise<ProjectData | null> {
     const all = await this.getAllProjects();

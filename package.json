@@ -19,6 +19,8 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
+    "test:wizard": "vitest run src/wizard/__tests__",
+    "test:integration": "node scripts/test-wizard-integration.js",
     "seed:act-patterns": "node scripts/seed-act-type-patterns.js"
   },
   "dependencies": {
