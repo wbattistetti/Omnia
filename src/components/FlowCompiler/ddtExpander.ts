@@ -1,6 +1,6 @@
 // DDT Expander: Expands DDT structure into flat tasks
 
-import type { AssembledDDT, StepGroup, Escalation, TaskReference } from '../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledTaskTree, StepGroup, Escalation, TaskReference } from '../TaskTreeBuilder/DDTAssembler/currentDDT.types';
 import type { CompiledTask, DDTExpansion } from './types';
 import { buildStepCondition, buildRecoveryFirstActionCondition, buildRecoverySequentialCondition } from './conditionBuilder';
 import { getTemplateId } from '../../utils/taskHelpers';
@@ -10,7 +10,7 @@ import { getTemplateId } from '../../utils/taskHelpers';
  * Returns tasks for all steps, recoveries, and actions
  */
 export function expandDDT(
-  ddt: AssembledDDT,
+  ddt: AssembledTaskTree,
   parentNodeId: string,
   getTask: (taskId: string) => any, // Function to resolve Task from taskId
   parentRowAction?: string // Action type of parent row (DataRequest, ClassifyProblem, etc.)

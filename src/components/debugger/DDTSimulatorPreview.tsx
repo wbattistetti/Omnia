@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import DebugGroupedPanel, { type LogEntry } from './DebugGroupedPanel';
-import type { AssembledDDT } from '../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledTaskTree } from '../TaskTreeBuilder/DDTAssembler/currentDDT.types';
 import { adaptCurrentToV2 } from '../DialogueDataEngine/model/adapters/currentToV2';
 import type { DDTTemplateV2 } from '../DialogueDataEngine/model/ddt.v2.types';
 import { useDDTSimulator } from '../DialogueDataEngine/useSimulator';
 
-type Props = { currentDDT?: AssembledDDT };
+type Props = { currentDDT?: AssembledTaskTree };
 
 // ⭐ Backend DDT sempre attivo - Ruby è l'unica fonte di verità
 // Rimossa funzione getUseBackendDDTEngine() - backend sempre attivo

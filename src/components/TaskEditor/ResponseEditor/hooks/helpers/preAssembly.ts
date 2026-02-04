@@ -37,14 +37,14 @@ export async function preAssembleTaskTree(
     const { getTemplateTranslations } = await import('../../../../../services/ProjectDataService');
     const templateTranslations = await getTemplateTranslations(translationGuids);
 
-    const { assembleFinalDDT } = await import('../../../../DialogueDataTemplateBuilder/DDTWizard/assembleFinal');
-    const { buildArtifactStore } = await import('../../../../DialogueDataTemplateBuilder/DDTWizard/artifactStore');
+    const { assembleFinalTaskTree } = await import('../../../../TaskTreeBuilder/TaskTreeWizard/assembleFinal');
+    const { buildArtifactStore } = await import('../../../../TaskTreeBuilder/TaskTreeWizard/artifactStore');
 
     const emptyStore = buildArtifactStore([]);
     const projectLang = (localStorage.getItem('project.lang') || 'pt') as 'en' | 'it' | 'pt';
 
-    // ✅ assembleFinalDDT restituisce ancora formato legacy, convertiamo a TaskTree
-    const preAssembledLegacy = await assembleFinalDDT(
+    // ✅ assembleFinalTaskTree restituisce ancora formato legacy, convertiamo a TaskTree
+    const preAssembledLegacy = await assembleFinalTaskTree(
       schema.label || 'Data',
       schema.nodes || schema.data || [],
       emptyStore,

@@ -14,7 +14,7 @@
 
 import React from 'react';
 import { flushSync } from 'react-dom';
-import type { AssembledDDT } from '../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledTaskTree } from '../TaskTreeBuilder/DDTAssembler/currentDDT.types';
 import { AlertTriangle } from 'lucide-react';
 import UserMessage, { type Message } from './UserMessage';
 import BotMessage from './BotMessage';
@@ -37,9 +37,9 @@ import { taskRepository } from '../../services/TaskRepository';
 // UserMessage and BotMessage components moved to separate files
 
 interface DDEBubbleChatProps {
-  currentDDT?: AssembledDDT | null; // Optional for flow mode
+  currentDDT?: AssembledTaskTree | null; // Optional for flow mode
   translations?: Record<string, string>;
-  onUpdateDDT?: (updater: (ddt: AssembledDDT) => AssembledDDT) => void;
+  onUpdateDDT?: (updater: (ddt: AssembledTaskTree) => AssembledTaskTree) => void;
   // Flow mode props
   mode?: 'single-ddt' | 'flow';
   nodes?: Node<FlowNode>[]; // For flow mode

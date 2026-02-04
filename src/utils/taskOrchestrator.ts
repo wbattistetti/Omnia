@@ -7,11 +7,11 @@
  */
 
 import { buildTaskTreeNodes, cloneTemplateSteps } from './taskUtils';
-import { AdaptTaskTreePromptToContext } from './ddtPromptAdapter';
-import { generateAllTaskTreeStepsFromAI } from './ddtStepGenerator';
+import { AdaptTaskTreePromptToContext } from './taskTreePromptAdapter';
+import { generateAllTaskTreeStepsFromAI } from './taskTreeStepGenerator';
 import { DialogueTaskService } from '../services/DialogueTaskService';
 import type { Task, TaskTreeNode } from '../types/taskTypes';
-import type { SchemaNode } from '../components/DialogueDataTemplateBuilder/DDTWizard/types';
+import type { SchemaNode } from '../components/TaskTreeBuilder/TaskTreeWizard/types';
 
 /**
  * CASO 1: Template candidato trovato

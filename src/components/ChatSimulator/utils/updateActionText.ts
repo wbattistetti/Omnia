@@ -1,4 +1,4 @@
-import type { AssembledDDT } from '../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledTaskTree } from '../../../TaskTreeBuilder/DDTAssembler/currentDDT.types';
 
 /**
  * Finds and updates action.text in the DDT structure for a given textKey and stepType.
@@ -6,12 +6,12 @@ import type { AssembledDDT } from '../../../DialogueDataTemplateBuilder/DDTAssem
  * of truth (action.text) that StepEditor uses.
  */
 export function updateActionTextInDDT(
-  ddt: AssembledDDT,
+  ddt: AssembledTaskTree,
   textKey: string,
   stepType: string,
   newText: string,
   escalationNumber?: number
-): AssembledDDT {
+): AssembledTaskTree {
   if (!ddt || !textKey) return ddt;
 
   // Map stepType to stepKey (Chat Simulator uses different names than DDT structure)

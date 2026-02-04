@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import DDTWizard from '../DDTWizard';
+import TaskTreeWizard from '../DDTWizard';
 
 // Mock fetch
 const mockFetch = vi.fn();
@@ -23,7 +23,7 @@ describe('DDTWizard', () => {
         subData: ['day', 'month', 'year']
       }
     };
-    
+
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => mockResponse
@@ -52,7 +52,7 @@ describe('DDTWizard', () => {
         icon: 'Mail'
       }
     };
-    
+
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => mockResponse
@@ -82,7 +82,7 @@ describe('DDTWizard', () => {
         subData: []
       }
     };
-    
+
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => mockResponse
@@ -131,7 +131,7 @@ describe('DDTWizard', () => {
         subData: ['day', 'month', 'year']
       }
     };
-    
+
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => mockResponse
@@ -148,7 +148,7 @@ describe('DDTWizard', () => {
     await waitFor(() => {
       expect(screen.getByText('Create a dialogue for:')).toBeInTheDocument();
     });
-    
+
     fireEvent.click(screen.getByText('Wrong'));
 
     // Check that we're back to input step with current data shown
@@ -160,9 +160,9 @@ describe('DDTWizard', () => {
 
   it('should call onCancel when cancel button is clicked', () => {
     render(<DDTWizard onCancel={mockOnCancel} onComplete={mockOnComplete} />);
-    
+
     fireEvent.click(screen.getByText('Annulla'));
-    
+
     expect(mockOnCancel).toHaveBeenCalledTimes(1);
   });
-}); 
+});

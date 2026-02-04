@@ -3,7 +3,7 @@
 
 // TODO: Flow orchestrator will be refactored - temporarily isolated
 // import { instanceRepository } from '../../../services/InstanceRepository';
-import type { AssembledDDT } from '../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledTaskTree } from '../../TaskTreeBuilder/DDTAssembler/currentDDT.types';
 import { getDDTForRow, validateDDT } from './rowHelpers';
 import { resolveAsk } from '../messageResolvers';
 import { getStepColor } from '../chatSimulatorUtils';
@@ -48,11 +48,11 @@ export function playMessage(row: any, generateId: () => string): PlayedMessage[]
 export function playDDT(
   row: any,
   resolveAct: (row: any) => any,
-  toAssembled: (raw: any) => AssembledDDT | null,
+  toAssembled: (raw: any) => AssembledTaskTree | null,
   translations: Record<string, string>,
   legacyDict: Record<string, string>,
   generateId: () => string
-): { messages: PlayedMessage[]; ddt: AssembledDDT | null; error?: string } {
+): { messages: PlayedMessage[]; ddt: AssembledTaskTree | null; error?: string } {
   try {
     const debugEnabled = localStorage.getItem('debug.chatSimulator') === '1';
 

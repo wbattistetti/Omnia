@@ -1,7 +1,7 @@
 // DDT Engine Adapter - Bridge tra nuova logica e interfaccia esistente
 // Permette test side-by-side senza rompere codice esistente
 
-import type { AssembledDDT } from '../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledTaskTree } from '../../TaskTreeBuilder/DDTAssembler/currentDDT.types';
 import type {
   DDTState,
   RetrieveResult,
@@ -33,7 +33,7 @@ function getUseNewEngine(): boolean {
  * ✅ NEW: Usa backend DDT Engine tramite SSE (Server-Sent Events) - NO POLLING!
  */
 async function executeGetDataHierarchicalBackend(
-  ddt: AssembledDDT,
+  ddt: AssembledTaskTree,
   state: DDTState,
   callbacks: DDTNavigatorCallbacks
 ): Promise<RetrieveResult> {
@@ -290,7 +290,7 @@ async function executeGetDataHierarchicalBackend(
  * (Versione locale - senza backend)
  */
 async function executeGetDataHierarchicalNewLocal(
-  ddt: AssembledDDT,
+  ddt: AssembledTaskTree,
   state: DDTState,
   callbacks: DDTNavigatorCallbacks
 ): Promise<RetrieveResult> {
@@ -320,7 +320,7 @@ async function executeGetDataHierarchicalNewLocal(
  * (Versione pubblica - sceglie tra backend e locale)
  */
 export async function executeGetDataHierarchicalNew(
-  ddt: AssembledDDT,
+  ddt: AssembledTaskTree,
   state: DDTState,
   callbacks: DDTNavigatorCallbacks
 ): Promise<RetrieveResult> {
@@ -338,7 +338,7 @@ export async function executeGetDataHierarchicalNew(
  * Wrapper che sceglie tra vecchio e nuovo engine in base a feature flag
  */
 export async function executeGetDataHierarchicalWithFallback(
-  ddt: AssembledDDT,
+  ddt: AssembledTaskTree,
   state: DDTState,
   callbacks: DDTNavigatorCallbacks,
   useOldEngine: () => Promise<RetrieveResult>

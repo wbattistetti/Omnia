@@ -1,7 +1,7 @@
 // DialogueStep: Flat structure for dialogue steps (replaces nested data[].steps)
 // Part of hybrid DDT structure migration
 
-import type { StepGroup, Escalation } from '../components/DialogueDataTemplateBuilder/DDTAssembler/types';
+import type { StepGroup, Escalation } from '../components/TaskTreeBuilder/DDTAssembler/types';
 
 /**
  * DialogueStep: Flat representation of a dialogue step

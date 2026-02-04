@@ -36,7 +36,7 @@ import { generateId } from '../../../../utils/idGenerator';
 import { taskRepository } from '../../../../services/TaskRepository';
 import { useRowExecutionHighlight } from '../../executionHighlight/useExecutionHighlight';
 import { getTaskIdFromRow, updateRowTaskType, createRowWithTask, getTemplateId } from '../../../../utils/taskHelpers'; // ✅ RINOMINATO: updateRowTaskAction → updateRowTaskType
-import TemplatePreviewDialog from '../../../DialogueDataTemplateBuilder/TemplatePreviewDialog';
+import TemplatePreviewDialog from '../../../TaskTreeBuilder/TemplatePreviewDialog';
 
 const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps> = (
   {
@@ -1979,7 +1979,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                         });
 
                         try {
-                          const { loadAndAdaptTaskTreeForExistingTask } = await import('../../../../utils/ddtInstanceManager');
+                          const { loadAndAdaptTaskTreeForExistingTask } = await import('../../../../utils/taskTreeManager');
 
                           // ✅ Usa funzione centralizzata (gestisce tutto: buildTaskTreeNodes, cloneSteps, adattamento)
                           const { taskTree, adapted } = await loadAndAdaptTaskTreeForExistingTask(taskForType, projectId);

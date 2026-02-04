@@ -1,7 +1,7 @@
 // DDT Engine Types - New Clean Architecture
 // This file defines types for the new DDT engine implementation
 
-import type { AssembledDDT, dataNode } from '../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledTaskTree, dataNode } from '../../TaskTreeBuilder/DDTAssembler/currentDDT.types';
 import type { DDTNavigatorCallbacks } from './ddtTypes';
 
 // ============================================================================

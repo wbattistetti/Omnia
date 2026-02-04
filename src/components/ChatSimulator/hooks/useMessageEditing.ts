@@ -1,14 +1,14 @@
 import React from 'react';
 import type { Message } from '../UserMessage';
 import { useTaskTreeManager } from '../../../context/DDTManagerContext';
-import type { AssembledDDT } from '../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledTaskTree } from '../../../TaskTreeBuilder/DDTAssembler/currentDDT.types';
 import { updateActionTextInDDT } from '../utils/updateActionText';
 
 interface UseMessageEditingProps {
   messages: Message[];
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
-  currentDDT: AssembledDDT;
-  onUpdateDDT?: (updater: (ddt: AssembledDDT) => AssembledDDT) => void;
+  currentDDT: AssembledTaskTree;
+  onUpdateDDT?: (updater: (ddt: AssembledTaskTree) => AssembledTaskTree) => void;
 }
 
 export function useMessageEditing({ messages, setMessages, currentDDT, onUpdateDDT }: UseMessageEditingProps) {

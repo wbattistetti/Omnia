@@ -4,7 +4,7 @@ import { classifyTaskInteractivity } from '../../nlp/taskInteractivity';
 import SidebarItem from './SidebarItem';
 import { Pencil, Trash2 } from 'lucide-react';
 import { Category, ProjectEntityItem, EntityType } from '../../types/project';
-import DDTBuilder from '../DialogueDataTemplateBuilder/DDTBuilder';
+import DDTBuilder from '../TaskTreeBuilder/DDTBuilder';
 
 interface SidebarCategoryProps {
   category: Category<ProjectEntityItem>;

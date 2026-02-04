@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import SidebarEntityAccordion from './SidebarEntityAccordion';
 import { Calendar, Mail, MapPin, FileText, Settings, Trash2, Loader, Plus, Save } from 'lucide-react';
-import DDTBuilder from '../DialogueDataTemplateBuilder/DDTBuilder';
+import DDTBuilder from '../TaskTreeBuilder/DDTBuilder';
 import { FontProvider } from '../../context/FontContext';
 
 interface DDTSectionProps {

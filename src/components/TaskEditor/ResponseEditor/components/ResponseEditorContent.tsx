@@ -11,7 +11,7 @@
  */
 
 import React from 'react';
-import DDTWizard from '../../../DialogueDataTemplateBuilder/DDTWizard/DDTWizard';
+import TaskTreeWizard from '../../../TaskTreeBuilder/TaskTreeWizard/DDTWizard';
 import ContractWizard from '../ContractWizard/ContractWizard';
 import IntentMessagesBuilder from './IntentMessagesBuilder';
 import type { Task, TaskTree } from '../../../../types/taskTypes';
@@ -109,7 +109,7 @@ export function ResponseEditorContent({
     // Show DDT Wizard
     return (
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-        <DDTWizard
+        <TaskTreeWizard
           taskType={task?.type ? String(task.type) : undefined}
           taskLabel={task?.label || ''}
           initialTaskTree={getInitialTaskTree()}

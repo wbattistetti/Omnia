@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import DDTWizard from '../DDTWizard';
+import TaskTreeWizard from '../TaskTreeWizard/DDTWizard';
 
 // Mock fetch per simulare le risposte del backend
 const mockFetch = vi.fn();
@@ -67,7 +67,7 @@ describe('DDT Builder SubData Integration', () => {
         })
       });
 
-    render(<DDTWizard />);
+    render(<TaskTreeWizard />);
 
     // Verifica che il wizard sia renderizzato
     expect(screen.getByText(/Creazione DDT/i)).toBeInTheDocument();
@@ -160,7 +160,7 @@ describe('DDT Builder SubData Integration', () => {
       })
       .mockRejectedValueOnce(new Error('Network error')); // Errore per subData
 
-    render(<DDTWizard />);
+    render(<TaskTreeWizard />);
 
     const input = screen.getByPlaceholderText(/Che tipo di dato vuoi acquisire/i);
     await user.type(input, 'data di nascita');
@@ -176,4 +176,4 @@ describe('DDT Builder SubData Integration', () => {
       );
     });
   });
-}); 
+});

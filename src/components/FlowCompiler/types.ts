@@ -4,7 +4,7 @@
 import type { Task } from '../../types/taskTypes';
 import type { Node, Edge } from 'reactflow';
 import type { FlowNode, EdgeData } from '../Flowchart/types/flowTypes';
-import type { AssembledDDT } from '../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledTaskTree } from '../TaskTreeBuilder/DDTAssembler/currentDDT.types';
 
 /**
  * Task State: Execution state of a task

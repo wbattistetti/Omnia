@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import type { AssembledDDT } from '../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledTaskTree } from '../../../TaskTreeBuilder/DDTAssembler/currentDDT.types';
 import { extractField, type ExtractionContext } from '../../../nlp/pipeline';
 import type { SlotDecision } from '../../../nlp/types';
 import { getStepColor } from '../chatSimulatorUtils';
@@ -16,7 +16,7 @@ import { extractTranslations } from '../DDTAdapter';
 interface UseMessageHandlingProps {
   state: any;
   send: (text: string) => Promise<void>;
-  currentDDT: AssembledDDT;
+  currentDDT: AssembledTaskTree;
   translations?: Record<string, string>;
   legacyDict: Record<string, string>;
   messages: Message[];

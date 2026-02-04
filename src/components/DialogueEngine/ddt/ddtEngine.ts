@@ -2,7 +2,7 @@
 // Implementazione parallela: NON tocca il codice esistente
 // Permette test side-by-side e switch graduale
 
-import type { AssembledDDT, dataNode } from '../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledTaskTree, dataNode } from '../../TaskTreeBuilder/DDTAssembler/currentDDT.types';
 import type { DDTNavigatorCallbacks } from './ddtTypes';
 import { getStep, getEscalationRecovery, executeStep } from './ddtSteps';
 import { getTaskSemantics } from '../../../utils/taskSemantics';
@@ -82,7 +82,7 @@ const DEFAULT_LIMITS: Limits = {
 // ============================================================================
 
 export async function runDDT(
-  ddtInstance: AssembledDDT,
+  ddtInstance: AssembledTaskTree,
   callbacks: DDTNavigatorCallbacks,
   limits: Limits = DEFAULT_LIMITS
 ): Promise<RetrieveResult> {
@@ -265,7 +265,7 @@ export async function runDDT(
  * ✅ Uses referenceId from instance (not recalculated from template)
  */
 function getNextData(
-  ddtInstance: AssembledDDT,
+  ddtInstance: AssembledTaskTree,
   state: DDTEngineState
 ): CurrentData | null {
   // Normalizza data (può essere array o singolo oggetto)
@@ -899,7 +899,7 @@ function getState(
 // HELPER FUNCTIONS
 // ============================================================================
 
-function initializeState(ddtInstance: AssembledDDT): DDTEngineState {
+function initializeState(ddtInstance: AssembledTaskTree): DDTEngineState {
   const state: DDTEngineState = {
     memory: {},
     counters: {},
@@ -1022,7 +1022,7 @@ function isdataSaturated(
 }
 
 function peekNextData(
-  ddtInstance: AssembledDDT,
+  ddtInstance: AssembledTaskTree,
   state: DDTEngineState
 ): CurrentData | null {
   // Simula GetNextData senza modificare lo stato

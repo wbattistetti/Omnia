@@ -1,4 +1,4 @@
-import type { AssembledDDT, dataNode } from '../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledTaskTree, dataNode } from '../../../TaskTreeBuilder/DDTAssembler/currentDDT.types';
 import type {
   DDTTemplateV2,
   DDTNode,
@@ -308,7 +308,7 @@ async function mapNode(current: dataNode, asType: 'main' | 'sub', projectLanguag
   } as DDTNode;
 }
 
-export async function adaptCurrentToV2(current: AssembledDDT, projectLanguage: string): Promise<DDTTemplateV2> {
+export async function adaptCurrentToV2(current: AssembledTaskTree, projectLanguage: string): Promise<DDTTemplateV2> {
   // ✅ projectLanguage è OBBLIGATORIO - nessun fallback
   if (!projectLanguage) {
     throw new Error('[adaptCurrentToV2] projectLanguage is REQUIRED. Cannot adapt DDT without project language.');

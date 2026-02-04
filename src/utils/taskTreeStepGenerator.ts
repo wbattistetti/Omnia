@@ -4,10 +4,10 @@
  * Usato quando non c'è un template candidato e dobbiamo generare tutto da zero.
  */
 
-import { generateStepsSkipDetectType } from '../components/DialogueDataTemplateBuilder/orchestrator/stepGenerator';
-import { buildDDT } from '../components/DialogueDataTemplateBuilder/DDTAssembler/DDTBuilder';
-import type { SchemaNode } from '../components/DialogueDataTemplateBuilder/DDTWizard/types';
-import type { Step, StepResult } from '../components/DialogueDataTemplateBuilder/orchestrator/types';
+import { generateStepsSkipDetectType } from '../components/TaskTreeBuilder/orchestrator/stepGenerator';
+import { buildDDT } from '../components/TaskTreeBuilder/DDTAssembler/DDTBuilder';
+import type { SchemaNode } from '../components/TaskTreeBuilder/TaskTreeWizard/types';
+import type { Step, StepResult } from '../components/TaskTreeBuilder/orchestrator/types';
 import { v4 as uuidv4 } from 'uuid';
 
 /**

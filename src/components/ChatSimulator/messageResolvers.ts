@@ -1,4 +1,4 @@
-import type { AssembledDDT } from '../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledTaskTree } from '../TaskTreeBuilder/DDTAssembler/currentDDT.types';
 
 /**
  * ❌ REMOVED: All runtime logic functions (resolveAsk, resolveConfirm, resolveSuccess, resolveEscalation, etc.)
@@ -10,7 +10,7 @@ import type { AssembledDDT } from '../DialogueDataTemplateBuilder/DDTAssembler/c
 
 // Helper to find the original node from currentDDT by label/id
 // This is NOT runtime logic - it's just for accessing the DDT structure
-export function findOriginalNode(currentDDT: AssembledDDT, nodeLabel?: string, nodeId?: string): any {
+export function findOriginalNode(currentDDT: AssembledTaskTree, nodeLabel?: string, nodeId?: string): any {
   if (!currentDDT) return undefined;
   const mains = Array.isArray((currentDDT as any)?.data)
     ? (currentDDT as any).data

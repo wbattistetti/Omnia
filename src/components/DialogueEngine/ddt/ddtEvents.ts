@@ -1,7 +1,7 @@
 // DDT Event Handling
 
 import type { RetrieveEvent, DDTNavigatorCallbacks } from './ddtTypes';
-import type { AssembledDDT } from '../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledTaskTree } from '../../TaskTreeBuilder/DDTAssembler/currentDDT.types';
 
 /**
  * Gets retrieve event from system
@@ -9,8 +9,8 @@ import type { AssembledDDT } from '../../DialogueDataTemplateBuilder/DDTAssemble
  */
 export async function getRetrieveEvent(
   nodeId: string,
-  onGetRetrieveEvent?: (nodeId: string, ddt?: AssembledDDT) => Promise<RetrieveEvent>,
-  ddt?: AssembledDDT
+  onGetRetrieveEvent?: (nodeId: string, ddt?: AssembledTaskTree) => Promise<RetrieveEvent>,
+  ddt?: AssembledTaskTree
 ): Promise<RetrieveEvent> {
   // If callback provided, use it (async - waits for user input)
   if (onGetRetrieveEvent) {

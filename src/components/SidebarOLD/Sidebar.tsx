@@ -11,35 +11,35 @@ import { AddButton } from './AddButton';
 import { EntityType } from '../../types/project';
 import { useSidebarTheme } from './SidebarThemeContext';
 import { getAllDialogueTemplates } from '../../services/ProjectDataService';
-import DDTBuilder from '../DialogueDataTemplateBuilder/DDTBuilder';
+import DDTBuilder from '../TaskTreeBuilder/DDTBuilder';
 import { useFilteredProjectData } from './useFilteredProjectData';
 import DeleteConfirmation from './DeleteConfirmation';
 
 // Configuration for each entity type in the sidebar
 const entityConfig = {
-  agentActs: { 
-    title: 'Agent Acts', 
-    icon: <Bot className="w-5 h-5 text-purple-400" /> 
+  agentActs: {
+    title: 'Agent Acts',
+    icon: <Bot className="w-5 h-5 text-purple-400" />
   },
-  userActs: { 
-    title: 'User Acts', 
-    icon: <User className="w-5 h-5 text-green-400" /> 
+  userActs: {
+    title: 'User Acts',
+    icon: <User className="w-5 h-5 text-green-400" />
   },
-  backendActions: { 
-    title: 'Backend Actions', 
-    icon: <Database className="w-5 h-5 text-blue-400" /> 
+  backendActions: {
+    title: 'Backend Actions',
+    icon: <Database className="w-5 h-5 text-blue-400" />
   },
-  conditions: { 
-    title: 'Conditions', 
-    icon: <GitBranch className="w-5 h-5 text-yellow-400" /> 
+  conditions: {
+    title: 'Conditions',
+    icon: <GitBranch className="w-5 h-5 text-yellow-400" />
   },
-  tasks: { 
-    title: 'Tasks', 
-    icon: <CheckSquare className="w-5 h-5 text-orange-400" /> 
+  tasks: {
+    title: 'Tasks',
+    icon: <CheckSquare className="w-5 h-5 text-orange-400" />
   },
-  macrotasks: { 
-    title: 'Macrotasks', 
-    icon: <Layers className="w-5 h-5 text-red-400" /> 
+  macrotasks: {
+    title: 'Macrotasks',
+    icon: <Layers className="w-5 h-5 text-red-400" />
   }
 };
 
@@ -68,8 +68,8 @@ const DEFAULT_FONT_SIZE = 16;
  * - Data Dialogue Templates (DDT) are managed in a dedicated accordion.
  * - Uses memoized components (Accordion, CategoryItem) for performance.
  */
-export const Sidebar: React.FC<SidebarProps> = ({ 
-  isCollapsed = false, 
+export const Sidebar: React.FC<SidebarProps> = ({
+  isCollapsed = false,
   onToggleCollapse,
   onOpenDDTEditor,
   openedDDTId,
@@ -79,15 +79,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   // Project data and update handlers from context
   const { data, loading, error } = useProjectData();
-  const { 
-    addCategory, 
-    deleteCategory, 
-    updateCategory, 
-    addItem, 
-    deleteItem, 
-    updateItem 
+  const {
+    addCategory,
+    deleteCategory,
+    updateCategory,
+    addItem,
+    deleteItem,
+    updateItem
   } = useProjectDataUpdate();
-  
+
   // Custom hook: handles search/filter logic and exposes filteredData, searchTerm, setSearchTerm
   const { filteredData, searchTerm, setSearchTerm } = useFilteredProjectData(data);
 
@@ -602,19 +602,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       key={category.id}
                       category={category}
                       entityType={entityType as EntityType}
-                      onAddItem={(name: string, description?: string) => 
+                      onAddItem={(name: string, description?: string) =>
                         addItem(entityType as EntityType, category.id, name, description || '')
                       }
-                      onDeleteCategory={() => 
+                      onDeleteCategory={() =>
                         deleteCategory(entityType as EntityType, category.id)
                       }
-                      onUpdateCategory={(updates: any) => 
+                      onUpdateCategory={(updates: any) =>
                         updateCategory(entityType as EntityType, category.id, updates)
                       }
-                      onDeleteItem={(itemId: string) => 
+                      onDeleteItem={(itemId: string) =>
                         deleteItem(entityType as EntityType, category.id, itemId)
                       }
-                      onUpdateItem={(itemId: string, updates: any) => 
+                      onUpdateItem={(itemId: string, updates: any) =>
                         updateItem(entityType as EntityType, category.id, itemId, updates)
                       }
                     />

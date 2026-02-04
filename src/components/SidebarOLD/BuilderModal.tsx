@@ -1,5 +1,5 @@
 import React from 'react';
-import DDTBuilder from '../DialogueDataTemplateBuilder/DDTBuilder';
+import DDTBuilder from '../TaskTreeBuilder/DDTBuilder';
 
 // TODO: importa qui tutti i wizard reali (AgentActBuilder, UserActBuilder, ecc.)
 const AgentActBuilder = (props: any) => { React.useState(null); return <div>AgentActBuilder (TODO)</div>; };

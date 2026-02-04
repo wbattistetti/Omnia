@@ -17,7 +17,7 @@ vi.mock('../../ContractWizard/ContractWizard', () => ({
   ),
 }));
 
-vi.mock('../../../../DialogueDataTemplateBuilder/DDTWizard/DDTWizard', () => ({
+vi.mock('../../../../TaskTreeBuilder/TaskTreeWizard/TaskTreeWizard', () => ({
   default: ({ onCancel, onComplete }: any) => (
     <div data-testid="ddt-wizard">
       <button onClick={onCancel}>Cancel</button>

@@ -1,5 +1,5 @@
 import React from 'react';
-import DDTWizard from './DDTWizard/DDTWizard';
+import DDTWizard from './TaskTreeWizard/DDTWizard';
 
 const DDTBuilder: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, messages?: any) => void; initialDDT?: any; startOnStructure?: boolean }> = ({ onCancel, onComplete, initialDDT, startOnStructure }) => {
   React.useEffect(() => {
@@ -14,4 +14,4 @@ const DDTBuilder: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, me
   );
 };
 
-export default DDTBuilder; 
+export default DDTBuilder;

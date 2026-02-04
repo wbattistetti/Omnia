@@ -393,7 +393,7 @@ export async function loadAndAdaptTaskTreeForExistingTask(
 
       // ✅ 8.2. Adatta prompt al contesto usando la nuova funzione centralizzata
       // ✅ Usa AdaptTaskTreePromptToContext che gestisce tutto: estrazione, chiamata API, salvataggio
-      const { AdaptTaskTreePromptToContext } = await import('./ddtPromptAdapter');
+      const { AdaptTaskTreePromptToContext } = await import('./taskTreePromptAdapter');
 
       try {
         await AdaptTaskTreePromptToContext(task, task.label || '', false); // false = solo nodi radice

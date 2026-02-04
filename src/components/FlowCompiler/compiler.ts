@@ -2,7 +2,7 @@
 
 import type { Node, Edge } from 'reactflow';
 import type { FlowNode, EdgeData } from '../Flowchart/types/flowTypes';
-import type { AssembledDDT } from '../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledTaskTree } from '../TaskTreeBuilder/DDTAssembler/currentDDT.types';
 import type { CompiledTask, CompilationResult, DDTExpansion } from './types';
 import { buildFirstRowCondition, buildSequentialCondition } from './conditionBuilder';
 import { expandDDT } from './ddtExpander';
@@ -13,7 +13,7 @@ import { templateIdToTaskType, TaskType } from '../../types/taskTypes';
 
 interface CompilerOptions {
   getTask: (taskId: string) => any; // Function to resolve Task from taskId
-  getDDT?: (taskId: string) => AssembledDDT | null; // Function to get DDT for DataRequest tasks
+  getDDT?: (taskId: string) => AssembledTaskTree | null; // Function to get DDT for DataRequest tasks
 }
 
 /**

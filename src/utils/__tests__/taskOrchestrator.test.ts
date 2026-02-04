@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { generateStructureFromAI, generateTaskStructureFromAI } from '../taskOrchestrator';
-import type { SchemaNode } from '../../components/DialogueDataTemplateBuilder/DDTWizard/types';
+import type { SchemaNode } from '../../components/TaskTreeBuilder/TaskTreeWizard/types';
 
 // Mock callAIInference
 vi.mock('../../components/TaskEditor/ResponseEditor/hooks/helpers/aiInference', () => ({

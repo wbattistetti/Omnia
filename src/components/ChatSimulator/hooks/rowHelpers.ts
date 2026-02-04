@@ -3,7 +3,7 @@
 
 import { taskRepository } from '../../../services/TaskRepository';
 import { getTemplateId } from '../../../utils/taskHelpers';
-import type { AssembledDDT } from '../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledTaskTree } from '../../../TaskTreeBuilder/DDTAssembler/currentDDT.types';
 
 /**
  * Get instance-like object from Task for backward compatibility
@@ -49,7 +49,7 @@ export interface DDTValidationResult {
  * @param row - The row from the flowchart node
  * @param resolveAct - Function to resolve act from template (from useFlowOrchestrator)
  * @param toAssembled - Function to normalize DDT format (from useFlowOrchestrator)
- * @returns AssembledDDT or null if not found
+ * @returns AssembledTaskTree or null if not found
  */
 /**
  * Get DDT for a row - NO FALLBACK, only from instance
@@ -57,13 +57,13 @@ export interface DDTValidationResult {
  * @param row - The row from the flowchart node
  * @param resolveAct - Function to resolve act from template (unused, kept for API compatibility)
  * @param toAssembled - Function to normalize DDT format
- * @returns AssembledDDT or null if not found in instance
+ * @returns AssembledTaskTree or null if not found in instance
  */
 export function getDDTForRow(
   row: any,
   resolveAct: (row: any) => any,
-  toAssembled: (raw: any) => AssembledDDT | null
-): AssembledDDT | null {
+  toAssembled: (raw: any) => AssembledTaskTree | null
+): AssembledTaskTree | null {
   try {
     const debugEnabled = localStorage.getItem('debug.chatSimulator') === '1';
 
@@ -163,7 +163,7 @@ export function getDDTForRow(
  * @param basicOnly - If true, only validates basic structure (data, label) without type-specific checks
  * @returns Validation result with reason if invalid
  */
-export function validateDDT(ddt: AssembledDDT | null, expectedKind?: 'intent' | 'data' | string, basicOnly: boolean = false): DDTValidationResult {
+export function validateDDT(ddt: AssembledTaskTree | null, expectedKind?: 'intent' | 'data' | string, basicOnly: boolean = false): DDTValidationResult {
   // Check if DDT exists
   if (!ddt) {
     return { valid: false, reason: 'DDT_MISSING' };

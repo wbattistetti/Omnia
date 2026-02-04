@@ -3,14 +3,14 @@
 
 import { runDDT } from '../ddtEngine';
 import { executeGetDataHierarchical } from '../ddtNavigator';
-import type { AssembledDDT, dataNode } from '../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledTaskTree, dataNode } from '../../../TaskTreeBuilder/DDTAssembler/currentDDT.types';
 import type { DDTState, DDTNavigatorCallbacks } from '../ddtTypes';
 
 // ============================================================================
 // HELPER: Crea DDT di test minimale
 // ============================================================================
 
-function createTestDDT(overrides?: Partial<AssembledDDT>): AssembledDDT {
+function createTestDDT(overrides?: Partial<AssembledTaskTree>): AssembledTaskTree {
   const data: dataNode = {
     id: 'test-main',
     label: 'Test Data',

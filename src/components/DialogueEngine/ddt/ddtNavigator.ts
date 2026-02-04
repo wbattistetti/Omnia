@@ -1,6 +1,6 @@
 // DDT Navigator - Entry point for hierarchical DDT navigation
 
-import type { AssembledDDT } from '../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledTaskTree } from '../../TaskTreeBuilder/DDTAssembler/currentDDT.types';
 import type { DDTState, RetrieveResult, DDTNavigatorCallbacks } from './ddtTypes';
 import { retrieve } from './ddtRetrieve';
 import { findMissingRequiredSub, isAllRequiredSubsFilled } from './ddtMemory';
@@ -32,7 +32,7 @@ function getUseNewEngineFromStorage(): boolean {
  * @param options.useNewEngine - If true, uses new DDT engine. If false or undefined, reads from localStorage/env.
  */
 export async function executeGetDataHierarchical(
-  ddt: AssembledDDT,
+  ddt: AssembledTaskTree,
   state: DDTState,
   callbacks: DDTNavigatorCallbacks,
   options?: { useNewEngine?: boolean }
@@ -68,7 +68,7 @@ export async function executeGetDataHierarchical(
  * Old engine implementation (renamed from executeGetDataHierarchical)
  */
 async function executeGetDataHierarchicalOld(
-  ddt: AssembledDDT,
+  ddt: AssembledTaskTree,
   state: DDTState,
   callbacks: DDTNavigatorCallbacks
 ): Promise<RetrieveResult> {

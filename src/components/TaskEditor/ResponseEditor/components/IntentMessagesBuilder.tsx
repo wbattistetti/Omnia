@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
-import ProgressBar from '../../../DialogueDataTemplateBuilder/DDTWizard/components/ProgressBar';
+import ProgressBar from '../../../TaskTreeBuilder/TaskTreeWizard/components/ProgressBar';
 import { useAIProvider } from '../../../../context/AIProviderContext';
 
 interface IntentMessagesBuilderProps {

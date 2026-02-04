@@ -53,4 +53,7 @@ export interface AssembledDDT {
   introduction?: StepGroup; // Optional introduction step at root level (aggregate)
 }
 
+// ✅ Alias for TaskTree terminology (backward compatible)
+export type AssembledTaskTree = AssembledDDT;
+
 

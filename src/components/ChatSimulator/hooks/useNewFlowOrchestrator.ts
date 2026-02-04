@@ -7,7 +7,7 @@ import { useDialogueEngine } from '../../DialogueEngine';
 // Frontend taskExecutors removed - backend orchestrator handles all task execution
 import { taskRepository } from '../../../services/TaskRepository';
 import { getTemplateId } from '../../../utils/taskHelpers';
-import type { AssembledDDT } from '../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledTaskTree } from '../../../TaskTreeBuilder/DDTAssembler/currentDDT.types';
 import type { PlayedMessage } from './flowRowPlayer';
 import { useDDTTranslations } from '../../../hooks/useDDTTranslations';
 import { extractGUIDsFromDDT } from '../../../utils/ddtUtils';
@@ -20,7 +20,7 @@ interface UseNewFlowOrchestratorProps {
   nodes: Node<FlowNode>[];
   edges: Edge<EdgeData>[];
   onMessage?: (message: PlayedMessage) => void;
-  onDDTStart?: (ddt: AssembledDDT) => void;
+  onDDTStart?: (ddt: AssembledTaskTree) => void;
   onDDTComplete?: () => void;
 }
 
@@ -76,7 +76,7 @@ export function useNewFlowOrchestrator({
 
   // ✅ MIGRATION: Use getTemplateId() helper
   // Get DDT from task (for GetData tasks)
-  const getDDT = useCallback((taskId: string): AssembledDDT | null => {
+  const getDDT = useCallback((taskId: string): AssembledTaskTree | null => {
     const task = taskRepository.getTask(taskId);
     if (!task) return null;
     const templateId = getTemplateId(task);
@@ -96,7 +96,7 @@ export function useNewFlowOrchestrator({
   }, []);
 
   // Track current DDT
-  const [currentDDTState, setCurrentDDTState] = useState<AssembledDDT | null>(null);
+  const [currentDDTState, setCurrentDDTState] = useState<AssembledTaskTree | null>(null);
 
   // Debug: log when currentDDTState changes (only if DDT exists or in flow mode)
   React.useEffect(() => {
@@ -117,7 +117,7 @@ export function useNewFlowOrchestrator({
   const ddtTranslations = useDDTTranslations(currentDDTState);
 
   // Helper function to load translations from a DDT (can be called in callbacks, not a hook)
-  const loadTranslationsFromDDT = useCallback((ddt: AssembledDDT | null | undefined): Record<string, string> => {
+  const loadTranslationsFromDDT = useCallback((ddt: AssembledTaskTree | null | undefined): Record<string, string> => {
     if (!ddt) {
       return {};
     }
@@ -162,7 +162,7 @@ export function useNewFlowOrchestrator({
   }, [currentDDTState, ddtTranslations]);
 
   // Use ref to store current DDT for async callbacks (avoids stale closure)
-  const currentDDTRef = React.useRef<AssembledDDT | null>(null);
+  const currentDDTRef = React.useRef<AssembledTaskTree | null>(null);
 
   // Use ref to store translations for async callbacks
   const translationsRef = React.useRef<Record<string, string>>({});
@@ -177,7 +177,7 @@ export function useNewFlowOrchestrator({
   }, [ddtTranslations]);
 
   // Store DDT in closure for onGetRetrieveEvent callback
-  let currentDDTInClosure: AssembledDDT | null = null;
+    let currentDDTInClosure: AssembledTaskTree | null = null;
 
   // Track pending user input for DDT navigation
   // ✅ Use useRef instead of useState for immediate availability (no async state update)
@@ -467,7 +467,7 @@ export function useNewFlowOrchestrator({
       // TODO: Implement variable store update
       console.log('[useNewFlowOrchestrator] updateVariableStore called');
     },
-    setCurrentDDT: (ddt: AssembledDDT | null) => {
+    setCurrentDDT: (ddt: AssembledTaskTree | null) => {
       setCurrentDDTState(ddt);
     },
     updateCurrentActIndex: (index: number) => {

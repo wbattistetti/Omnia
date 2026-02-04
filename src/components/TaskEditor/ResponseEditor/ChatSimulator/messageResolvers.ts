@@ -1,11 +1,11 @@
-import type { AssembledDDT } from '../../../DialogueDataTemplateBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledTaskTree } from '../../../TaskTreeBuilder/DDTAssembler/currentDDT.types';
 
 /**
  * Helper to find the original node from currentDDT by label/id
  * Used by other components that need to access the original DDT structure
  */
 // ✅ NUOVO MODELLO: Usa nodes[] e subNodes[] invece di data[] e subTasks[]
-export function findOriginalNode(currentDDT: AssembledDDT, nodeLabel?: string, nodeId?: string): any {
+export function findOriginalNode(currentDDT: AssembledTaskTree, nodeLabel?: string, nodeId?: string): any {
   if (!currentDDT) return undefined;
   const mains = Array.isArray((currentDDT as any)?.nodes)
     ? (currentDDT as any).nodes

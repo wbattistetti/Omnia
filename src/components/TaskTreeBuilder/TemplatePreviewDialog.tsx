@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import DataCollection, { type SchemaNode } from './DDTWizard/MainDataCollection';
+import DataCollection, { type SchemaNode } from './TaskTreeWizard/MainDataCollection';
 
 interface TemplatePreviewDialogProps {
   open: boolean;
