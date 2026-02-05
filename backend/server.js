@@ -4459,17 +4459,21 @@ function getPatternMemoryService() {
 
 // Provider selection endpoint
 app.post('/step2-with-provider', async (req, res) => {
+  const requestId = Date.now();
+  console.log(`[STEP2][${requestId}] 📥 POST /step2-with-provider - Request received`);
+
   try {
     const { userDesc, provider = 'groq', model } = req.body;
 
-    console.log('[STEP2] Raw body:', req.body);
-    console.log('[STEP2] Parsed userDesc:', userDesc);
-    console.log('[STEP2] Parsed provider:', provider);
-    console.log('[STEP2] Parsed model:', model);
+    console.log(`[STEP2][${requestId}] Raw body:`, req.body);
+    console.log(`[STEP2][${requestId}] Parsed userDesc:`, userDesc);
+    console.log(`[STEP2][${requestId}] Parsed provider:`, provider);
+    console.log(`[STEP2][${requestId}] Parsed model:`, model);
 
     // Load templates from database
+    console.log(`[STEP2][${requestId}] Loading templates from database...`);
     const templates = await loadTemplatesFromDB();
-    console.log('[STEP2] Using', Object.keys(templates).length, 'templates from Factory DB cache');
+    console.log(`[STEP2][${requestId}] Using`, Object.keys(templates).length, 'templates from Factory DB cache');
 
     // Initialize orchestrator with templates (lazy initialization)
     // This pre-computes embeddings for faster retrieval
@@ -4574,8 +4578,18 @@ app.post('/step2-with-provider', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('[STEP2] Error:', error);
-    res.status(500).json({ error: error.message });
+    console.error(`[STEP2][${requestId}] ❌ ERROR:`, error);
+    console.error(`[STEP2][${requestId}] ❌ Error stack:`, error.stack);
+    console.error(`[STEP2][${requestId}] ❌ Error details:`, {
+      message: error.message,
+      name: error.name,
+      code: error.code,
+      body: req.body
+    });
+    res.status(500).json({
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 

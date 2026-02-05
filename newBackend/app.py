@@ -5,6 +5,7 @@ from newBackend.api.api_nlp import router as nlp_router
 from newBackend.api.api_proxy_express import router as proxy_router
 from newBackend.api.api_nlp_config import router as nlp_config_router
 from newBackend.api.api_factory import router as factory_router
+from newBackend.api.api_tasks import router as tasks_router
 import os
 import sys
 import httpx
@@ -259,6 +260,17 @@ except Exception as e:
     # Create empty router as fallback
     from fastapi import APIRouter
     api_factory_router = APIRouter()
+
+# Include tasks router with error handling
+try:
+    from newBackend.api.api_tasks import router as api_tasks_router
+    app.include_router(api_tasks_router)
+    print("[INFO] Tasks router loaded successfully")
+except Exception as e:
+    print(f"[WARNING] Tasks router failed to load: {e}")
+    # Create empty router as fallback
+    from fastapi import APIRouter
+    api_tasks_router = APIRouter()
 
 # Endpoint per verificare lo stato della cache
 @app.get("/api/cache/status")

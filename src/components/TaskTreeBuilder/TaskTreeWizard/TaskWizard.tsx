@@ -4,6 +4,8 @@ import WizardLoadingStep from './WizardLoadingStep';
 import WizardPipelineStep from './WizardPipelineStep';
 import WizardErrorStep from './WizardErrorStep';
 import WizardSupportModal from './WizardSupportModal';
+import TaskWizardCompact from './TaskWizardCompact';
+import { AccordionState } from './WizardAI';
 import DataCollection, { SchemaNode } from './MainDataCollection';
 import V2TogglePanel from './V2TogglePanel';
 import { computeWorkPlan } from './workPlan';
@@ -12,6 +14,7 @@ import { taskCounter } from '../../../utils/TaskCounter';
 import { PlanRunResult } from './planRunner';
 import { buildArtifactStore, mergeArtifactStores, moveArtifactsPath } from './artifactStore';
 import { assembleFinalTaskTree } from './assembleFinal';
+import { v4 as uuidv4 } from 'uuid';
 import { Hourglass, Bell } from 'lucide-react';
 import { useAIProvider } from '../../../context/AIProviderContext';
 import { debug, error } from '../../../utils/logger';
@@ -224,64 +227,26 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
     // ✅ NUOVO: Modalità compatta iniziale
     return startOnStructure ? 'structure' : 'input-compact';
   });
-  const [saving, setSaving] = useState<'factory' | 'project' | null>(null);
-  const [isCompactMode, setIsCompactMode] = useState<boolean>(() => {
-    // ✅ Inizia in modalità compatta se non c'è initialTaskTree o startOnStructure è false
-    return !startOnStructure && !initialTaskTree;
-  });
   const [isAIGenerating, setIsAIGenerating] = useState<boolean>(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
 
-  // ✅ Stati per refining textbox in step 'structure'
+  // ✅ Stati per refining textbox in accordion
   const [showRefiningTextbox, setShowRefiningTextbox] = useState<boolean>(false);
   const [refiningText, setRefiningText] = useState<string>('');
 
+  // ✅ Stato accordion AI
+  const [accordionState, setAccordionState] = useState<AccordionState>('collapsed');
+
+  // Legacy state (per expanded mode)
   const [pendingHeuristicMatch, setPendingHeuristicMatch] = useState<{
     schema: any;
     icon: string | null;
     mains0: SchemaNode[];
     root: string;
-  } | null>(() => {
-    // ✅ Phase 4A: Use only nodes (no fallback to data)
-    const nodes = initialTaskTree?.nodes;
-    if (initialTaskTree?._inferenceResult?.ai?.schema && nodes && Array.isArray(nodes) && nodes.length > 0) {
-      const mains = (nodes as any[]).map((m: any) => ({
-        id: m.id,  // ✅ CRITICAL: Preserve node ID (GUID from template)
-        label: m.label,
-        type: m.type,
-        icon: m.icon,
-        constraints: m.constraints || [],
-        // ✅ Steps non sono più dentro data, sono a root level
-        // ✅ CRITICO: Preserva nlpContract, templateId, kind
-        nlpContract: m.nlpContract || undefined,
-        templateId: m.templateId || undefined,
-        kind: m.kind || undefined,
-        subData: Array.isArray(m.subData) ? m.subData.map((s: any) => ({
-          id: s.id,  // ✅ CRITICAL: Preserve subData node ID (GUID from template)
-          label: s.label,
-          type: s.type,
-          icon: s.icon,
-          constraints: s.constraints || [],
-          // ✅ Steps non sono più dentro subData, sono a root level
-          // ✅ CRITICO: Preserva nlpContract, templateId, kind anche per sub
-          nlpContract: (s as any).nlpContract || undefined,
-          templateId: (s as any).templateId || undefined,
-          kind: (s as any).kind || undefined
-        })) : []
-      }));
-
-      return {
-        schema: initialTaskTree._inferenceResult.ai.schema,
-        icon: initialTaskTree._inferenceResult.ai.icon || null,
-        mains0: mains,
-        root: initialTaskTree.label || 'Data'
-      };
-    }
-    return null;
-  });
-
-  // Show input alongside confirmation when user clicks "No"
+  } | null>(null);
   const [showInputAlongsideConfirm, setShowInputAlongsideConfirm] = useState(false);
+  const [showRight, setShowRight] = useState<boolean>(false);
+  const [isCompactMode, setIsCompactMode] = useState<boolean>(false);
 
   // Schema editing state (from detect schema)
   const [schemaRootLabel, setSchemaRootLabel] = useState<string>(initialTaskTree?.label || '');
@@ -326,112 +291,31 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
     return [];
   });
 
+  // ✅ Sincronizza stato accordion con step (dopo la dichiarazione di mountedDataTree)
+  // ✅ In modalità compatta, accordionState è l'unica fonte di verità
+  // ✅ NOTA: accordionState viene gestito direttamente da handleCreateWithAI e handleDetectType
+  // ✅ Questo useEffect serve solo per inizializzazione e casi edge
+  React.useEffect(() => {
+    // ✅ Solo in modalità compatta gestiamo accordionState
+    if (step !== 'input-compact') {
+      return; // ✅ Ignora se non siamo in modalità compatta
+    }
+
+    // ✅ Caso A: Se un template è selezionato, accordion rimane collassato
+    if (selectedTemplateId) {
+      if (accordionState !== 'collapsed') {
+        setAccordionState('collapsed');
+      }
+      return;
+    }
+
+    // ✅ Caso B: Se AI sta generando, accordion è loading (gestito da handleCreateWithAI)
+    // ✅ Caso C: Se abbiamo struttura e non stiamo generando, accordion è structure-ready (gestito da handleDetectType)
+    // ✅ Non sovrascrivere se già impostato correttamente
+  }, [step, selectedTemplateId, accordionState]);
+
   // Check if TaskTree is composite (has multiple data or is explicitly composite)
-  const isCompositeTaskTree = useMemo(() => {
-    return mountedDataTree.length > 1 ||
-      (mountedDataTree.length === 1 && ((mountedDataTree[0] as any)?.subTasks && (mountedDataTree[0] as any).subTasks.length > 0) || (mountedDataTree[0]?.subData && mountedDataTree[0].subData.length > 0));
-  }, [mountedDataTree]);
-
-  // Save template to Factory (global)
-  const handleSaveToFactory = async () => {
-    if (!schemaRootLabel || mountedDataTree.length === 0) {
-      alert('Please complete the TaskTree structure before saving');
-      return;
-    }
-
-    setSaving('factory');
-    try {
-      const templateData = {
-        name: schemaRootLabel.toLowerCase().replace(/\s+/g, '_'),
-        label: schemaRootLabel,
-        type: isCompositeTaskTree ? 'composite' : 'atomic',
-        icon: 'Folder',
-        data: mountedDataTree.map(main => ({
-          templateRef: main.type,
-          label: main.label,
-          type: main.type,
-          icon: main.icon,
-          subData: main.subData || []
-        })),
-        synonyms: [], // Can be extended later
-        constraints: [],
-        validation: {},
-        metadata: {}
-      };
-
-      const response = await fetch('/api/factory/type-templates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(templateData)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to save: ${response.statusText}`);
-      }
-
-      const saved = await response.json();
-      console.log('[TaskTreeWizard] Saved to Factory:', saved);
-      alert('Template saved to Factory successfully!');
-    } catch (error: any) {
-      console.error('[TaskTreeWizard] Error saving to Factory:', error);
-      alert(`Error saving to Factory: ${error.message}`);
-    } finally {
-      setSaving(null);
-    }
-  };
-
-  // Save template to Project (project-specific)
-  const handleSaveToProject = async () => {
-    if (!currentProjectId) {
-      alert('No project selected. Please open a project first.');
-      return;
-    }
-
-    if (!schemaRootLabel || mountedDataTree.length === 0) {
-      alert('Please complete the TaskTree structure before saving');
-      return;
-    }
-
-    setSaving('project');
-    try {
-      const templateData = {
-        name: schemaRootLabel.toLowerCase().replace(/\s+/g, '_'),
-        label: schemaRootLabel,
-        type: isCompositeTaskTree ? 'composite' : 'atomic',
-        icon: 'Folder',
-        data: mountedDataTree.map(main => ({
-          templateRef: main.type,
-          label: main.label,
-          type: main.type,
-          icon: main.icon,
-          subData: main.subData || []
-        })),
-        synonyms: [], // Can be extended later
-        constraints: [],
-        validation: {},
-        metadata: {}
-      };
-
-      const response = await fetch(`/api/projects/${currentProjectId}/type-templates`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(templateData)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to save: ${response.statusText}`);
-      }
-
-      const saved = await response.json();
-      console.log('[TaskTreeWizard] Saved to Project:', saved);
-      alert('Template saved to Project successfully!');
-    } catch (error: any) {
-      console.error('[TaskTreeWizard] Error saving to Project:', error);
-      alert(`Error saving to Project: ${error.message}`);
-    } finally {
-      setSaving(null);
-    }
-  };
+  // ❌ REMOVED: handleSaveToFactory and handleSaveToProject (generalizability moved to ResponseEditor)
 
   // Auto-mapping function for manually added fields
   const autoMapFieldStructure = async (fieldLabel: string, fieldIndex: number) => {
@@ -925,12 +809,6 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
     };
   }, []);
 
-  const [showRight, setShowRight] = useState<boolean>(() => {
-    // ✅ Phase 4A: Use only nodes (no fallback to data)
-    const nodes = initialTaskTree?.nodes;
-    if (initialTaskTree?._inferenceResult?.ai?.schema && nodes && Array.isArray(nodes) && nodes.length > 0) return true;
-    return startOnStructure ? true : false;
-  });
 
   // Auto-collapse/expand: quando un main data raggiunge 100%, passa automaticamente al successivo
   useEffect(() => {
@@ -1047,19 +925,27 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
 
   const handleCancelPipeline = React.useCallback(() => {
     setStep('structure');
-  }, [setStep]);
+  }, []);
 
   const handleFieldProcessingStates = React.useCallback((updater: (prev: any) => any) => {
     setFieldProcessingStates(updater);
   }, []);
 
   // Funzione per chiamare la detection AI
-  const handleDetectType = async (textToUse?: string) => { // ✅ MODIFICATO: accetta parametro opzionale
+  const handleDetectType = async (textToUse?: string, isCompactMode?: boolean) => { // ✅ MODIFICATO: accetta parametro opzionale e flag modalità compatta
     if (step === 'pipeline' || closed) return; // Blocca ogni setState durante la pipeline
-    setShowRight(true);
-    setStep('loading');
-    setIsAIGenerating(true); // ✅ Imposta flag AI generando
-    try { dlog('[TaskTree][UI] step → loading'); } catch { }
+
+    // ✅ In modalità compatta, NON cambiare step, solo accordionState
+    if (isCompactMode && step === 'input-compact') {
+      // accordionState è già 'loading' da handleCreateWithAI
+      setIsAIGenerating(true);
+      try { dlog('[TaskTree][UI] accordion → loading (compact mode)'); } catch { }
+    } else {
+      setShowRight(true);
+      setStep('loading');
+      setIsAIGenerating(true); // ✅ Imposta flag AI generando
+      try { dlog('[TaskTree][UI] step → loading'); } catch { }
+    }
     setErrorMsg(null);
     try {
       // ✅ Deterministico: usa textToUse se fornito, altrimenti userDesc dallo stato
@@ -1194,11 +1080,18 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
         setSchemaRootLabel(finalRoot);
         setMountedDataTree(finalMains);
         setIsAIGenerating(false); // ✅ AI completata
-        setIsCompactMode(false); // ✅ Espandi wizard
-        // ✅ Emetti evento per espandere modal
-        document.dispatchEvent(new CustomEvent('taskTreeWizard:expand'));
-        setStep('structure');
-        try { dlog('[TaskTree][UI] step → structure', { root: finalRoot, mains: finalMains.length }); } catch { }
+
+        // ✅ In modalità compatta, aggiorna accordionState invece di step
+        if (isCompactMode && step === 'input-compact') {
+          setAccordionState('structure-ready'); // ✅ Mostra struttura nell'accordion
+          try { dlog('[TaskTree][UI] accordion → structure-ready (compact mode)', { root: finalRoot, mains: finalMains.length }); } catch { }
+        } else {
+          setIsCompactMode(false); // ✅ Espandi wizard
+          // ✅ Emetti evento per espandere modal
+          document.dispatchEvent(new CustomEvent('taskTreeWizard:expand'));
+          setStep('structure');
+          try { dlog('[TaskTree][UI] step → structure', { root: finalRoot, mains: finalMains.length }); } catch { }
+        }
         return;
       }
       console.warn('[TaskTree][DetectType][invalidSchema]', { schema });
@@ -1231,14 +1124,14 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
   const handleCreateWithAI = React.useCallback(async () => {
     if (step === 'pipeline' || closed || isAIGenerating) return;
     setIsAIGenerating(true);
-    setIsCompactMode(false);
-    setShowRight(true);
+    setAccordionState('loading'); // ✅ Imposta accordion a loading
+    // ✅ NON cambiare step - rimaniamo in 'input-compact'
     // Usa taskLabel come input per AI
     const textToUse = taskLabel || userDesc;
-    await handleDetectType(textToUse);
+    await handleDetectType(textToUse, true); // ✅ Passa flag per modalità compatta
   }, [step, closed, isAIGenerating, taskLabel, userDesc, handleDetectType]);
 
-  // ✅ Handler "Sì, va bene" → conferma struttura e passa a pipeline
+  // ✅ Handler "Sì, va bene" → conferma struttura e passa a pipeline (per step 'structure' normale)
   const handleConfirmStructure = React.useCallback(() => {
     try { dlog('[TaskTree][UI] step → pipeline (confirm structure)'); } catch { }
     // Avvia pipeline generativa mantenendo visibile la struttura (progress in-place)
@@ -1251,6 +1144,56 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
     setSelectedIdx(0);
     setStep('pipeline');
   }, [setSelectedIdx]);
+
+  // ✅ Handler "Sì, va bene" dall'accordion → assembla TaskTree minimo e apre ResponseEditor direttamente
+  const handleConfirmStructureFromAccordion = React.useCallback(async () => {
+    try {
+      dlog('[TaskTree][UI] accordion → confirm structure → open ResponseEditor directly');
+
+      if (mountedDataTree.length === 0 || !schemaRootLabel) {
+        console.warn('[TaskTreeWizard] Cannot confirm: no structure available');
+        return;
+      }
+
+      // Assemble minimal TaskTree from structure (without messages - they will be generated in ResponseEditor)
+      const taskTreeId = schemaRootLabel.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now();
+
+      // Convert mountedDataTree to nodes format
+      const nodes = mountedDataTree.map((main: any) => ({
+        id: main.id || uuidv4(),
+        templateId: main.templateId || main.type || 'unknown',
+        label: main.label,
+        type: main.type,
+        icon: main.icon,
+        constraints: main.constraints || [],
+        dataContract: main.dataContract || main.nlpContract || undefined,
+        subNodes: (main.subData || []).map((sub: any) => ({
+          id: sub.id || uuidv4(),
+          templateId: sub.templateId || sub.type || 'unknown',
+          label: sub.label,
+          type: sub.type,
+          icon: sub.icon,
+          constraints: sub.constraints || [],
+          dataContract: sub.dataContract || sub.nlpContract || undefined,
+        })),
+      }));
+
+      const minimalTaskTree = {
+        id: taskTreeId,
+        labelKey: schemaRootLabel.toLowerCase().replace(/\s+/g, '_'),
+        nodes,
+        steps: {}, // Empty steps - will be generated in ResponseEditor
+        constraints: [],
+        dataContract: undefined,
+      };
+
+      // Close wizard and open ResponseEditor
+      handleClose(minimalTaskTree, {});
+    } catch (error) {
+      console.error('[TaskTreeWizard] Error confirming structure from accordion:', error);
+      error('TASKTREE_WIZARD', 'Failed to confirm structure from accordion', error);
+    }
+  }, [mountedDataTree, schemaRootLabel, handleClose]);
 
   // ✅ Handler "No, correggila" → mostra textbox refining
   const handleShowRefining = React.useCallback(() => {
@@ -1485,8 +1428,9 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
   };
 
   // Two-panel layout render (simplified, as requested)
+  // ✅ In modalità compatta (step === 'input-compact'), ignorare step === 'loading' e step === 'structure'
   const rightHasContent = Boolean(
-    showRight && (
+    showRight && step !== 'input-compact' && (
       step === 'loading' ||
       step === 'heuristic-confirm' ||
       (step === 'structure' && Array.isArray(mountedDataTree) && mountedDataTree.length > 0) ||
@@ -1840,7 +1784,7 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
           // ✅ Phase 2: Only check nodes (no fallback to data)
           if (!finalTaskTree.nodes || finalTaskTree.nodes.length === 0) {
             console.error('[TaskTree][Wizard][processTemplate] ERROR: TaskTree has no nodes!', finalTaskTree);
-              error('TASKTREE_WIZARD', 'TaskTree has no nodes after assembly', new Error('TaskTree has no nodes'));
+            error('TASKTREE_WIZARD', 'TaskTree has no nodes after assembly', new Error('TaskTree has no nodes'));
             return;
           }
 
@@ -1895,9 +1839,18 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
       }
     }
 
-    // ✅ Se in modalità compatta (o skipCompactCheck è true), passa direttamente a structure
-    const shouldGoToStructure = skipCompactCheck || isCompactMode;
-    if (shouldGoToStructure) {
+    // ✅ Se in modalità compatta, aggiorna solo accordionState (NON cambiare step)
+    if (isCompactMode && step === 'input-compact') {
+      setSchemaRootLabel(root);
+      setMountedDataTree(mains0);
+      setDetectTypeIcon(template.icon || null);
+      setAccordionState('structure-ready'); // ✅ Mostra struttura nell'accordion
+      try { dlog('[TaskTree][UI] accordion → structure-ready (compact mode, processTemplate)', { root, mains: mains0.length }); } catch { }
+      return; // ✅ Esci qui, non cambiare step
+    }
+
+    // ✅ Se skipCompactCheck è true (expanded mode), passa a structure
+    if (skipCompactCheck) {
       setSchemaRootLabel(root);
       setMountedDataTree(mains0);
       setDetectTypeIcon(template.icon || null);
@@ -1916,6 +1869,7 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
       setShowRight(true);
       setStep('heuristic-confirm');
     }
+    const shouldGoToStructure = skipCompactCheck;
     console.log('[TaskTree][Wizard][processTemplate] Template processed', {
       root,
       mainsCount: mains0.length,
@@ -1962,20 +1916,33 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
   // ✅ Se chiuso, non renderizzare nulla (dopo tutti gli hook per rispettare le regole di React)
   if (closed) return null;
 
+  // ✅ COMPACT MODE: Isolato in TaskWizardCompact
+  if (step === 'input-compact') {
+    return (
+      <TaskWizardCompact
+        onCancel={handleClose}
+        onComplete={onComplete}
+        initialTaskTree={initialTaskTree}
+        taskType={taskType}
+        taskLabel={taskLabel}
+      />
+    );
+  }
+
+  // ✅ EXPANDED MODE: Layout legacy mantenuto per compatibilità
   return (
     <div
       style={{
         display: 'grid',
-        // ✅ FIX: Adatta layout in base a cosa è visibile
         gridTemplateColumns: showInputAlongsideConfirm
-          ? 'minmax(420px,520px) minmax(420px,520px) 1fr' // Input + Confirm + Right panel
+          ? 'minmax(420px,520px) minmax(420px,520px) 1fr'
           : (!pendingHeuristicMatch && rightHasContent)
-            ? 'minmax(420px,520px) 1fr' // Solo Input + Right panel
+            ? 'minmax(420px,520px) 1fr'
             : (pendingHeuristicMatch && !rightHasContent)
-              ? '1fr' // Solo Confirm (full width)
+              ? '1fr'
               : rightHasContent
-                ? 'minmax(420px,520px) 1fr' // Confirm + Right panel
-                : '1fr', // Solo Input (fallback)
+                ? 'minmax(420px,520px) 1fr'
+                : '1fr',
         gap: 12,
         height: '100%',
       }}
@@ -1985,10 +1952,16 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
           - step is 'input-compact' (modalità compatta iniziale)
           - step is 'input' (modalità espansa)
           - OR (step is 'heuristic-confirm' AND showInputAlongsideConfirm is true - user clicked "No") */}
-      {(step === 'input-compact' || step === 'input' || (step === 'heuristic-confirm' && showInputAlongsideConfirm)) && (
+      {/* EXPANDED MODE: Mantenuto per compatibilità */}
+      {(step === 'input' || (step === 'heuristic-confirm' && showInputAlongsideConfirm)) && (
         <div style={{
-          overflow: 'auto',
-          padding: '0 8px'
+          overflow: 'visible',
+          padding: '0 8px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
+          minHeight: '100%',
+          height: 'auto',
         }}>
           <WizardInputStep
             userDesc={userDesc}
@@ -2000,10 +1973,21 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
             onTemplateSelect={handleTemplateSelect}
             taskType={taskType}
             taskLabel={taskLabel}
-            isCompactMode={step === 'input-compact'}
-            isAIGenerating={isAIGenerating}
-            onCreateWithAI={step === 'input-compact' ? handleCreateWithAI : undefined}
-            onConfirmTemplate={step === 'input-compact' && selectedTemplateId ? handleChooseThis : undefined}
+            isCompactMode={false}
+            onConfirmTemplate={undefined}
+            accordionState={'collapsed'}
+            mountedDataTree={[]}
+            schemaRootLabel={schemaRootLabel}
+            onConfirmStructure={undefined}
+            onRefineStructure={undefined}
+            onEditManually={undefined}
+            onStructureChange={undefined}
+            showRefiningTextbox={false}
+            refiningText={''}
+            onRefiningTextChange={undefined}
+            onApplyRefining={undefined}
+            onCreateWithAI={undefined}
+            isAIGenerating={false}
           />
         </div>
       )}
@@ -2062,233 +2046,262 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
                   justifyContent: 'flex-end',
                   gap: 8
                 }}>
-                    <button
-                      onClick={async () => {
-                        const t0 = performance.now();
-                        console.log('🔵 [YES_BUTTON] Click ricevuto', { timestamp: new Date().toISOString() });
+                  <button
+                    onClick={async () => {
+                      const t0 = performance.now();
+                      console.log('🔵 [YES_BUTTON] Click ricevuto', { timestamp: new Date().toISOString() });
 
-                        const { schema, icon, mains0, root } = pendingHeuristicMatch;
-                        setPendingHeuristicMatch(null);
-                        setShowInputAlongsideConfirm(false);
-                        setDetectTypeIcon(icon);
+                      const { schema, icon, mains0, root } = pendingHeuristicMatch;
+                      setPendingHeuristicMatch(null);
+                      setShowInputAlongsideConfirm(false);
+                      setDetectTypeIcon(icon);
 
-                        // ✅ DEBUG: Log steps structure per capire perché hassteps è false
-                        const debugMains0 = mains0.map((m: any) => ({
-                          label: m.label,
-                          hassteps: !!m.steps,
-                          stepsType: typeof m.steps,
-                          stepsValue: m.steps,
-                          stepsKeys: m.steps ? Object.keys(m.steps) : [],
-                          nodeId: m.templateId || m.id,
-                          allKeys: Object.keys(m),
-                          subData: (m.subData || []).map((s: any) => ({
-                            label: s.label,
-                            hassteps: !!(s as any).steps,
-                            stepsType: typeof (s as any).steps,
-                            stepsValue: (s as any).steps,
-                            stepsKeys: (s as any).steps ? Object.keys((s as any).steps) : [],
-                            allKeys: Object.keys(s)
-                          }))
-                        }));
-                        console.log('🔵 [YES_BUTTON] DEBUG mains0 steps', JSON.stringify(debugMains0, null, 2));
-                        console.log('🔵 [YES_BUTTON] DEBUG schema', {
-                          schemaHassteps: !!(schema && schema.steps),
-                          schemasteps: schema?.steps,
-                          schemaKeys: schema ? Object.keys(schema) : []
-                        });
+                      // ✅ DEBUG: Log steps structure per capire perché hassteps è false
+                      const debugMains0 = mains0.map((m: any) => ({
+                        label: m.label,
+                        hassteps: !!m.steps,
+                        stepsType: typeof m.steps,
+                        stepsValue: m.steps,
+                        stepsKeys: m.steps ? Object.keys(m.steps) : [],
+                        nodeId: m.templateId || m.id,
+                        allKeys: Object.keys(m),
+                        subData: (m.subData || []).map((s: any) => ({
+                          label: s.label,
+                          hassteps: !!(s as any).steps,
+                          stepsType: typeof (s as any).steps,
+                          stepsValue: (s as any).steps,
+                          stepsKeys: (s as any).steps ? Object.keys((s as any).steps) : [],
+                          allKeys: Object.keys(s)
+                        }))
+                      }));
+                      console.log('🔵 [YES_BUTTON] DEBUG mains0 steps', JSON.stringify(debugMains0, null, 2));
+                      console.log('🔵 [YES_BUTTON] DEBUG schema', {
+                        schemaHassteps: !!(schema && schema.steps),
+                        schemasteps: schema?.steps,
+                        schemaKeys: schema ? Object.keys(schema) : []
+                      });
 
-                        // ✅ Controlla solo steps a root level (non più dentro data)
-                        // Nota: durante il wizard, steps vengono ancora creati dentro data temporaneamente
-                        // ma vengono estratti a root level da assembleFinalTaskTree
-                        // Qui controlliamo se il template ha già steps (dal database)
-                        const hasSteps = !!(schema && schema.steps && typeof schema.steps === 'object' && Object.keys(schema.steps).length > 0);
+                      // ✅ Controlla solo steps a root level (non più dentro data)
+                      // Nota: durante il wizard, steps vengono ancora creati dentro data temporaneamente
+                      // ma vengono estratti a root level da assembleFinalTaskTree
+                      // Qui controlliamo se il template ha già steps (dal database)
+                      const hasSteps = !!(schema && schema.steps && typeof schema.steps === 'object' && Object.keys(schema.steps).length > 0);
 
-                        console.log('🔵 [YES_BUTTON] hasSteps check:', {
-                          hasSteps,
-                          schemaHasSteps: !!(schema?.steps)
-                        });
+                      console.log('🔵 [YES_BUTTON] hasSteps check:', {
+                        hasSteps,
+                        schemaHasSteps: !!(schema?.steps)
+                      });
 
-                        if (hasSteps) {
-                          // If steps are present, go directly to Response Editor
-                          console.log('[TaskTree][Wizard][heuristicMatch] steps found, going directly to Response Editor');
+                      if (hasSteps) {
+                        // If steps are present, go directly to Response Editor
+                        console.log('[TaskTree][Wizard][heuristicMatch] steps found, going directly to Response Editor');
 
-                          // ✅ Steps vengono gestiti da assembleFinalTaskTree che estrae i GUID dalle traduzioni
-                          // Non serve più estrarre GUID da steps dentro data
-                          const t1 = performance.now();
-                          console.log(`⏱️ [YES_BUTTON] Tempo fino a assembly: ${(t1 - t0).toFixed(2)}ms`);
+                        // ✅ Steps vengono gestiti da assembleFinalTaskTree che estrae i GUID dalle traduzioni
+                        // Non serve più estrarre GUID da steps dentro data
+                        const t1 = performance.now();
+                        console.log(`⏱️ [YES_BUTTON] Tempo fino a assembly: ${(t1 - t0).toFixed(2)}ms`);
 
-                          // ✅ SUPER-OTTIMIZZAZIONE: Usa TaskTree pre-assemblato se disponibile (ISTANTANEO!)
-                          const preAssembledTaskTree = (initialTaskTree as any)?._inferenceResult?.ai?.preAssembledTaskTree;
-                          if (preAssembledTaskTree) {
-                            const t2 = performance.now();
-                            console.log(`⏱️ [YES_BUTTON] ✅ TaskTree pre-assemblato trovato - ISTANTANEO! Tempo: ${(t2 - t0).toFixed(2)}ms`);
+                        // ✅ SUPER-OTTIMIZZAZIONE: Usa TaskTree pre-assemblato se disponibile (ISTANTANEO!)
+                        const preAssembledTaskTree = (initialTaskTree as any)?._inferenceResult?.ai?.preAssembledTaskTree;
+                        if (preAssembledTaskTree) {
+                          const t2 = performance.now();
+                          console.log(`⏱️ [YES_BUTTON] ✅ TaskTree pre-assemblato trovato - ISTANTANEO! Tempo: ${(t2 - t0).toFixed(2)}ms`);
 
-                            // Set schema for consistency
-                            setSchemaRootLabel(root);
-                            setMountedDataTree(mains0);
-
-                            // ✅ Usa il TaskTree già assemblato in background!
-                            handleClose(preAssembledTaskTree, {});
-
-                            const tAfterClose = performance.now();
-                            console.log(`⏱️ [YES_BUTTON] 🏁 FINE TOTALE (pre-assembled) - Tempo: ${(tAfterClose - t0).toFixed(2)}ms`);
-                            return; // ✅ FATTO! Nessun assembly necessario
-                          }
-
-                          const t3 = performance.now();
-                          console.log(`⏱️ [YES_BUTTON] Prima di assembleFinalTaskTree - Tempo: ${(t3 - t0).toFixed(2)}ms`);
-
-                          // Set schema for assembly
+                          // Set schema for consistency
                           setSchemaRootLabel(root);
                           setMountedDataTree(mains0);
 
-                          try {
-                            const emptyStore = buildArtifactStore([]);
-                            const projectLang = (localStorage.getItem('project.lang') || 'pt') as 'en' | 'it' | 'pt';
-                            // ✅ assembleFinalTaskTree now adds translations to global table via addTranslations callback
-                            // Translations are NOT stored in finalTaskTree.translations anymore
-                            // Translations will be saved to database only on explicit save
-                            const tAssemblyStart = performance.now();
-                            console.log(`⏱️ [YES_BUTTON] Inizio assembleFinalTaskTree - Tempo: ${(tAssemblyStart - t0).toFixed(2)}ms`);
+                          // ✅ Usa il TaskTree già assemblato in background!
+                          handleClose(preAssembledTaskTree, {});
 
-                            const finalTaskTree = await assembleFinalTaskTree(
-                              root || 'Data',
-                              mains0,
-                              emptyStore,
-                              {
-                                escalationCounts: { noMatch: 2, noInput: 2, confirmation: 2 },
-                                templateTranslations: templateTranslations,
-                                projectLocale: projectLang,
-                                addTranslations: addTranslationsToGlobal, // ✅ Add translations to global table
-                                contextLabel: taskLabel || root || 'Data', // ✅ Context label for prompt adaptation (e.g., "Chiedi la data di nascita del paziente")
-                                templateLabel: root || 'Data', // ✅ Template label (e.g., "Date")
-                                aiProvider: selectedProvider.toLowerCase() as 'groq' | 'openai' // ✅ AI provider for adaptation
-                              }
-                            );
-
-                            const tAssemblyEnd = performance.now();
-                            console.log(`⏱️ [YES_BUTTON] Fine assembleFinalTaskTree - Tempo assembly: ${(tAssemblyEnd - tAssemblyStart).toFixed(2)}ms, Tempo totale: ${(tAssemblyEnd - t0).toFixed(2)}ms`);
-
-                            // ✅ Translations are now in global table, not in finalTaskTree.translations
-                            // action.text will be resolved from global table when needed (in Chat Simulator, etc.)
-                            console.log('[TaskTree][Wizard][heuristicMatch] ✅ TaskTree assembled, translations in global table', {
-                              taskTreeId: finalTaskTree.id,
-                              label: finalTaskTree.label,
-                              nodesLength: finalTaskTree.nodes?.length || 0,
-                              templateTranslationsCount: Object.keys(templateTranslations).length
-                            });
-
-                            // ✅ Phase 2: Only check nodes (no fallback to data)
-                            if (!finalTaskTree.nodes || finalTaskTree.nodes.length === 0) {
-                              console.error('[TaskTree][Wizard][heuristicMatch] ERROR: TaskTree has no nodes!', finalTaskTree);
-                              error('TASKTREE_WIZARD', 'TaskTree has no nodes after assembly', new Error('TaskTree has no nodes'));
-                              return;
-                            }
-
-                            // ✅ Use nodes only
-                            const firstMainId = finalTaskTree.nodes[0]?.id;
-                            if (!firstMainId || !finalTaskTree.steps || !finalTaskTree.steps[firstMainId] || Object.keys(finalTaskTree.steps[firstMainId]).length === 0) {
-                              console.error('[TaskTree][Wizard][heuristicMatch] ERROR: TaskTree has no steps at root level!', {
-                                taskTreeId: finalTaskTree.id,
-                                firstMainId,
-                                hasSteps: !!finalTaskTree.steps,
-                                stepsKeys: finalTaskTree.steps ? Object.keys(finalTaskTree.steps) : []
-                              });
-                              error('TASKTREE_WIZARD', 'TaskTree has no steps at root level after assembly', new Error('TaskTree has no steps at root level'));
-                              return;
-                            }
-
-                            const tBeforeClose = performance.now();
-                            console.log(`⏱️ [YES_BUTTON] Prima di handleClose - Tempo totale: ${(tBeforeClose - t0).toFixed(2)}ms`);
-                            console.log('[TaskTree][Wizard][heuristicMatch] ✅ TaskTree structure verified, calling handleClose');
-
-                            // Call onComplete to open Response Editor directly
-                            // ❌ REMOVED: finalTaskTree.translations - translations are now in global table
-                            handleClose(finalTaskTree, {});
-
-                            const tAfterClose = performance.now();
-                            console.log(`⏱️ [YES_BUTTON] 🏁 FINE TOTALE - Tempo totale: ${(tAfterClose - t0).toFixed(2)}ms`);
-                          } catch (err) {
-                            console.error('[TaskTree][Wizard][heuristicMatch] Failed to assemble TaskTree:', err);
-                            error('TASKTREE_WIZARD', 'Failed to assemble TaskTree with steps', err);
-                          }
-                        } else {
-                          console.log('🔵 [YES_BUTTON] No steps, andando a pipeline');
-
-                          const enrichedRes = await enrichConstraintsFor(root, mains0);
-
-                          const finalRoot = (enrichedRes && (enrichedRes as any).label) ? (enrichedRes as any).label : root;
-                          let finalMains: any[] = (enrichedRes && (enrichedRes as any).mains) ? (enrichedRes as any).mains as any[] : mains0 as any[];
-
-                          // Fallback: infer subData from text if missing
-                          try {
-                            const inferred = inferSubDataFromText(userDesc);
-                            console.log('[TaskTree][Wizard][heuristicMatch] Inferred subData', { inferredCount: inferred.length, inferred });
-                            if (Array.isArray(finalMains) && finalMains.length > 0 && (!finalMains[0].subData || finalMains[0].subData.length === 0) && inferred.length > 0) {
-                              finalMains = [{ ...finalMains[0], subData: inferred }];
-                              console.log('[TaskTree][Wizard][heuristicMatch] Applied inferred subData', { finalMainsCount: finalMains.length });
-                            }
-                          } catch (err) {
-                            console.log('[TaskTree][Wizard][heuristicMatch] Inference failed', { error: err });
-                          }
-
-                          setSchemaRootLabel(finalRoot);
-                          setMountedDataTree(finalMains);
-                          setShowRight(true);
-                          setTaskProgress({});
-                          setRootProgress(0);
-                          setPartialResults({});
-                          setSelectedIdx(0);
-
-                          // ✅ IMPORTANTE: Non chiudere il wizard quando si passa a pipeline
-                          // Il wizard rimane aperto durante tutto il processo pipeline
-                          // Solo quando il pipeline completa, verrà chiamato handleClose
-                          console.log('🔵 [YES_BUTTON] Settando step=pipeline, mains=', finalMains.length);
-                          setStep('pipeline');
-                          // ✅ NON chiamare handleClose qui - il wizard deve rimanere aperto
+                          const tAfterClose = performance.now();
+                          console.log(`⏱️ [YES_BUTTON] 🏁 FINE TOTALE (pre-assembled) - Tempo: ${(tAfterClose - t0).toFixed(2)}ms`);
+                          return; // ✅ FATTO! Nessun assembly necessario
                         }
-                      }}
-                      style={{
-                        background: '#22c55e',
-                        color: '#0b1220',
-                        border: 'none',
-                        borderRadius: 8,
-                        padding: '10px 20px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        fontSize: 14
-                      }}
-                    >
-                      Yes
-                    </button>
-                    <button
-                      onClick={() => {
-                        console.log('[TaskTree][Wizard][heuristicMatch] User rejected, showing input alongside');
-                        setShowInputAlongsideConfirm(true); // Show input alongside, DON'T hide confirmation
-                        // DON'T remove pendingHeuristicMatch, DON'T hide right panel
-                      }}
-                      style={{
-                        background: '#ef4444',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: 8,
-                        padding: '10px 20px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        fontSize: 14
-                      }}
-                    >
-                      No
-                    </button>
-                  </div>
+
+                        const t3 = performance.now();
+                        console.log(`⏱️ [YES_BUTTON] Prima di assembleFinalTaskTree - Tempo: ${(t3 - t0).toFixed(2)}ms`);
+
+                        // Set schema for assembly
+                        setSchemaRootLabel(root);
+                        setMountedDataTree(mains0);
+
+                        try {
+                          const emptyStore = buildArtifactStore([]);
+                          const projectLang = (localStorage.getItem('project.lang') || 'pt') as 'en' | 'it' | 'pt';
+                          // ✅ assembleFinalTaskTree now adds translations to global table via addTranslations callback
+                          // Translations are NOT stored in finalTaskTree.translations anymore
+                          // Translations will be saved to database only on explicit save
+                          const tAssemblyStart = performance.now();
+                          console.log(`⏱️ [YES_BUTTON] Inizio assembleFinalTaskTree - Tempo: ${(tAssemblyStart - t0).toFixed(2)}ms`);
+
+                          // Load translations
+                          let templateTranslations: Record<string, { en: string; it: string; pt: string }> = {};
+                          try {
+                            const translationKeys: string[] = [];
+                            mains0.forEach((m: any) => {
+                              const mSteps = m.steps;
+                              if (mSteps && typeof mSteps === 'object') {
+                                const nodeId = m.templateId || m.id;
+                                if (nodeId && mSteps[String(nodeId)]) {
+                                  const nodeSteps = mSteps[String(nodeId)];
+                                  Object.values(nodeSteps).forEach((stepValue: any) => {
+                                    if (Array.isArray(stepValue)) {
+                                      stepValue.forEach((key: string) => {
+                                        if (typeof key === 'string' && key.startsWith('template.')) {
+                                          translationKeys.push(key);
+                                        }
+                                      });
+                                    }
+                                  });
+                                }
+                              }
+                            });
+                            if (translationKeys.length > 0) {
+                              templateTranslations = await getTemplateTranslations(translationKeys);
+                            }
+                          } catch (err) {
+                            console.error('[TaskTree][Wizard] Failed to load template translations:', err);
+                          }
+
+                          const finalTaskTree = await assembleFinalTaskTree(
+                            root || 'Data',
+                            mains0,
+                            emptyStore,
+                            {
+                              escalationCounts: { noMatch: 2, noInput: 2, confirmation: 2 },
+                              templateTranslations: templateTranslations,
+                              projectLocale: projectLang,
+                              addTranslations: addTranslationsToGlobal, // ✅ Add translations to global table
+                              contextLabel: taskLabel || root || 'Data', // ✅ Context label for prompt adaptation (e.g., "Chiedi la data di nascita del paziente")
+                              templateLabel: root || 'Data', // ✅ Template label (e.g., "Date")
+                              aiProvider: selectedProvider.toLowerCase() as 'groq' | 'openai' // ✅ AI provider for adaptation
+                            }
+                          );
+
+                          const tAssemblyEnd = performance.now();
+                          console.log(`⏱️ [YES_BUTTON] Fine assembleFinalTaskTree - Tempo assembly: ${(tAssemblyEnd - tAssemblyStart).toFixed(2)}ms, Tempo totale: ${(tAssemblyEnd - t0).toFixed(2)}ms`);
+
+                          // ✅ Translations are now in global table, not in finalTaskTree.translations
+                          // action.text will be resolved from global table when needed (in Chat Simulator, etc.)
+                          console.log('[TaskTree][Wizard][heuristicMatch] ✅ TaskTree assembled, translations in global table', {
+                            taskTreeId: finalTaskTree.id,
+                            label: finalTaskTree.label,
+                            nodesLength: finalTaskTree.nodes?.length || 0,
+                            templateTranslationsCount: Object.keys(templateTranslations).length
+                          });
+
+                          // ✅ Phase 2: Only check nodes (no fallback to data)
+                          if (!finalTaskTree.nodes || finalTaskTree.nodes.length === 0) {
+                            console.error('[TaskTree][Wizard][heuristicMatch] ERROR: TaskTree has no nodes!', finalTaskTree);
+                            error('TASKTREE_WIZARD', 'TaskTree has no nodes after assembly', new Error('TaskTree has no nodes'));
+                            return;
+                          }
+
+                          // ✅ Use nodes only
+                          const firstMainId = finalTaskTree.nodes[0]?.id;
+                          if (!firstMainId || !finalTaskTree.steps || !finalTaskTree.steps[firstMainId] || Object.keys(finalTaskTree.steps[firstMainId]).length === 0) {
+                            console.error('[TaskTree][Wizard][heuristicMatch] ERROR: TaskTree has no steps at root level!', {
+                              taskTreeId: finalTaskTree.id,
+                              firstMainId,
+                              hasSteps: !!finalTaskTree.steps,
+                              stepsKeys: finalTaskTree.steps ? Object.keys(finalTaskTree.steps) : []
+                            });
+                            error('TASKTREE_WIZARD', 'TaskTree has no steps at root level after assembly', new Error('TaskTree has no steps at root level'));
+                            return;
+                          }
+
+                          const tBeforeClose = performance.now();
+                          console.log(`⏱️ [YES_BUTTON] Prima di handleClose - Tempo totale: ${(tBeforeClose - t0).toFixed(2)}ms`);
+                          console.log('[TaskTree][Wizard][heuristicMatch] ✅ TaskTree structure verified, calling handleClose');
+
+                          // Call onComplete to open Response Editor directly
+                          // ❌ REMOVED: finalTaskTree.translations - translations are now in global table
+                          handleClose(finalTaskTree, {});
+
+                          const tAfterClose = performance.now();
+                          console.log(`⏱️ [YES_BUTTON] 🏁 FINE TOTALE - Tempo totale: ${(tAfterClose - t0).toFixed(2)}ms`);
+                        } catch (err) {
+                          console.error('[TaskTree][Wizard][heuristicMatch] Failed to assemble TaskTree:', err);
+                          error('TASKTREE_WIZARD', 'Failed to assemble TaskTree with steps', err);
+                        }
+                      } else {
+                        console.log('🔵 [YES_BUTTON] No steps, andando a pipeline');
+
+                        const enrichedRes = await enrichConstraintsFor(root, mains0);
+
+                        const finalRoot = (enrichedRes && (enrichedRes as any).label) ? (enrichedRes as any).label : root;
+                        let finalMains: any[] = (enrichedRes && (enrichedRes as any).mains) ? (enrichedRes as any).mains as any[] : mains0 as any[];
+
+                        // Fallback: infer subData from text if missing
+                        try {
+                          const inferred = inferSubDataFromText(userDesc);
+                          console.log('[TaskTree][Wizard][heuristicMatch] Inferred subData', { inferredCount: inferred.length, inferred });
+                          if (Array.isArray(finalMains) && finalMains.length > 0 && (!finalMains[0].subData || finalMains[0].subData.length === 0) && inferred.length > 0) {
+                            finalMains = [{ ...finalMains[0], subData: inferred }];
+                            console.log('[TaskTree][Wizard][heuristicMatch] Applied inferred subData', { finalMainsCount: finalMains.length });
+                          }
+                        } catch (err) {
+                          console.log('[TaskTree][Wizard][heuristicMatch] Inference failed', { error: err });
+                        }
+
+                        setSchemaRootLabel(finalRoot);
+                        setMountedDataTree(finalMains);
+                        setShowRight(true);
+                        setTaskProgress({});
+                        setRootProgress(0);
+                        setPartialResults({});
+                        setSelectedIdx(0);
+
+                        // ✅ IMPORTANTE: Non chiudere il wizard quando si passa a pipeline
+                        // Il wizard rimane aperto durante tutto il processo pipeline
+                        // Solo quando il pipeline completa, verrà chiamato handleClose
+                        console.log('🔵 [YES_BUTTON] Settando step=pipeline, mains=', finalMains.length);
+                        setStep('pipeline');
+                        // ✅ NON chiamare handleClose qui - il wizard deve rimanere aperto
+                      }
+                    }}
+                    style={{
+                      background: '#22c55e',
+                      color: '#0b1220',
+                      border: 'none',
+                      borderRadius: 8,
+                      padding: '10px 20px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      fontSize: 14
+                    }}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    onClick={() => {
+                      console.log('[TaskTree][Wizard][heuristicMatch] User rejected, showing input alongside');
+                      setShowInputAlongsideConfirm(true); // Show input alongside, DON'T hide confirmation
+                      // DON'T remove pendingHeuristicMatch, DON'T hide right panel
+                    }}
+                    style={{
+                      background: '#ef4444',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: 8,
+                      padding: '10px 20px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      fontSize: 14
+                    }}
+                  >
+                    No
+                  </button>
+                </div>
               </div>
             );
           })()}
         </div>
       )}
 
-      {/* Right panel for other steps (NOT heuristic-confirm) */}
-      {rightHasContent && step !== 'heuristic-confirm' && (
+      {/* Right panel for other steps (NOT heuristic-confirm, NOT compact mode) */}
+      {rightHasContent && step !== 'heuristic-confirm' && step !== 'input-compact' && (
         <div style={{ overflow: 'auto', borderLeft: '1px solid #1f2340', padding: 12 }}>
           {step === 'loading' && <WizardLoadingStep />}
 
@@ -2456,151 +2469,115 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
               )}
               {step === 'pipeline' && (
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-                  {/* Save buttons - only show for composite TaskTrees */}
-                  {isCompositeTaskTree && (
-                    <>
-                      <button
-                        onClick={handleSaveToFactory}
-                        disabled={saving !== null}
-                        style={{
-                          background: saving === 'factory' ? '#64748b' : '#3b82f6',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: 8,
-                          padding: '8px 14px',
-                          fontWeight: 600,
-                          cursor: saving !== null ? 'not-allowed' : 'pointer',
-                          opacity: saving !== null ? 0.6 : 1
-                        }}
-                      >
-                        {saving === 'factory' ? 'Saving...' : 'Save in Factory'}
-                      </button>
-                      <button
-                        onClick={handleSaveToProject}
-                        disabled={saving !== null || !currentProjectId}
-                        style={{
-                          background: saving === 'project' ? '#64748b' : '#8b5cf6',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: 8,
-                          padding: '8px 14px',
-                          fontWeight: 600,
-                          cursor: (saving !== null || !currentProjectId) ? 'not-allowed' : 'pointer',
-                          opacity: (saving !== null || !currentProjectId) ? 0.6 : 1
-                        }}
-                      >
-                        {saving === 'project' ? 'Saving...' : 'Save in Project'}
-                      </button>
-                    </>
-                  )}
+                  {/* ❌ REMOVED: Save buttons (generalizability moved to ResponseEditor) */}
                   {/* If steps are present, automatically proceed to Response Editor when user clicks any action */}
                   {mountedDataTree.some((m: any) => {
                     const nodeId = m.templateId || m.id;
                     return m.steps && nodeId && m.steps[nodeId] && Object.keys(m.steps[nodeId]).length > 0;
                   }) && (
-                    <button
-                      onClick={async () => {
-                        try {
-                          dlog('[TaskTree][UI] step → complete with steps');
-                        } catch { }
+                      <button
+                        onClick={async () => {
+                          try {
+                            dlog('[TaskTree][UI] step → complete with steps');
+                          } catch { }
 
-                        // Assemble final TaskTree with steps
-                        try {
-                          // Extract all translation keys from steps
-                          const { extractTranslationKeysFromSteps } = await import('../../../utils/stepPromptsConverter');
-                          const translationKeys: string[] = [];
-                          mountedDataTree.forEach((m: any) => {
-                            const nodeId = m.templateId || m.id;
-                            if (m.steps && nodeId) {
-                              const extracted = extractTranslationKeysFromSteps(m.steps, String(nodeId));
-                              if (extracted) {
-                                Object.values(extracted).forEach((keys: any) => {
-                                  if (Array.isArray(keys)) {
-                                    translationKeys.push(...keys);
-                                  }
-                                });
+                          // Assemble final TaskTree with steps
+                          try {
+                            // Extract all translation keys from steps
+                            const { extractTranslationKeysFromSteps } = await import('../../../utils/stepPromptsConverter');
+                            const translationKeys: string[] = [];
+                            mountedDataTree.forEach((m: any) => {
+                              const nodeId = m.templateId || m.id;
+                              if (m.steps && nodeId) {
+                                const extracted = extractTranslationKeysFromSteps(m.steps, String(nodeId));
+                                if (extracted) {
+                                  Object.values(extracted).forEach((keys: any) => {
+                                    if (Array.isArray(keys)) {
+                                      translationKeys.push(...keys);
+                                    }
+                                  });
+                                }
+                              }
+                            });
+
+                            console.log('[TaskTree][Wizard][steps] Extracted translation keys:', translationKeys);
+
+                            // Load translations from database
+                            let templateTranslations: Record<string, { en: string; it: string; pt: string }> = {};
+                            if (translationKeys.length > 0) {
+                              try {
+                                templateTranslations = await getTemplateTranslations(translationKeys);
+                                console.log('[TaskTree][Wizard][steps] Loaded', Object.keys(templateTranslations).length, 'translations');
+                              } catch (err) {
+                                console.error('[TaskTree][Wizard][steps] Failed to load template translations:', err);
                               }
                             }
-                          });
 
-                          console.log('[TaskTree][Wizard][steps] Extracted translation keys:', translationKeys);
+                            const emptyStore = buildArtifactStore([]);
+                            const projectLang = (localStorage.getItem('project.lang') || 'pt') as 'en' | 'it' | 'pt';
+                            // ✅ assembleFinalTaskTree now adds translations to global table via addTranslations callback
+                            const finalTaskTree = await assembleFinalTaskTree(
+                              schemaRootLabel || 'Data',
+                              mountedDataTree,
+                              emptyStore,
+                              {
+                                escalationCounts: { noMatch: 2, noInput: 2, confirmation: 2 },
+                                templateTranslations: templateTranslations,
+                                projectLocale: projectLang,
+                                addTranslations: addTranslationsToGlobal // ✅ Add translations to global table
+                              }
+                            );
 
-                          // Load translations from database
-                          let templateTranslations: Record<string, { en: string; it: string; pt: string }> = {};
-                          if (translationKeys.length > 0) {
-                            try {
-                              templateTranslations = await getTemplateTranslations(translationKeys);
-                              console.log('[TaskTree][Wizard][steps] Loaded', Object.keys(templateTranslations).length, 'translations');
-                            } catch (err) {
-                              console.error('[TaskTree][Wizard][steps] Failed to load template translations:', err);
-                            }
-                          }
-
-                          const emptyStore = buildArtifactStore([]);
-                          const projectLang = (localStorage.getItem('project.lang') || 'pt') as 'en' | 'it' | 'pt';
-                          // ✅ assembleFinalTaskTree now adds translations to global table via addTranslations callback
-                          const finalTaskTree = await assembleFinalTaskTree(
-                            schemaRootLabel || 'Data',
-                            mountedDataTree,
-                            emptyStore,
-                            {
-                              escalationCounts: { noMatch: 2, noInput: 2, confirmation: 2 },
-                              templateTranslations: templateTranslations,
-                              projectLocale: projectLang,
-                              addTranslations: addTranslationsToGlobal // ✅ Add translations to global table
-                            }
-                          );
-
-                          // ✅ Get first main nodeId for steps lookup (use nodes if available, otherwise data)
-                          const firstMain = finalTaskTree.nodes?.[0];
-                          const firstMainId = firstMain?.id;
-                          const firstMainSteps = firstMainId && finalTaskTree.steps?.[firstMainId] ? Object.keys(finalTaskTree.steps[firstMainId]) : [];
-                          const firstMainMessages = firstMain?.messages ? Object.keys(firstMain.messages) : [];
-                          console.log('[TaskTree][Wizard][steps] ✅ TaskTree assembled, translations added to global table', {
-                            taskTreeId: finalTaskTree.id,
-                            label: finalTaskTree.label,
-                            nodesLength: finalTaskTree.nodes?.length || 0,
-                            templateTranslationsCount: Object.keys(templateTranslations).length,
-                            firstMainId,
-                            firstMainSteps,
-                            firstMainMessages,
-                            allStepsKeys: finalTaskTree.steps ? Object.keys(finalTaskTree.steps) : []
-                          });
-
-                          // ✅ Phase 2: Only check nodes (no fallback to data)
-                          if (!finalTaskTree.nodes || finalTaskTree.nodes.length === 0) {
-                            console.error('[TaskTree][Wizard][steps] ERROR: TaskTree has no nodes!', finalTaskTree);
-                            error('TASKTREE_WIZARD', 'TaskTree has no nodes after assembly', new Error('TaskTree has no nodes'));
-                            return;
-                          }
-
-                          // ✅ Check steps at root level (keyed by nodeId) - firstMainId already declared above
-                          if (!firstMainId || !finalTaskTree.steps || !finalTaskTree.steps[firstMainId] || Object.keys(finalTaskTree.steps[firstMainId]).length === 0) {
-                            console.error('[TaskTree][Wizard][steps] ERROR: TaskTree has no steps at root level!', {
+                            // ✅ Get first main nodeId for steps lookup (use nodes if available, otherwise data)
+                            const firstMain = finalTaskTree.nodes?.[0];
+                            const firstMainId = firstMain?.id;
+                            const firstMainSteps = firstMainId && finalTaskTree.steps?.[firstMainId] ? Object.keys(finalTaskTree.steps[firstMainId]) : [];
+                            const firstMainMessages = firstMain?.messages ? Object.keys(firstMain.messages) : [];
+                            console.log('[TaskTree][Wizard][steps] ✅ TaskTree assembled, translations added to global table', {
                               taskTreeId: finalTaskTree.id,
+                              label: finalTaskTree.label,
+                              nodesLength: finalTaskTree.nodes?.length || 0,
+                              templateTranslationsCount: Object.keys(templateTranslations).length,
                               firstMainId,
-                              hasSteps: !!finalTaskTree.steps,
-                              stepsKeys: finalTaskTree.steps ? Object.keys(finalTaskTree.steps) : []
+                              firstMainSteps,
+                              firstMainMessages,
+                              allStepsKeys: finalTaskTree.steps ? Object.keys(finalTaskTree.steps) : []
                             });
-                            error('TASKTREE_WIZARD', 'TaskTree has no steps at root level after assembly', new Error('TaskTree has no steps at root level'));
-                            return;
+
+                            // ✅ Phase 2: Only check nodes (no fallback to data)
+                            if (!finalTaskTree.nodes || finalTaskTree.nodes.length === 0) {
+                              console.error('[TaskTree][Wizard][steps] ERROR: TaskTree has no nodes!', finalTaskTree);
+                              error('TASKTREE_WIZARD', 'TaskTree has no nodes after assembly', new Error('TaskTree has no nodes'));
+                              return;
+                            }
+
+                            // ✅ Check steps at root level (keyed by nodeId) - firstMainId already declared above
+                            if (!firstMainId || !finalTaskTree.steps || !finalTaskTree.steps[firstMainId] || Object.keys(finalTaskTree.steps[firstMainId]).length === 0) {
+                              console.error('[TaskTree][Wizard][steps] ERROR: TaskTree has no steps at root level!', {
+                                taskTreeId: finalTaskTree.id,
+                                firstMainId,
+                                hasSteps: !!finalTaskTree.steps,
+                                stepsKeys: finalTaskTree.steps ? Object.keys(finalTaskTree.steps) : []
+                              });
+                              error('TASKTREE_WIZARD', 'TaskTree has no steps at root level after assembly', new Error('TaskTree has no steps at root level'));
+                              return;
+                            }
+
+                            console.log('[TaskTree][Wizard][steps] ✅ TaskTree structure verified, calling handleClose');
+
+                            // Call onComplete to open Response Editor
+                            // ❌ REMOVED: finalTaskTree.translations - translations are now in global table
+                            handleClose(finalTaskTree, {});
+                          } catch (err) {
+                            console.error('[TaskTree][Wizard][steps] Failed to assemble TaskTree:', err);
+                            error('TASKTREE_WIZARD', 'Failed to assemble TaskTree with steps', err);
                           }
-
-                          console.log('[TaskTree][Wizard][steps] ✅ TaskTree structure verified, calling handleClose');
-
-                          // Call onComplete to open Response Editor
-                          // ❌ REMOVED: finalTaskTree.translations - translations are now in global table
-                          handleClose(finalTaskTree, {});
-                        } catch (err) {
-                          console.error('[TaskTree][Wizard][steps] Failed to assemble TaskTree:', err);
-                          error('TASKTREE_WIZARD', 'Failed to assemble TaskTree with steps', err);
-                        }
-                      }}
-                      style={{ background: '#22c55e', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, cursor: 'pointer' }}
-                    >
-                      Continue
-                    </button>
-                  )}
+                        }}
+                        style={{ background: '#22c55e', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        Continue
+                      </button>
+                    )}
                 </div>
               )}
             </div>

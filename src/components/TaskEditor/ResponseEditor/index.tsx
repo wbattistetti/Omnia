@@ -32,6 +32,8 @@ import { useResponseEditorRefs } from './hooks/useResponseEditorRefs';
 import { usePanelWidths } from './hooks/usePanelWidths';
 import { getStepsAsArray, getStepsForNode, getTaskMeta } from './utils/responseEditorUtils';
 import { ServiceUnavailableModal } from './components/ServiceUnavailableModal';
+import { GeneralizabilityBanner } from './components/GeneralizabilityBanner';
+import { useGeneralizabilityCheck } from './hooks/useGeneralizabilityCheck';
 
 import type { TaskMeta } from '../EditorHost/types';
 import type { Task } from '../../../types/taskTypes';
@@ -149,6 +151,17 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     taskTreeVersion,
     isTaskTreeLoading,
   });
+
+  // ✅ Check generalizability
+  const {
+    isGeneralizable,
+    generalizationReason,
+    isLoading: isCheckingGeneralizability,
+  } = useGeneralizabilityCheck(
+    taskTree,
+    task?.label,
+    currentProjectId
+  );
   const {
     rightWidth,
     setRightWidth,
@@ -330,6 +343,22 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
         />
       )}
 
+      {/* Generalizability Banner */}
+      {isGeneralizable && (
+        <GeneralizabilityBanner
+          isGeneralizable={isGeneralizable}
+          generalizationReason={generalizationReason}
+          onSaveToFactory={() => {
+            // TODO: Implement save to factory logic
+            console.log('[GeneralizabilityBanner] Save to Factory clicked');
+          }}
+          onIgnore={() => {
+            // Banner will be dismissed automatically
+            console.log('[GeneralizabilityBanner] Ignore clicked');
+          }}
+        />
+      )}
+
       <div style={{ display: 'flex', flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
         <ResponseEditorContent
           showContractWizard={showContractWizard}
@@ -396,7 +425,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
               setTasksPanelWidth={setTasksPanelWidth}
               tasksStartWidthRef={tasksStartWidthRef}
               tasksStartXRef={tasksStartXRef}
-              replaceSelectedTaskTree={replaceSelectedTaskTree}
               replaceSelectedTaskTree={replaceSelectedTaskTree}
             />
           }
