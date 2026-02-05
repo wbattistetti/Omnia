@@ -12,6 +12,7 @@ import { useDDTTranslations } from '../../../hooks/useDDTTranslations';
 import { ToolbarButton } from '../../../dock/types';
 import { useResponseEditorSideEffects } from './hooks/useResponseEditorSideEffects';
 import { useResponseEditorState } from './hooks/useResponseEditorState';
+import { useResponseEditorInitialization } from './hooks/useResponseEditorInitialization';
 import { ResponseEditorContent } from './components/ResponseEditorContent';
 import { ResponseEditorNormalLayout } from './components/ResponseEditorNormalLayout';
 import { useSidebarHandlers } from './hooks/useSidebarHandlers';
@@ -203,6 +204,8 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     setShowContractWizard,
     setTaskTreeVersion,
     setLeftPanelMode,
+    setTestPanelMode,
+    setTasksPanelMode,
     replaceSelectedTaskTree: replaceSelectedTaskTree,
     leftPanelMode,
     testPanelMode,

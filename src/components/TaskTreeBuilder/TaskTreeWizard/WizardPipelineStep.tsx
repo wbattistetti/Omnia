@@ -260,7 +260,7 @@ const WizardPipelineStep: React.FC<Props> = ({ dataNode, detectTypeIcon, onCance
     subList.forEach(subLabel => {
       const subFieldId = `${mainLabel}/${subLabel}`;
       if (!taskCounter.getFieldTasks(subFieldId).startPrompt) {
-        taskCounter.initializeField(subFieldId, 'subData');
+        taskCounter.initializeField(subFieldId, 'subTasks'); // ✅ Fixed: use 'subTasks' instead of 'subData'
       }
     });
 

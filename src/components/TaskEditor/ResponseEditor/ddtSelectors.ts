@@ -1,17 +1,14 @@
 // Puri selettori/mappers per TaskTree. Nessuna dipendenza da React.
 // Le funzioni sono tolleranti a strutture diverse (steps come array o come oggetto, messages annidati, ecc.)
 
+import { getNodesWithFallback } from '../../../utils/taskTreeMigrationHelpers';
+
 /**
  * Get node list from TaskTree
- * ✅ Usa solo TaskTree.nodes (nessuna backward compatibility)
+ * ✅ Uses migration helper with fallback support
  */
 export function getdataList(taskTree: any): any[] {
-  if (!taskTree) return [];
-  // ✅ Usa solo TaskTree.nodes
-  if (Array.isArray(taskTree.nodes)) {
-    return taskTree.nodes.filter(Boolean);
-  }
-  return [];
+  return getNodesWithFallback(taskTree, 'getdataList');
 }
 
 /**

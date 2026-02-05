@@ -205,16 +205,19 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
   const { addTranslations: addTranslationsToGlobal } = useProjectTranslations();
 
   const [step, setStep] = useState<string>(() => {
-    if (initialTaskTree?._inferenceResult?.ai?.schema && initialTaskTree.data?.length > 0) {
+    // ✅ Phase 4A: Use only nodes (no fallback to data)
+    const nodes = initialTaskTree?.nodes;
+
+    if (initialTaskTree?._inferenceResult?.ai?.schema && nodes && Array.isArray(nodes) && nodes.length > 0) {
       return 'heuristic-confirm';
     }
-    // ✅ NUOVO: Se initialTaskTree ha data ma senza steps → vai direttamente a 'structure'
+    // ✅ NUOVO: Se initialTaskTree ha nodes ma senza steps → vai direttamente a 'structure'
     // Il bottone "Build Messages" sarà visibile e porterà a 'pipeline'
-    if (initialTaskTree?.data && Array.isArray(initialTaskTree.data) && initialTaskTree.data.length > 0) {
+    if (nodes && Array.isArray(nodes) && nodes.length > 0) {
       // ✅ Controlla solo steps a root level
       const hasStepsAtRoot = initialTaskTree.steps && typeof initialTaskTree.steps === 'object' && Object.keys(initialTaskTree.steps).length > 0;
       if (!hasStepsAtRoot) {
-        console.log('[TaskTreeWizard] data presente ma senza steps, andando a structure per generare messaggi');
+        console.log('[TaskTreeWizard] nodes presente ma senza steps, andando a structure per generare messaggi');
         return 'structure';
       }
     }
@@ -239,8 +242,10 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
     mains0: SchemaNode[];
     root: string;
   } | null>(() => {
-    if (initialTaskTree?._inferenceResult?.ai?.schema && initialTaskTree.data?.length > 0) {
-      const mains = (initialTaskTree.data as any[]).map((m: any) => ({
+    // ✅ Phase 4A: Use only nodes (no fallback to data)
+    const nodes = initialTaskTree?.nodes;
+    if (initialTaskTree?._inferenceResult?.ai?.schema && nodes && Array.isArray(nodes) && nodes.length > 0) {
+      const mains = (nodes as any[]).map((m: any) => ({
         id: m.id,  // ✅ CRITICAL: Preserve node ID (GUID from template)
         label: m.label,
         type: m.type,
@@ -281,8 +286,10 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
   // Schema editing state (from detect schema)
   const [schemaRootLabel, setSchemaRootLabel] = useState<string>(initialTaskTree?.label || '');
   const [mountedDataTree, setMountedDataTree] = useState<SchemaNode[]>(() => {
-    if (initialTaskTree?.data && Array.isArray(initialTaskTree.data) && initialTaskTree.data.length > 0) {
-      const mains = (initialTaskTree.data as any[]).map((m: any) => ({
+    // ✅ Phase 4A: Use only nodes (no fallback to data)
+    const nodes = initialTaskTree?.nodes;
+    if (nodes && Array.isArray(nodes) && nodes.length > 0) {
+      const mains = (nodes as any[]).map((m: any) => ({
         id: m.id,  // ✅ CRITICAL: Preserve node ID (GUID from template)
         label: m.label,
         type: m.type,
@@ -919,7 +926,9 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
   }, []);
 
   const [showRight, setShowRight] = useState<boolean>(() => {
-    if (initialTaskTree?._inferenceResult?.ai?.schema && initialTaskTree.data?.length > 0) return true;
+    // ✅ Phase 4A: Use only nodes (no fallback to data)
+    const nodes = initialTaskTree?.nodes;
+    if (initialTaskTree?._inferenceResult?.ai?.schema && nodes && Array.isArray(nodes) && nodes.length > 0) return true;
     return startOnStructure ? true : false;
   });
 
@@ -969,7 +978,7 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
 
   // Handler per chiusura (annulla o completamento) - definito qui per essere disponibile nei useEffect
   const handleClose = React.useCallback((result?: any, messages?: any) => {
-    debug('TASKTREE_WIZARD', 'Handle close', { hasResult: !!result, hasOnComplete: !!onComplete, resultId: result?.id, resultLabel: result?.label, mainsCount: Array.isArray(result?.data) ? result.data.length : 'not-array' });
+    debug('TASKTREE_WIZARD', 'Handle close', { hasResult: !!result, hasOnComplete: !!onComplete, resultId: result?.id, resultLabel: result?.label, mainsCount: Array.isArray(result?.nodes) ? result.nodes.length : 'not-array' });
     setClosed(true);
     if (result && onComplete) {
       debug('TASKTREE_WIZARD', 'Calling onComplete callback');
@@ -1714,14 +1723,11 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
     if (fromExistingTemplate) {
       console.log('[TaskTree][Wizard][processTemplate] Template esistente: assemblo e vado direttamente a ResponseEditor');
 
-      // Set schema for consistency
+      // Set schema for consistency (senza espandere il wizard)
       setSchemaRootLabel(root);
       setMountedDataTree(mains0);
       setDetectTypeIcon(template.icon || null);
-      setShowRight(true);
-      setIsCompactMode(false); // ✅ Espandi wizard
-      // ✅ Emetti evento per espandere modal
-      document.dispatchEvent(new CustomEvent('taskTreeWizard:expand'));
+      // ✅ NON espandere il wizard - andiamo direttamente al ResponseEditor
 
       // ✅ Verifica se ci sono steps nel template
       const hasSteps = mains0.some((m: any) => {
@@ -1827,14 +1833,14 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
           console.log('[TaskTree][Wizard][processTemplate] ✅ TaskTree assembled, translations in global table', {
             taskTreeId: finalTaskTree.id,
             label: finalTaskTree.label,
-            nodesLength: finalTaskTree.nodes?.length || finalTaskTree.data?.length || 0,
+            nodesLength: finalTaskTree.nodes?.length || 0,
             templateTranslationsCount: Object.keys(templateTranslations).length
           });
 
-          // ✅ Verifica struttura TaskTree
-          if (!finalTaskTree.data || finalTaskTree.data.length === 0) {
-            console.error('[TaskTree][Wizard][processTemplate] ERROR: TaskTree has no data!', finalTaskTree);
-            error('TASKTREE_WIZARD', 'TaskTree has no data after assembly', new Error('TaskTree has no data'));
+          // ✅ Phase 2: Only check nodes (no fallback to data)
+          if (!finalTaskTree.nodes || finalTaskTree.nodes.length === 0) {
+            console.error('[TaskTree][Wizard][processTemplate] ERROR: TaskTree has no nodes!', finalTaskTree);
+              error('TASKTREE_WIZARD', 'TaskTree has no nodes after assembly', new Error('TaskTree has no nodes'));
             return;
           }
 
@@ -2168,19 +2174,19 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
                             console.log('[TaskTree][Wizard][heuristicMatch] ✅ TaskTree assembled, translations in global table', {
                               taskTreeId: finalTaskTree.id,
                               label: finalTaskTree.label,
-                              nodesLength: finalTaskTree.nodes?.length || finalTaskTree.data?.length || 0,
+                              nodesLength: finalTaskTree.nodes?.length || 0,
                               templateTranslationsCount: Object.keys(templateTranslations).length
                             });
 
-                            // Verify TaskTree structure before passing to Response Editor
-                            if (!finalTaskTree.data || finalTaskTree.data.length === 0) {
-                              console.error('[TaskTree][Wizard][heuristicMatch] ERROR: TaskTree has no data!', finalTaskTree);
-                              error('TASKTREE_WIZARD', 'TaskTree has no data after assembly', new Error('TaskTree has no data'));
+                            // ✅ Phase 2: Only check nodes (no fallback to data)
+                            if (!finalTaskTree.nodes || finalTaskTree.nodes.length === 0) {
+                              console.error('[TaskTree][Wizard][heuristicMatch] ERROR: TaskTree has no nodes!', finalTaskTree);
+                              error('TASKTREE_WIZARD', 'TaskTree has no nodes after assembly', new Error('TaskTree has no nodes'));
                               return;
                             }
 
-                            // ✅ Check steps at root level (keyed by nodeId)
-                            const firstMainId = finalTaskTree.data[0]?.id;
+                            // ✅ Use nodes only
+                            const firstMainId = finalTaskTree.nodes[0]?.id;
                             if (!firstMainId || !finalTaskTree.steps || !finalTaskTree.steps[firstMainId] || Object.keys(finalTaskTree.steps[firstMainId]).length === 0) {
                               console.error('[TaskTree][Wizard][heuristicMatch] ERROR: TaskTree has no steps at root level!', {
                                 taskTreeId: finalTaskTree.id,
@@ -2545,14 +2551,15 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
                             }
                           );
 
-                          // ✅ Get first main nodeId for steps lookup
-                          const firstMainId = finalTaskTree.data?.[0]?.id;
+                          // ✅ Get first main nodeId for steps lookup (use nodes if available, otherwise data)
+                          const firstMain = finalTaskTree.nodes?.[0];
+                          const firstMainId = firstMain?.id;
                           const firstMainSteps = firstMainId && finalTaskTree.steps?.[firstMainId] ? Object.keys(finalTaskTree.steps[firstMainId]) : [];
-                          const firstMainMessages = finalTaskTree.data?.[0]?.messages ? Object.keys(finalTaskTree.data[0].messages) : [];
+                          const firstMainMessages = firstMain?.messages ? Object.keys(firstMain.messages) : [];
                           console.log('[TaskTree][Wizard][steps] ✅ TaskTree assembled, translations added to global table', {
                             taskTreeId: finalTaskTree.id,
                             label: finalTaskTree.label,
-                            nodesLength: finalTaskTree.nodes?.length || finalTaskTree.data?.length || 0,
+                            nodesLength: finalTaskTree.nodes?.length || 0,
                             templateTranslationsCount: Object.keys(templateTranslations).length,
                             firstMainId,
                             firstMainSteps,
@@ -2560,10 +2567,10 @@ const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: an
                             allStepsKeys: finalTaskTree.steps ? Object.keys(finalTaskTree.steps) : []
                           });
 
-                          // Verify TaskTree structure before passing to Response Editor
-                          if (!finalTaskTree.data || finalTaskTree.data.length === 0) {
-                            console.error('[TaskTree][Wizard][steps] ERROR: TaskTree has no data!', finalTaskTree);
-                            error('TASKTREE_WIZARD', 'TaskTree has no data after assembly', new Error('TaskTree has no data'));
+                          // ✅ Phase 2: Only check nodes (no fallback to data)
+                          if (!finalTaskTree.nodes || finalTaskTree.nodes.length === 0) {
+                            console.error('[TaskTree][Wizard][steps] ERROR: TaskTree has no nodes!', finalTaskTree);
+                            error('TASKTREE_WIZARD', 'TaskTree has no nodes after assembly', new Error('TaskTree has no nodes'));
                             return;
                           }
 

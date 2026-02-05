@@ -48,6 +48,7 @@ import { TaskType } from '../types/taskTypes'; // ✅ RIMOSSO: taskIdToTaskType 
 import type { TaskMeta } from './TaskEditor/EditorHost/types'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import TaskTreeWizardModal from './TaskTreeBuilder/TaskTreeWizard/TaskTreeWizardModal';
 import { useTaskTreeWizardModal } from './TaskTreeBuilder/TaskTreeWizard/useTaskTreeWizardModal';
+import { getNodesWithFallback } from '../utils/taskTreeMigrationHelpers';
 import type { TaskTree } from '../types/taskTypes';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
@@ -1024,10 +1025,8 @@ export const AppContent: React.FC<AppContentProps> = ({
             if (!taskName) continue;
             const taskTree: any = it?.ddt || it?.taskTree; // ✅ Support both old 'ddt' and new 'taskTree' property names
             if (!taskTree) continue;
-            // Support assembled shape (nodes) and snapshot shape (data/mains)
-            const mains: any[] = Array.isArray(taskTree?.nodes)
-              ? taskTree.nodes
-              : (Array.isArray(taskTree?.data) ? taskTree.data : (taskTree?.data ? [taskTree.data] : (Array.isArray(taskTree?.mains) ? taskTree.mains : [])));
+            // ✅ Use migration helper for consistent fallback handling
+            const mains: any[] = getNodesWithFallback(taskTree, 'AppContent.saveTaskToRepository');
             for (const m of (mains || [])) {
               const mainLabel: string = String(m?.labelKey || m?.label || m?.name || 'Data').trim();
               const mainKey = `${taskName}.${mainLabel}`; // ✅ RINOMINATO: actName → taskName
@@ -1061,9 +1060,10 @@ export const AppContent: React.FC<AppContentProps> = ({
             if (!taskName) continue;
             const taskTree: any = it?.ddt || it?.taskTree; // ✅ Support both old 'ddt' and new 'taskTree' property names
             if (!taskTree) continue;
+            // ✅ Phase 4A: Use only nodes (no fallback to data)
             const mains: any[] = Array.isArray(taskTree?.nodes)
               ? taskTree.nodes
-              : (Array.isArray(taskTree?.data) ? taskTree.data : (taskTree?.data ? [taskTree.data] : (Array.isArray(taskTree?.mains) ? taskTree.mains : [])));
+              : (Array.isArray(taskTree?.mains) ? taskTree.mains : []);
             const mainsOut: any[] = [];
             for (const m of (mains || [])) {
               const mainLabel: string = String(m?.labelKey || m?.label || m?.name || 'Data').trim();

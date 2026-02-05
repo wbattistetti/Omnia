@@ -17,7 +17,8 @@ import { extractTranslationKeysFromSteps } from '../../../utils/stepPromptsConve
 export interface AssembledTaskTree {
   id: string;
   label: string;
-  data: any[];  // ✅ Solo struttura dati (senza steps)
+  // ❌ REMOVED: data (legacy format, no longer supported)
+  nodes: any[];     // ✅ Required (no longer optional)
   steps?: Record<string, any>;  // ✅ Steps a root level: { "nodeId": { start: {...}, noMatch: {...} } }
   // ❌ REMOVED: translations - translations are now stored in global ProjectTranslationsContext
   v2Draft?: any;
@@ -826,7 +827,8 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
     const result: AssembledTaskTree = {
       id: taskTreeId,
       label: rootLabel || 'Data',
-      data: assembledMains,  // ✅ data ora senza steps (solo struttura dati)
+      // ❌ REMOVED: data (no longer produced in Phase 2)
+      nodes: assembledMains,     // ✅ Only nodes
       steps: Object.keys(rootSteps).length > 0 ? rootSteps : undefined,  // ✅ Steps a root level
       v2Draft: getAllV2Draft(),
     };
@@ -834,7 +836,8 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
     console.log('[assembleFinalTaskTree][RESULT]', {
       id: result.id,
       label: result.label,
-      mainsCount: result.data.length,
+      mainsCount: result.nodes.length || 0,
+      hasNodes: !!result.nodes,
       hasSteps: !!result.steps,
       stepsCount: result.steps ? Object.keys(result.steps).length : 0
     });

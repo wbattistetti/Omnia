@@ -142,7 +142,7 @@ export async function generateAllTaskTreeStepsFromAI(
   console.log('[🔍 taskTreeStepGenerator] generateAllTaskTreeStepsFromAI COMPLETE', {
     taskTreeId: finalTaskTree.id,
     taskTreeLabel: finalTaskTree.label,
-    nodesLength: finalTaskTree.nodes?.length || finalTaskTree.data?.length || 0,
+    nodesLength: finalTaskTree.nodes?.length || 0,
     hasSteps: !!finalTaskTree.steps,
     stepsCount: finalTaskTree.steps ? Object.keys(finalTaskTree.steps).length : 0
   });

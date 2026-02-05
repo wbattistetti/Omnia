@@ -6,6 +6,7 @@ import type { AssembledTaskTree, dataNode } from '../../TaskTreeBuilder/DDTAssem
 import type { DDTNavigatorCallbacks } from './ddtTypes';
 import { getStep, getEscalationRecovery, executeStep } from './ddtSteps';
 import { getTaskSemantics } from '../../../utils/taskSemantics';
+import { getNodesWithFallback } from '../../../utils/taskTreeMigrationHelpers';
 
 // ============================================================================
 // TYPES
@@ -268,12 +269,8 @@ function getNextData(
   ddtInstance: AssembledTaskTree,
   state: DDTEngineState
 ): CurrentData | null {
-  // Normalizza data (può essere array o singolo oggetto)
-  const dataList = Array.isArray(ddtInstance.data)
-    ? ddtInstance.data
-    : ddtInstance.data
-    ? [ddtInstance.data]
-    : [];
+  // ✅ Use helper with logging
+  const dataList = getNodesWithFallback(ddtInstance, 'ddtEngine.getNextData');
 
   // ✅ Deduce semantics from structure
   const semantics = getTaskSemantics(ddtInstance);

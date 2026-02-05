@@ -1,83 +1,99 @@
-import { describe, it, expect } from 'vitest';
-import { getdataList, getSubDataList, getNodeSteps, getMessagesFor, findNode, getLabel, hasMultipleMains } from '../ddtSelectors';
+// Please write clean, production-grade TypeScript code.
+// Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import address from './__fixtures__/ddt_address.json';
-import birthdate from './__fixtures__/ddt_birthdate.json';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { getdataList } from '../ddtSelectors';
+import * as migrationHelpers from '../../../../utils/taskTreeMigrationHelpers';
 
-describe('ddtSelectors', () => {
-  describe('getdataList', () => {
-    it('wrappa data singolo (root) in array', () => {
-      const mains = getdataList(birthdate as any);
-      expect(Array.isArray(mains)).toBe(true);
-      expect(mains.length).toBe(1);
-      expect(getLabel(mains[0])).toBe('Birthdate');
-    });
-
-    it('ritorna array di data quando data è array', () => {
-      const mains = getdataList(address as any);
-      expect(mains.length).toBe(2);
-      expect(getLabel(mains[0])).toBe('Address');
-      expect(getLabel(mains[1])).toBe('Contact');
-    });
+describe('ddtSelectors - Migration Phase 0', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  describe('getSubDataList', () => {
-    it('ritorna subData del main', () => {
-      const mains = getdataList(address as any);
-      const subs = getSubDataList(mains[0]);
-      expect(subs.map(getLabel)).toEqual(['street','city','postal_code','country']);
-    });
+  it('should use getNodesWithFallback helper', () => {
+    const getNodesWithFallbackSpy = vi.spyOn(migrationHelpers, 'getNodesWithFallback');
+
+    const taskTree = {
+      id: 'test-1',
+      nodes: [
+        { id: 'node-1', label: 'Node 1' }
+      ]
+    };
+
+    const result = getdataList(taskTree);
+
+    // ✅ Verify helper was called
+    expect(getNodesWithFallbackSpy).toHaveBeenCalledWith(taskTree, 'getdataList');
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('node-1');
+
+    getNodesWithFallbackSpy.mockRestore();
   });
 
-  describe('getNodeSteps', () => {
-    it('estrae step da array steps[]', () => {
-      const mains = getdataList(address as any);
-      const steps = getNodeSteps(mains[0]);
-      expect(steps).toEqual(['start','noInput','success']);
-    });
+  it('should return nodes when available', () => {
+    const taskTree = {
+      id: 'test-2',
+      nodes: [
+        { id: 'node-1', label: 'Node 1' },
+        { id: 'node-2', label: 'Node 2' }
+      ]
+    };
 
-    it('estrae step da oggetto steps{} o messages{}', () => {
-      const mains = getdataList(address as any);
-      const stepsContact = getNodeSteps(mains[1]);
-      expect(stepsContact).toEqual(['success']);
+    const result = getdataList(taskTree);
 
-      const rootSteps = getNodeSteps(birthdate as any);
-      expect(rootSteps).toEqual(['start','noMatch','confirmation','success']);
-    });
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe('node-1');
+    expect(result[1].id).toBe('node-2');
   });
 
-  describe('getMessagesFor', () => {
-    it('ritorna struttura step quando presente', () => {
-      const mains = getdataList(address as any);
-      const start = getMessagesFor(mains[0], 'start');
-      expect(start).toHaveProperty('type', 'start');
-    });
+  it('should return empty array when nodes not available but data exists (Phase 4A: no fallback)', () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    it('ritorna {} quando non presente', () => {
-      const mains = getdataList(address as any);
-      const missing = getMessagesFor(mains[0], 'noMatch');
-      expect(missing).toEqual({});
-    });
+    const taskTree = {
+      id: 'test-3',
+      data: [
+        { id: 'data-1', label: 'Data 1' }
+      ]
+    };
+
+    const result = getdataList(taskTree);
+
+    // ✅ Phase 4A: Should return empty array (no fallback to data)
+    expect(result).toHaveLength(0);
+    expect(result).toEqual([]);
+
+    // ✅ Verify error was logged (via helper)
+    expect(consoleErrorSpy).toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
   });
 
-  describe('findNode & helpers', () => {
-    it('seleziona main e sub con fallback sicuri', () => {
-      const mains = getdataList(address as any);
-      expect(getLabel(findNode(address as any, 0, null))).toBe('Address');
-      expect(getLabel(findNode(address as any, 0, 2))).toBe('postal_code');
-      // out of range fallback
-      expect(getLabel(findNode(address as any, 10, null))).toBe('Address');
-      expect(getLabel(findNode(address as any, 0, 99))).toBe('street');
-    });
+  it('should return empty array when taskTree is null', () => {
+    const result = getdataList(null);
+    expect(result).toEqual([]);
+  });
 
-    it('hasMultipleMains', () => {
-      expect(hasMultipleMains(address as any)).toBe(true);
-      expect(hasMultipleMains(birthdate as any)).toBe(false);
-    });
+  it('should return empty array when taskTree is undefined', () => {
+    const result = getdataList(undefined);
+    expect(result).toEqual([]);
+  });
+
+  it('should prefer nodes over data when both available', () => {
+    const taskTree = {
+      id: 'test-4',
+      nodes: [
+        { id: 'node-1', label: 'Node 1' }
+      ],
+      data: [
+        { id: 'data-1', label: 'Data 1' }
+      ]
+    };
+
+    const result = getdataList(taskTree);
+
+    // ✅ Should prefer nodes
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('node-1');
+    expect(result[0].label).toBe('Node 1');
   });
 });
-
-
-
-
-

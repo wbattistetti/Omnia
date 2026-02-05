@@ -17,6 +17,8 @@ export interface UseResponseEditorInitializationParams {
   setShowContractWizard: React.Dispatch<React.SetStateAction<boolean>>;
   setTaskTreeVersion: React.Dispatch<React.SetStateAction<number>>;
   setLeftPanelMode: React.Dispatch<React.SetStateAction<RightPanelMode>>;
+  setTestPanelMode: React.Dispatch<React.SetStateAction<RightPanelMode>>;
+  setTasksPanelMode: React.Dispatch<React.SetStateAction<RightPanelMode>>;
   replaceSelectedTaskTree: (taskTree: TaskTree) => void;
   leftPanelMode: RightPanelMode;
   testPanelMode: RightPanelMode;
@@ -57,6 +59,9 @@ export function useResponseEditorInitialization(params: UseResponseEditorInitial
     showContractWizard,
     setShowContractWizard,
     setTaskTreeVersion,
+    setLeftPanelMode,
+    setTestPanelMode,
+    setTasksPanelMode,
     leftPanelMode,
     testPanelMode,
     tasksPanelMode,
@@ -97,8 +102,8 @@ export function useResponseEditorInitialization(params: UseResponseEditorInitial
     saveRightMode,
   } = usePanelModes({
     setLeftPanelMode,
-    setTestPanelMode: params.setTestPanelMode || (() => {}),
-    setTasksPanelMode: params.setTasksPanelMode || (() => {}),
+    setTestPanelMode,
+    setTasksPanelMode,
   });
 
   const toolbarButtons = useResponseEditorToolbar({

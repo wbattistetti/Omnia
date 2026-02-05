@@ -47,7 +47,8 @@ export interface dataNode {
 export interface AssembledDDT {
   id: string;
   label: string;
-  data: dataNode;
+  // ❌ REMOVED: data (legacy format, no longer supported)
+  nodes: any[];     // ✅ Required (no longer optional)
   dialogueSteps?: any[]; // ✅ Flat dialogue steps array (replaces nested data[].steps)
   translations: Record<string, string>;
   introduction?: StepGroup; // Optional introduction step at root level (aggregate)

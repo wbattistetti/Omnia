@@ -19,8 +19,8 @@ export function buildTask(
   ddtId: string,
   translations: Record<string, string>
 ): Task {
-  // ✅ Rimosso askQuestion, usa DataRequest per step 'start'
-  const templateId = stepType === 'start' ? 'DataRequest' : 'sayMessage';
+  // ✅ Fixed: Use 'UtteranceInterpretation' instead of 'DataRequest' (which is not a valid templateId)
+  const templateId = stepType === 'start' ? 'UtteranceInterpretation' : 'sayMessage';
   const taskId = uuidv4(); // Unique Task ID
   const parameterId = KNOWN_ACTIONS[templateId]?.defaultParameter || 'text';
   const valueKey = `runtime.${ddtId}.${stepType}.${templateId}.${taskId}.text`;
