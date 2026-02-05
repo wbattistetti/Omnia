@@ -178,7 +178,7 @@ class AutoMappingService {
 
 const autoMappingService = new AutoMappingService();
 
-const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: any, messages?: any) => void; initialTaskTree?: any; startOnStructure?: boolean; onSeePrompts?: () => void; taskType?: string; taskLabel?: string }> = ({ onCancel, onComplete, initialTaskTree, startOnStructure, onSeePrompts, taskType, taskLabel }) => {
+const TaskWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree: any, messages?: any) => void; initialTaskTree?: any; startOnStructure?: boolean; onSeePrompts?: () => void; taskType?: string; taskLabel?: string }> = ({ onCancel, onComplete, initialTaskTree, startOnStructure, onSeePrompts, taskType, taskLabel }) => {
   const API_BASE = '';
   // Ensure accent is inherited in nested components
   React.useEffect(() => {
@@ -218,9 +218,20 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
         return 'structure';
       }
     }
-    return startOnStructure ? 'structure' : 'input';
+    // ✅ NUOVO: Modalità compatta iniziale
+    return startOnStructure ? 'structure' : 'input-compact';
   });
   const [saving, setSaving] = useState<'factory' | 'project' | null>(null);
+  const [isCompactMode, setIsCompactMode] = useState<boolean>(() => {
+    // ✅ Inizia in modalità compatta se non c'è initialTaskTree o startOnStructure è false
+    return !startOnStructure && !initialTaskTree;
+  });
+  const [isAIGenerating, setIsAIGenerating] = useState<boolean>(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+
+  // ✅ Stati per refining textbox in step 'structure'
+  const [showRefiningTextbox, setShowRefiningTextbox] = useState<boolean>(false);
+  const [refiningText, setRefiningText] = useState<string>('');
 
   const [pendingHeuristicMatch, setPendingHeuristicMatch] = useState<{
     schema: any;
@@ -892,6 +903,8 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
   const [partialResults, setPartialResults] = useState<Record<number, any>>({});
   // Ref to track when all mains are completed and we should close
   const pendingCloseRef = React.useRef<{ taskTree: any; translations: any } | null>(null);
+  // State to track when template is processed and we should close directly (fromExistingTemplate flow)
+  const [pendingTemplateClose, setPendingTemplateClose] = React.useState<{ taskTree: any; translations: any } | null>(null);
   // Persisted artifacts across runs for incremental assemble
   const [artifactStore, setArtifactStore] = useState<any | null>(null);
   // Track pending renames to relocate artifacts keys between normalized paths
@@ -954,6 +967,31 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
     }
   }, [partialResults, mountedDataTree.length]);
 
+  // Handler per chiusura (annulla o completamento) - definito qui per essere disponibile nei useEffect
+  const handleClose = React.useCallback((result?: any, messages?: any) => {
+    debug('TASKTREE_WIZARD', 'Handle close', { hasResult: !!result, hasOnComplete: !!onComplete, resultId: result?.id, resultLabel: result?.label, mainsCount: Array.isArray(result?.data) ? result.data.length : 'not-array' });
+    setClosed(true);
+    if (result && onComplete) {
+      debug('TASKTREE_WIZARD', 'Calling onComplete callback');
+      onComplete(result, messages);
+    } else {
+      debug('TASKTREE_WIZARD', 'Calling onCancel');
+      onCancel();
+    }
+  }, [onComplete, onCancel]);
+
+  // Effect to handle closing when template is processed (fromExistingTemplate flow)
+  React.useEffect(() => {
+    if (!pendingTemplateClose) return;
+
+    const { taskTree, translations } = pendingTemplateClose;
+    setPendingTemplateClose(null); // Clear before calling to avoid re-triggering
+    // Use setTimeout to defer to next tick, avoiding setState during render
+    setTimeout(() => {
+      handleClose(taskTree, translations);
+    }, 0);
+  }, [pendingTemplateClose, handleClose]);
+
   // ✅ FIX: Memoizza dataNodes per evitare re-creazione ad ogni render
   const dataNodes = React.useMemo(() => {
     return mountedDataTree.map((mainItem) => ({
@@ -1011,6 +1049,7 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
     if (step === 'pipeline' || closed) return; // Blocca ogni setState durante la pipeline
     setShowRight(true);
     setStep('loading');
+    setIsAIGenerating(true); // ✅ Imposta flag AI generando
     try { dlog('[TaskTree][UI] step → loading'); } catch { }
     setErrorMsg(null);
     try {
@@ -1145,6 +1184,10 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
         }
         setSchemaRootLabel(finalRoot);
         setMountedDataTree(finalMains);
+        setIsAIGenerating(false); // ✅ AI completata
+        setIsCompactMode(false); // ✅ Espandi wizard
+        // ✅ Emetti evento per espandere modal
+        document.dispatchEvent(new CustomEvent('taskTreeWizard:expand'));
         setStep('structure');
         try { dlog('[TaskTree][UI] step → structure', { root: finalRoot, mains: finalMains.length }); } catch { }
         return;
@@ -1168,11 +1211,65 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
         msg = err.message || 'Errore sconosciuto';
       }
 
+      setIsAIGenerating(false); // ✅ Reset flag AI in caso di errore
       setErrorMsg('Errore IA: ' + msg);
       setStep('error');
       try { dlog('[TaskTree][UI] step → error'); } catch { }
     }
   };
+
+  // ✅ NUOVO: Handler per pulsante "Crea" (AI) in modalità compatta
+  const handleCreateWithAI = React.useCallback(async () => {
+    if (step === 'pipeline' || closed || isAIGenerating) return;
+    setIsAIGenerating(true);
+    setIsCompactMode(false);
+    setShowRight(true);
+    // Usa taskLabel come input per AI
+    const textToUse = taskLabel || userDesc;
+    await handleDetectType(textToUse);
+  }, [step, closed, isAIGenerating, taskLabel, userDesc, handleDetectType]);
+
+  // ✅ Handler "Sì, va bene" → conferma struttura e passa a pipeline
+  const handleConfirmStructure = React.useCallback(() => {
+    try { dlog('[TaskTree][UI] step → pipeline (confirm structure)'); } catch { }
+    // Avvia pipeline generativa mantenendo visibile la struttura (progress in-place)
+    setShowRight(true);
+    // reset progress state to avoid stale 100%
+    setTaskProgress({});
+    setRootProgress(0);
+    setPartialResults({}); // Reset parallel processing results
+    // Apri il primo main data
+    setSelectedIdx(0);
+    setStep('pipeline');
+  }, [setSelectedIdx]);
+
+  // ✅ Handler "No, correggila" → mostra textbox refining
+  const handleShowRefining = React.useCallback(() => {
+    setShowRefiningTextbox(true);
+  }, []);
+
+  // ✅ Handler "Applica correzione" → invia a AI e rigenera struttura
+  const handleApplyRefining = React.useCallback(async () => {
+    if (!refiningText.trim()) return;
+
+    // Combina taskLabel + refiningText per AI
+    const combinedText = `${taskLabel || ''} ${refiningText.trim()}`.trim();
+
+    if (!combinedText) {
+      console.warn('[TaskTreeWizard] handleApplyRefining: no text to refine');
+      return;
+    }
+
+    // Reset textbox prima di chiamare AI
+    setShowRefiningTextbox(false);
+    const textToRefine = refiningText.trim();
+    setRefiningText('');
+
+    // Chiama handleDetectType con testo combinato (rigenera struttura)
+    await handleDetectType(combinedText);
+
+    // Rimane in step 'structure' (handleDetectType già gestisce questo)
+  }, [refiningText, taskLabel, handleDetectType]);
 
   // removed old continue
 
@@ -1378,22 +1475,6 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
     }
   };
 
-  // Handler per chiusura (annulla o completamento)
-  const handleClose = (result?: any, messages?: any) => {
-    debug('TASKTREE_WIZARD', 'Handle close', { hasResult: !!result, hasOnComplete: !!onComplete, resultId: result?.id, resultLabel: result?.label, mainsCount: Array.isArray(result?.data) ? result.data.length : 'not-array' });
-    setClosed(true);
-    if (result && onComplete) {
-      debug('TASKTREE_WIZARD', 'Calling onComplete callback');
-      onComplete(result, messages);
-    } else {
-      debug('TASKTREE_WIZARD', 'Calling onCancel');
-      onCancel();
-    }
-  };
-
-  // Se chiuso, non renderizzare nulla
-  if (closed) return null;
-
   // Two-panel layout render (simplified, as requested)
   const rightHasContent = Boolean(
     showRight && (
@@ -1407,10 +1488,11 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
   const pipelineHeadless = true; // run pipeline headlessly; show progress under structure
   const renderTogglePanel = step !== 'pipeline';
 
-  // Handle manual template selection
-  const handleTemplateSelect = React.useCallback((template: any) => {
-    console.log('[TaskTree][Wizard][templateSelect] Template selected manually:', template.label);
-    console.log('[TaskTree][Wizard][templateSelect] Full template structure:', {
+  // ✅ Funzione helper per processare un template (estratta per riuso)
+  const processTemplate = React.useCallback(async (template: any, skipCompactCheck: boolean = false, fromExistingTemplate: boolean = false) => {
+    console.log('[TaskTree][Wizard][processTemplate] Processing template:', template.label, { skipCompactCheck, fromExistingTemplate });
+
+    console.log('[TaskTree][Wizard][processTemplate] Full template structure:', {
       label: template.label,
       name: template.name,
       hasSubDataIds: !!template.subDataIds,
@@ -1433,7 +1515,7 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
 
     if (subDataIds.length > 0) {
       // ✅ Template composito: crea UN SOLO data con subData[] popolato
-      console.log('[TaskTree][Wizard][templateSelect] 📦 Template composito, creando istanze per sottodati', {
+      console.log('[TaskTree][Wizard][processTemplate] 📦 Template composito, creando istanze per sottodati', {
         subDataIds,
         count: subDataIds.length
       });
@@ -1504,7 +1586,7 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
             kind: subTemplate.name || subTemplate.type || undefined
           });
         } else {
-          console.warn('[TaskTree][Wizard][templateSelect] ⚠️ Template sottodato non trovato per ID', { subId });
+          console.warn('[TaskTree][Wizard][processTemplate] ⚠️ Template sottodato non trovato per ID', { subId });
           // Fallback: crea placeholder senza steps
           subDataInstances.push({
             label: subId,
@@ -1540,7 +1622,7 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
       data.push(mainInstance); // ✅ UN SOLO elemento in data
     } else {
       // ✅ Template semplice: crea istanza dal template root
-      console.log('[TaskTree][Wizard][templateSelect] 📄 Template semplice, creando istanza root');
+      console.log('[TaskTree][Wizard][processTemplate] 📄 Template semplice, creando istanza root');
       // ✅ CRITICAL: Include node ID from template (preserve GUID)
       const mainTemplateNodeId = template.data?.[0]?.id || template.id || template._id;
       const mainTemplateId = template.id || template._id;
@@ -1611,7 +1693,7 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
       data: mains0
     };
 
-    console.log('[TaskTree][Wizard][templateSelect] Processed mains0:', {
+    console.log('[TaskTree][Wizard][processTemplate] Processed mains0:', {
       count: mains0.length,
       mains: mains0.map(m => ({
         label: m.label,
@@ -1628,21 +1710,251 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
       }))
     });
 
-    // Process as if it were a heuristic match
-    setPendingHeuristicMatch({ schema, icon: template.icon || null, mains0, root });
-    setShowInputAlongsideConfirm(false);
-    setSchemaRootLabel(root);
-    setMountedDataTree(mains0);
-    setDetectTypeIcon(template.icon || null);
-    setShowRight(true);
-    setStep('heuristic-confirm');
-    console.log('[TaskTree][Wizard][templateSelect] Template processed, showing confirmation', {
+    // ✅ NUOVO: Se viene da template esistente, assembla TaskTree e vai direttamente a ResponseEditor
+    if (fromExistingTemplate) {
+      console.log('[TaskTree][Wizard][processTemplate] Template esistente: assemblo e vado direttamente a ResponseEditor');
+
+      // Set schema for consistency
+      setSchemaRootLabel(root);
+      setMountedDataTree(mains0);
+      setDetectTypeIcon(template.icon || null);
+      setShowRight(true);
+      setIsCompactMode(false); // ✅ Espandi wizard
+      // ✅ Emetti evento per espandere modal
+      document.dispatchEvent(new CustomEvent('taskTreeWizard:expand'));
+
+      // ✅ Verifica se ci sono steps nel template
+      const hasSteps = mains0.some((m: any) => {
+        const mSteps = m.steps;
+        if (mSteps && typeof mSteps === 'object') {
+          const nodeId = m.templateId || m.id;
+          if (nodeId && mSteps[String(nodeId)]) {
+            return Object.keys(mSteps[String(nodeId)]).length > 0;
+          }
+        }
+        return false;
+      }) || (mains0.some((m: any) => {
+        // Check subData steps too
+        return (m.subData || []).some((s: any) => {
+          const sSteps = s.steps;
+          if (sSteps && typeof sSteps === 'object') {
+            const nodeId = s.templateId || s.id;
+            if (nodeId && sSteps[String(nodeId)]) {
+              return Object.keys(sSteps[String(nodeId)]).length > 0;
+            }
+          }
+          return false;
+        });
+      }));
+
+      console.log('[TaskTree][Wizard][processTemplate] Template esistente - hasSteps:', hasSteps);
+
+      if (hasSteps) {
+        // ✅ Assembla TaskTree e vai direttamente a ResponseEditor
+        try {
+          // ✅ Estrai translation keys dagli steps del template (come fa heuristic-confirm)
+          const translationKeys: string[] = [];
+          mains0.forEach((m: any) => {
+            const mSteps = m.steps;
+            if (mSteps && typeof mSteps === 'object') {
+              const nodeId = m.templateId || m.id;
+              if (nodeId && mSteps[String(nodeId)]) {
+                const nodeSteps = mSteps[String(nodeId)];
+                Object.values(nodeSteps).forEach((stepValue: any) => {
+                  if (Array.isArray(stepValue)) {
+                    stepValue.forEach((key: string) => {
+                      if (typeof key === 'string' && key.startsWith('template.')) {
+                        translationKeys.push(key);
+                      }
+                    });
+                  }
+                });
+              }
+            }
+            // Check subData steps
+            (m.subData || []).forEach((s: any) => {
+              const sSteps = s.steps;
+              if (sSteps && typeof sSteps === 'object') {
+                const nodeId = s.templateId || s.id;
+                if (nodeId && sSteps[String(nodeId)]) {
+                  const nodeSteps = sSteps[String(nodeId)];
+                  Object.values(nodeSteps).forEach((stepValue: any) => {
+                    if (Array.isArray(stepValue)) {
+                      stepValue.forEach((key: string) => {
+                        if (typeof key === 'string' && key.startsWith('template.')) {
+                          translationKeys.push(key);
+                        }
+                      });
+                    }
+                  });
+                }
+              }
+            });
+          });
+
+          console.log('[TaskTree][Wizard][processTemplate] Extracted translation keys:', translationKeys);
+
+          // ✅ Carica traduzioni dal database
+          let templateTranslations: Record<string, { en: string; it: string; pt: string }> = {};
+          if (translationKeys.length > 0) {
+            try {
+              templateTranslations = await getTemplateTranslations(translationKeys);
+              console.log('[TaskTree][Wizard][processTemplate] Loaded', Object.keys(templateTranslations).length, 'translations');
+            } catch (err) {
+              console.error('[TaskTree][Wizard][processTemplate] Failed to load template translations:', err);
+            }
+          }
+
+          // ✅ Assembla TaskTree
+          const emptyStore = buildArtifactStore([]);
+          const projectLang = (localStorage.getItem('project.lang') || 'pt') as 'en' | 'it' | 'pt';
+
+          const finalTaskTree = await assembleFinalTaskTree(
+            root || 'Data',
+            mains0,
+            emptyStore,
+            {
+              escalationCounts: { noMatch: 2, noInput: 2, confirmation: 2 },
+              templateTranslations: templateTranslations,
+              projectLocale: projectLang,
+              addTranslations: addTranslationsToGlobal, // ✅ Add translations to global table
+              contextLabel: taskLabel || root || 'Data', // ✅ Context label for prompt adaptation
+              templateLabel: root || 'Data', // ✅ Template label
+              aiProvider: selectedProvider.toLowerCase() as 'groq' | 'openai' // ✅ AI provider for adaptation
+            }
+          );
+
+          console.log('[TaskTree][Wizard][processTemplate] ✅ TaskTree assembled, translations in global table', {
+            taskTreeId: finalTaskTree.id,
+            label: finalTaskTree.label,
+            nodesLength: finalTaskTree.nodes?.length || finalTaskTree.data?.length || 0,
+            templateTranslationsCount: Object.keys(templateTranslations).length
+          });
+
+          // ✅ Verifica struttura TaskTree
+          if (!finalTaskTree.data || finalTaskTree.data.length === 0) {
+            console.error('[TaskTree][Wizard][processTemplate] ERROR: TaskTree has no data!', finalTaskTree);
+            error('TASKTREE_WIZARD', 'TaskTree has no data after assembly', new Error('TaskTree has no data'));
+            return;
+          }
+
+          // ✅ Memorizza TaskTree in state per chiusura asincrona (evita problemi con hooks)
+          console.log('[TaskTree][Wizard][processTemplate] ✅ TaskTree structure verified, scheduling handleClose');
+          setPendingTemplateClose({ taskTree: finalTaskTree, translations: {} });
+          return; // ✅ Esci qui, non andare a structure
+        } catch (err) {
+          console.error('[TaskTree][Wizard][processTemplate] Failed to assemble TaskTree:', err);
+          error('TASKTREE_WIZARD', 'Failed to assemble TaskTree with steps', err);
+          // Fallback: vai comunque a ResponseEditor con TaskTree minimale
+          const minimalTaskTree = {
+            label: root || 'Data',
+            data: mains0.map((m: any) => ({
+              id: m.id,
+              label: m.label,
+              type: m.type,
+              icon: m.icon,
+              subData: (m.subData || []).map((s: any) => ({
+                id: s.id,
+                label: s.label,
+                type: s.type,
+                icon: s.icon
+              }))
+            })),
+            steps: {}
+          };
+          setPendingTemplateClose({ taskTree: minimalTaskTree, translations: {} });
+          return;
+        }
+      } else {
+        // ✅ Se non ci sono steps, vai comunque a ResponseEditor (l'adattamento avverrà lì)
+        console.log('[TaskTree][Wizard][processTemplate] Template esistente senza steps, vado comunque a ResponseEditor');
+        const minimalTaskTree = {
+          label: root || 'Data',
+          data: mains0.map((m: any) => ({
+            id: m.id,
+            label: m.label,
+            type: m.type,
+            icon: m.icon,
+            subData: (m.subData || []).map((s: any) => ({
+              id: s.id,
+              label: s.label,
+              type: s.type,
+              icon: s.icon
+            }))
+          })),
+          steps: {}
+        };
+        setPendingTemplateClose({ taskTree: minimalTaskTree, translations: {} });
+        return; // ✅ Esci qui, non andare a structure
+      }
+    }
+
+    // ✅ Se in modalità compatta (o skipCompactCheck è true), passa direttamente a structure
+    const shouldGoToStructure = skipCompactCheck || isCompactMode;
+    if (shouldGoToStructure) {
+      setSchemaRootLabel(root);
+      setMountedDataTree(mains0);
+      setDetectTypeIcon(template.icon || null);
+      setShowRight(true);
+      setIsCompactMode(false); // ✅ Espandi wizard
+      // ✅ Emetti evento per espandere modal
+      document.dispatchEvent(new CustomEvent('taskTreeWizard:expand'));
+      setStep('structure');
+    } else {
+      // Process as if it were a heuristic match
+      setPendingHeuristicMatch({ schema, icon: template.icon || null, mains0, root });
+      setShowInputAlongsideConfirm(false);
+      setSchemaRootLabel(root);
+      setMountedDataTree(mains0);
+      setDetectTypeIcon(template.icon || null);
+      setShowRight(true);
+      setStep('heuristic-confirm');
+    }
+    console.log('[TaskTree][Wizard][processTemplate] Template processed', {
       root,
       mainsCount: mains0.length,
       schema,
-      hasPendingMatch: true
+      isCompactMode,
+      skipCompactCheck,
+      nextStep: shouldGoToStructure ? 'structure' : 'heuristic-confirm'
     });
-  }, []);
+  }, [isCompactMode, taskLabel, selectedProvider, addTranslationsToGlobal, handleClose]);
+
+  // Handle manual template selection
+  const handleTemplateSelect = React.useCallback((template: any) => {
+    console.log('[TaskTree][Wizard][templateSelect] Template selected manually:', template.label);
+    // ✅ Aggiorna selectedTemplateId quando template viene selezionato
+    const templateId = template._id || template.id || template.name;
+    setSelectedTemplateId(templateId);
+
+    // ✅ CRITICO: Se siamo in modalità compatta (input-compact), NON processare subito il template
+    // Aspetta che l'utente clicchi su "Usa <nomeTemplate>" (che chiamerà handleChooseThis)
+    if (isCompactMode && step === 'input-compact') {
+      console.log('[TaskTree][Wizard][templateSelect] Modalità compatta: solo aggiornato selectedTemplateId, aspetto conferma utente');
+      return; // ✅ Esci qui, non processare il template
+    }
+
+    // ✅ Processa il template chiamando la funzione helper
+    processTemplate(template, false);
+  }, [isCompactMode, step, processTemplate]);
+
+  // ✅ NUOVO: Handler per pulsante "Usa questo" (template) in modalità compatta
+  const handleChooseThis = React.useCallback(async () => {
+    if (!selectedTemplateId) return;
+    // Trova template selezionato e processalo
+    const allTemplates = DialogueTaskService.getAllTemplates();
+    const selectedTemplate = allTemplates.find((t: any) => (t._id || t.id || t.name) === selectedTemplateId);
+    if (selectedTemplate) {
+      // ✅ CRITICO: Processa template esistente - passa fromExistingTemplate: true per saltare structure
+      await processTemplate(selectedTemplate, true, true); // skipCompactCheck: true, fromExistingTemplate: true
+    }
+  }, [selectedTemplateId, processTemplate]);
+
+  // ✅ Alias per compatibilità (handleChooseThis = handleConfirmTemplate)
+  const handleConfirmTemplate = handleChooseThis;
+
+  // ✅ Se chiuso, non renderizzare nulla (dopo tutti gli hook per rispettare le regole di React)
+  if (closed) return null;
 
   return (
     <div
@@ -1663,10 +1975,11 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
       }}
     >
       {/* ✅ FIX: Monta WizardInputStep SOLO negli step corretti */}
-      {/* Show WizardInputStep ONLY when:
-          - step is 'input' (initial step)
+      {/* Show WizardInputStep when:
+          - step is 'input-compact' (modalità compatta iniziale)
+          - step is 'input' (modalità espansa)
           - OR (step is 'heuristic-confirm' AND showInputAlongsideConfirm is true - user clicked "No") */}
-      {(step === 'input' || (step === 'heuristic-confirm' && showInputAlongsideConfirm)) && (
+      {(step === 'input-compact' || step === 'input' || (step === 'heuristic-confirm' && showInputAlongsideConfirm)) && (
         <div style={{
           overflow: 'auto',
           padding: '0 8px'
@@ -1680,7 +1993,11 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
             onAutoDetect={initialTaskTree?._inferenceResult ? undefined : handleAutoDetect}
             onTemplateSelect={handleTemplateSelect}
             taskType={taskType}
-            taskLabel={taskLabel} // ✅ LOGICA CORRETTA: nello step 'input', dataNode è vuoto, quindi taskLabel è la fonte primaria
+            taskLabel={taskLabel}
+            isCompactMode={step === 'input-compact'}
+            isAIGenerating={isAIGenerating}
+            onCreateWithAI={step === 'input-compact' ? handleCreateWithAI : undefined}
+            onConfirmTemplate={step === 'input-compact' && selectedTemplateId ? handleChooseThis : undefined}
           />
         </div>
       )}
@@ -1980,6 +2297,18 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
 
           {(step === 'structure' || step === 'pipeline') && (
             <div style={{ padding: 4 }}>
+              {/* ✅ Testo introduttivo sopra l'albero (solo in step 'structure') */}
+              {step === 'structure' && (
+                <p style={{
+                  color: '#e2e8f0',
+                  fontSize: 15,
+                  lineHeight: 1.6,
+                  marginBottom: 16,
+                  fontWeight: 400,
+                }}>
+                  Questa struttura dovrebbe essere adatta.
+                </p>
+              )}
               <div tabIndex={0} style={{ outline: 'none' }}>
                 <DataCollection
                   rootLabel={schemaRootLabel || 'Data'}
@@ -1998,6 +2327,128 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
                 />
               </div>
               {step === 'structure' && (
+                <>
+                  {/* ✅ Textbox refining (solo se showRefiningTextbox === true) */}
+                  {showRefiningTextbox && (
+                    <div style={{ marginTop: 16, marginBottom: 16 }}>
+                      <p style={{
+                        color: '#cbd5e1',
+                        fontSize: 14,
+                        lineHeight: 1.5,
+                        marginBottom: 8,
+                        fontWeight: 400,
+                      }}>
+                        Vuoi aiutarmi a migliorare questa struttura?<br />
+                        Scrivi qui cosa non ti convince o cosa vorresti cambiare.
+                      </p>
+                      <textarea
+                        value={refiningText}
+                        onChange={(e) => setRefiningText(e.target.value)}
+                        placeholder="Es. rendi 'Anno' opzionale… Oppure aggiungi 'Formato' come figlio…"
+                        style={{
+                          width: '100%',
+                          minHeight: '100px',
+                          padding: '12px',
+                          borderRadius: 8,
+                          border: '1px solid #475569',
+                          background: '#1e293b',
+                          color: '#e2e8f0',
+                          fontSize: 14,
+                          fontFamily: 'inherit',
+                          resize: 'vertical',
+                          outline: 'none',
+                          boxSizing: 'border-box',
+                        }}
+                        onFocus={(e) => {
+                          e.target.style.borderColor = '#3b82f6';
+                        }}
+                        onBlur={(e) => {
+                          e.target.style.borderColor = '#475569';
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {/* ✅ Pulsanti principali */}
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12, flexWrap: 'wrap' }}>
+                    {/* Pulsante "Sì, va bene" */}
+                    <button
+                      onClick={handleConfirmStructure}
+                      title="Conferma questa struttura e procedi"
+                      style={{
+                        background: '#22c55e',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 8,
+                        padding: '8px 16px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        fontSize: 14,
+                      }}
+                    >
+                      Sì, va bene
+                    </button>
+
+                    {/* Pulsante "No, correggila" / "Applica correzione" */}
+                    <button
+                      onClick={showRefiningTextbox ? handleApplyRefining : handleShowRefining}
+                      disabled={showRefiningTextbox && !refiningText.trim()}
+                      title={showRefiningTextbox ? "Applica le correzioni e rigenera la struttura" : "Scrivi cosa non va e la correggo con l'AI"}
+                      style={{
+                        background: showRefiningTextbox ? '#3b82f6' : 'transparent',
+                        color: showRefiningTextbox ? '#fff' : '#e2e8f0',
+                        border: `1px solid ${showRefiningTextbox ? '#3b82f6' : '#475569'}`,
+                        borderRadius: 8,
+                        padding: '8px 16px',
+                        fontWeight: 600,
+                        cursor: (showRefiningTextbox && !refiningText.trim()) ? 'not-allowed' : 'pointer',
+                        fontSize: 14,
+                        opacity: (showRefiningTextbox && !refiningText.trim()) ? 0.6 : 1,
+                      }}
+                    >
+                      {showRefiningTextbox ? 'Applica correzione' : 'No, correggila'}
+                    </button>
+
+                    {/* Pulsante "Modifico manualmente" */}
+                    <button
+                      onClick={handleCreateManually}
+                      title="Entra nella modalità di editing manuale"
+                      style={{
+                        background: 'transparent',
+                        color: '#e2e8f0',
+                        border: '1px solid #475569',
+                        borderRadius: 8,
+                        padding: '8px 16px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        fontSize: 14,
+                      }}
+                    >
+                      Modifico manualmente
+                    </button>
+                  </div>
+
+                  {/* ✅ Pulsante "Cancella" sempre visibile in basso */}
+                  <div style={{ marginTop: 16, textAlign: 'center' }}>
+                    <button
+                      onClick={handleClose}
+                      style={{
+                        background: 'transparent',
+                        color: '#94a3b8',
+                        border: 'none',
+                        borderRadius: 8,
+                        padding: '8px 16px',
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                        fontSize: 14,
+                      }}
+                    >
+                      Cancella
+                    </button>
+                  </div>
+                </>
+              )}
+              {step === 'pipeline' && (
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
                   {/* Save buttons - only show for composite TaskTrees */}
                   {isCompositeTaskTree && (
@@ -2035,42 +2486,6 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
                         {saving === 'project' ? 'Saving...' : 'Save in Project'}
                       </button>
                     </>
-                  )}
-                  {/* ✅ FIX: Cancel nello step 'structure' torna al passo precedente (input) invece di chiudere */}
-                  <button
-                    onClick={() => {
-                      if (step === 'structure') {
-                        // Torna al passo input per permettere all'utente di aggiungere dettagli
-                        console.log('[TaskTree][Wizard] Cancel clicked in structure step, returning to input');
-                        setStep('input');
-                        setShowRight(false);
-                      } else {
-                        handleClose();
-                      }
-                    }}
-                    style={{ background: 'transparent', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}
-                  >
-                    Cancel
-                  </button>
-                  {/* Only show "Build Messages" if no steps are present (new TaskTree structure) */}
-                  {!mountedDataTree.some((m: any) => m.steps && Object.keys(m.steps).length > 0) && (
-                    <button
-                      onClick={() => {
-                        try { dlog('[TaskTree][UI] step → pipeline'); } catch { }
-                        // Avvia pipeline generativa mantenendo visibile la struttura (progress in-place)
-                        setShowRight(true);
-                        // reset progress state to avoid stale 100%
-                        setTaskProgress({});
-                        setRootProgress(0);
-                        setPartialResults({}); // Reset parallel processing results
-                        // Apri il primo main data
-                        setSelectedIdx(0);
-                        setStep('pipeline');
-                      }}
-                      style={{ background: '#22c55e', color: '#0b1220', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, cursor: 'pointer' }}
-                    >
-                      Build Messages
-                    </button>
                   )}
                   {/* If steps are present, automatically proceed to Response Editor when user clicks any action */}
                   {mountedDataTree.some((m: any) => {
@@ -2328,4 +2743,4 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
   );
 };
 
-export default TaskTreeWizard;
+export default TaskWizard;

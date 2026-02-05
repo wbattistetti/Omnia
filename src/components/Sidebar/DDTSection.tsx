@@ -40,7 +40,7 @@ const DDTSection: React.FC<DDTSectionProps> = ({ ddtList, onAdd, onEdit, onDelet
       if (typeof detail.prefillUserDesc === 'string') {
         setTimeout(() => {
           console.log('[DDT][Section][prefill emit below]', detail.prefillUserDesc);
-          document.dispatchEvent(new CustomEvent('ddtWizard:prefillDesc', { detail: { text: detail.prefillUserDesc } }));
+          document.dispatchEvent(new CustomEvent('taskWizard:prefillDesc', { detail: { text: detail.prefillUserDesc } }));
         }, 0);
       }
     };
@@ -80,7 +80,7 @@ const DDTSection: React.FC<DDTSectionProps> = ({ ddtList, onAdd, onEdit, onDelet
         // Hack: set textarea value after mount via event
         setTimeout(() => {
           console.log('[DDT][Section][prefill emit]', detail.prefillUserDesc);
-          document.dispatchEvent(new CustomEvent('ddtWizard:prefillDesc', { detail: { text: detail.prefillUserDesc } }));
+          document.dispatchEvent(new CustomEvent('taskWizard:prefillDesc', { detail: { text: detail.prefillUserDesc } }));
         }, 0);
       }
     };

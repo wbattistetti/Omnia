@@ -17,11 +17,9 @@ import type { SchemaNode } from '../components/TaskTreeBuilder/TaskTreeWizard/ty
  * CASO 1: Template candidato trovato
  *
  * 1. Monta struttura nodi dal template
- * 2. Mostra preview (TemplatePreviewDialog)
- * 3. Se confermato:
- *    - Clona steps dal template
- *    - Adatta prompt al contesto
- *    - Crea task con templateId
+ * 2. Clona steps dal template
+ * 3. Adatta prompt al contesto
+ * 4. Crea task con templateId
  */
 export async function createTaskFromTemplate(
   templateId: string,

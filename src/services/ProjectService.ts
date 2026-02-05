@@ -11,7 +11,8 @@ async function fetchWithRetry(
   url: string,
   options: RequestInit = {},
   maxRetries: number = 3,
-  retryDelay: number = 1000
+  retryDelay: number = 1000,
+  timeout: number = 30000 // 30 second timeout for MongoDB queries
 ): Promise<Response> {
   let lastError: Error | null = null;
 
@@ -19,7 +20,7 @@ async function fetchWithRetry(
     try {
       const response = await fetch(url, {
         ...options,
-        signal: AbortSignal.timeout(10000) // 10 second timeout
+        signal: AbortSignal.timeout(timeout)
       });
 
       if (response.ok) {
@@ -54,7 +55,7 @@ export const ProjectService = {
   async getRecentProjects(): Promise<ProjectData[]> {
     try {
       console.log('[ProjectService] Fetching recent projects from /api/projects/catalog');
-      const res = await fetchWithRetry(`/api/projects/catalog`);
+      const res = await fetchWithRetry(`/api/projects/catalog`, {}, 3, 1000, 30000);
       if (!res.ok) {
         const errorText = await res.text();
         console.error('[ProjectService] Error fetching recent projects:', res.status, errorText);
@@ -79,7 +80,7 @@ export const ProjectService = {
   async getAllProjects(): Promise<ProjectData[]> {
     try {
       console.log('[ProjectService] Fetching all projects from /api/projects/catalog');
-      const res = await fetchWithRetry(`/api/projects/catalog`);
+      const res = await fetchWithRetry(`/api/projects/catalog`, {}, 3, 1000, 30000);
       if (!res.ok) {
         const errorText = await res.text();
         console.error('[ProjectService] Error fetching all projects:', res.status, errorText);

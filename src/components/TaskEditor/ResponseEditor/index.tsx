@@ -10,10 +10,8 @@ import { FontProvider, useFontContext } from '../../../context/FontContext';
 import { useAIProvider } from '../../../context/AIProviderContext';
 import { useDDTTranslations } from '../../../hooks/useDDTTranslations';
 import { ToolbarButton } from '../../../dock/types';
-import { useWizardInference } from './hooks/useWizardInference';
 import { useResponseEditorSideEffects } from './hooks/useResponseEditorSideEffects';
 import { useResponseEditorState } from './hooks/useResponseEditorState';
-import { useResponseEditorWizard } from './hooks/useResponseEditorWizard';
 import { ResponseEditorContent } from './components/ResponseEditorContent';
 import { ResponseEditorNormalLayout } from './components/ResponseEditorNormalLayout';
 import { useSidebarHandlers } from './hooks/useSidebarHandlers';
@@ -187,84 +185,39 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   });
 
   const {
-    showWizard,
-    setShowWizard,
-    isInferring,
-    setIsInferring,
-    inferenceResult,
-    setInferenceResult,
-  } = useWizardInference({
-    taskTree,
-    taskTreeRef,
-    task: taskMeta,
-    isTaskTreeLoading: isTaskTreeLoading ?? false,
-    currentProjectId,
-    selectedProvider,
-    selectedModel,
-    preAssembledTaskTreeCache,
-    wizardOwnsDataRef,
-  });
-
-  const {
+    replaceSelectedTaskTree: replaceSelectedTaskTreeFromInit,
     handleGenerateAll,
     handleContractWizardClose,
     handleContractWizardNodeUpdate,
     handleContractWizardComplete,
-    handleDDTWizardCancel,
-    handleDDTWizardComplete,
-    getInitialTaskTree,
-    shouldShowInferenceLoading,
-  } = useResponseEditorWizard({
-    task: taskMeta,
-    taskTree,
-    taskTreeRef,
-    currentProjectId,
-    showWizard,
-    showContractWizard,
-    isInferring,
-    inferenceResult,
-    setShowWizard,
-    setShowContractWizard,
-    setTaskTreeVersion,
-    setLeftPanelMode,
-    replaceSelectedTaskTree: replaceSelectedTaskTree,
-    wizardOwnsDataRef,
-    onClose,
-    onWizardComplete,
-  });
-
-  const {
     saveLeftPanelMode,
     saveTestPanelMode,
     saveTasksPanelMode,
     saveRightMode,
-  } = usePanelModes({
+    toolbarButtons,
+  } = useResponseEditorInitialization({
+    task: taskMeta,
+    taskTree,
+    taskTreeRef,
+    showContractWizard,
+    setShowContractWizard,
+    setTaskTreeVersion,
     setLeftPanelMode,
-    setTestPanelMode,
-    setTasksPanelMode,
-  });
-
-  const toolbarButtons = useResponseEditorToolbar({
-    showWizard,
-    rightMode,
+    replaceSelectedTaskTree: replaceSelectedTaskTree,
     leftPanelMode,
     testPanelMode,
     tasksPanelMode,
     showSynonyms,
+    setShowSynonyms,
     showMessageReview,
-    onRightModeChange: saveRightMode,
-    onLeftPanelModeChange: saveLeftPanelMode,
-    onTestPanelModeChange: saveTestPanelMode,
-    onTasksPanelModeChange: saveTasksPanelMode,
-    onToggleSynonyms: () => setShowSynonyms(v => !v),
-    onToggleMessageReview: () => setShowMessageReview(v => !v),
-    onOpenContractWizard: handleGenerateAll,
+    setShowMessageReview,
+    rightMode,
     rightWidth,
-    onRightWidthChange: setRightWidth,
+    setRightWidth,
     testPanelWidth,
-    onTestPanelWidthChange: setTestPanelWidth,
+    setTestPanelWidth,
     tasksPanelWidth,
-    onTasksPanelWidthChange: setTasksPanelWidth,
+    setTasksPanelWidth,
   });
 
   const handleEditorClose = useResponseEditorClose({
@@ -376,10 +329,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
 
       <div style={{ display: 'flex', flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
         <ResponseEditorContent
-          isInferring={isInferring}
           showContractWizard={showContractWizard}
-          showWizard={showWizard}
-          shouldShowInferenceLoading={shouldShowInferenceLoading}
           needsIntentMessages={needsIntentMessages}
           task={taskMeta}
           taskTree={taskTree}
@@ -387,9 +337,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
           handleContractWizardClose={handleContractWizardClose}
           handleContractWizardNodeUpdate={handleContractWizardNodeUpdate}
           handleContractWizardComplete={handleContractWizardComplete}
-          handleDDTWizardCancel={handleDDTWizardCancel}
-          handleDDTWizardComplete={handleDDTWizardComplete}
-          getInitialTaskTree={getInitialTaskTree}
           onIntentMessagesComplete={handleIntentMessagesComplete}
           normalEditorLayout={
             <ResponseEditorNormalLayout

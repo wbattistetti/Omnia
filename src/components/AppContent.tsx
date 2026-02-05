@@ -46,6 +46,9 @@ import { taskRepository } from '../services/TaskRepository';
 import { getTemplateId } from '../utils/taskHelpers';
 import { TaskType } from '../types/taskTypes'; // ✅ RIMOSSO: taskIdToTaskType - non più necessario, le fonti emettono direttamente TaskType enum
 import type { TaskMeta } from './TaskEditor/EditorHost/types'; // ✅ RINOMINATO: ActEditor → TaskEditor
+import TaskTreeWizardModal from './TaskTreeBuilder/TaskTreeWizard/TaskTreeWizardModal';
+import { useTaskTreeWizardModal } from './TaskTreeBuilder/TaskTreeWizard/useTaskTreeWizardModal';
+import type { TaskTree } from '../types/taskTypes';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -91,6 +94,9 @@ export const AppContent: React.FC<AppContentProps> = ({
 }) => {
   const pdUpdate = useProjectDataUpdate();
   const currentPid = (() => { try { return pdUpdate.getCurrentProjectId(); } catch { return undefined; } })();
+
+  // ✅ External TaskTree Wizard Modal
+  const { modalState, openWizard, closeWizard, handleWizardComplete } = useTaskTreeWizardModal();
 
   // Dock tree (new dock manager)
   const [dockTree, setDockTree] = useState<DockNode>({
@@ -880,8 +886,73 @@ export const AppContent: React.FC<AppContentProps> = ({
       }
     };
     document.addEventListener('taskEditor:open', h as any); // ✅ RINOMINATO: actEditor:open → taskEditor:open
-    return () => document.removeEventListener('taskEditor:open', h as any); // ✅ RINOMINATO: actEditor:open → taskEditor:open
-  }, [taskEditorCtx, getTranslationsForTaskTree]); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx
+
+    // ✅ External TaskTree Wizard: Listen for wizard open events
+    const handleWizardOpen = (e: any) => {
+      const detail = e.detail || {};
+      const { taskLabel, taskType, initialTaskTree, startOnStructure, rowId, instanceId } = detail;
+
+      openWizard({
+        taskLabel: taskLabel || '',
+        taskType: taskType,
+        initialTaskTree: initialTaskTree,
+        startOnStructure: startOnStructure ?? false,
+        onComplete: async (taskTree: TaskTree, messages?: any) => {
+          // ✅ After wizard completes, create task and open ResponseEditor
+          if (!currentPid) {
+            console.error('[AppContent] Cannot create task: no project ID');
+            return;
+          }
+
+          try {
+            // Create task with the TaskTree from wizard
+            const taskTypeEnum = typeof taskType === 'string'
+              ? (TaskType[taskType as keyof typeof TaskType] || TaskType.UtteranceInterpretation)
+              : (taskType || TaskType.UtteranceInterpretation);
+
+            const task = taskRepository.createTask(
+              taskTypeEnum,
+              null,
+              { label: taskLabel || '' },
+              rowId || instanceId || `task_${Date.now()}`,
+              currentPid
+            );
+
+            // Save TaskTree to task
+            const { saveTaskToRepository } = await import('./TaskEditor/ResponseEditor/modules/ResponseEditor/persistence/ResponseEditorPersistence');
+            await saveTaskToRepository(task.id, taskTree, task, currentPid);
+
+            // Open ResponseEditor with created task
+            // ✅ Use existing taskEditorCtx from component scope
+            taskEditorCtx.open({
+              id: task.id,
+              type: taskTypeEnum,
+              label: taskLabel || '',
+              instanceId: rowId || instanceId
+            });
+
+            // Emit event to open ResponseEditor tab
+            const event = new CustomEvent('taskEditor:open', {
+              detail: {
+                id: task.id,
+                type: taskTypeEnum,
+                label: taskLabel || '',
+                taskTree: taskTree,
+                instanceId: rowId || instanceId
+              },
+              bubbles: true
+            });
+            document.dispatchEvent(event);
+          } catch (error) {
+            console.error('[AppContent] Error creating task after wizard completion:', error);
+          }
+        },
+      });
+    };
+
+    document.addEventListener('taskTreeWizard:open', handleWizardOpen as any);
+    return () => document.removeEventListener('taskTreeWizard:open', handleWizardOpen as any);
+  }, [openWizard, currentPid, taskEditorCtx]);
 
   // Note: nodes/edges are read directly from window.__flowNodes by DDEBubbleChat in flow mode
   // No local state needed to avoid flickering and synchronization issues
@@ -1973,6 +2044,17 @@ export const AppContent: React.FC<AppContentProps> = ({
           </div>
         </div>
       )}
+
+      {/* ✅ External TaskTree Wizard Modal */}
+      <TaskTreeWizardModal
+        isOpen={modalState.isOpen}
+        onClose={closeWizard}
+        onComplete={handleWizardComplete}
+        taskLabel={modalState.taskLabel}
+        taskType={modalState.taskType}
+        initialTaskTree={modalState.initialTaskTree}
+        startOnStructure={modalState.startOnStructure}
+      />
     </div>
   );
 };

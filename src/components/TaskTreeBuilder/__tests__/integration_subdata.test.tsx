@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import TaskTreeWizard from '../TaskTreeWizard/DDTWizard';
+import TaskWizard from '../TaskTreeWizard/TaskWizard';
 
 // Mock fetch per simulare le risposte del backend
 const mockFetch = vi.fn();

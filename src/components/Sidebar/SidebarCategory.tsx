@@ -58,7 +58,7 @@ const SidebarCategory: React.FC<SidebarCategoryProps> = ({
       // Fill wizard textarea
       setTimeout(() => {
         try {
-          document.dispatchEvent(new CustomEvent('ddtWizard:prefillDesc', { detail: { text: d.prefillUserDesc || '' } }));
+          document.dispatchEvent(new CustomEvent('taskWizard:prefillDesc', { detail: { text: d.prefillUserDesc || '' } }));
         } catch {}
       }, 0);
     };

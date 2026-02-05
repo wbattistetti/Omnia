@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import TaskTreeWizard from '../DDTWizard';
+import TaskWizard from '../TaskWizard';
 
 // Mock fetch with a simple queue of responses
 const mockFetch = vi.fn();
@@ -12,7 +12,7 @@ function enqueueJsonResponses(jsons: any[]) {
 	});
 }
 
-describe('DDTWizard progress UI behavior', () => {
+describe('TaskWizard progress UI behavior', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 	});
@@ -29,7 +29,7 @@ describe('DDTWizard progress UI behavior', () => {
 			] } } }
 		]);
 
-		render(<DDTWizard onCancel={() => {}} onComplete={() => {}} />);
+		render(<TaskWizard onCancel={() => {}} onComplete={() => {}} />);
 
 		const input = screen.getByPlaceholderText('e.g., date of birth, email, phone number...');
 		fireEvent.change(input, { target: { value: 'date of birth' } });

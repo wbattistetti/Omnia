@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import TaskTreeWizard from '../TaskTreeWizard/DDTWizard';
+import TaskWizard from '../TaskTreeWizard/TaskWizard';
 
 // Mock the orchestrator hook
 vi.mock('../orchestrator/useDDTOrchestrator', () => ({
@@ -18,7 +18,7 @@ vi.mock('../orchestrator/useDDTOrchestrator', () => ({
     },
     step: 'structure',
     error: null,
-    finalDDT: null,
+      finalTaskTree: null,
     messages: {},
     start: vi.fn(),
     retry: vi.fn()
@@ -30,8 +30,8 @@ describe('DDT Builder Integration', () => {
     vi.clearAllMocks();
   });
 
-  it('should render DDT Wizard without crashing', () => {
-    render(<TaskTreeWizard />);
+  it('should render Task Wizard without crashing', () => {
+    render(<TaskWizard />);
 
     // Verify that the wizard renders without errors
     expect(screen.getByText(/Creazione DDT/i)).toBeInTheDocument();
@@ -39,7 +39,7 @@ describe('DDT Builder Integration', () => {
   });
 
   it('should show input field in structure step', () => {
-    render(<TaskTreeWizard />);
+    render(<TaskWizard />);
 
     // Verify that input field is present
     expect(screen.getByPlaceholderText(/Che tipo di dato vuoi acquisire/i)).toBeInTheDocument();

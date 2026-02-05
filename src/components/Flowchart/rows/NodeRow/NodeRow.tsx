@@ -36,7 +36,6 @@ import { generateId } from '../../../../utils/idGenerator';
 import { taskRepository } from '../../../../services/TaskRepository';
 import { useRowExecutionHighlight } from '../../executionHighlight/useExecutionHighlight';
 import { getTaskIdFromRow, updateRowTaskType, createRowWithTask, getTemplateId } from '../../../../utils/taskHelpers'; // ✅ RINOMINATO: updateRowTaskAction → updateRowTaskType
-import TemplatePreviewDialog from '../../../TaskTreeBuilder/TemplatePreviewDialog';
 
 const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps> = (
   {
@@ -139,15 +138,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   const [pickerCurrentType, setPickerCurrentType] = useState<TaskType | undefined>(undefined);
   const [pickerPosition, setPickerPosition] = useState<{ left: number; top: number } | null>(null);
 
-  // ✅ Stato per preview dialog (template candidato o struttura AI)
-  const [showPreviewDialog, setShowPreviewDialog] = useState(false);
-  const [previewData, setPreviewData] = useState<{
-    type: 'template' | 'ai';
-    templateId?: string;
-    templateLabel?: string;
-    dataTree: any[];
-    rootLabel: string;
-  } | null>(null);
 
 
   // Registry for external access
@@ -1802,10 +1792,10 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     const metaTemplateId = rowMeta?.templateId || null;
                     const projectId = getProjectId?.() || undefined;
 
-                    // ✅ Sotto-caso 2a: C'è templateId → mostra preview struttura template
+                    // ✅ Sotto-caso 2a: C'è templateId → apri wizard esterno con template (non preview)
                     if (metaTemplateId && metaTaskType === TaskType.UtteranceInterpretation) {
                       try {
-                        console.log('[🔍 NodeRow][onOpenTaskTree] ✅ CASO 2a: Template candidato trovato, mostrando preview', {
+                        console.log('[🔍 NodeRow][onOpenTaskTree] ✅ CASO 2a: Template trovato, aprendo wizard esterno', {
                           templateId: metaTemplateId,
                           rowText: row.text
                         });
@@ -1817,65 +1807,55 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                           const { buildTaskTreeNodes } = await import('../../../../utils/taskUtils');
                           const nodes = buildTaskTreeNodes(template);
 
-                          // ✅ NUOVO MODELLO: nodes già ha subNodes[], mappa per compatibilità SchemaNode se necessario
-                          const mappedDataTree = nodes.map((node: any) => ({
-                            ...node,
-                            subData: node.subNodes || [], // ✅ Usa subNodes dal nuovo modello
-                            subNodes: undefined // Remove subNodes per compatibilità SchemaNode
-                          }));
+                          // Costruisci initialTaskTree per il wizard
+                          const initialTaskTree = {
+                            label: template.label || row.text || 'Data',
+                            nodes: nodes,
+                            steps: {}
+                          };
 
-                          console.log('[🔍 NodeRow][onOpenTaskTree] 📋 Mostrando preview dialog (template)', {
-                            templateId: metaTemplateId,
-                            templateLabel: template.label || template.name,
-                            dataTreeLength: mappedDataTree.length
+                          // ✅ Apri wizard esterno con template (non preview dialog)
+                          const wizardEvent = new CustomEvent('taskTreeWizard:open', {
+                            detail: {
+                              taskLabel: row.text || '',
+                              taskType: TaskType.UtteranceInterpretation,
+                              initialTaskTree: initialTaskTree, // ✅ Passa template come initialTaskTree
+                              startOnStructure: true, // ✅ Parte da structure step (ha già dati)
+                              rowId: row.id,
+                              instanceId: row.id
+                            },
+                            bubbles: true
                           });
-
-                          // Mostra preview dialog
-                          setPreviewData({
-                            type: 'template',
-                            templateId: metaTemplateId,
-                            templateLabel: template.label || template.name || 'Template',
-                            dataTree: mappedDataTree,
-                            rootLabel: template.label || row.text || 'Data'
-                          });
-                          setShowPreviewDialog(true);
+                          document.dispatchEvent(wizardEvent);
                           return;
                         }
                       } catch (err) {
-                        console.error('[🔍 NodeRow][onOpenTaskTree] ❌ Errore caricamento template per preview:', err);
+                        console.error('[🔍 NodeRow][onOpenTaskTree] ❌ Errore caricamento template:', err);
+                        // Fallback: apri wizard vuoto
                       }
                     }
 
-                    // ✅ Sotto-caso 2b: NON c'è templateId → genera struttura da AI, poi mostra preview
+                    // ✅ Sotto-caso 2b: NON c'è templateId → apri wizard esterno direttamente (non generare AI qui)
                     if (!metaTemplateId && metaTaskType === TaskType.UtteranceInterpretation && row.text && row.text.trim().length >= 3) {
-                      try {
-                        console.log('[🔍 NodeRow][onOpenTaskTree] ✅ CASO 2b: Nessun template, generando struttura da AI', {
-                          label: row.text,
-                          labelLength: row.text.trim().length
-                        });
+                      console.log('[🔍 NodeRow][onOpenTaskTree] ✅ CASO 2b: Nessun template, aprendo wizard esterno', {
+                        label: row.text,
+                        labelLength: row.text.trim().length
+                      });
 
-                        const { generateTaskStructureFromAI } = await import('../../../../utils/taskOrchestrator');
-                        const provider = (localStorage.getItem('ai.provider') as 'groq' | 'openai') || 'groq';
-
-                        const dataTree = await generateTaskStructureFromAI(row.text, provider);
-
-                        console.log('[🔍 NodeRow][onOpenTaskTree] 📋 Mostrando preview dialog (AI)', {
-                          dataTreeLength: dataTree.length,
-                          rootLabel: row.text
-                        });
-
-                        // Mostra preview dialog
-                        setPreviewData({
-                          type: 'ai',
-                          dataTree: dataTree,
-                          rootLabel: row.text || 'Data'
-                        });
-                        setShowPreviewDialog(true);
-                        return;
-                      } catch (err) {
-                        console.error('[🔍 NodeRow][onOpenTaskTree] ❌ Errore generazione struttura AI:', err);
-                        // Fallback: crea task vuoto e apri wizard
-                      }
+                      // ✅ Apri wizard esterno direttamente (il wizard gestirà la generazione AI internamente se necessario)
+                      const wizardEvent = new CustomEvent('taskTreeWizard:open', {
+                        detail: {
+                          taskLabel: row.text || '',
+                          taskType: TaskType.UtteranceInterpretation,
+                          initialTaskTree: undefined, // Wizard parte da zero
+                          startOnStructure: false, // Wizard parte da input step
+                          rowId: row.id,
+                          instanceId: row.id
+                        },
+                        bubbles: true
+                      });
+                      document.dispatchEvent(wizardEvent);
+                      return; // ✅ Esci qui, non mostrare preview
                     }
 
                     // ✅ Fallback: Crea task base senza preview (comportamento legacy)
@@ -1947,13 +1927,31 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                           templateId: metaTemplateId
                         });
                       }
-                      // ✅ CASO 3: Se NON c'è né categoria né template → l'utente crea manualmente
+                      // ✅ CASO 3: Se NON c'è né categoria né template → apri wizard esterno (non creare task)
                       else {
-                        // Nessun data, l'utente creerà manualmente
-                        console.log('✅ [LAZY] Task creato senza data, l\'utente creerà manualmente');
+                        // Nessun data, apri wizard esterno per creazione manuale
+                        console.log('✅ [EXTERNAL_WIZARD] Aprendo wizard esterno (nessun template/categoria)', {
+                          rowId: row.id,
+                          rowText: row.text
+                        });
+
+                        // ✅ Emetti evento per aprire wizard esterno (non creare task qui)
+                        const wizardEvent = new CustomEvent('taskTreeWizard:open', {
+                          detail: {
+                            taskLabel: row.text || '',
+                            taskType: metaTaskType === TaskType.UNDEFINED ? TaskType.UtteranceInterpretation : metaTaskType,
+                            initialTaskTree: undefined, // Wizard parte da zero
+                            startOnStructure: false, // Wizard parte da input step
+                            rowId: row.id,
+                            instanceId: row.id
+                          },
+                          bubbles: true
+                        });
+                        document.dispatchEvent(wizardEvent);
+                        return; // ✅ Esci qui, non creare task né aprire ResponseEditor
                       }
 
-                      // ✅ Crea task base (con TaskTree se inferreddata presente)
+                      // ✅ Crea task base (con TaskTree se inferreddata presente) - solo se c'è categoria o template
                       // ✅ FIX: taskForType è già dichiarato come const sopra, quindi usiamo una nuova variabile
                       const newTask = taskRepository.createTask(
                         metaTaskType,
@@ -2270,234 +2268,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         </>, document.body
       )}
 
-      {/* ✅ TemplatePreviewDialog - Preview e conferma struttura dati */}
-      {showPreviewDialog && previewData && createPortal(
-        <FontProvider>
-              <div style={{
-                position: 'fixed',
-                inset: 0,
-                background: 'rgba(0,0,0,0.7)',
-                zIndex: 10000,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <div style={{
-                  width: '90%',
-                  maxWidth: 800,
-                  maxHeight: '90vh',
-                  overflow: 'auto',
-                  background: '#0f172a',
-                  color: '#e2e8f0',
-                  borderRadius: 12,
-                  boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
-                  padding: 24
-                }}>
-                  <TemplatePreviewDialog
-                  open={showPreviewDialog}
-                  title={previewData.type === 'template'
-                    ? `Template trovato: "${previewData.templateLabel}"`
-                    : 'Struttura dati generata da AI'}
-                  message={previewData.type === 'template'
-                    ? 'Vuoi usare questo template?'
-                    : 'Vuoi usare questa struttura dati?'}
-                  rootLabel={previewData.rootLabel}
-                  dataTree={previewData.dataTree}
-                  onConfirm={async () => {
-                    try {
-                      console.log('[🔍 NodeRow][PreviewConfirm] ✅ CONFIRM - Utente ha confermato', {
-                        previewType: previewData?.type,
-                        templateId: previewData?.templateId,
-                        dataTreeLength: previewData?.dataTree?.length,
-                        rootLabel: previewData?.rootLabel
-                      });
-
-                      const rowMeta = (row as any)?.meta;
-                      const projectId = getProjectId?.() || undefined;
-
-                      if (previewData.type === 'template' && previewData.templateId) {
-                        console.log('[🔍 NodeRow][PreviewConfirm] ✅ CASO 1: Template confermato, clonando steps', {
-                          templateId: previewData.templateId,
-                          templateLabel: previewData.templateLabel
-                        });
-
-                        // ✅ CASO 1: Template candidato → clona steps e adatta prompt
-                        const { createTaskFromTemplate } = await import('../../../../utils/taskOrchestrator');
-
-                        // Crea task base (createTask salva automaticamente, ma senza steps è OK)
-                        const task = taskRepository.createTask(
-                          TaskType.UtteranceInterpretation,
-                          previewData.templateId,
-                          { label: row.text || '' },
-                          row.id,
-                          projectId
-                        );
-
-                        // ✅ REGOLA ARCHITETTURALE: task.id = row.id
-                        // ✅ NON modificare row.taskId direttamente (row è una prop immutabile)
-                        // ✅ Il task è già stato creato con row.id come ID, quindi task.id === row.id è sempre vero
-                        console.log('[🔍 NodeRow][PreviewConfirm] ✅ Task creato', {
-                          rowId: row.id,
-                          taskId: task.id
-                        });
-
-                        // Clona steps e adatta prompt (modifica task.steps in-place)
-                        try {
-                          await createTaskFromTemplate(previewData.templateId, task, row.text || '', false);
-                          console.log('[🔍 NodeRow][PreviewConfirm] ✅ createTaskFromTemplate completato', {
-                            taskId: task.id,
-                            stepsCount: Object.keys(task.steps || {}).length
-                          });
-                        } catch (err) {
-                          console.error('[🔍 NodeRow][PreviewConfirm] ❌ Errore in createTaskFromTemplate:', err);
-                          throw err; // Rilancia per essere catturato dal catch esterno
-                        }
-
-                        // ✅ REMOVED: updateTask ridondante - task è già nella cache e modificato in-place
-                        // ✅ task.steps e task.metadata sono già aggiornati direttamente nella cache
-                        // ✅ updatedAt verrà aggiornato al salvataggio esplicito del progetto
-
-                        // ✅ CRITICAL: Costruisci taskTree PRIMA di aprire ResponseEditor
-                        const { buildTaskTree } = await import('../../../../utils/taskUtils');
-                        let taskTree: any = null;
-                        try {
-                          taskTree = await buildTaskTree(task, projectId);
-                          console.log('[🔍 NodeRow][PreviewConfirm] ✅ buildTaskTree completato', {
-                            taskId: task.id,
-                            hasTaskTree: !!taskTree,
-                            nodesCount: taskTree?.nodes?.length || 0
-                          });
-                        } catch (err) {
-                          console.error('[🔍 NodeRow][PreviewConfirm] ❌ Errore in buildTaskTree:', err);
-                          // ✅ Se buildTaskTree fallisce (template corrotto), apri comunque l'editor
-                          // L'editor mostrerà il wizard per creare il task manualmente
-                          taskTree = null;
-                        }
-
-                        // Apri ResponseEditor
-                        taskEditorCtx.open({ id: task.id, type: TaskType.UtteranceInterpretation, label: row.text, instanceId: row.id });
-
-                        // Emetti evento con taskTree per aprire come docking tab
-                        const event = new CustomEvent('taskEditor:open', {
-                          detail: {
-                            id: task.id,
-                            type: TaskType.UtteranceInterpretation,
-                            label: row.text,
-                            taskTree: taskTree,
-                            instanceId: row.id,
-                            templateId: previewData.templateId
-                          },
-                          bubbles: true
-                        });
-                        document.dispatchEvent(event);
-                      } else {
-                        console.log('[🔍 NodeRow][PreviewConfirm] ✅ CASO 2: Struttura AI confermata, generando steps', {
-                          dataTreeLength: previewData.dataTree.length,
-                          rootLabel: previewData.rootLabel
-                        });
-
-                        // ✅ CASO 2: Struttura AI → genera tutti gli steps
-                        const { generateTaskStepsFromAI } = await import('../../../../utils/taskOrchestrator');
-                        const provider = (localStorage.getItem('ai.provider') as 'groq' | 'openai') || 'groq';
-
-                        // Crea task base (senza templateId = standalone)
-                        const task = taskRepository.createTask(
-                          TaskType.UtteranceInterpretation,
-                          null, // ✅ Standalone, no templateId
-                          { label: row.text || '' },
-                          row.id,
-                          projectId
-                        );
-
-                        // ✅ REGOLA ARCHITETTURALE: task.id = row.id
-                        // ✅ NON modificare row.taskId direttamente (row è una prop immutabile)
-                        // ✅ Il task è già stato creato con row.id come ID, quindi task.id === row.id è sempre vero
-                        console.log('[🔍 NodeRow][PreviewConfirm] ✅ Task creato (AI)', {
-                          rowId: row.id,
-                          taskId: task.id
-                        });
-
-                        // Genera tutti gli steps da AI
-                        const taskTree = await generateTaskStepsFromAI(
-                          previewData.dataTree,
-                          previewData.rootLabel,
-                          row.text || '',
-                          provider
-                        );
-
-                        // Salva task con steps
-                        taskRepository.updateTask(task.id, {
-                          steps: taskTree.steps,
-                          data: taskTree.data
-                        }, projectId);
-
-                        // Apri ResponseEditor
-                        taskEditorCtx.open({ id: task.id, type: TaskType.UtteranceInterpretation, label: row.text, instanceId: row.id });
-
-                        const event = new CustomEvent('taskEditor:open', {
-                          detail: {
-                            id: task.id,
-                            type: TaskType.UtteranceInterpretation,
-                            label: row.text,
-                            taskTree: taskTree,
-                            instanceId: row.id
-                          },
-                          bubbles: true
-                        });
-                        document.dispatchEvent(event);
-                      }
-
-                      setShowPreviewDialog(false);
-                      setPreviewData(null);
-                    } catch (err) {
-                      console.error('[NodeRow] Errore durante creazione task da preview:', err);
-                      setShowPreviewDialog(false);
-                      setPreviewData(null);
-                    }
-                  }}
-                  onReject={() => {
-                    // ✅ Se rifiutato, apri wizard vuoto per creazione manuale
-                    setShowPreviewDialog(false);
-                    setPreviewData(null);
-
-                    // Crea task vuoto e apri ResponseEditor (che aprirà wizard)
-                    const projectId = getProjectId?.() || undefined;
-                    const task = taskRepository.createTask(
-                      TaskType.UtteranceInterpretation,
-                      null,
-                      { label: row.text || '' },
-                      row.id,
-                      projectId
-                    );
-
-                    // ✅ REGOLA ARCHITETTURALE: task.id = row.id
-                    // ✅ NON modificare row.taskId direttamente (row è una prop immutabile)
-                    // ✅ Il task è già stato creato con row.id come ID, quindi task.id === row.id è sempre vero
-                    console.log('[🔍 NodeRow][PreviewReject] ✅ Task creato', {
-                      rowId: row.id,
-                      taskId: task.id
-                    });
-
-                    taskEditorCtx.open({ id: task.id, type: TaskType.UtteranceInterpretation, label: row.text, instanceId: row.id });
-
-                    const event = new CustomEvent('taskEditor:open', {
-                      detail: {
-                        id: task.id,
-                        type: TaskType.UtteranceInterpretation,
-                        label: row.text,
-                        taskTree: null, // ✅ null = ResponseEditor aprirà wizard
-                        instanceId: row.id
-                      },
-                      bubbles: true
-                    });
-                    document.dispatchEvent(event);
-                  }}
-                />
-                </div>
-              </div>
-            </FontProvider>,
-        document.body
-      )}
     </>
   );
 };

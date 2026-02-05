@@ -17,14 +17,7 @@ vi.mock('../../ContractWizard/ContractWizard', () => ({
   ),
 }));
 
-vi.mock('../../../../TaskTreeBuilder/TaskTreeWizard/TaskTreeWizard', () => ({
-  default: ({ onCancel, onComplete }: any) => (
-    <div data-testid="ddt-wizard">
-      <button onClick={onCancel}>Cancel</button>
-      <button onClick={() => onComplete({}, {})}>Complete</button>
-    </div>
-  ),
-}));
+// NOTE: TaskWizard is now external, no need to mock it here
 
 vi.mock('../IntentMessagesBuilder', () => ({
   default: ({ onComplete }: any) => (
@@ -43,7 +36,7 @@ vi.mock('../IntentMessagesBuilder', () => ({
  * WHAT WE TEST:
  * - Renders loading state when isInferring is true
  * - Renders ContractWizard when showContractWizard is true
- * - Renders DDTWizard when showWizard is true
+ * - Renders TaskWizard when showWizard is true
  * - Renders loading state when showWizard is true and shouldShowInferenceLoading is true
  * - Renders IntentMessagesBuilder when needsIntentMessages is true
  * - Renders normalEditorLayout when none of the above conditions are true
@@ -66,8 +59,6 @@ describe('ResponseEditorContent', () => {
     handleContractWizardClose: ReturnType<typeof vi.fn>;
     handleContractWizardNodeUpdate: ReturnType<typeof vi.fn>;
     handleContractWizardComplete: ReturnType<typeof vi.fn>;
-    handleDDTWizardCancel: ReturnType<typeof vi.fn>;
-    handleDDTWizardComplete: ReturnType<typeof vi.fn>;
     getInitialDDT: ReturnType<typeof vi.fn>;
     onIntentMessagesComplete: ReturnType<typeof vi.fn>;
   };
@@ -95,65 +86,18 @@ describe('ResponseEditorContent', () => {
       handleContractWizardClose: vi.fn(),
       handleContractWizardNodeUpdate: vi.fn(),
       handleContractWizardComplete: vi.fn(),
-      handleDDTWizardCancel: vi.fn(),
-      handleDDTWizardComplete: vi.fn(),
       getInitialDDT: vi.fn(() => mockTaskTree),
       onIntentMessagesComplete: vi.fn(),
     };
   });
 
-  describe('loading state', () => {
-    it('should render loading state when isInferring is true', () => {
-      render(
-        <ResponseEditorContent
-          isInferring={true}
-          showContractWizard={false}
-          showWizard={false}
-          shouldShowInferenceLoading={false}
-          needsIntentMessages={false}
-          task={mockTask}
-          taskTree={mockTaskTree}
-          taskTreeRef={mockTaskTreeRef}
-          {...mockHandlers}
-          normalEditorLayout={<div data-testid="normal-layout">Normal Layout</div>}
-        />
-      );
-
-      expect(screen.getByText(/Sto cercando se ho già un modello/i)).toBeInTheDocument();
-      expect(screen.queryByTestId('contract-wizard')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('ddt-wizard')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('intent-messages-builder')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('normal-layout')).not.toBeInTheDocument();
-    });
-
-    it('should prioritize isInferring over other states', () => {
-      render(
-        <ResponseEditorContent
-          isInferring={true}
-          showContractWizard={true}
-          showWizard={true}
-          shouldShowInferenceLoading={true}
-          needsIntentMessages={true}
-          task={mockTask}
-          taskTree={mockTaskTree}
-          taskTreeRef={mockTaskTreeRef}
-          {...mockHandlers}
-          normalEditorLayout={<div data-testid="normal-layout">Normal Layout</div>}
-        />
-      );
-
-      expect(screen.getByText(/Sto cercando se ho già un modello/i)).toBeInTheDocument();
-    });
-  });
+  // NOTE: Loading state (isInferring) and TaskWizard tests removed - TaskWizard is now external
 
   describe('Contract Wizard', () => {
     it('should render ContractWizard when showContractWizard is true', () => {
       render(
         <ResponseEditorContent
-          isInferring={false}
           showContractWizard={true}
-          showWizard={false}
-          shouldShowInferenceLoading={false}
           needsIntentMessages={false}
           task={mockTask}
           taskTree={mockTaskTree}
@@ -164,7 +108,6 @@ describe('ResponseEditorContent', () => {
       );
 
       expect(screen.getByTestId('contract-wizard')).toBeInTheDocument();
-      expect(screen.queryByTestId('ddt-wizard')).not.toBeInTheDocument();
       expect(screen.queryByTestId('intent-messages-builder')).not.toBeInTheDocument();
       expect(screen.queryByTestId('normal-layout')).not.toBeInTheDocument();
     });
@@ -186,12 +129,11 @@ describe('ResponseEditorContent', () => {
       );
 
       expect(screen.getByTestId('contract-wizard')).toBeInTheDocument();
-      expect(screen.queryByTestId('ddt-wizard')).not.toBeInTheDocument();
       expect(screen.queryByTestId('intent-messages-builder')).not.toBeInTheDocument();
     });
   });
 
-  describe('DDT Wizard', () => {
+  describe('Task Wizard', () => {
     it('should render loading state when showWizard is true and shouldShowInferenceLoading is true', () => {
       render(
         <ResponseEditorContent
@@ -209,10 +151,9 @@ describe('ResponseEditorContent', () => {
       );
 
       expect(screen.getByText(/Sto cercando se ho già un modello/i)).toBeInTheDocument();
-      expect(screen.queryByTestId('ddt-wizard')).not.toBeInTheDocument();
     });
 
-    it('should render DDTWizard when showWizard is true and shouldShowInferenceLoading is false', () => {
+    it('should render TaskWizard when showWizard is true and shouldShowInferenceLoading is false', () => {
       render(
         <ResponseEditorContent
           isInferring={false}
@@ -228,7 +169,7 @@ describe('ResponseEditorContent', () => {
         />
       );
 
-      expect(screen.getByTestId('ddt-wizard')).toBeInTheDocument();
+      expect(screen.getByTestId('task-wizard')).toBeInTheDocument();
       expect(screen.queryByTestId('contract-wizard')).not.toBeInTheDocument();
       expect(screen.queryByTestId('intent-messages-builder')).not.toBeInTheDocument();
       expect(screen.queryByTestId('normal-layout')).not.toBeInTheDocument();
@@ -250,7 +191,7 @@ describe('ResponseEditorContent', () => {
         />
       );
 
-      expect(screen.getByTestId('ddt-wizard')).toBeInTheDocument();
+      expect(screen.getByTestId('task-wizard')).toBeInTheDocument();
       expect(screen.queryByTestId('intent-messages-builder')).not.toBeInTheDocument();
     });
   });
@@ -259,10 +200,7 @@ describe('ResponseEditorContent', () => {
     it('should render IntentMessagesBuilder when needsIntentMessages is true', () => {
       render(
         <ResponseEditorContent
-          isInferring={false}
           showContractWizard={false}
-          showWizard={false}
-          shouldShowInferenceLoading={false}
           needsIntentMessages={true}
           task={mockTask}
           taskTree={mockTaskTree}
@@ -274,7 +212,6 @@ describe('ResponseEditorContent', () => {
 
       expect(screen.getByTestId('intent-messages-builder')).toBeInTheDocument();
       expect(screen.queryByTestId('contract-wizard')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('ddt-wizard')).not.toBeInTheDocument();
       expect(screen.queryByTestId('normal-layout')).not.toBeInTheDocument();
     });
   });
@@ -283,10 +220,7 @@ describe('ResponseEditorContent', () => {
     it('should render normalEditorLayout when none of the conditions are true', () => {
       render(
         <ResponseEditorContent
-          isInferring={false}
           showContractWizard={false}
-          showWizard={false}
-          shouldShowInferenceLoading={false}
           needsIntentMessages={false}
           task={mockTask}
           taskTree={mockTaskTree}
@@ -298,7 +232,6 @@ describe('ResponseEditorContent', () => {
 
       expect(screen.getByTestId('normal-layout')).toBeInTheDocument();
       expect(screen.queryByTestId('contract-wizard')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('ddt-wizard')).not.toBeInTheDocument();
       expect(screen.queryByTestId('intent-messages-builder')).not.toBeInTheDocument();
     });
   });
@@ -307,10 +240,7 @@ describe('ResponseEditorContent', () => {
     it('should handle null task', () => {
       render(
         <ResponseEditorContent
-          isInferring={false}
           showContractWizard={false}
-          showWizard={false}
-          shouldShowInferenceLoading={false}
           needsIntentMessages={false}
           task={null}
           taskTree={mockTaskTree}
@@ -326,10 +256,7 @@ describe('ResponseEditorContent', () => {
     it('should handle undefined task', () => {
       render(
         <ResponseEditorContent
-          isInferring={false}
           showContractWizard={false}
-          showWizard={false}
-          shouldShowInferenceLoading={false}
           needsIntentMessages={false}
           task={undefined}
           taskTree={mockTaskTree}
@@ -345,10 +272,7 @@ describe('ResponseEditorContent', () => {
     it('should handle null taskTree', () => {
       render(
         <ResponseEditorContent
-          isInferring={false}
           showContractWizard={false}
-          showWizard={false}
-          shouldShowInferenceLoading={false}
           needsIntentMessages={false}
           task={mockTask}
           taskTree={null}
@@ -364,10 +288,7 @@ describe('ResponseEditorContent', () => {
     it('should handle undefined taskTree', () => {
       render(
         <ResponseEditorContent
-          isInferring={false}
           showContractWizard={false}
-          showWizard={false}
-          shouldShowInferenceLoading={false}
           needsIntentMessages={false}
           task={mockTask}
           taskTree={undefined}
@@ -387,10 +308,7 @@ describe('ResponseEditorContent', () => {
 
       render(
         <ResponseEditorContent
-          isInferring={false}
           showContractWizard={true}
-          showWizard={false}
-          shouldShowInferenceLoading={false}
           needsIntentMessages={false}
           task={mockTask}
           taskTree={mockTaskTree}

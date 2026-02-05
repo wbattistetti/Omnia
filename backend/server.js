@@ -85,11 +85,16 @@ async function getMongoClient() {
 
   mongoClientPoolPromise = (async () => {
     const client = new MongoClient(uri, {
-      maxPoolSize: 10, // Maximum number of connections in the pool
+      maxPoolSize: 50, // Maximum number of connections in the pool
       minPoolSize: 2,  // Minimum number of connections in the pool
-      maxIdleTimeMS: 30000, // Close connections after 30s of inactivity
-      serverSelectionTimeoutMS: 10000, // ✅ Aumentato a 10s per dare più tempo
-      connectTimeoutMS: 10000, // ✅ Aggiunto timeout esplicito
+      maxIdleTimeMS: 120000, // Close connections after 2 minutes of inactivity
+      serverSelectionTimeoutMS: 30000, // ✅ Increased to 30s
+      connectTimeoutMS: 30000, // ✅ Increased to 30s
+      // ✅ Retry options
+      retryWrites: true,
+      retryReads: true,
+      // ✅ Heartbeat per mantenere connessione viva
+      heartbeatFrequencyMS: 10000,
     });
 
     try {
@@ -120,6 +125,56 @@ async function withMongoClient(callback) {
   // Don't close the client - it's a pool that should be reused!
 }
 
+// ✅ Create indexes for projects_catalog collection
+async function ensureCatalogIndexes() {
+  try {
+    const client = await getMongoClient();
+    const db = client.db(dbProjects);
+    const coll = db.collection('projects_catalog');
+
+    const indexes = [
+      { key: { updatedAt: -1 }, name: 'idx_updatedAt' },
+      { key: { clientName: 1 }, name: 'idx_clientName' },
+      { key: { projectName: 1 }, name: 'idx_projectName' },
+      { key: { industry: 1 }, name: 'idx_industry' },
+      { key: { status: 1, updatedAt: -1 }, name: 'idx_status_updatedAt' },
+    ];
+
+    for (const idx of indexes) {
+      try {
+        await coll.createIndex(idx.key, { name: idx.name });
+      } catch (e) {
+        const msg = String(e?.message || e);
+        if (!msg.includes('already exists')) {
+          logWarn('MongoDB.Index', { index: idx.name, error: msg });
+        }
+      }
+    }
+
+    // Verify collection size
+    const count = await coll.countDocuments({});
+    if (count > 10000) {
+      logWarn('MongoDB.Collection', {
+        collection: 'projects_catalog',
+        size: count,
+        message: 'Large collection detected, using aggregation'
+      });
+    }
+    if (count > 100000) {
+      logWarn('MongoDB.Collection', {
+        collection: 'projects_catalog',
+        size: count,
+        message: 'Very large collection, consider pagination'
+      });
+    }
+
+    logInfo('MongoDB.Index', { message: 'Catalog indexes ensured', collectionSize: count });
+  } catch (e) {
+    logError('MongoDB.Index', e, { message: 'Failed to ensure catalog indexes' });
+    // Non bloccare l'avvio se gli indici falliscono
+  }
+}
+
 // -----------------------------
 // Template Cache Management
 // -----------------------------
@@ -139,8 +194,7 @@ async function loadTaskHeuristicsFromDB() {
 
   try {
     console.log('[TASK_HEURISTICS_CACHE] Caricando pattern da Heuristics...');
-    const client = new MongoClient(uri);
-    await client.connect();
+    const client = await getMongoClient();
     const db = client.db(dbFactory);
     // Pattern sono ora in Heuristics (rinominata da Task_Types)
     const collection = db.collection('Heuristics');
@@ -288,18 +342,12 @@ async function loadTaskHeuristicsFromDB() {
     }
 
     // ✅ Chiudi la connessione DOPO aver caricato tutto (incluso CategoryExtraction)
-    await client.close();
-
+  // ✅ NON chiudere la connessione se usi il pool
     return taskHeuristicsCache;
 
   } catch (error) {
     console.error('[TASK_HEURISTICS_CACHE] Errore nel caricamento:', error);
-    // ✅ Assicurati di chiudere la connessione anche in caso di errore
-    try {
-      if (client) await client.close();
-    } catch (closeError) {
-      // Ignora errori di chiusura
-    }
+    // ✅ NON chiudere la connessione se usi il pool
     return {};
   }
 }
@@ -311,8 +359,7 @@ async function loadTemplatesFromDB() {
 
   try {
     console.log('[TEMPLATE_CACHE] Caricando template dal database Factory...');
-    const client = new MongoClient(uri);
-    await client.connect();
+    const client = await getMongoClient();
     const db = client.db('factory');
 
     // ✅ Carica dialogue templates da tasks collection
@@ -327,9 +374,7 @@ async function loadTemplatesFromDB() {
 
     // ✅ Collection tasks (lowercase)
     const templates1 = await db.collection('tasks').find(query).toArray();  // ✅ Collection tasks (lowercase)
-
-    await client.close();
-
+  // ✅ NON chiudere la connessione se usi il pool
     // Converti in oggetto per accesso rapido
     const allTemplates = [...templates1];
     templateCache = {};
@@ -513,63 +558,312 @@ app.get('/api/projects/catalog', async (req, res) => {
 });
 
 // Endpoint: Get unique clients from catalog
-app.get('/api/projects/catalog/clients', async (req, res) => {
-  const client = new MongoClient(uri);
+// ✅ Test endpoints
+app.get('/api/ping', (req, res) => {
+  res.json({
+    ok: true,
+    express: 'running',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
+app.get('/api/mongodb/ping', async (req, res) => {
   try {
-    await client.connect();
-    const db = client.db(dbProjects);
-    const projects = await db.collection('projects_catalog').find({}).toArray();
+    const client = await getMongoClient();
+    const db = client.db('admin');
+    const start = Date.now();
+    await db.admin().ping();
+    const latency = Date.now() - start;
 
-    // Estrai tutti i clientName validi (escludendo null/vuoti)
-    const clients = new Set();
-    projects.forEach((p) => {
-      const clientName = (p.clientName || '').trim();
-      if (clientName) {
-        clients.add(clientName);
+    // Pool metrics (if available, otherwise 'unknown')
+    let poolSize = 'unknown';
+    let availableConnections = 'unknown';
+    try {
+      // Access to internal properties (fragile, but useful for debugging)
+      const topology = client.topology;
+      if (topology?.s?.pool) {
+        poolSize = topology.s.pool.totalConnectionCount ?? 'unknown';
+        availableConnections = topology.s.pool.availableConnectionCount ?? 'unknown';
       }
+    } catch (e) {
+      // Ignore errors accessing internal properties
+    }
+
+    res.json({
+      ok: true,
+      mongodb: 'connected',
+      latency: `${latency}ms`,
+      poolSize,
+      availableConnections,
+      timestamp: new Date().toISOString(),
     });
-
-    // Converti in array e ordina alfabeticamente
-    const uniqueClients = Array.from(clients).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-
-    logInfo('Catalog.clients', { count: uniqueClients.length });
-    res.json(uniqueClients);
   } catch (e) {
-    logError('Catalog.clients', e);
-    res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
+    res.status(500).json({
+      ok: false,
+      mongodb: 'disconnected',
+      error: String(e?.message || e),
+      stack: process.env.NODE_ENV === 'development' ? e.stack : undefined,
+    });
   }
+});
+
+// ✅ DIAGNOSTIC ENDPOINTS - Test colli di bottiglia
+app.get('/api/test/catalog-structure', async (req, res) => {
+  const startTime = Date.now();
+  const client = await getMongoClient();
+  try {
+    const db = client.db(dbProjects);
+    const coll = db.collection('projects_catalog');
+
+    // Test 1: Conta documenti
+    const countStart = Date.now();
+    const count = await coll.countDocuments({});
+    const countDuration = Date.now() - countStart;
+
+    // Test 2: Prendi un documento di esempio
+    const sampleStart = Date.now();
+    const sample = await coll.findOne({});
+    const sampleDuration = Date.now() - sampleStart;
+
+    // Test 3: Verifica campi presenti
+    const fields = sample ? Object.keys(sample) : [];
+
+    // Test 4: Query semplice senza aggregation
+    const simpleStart = Date.now();
+    const simpleQuery = await coll.find({}).project({ clientName: 1 }).limit(5).toArray();
+    const simpleDuration = Date.now() - simpleStart;
+
+    // Test 5: Query aggregation (quella che potrebbe fallire)
+    let aggregationResult = null;
+    let aggregationError = null;
+    let aggregationDuration = 0;
+    try {
+      const aggStart = Date.now();
+      aggregationResult = await coll.aggregate([
+        { $match: { clientName: { $exists: true, $ne: null } } },
+        { $group: { _id: '$clientName' } },
+        { $limit: 5 }
+      ]).toArray();
+      aggregationDuration = Date.now() - aggStart;
+    } catch (e) {
+      aggregationError = e.message;
+      aggregationDuration = Date.now() - aggStart;
+    }
+
+    const totalDuration = Date.now() - startTime;
+
+    res.json({
+      success: true,
+      timings: {
+        total: `${totalDuration}ms`,
+        countDocuments: `${countDuration}ms`,
+        findOne: `${sampleDuration}ms`,
+        simpleQuery: `${simpleDuration}ms`,
+        aggregation: aggregationError ? `ERROR: ${aggregationDuration}ms` : `${aggregationDuration}ms`
+      },
+      data: {
+        collectionSize: count,
+        sampleFields: fields,
+        sampleDocument: sample ? { _id: sample._id, clientName: sample.clientName, projectName: sample.projectName } : null,
+        simpleQueryResult: simpleQuery,
+        aggregationResult: aggregationResult,
+        aggregationError: aggregationError
+      },
+      message: 'Database structure check completed'
+    });
+  } catch (e) {
+    const totalDuration = Date.now() - startTime;
+    res.status(500).json({
+      success: false,
+      error: e.message,
+      stack: e.stack,
+      duration: `${totalDuration}ms`,
+      message: 'Database check failed'
+    });
+  }
+});
+
+// ✅ DNS diagnostic endpoint
+app.get('/api/test/dns', async (req, res) => {
+  const dns = require('dns').promises;
+  const results = {
+    srvLookup: { ok: false, error: null, duration: 0 },
+    directLookup: { ok: false, error: null, duration: 0 }
+  };
+
+  // Test 1: SRV lookup (quello che fallisce)
+  try {
+    const srvStart = Date.now();
+    const srvRecords = await dns.resolveSrv('_mongodb._tcp.omnia-db.a5j05mj.mongodb.net');
+    results.srvLookup.duration = Date.now() - srvStart;
+    results.srvLookup.ok = true;
+    results.srvLookup.records = srvRecords;
+  } catch (e) {
+    results.srvLookup.error = e.message;
+    results.srvLookup.duration = 0;
+  }
+
+  // Test 2: Direct hostname lookup
+  try {
+    const directStart = Date.now();
+    const directRecords = await dns.resolve4('omnia-db.a5j05mj.mongodb.net');
+    results.directLookup.duration = Date.now() - directStart;
+    results.directLookup.ok = true;
+    results.directLookup.records = directRecords;
+  } catch (e) {
+    results.directLookup.error = e.message;
+    results.directLookup.duration = 0;
+  }
+
+  res.json({
+    timestamp: new Date().toISOString(),
+    results,
+    recommendation: results.srvLookup.ok ? 'SRV lookup OK' : 'SRV lookup failed - check DNS/firewall'
+  });
+});
+
+// ✅ Performance test endpoint
+app.get('/api/test/performance', async (req, res) => {
+  const results = {
+    express: { ok: true, latency: 0 },
+    mongodb: { ok: false, latency: 0, error: null },
+    catalogQueries: { ok: false, timings: {}, errors: [] }
+  };
+
+  // Test 1: Express response time
+  const expressStart = Date.now();
+  results.express.latency = Date.now() - expressStart;
+
+  // Test 2: MongoDB ping
+  try {
+    const client = await getMongoClient();
+    const db = client.db('admin');
+    const mongoStart = Date.now();
+    await db.admin().ping();
+    results.mongodb.latency = Date.now() - mongoStart;
+    results.mongodb.ok = true;
+  } catch (e) {
+    results.mongodb.error = e.message;
+  }
+
+  // Test 3: Catalog queries
+  try {
+    const client = await getMongoClient();
+    const db = client.db(dbProjects);
+    const coll = db.collection('projects_catalog');
+
+    // Test 3a: countDocuments
+    const countStart = Date.now();
+    await coll.countDocuments({});
+    results.catalogQueries.timings.countDocuments = Date.now() - countStart;
+
+    // Test 3b: find with projection
+    const findStart = Date.now();
+    await coll.find({}).project({ clientName: 1 }).limit(10).toArray();
+    results.catalogQueries.timings.findProjection = Date.now() - findStart;
+
+    // Test 3c: aggregation (simple)
+    const aggStart = Date.now();
+    try {
+      await coll.aggregate([
+        { $match: { clientName: { $exists: true, $ne: null } } },
+        { $group: { _id: '$clientName' } },
+        { $limit: 10 }
+      ]).toArray();
+      results.catalogQueries.timings.aggregation = Date.now() - aggStart;
+    } catch (e) {
+      results.catalogQueries.errors.push(`Aggregation failed: ${e.message}`);
+    }
+
+    results.catalogQueries.ok = true;
+  } catch (e) {
+    results.catalogQueries.errors.push(`Catalog query failed: ${e.message}`);
+  }
+
+  res.json({
+    timestamp: new Date().toISOString(),
+    results
+  });
+});
+
+app.get('/api/projects/catalog/clients', async (req, res) => {
+  const startTime = Date.now();
+  const client = await getMongoClient(); // ✅ Usa pool invece di nuova connessione
+  try {
+    const db = client.db(dbProjects);
+    const coll = db.collection('projects_catalog');
+
+    // ✅ Optimized aggregation pipeline (rimosso $type per compatibilità)
+    const clients = await coll.aggregate([
+      { $match: { clientName: { $exists: true, $ne: null } } },
+      { $group: { _id: '$clientName' } },
+      { $match: { _id: { $ne: '', $regex: /^\s*\S/ } } }, // at least one non-whitespace char
+      { $sort: { _id: 1 } },
+      { $project: { _id: 0, clientName: '$_id' } },
+    ]).toArray();
+
+    // Trim e filtra stringhe lato JavaScript (più compatibile)
+    const clientNames = clients
+      .map(c => (c.clientName || '').trim())
+      .filter(name => typeof name === 'string' && name.length > 0)
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+    const duration = Date.now() - startTime;
+    logInfo('Catalog.clients', { count: clientNames.length, duration: `${duration}ms` });
+    res.json(clientNames);
+  } catch (e) {
+    const duration = Date.now() - startTime;
+    logError('Catalog.clients', e, { duration: `${duration}ms` });
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+  // ✅ NON chiudere la connessione se usi il pool
 });
 
 // Endpoint: Get unique project names from catalog
 app.get('/api/projects/catalog/project-names', async (req, res) => {
-  const client = new MongoClient(uri);
+  const startTime = Date.now();
+  const client = await getMongoClient(); // ✅ Usa pool invece di nuova connessione
   try {
-    await client.connect();
     const db = client.db(dbProjects);
-    const projects = await db.collection('projects_catalog').find({}).toArray();
+    const coll = db.collection('projects_catalog');
 
-    // Estrai tutti i projectName validi
-    const projectNames = new Set();
-    projects.forEach((p) => {
-      const projectName = (p.projectName || p.name || '').trim();
-      if (projectName) {
-        projectNames.add(projectName);
-      }
-    });
+    // ✅ Optimized aggregation pipeline
+    const projects = await coll.aggregate([
+      {
+        $match: {
+          $or: [
+            { projectName: { $exists: true, $ne: null, $type: 'string' } },
+            { name: { $exists: true, $ne: null, $type: 'string' } }
+          ]
+        }
+      },
+      {
+        $project: {
+          projectName: { $ifNull: ['$projectName', '$name'] }
+        }
+      },
+      { $group: { _id: '$projectName' } },
+      { $match: { _id: { $ne: '', $regex: /^\s*\S/ } } }, // at least one non-whitespace char
+      { $sort: { _id: 1 } },
+      { $project: { _id: 0, projectName: '$_id' } },
+    ]).toArray();
 
-    // Converti in array e ordina alfabeticamente
-    const uniqueProjectNames = Array.from(projectNames).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    // Trim lato JavaScript (più compatibile con versioni MongoDB)
+    const projectNames = projects
+      .map(p => (p.projectName || '').trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 
-    logInfo('Catalog.projectNames', { count: uniqueProjectNames.length });
-    res.json(uniqueProjectNames);
+    const duration = Date.now() - startTime;
+    logInfo('Catalog.projectNames', { count: projectNames.length, duration: `${duration}ms` });
+    res.json(projectNames);
   } catch (e) {
-    logError('Catalog.projectNames', e);
+    const duration = Date.now() - startTime;
+    logError('Catalog.projectNames', e, { duration: `${duration}ms` });
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
   }
+  // ✅ NON chiudere la connessione se usi il pool
 });
 
 app.post('/api/projects/catalog', async (req, res) => {
@@ -579,9 +873,8 @@ app.post('/api/projects/catalog', async (req, res) => {
   if (!projectName) {
     return res.status(400).json({ error: 'projectName_required' });
   }
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbProjects);
     const coll = db.collection('projects_catalog');
     const projectId = makeProjectId();
@@ -607,17 +900,15 @@ app.post('/api/projects/catalog', async (req, res) => {
     res.json(doc);
   } catch (e) {
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
   }
+  // ✅ NON chiudere la connessione se usi il pool
 });
 
 // DELETE catalog by id
 app.delete('/api/projects/catalog/:id', async (req, res) => {
   const id = req.params.id;
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbProjects);
     const coll = db.collection('projects_catalog');
 
@@ -689,16 +980,14 @@ app.delete('/api/projects/catalog/:id', async (req, res) => {
   } catch (e) {
     logError('Projects.delete', e, { projectId: id });
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
 // DELETE all catalog
 app.delete('/api/projects/catalog', async (req, res) => {
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbProjects);
     const coll = db.collection('projects_catalog');
 
@@ -747,8 +1036,7 @@ app.delete('/api/projects/catalog', async (req, res) => {
   } catch (e) {
     logError('Projects.deleteAll', e);
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -773,11 +1061,10 @@ app.post('/api/projects/bootstrap', async (req, res) => {
   }
 
   console.log('[Bootstrap] 🚀 START - Creating project:', { projectName, clientName, industry, language });
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    console.log('[Bootstrap] 📡 Connecting to MongoDB...');
-    await client.connect();
-    console.log('[Bootstrap] ✅ Connected to MongoDB');
+    logInfo('Bootstrap', { message: 'Connecting to MongoDB...' });
+    logInfo('Bootstrap', { message: 'Connected to MongoDB' });
 
     // 1) Catalogo: crea record se non esiste
     console.log('[Bootstrap] 📋 Step 1: Creating catalog entry...');
@@ -922,7 +1209,7 @@ app.post('/api/projects/bootstrap', async (req, res) => {
     res.status(500).json({ ok: false, error: String(e?.message || e), stack: e?.stack });
   } finally {
     console.log('[Bootstrap] 🔌 Closing MongoDB connection...');
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
     console.log('[Bootstrap] 🔌 MongoDB connection closed');
   }
 });
@@ -933,9 +1220,8 @@ app.post('/api/projects/bootstrap', async (req, res) => {
 // GET /api/projects/:pid/tasks - Load project tasks
 app.get('/api/projects/:pid/tasks', async (req, res) => {
   const projectId = req.params.pid;
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const projDb = await getProjectDb(client, projectId);
     const factoryDb = client.db(dbFactory);
 
@@ -1060,8 +1346,7 @@ app.get('/api/projects/:pid/tasks', async (req, res) => {
   } catch (e) {
     logError('TaskTemplates.get', e, { projectId });
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -1078,9 +1363,8 @@ app.get('/api/projects/:pid/tasks', async (req, res) => {
 // Ora carica da Task_Types del progetto (o factory come fallback)
 app.get('/api/projects/:pid/task-heuristics', async (req, res) => {
   const projectId = req.params.pid;
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const projDb = await getProjectDb(client, projectId);
     // Pattern sono ora in Heuristics (rinominata da Task_Types)
     const coll = projDb.collection('Heuristics');
@@ -1149,8 +1433,7 @@ app.get('/api/projects/:pid/task-heuristics', async (req, res) => {
   } catch (e) {
     logError('TaskHeuristics.get', e, { projectId });
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -1340,9 +1623,8 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
 // List flows (by distinct flowId in flow_nodes)
 app.get('/api/projects/:pid/flows', async (req, res) => {
   const pid = req.params.pid;
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = await getProjectDb(client, pid);
     const ncoll = db.collection('flow_nodes');
     const list = await ncoll.aggregate([
@@ -1354,8 +1636,7 @@ app.get('/api/projects/:pid/flows', async (req, res) => {
   } catch (e) {
     logError('Flows.list', e, { projectId: pid });
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -1371,9 +1652,8 @@ app.post('/api/projects/:pid/conditions', async (req, res) => {
   if (!payload || !payload._id || !payload.name) {
     return res.status(400).json({ error: 'id_and_name_required' });
   }
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = await getProjectDb(client, pid);
     const coll = db.collection('project_conditions');
     const now = new Date();
@@ -1399,8 +1679,7 @@ app.post('/api/projects/:pid/conditions', async (req, res) => {
   } catch (e) {
     logError('Conditions.post', e, { projectId: pid, id: payload?._id });
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -1639,9 +1918,8 @@ app.post('/api/projects/:pid/tasks', async (req, res) => {
     }
   }
 
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const projDb = await getProjectDb(client, projectId);
     const now = new Date();
 
@@ -1749,8 +2027,7 @@ app.post('/api/projects/:pid/tasks', async (req, res) => {
       mainDataLength: Array.isArray(payload?.mainData) ? payload.mainData.length : 'not array'
     });
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -1759,9 +2036,8 @@ app.put('/api/projects/:pid/tasks/:taskId', async (req, res) => {
   const projectId = req.params.pid;
   const taskId = req.params.taskId;
   const payload = req.body || {};
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const projDb = await getProjectDb(client, projectId);
 
     // Find by id field (not _id)
@@ -1867,8 +2143,7 @@ app.put('/api/projects/:pid/tasks/:taskId', async (req, res) => {
   } catch (e) {
     logError('Tasks.put', e, { projectId, taskId });
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -1876,9 +2151,8 @@ app.put('/api/projects/:pid/tasks/:taskId', async (req, res) => {
 app.delete('/api/projects/:pid/tasks/:taskId', async (req, res) => {
   const projectId = req.params.pid;
   const taskId = req.params.taskId;
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const projDb = await getProjectDb(client, projectId);
     const result = await projDb.collection('tasks').deleteOne({ projectId, id: taskId });
     logInfo('Tasks.delete', { projectId, taskId, deleted: result.deletedCount > 0 });
@@ -1886,8 +2160,7 @@ app.delete('/api/projects/:pid/tasks/:taskId', async (req, res) => {
   } catch (e) {
     logError('Tasks.delete', e, { projectId, taskId });
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -2116,9 +2389,8 @@ app.get('/api/projects/:pid/variable-mappings', async (req, res) => {
 app.post('/api/projects/:pid/variable-mappings', async (req, res) => {
   const projectId = req.params.pid;
   const payload = req.body || {};
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const projDb = await getProjectDb(client, projectId);
     const now = new Date();
 
@@ -2152,8 +2424,7 @@ app.post('/api/projects/:pid/variable-mappings', async (req, res) => {
   } catch (e) {
     logError('VariableMappings.post', e, { projectId });
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -2189,9 +2460,8 @@ function deriveIsInteractiveFromMode(mode) {
 // Endpoint per caricare Tasks con scope filtering
 // -----------------------------
 app.get('/api/factory/tasks', async (req, res) => {
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbFactory);
 
     // Parametri query per scope filtering e taskType
@@ -2307,8 +2577,7 @@ app.get('/api/factory/tasks', async (req, res) => {
   } catch (error) {
     console.error('[TaskTemplatesV2] Error:', error);
     res.status(500).json({ error: 'Failed to fetch task templates', details: error.message });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -2341,9 +2610,8 @@ function mapModeToBuiltIn(mode) {
 
 // Conditions - GET (legacy)
 app.get('/api/factory/conditions', async (req, res) => {
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbFactory);
     const coll = db.collection('Conditions');
     const docs = await coll.find({}).toArray();
@@ -2352,8 +2620,7 @@ app.get('/api/factory/conditions', async (req, res) => {
   } catch (error) {
     console.error('Error fetching conditions:', error);
     res.status(500).json({ error: 'Failed to fetch conditions' });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -2409,9 +2676,8 @@ app.post('/api/factory/conditions', async (req, res) => {
 // Conditions - POST (create new)
 app.post('/api/factory/conditions/create', async (req, res) => {
   const payload = req.body || {};
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbFactory);
     const coll = db.collection('Conditions');
 
@@ -2440,8 +2706,7 @@ app.post('/api/factory/conditions/create', async (req, res) => {
   } catch (error) {
     console.error('[Conditions][Create] Error:', error);
     res.status(500).json({ error: 'Failed to create condition' });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -2449,9 +2714,8 @@ app.post('/api/factory/conditions/create', async (req, res) => {
 app.put('/api/factory/conditions/:id', async (req, res) => {
   const conditionId = req.params.id;
   const payload = req.body || {};
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbFactory);
     const coll = db.collection('Conditions');
 
@@ -2471,8 +2735,7 @@ app.put('/api/factory/conditions/:id', async (req, res) => {
   } catch (error) {
     console.error('[Conditions][Update] Error:', error);
     res.status(500).json({ error: 'Failed to update condition' });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -2480,9 +2743,8 @@ app.put('/api/factory/conditions/:id', async (req, res) => {
 
 // Tasks - POST (with scope filtering)
 app.post('/api/factory/tasks', async (req, res) => {
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbFactory);
     const coll = db.collection('tasks');
 
@@ -2518,16 +2780,14 @@ app.post('/api/factory/tasks', async (req, res) => {
   } catch (error) {
     console.error('Error fetching tasks with scope filtering:', error);
     res.status(500).json({ error: 'Failed to fetch tasks' });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
 // Constants - GET months for language
 app.get('/api/constants/months/:language', async (req, res) => {
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbFactory);
     const constantsCollection = db.collection('Constants');
 
@@ -2562,16 +2822,14 @@ app.get('/api/constants/months/:language', async (req, res) => {
   } catch (error) {
     logError('CONSTANTS_MONTHS', error, { language: req.params.language });
     res.status(500).json({ error: error.message });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
 // Macro Tasks - GET (legacy)
 app.get('/api/factory/macro-tasks', async (req, res) => {
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbFactory);
     const coll = db.collection('MacroTasks');
     const docs = await coll.find({}).toArray();
@@ -2580,16 +2838,14 @@ app.get('/api/factory/macro-tasks', async (req, res) => {
   } catch (error) {
     console.error('Error fetching macro tasks:', error);
     res.status(500).json({ error: 'Failed to fetch macro tasks' });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
 // Macro Tasks - POST (with scope filtering)
 app.post('/api/factory/macro-tasks', async (req, res) => {
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbFactory);
     const coll = db.collection('MacroTasks');
 
@@ -2625,17 +2881,15 @@ app.post('/api/factory/macro-tasks', async (req, res) => {
   } catch (error) {
     console.error('Error fetching macro tasks with scope filtering:', error);
     res.status(500).json({ error: 'Failed to fetch macro tasks' });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
 // DEPRECATED: AgentActs endpoints removed - use /api/factory/tasks instead
 
 app.get('/api/factory/actions', async (req, res) => {
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbFactory);
     // ✅ Actions sono in Tasks con type enum 6-19 (SendSMS=6, SendEmail=7, EscalateToHuman=8, ecc.)
     const actions = await db.collection('tasks').find({  // ✅ Collection tasks (lowercase)
@@ -2653,8 +2907,7 @@ app.get('/api/factory/actions', async (req, res) => {
     res.json(formattedActions);
   } catch (err) {
     res.status(500).json({ error: err.message, stack: err.stack });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -2691,9 +2944,8 @@ app.get('/api/factory/dialogue-templates', async (req, res) => {
 
 // IDE translations (static, read-only from client perspective)
 app.get('/api/factory/ide-translations', async (req, res) => {
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbFactory);
     const coll = db.collection('IDETranslations');
     const docs = await coll.find({}).toArray();
@@ -2707,33 +2959,30 @@ app.get('/api/factory/ide-translations', async (req, res) => {
     res.json(merged);
   } catch (err) {
     res.status(500).json({ error: err.message, stack: err.stack });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
 // Template translations (from steps)
 app.post('/api/factory/template-translations', async (req, res) => {
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
     // Validate request body
     if (!req.body) {
-      console.error('[TEMPLATE_TRANSLATIONS] No request body received');
+      logError('TEMPLATE_TRANSLATIONS', new Error('No request body received'));
       return res.status(400).json({ error: 'Request body is required' });
     }
 
     const { keys } = req.body; // Array of translation keys (GUIDs or old-style keys)
 
     if (!Array.isArray(keys)) {
-      console.error('[TEMPLATE_TRANSLATIONS] Invalid keys format:', typeof keys, keys);
+      logError('TEMPLATE_TRANSLATIONS', new Error('Invalid keys format'), { received: typeof keys });
       return res.status(400).json({ error: 'Keys must be an array', received: typeof keys });
     }
 
     if (keys.length === 0) {
       return res.json({});
     }
-
-    await client.connect();
     const db = client.db(dbFactory);
     const coll = db.collection('Translations');
 
@@ -2808,11 +3057,7 @@ app.post('/api/factory/template-translations', async (req, res) => {
       keysCount: req.body?.keys?.length
     });
   } finally {
-    if (client) {
-      await client.close().catch(closeErr => {
-        console.error('[TEMPLATE_TRANSLATIONS] Error closing client:', closeErr);
-      });
-    }
+    // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -2864,9 +3109,8 @@ app.post('/api/projects/:pid/translations/load', async (req, res) => {
     return res.json({});
   }
 
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
 
     console.log(`[PROJECT_TRANSLATIONS] Request for project ${projectId}, ${guids.length} GUIDs`);
     console.log(`[PROJECT_TRANSLATIONS] Sample GUIDs:`, guids.slice(0, 5));
@@ -2963,8 +3207,7 @@ app.post('/api/projects/:pid/translations/load', async (req, res) => {
   } catch (err) {
     console.error('[PROJECT_TRANSLATIONS] Error:', err);
     res.status(500).json({ error: err.message, stack: err.stack });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -3050,9 +3293,8 @@ app.post('/api/projects/:pid/translations', async (req, res) => {
     return res.json({ success: true, count: 0 });
   }
 
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
 
     console.log(`[PROJECT_TRANSLATIONS_SAVE] Saving ${translations.length} translations for project ${projectId}`);
 
@@ -3105,8 +3347,7 @@ app.post('/api/projects/:pid/translations', async (req, res) => {
   } catch (err) {
     console.error('[PROJECT_TRANSLATIONS_SAVE] Error:', err);
     res.status(500).json({ error: err.message, stack: err.stack });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -3116,9 +3357,8 @@ app.post('/api/projects/:pid/translations', async (req, res) => {
 
 app.post('/api/factory/dialogue-templates', async (req, res) => {
   try { console.log('>>> SAVE /api/factory/dialogue-templates size ~', Buffer.byteLength(JSON.stringify(req.body || {})), 'bytes'); } catch { }
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbFactory);
     const coll = db.collection('tasks');
     const now = new Date();
@@ -3150,16 +3390,14 @@ app.post('/api/factory/dialogue-templates', async (req, res) => {
     res.json({ success: true, count: templates.length });
   } catch (err) {
     res.status(500).json({ error: err.message, stack: err.stack });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
 app.delete('/api/factory/dialogue-templates/:id', async (req, res) => {
   const id = req.params.id;
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbFactory);
     const coll = db.collection('tasks');
     // Delete by name or _id
@@ -3178,46 +3416,54 @@ app.delete('/api/factory/dialogue-templates/:id', async (req, res) => {
     }
   } catch (err) {
     res.status(500).json({ error: err.message, stack: err.stack });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
 app.get('/api/factory/industries', async (req, res) => {
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbFactory);
     const industries = await db.collection('Industries').find({}).toArray();
     res.json(industries);
   } catch (err) {
     res.status(500).json({ error: err.message, stack: err.stack });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
 // GET: Lista industry uniche dai progetti (come per i clienti)
 app.get('/api/projects/catalog/industries', async (req, res) => {
-  const client = new MongoClient(uri);
+  const startTime = Date.now();
+  const client = await getMongoClient(); // ✅ Usa pool invece di nuova connessione
   try {
-    await client.connect();
     const db = client.db(dbProjects);
     const coll = db.collection('projects_catalog');
-    const projects = await coll.find({}, { projection: { industry: 1 } }).toArray();
-    const industries = new Set();
-    projects.forEach(p => {
-      if (p.industry && typeof p.industry === 'string' && p.industry.trim()) {
-        industries.add(p.industry.trim());
-      }
-    });
-    const uniqueIndustries = Array.from(industries).sort();
+
+    // ✅ Optimized aggregation pipeline
+    const industries = await coll.aggregate([
+      { $match: { industry: { $exists: true, $ne: null, $type: 'string' } } },
+      { $group: { _id: '$industry' } },
+      { $match: { _id: { $ne: '', $regex: /^\s*\S/ } } }, // at least one non-whitespace char
+      { $sort: { _id: 1 } },
+      { $project: { _id: 0, industry: '$_id' } },
+    ]).toArray();
+
+    // Trim lato JavaScript (più compatibile con versioni MongoDB)
+    const uniqueIndustries = industries
+      .map(i => (i.industry || '').trim())
+      .filter(Boolean)
+      .sort();
+
+    const duration = Date.now() - startTime;
+    logInfo('Catalog.industries', { count: uniqueIndustries.length, duration: `${duration}ms` });
     res.json(uniqueIndustries);
   } catch (e) {
+    const duration = Date.now() - startTime;
+    logError('Catalog.industries', e, { duration: `${duration}ms` });
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
   }
+  // ✅ NON chiudere la connessione se usi il pool
 });
 
 // POST: Crea nuova industry nel factory
@@ -3227,9 +3473,8 @@ app.post('/api/factory/industries', async (req, res) => {
   if (!industryName || typeof industryName !== 'string' || !industryName.trim()) {
     return res.status(400).json({ error: 'industry_name_required' });
   }
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbFactory);
     const coll = db.collection('Industries');
     // Verifica se esiste già
@@ -3255,8 +3500,7 @@ app.post('/api/factory/industries', async (req, res) => {
     res.json(newIndustry);
   } catch (e) {
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -3289,9 +3533,8 @@ app.get('/api/factory/task-heuristics', async (req, res) => {
 // POST /api/factory/task-heuristics - Save heuristics
 // Ora salva i pattern in Heuristics (rinominata da Task_Types)
 app.post('/api/factory/task-heuristics', async (req, res) => {
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbFactory);
     // Pattern sono ora in Heuristics (rinominata da Task_Types)
     const coll = db.collection('Heuristics');
@@ -3359,8 +3602,7 @@ app.post('/api/factory/task-heuristics', async (req, res) => {
   } catch (e) {
     logError('TaskHeuristics.post', e);
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -3444,9 +3686,8 @@ app.get('/api/factory/tasks', async (req, res) => {
 
 // POST /api/factory/tasks - Create task
 app.post('/api/factory/tasks', async (req, res) => {
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbFactory);
     const coll = db.collection('tasks');
 
@@ -3493,17 +3734,15 @@ app.post('/api/factory/tasks', async (req, res) => {
   } catch (e) {
     logError('TaskTemplates.post', e);
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
 // PUT /api/factory/tasks/:id - Update task
 app.put('/api/factory/tasks/:id', async (req, res) => {
   const id = req.params.id;
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbFactory);
     const coll = db.collection('tasks');
 
@@ -3564,17 +3803,15 @@ app.put('/api/factory/tasks/:id', async (req, res) => {
   } catch (e) {
     logError('TaskTemplates.put', e);
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
 // DELETE /api/factory/tasks/:id - Delete task
 app.delete('/api/factory/tasks/:id', async (req, res) => {
   const id = req.params.id;
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbFactory);
     const coll = db.collection('tasks');
 
@@ -3588,8 +3825,7 @@ app.delete('/api/factory/tasks/:id', async (req, res) => {
   } catch (e) {
     logError('TaskTemplates.delete', e);
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -3605,9 +3841,8 @@ app.get('/api/factory/type-templates', async (req, res) => {
 
 // POST /api/factory/type-templates - Save type template in Factory
 app.post('/api/factory/type-templates', async (req, res) => {
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbFactory);
     const coll = db.collection('Heuristics');
 
@@ -3650,17 +3885,15 @@ app.post('/api/factory/type-templates', async (req, res) => {
   } catch (e) {
     logError('TypeTemplates.post', e);
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
 // POST /api/projects/:pid/type-templates - Save type template in Project
 app.post('/api/projects/:pid/type-templates', async (req, res) => {
   const projectId = req.params.pid;
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const projDb = await getProjectDb(client, projectId);
     const coll = projDb.collection('Heuristics');
 
@@ -3703,8 +3936,7 @@ app.post('/api/projects/:pid/type-templates', async (req, res) => {
   } catch (e) {
     logError('TypeTemplates.post', e, { projectId, name: payload?.name });
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -3751,16 +3983,14 @@ app.post('/step2', async (req, res) => {
 
 app.get('/api/industry/:industryId/templates', async (req, res) => {
   const industryId = req.params.industryId;
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbFactory);
     const templates = await db.collection('DataDialogueTemplates').find({ industry: industryId }).toArray();
     res.json(templates);
   } catch (err) {
     res.status(500).json({ error: err.message, stack: err.stack });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -3768,93 +3998,81 @@ app.get('/api/industry/:industryId/templates', async (req, res) => {
 
 app.get('/api/projects', async (req, res) => {
   console.log('>>> CHIAMATA /api/projects');
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbProjects);
     const projects = await db.collection('projects').find({}).sort({ _id: -1 }).toArray();
     res.json(projects);
   } catch (err) {
     res.status(500).json({ error: err.message, stack: err.stack });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
 app.post('/api/projects', async (req, res) => {
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbProjects);
     const result = await db.collection('projects').insertOne(req.body);
     const saved = await db.collection('projects').findOne({ _id: result.insertedId });
     res.json({ id: result.insertedId, ...saved });
   } catch (err) {
     res.status(500).json({ error: err.message, stack: err.stack });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
 app.get('/api/projects/:id', async (req, res) => {
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbProjects);
     const project = await db.collection('projects').findOne({ _id: new ObjectId(req.params.id) });
     if (!project) return res.status(404).json({ error: 'Progetto non trovato' });
     res.json(project);
   } catch (err) {
     res.status(500).json({ error: err.message, stack: err.stack });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
 // --- PROJECTS ENDPOINTS (ALIAS) ---
 
 app.get('/projects', async (req, res) => {
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbProjects);
     const projects = await db.collection('projects').find({}).sort({ _id: -1 }).toArray();
     res.json(projects);
   } catch (err) {
     res.status(500).json({ error: err.message, stack: err.stack });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
 app.post('/projects', async (req, res) => {
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbProjects);
     const result = await db.collection('projects').insertOne(req.body);
     const saved = await db.collection('projects').findOne({ _id: result.insertedId });
     res.json({ id: result.insertedId, ...saved });
   } catch (err) {
     res.status(500).json({ error: err.message, stack: err.stack });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
 app.get('/projects/all', async (req, res) => {
   console.log('>>> CHIAMATA /projects/all');
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbProjects);
     const projects = await db.collection('projects').find({}).sort({ _id: -1 }).toArray();
     res.json(projects);
   } catch (err) {
     console.error('Errore in /projects/all:', err); // <--- AGGIUNGI QUESTO
     res.status(500).json({ error: err.message, stack: err.stack });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -3868,17 +4086,15 @@ app.get('/projects/:id', async (req, res) => {
   if (!isValidObjectId(req.params.id)) {
     return res.status(400).json({ error: 'ID non valido' });
   }
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbProjects);
     const project = await db.collection('projects').findOne({ _id: new ObjectId(req.params.id) });
     if (!project) return res.status(404).json({ error: 'Progetto non trovato' });
     res.json(project);
   } catch (err) {
     res.status(500).json({ error: err.message, stack: err.stack });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -4461,9 +4677,8 @@ app.post('/api/projects/catalog/update-timestamp', async (req, res) => {
   if (!projectId) {
     return res.status(400).json({ error: 'projectId_required' });
   }
-  const client = new MongoClient(uri);
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbProjects);
     const cat = db.collection('projects_catalog');
     const now = new Date();
@@ -4515,8 +4730,7 @@ app.post('/api/projects/catalog/update-timestamp', async (req, res) => {
   } catch (e) {
     logError('Catalog.updateTimestamp', e);
     res.status(500).json({ error: String(e?.message || e) });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
@@ -4540,8 +4754,7 @@ preloadAllServerCaches();
 // Initialize indexes for factory Translations collection (one-time, async)
 (async () => {
   try {
-    const client = new MongoClient(uri);
-    await client.connect();
+    const client = await getMongoClient();
     const factoryDb = client.db(dbFactory);
     const factoryTranslationsColl = factoryDb.collection('Translations');
 
@@ -4549,8 +4762,7 @@ preloadAllServerCaches();
     await factoryTranslationsColl.createIndex({ language: 1, type: 1 }).catch(() => { });
     await factoryTranslationsColl.createIndex({ guid: 1, language: 1 }).catch(() => { });
     await factoryTranslationsColl.createIndex({ language: 1, type: 1, projectId: 1 }).catch(() => { });
-
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
     console.log('[SERVER] ✅ Factory Translations indexes initialized');
   } catch (err) {
     console.warn('[SERVER] ⚠️ Could not initialize factory Translations indexes:', err.message);
@@ -5573,10 +5785,8 @@ app.use((err, req, res, next) => {
 // Template label translations (for heuristic matching)
 app.get('/api/factory/template-label-translations', async (req, res) => {
   const language = req.query.language || 'it';
-  const client = new MongoClient(uri);
-
+  const client = await getMongoClient();
   try {
-    await client.connect();
     const db = client.db(dbFactory);
 
     // Ottieni tutti gli ID dei template DDT
@@ -5622,19 +5832,21 @@ app.get('/api/factory/template-label-translations', async (req, res) => {
   } catch (err) {
     console.error('[API] Errore caricamento traduzioni label:', err);
     res.status(500).json({ error: err.message });
-  } finally {
-    await client.close();
+  // ✅ NON chiudere la connessione se usi il pool
   }
 });
 
 // ✅ Pre-inizializza il MongoDB connection pool all'avvio del server
 async function initializeMongoPool() {
   try {
-    console.log('[MongoDB] 🔄 Pre-initializing connection pool...');
+    logInfo('MongoDB.Startup', { message: 'Pre-initializing connection pool...' });
     await getMongoClient();
-    console.log('[MongoDB] ✅ Connection pool pre-initialized successfully');
+    logInfo('MongoDB.Startup', { message: 'Connection pool pre-initialized successfully' });
+
+    // Create indexes after pool is initialized
+    await ensureCatalogIndexes();
   } catch (error) {
-    console.error('[MongoDB] ⚠️ Failed to pre-initialize pool (will retry on first request)', error);
+    logError('MongoDB.Startup', error, { message: 'Failed to pre-initialize pool (will retry on first request)' });
     // Non bloccare l'avvio del server, il pool verrà inizializzato alla prima richiesta
   }
 }
@@ -5642,13 +5854,13 @@ async function initializeMongoPool() {
 // Inizializza il pool prima di avviare il server
 initializeMongoPool().then(() => {
   app.listen(3100, () => {
-    console.log('Backend API pronta su http://localhost:3100');
+    logInfo('Express', { message: 'Server ready on port 3100' });
   });
 }).catch((error) => {
-  console.error('[Server] ❌ Failed to start server:', error);
+  logError('Express', error, { message: 'Failed to start server' });
   // Avvia comunque il server, il pool verrà inizializzato alla prima richiesta
   app.listen(3100, () => {
-    console.log('Backend API pronta su http://localhost:3100 (MongoDB pool will initialize on first request)');
+    logInfo('Express', { message: 'Server ready on port 3100 (MongoDB pool will initialize on first request)' });
   });
 });
 

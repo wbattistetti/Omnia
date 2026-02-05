@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import TaskTreeWizard from '../DDTWizard';
+import TaskWizard from '../TaskWizard';
 
 // Mock fetch
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
-describe('DDTWizard', () => {
+describe('TaskWizard', () => {
   const mockOnCancel = vi.fn();
   const mockOnComplete = vi.fn();
 
@@ -29,7 +29,7 @@ describe('DDTWizard', () => {
       json: async () => mockResponse
     });
 
-    render(<DDTWizard onCancel={mockOnCancel} onComplete={mockOnComplete} />);
+    render(<TaskWizard onCancel={mockOnCancel} onComplete={mockOnComplete} />);
 
     // Enter description and submit
     const input = screen.getByPlaceholderText('e.g., date of birth, email, phone number...');
@@ -58,7 +58,7 @@ describe('DDTWizard', () => {
       json: async () => mockResponse
     });
 
-    render(<DDTWizard onCancel={mockOnCancel} onComplete={mockOnComplete} />);
+    render(<TaskWizard onCancel={mockOnCancel} onComplete={mockOnComplete} />);
 
     // Enter description and submit
     const input = screen.getByPlaceholderText('e.g., date of birth, email, phone number...');
@@ -88,7 +88,7 @@ describe('DDTWizard', () => {
       json: async () => mockResponse
     });
 
-    render(<DDTWizard onCancel={mockOnCancel} onComplete={mockOnComplete} />);
+    render(<TaskWizard onCancel={mockOnCancel} onComplete={mockOnComplete} />);
 
     // Enter description and submit
     const input = screen.getByPlaceholderText('e.g., date of birth, email, phone number...');
@@ -109,7 +109,7 @@ describe('DDTWizard', () => {
       ok: false
     });
 
-    render(<DDTWizard onCancel={mockOnCancel} onComplete={mockOnComplete} />);
+    render(<TaskWizard onCancel={mockOnCancel} onComplete={mockOnComplete} />);
 
     // Enter description and submit
     const input = screen.getByPlaceholderText('e.g., date of birth, email, phone number...');
@@ -137,7 +137,7 @@ describe('DDTWizard', () => {
       json: async () => mockResponse
     });
 
-    render(<DDTWizard onCancel={mockOnCancel} onComplete={mockOnComplete} />);
+    render(<TaskWizard onCancel={mockOnCancel} onComplete={mockOnComplete} />);
 
     // Enter description and submit
     const input = screen.getByPlaceholderText('e.g., date of birth, email, phone number...');
@@ -159,7 +159,7 @@ describe('DDTWizard', () => {
   });
 
   it('should call onCancel when cancel button is clicked', () => {
-    render(<DDTWizard onCancel={mockOnCancel} onComplete={mockOnComplete} />);
+    render(<TaskWizard onCancel={mockOnCancel} onComplete={mockOnComplete} />);
 
     fireEvent.click(screen.getByText('Annulla'));
 

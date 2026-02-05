@@ -1,11 +1,11 @@
 import React from 'react';
-import DDTWizard from './TaskTreeWizard/DDTWizard';
+import TaskWizard from './TaskTreeWizard/TaskWizard';
 
 const DDTBuilder: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, messages?: any) => void; initialDDT?: any; startOnStructure?: boolean }> = ({ onCancel, onComplete, initialDDT, startOnStructure }) => {
   React.useEffect(() => {
   });
   return (
-    <DDTWizard
+    <TaskWizard
       onCancel={onCancel}
       onComplete={(ddt, messages) => { if (onComplete) onComplete(ddt, messages); }}
       initialDDT={initialDDT}

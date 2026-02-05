@@ -3,7 +3,6 @@ import { Undo2, Redo2, MessageSquare, Rocket, BookOpen, List, CheckSquare, Spark
 import { RightPanelMode } from './RightPanel';
 
 interface ResponseEditorToolbarProps {
-  showWizard: boolean;
   rightMode: RightPanelMode; // Per compatibilità
   leftPanelMode: RightPanelMode; // Nuovo: stato separato per pannello sinistro
   testPanelMode: RightPanelMode; // Nuovo: stato separato per pannello Test
@@ -30,7 +29,6 @@ interface ResponseEditorToolbarProps {
  * Provides buttons for editor actions and panel toggles.
  */
 export function useResponseEditorToolbar({
-  showWizard,
   rightMode, // Per compatibilità
   leftPanelMode, // Nuovo
   testPanelMode, // Nuovo
@@ -74,10 +72,7 @@ export function useResponseEditorToolbar({
     }
   }, [tasksPanelWidth]);
 
-  // ✅ Early return DOPO gli hooks (non viola le regole di React)
-  if (showWizard) {
-    return []; // Empty during wizard
-  }
+  // NOTE: TaskWizard is now external, so no need to hide toolbar during wizard
 
   const handleRightModeChange = (mode: RightPanelMode) => {
     // Close both panels when changing right mode
