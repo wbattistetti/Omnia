@@ -100,7 +100,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
 
   // ✅ FASE 2.2: Integrate Zustand store - sync ref ↔ store
   useTaskTreeSync(taskTreeRef, taskTree, { enabled: true });
-  
+
   // ✅ FASE 2.2: Use Zustand store version instead of useState
   const taskTreeVersionFromStore = useTaskTreeVersion();
   const taskTreeVersion = taskTreeVersionFromStore || taskTreeVersionFromState;

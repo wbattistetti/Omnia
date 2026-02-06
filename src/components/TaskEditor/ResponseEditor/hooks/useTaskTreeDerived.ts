@@ -3,6 +3,7 @@
 
 import { useMemo } from 'react';
 import { getdataList } from '../ddtSelectors';
+import { useTaskTreeFromStore } from '../core/state';
 import type { TaskTree } from '../../../../types/taskTypes';
 
 export interface UseTaskTreeDerivedParams {
@@ -32,15 +33,18 @@ export function useTaskTreeDerived(params: UseTaskTreeDerivedParams): UseTaskTre
   // Stabilizza isTaskTreeLoading per evitare problemi con dipendenze undefined
   const stableIsTaskTreeLoading = isTaskTreeLoading ?? false;
 
-  // Usa taskTreeRef.current per mainList (contiene già le modifiche)
+  // ✅ FASE 2.2: Use Zustand store as primary source, fallback to ref/prop
+  const taskTreeFromStore = useTaskTreeFromStore();
+
+  // Usa store come fonte primaria, poi ref, poi prop (priorità: store > ref > prop)
   // Forza re-render quando taskTreeRef cambia usando uno stato trigger
   const mainList = useMemo(() => {
-    // ARCHITETTURA ESPERTO: Usa taskTree prop se disponibile, altrimenti taskTreeRef.current
+    // ARCHITETTURA ESPERTO: Usa store se disponibile, poi taskTree prop, poi taskTreeRef.current
     // Questo garantisce che mainList sia aggiornato quando DDTHostAdapter carica il TaskTree
-    const currentTaskTree = taskTree ?? taskTreeRef.current;
+    const currentTaskTree = taskTreeFromStore ?? taskTree ?? taskTreeRef.current;
     const list = getdataList(currentTaskTree);
     return list;
-  }, [taskTree?.label ?? '', taskTree?.nodes?.length ?? 0, taskTreeVersion ?? 0, stableIsTaskTreeLoading]); // Usa valori primitivi sempre definiti
+  }, [taskTreeFromStore, taskTree?.label ?? '', taskTree?.nodes?.length ?? 0, taskTreeVersion ?? 0, stableIsTaskTreeLoading]); // Usa valori primitivi sempre definiti
 
   // Aggregated view: show a group header when there are multiple mains
   const isAggregatedAtomic = useMemo(() => (
@@ -54,8 +58,9 @@ export function useTaskTreeDerived(params: UseTaskTreeDerivedParams): UseTaskTre
   const stableIntroductionKey = taskTree?.introduction ? JSON.stringify(taskTree.introduction) : '';
 
   const introduction = useMemo(() => {
-    return taskTreeRef.current?.introduction ?? null;
-  }, [stableTaskTreeVersion, stableIntroductionKey]); // Usa chiave serializzata sempre stringa
+    // ✅ FASE 2.2: Use store as primary source
+    return taskTreeFromStore?.introduction ?? taskTreeRef.current?.introduction ?? null;
+  }, [taskTreeFromStore, stableTaskTreeVersion, stableIntroductionKey]); // Usa chiave serializzata sempre stringa
 
   return {
     mainList,

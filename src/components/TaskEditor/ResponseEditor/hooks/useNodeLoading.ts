@@ -3,6 +3,7 @@
 
 import { useEffect } from 'react';
 import { getdataList, getSubDataList } from '../ddtSelectors';
+import { useTaskTreeFromStore } from '../core/state';
 import type { Task, TaskTree } from '../../../../types/taskTypes';
 
 export interface UseNodeLoadingParams {
@@ -48,9 +49,14 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
     getStepsAsArray,
   } = params;
 
+  // ✅ FASE 2.2: Use Zustand store as primary source
+  const taskTreeFromStore = useTaskTreeFromStore();
+
   useEffect(() => {
     // LOG CHIRURGICO 3: Caricamento nodo
-    const currentMainList = getdataList(taskTreeRef.current); // Leggi dal ref, non dal prop
+    // ✅ FASE 2.2: Use store as primary source, fallback to ref
+    const currentTaskTree = taskTreeFromStore ?? taskTreeRef.current;
+    const currentMainList = getdataList(currentTaskTree); // Leggi dallo store/ref, non dal prop
 
     if (currentMainList.length === 0) {
       return;
@@ -68,10 +74,11 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
     } catch { }
 
     if (selectedRoot) {
-      const introStep = taskTreeRef.current?.introduction
-        ? { type: 'introduction', escalations: taskTreeRef.current.introduction.escalations }
+      // ✅ FASE 2.2: Use store as primary source
+      const introStep = currentTaskTree?.introduction
+        ? { type: 'introduction', escalations: currentTaskTree.introduction.escalations }
         : { type: 'introduction', escalations: [] };
-      const newNode = { ...taskTreeRef.current, steps: [introStep] };
+      const newNode = { ...currentTaskTree, steps: [introStep] };
 
       try {
         if (localStorage.getItem('debug.nodeSync') === '1') {
@@ -116,8 +123,9 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
 
         // NUOVO: Usa lookup diretto per ottenere steps per questo nodo (dictionary)
         // CRITICAL: Usa taskTree.steps come fonte primaria (più affidabile, costruito da buildTaskTree)
+        // ✅ FASE 2.2: Use store as primary source
         // Fallback a task.steps solo se taskTree.steps non è disponibile
-        const stepsSource = taskTreeRef.current?.steps || task?.steps;
+        const stepsSource = currentTaskTree?.steps || task?.steps;
         const nodeStepsDict = getStepsForNode(stepsSource, nodeTemplateId);
         const taskTemplateIdsCount = stepsSource && typeof stepsSource === 'object' && !Array.isArray(stepsSource)
           ? Object.keys(stepsSource).length
@@ -132,7 +140,7 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
           taskTemplateIdsCount,
           nodeStepTypes,
           nodeStepsCount: nodeStepTypes.length,
-          stepsSource: taskTreeRef.current?.steps ? 'taskTree.steps' : 'task.steps',
+          stepsSource: currentTaskTree?.steps ? 'taskTree.steps' : 'task.steps',
           stepsIsDictionary: stepsSource && typeof stepsSource === 'object' && !Array.isArray(stepsSource)
         });
         const nodeStepsDetails = nodeStepTypes.length > 0 ? (() => {
@@ -193,7 +201,7 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
             nodeId: node.id,
             nodeTemplateId,
             nodeLabel: node?.label,
-            stepsSource: taskTreeRef.current?.steps ? 'taskTree.steps' : 'task.steps',
+            stepsSource: currentTaskTree?.steps ? 'taskTree.steps' : 'task.steps',
             hasTaskSteps: !!(nodeTemplateId && stepsSource?.[nodeTemplateId]),
             taskStepsKeys: stepsSource && typeof stepsSource === 'object' && !Array.isArray(stepsSource)
               ? Object.keys(stepsSource)
@@ -273,6 +281,6 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
 
 
     // Carica il nodo quando cambiano gli indici O quando taskTree prop cambia (dal dockTree)
-    // taskTreeRef.current è già sincronizzato con taskTree prop dal useEffect precedente
-  }, [selectedMainIndex, selectedSubIndex, selectedRoot, introduction, taskTree?.label, taskTree?.nodes?.length, task?.steps, taskTreeRef, setSelectedNode, setSelectedNodePath, getStepsForNode, getStepsAsArray]);
+    // ✅ FASE 2.2: Store is already synced with taskTreeRef via useTaskTreeSync
+  }, [selectedMainIndex, selectedSubIndex, selectedRoot, introduction, taskTree?.label, taskTree?.nodes?.length, task?.steps, taskTreeFromStore, taskTreeRef, setSelectedNode, setSelectedNodePath, getStepsForNode, getStepsAsArray]);
 }
