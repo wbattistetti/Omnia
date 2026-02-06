@@ -17,7 +17,7 @@ export interface UseProjectSaveParams {
  */
 export function useProjectSave(params: UseProjectSaveParams) {
   const { task, taskTreeRef, currentProjectId } = params;
-  
+
   // ✅ FASE 2.2: Use Zustand store as primary source
   const taskTreeFromStore = useTaskTreeFromStore();
 

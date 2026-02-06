@@ -18,7 +18,7 @@ export interface UseNodeFinderParams {
  */
 export function useNodeFinder(params: UseNodeFinderParams) {
   const { taskTree, taskTreeRef, handleSelectMain, handleSelectSub } = params;
-  
+
   // ✅ FASE 2.2: Use Zustand store as primary source
   const taskTreeFromStore = useTaskTreeFromStore();
 
