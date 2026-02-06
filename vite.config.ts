@@ -22,6 +22,21 @@ export default defineConfig({
       '@components': path.resolve(__dirname, 'src/components'),
     }
   },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    resolve: {
+      alias: {
+        '@services': path.resolve(__dirname, 'src/services'),
+        '@utils': path.resolve(__dirname, 'src/utils'),
+        '@types': path.resolve(__dirname, 'src/types'),
+        '@context': path.resolve(__dirname, 'src/context'),
+        '@hooks': path.resolve(__dirname, 'src/hooks'),
+        '@dock': path.resolve(__dirname, 'src/dock'),
+        '@components': path.resolve(__dirname, 'src/components'),
+      }
+    }
+  },
   optimizeDeps: {
     exclude: ['lucide-react'],
   },

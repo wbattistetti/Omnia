@@ -8,8 +8,8 @@
  * to create a clean domain layer.
  */
 
-import { getNodesWithFallback } from '@utils/taskTreeMigrationHelpers';
-import type { TaskTree } from '@types/taskTypes';
+import { getNodesWithFallback } from '../../../../../utils/taskTreeMigrationHelpers';
+import type { TaskTree } from '../../../../../types/taskTypes';
 
 /**
  * Get main nodes list from TaskTree
@@ -59,8 +59,11 @@ export function findNodeByIndices(
   if (subIndex == null) return main;
 
   const subs = getSubNodes(main);
-  const safeSubIdx = Number.isFinite(subIndex) && subIndex >= 0 && subIndex < subs.length
-    ? subIndex
-    : 0;
-  return subs.length > 0 ? (subs[safeSubIdx] || main) : main;
+  if (subs.length === 0) return main;
+  
+  // If subIndex is out of bounds, return main node
+  const isValidSubIndex = Number.isFinite(subIndex) && subIndex >= 0 && subIndex < subs.length;
+  if (!isValidSubIndex) return main;
+  
+  return subs[subIndex] || main;
 }
