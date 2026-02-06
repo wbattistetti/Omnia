@@ -1,6 +1,6 @@
 /**
  * Steps Domain Operations
- * 
+ *
  * Pure functions for step operations.
  * No side effects, no dependencies on React or state.
  */
@@ -12,12 +12,12 @@
  */
 export function convertStepsArrayToDictionary(steps: any): Record<string, any> {
   if (!steps) return {};
-  
+
   // Already dictionary: use directly
   if (typeof steps === 'object' && !Array.isArray(steps)) {
     return steps;
   }
-  
+
   // Array: convert to dictionary
   if (Array.isArray(steps)) {
     const result: Record<string, any> = {};
@@ -32,7 +32,7 @@ export function convertStepsArrayToDictionary(steps: any): Record<string, any> {
     }
     return result;
   }
-  
+
   return {};
 }
 
@@ -49,14 +49,14 @@ export function normalizeStepsToDictionary(steps: any): Record<string, any> {
  */
 export function hasStepsContent(steps: any): boolean {
   if (!steps) return false;
-  
+
   if (typeof steps === 'object' && !Array.isArray(steps)) {
     return Object.keys(steps).length > 0;
   }
-  
+
   if (Array.isArray(steps)) {
     return steps.length > 0;
   }
-  
+
   return false;
 }

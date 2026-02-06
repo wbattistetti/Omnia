@@ -6,7 +6,7 @@ import { getTemplateId } from '../../../../../../utils/taskHelpers';
 import { extractTaskOverrides, buildTemplateExpanded } from '../../../../../../utils/taskUtils';
 import { TaskType, isUtteranceInterpretationTemplateId } from '../../../../../../types/taskTypes';
 import type { Task, TaskTree } from '../../../../../../types/taskTypes';
-import { getdataList } from '../../../ddtSelectors';
+import { getMainNodes } from '../../../core/domain';
 import { info } from '../../../../../../utils/logger';
 
 /**
@@ -20,7 +20,7 @@ export async function saveTaskToRepository(
   currentProjectId: string | null
 ): Promise<void> {
   const key = taskId;
-  const currentMainList = getdataList(taskTree);
+  const currentMainList = getMainNodes(taskTree);
   const hasTaskTree = taskTree && Object.keys(taskTree).length > 0 && currentMainList && currentMainList.length > 0;
 
   if (hasTaskTree) {
@@ -95,7 +95,7 @@ export async function saveTaskOnProjectSave(
   currentProjectId: string | null
 ): Promise<void> {
   const key = taskId;
-  const currentMainList = getdataList(taskTree);
+  const currentMainList = getMainNodes(taskTree);
   const hasTaskTree = taskTree && Object.keys(taskTree).length > 0 && currentMainList && currentMainList.length > 0;
 
   if (hasTaskTree) {
