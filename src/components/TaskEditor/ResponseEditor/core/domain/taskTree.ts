@@ -60,10 +60,10 @@ export function findNodeByIndices(
 
   const subs = getSubNodes(main);
   if (subs.length === 0) return main;
-  
+
   // If subIndex is out of bounds, return main node
   const isValidSubIndex = Number.isFinite(subIndex) && subIndex >= 0 && subIndex < subs.length;
   if (!isValidSubIndex) return main;
-  
+
   return subs[subIndex] || main;
 }

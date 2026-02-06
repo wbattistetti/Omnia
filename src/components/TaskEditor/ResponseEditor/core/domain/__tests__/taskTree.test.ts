@@ -362,10 +362,10 @@ describe('Domain: TaskTree Operations', () => {
         { id: 'main-2', label: 'Main 2', subNodes: [subNode2] },
       ];
       const taskTree: TaskTree = { id: 'test', nodes: nodes as any };
-      
+
       const result1 = findNodeByIndices(taskTree, 0, 0);
       const result2 = findNodeByIndices(taskTree, 1, 0);
-      
+
       expect(result1).toEqual(subNode1);
       expect(result2).toEqual(subNode2);
     });

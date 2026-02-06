@@ -98,13 +98,13 @@ describe('Domain: Node Operations', () => {
         },
       };
       const result = getNodeStepKeys(node);
-      
+
       // Known steps should come first in order
       const startIndex = result.indexOf('start');
       const noMatchIndex = result.indexOf('noMatch');
       const anotherCustomIndex = result.indexOf('anotherCustom'); // Sorted alphabetically
       const customIndex = result.indexOf('customStep');
-      
+
       expect(startIndex).toBeLessThan(anotherCustomIndex);
       expect(noMatchIndex).toBeLessThan(anotherCustomIndex);
       expect(anotherCustomIndex).toBeLessThan(customIndex); // Custom sorted alphabetically: "anotherCustom" < "customStep"
@@ -316,7 +316,7 @@ describe('Domain: Node Operations', () => {
         { id: 'other', label: 'Other', parentId: undefined },
       ];
       const result = removeNode(nodes, 'parent', true);
-      
+
       expect(result).toHaveLength(1);
       expect(result.find(n => n.id === 'other')).toBeDefined();
       expect(result.find(n => n.id === 'parent')).toBeUndefined();
@@ -334,7 +334,7 @@ describe('Domain: Node Operations', () => {
         { id: 'sibling', parentId: undefined },
       ];
       const result = removeNode(nodes, 'level1', true);
-      
+
       expect(result).toHaveLength(1);
       expect(result.find(n => n.id === 'sibling')).toBeDefined();
       expect(result.find(n => n.id === 'level1')).toBeUndefined();

@@ -36,7 +36,7 @@ describe('Domain: Steps Operations', () => {
         { type: 'success', escalations: [], id: 'success-id' },
       ];
       const result = convertStepsArrayToDictionary(array);
-      
+
       expect(result).toEqual({
         start: { type: 'start', escalations: [], id: 'start-id' },
         noMatch: { type: 'noMatch', escalations: [], id: 'noMatch-id' },
@@ -57,7 +57,7 @@ describe('Domain: Steps Operations', () => {
         { type: null, escalations: [] }, // Null type
       ];
       const result = convertStepsArrayToDictionary(array);
-      
+
       expect(result).toHaveProperty('start');
       expect(result).toHaveProperty('noMatch');
       expect(result).not.toHaveProperty('undefined');
@@ -70,7 +70,7 @@ describe('Domain: Steps Operations', () => {
         { type: 'noMatch', escalations: [] },
       ];
       const result = convertStepsArrayToDictionary(array);
-      
+
       expect(result.start.escalations).toEqual([]);
       expect(result.noMatch.escalations).toEqual([]);
     });
@@ -81,7 +81,7 @@ describe('Domain: Steps Operations', () => {
         { type: 'start', escalations, id: 'start-id' },
       ];
       const result = convertStepsArrayToDictionary(array);
-      
+
       expect(result.start.escalations).toEqual(escalations);
     });
 
@@ -91,7 +91,7 @@ describe('Domain: Steps Operations', () => {
         { type: 'noMatch', escalations: [] }, // No id
       ];
       const result = convertStepsArrayToDictionary(array);
-      
+
       expect(result.start.id).toBe('custom-start-id');
       expect(result.noMatch.id).toBeUndefined();
     });
@@ -105,7 +105,7 @@ describe('Domain: Steps Operations', () => {
         { type: '', escalations: [] }, // Empty type
       ];
       const result = convertStepsArrayToDictionary(array);
-      
+
       expect(result).toHaveProperty('start');
       expect(result).toHaveProperty('noMatch');
       expect(Object.keys(result)).toHaveLength(2);
@@ -117,7 +117,7 @@ describe('Domain: Steps Operations', () => {
         { type: 'start', escalations: [], id: 'second' },
       ];
       const result = convertStepsArrayToDictionary(array);
-      
+
       expect(result.start.id).toBe('second');
     });
   });

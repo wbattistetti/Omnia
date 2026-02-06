@@ -50,13 +50,18 @@ export const useTaskTreeStore = create<TaskTreeStore>((set, get) => ({
 
   // Actions
   setTaskTree: (taskTree) => {
-    set({ taskTree, taskTreeVersion: get().taskTreeVersion + 1 });
+    set((state) => ({ 
+      ...state,
+      taskTree, 
+      taskTreeVersion: state.taskTreeVersion + 1 
+    }));
   },
 
   updateTaskTree: (updater) => {
     set((state) => {
       const updated = updater(state.taskTree);
       return {
+        ...state,
         taskTree: updated,
         taskTreeVersion: state.taskTreeVersion + 1,
       };
@@ -64,19 +69,23 @@ export const useTaskTreeStore = create<TaskTreeStore>((set, get) => ({
   },
 
   incrementVersion: () => {
-    set((state) => ({ taskTreeVersion: state.taskTreeVersion + 1 }));
+    set((state) => ({ ...state, taskTreeVersion: state.taskTreeVersion + 1 }));
   },
 
   reset: () => {
-    set(initialState);
+    set((state) => ({ ...state, ...initialState }));
   },
 
-  // Selectors
+  // Selectors (must be arrow functions to use get())
   hasTaskTree: () => {
     const state = get();
-    return state.taskTree !== null &&
-           (state.taskTree.nodes?.length > 0 ||
-            (state.taskTree.steps && Object.keys(state.taskTree.steps).length > 0));
+    if (!state.taskTree) return false;
+    const hasNodes = Array.isArray(state.taskTree.nodes) && state.taskTree.nodes.length > 0;
+    const hasSteps = state.taskTree.steps && 
+                     typeof state.taskTree.steps === 'object' && 
+                     !Array.isArray(state.taskTree.steps) &&
+                     Object.keys(state.taskTree.steps).length > 0;
+    return hasNodes || hasSteps;
   },
 
   getMainNodes: () => {
