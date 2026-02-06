@@ -50,10 +50,10 @@ export const useTaskTreeStore = create<TaskTreeStore>((set, get) => ({
 
   // Actions
   setTaskTree: (taskTree) => {
-    set((state) => ({ 
+    set((state) => ({
       ...state,
-      taskTree, 
-      taskTreeVersion: state.taskTreeVersion + 1 
+      taskTree,
+      taskTreeVersion: state.taskTreeVersion + 1
     }));
   },
 
@@ -81,8 +81,8 @@ export const useTaskTreeStore = create<TaskTreeStore>((set, get) => ({
     const state = get();
     if (!state.taskTree) return false;
     const hasNodes = Array.isArray(state.taskTree.nodes) && state.taskTree.nodes.length > 0;
-    const hasSteps = state.taskTree.steps && 
-                     typeof state.taskTree.steps === 'object' && 
+    const hasSteps = state.taskTree.steps &&
+                     typeof state.taskTree.steps === 'object' &&
                      !Array.isArray(state.taskTree.steps) &&
                      Object.keys(state.taskTree.steps).length > 0;
     return hasNodes || hasSteps;

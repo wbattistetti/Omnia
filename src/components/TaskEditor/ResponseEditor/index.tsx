@@ -13,6 +13,7 @@ import { ToolbarButton } from '../../../dock/types';
 import { useResponseEditorSideEffects } from './hooks/useResponseEditorSideEffects';
 import { useResponseEditorState } from './hooks/useResponseEditorState';
 import { useResponseEditorInitialization } from './hooks/useResponseEditorInitialization';
+import { useTaskTreeSync, useTaskTreeVersion } from './core/state';
 import { ResponseEditorContent } from './components/ResponseEditorContent';
 import { ResponseEditorNormalLayout } from './components/ResponseEditorNormalLayout';
 import { useSidebarHandlers } from './hooks/useSidebarHandlers';
@@ -68,7 +69,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     setSelectedNode,
     selectedNodePath,
     setSelectedNodePath,
-    taskTreeVersion,
+    taskTreeVersion: taskTreeVersionFromState,
     setTaskTreeVersion,
     leftPanelMode,
     setLeftPanelMode,
@@ -96,6 +97,13 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     tasksStartWidthRef,
     tasksStartXRef,
   } = useResponseEditorRefs({ taskTree, task });
+
+  // ✅ FASE 2.2: Integrate Zustand store - sync ref ↔ store
+  useTaskTreeSync(taskTreeRef, taskTree, { enabled: true });
+  
+  // ✅ FASE 2.2: Use Zustand store version instead of useState
+  const taskTreeVersionFromStore = useTaskTreeVersion();
+  const taskTreeVersion = taskTreeVersionFromStore || taskTreeVersionFromState;
 
   const { replaceSelectedTaskTree: replaceSelectedTaskTreeFromContext } = useTaskTreeManager();
   const replaceSelectedTaskTree = React.useCallback((taskTree: any) => {

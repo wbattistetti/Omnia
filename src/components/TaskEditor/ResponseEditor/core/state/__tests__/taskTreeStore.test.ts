@@ -338,7 +338,7 @@ describe('Domain: TaskTree Store (Zustand)', () => {
         storeResult.result.current.setTaskTree(taskTree);
       });
 
-      const { result: selectorResult } = renderHook(() => 
+      const { result: selectorResult } = renderHook(() =>
         useTaskTreeStore(taskTreeSelectors.taskTree)
       );
       expect(selectorResult.current).toEqual(taskTree);
@@ -351,7 +351,7 @@ describe('Domain: TaskTree Store (Zustand)', () => {
         storeResult.result.current.incrementVersion();
       });
 
-      const { result: selectorResult } = renderHook(() => 
+      const { result: selectorResult } = renderHook(() =>
         useTaskTreeStore(taskTreeSelectors.taskTreeVersion)
       );
       expect(selectorResult.current).toBe(1);
@@ -368,7 +368,7 @@ describe('Domain: TaskTree Store (Zustand)', () => {
         storeResult.result.current.setTaskTree(taskTree);
       });
 
-      const { result: selectorResult } = renderHook(() => 
+      const { result: selectorResult } = renderHook(() =>
         useTaskTreeStore(taskTreeSelectors.hasTaskTree)
       );
       expect(selectorResult.current).toBe(true);
@@ -383,7 +383,7 @@ describe('Domain: TaskTree Store (Zustand)', () => {
         storeResult.result.current.setTaskTree(taskTree);
       });
 
-      const { result: selectorResult } = renderHook(() => 
+      const { result: selectorResult } = renderHook(() =>
         useTaskTreeStore(taskTreeSelectors.mainNodes)
       );
       expect(selectorResult.current).toEqual(nodes);
@@ -401,7 +401,7 @@ describe('Domain: TaskTree Store (Zustand)', () => {
         storeResult.result.current.setTaskTree(taskTree);
       });
 
-      const { result: selectorResult } = renderHook(() => 
+      const { result: selectorResult } = renderHook(() =>
         useTaskTreeStore(taskTreeSelectors.nodeCount)
       );
       expect(selectorResult.current).toBe(2);
@@ -461,7 +461,7 @@ describe('Domain: TaskTree Store (Zustand)', () => {
       const hasTaskTreeSelector = renderHook(() => useTaskTreeStore(taskTreeSelectors.hasTaskTree));
       const mainNodesSelector = renderHook(() => useTaskTreeStore(taskTreeSelectors.mainNodes));
       const nodeCountSelector = renderHook(() => useTaskTreeStore(taskTreeSelectors.nodeCount));
-      
+
       expect(taskTreeSelector.result.current).toEqual(taskTree);
       expect(hasTaskTreeSelector.result.current).toBe(true);
       expect(mainNodesSelector.result.current).toHaveLength(2);
