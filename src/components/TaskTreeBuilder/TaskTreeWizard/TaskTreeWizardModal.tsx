@@ -104,13 +104,13 @@ export const TaskTreeWizardModal: React.FC<TaskTreeWizardModalProps> = ({
           width: '100%',
           maxWidth: isExpanded ? '1400px' : '500px',
           height: isExpanded ? '90vh' : 'auto',
-          maxHeight: isExpanded ? '900px' : '400px',
+          maxHeight: isExpanded ? '900px' : 'none',
           backgroundColor: '#0f172a',
           borderRadius: '12px',
           border: '1px solid #334155',
           display: 'flex',
           flexDirection: 'column',
-          overflow: 'hidden',
+          overflow: isExpanded ? 'hidden' : 'visible',
           boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
           transition: 'all 0.3s ease-in-out', // ✅ Animazione smooth per espansione
         }}
@@ -168,7 +168,7 @@ export const TaskTreeWizardModal: React.FC<TaskTreeWizardModalProps> = ({
         )}
 
         {/* Wizard Content */}
-        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, overflow: isExpanded ? 'hidden' : 'visible', display: 'flex', flexDirection: 'column' }}>
           <FontProvider>
             <TaskWizard
               taskLabel={taskLabel}

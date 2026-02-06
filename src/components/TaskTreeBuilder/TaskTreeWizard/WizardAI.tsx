@@ -5,6 +5,7 @@ import React from 'react';
 import { Loader2 } from 'lucide-react';
 import DataCollection, { SchemaNode } from './MainDataCollection';
 import { useFontContext } from '../../../context/FontContext';
+import { PipelineProgressState } from './components/PipelineProgressChips';
 
 export type AccordionState = 'collapsed' | 'loading' | 'structure-ready' | 'editing';
 
@@ -22,6 +23,7 @@ interface WizardAIProps {
   onApplyRefining?: () => void;
   onCreateWithAI?: () => void;
   isAIGenerating?: boolean;
+  pipelineProgress?: PipelineProgressState;
 }
 
 const WizardAI: React.FC<WizardAIProps> = ({
@@ -38,6 +40,7 @@ const WizardAI: React.FC<WizardAIProps> = ({
   onApplyRefining,
   onCreateWithAI,
   isAIGenerating = false,
+  pipelineProgress,
 }) => {
   const { combinedClass } = useFontContext();
   const [headerClicked, setHeaderClicked] = React.useState(false);
@@ -52,42 +55,55 @@ const WizardAI: React.FC<WizardAIProps> = ({
   };
 
   return (
-    <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div style={{
+      width: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      border: isExpanded ? '1px solid #22c55e' : 'none',
+      borderRadius: 8,
+      padding: isExpanded ? '10px 20px' : 0,
+      boxSizing: 'border-box',
+      overflow: 'visible',
+    }}>
 
       {/* AccordionHeader */}
-      <div style={{ width: '100%' }}>
-        <button
-          onClick={handleHeaderClick}
-          disabled={isAIGenerating || state !== 'collapsed'}
-          className={combinedClass}
-          style={{
-            width: '100%',
-            background: 'transparent',
-            color: '#22c55e',
-            border: '1px solid #22c55e',
-            borderRadius: 8,
-            fontWeight: 500,
-            cursor: (isAIGenerating || state !== 'collapsed') ? 'not-allowed' : 'pointer',
-            padding: '10px 20px',
-            opacity: (isAIGenerating || state !== 'collapsed') ? 0.6 : 1,
-            fontSize: 14,
-            transition: 'all 0.2s ease',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-          }}
-        >
-          {(headerClicked || state !== 'collapsed') && (
-            <span style={{ color: '#22c55e' }}>✓</span>
-          )}
-          Oppure clicca qui e ne creo uno nuovo per te
-        </button>
-      </div>
+      <button
+        onClick={handleHeaderClick}
+        disabled={isAIGenerating || state !== 'collapsed'}
+        className={combinedClass}
+        style={{
+          width: '100%',
+          background: 'transparent',
+          color: '#22c55e',
+          border: '1px solid #22c55e',
+          borderRadius: 8,
+          fontWeight: 500,
+          cursor: (isAIGenerating || state !== 'collapsed') ? 'not-allowed' : 'pointer',
+          padding: '10px 20px',
+          opacity: (isAIGenerating || state !== 'collapsed') ? 0.6 : 1,
+          fontSize: 14,
+          transition: 'all 0.2s ease',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '8px',
+        }}
+      >
+        {(headerClicked || state !== 'collapsed') && (
+          <span style={{ color: '#22c55e' }}>✓</span>
+        )}
+        Oppure clicca qui e ne creo uno nuovo per te
+      </button>
 
       {/* AccordionContent */}
       {isExpanded && (
-        <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
+        <div style={{
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          marginTop: 16,
+          boxSizing: 'border-box',
+        }}>
 
           {/* LoadingState */}
           {state === 'loading' && (
@@ -139,6 +155,8 @@ const WizardAI: React.FC<WizardAIProps> = ({
                     onAutoMap={async () => { }}
                     onRetryField={() => { }}
                     onCreateManually={() => { }}
+                    compact={true}
+                    pipelineProgress={pipelineProgress}
                   />
                 </div>
               )}
@@ -205,7 +223,7 @@ const WizardAI: React.FC<WizardAIProps> = ({
                     fontSize: 14,
                   }}
                 >
-                  Sì, va bene
+                  Va bene
                 </button>
 
                 <button
@@ -224,24 +242,7 @@ const WizardAI: React.FC<WizardAIProps> = ({
                     opacity: (showRefiningTextbox && !refiningText.trim()) ? 0.6 : 1,
                   }}
                 >
-                  {showRefiningTextbox ? 'Applica correzione' : 'No, correggila'}
-                </button>
-
-                <button
-                  onClick={onEditManually}
-                  className={combinedClass}
-                  style={{
-                    background: 'transparent',
-                    color: '#e2e8f0',
-                    border: '1px solid #475569',
-                    borderRadius: 8,
-                    padding: '8px 16px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    fontSize: 14,
-                  }}
-                >
-                  Modifico manualmente
+                  {showRefiningTextbox ? 'Applica correzione' : 'Correggi'}
                 </button>
               </div>
             </>
@@ -264,6 +265,7 @@ const WizardAI: React.FC<WizardAIProps> = ({
                 onAutoMap={async () => { }}
                 onRetryField={() => { }}
                 onCreateManually={() => { }}
+                compact={true}
               />
             </div>
           )}

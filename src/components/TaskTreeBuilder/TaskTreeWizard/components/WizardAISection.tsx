@@ -4,6 +4,7 @@
 import React from 'react';
 import WizardAI, { AccordionState } from '../WizardAI';
 import { SchemaNode } from '../MainDataCollection';
+import { PipelineProgressState } from './PipelineProgressChips';
 
 interface WizardAISectionProps {
   state: AccordionState;
@@ -19,6 +20,7 @@ interface WizardAISectionProps {
   onApplyRefining?: () => void;
   onCreateWithAI?: () => void;
   isAIGenerating?: boolean;
+  pipelineProgress?: PipelineProgressState;
 }
 
 const WizardAISection: React.FC<WizardAISectionProps> = (props) => {

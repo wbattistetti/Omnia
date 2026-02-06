@@ -11,6 +11,7 @@ interface WizardTemplateSelectorProps {
   loading: boolean;
   onSelect: (template: any) => void;
   onConfirm?: () => void;
+  wizardMode?: 'no-candidate' | 'confirm-candidate' | 'manual-selection';
 }
 
 const WizardTemplateSelector: React.FC<WizardTemplateSelectorProps> = ({
@@ -19,8 +20,13 @@ const WizardTemplateSelector: React.FC<WizardTemplateSelectorProps> = ({
   loading,
   onSelect,
   onConfirm,
+  wizardMode,
 }) => {
   const { combinedClass } = useFontContext();
+
+  if (wizardMode === 'confirm-candidate') {
+    return null;
+  }
 
   const selectedTemplate = selectedTemplateId
     ? templates.find(t => (t._id || t.id || t.name) === selectedTemplateId)

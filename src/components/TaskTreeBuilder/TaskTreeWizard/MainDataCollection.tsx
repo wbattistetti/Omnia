@@ -2,6 +2,7 @@ import React from 'react';
 import { Folder, Plus } from 'lucide-react';
 import DataWizard from './MainDataWizard';
 import { useFontContext } from '../../../context/FontContext';
+import PipelineProgressChips, { PipelineProgressState } from './components/PipelineProgressChips';
 
 export interface SchemaNode {
   label: string;
@@ -38,9 +39,10 @@ interface dataCollectionProps {
   onRetryField?: (fieldId: string) => void;
   onCreateManually?: () => void;
   compact?: boolean; // ✅ Modalità compatta per conferma
+  pipelineProgress?: PipelineProgressState; // ✅ Stato progressione pipeline
 }
 
-const DataCollection: React.FC<dataCollectionProps & { progressByPath?: Record<string, number>, autoEditIndex?: number | null, onChangeEvent?: (e: any) => void }> = ({ rootLabel, mains, onChangeMains, onAddMain, progressByPath, fieldProcessingStates, selectedIdx, onSelect, autoEditIndex, onChangeEvent, onAutoMap, onRetryField, onCreateManually, compact = false }) => {
+const DataCollection: React.FC<dataCollectionProps & { progressByPath?: Record<string, number>, autoEditIndex?: number | null, onChangeEvent?: (e: any) => void }> = ({ rootLabel, mains, onChangeMains, onAddMain, progressByPath, fieldProcessingStates, selectedIdx, onSelect, autoEditIndex, onChangeEvent, onAutoMap, onRetryField, onCreateManually, compact = false, pipelineProgress }) => {
   const { combinedClass } = useFontContext();
   const handleChangeAt = (idx: number, nextNode: SchemaNode) => {
     const next = mains.slice();
@@ -90,21 +92,27 @@ const DataCollection: React.FC<dataCollectionProps & { progressByPath?: Record<s
       )}
       {mains.length > 1 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
-          {/* 📐 Riga 1: Label + Percentuale inline */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span className={combinedClass} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 800, whiteSpace: 'nowrap', padding: '4px 10px', borderRadius: 12, border: '1px solid #334155', background: '#1f2937', color: '#e2e8f0' }}>
-              <Folder size={18} color="#fb923c" />
-              {rootLabel}
-            </span>
-            {/* 📍 Percentuale subito dopo il testo */}
-            {(((progressByPath as any)?.__root__ || 0) > 0) && (() => {
-              const percentage = Math.round(((progressByPath as any)?.__root__ || 0) * 100);
-              return (
-                <span className={combinedClass} style={{ color: '#93c5fd', fontWeight: 600, marginLeft: 4 }}>
-                  {percentage}%
-                </span>
-              );
-            })()}
+          {/* 📐 Riga 1: Label + Chip progressione inline */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span className={combinedClass} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 800, whiteSpace: 'nowrap', padding: '4px 10px', borderRadius: 12, border: '1px solid #334155', background: '#1f2937', color: '#e2e8f0' }}>
+                <Folder size={18} color="#cbd5e1" />
+                {rootLabel}
+              </span>
+              {/* 📍 Percentuale subito dopo il testo */}
+              {(((progressByPath as any)?.__root__ || 0) > 0) && (() => {
+                const percentage = Math.round(((progressByPath as any)?.__root__ || 0) * 100);
+                return (
+                  <span className={combinedClass} style={{ color: '#93c5fd', fontWeight: 600, marginLeft: 4 }}>
+                    {percentage}%
+                  </span>
+                );
+              })()}
+            </div>
+            {/* ✅ Chip progressione pipeline alla destra */}
+            {pipelineProgress && (
+              <PipelineProgressChips progress={pipelineProgress} />
+            )}
           </div>
           {/* 📐 Riga 2: Barra di progresso sotto, full width */}
           {(((progressByPath as any)?.__root__ || 0) > 0) && (() => {
@@ -132,10 +140,32 @@ const DataCollection: React.FC<dataCollectionProps & { progressByPath?: Record<s
         </div>
       )}
       {/* Root progress also when a single main exists */}
-      {mains.length <= 1 && (((progressByPath as any)?.__root__ || 0) > 0) && (
+      {mains.length <= 1 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
-          {/* 📐 Barra di progresso sotto "Create a dialogue for", full width */}
-          {(() => {
+          {/* 📐 Riga 1: Label + Chip progressione inline (anche per single main) */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span className={combinedClass} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 800, whiteSpace: 'nowrap', padding: '4px 10px', borderRadius: 12, border: '1px solid #334155', background: '#1f2937', color: '#e2e8f0' }}>
+                <Folder size={18} color="#cbd5e1" />
+                {rootLabel}
+              </span>
+              {/* 📍 Percentuale subito dopo il testo */}
+              {(((progressByPath as any)?.__root__ || 0) > 0) && (() => {
+                const percentage = Math.round(((progressByPath as any)?.__root__ || 0) * 100);
+                return (
+                  <span className={combinedClass} style={{ color: '#93c5fd', fontWeight: 600, marginLeft: 4 }}>
+                    {percentage}%
+                  </span>
+                );
+              })()}
+            </div>
+            {/* ✅ Chip progressione pipeline alla destra (anche per single main) */}
+            {pipelineProgress && (
+              <PipelineProgressChips progress={pipelineProgress} />
+            )}
+          </div>
+          {/* 📐 Riga 2: Barra di progresso sotto, full width */}
+          {(((progressByPath as any)?.__root__ || 0) > 0) && (() => {
             const percentage = Math.round(((progressByPath as any)?.__root__ || 0) * 100);
             const isComplete = percentage >= 100;
             const barColor = isComplete ? '#ef4444' : '#fbbf24';

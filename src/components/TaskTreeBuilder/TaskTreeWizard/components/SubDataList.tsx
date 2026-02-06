@@ -74,7 +74,7 @@ export default function SubDataList({
       {subTasks.map((s, i) => (
         <div
           key={i}
-          style={{ display: 'flex', alignItems: 'center', gap: compact ? 4 : 8, marginTop: compact ? 2 : 8 }}
+          style={{ display: 'flex', alignItems: 'center', gap: compact ? 4 : 8, marginTop: compact ? 2 : 8, paddingLeft: 16 }}
           onMouseEnter={() => setHoverSubIdx(i)}
           onMouseLeave={() => setHoverSubIdx(curr => (curr === i ? null : curr))}
         >

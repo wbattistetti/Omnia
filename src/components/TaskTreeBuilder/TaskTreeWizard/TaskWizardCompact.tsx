@@ -14,6 +14,7 @@ import WizardHeader from './components/WizardHeader';
 import WizardTemplateSelector from './components/WizardTemplateSelector';
 import WizardAISection from './components/WizardAISection';
 import WizardFooter from './components/WizardFooter';
+import { PipelineProgressState } from './components/PipelineProgressChips';
 
 interface DataNode {
   name: string;
@@ -26,6 +27,8 @@ interface TaskWizardCompactProps {
   initialTaskTree?: any;
   taskType?: string;
   taskLabel?: string;
+  candidateTemplateId?: string | null;
+  candidateTemplate?: any | null;
 }
 
 const TaskWizardCompact: React.FC<TaskWizardCompactProps> = ({
@@ -34,14 +37,23 @@ const TaskWizardCompact: React.FC<TaskWizardCompactProps> = ({
   initialTaskTree,
   taskType,
   taskLabel,
+  candidateTemplateId,
+  candidateTemplate,
 }) => {
   // State
+  const [wizardMode, setWizardMode] = useState<'no-candidate' | 'confirm-candidate' | 'manual-selection'>(candidateTemplateId ? 'confirm-candidate' : 'no-candidate');
   const [userDesc, setUserDesc] = useState('');
   const [isAIGenerating, setIsAIGenerating] = useState<boolean>(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [showRefiningTextbox, setShowRefiningTextbox] = useState<boolean>(false);
   const [refiningText, setRefiningText] = useState<string>('');
   const [accordionState, setAccordionState] = useState<AccordionState>('collapsed');
+  const [pipelineProgress, setPipelineProgress] = useState<PipelineProgressState>({
+    constraints: 'idle',
+    contracts: 'idle',
+    messaggi: 'idle',
+  });
+  const [isPipelineRunning, setIsPipelineRunning] = useState<boolean>(false);
   const [schemaRootLabel, setSchemaRootLabel] = useState<string>(initialTaskTree?.label || '');
   const [mountedDataTree, setMountedDataTree] = useState<SchemaNode[]>(() => {
     const nodes = initialTaskTree?.nodes;
@@ -231,6 +243,65 @@ const TaskWizardCompact: React.FC<TaskWizardCompactProps> = ({
     }
   }, [onComplete, onCancel]);
 
+  // handleConfirmCandidate
+  const handleConfirmCandidate = useCallback(async () => {
+    if (!candidateTemplateId || !candidateTemplate) {
+      console.error('[TaskWizardCompact] Cannot confirm candidate: missing data');
+      return;
+    }
+
+    try {
+      const { buildTaskTreeNodes } = await import('../../../utils/taskUtils');
+      const nodes = buildTaskTreeNodes(candidateTemplate);
+
+      const taskTreeId = (candidateTemplate.label || taskLabel || 'Data').toLowerCase().replace(/\s+/g, '_') + '_' + Date.now();
+      const minimalTaskTree = {
+        id: taskTreeId,
+        labelKey: (candidateTemplate.label || taskLabel || 'Data').toLowerCase().replace(/\s+/g, '_'),
+        nodes,
+        steps: {},
+        constraints: candidateTemplate.constraints || [],
+        dataContract: candidateTemplate.dataContract || undefined,
+      };
+
+      handleClose(minimalTaskTree, {});
+    } catch (err) {
+      console.error('[TaskWizardCompact] Error confirming candidate:', err);
+      error('TASKTREE_WIZARD', 'Failed to confirm candidate', err);
+    }
+  }, [candidateTemplateId, candidateTemplate, taskLabel, handleClose]);
+
+  // handleRejectCandidate
+  const handleRejectCandidate = useCallback(() => {
+    setWizardMode('manual-selection');
+  }, []);
+
+  // getModeMessage
+  const getModeMessage = useCallback(() => {
+    switch (wizardMode) {
+      case 'confirm-candidate':
+        const candidateName = candidateTemplate?.label || candidateTemplate?.name || 'questo template';
+        return {
+          prefix: 'Ho trovato questo candidato:',
+          boldPart: candidateName,
+          suffix: '\nVuoi usarlo?'
+        };
+      case 'manual-selection':
+        return {
+          prefix: 'Ok, scartiamo questo candidato.',
+          boldPart: '',
+          suffix: '\nScegline uno tu tra i moduli disponibili, oppure creane uno nuovo (anche con l\'AI).'
+        };
+      case 'no-candidate':
+      default:
+        return taskLabel ? generateFriendlyWizardMessage(taskLabel) : {
+          prefix: 'Non ho trovato nessun candidato adatto per',
+          boldPart: taskLabel || 'questa riga',
+          suffix: '.\nProva a vedere se tra quelli disponibili qui sotto ce n\'è uno che fa al caso tuo:'
+        };
+    }
+  }, [wizardMode, candidateTemplate, taskLabel]);
+
   // handleDetectType (compact mode only)
   const handleDetectType = useCallback(async (textToUse?: string) => {
     setIsAIGenerating(true);
@@ -363,37 +434,82 @@ const TaskWizardCompact: React.FC<TaskWizardCompactProps> = ({
       return;
     }
 
-    const taskTreeId = schemaRootLabel.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now();
-    const nodes = mountedDataTree.map((main: any) => ({
-      id: main.id || uuidv4(),
-      templateId: main.templateId || main.type || 'unknown',
-      label: main.label,
-      type: main.type,
-      icon: main.icon,
-      constraints: main.constraints || [],
-      dataContract: main.dataContract || main.nlpContract || undefined,
-      subNodes: (main.subData || []).map((sub: any) => ({
-        id: sub.id || uuidv4(),
-        templateId: sub.templateId || sub.type || 'unknown',
-        label: sub.label,
-        type: sub.type,
-        icon: sub.icon,
-        constraints: sub.constraints || [],
-        dataContract: sub.dataContract || sub.nlpContract || undefined,
-      })),
-    }));
+    if (isPipelineRunning) {
+      console.warn('[TaskTreeWizard] Pipeline already running');
+      return;
+    }
 
-    const minimalTaskTree = {
-      id: taskTreeId,
-      labelKey: schemaRootLabel.toLowerCase().replace(/\s+/g, '_'),
-      nodes,
-      steps: {},
-      constraints: [],
-      dataContract: undefined,
-    };
+    setIsPipelineRunning(true);
 
-    handleClose(minimalTaskTree, {});
-  }, [mountedDataTree, schemaRootLabel, handleClose]);
+    try {
+      // ✅ Fase 1: Constraints
+      setPipelineProgress({
+        constraints: 'in-progress',
+        contracts: 'idle',
+        messaggi: 'idle',
+      });
+
+      // ✅ Avvia la pipeline completa con assembleFinalTaskTree
+      const emptyStore = buildArtifactStore([]);
+      const projectLang = (localStorage.getItem('project.lang') || 'pt') as 'en' | 'it' | 'pt';
+
+      // ✅ Fase 2: Contracts (dopo constraints)
+      setPipelineProgress({
+        constraints: 'completed',
+        contracts: 'in-progress',
+        messaggi: 'idle',
+      });
+
+      const finalTaskTree = await assembleFinalTaskTree(
+        schemaRootLabel || 'Data',
+        mountedDataTree,
+        emptyStore,
+        {
+          escalationCounts: { noMatch: 2, noInput: 2, confirmation: 2 },
+          templateTranslations: {},
+          projectLocale: projectLang,
+          addTranslations: addTranslationsToGlobal,
+          contextLabel: taskLabel || schemaRootLabel || 'Data',
+          templateLabel: schemaRootLabel || 'Data',
+          aiProvider: selectedProvider.toLowerCase() as 'groq' | 'openai'
+        }
+      );
+
+      // ✅ Fase 3: Messaggi (dopo contracts)
+      setPipelineProgress({
+        constraints: 'completed',
+        contracts: 'completed',
+        messaggi: 'in-progress',
+        currentMessageStep: 'start',
+      });
+
+      // ✅ Simula progressione messaggi (in realtà viene fatto dentro assembleFinalTaskTree)
+      // Per ora, aggiorniamo lo stato dopo che assembleFinalTaskTree completa
+      setPipelineProgress({
+        constraints: 'completed',
+        contracts: 'completed',
+        messaggi: 'completed',
+      });
+
+      if (!finalTaskTree.nodes || finalTaskTree.nodes.length === 0) {
+        console.error('[TaskTreeWizard] ERROR: TaskTree has no nodes after assembly!', finalTaskTree);
+        error('TASKTREE_WIZARD', 'TaskTree has no nodes after assembly', new Error('TaskTree has no nodes'));
+        setIsPipelineRunning(false);
+        return;
+      }
+
+      handleClose(finalTaskTree, {});
+    } catch (err) {
+      console.error('[TaskTreeWizard] Pipeline error:', err);
+      error('TASKTREE_WIZARD', 'Pipeline failed', err);
+      setIsPipelineRunning(false);
+      setPipelineProgress({
+        constraints: 'idle',
+        contracts: 'idle',
+        messaggi: 'idle',
+      });
+    }
+  }, [mountedDataTree, schemaRootLabel, handleClose, isPipelineRunning, taskLabel, selectedProvider, addTranslationsToGlobal]);
 
   // handleShowRefining
   const handleShowRefining = useCallback(() => {
@@ -555,13 +671,6 @@ const TaskWizardCompact: React.FC<TaskWizardCompactProps> = ({
     }
   }, [selectedTemplateId, taskLabel, selectedProvider, addTranslationsToGlobal, handleClose]);
 
-  // Calculate message (moved from WizardInputStep)
-  const messageParts = taskLabel ? generateFriendlyWizardMessage(taskLabel) : {
-    prefix: 'Non sono riuscito a trovare un modulo adatto per',
-    boldPart: '',
-    suffix: '.\nProva a vedere se tra quelli disponibili qui sotto ce n\'è uno che fa al caso tuo:'
-  };
-
   return (
     <div
       style={{
@@ -573,16 +682,22 @@ const TaskWizardCompact: React.FC<TaskWizardCompactProps> = ({
       }}
     >
       <WizardHeader
-        message={messageParts}
+        message={getModeMessage()}
+        onConfirmCandidate={wizardMode === 'confirm-candidate' ? handleConfirmCandidate : undefined}
+        onRejectCandidate={wizardMode === 'confirm-candidate' ? handleRejectCandidate : undefined}
+        candidateTemplate={candidateTemplate}
       />
 
-      <WizardTemplateSelector
-        templates={templates}
-        selectedTemplateId={selectedTemplateId}
-        loading={loadingTemplates}
-        onSelect={handleTemplateSelect}
-        onConfirm={selectedTemplateId ? handleChooseThis : undefined}
-      />
+      {wizardMode !== 'confirm-candidate' && (
+        <WizardTemplateSelector
+          templates={templates}
+          selectedTemplateId={selectedTemplateId}
+          loading={loadingTemplates}
+          onSelect={handleTemplateSelect}
+          onConfirm={selectedTemplateId ? handleChooseThis : undefined}
+          wizardMode={wizardMode}
+        />
+      )}
 
       <WizardAISection
         state={accordionState}
@@ -598,6 +713,7 @@ const TaskWizardCompact: React.FC<TaskWizardCompactProps> = ({
         onApplyRefining={handleApplyRefining}
         onCreateWithAI={handleCreateWithAI}
         isAIGenerating={isAIGenerating}
+        pipelineProgress={pipelineProgress}
       />
 
       <WizardFooter
