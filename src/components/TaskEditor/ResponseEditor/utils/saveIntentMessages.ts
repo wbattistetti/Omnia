@@ -98,9 +98,3 @@ export function saveIntentMessagesToTaskTree(taskTree: any, messages: IntentMess
   return updated;
 }
 
-/**
- * @deprecated Use saveIntentMessagesToTaskTree instead
- */
-export function saveIntentMessagesToDDT(ddt: any, messages: IntentMessages): any {
-  return saveIntentMessagesToTaskTree(ddt, messages);
-}

@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import TaskRow from '../../ResponseEditor/TaskRow';
+import TaskRow from '../TaskRow';
 
 const setup = (props?: Partial<React.ComponentProps<typeof TaskRow>>) => {
   const onEdit = vi.fn();

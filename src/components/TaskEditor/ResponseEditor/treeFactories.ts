@@ -95,14 +95,6 @@ export const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): Tree
   return nodes;
 };
 
-// Inserisce un nodo in una posizione specifica rispetto a un targetId
-export function insertNodeAt(nodes: TreeNodeProps[], node: TreeNodeProps, targetId: string, position: 'before' | 'after') {
-  const idx = nodes.findIndex(n => n.id === targetId);
-  if (idx === -1) return nodes;
-  const insertIdx = position === 'before' ? idx : idx + 1;
-  return [...nodes.slice(0, insertIdx), node, ...nodes.slice(insertIdx)];
-}
-
 // Rimuove un nodo (e opzionalmente i figli)
 export function removeNodePure(nodes: TreeNodeProps[], id: string, removeChildren: boolean) {
   if (!removeChildren) return nodes.filter(n => n.id !== id);
@@ -118,9 +110,4 @@ export function removeNodePure(nodes: TreeNodeProps[], id: string, removeChildre
     }
   }
   return nodes.filter(n => !toRemove.has(n.id));
-}
-
-// Aggiunge un nodo in fondo
-export function addNode(nodes: TreeNodeProps[], node: TreeNodeProps) {
-  return [...nodes, node];
 }
