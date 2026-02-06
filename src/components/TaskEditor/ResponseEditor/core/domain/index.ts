@@ -1,6 +1,6 @@
 /**
  * Domain Layer - Barrel Export
- *
+ * 
  * Centralized exports for all domain operations.
  * This provides a clean API for TaskTree and Node operations.
  */
@@ -20,3 +20,10 @@ export {
   getNodeLabel,
   removeNode,
 } from './node';
+
+// Steps operations
+export {
+  convertStepsArrayToDictionary,
+  normalizeStepsToDictionary,
+  hasStepsContent,
+} from './steps';

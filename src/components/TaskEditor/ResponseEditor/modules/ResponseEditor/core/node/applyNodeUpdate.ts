@@ -6,6 +6,7 @@ import { getTemplateId } from '../../../../../../../utils/taskHelpers';
 import { taskRepository } from '../../../../../../../services/TaskRepository';
 import { saveTaskToRepository } from '../../persistence/ResponseEditorPersistence';
 import { mapNode } from '../../../../../../../dock/ops';
+import { normalizeStepsToDictionary } from '../../../../core/domain';
 import type { Task, TaskTree } from '../../../../../../../types/taskTypes';
 
 export interface ApplyNodeUpdateParams {
@@ -107,23 +108,10 @@ export function applyNodeUpdate(params: ApplyNodeUpdateParams): ApplyNodeUpdateR
           task.steps = {};
         }
 
-        // updated.steps can be dictionary or array (legacy)
-        let nodeStepsDict: Record<string, any> = {};
-        if (updatedNode.steps && typeof updatedNode.steps === 'object' && !Array.isArray(updatedNode.steps)) {
-          // Already dictionary: use directly
-          nodeStepsDict = updatedNode.steps;
-        } else if (Array.isArray(updatedNode.steps)) {
-          // Legacy array: convert to dictionary
+        // Normalize steps to dictionary format (handles both array and dictionary)
+        const nodeStepsDict = normalizeStepsToDictionary(updatedNode.steps);
+        if (Array.isArray(updatedNode.steps)) {
           console.warn('[updateSelectedNode] Converting legacy array to dictionary', { nodeTemplateId });
-          for (const step of updatedNode.steps) {
-            if (step?.type) {
-              nodeStepsDict[step.type] = {
-                type: step.type,
-                escalations: step.escalations || [],
-                id: step.id
-              };
-            }
-          }
         }
 
         // Save in dictionary using nodeTemplateId as key
@@ -147,23 +135,10 @@ export function applyNodeUpdate(params: ApplyNodeUpdateParams): ApplyNodeUpdateR
             task.steps = {};
           }
 
-          // updated.steps can be dictionary or array (legacy)
-          let nodeStepsDict: Record<string, any> = {};
-          if (updatedNode.steps && typeof updatedNode.steps === 'object' && !Array.isArray(updatedNode.steps)) {
-            // Already dictionary: use directly
-            nodeStepsDict = updatedNode.steps;
-          } else if (Array.isArray(updatedNode.steps)) {
-            // Legacy array: convert to dictionary
+          // Normalize steps to dictionary format (handles both array and dictionary)
+          const nodeStepsDict = normalizeStepsToDictionary(updatedNode.steps);
+          if (Array.isArray(updatedNode.steps)) {
             console.warn('[updateSelectedNode] Converting legacy array to dictionary (sub)', { nodeTemplateId });
-            for (const step of updatedNode.steps) {
-              if (step?.type) {
-                nodeStepsDict[step.type] = {
-                  type: step.type,
-                  escalations: step.escalations || [],
-                  id: step.id
-                };
-              }
-            }
           }
 
           // Save in dictionary using nodeTemplateId as key

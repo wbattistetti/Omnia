@@ -520,9 +520,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         // ✅ AGGIORNA RIGA con metadati
         // ✅ Converti TaskType enum → string per row.type (compatibilità con codice esistente)
         const rowType = taskType === TaskType.UtteranceInterpretation ? 'UtteranceInterpretation' :
-                       taskType === TaskType.SayMessage ? 'Message' :
-                       taskType === TaskType.ClassifyProblem ? 'ProblemClassification' :
-                       taskType === TaskType.BackendCall ? 'BackendCall' : undefined;
+          taskType === TaskType.SayMessage ? 'Message' :
+            taskType === TaskType.ClassifyProblem ? 'ProblemClassification' :
+              taskType === TaskType.BackendCall ? 'BackendCall' : undefined;
 
         // ✅ Memorizza metadati nella riga per lazy task creation
         // ✅ LAZY: NON impostiamo taskId - il task verrà creato solo quando si apre l'editor
@@ -672,11 +672,11 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         // ✅ TaskType enum: usa direttamente
         finalTaskType = selectedTaskType;
         typeString = finalTaskType === TaskType.SayMessage ? 'Message' :
-                    finalTaskType === TaskType.UtteranceInterpretation ? 'UtteranceInterpretation' :
-                    finalTaskType === TaskType.BackendCall ? 'BackendCall' :
-                    finalTaskType === TaskType.ClassifyProblem ? 'ProblemClassification' :
-                    finalTaskType === TaskType.AIAgent ? 'AIAgent' :
-                    finalTaskType === TaskType.Summarizer ? 'Summarizer' :
+          finalTaskType === TaskType.UtteranceInterpretation ? 'UtteranceInterpretation' :
+            finalTaskType === TaskType.BackendCall ? 'BackendCall' :
+              finalTaskType === TaskType.ClassifyProblem ? 'ProblemClassification' :
+                finalTaskType === TaskType.AIAgent ? 'AIAgent' :
+                  finalTaskType === TaskType.Summarizer ? 'Summarizer' :
                     finalTaskType === TaskType.Negotiation ? 'Negotiation' : 'Message';
       } else {
         console.error('❌ [CHANGE_TYPE] Nessun tipo valido fornito');
@@ -1457,9 +1457,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   // ✅ Applica bordo invece di background
   const rowBorderStyle = rowHighlight.border !== 'transparent'
     ? {
-        border: `${rowHighlight.borderWidth}px solid ${rowHighlight.border}`,
-        borderRadius: '4px' // Opzionale: per rendere il bordo più visibile
-      }
+      border: `${rowHighlight.borderWidth}px solid ${rowHighlight.border}`,
+      borderRadius: '4px' // Opzionale: per rendere il bordo più visibile
+    }
     : {};
 
   // Checkbox styles (always applied based on included state)
@@ -1784,7 +1784,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       return;
                     }
 
-                    // ✅ CASO 2: Task non esiste → mostra preview prima di creare
+                    // ✅ CASO 2: Task non esiste → cerca task nella libreria prima di aprire wizard
                     const rowMeta = (row as any)?.meta;
                     const metaTaskType = (rowMeta?.type !== undefined && rowMeta?.type !== null)
                       ? rowMeta.type
@@ -1792,46 +1792,64 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     const metaTemplateId = rowMeta?.templateId || null;
                     const projectId = getProjectId?.() || undefined;
 
-                    // ✅ Sotto-caso 2a: C'è templateId → apri wizard esterno con template (non preview)
+                    // ✅ Sotto-caso 2a: C'è templateId → apri ResponseEditor direttamente (salta wizard)
                     if (metaTemplateId && metaTaskType === TaskType.UtteranceInterpretation) {
                       try {
-                        console.log('[🔍 NodeRow][onOpenTaskTree] ✅ CASO 2a: Template trovato, aprendo wizard esterno', {
+                        console.log('[🔍 NodeRow][onOpenTaskTree] ✅ CASO 2a: Template trovato dall\'euristica, aprendo ResponseEditor direttamente', {
                           templateId: metaTemplateId,
                           rowText: row.text
                         });
 
                         const DialogueTaskService = (await import('../../../../services/DialogueTaskService')).default;
+
+                        // Assicurati che i template siano caricati
+                        if (!DialogueTaskService.isCacheLoaded()) {
+                          await DialogueTaskService.loadTemplates();
+                        }
+
                         const template = DialogueTaskService.getTemplate(metaTemplateId);
 
                         if (template) {
-                          const { buildTaskTreeNodes } = await import('../../../../utils/taskUtils');
-                          const nodes = buildTaskTreeNodes(template);
+                          // Crea task dal template trovato dall'euristica
+                          const newTask = taskRepository.createTask(
+                            metaTaskType,
+                            metaTemplateId,
+                            { label: row.text || '' },
+                            row.id,
+                            projectId
+                          );
 
-                          // Costruisci initialTaskTree per il wizard
-                          const initialTaskTree = {
-                            label: template.label || row.text || 'Data',
-                            nodes: nodes,
-                            steps: {}
-                          };
+                          // ✅ NON costruire taskTree qui - lascia che DDTHostAdapter lo faccia con buildTaskTree
+                          // DDTHostAdapter chiamerà buildTaskTree che clonerà gli step correttamente
+                          // Questo evita race condition: gli step saranno già disponibili quando viene selezionato il primo nodo
 
-                          // ✅ Apri wizard esterno con template (non preview dialog)
-                          const wizardEvent = new CustomEvent('taskTreeWizard:open', {
+                          // Apri ResponseEditor direttamente
+                          taskEditorCtx.open({
+                            id: String(newTask.id),
+                            type: metaTaskType,
+                            label: row.text || '',
+                            instanceId: row.id
+                          });
+
+                          // Emit event to open ResponseEditor tab
+                          // ✅ NON passare taskTree - DDTHostAdapter lo costruirà da solo con buildTaskTree
+                          const event = new CustomEvent('taskEditor:open', {
                             detail: {
-                              taskLabel: row.text || '',
-                              taskType: TaskType.UtteranceInterpretation,
-                              initialTaskTree: initialTaskTree, // ✅ Passa template come initialTaskTree
-                              startOnStructure: true, // ✅ Parte da structure step (ha già dati)
-                              rowId: row.id,
-                              instanceId: row.id
+                              id: String(newTask.id),
+                              type: metaTaskType,
+                              label: row.text || '',
+                              // ✅ RIMOSSO: taskTree - DDTHostAdapter lo costruirà con buildTaskTree (clona step correttamente)
+                              instanceId: row.id,
+                              templateId: metaTemplateId
                             },
                             bubbles: true
                           });
-                          document.dispatchEvent(wizardEvent);
-                          return;
+                          document.dispatchEvent(event);
+                          return; // ✅ Esci qui, non aprire wizard
                         }
                       } catch (err) {
                         console.error('[🔍 NodeRow][onOpenTaskTree] ❌ Errore caricamento template:', err);
-                        // Fallback: apri wizard vuoto
+                        // Fallback: continua con wizard
                       }
                     }
 
@@ -2118,8 +2136,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       const template = DialogueTaskService.getTemplate(metaTemplateId);
 
                       if (template) {
-                          const { buildTaskTreeNodes } = await import('../../../../utils/taskUtils');
-                          const nodes = buildTaskTreeNodes(template);
+                        const { buildTaskTreeNodes } = await import('../../../../utils/taskUtils');
+                        const nodes = buildTaskTreeNodes(template);
 
                         // ❌ DEPRECATED: Non salvare più .data - il modello Task non usa .data
                         // ✅ La struttura viene ricostruita runtime da template.subTasksIds
