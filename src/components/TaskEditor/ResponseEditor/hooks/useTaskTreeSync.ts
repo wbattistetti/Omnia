@@ -3,6 +3,7 @@
 
 import { useEffect } from 'react';
 import { getdataList } from '../ddtSelectors';
+import { useTaskTreeStore } from '../core/state';
 import type { Task, TaskTree } from '../../../../types/taskTypes';
 
 export interface UseTaskTreeSyncParams {
@@ -15,6 +16,7 @@ export interface UseTaskTreeSyncParams {
 
 /**
  * Hook that synchronizes taskTreeRef.current with taskTree prop (source of truth from dockTree).
+ * ✅ FASE 2.2: Also updates Zustand store when taskTree changes.
  */
 export function useTaskTreeSync(params: UseTaskTreeSyncParams) {
   const {
@@ -24,17 +26,25 @@ export function useTaskTreeSync(params: UseTaskTreeSyncParams) {
     setTaskTreeVersion,
     prevInstanceRef,
   } = params;
+  
+  // ✅ FASE 2.2: Use Zustand store to update when taskTree changes
+  const { setTaskTree, incrementVersion } = useTaskTreeStore();
 
   useEffect(() => {
     const instance = task?.instanceId || task?.id;
     const isNewInstance = prevInstanceRef.current !== instance;
 
     if (isNewInstance) {
+      // ✅ FASE 2.2: Update both ref (for backward compatibility) and store
       taskTreeRef.current = taskTree;
+      if (taskTree) {
+        setTaskTree(taskTree);
+      }
       prevInstanceRef.current = instance;
       const currentList = getdataList(taskTree);
       if (currentList && currentList.length > 0) {
-        setTaskTreeVersion(v => v + 1);
+        incrementVersion();
+        setTaskTreeVersion(v => v + 1); // Keep for backward compatibility
       }
     } else if (taskTree && taskTree !== taskTreeRef.current) {
       const currentList = getdataList(taskTree);
@@ -42,11 +52,14 @@ export function useTaskTreeSync(params: UseTaskTreeSyncParams) {
       const taskTreeChanged = taskTree !== taskTreeRef.current ||
         (currentList?.length !== prevList?.length);
       if (taskTreeChanged) {
+        // ✅ FASE 2.2: Update both ref (for backward compatibility) and store
         taskTreeRef.current = taskTree;
+        setTaskTree(taskTree);
         if (currentList && currentList.length > 0) {
-          setTaskTreeVersion(v => v + 1);
+          incrementVersion();
+          setTaskTreeVersion(v => v + 1); // Keep for backward compatibility
         }
       }
     }
-  }, [taskTree, task?.instanceId, task?.id, taskTreeRef, prevInstanceRef, setTaskTreeVersion]);
+  }, [taskTree, task?.instanceId, task?.id, taskTreeRef, prevInstanceRef, setTaskTreeVersion, setTaskTree, incrementVersion]);
 }

@@ -14,6 +14,7 @@
 import React from 'react';
 import ContractWizard from '../ContractWizard/ContractWizard';
 import IntentMessagesBuilder from './IntentMessagesBuilder';
+import { useTaskTreeFromStore } from '../core/state';
 import type { Task, TaskTree } from '../../../../types/taskTypes';
 
 export interface ResponseEditorContentProps {
@@ -55,10 +56,12 @@ export function ResponseEditorContent({
 }: ResponseEditorContentProps) {
   // Contract Wizard
   if (showContractWizard) {
+    // ✅ FASE 2.2: Use store as primary source, fallback to ref, then prop
+    const currentTaskTree = taskTreeFromStore ?? taskTreeRef.current ?? taskTree;
     return (
       <div style={{ flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
         <ContractWizard
-          taskTree={taskTreeRef.current}
+          taskTree={currentTaskTree}
           integrated={true}
           onClose={handleContractWizardClose}
           onNodeUpdate={handleContractWizardNodeUpdate}

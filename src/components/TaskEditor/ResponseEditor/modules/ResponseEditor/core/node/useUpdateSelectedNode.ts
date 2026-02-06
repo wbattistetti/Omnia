@@ -40,7 +40,7 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
     setSelectedNode,
     setTaskTreeVersion,
   } = params;
-  
+
   // ✅ FASE 2.2: Use Zustand store for reading and writing
   const taskTreeFromStore = useTaskTreeFromStore();
   const { setTaskTree, incrementVersion } = useTaskTreeStore();
@@ -139,7 +139,7 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
               }
               taskTreeRef.current.steps[nodeTemplateId] = nodeStepsDict;
             }
-            
+
             // ✅ FASE 2.2: Update store with steps
             const updatedTaskTreeWithSteps = {
               ...result.updatedTaskTree,
