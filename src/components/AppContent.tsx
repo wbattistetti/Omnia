@@ -15,9 +15,6 @@ import { useEffect } from 'react';
 import { ProjectService } from '../services/ProjectService';
 import { ProjectData } from '../types/project';
 import { SidebarThemeProvider } from './Sidebar/SidebarThemeContext';
-// import ActEditor from './ActEditor';
-// import { DockablePanelsHandle } from './DockablePanels';
-// import DockablePanels from './DockablePanels';
 import { FlowEditor } from './Flowchart/FlowEditor';
 import { FlowWorkspace } from './FlowWorkspace/FlowWorkspace';
 import { DockWorkspace } from './FlowWorkspace/DockWorkspace';
@@ -1166,7 +1163,6 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   // Stato per finestre editor TaskTree aperte (ora con react-mosaic)
   // const [mosaicNodes, setMosaicNodes] = useState<any>(null);
-  // const dockablePanelsRef = React.useRef<DockablePanelsHandle>(null);
 
   // Rimuovi questi stati che ora sono nel hook
   // const [selectedDDT, setSelectedDDT] = useState<any | null>(null);
@@ -1181,10 +1177,6 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   // Pannello di test in alto a sinistra all'avvio
   // React.useEffect(() => {
-  //   if (dockablePanelsRef.current) {
-  //     dockablePanelsRef.current.openPanel({
-  //       id: 'test-panel',
-  //       title: 'Test Panel',
       //       taskTree: { label: 'Test Panel' },
   //       translations: {},
   //       lang: 'it'

@@ -3,7 +3,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useResponseEditorState } from '../useResponseEditorState';
+import { useResponseEditorState } from './useResponseEditorState';
 import type { RightPanelMode } from '../../RightPanel';
 
 /**
