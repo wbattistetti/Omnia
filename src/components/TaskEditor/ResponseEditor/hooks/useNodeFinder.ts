@@ -3,6 +3,7 @@
 
 import { useCallback } from 'react';
 import { getdataList, getSubDataList } from '../ddtSelectors';
+import { useTaskTreeFromStore } from '../core/state';
 import type { TaskTree } from '../../../../types/taskTypes';
 
 export interface UseNodeFinderParams {
@@ -17,9 +18,14 @@ export interface UseNodeFinderParams {
  */
 export function useNodeFinder(params: UseNodeFinderParams) {
   const { taskTree, taskTreeRef, handleSelectMain, handleSelectSub } = params;
+  
+  // ✅ FASE 2.2: Use Zustand store as primary source
+  const taskTreeFromStore = useTaskTreeFromStore();
 
   const findAndSelectNodeById = useCallback((nodeId: string) => {
-    const mains = getdataList(taskTreeRef.current || taskTree);
+    // ✅ FASE 2.2: Use store as primary source, fallback to ref, then prop
+    const currentTaskTree = taskTreeFromStore ?? taskTreeRef.current ?? taskTree;
+    const mains = getdataList(currentTaskTree);
     for (let mIdx = 0; mIdx < mains.length; mIdx++) {
       const main = mains[mIdx];
       const mainNodeId = main.id || main.templateId || main._id;
@@ -39,7 +45,7 @@ export function useNodeFinder(params: UseNodeFinderParams) {
         }
       }
     }
-  }, [taskTree, taskTreeRef, handleSelectMain, handleSelectSub]);
+  }, [taskTreeFromStore, taskTree, taskTreeRef, handleSelectMain, handleSelectSub]);
 
   return findAndSelectNodeById;
 }
