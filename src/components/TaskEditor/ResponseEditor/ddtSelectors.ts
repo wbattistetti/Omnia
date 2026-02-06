@@ -42,9 +42,9 @@ export function getNodeSteps(node: any): string[] {
     console.log('[🔍 getNodeSteps] ❌ Node is null/undefined');
     return [];
   }
-  
+
   const stepKeys = getNodeStepKeys(node);
-  
+
   // Log for debugging (preserving original behavior)
   if (node.steps && typeof node.steps === 'object' && !Array.isArray(node.steps)) {
     const stepKeysArray = Object.keys(node.steps);
@@ -59,7 +59,7 @@ export function getNodeSteps(node: any): string[] {
       }))
     });
   }
-  
+
   return stepKeys;
 }
 
