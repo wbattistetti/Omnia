@@ -6,6 +6,7 @@ import { saveTaskToRepository, saveTaskOnEditorClose } from '../modules/Response
 import { getdataList } from '../ddtSelectors';
 import DialogueTaskService from '../../../../services/DialogueTaskService';
 import { closeTab } from '../../../../dock/ops';
+import { useTaskTreeStore } from '../core/state';
 import type { Task, TaskTree } from '../../../../types/taskTypes';
 
 export interface UseResponseEditorCloseParams {
@@ -66,6 +67,9 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
     onClose,
     replaceSelectedDDT,
   } = params;
+  
+  // ✅ FASE 2.2: Use Zustand store to update when closing
+  const { setTaskTree } = useTaskTreeStore();
 
   const handleEditorClose = useCallback(async (): Promise<boolean> => {
     console.log('[ResponseEditor][CLOSE] 🚪 Editor close initiated', {
@@ -295,6 +299,9 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
             ...finalTaskTree,
             steps: task?.steps || taskTreeRef.current?.steps || finalTaskTree.steps || {}
           };
+          
+          // ✅ FASE 2.2: Update store with final TaskTree (ref already updated above)
+          setTaskTree(finalTaskTreeWithSteps);
 
           console.log('[ResponseEditor][CLOSE] 📦 Final TaskTree with steps prepared', {
             taskId: task?.id || (task as any)?.instanceId,

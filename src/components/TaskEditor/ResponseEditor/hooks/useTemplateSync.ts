@@ -27,7 +27,7 @@ export function useTemplateSync(params: UseTemplateSyncParams) {
     prevInstanceRef,
     replaceSelectedTaskTree,
   } = params;
-  
+
   // ✅ FASE 2.2: Use Zustand store to update both ref and store
   const { setTaskTree } = useTaskTreeStore();
 
