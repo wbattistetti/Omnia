@@ -67,7 +67,7 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
     onClose,
     replaceSelectedDDT,
   } = params;
-  
+
   // ✅ FASE 2.2: Use Zustand store to update when closing
   const { setTaskTree } = useTaskTreeStore();
 
@@ -299,7 +299,7 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
             ...finalTaskTree,
             steps: task?.steps || taskTreeRef.current?.steps || finalTaskTree.steps || {}
           };
-          
+
           // ✅ FASE 2.2: Update store with final TaskTree (ref already updated above)
           setTaskTree(finalTaskTreeWithSteps);
 

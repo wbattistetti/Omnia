@@ -4,6 +4,7 @@
 import { useCallback } from 'react';
 import { getIsTesting } from '../../../../testingState';
 import { applyNodeUpdate, updateDockTreeWithTaskTree, saveTaskAsync } from './applyNodeUpdate';
+import { useTaskTreeStore, useTaskTreeFromStore } from '../../../../core/state';
 import type { Task, TaskTree } from '../../../../../../../types/taskTypes';
 
 export interface UseUpdateSelectedNodeParams {
@@ -39,6 +40,10 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
     setSelectedNode,
     setTaskTreeVersion,
   } = params;
+  
+  // ✅ FASE 2.2: Use Zustand store for reading and writing
+  const taskTreeFromStore = useTaskTreeFromStore();
+  const { setTaskTree, incrementVersion } = useTaskTreeStore();
 
   const updateSelectedNode = useCallback((updater: (node: any) => any, notifyProvider: boolean = true) => {
     // CRITICAL: Block structural mutations during batch testing
@@ -65,12 +70,14 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
       }
 
       // Apply node update using pure function
+      // ✅ FASE 2.2: Use store as primary source, fallback to ref, then prop
+      const currentTaskTree = taskTreeFromStore ?? taskTreeRef.current ?? taskTree;
       const result = applyNodeUpdate({
         prevNode: prev,
         updatedNode: updated,
         selectedNodePath,
         selectedRoot,
-        currentTaskTree: taskTreeRef.current || taskTree,
+        currentTaskTree,
         task,
         currentProjectId,
         tabId,
@@ -82,17 +89,18 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
         return prev;
       }
 
-      // STEP 3: Update taskTreeRef.current (local buffer)
+      // STEP 3: Update both ref (for backward compatibility) and store (source of truth)
       taskTreeRef.current = result.updatedTaskTree;
+      setTaskTree(result.updatedTaskTree);
 
-      // LOG: Verify nlpProfile.examples is present in taskTreeRef.current after update
+      // LOG: Verify nlpProfile.examples is present in updated TaskTree after update
       const { mainIndex } = selectedNodePath;
-      const taskTreeRefNlpProfileExamples = taskTreeRef.current?.nodes?.[mainIndex]?.nlpProfile?.examples;
+      const taskTreeRefNlpProfileExamples = result.updatedTaskTree?.nodes?.[mainIndex]?.nlpProfile?.examples;
       if (taskTreeRefNlpProfileExamples) {
-        console.log('[EXAMPLES] UPDATE - Verified in taskTreeRef.current', {
+        console.log('[EXAMPLES] UPDATE - Verified in updated TaskTree', {
           nodeId: updated.id,
           mainIndex,
-          hasNlpProfile: !!taskTreeRef.current?.nodes?.[mainIndex]?.nlpProfile,
+          hasNlpProfile: !!result.updatedTaskTree?.nodes?.[mainIndex]?.nlpProfile,
           hasNlpProfileExamples: !!taskTreeRefNlpProfileExamples,
           nlpProfileExamplesCount: taskTreeRefNlpProfileExamples.length,
           nlpProfileExamples: taskTreeRefNlpProfileExamples.slice(0, 3)
@@ -116,25 +124,38 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
         );
       }
 
-      // CRITICAL: Update taskTreeRef.current.steps for synchronization
+      // CRITICAL: Update steps in both ref and store for synchronization
       // This is needed because applyNodeUpdate mutates task.steps but not taskTreeRef.current.steps
       if (task && result.updatedTaskTree) {
         const nodeTemplateId = updated.templateId || updated.id;
         if (nodeTemplateId && updated.steps) {
-          if (taskTreeRef.current) {
-            if (!taskTreeRef.current.steps || typeof taskTreeRef.current.steps !== 'object' || Array.isArray(taskTreeRef.current.steps)) {
-              taskTreeRef.current.steps = {};
-            }
-            // Get the steps dict from task.steps (already updated by applyNodeUpdate)
-            const nodeStepsDict = task.steps?.[nodeTemplateId];
-            if (nodeStepsDict) {
+          // Get the steps dict from task.steps (already updated by applyNodeUpdate)
+          const nodeStepsDict = task.steps?.[nodeTemplateId];
+          if (nodeStepsDict) {
+            // Update ref (for backward compatibility)
+            if (taskTreeRef.current) {
+              if (!taskTreeRef.current.steps || typeof taskTreeRef.current.steps !== 'object' || Array.isArray(taskTreeRef.current.steps)) {
+                taskTreeRef.current.steps = {};
+              }
               taskTreeRef.current.steps[nodeTemplateId] = nodeStepsDict;
             }
+            
+            // ✅ FASE 2.2: Update store with steps
+            const updatedTaskTreeWithSteps = {
+              ...result.updatedTaskTree,
+              steps: {
+                ...(result.updatedTaskTree.steps || {}),
+                [nodeTemplateId]: nodeStepsDict
+              }
+            };
+            setTaskTree(updatedTaskTreeWithSteps);
           }
         }
       }
 
-      // Only internal invalidator (don't notify provider to avoid re-mount)
+      // ✅ FASE 2.2: Use store incrementVersion instead of setTaskTreeVersion
+      incrementVersion();
+      // Keep setTaskTreeVersion for backward compatibility (if still needed)
       setTaskTreeVersion(v => v + 1);
 
       try {
@@ -155,7 +176,7 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
 
       return result.updatedNode;
     });
-  }, [selectedNodePath, selectedRoot, tabId, setDockTree, taskTree?.label, taskTree?.nodes?.length ?? 0, task, currentProjectId, taskTreeRef, setSelectedNode, setTaskTreeVersion]);
+  }, [selectedNodePath, selectedRoot, tabId, setDockTree, taskTree?.label, taskTree?.nodes?.length ?? 0, task, currentProjectId, taskTreeRef, taskTreeFromStore, setSelectedNode, setTaskTreeVersion, setTaskTree, incrementVersion]);
 
   return updateSelectedNode;
 }
