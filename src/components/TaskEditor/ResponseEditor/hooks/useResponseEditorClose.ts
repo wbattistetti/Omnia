@@ -4,6 +4,7 @@
 import { useCallback } from 'react';
 import { saveTaskToRepository, saveTaskOnEditorClose } from '@responseEditor/features/persistence/ResponseEditorPersistence';
 import { getMainNodes } from '@responseEditor/core/domain';
+import { getSubNodesStrict } from '@responseEditor/core/domain/nodeStrict';
 import DialogueTaskService from '@services/DialogueTaskService';
 import { closeTab } from '@dock/ops';
 import { useTaskTreeStore, useTaskTreeFromStore } from '@responseEditor/core/state';
@@ -201,11 +202,12 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
             nlpProfileExamplesCount: Array.isArray(savedNode?.nlpProfile?.examples) ? savedNode.nlpProfile.examples.length : 0
           });
         } else {
-          const subList = main.subTasks || [];
+          // After validation strict, main.subNodes MUST exist (not subTasks)
+          const subList = getSubNodesStrict(main);
           const subIdx = subList.findIndex((s: any, idx: number) => idx === subIndex);
           if (subIdx >= 0) {
             subList[subIdx] = selectedNode;
-            main.subTasks = subList;
+            main.subNodes = subList;
             mains[mainIndex] = main;
             // ✅ FASE 2.3: Aggiorna store invece di taskTreeRef
             const updatedTaskTree = currentTaskTree || { label: '', nodes: [], steps: {} };
@@ -294,7 +296,9 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
         // Qui aggiorniamo solo la cache in memoria per mantenere la working copy aggiornata
         if (hasTaskTree) {
           const finaldata = firstNode;
-          const finalSubData = finaldata?.subTasks?.[0];
+          // After validation strict, use subNodes (not subTasks)
+          const subNodes = getSubNodesStrict(finaldata);
+          const finalSubData = subNodes?.[0];
           const finalStartTasks = finalSubData?.steps?.start?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0;
 
           console.log('[handleEditorClose] 🔄 Aggiornando cache in memoria (NON salvataggio DB)', {
