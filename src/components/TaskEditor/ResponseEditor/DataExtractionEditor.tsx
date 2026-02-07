@@ -1,21 +1,21 @@
 import React from 'react';
 import { Wand2 } from 'lucide-react';
-import { taskRepository } from '../../../services/TaskRepository';
-import type { ProblemIntent } from '../../../types/project';
-import RegexEditor from './RegexEditor';
-import NLPCompactEditor from './NLPCompactEditor';
-import PostProcessEditor from './PostProcessEditor';
+import { taskRepository } from '@services/TaskRepository';
+import type { ProblemIntent } from '@types/project';
+import RegexEditor from '@responseEditor/RegexEditor';
+import NLPCompactEditor from '@responseEditor/NLPCompactEditor';
+import PostProcessEditor from '@responseEditor/PostProcessEditor';
 import { Calendar, Mail, Phone, Hash, Globe, MapPin, User, FileText, CreditCard, CarFront as Car, Badge, Landmark, Type as TypeIcon, ChevronDown } from 'lucide-react';
 
 // 🎯 Custom Hooks
-import { useNotes } from './hooks/useNotes';
-import { useEditorState } from './hooks/useEditorState';
-import { useProfileState } from './features/step-management/hooks/useProfileState';
-import { useExtractionTesting } from './hooks/useExtractionTesting';
-import { useCellOverridesStore } from './stores/cellOverridesStore';
+import { useNotes } from '@responseEditor/hooks/useNotes';
+import { useEditorState } from '@responseEditor/hooks/useEditorState';
+import { useProfileState } from '@responseEditor/features/step-management/hooks/useProfileState';
+import { useExtractionTesting } from '@responseEditor/hooks/useExtractionTesting';
+import { useCellOverridesStore } from '@responseEditor/stores/cellOverridesStore';
 
 // 🎨 Config Components
-import RecognitionEditor from './RecognitionEditor';
+import RecognitionEditor from '@responseEditor/RecognitionEditor';
 
 // 📝 Note Components
 import NoteButton from './CellNote/NoteButton';
@@ -68,7 +68,7 @@ if (typeof document !== 'undefined' && !document.getElementById('nlp-spinner-ani
   document.head.appendChild(style);
 }
 
-import { TaskMeta } from '../../EditorHost/types';
+import { TaskMeta } from '@taskEditor/EditorHost/types';
 
 export default function DataExtractionEditor({
   node,

@@ -1,17 +1,17 @@
 import React, { useMemo, useCallback, useState, useEffect } from 'react';
 import { MessageCircle } from 'lucide-react';
-import KindSelector from './Config/KindSelector';
-import ConfidenceInput from './Config/ConfidenceInput';
-import WaitingMessagesConfig from './Config/WaitingMessagesConfig';
-import TesterGrid from './features/step-management/components/TesterGrid';
-import { RowResult } from './hooks/useExtractionTesting';
-import { loadContractFromNode } from './ContractSelector/contractHelpers';
-import type { DataContract } from '../../DialogueDataEngine/contracts/contractLoader';
-import DialogueTaskService from '../../../services/DialogueTaskService';
-import { useProjectData } from '../../../context/ProjectDataContext';
-import { useNotesStore } from './stores/notesStore';
-import { taskRepository } from '../../../services/TaskRepository';
-import { ExamplesPersistenceService } from './services/examplesPersistenceService';
+import KindSelector from '@responseEditor/Config/KindSelector';
+import ConfidenceInput from '@responseEditor/Config/ConfidenceInput';
+import WaitingMessagesConfig from '@responseEditor/Config/WaitingMessagesConfig';
+import TesterGrid from '@responseEditor/features/step-management/components/TesterGrid';
+import { RowResult } from '@responseEditor/hooks/useExtractionTesting';
+import { loadContractFromNode } from '@responseEditor/ContractSelector/contractHelpers';
+import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
+import DialogueTaskService from '@services/DialogueTaskService';
+import { useProjectData } from '@context/ProjectDataContext';
+import { useNotesStore } from '@responseEditor/stores/notesStore';
+import { taskRepository } from '@services/TaskRepository';
+import { ExamplesPersistenceService } from '@responseEditor/services/examplesPersistenceService';
 
 interface RecognitionEditorProps {
   // Config props (Kind, Confidence, Waiting Messages)

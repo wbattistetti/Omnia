@@ -1,12 +1,12 @@
 import React from 'react';
 // Modular components
-import TesterGridHeader from './TesterGrid/components/TesterGridHeader';
-import TesterGridRow from './TesterGrid/components/TesterGridRow';
-import { MemoizedEditorOverlay } from './TesterGrid/components/EditorOverlay';
-import { useColumnResize } from './TesterGrid/hooks/useColumnResize';
-import { useEditorOverlay } from './TesterGrid/hooks/useEditorOverlay';
-import { RowResult } from './hooks/useExtractionTesting';
-import type { DataContract } from '../../DialogueDataEngine/contracts/contractLoader';
+import TesterGridHeader from '@responseEditor/features/step-management/components/TesterGrid/components/TesterGridHeader';
+import TesterGridRow from '@responseEditor/features/step-management/components/TesterGrid/components/TesterGridRow';
+import { MemoizedEditorOverlay } from '@responseEditor/features/step-management/components/TesterGrid/components/EditorOverlay';
+import { useColumnResize } from '@responseEditor/features/step-management/components/TesterGrid/hooks/useColumnResize';
+import { useEditorOverlay } from '@responseEditor/features/step-management/components/TesterGrid/hooks/useEditorOverlay';
+import { RowResult } from '@responseEditor/features/step-management/hooks/useExtractionTesting';
+import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
 
 // 🎨 Colori centralizzati per extractors (usati solo per editor overlay)
 const EXTRACTOR_COLORS = {

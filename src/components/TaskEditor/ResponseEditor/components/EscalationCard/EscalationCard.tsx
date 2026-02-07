@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { EscalationHeader } from './EscalationHeader';
 import { EscalationTasksList } from './EscalationTasksList';
-import { hasEscalationCard } from '../../ddtUtils';
+import { hasEscalationCard } from '@responseEditor/ddtUtils';
 
 type EscalationCardProps = {
   escalation: any;

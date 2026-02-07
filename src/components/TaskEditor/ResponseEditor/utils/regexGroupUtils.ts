@@ -1,8 +1,8 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import type { TaskTreeNode } from '../../../../types/taskTypes';
-import { deriveSubTaskKey } from '../../../../utils/taskUtils';
+import type { TaskTreeNode } from '@types/taskTypes';
+import { deriveSubTaskKey } from '@utils/taskUtils';
 
 /**
  * Get subTasks info (subTaskKey and label) from a node

@@ -3,8 +3,8 @@
 // Centralizza l'accesso al repository e fornisce uno stato reattivo
 
 import React from 'react';
-import { taskRepository } from '../../../../services/TaskRepository';
-import type { Task } from '../../../../types/taskTypes';
+import { taskRepository } from '@services/TaskRepository';
+import type { Task } from '@types/taskTypes';
 
 interface UseTaskInstanceResult {
   task: Task | null;

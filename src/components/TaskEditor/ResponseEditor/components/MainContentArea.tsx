@@ -10,12 +10,12 @@
  */
 
 import React from 'react';
-import BehaviourEditor from '../BehaviourEditor';
-import MessageReviewView from '../MessageReview/MessageReviewView';
-import DataExtractionEditor from '../DataExtractionEditor';
-import { getIsTesting } from '../testingState';
-import type { Task } from '../../../../types/taskTypes';
-import { TabContentContainer } from './TabContentContainer';
+import BehaviourEditor from '@responseEditor/BehaviourEditor';
+import MessageReviewView from '@responseEditor/MessageReview/MessageReviewView';
+import DataExtractionEditor from '@responseEditor/DataExtractionEditor';
+import { getIsTesting } from '@responseEditor/testingState';
+import type { Task } from '@types/taskTypes';
+import { TabContentContainer } from '@responseEditor/components/TabContentContainer';
 
 export interface MainContentAreaProps {
   // Content state

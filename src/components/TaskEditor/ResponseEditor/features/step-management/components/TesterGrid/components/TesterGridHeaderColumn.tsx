@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Wand2, TypeIcon, Plus, X } from 'lucide-react';
-import SmartTooltip from '../../../../../../../SmartTooltip';
-import { getEditorTypeFromContractType } from '../helpers/contractTypeMapper';
+import SmartTooltip from '@components/SmartTooltip';
+import { getEditorTypeFromContractType } from '@responseEditor/features/step-management/components/TesterGrid/helpers/contractTypeMapper';
 
 interface TesterGridHeaderColumnProps {
   type: 'regex' | 'deterministic' | 'ner' | 'llm' | 'embeddings';

@@ -6,12 +6,12 @@
  */
 
 import React from 'react';
-import Sidebar from '../Sidebar';
-import { RightPanelMode } from '../RightPanel';
-import IntentListEditorWrapper from './IntentListEditorWrapper';
-import { MainContentArea } from './MainContentArea';
-import { PanelContainer } from './PanelContainer';
-import type { Task, TaskTree } from '../../../../types/taskTypes';
+import Sidebar from '@responseEditor/Sidebar';
+import { RightPanelMode } from '@responseEditor/RightPanel';
+import IntentListEditorWrapper from '@responseEditor/components/IntentListEditorWrapper';
+import { MainContentArea } from '@responseEditor/components/MainContentArea';
+import { PanelContainer } from '@responseEditor/components/PanelContainer';
+import type { Task, TaskTree } from '@types/taskTypes';
 
 export interface ResponseEditorNormalLayoutProps {
   // Data

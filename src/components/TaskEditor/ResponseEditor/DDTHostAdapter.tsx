@@ -1,14 +1,14 @@
 import React from 'react';
-import type { EditorProps } from '../EditorHost/types';
-import ResponseEditor from './index';
-import { taskRepository } from '../../../services/TaskRepository';
-import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
-import { flowchartVariablesService } from '../../../services/FlowchartVariablesService';
-import { getTemplateId } from '../../../utils/taskHelpers';
-import { buildTaskTree } from '../../../utils/taskUtils';
-import { TaskType, taskIdToTaskType, getEditorFromTaskType } from '../../../types/taskTypes';
-import type { TaskTree } from '../../../types/taskTypes';
-import { useTaskTreeStore } from './core/state';
+import type { EditorProps } from '@taskEditor/EditorHost/types';
+import ResponseEditor from '@responseEditor/index';
+import { taskRepository } from '@services/TaskRepository';
+import { useProjectDataUpdate } from '@context/ProjectDataContext';
+import { flowchartVariablesService } from '@services/FlowchartVariablesService';
+import { getTemplateId } from '@utils/taskHelpers';
+import { buildTaskTree } from '@utils/taskUtils';
+import { TaskType, taskIdToTaskType, getEditorFromTaskType } from '@types/taskTypes';
+import type { TaskTree } from '@types/taskTypes';
+import { useTaskTreeStore } from '@responseEditor/core/state';
 
 export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeader, onToolbarUpdate, registerOnClose }: EditorProps) { // ✅ PATTERN CENTRALIZZATO: Accetta hideHeader e onToolbarUpdate
   // ✅ ARCHITETTURA ESPERTO: Verifica che questo componente sia usato solo per TaskTree

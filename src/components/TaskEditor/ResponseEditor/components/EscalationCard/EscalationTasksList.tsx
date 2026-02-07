@@ -1,14 +1,14 @@
 import React from 'react';
-import TaskRowDnDWrapper from '../../TaskRowDnDWrapper';
-import TaskRow from '../../TaskRow';
-import { getTaskIconNode, getTaskLabel } from '../../taskMeta';
-import getIconComponent from '../../icons';
-import { ensureHexColor } from '../../utils/color';
-import CanvasDropWrapper from '../../CanvasDropWrapper';
-import PanelEmptyDropZone from '../../PanelEmptyDropZone';
-import { getTaskText, normalizeTaskForEscalation, generateGuid } from '../../utils/escalationHelpers';
-import { useTaskEditing } from '../../hooks/useTaskEditing';
-import { updateStepEscalations } from '../../utils/stepHelpers';
+import TaskRowDnDWrapper from '@responseEditor/TaskRowDnDWrapper';
+import TaskRow from '@responseEditor/TaskRow';
+import { getTaskIconNode, getTaskLabel } from '@responseEditor/taskMeta';
+import getIconComponent from '@responseEditor/icons';
+import { ensureHexColor } from '@responseEditor/utils/color';
+import CanvasDropWrapper from '@responseEditor/CanvasDropWrapper';
+import PanelEmptyDropZone from '@responseEditor/PanelEmptyDropZone';
+import { getTaskText, normalizeTaskForEscalation, generateGuid } from '@responseEditor/utils/escalationHelpers';
+import { useTaskEditing } from '@responseEditor/hooks/useTaskEditing';
+import { updateStepEscalations } from '@responseEditor/utils/stepHelpers';
 
 type EscalationTasksListProps = {
   escalation: any;

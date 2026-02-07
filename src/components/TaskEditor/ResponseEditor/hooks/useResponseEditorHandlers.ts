@@ -11,13 +11,13 @@
  */
 
 import React from 'react';
-import { useSidebarHandlers } from './useSidebarHandlers';
-import { useSidebarResize } from './useSidebarResize';
-import { useResponseEditorClose } from './useResponseEditorClose';
-import { useContractUpdateDialog } from './useContractUpdateDialog';
-import { useResponseEditorSideEffects } from './useResponseEditorSideEffects';
-import type { TaskMeta, Task } from '../../../../types/taskTypes';
-import type { TaskTree } from '../../../../types/taskTypes';
+import { useSidebarHandlers } from '@responseEditor/hooks/useSidebarHandlers';
+import { useSidebarResize } from '@responseEditor/hooks/useSidebarResize';
+import { useResponseEditorClose } from '@responseEditor/hooks/useResponseEditorClose';
+import { useContractUpdateDialog } from '@responseEditor/hooks/useContractUpdateDialog';
+import { useResponseEditorSideEffects } from '@responseEditor/hooks/useResponseEditorSideEffects';
+import type { TaskMeta, Task } from '@types/taskTypes';
+import type { TaskTree } from '@types/taskTypes';
 
 export interface UseResponseEditorHandlersParams {
   // Core data

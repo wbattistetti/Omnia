@@ -1,4 +1,4 @@
-import type { ContractType } from '../../../../DialogueDataEngine/contracts/contractLoader';
+import type { ContractType } from '@components/DialogueDataEngine/contracts/contractLoader';
 
 export type EditorType = 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings';
 

@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { TaskType, templateIdToTaskType } from '../../../../types/taskTypes';
+import { TaskType, templateIdToTaskType } from '@types/taskTypes';
 
 /**
  * Hook for normalizing and persisting node model changes in ResponseEditor.

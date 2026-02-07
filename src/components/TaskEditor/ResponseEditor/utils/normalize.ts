@@ -1,5 +1,5 @@
-import type { Task } from '../../../../types/taskTypes';
-import { TaskType, templateIdToTaskType } from '../../../../types/taskTypes';
+import type { Task } from '@types/taskTypes';
+import { TaskType, templateIdToTaskType } from '@types/taskTypes';
 import { v4 as uuidv4 } from 'uuid';
 
 /**

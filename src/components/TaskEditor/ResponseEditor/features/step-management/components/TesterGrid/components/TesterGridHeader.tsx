@@ -3,7 +3,7 @@ import TesterGridInput from './TesterGridInput';
 import TesterGridActionsColumn from './TesterGridActionsColumn';
 import TesterGridHeaderColumn from './TesterGridHeaderColumn';
 import AddContractDropdown from './AddContractDropdown';
-import type { DataContract, ContractType } from '../../../../DialogueDataEngine/contracts/contractLoader';
+import type { DataContract, ContractType } from '@components/DialogueDataEngine/contracts/contractLoader';
 
 // 🎨 Colori centralizzati per extractors
 const EXTRACTOR_COLORS = {

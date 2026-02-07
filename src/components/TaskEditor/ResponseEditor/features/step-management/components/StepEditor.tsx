@@ -1,10 +1,10 @@
 import React from 'react';
 import { Plus } from 'lucide-react';
-import { stepMeta, hasEscalationCard } from '../../../ddtUtils';
-import { updateStepEscalations } from '../../../utils/stepHelpers';
-import { EscalationCard } from '../../../components/EscalationCard/EscalationCard';
-import { useEscalationUpdate } from '../../../hooks/useEscalationUpdate';
-import { getEscalationName } from '../../../utils/escalationHelpers';
+import { stepMeta, hasEscalationCard } from '@responseEditor/ddtUtils';
+import { updateStepEscalations } from '@responseEditor/utils/stepHelpers';
+import { EscalationCard } from '@responseEditor/components/EscalationCard/EscalationCard';
+import { useEscalationUpdate } from '@responseEditor/hooks/useEscalationUpdate';
+import { getEscalationName } from '@responseEditor/utils/escalationHelpers';
 
 // Force Vite cache refresh
 

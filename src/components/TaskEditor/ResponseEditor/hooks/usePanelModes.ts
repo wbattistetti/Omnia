@@ -2,7 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useCallback } from 'react';
-import type { RightPanelMode } from '../RightPanel';
+import type { RightPanelMode } from '@responseEditor/RightPanel';
 
 export interface UsePanelModesParams {
   setLeftPanelMode: React.Dispatch<React.SetStateAction<RightPanelMode>>;

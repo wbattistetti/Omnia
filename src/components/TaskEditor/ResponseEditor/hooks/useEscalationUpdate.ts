@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { updateStepEscalations } from '../utils/stepHelpers';
+import { updateStepEscalations } from '@responseEditor/utils/stepHelpers';
 
 type UpdateSelectedNodeFn = (updater: (node: any) => any, notifyProvider?: boolean) => void;
 

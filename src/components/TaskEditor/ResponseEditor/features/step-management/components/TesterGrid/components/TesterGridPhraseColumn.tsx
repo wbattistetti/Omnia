@@ -1,5 +1,5 @@
 import React from 'react';
-import { renderPhraseWithSpans } from '../helpers/renderPhraseWithSpans';
+import { renderPhraseWithSpans } from '@responseEditor/features/step-management/components/TesterGrid/helpers/renderPhraseWithSpans';
 
 interface TesterGridPhraseColumnProps {
   phrase: string;

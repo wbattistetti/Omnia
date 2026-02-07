@@ -18,7 +18,7 @@ import { findLocalTemplate } from '@responseEditor/hooks/helpers/templateMatcher
 import { callAIInference } from '@responseEditor/hooks/helpers/aiInference';
 import { preAssembleTaskTree } from '@responseEditor/hooks/helpers/preAssembly';
 import { normalizeTemplateId, isValidTemplateId } from '@responseEditor/hooks/helpers/templateIdUtils';
-import DialogueTaskService from '../../../../services/DialogueTaskService';
+import DialogueTaskService from '@services/DialogueTaskService';
 
 interface UseWizardInferenceParams {
   taskTree: any; // ✅ Renamed from ddt to taskTree (opzionale - store è primary)

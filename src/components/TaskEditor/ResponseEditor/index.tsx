@@ -1,7 +1,7 @@
 import React from 'react';
 import { useProjectDataUpdate } from '@context/ProjectDataContext';
 import { ContractUpdateDialog } from '@responseEditor/ContractUpdateDialog';
-import EditorHeader from '@taskEditor/common/EditorHeader';
+import EditorHeader from '@components/common/EditorHeader';
 import TaskDragLayer from '@responseEditor/TaskDragLayer';
 import { FontProvider, useFontContext } from '@context/FontContext';
 import { ToolbarButton } from '@dock/types';

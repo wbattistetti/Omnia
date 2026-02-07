@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import IntentListEditor from './IntentListEditor';
-import { taskRepository } from '../../../../services/TaskRepository';
+import IntentListEditor from '@responseEditor/components/IntentListEditor';
+import { taskRepository } from '@services/TaskRepository';
 
 interface IntentListEditorWrapperProps {
   act: { id: string; type: string; label?: string; instanceId?: string };

@@ -2,7 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useCallback } from 'react';
-import { getIsTesting } from '../../../testingState';
+import { getIsTesting } from '@responseEditor/testingState';
 
 export interface UseProfileUpdateParams {
   updateSelectedNode: (updater: (node: any) => any, notifyProvider?: boolean) => void;

@@ -12,8 +12,8 @@
  */
 
 import React from 'react';
-import RightPanel, { RightPanelMode } from '../RightPanel';
-import type { Task, TaskTree } from '../../../../types/taskTypes';
+import RightPanel, { RightPanelMode } from '@responseEditor/RightPanel';
+import type { Task, TaskTree } from '@types/taskTypes';
 
 export interface PanelContainerProps {
   // Panel modes

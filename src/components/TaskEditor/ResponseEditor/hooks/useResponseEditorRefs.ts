@@ -2,7 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useRef } from 'react';
-import type { TaskTree } from '../../../../types/taskTypes';
+import type { TaskTree } from '@types/taskTypes';
 
 export interface UseResponseEditorRefsParams {
   taskTree: TaskTree | null | undefined;

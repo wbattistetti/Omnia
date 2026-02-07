@@ -2,7 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { useNotesStore } from '../stores/notesStore';
+import { useNotesStore } from '@responseEditor/stores/notesStore';
 
 /**
  * Simple hash function for tester notes

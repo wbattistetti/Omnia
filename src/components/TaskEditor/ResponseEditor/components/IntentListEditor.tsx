@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import ItemListEditor from '../../../../components/common/ItemListEditor';
-import type { ListItem } from '../../../../features/intent-editor/ui/common/ListGrid';
-import { taskRepository } from '../../../../services/TaskRepository';
+import ItemListEditor from '@components/common/ItemListEditor';
+import type { ListItem } from '@features/intent-editor/ui/common/ListGrid';
+import { taskRepository } from '@services/TaskRepository';
 import { GitBranch } from 'lucide-react';
-import type { ProblemIntent } from '../../../../types/project';
-import PhrasesDropdown from './PhrasesDropdown';
-import { useIntentStore } from '../../../../features/intent-editor/state/intentStore';
-import { generateVariantsForIntent } from '../../../../features/intent-editor/services/variantsService';
-import { ImportDropdown } from '../../../../features/intent-editor/ui/common/ImportDropdown';
+import type { ProblemIntent } from '@types/project';
+import PhrasesDropdown from '@responseEditor/components/PhrasesDropdown';
+import { useIntentStore } from '@features/intent-editor/state/intentStore';
+import { generateVariantsForIntent } from '@features/intent-editor/services/variantsService';
+import { ImportDropdown } from '@features/intent-editor/ui/common/ImportDropdown';
 
 export interface IntentListEditorProps {
   instanceId: string;

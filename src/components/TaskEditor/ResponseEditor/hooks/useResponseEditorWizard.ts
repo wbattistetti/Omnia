@@ -11,7 +11,7 @@
  */
 
 import { useCallback } from 'react';
-import { info } from '../../../../utils/logger';
+import { info } from '@utils/logger';
 
 export interface UseResponseEditorWizardProps {
   showContractWizard: boolean;

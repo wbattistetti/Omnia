@@ -917,7 +917,7 @@ export const AppContent: React.FC<AppContentProps> = ({
             );
 
             // Save TaskTree to task
-            const { saveTaskToRepository } = await import('./TaskEditor/ResponseEditor/modules/ResponseEditor/persistence/ResponseEditorPersistence');
+            const { saveTaskToRepository } = await import('@responseEditor/features/persistence/ResponseEditorPersistence');
             await saveTaskToRepository(task.id, taskTree, task, currentPid);
 
             // Open ResponseEditor with created task

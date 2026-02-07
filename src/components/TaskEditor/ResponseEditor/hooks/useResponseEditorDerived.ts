@@ -2,10 +2,10 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useMemo } from 'react';
-import { getTaskVisualsByType } from '../../../Flowchart/utils/taskVisuals';
-import { hasIntentMessages } from '../utils/hasMessages';
-import type { Task, TaskTree } from '../../../../types/taskTypes';
-import type { RightPanelMode } from '../RightPanel';
+import { getTaskVisualsByType } from '@components/Flowchart/utils/taskVisuals';
+import { hasIntentMessages } from '@responseEditor/utils/hasMessages';
+import type { Task, TaskTree } from '@types/taskTypes';
+import type { RightPanelMode } from '@responseEditor/RightPanel';
 
 export interface UseResponseEditorDerivedParams {
   task: Task | null | undefined;

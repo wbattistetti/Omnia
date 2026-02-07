@@ -2,7 +2,7 @@
 // Pure functions per costruire strutture template (data, subData)
 // Testabili in isolamento, senza side effects
 
-import { DialogueTaskService } from '../../../../../services/DialogueTaskService';
+import { DialogueTaskService } from '@services/DialogueTaskService';
 
 export interface TemplateMatchResult {
   ai: {

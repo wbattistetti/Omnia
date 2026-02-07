@@ -2,11 +2,11 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useCallback } from 'react';
-import { taskRepository } from '../../../../services/TaskRepository';
-import { getTemplateId } from '../../../../utils/taskHelpers';
-import { TaskType, isUtteranceInterpretationTemplateId } from '../../../../types/taskTypes';
-import type { Task, TaskTree } from '../../../../types/taskTypes';
-import { saveIntentMessagesToTaskTree } from '../utils/saveIntentMessages';
+import { taskRepository } from '@services/TaskRepository';
+import { getTemplateId } from '@utils/taskHelpers';
+import { TaskType, isUtteranceInterpretationTemplateId } from '@types/taskTypes';
+import type { Task, TaskTree } from '@types/taskTypes';
+import { saveIntentMessagesToTaskTree } from '@responseEditor/utils/saveIntentMessages';
 
 export interface UseIntentMessagesHandlerParams {
   task: Task | null | undefined;

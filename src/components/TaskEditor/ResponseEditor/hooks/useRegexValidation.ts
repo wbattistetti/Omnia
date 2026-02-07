@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import nlpTypesConfig from '../../../../config/nlp-types.json';
-import { getIsTesting } from '../testingState';
-import { validateNamedGroups, extractNamedGroupsFromRegex } from '../utils/regexGroupUtils';
-import type { TaskTreeNode } from '../../../../types/taskTypes';
+import nlpTypesConfig from '@config/nlp-types.json';
+import { getIsTesting } from '@responseEditor/testingState';
+import { validateNamedGroups, extractNamedGroupsFromRegex } from '@responseEditor/utils/regexGroupUtils';
+import type { TaskTreeNode } from '@types/taskTypes';
 
 // Validate regex capture groups against expected sub-data
 export interface ValidationResult {

@@ -12,10 +12,10 @@
  */
 
 import React from 'react';
-import ContractWizard from '../ContractWizard/ContractWizard';
-import IntentMessagesBuilder from './IntentMessagesBuilder';
-import { useTaskTreeFromStore } from '../core/state';
-import type { Task, TaskTree } from '../../../../types/taskTypes';
+import ContractWizard from '@responseEditor/ContractWizard/ContractWizard';
+import IntentMessagesBuilder from '@responseEditor/components/IntentMessagesBuilder';
+import { useTaskTreeFromStore } from '@responseEditor/core/state';
+import type { Task, TaskTree } from '@types/taskTypes';
 
 export interface ResponseEditorContentProps {
   // State flags

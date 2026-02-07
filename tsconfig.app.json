@@ -30,6 +30,8 @@
       "@hooks/*": ["hooks/*"],
       "@dock/*": ["dock/*"],
       "@components/*": ["components/*"],
+      "@features/*": ["../features/*"],
+      "@config/*": ["../config/*"],
       "@taskEditor/*": ["components/TaskEditor/*"],
       "@responseEditor/*": ["components/TaskEditor/ResponseEditor/*"]
     }

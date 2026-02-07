@@ -2,9 +2,9 @@
 // Service per ricerca template locale (ultimo tentativo prima di AI)
 // ⚠️ NOTA: Chiamato SOLO se task.templateId NON esiste
 
-import { TaskType } from '../../../../../types/taskTypes';
-import TaskTemplateMatcherService from '../../../../../services/TaskTemplateMatcherService';
-import { buildTemplateMatchResult, type TemplateMatchResult } from './templateBuilders';
+import { TaskType } from '@types/taskTypes';
+import TaskTemplateMatcherService from '@services/TaskTemplateMatcherService';
+import { buildTemplateMatchResult, type TemplateMatchResult } from '@responseEditor/hooks/helpers/templateBuilders';
 
 /**
  * Cerca un template Task usando il matcher service

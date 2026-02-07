@@ -1,5 +1,5 @@
 import React from 'react';
-import { parseSummaryToGroups } from '../helpers/parseSummaryToGroups';
+import { parseSummaryToGroups } from '@responseEditor/features/step-management/components/TesterGrid/helpers/parseSummaryToGroups';
 import { useCellOverridesStore } from '@responseEditor/stores/cellOverridesStore';
 
 interface GroupDetailsExpanderProps {

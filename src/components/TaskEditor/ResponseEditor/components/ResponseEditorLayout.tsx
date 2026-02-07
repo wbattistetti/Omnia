@@ -11,15 +11,15 @@
  */
 
 import React from 'react';
-import EditorHeader from '../../../common/EditorHeader';
-import TaskDragLayer from '../TaskDragLayer';
-import { ResponseEditorContent } from './ResponseEditorContent';
-import { ResponseEditorNormalLayout } from './ResponseEditorNormalLayout';
-import { ServiceUnavailableModal } from './ServiceUnavailableModal';
-import { GeneralizabilityBanner } from './GeneralizabilityBanner';
-import { ContractUpdateDialog } from '../ContractUpdateDialog';
-import type { TaskTree } from '../../../../types/taskTypes';
-import type { UseResponseEditorResult } from '../hooks/useResponseEditor';
+import EditorHeader from '@components/common/EditorHeader';
+import TaskDragLayer from '@responseEditor/TaskDragLayer';
+import { ResponseEditorContent } from '@responseEditor/components/ResponseEditorContent';
+import { ResponseEditorNormalLayout } from '@responseEditor/components/ResponseEditorNormalLayout';
+import { ServiceUnavailableModal } from '@responseEditor/components/ServiceUnavailableModal';
+import { GeneralizabilityBanner } from '@responseEditor/components/GeneralizabilityBanner';
+import { ContractUpdateDialog } from '@responseEditor/ContractUpdateDialog';
+import type { TaskTree } from '@types/taskTypes';
+import type { UseResponseEditorResult } from '@responseEditor/hooks/useResponseEditor';
 
 export interface ResponseEditorLayoutProps {
   editor: UseResponseEditorResult;

@@ -3,7 +3,7 @@
 
 import React, { useState } from 'react';
 import { AlertTriangle, X, Info } from 'lucide-react';
-import { useFontContext } from '../../../../context/FontContext';
+import { useFontContext } from '@context/FontContext';
 
 interface GeneralizabilityBannerProps {
   isGeneralizable: boolean;

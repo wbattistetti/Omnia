@@ -1,15 +1,15 @@
 import { useState, useCallback } from 'react';
-import { ValidationResult } from './useRegexValidation';
-import { RowResult } from './useExtractionTesting';
-import { useNotesStore, getCellKeyFromPhrase } from '../stores/notesStore';
-import { getSubTasksInfo } from '../utils/regexGroupUtils';
-import { deriveSubTaskKey } from '../../../../utils/taskUtils';
-import type { TaskTreeNode } from '../../../../types/taskTypes';
-import { buildSemanticContract } from '../../../../utils/semanticContractBuilder';
-import { buildAIPrompt, getSystemMessageForEngine } from '../../../../utils/aiPromptTemplates';
-import { SemanticContractService } from '../../../../services/SemanticContractService';
-import { EngineService } from '../../../../services/EngineService';
-import type { EngineConfig } from '../../../../types/semanticContract';
+import { ValidationResult } from '@responseEditor/hooks/useRegexValidation';
+import { RowResult } from '@responseEditor/hooks/useExtractionTesting';
+import { useNotesStore, getCellKeyFromPhrase } from '@responseEditor/stores/notesStore';
+import { getSubTasksInfo } from '@responseEditor/utils/regexGroupUtils';
+import { deriveSubTaskKey } from '@utils/taskUtils';
+import type { TaskTreeNode } from '@types/taskTypes';
+import { buildSemanticContract } from '@utils/semanticContractBuilder';
+import { buildAIPrompt, getSystemMessageForEngine } from '@utils/aiPromptTemplates';
+import { SemanticContractService } from '@services/SemanticContractService';
+import { EngineService } from '@services/EngineService';
+import type { EngineConfig } from '@types/semanticContract';
 
 interface FeedbackItem {
   testPhrase: string;

@@ -20,6 +20,8 @@ export default defineConfig({
       '@hooks': path.resolve(__dirname, 'src/hooks'),
       '@dock': path.resolve(__dirname, 'src/dock'),
       '@components': path.resolve(__dirname, 'src/components'),
+      '@features': path.resolve(__dirname, 'src/features'),
+      '@config': path.resolve(__dirname, 'config'),
       '@taskEditor': path.resolve(__dirname, 'src/components/TaskEditor'),
       '@responseEditor': path.resolve(__dirname, 'src/components/TaskEditor/ResponseEditor'),
     }
@@ -36,6 +38,8 @@ export default defineConfig({
         '@hooks': path.resolve(__dirname, 'src/hooks'),
         '@dock': path.resolve(__dirname, 'src/dock'),
         '@components': path.resolve(__dirname, 'src/components'),
+        '@features': path.resolve(__dirname, 'src/features'),
+        '@config': path.resolve(__dirname, 'config'),
         '@taskEditor': path.resolve(__dirname, 'src/components/TaskEditor'),
         '@responseEditor': path.resolve(__dirname, 'src/components/TaskEditor/ResponseEditor'),
       }

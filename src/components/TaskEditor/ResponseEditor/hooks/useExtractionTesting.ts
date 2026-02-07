@@ -1,12 +1,12 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { extractField } from '../../../../nlp/pipeline';
-import { nerExtract } from '../../../../nlp/services/nerClient';
-import nlpTypesConfig from '../../../../../config/nlp-types.json';
-import { mapLabelToStandardKey } from './useRegexValidation';
-import * as testingState from '../testingState';
-import { loadContractFromNode } from '../ContractSelector/contractHelpers';
-import { TestExtractionService } from '../../../../services/TestExtractionService';
-import { useCellOverridesStore } from '../stores/cellOverridesStore';
+import { extractField } from '@utils/nlp/pipeline';
+import { nerExtract } from '@utils/nlp/services/nerClient';
+import nlpTypesConfig from '@config/nlp-types.json';
+import { mapLabelToStandardKey } from '@responseEditor/hooks/useRegexValidation';
+import * as testingState from '@responseEditor/testingState';
+import { loadContractFromNode } from '@responseEditor/ContractSelector/contractHelpers';
+import { TestExtractionService } from '@services/TestExtractionService';
+import { useCellOverridesStore } from '@responseEditor/stores/cellOverridesStore';
 
 export interface RowResult {
   regex?: string;

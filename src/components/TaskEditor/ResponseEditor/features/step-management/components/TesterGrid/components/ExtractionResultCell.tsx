@@ -1,8 +1,8 @@
 import React from 'react';
 import { Eye, EyeOff } from 'lucide-react';
-import { renderTimeBar } from '../helpers/renderTimeBar';
-import { parseSummaryToGroups } from '../helpers/parseSummaryToGroups';
-import GroupDetailsExpander from './GroupDetailsExpander';
+import { renderTimeBar } from '@responseEditor/features/step-management/components/TesterGrid/helpers/renderTimeBar';
+import { parseSummaryToGroups } from '@responseEditor/features/step-management/components/TesterGrid/helpers/parseSummaryToGroups';
+import GroupDetailsExpander from '@responseEditor/features/step-management/components/TesterGrid/components/GroupDetailsExpander';
 import NoteButton from '@responseEditor/CellNote/NoteButton';
 import NoteEditor from '@responseEditor/CellNote/NoteEditor';
 import NoteDisplay from '@responseEditor/CellNote/NoteDisplay';

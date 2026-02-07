@@ -1,4 +1,4 @@
-import { getTaskLabel } from '../taskMeta';
+import { getTaskLabel } from '@responseEditor/taskMeta';
 
 /**
  * Genera un GUID valido

@@ -9,7 +9,7 @@
  */
 
 import { useState } from 'react';
-import type { RightPanelMode } from '../RightPanel';
+import type { RightPanelMode } from '@responseEditor/RightPanel';
 
 export interface ResponseEditorState {
   // Service unavailable

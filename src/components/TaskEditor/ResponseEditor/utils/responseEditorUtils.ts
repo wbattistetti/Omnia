@@ -1,7 +1,7 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import type { TaskMeta } from '../../EditorHost/types';
+import type { TaskMeta } from '@taskEditor/EditorHost/types';
 
 /**
  * Helper: safe deep clone that handles circular references

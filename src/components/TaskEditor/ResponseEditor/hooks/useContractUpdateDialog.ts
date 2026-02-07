@@ -2,8 +2,8 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useCallback } from 'react';
-import { mapNode, closeTab } from '../../../../dock/ops';
-import DialogueTaskService from '../../../../services/DialogueTaskService';
+import { mapNode, closeTab } from '@dock/ops';
+import DialogueTaskService from '@services/DialogueTaskService';
 
 export interface UseContractUpdateDialogParams {
   showContractDialog: boolean;
