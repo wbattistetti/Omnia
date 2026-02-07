@@ -1,13 +1,13 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { taskRepository } from '../../../../../services/TaskRepository';
-import { getTemplateId } from '../../../../../utils/taskHelpers';
-import { extractTaskOverrides, buildTemplateExpanded } from '../../../../../utils/taskUtils';
-import { TaskType, isUtteranceInterpretationTemplateId } from '../../../../../types/taskTypes';
-import type { Task, TaskTree } from '../../../../../types/taskTypes';
-import { getMainNodes } from '../../core/domain';
-import { info } from '../../../../../utils/logger';
+import { taskRepository } from '@services/TaskRepository';
+import { getTemplateId } from '@utils/taskHelpers';
+import { extractTaskOverrides, buildTemplateExpanded } from '@utils/taskUtils';
+import { TaskType, isUtteranceInterpretationTemplateId } from '@types/taskTypes';
+import type { Task, TaskTree } from '@types/taskTypes';
+import { getMainNodes } from '@responseEditor/core/domain';
+import { info } from '@utils/logger';
 
 /**
  * Save task data to repository (in-memory cache only, not DB).

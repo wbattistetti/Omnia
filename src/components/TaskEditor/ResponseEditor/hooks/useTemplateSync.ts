@@ -2,9 +2,9 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useEffect } from 'react';
-import { checkAndApplyTemplateSync } from '../features/persistence/ResponseEditorPersistence';
-import { useTaskTreeStore, useTaskTreeFromStore } from '../core/state';
-import type { Task, TaskTree } from '../../../../types/taskTypes';
+import { checkAndApplyTemplateSync } from '@responseEditor/features/persistence/ResponseEditorPersistence';
+import { useTaskTreeStore, useTaskTreeFromStore } from '@responseEditor/core/state';
+import type { Task, TaskTree } from '@types/taskTypes';
 
 export interface UseTemplateSyncParams {
   task?: Task | null;

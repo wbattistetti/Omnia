@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import StepsStrip from './StepsStrip';
-import StepEditor from './features/step-management/components/StepEditor';
-import { getNodeStepKeys } from './core/domain';
-import { stepMeta } from './ddtUtils';
+import StepsStrip from '@responseEditor/StepsStrip';
+import StepEditor from '@responseEditor/features/step-management/components/StepEditor';
+import { getNodeStepKeys } from '@responseEditor/core/domain';
+import { stepMeta } from '@responseEditor/ddtUtils';
 
 interface BehaviourEditorProps {
   node: any;

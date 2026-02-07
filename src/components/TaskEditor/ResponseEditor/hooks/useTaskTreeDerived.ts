@@ -2,9 +2,9 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useMemo } from 'react';
-import { getMainNodes } from '../core/domain';
-import { useTaskTreeFromStore, useTaskTreeVersion } from '../core/state';
-import type { TaskTree } from '../../../../types/taskTypes';
+import { getMainNodes } from '@responseEditor/core/domain';
+import { useTaskTreeFromStore, useTaskTreeVersion } from '@responseEditor/core/state';
+import type { TaskTree } from '@types/taskTypes';
 
 export interface UseTaskTreeDerivedParams {
   // ✅ FASE 3: Parametri opzionali rimossi - store è single source of truth

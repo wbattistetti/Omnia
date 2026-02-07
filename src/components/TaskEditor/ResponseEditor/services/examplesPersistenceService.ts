@@ -1,7 +1,7 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { taskRepository } from '../../../../services/TaskRepository';
+import { taskRepository } from '@services/TaskRepository';
 
 /**
  * Centralized service for persisting examplesList to node.nlpProfile.examples

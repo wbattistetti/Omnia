@@ -7,17 +7,17 @@
 // 3. Se task.type !== DataRequest → NON chiamare AI (wizard supporta solo TaskTree)
 
 import React, { useEffect, useRef, useState } from 'react';
-import { TaskType } from '../../../../types/taskTypes';
-import { taskRepository } from '../../../../services/TaskRepository';
-import { getTemplateId } from '../../../../utils/taskHelpers';
-import { isTaskTreeEmpty, hasdataButNosteps } from '../../../../utils/ddt';
-import { getMainNodes } from '../core/domain';
-import { useTaskTreeFromStore } from '../core/state';
-import type { Task } from '../../../../types/taskTypes';
-import { findLocalTemplate } from './helpers/templateMatcher';
-import { callAIInference } from './helpers/aiInference';
-import { preAssembleTaskTree } from './helpers/preAssembly';
-import { normalizeTemplateId, isValidTemplateId } from './helpers/templateIdUtils';
+import { TaskType } from '@types/taskTypes';
+import { taskRepository } from '@services/TaskRepository';
+import { getTemplateId } from '@utils/taskHelpers';
+import { isTaskTreeEmpty, hasdataButNosteps } from '@utils/ddt';
+import { getMainNodes } from '@responseEditor/core/domain';
+import { useTaskTreeFromStore } from '@responseEditor/core/state';
+import type { Task } from '@types/taskTypes';
+import { findLocalTemplate } from '@responseEditor/hooks/helpers/templateMatcher';
+import { callAIInference } from '@responseEditor/hooks/helpers/aiInference';
+import { preAssembleTaskTree } from '@responseEditor/hooks/helpers/preAssembly';
+import { normalizeTemplateId, isValidTemplateId } from '@responseEditor/hooks/helpers/templateIdUtils';
 import DialogueTaskService from '../../../../services/DialogueTaskService';
 
 interface UseWizardInferenceParams {

@@ -8,8 +8,8 @@
  * to create a clean domain layer.
  */
 
-import { getNodesWithFallback } from '../../../../../utils/taskTreeMigrationHelpers';
-import type { TaskTree } from '../../../../../types/taskTypes';
+import { getNodesWithFallback } from '@utils/taskTreeMigrationHelpers';
+import type { TaskTree } from '@types/taskTypes';
 
 /**
  * Get main nodes list from TaskTree

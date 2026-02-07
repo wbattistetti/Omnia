@@ -2,12 +2,12 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useCallback } from 'react';
-import { useTaskTreeManager } from '../../../../context/DDTManagerContext';
-import { useResponseEditorWizard } from './useResponseEditorWizard';
-import { useResponseEditorToolbar } from '../ResponseEditorToolbar';
-import { usePanelModes } from './usePanelModes';
-import type { Task, TaskTree } from '../../../../types/taskTypes';
-import type { RightPanelMode } from '../RightPanel';
+import { useTaskTreeManager } from '@context/DDTManagerContext';
+import { useResponseEditorWizard } from '@responseEditor/hooks/useResponseEditorWizard';
+import { useResponseEditorToolbar } from '@responseEditor/ResponseEditorToolbar';
+import { usePanelModes } from '@responseEditor/hooks/usePanelModes';
+import type { Task, TaskTree } from '@types/taskTypes';
+import type { RightPanelMode } from '@responseEditor/RightPanel';
 
 export interface UseResponseEditorInitializationParams {
   task: Task | null | undefined;

@@ -1,9 +1,9 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { syncTasksWithTemplate, markTaskAsEdited } from '../../../../../utils/taskUtils';
-import type { Task, TaskTree } from '../../../../../types/taskTypes';
-import { info } from '../../../../../utils/logger';
+import { syncTasksWithTemplate, markTaskAsEdited } from '@utils/taskUtils';
+import type { Task, TaskTree } from '@types/taskTypes';
+import { info } from '@utils/logger';
 
 /**
  * Check if template sync is needed and apply updates if user confirms.
@@ -19,7 +19,7 @@ export async function checkAndApplyTemplateSync(
   }
 
   try {
-    const { default: DialogueTaskService } = await import('../../../../../services/DialogueTaskService');
+    const { default: DialogueTaskService } = await import('@services/DialogueTaskService');
     const template = DialogueTaskService.getTemplate(task.templateId);
     if (!template) {
       return false;

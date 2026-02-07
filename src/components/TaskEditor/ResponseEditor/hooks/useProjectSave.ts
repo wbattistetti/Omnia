@@ -2,9 +2,9 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useEffect } from 'react';
-import { saveTaskOnProjectSave } from '../features/persistence/ResponseEditorPersistence';
-import { useTaskTreeFromStore } from '../core/state';
-import type { Task, TaskTree } from '../../../../types/taskTypes';
+import { saveTaskOnProjectSave } from '@responseEditor/features/persistence/ResponseEditorPersistence';
+import { useTaskTreeFromStore } from '@responseEditor/core/state';
+import type { Task, TaskTree } from '@types/taskTypes';
 
 export interface UseProjectSaveParams {
   task?: Task | null;

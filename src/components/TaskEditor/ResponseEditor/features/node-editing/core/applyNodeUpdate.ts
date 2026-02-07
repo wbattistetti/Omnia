@@ -1,13 +1,13 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { validateTaskStructure } from '../../../../../../utils/taskSemantics';
-import { getTemplateId } from '../../../../../../utils/taskHelpers';
-import { taskRepository } from '../../../../../../services/TaskRepository';
-import { saveTaskToRepository } from '../../persistence/ResponseEditorPersistence';
-import { mapNode } from '../../../../../../dock/ops';
-import { normalizeStepsToDictionary } from '../../../core/domain';
-import type { Task, TaskTree } from '../../../../../../types/taskTypes';
+import { validateTaskStructure } from '@utils/taskSemantics';
+import { getTemplateId } from '@utils/taskHelpers';
+import { taskRepository } from '@services/TaskRepository';
+import { saveTaskToRepository } from '@responseEditor/features/persistence/ResponseEditorPersistence';
+import { mapNode } from '@dock/ops';
+import { normalizeStepsToDictionary } from '@responseEditor/core/domain';
+import type { Task, TaskTree } from '@types/taskTypes';
 
 export interface ApplyNodeUpdateParams {
   prevNode: any;

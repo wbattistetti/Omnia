@@ -2,9 +2,9 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useEffect } from 'react';
-import { getMainNodes, getSubNodes } from '../../../core/domain';
-import { useTaskTreeFromStore, useTaskTreeVersion } from '../../../core/state';
-import type { Task, TaskTree } from '../../../../types/taskTypes';
+import { getMainNodes, getSubNodes } from '@responseEditor/core/domain';
+import { useTaskTreeFromStore, useTaskTreeVersion } from '@responseEditor/core/state';
+import type { Task, TaskTree } from '@types/taskTypes';
 
 export interface UseNodeLoadingParams {
   // Node selection indices

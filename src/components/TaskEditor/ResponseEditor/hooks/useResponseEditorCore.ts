@@ -11,27 +11,27 @@
  */
 
 import React from 'react';
-import { useTaskTreeManager } from '../../../../context/DDTManagerContext';
-import { useProjectDataUpdate } from '../../../../context/ProjectDataContext';
-import { useFontContext } from '../../../../context/FontContext';
-import { useAIProvider } from '../../../../context/AIProviderContext';
-import { useDDTTranslations } from '../../../../hooks/useDDTTranslations';
-import { useTaskTreeVersion, useTaskTreeFromStore } from '../core/state';
-import { useResponseEditorState } from './useResponseEditorState';
-import { useResponseEditorRefs } from './useResponseEditorRefs';
-import { useNodeSelection, useNodeFinder, useNodeLoading } from '../features/node-editing/hooks';
-import { useTaskTreeDerived } from './useTaskTreeDerived';
-import { useResponseEditorDerived } from './useResponseEditorDerived';
-import { useResponseEditorInitialization } from './useResponseEditorInitialization';
-import { usePanelModes } from './usePanelModes';
-import { usePanelWidths } from './usePanelWidths';
-import { useParserHandlers, useProfileUpdate } from '../features/step-management/hooks';
-import { useUpdateSelectedNode } from '../features/node-editing/hooks/useUpdateSelectedNode';
-import { useIntentMessagesHandler } from './useIntentMessagesHandler';
-import { useGeneralizabilityCheck } from './useGeneralizabilityCheck';
-import { getTaskMeta, getStepsForNode, getStepsAsArray } from '../utils/responseEditorUtils';
-import type { TaskMeta, Task } from '../../../../types/taskTypes';
-import type { TaskTree } from '../../../../types/taskTypes';
+import { useTaskTreeManager } from '@context/DDTManagerContext';
+import { useProjectDataUpdate } from '@context/ProjectDataContext';
+import { useFontContext } from '@context/FontContext';
+import { useAIProvider } from '@context/AIProviderContext';
+import { useDDTTranslations } from '@hooks/useDDTTranslations';
+import { useTaskTreeVersion, useTaskTreeFromStore } from '@responseEditor/core/state';
+import { useResponseEditorState } from '@responseEditor/hooks/useResponseEditorState';
+import { useResponseEditorRefs } from '@responseEditor/hooks/useResponseEditorRefs';
+import { useNodeSelection, useNodeFinder, useNodeLoading } from '@responseEditor/features/node-editing/hooks';
+import { useTaskTreeDerived } from '@responseEditor/hooks/useTaskTreeDerived';
+import { useResponseEditorDerived } from '@responseEditor/hooks/useResponseEditorDerived';
+import { useResponseEditorInitialization } from '@responseEditor/hooks/useResponseEditorInitialization';
+import { usePanelModes } from '@responseEditor/hooks/usePanelModes';
+import { usePanelWidths } from '@responseEditor/hooks/usePanelWidths';
+import { useParserHandlers, useProfileUpdate } from '@responseEditor/features/step-management/hooks';
+import { useUpdateSelectedNode } from '@responseEditor/features/node-editing/hooks/useUpdateSelectedNode';
+import { useIntentMessagesHandler } from '@responseEditor/hooks/useIntentMessagesHandler';
+import { useGeneralizabilityCheck } from '@responseEditor/hooks/useGeneralizabilityCheck';
+import { getTaskMeta, getStepsForNode, getStepsAsArray } from '@responseEditor/utils/responseEditorUtils';
+import type { TaskMeta, Task } from '@types/taskTypes';
+import type { TaskTree } from '@types/taskTypes';
 
 export interface UseResponseEditorCoreParams {
   taskTree?: TaskTree | null;

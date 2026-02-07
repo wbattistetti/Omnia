@@ -2,13 +2,13 @@ import React, { forwardRef } from 'react';
 import { createPortal } from 'react-dom';
 import * as ReactDOM from 'react-dom/client';
 import { Check, Plus, Pencil, Trash2 } from 'lucide-react';
-import { getNodeLabel, getSubNodes } from './core/domain';
-import getIconComponent from './icons';
-import styles from './ResponseEditor.module.css';
-import { useFontContext } from '../../../context/FontContext';
-import { useProjectTranslations } from '../../../context/ProjectTranslationsContext';
-import ParserStatusRow from './Sidebar/ParserStatusRow';
-import type { EngineType } from '../../../types/semanticContract';
+import { getNodeLabel, getSubNodes } from '@responseEditor/core/domain';
+import getIconComponent from '@responseEditor/icons';
+import styles from '@responseEditor/ResponseEditor.module.css';
+import { useFontContext } from '@context/FontContext';
+import { useProjectTranslations } from '@context/ProjectTranslationsContext';
+import ParserStatusRow from '@responseEditor/Sidebar/ParserStatusRow';
+import type { EngineType } from '@types/semanticContract';
 
 interface SidebarProps {
   mainList: any[];

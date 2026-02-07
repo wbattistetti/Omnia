@@ -2,9 +2,9 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useCallback } from 'react';
-import { getMainNodes, getSubNodes } from '../../../core/domain';
-import { useTaskTreeFromStore } from '../../../core/state';
-import type { TaskTree } from '../../../../types/taskTypes';
+import { getMainNodes, getSubNodes } from '@responseEditor/core/domain';
+import { useTaskTreeFromStore } from '@responseEditor/core/state';
+import type { TaskTree } from '@types/taskTypes';
 
 export interface UseNodeFinderParams {
   // ✅ FASE 3: Parametri opzionali rimossi - store è single source of truth

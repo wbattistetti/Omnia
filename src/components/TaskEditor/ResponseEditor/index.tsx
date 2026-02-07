@@ -1,15 +1,15 @@
 import React from 'react';
-import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
-import { ContractUpdateDialog } from './ContractUpdateDialog';
-import EditorHeader from '../../common/EditorHeader';
-import TaskDragLayer from './TaskDragLayer';
-import { FontProvider, useFontContext } from '../../../context/FontContext';
-import { ToolbarButton } from '../../../dock/types';
-import { ResponseEditorLayout } from './components/ResponseEditorLayout';
-import { useResponseEditor } from './hooks/useResponseEditor';
+import { useProjectDataUpdate } from '@context/ProjectDataContext';
+import { ContractUpdateDialog } from '@responseEditor/ContractUpdateDialog';
+import EditorHeader from '@taskEditor/common/EditorHeader';
+import TaskDragLayer from '@responseEditor/TaskDragLayer';
+import { FontProvider, useFontContext } from '@context/FontContext';
+import { ToolbarButton } from '@dock/types';
+import { ResponseEditorLayout } from '@responseEditor/components/ResponseEditorLayout';
+import { useResponseEditor } from '@responseEditor/hooks/useResponseEditor';
 
-import type { TaskMeta } from '../EditorHost/types';
-import type { Task, TaskTree } from '../../../types/taskTypes';
+import type { TaskMeta } from '@taskEditor/EditorHost/types';
+import type { Task, TaskTree } from '@types/taskTypes';
 
 function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTaskTreeLoading, hideHeader, onToolbarUpdate, tabId, setDockTree, registerOnClose }: { taskTree?: TaskTree | null, onClose?: () => void, onWizardComplete?: (finalTaskTree: TaskTree) => void, task?: TaskMeta | Task, isTaskTreeLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void, registerOnClose?: (fn: () => Promise<boolean>) => void }) {
   const pdUpdate = useProjectDataUpdate();

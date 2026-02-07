@@ -6,8 +6,8 @@
  */
 
 import { useCallback } from 'react';
-import { getMainNodes, getSubNodes } from '../core/domain';
-import type { TaskTree } from '../../../../types/taskTypes';
+import { getMainNodes, getSubNodes } from '@responseEditor/core/domain';
+import type { TaskTree } from '@types/taskTypes';
 
 export interface UseSidebarHandlersProps {
   taskTree: TaskTree | null | undefined;

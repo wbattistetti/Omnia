@@ -10,10 +10,10 @@
  * ✅ FASE 3.1: Extracted from index.tsx to reduce complexity
  */
 
-import { useResponseEditorCore } from './useResponseEditorCore';
-import { useResponseEditorHandlers } from './useResponseEditorHandlers';
-import type { TaskMeta, Task } from '../../../../types/taskTypes';
-import type { TaskTree } from '../../../../types/taskTypes';
+import { useResponseEditorCore } from '@responseEditor/hooks/useResponseEditorCore';
+import { useResponseEditorHandlers } from '@responseEditor/hooks/useResponseEditorHandlers';
+import type { TaskMeta, Task } from '@types/taskTypes';
+import type { TaskTree } from '@types/taskTypes';
 
 export interface UseResponseEditorParams {
   taskTree?: TaskTree | null;

@@ -31,7 +31,7 @@ import { useSidebarDrag } from './useSidebarDrag';
 import { useEditorCloseRegistration } from './useEditorCloseRegistration';
 import { useSplitterDrag } from './useSplitterDrag';
 import { useToolbarSync } from './useToolbarSync';
-import type { Task, TaskTree } from '../../../../types/taskTypes';
+import type { Task, TaskTree } from '@types/taskTypes';
 
 interface UseResponseEditorSideEffectsProps {
   // Task and tree

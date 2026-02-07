@@ -2,12 +2,12 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useCallback } from 'react';
-import { saveTaskToRepository, saveTaskOnEditorClose } from '../features/persistence/ResponseEditorPersistence';
-import { getMainNodes } from '../core/domain';
-import DialogueTaskService from '../../../../services/DialogueTaskService';
-import { closeTab } from '../../../../dock/ops';
-import { useTaskTreeStore, useTaskTreeFromStore } from '../core/state';
-import type { Task, TaskTree } from '../../../../types/taskTypes';
+import { saveTaskToRepository, saveTaskOnEditorClose } from '@responseEditor/features/persistence/ResponseEditorPersistence';
+import { getMainNodes } from '@responseEditor/core/domain';
+import DialogueTaskService from '@services/DialogueTaskService';
+import { closeTab } from '@dock/ops';
+import { useTaskTreeStore, useTaskTreeFromStore } from '@responseEditor/core/state';
+import type { Task, TaskTree } from '@types/taskTypes';
 
 export interface UseResponseEditorCloseParams {
   // Contract change state
