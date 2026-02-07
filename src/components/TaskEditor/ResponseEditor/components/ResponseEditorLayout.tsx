@@ -18,103 +18,26 @@ import { ResponseEditorNormalLayout } from './ResponseEditorNormalLayout';
 import { ServiceUnavailableModal } from './ServiceUnavailableModal';
 import { GeneralizabilityBanner } from './GeneralizabilityBanner';
 import { ContractUpdateDialog } from '../ContractUpdateDialog';
-import type { TaskMeta, Task } from '../../../../types/taskTypes';
 import type { TaskTree } from '../../../../types/taskTypes';
+import type { UseResponseEditorResult } from '../hooks/useResponseEditor';
 
 export interface ResponseEditorLayoutProps {
-  // Layout props
-  rootRef: React.RefObject<HTMLDivElement>;
+  editor: UseResponseEditorResult;
   combinedClass: string;
   hideHeader?: boolean;
-
-  // Header props
-  icon: React.ComponentType<any>;
-  iconColor: string;
-  headerTitle: string;
-  toolbarButtons: any[];
-  handleEditorClose: () => Promise<boolean>;
-
-  // Generalizability banner
-  isGeneralizable: boolean;
-  generalizationReason: string | null;
-
-  // Content props
-  showContractWizard: boolean;
-  needsIntentMessages: boolean;
-  task: TaskMeta | Task | null | undefined;
   taskTree: TaskTree | null | undefined;
   currentProjectId: string | null;
-  handleContractWizardClose: () => void;
-  handleContractWizardNodeUpdate: (node: any) => void;
-  handleContractWizardComplete: (taskTree: TaskTree) => void;
-  handleIntentMessagesComplete: () => void;
-
-  // Normal layout props
-  mainList: any[];
-  localTranslations: Record<string, string>;
-  escalationTasks: any[];
-  selectedMainIndex: number;
-  selectedSubIndex: number | null | undefined;
-  selectedRoot: boolean;
-  selectedNode: any;
-  selectedNodePath: { mainIndex: number; subIndex?: number } | null;
-  handleSelectMain: (idx: number) => void;
-  handleSelectSub: (idx: number | undefined, mainIdx?: number) => void;
-  handleSelectAggregator: () => void;
-  sidebarRef: React.RefObject<HTMLDivElement>;
-  sidebarHandlers: any;
-  handleParserCreate: (nodeId: string, node: any) => void;
-  handleParserModify: (nodeId: string, node: any) => void;
-  handleEngineChipClick: (nodeId: string, node: any, editorType: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings') => void;
-  handleGenerateAll: () => void;
-  isAggregatedAtomic: boolean;
-  sidebarManualWidth: number;
-  isDraggingSidebar: boolean;
-  handleSidebarResizeStart: (e: React.MouseEvent) => void;
-  showMessageReview: boolean;
-  showSynonyms: boolean;
-  selectedIntentIdForTraining: string | null;
-  setSelectedIntentIdForTraining: (id: string | null) => void;
-  pendingEditorOpen: boolean;
-  contractChangeRef: React.MutableRefObject<any>;
-  taskType: string;
-  handleProfileUpdate: (node: any) => void;
-  updateSelectedNode: (node: any) => void;
-  leftPanelMode: any;
-  testPanelMode: any;
-  tasksPanelMode: any;
-  rightWidth: number;
-  testPanelWidth: number;
-  tasksPanelWidth: number;
-  draggingPanel: any;
-  setDraggingPanel: (panel: any) => void;
-  setRightWidth: (width: number) => void;
-  setTestPanelWidth: (width: number) => void;
-  setTasksPanelWidth: (width: number) => void;
-  tasksStartWidthRef: React.MutableRefObject<number>;
-  tasksStartXRef: React.MutableRefObject<number>;
-  replaceSelectedTaskTree: (taskTree: TaskTree) => void;
-
-  // Modals
-  serviceUnavailable: { service: string; message: string; endpoint?: string; onRetry?: () => void } | null;
-  setServiceUnavailable: (value: any) => void;
-  showContractDialog: boolean;
-  pendingContractChange: { templateId: string; templateLabel: string; modifiedContract: any } | null;
-  contractDialogHandlers: {
-    handleKeep: () => void;
-    handleDiscard: () => void;
-    handleCancel: () => void;
-  };
 }
 
 /**
  * Main layout component for ResponseEditor.
  */
 export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
+  const { editor, combinedClass, hideHeader, taskTree, currentProjectId } = props;
+
+  // Extract values from editor
   const {
     rootRef,
-    combinedClass,
-    hideHeader,
     icon: Icon,
     iconColor,
     headerTitle,
@@ -124,9 +47,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     generalizationReason,
     showContractWizard,
     needsIntentMessages,
-    task,
-    taskTree,
-    currentProjectId,
+    taskMeta: task,
     handleContractWizardClose,
     handleContractWizardNodeUpdate,
     handleContractWizardComplete,
@@ -180,7 +101,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     showContractDialog,
     pendingContractChange,
     contractDialogHandlers,
-  } = props;
+  } = editor;
 
   return (
     <div
