@@ -21,9 +21,8 @@ import { normalizeTemplateId, isValidTemplateId } from './helpers/templateIdUtil
 import DialogueTaskService from '../../../../services/DialogueTaskService';
 
 interface UseWizardInferenceParams {
-  taskTree: any; // ✅ Renamed from ddt to taskTree
-  // ✅ FASE 2.3: taskTreeRef opzionale per backward compatibility temporanea
-  taskTreeRef?: React.MutableRefObject<any>;
+  taskTree: any; // ✅ Renamed from ddt to taskTree (opzionale - store è primary)
+  // ✅ FASE 3: taskTreeRef rimosso - store è single source of truth
   task: Task | null | undefined; // ✅ ARCHITETTURA ESPERTO: Task completo, non TaskMeta
   isTaskTreeLoading: boolean; // ✅ Renamed from isDdtLoading to isTaskTreeLoading
   currentProjectId: string | null;

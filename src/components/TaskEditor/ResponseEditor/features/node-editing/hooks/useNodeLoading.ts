@@ -14,11 +14,8 @@ export interface UseNodeLoadingParams {
   introduction: any;
 
   // Task and tree
-  // ✅ FASE 2.3: Parametri opzionali per backward compatibility temporanea
+  // ✅ FASE 3: Parametri opzionali rimossi - store è single source of truth
   task?: Task | null | undefined;
-  taskTree?: TaskTree | null | undefined;
-  taskTreeRef?: React.MutableRefObject<TaskTree | null | undefined>;
-  taskTreeVersion?: number; // Opzionale - useremo quello dello store
 
   // Setters
   setSelectedNode: React.Dispatch<React.SetStateAction<any>>;
@@ -35,10 +32,10 @@ export interface UseNodeLoadingParams {
 /**
  * Hook that manages node loading when selection changes.
  *
- * ✅ FASE 2.3: Migrato a usare solo Zustand store (single source of truth)
+ * ✅ FASE 3: Completamente migrato a Zustand store (single source of truth)
  * - Usa taskTreeFromStore come unica fonte
  * - Usa taskTreeVersion dallo store
- * - Rimossi fallback a taskTreeRef e taskTree prop
+ * - Rimossi completamente taskTreeRef e taskTree prop
  */
 export function useNodeLoading(params: UseNodeLoadingParams) {
   const {

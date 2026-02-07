@@ -35,8 +35,7 @@ export interface UseResponseEditorCloseParams {
 
   // Task and tree
   task: Task | null | undefined;
-  // ✅ FASE 2.3: taskTreeRef opzionale per backward compatibility temporanea
-  taskTreeRef?: React.MutableRefObject<TaskTree | null | undefined>;
+  // ✅ FASE 3: taskTreeRef rimosso - store è single source of truth
   currentProjectId: string | null;
 
   // Dock tree
@@ -61,7 +60,6 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
     selectedNodePath,
     selectedRoot,
     task,
-    taskTreeRef,
     currentProjectId,
     tabId,
     setDockTree,

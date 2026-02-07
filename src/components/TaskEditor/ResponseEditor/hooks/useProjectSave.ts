@@ -8,17 +8,16 @@ import type { Task, TaskTree } from '../../../../types/taskTypes';
 
 export interface UseProjectSaveParams {
   task?: Task | null;
-  // ✅ FASE 2.3: Parametri opzionali per backward compatibility temporanea
-  taskTreeRef?: React.MutableRefObject<TaskTree | null | undefined>;
+  // ✅ FASE 3: taskTreeRef rimosso - store è single source of truth
   currentProjectId: string | null;
 }
 
 /**
  * Hook that saves changes when "Salva" is clicked in the project.
  *
- * ✅ FASE 2.3: Migrato a usare solo Zustand store (single source of truth)
+ * ✅ FASE 3: Completamente migrato a Zustand store (single source of truth)
  * - Usa taskTreeFromStore come unica fonte
- * - Rimossi fallback a taskTreeRef
+ * - Rimossi completamente taskTreeRef
  */
 export function useProjectSave(params: UseProjectSaveParams) {
   const { task, currentProjectId } = params;

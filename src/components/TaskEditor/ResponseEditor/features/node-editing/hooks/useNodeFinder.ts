@@ -7,9 +7,7 @@ import { useTaskTreeFromStore } from '../../../core/state';
 import type { TaskTree } from '../../../../types/taskTypes';
 
 export interface UseNodeFinderParams {
-  // ✅ FASE 2.3: Parametri opzionali per backward compatibility temporanea
-  taskTree?: TaskTree | null | undefined;
-  taskTreeRef?: React.MutableRefObject<TaskTree | null | undefined>;
+  // ✅ FASE 3: Parametri opzionali rimossi - store è single source of truth
   handleSelectMain: (idx: number) => void;
   handleSelectSub: (idx: number | undefined, mainIdx?: number) => void;
 }
@@ -17,9 +15,9 @@ export interface UseNodeFinderParams {
 /**
  * Hook that provides findAndSelectNodeById function for finding and selecting nodes by ID.
  *
- * ✅ FASE 2.3: Migrato a usare solo Zustand store (single source of truth)
+ * ✅ FASE 3: Completamente migrato a Zustand store (single source of truth)
  * - Usa taskTreeFromStore come unica fonte
- * - Rimossi fallback a taskTreeRef e taskTree prop
+ * - Rimossi completamente taskTreeRef e taskTree prop
  */
 export function useNodeFinder(params: UseNodeFinderParams) {
   const { handleSelectMain, handleSelectSub } = params;

@@ -7,14 +7,14 @@ import { taskRepository } from '../../../../services/TaskRepository';
  * Centralized service for persisting examplesList to node.nlpProfile.examples
  *
  * This service ensures that examplesList is synchronized across:
- * - node.nlpProfile.examples (in taskTreeRef)
+ * - node.nlpProfile.examples (in Zustand store)
  * - TaskRepository cache (in-memory)
  *
  * The database is updated ONLY on explicit save (handleEditorClose).
  *
  * Architecture:
- * - Single source of truth: taskTreeRef.current.nodes (via updateSelectedNode)
- * - TaskRepository cache: mirror of taskTreeRef, updated synchronously
+ * - Single source of truth: Zustand store (via updateSelectedNode)
+ * - TaskRepository cache: mirror of store, updated synchronously
  * - Database: updated only on explicit save
  */
 export class ExamplesPersistenceService {
@@ -22,7 +22,7 @@ export class ExamplesPersistenceService {
    * Set examples for a node and synchronize across all layers
    *
    * This method:
-   * 1. Updates node.nlpProfile.examples in taskTreeRef (via updateSelectedNode)
+   * 1. Updates node.nlpProfile.examples in Zustand store (via updateSelectedNode)
    * 2. Updates TaskRepository cache (in-memory)
    *
    * The database is NOT updated here - it's updated only on explicit save.
@@ -31,7 +31,7 @@ export class ExamplesPersistenceService {
    * @param nodeTemplateId - The node template ID (for finding in taskTree.nodes)
    * @param taskId - The task ID (for TaskRepository cache)
    * @param examplesList - The new examples list
-   * @param updateSelectedNode - Callback to update the node in taskTreeRef
+   * @param updateSelectedNode - Callback to update the node in Zustand store
    * @returns void (updates are applied via callbacks)
    */
   static setExamplesForNode(
@@ -45,7 +45,7 @@ export class ExamplesPersistenceService {
       console.warn('[ExamplesPersistence] No taskId provided, skipping TaskRepository sync');
     }
 
-    // Step 1: Update node in taskTreeRef via updateSelectedNode
+    // Step 1: Update node in Zustand store via updateSelectedNode
     updateSelectedNode((prev: any) => {
       if (!prev) return prev;
 

@@ -54,11 +54,12 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
     }
   }, [instanceKey]);
 
-  // ✅ FIX STRUTTURALE: Store è solo un sink, non un anello di ritorno
-  // L'editor vive su taskTree locale, lo store è solo un mirror
+  // ✅ FASE 3: Store è single source of truth
   const { setTaskTree: setTaskTreeInStore } = useTaskTreeStore();
+  const taskTreeFromStore = useTaskTreeStore((state) => state.taskTree);
 
-  // ✅ TaskTree state (sostituisce ddt) - Keep for backward compatibility
+  // ✅ FASE 3: taskTree locale mantenuto temporaneamente per backward compatibility
+  // TODO: Rimuovere dopo migrazione completa - ResponseEditor dovrebbe leggere solo dallo store
   const [taskTree, setTaskTree] = React.useState<TaskTree | null>(null);
   const [taskTreeLoading, setTaskTreeLoading] = React.useState(true);
 
@@ -94,14 +95,11 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
 
         // ✅ TaskTree caricato
         if (tree) {
-          // ✅ FIX STRUTTURALE: Aggiorna solo local state (editor vive su questo)
+          // ✅ FASE 3: Store è primary - aggiorna sempre lo store
+          setTaskTreeInStore(tree);
+          // ✅ FASE 3: Local state mantenuto temporaneamente per backward compatibility
           setTaskTree(tree);
-
-          // ✅ FIX STRUTTURALE: Popola store solo se non ancora inizializzato (solo una volta per istanza)
-          if (!initializedRef.current) {
-            setTaskTreeInStore(tree);
-            initializedRef.current = true;
-          }
+          initializedRef.current = true;
 
           console.log('[🔍 TaskTreeHostAdapter] ✅ TaskTree caricato', {
             taskId: fullTask.id,
@@ -123,23 +121,19 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
             storeInitialized: initializedRef.current
           });
         } else {
-          // ✅ FIX STRUTTURALE: Aggiorna solo local state
+          // ✅ FASE 3: Store è primary - aggiorna sempre lo store
+          setTaskTreeInStore(null);
+          // ✅ FASE 3: Local state mantenuto temporaneamente per backward compatibility
           setTaskTree(null);
-          // ✅ Popola store solo se non ancora inizializzato
-          if (!initializedRef.current) {
-            setTaskTreeInStore(null);
-            initializedRef.current = true;
-          }
+          initializedRef.current = true;
         }
       } catch (error) {
         console.error('[TaskTreeHostAdapter] Error loading TaskTree:', error);
-        // ✅ FIX STRUTTURALE: Aggiorna solo local state
+        // ✅ FASE 3: Store è primary - aggiorna sempre lo store
+        setTaskTreeInStore(null);
+        // ✅ FASE 3: Local state mantenuto temporaneamente per backward compatibility
         setTaskTree(null);
-        // ✅ Popola store solo se non ancora inizializzato
-        if (!initializedRef.current) {
-          setTaskTreeInStore(null);
-          initializedRef.current = true;
-        }
+        initializedRef.current = true;
       } finally {
         setTaskTreeLoading(false);
       }
@@ -271,12 +265,10 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
       // Failed to extract variables from TaskTree
     }
 
-    // ✅ ARCHITETTURA ESPERTO: Aggiorna immediatamente taskTree per aggiornare i props
-    // ✅ FIX STRUTTURALE: Aggiorna solo local state (editor vive su questo)
-    setTaskTree(finalTaskTree);
-    // ✅ FIX STRUTTURALE: Aggiorna store solo se non ancora inizializzato (o se è un nuovo wizard)
-    // In questo caso, il wizard completa, quindi aggiorniamo sempre lo store
+    // ✅ FASE 3: Store è primary - aggiorna sempre lo store
     setTaskTreeInStore(finalTaskTree);
+    // ✅ FASE 3: Local state mantenuto temporaneamente per backward compatibility
+    setTaskTree(finalTaskTree);
     initializedRef.current = true; // ✅ Marca come inizializzato dopo wizard
   }, [instanceKey, currentProjectId, taskMeta.label, setTaskTreeInStore]);
 
