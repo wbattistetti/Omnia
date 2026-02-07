@@ -1,40 +1,16 @@
 import React from 'react';
-import { useTaskTreeManager } from '../../../context/DDTManagerContext';
 import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
 import { ContractUpdateDialog } from './ContractUpdateDialog';
 import EditorHeader from '../../common/EditorHeader';
 import TaskDragLayer from './TaskDragLayer';
-import { useNodeSelection } from './hooks/useNodeSelection';
-import { useResponseEditorToolbar } from './ResponseEditorToolbar';
 import { FontProvider, useFontContext } from '../../../context/FontContext';
-import { useAIProvider } from '../../../context/AIProviderContext';
-import { useDDTTranslations } from '../../../hooks/useDDTTranslations';
 import { ToolbarButton } from '../../../dock/types';
-import { useResponseEditorSideEffects } from './hooks/useResponseEditorSideEffects';
-import { useResponseEditorState } from './hooks/useResponseEditorState';
-import { useResponseEditorInitialization } from './hooks/useResponseEditorInitialization';
-import { useTaskTreeVersion, useTaskTreeFromStore } from './core/state';
 import { ResponseEditorContent } from './components/ResponseEditorContent';
 import { ResponseEditorNormalLayout } from './components/ResponseEditorNormalLayout';
-import { useSidebarHandlers } from './hooks/useSidebarHandlers';
-import { useUpdateSelectedNode } from './modules/ResponseEditor/core/node/useUpdateSelectedNode';
-import { useResponseEditorClose } from './hooks/useResponseEditorClose';
-import { useNodeLoading } from './hooks/useNodeLoading';
-import { usePanelModes } from './hooks/usePanelModes';
-import { useParserHandlers } from './hooks/useParserHandlers';
-import { useProfileUpdate } from './hooks/useProfileUpdate';
-import { useNodeFinder } from './hooks/useNodeFinder';
-import { useIntentMessagesHandler } from './hooks/useIntentMessagesHandler';
-import { useSidebarResize } from './hooks/useSidebarResize';
-import { useTaskTreeDerived } from './hooks/useTaskTreeDerived';
-import { useResponseEditorDerived } from './hooks/useResponseEditorDerived';
-import { useContractUpdateDialog } from './hooks/useContractUpdateDialog';
-import { useResponseEditorRefs } from './hooks/useResponseEditorRefs';
-import { usePanelWidths } from './hooks/usePanelWidths';
-import { getStepsAsArray, getStepsForNode, getTaskMeta } from './utils/responseEditorUtils';
 import { ServiceUnavailableModal } from './components/ServiceUnavailableModal';
 import { GeneralizabilityBanner } from './components/GeneralizabilityBanner';
-import { useGeneralizabilityCheck } from './hooks/useGeneralizabilityCheck';
+import { useResponseEditorCore } from './hooks/useResponseEditorCore';
+import { useResponseEditorHandlers } from './hooks/useResponseEditorHandlers';
 
 import type { TaskMeta } from '../EditorHost/types';
 import type { Task } from '../../../types/taskTypes';
@@ -43,310 +19,131 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   const pdUpdate = useProjectDataUpdate();
   const currentProjectId = pdUpdate?.getCurrentProjectId() || null;
   const { combinedClass } = useFontContext();
-  const { provider: selectedProvider, model: selectedModel } = useAIProvider();
 
-  const state = useResponseEditorState();
-  const {
-    serviceUnavailable,
-    setServiceUnavailable,
-    showContractDialog,
-    setShowContractDialog,
-    pendingContractChange,
-    setPendingContractChange,
-    escalationTasks,
-    setEscalationTasks,
-    pendingEditorOpen,
-    setPendingEditorOpen,
-    showSynonyms,
-    setShowSynonyms,
-    showMessageReview,
-    setShowMessageReview,
-    selectedIntentIdForTraining,
-    setSelectedIntentIdForTraining,
-    showContractWizard,
-    setShowContractWizard,
-    selectedNode,
-    setSelectedNode,
-    selectedNodePath,
-    setSelectedNodePath,
-    taskTreeVersion: taskTreeVersionFromState,
-    setTaskTreeVersion,
-    leftPanelMode,
-    setLeftPanelMode,
-    testPanelMode,
-    setTestPanelMode,
-    tasksPanelMode,
-    setTasksPanelMode,
-    sidebarManualWidth,
-    setSidebarManualWidth,
-    isDraggingSidebar,
-    setIsDraggingSidebar,
-    draggingPanel,
-    setDraggingPanel,
-  } = state;
-
-  const {
-    prevInstanceRef,
-    contractChangeRef,
-    rootRef,
-    preAssembledTaskTreeCache,
-    wizardOwnsDataRef,
-    sidebarStartWidthRef,
-    sidebarStartXRef,
-    tasksStartWidthRef,
-    tasksStartXRef,
-  } = useResponseEditorRefs({ taskTree, task });
-
-  // ✅ FASE 2.3: Use Zustand store version (no sync needed - store is single source of truth)
-  const taskTreeVersionFromStore = useTaskTreeVersion();
-  const taskTreeVersion = taskTreeVersionFromStore || taskTreeVersionFromState;
-
-  const { replaceSelectedTaskTree: replaceSelectedTaskTreeFromContext } = useTaskTreeManager();
-  const replaceSelectedTaskTree = React.useCallback((taskTree: any) => {
-    replaceSelectedTaskTreeFromContext(taskTree);
-  }, [replaceSelectedTaskTreeFromContext]);
-  const {
-    selectedMainIndex,
-    selectedSubIndex,
-    selectedRoot,
-    sidebarRef,
-    setSelectedMainIndex,
-    setSelectedSubIndex,
-    setSelectedRoot,
-    handleSelectMain,
-    handleSelectSub,
-    handleSelectAggregator,
-  } = useNodeSelection(0);
-  const findAndSelectNodeById = useNodeFinder({
-    handleSelectMain,
-    handleSelectSub,
-  });
-
-  const {
-    handleParserCreate,
-    handleParserModify,
-    handleEngineChipClick,
-  } = useParserHandlers({
-    findAndSelectNodeById,
-    setShowSynonyms,
-    setPendingEditorOpen,
-  });
-
-  const taskMeta = getTaskMeta(task);
-  const handleIntentMessagesComplete = useIntentMessagesHandler({
-    task: taskMeta,
+  // ✅ FASE 3.1: Use composite hooks to reduce complexity
+  const core = useResponseEditorCore({
     taskTree,
-    currentProjectId,
+    task,
+    isTaskTreeLoading,
     onWizardComplete,
-    replaceSelectedTaskTree,
+    currentProjectId,
+    tabId,
+    setDockTree,
   });
 
-  // ✅ FASE 2.3: Use store as source for translations
-  const taskTreeFromStore = useTaskTreeFromStore();
-  // ✅ taskTreeVersionFromStore già dichiarato sopra alla riga 101
-
-  // ✅ CRITICAL: Use prop as fallback if store is not yet populated
-  // This ensures translations are loaded even if store is not yet populated
-  // Store will be populated by DDTHostAdapter, but we need translations immediately
-  const taskTreeForTranslations = taskTreeFromStore || taskTree;
-
-  // ✅ DEBUG: Log per capire se store è popolato (solo se debug attivo)
-  React.useEffect(() => {
-    if (typeof localStorage !== 'undefined' && localStorage.getItem('debug.translations') === '1') {
-      console.log('[ResponseEditor] Translations source check', {
-        hasTaskTreeFromStore: !!taskTreeFromStore,
-        hasTaskTreeProp: !!taskTree,
-        taskTreeFromStoreId: taskTreeFromStore?.id,
-        taskTreePropId: taskTree?.id,
-        taskTreeVersion: taskTreeVersionFromStore,
-        nodesCount: taskTreeFromStore?.nodes?.length || 0,
-        usingStore: !!taskTreeFromStore,
-        usingProp: !taskTreeFromStore && !!taskTree
-      });
-    }
-  }, [taskTreeFromStore, taskTree, taskTreeVersionFromStore]);
-
-  // ✅ FASE 2.3: Pass taskTreeVersion to force recalculation when store is populated
-  const localTranslations = useDDTTranslations(taskTreeForTranslations, task, taskTreeVersionFromStore);
-
   const {
+    state,
+    refs,
+    taskMeta,
+    localTranslations,
     mainList,
     isAggregatedAtomic,
-    introduction,
-  } = useTaskTreeDerived({
-    isTaskTreeLoading,
-  });
-
-  // ✅ Check generalizability
-  const {
-    isGeneralizable,
-    generalizationReason,
-    isLoading: isCheckingGeneralizability,
-  } = useGeneralizabilityCheck(
-    taskTree,
-    task?.label,
-    currentProjectId
-  );
-  const {
-    rightWidth,
-    setRightWidth,
-    testPanelWidth,
-    setTestPanelWidth,
-    tasksPanelWidth,
-    setTasksPanelWidth,
-  } = usePanelWidths();
-
-  const sidebarHandlers = useSidebarHandlers({
-    taskTree,
-    replaceSelectedTaskTree,
-  });
-
-  const handleSidebarResizeStart = useSidebarResize({
-    sidebarRef,
-    sidebarStartWidthRef,
-    sidebarStartXRef,
-    setIsDraggingSidebar,
-  });
-
-  const {
     needsIntentMessages,
     taskType,
     headerTitle,
     icon: Icon,
     iconColor,
     rightMode,
-  } = useResponseEditorDerived({
-    task: taskMeta,
-    taskTree,
-    mainList,
-    leftPanelMode,
-    testPanelMode,
-  });
+    isGeneralizable,
+    generalizationReason,
+    nodeSelection,
+    handleParserCreate,
+    handleParserModify,
+    handleEngineChipClick,
+    updateSelectedNode,
+    handleProfileUpdate,
+    handleIntentMessagesComplete,
+    initialization,
+    panelWidths,
+  } = core;
 
   const {
-    replaceSelectedTaskTree: replaceSelectedTaskTreeFromInit,
+    rootRef,
+  } = refs;
+
+  const {
+    selectedMainIndex,
+    selectedSubIndex,
+    selectedRoot,
+    sidebarRef,
+    handleSelectMain,
+    handleSelectSub,
+    handleSelectAggregator,
+  } = nodeSelection;
+
+  const {
     handleGenerateAll,
     handleContractWizardClose,
     handleContractWizardNodeUpdate,
     handleContractWizardComplete,
-    saveLeftPanelMode,
-    saveTestPanelMode,
-    saveTasksPanelMode,
-    saveRightMode,
     toolbarButtons,
-  } = useResponseEditorInitialization({
-    task: taskMeta,
-    taskTree,
+    replaceSelectedTaskTree: replaceSelectedTaskTreeFromInit,
+  } = initialization;
+
+  const {
+    rightWidth,
+    setRightWidth,
+    testPanelWidth,
+    setTestPanelWidth,
+    tasksPanelWidth,
+    setTasksPanelWidth,
+  } = panelWidths;
+
+  const {
+    serviceUnavailable,
+    setServiceUnavailable,
+    showContractDialog,
+    pendingContractChange,
+    escalationTasks,
     showContractWizard,
-    setShowContractWizard,
-    setTaskTreeVersion,
-    setLeftPanelMode,
-    setTestPanelMode,
-    setTasksPanelMode,
-    replaceSelectedTaskTree: replaceSelectedTaskTree,
+    selectedNode,
+    selectedNodePath,
+    isDraggingSidebar,
+    draggingPanel,
+    setDraggingPanel,
+    sidebarManualWidth,
     leftPanelMode,
     testPanelMode,
     tasksPanelMode,
     showSynonyms,
-    setShowSynonyms,
     showMessageReview,
-    setShowMessageReview,
-    rightMode,
-    rightWidth,
-    setRightWidth,
-    testPanelWidth,
-    setTestPanelWidth,
-    tasksPanelWidth,
-    setTasksPanelWidth,
-  });
-
-  const handleEditorClose = useResponseEditorClose({
-    contractChangeRef,
-    setPendingContractChange,
-    setShowContractDialog,
-    selectedNode,
-    selectedNodePath,
-    selectedRoot,
-    task,
-    currentProjectId,
-    tabId,
-    setDockTree,
-    onClose,
-    replaceSelectedTaskTree,
-  });
-
-  useNodeLoading({
-    selectedMainIndex,
-    selectedSubIndex,
-    selectedRoot,
-    introduction,
-    task,
-    setSelectedNode,
-    setSelectedNodePath,
-    getStepsForNode,
-    getStepsAsArray,
-  });
-
-  const updateSelectedNode = useUpdateSelectedNode({
-    selectedNodePath,
-    selectedRoot,
-    task,
-    currentProjectId,
-    tabId,
-    setDockTree,
-    setSelectedNode,
-    setTaskTreeVersion,
-  });
-
-  const handleProfileUpdate = useProfileUpdate({ updateSelectedNode });
-  const contractDialogHandlers = useContractUpdateDialog({
-    showContractDialog,
-    setShowContractDialog,
-    pendingContractChange,
-    setPendingContractChange,
-    contractChangeRef,
-    tabId,
-    setDockTree,
-    onClose,
-  });
-
-  useResponseEditorSideEffects({
-    task,
-    taskTree,
-    currentProjectId,
-    setTaskTreeVersion,
-    prevInstanceRef,
-    setServiceUnavailable,
-    setEscalationTasks,
+    selectedIntentIdForTraining,
+    setSelectedIntentIdForTraining,
     pendingEditorOpen,
-    showSynonyms,
-    selectedNode,
-    setPendingEditorOpen,
-    replaceSelectedTaskTree,
-    sidebarRef,
-    isDraggingSidebar,
-    setIsDraggingSidebar,
-    sidebarStartWidthRef,
-    sidebarStartXRef,
-    setSidebarManualWidth,
-    handleEditorClose,
-    registerOnClose,
-    draggingPanel,
-    setDraggingPanel,
-    rightWidth,
-    setRightWidth,
-    testPanelWidth,
-    setTestPanelWidth,
-    tasksPanelWidth,
-    setTasksPanelWidth,
-    tasksPanelMode,
-    testPanelMode,
+  } = state;
+
+  const {
+    contractChangeRef,
     tasksStartWidthRef,
     tasksStartXRef,
+  } = refs;
+
+  // ✅ FASE 3.1: Use composite handlers hook
+  const handlers = useResponseEditorHandlers({
+    taskTree,
+    task,
+    currentProjectId,
+    state,
+    refs,
+    nodeSelection,
+    panelWidths,
+    initialization,
+    updateSelectedNode,
+    handleProfileUpdate,
+    tabId,
+    setDockTree,
+    onClose,
     hideHeader,
     onToolbarUpdate,
-    toolbarButtons,
+    registerOnClose,
   });
+
+  const {
+    sidebarHandlers,
+    handleSidebarResizeStart,
+    handleEditorClose,
+    contractDialogHandlers,
+  } = handlers;
 
   return (
     <div ref={rootRef} className={combinedClass} style={{ background: '#0b0f17', display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1, minHeight: 0, height: '100%' }}>
@@ -442,7 +239,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
               setTasksPanelWidth={setTasksPanelWidth}
               tasksStartWidthRef={tasksStartWidthRef}
               tasksStartXRef={tasksStartXRef}
-              replaceSelectedTaskTree={replaceSelectedTaskTree}
+              replaceSelectedTaskTree={replaceSelectedTaskTreeFromInit}
             />
           }
         />
