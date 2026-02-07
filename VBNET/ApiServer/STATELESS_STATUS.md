@@ -144,7 +144,7 @@ Request → ApiServer Instance 1
     Session locale (non condivisa)
 ```
 
-**Problema**: 
+**Problema**:
 - ❌ Solo 1 istanza può gestire una sessione
 - ❌ Se l'istanza cade, la sessione si perde
 - ❌ Non scalabile orizzontalmente

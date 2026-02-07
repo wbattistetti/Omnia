@@ -40,8 +40,26 @@ Module Program
             Dim logger As ApiServer.Interfaces.ILogger = New ApiServer.Logging.StdoutLogger()
             builder.Services.AddSingleton(Of ApiServer.Interfaces.ILogger)(logger)
 
-            ' Registra ISessionStorage come singleton (default: InMemory)
+            ' ✅ FASE 4: Configura Redis (leggi da appsettings.json)
+            ' Per ora usa valori di default, configurazione sarà letta quando RedisSessionStorage è completo
+            Dim redisConnectionString = "localhost:6379"
+            Dim redisKeyPrefix = "omnia:"
+            Dim sessionTTL As Integer = 3600
+
+            ' TODO: Leggere da appsettings.json quando necessario
+            ' Dim redisSection = builder.Configuration.GetSection("Redis")
+            ' If redisSection IsNot Nothing Then
+            '     redisConnectionString = If(redisSection("ConnectionString"), "localhost:6379")
+            '     redisKeyPrefix = If(redisSection("KeyPrefix"), "omnia:")
+            '     Dim ttlStr = If(redisSection("SessionTTL"), "3600")
+            '     Integer.TryParse(ttlStr, sessionTTL)
+            ' End If
+
+            ' Per ora usa InMemory, ma configurazione Redis è pronta
+            ' TODO FASE 4: Quando RedisSessionStorage è completo, cambiare qui:
+            ' Dim storage As ApiServer.Interfaces.ISessionStorage = New ApiServer.SessionStorage.RedisSessionStorage(redisConnectionString, redisKeyPrefix, sessionTTL)
             Dim storage As ApiServer.Interfaces.ISessionStorage = New ApiServer.SessionStorage.InMemorySessionStorage()
+
             builder.Services.AddSingleton(Of ApiServer.Interfaces.ISessionStorage)(storage)
 
             ' Configura SessionManager con i servizi registrati
