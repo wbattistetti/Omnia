@@ -100,6 +100,11 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     showContractDialog,
     pendingContractChange,
     contractDialogHandlers,
+    // ✅ NEW: Wizard states
+    needsTaskContextualization,
+    needsTaskBuilder,
+    contextualizationTemplateId,
+    taskLabel,
   } = editor;
 
   return (
@@ -152,6 +157,23 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
           handleContractWizardNodeUpdate={handleContractWizardNodeUpdate}
           handleContractWizardComplete={handleContractWizardComplete}
           onIntentMessagesComplete={handleIntentMessagesComplete}
+          // ✅ NEW: Wizard props
+          needsTaskContextualization={needsTaskContextualization}
+          needsTaskBuilder={needsTaskBuilder}
+          taskLabel={taskLabel}
+          templateId={contextualizationTemplateId || undefined}
+          onTaskContextualizationComplete={(contextualizedTaskTree) => {
+            // TODO: Implement in Phase 13 - save contextualized task tree
+            console.log('[ResponseEditorLayout] Task contextualization complete', contextualizedTaskTree);
+          }}
+          onTaskBuilderComplete={(taskTree, messages) => {
+            // TODO: Implement in Phase 15 - save task tree from wizard
+            console.log('[ResponseEditorLayout] Task builder complete', taskTree, messages);
+          }}
+          onTaskBuilderCancel={() => {
+            // TODO: Implement in Phase 10 - cancel wizard
+            console.log('[ResponseEditorLayout] Task builder cancelled');
+          }}
           normalEditorLayout={
             <ResponseEditorNormalLayout
               mainList={mainList}

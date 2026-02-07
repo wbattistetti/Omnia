@@ -113,6 +113,14 @@ export interface UseResponseEditorResult {
   tasksStartXRef: React.MutableRefObject<number>;
   replaceSelectedTaskTree: (taskTree: TaskTree) => void;
   escalationTasks: any[];
+
+  // ✅ NEW: Wizard states
+  needsTaskContextualization: boolean;
+  needsTaskBuilder: boolean;
+  isContextualizing: boolean;
+  contextualizationTemplateId: string | null;
+  taskLabel: string;
+  wizardMode: 'library' | 'ai' | null;
 }
 
 /**
@@ -257,6 +265,13 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     draggingPanel,
     setDraggingPanel,
     escalationTasks,
+    // ✅ NEW: Wizard states
+    needsTaskContextualization,
+    needsTaskBuilder,
+    isContextualizing,
+    contextualizationTemplateId,
+    taskLabel,
+    wizardMode,
   } = state;
 
   return {
@@ -330,5 +345,12 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     tasksStartXRef,
     replaceSelectedTaskTree: replaceSelectedTaskTreeFromInit,
     escalationTasks,
+    // ✅ NEW: Wizard states
+    needsTaskContextualization,
+    needsTaskBuilder,
+    isContextualizing,
+    contextualizationTemplateId,
+    taskLabel,
+    wizardMode,
   };
 }

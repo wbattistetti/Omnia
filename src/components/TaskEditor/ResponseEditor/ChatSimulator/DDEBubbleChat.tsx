@@ -12,13 +12,23 @@ export default function DDEBubbleChat({
   projectId,
   translations,
   taskTree,
-  onUpdateTaskTree
+  onUpdateTaskTree,
+  // ✅ NEW: Preview mode props (optional, default = 'interactive')
+  mode = 'interactive',
+  previewMessages,
+  activeScenario,
+  onScenarioChange,
 }: {
   task: Task | null;
   projectId: string | null;
   translations?: Record<string, string>;
   taskTree?: TaskTree | null;
   onUpdateTaskTree?: (updater: (taskTree: any) => any) => void;
+  // ✅ NEW: Preview mode props
+  mode?: 'interactive' | 'preview';
+  previewMessages?: Message[];
+  activeScenario?: 'happy' | 'partial' | 'error';
+  onScenarioChange?: (scenario: 'happy' | 'partial' | 'error') => void;
 }) {
   const { combinedClass, fontSize } = useFontContext();
   const [messages, setMessages] = React.useState<Message[]>([]);
@@ -59,10 +69,29 @@ export default function DDEBubbleChat({
     onUpdateDDT: onUpdateTaskTree as any // TODO: Update when useMessageEditing is updated
   });
 
+  // ✅ NEW: In preview mode, use previewMessages instead of SSE
+  const displayMessages = mode === 'preview' && previewMessages ? previewMessages : messages;
+
   // Connect to backend via SSE
   // ❌ CRITICAL: NO frontend dialogue logic - ALL messages come from backend via SSE
   // If backend is not reachable, NO messages should be shown, NO dialogue should start
+  // ✅ NEW: Skip SSE in preview mode
   React.useEffect(() => {
+    // ✅ NEW: Preview mode - no SSE, use previewMessages
+    if (mode === 'preview') {
+      // Clear any existing SSE state
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      setBackendError(null);
+      setIsWaitingForInput(false);
+      sessionStartingRef.current = false;
+      lastSessionKeyRef.current = null;
+      return;
+    }
+
+    // ✅ EXISTING: Interactive mode - normal behavior (unchanged)
     if (!task || !projectId || !task.id) {
       // Clear messages when task is not available - NO frontend logic
       setMessages([]);
@@ -336,7 +365,7 @@ export default function DDEBubbleChat({
         }).catch(() => { });
       }
     };
-  }, [task?.id, projectId]);
+  }, [task?.id, projectId, mode]); // ✅ Added mode dependency
 
   // Clear input when sent text appears as a user message
   React.useEffect(() => {
@@ -446,8 +475,42 @@ export default function DDEBubbleChat({
           </div>
         )}
       </div>
+      {/* ✅ NEW: Tabs for preview mode */}
+      {mode === 'preview' && activeScenario && onScenarioChange && (
+        <div
+          style={{
+            display: 'flex',
+            borderBottom: '1px solid #334155',
+            backgroundColor: '#1e293b',
+          }}
+        >
+          {(['happy', 'partial', 'error'] as const).map((scenario) => (
+            <button
+              key={scenario}
+              onClick={() => onScenarioChange(scenario)}
+              style={{
+                flex: 1,
+                padding: '12px 16px',
+                backgroundColor: activeScenario === scenario ? '#0f172a' : 'transparent',
+                color: activeScenario === scenario ? '#e2e8f0' : '#94a3b8',
+                border: 'none',
+                borderBottom: activeScenario === scenario ? '2px solid #3b82f6' : '2px solid transparent',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: activeScenario === scenario ? 600 : 400,
+                transition: 'all 0.2s',
+              }}
+            >
+              {scenario === 'happy' && 'Happy Path'}
+              {scenario === 'partial' && 'Frasi Parziali'}
+              {scenario === 'error' && 'Errori'}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className={`flex-1 overflow-y-auto p-4 space-y-3 ${combinedClass}`} ref={scrollContainerRef}>
-        {messages.map((m) => {
+        {displayMessages.map((m) => {
           if (m.type === 'user') {
             return (
               <UserMessage
@@ -490,8 +553,9 @@ export default function DDEBubbleChat({
 
           return null;
         })}
-        {/* Input field */}
-        <div className={`bg-white border border-gray-300 rounded-lg p-2 shadow-sm max-w-xs lg:max-w-md w-full mt-3 ${combinedClass}`}>
+        {/* ✅ NEW: Input field - hidden in preview mode */}
+        {mode === 'interactive' && (
+          <div className={`bg-white border border-gray-300 rounded-lg p-2 shadow-sm max-w-xs lg:max-w-md w-full mt-3 ${combinedClass}`}>
           <style dangerouslySetInnerHTML={{
             __html: `
             .chat-simulator-input-placeholder::placeholder {
@@ -524,7 +588,8 @@ export default function DDEBubbleChat({
             disabled={!isWaitingForInput}
             autoFocus
           />
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

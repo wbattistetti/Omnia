@@ -142,6 +142,21 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     tasksPanelMode,
     setTasksPanelMode,
     sidebarManualWidth,
+    // ✅ NEW: Wizard states
+    needsTaskContextualization,
+    setNeedsTaskContextualization,
+    needsTaskBuilder,
+    setNeedsTaskBuilder,
+    isContextualizing,
+    setIsContextualizing,
+    contextualizationTemplateId,
+    setContextualizationTemplateId,
+    taskLabel,
+    setTaskLabel,
+    wizardMode,
+    setWizardMode,
+    contextualizationAbortController,
+    setContextualizationAbortController,
     setSidebarManualWidth,
     isDraggingSidebar,
     setIsDraggingSidebar,
@@ -170,6 +185,25 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
 
   // Task meta
   const taskMeta = getTaskMeta(task);
+
+  // ✅ NEW: Read wizard flags from taskMeta (if present)
+  // These flags are set when opening ResponseEditor from NodeRow
+  React.useEffect(() => {
+    if (taskMeta) {
+      // Read flags from taskMeta (set by NodeRow when opening ResponseEditor)
+      const needsContextualization = (taskMeta as any).needsTaskContextualization === true;
+      const needsBuilder = (taskMeta as any).needsTaskBuilder === true;
+      const contextualizationTemplateId = (taskMeta as any).contextualizationTemplateId || null;
+      const taskLabelFromMeta = (taskMeta as any).taskLabel || taskMeta.label || '';
+
+      if (needsContextualization || needsBuilder) {
+        setNeedsTaskContextualization(needsContextualization);
+        setNeedsTaskBuilder(needsBuilder);
+        setContextualizationTemplateId(contextualizationTemplateId);
+        setTaskLabel(taskLabelFromMeta);
+      }
+    }
+  }, [taskMeta, setNeedsTaskContextualization, setNeedsTaskBuilder, setContextualizationTemplateId, setTaskLabel]);
 
   // Replace selected task tree
   const { replaceSelectedTaskTree: replaceSelectedTaskTreeFromContext } = useTaskTreeManager();
@@ -286,6 +320,13 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     setTestPanelWidth,
     tasksPanelWidth,
     setTasksPanelWidth,
+    // ✅ NEW: Wizard states
+    taskMeta,
+    contextualizationAbortController,
+    setContextualizationAbortController,
+    setNeedsTaskContextualization,
+    setNeedsTaskBuilder,
+    setWizardMode,
   });
   const {
     replaceSelectedTaskTree: replaceSelectedTaskTreeFromInit,
@@ -380,5 +421,12 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     initialization,
     panelModes,
     panelWidths,
+    // ✅ NEW: Wizard states
+    needsTaskContextualization,
+    needsTaskBuilder,
+    isContextualizing,
+    contextualizationTemplateId,
+    taskLabel,
+    wizardMode,
   };
 }

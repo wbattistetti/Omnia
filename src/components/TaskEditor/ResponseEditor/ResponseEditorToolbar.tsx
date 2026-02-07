@@ -1,5 +1,5 @@
 import React from 'react';
-import { Undo2, Redo2, MessageSquare, Rocket, BookOpen, List, CheckSquare, Sparkles } from 'lucide-react';
+import { Undo2, Redo2, MessageSquare, Rocket, BookOpen, List, CheckSquare, Sparkles, Wand2 } from 'lucide-react';
 import { RightPanelMode } from './RightPanel';
 
 interface ResponseEditorToolbarProps {
@@ -22,6 +22,9 @@ interface ResponseEditorToolbarProps {
   onTestPanelWidthChange?: (width: number) => void;
   tasksPanelWidth?: number;
   onTasksPanelWidthChange?: (width: number) => void;
+  // ✅ NEW: Wizard handlers
+  onChooseFromLibrary?: () => void;
+  onGenerateNewTask?: () => void;
 }
 
 /**
@@ -48,6 +51,9 @@ export function useResponseEditorToolbar({
   onTestPanelWidthChange,
   tasksPanelWidth = 360,
   onTasksPanelWidthChange,
+  // ✅ NEW: Wizard handlers
+  onChooseFromLibrary,
+  onGenerateNewTask,
 }: ResponseEditorToolbarProps) {
   // ✅ CRITICAL: Hooks devono essere chiamati PRIMA di qualsiasi return condizionale
   // ✅ Test è un toggle indipendente per mostrare/nascondere il pannello debugger
@@ -229,6 +235,25 @@ export function useResponseEditorToolbar({
       onClick: handleTasksClick,
       title: "View and manage available tasks for the dialogue flow.",
       active: tasksPanelMode === 'actions'
+    },
+    // ✅ NEW: Wizard buttons (always visible)
+    {
+      icon: <BookOpen size={16} />,
+      label: "Scegli dalla libreria",
+      onClick: onChooseFromLibrary || (() => {
+        console.warn('[Toolbar] onChooseFromLibrary handler not provided');
+      }),
+      title: "Scegli un task dalla libreria di template predefiniti",
+      active: false
+    },
+    {
+      icon: <Wand2 size={16} />,
+      label: "Genera nuovo task",
+      onClick: onGenerateNewTask || (() => {
+        console.warn('[Toolbar] onGenerateNewTask handler not provided');
+      }),
+      title: "Genera un nuovo task usando AI",
+      active: false
     },
   ];
 }

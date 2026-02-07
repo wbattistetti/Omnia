@@ -97,6 +97,22 @@ export interface ResponseEditorState {
   // Splitter drag state
   draggingPanel: 'left' | 'test' | 'tasks' | 'shared' | null;
   setDraggingPanel: React.Dispatch<React.SetStateAction<'left' | 'test' | 'tasks' | 'shared' | null>>;
+
+  // ✅ NEW: Wizard and contextualization states (opt-in, non-invasive)
+  needsTaskContextualization: boolean;
+  setNeedsTaskContextualization: React.Dispatch<React.SetStateAction<boolean>>;
+  needsTaskBuilder: boolean;
+  setNeedsTaskBuilder: React.Dispatch<React.SetStateAction<boolean>>;
+  isContextualizing: boolean;
+  setIsContextualizing: React.Dispatch<React.SetStateAction<boolean>>;
+  contextualizationTemplateId: string | null;
+  setContextualizationTemplateId: React.Dispatch<React.SetStateAction<string | null>>;
+  taskLabel: string;
+  setTaskLabel: React.Dispatch<React.SetStateAction<string>>;
+  wizardMode: 'library' | 'ai' | null;
+  setWizardMode: React.Dispatch<React.SetStateAction<'library' | 'ai' | null>>;
+  contextualizationAbortController: AbortController | null;
+  setContextualizationAbortController: React.Dispatch<React.SetStateAction<AbortController | null>>;
 }
 
 /**
@@ -156,6 +172,15 @@ export function useResponseEditorState(): ResponseEditorState {
   // Splitter drag state
   const [draggingPanel, setDraggingPanel] = useState<'left' | 'test' | 'tasks' | 'shared' | null>(null);
 
+  // ✅ NEW: Wizard and contextualization states (opt-in, default false)
+  const [needsTaskContextualization, setNeedsTaskContextualization] = useState(false);
+  const [needsTaskBuilder, setNeedsTaskBuilder] = useState(false);
+  const [isContextualizing, setIsContextualizing] = useState(false);
+  const [contextualizationTemplateId, setContextualizationTemplateId] = useState<string | null>(null);
+  const [taskLabel, setTaskLabel] = useState('');
+  const [wizardMode, setWizardMode] = useState<'library' | 'ai' | null>(null);
+  const [contextualizationAbortController, setContextualizationAbortController] = useState<AbortController | null>(null);
+
   return {
     // Service unavailable
     serviceUnavailable,
@@ -212,5 +237,21 @@ export function useResponseEditorState(): ResponseEditorState {
     // Splitter drag state
     draggingPanel,
     setDraggingPanel,
+
+    // ✅ NEW: Wizard and contextualization states
+    needsTaskContextualization,
+    setNeedsTaskContextualization,
+    needsTaskBuilder,
+    setNeedsTaskBuilder,
+    isContextualizing,
+    setIsContextualizing,
+    contextualizationTemplateId,
+    setContextualizationTemplateId,
+    taskLabel,
+    setTaskLabel,
+    wizardMode,
+    setWizardMode,
+    contextualizationAbortController,
+    setContextualizationAbortController,
   };
 }
