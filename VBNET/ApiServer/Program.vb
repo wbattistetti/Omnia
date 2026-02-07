@@ -51,7 +51,14 @@ Module Program
             ' Configura TaskSessionHandlers con logger
             ApiServer.Handlers.TaskSessionHandlers.ConfigureLogger(logger)
 
-            Console.WriteLine("✅ [FASE 2] Dependency Injection configured: ILogger and ISessionStorage")
+            ' ✅ FASE 3: Usa logger invece di Console.WriteLine (dopo configurazione DI)
+            logger.LogInfo("Dependency Injection configured", New With {
+                .phase = "FASE 2",
+                .services = New With {
+                    .logger = "ILogger",
+                    .sessionStorage = "ISessionStorage"
+                }
+            })
 
             ' Add services
             builder.Services.AddControllers().AddNewtonsoftJson(Sub(options)
@@ -71,11 +78,10 @@ Module Program
 
             ' Configure pipeline
             app.UseCors()
-            Console.WriteLine("🔥 Registering ExceptionLoggingMiddleware...")
-            Console.Out.Flush()
+            ' ✅ FASE 3: Usa logger invece di Console.WriteLine
+            logger.LogInfo("Registering ExceptionLoggingMiddleware")
             app.UseMiddleware(Of ApiServer.Middleware.ExceptionLoggingMiddleware)()
-            Console.WriteLine("✅ ExceptionLoggingMiddleware registered")
-            Console.Out.Flush()
+            logger.LogInfo("ExceptionLoggingMiddleware registered")
 
             ' Add global exception handler
             app.UseExceptionHandler(Sub(appBuilder)
@@ -83,31 +89,28 @@ Module Program
                                                            Dim exceptionHandlerPathFeature = context.Features.Get(Of Microsoft.AspNetCore.Diagnostics.IExceptionHandlerPathFeature)()
                                                            Dim ex = exceptionHandlerPathFeature?.Error
                                                            If ex IsNot Nothing Then
-                                                               Console.WriteLine("═══════════════════════════════════════════════════════════════")
-                                                               Console.WriteLine("❌ [GlobalExceptionHandler] UNHANDLED EXCEPTION")
-                                                               Console.WriteLine($"   Path: {context.Request.Path}")
-                                                               Console.WriteLine($"   Method: {context.Request.Method}")
-                                                               Console.WriteLine($"   Type: {ex.GetType().FullName}")
-                                                               Console.WriteLine($"   Message: {ex.Message}")
-                                                               Console.WriteLine($"   StackTrace: {ex.StackTrace}")
-
-                                                               If ex.InnerException IsNot Nothing Then
-                                                                   Console.WriteLine("   ── Inner Exception ──")
-                                                                   Console.WriteLine($"   Type: {ex.InnerException.GetType().FullName}")
-                                                                   Console.WriteLine($"   Message: {ex.InnerException.Message}")
-                                                                   Console.WriteLine($"   StackTrace: {ex.InnerException.StackTrace}")
-                                                               End If
-
-                                                               Dim jsonEx = TryCast(ex, JsonSerializationException)
-                                                               If jsonEx IsNot Nothing Then
-                                                                   Console.WriteLine("   ── JSON Exception Details ──")
-                                                                   Console.WriteLine($"   JSON Path: {jsonEx.Path}")
-                                                                   Console.WriteLine($"   LineNumber: {jsonEx.LineNumber}")
-                                                                   Console.WriteLine($"   LinePosition: {jsonEx.LinePosition}")
-                                                               End If
-
-                                                               Console.WriteLine("═══════════════════════════════════════════════════════════════")
-                                                               Console.Out.Flush()
+                                                               ' ✅ FASE 3: Usa logger dal DI container (o fallback a Console)
+                                                               Try
+                                                                   Dim serviceProvider = context.RequestServices
+                                                                   Dim loggerFromDI = serviceProvider.GetService(Of ApiServer.Interfaces.ILogger)()
+                                                                   If loggerFromDI IsNot Nothing Then
+                                                                       loggerFromDI.LogError("GlobalExceptionHandler: Unhandled exception", ex, New With {
+                                                                           .path = context.Request.Path.ToString(),
+                                                                           .method = context.Request.Method,
+                                                                           .jsonException = If(TryCast(ex, JsonSerializationException) IsNot Nothing, New With {
+                                                                               .path = TryCast(ex, JsonSerializationException).Path,
+                                                                               .lineNumber = TryCast(ex, JsonSerializationException).LineNumber,
+                                                                               .linePosition = TryCast(ex, JsonSerializationException).LinePosition
+                                                                           }, Nothing)
+                                                                       })
+                                                                   Else
+                                                                       ' Fallback a Console se logger non disponibile
+                                                                       Console.WriteLine($"❌ [GlobalExceptionHandler] UNHANDLED EXCEPTION: {ex.GetType().FullName} - {ex.Message}")
+                                                                   End If
+                                                               Catch
+                                                                   ' Fallback assoluto: usa Console
+                                                                   Console.WriteLine($"❌ [GlobalExceptionHandler] UNHANDLED EXCEPTION: {ex.GetType().FullName} - {ex.Message}")
+                                                               End Try
                                                            End If
                                                            context.Response.StatusCode = 500
                                                            Await context.Response.WriteAsync("Internal Server Error")

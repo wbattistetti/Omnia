@@ -29,6 +29,9 @@
     <Compile Include="Logging\StdoutLogger.vb" />
     <Compile Include="SessionStorage\InMemorySessionStorage.vb" />
     <!-- Fine FASE 1 -->
+    <!-- FASE 3: Redis Session Storage (stub per futuro) -->
+    <Compile Include="SessionStorage\RedisSessionStorage.vb" />
+    <!-- Fine FASE 3 -->
     <Compile Include="Commands\CompileFlowCommand.vb" />
     <Compile Include="Commands\CompileDDTCommand.vb" />
     <Compile Include="Commands\RunDDTCommand.vb" />
