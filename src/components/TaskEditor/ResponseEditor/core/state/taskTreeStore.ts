@@ -3,13 +3,12 @@
  *
  * Centralized state management for TaskTree in ResponseEditor.
  *
- * ✅ FASE 2.1 - INFRASTRUCTURE: Store structure ready for migration
- * ⚠️ NOT YET USED: This store will replace taskTreeRef in future phases
+ * ✅ FASE 3 - MIGRATION COMPLETE: Store is now single source of truth
  *
- * This store will eventually replace:
- * - taskTreeRef (mutable ref used as state - anti-pattern)
- * - taskTree prop (duplicated state)
- * - taskTreeVersion (for forcing re-renders)
+ * This store has replaced:
+ * - ✅ taskTreeRef (mutable ref used as state - anti-pattern) - REMOVED
+ * - ✅ taskTree prop (duplicated state) - REMOVED
+ * - ✅ taskTreeVersion (for forcing re-renders) - Now managed by store
  *
  * Benefits:
  * - Single source of truth for TaskTree

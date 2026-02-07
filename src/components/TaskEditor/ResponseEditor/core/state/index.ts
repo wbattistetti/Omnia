@@ -3,9 +3,8 @@
  *
  * Centralized exports for all Zustand stores.
  *
- * ✅ FASE 2.1 - INFRASTRUCTURE: Store structure ready
- * ✅ FASE 2.2 - PARALLEL IMPLEMENTATION: Sync hooks ready
- * ⚠️ MIGRATION IN PROGRESS: Stores work in parallel with existing code
+ * ✅ FASE 3 - MIGRATION COMPLETE: Store is now single source of truth
+ * ✅ All hooks and components now use Zustand store instead of taskTreeRef
  */
 
 // TaskTree store
@@ -14,9 +13,8 @@ export {
   taskTreeSelectors,
 } from './taskTreeStore';
 
-// TaskTree sync hooks (for parallel implementation)
+// TaskTree store hooks
 export {
-  useTaskTreeSync,
   useTaskTreeFromStore,
   useTaskTreeVersion,
 } from './useTaskTreeSync';

@@ -8,7 +8,6 @@
  * - useServiceEvents: Service unavailable events
  * - useEscalationTasks: Escalation tasks loading
  * - usePendingEditorClear: Pending editor clearing
- * - useTaskTreeSync: TaskTree synchronization
  * - useTemplateSync: Template sync check
  * - useDebugFlags: Debug flags setup
  * - useProjectSave: Project save handler
@@ -22,7 +21,6 @@
 import { useServiceEvents } from './useServiceEvents';
 import { useEscalationTasks } from './useEscalationTasks';
 import { usePendingEditorClear } from './usePendingEditorClear';
-// ✅ FASE 2.3: useTaskTreeSync rimosso - non più necessario (store è single source of truth)
 import { useTemplateSync } from './useTemplateSync';
 import { useDebugFlags } from './useDebugFlags';
 import { useProjectSave } from './useProjectSave';
@@ -141,7 +139,6 @@ export function useResponseEditorSideEffects(props: UseResponseEditorSideEffects
   useServiceEvents({ setServiceUnavailable });
   useEscalationTasks({ setEscalationTasks });
   usePendingEditorClear({ pendingEditorOpen, showSynonyms, selectedNode, setPendingEditorOpen });
-  // ✅ FASE 2.3: useTaskTreeSync rimosso - non più necessario (store è single source of truth)
   useTemplateSync({ task, taskTree, currentProjectId, prevInstanceRef, replaceSelectedTaskTree });
   useDebugFlags();
   useProjectSave({ task, currentProjectId });

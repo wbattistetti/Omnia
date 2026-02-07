@@ -2,116 +2,20 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import {
-  useTaskTreeSync,
   useTaskTreeFromStore,
   useTaskTreeVersion,
 } from '../useTaskTreeSync';
 import { useTaskTreeStore } from '../taskTreeStore';
-import type { TaskTree } from '../../../../../../types/taskTypes';
+import type { TaskTree } from '@types/taskTypes';
 
-describe('Domain: TaskTree Sync Hooks', () => {
+describe('TaskTree Store Hooks', () => {
   beforeEach(() => {
     // Reset store before each test
     const { result } = renderHook(() => useTaskTreeStore());
     act(() => {
       result.current.reset();
-    });
-  });
-
-  describe('useTaskTreeSync', () => {
-    it('should sync taskTree prop to store when prop changes', () => {
-      const taskTreeRef = { current: null as TaskTree | null };
-      const taskTree: TaskTree = { id: 'test-1', nodes: [] };
-
-      const { rerender } = renderHook(
-        ({ taskTree }) => useTaskTreeSync(taskTreeRef as any, taskTree),
-        { initialProps: { taskTree: null } }
-      );
-
-      // Update prop
-      rerender({ taskTree });
-
-      // Store should be updated
-      const storeResult = renderHook(() => useTaskTreeStore());
-      expect(storeResult.result.current.taskTree).toEqual(taskTree);
-    });
-
-    it('should sync taskTree prop to store when prop changes', () => {
-      const taskTreeRef = { current: null as TaskTree | null };
-      const taskTree1: TaskTree = { id: 'test-1', nodes: [] };
-      const taskTree2: TaskTree = { id: 'test-2', nodes: [] };
-
-      const { rerender } = renderHook(
-        ({ taskTree }) => useTaskTreeSync(taskTreeRef as any, taskTree),
-        { initialProps: { taskTree: taskTree1 } }
-      );
-
-      // Store should have taskTree1
-      const storeResult1 = renderHook(() => useTaskTreeStore());
-      expect(storeResult1.result.current.taskTree).toEqual(taskTree1);
-
-      // Update prop
-      rerender({ taskTree: taskTree2 });
-
-      // Store should have taskTree2
-      const storeResult2 = renderHook(() => useTaskTreeStore());
-      expect(storeResult2.result.current.taskTree).toEqual(taskTree2);
-    });
-
-    it('should not sync when enabled is false', () => {
-      const taskTreeRef = { current: null as TaskTree | null };
-      const taskTree: TaskTree = { id: 'test-1', nodes: [] };
-
-      renderHook(() => {
-        useTaskTreeSync(taskTreeRef as any, taskTree, { enabled: false });
-      });
-
-      // Store should remain null
-      const storeResult = renderHook(() => useTaskTreeStore());
-      expect(storeResult.result.current.taskTree).toBeNull();
-    });
-
-    it('should sync bidirectionally when bidirectional is true', async () => {
-      const taskTreeRef = { current: null as TaskTree | null };
-      const taskTree: TaskTree = { id: 'test-1', nodes: [] };
-
-      const { rerender } = renderHook(
-        () => useTaskTreeSync(taskTreeRef as any, null, { bidirectional: true })
-      );
-
-      // Update store
-      const storeResult = renderHook(() => useTaskTreeStore());
-      act(() => {
-        storeResult.result.current.setTaskTree(taskTree);
-      });
-
-      // Re-render to trigger sync
-      rerender();
-
-      // Wait for sync to complete
-      await waitFor(() => {
-        expect(taskTreeRef.current).toEqual(taskTree);
-      });
-    });
-
-    it('should not sync bidirectionally when bidirectional is false', () => {
-      const taskTreeRef = { current: null as TaskTree | null };
-      const taskTree: TaskTree = { id: 'test-1', nodes: [] };
-
-      renderHook(() => {
-        useTaskTreeSync(taskTreeRef as any, null, { bidirectional: false });
-      });
-
-      // Update store
-      const storeResult = renderHook(() => useTaskTreeStore());
-      act(() => {
-        storeResult.result.current.setTaskTree(taskTree);
-      });
-
-      // Ref should remain null
-      expect(taskTreeRef.current).toBeNull();
     });
   });
 
