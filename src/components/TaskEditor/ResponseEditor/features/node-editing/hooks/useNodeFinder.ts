@@ -2,8 +2,8 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useCallback } from 'react';
-import { getdataList, getSubDataList } from '../ddtSelectors';
-import { useTaskTreeFromStore } from '../core/state';
+import { getdataList, getSubDataList } from '../../../ddtSelectors';
+import { useTaskTreeFromStore } from '../../../core/state';
 import type { TaskTree } from '../../../../types/taskTypes';
 
 export interface UseNodeFinderParams {

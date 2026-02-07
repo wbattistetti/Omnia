@@ -2,8 +2,8 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useEffect } from 'react';
-import { getdataList, getSubDataList } from '../ddtSelectors';
-import { useTaskTreeFromStore, useTaskTreeVersion } from '../core/state';
+import { getdataList, getSubDataList } from '../../../ddtSelectors';
+import { useTaskTreeFromStore, useTaskTreeVersion } from '../../../core/state';
 import type { Task, TaskTree } from '../../../../types/taskTypes';
 
 export interface UseNodeLoadingParams {
