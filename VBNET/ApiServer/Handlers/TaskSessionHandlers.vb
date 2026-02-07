@@ -60,7 +60,7 @@ Namespace ApiServer.Handlers
         ''' Reads and parses the request body for task session start
         ''' </summary>
         Private Async Function ReadAndParseRequest(context As HttpContext) As Task(Of (Success As Boolean, Request As TaskSessionStartRequest, ErrorMessage As String))
-            Console.WriteLine("🔵 [ReadAndParseRequest] ENTRY")
+            ' Log rimosso: non essenziale per flusso motore
             System.Diagnostics.Debug.WriteLine("🔵 [ReadAndParseRequest] ENTRY")
             Console.Out.Flush()
 
@@ -117,8 +117,8 @@ Namespace ApiServer.Handlers
 
                 Return (True, request, Nothing)
             Catch ex As Exception
-                Console.WriteLine($"🔵 [ReadAndParseRequest] EXCEPTION: {ex.GetType().Name} - {ex.Message}")
-                Console.WriteLine($"🔵 [ReadAndParseRequest] StackTrace: {ex.StackTrace}")
+                ' Log errore mantenuto ma semplificato
+                Console.WriteLine($"[ERROR] ReadAndParseRequest failed: {ex.Message}")
                 System.Diagnostics.Debug.WriteLine($"🔵 [ReadAndParseRequest] EXCEPTION: {ex.GetType().Name} - {ex.Message}")
                 Console.Out.Flush()
                 Return (False, Nothing, $"Failed to parse request body as JSON. Error: {ex.Message}")
@@ -579,6 +579,20 @@ Namespace ApiServer.Handlers
                 SessionManager.SaveTaskSession(session)
                 Console.WriteLine($"[API] ✅ STATELESS: SSE connection flag set to True and saved to Redis for session: {sessionId}")
 
+                ' ✅ STATELESS: Pubblica evento Redis Pub/Sub per notificare che SSE è connesso
+                Try
+                    ' ✅ STATELESS: Usa la stessa connection string configurata in Program.vb
+                    ' La connection string è già disponibile tramite RedisConnectionManager
+                    Dim redis = ApiServer.Infrastructure.RedisConnectionManager.GetConnection("localhost:6379")
+                    Dim subscriber = redis.GetSubscriber()
+                    Dim channel = $"omnia:events:sse-connected:{sessionId}"
+                    Await subscriber.PublishAsync(channel, "connected")
+                    Console.WriteLine($"[API] ✅ STATELESS: Published SSE connected event to Redis Pub/Sub channel: {channel}")
+                Catch ex As Exception
+                    Console.WriteLine($"[API] ⚠️ STATELESS: Failed to publish Redis Pub/Sub event: {ex.Message}")
+                    ' Non bloccare il flusso se Pub/Sub fallisce - il flag è già salvato su Redis
+                End Try
+
                 ' ✅ STATELESS: Se il task non è ancora stato eseguito, avvialo ora (SSE è connesso)
                 Console.WriteLine($"[API] ✅ STATELESS: Checking TaskInstance for session: {sessionId}, IsNothing: {session.TaskInstance Is Nothing}")
                 If session.TaskInstance Is Nothing Then
@@ -731,15 +745,8 @@ Namespace ApiServer.Handlers
                 SessionManager.SaveTaskSession(session)
                 Console.WriteLine($"[API] ✅ STATELESS: Session saved with event listeners for session: {sessionId}")
 
-                ' ✅ STATELESS: Mantieni la connessione aperta e aspetta eventi
-                ' Il task in background verrà avviato quando SseConnected diventa True
-                Try
-                    Await System.Threading.Tasks.Task.Delay(System.Threading.Timeout.Infinite, context.RequestAborted)
-                Catch
-                    ' Connection closed normally
-                End Try
-
-                ' Keep connection alive (heartbeat every 30 seconds)
+                ' ✅ STATELESS: Mantieni connessione aperta con heartbeat integrato
+                ' Il task in background verrà avviato quando SseConnected diventa True (via Redis Pub/Sub)
                 Dim heartbeatTimer As New System.Threading.Timer(Async Sub(state)
                                                                      Try
                                                                          Await writer.WriteLineAsync($"event: heartbeat")
@@ -751,13 +758,14 @@ Namespace ApiServer.Handlers
                                                                      End Try
                                                                  End Sub, Nothing, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30))
 
-                ' Wait for connection to close
+                ' ✅ STATELESS: Mantieni connessione aperta fino a chiusura
                 Try
                     Await System.Threading.Tasks.Task.Delay(System.Threading.Timeout.Infinite, context.RequestAborted)
                 Catch ex As System.Threading.Tasks.TaskCanceledException
                     ' Connection closed normally
                 Finally
                     heartbeatTimer.Dispose()
+                    Console.WriteLine($"[API] ✅ STATELESS: SSE connection closed, heartbeat timer disposed for session: {sessionId}")
                 End Try
             Catch ex As Exception
                 ' ✅ FASE 2: Usa logger invece di Console.WriteLine
@@ -779,55 +787,65 @@ Namespace ApiServer.Handlers
                 Dim body = Await reader.ReadToEndAsync()
                 Dim request = JsonConvert.DeserializeObject(Of TaskSessionInputRequest)(body)
 
-                Console.WriteLine($"[DIAG] Request parsed: Input='{If(request IsNot Nothing, request.Input, "Nothing")}'")
-
                 If request Is Nothing OrElse String.IsNullOrEmpty(request.Input) Then
-                    Console.WriteLine($"[API] ERROR: Invalid request or empty input for session {sessionId}")
+                    Console.WriteLine($"[MOTORE] ❌ ERROR: Invalid request or empty input")
                     Return Results.BadRequest(New With {.error = "Input is required"})
                 End If
 
                 Dim session = SessionManager.GetTaskSession(sessionId)
-                Console.WriteLine($"[DIAG] Session found: IsNothing={session Is Nothing}, TaskEngine IsNothing={If(session IsNot Nothing, session.TaskEngine Is Nothing, True)}")
 
                 If session Is Nothing Then
                     Console.WriteLine($"[API] ERROR: Session not found: {sessionId}")
                     Return Results.NotFound(New With {.error = "Session not found"})
                 End If
 
-                Console.WriteLine($"[DIAG] HandleTaskSessionInput: Input received='{request.Input}', SessionId={sessionId}")
-                Console.WriteLine($"[DIAG] HandleTaskSessionInput: IsWaitingForInput={session.IsWaitingForInput}")
+                Console.WriteLine($"[MOTORE] 📥 Input received: '{request.Input}', SessionId={sessionId}")
 
                 ' ✅ STEP 1: Verifica che TaskInstance esista
                 If session.TaskInstance Is Nothing Then
-                    Console.WriteLine($"[DIAG] HandleTaskSessionInput: ERROR - TaskInstance is Nothing")
+                    Console.WriteLine($"[MOTORE] ❌ ERROR: TaskInstance is Nothing")
                     Return Results.BadRequest(New With {.error = "TaskInstance not initialized"})
                 End If
-                Console.WriteLine($"[DIAG] HandleTaskSessionInput: TaskInstance found, TaskList.Count={session.TaskInstance.TaskList.Count}")
 
                 ' ✅ STEP 2: Ottieni il task corrente (quello che sta aspettando input)
                 Dim currTaskNode = session.TaskEngine.GetNextTask(session.TaskInstance)
                 If currTaskNode Is Nothing Then
-                    Console.WriteLine($"[DIAG] HandleTaskSessionInput: ERROR - GetNextTask returned Nothing (no task waiting for input)")
+                    Console.WriteLine($"[MOTORE] ❌ ERROR: GetNextTask returned Nothing (no task waiting for input)")
                     Return Results.BadRequest(New With {.error = "No task waiting for input"})
                 End If
-                Console.WriteLine($"[DIAG] HandleTaskSessionInput: Current task node: Id={currTaskNode.Id}, State={currTaskNode.State}")
+                Console.WriteLine($"[MOTORE] 📍 Current node: Id={currTaskNode.Id}, State={currTaskNode.State}")
 
                 ' ✅ STEP 3: Invia input al Parser (thread-safe, Shared method)
                 Parser.SetUserInput(request.Input)
-                Console.WriteLine($"[DIAG] HandleTaskSessionInput: Input sent to Parser via SetUserInput")
 
                 ' ✅ STEP 4: Processa l'input con il Parser
                 Dim parseResult = session.TaskEngine.Parser.InterpretUtterance(currTaskNode)
-                Console.WriteLine($"[DIAG] HandleTaskSessionInput: ParseResult received: {parseResult.Result}")
+                Console.WriteLine($"[MOTORE] 🔍 ParseResult: {parseResult.Result}")
 
                 ' ✅ STEP 5: Aggiorna lo stato del task
                 session.TaskEngine.SetState(parseResult, currTaskNode.State, currTaskNode)
-                Console.WriteLine($"[DIAG] HandleTaskSessionInput: Task state updated: {currTaskNode.State}")
+                Console.WriteLine($"[MOTORE] 🔄 State updated: {currTaskNode.State}")
 
                 ' ✅ STEP 6: Continua l'esecuzione del motore
-                Console.WriteLine($"[DIAG] HandleTaskSessionInput: About to call ExecuteTask to continue execution")
+                Console.WriteLine($"[MOTORE] ▶️ Executing task after input...")
                 session.TaskEngine.ExecuteTask(session.TaskInstance)
-                Console.WriteLine($"[DIAG] HandleTaskSessionInput: ExecuteTask completed")
+                Console.WriteLine($"[MOTORE] ✅ ExecuteTask completed")
+
+                ' ✅ STATELESS: Salva la sessione su Redis dopo l'esecuzione
+                SessionManager.SaveTaskSession(session)
+
+                ' ✅ STATELESS: Verifica se tutti i task sono completati e emetti evento "complete"
+                Dim allCompleted = session.TaskInstance.TaskList.All(Function(t) t.State = DialogueState.Success OrElse t.State = DialogueState.AcquisitionFailed)
+                Console.WriteLine($"[MOTORE] ✅ All tasks completed: {allCompleted}")
+                If allCompleted Then
+                    Dim sharedEmitter = SessionManager.GetOrCreateEventEmitter(sessionId)
+                    Dim completeData = New With {
+                        .success = True,
+                        .timestamp = DateTime.UtcNow.ToString("O")
+                    }
+                    sharedEmitter.Emit("complete", completeData)
+                    Console.WriteLine($"[MOTORE] 🎉 Complete event emitted for session: {sessionId}")
+                End If
 
                 ' Clear waiting state
                 session.IsWaitingForInput = False

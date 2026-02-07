@@ -106,18 +106,23 @@ Public Class SessionManager
     Private Shared ReadOnly _lock As New Object
     ' ✅ STATELESS: EventEmitter condivisi per sessione (non serializzati, rimangono in memoria)
     Private Shared ReadOnly _eventEmitters As New Dictionary(Of String, EventEmitter)
+    ' ✅ STATELESS: Redis connection per Pub/Sub (per notifiche SSE connected)
+    Private Shared _redisConnectionString As String = Nothing
 
     ' ✅ STATELESS: Dizionari rimossi - tutto lo stato è in Redis
 
     ''' <summary>
-    ''' ✅ STATELESS: Configura il storage (solo Redis)
+    ''' ✅ STATELESS: Configura il storage (solo Redis) e connection string per Pub/Sub
     ''' </summary>
-    Public Shared Sub ConfigureStorage(storage As ApiServer.Interfaces.ISessionStorage)
+    Public Shared Sub ConfigureStorage(storage As ApiServer.Interfaces.ISessionStorage, Optional redisConnectionString As String = Nothing)
         If storage Is Nothing Then
             Throw New ArgumentNullException(NameOf(storage), "Storage cannot be Nothing. Redis is required.")
         End If
         SyncLock _lock
             _storage = storage
+            If Not String.IsNullOrEmpty(redisConnectionString) Then
+                _redisConnectionString = redisConnectionString
+            End If
         End SyncLock
     End Sub
 
@@ -296,12 +301,9 @@ Public Class SessionManager
                            .timestamp = DateTime.UtcNow.ToString("O")
                        }
                                                      session.Messages.Add(msg)
-                                                     Console.WriteLine($"[SessionManager] ✅ STATELESS: Message added to session.Messages, count: {session.Messages.Count}")
-                                                     ' ✅ STATELESS: Usa EventEmitter condiviso
+                                                     Console.WriteLine($"[MOTORE] 💬 Message emitted: '{e.Message}'")
                                                      Dim emitter = GetOrCreateEventEmitter(sessionId)
-                                                     Console.WriteLine($"[SessionManager] ✅ STATELESS: Emitting message event on shared EventEmitter, listener count: {emitter.ListenerCount("message")}")
                                                      emitter.Emit("message", msg)
-                                                     Console.WriteLine($"[SessionManager] ✅ STATELESS: Message event emitted on shared EventEmitter for session: {sessionId}")
 
                                                      session.IsWaitingForInput = True
                                                      Dim firstNodeId As String = ""
@@ -313,99 +315,48 @@ Public Class SessionManager
                                                          End If
                                                      End If
                                                      session.WaitingForInputData = New With {.nodeId = firstNodeId}
-                                                     Console.WriteLine($"[SessionManager] ✅ STATELESS: Emitting waitingForInput event on shared EventEmitter for session: {sessionId}")
+                                                     Console.WriteLine($"[MOTORE] ⏳ Waiting for input: nodeId={firstNodeId}")
                                                      emitter.Emit("waitingForInput", session.WaitingForInputData)
 
-                                                     ' ✅ STATELESS: Salva su Redis dopo ogni messaggio
                                                      Try
                                                          _storage.SaveTaskSession(session)
-                                                         Console.WriteLine($"[SessionManager] ✅ STATELESS: Session saved to Redis after message for session: {sessionId}")
                                                      Catch saveEx As Exception
-                                                         Console.WriteLine($"[SessionManager] ❌ STATELESS: Failed to save session to Redis: {saveEx.Message}")
+                                                         Console.WriteLine($"[ERROR] Failed to save session: {saveEx.Message}")
                                                      End Try
                                                  End Sub
 
             ' ✅ STATELESS: Salva solo su Redis (SseConnected=False inizialmente)
             _storage.SaveTaskSession(session)
-            Console.WriteLine($"[SessionManager] ✅ STATELESS: Session saved to Redis: {sessionId}, SseConnected=False (will wait for SSE connection)")
+            ' ✅ STATELESS: Session saved, waiting for SSE connection
 
-            ' ✅ STATELESS: NON avviare il task qui - aspetta che SSE si connetta
-            ' Il task verrà avviato quando l'handler SSE imposterà SseConnected=True
-            Console.WriteLine($"[SessionManager] ✅ STATELESS: Task execution will start when SSE connects (SseConnected flag)")
-
-            ' ✅ STATELESS: Avvia un task in background che aspetta che SSE si connetta
-            Dim backgroundTask = System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
-                                                                     Try
-                                                                         Console.WriteLine($"[SessionManager] ✅ STATELESS: Waiting for SSE connection for session: {sessionId}")
-                                                                         ' ✅ STATELESS: Polling fino a quando SSE non si connette (max 10 secondi)
-                                                                         Dim maxWaitTime = TimeSpan.FromSeconds(10)
-                                                                         Dim pollInterval = TimeSpan.FromMilliseconds(100)
-                                                                         Dim startTime = DateTime.UtcNow
-
-                                                                         While DateTime.UtcNow - startTime < maxWaitTime
-                                                                             ' Ricarica la sessione da Redis per verificare il flag
-                                                                             Dim currentSession = _storage.GetTaskSession(sessionId)
-                                                                             If currentSession IsNot Nothing AndAlso currentSession.SseConnected Then
-                                                                                 Console.WriteLine($"[SessionManager] ✅ STATELESS: SSE connected! Starting task execution for session: {sessionId}")
-                                                                                 Exit While
-                                                                             End If
-                                                                             Await System.Threading.Tasks.Task.Delay(pollInterval)
-                                                                         End While
-
-                                                                         ' Verifica ancora una volta prima di procedere
-                                                                         Dim sessionToUse = _storage.GetTaskSession(sessionId)
-                                                                         If sessionToUse Is Nothing Then
-                                                                             Console.WriteLine($"[SessionManager] ❌ STATELESS: Session not found, aborting task execution: {sessionId}")
-                                                                             Return
-                                                                         End If
-
-                                                                         If Not sessionToUse.SseConnected Then
-                                                                             Console.WriteLine($"[SessionManager] ⚠️ STATELESS: SSE not connected after {maxWaitTime.TotalSeconds}s, starting task anyway: {sessionId}")
-                                                                         End If
-
-                                                                         Console.WriteLine($"[SessionManager] ✅ STATELESS: Proceeding with task execution for session: {sessionId}")
-
-                                                                         Console.WriteLine($"[SessionManager] ✅ STATELESS: Converting RuntimeTask to TaskInstance for session: {sessionId}")
-                                                                         Dim taskInstance = ConvertRuntimeTaskToTaskInstance(sessionToUse.RuntimeTask, sessionToUse.Translations)
-                                                                         _logger.LogDebug("Converted to TaskInstance", New With {
-                                                                             .sessionId = sessionId,
-                                                                             .taskListCount = taskInstance.TaskList.Count
-                                                                         })
-                                                                         Console.WriteLine($"[SessionManager] ✅ STATELESS: TaskInstance created: {taskInstance.TaskList.Count} tasks for session: {sessionId}")
-                                                                         sessionToUse.TaskInstance = taskInstance
-                                                                         _storage.SaveTaskSession(sessionToUse) ' ✅ STATELESS: Salva TaskInstance su Redis
-                                                                         _logger.LogDebug("TaskInstance saved to session", New With {.sessionId = sessionId})
-                                                                         Console.WriteLine($"[SessionManager] ✅ STATELESS: Executing task for session: {sessionId}")
-                                                                         sessionToUse.TaskEngine.ExecuteTask(taskInstance)
-                                                                         Console.WriteLine($"[SessionManager] ✅ STATELESS: Task execution completed for session: {sessionId}")
-
-                                                                         ' ✅ STATELESS: Usa EventEmitter condiviso per emettere eventi
-                                                                         Dim emitterForComplete = GetOrCreateEventEmitter(sessionId)
-                                                                         ' ✅ Check if all tasks are completed
-                                                                         Dim allCompleted = taskInstance.TaskList.All(Function(t) t.State = DialogueState.Success OrElse t.State = DialogueState.AcquisitionFailed)
-                                                                         _logger.LogDebug("Tasks completion check", New With {
-                                                                             .sessionId = sessionId,
-                                                                             .allCompleted = allCompleted
-                                                                         })
-                                                                         If allCompleted Then
-                                                                             Dim completeData = New With {
-                                                                                 .success = True,
-                                                                                 .timestamp = DateTime.UtcNow.ToString("O")
-                                                                             }
-                                                                             emitterForComplete.Emit("complete", completeData)
-                                                                             Console.WriteLine($"[SessionManager] ✅ STATELESS: Complete event emitted on shared EventEmitter for session: {sessionId}")
-                                                                         End If
-                                                                     Catch ex As Exception
-                                                                         _logger.LogError("Runtime execution error", ex, New With {.sessionId = sessionId})
-                                                                         Dim emitterForError = GetOrCreateEventEmitter(sessionId)
-                                                                         Dim errorData = New With {
-                                                                             .error = ex.Message,
-                                                                             .timestamp = DateTime.UtcNow.ToString("O")
-                                                                         }
-                                                                         emitterForError.Emit("error", errorData)
-                                                                         Console.WriteLine($"[SessionManager] ✅ STATELESS: Error event emitted on shared EventEmitter for session: {sessionId}")
-                                                                     End Try
-                                                                 End Function)
+            ' ✅ STATELESS: Iscriviti a Redis Pub/Sub per notifica quando SSE si connette
+            If Not String.IsNullOrEmpty(_redisConnectionString) Then
+                Dim backgroundTask = System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
+                                                                         Try
+                                                                             Dim redis = ApiServer.Infrastructure.RedisConnectionManager.GetConnection(_redisConnectionString)
+                                                                             Dim subscriber = redis.GetSubscriber()
+                                                                             Dim channelName = $"omnia:events:sse-connected:{sessionId}"
+                                                                             Dim handler As Action(Of StackExchange.Redis.RedisChannel, StackExchange.Redis.RedisValue) = Sub(redisChannel, message)
+                                                                                                                   Try
+                                                                                                                       Dim sessionToUse = _storage.GetTaskSession(sessionId)
+                                                                                                                       If sessionToUse Is Nothing OrElse Not sessionToUse.SseConnected Then
+                                                                                                                           Return
+                                                                                                                       End If
+                                                                                                                       Console.WriteLine($"[MOTORE] 🔌 SSE connected, starting task execution")
+                                                                                                                       System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
+                                                                                                                                                           Await StartTaskExecutionAsync(sessionId)
+                                                                                                                                                           subscriber.Unsubscribe(channelName)
+                                                                                                                                                       End Function)
+                                                                                                                   Catch ex As Exception
+                                                                                                                       Console.WriteLine($"[ERROR] Pub/Sub notification error: {ex.Message}")
+                                                                                                                   End Try
+                                                                                                               End Sub
+                                                                             subscriber.Subscribe(channelName, handler)
+                                                                         Catch ex As Exception
+                                                                             Console.WriteLine($"[ERROR] Failed to subscribe to Redis Pub/Sub: {ex.Message}")
+                                                                         End Try
+                                                                     End Function)
+            End If
 
             Return session
         End SyncLock
@@ -420,7 +371,7 @@ Public Class SessionManager
 
         ' ✅ STATELESS: Usa EventEmitter condiviso, non session.EventEmitter
         Dim sharedEmitter = GetOrCreateEventEmitter(session.SessionId)
-        Console.WriteLine($"[SessionManager] ✅ STATELESS: Attaching TaskEngine handlers to shared EventEmitter for session: {session.SessionId}")
+        ' Log rimosso: non essenziale per flusso motore
 
         ' Collega l'handler MessageToShow del Motore all'EventEmitter condiviso
         AddHandler session.TaskEngine.MessageToShow, Sub(sender, e)
@@ -438,7 +389,7 @@ Public Class SessionManager
                                                         session.Messages.Add(msg)
                                                         ' ✅ STATELESS: Usa EventEmitter condiviso
                                                         sharedEmitter.Emit("message", msg)
-                                                        Console.WriteLine($"[SessionManager] ✅ STATELESS: Message event emitted on shared EventEmitter for session: {session.SessionId}")
+                                                        Console.WriteLine($"[MOTORE] 💬 Message emitted: '{e.Message}'")
 
                                                         session.IsWaitingForInput = True
                                                         Dim firstNodeId As String = ""
@@ -452,17 +403,17 @@ Public Class SessionManager
                                                         session.WaitingForInputData = New With {.nodeId = firstNodeId}
                                                         ' ✅ STATELESS: Usa EventEmitter condiviso
                                                         sharedEmitter.Emit("waitingForInput", session.WaitingForInputData)
-                                                        Console.WriteLine($"[SessionManager] ✅ STATELESS: Emitted waitingForInput event on shared EventEmitter for session: {session.SessionId}")
+                                                        Console.WriteLine($"[MOTORE] ⏳ Waiting for input")
 
                                                         ' ✅ STATELESS: Salva su Redis dopo ogni messaggio
                                                         Try
                                                             _storage.SaveTaskSession(session)
-                                                            Console.WriteLine($"[SessionManager] ✅ STATELESS: Session saved to Redis after message for session: {session.SessionId}")
+                                                            ' Log rimosso: salvataggio non essenziale per flusso motore
                                                         Catch saveEx As Exception
-                                                            Console.WriteLine($"[SessionManager] ❌ STATELESS: Failed to save session to Redis: {saveEx.Message}")
+                                                            Console.WriteLine($"[ERROR] Failed to save session: {saveEx.Message}")
                                                         End Try
                                                     End Sub
-        Console.WriteLine($"[SessionManager] ✅ STATELESS: TaskEngine handlers attached successfully for session: {session.SessionId}")
+        ' Log rimosso: non essenziale per flusso motore
     End Sub
 
     ''' <summary>
@@ -492,36 +443,27 @@ Public Class SessionManager
             AttachTaskEngineHandlers(session)
 
             ' Avvia l'esecuzione del task
-            Console.WriteLine($"[SessionManager] ✅ STATELESS: Starting task execution for session {sessionId} (recovered from Redis)")
+                Console.WriteLine($"[MOTORE] ▶️ Starting task execution (recovered session)")
             Try
                 Dim taskInstance = ConvertRuntimeTaskToTaskInstance(session.RuntimeTask, session.Translations)
                 session.TaskInstance = taskInstance
                 _storage.SaveTaskSession(session) ' Salva su Redis
 
-                ' Esegui il task in background
-                Dim backgroundTask = System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
-                                                                         Try
-                                                                             Await System.Threading.Tasks.Task.Delay(100)
-                                                                             session.TaskEngine.ExecuteTask(taskInstance)
+                ' ✅ STATELESS: Esegui il task senza delay artificiale
+                session.TaskEngine.ExecuteTask(taskInstance)
+                Console.WriteLine($"[MOTORE] ✅ Task execution completed")
 
-                                                                             ' Check if all tasks are completed
-                                                                             Dim allCompleted = taskInstance.TaskList.All(Function(t) t.State = DialogueState.Success OrElse t.State = DialogueState.AcquisitionFailed)
-                                                                             If allCompleted Then
-                                                                                 Dim completeData = New With {
-                                                                                     .success = True,
-                                                                                     .timestamp = DateTime.UtcNow.ToString("O")
-                                                                                 }
-                                                                                 session.EventEmitter.Emit("complete", completeData)
-                                                                             End If
-                                                                         Catch ex As Exception
-                                                                             _logger.LogError("Runtime execution error (recovered session)", ex, New With {.sessionId = sessionId})
-                                                                             Dim errorData = New With {
-                                                                                 .error = ex.Message,
-                                                                                 .timestamp = DateTime.UtcNow.ToString("O")
-                                                                             }
-                                                                             session.EventEmitter.Emit("error", errorData)
-                                                                         End Try
-                                                                     End Function)
+                ' ✅ STATELESS: Verifica completamento
+                Dim sharedEmitterRecovered = GetOrCreateEventEmitter(sessionId)
+                Dim allCompleted = taskInstance.TaskList.All(Function(t) t.State = DialogueState.Success OrElse t.State = DialogueState.AcquisitionFailed)
+                If allCompleted Then
+                    Dim completeData = New With {
+                        .success = True,
+                        .timestamp = DateTime.UtcNow.ToString("O")
+                    }
+                    sharedEmitterRecovered.Emit("complete", completeData)
+                    Console.WriteLine($"[MOTORE] 🎉 All tasks completed, complete event emitted")
+                End If
             Catch ex As Exception
                 _logger.LogError("Failed to start task execution for recovered session", ex, New With {.sessionId = sessionId})
             End Try
@@ -536,7 +478,7 @@ Public Class SessionManager
         SyncLock _lock
             If Not _eventEmitters.ContainsKey(sessionId) Then
                 _eventEmitters(sessionId) = New EventEmitter()
-                Console.WriteLine($"[SessionManager] ✅ STATELESS: Created shared EventEmitter for session: {sessionId}")
+                ' Log rimosso: non essenziale per flusso motore
             End If
             Return _eventEmitters(sessionId)
         End SyncLock
@@ -549,10 +491,70 @@ Public Class SessionManager
         SyncLock _lock
             If _eventEmitters.ContainsKey(sessionId) Then
                 _eventEmitters.Remove(sessionId)
-                Console.WriteLine($"[SessionManager] ✅ STATELESS: Removed shared EventEmitter for session: {sessionId}")
+                ' Log rimosso: non essenziale per flusso motore
             End If
         End SyncLock
     End Sub
+
+    ''' <summary>
+    ''' ✅ STATELESS: Avvia l'esecuzione del task (chiamato da Redis Pub/Sub quando SSE si connette)
+    ''' </summary>
+    Friend Shared Async Function StartTaskExecutionAsync(sessionId As String) As System.Threading.Tasks.Task
+        SyncLock _lock
+            Dim session = _storage.GetTaskSession(sessionId)
+            If session Is Nothing Then
+                Console.WriteLine($"[MOTORE] ❌ ERROR: Session not found for task execution")
+                Return
+            End If
+
+            ' Se il task è già stato eseguito, non fare nulla
+            If session.TaskInstance IsNot Nothing Then
+                Console.WriteLine($"[MOTORE] ⚠️ Task already executed, skipping")
+                Return
+            End If
+
+            ' Se non c'è RuntimeTask, non possiamo eseguire
+            If session.RuntimeTask Is Nothing Then
+                Console.WriteLine($"[SessionManager] ⚠️ Cannot start execution: RuntimeTask is Nothing for session {sessionId}")
+                Return
+            End If
+
+            ' ✅ STATELESS: Collega gli handler PRIMA di eseguire il task
+            AttachTaskEngineHandlers(session)
+
+            Console.WriteLine($"[MOTORE] ▶️ Starting task execution (triggered by SSE connection)")
+            Try
+                Dim taskInstance = ConvertRuntimeTaskToTaskInstance(session.RuntimeTask, session.Translations)
+                session.TaskInstance = taskInstance
+                _storage.SaveTaskSession(session) ' Salva su Redis
+
+                ' ✅ STATELESS: Esegui il task (senza delay artificiale)
+                session.TaskEngine.ExecuteTask(taskInstance)
+                Console.WriteLine($"[MOTORE] ✅ Task execution completed")
+
+                ' ✅ STATELESS: Verifica completamento
+                Dim sharedEmitter = GetOrCreateEventEmitter(sessionId)
+                Dim allCompleted = taskInstance.TaskList.All(Function(t) t.State = DialogueState.Success OrElse t.State = DialogueState.AcquisitionFailed)
+                If allCompleted Then
+                    Dim completeData = New With {
+                        .success = True,
+                        .timestamp = DateTime.UtcNow.ToString("O")
+                    }
+                    sharedEmitter.Emit("complete", completeData)
+                    Console.WriteLine($"[MOTORE] 🎉 All tasks completed, complete event emitted")
+                End If
+            Catch ex As Exception
+                _logger.LogError("Runtime execution error", ex, New With {.sessionId = sessionId})
+                Dim sharedEmitter = GetOrCreateEventEmitter(sessionId)
+                Dim errorData = New With {
+                    .error = ex.Message,
+                    .timestamp = DateTime.UtcNow.ToString("O")
+                }
+                sharedEmitter.Emit("error", errorData)
+                Console.WriteLine($"[SessionManager] ✅ STATELESS: Error event emitted on shared EventEmitter for session: {sessionId}")
+            End Try
+        End SyncLock
+    End Function
 
     ''' <summary>
     ''' ✅ STATELESS: Recupera TaskSession da Redis

@@ -40,13 +40,17 @@ Module Program
             Dim logger As ApiServer.Interfaces.ILogger = New ApiServer.Logging.StdoutLogger()
             builder.Services.AddSingleton(Of ApiServer.Interfaces.ILogger)(logger)
 
-            ' ✅ STATELESS: Configura Redis (OBBLIGATORIO - nessun fallback)
-            Dim redisConnectionString = "localhost:6379"
-            Dim redisKeyPrefix = "omnia:"
+            ' ✅ STATELESS: Leggi configurazione Redis da appsettings.json
+            Dim redisConnectionString = If(builder.Configuration("Redis:ConnectionString"), "localhost:6379")
+            Dim redisKeyPrefix = If(builder.Configuration("Redis:KeyPrefix"), "omnia:")
+            Dim sessionTTLStr = If(builder.Configuration("Redis:SessionTTL"), "3600")
             Dim sessionTTL As Integer = 3600
+            Integer.TryParse(sessionTTLStr, sessionTTL)
 
-            ' TODO: Leggere da appsettings.json quando necessario
-            ' Per ora usa valori di default
+            Console.WriteLine($"[Program] ✅ STATELESS: Redis configuration loaded:")
+            Console.WriteLine($"[Program]   ConnectionString: {redisConnectionString}")
+            Console.WriteLine($"[Program]   KeyPrefix: {redisKeyPrefix}")
+            Console.WriteLine($"[Program]   SessionTTL: {sessionTTL}s")
 
             ' ✅ STATELESS: Redis è OBBLIGATORIO - se non disponibile, il servizio non si avvia
             Console.WriteLine("═══════════════════════════════════════════════════════════════")
@@ -70,8 +74,8 @@ Module Program
 
             builder.Services.AddSingleton(Of ApiServer.Interfaces.ISessionStorage)(storage)
 
-            ' Configura SessionManager con i servizi registrati
-            SessionManager.ConfigureStorage(storage)
+            ' Configura SessionManager con i servizi registrati e connection string per Pub/Sub
+            SessionManager.ConfigureStorage(storage, redisConnectionString)
             SessionManager.ConfigureLogger(logger)
 
             ' Configura TaskSessionHandlers con logger

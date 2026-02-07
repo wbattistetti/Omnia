@@ -100,7 +100,7 @@ Public Class FlowOrchestrator
                 _state.CurrentNodeId = nextTask.Id
                 RaiseEvent StateUpdated(Me, _state)
 
-                Await System.Threading.Tasks.Task.Delay(10)
+                ' ✅ STATELESS: Nessun delay artificiale - il loop è guidato da stato, non da timing
             End While
 
             Console.WriteLine($"✅ [FlowOrchestrator] Dialogue completed after {iterationCount} iterations")
