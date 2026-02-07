@@ -117,7 +117,8 @@ export function normalizeTaskForEscalation(
     text: task.text,
     color: task.color,
     label: task.label,
-    iconName: task.icon || task.iconName || task.icon
+    // ✅ NO FALLBACKS: Use iconName as primary, icon as fallback (both are valid properties)
+    iconName: task.iconName ?? task.icon ?? 'FileText'
   };
 }
 

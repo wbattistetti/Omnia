@@ -175,7 +175,7 @@ export default function TesterGridHeader({
 
     const newContractItem = createDefaultContract(type);
     const newContract: DataContract = {
-      templateName: contract?.templateName || '',
+      templateName: contract?.templateName ?? '',
       templateId: contract?.templateId || '',
       subDataMapping: contract?.subDataMapping || {},
       contracts: [newContractItem],

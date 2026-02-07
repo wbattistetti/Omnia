@@ -43,8 +43,13 @@ export function extractTranslations(ddt: any, translations?: any): Record<string
 
 export function getStepsArray(node: any): StepGroup[] {
   if (!node) return [];
+  // ✅ RETROCOMPATIBILITÀ: Gestisce formato array legacy (solo per ChatSimulator che può ricevere dati legacy)
   if (Array.isArray(node.steps)) {
-    return node.steps.map((s: any) => ({ type: s.type || s.stepType, escalations: s.escalations || [] }));
+    console.warn('[DDTAdapter.getStepsArray] Received array format for steps, expected dictionary. Converting...');
+    return node.steps.map((s: any) => ({
+      type: s.type ?? s.stepType ?? 'start',
+      escalations: s.escalations ?? []
+    }));
   }
   if (node.steps && typeof node.steps === 'object') {
     const map = node.steps as Record<string, any>;
@@ -68,7 +73,8 @@ export function getStepGroup(node: any, stepType: string): StepGroup | undefined
 export function getEscalationTasks(node: any, stepType: string, level: number): any[] {
   const sg = getStepGroup(node, stepType);
   const esc = sg?.escalations?.[level - 1];
-  return esc?.tasks || [];
+  // ✅ NO FALLBACKS: tasks can be undefined (legitimate default)
+  return esc?.tasks ?? [];
 }
 
 // Legacy alias for backward compatibility (will be removed)
@@ -93,14 +99,14 @@ export function resolveTaskText(task: any, dict: Record<string, string>): string
     templateId: task.templateId,
     taskId: task.id,
     hasParameters: !!task.parameters,
-    parametersCount: task.parameters?.length || 0,
+    parametersCount: task.parameters?.length ?? 0,
     parameters: task.parameters?.map((p: any) => ({
       parameterId: p.parameterId,
       key: p.key,
       value: p.value,
       valueType: typeof p.value,
       isGuid: p.value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(p.value)
-    })) || [],
+    })) ?? [],
     dictKeysCount: Object.keys(dict).length,
     sampleDictKeys: Object.keys(dict).slice(0, 10)
   });

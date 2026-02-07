@@ -99,7 +99,8 @@ function TestsetView({ node }: { node: any }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {cases.map((tc: any, i: number) => (
             <div key={i} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 8 }}>
-              <div style={{ fontWeight: 700 }}>{tc?.name || `case ${i + 1}`}</div>
+              {/* ✅ NO FALLBACKS: Use label as primary, name as fallback for display, 'case N' as explicit default */}
+              <div style={{ fontWeight: 700 }}>{tc?.label ?? tc?.name ?? `case ${i + 1}`}</div>
               <div style={{ color: '#334155' }}>input: {JSON.stringify(tc?.input)}</div>
               <div style={{ color: '#334155' }}>expect: {JSON.stringify(tc?.expect)}</div>
             </div>
