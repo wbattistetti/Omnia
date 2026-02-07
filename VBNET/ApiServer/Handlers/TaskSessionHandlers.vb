@@ -137,19 +137,19 @@ Namespace ApiServer.Handlers
             System.Diagnostics.Debug.WriteLine($"[API] CreateTaskSession ENTRY: TaskId={compiledTask.Id}, Language={language}")
             Console.Out.Flush()
             Dim sessionId = Guid.NewGuid().ToString()
-            Console.WriteLine($"[API] CreateTaskSession: Generated sessionId={sessionId}")
-            System.Diagnostics.Debug.WriteLine($"[API] CreateTaskSession: Generated sessionId={sessionId}")
+            Console.WriteLine($"[API] ✅ STATELESS: CreateTaskSession: Generated sessionId={sessionId}")
+            System.Diagnostics.Debug.WriteLine($"[API] ✅ STATELESS: CreateTaskSession: Generated sessionId={sessionId}")
             Console.Out.Flush()
             Console.WriteLine($"[API] CreateTaskSession: Converting CompiledTask to RuntimeTask...")
             System.Diagnostics.Debug.WriteLine($"[API] CreateTaskSession: Converting CompiledTask to RuntimeTask...")
             Console.Out.Flush()
             Dim runtimeTask = RuntimeTaskConverter.ConvertCompiledToRuntimeTask(compiledTask)
-            Console.WriteLine($"[API] CreateTaskSession: Calling SessionManager.CreateTaskSession...")
-            System.Diagnostics.Debug.WriteLine($"[API] CreateTaskSession: Calling SessionManager.CreateTaskSession...")
+            Console.WriteLine($"[API] ✅ STATELESS: CreateTaskSession: Calling SessionManager.CreateTaskSession (will save to Redis)...")
+            System.Diagnostics.Debug.WriteLine($"[API] ✅ STATELESS: CreateTaskSession: Calling SessionManager.CreateTaskSession (will save to Redis)...")
             Console.Out.Flush()
             SessionManager.CreateTaskSession(sessionId, runtimeTask, language, translations)
-            Console.WriteLine($"[API] Session created: {sessionId}, TaskId={compiledTask.Id}, Language={language}")
-            System.Diagnostics.Debug.WriteLine($"[API] Session created: {sessionId}, TaskId={compiledTask.Id}, Language={language}")
+            Console.WriteLine($"[API] ✅ STATELESS: Session created and saved to Redis: {sessionId}, TaskId={compiledTask.Id}, Language={language}")
+            System.Diagnostics.Debug.WriteLine($"[API] ✅ STATELESS: Session created and saved to Redis: {sessionId}, TaskId={compiledTask.Id}, Language={language}")
             Console.Out.Flush()
             Return sessionId
         End Function
@@ -564,14 +564,33 @@ Namespace ApiServer.Handlers
         ''' </summary>
         Public Async Function HandleTaskSessionStream(context As HttpContext, sessionId As String) As System.Threading.Tasks.Task
             Try
-                Console.WriteLine($"[API] SSE connection opened for session: {sessionId}")
+                Console.WriteLine($"[API] ✅ STATELESS: SSE connection opened for session: {sessionId} (retrieved from Redis)")
 
                 Dim session = SessionManager.GetTaskSession(sessionId)
                 If session Is Nothing Then
-                    Console.WriteLine($"[API] ERROR: Session not found: {sessionId}")
+                    Console.WriteLine($"[API] ❌ ERROR: Session not found in Redis: {sessionId}")
                     context.Response.StatusCode = 404
                     Await context.Response.WriteAsync($"event: error\ndata: {JsonConvert.SerializeObject(New With {.error = "Session not found"})}\n\n")
                     Return
+                End If
+
+                ' ✅ STATELESS: Imposta il flag SseConnected=True e salva su Redis
+                session.SseConnected = True
+                SessionManager.SaveTaskSession(session)
+                Console.WriteLine($"[API] ✅ STATELESS: SSE connection flag set to True and saved to Redis for session: {sessionId}")
+
+                ' ✅ STATELESS: Se il task non è ancora stato eseguito, avvialo ora (SSE è connesso)
+                Console.WriteLine($"[API] ✅ STATELESS: Checking TaskInstance for session: {sessionId}, IsNothing: {session.TaskInstance Is Nothing}")
+                If session.TaskInstance Is Nothing Then
+                    Console.WriteLine($"[API] ✅ STATELESS: TaskInstance is Nothing, SSE is connected, starting execution now for session: {sessionId}")
+                    SessionManager.StartTaskExecutionIfNeeded(sessionId)
+                    ' Ricarica la sessione dopo aver avviato l'esecuzione
+                    session = SessionManager.GetTaskSession(sessionId)
+                    Console.WriteLine($"[API] ✅ STATELESS: Session reloaded after starting execution, TaskInstance IsNothing: {session.TaskInstance Is Nothing}")
+                Else
+                    Console.WriteLine($"[API] ✅ STATELESS: TaskInstance already exists, ensuring handlers are attached for session: {sessionId}")
+                    ' ✅ STATELESS: Assicurati che gli handler siano collegati anche se il task è già stato eseguito
+                    SessionManager.StartTaskExecutionIfNeeded(sessionId)
                 End If
 
                 ' Setup SSE headers
@@ -583,16 +602,25 @@ Namespace ApiServer.Handlers
 
                 Dim writer As New StreamWriter(context.Response.Body)
 
-                ' Send existing messages first
-                For Each msg In session.Messages
-                    Await writer.WriteLineAsync($"event: message")
-                    Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(msg)}")
-                    Await writer.WriteLineAsync()
-                    Await writer.FlushAsync()
-                Next
+                ' ✅ STATELESS: Send existing messages first (from Redis)
+                Console.WriteLine($"[API] ✅ STATELESS: Checking for existing messages in Redis session: {sessionId}")
+                Console.WriteLine($"[API] ✅ STATELESS: session.Messages IsNothing: {session.Messages Is Nothing}, Count: {If(session.Messages IsNot Nothing, session.Messages.Count, 0)}")
+                If session.Messages IsNot Nothing AndAlso session.Messages.Count > 0 Then
+                    Console.WriteLine($"[API] ✅ STATELESS: Sending {session.Messages.Count} existing messages from Redis for session: {sessionId}")
+                    For Each msg In session.Messages
+                        Console.WriteLine($"[API] ✅ STATELESS: Sending existing message: {JsonConvert.SerializeObject(msg)}")
+                        Await writer.WriteLineAsync($"event: message")
+                        Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(msg)}")
+                        Await writer.WriteLineAsync()
+                        Await writer.FlushAsync()
+                    Next
+                Else
+                    Console.WriteLine($"[API] ⚠️ STATELESS: No existing messages in Redis session: {sessionId} (task may not have executed yet)")
+                End If
 
                 ' Send waitingForInput event if already waiting
                 If session.IsWaitingForInput Then
+                    Console.WriteLine($"[API] ✅ STATELESS: Session is already waiting for input, sending waitingForInput event")
                     Dim jsonData = JsonConvert.SerializeObject(session.WaitingForInputData)
                     Console.WriteLine($"[API] Sending initial waitingForInput event (session already waiting)")
                     Console.WriteLine($"[API] JSON data: {jsonData}")
@@ -608,14 +636,17 @@ Namespace ApiServer.Handlers
 
                 ' Register event handlers
                 Dim onMessage As Action(Of Object) = Sub(data)
+                                                         Console.WriteLine($"[API] ✅ STATELESS: onMessage handler called for session: {sessionId}, data: {JsonConvert.SerializeObject(data)}")
                                                          System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
                                                                                              Try
+                                                                                                 Console.WriteLine($"[API] ✅ STATELESS: Writing message to SSE stream for session: {sessionId}")
                                                                                                  Await writer.WriteLineAsync($"event: message")
                                                                                                  Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
                                                                                                  Await writer.WriteLineAsync()
                                                                                                  Await writer.FlushAsync()
+                                                                                                 Console.WriteLine($"[API] ✅ STATELESS: Message sent to SSE stream for session: {sessionId}")
                                                                                              Catch ex As Exception
-                                                                                                 Console.WriteLine($"[API] ERROR: SSE error sending message: {ex.Message}")
+                                                                                                 Console.WriteLine($"[API] ❌ ERROR: SSE error sending message: {ex.Message}")
                                                                                              End Try
                                                                                          End Function)
                                                      End Sub
@@ -672,19 +703,41 @@ Namespace ApiServer.Handlers
                                                                                        End Function)
                                                    End Sub
 
-                ' Register listeners
-                session.EventEmitter.[On]("message", onMessage)
-                session.EventEmitter.[On]("waitingForInput", onWaitingForInput)
-                session.EventEmitter.[On]("complete", onComplete)
-                session.EventEmitter.[On]("error", onError)
+                ' ✅ STATELESS: Registra gli handler sull'EventEmitter condiviso
+                Dim sharedEmitter = SessionManager.GetOrCreateEventEmitter(sessionId)
+                Console.WriteLine($"[API] ✅ STATELESS: Registering event listeners on shared EventEmitter for session: {sessionId}")
+                sharedEmitter.[On]("message", onMessage)
+                sharedEmitter.[On]("waitingForInput", onWaitingForInput)
+                sharedEmitter.[On]("complete", onComplete)
+                sharedEmitter.[On]("error", onError)
+                Console.WriteLine($"[API] ✅ STATELESS: Event listeners registered on shared EventEmitter for session: {sessionId}")
+                Console.WriteLine($"[API] ✅ STATELESS: Shared EventEmitter listener count - message: {sharedEmitter.ListenerCount("message")}, waitingForInput: {sharedEmitter.ListenerCount("waitingForInput")}")
 
+                ' ✅ STATELESS: Quando la connessione SSE si chiude, imposta SseConnected=False
                 context.RequestAborted.Register(Sub()
-                                                    Console.WriteLine($"[API] SSE connection closed for session: {sessionId}")
-                                                    session.EventEmitter.RemoveListener("message", onMessage)
-                                                    session.EventEmitter.RemoveListener("waitingForInput", onWaitingForInput)
-                                                    session.EventEmitter.RemoveListener("complete", onComplete)
-                                                    session.EventEmitter.RemoveListener("error", onError)
+                                                    Try
+                                                        Dim closedSession = SessionManager.GetTaskSession(sessionId)
+                                                        If closedSession IsNot Nothing Then
+                                                            closedSession.SseConnected = False
+                                                            SessionManager.SaveTaskSession(closedSession)
+                                                            Console.WriteLine($"[API] ✅ STATELESS: SSE connection closed, flag set to False for session: {sessionId}")
+                                                        End If
+                                                    Catch
+                                                        ' Ignore errors during cleanup
+                                                    End Try
                                                 End Sub)
+
+                ' ✅ STATELESS: Salva la sessione con gli handler registrati
+                SessionManager.SaveTaskSession(session)
+                Console.WriteLine($"[API] ✅ STATELESS: Session saved with event listeners for session: {sessionId}")
+
+                ' ✅ STATELESS: Mantieni la connessione aperta e aspetta eventi
+                ' Il task in background verrà avviato quando SseConnected diventa True
+                Try
+                    Await System.Threading.Tasks.Task.Delay(System.Threading.Timeout.Infinite, context.RequestAborted)
+                Catch
+                    ' Connection closed normally
+                End Try
 
                 ' Keep connection alive (heartbeat every 30 seconds)
                 Dim heartbeatTimer As New System.Threading.Timer(Async Sub(state)

@@ -2,144 +2,181 @@ Option Strict On
 Option Explicit On
 Imports System.Collections.Generic
 Imports ApiServer.Interfaces
+Imports ApiServer.Infrastructure
 Imports Compiler
 Imports TaskEngine
 Imports Newtonsoft.Json
+Imports StackExchange.Redis
+Imports ApiServer.SessionStorage
 
 Namespace ApiServer.SessionStorage
     ''' <summary>
-    ''' ✅ FASE 3: Stub per implementazione futura di RedisSessionStorage
+    ''' ✅ STATELESS: Implementazione RedisSessionStorage (OBBLIGATORIO)
     '''
-    ''' NOTA: Questa implementazione è un placeholder per la migrazione futura a Redis.
-    ''' Per ora delega a InMemorySessionStorage per backward compatibility.
+    ''' NOTA: Redis è OBBLIGATORIO - nessun fallback.
+    ''' Se Redis non è disponibile, il servizio non si avvia.
     '''
-    ''' Per implementare Redis:
-    ''' 1. Aggiungere package StackExchange.Redis via NuGet
-    ''' 2. Configurare connection string in appsettings.json
-    ''' 3. Implementare serializzazione/deserializzazione JSON per TaskSession e OrchestratorSession
-    ''' 4. Gestire TTL (Time To Live) per sessioni (es. 1 ora)
-    ''' 5. Gestire errori di connessione e fallback
-    '''
-    ''' Pattern suggerito:
-    ''' - Key format: "session:task:{sessionId}" e "session:orchestrator:{sessionId}"
-    ''' - TTL: 3600 secondi (1 ora)
-    ''' - Serializzazione: JSON con Newtonsoft.Json
-    ''' - Fallback: InMemorySessionStorage se Redis non disponibile
+    ''' Pattern:
+    ''' - Key format: "{keyPrefix}session:task:{sessionId}" e "{keyPrefix}session:orchestrator:{sessionId}"
+    ''' - TTL: Configurabile (default 3600 secondi = 1 ora)
+    ''' - Serializzazione: JSON con SessionSerializer
+    ''' - Nessun fallback: Redis è obbligatorio
     ''' </summary>
     Public Class RedisSessionStorage
         Implements ApiServer.Interfaces.ISessionStorage
 
-        ' ✅ FASE 3: Per ora usa InMemory come fallback
-        Private ReadOnly _fallbackStorage As InMemorySessionStorage
-        Private ReadOnly _isRedisAvailable As Boolean = False
+        Private ReadOnly _connection As IConnectionMultiplexer
+        Private ReadOnly _database As IDatabase
+        Private ReadOnly _keyPrefix As String
+        Private ReadOnly _sessionTTL As TimeSpan
 
         ''' <summary>
-        ''' Costruttore: inizializza Redis (per ora usa fallback in-memory)
+        ''' Costruttore: inizializza Redis (OBBLIGATORIO - nessun fallback)
         ''' </summary>
-        Public Sub New(Optional connectionString As String = Nothing)
-            ' TODO FASE 3: Inizializzare connessione Redis
-            ' Dim redis = ConnectionMultiplexer.Connect(connectionString)
-            ' _isRedisAvailable = redis.IsConnected
+        ''' <exception cref="Exception">Solleva eccezione se Redis non è disponibile</exception>
+        Public Sub New(connectionString As String, keyPrefix As String, sessionTTL As Integer)
+            Try
+                _connection = ApiServer.Infrastructure.RedisConnectionManager.GetConnection(connectionString)
+                _database = _connection.GetDatabase()
+                _keyPrefix = keyPrefix
+                _sessionTTL = TimeSpan.FromSeconds(sessionTTL)
 
-            ' Per ora usa fallback
-            _fallbackStorage = New InMemorySessionStorage()
-            _isRedisAvailable = False
+                ' ✅ STATELESS: Verifica che Redis sia connesso, altrimenti solleva eccezione
+                If Not ApiServer.Infrastructure.RedisConnectionManager.IsConnected() Then
+                    Throw New Exception("Redis connection is not available. Service cannot start without Redis.")
+                End If
+
+                ' Test connessione con PING
+                If Not _database.StringSet("__health_check__", "ok", TimeSpan.FromSeconds(1)) Then
+                    Throw New Exception("Redis health check failed: cannot write to Redis.")
+                End If
+                _database.KeyDelete("__health_check__")
+
+                Console.WriteLine($"[RedisSessionStorage] ✅ Connected to Redis: {connectionString}, KeyPrefix: {keyPrefix}, TTL: {sessionTTL}s")
+            Catch ex As Exception
+                Console.WriteLine($"[RedisSessionStorage] ❌ CRITICAL: Failed to connect to Redis: {ex.Message}")
+                Console.WriteLine($"[RedisSessionStorage] ❌ Service cannot start without Redis. Terminating.")
+                Throw New Exception($"Redis is required but not available: {ex.Message}", ex)
+            End Try
         End Sub
 
+        Private Function GetTaskSessionKey(sessionId As String) As String
+            Return $"{_keyPrefix}session:task:{sessionId}"
+        End Function
+
+        Private Function GetOrchestratorSessionKey(sessionId As String) As String
+            Return $"{_keyPrefix}session:orchestrator:{sessionId}"
+        End Function
+
         ''' <summary>
-        ''' Recupera una TaskSession da Redis (o fallback)
+        ''' Recupera una TaskSession da Redis
         ''' </summary>
         Public Function GetTaskSession(sessionId As String) As TaskSession Implements ApiServer.Interfaces.ISessionStorage.GetTaskSession
-            If Not _isRedisAvailable Then
-                Return _fallbackStorage.GetTaskSession(sessionId)
-            End If
+            Try
+                Dim key = GetTaskSessionKey(sessionId)
+                Dim json = _database.StringGet(key)
 
-            ' TODO FASE 3: Implementare recupero da Redis
-            ' Dim key = $"session:task:{sessionId}"
-            ' Dim json = redis.StringGet(key)
-            ' If json.HasValue Then
-            '     Return JsonConvert.DeserializeObject(Of TaskSession)(json)
-            ' End If
-            ' Return Nothing
+                If json.HasValue Then
+                    Try
+                        Return SessionSerializer.DeserializeTaskSession(json)
+                    Catch deserializeEx As Exception
+                        ' ✅ STATELESS: Se deserializzazione fallisce, potrebbe essere una sessione vecchia senza TypeNameHandling
+                        ' Prova a eliminare la sessione corrotta e restituisci Nothing (verrà ricreata)
+                        Console.WriteLine($"[RedisSessionStorage] ⚠️ Warning: Failed to deserialize session {sessionId}: {deserializeEx.Message}")
+                        Console.WriteLine($"[RedisSessionStorage] ⚠️ This might be an old session format. Deleting corrupted session.")
+                        Try
+                            _database.KeyDelete(key)
+                        Catch
+                            ' Ignore delete errors
+                        End Try
+                        Return Nothing
+                    End Try
+                End If
 
-            Return Nothing
+                Return Nothing
+            Catch ex As Exception
+                ' ✅ STATELESS: Nessun fallback - solleva eccezione
+                Console.WriteLine($"[RedisSessionStorage] ❌ Error getting task session: {ex.Message}")
+                Throw New Exception($"Failed to get task session from Redis: {ex.Message}", ex)
+            End Try
         End Function
 
         ''' <summary>
-        ''' Salva una TaskSession su Redis (o fallback)
+        ''' Salva una TaskSession su Redis
         ''' </summary>
         Public Sub SaveTaskSession(session As TaskSession) Implements ApiServer.Interfaces.ISessionStorage.SaveTaskSession
-            If Not _isRedisAvailable Then
-                _fallbackStorage.SaveTaskSession(session)
-                Return
-            End If
-
-            ' TODO FASE 3: Implementare salvataggio su Redis
-            ' Dim key = $"session:task:{session.SessionId}"
-            ' Dim json = JsonConvert.SerializeObject(session)
-            ' redis.StringSet(key, json, TimeSpan.FromSeconds(3600)) ' TTL 1 ora
+            Try
+                Dim key = GetTaskSessionKey(session.SessionId)
+                Dim json = SessionSerializer.SerializeTaskSession(session)
+                _database.StringSet(key, json, _sessionTTL)
+            Catch ex As Exception
+                ' ✅ STATELESS: Nessun fallback - solleva eccezione
+                Console.WriteLine($"[RedisSessionStorage] ❌ Error saving task session: {ex.Message}")
+                Throw New Exception($"Failed to save task session to Redis: {ex.Message}", ex)
+            End Try
         End Sub
 
         ''' <summary>
-        ''' Elimina una TaskSession da Redis (o fallback)
+        ''' Elimina una TaskSession da Redis
         ''' </summary>
         Public Sub DeleteTaskSession(sessionId As String) Implements ApiServer.Interfaces.ISessionStorage.DeleteTaskSession
-            If Not _isRedisAvailable Then
-                _fallbackStorage.DeleteTaskSession(sessionId)
-                Return
-            End If
-
-            ' TODO FASE 3: Implementare eliminazione da Redis
-            ' Dim key = $"session:task:{sessionId}"
-            ' redis.KeyDelete(key)
+            Try
+                Dim key = GetTaskSessionKey(sessionId)
+                _database.KeyDelete(key)
+            Catch ex As Exception
+                ' ✅ STATELESS: Nessun fallback - solleva eccezione
+                Console.WriteLine($"[RedisSessionStorage] ❌ Error deleting task session: {ex.Message}")
+                Throw New Exception($"Failed to delete task session from Redis: {ex.Message}", ex)
+            End Try
         End Sub
 
         ''' <summary>
-        ''' Recupera una OrchestratorSession da Redis (o fallback)
+        ''' Recupera una OrchestratorSession da Redis
         ''' </summary>
         Public Function GetOrchestratorSession(sessionId As String) As OrchestratorSession Implements ApiServer.Interfaces.ISessionStorage.GetOrchestratorSession
-            If Not _isRedisAvailable Then
-                Return _fallbackStorage.GetOrchestratorSession(sessionId)
-            End If
+            Try
+                Dim key = GetOrchestratorSessionKey(sessionId)
+                Dim json = _database.StringGet(key)
 
-            ' TODO FASE 3: Implementare recupero da Redis
-            ' Dim key = $"session:orchestrator:{sessionId}"
-            ' Dim json = redis.StringGet(key)
-            ' If json.HasValue Then
-            '     Return JsonConvert.DeserializeObject(Of OrchestratorSession)(json)
-            ' End If
-            ' Return Nothing
+                If json.HasValue Then
+                    Return SessionSerializer.DeserializeOrchestratorSession(json, sessionId)
+                End If
 
-            Return Nothing
+                Return Nothing
+            Catch ex As Exception
+                ' ✅ STATELESS: Nessun fallback - solleva eccezione
+                Console.WriteLine($"[RedisSessionStorage] ❌ Error getting orchestrator session: {ex.Message}")
+                Throw New Exception($"Failed to get orchestrator session from Redis: {ex.Message}", ex)
+            End Try
         End Function
 
         ''' <summary>
-        ''' Salva una OrchestratorSession su Redis (o fallback)
+        ''' Salva una OrchestratorSession su Redis
         ''' </summary>
         Public Sub SaveOrchestratorSession(session As OrchestratorSession) Implements ApiServer.Interfaces.ISessionStorage.SaveOrchestratorSession
-            If Not _isRedisAvailable Then
-                _fallbackStorage.SaveOrchestratorSession(session)
-                Return
-            End If
-
-            ' TODO FASE 3: Implementare salvataggio su Redis
-            ' Dim key = $"session:orchestrator:{session.SessionId}"
-            ' Dim json = JsonConvert.SerializeObject(session)
-            ' redis.StringSet(key, json, TimeSpan.FromSeconds(3600)) ' TTL 1 ora
+            Try
+                Dim key = GetOrchestratorSessionKey(session.SessionId)
+                Dim json = SessionSerializer.SerializeOrchestratorSession(session)
+                _database.StringSet(key, json, _sessionTTL)
+            Catch ex As Exception
+                ' ✅ STATELESS: Nessun fallback - solleva eccezione
+                Console.WriteLine($"[RedisSessionStorage] ❌ Error saving orchestrator session: {ex.Message}")
+                Throw New Exception($"Failed to save orchestrator session to Redis: {ex.Message}", ex)
+            End Try
         End Sub
 
         ''' <summary>
-        ''' Elimina una OrchestratorSession da Redis (o fallback)
+        ''' Elimina una OrchestratorSession da Redis
         ''' </summary>
         Public Sub DeleteOrchestratorSession(sessionId As String) Implements ApiServer.Interfaces.ISessionStorage.DeleteOrchestratorSession
-            If Not _isRedisAvailable Then
-                _fallbackStorage.DeleteOrchestratorSession(sessionId)
-                Return
-            End If
-
-            ' TODO FASE 3: Implementare eliminazione da Redis
-            ' Dim key = $"session:orchestrator:{sessionId}"
-            ' redis.KeyDelete(key)
+            Try
+                Dim key = GetOrchestratorSessionKey(sessionId)
+                _database.KeyDelete(key)
+            Catch ex As Exception
+                ' ✅ STATELESS: Nessun fallback - solleva eccezione
+                Console.WriteLine($"[RedisSessionStorage] ❌ Error deleting orchestrator session: {ex.Message}")
+                Throw New Exception($"Failed to delete orchestrator session from Redis: {ex.Message}", ex)
+            End Try
         End Sub
     End Class
 End Namespace

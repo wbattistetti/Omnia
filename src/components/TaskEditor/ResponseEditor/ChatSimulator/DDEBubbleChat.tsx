@@ -73,6 +73,17 @@ export default function DDEBubbleChat({
       return;
     }
 
+    // ✅ STATELESS: Log iniziale modalità stateless
+    console.log('%c═══════════════════════════════════════════════════════════════', 'color: #00ffff; font-weight: bold; font-size: 14px;');
+    console.log('%c🔴 STATELESS MODE: Chat Simulator Initialized', 'color: #00ffff; font-weight: bold; font-size: 16px;');
+    console.log('%c═══════════════════════════════════════════════════════════════', 'color: #00ffff; font-weight: bold; font-size: 14px;');
+    console.log('%c📦 Storage:', 'color: #00ffff; font-weight: bold;', 'Redis (stateless)');
+    console.log('%c🌐 Backend:', 'color: #00ffff; font-weight: bold;', 'http://localhost:5000 (VB.NET)');
+    console.log('%c📝 Task ID:', 'color: #00ffff; font-weight: bold;', task.id);
+    console.log('%c🔑 Project ID:', 'color: #00ffff; font-weight: bold;', projectId);
+    console.log('%c⏱️  Timestamp:', 'color: #00ffff; font-weight: bold;', new Date().toISOString());
+    console.log('%c═══════════════════════════════════════════════════════════════', 'color: #00ffff; font-weight: bold; font-size: 14px;');
+
     // ✅ Create a unique key for this task/project combination
     const sessionKey = `${task.id}-${projectId}`;
     console.log('[DDEBubbleChat] Computed sessionKey:', sessionKey, 'lastSessionKeyRef:', lastSessionKeyRef.current);
@@ -133,11 +144,13 @@ export default function DDEBubbleChat({
                 projectLanguage = langMap[project.language] || `${project.language}-${project.language.toUpperCase()}` || 'it-IT';
               }
             } else {
-              console.warn(`[DDEBubbleChat] Failed to load project metadata: ${projectResponse.status}, using fallback language`);
+              console.warn(`[DDEBubbleChat] ⚠️ Failed to load project metadata: ${projectResponse.status}, using fallback language 'it-IT'`);
+              // ✅ STATELESS: Continua con fallback - non bloccare la sessione
             }
           } catch (error) {
-            console.error('[DDEBubbleChat] Error loading project language:', error);
-            // Usa fallback
+            console.error('[DDEBubbleChat] ⚠️ Error loading project language (non critico):', error);
+            // ✅ STATELESS: Usa fallback - non bloccare la sessione
+            // Il backend VB.NET può funzionare anche senza la lingua del progetto
           }
         }
 
@@ -251,6 +264,18 @@ export default function DDEBubbleChat({
 
         const { sessionId: newSessionId } = responseData;
         setSessionId(newSessionId);
+
+        // ✅ STATELESS: Log dettagliato per verifica modalità stateless
+        console.log('%c═══════════════════════════════════════════════════════════════', 'color: #00ff00; font-weight: bold; font-size: 14px;');
+        console.log('%c🔴 STATELESS MODE: Session Created', 'color: #00ff00; font-weight: bold; font-size: 16px;');
+        console.log('%c═══════════════════════════════════════════════════════════════', 'color: #00ff00; font-weight: bold; font-size: 14px;');
+        console.log('%c✅ Session ID:', 'color: #00ff00; font-weight: bold;', newSessionId);
+        console.log('%c📦 Storage:', 'color: #00ff00; font-weight: bold;', 'Redis (stateless)');
+        console.log('%c🌐 Backend:', 'color: #00ff00; font-weight: bold;', baseUrl);
+        console.log('%c📝 Task ID:', 'color: #00ff00; font-weight: bold;', task.id);
+        console.log('%c🔑 Session Key:', 'color: #00ff00; font-weight: bold;', `omnia:session:task:${newSessionId}`);
+        console.log('%c⏱️  Timestamp:', 'color: #00ff00; font-weight: bold;', new Date().toISOString());
+        console.log('%c═══════════════════════════════════════════════════════════════', 'color: #00ff00; font-weight: bold; font-size: 14px;');
         console.log('[DDEBubbleChat] ✅ Backend session created:', { sessionId: newSessionId });
 
         // ✅ NUOVO: SSE stream diretto da VB.NET backend
@@ -270,6 +295,17 @@ export default function DDEBubbleChat({
         eventSource.addEventListener('message', (e: MessageEvent) => {
           try {
             const msg = JSON.parse(e.data);
+
+            // ✅ STATELESS: Log ricezione messaggio con info Redis
+            console.log('%c═══════════════════════════════════════════════════════════════', 'color: #ffaa00; font-weight: bold; font-size: 14px;');
+            console.log('%c📨 STATELESS: Backend Message Received', 'color: #ffaa00; font-weight: bold; font-size: 16px;');
+            console.log('%c═══════════════════════════════════════════════════════════════', 'color: #ffaa00; font-weight: bold; font-size: 14px;');
+            console.log('%c✅ Session ID:', 'color: #ffaa00; font-weight: bold;', newSessionId);
+            console.log('%c🔑 Redis Key:', 'color: #ffaa00; font-weight: bold;', `omnia:session:task:${newSessionId}`);
+            console.log('%c💬 Message:', 'color: #ffaa00; font-weight: bold;', msg.text || msg.message || '');
+            console.log('%c📦 Storage:', 'color: #ffaa00; font-weight: bold;', 'Redis (stateless) - Message retrieved from Redis session');
+            console.log('%c⏱️  Timestamp:', 'color: #ffaa00; font-weight: bold;', new Date().toISOString());
+            console.log('%c═══════════════════════════════════════════════════════════════', 'color: #ffaa00; font-weight: bold; font-size: 14px;');
             console.log('[DDEBubbleChat] 📨 Backend message received:', msg);
 
             // Only add message if it has actual text from backend
@@ -301,14 +337,22 @@ export default function DDEBubbleChat({
         // Handle waiting for input
         eventSource.addEventListener('waitingForInput', (e: MessageEvent) => {
           try {
+            const data = JSON.parse(e.data);
+
+            // ✅ STATELESS: Log stato waiting for input
+            console.log('%c⏳ STATELESS: Waiting for Input', 'color: #ffff00; font-weight: bold;', {
+              sessionId: newSessionId,
+              redisKey: `omnia:session:task:${newSessionId}`,
+              message: 'Session state saved to Redis, waiting for user input',
+              timestamp: new Date().toISOString()
+            });
+
             console.log('[DDEBubbleChat] waitingForInput event received');
             console.log('[DDEBubbleChat] waitingForInput raw data:', e.data);
             console.log('[DDEBubbleChat] waitingForInput data type:', typeof e.data);
             console.log('[DDEBubbleChat] waitingForInput data length:', e.data?.length);
             console.log('[DDEBubbleChat] waitingForInput data preview:', e.data?.substring(0, 100));
             console.log('[DDEBubbleChat] waitingForInput data char codes:', Array.from(e.data || '').slice(0, 100).map(c => c.charCodeAt(0)));
-
-            const data = JSON.parse(e.data);
             console.log('[DDEBubbleChat] Backend waiting for input:', data);
             setIsWaitingForInput(true);
           } catch (error) {
@@ -322,6 +366,16 @@ export default function DDEBubbleChat({
         eventSource.addEventListener('stateUpdate', (e: MessageEvent) => {
           try {
             const data = JSON.parse(e.data);
+
+            // ✅ STATELESS: Log aggiornamento stato
+            console.log('%c🔄 STATELESS: State Update', 'color: #00ffaa; font-weight: bold;', {
+              sessionId: newSessionId,
+              redisKey: `omnia:session:task:${newSessionId}`,
+              message: 'Session state updated and saved to Redis',
+              state: data,
+              timestamp: new Date().toISOString()
+            });
+
             console.log('[DDEBubbleChat] Backend state update:', data);
             // State updates are handled by backend, we just log them
           } catch (error) {
@@ -366,11 +420,18 @@ export default function DDEBubbleChat({
         });
 
         eventSource.onerror = (error) => {
+          console.error('%c❌ STATELESS: SSE connection error', 'color: #ff0000; font-weight: bold;', {
+            error,
+            readyState: eventSource.readyState,
+            sessionId: newSessionId,
+            redisKey: `omnia:session:task:${newSessionId}`,
+            url: eventSource.url
+          });
           console.error('[DDEBubbleChat] SSE connection error', error);
           if (eventSource.readyState === EventSource.CLOSED) {
             // Clear messages when connection is closed - backend is not available
             setMessages([]);
-            setBackendError('Connection to backend server closed. Is Ruby server running on port 3101?');
+            setBackendError('Connection to backend server closed. Is VB.NET server running on port 5000?');
             setIsWaitingForInput(false);
           }
         };
@@ -400,6 +461,17 @@ export default function DDEBubbleChat({
       }
       if (sessionId) {
         const baseUrl = 'http://localhost:5000';
+
+        // ✅ STATELESS: Log eliminazione sessione
+        console.log('%c═══════════════════════════════════════════════════════════════', 'color: #ff0000; font-weight: bold; font-size: 14px;');
+        console.log('%c🗑️  STATELESS: Deleting Session', 'color: #ff0000; font-weight: bold; font-size: 16px;');
+        console.log('%c═══════════════════════════════════════════════════════════════', 'color: #ff0000; font-weight: bold; font-size: 14px;');
+        console.log('%c✅ Session ID:', 'color: #ff0000; font-weight: bold;', sessionId);
+        console.log('%c🔑 Redis Key:', 'color: #ff0000; font-weight: bold;', `omnia:session:task:${sessionId}`);
+        console.log('%c📦 Storage:', 'color: #ff0000; font-weight: bold;', 'Redis (stateless) - Session will be deleted from Redis');
+        console.log('%c⏱️  Timestamp:', 'color: #ff0000; font-weight: bold;', new Date().toISOString());
+        console.log('%c═══════════════════════════════════════════════════════════════', 'color: #ff0000; font-weight: bold; font-size: 14px;');
+
         fetch(`${baseUrl}/api/runtime/task/session/${sessionId}`, {
           method: 'DELETE'
         }).catch(() => { });
@@ -439,6 +511,17 @@ export default function DDEBubbleChat({
     if (!trimmed || !sessionId) return;
 
     try {
+      // ✅ STATELESS: Log invio messaggio con info Redis
+      console.log('%c═══════════════════════════════════════════════════════════════', 'color: #00aaff; font-weight: bold; font-size: 14px;');
+      console.log('%c📤 STATELESS: Sending User Input', 'color: #00aaff; font-weight: bold; font-size: 16px;');
+      console.log('%c═══════════════════════════════════════════════════════════════', 'color: #00aaff; font-weight: bold; font-size: 14px;');
+      console.log('%c✅ Session ID:', 'color: #00aaff; font-weight: bold;', sessionId);
+      console.log('%c🔑 Redis Key:', 'color: #00aaff; font-weight: bold;', `omnia:session:task:${sessionId}`);
+      console.log('%c💬 User Input:', 'color: #00aaff; font-weight: bold;', trimmed);
+      console.log('%c📦 Storage:', 'color: #00aaff; font-weight: bold;', 'Redis (stateless) - Session will be retrieved from Redis');
+      console.log('%c⏱️  Timestamp:', 'color: #00aaff; font-weight: bold;', new Date().toISOString());
+      console.log('%c═══════════════════════════════════════════════════════════════', 'color: #00aaff; font-weight: bold; font-size: 14px;');
+
       // Add user message immediately
       setMessages((prev) => [...prev, {
         id: generateMessageId('user'),
@@ -465,10 +548,23 @@ export default function DDEBubbleChat({
         throw new Error(`Failed to send input: ${response.statusText} - ${errorText}`);
       }
 
+      // ✅ STATELESS: Log successo invio
+      console.log('%c✅ STATELESS: Input sent successfully', 'color: #00ff00; font-weight: bold;', {
+        sessionId,
+        redisKey: `omnia:session:task:${sessionId}`,
+        status: response.status,
+        message: 'Session state will be saved to Redis after processing'
+      });
+
       // ✅ Lo stato isWaitingForInput verrà gestito dall'evento SSE waitingForInput
       // Non impostiamo false qui perché il backend potrebbe ancora processare l'input
       // e inviare un nuovo evento waitingForInput dopo aver eseguito il messaggio di risposta
     } catch (error) {
+      console.error('%c❌ STATELESS: Error sending input', 'color: #ff0000; font-weight: bold;', {
+        sessionId,
+        redisKey: `omnia:session:task:${sessionId}`,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       console.error('[DDEBubbleChat] Error sending input', error);
       setBackendError(error instanceof Error ? error.message : 'Failed to send input to backend');
       // ✅ In caso di errore, riabilita l'input per permettere un nuovo tentativo

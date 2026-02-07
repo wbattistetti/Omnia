@@ -28,13 +28,14 @@
     <Compile Include="Interfaces\ILogger.vb" />
     <Compile Include="Interfaces\ISessionStorage.vb" />
     <Compile Include="Logging\StdoutLogger.vb" />
-    <Compile Include="SessionStorage\InMemorySessionStorage.vb" />
+    <!-- ✅ STATELESS: InMemorySessionStorage rimosso - solo Redis -->
     <!-- Fine FASE 1 -->
-    <!-- FASE 3: Redis Session Storage (stub per futuro) -->
-    <Compile Include="SessionStorage\RedisSessionStorage.vb" />
-    <!-- Fine FASE 3 -->
-    <!-- FASE 4: Redis Infrastructure -->
+    <!-- FASE 4: Redis Infrastructure (DEVE essere prima di RedisSessionStorage) -->
     <Compile Include="Infrastructure\RedisConnectionManager.vb" />
+    <Compile Include="SessionStorage\SessionSerializer.vb" />
+    <!-- Fine FASE 4 -->
+    <!-- FASE 4: Redis Session Storage (implementazione completa) -->
+    <Compile Include="SessionStorage\RedisSessionStorage.vb" />
     <!-- Fine FASE 4 -->
     <Compile Include="Commands\CompileFlowCommand.vb" />
     <Compile Include="Commands\CompileDDTCommand.vb" />
