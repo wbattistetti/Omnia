@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { ResponseEditorContent } from '../ResponseEditorContent';
-import type { Task, TaskTree } from '../../../../../types/taskTypes';
+import type { Task, TaskTree } from '@types/taskTypes';
 
 // Mock child components
 vi.mock('../../ContractWizard/ContractWizard', () => ({

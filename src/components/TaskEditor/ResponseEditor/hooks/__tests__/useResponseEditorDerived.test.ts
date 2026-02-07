@@ -47,8 +47,8 @@ vi.mock('../../utils/hasMessages', () => ({
   hasIntentMessages: vi.fn(() => false),
 }));
 
-import { getTaskVisualsByType } from '../../../../Flowchart/utils/taskVisuals';
-import { hasIntentMessages } from '../../utils/hasMessages';
+import { getTaskVisualsByType } from '@components/Flowchart/utils/taskVisuals';
+import { hasIntentMessages } from '@responseEditor/utils/hasMessages';
 
 describe('useResponseEditorDerived', () => {
   beforeEach(() => {

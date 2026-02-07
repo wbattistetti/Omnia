@@ -10,7 +10,7 @@ import {
   isTaskMeta,
   getTaskMeta,
 } from '../responseEditorUtils';
-import type { TaskMeta } from '../../../EditorHost/types';
+import type { TaskMeta } from '@taskEditor/EditorHost/types';
 
 /**
  * Tests for responseEditorUtils

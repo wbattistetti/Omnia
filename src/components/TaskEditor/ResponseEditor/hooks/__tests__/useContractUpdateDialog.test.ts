@@ -42,8 +42,8 @@ vi.mock('../../../../../dock/ops', () => ({
   closeTab: vi.fn((prev: any, tabId: string) => ({ ...prev, closedTab: tabId })),
 }));
 
-import DialogueTaskService from '../../../../../services/DialogueTaskService';
-import { closeTab } from '../../../../../dock/ops';
+import DialogueTaskService from '@services/DialogueTaskService';
+import { closeTab } from '@dock/ops';
 
 describe('useContractUpdateDialog', () => {
   let setShowContractDialog: ReturnType<typeof vi.fn>;

@@ -3,7 +3,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getdataList } from '../ddtSelectors';
-import * as migrationHelpers from '../../../../utils/taskTreeMigrationHelpers';
+import * as migrationHelpers from '@utils/taskTreeMigrationHelpers';
 
 describe('ddtSelectors - Migration Phase 0', () => {
   beforeEach(() => {
