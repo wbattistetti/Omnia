@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import TreeView from '../index';
-import { TreeNodeProps } from '../../types';
+import TreeView from '@responseEditor/TreeView/index';
+import { TreeNodeProps } from '@responseEditor/types';
 
 describe('TreeView (Refactored)', () => {
   it('should export a React component', () => {
@@ -13,7 +13,7 @@ describe('TreeView (Refactored)', () => {
     const mockNodes: TreeNodeProps[] = [
       { id: '1', text: 'Test Node 1', type: 'root' }
     ];
-    
+
     const mockProps = {
       nodes: mockNodes,
       onDrop: vi.fn(),
@@ -24,7 +24,7 @@ describe('TreeView (Refactored)', () => {
       foreColor: '#000000',
       bgColor: '#ffffff'
     };
-    
+
     // Test that the component can be instantiated without errors
     expect(() => {
       <TreeView {...mockProps} />
@@ -37,7 +37,7 @@ describe('TreeView (Refactored)', () => {
       onDrop: vi.fn(),
       onRemove: vi.fn()
     };
-    
+
     expect(() => {
       <TreeView {...mockProps} />
     }).not.toThrow();
@@ -47,14 +47,14 @@ describe('TreeView (Refactored)', () => {
     const mockNodes: TreeNodeProps[] = [
       { id: '1', text: 'Test Node 1', type: 'root' }
     ];
-    
+
     const mockProps = {
       nodes: mockNodes,
       onDrop: vi.fn(),
       onRemove: vi.fn()
     };
-    
+
     const component = <TreeView {...mockProps} />;
     expect(component).toBeDefined();
   });
-}); 
+});

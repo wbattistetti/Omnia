@@ -1,7 +1,7 @@
 import React from 'react';
 import { useDragLayer } from 'react-dnd';
-import { TreeNodeProps } from '../types';
-import { CustomDragLayerProps } from './TreeViewTypes';
+import { TreeNodeProps } from '@responseEditor/types';
+import { CustomDragLayerProps } from '@responseEditor/TreeView/TreeViewTypes';
 
 const CustomDragLayer: React.FC<CustomDragLayerProps> = ({ nodes }) => {
   const { isDragging, item, currentOffset } = useDragLayer((monitor) => ({
@@ -15,7 +15,7 @@ const CustomDragLayer: React.FC<CustomDragLayerProps> = ({ nodes }) => {
   const draggedNode = nodes.find(n => n.id === item.id);
   if (!draggedNode) return null;
 
-  const previewText = (draggedNode.text || draggedNode.label || '').slice(0, 30) + 
+  const previewText = (draggedNode.text || draggedNode.label || '').slice(0, 30) +
     (draggedNode.text && draggedNode.text.length > 30 ? '...' : '');
 
   return (
@@ -43,4 +43,4 @@ const CustomDragLayer: React.FC<CustomDragLayerProps> = ({ nodes }) => {
   );
 };
 
-export default CustomDragLayer; 
+export default CustomDragLayer;

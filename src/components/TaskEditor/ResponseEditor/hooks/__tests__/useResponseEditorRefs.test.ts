@@ -3,8 +3,8 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import { useResponseEditorRefs } from '../useResponseEditorRefs';
-import type { TaskTree } from '../../../../../types/taskTypes';
+import { useResponseEditorRefs } from '@responseEditor/hooks/useResponseEditorRefs';
+import type { TaskTree } from '@types/taskTypes';
 
 /**
  * Tests for useResponseEditorRefs

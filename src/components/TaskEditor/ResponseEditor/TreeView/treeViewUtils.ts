@@ -1,4 +1,4 @@
-import { TreeNodeProps } from '../types';
+import { TreeNodeProps } from '@responseEditor/types';
 
 // Default nodes for testing/initialization
 export const defaultNodes: TreeNodeProps[] = [
@@ -99,7 +99,7 @@ export const calculateEscalationLabel = (
   siblings: TreeNodeProps[]
 ): string | undefined => {
   if (!isEscalationNode(node)) return undefined;
-  
+
   const allEscalations = siblings.filter(n => n.type === 'escalation');
   const escIdx = allEscalations.findIndex(n => n.id === node.id);
   return `${escIdx + 1}° recovery`;
@@ -117,7 +117,7 @@ export const isSingleEscalation = (
   if (!isEscalationNode(node) || !stepKey || !singleEscalationSteps.includes(stepKey)) {
     return false;
   }
-  
+
   const escCount = siblings.filter(n => n.type === 'escalation').length;
   return escCount === 1;
 };
@@ -164,4 +164,4 @@ export const getEscalationProps = (
     foreColor: extraProps?.foreColor,
     bgColor: extraProps?.bgColor
   };
-}; 
+};

@@ -8,8 +8,8 @@ import {
   isSingleEscalation,
   isDropOutsideNodes,
   calculateDropPosition
-} from '../treeViewUtils';
-import { TreeNodeProps } from '../../types';
+} from '@responseEditor/TreeView/treeViewUtils';
+import { TreeNodeProps } from '@responseEditor/types';
 
 describe('treeViewUtils', () => {
   describe('defaultNodes', () => {
@@ -40,7 +40,7 @@ describe('treeViewUtils', () => {
     it('should return false for non-escalation nodes', () => {
       const rootNode: TreeNodeProps = { id: '1', type: 'root', text: 'Test' };
       const nomatchNode: TreeNodeProps = { id: '2', type: 'nomatch', text: 'Test' };
-      
+
       expect(isEscalationNode(rootNode)).toBe(false);
       expect(isEscalationNode(nomatchNode)).toBe(false);
     });
@@ -55,7 +55,7 @@ describe('treeViewUtils', () => {
       ];
 
       const children = getEscalationChildren(nodes, '1', 1);
-      
+
       expect(children).toHaveLength(2);
       expect(children[0]).toHaveProperty('level', 2);
       expect(children[1]).toHaveProperty('level', 2);
@@ -179,4 +179,4 @@ describe('treeViewUtils', () => {
       expect(result).toBe('after');
     });
   });
-}); 
+});

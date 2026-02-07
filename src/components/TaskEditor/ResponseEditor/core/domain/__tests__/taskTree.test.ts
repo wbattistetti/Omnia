@@ -7,9 +7,9 @@ import {
   getSubNodes,
   hasMultipleMainNodes,
   findNodeByIndices,
-} from '../taskTree';
-import * as migrationHelpers from '../../../../../../utils/taskTreeMigrationHelpers';
-import type { TaskTree } from '../../../../../../types/taskTypes';
+} from '@responseEditor/core/domain/taskTree';
+import * as migrationHelpers from '@utils/taskTreeMigrationHelpers';
+import type { TaskTree } from '@types/taskTypes';
 
 describe('Domain: TaskTree Operations', () => {
   beforeEach(() => {

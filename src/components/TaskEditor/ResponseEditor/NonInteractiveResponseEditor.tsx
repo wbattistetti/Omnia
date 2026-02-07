@@ -1,5 +1,5 @@
 import React from 'react';
-import { taskRepository } from '../../../services/TaskRepository';
+import { taskRepository } from '@services/TaskRepository';
 
 export interface NonInteractiveResponse {
   template: string;

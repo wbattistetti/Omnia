@@ -1,10 +1,10 @@
 import React from 'react';
-import EditorPanel from '../../../CodeEditor/EditorPanel';
-import EditorHeader from './shared/EditorHeader';
+import EditorPanel from '@components/CodeEditor/EditorPanel';
+import EditorHeader from '@responseEditor/InlineEditors/shared/EditorHeader';
 // TestValuesColumn rimosso - ora è unico in DataExtractionEditor
-import { type TestResult } from './shared/TestValuesColumn';
-import { useEditorMode } from '../hooks/useEditorMode';
-import { NLPProfile } from '../DataExtractionEditor';
+import { type TestResult } from '@responseEditor/InlineEditors/shared/TestValuesColumn';
+import { useEditorMode } from '@responseEditor/hooks/useEditorMode';
+import { NLPProfile } from '@responseEditor/DataExtractionEditor';
 
 interface ExtractorInlineEditorProps {
   onClose: () => void;

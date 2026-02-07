@@ -3,12 +3,12 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import { useIntentMessagesHandler } from '../useIntentMessagesHandler';
-import type { Task, TaskTree } from '../../../../../types/taskTypes';
-import { TaskType } from '../../../../../types/taskTypes';
+import { useIntentMessagesHandler } from '@responseEditor/hooks/useIntentMessagesHandler';
+import type { Task, TaskTree } from '@types/taskTypes';
+import { TaskType } from '@types/taskTypes';
 
 // Mock dependencies
-vi.mock('../../../../../services/TaskRepository', () => ({
+vi.mock('@services/TaskRepository', () => ({
   taskRepository: {
     getTask: vi.fn(),
     updateTask: vi.fn(),
@@ -16,26 +16,26 @@ vi.mock('../../../../../services/TaskRepository', () => ({
   },
 }));
 
-vi.mock('../../../../../utils/taskHelpers', () => ({
+vi.mock('@utils/taskHelpers', () => ({
   getTemplateId: vi.fn(),
 }));
 
-vi.mock('../../../../../types/taskTypes', async () => {
-  const actual = await vi.importActual('../../../../../types/taskTypes');
+vi.mock('@types/taskTypes', async () => {
+  const actual = await vi.importActual('@types/taskTypes');
   return {
     ...actual,
     isUtteranceInterpretationTemplateId: vi.fn(),
   };
 });
 
-vi.mock('../../utils/saveIntentMessages', () => ({
+vi.mock('@responseEditor/utils/saveIntentMessages', () => ({
   saveIntentMessagesToTaskTree: vi.fn(),
 }));
 
-import { taskRepository } from '../../../../../services/TaskRepository';
-import { getTemplateId } from '../../../../../utils/taskHelpers';
-import { isUtteranceInterpretationTemplateId } from '../../../../../types/taskTypes';
-import { saveIntentMessagesToTaskTree } from '../../utils/saveIntentMessages';
+import { taskRepository } from '@services/TaskRepository';
+import { getTemplateId } from '@utils/taskHelpers';
+import { isUtteranceInterpretationTemplateId } from '@types/taskTypes';
+import { saveIntentMessagesToTaskTree } from '@responseEditor/utils/saveIntentMessages';
 
 /**
  * Tests for useIntentMessagesHandler

@@ -1,4 +1,4 @@
-import type { AssembledTaskTree } from '../../../../TaskTreeBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledTaskTree } from '@components/TaskTreeBuilder/DDTAssembler/currentDDT.types';
 
 /**
  * Finds and updates action.text in the DDT structure for a given textKey and stepType.

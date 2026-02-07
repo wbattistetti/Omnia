@@ -3,7 +3,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import { usePanelWidths } from '../usePanelWidths';
+import { usePanelWidths } from '@responseEditor/hooks/usePanelWidths';
 
 /**
  * Tests for usePanelWidths

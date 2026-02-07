@@ -3,8 +3,8 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useTaskTreeDerived } from '../useTaskTreeDerived';
-import type { TaskTree } from '../../../../../types/taskTypes';
+import { useTaskTreeDerived } from '@responseEditor/hooks/useTaskTreeDerived';
+import type { TaskTree } from '@types/taskTypes';
 
 /**
  * Tests for useTaskTreeDerived

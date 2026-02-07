@@ -1,20 +1,20 @@
 import React from 'react';
 import { AlertTriangle, CheckCircle2 } from 'lucide-react';
-import EditorPanel, { type CustomLanguage } from '../../../CodeEditor/EditorPanel';
-import EditorHeader from './shared/EditorHeader';
-import { useEditorMode } from '../hooks/useEditorMode';
-import { useRegexValidation } from '../hooks/useRegexValidation';
-import { useRegexButtonMode } from '../hooks/useRegexButtonMode';
-import { usePlaceholderSelection } from '../hooks/usePlaceholderSelection';
-import { useRegexAIGeneration } from '../hooks/useRegexAIGeneration';
-import { NLPProfile } from '../DataExtractionEditor';
-import { getIsTesting } from '../testingState';
-import { useNotesStore } from '../stores/notesStore';
-import { generateBaseRegexWithNamedGroups, generateBaseRegexSimple } from '../utils/regexGroupUtils';
-import type { TaskTreeNode } from '../../../../types/taskTypes';
-import { useRegexState } from '../hooks/useRegexState';
+import EditorPanel, { type CustomLanguage } from '@components/CodeEditor/EditorPanel';
+import EditorHeader from '@responseEditor/InlineEditors/shared/EditorHeader';
+import { useEditorMode } from '@responseEditor/hooks/useEditorMode';
+import { useRegexValidation } from '@responseEditor/hooks/useRegexValidation';
+import { useRegexButtonMode } from '@responseEditor/hooks/useRegexButtonMode';
+import { usePlaceholderSelection } from '@responseEditor/hooks/usePlaceholderSelection';
+import { useRegexAIGeneration } from '@responseEditor/hooks/useRegexAIGeneration';
+import { NLPProfile } from '@responseEditor/DataExtractionEditor';
+import { getIsTesting } from '@responseEditor/testingState';
+import { useNotesStore } from '@responseEditor/stores/notesStore';
+import { generateBaseRegexWithNamedGroups, generateBaseRegexSimple } from '@responseEditor/utils/regexGroupUtils';
+import type { TaskTreeNode } from '@types/taskTypes';
+import { useRegexState } from '@responseEditor/hooks/useRegexState';
 
-import { RowResult } from '../hooks/useExtractionTesting';
+import { RowResult } from '@responseEditor/hooks/useExtractionTesting';
 
 interface RegexInlineEditorProps {
   regex: string;

@@ -1,11 +1,11 @@
 import React from 'react';
-import type { Task, TaskTree } from '../../../../types/taskTypes';
+import type { Task, TaskTree } from '@types/taskTypes';
 import { AlertTriangle } from 'lucide-react';
-import UserMessage, { type Message } from '../../../ChatSimulator/UserMessage';
-import BotMessage from './BotMessage';
-import { getStepColor } from './chatSimulatorUtils';
-import { useFontContext } from '../../../../context/FontContext';
-import { useMessageEditing } from './hooks/useMessageEditing';
+import UserMessage, { type Message } from '@components/ChatSimulator/UserMessage';
+import BotMessage from '@responseEditor/ChatSimulator/BotMessage';
+import { getStepColor } from '@responseEditor/ChatSimulator/chatSimulatorUtils';
+import { useFontContext } from '@context/FontContext';
+import { useMessageEditing } from '@responseEditor/ChatSimulator/hooks/useMessageEditing';
 
 export default function DDEBubbleChat({
   task,

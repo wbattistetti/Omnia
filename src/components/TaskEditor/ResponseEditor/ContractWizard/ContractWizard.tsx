@@ -3,9 +3,9 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, Check, AlertCircle, Loader2, Sparkles } from 'lucide-react';
-import type { TaskTree } from '../../../../types/taskTypes';
-import type { TreeAnalysis, GenerationPlan, GenerationProgress, NodeGenerationResult } from '../../../../utils/contractWizardOrchestrator';
-import { analyzeTree, proposeEngines, buildGenerationPlan, executeGenerationPlan } from '../../../../utils/contractWizardOrchestrator';
+import type { TaskTree } from '@types/taskTypes';
+import type { TreeAnalysis, GenerationPlan, GenerationProgress, NodeGenerationResult } from '@utils/contractWizardOrchestrator';
+import { analyzeTree, proposeEngines, buildGenerationPlan, executeGenerationPlan } from '@utils/contractWizardOrchestrator';
 
 interface ContractWizardProps {
   taskTree: TaskTree | null;

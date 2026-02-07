@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect } from 'vitest';
-import CustomDragLayer from '../CustomDragLayer';
-import { TreeNodeProps } from '../../types';
+import CustomDragLayer from '@responseEditor/TreeView/CustomDragLayer';
+import { TreeNodeProps } from '@responseEditor/types';
 
 describe('CustomDragLayer', () => {
   it('should export a React component', () => {
@@ -13,7 +13,7 @@ describe('CustomDragLayer', () => {
     const mockNodes: TreeNodeProps[] = [
       { id: '1', text: 'Test Node', type: 'root' }
     ];
-    
+
     // Just test that the component can be instantiated without errors
     expect(() => {
       <CustomDragLayer nodes={mockNodes} />
@@ -24,8 +24,8 @@ describe('CustomDragLayer', () => {
     const mockNodes: TreeNodeProps[] = [
       { id: '1', text: 'Test Node', type: 'root' }
     ];
-    
+
     const component = <CustomDragLayer nodes={mockNodes} />;
     expect(component).toBeDefined();
   });
-}); 
+});

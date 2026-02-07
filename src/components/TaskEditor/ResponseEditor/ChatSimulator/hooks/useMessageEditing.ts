@@ -1,8 +1,8 @@
 import React from 'react';
-import type { Message } from '../../../../ChatSimulator/UserMessage';
-import { useTaskTreeManager } from '../../../../../context/DDTManagerContext';
-import type { AssembledTaskTree } from '../../../../TaskTreeBuilder/DDTAssembler/currentDDT.types';
-import { updateActionTextInDDT } from '../utils/updateActionText';
+import type { Message } from '@components/ChatSimulator/UserMessage';
+import { useTaskTreeManager } from '@context/DDTManagerContext';
+import type { AssembledTaskTree } from '@components/TaskTreeBuilder/DDTAssembler/currentDDT.types';
+import { updateActionTextInDDT } from '@responseEditor/ChatSimulator/utils/updateActionText';
 
 interface UseMessageEditingProps {
   messages: Message[];

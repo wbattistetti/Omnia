@@ -4,14 +4,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import React from 'react';
-import ResponseEditor from '../index';
-import type { Task, TaskTree } from '../../../../types/taskTypes';
+import ResponseEditor from '@responseEditor/index';
+import type { Task, TaskTree } from '@types/taskTypes';
 
 // Import real providers for integration testing
-import { ProjectDataProvider } from '../../../../context/ProjectDataContext';
-import { DDTManagerProvider } from '../../../../context/DDTManagerContext';
-import { AIProviderProvider } from '../../../../context/AIProviderContext';
-import { ProjectTranslationsProvider } from '../../../../context/ProjectTranslationsContext';
+import { ProjectDataProvider } from '@context/ProjectDataContext';
+import { DDTManagerProvider } from '@context/DDTManagerContext';
+import { AIProviderProvider } from '@context/AIProviderContext';
+import { ProjectTranslationsProvider } from '@context/ProjectTranslationsContext';
 
 // Mock services that ProjectDataProvider depends on
 vi.mock('../../../../services/ProjectDataService', () => ({

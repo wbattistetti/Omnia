@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import EmbeddingEditorShell, { EmbeddingEditorShellRef } from '../../../../features/intent-editor/EmbeddingEditorShell';
-import { NLPProfile } from '../DataExtractionEditor';
-import { useIntentStore } from '../../../../features/intent-editor/state/intentStore';
-import { taskRepository } from '../../../../services/TaskRepository';
-import type { ProblemIntent } from '../../../../types/project';
+import EmbeddingEditorShell, { EmbeddingEditorShellRef } from '@features/intent-editor/EmbeddingEditorShell';
+import { NLPProfile } from '@responseEditor/DataExtractionEditor';
+import { useIntentStore } from '@features/intent-editor/state/intentStore';
+import { taskRepository } from '@services/TaskRepository';
+import type { ProblemIntent } from '@types/project';
 import { Brain, Loader2 } from 'lucide-react';
 
 interface IntentEditorInlineEditorProps {

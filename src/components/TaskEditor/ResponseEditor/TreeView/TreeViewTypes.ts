@@ -1,4 +1,4 @@
-import { TreeNodeProps } from '../types';
+import { TreeNodeProps } from '@responseEditor/types';
 
 export interface TreeViewProps {
   nodes: TreeNodeProps[];
@@ -49,4 +49,4 @@ export interface UseTreeDragDropReturn {
   dropPreviewPosition: 'before' | 'after' | null;
   setDropPreviewIdx: (idx: number | null) => void;
   setDropPreviewPosition: (position: 'before' | 'after' | null) => void;
-} 
+}

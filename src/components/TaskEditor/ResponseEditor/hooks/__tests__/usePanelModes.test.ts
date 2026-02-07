@@ -3,8 +3,8 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import { usePanelModes } from '../usePanelModes';
-import type { RightPanelMode } from '../../RightPanel';
+import { usePanelModes } from '@responseEditor/hooks/usePanelModes';
+import type { RightPanelMode } from '@responseEditor/RightPanel';
 
 /**
  * Tests for usePanelModes

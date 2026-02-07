@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import TreeRenderer from '../TreeRenderer';
-import { TreeNodeProps } from '../../types';
+import TreeRenderer from '@responseEditor/TreeView/TreeRenderer';
+import { TreeNodeProps } from '@responseEditor/types';
 
 describe('TreeRenderer', () => {
   it('should export a React component', () => {
@@ -13,7 +13,7 @@ describe('TreeRenderer', () => {
     const mockNodes: TreeNodeProps[] = [
       { id: '1', text: 'Test Node 1', type: 'root' }
     ];
-    
+
     // Test that the component can be instantiated without errors
     expect(() => {
       <TreeRenderer
@@ -34,7 +34,7 @@ describe('TreeRenderer', () => {
       { id: '2', text: 'Escalation Node', type: 'escalation', level: 1, parentId: '1' },
       { id: '3', text: 'Child Node', type: 'nomatch', level: 2, parentId: '2' }
     ];
-    
+
     expect(() => {
       <TreeRenderer
         nodes={mockNodes}
@@ -68,7 +68,7 @@ describe('TreeRenderer', () => {
     const mockNodes: TreeNodeProps[] = [
       { id: '1', text: 'Test Node 1', type: 'root' }
     ];
-    
+
     const component = <TreeRenderer
       nodes={mockNodes}
       parentId={undefined}
@@ -83,4 +83,4 @@ describe('TreeRenderer', () => {
     />;
     expect(component).toBeDefined();
   });
-}); 
+});

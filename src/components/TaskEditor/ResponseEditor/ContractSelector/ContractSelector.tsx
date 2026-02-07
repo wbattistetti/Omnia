@@ -6,7 +6,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { Plus, ChevronUp, ChevronDown, X, Sparkles } from 'lucide-react';
-import type { DataContract, ContractType } from '../../../../components/DialogueDataEngine/contracts/contractLoader';
+import type { DataContract, ContractType } from '@components/DialogueDataEngine/contracts/contractLoader';
 
 export type ContractMethod = ContractType;
 

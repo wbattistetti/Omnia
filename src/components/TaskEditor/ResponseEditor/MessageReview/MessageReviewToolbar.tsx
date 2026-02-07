@@ -1,6 +1,6 @@
 import React from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { useFontContext } from '../../../../context/FontContext';
+import { useFontContext } from '@context/FontContext';
 
 type Props = {
     onExpandAll: () => void;

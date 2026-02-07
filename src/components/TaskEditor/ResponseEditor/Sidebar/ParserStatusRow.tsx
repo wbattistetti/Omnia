@@ -3,10 +3,10 @@
 
 import React from 'react';
 import { Code, Code2 } from 'lucide-react';
-import type { TaskTreeNode } from '../../../../types/taskTypes';
-import { SemanticContractService } from '../../../../services/SemanticContractService';
-import { EngineEscalationService } from '../../../../services/EngineEscalationService';
-import type { EngineType } from '../../../../types/semanticContract';
+import type { TaskTreeNode } from '@types/taskTypes';
+import { SemanticContractService } from '@services/SemanticContractService';
+import { EngineEscalationService } from '@services/EngineEscalationService';
+import type { EngineType } from '@types/semanticContract';
 
 // Colors from TesterGrid (centralized palette)
 const EXTRACTOR_COLORS = {

@@ -31,7 +31,7 @@ export const ICON_KEYS = [
 export type IconKey = typeof ICON_KEYS[number] | string;
 
 // Import unified Task type
-import type { Task } from '../../../types/taskTypes';
+import type { Task } from '@types/taskTypes';
 
 // Legacy type alias for backward compatibility
 // @deprecated Use Task from taskTypes.ts instead

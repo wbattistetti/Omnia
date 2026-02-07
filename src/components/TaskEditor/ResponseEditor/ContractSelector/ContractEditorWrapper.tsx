@@ -5,13 +5,13 @@
  */
 
 import React from 'react';
-import type { DataContract, DataContractItem } from '../../../../components/DialogueDataEngine/contracts/contractLoader';
-import type { ContractMethod } from './ContractSelector';
-import RegexInlineEditor from '../InlineEditors/RegexInlineEditor';
-import ExtractorInlineEditor from '../InlineEditors/ExtractorInlineEditor';
-import NERInlineEditor from '../InlineEditors/NERInlineEditor';
-import LLMInlineEditor from '../InlineEditors/LLMInlineEditor';
-import IntentEditorInlineEditor from '../InlineEditors/IntentEditorInlineEditor';
+import type { DataContract, DataContractItem } from '@components/DialogueDataEngine/contracts/contractLoader';
+import type { ContractMethod } from '@responseEditor/ContractSelector/ContractSelector';
+import RegexInlineEditor from '@responseEditor/InlineEditors/RegexInlineEditor';
+import ExtractorInlineEditor from '@responseEditor/InlineEditors/ExtractorInlineEditor';
+import NERInlineEditor from '@responseEditor/InlineEditors/NERInlineEditor';
+import LLMInlineEditor from '@responseEditor/InlineEditors/LLMInlineEditor';
+import IntentEditorInlineEditor from '@responseEditor/InlineEditors/IntentEditorInlineEditor';
 
 interface ContractEditorWrapperProps {
   method: ContractMethod;

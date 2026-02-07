@@ -1,7 +1,7 @@
 import React from 'react';
 import { stepMeta } from './ddtUtils';
 import { Shield } from 'lucide-react';
-import { useFontContext } from '../../../context/FontContext';
+import { useFontContext } from '@context/FontContext';
 
 interface StepsStripProps {
   stepKeys: string[];

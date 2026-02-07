@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useDrop } from 'react-dnd';
-import { TreeNodeProps } from '../types';
-import { UseTreeDragDropProps, UseTreeDragDropReturn } from './TreeViewTypes';
+import { TreeNodeProps } from '@responseEditor/types';
+import { UseTreeDragDropProps, UseTreeDragDropReturn } from '@responseEditor/TreeView/TreeViewTypes';
 
 export const useTreeDragDrop = ({
   nodes,
@@ -36,13 +36,13 @@ export const useTreeDragDrop = ({
           return;
         }
         const y = clientOffset.y - containerRect.top;
-        
+
         // Trova il nodo più vicino al punto di drop
         let closestIdx = -1;
         let minDist = Infinity;
         let minY = Infinity;
         let maxY = -Infinity;
-        
+
         nodes.forEach((node, idx) => {
           const nodeElem = document.getElementById('tree-node-' + node.id);
           if (nodeElem) {
@@ -57,7 +57,7 @@ export const useTreeDragDrop = ({
             }
           }
         });
-        
+
         // Se non ci sono nodi, aggiungi come root
         if (nodes.length === 0) {
           setDropPreviewIdx(null);
@@ -66,7 +66,7 @@ export const useTreeDragDrop = ({
           setSelectedNodeId(null);
           return;
         }
-        
+
         // Se il punto di drop è sopra il primo nodo o sotto l'ultimo nodo, aggiungi come root
         if (y < minY - 16 || y > maxY + 16) { // 16px di tolleranza
           setDropPreviewIdx(null);
@@ -75,7 +75,7 @@ export const useTreeDragDrop = ({
           setSelectedNodeId(null);
           return;
         }
-        
+
         // Altrimenti, drop tra i nodi
         let position: 'before' | 'after' | 'child' = 'after';
         if (closestIdx !== -1) {
@@ -105,7 +105,7 @@ export const useTreeDragDrop = ({
       // Debug per capire il tipo di drag
       const isNewAction = item?.action; // Nuova azione ha 'action' property
       const isExistingAction = item?.id && !item?.action; // Azione esistente ha solo 'id'
-      
+
       const clientOffset = monitor.getClientOffset();
       if (!clientOffset) {
         setDropPreviewIdx(null);
@@ -119,16 +119,16 @@ export const useTreeDragDrop = ({
         return;
       }
       const y = clientOffset.y - containerRect.top;
-      
+
       // LOGICA SPECIFICA PER NUOVE AZIONI
       if (isNewAction) {
-        
+
         // Trova il nodo più vicino
         let closestIdx = -1;
         let minDist = Infinity;
         let minY = Infinity;
         let maxY = -Infinity;
-        
+
         nodes.forEach((node, idx) => {
           const nodeElem = document.getElementById('tree-node-' + node.id);
           if (nodeElem) {
@@ -143,7 +143,7 @@ export const useTreeDragDrop = ({
             }
           }
         });
-        
+
         if (nodes.length === 0) {
           setDropPreviewIdx(null);
           setDropPreviewPosition(null);
@@ -154,16 +154,16 @@ export const useTreeDragDrop = ({
           setDropPreviewPosition(null);
           return;
         }
-        
+
         if (closestIdx !== -1) {
           const targetNode = nodes[closestIdx];
           const nodeElem = document.getElementById('tree-node-' + targetNode.id);
-          
+
           if (nodeElem) {
             const rect = nodeElem.getBoundingClientRect();
             const centerY = rect.top + rect.height / 2 - containerRect.top;
             const position = y < centerY ? 'before' : 'after';
-            
+
             // REGOLA 4: Se è un escalation e stiamo trascinando sopra lo spazio tra due recovery, non mostrare preview
             if (targetNode.type === 'escalation') {
               // Calcola se siamo nello spazio tra recovery (non dentro un recovery)
@@ -173,7 +173,7 @@ export const useTreeDragDrop = ({
               const nodeHeight = nodeElem.offsetHeight;
               const headerBottom = nodeTop + headerHeight + padding;
               const nodeBottom = nodeTop + nodeHeight;
-              
+
               // Se siamo sopra l'header o sotto il nodo, non mostrare preview
               if (y < headerBottom || y > nodeBottom) {
                 setDropPreviewIdx(null);
@@ -181,7 +181,7 @@ export const useTreeDragDrop = ({
                 return;
               }
             }
-            
+
             // REGOLA 1-3: Mostra preview per azioni dentro recovery
             setDropPreviewIdx(closestIdx);
             setDropPreviewPosition(position);
@@ -189,16 +189,16 @@ export const useTreeDragDrop = ({
           }
         }
       }
-      
+
       // LOGICA SPECIFICA PER AZIONI ESISTENTI (REORDERING)
       if (isExistingAction) {
-        
+
         // Per reordering, permette preview ovunque tranne tra escalation
         let closestIdx = -1;
         let minDist = Infinity;
         let minY = Infinity;
         let maxY = -Infinity;
-        
+
         nodes.forEach((node, idx) => {
           const nodeElem = document.getElementById('tree-node-' + node.id);
           if (nodeElem) {
@@ -213,7 +213,7 @@ export const useTreeDragDrop = ({
             }
           }
         });
-        
+
         if (nodes.length === 0) {
           setDropPreviewIdx(null);
           setDropPreviewPosition(null);
@@ -224,16 +224,16 @@ export const useTreeDragDrop = ({
           setDropPreviewPosition(null);
           return;
         }
-        
+
         if (closestIdx !== -1) {
           const targetNode = nodes[closestIdx];
           const nodeElem = document.getElementById('tree-node-' + targetNode.id);
-          
+
           if (nodeElem) {
             const rect = nodeElem.getBoundingClientRect();
             const centerY = rect.top + rect.height / 2 - containerRect.top;
             const position = y < centerY ? 'before' : 'after';
-            
+
             // Per reordering, mostra sempre preview (anche tra escalation)
             setDropPreviewIdx(closestIdx);
             setDropPreviewPosition(position);
@@ -241,7 +241,7 @@ export const useTreeDragDrop = ({
           }
         }
       }
-      
+
       setDropPreviewIdx(null);
       setDropPreviewPosition(null);
     },
@@ -257,4 +257,4 @@ export const useTreeDragDrop = ({
     setDropPreviewIdx,
     setDropPreviewPosition
   };
-}; 
+};

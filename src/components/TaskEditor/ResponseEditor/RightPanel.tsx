@@ -1,11 +1,11 @@
 import React from 'react';
-import TaskList from '../TaskPalette/TaskList';
+import TaskList from '@taskEditor/TaskPalette/TaskList';
 // ❌ REMOVED: ResponseSimulator - contains duplicate runtime logic
 // ✅ Using clean DDEBubbleChat from ResponseEditor (SSE-only, no runtime logic)
 import DDEBubbleChat from './ChatSimulator/DDEBubbleChat';
 import { stepMeta } from './ddtUtils';
-import { useTaskTreeManager } from '../../../context/DDTManagerContext';
-import { useFontContext } from '../../../context/FontContext';
+import { useTaskTreeManager } from '@context/DDTManagerContext';
+import { useFontContext } from '@context/FontContext';
 
 export type RightPanelMode = 'actions' | 'validator' | 'testset' | 'chat' | 'styles' | 'none';
 

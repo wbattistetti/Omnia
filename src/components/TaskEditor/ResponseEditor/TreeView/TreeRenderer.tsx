@@ -1,6 +1,6 @@
 import React from 'react';
-import TreeNode from '../TreeNode';
-import { TreeRendererProps } from './TreeViewTypes';
+import TreeNode from '@responseEditor/TreeNode';
+import { TreeRendererProps } from '@responseEditor/TreeView/TreeViewTypes';
 
 const TreeRenderer: React.FC<TreeRendererProps> = ({
   nodes,
@@ -37,19 +37,19 @@ const TreeRenderer: React.FC<TreeRendererProps> = ({
           const escIdx = allEscalations.findIndex(n => n.id === node.id);
           escalationLabel = `${escIdx + 1}° recovery`;
         }
-        
+
         // Se escalation, raccogli i figli
         const childrenNodes = node.type === 'escalation'
           ? nodes.filter(n => n.parentId === node.id).map(child => ({ ...child, level: level + 1 }))
           : undefined;
-        
+
         // Calcola se questa escalation è l'unica nello step e lo step è single-escalation
         let isSingleEscalation = false;
         if (node.type === 'escalation' && stepKey && singleEscalationSteps.includes(stepKey)) {
           const escCount = siblings.filter(n => n.type === 'escalation').length;
           if (escCount === 1) isSingleEscalation = true;
         }
-        
+
         return (
           <React.Fragment key={node.id}>
             <TreeNode
@@ -70,27 +70,27 @@ const TreeRenderer: React.FC<TreeRendererProps> = ({
               currentStep={stepKey}
               onAIGenerate={extraProps?.onAIGenerate}
               stepType={extraProps?.selectedStep}
-              {...(node.type === 'escalation' ? { 
-                childrenNodes, 
-                escalationLabel, 
-                included: node.included, 
-                onToggleInclude: extraProps?.onToggleInclude, 
-                isSingleEscalation, 
-                foreColor: extraProps?.foreColor, 
-                bgColor: extraProps?.bgColor 
+              {...(node.type === 'escalation' ? {
+                childrenNodes,
+                escalationLabel,
+                included: node.included,
+                onToggleInclude: extraProps?.onToggleInclude,
+                isSingleEscalation,
+                foreColor: extraProps?.foreColor,
+                bgColor: extraProps?.bgColor
               } : {})}
             />
             {/* Solo se non escalation, ricorsione classica */}
             {node.type !== 'escalation' && renderTree(
-              nodes, 
-              node.id, 
-              level + 1, 
-              selectedNodeId, 
-              onDrop, 
-              onRemove, 
-              setSelectedNodeId, 
-              stepKey, 
-              extraProps, 
+              nodes,
+              node.id,
+              level + 1,
+              selectedNodeId,
+              onDrop,
+              onRemove,
+              setSelectedNodeId,
+              stepKey,
+              extraProps,
               singleEscalationSteps
             )}
           </React.Fragment>
@@ -116,4 +116,4 @@ const TreeRenderer: React.FC<TreeRendererProps> = ({
   );
 };
 
-export default TreeRenderer; 
+export default TreeRenderer;

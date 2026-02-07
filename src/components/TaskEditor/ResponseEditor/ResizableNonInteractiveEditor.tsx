@@ -1,8 +1,8 @@
 import React from 'react';
 import { X } from 'lucide-react';
-import ResizeHandle from '../../common/ResizeHandle';
-import { useResizablePanel } from '../../../hooks/useResizablePanel';
-import NonInteractiveResponseEditor, { NonInteractiveResponse } from './NonInteractiveResponseEditor';
+import ResizeHandle from '@components/common/ResizeHandle';
+import { useResizablePanel } from '@hooks/useResizablePanel';
+import NonInteractiveResponseEditor, { NonInteractiveResponse } from '@responseEditor/NonInteractiveResponseEditor';
 
 interface ResizableNonInteractiveEditorProps {
   title?: string;

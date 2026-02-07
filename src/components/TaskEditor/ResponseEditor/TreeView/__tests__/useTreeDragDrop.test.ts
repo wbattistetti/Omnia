@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import { useTreeDragDrop } from '../useTreeDragDrop';
-import { TreeNodeProps } from '../../types';
+import { useTreeDragDrop } from '@responseEditor/TreeView/useTreeDragDrop';
+import { TreeNodeProps } from '@responseEditor/types';
 
 // Mock react-dnd
 vi.mock('react-dnd', () => ({
@@ -70,4 +70,4 @@ describe('useTreeDragDrop', () => {
       renderHook(() => useTreeDragDrop(propsWithNullRef));
     }).not.toThrow();
   });
-}); 
+});

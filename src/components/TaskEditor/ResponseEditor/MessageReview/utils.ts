@@ -1,5 +1,5 @@
-import { ReviewItem, StepGroup, RecoveryGroup } from './types';
-import { getTaskText } from '../utils/escalationHelpers';
+import { ReviewItem, StepGroup, RecoveryGroup } from '@responseEditor/MessageReview/types';
+import { getTaskText } from '@responseEditor/utils/escalationHelpers';
 
 const STEP_ORDER = ['start', 'confirmation', 'noInput', 'noMatch', 'notConfirmed', 'notAcquired', 'success'];
 

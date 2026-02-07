@@ -3,8 +3,8 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useUpdateSelectedNode } from '../useUpdateSelectedNode';
-import type { Task, TaskTree } from '../../../../../../../../types/taskTypes';
+import { useUpdateSelectedNode } from '@responseEditor/features/node-editing/hooks/useUpdateSelectedNode';
+import type { Task, TaskTree } from '@types/taskTypes';
 
 /**
  * Tests for useUpdateSelectedNode
@@ -22,36 +22,35 @@ vi.mock('../applyNodeUpdate', () => ({
   updateDockTreeWithTaskTree: vi.fn((dockTree, tabId, taskTree) => dockTree),
 }));
 
-vi.mock('../../../../../../../../utils/taskSemantics', () => ({
+vi.mock('@utils/taskSemantics', () => ({
   validateTaskStructure: vi.fn(),
 }));
 
-vi.mock('../../../../../../../../utils/taskHelpers', () => ({
+vi.mock('@utils/taskHelpers', () => ({
   getTemplateId: vi.fn(),
 }));
 
-vi.mock('../../../../../../../../services/TaskRepository', () => ({
+vi.mock('@services/TaskRepository', () => ({
   taskRepository: {
     getTask: vi.fn(),
   },
 }));
 
-vi.mock('../../../../../../../../dock/ops', () => ({
+vi.mock('@dock/ops', () => ({
   mapNode: vi.fn((tree, fn) => tree),
 }));
 
-vi.mock('../../../persistence/ResponseEditorPersistence', () => ({
+vi.mock('@responseEditor/features/persistence/ResponseEditorPersistence', () => ({
   saveTaskToRepository: vi.fn(),
 }));
 
 // testingState.ts is in ResponseEditor root: src/components/TaskEditor/ResponseEditor/testingState.ts
-// Path from __tests__: 5 levels up = '../../../../../testingState' (verified with Resolve-Path)
-vi.mock('../../../../../../../testingState', () => ({
+vi.mock('@responseEditor/testingState', () => ({
   getIsTesting: vi.fn(() => false),
 }));
 
-import { applyNodeUpdate, saveTaskAsync } from '../applyNodeUpdate';
-import { mapNode } from '../../../../../../../../dock/ops';
+import { applyNodeUpdate, saveTaskAsync } from '@responseEditor/features/node-editing/core/applyNodeUpdate';
+import { mapNode } from '@dock/ops';
 // getIsTesting is mocked above and used internally by useUpdateSelectedNode
 // We access it via vi.mocked() in tests that need to control it
 

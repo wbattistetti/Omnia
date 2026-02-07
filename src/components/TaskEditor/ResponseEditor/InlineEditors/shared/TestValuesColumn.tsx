@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { useResizablePanel } from '../../../../../hooks/useResizablePanel';
+import { useResizablePanel } from '@hooks/useResizablePanel';
 import { Trash2, MessageCircle } from 'lucide-react';
-import { useNotes } from '../../hooks/useNotes';
+import { useNotes } from '@responseEditor/hooks/useNotes';
 
 export interface TestResult {
   matched: boolean;

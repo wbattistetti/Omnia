@@ -1,5 +1,5 @@
 import React from 'react';
-import { DropPreviewProps } from './TreeViewTypes';
+import { DropPreviewProps } from '@responseEditor/TreeView/TreeViewTypes';
 
 const DropPreview: React.FC<DropPreviewProps> = ({
   dropPreviewIdx,

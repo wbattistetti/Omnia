@@ -1,8 +1,8 @@
 import React from 'react';
 import { Check, X as XIcon, Pencil, AlertTriangle, AlertCircle } from 'lucide-react';
-import { getStepIcon } from './chatSimulatorUtils';
-import type { Message } from '../../../ChatSimulator/UserMessage';
-import { useFontContext } from '../../../../context/FontContext';
+import { getStepIcon } from '@responseEditor/ChatSimulator/chatSimulatorUtils';
+import type { Message } from '@components/ChatSimulator/UserMessage';
+import { useFontContext } from '@context/FontContext';
 
 interface BotMessageProps {
   message: Message;

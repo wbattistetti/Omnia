@@ -6,8 +6,8 @@ import {
   saveTaskToRepository,
   saveTaskOnProjectSave,
   saveTaskOnEditorClose,
-} from '../saveTask';
-import type { Task, TaskTree } from '../../../../../../types/taskTypes';
+} from '@responseEditor/features/persistence/saveTask';
+import type { Task, TaskTree } from '@types/taskTypes';
 
 /**
  * Tests for saveTask functions
@@ -20,7 +20,7 @@ import type { Task, TaskTree } from '../../../../../../types/taskTypes';
 const mockGetdataList = vi.fn();
 
 // Mock dependencies
-vi.mock('../../../../../../../services/TaskRepository', () => ({
+vi.mock('@services/TaskRepository', () => ({
   taskRepository: {
     getTask: vi.fn(),
     createTask: vi.fn(),
@@ -28,36 +28,36 @@ vi.mock('../../../../../../../services/TaskRepository', () => ({
   },
 }));
 
-vi.mock('../../../../../../../utils/taskHelpers', () => ({
+vi.mock('@utils/taskHelpers', () => ({
   getTemplateId: vi.fn(),
 }));
 
-vi.mock('../../../../../../../utils/taskUtils', () => ({
+vi.mock('@utils/taskUtils', () => ({
   extractTaskOverrides: vi.fn(),
   buildTemplateExpanded: vi.fn(),
 }));
 
-vi.mock('../../../../../../../types/taskTypes', () => ({
+vi.mock('@types/taskTypes', () => ({
   TaskType: {
     UtteranceInterpretation: 1,
   },
   isUtteranceInterpretationTemplateId: vi.fn(),
 }));
 
-vi.mock('../../../ddtSelectors', () => ({
+vi.mock('@responseEditor/ddtSelectors', () => ({
   getdataList: vi.fn(),
 }));
 
-vi.mock('../../../../../../../utils/logger', () => ({
+vi.mock('@utils/logger', () => ({
   info: vi.fn(),
 }));
 
-import { taskRepository } from '../../../../../../../services/TaskRepository';
-import { getTemplateId } from '../../../../../../../utils/taskHelpers';
-import { extractTaskOverrides, buildTemplateExpanded } from '../../../../../../../utils/taskUtils';
-import { TaskType, isUtteranceInterpretationTemplateId } from '../../../../../../../types/taskTypes';
+import { taskRepository } from '@services/TaskRepository';
+import { getTemplateId } from '@utils/taskHelpers';
+import { extractTaskOverrides, buildTemplateExpanded } from '@utils/taskUtils';
+import { TaskType, isUtteranceInterpretationTemplateId } from '@types/taskTypes';
 // getdataList is mocked above as mockGetdataList
-import { info } from '../../../../../../../utils/logger';
+import { info } from '@utils/logger';
 
 describe('saveTask', () => {
   const mockTaskId = 'task-1';

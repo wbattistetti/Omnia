@@ -1,6 +1,6 @@
 import React from 'react';
 import { Loader2, AlertTriangle } from 'lucide-react';
-import { ExtractorType } from '../../hooks/useEditorMode';
+import { ExtractorType } from '@responseEditor/hooks/useEditorMode';
 
 interface EditorHeaderProps {
   title: string;

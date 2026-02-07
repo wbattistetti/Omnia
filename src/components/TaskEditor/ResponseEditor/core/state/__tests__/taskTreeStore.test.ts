@@ -3,8 +3,8 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useTaskTreeStore, taskTreeSelectors } from '../taskTreeStore';
-import type { TaskTree } from '../../../../../../types/taskTypes';
+import { useTaskTreeStore, taskTreeSelectors } from '@responseEditor/core/state/taskTreeStore';
+import type { TaskTree } from '@types/taskTypes';
 
 describe('Domain: TaskTree Store (Zustand)', () => {
   beforeEach(() => {

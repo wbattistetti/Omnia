@@ -1,4 +1,4 @@
-import type { AssembledTaskTree } from '../../../TaskTreeBuilder/DDTAssembler/currentDDT.types';
+import type { AssembledTaskTree } from '@components/TaskTreeBuilder/DDTAssembler/currentDDT.types';
 
 /**
  * Helper to find the original node from currentDDT by label/id

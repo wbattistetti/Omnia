@@ -3,7 +3,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useContractUpdateDialog } from '../useContractUpdateDialog';
+import { useContractUpdateDialog } from '@responseEditor/hooks/useContractUpdateDialog';
 
 /**
  * Tests for useContractUpdateDialog

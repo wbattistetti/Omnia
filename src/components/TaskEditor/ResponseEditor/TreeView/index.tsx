@@ -1,22 +1,22 @@
 // Executive summary: Refactored TreeView component that uses extracted components and hooks for better separation of concerns
 import React, { useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
-import TreeRenderer from './TreeRenderer';
-import CustomDragLayer from './CustomDragLayer';
-import DropPreview from './DropPreview';
-import { useTreeDragDrop } from './useTreeDragDrop';
-import { TreeViewProps } from './TreeViewTypes';
-import { usePanelZoom } from '../../../hooks/usePanelZoom';
+import TreeRenderer from '@responseEditor/TreeView/TreeRenderer';
+import CustomDragLayer from '@responseEditor/TreeView/CustomDragLayer';
+import DropPreview from '@responseEditor/TreeView/DropPreview';
+import { useTreeDragDrop } from '@responseEditor/TreeView/useTreeDragDrop';
+import { TreeViewProps } from '@responseEditor/TreeView/TreeViewTypes';
+import { usePanelZoom } from '@hooks/usePanelZoom';
 
-const TreeView: React.FC<TreeViewProps> = ({ 
-  nodes, 
-  onDrop, 
-  onRemove, 
-  onAddEscalation, 
-  onToggleInclude, 
-  stepKey, 
-  foreColor, 
-  bgColor 
+const TreeView: React.FC<TreeViewProps> = ({
+  nodes,
+  onDrop,
+  onRemove,
+  onAddEscalation,
+  onToggleInclude,
+  stepKey,
+  foreColor,
+  bgColor
 }) => {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -50,13 +50,13 @@ const TreeView: React.FC<TreeViewProps> = ({
       }}
     >
       <CustomDragLayer nodes={nodes} />
-      
-      <DropPreview 
+
+      <DropPreview
         dropPreviewIdx={dropPreviewIdx}
         dropPreviewPosition={dropPreviewPosition}
         nodes={nodes}
       />
-      
+
       <TreeRenderer
         nodes={nodes}
         parentId={undefined}
@@ -98,4 +98,4 @@ const TreeView: React.FC<TreeViewProps> = ({
   );
 };
 
-export default TreeView; 
+export default TreeView;

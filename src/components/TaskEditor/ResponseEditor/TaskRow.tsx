@@ -3,7 +3,7 @@ import { Check, X } from 'lucide-react';
 import TaskRowActions from './TaskRowActions';
 import ActionText from './ActionText';
 import styles from './TaskRow.module.css';
-import { useFontContext } from '../../../context/FontContext';
+import { useFontContext } from '@context/FontContext';
 
 interface TaskRowProps {
   icon?: React.ReactNode;

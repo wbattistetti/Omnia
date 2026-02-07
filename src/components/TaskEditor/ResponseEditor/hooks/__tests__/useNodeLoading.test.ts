@@ -3,8 +3,8 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import { useNodeLoading } from '../../features/node-editing/hooks/useNodeLoading';
-import type { Task, TaskTree } from '../../../../types/taskTypes';
+import { useNodeLoading } from '@responseEditor/features/node-editing/hooks/useNodeLoading';
+import type { Task, TaskTree } from '@types/taskTypes';
 
 /**
  * Tests for useNodeLoading

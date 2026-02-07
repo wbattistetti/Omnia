@@ -1,14 +1,14 @@
 // Executive summary: Represents a single node in the response tree, including drag & drop and visual state.
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronRight, ChevronDown, MessageCircle, Trash2, ArrowRight } from 'lucide-react';
-import getIconComponent from './icons';
-import { TreeNodeProps } from './types';
-import styles from './TreeNode.module.css';
+import getIconComponent from '@responseEditor/icons';
+import { TreeNodeProps } from '@responseEditor/types';
+import styles from '@responseEditor/TreeNode.module.css';
 import { useDrop, useDrag } from 'react-dnd';
-import { ESCALATION_COLORS } from './escalationColors';
-import TaskRow from './TaskRow';
-import SmartTooltip from '../../SmartTooltip';
-import { TooltipWrapper } from '../../TooltipWrapper';
+import { ESCALATION_COLORS } from '@responseEditor/escalationColors';
+import TaskRow from '@responseEditor/TaskRow';
+import SmartTooltip from '@components/SmartTooltip';
+import { TooltipWrapper } from '@components/TooltipWrapper';
 
 interface TreeNodeExtraProps {
   showLabel?: boolean;

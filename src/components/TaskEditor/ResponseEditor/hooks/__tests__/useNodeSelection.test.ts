@@ -3,7 +3,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useNodeSelection } from '../../features/node-editing/hooks/useNodeSelection';
+import { useNodeSelection } from '@responseEditor/features/node-editing/hooks/useNodeSelection';
 
 /**
  * Tests for useNodeSelection

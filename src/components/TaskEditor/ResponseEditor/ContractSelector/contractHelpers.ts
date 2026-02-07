@@ -3,8 +3,8 @@
  * Utilities for loading and saving Data contracts
  */
 
-import type { DataContract } from '../../../../components/DialogueDataEngine/contracts/contractLoader';
-import DialogueTaskService from '../../../../services/DialogueTaskService';
+import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
+import DialogueTaskService from '@services/DialogueTaskService';
 
 /**
  * Load contract from node

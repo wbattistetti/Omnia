@@ -3,8 +3,8 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useNodeFinder } from '../../features/node-editing/hooks/useNodeFinder';
-import type { TaskTree } from '../../../../../types/taskTypes';
+import { useNodeFinder } from '@responseEditor/features/node-editing/hooks/useNodeFinder';
+import type { TaskTree } from '@types/taskTypes';
 
 /**
  * Tests for useNodeFinder

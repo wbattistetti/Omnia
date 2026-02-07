@@ -3,9 +3,9 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import { useResponseEditorDerived } from '../useResponseEditorDerived';
-import type { Task, TaskTree } from '../../../../../types/taskTypes';
-import type { RightPanelMode } from '../../RightPanel';
+import { useResponseEditorDerived } from '@responseEditor/hooks/useResponseEditorDerived';
+import type { Task, TaskTree } from '@types/taskTypes';
+import type { RightPanelMode } from '@responseEditor/RightPanel';
 
 /**
  * Tests for useResponseEditorDerived

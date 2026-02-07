@@ -3,8 +3,8 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
-import { useResponseEditorClose } from '../useResponseEditorClose';
-import type { Task, TaskTree } from '../../../../types/taskTypes';
+import { useResponseEditorClose } from '@responseEditor/hooks/useResponseEditorClose';
+import type { Task, TaskTree } from '@types/taskTypes';
 
 /**
  * Tests for useResponseEditorClose
@@ -37,10 +37,10 @@ vi.mock('../../../../../dock/ops', () => ({
   closeTab: vi.fn(),
 }));
 
-import { saveTaskOnEditorClose, saveTaskToRepository } from '../../features/persistence/ResponseEditorPersistence';
-import { getdataList } from '../../ddtSelectors';
-import DialogueTaskService from '../../../../../services/DialogueTaskService';
-import { closeTab } from '../../../../../dock/ops';
+import { saveTaskOnEditorClose, saveTaskToRepository } from '@responseEditor/features/persistence/ResponseEditorPersistence';
+import { getdataList } from '@responseEditor/ddtSelectors';
+import DialogueTaskService from '@services/DialogueTaskService';
+import { closeTab } from '@dock/ops';
 
 describe('useResponseEditorClose', () => {
   const mockSetPendingContractChange = vi.fn();

@@ -1,11 +1,11 @@
 import React, { useState, useRef } from 'react';
 import { Check, X } from 'lucide-react';
-import { useTaskTreeManager } from '../../../../context/DDTManagerContext';
-import { ReviewItem } from './types';
-import { getTaskIconNode, getTaskMeta } from '../taskMeta';
-import { ensureHexColor, tailwindToHex } from '../utils/color';
-import ActionText from '../ActionText';
-import { useFontContext } from '../../../../context/FontContext';
+import { useTaskTreeManager } from '@context/DDTManagerContext';
+import { ReviewItem } from '@responseEditor/MessageReview/types';
+import { getTaskIconNode, getTaskMeta } from '@responseEditor/taskMeta';
+import { ensureHexColor, tailwindToHex } from '@responseEditor/utils/color';
+import ActionText from '@responseEditor/ActionText';
+import { useFontContext } from '@context/FontContext';
 
 type Props = {
     item: ReviewItem;

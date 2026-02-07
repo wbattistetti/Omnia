@@ -1,12 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { 
-  TreeViewProps, 
-  TreeRendererProps, 
-  DropPreviewProps, 
+import type {
+  TreeViewProps,
+  TreeRendererProps,
+  DropPreviewProps,
   CustomDragLayerProps,
   UseTreeDragDropProps,
-  UseTreeDragDropReturn 
-} from '../TreeViewTypes';
+  UseTreeDragDropReturn
+} from '@responseEditor/TreeView/TreeViewTypes';
 
 describe('TreeViewTypes', () => {
   it('should have TreeViewProps interface with required properties', () => {
@@ -103,4 +103,4 @@ describe('TreeViewTypes', () => {
     expect(typeof returnValue.setDropPreviewIdx).toBe('function');
     expect(typeof returnValue.setDropPreviewPosition).toBe('function');
   });
-}); 
+});

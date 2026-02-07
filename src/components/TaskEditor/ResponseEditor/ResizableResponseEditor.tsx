@@ -1,8 +1,8 @@
 import React from 'react';
 // Use the NEW Response Editor (purple header) exported by index.tsx
 import ResponseEditor from './index';
-import ResizeHandle from '../../common/ResizeHandle';
-import { useResizablePanel } from '../../../hooks/useResizablePanel';
+import ResizeHandle from '@components/common/ResizeHandle';
+import { useResizablePanel } from '@hooks/useResizablePanel';
 
 interface ResizableResponseEditorProps {
   ddt: any;

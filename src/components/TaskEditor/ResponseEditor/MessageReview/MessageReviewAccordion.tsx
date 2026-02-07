@@ -1,9 +1,9 @@
 import React from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { stepMeta } from '../ddtUtils';
-import { StepGroup } from './types';
-import MessageReviewMessage from './MessageReviewMessage';
-import { useFontContext } from '../../../../context/FontContext';
+import { stepMeta } from '@responseEditor/ddtUtils';
+import { StepGroup } from '@responseEditor/MessageReview/types';
+import MessageReviewMessage from '@responseEditor/MessageReview/MessageReviewMessage';
+import { useFontContext } from '@context/FontContext';
 
 type Props = {
     group: StepGroup;
