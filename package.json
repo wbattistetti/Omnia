@@ -21,7 +21,11 @@
     "test:run": "vitest run",
     "test:wizard": "vitest run src/wizard/__tests__",
     "test:integration": "node scripts/test-wizard-integration.js",
-    "seed:act-patterns": "node scripts/seed-act-type-patterns.js"
+    "seed:act-patterns": "node scripts/seed-act-type-patterns.js",
+    "verify:domain-purity": "node scripts/verify-domain-purity.js",
+    "verify:imports": "node scripts/verify-imports.js",
+    "verify:features": "node scripts/verify-features.js",
+    "verify:architecture": "npm run verify:domain-purity && npm run verify:imports && npm run verify:features"
   },
   "dependencies": {
     "@popperjs/core": "^2.11.8",
