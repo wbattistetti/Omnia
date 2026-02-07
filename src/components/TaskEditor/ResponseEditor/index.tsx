@@ -13,7 +13,7 @@ import { ToolbarButton } from '../../../dock/types';
 import { useResponseEditorSideEffects } from './hooks/useResponseEditorSideEffects';
 import { useResponseEditorState } from './hooks/useResponseEditorState';
 import { useResponseEditorInitialization } from './hooks/useResponseEditorInitialization';
-import { useTaskTreeSync, useTaskTreeVersion, useTaskTreeFromStore } from './core/state';
+import { useTaskTreeVersion, useTaskTreeFromStore } from './core/state';
 import { ResponseEditorContent } from './components/ResponseEditorContent';
 import { ResponseEditorNormalLayout } from './components/ResponseEditorNormalLayout';
 import { useSidebarHandlers } from './hooks/useSidebarHandlers';
@@ -86,7 +86,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   } = state;
 
   const {
-    taskTreeRef,
     prevInstanceRef,
     contractChangeRef,
     rootRef,
@@ -98,10 +97,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     tasksStartXRef,
   } = useResponseEditorRefs({ taskTree, task });
 
-  // ✅ FASE 2.2: Integrate Zustand store - sync ref ↔ store
-  useTaskTreeSync(taskTreeRef, taskTree, { enabled: true });
-
-  // ✅ FASE 2.2: Use Zustand store version instead of useState
+  // ✅ FASE 2.3: Use Zustand store version (no sync needed - store is single source of truth)
   const taskTreeVersionFromStore = useTaskTreeVersion();
   const taskTreeVersion = taskTreeVersionFromStore || taskTreeVersionFromState;
 
@@ -122,8 +118,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     handleSelectAggregator,
   } = useNodeSelection(0);
   const findAndSelectNodeById = useNodeFinder({
-    taskTree,
-    taskTreeRef,
     handleSelectMain,
     handleSelectSub,
   });
@@ -147,18 +141,39 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     replaceSelectedTaskTree,
   });
 
-  // ✅ FASE 2.3: Use store as source for translations (taskTree prop might not be updated)
+  // ✅ FASE 2.3: Use store as source for translations
   const taskTreeFromStore = useTaskTreeFromStore();
-  const localTranslations = useDDTTranslations(taskTreeFromStore || taskTree, task);
+  // ✅ taskTreeVersionFromStore già dichiarato sopra alla riga 101
+
+  // ✅ CRITICAL: Use prop as fallback if store is not yet populated
+  // This ensures translations are loaded even if store is not yet populated
+  // Store will be populated by DDTHostAdapter, but we need translations immediately
+  const taskTreeForTranslations = taskTreeFromStore || taskTree;
+
+  // ✅ DEBUG: Log per capire se store è popolato (solo se debug attivo)
+  React.useEffect(() => {
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('debug.translations') === '1') {
+      console.log('[ResponseEditor] Translations source check', {
+        hasTaskTreeFromStore: !!taskTreeFromStore,
+        hasTaskTreeProp: !!taskTree,
+        taskTreeFromStoreId: taskTreeFromStore?.id,
+        taskTreePropId: taskTree?.id,
+        taskTreeVersion: taskTreeVersionFromStore,
+        nodesCount: taskTreeFromStore?.nodes?.length || 0,
+        usingStore: !!taskTreeFromStore,
+        usingProp: !taskTreeFromStore && !!taskTree
+      });
+    }
+  }, [taskTreeFromStore, taskTree, taskTreeVersionFromStore]);
+
+  // ✅ FASE 2.3: Pass taskTreeVersion to force recalculation when store is populated
+  const localTranslations = useDDTTranslations(taskTreeForTranslations, task, taskTreeVersionFromStore);
 
   const {
     mainList,
     isAggregatedAtomic,
     introduction,
   } = useTaskTreeDerived({
-    taskTree,
-    taskTreeRef,
-    taskTreeVersion,
     isTaskTreeLoading,
   });
 
@@ -222,7 +237,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   } = useResponseEditorInitialization({
     task: taskMeta,
     taskTree,
-    taskTreeRef,
     showContractWizard,
     setShowContractWizard,
     setTaskTreeVersion,
@@ -254,7 +268,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     selectedNodePath,
     selectedRoot,
     task,
-    taskTreeRef,
     currentProjectId,
     tabId,
     setDockTree,
@@ -268,9 +281,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     selectedRoot,
     introduction,
     task,
-    taskTree,
-    taskTreeRef,
-    taskTreeVersion, // ✅ Add taskTreeVersion as trigger
     setSelectedNode,
     setSelectedNodePath,
     getStepsForNode,
@@ -280,15 +290,12 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   const updateSelectedNode = useUpdateSelectedNode({
     selectedNodePath,
     selectedRoot,
-    taskTreeRef,
-    taskTree,
     task,
     currentProjectId,
     tabId,
     setDockTree,
     setSelectedNode,
     setTaskTreeVersion,
-    taskTreeVersion, // ✅ FIX: Passa taskTreeVersion come dipendenza stabile
   });
 
   const handleProfileUpdate = useProfileUpdate({ updateSelectedNode });
@@ -306,7 +313,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   useResponseEditorSideEffects({
     task,
     taskTree,
-    taskTreeRef,
     currentProjectId,
     setTaskTreeVersion,
     prevInstanceRef,
@@ -377,7 +383,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
           needsIntentMessages={needsIntentMessages}
           task={taskMeta}
           taskTree={taskTree}
-          taskTreeRef={taskTreeRef}
           handleContractWizardClose={handleContractWizardClose}
           handleContractWizardNodeUpdate={handleContractWizardNodeUpdate}
           handleContractWizardComplete={handleContractWizardComplete}

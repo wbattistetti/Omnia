@@ -6,7 +6,7 @@ import { saveTaskToRepository, saveTaskOnEditorClose } from '../modules/Response
 import { getdataList } from '../ddtSelectors';
 import DialogueTaskService from '../../../../services/DialogueTaskService';
 import { closeTab } from '../../../../dock/ops';
-import { useTaskTreeStore } from '../core/state';
+import { useTaskTreeStore, useTaskTreeFromStore } from '../core/state';
 import type { Task, TaskTree } from '../../../../types/taskTypes';
 
 export interface UseResponseEditorCloseParams {
@@ -35,7 +35,8 @@ export interface UseResponseEditorCloseParams {
 
   // Task and tree
   task: Task | null | undefined;
-  taskTreeRef: React.MutableRefObject<TaskTree | null | undefined>;
+  // ✅ FASE 2.3: taskTreeRef opzionale per backward compatibility temporanea
+  taskTreeRef?: React.MutableRefObject<TaskTree | null | undefined>;
   currentProjectId: string | null;
 
   // Dock tree
@@ -68,8 +69,9 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
     replaceSelectedDDT,
   } = params;
 
-  // ✅ FASE 2.2: Use Zustand store to update when closing
+  // ✅ FASE 2.3: Use Zustand store as SINGLE source of truth
   const { setTaskTree } = useTaskTreeStore();
+  const taskTreeFromStore = useTaskTreeFromStore();
 
   const handleEditorClose = useCallback(async (): Promise<boolean> => {
     console.log('[ResponseEditor][CLOSE] 🚪 Editor close initiated', {
@@ -144,9 +146,11 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
       return false;
     }
 
-    // ✅ Salva selectedNode corrente nel ref prima di chiudere (se non già salvato)
+    // ✅ FASE 2.3: Salva selectedNode corrente nello store prima di chiudere (se non già salvato)
     if (selectedNode && selectedNodePath) {
-      const mains = getdataList(taskTreeRef.current);
+      // ✅ FASE 2.3: Usa store invece di taskTreeRef
+      const currentTaskTree = taskTreeFromStore;
+      const mains = getdataList(currentTaskTree);
       const { mainIndex, subIndex } = selectedNodePath;
       const isRoot = selectedRoot || false;
 
@@ -159,13 +163,20 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
             esc?.tasks && Array.isArray(esc.tasks) && esc.tasks.length > 0
           );
           if (hasTasks) {
-            if (!taskTreeRef.current) taskTreeRef.current = { label: '', nodes: [], steps: {} };
-            taskTreeRef.current.introduction = {
+            // ✅ FASE 2.3: Aggiorna store invece di taskTreeRef
+            const updatedTaskTree = currentTaskTree || { label: '', nodes: [], steps: {} };
+            updatedTaskTree.introduction = {
               type: 'introduction',
               escalations: newIntroStep.escalations || []
             };
+            setTaskTree(updatedTaskTree);
           } else {
-            if (taskTreeRef.current) delete taskTreeRef.current.introduction;
+            // ✅ FASE 2.3: Rimuovi introduction dallo store
+            if (currentTaskTree) {
+              const updatedTaskTree = { ...currentTaskTree };
+              delete updatedTaskTree.introduction;
+              setTaskTree(updatedTaskTree);
+            }
           }
         } else if (subIndex === undefined) {
           const regexPattern = selectedNode?.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
@@ -179,10 +190,12 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
             nlpProfileExamples: nlpProfileExamples?.slice(0, 3)
           });
           mains[mainIndex] = selectedNode;
-          taskTreeRef.current.nodes = mains;
+          // ✅ FASE 2.3: Aggiorna store invece di taskTreeRef
+          const updatedTaskTree = { ...currentTaskTree, nodes: mains };
+          setTaskTree(updatedTaskTree);
 
           // ✅ VERIFICA: Controlla se nlpProfile.examples è presente dopo il salvataggio
-          const savedNode = taskTreeRef.current.nodes[mainIndex];
+          const savedNode = updatedTaskTree.nodes[mainIndex];
           console.log('[EXAMPLES] CLOSE - Verifying saved node', {
             nodeId: savedNode?.id,
             hasNlpProfile: !!savedNode?.nlpProfile,
@@ -196,15 +209,17 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
             subList[subIdx] = selectedNode;
             main.subTasks = subList;
             mains[mainIndex] = main;
-            if (!taskTreeRef.current) taskTreeRef.current = { label: '', nodes: [], steps: {} };
-            taskTreeRef.current.nodes = mains;
+            // ✅ FASE 2.3: Aggiorna store invece di taskTreeRef
+            const updatedTaskTree = currentTaskTree || { label: '', nodes: [], steps: {} };
+            updatedTaskTree.nodes = mains;
+            setTaskTree(updatedTaskTree);
           }
         }
       }
     }
 
-    // ✅ Usa direttamente taskTreeRef.current (già contiene tutte le modifiche)
-    const finalTaskTree = { ...taskTreeRef.current };
+    // ✅ FASE 2.3: Usa store (già contiene tutte le modifiche)
+    const finalTaskTree = taskTreeFromStore || { label: '', nodes: [], steps: {} };
     const finalMainList = getdataList(finalTaskTree);
     const firstNode = finalMainList?.[0];
     const firstNodeRegex = firstNode?.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
@@ -297,10 +312,10 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
           // ✅ Usa task.steps come fonte di verità (contiene tutti gli steps aggiornati dai nodi)
           const finalTaskTreeWithSteps: TaskTree = {
             ...finalTaskTree,
-            steps: task?.steps || taskTreeRef.current?.steps || finalTaskTree.steps || {}
+            steps: task?.steps || finalTaskTree.steps || {}
           };
 
-          // ✅ FASE 2.2: Update store with final TaskTree (ref already updated above)
+          // ✅ FASE 2.3: Update store with final TaskTree
           setTaskTree(finalTaskTreeWithSteps);
 
           console.log('[ResponseEditor][CLOSE] 📦 Final TaskTree with steps prepared', {
@@ -361,8 +376,9 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
     selectedNodePath,
     selectedRoot,
     task,
-    taskTreeRef,
+    taskTreeFromStore,
     currentProjectId,
+    setTaskTree,
     replaceSelectedDDT,
   ]);
 

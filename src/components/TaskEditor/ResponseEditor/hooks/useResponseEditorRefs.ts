@@ -10,7 +10,7 @@ export interface UseResponseEditorRefsParams {
 }
 
 export interface UseResponseEditorRefsResult {
-  taskTreeRef: React.MutableRefObject<TaskTree | null | undefined>;
+  // ✅ FASE 2.3: taskTreeRef rimosso - non più necessario (store è single source of truth)
   prevInstanceRef: React.MutableRefObject<string | undefined>;
   contractChangeRef: React.MutableRefObject<{
     hasUnsavedChanges: boolean;
@@ -32,12 +32,9 @@ export interface UseResponseEditorRefsResult {
  * Hook that provides all refs for ResponseEditor.
  */
 export function useResponseEditorRefs(params: UseResponseEditorRefsParams): UseResponseEditorRefsResult {
-  const { taskTree } = params;
+  // ✅ FASE 2.3: taskTreeRef rimosso - non più necessario (store è single source of truth)
 
-  // TaskTree come ref mutabile (simula VB.NET: modifica diretta sulla struttura in memoria)
-  const taskTreeRef = useRef(taskTree);
-
-  // Inizializza taskTreeRef.current solo su cambio istanza (non ad ogni re-render)
+  // Inizializza prevInstanceRef per tracciare cambio istanza
   const prevInstanceRef = useRef<string | undefined>(undefined);
 
   // Ref per accedere allo stato delle modifiche da RecognitionEditor
@@ -72,7 +69,6 @@ export function useResponseEditorRefs(params: UseResponseEditorRefsParams): UseR
   const tasksStartXRef = useRef<number>(0);
 
   return {
-    taskTreeRef,
     prevInstanceRef,
     contractChangeRef,
     rootRef,

@@ -12,7 +12,8 @@ import type { RightPanelMode } from '../RightPanel';
 export interface UseResponseEditorInitializationParams {
   task: Task | null | undefined;
   taskTree: TaskTree | null | undefined;
-  taskTreeRef: React.MutableRefObject<TaskTree | null | undefined>;
+  // ✅ FASE 2.3: taskTreeRef opzionale per backward compatibility temporanea
+  taskTreeRef?: React.MutableRefObject<TaskTree | null | undefined>;
   showContractWizard: boolean;
   setShowContractWizard: React.Dispatch<React.SetStateAction<boolean>>;
   setTaskTreeVersion: React.Dispatch<React.SetStateAction<number>>;

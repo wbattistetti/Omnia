@@ -14,9 +14,10 @@ import { extractGUIDsFromDDT } from '../utils/ddtUtils';
  *
  * @param ddt - The DDT object to extract translations for
  * @param task - Optional Task object to extract GUIDs from task.steps[nodeId]
+ * @param version - Optional version number to force recalculation when it changes
  * @returns Record<string, string> - Dictionary of translations { guid: text }
  */
-export function useDDTTranslations(ddt: any | null | undefined, task?: any): Record<string, string> {
+export function useDDTTranslations(ddt: any | null | undefined, task?: any, version?: number): Record<string, string> {
   const { translations: globalTranslations } = useProjectTranslations();
 
   // Track last logged state to avoid duplicate logs - use stable keys
@@ -36,6 +37,8 @@ export function useDDTTranslations(ddt: any | null | undefined, task?: any): Rec
         : Object.keys(task.steps).sort().join(','))
     : '';
   const translationsKeys = Object.keys(globalTranslations).sort().join(',');
+  // ✅ FASE 2.3: Use version to force recalculation when store is populated
+  const stableVersion = version ?? 0;
 
   return useMemo(() => {
     if (!ddt) {
@@ -210,8 +213,9 @@ export function useDDTTranslations(ddt: any | null | undefined, task?: any): Rec
 
     return translationsFromGlobal;
     // ✅ CRITICAL: Don't include ddt/task in deps - they change reference on every render
-    // Use only stable keys: ddtId, taskStepsKeys, translationsKeys
+    // Use only stable keys: ddtId, taskStepsKeys, translationsKeys, version
+    // ✅ FASE 2.3: Added version to force recalculation when store is populated
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ddtId, taskStepsKeys, translationsKeys]);
+  }, [ddtId, taskStepsKeys, translationsKeys, stableVersion]);
 }
 

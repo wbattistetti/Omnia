@@ -12,6 +12,7 @@ import { taskRepository } from '../../../../services/TaskRepository';
 import { getTemplateId } from '../../../../utils/taskHelpers';
 import { isTaskTreeEmpty, hasdataButNosteps } from '../../../../utils/ddt';
 import { getdataList } from '../ddtSelectors';
+import { useTaskTreeFromStore } from '../core/state';
 import type { Task } from '../../../../types/taskTypes';
 import { findLocalTemplate } from './helpers/templateMatcher';
 import { callAIInference } from './helpers/aiInference';
@@ -21,7 +22,8 @@ import DialogueTaskService from '../../../../services/DialogueTaskService';
 
 interface UseWizardInferenceParams {
   taskTree: any; // ✅ Renamed from ddt to taskTree
-  taskTreeRef: React.MutableRefObject<any>; // ✅ Renamed from ddtRef to taskTreeRef
+  // ✅ FASE 2.3: taskTreeRef opzionale per backward compatibility temporanea
+  taskTreeRef?: React.MutableRefObject<any>;
   task: Task | null | undefined; // ✅ ARCHITETTURA ESPERTO: Task completo, non TaskMeta
   isTaskTreeLoading: boolean; // ✅ Renamed from isDdtLoading to isTaskTreeLoading
   currentProjectId: string | null;
@@ -53,7 +55,6 @@ interface UseWizardInferenceResult {
  */
 export function useWizardInference({
   taskTree, // ✅ Renamed from ddt to taskTree
-  taskTreeRef, // ✅ Renamed from ddtRef to taskTreeRef
   task, // ✅ ARCHITETTURA ESPERTO: Task completo
   isTaskTreeLoading, // ✅ Renamed from isDdtLoading to isTaskTreeLoading
   currentProjectId,
@@ -62,6 +63,8 @@ export function useWizardInference({
   preAssembledTaskTreeCache,
   wizardOwnsDataRef,
 }: UseWizardInferenceParams): UseWizardInferenceResult {
+  // ✅ FASE 2.3: Use Zustand store as SINGLE source of truth
+  const taskTreeFromStore = useTaskTreeFromStore();
   const [showWizard, setShowWizard] = useState<boolean>(false);
   const [isInferring, setIsInferring] = useState(false);
   const [inferenceResult, setInferenceResult] = useState<any>(null);
@@ -85,7 +88,8 @@ export function useWizardInference({
   const stableTemplateId = normalizeTemplateId(rawTemplateId);
 
   useEffect(() => {
-    const currentTaskTree = taskTreeRef?.current || taskTree;
+    // ✅ FASE 2.3: Usa store invece di taskTreeRef
+    const currentTaskTree = taskTreeFromStore || taskTree;
 
     // ========================================================================
     // ✅ ARCHITETTURA ESPERTO: EARLY EXIT se dati non sono ancora caricati
@@ -389,7 +393,6 @@ export function useWizardInference({
     isInferring,
     inferenceResult?.ai?.schema?.label ?? '',
     showWizard,
-    taskTreeRef,
     wizardOwnsDataRef,
     currentProjectId,
     preAssembledTaskTreeCache,

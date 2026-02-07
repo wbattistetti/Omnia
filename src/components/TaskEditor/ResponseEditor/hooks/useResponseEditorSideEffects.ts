@@ -22,7 +22,7 @@
 import { useServiceEvents } from './useServiceEvents';
 import { useEscalationTasks } from './useEscalationTasks';
 import { usePendingEditorClear } from './usePendingEditorClear';
-import { useTaskTreeSync } from './useTaskTreeSync';
+// ✅ FASE 2.3: useTaskTreeSync rimosso - non più necessario (store è single source of truth)
 import { useTemplateSync } from './useTemplateSync';
 import { useDebugFlags } from './useDebugFlags';
 import { useProjectSave } from './useProjectSave';
@@ -37,7 +37,8 @@ interface UseResponseEditorSideEffectsProps {
   // Task and tree
   task?: Task | null;
   taskTree?: TaskTree | null;
-  taskTreeRef: React.MutableRefObject<TaskTree | null | undefined>;
+  // ✅ FASE 2.3: taskTreeRef opzionale per backward compatibility temporanea
+  taskTreeRef?: React.MutableRefObject<TaskTree | null | undefined>;
   currentProjectId: string | null;
   setTaskTreeVersion: React.Dispatch<React.SetStateAction<number>>;
   prevInstanceRef: React.MutableRefObject<string | undefined>;
@@ -142,10 +143,10 @@ export function useResponseEditorSideEffects(props: UseResponseEditorSideEffects
   useServiceEvents({ setServiceUnavailable });
   useEscalationTasks({ setEscalationTasks });
   usePendingEditorClear({ pendingEditorOpen, showSynonyms, selectedNode, setPendingEditorOpen });
-  useTaskTreeSync({ task, taskTree, taskTreeRef, setTaskTreeVersion, prevInstanceRef });
-  useTemplateSync({ task, taskTree, taskTreeRef, currentProjectId, prevInstanceRef, replaceSelectedTaskTree });
+  // ✅ FASE 2.3: useTaskTreeSync rimosso - non più necessario (store è single source of truth)
+  useTemplateSync({ task, taskTree, currentProjectId, prevInstanceRef, replaceSelectedTaskTree });
   useDebugFlags();
-  useProjectSave({ task, taskTreeRef, currentProjectId });
+  useProjectSave({ task, currentProjectId });
   useSidebarCleanup();
   useSidebarDrag({ isDraggingSidebar, sidebarStartWidthRef, sidebarStartXRef, setSidebarManualWidth, setIsDraggingSidebar });
   useEditorCloseRegistration({ handleEditorClose, registerOnClose });
