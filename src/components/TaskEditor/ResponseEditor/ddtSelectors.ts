@@ -112,11 +112,11 @@ export function useNodeLabel(node: any): string {
 
   if (!node) return '';
 
-  const guid = node.id || node._id;
+  const guid = getNodeIdStrict(node);
   if (!guid) return '';
 
   // Use Translations if available, otherwise fallback to node.label
-  return getTranslation(guid) || node.label || node.name || '';
+  return getTranslation(guid) || getNodeLabelStrict(node);
 }
 
 

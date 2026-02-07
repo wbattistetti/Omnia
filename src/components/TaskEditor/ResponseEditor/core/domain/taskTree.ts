@@ -9,11 +9,11 @@
  */
 
 import { getNodesWithFallback } from '@utils/taskTreeMigrationHelpers';
+import { validateTaskTreeStructure } from './validators';
 import type { TaskTree } from '@types/taskTypes';
 
 /**
- * Get main nodes list from TaskTree.
- * Uses migration helper with fallback support for legacy formats.
+ * Get main nodes list from TaskTree - STRICT
  *
  * @param taskTree - The TaskTree to extract nodes from, or null/undefined
  * @returns Array of main nodes (empty array if taskTree is null/undefined)
@@ -26,7 +26,10 @@ import type { TaskTree } from '@types/taskTypes';
  */
 export function getMainNodes(taskTree: TaskTree | null | undefined): TaskTree['nodes'] {
   if (!taskTree) return [];
-  return getNodesWithFallback(taskTree, 'getdataList');
+
+  validateTaskTreeStructure(taskTree, 'getMainNodes');
+
+  return taskTree.nodes.filter(Boolean);
 }
 
 /**

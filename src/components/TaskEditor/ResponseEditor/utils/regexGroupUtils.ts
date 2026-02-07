@@ -10,8 +10,7 @@ import { deriveSubTaskKey } from '@utils/taskUtils';
 export function getSubTasksInfo(node: TaskTreeNode | null | undefined): Array<{ subTaskKey: string; label: string }> {
   if (!node) return [];
 
-  // Use subNodes if available, otherwise fallback to subData/subSlots for backward compatibility
-  const subNodes = node.subNodes || [];
+  const subNodes = getSubNodesStrict(node);
 
   return subNodes.map((subNode) => {
     const subTaskKey = deriveSubTaskKey(subNode);

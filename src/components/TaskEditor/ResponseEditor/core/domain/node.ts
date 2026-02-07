@@ -1,55 +1,28 @@
 /**
- * Node Domain Operations
+ * Node Domain Operations - STRICT MODE
  *
  * Pure functions for node operations.
- * No side effects, no dependencies on React or state.
+ * NO FALLBACKS - Throws errors for invalid data
  */
 
+import { validateNodeStructure } from './validators';
+import type { TaskTreeNode } from '@types/taskTypes';
+
 /**
- * Get step keys from a node
- * Supports multiple formats: dictionary, array, legacy messages
+ * Get step keys from a node - STRICT, dictionary only
  */
-export function getNodeStepKeys(node: any): string[] {
+export function getNodeStepKeys(node: TaskTreeNode | null | undefined): string[] {
   if (!node) {
     return [];
   }
 
-  const present = new Set<string>();
+  validateNodeStructure(node, 'getNodeStepKeys');
 
-  // Variant A: steps as dictionary: { "start": {...}, "noMatch": {...}, ... }
-  if (node.steps && typeof node.steps === 'object' && !Array.isArray(node.steps)) {
-    const stepKeys = Object.keys(node.steps);
-    for (const stepKey of stepKeys) {
-      const step = node.steps[stepKey];
-      if (step && typeof step === 'object') {
-        if (stepKey && stepKey.trim()) {
-          present.add(stepKey);
-        }
-      }
-    }
-  }
-
-  // Variant B: steps as array: [{ type: 'start', ... }, ...]
-  if (Array.isArray(node.steps)) {
-    for (const s of node.steps) {
-      const t = s?.type;
-      if (typeof t === 'string' && t.trim()) present.add(t);
-    }
-  }
-
-  // Variant C: messages nested in node.messages (legacy)
-  if (node.messages && typeof node.messages === 'object') {
-    for (const key of Object.keys(node.messages)) {
-      const val = node.messages[key];
-      if (val != null) present.add(key);
-    }
-  }
-
-  if (present.size === 0) {
+  if (!node.steps || typeof node.steps !== 'object' || Array.isArray(node.steps)) {
     return [];
   }
 
-  // Return in known order, with custom steps appended
+  const stepKeys = Object.keys(node.steps);
   const DEFAULT_STEP_ORDER = [
     'start',
     'noInput',
@@ -61,55 +34,42 @@ export function getNodeStepKeys(node: any): string[] {
     'error',
   ];
 
-  const orderedKnown = DEFAULT_STEP_ORDER.filter((k) => present.has(k));
-  const custom = Array.from(present).filter((k) => !DEFAULT_STEP_ORDER.includes(k)).sort();
+  const present = stepKeys.filter(key => key && key.trim());
+  const orderedKnown = DEFAULT_STEP_ORDER.filter((k) => present.includes(k));
+  const custom = present.filter((k) => !DEFAULT_STEP_ORDER.includes(k)).sort();
   return [...orderedKnown, ...custom];
 }
 
 /**
- * Get messages/step data for a specific step key
- * Supports multiple formats: array, dictionary, legacy messages
+ * Get messages/step data for a specific step key - STRICT, dictionary only
  */
-export function getNodeStepData(node: any, stepKey: string): any {
+export function getNodeStepData(node: TaskTreeNode | null | undefined, stepKey: string): any {
   if (!node || !stepKey) return {};
 
-  // steps as array
-  if (Array.isArray(node.steps)) {
-    const found = node.steps.find((s: any) => s?.type === stepKey);
-    if (found) return found;
+  validateNodeStructure(node, 'getNodeStepData');
+
+  if (!node.steps || typeof node.steps !== 'object' || Array.isArray(node.steps)) {
+    return {};
   }
 
-  // steps as object
-  if (node.steps && typeof node.steps === 'object' && !Array.isArray(node.steps)) {
-    const val = node.steps[stepKey];
-    if (val != null) return val;
-  }
-
-  // messages separated
-  if (node.messages && typeof node.messages === 'object') {
-    const val = node.messages[stepKey];
-    if (val != null) return val;
-  }
-
-  return {};
+  return node.steps[stepKey] || {};
 }
 
 /**
- * Get node label from translations or fallback to node.label
+ * Get node label - STRICT, no fallback
  */
-export function getNodeLabel(node: any, translations?: Record<string, string>): string {
+export function getNodeLabel(node: TaskTreeNode | null | undefined, translations?: Record<string, string>): string {
   if (!node) return '';
 
+  validateNodeStructure(node, 'getNodeLabel');
+
   // Priority 1: Use Translations if available
-  if (translations) {
-    const guid = node.id || node._id;
-    if (guid && translations[guid]) {
-      return translations[guid];
-    }
+  if (translations && node.id && translations[node.id]) {
+    return translations[node.id];
   }
 
-  // Priority 2: Fallback to node.label
-  return (node.label || node.name || '').toString();
+  // Priority 2: Return node.label
+  return node.label || '';
 }
 
 /**

@@ -7,6 +7,7 @@ import { taskRepository } from '@services/TaskRepository';
 import { saveTaskToRepository } from '@responseEditor/features/persistence/ResponseEditorPersistence';
 import { mapNode } from '@dock/ops';
 import { normalizeStepsToDictionary } from '@responseEditor/core/domain';
+import { validateNodeStructure } from '@responseEditor/core/domain/validators';
 import type { Task, TaskTree } from '@types/taskTypes';
 
 export interface ApplyNodeUpdateParams {
@@ -40,6 +41,22 @@ export interface ApplyNodeUpdateResult {
  * This function does NOT mutate any refs or state - it only computes the result.
  */
 export function applyNodeUpdate(params: ApplyNodeUpdateParams): ApplyNodeUpdateResult {
+  // Validate updated node structure
+  if (params.updatedNode) {
+    try {
+      validateNodeStructure(params.updatedNode, 'applyNodeUpdate');
+    } catch (error) {
+      return {
+        updatedNode: params.updatedNode,
+        updatedTaskTree: params.currentTaskTree || { nodes: [], steps: {} },
+        validationFailed: true,
+        validationError: error instanceof Error ? error.message : String(error),
+        shouldUpdateDockTree: false,
+        shouldSave: false,
+      };
+    }
+  }
+
   const {
     prevNode,
     updatedNode,

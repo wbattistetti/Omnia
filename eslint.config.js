@@ -71,5 +71,38 @@ export default tseslint.config(
         },
       ],
     },
+  },
+  // Prevent fallback patterns in ResponseEditor
+  {
+    files: ['src/components/TaskEditor/ResponseEditor/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'LogicalExpression[operator="||"] > MemberExpression[property.name="subData"]',
+          message: 'subData is legacy. Use subNodes instead. Import getSubNodesStrict from @responseEditor/core/domain/nodeStrict',
+        },
+        {
+          selector: 'LogicalExpression[operator="||"] > MemberExpression[property.name="subSlots"]',
+          message: 'subSlots is legacy. Use subNodes instead. Import getSubNodesStrict from @responseEditor/core/domain/nodeStrict',
+        },
+        {
+          selector: 'LogicalExpression[operator="||"] > MemberExpression[property.name="_id"]',
+          message: '_id is legacy. Use id instead. Import getNodeIdStrict from @responseEditor/core/domain/nodeStrict',
+        },
+        {
+          selector: 'LogicalExpression[operator="||"] > MemberExpression[property.name="name"]',
+          message: 'name is legacy. Use label instead. Import getNodeLabelStrict from @responseEditor/core/domain/nodeStrict',
+        },
+        {
+          selector: 'CallExpression[callee.name="convertStepsArrayToDictionary"]',
+          message: 'convertStepsArrayToDictionary is deprecated. Steps must be dictionary format.',
+        },
+        {
+          selector: 'CallExpression[callee.name="normalizeStepsToDictionary"]',
+          message: 'normalizeStepsToDictionary is deprecated. Steps must be dictionary format.',
+        },
+      ],
+    },
   }
 );

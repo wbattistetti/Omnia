@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { NLPProfile } from '@responseEditor/DataExtractionEditor';
 import { getIsTesting } from '@responseEditor/testingState';
+import { getNodeIdStrict, getNodeLabelStrict, getSubNodesStrict } from '@responseEditor/core/domain/nodeStrict';
 
 // Helper functions
 function toCommaList(list?: string[] | null): string {
@@ -62,10 +63,10 @@ export function useProfileState(
         hasTestNotes: !!(node as any)?.testNotes,
         testNotesCount: (node as any)?.testNotes ? Object.keys((node as any).testNotes).length : 0
       });
-    }
+      }
 
-    const result = {
-      slotId: (node?.id || node?._id || node?.label || 'slot') as string,
+      const result = {
+      slotId: node ? (getNodeIdStrict(node) || getNodeLabelStrict(node) || 'slot') : 'slot',
       locale,
       kind: ((node?.kind && node.kind !== 'generic') ? node.kind : (p.kind && p.kind !== 'generic') ? p.kind : inferKindFromNode(node)) as string,
       synonyms: Array.isArray(p.synonyms)
@@ -332,10 +333,11 @@ export function useProfileState(
     const ex = examplesList;
     const post = tryParseJSON(postProcessText);
     setJsonError(post.error);
-    const autoSubSlots = Array.isArray((node as any)?.subTasks)
-      ? (node as any).subTasks.map((s: any) => ({
-        slotId: s?.id || String(s?.label || s?.name || '').toLowerCase().replace(/\s+/g, '_'),
-        label: s?.label || s?.name || ''
+    const subNodes = getSubNodesStrict(node);
+    const autoSubSlots = subNodes.length > 0
+      ? subNodes.map((s: any) => ({
+        slotId: getNodeIdStrict(s) || String(getNodeLabelStrict(s) || '').toLowerCase().replace(/\s+/g, '_'),
+        label: getNodeLabelStrict(s)
       }))
       : undefined;
 

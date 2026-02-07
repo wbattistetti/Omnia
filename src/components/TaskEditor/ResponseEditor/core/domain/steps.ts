@@ -6,39 +6,26 @@
  */
 
 /**
- * Convert steps from array format to dictionary format
- * Supports legacy array format: [{ type: 'start', ... }, ...]
- * Returns dictionary format: { "start": {...}, "noMatch": {...}, ... }
+ * @deprecated Use dictionary format directly. This function will throw error in strict mode.
+ * DO NOT USE - Steps must be dictionary format
  */
 export function convertStepsArrayToDictionary(steps: any): Record<string, any> {
-  if (!steps) return {};
+  if (Array.isArray(steps)) {
+    throw new Error(
+      '[convertStepsArrayToDictionary] DEPRECATED: Steps must be dictionary format, not array. ' +
+      'Update your data structure to use dictionary format.'
+    );
+  }
 
-  // Already dictionary: use directly
+  if (!steps) return {};
   if (typeof steps === 'object' && !Array.isArray(steps)) {
     return steps;
   }
-
-  // Array: convert to dictionary
-  if (Array.isArray(steps)) {
-    const result: Record<string, any> = {};
-    for (const step of steps) {
-      if (step?.type) {
-        result[step.type] = {
-          type: step.type,
-          escalations: step.escalations || [],
-          id: step.id
-        };
-      }
-    }
-    return result;
-  }
-
   return {};
 }
 
 /**
- * Normalize steps to dictionary format
- * Ensures steps are always in dictionary format, converting if necessary
+ * @deprecated Use dictionary format directly. This function will throw error in strict mode.
  */
 export function normalizeStepsToDictionary(steps: any): Record<string, any> {
   return convertStepsArrayToDictionary(steps);
@@ -76,13 +63,16 @@ export function getStepsAsArray(steps: any): any[] {
 }
 
 /**
- * Get steps for a specific node (dictionary lookup)
+ * Get steps for a specific node (dictionary lookup) - STRICT
  * Pure function - O(1) lookup instead of O(n) filter
  */
-export function getStepsForNode(steps: any, nodeTemplateId: string): Record<string, any> {
+export function getStepsForNode(steps: Record<string, Record<string, any>>, nodeTemplateId: string): Record<string, any> {
   if (!steps || typeof steps !== 'object' || Array.isArray(steps)) {
-    return {}; // Return empty dictionary if invalid
+    throw new Error(
+      `[getStepsForNode] Steps must be dictionary format. ` +
+      `Got: ${Array.isArray(steps) ? 'array' : typeof steps}`
+    );
   }
-  // Direct lookup: O(1) instead of O(n) filter
+
   return steps[nodeTemplateId] || {};
 }

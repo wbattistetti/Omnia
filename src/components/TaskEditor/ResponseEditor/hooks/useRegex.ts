@@ -18,6 +18,7 @@ import { getIsTesting } from '@responseEditor/testingState';
 import { useNotesStore } from '@responseEditor/features/step-management/stores/notesStore';
 import { validateNamedGroups, extractNamedGroupsFromRegex } from '@responseEditor/utils/regexGroupUtils';
 import type { TaskTreeNode } from '@types/taskTypes';
+import { getSubNodesStrict } from '@responseEditor/core/domain/nodeStrict';
 
 // ============================================
 // Types and Interfaces
@@ -113,7 +114,7 @@ function validateRegexGroups(regex: string | undefined, node: any): ValidationRe
     return result;
   }
 
-  const subNodes = (node as TaskTreeNode).subNodes || node.subData || node.subSlots || [];
+  const subNodes = getSubNodesStrict(node);
   result.groupsExpected = subNodes.length;
 
   if (subNodes.length === 0) {

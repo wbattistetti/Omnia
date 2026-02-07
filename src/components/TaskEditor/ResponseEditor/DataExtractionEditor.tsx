@@ -69,6 +69,8 @@ if (typeof document !== 'undefined' && !document.getElementById('nlp-spinner-ani
 }
 
 import { TaskMeta } from '@taskEditor/EditorHost/types';
+import { getSubNodesStrict, getNodeIdStrict, getNodeLabelStrict } from '@responseEditor/core/domain/nodeStrict';
+import type { TaskTreeNode } from '@types/taskTypes';
 
 export default function DataExtractionEditor({
   node,
@@ -599,11 +601,10 @@ export default function DataExtractionEditor({
                     try {
                       console.log('[AI Regex] Generating regex for:', regexAiPrompt);
 
-                      // Extract sub-data from node if available
-                      const subData = (node?.subData || node?.subSlots || []) as any[];
-                      const subDataInfo = subData.map((sub: any, index: number) => ({
-                        id: sub.id || `sub-${index}`,
-                        label: sub.label || sub.name || '',
+                      const subNodes = getSubNodesStrict(node);
+                      const subDataInfo = subNodes.map((sub: TaskTreeNode, index: number) => ({
+                        id: getNodeIdStrict(sub),
+                        label: getNodeLabelStrict(sub),
                         index: index + 1 // Position in capture groups (1, 2, 3...)
                       }));
 

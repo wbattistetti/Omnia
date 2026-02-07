@@ -160,8 +160,7 @@ export default function RegexInlineEditor({
   React.useEffect(() => {
     // Only generate if baselineRegex is empty (not dirty)
     if (baselineRegex === '' && !isDirty && node) {
-      // Get subNodes from node (support both subNodes and subData/subSlots for backward compatibility)
-      const subNodes = (node as TaskTreeNode).subNodes || node.subData || node.subSlots || [];
+      const subNodes = getSubNodesStrict(node);
 
       let baseRegex = '';
       if (subNodes.length > 0) {

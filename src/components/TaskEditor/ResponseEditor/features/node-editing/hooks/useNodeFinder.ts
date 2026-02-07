@@ -5,6 +5,7 @@ import { useCallback } from 'react';
 import { getMainNodes, getSubNodes } from '@responseEditor/core/domain';
 import { useTaskTreeFromStore } from '@responseEditor/core/state';
 import type { TaskTree } from '@types/taskTypes';
+import { getNodeIdStrict } from '@responseEditor/core/domain/nodeStrict';
 
 export interface UseNodeFinderParams {
   // ✅ FASE 3: Parametri opzionali rimossi - store è single source of truth
@@ -31,7 +32,7 @@ export function useNodeFinder(params: UseNodeFinderParams) {
     const mains = getMainNodes(currentTaskTree);
     for (let mIdx = 0; mIdx < mains.length; mIdx++) {
       const main = mains[mIdx];
-      const mainNodeId = main.id || main.templateId || main._id;
+      const mainNodeId = main.id || main.templateId || getNodeIdStrict(main);
       if (mainNodeId === nodeId) {
         handleSelectMain(mIdx);
         handleSelectSub(undefined);
@@ -40,7 +41,7 @@ export function useNodeFinder(params: UseNodeFinderParams) {
       const subs = getSubNodes(main) || [];
       for (let sIdx = 0; sIdx < subs.length; sIdx++) {
         const sub = subs[sIdx];
-        const subNodeId = sub.id || sub.templateId || sub._id;
+        const subNodeId = sub.id || sub.templateId || getNodeIdStrict(sub);
         if (subNodeId === nodeId) {
           handleSelectMain(mIdx);
           handleSelectSub(sIdx, mIdx);

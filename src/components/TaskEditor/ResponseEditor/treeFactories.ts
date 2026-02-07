@@ -35,7 +35,7 @@ export const estraiNodiDaDDT = (ddt: any, translations: any, lang: string): Tree
             }
             const taskId = taskRef.id;
             if (taskId) {
-              const ddtId = ddt.id || ddt._id;
+              const ddtId = getNodeIdStrict(ddt);
               const key = taskRef.parameters && taskRef.parameters[0] && taskRef.parameters[0].value;
               const testo = translations[key];
               const text = testo || '';

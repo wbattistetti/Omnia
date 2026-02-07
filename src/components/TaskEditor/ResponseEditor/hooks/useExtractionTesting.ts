@@ -373,8 +373,7 @@ export function useExtractionTesting({
               }
             });
           } else if (bestMatch.length > 1 && node) {
-            // ✅ Fallback: numeric groups (backward compatibility)
-            const allSubs = [...(node.subSlots || []), ...(node.subData || [])];
+            const allSubs = getSubNodesStrict(node);
 
             // Iterate through capture groups (m[1], m[2], m[3], ...)
             for (let i = 1; i < bestMatch.length; i++) {
@@ -386,7 +385,7 @@ export function useExtractionTesting({
                   const subIndex = i - 1; // Group 1 -> subIndex 0, Group 2 -> subIndex 1, etc.
                   if (subIndex < allSubs.length) {
                     const sub = allSubs[subIndex];
-                    const subLabel = String(sub.label || sub.name || '');
+                    const subLabel = getNodeLabelStrict(sub);
                     const standardKey = mapLabelToStandardKey(subLabel);
 
                     if (standardKey) {
@@ -590,7 +589,7 @@ export function useExtractionTesting({
 
             // Extract capture groups - processa TUTTI i gruppi in base alla posizione
             if (bestMatch.length > 1 && node) {
-              const allSubs = [...(node.subSlots || []), ...(node.subData || [])];
+              const allSubs = getSubNodesStrict(node);
 
               // ✅ Processa TUTTI i gruppi in base alla loro posizione (1, 2, 3, ...)
               // Anche se alcuni sono undefined, li mappiamo ai subData corrispondenti
@@ -600,7 +599,7 @@ export function useExtractionTesting({
 
                 if (subIndex < allSubs.length) {
                   const sub = allSubs[subIndex];
-                  const subLabel = String(sub.label || sub.name || '');
+                  const subLabel = getNodeLabelStrict(sub);
                   const standardKey = mapLabelToStandardKey(subLabel);
 
                   // ✅ Solo se il gruppo ha un valore, aggiungilo

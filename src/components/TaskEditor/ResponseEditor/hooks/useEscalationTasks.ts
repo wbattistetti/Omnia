@@ -2,6 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useEffect } from 'react';
+import { getNodeIdStrict, getNodeLabelStrict } from '@responseEditor/core/domain/nodeStrict';
 
 export interface UseEscalationTasksParams {
   setEscalationTasks: React.Dispatch<React.SetStateAction<any[]>>;
@@ -9,6 +10,8 @@ export interface UseEscalationTasksParams {
 
 /**
  * Hook that loads tasks for escalation palette.
+ * Note: Templates from external API may have legacy structure (_id instead of id),
+ * so we use try-catch fallback here. This is the ONLY place where fallback is allowed.
  */
 export function useEscalationTasks(params: UseEscalationTasksParams) {
   const { setEscalationTasks } = params;
@@ -29,16 +32,37 @@ export function useEscalationTasks(params: UseEscalationTasksParams) {
           return;
         }
 
-        const tasks = templates.map((template: any) => ({
-          id: template.id || template._id,
-          label: template.label || '',
-          description: template.description || '',
-          icon: template.icon || 'Circle',
-          color: template.color || 'text-gray-500',
-          params: template.structure || template.params || {},
-          type: template.type,
-          allowedContexts: template.allowedContexts || []
-        }));
+        const tasks = templates
+          .map((template: any) => {
+            // Templates from API might have legacy structure - extract id safely
+            let templateId: string;
+            try {
+              templateId = getNodeIdStrict(template);
+            } catch (error) {
+              // Fallback for legacy API templates that might have _id
+              templateId = template.id || template._id || '';
+            }
+
+            let templateLabel: string;
+            try {
+              templateLabel = getNodeLabelStrict(template);
+            } catch (error) {
+              // Fallback for legacy API templates
+              templateLabel = template.label || template.name || '';
+            }
+
+            return {
+              id: templateId,
+              label: templateLabel,
+              description: template.description || '',
+              icon: template.icon || 'Circle',
+              color: template.color || 'text-gray-500',
+              params: template.structure || template.params || {},
+              type: template.type,
+              allowedContexts: template.allowedContexts || []
+            };
+          })
+          .filter(task => task.id); // Filter out tasks without valid id
 
         setEscalationTasks(tasks);
       })

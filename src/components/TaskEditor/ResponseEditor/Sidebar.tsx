@@ -9,6 +9,7 @@ import { useFontContext } from '@context/FontContext';
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import ParserStatusRow from '@responseEditor/Sidebar/ParserStatusRow';
 import type { EngineType } from '@types/semanticContract';
+import { getNodeIdStrict } from '@responseEditor/core/domain/nodeStrict';
 
 interface SidebarProps {
   mainList: any[];
@@ -703,15 +704,15 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                 node={main}
                 inline={true}
                 onCreateClick={() => {
-                  const nodeId = main.id || main.templateId || main._id;
+                  const nodeId = main.id || main.templateId || getNodeIdStrict(main);
                   onParserCreate?.(nodeId, main);
                 }}
                 onModifyClick={() => {
-                  const nodeId = main.id || main.templateId || main._id;
+                  const nodeId = main.id || main.templateId || getNodeIdStrict(main);
                   onParserModify?.(nodeId, main);
                 }}
                 onEngineChipClick={(engineType) => {
-                  const nodeId = main.id || main.templateId || main._id;
+                  const nodeId = main.id || main.templateId || getNodeIdStrict(main);
                   // Map EngineType to editor type
                   const editorTypeMap: Record<EngineType, 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings'> = {
                     regex: 'regex',
@@ -822,15 +823,15 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                           node={sub}
                           inline={true}
                           onCreateClick={() => {
-                            const nodeId = sub.id || sub.templateId || sub._id;
+                            const nodeId = sub.id || sub.templateId || getNodeIdStrict(sub);
                             onParserCreate?.(nodeId, sub);
                           }}
                           onModifyClick={() => {
-                            const nodeId = sub.id || sub.templateId || sub._id;
+                            const nodeId = sub.id || sub.templateId || getNodeIdStrict(sub);
                             onParserModify?.(nodeId, sub);
                           }}
                           onEngineChipClick={(engineType) => {
-                            const nodeId = sub.id || sub.templateId || sub._id;
+                            const nodeId = sub.id || sub.templateId || getNodeIdStrict(sub);
                             // Map EngineType to editor type
                             const editorTypeMap: Record<EngineType, 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings'> = {
                               regex: 'regex',

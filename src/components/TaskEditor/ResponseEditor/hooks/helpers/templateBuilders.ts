@@ -3,6 +3,7 @@
 // Testabili in isolamento, senza side effects
 
 import { DialogueTaskService } from '@services/DialogueTaskService';
+import { getNodeIdStrict, getNodeLabelStrict } from '@responseEditor/core/domain/nodeStrict';
 
 export interface TemplateMatchResult {
   ai: {
@@ -70,7 +71,7 @@ export function extractTranslationGuids(data: any[]): string[] {
  * Questo referenceId sarà scritto nell'istanza e usato a runtime
  */
 export function createSubDataInstance(subTemplate: any): any {
-  const subTemplateId = subTemplate.id || subTemplate._id;
+  const subTemplateId = getNodeIdStrict(subTemplate);
   let filteredSteps = undefined;
 
   if (subTemplate.steps && subTemplateId) {
@@ -91,10 +92,10 @@ export function createSubDataInstance(subTemplate: any): any {
 
   // ✅ NUOVO MODELLO: referenceId è sempre il templateId del subTemplate
   // Non serve più cercare in .data[0].id - il templateId è sufficiente
-  const referenceId = subTemplate.id || subTemplate._id;
+  const referenceId = getNodeIdStrict(subTemplate);
 
   return {
-    label: subTemplate.label || subTemplate.name || 'Sub',
+    label: getNodeLabelStrict(subTemplate) || 'Sub',
     type: subTemplate.type,
     icon: subTemplate.icon || 'FileText',
     steps: filteredSteps, // ✅ Usa steps invece di steps
@@ -102,9 +103,9 @@ export function createSubDataInstance(subTemplate: any): any {
     examples: subTemplate.examples || [],
     subData: [],
     nlpContract: subTemplate.nlpContract || undefined,
-    templateId: subTemplate.id || subTemplate._id, // ✅ GUID del task referenziato
+    templateId: getNodeIdStrict(subTemplate), // ✅ GUID del task referenziato
     referenceId: referenceId, // ✅ dataId del data[0] del template referenziato
-    kind: subTemplate.name || subTemplate.type || 'generic'
+    kind: subTemplate.type || 'generic'
   };
 }
 
@@ -112,9 +113,9 @@ export function createSubDataInstance(subTemplate: any): any {
  * Crea un'istanza data da un template semplice (senza subDataIds)
  */
 export function createSimpledataInstance(template: any): any {
-  const templateId = template.id || template._id;
+  const templateId = getNodeIdStrict(template);
   return {
-    label: template.label || template.name || 'Data',
+    label: getNodeLabelStrict(template) || 'Data',
     type: template.type,
     icon: template.icon || 'Calendar',
     steps: templateId && template.steps ? { [String(templateId)]: template.steps[String(templateId)] } : undefined, // ✅ Usa steps invece di steps
@@ -122,8 +123,8 @@ export function createSimpledataInstance(template: any): any {
     examples: template.examples || [],
     subData: [],
     nlpContract: template.nlpContract || undefined,
-    templateId: template.id || template._id,
-    kind: template.name || template.type || 'generic'
+    templateId: getNodeIdStrict(template),
+    kind: template.type || 'generic'
   };
 }
 
@@ -141,9 +142,9 @@ export function createCompositedata(template: any): any[] {
     }
   }
 
-  const mainTemplateId = template.id || template._id;
+  const mainTemplateId = getNodeIdStrict(template);
   const mainInstance = {
-    label: template.label || template.name || 'Data',
+    label: getNodeLabelStrict(template) || 'Data',
     type: template.type,
     icon: template.icon || 'Calendar',
     steps: mainTemplateId && template.steps ? { [String(mainTemplateId)]: template.steps[String(mainTemplateId)] } : undefined, // ✅ Usa steps invece di steps
@@ -151,8 +152,8 @@ export function createCompositedata(template: any): any[] {
     examples: template.examples || [],
     subData: subDataInstances,
     nlpContract: template.nlpContract || undefined,
-    templateId: template.id || template._id,
-    kind: template.name || template.type || 'generic'
+    templateId: getNodeIdStrict(template),
+    kind: template.type || 'generic'
   };
 
   return [mainInstance];
@@ -173,7 +174,7 @@ export async function buildTemplateMatchResult(template: any): Promise<TemplateM
   return {
     ai: {
       schema: {
-        label: template.label || template.name || 'Data',
+        label: getNodeLabelStrict(template) || 'Data',
         data: data
         // ❌ RIMOSSO: steps - usa steps nei nodi invece
       },

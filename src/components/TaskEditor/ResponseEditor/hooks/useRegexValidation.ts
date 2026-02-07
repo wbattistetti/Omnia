@@ -49,8 +49,7 @@ function validateRegexGroups(regex: string | undefined, node: any): ValidationRe
     return result;
   }
 
-  // ✅ Use subNodes if available, otherwise fallback to subData/subSlots for backward compatibility
-  const subNodes = (node as TaskTreeNode).subNodes || node.subData || node.subSlots || [];
+  const subNodes = getSubNodesStrict(node);
   result.groupsExpected = subNodes.length;
 
   if (subNodes.length === 0) {

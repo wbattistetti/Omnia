@@ -25,7 +25,8 @@
     "verify:domain-purity": "node scripts/verify-domain-purity.js",
     "verify:imports": "node scripts/verify-imports.js",
     "verify:features": "node scripts/verify-features.js",
-    "verify:architecture": "npm run verify:domain-purity && npm run verify:imports && npm run verify:features"
+    "verify:no-fallbacks": "node scripts/verify-no-fallbacks.js",
+    "verify:architecture": "npm run verify:domain-purity && npm run verify:imports && npm run verify:features && npm run verify:no-fallbacks"
   },
   "dependencies": {
     "@popperjs/core": "^2.11.8",
