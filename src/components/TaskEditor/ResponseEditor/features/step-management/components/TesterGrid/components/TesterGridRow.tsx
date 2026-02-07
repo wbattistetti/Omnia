@@ -8,7 +8,7 @@ import NoteDisplay from '@responseEditor/CellNote/NoteDisplay';
 import NoteSeparator from '@responseEditor/CellNote/NoteSeparator';
 import { RowResult } from '@responseEditor/hooks/useExtractionTesting';
 import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
-import { useNotesStore, getCellKeyFromPhrase } from '@responseEditor/stores/notesStore';
+import { useNotesStore, getCellKeyFromPhrase } from '@responseEditor/features/step-management/stores/notesStore';
 
 interface TesterGridRowProps {
   rowIndex: number;

@@ -14,14 +14,11 @@ export function getDDTIcon(type: string): JSX.Element {
 }
 
 // ✅ NUOVO MODELLO: Usa subNodes[] invece di subData[]
-// Questa funzione è deprecata - usa getdataList() e getSubDataList() da ddtSelectors.ts
+// ✅ Uses domain layer function (backward compatible)
+// @deprecated Use findNodeByIndices from core/domain instead
 export function getNodeByIndex(taskTree: any, mainIndex: number | null, subIndex: number | null) {
-  if (!taskTree || !taskTree.nodes) return null;
-  if (mainIndex == null || mainIndex < 0 || mainIndex >= taskTree.nodes.length) return null;
-  const main = taskTree.nodes[mainIndex];
-  if (subIndex == null) return main;
-  if (!main.subNodes || subIndex < 0 || subIndex >= main.subNodes.length) return main;
-  return main.subNodes[subIndex];
+  const { findNodeByIndices } = require('@responseEditor/core/domain');
+  return findNodeByIndices(taskTree, mainIndex ?? 0, subIndex ?? null);
 }
 
 export function ordinalIt(n: number): string {

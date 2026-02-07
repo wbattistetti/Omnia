@@ -6,7 +6,7 @@ import { mapLabelToStandardKey } from '@responseEditor/hooks/useRegexValidation'
 import * as testingState from '@responseEditor/testingState';
 import { loadContractFromNode } from '@responseEditor/ContractSelector/contractHelpers';
 import { TestExtractionService } from '@services/TestExtractionService';
-import { useCellOverridesStore } from '@responseEditor/stores/cellOverridesStore';
+import { useCellOverridesStore } from '@responseEditor/features/step-management/stores/cellOverridesStore';
 
 export interface RowResult {
   regex?: string;

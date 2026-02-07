@@ -9,7 +9,7 @@ import { usePlaceholderSelection } from '@responseEditor/hooks/usePlaceholderSel
 import { useRegexAIGeneration } from '@responseEditor/hooks/useRegexAIGeneration';
 import { NLPProfile } from '@responseEditor/DataExtractionEditor';
 import { getIsTesting } from '@responseEditor/testingState';
-import { useNotesStore } from '@responseEditor/stores/notesStore';
+import { useNotesStore } from '@responseEditor/features/step-management/stores/notesStore';
 import { generateBaseRegexWithNamedGroups, generateBaseRegexSimple } from '@responseEditor/utils/regexGroupUtils';
 import type { TaskTreeNode } from '@types/taskTypes';
 import { useRegexState } from '@responseEditor/hooks/useRegexState';

@@ -9,7 +9,7 @@ import { loadContractFromNode } from '@responseEditor/ContractSelector/contractH
 import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
 import DialogueTaskService from '@services/DialogueTaskService';
 import { useProjectData } from '@context/ProjectDataContext';
-import { useNotesStore } from '@responseEditor/stores/notesStore';
+import { useNotesStore } from '@responseEditor/features/step-management/stores/notesStore';
 import { taskRepository } from '@services/TaskRepository';
 import { ExamplesPersistenceService } from '@responseEditor/services/examplesPersistenceService';
 

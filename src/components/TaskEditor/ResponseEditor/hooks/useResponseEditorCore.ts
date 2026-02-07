@@ -29,7 +29,8 @@ import { useParserHandlers, useProfileUpdate } from '@responseEditor/features/st
 import { useUpdateSelectedNode } from '@responseEditor/features/node-editing/hooks/useUpdateSelectedNode';
 import { useIntentMessagesHandler } from '@responseEditor/hooks/useIntentMessagesHandler';
 import { useGeneralizabilityCheck } from '@responseEditor/hooks/useGeneralizabilityCheck';
-import { getTaskMeta, getStepsForNode, getStepsAsArray } from '@responseEditor/utils/responseEditorUtils';
+import { getTaskMeta } from '@responseEditor/utils/responseEditorUtils';
+import { getStepsForNode, getStepsAsArray } from '@responseEditor/core/domain';
 import type { TaskMeta, Task } from '@types/taskTypes';
 import type { TaskTree } from '@types/taskTypes';
 

@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { ValidationResult } from '@responseEditor/hooks/useRegexValidation';
 import { RowResult } from '@responseEditor/hooks/useExtractionTesting';
-import { useNotesStore, getCellKeyFromPhrase } from '@responseEditor/stores/notesStore';
+import { useNotesStore, getCellKeyFromPhrase } from '@responseEditor/features/step-management/stores/notesStore';
 import { getSubTasksInfo } from '@responseEditor/utils/regexGroupUtils';
 import { deriveSubTaskKey } from '@utils/taskUtils';
 import type { TaskTreeNode } from '@types/taskTypes';

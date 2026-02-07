@@ -26,4 +26,6 @@ export {
   convertStepsArrayToDictionary,
   normalizeStepsToDictionary,
   hasStepsContent,
+  getStepsAsArray,
+  getStepsForNode,
 } from './steps';

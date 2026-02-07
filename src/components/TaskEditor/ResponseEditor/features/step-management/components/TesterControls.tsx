@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Plus, ChevronsRight, Wrench, BarChart2, X } from 'lucide-react';
-import { useCellOverridesStore } from './stores/cellOverridesStore';
+import { useCellOverridesStore } from '@responseEditor/features/step-management/stores/cellOverridesStore';
 
 interface TesterControlsProps {
   newExample: string;

@@ -60,3 +60,29 @@ export function hasStepsContent(steps: any): boolean {
 
   return false;
 }
+
+/**
+ * Convert steps (object or array) to array format
+ * Pure function - no side effects
+ */
+export function getStepsAsArray(steps: any): any[] {
+  if (!steps) return [];
+  if (Array.isArray(steps)) return steps;
+  // If it's an object, convert it to array
+  return Object.entries(steps).map(([key, value]: [string, any]) => ({
+    type: key,
+    ...value
+  }));
+}
+
+/**
+ * Get steps for a specific node (dictionary lookup)
+ * Pure function - O(1) lookup instead of O(n) filter
+ */
+export function getStepsForNode(steps: any, nodeTemplateId: string): Record<string, any> {
+  if (!steps || typeof steps !== 'object' || Array.isArray(steps)) {
+    return {}; // Return empty dictionary if invalid
+  }
+  // Direct lookup: O(1) instead of O(n) filter
+  return steps[nodeTemplateId] || {};
+}

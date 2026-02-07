@@ -23,27 +23,17 @@ export function safeDeepClone<T>(obj: T): T {
 
 /**
  * Helper to convert steps (object or array) to array
+ * ✅ Re-exported from core/domain for backward compatibility
+ * @deprecated Use getStepsAsArray from core/domain instead
  */
-export function getStepsAsArray(steps: any): any[] {
-  if (!steps) return [];
-  if (Array.isArray(steps)) return steps;
-  // Se è un oggetto, convertilo in array
-  return Object.entries(steps).map(([key, value]: [string, any]) => ({
-    type: key,
-    ...value
-  }));
-}
+export { getStepsAsArray } from '@responseEditor/core/domain';
 
 /**
  * Helper function to get steps for a node (dictionary lookup diretto)
+ * ✅ Re-exported from core/domain for backward compatibility
+ * @deprecated Use getStepsForNode from core/domain instead
  */
-export function getStepsForNode(steps: any, nodeTemplateId: string): Record<string, any> {
-  if (!steps || typeof steps !== 'object' || Array.isArray(steps)) {
-    return {}; // Ritorna dictionary vuoto se non valido
-  }
-  // Lookup diretto: O(1) invece di O(n) filter
-  return steps[nodeTemplateId] || {};
-}
+export { getStepsForNode } from '@responseEditor/core/domain';
 
 /**
  * Check if editing is active (input, textarea, select)

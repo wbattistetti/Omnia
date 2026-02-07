@@ -7,8 +7,8 @@ import NoteButton from '@responseEditor/CellNote/NoteButton';
 import NoteEditor from '@responseEditor/CellNote/NoteEditor';
 import NoteDisplay from '@responseEditor/CellNote/NoteDisplay';
 import NoteSeparator from '@responseEditor/CellNote/NoteSeparator';
-import { useNotesStore, getCellKeyFromPhrase } from '@responseEditor/stores/notesStore';
-import { useCellOverridesStore } from '@responseEditor/stores/cellOverridesStore';
+import { useNotesStore, getCellKeyFromPhrase } from '@responseEditor/features/step-management/stores/notesStore';
+import { useCellOverridesStore } from '@responseEditor/features/step-management/stores/cellOverridesStore';
 
 interface ExtractionResultCellProps {
   summary: string | undefined;

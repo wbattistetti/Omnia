@@ -12,7 +12,7 @@ import { useNotes } from '@responseEditor/hooks/useNotes';
 import { useEditorState } from '@responseEditor/hooks/useEditorState';
 import { useProfileState } from '@responseEditor/features/step-management/hooks/useProfileState';
 import { useExtractionTesting } from '@responseEditor/hooks/useExtractionTesting';
-import { useCellOverridesStore } from '@responseEditor/stores/cellOverridesStore';
+import { useCellOverridesStore } from '@responseEditor/features/step-management/stores/cellOverridesStore';
 
 // 🎨 Config Components
 import RecognitionEditor from '@responseEditor/RecognitionEditor';
