@@ -826,13 +826,19 @@ Namespace ApiServer.Handlers
                 session.TaskEngine.SetState(parseResult, currTaskNode.State, currTaskNode)
                 Console.WriteLine($"[MOTORE] 🔄 State updated: {currTaskNode.State}")
 
-                ' ✅ STEP 6: Continua l'esecuzione del motore
+                ' ✅ STEP 6: Assicurati che gli handler siano collegati prima di eseguire il task
+                SessionManager.AttachTaskEngineHandlers(session)
+
+                ' ✅ STEP 7: Continua l'esecuzione del motore
                 Console.WriteLine($"[MOTORE] ▶️ Executing task after input...")
                 session.TaskEngine.ExecuteTask(session.TaskInstance)
                 Console.WriteLine($"[MOTORE] ✅ ExecuteTask completed")
 
-                ' ✅ STATELESS: Salva la sessione su Redis dopo l'esecuzione
+                ' ✅ STATELESS: Salva la sessione su Redis dopo l'esecuzione (include eventuali messaggi del SuccessResponse)
+                ' Nota: I messaggi del SuccessResponse vengono emessi durante ExecuteTask tramite MessageToShow event,
+                ' che li aggiunge a session.Messages e li emette sull'EventEmitter. Questo salvataggio cattura tutti i messaggi.
                 SessionManager.SaveTaskSession(session)
+                Console.WriteLine($"[MOTORE] 💾 Session saved, Messages.Count={session.Messages.Count}")
 
                 ' ✅ STATELESS: Verifica se tutti i task sono completati e emetti evento "complete"
                 Dim allCompleted = session.TaskInstance.TaskList.All(Function(t) t.State = DialogueState.Success OrElse t.State = DialogueState.AcquisitionFailed)

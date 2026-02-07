@@ -101,6 +101,8 @@ End Class
 Public Class SessionManager
     ' ✅ STATELESS: Solo Redis, nessun fallback
     Private Shared _storage As ApiServer.Interfaces.ISessionStorage
+    ' ✅ STATELESS: Storage per ExecutionState
+    Private Shared _executionStateStorage As ApiServer.Interfaces.IExecutionStateStorage
     ' ✅ FASE 2: Aggiunto supporto per ILogger
     Private Shared _logger As ApiServer.Interfaces.ILogger = New ApiServer.Logging.StdoutLogger()
     Private Shared ReadOnly _lock As New Object
@@ -108,13 +110,15 @@ Public Class SessionManager
     Private Shared ReadOnly _eventEmitters As New Dictionary(Of String, EventEmitter)
     ' ✅ STATELESS: Redis connection per Pub/Sub (per notifiche SSE connected)
     Private Shared _redisConnectionString As String = Nothing
+    Private Shared _redisKeyPrefix As String = Nothing
+    Private Shared _sessionTTL As Integer = 3600
 
     ' ✅ STATELESS: Dizionari rimossi - tutto lo stato è in Redis
 
     ''' <summary>
     ''' ✅ STATELESS: Configura il storage (solo Redis) e connection string per Pub/Sub
     ''' </summary>
-    Public Shared Sub ConfigureStorage(storage As ApiServer.Interfaces.ISessionStorage, Optional redisConnectionString As String = Nothing)
+    Public Shared Sub ConfigureStorage(storage As ApiServer.Interfaces.ISessionStorage, Optional redisConnectionString As String = Nothing, Optional redisKeyPrefix As String = Nothing, Optional sessionTTL As Integer = 3600)
         If storage Is Nothing Then
             Throw New ArgumentNullException(NameOf(storage), "Storage cannot be Nothing. Redis is required.")
         End If
@@ -122,6 +126,21 @@ Public Class SessionManager
             _storage = storage
             If Not String.IsNullOrEmpty(redisConnectionString) Then
                 _redisConnectionString = redisConnectionString
+            End If
+            If Not String.IsNullOrEmpty(redisKeyPrefix) Then
+                _redisKeyPrefix = redisKeyPrefix
+            End If
+            _sessionTTL = sessionTTL
+
+            ' ✅ STATELESS: Crea RedisExecutionStateStorage se abbiamo i parametri necessari
+            If Not String.IsNullOrEmpty(_redisConnectionString) AndAlso Not String.IsNullOrEmpty(_redisKeyPrefix) Then
+                Try
+                    _executionStateStorage = New ApiServer.SessionStorage.RedisExecutionStateStorage(_redisConnectionString, _redisKeyPrefix, _sessionTTL)
+                    Console.WriteLine($"[SessionManager] ✅ RedisExecutionStateStorage initialized")
+                Catch ex As Exception
+                    Console.WriteLine($"[SessionManager] ⚠️ Failed to initialize RedisExecutionStateStorage: {ex.Message}")
+                    ' Non solleviamo eccezione perché ExecutionState storage è opzionale per retrocompatibilità
+                End Try
             End If
         End SyncLock
     End Sub
@@ -155,7 +174,8 @@ Public Class SessionManager
                 .TaskEngine = taskEngine,
                 .IsWaitingForInput = False
             }
-            session.Orchestrator = New TaskEngine.Orchestrator.FlowOrchestrator(compilationResult, taskEngine)
+            ' ✅ STATELESS: Crea FlowOrchestrator con ExecutionStateStorage se disponibile
+            session.Orchestrator = New TaskEngine.Orchestrator.FlowOrchestrator(compilationResult, taskEngine, sessionId, _executionStateStorage)
 
             AddHandler session.Orchestrator.MessageToShow, Sub(sender, text)
                                                                Dim msgId = $"{sessionId}-{DateTime.UtcNow.Ticks}-{Guid.NewGuid().ToString().Substring(0, 8)}"
@@ -198,9 +218,9 @@ Public Class SessionManager
             ' ✅ STATELESS: Salva solo su Redis
             _storage.SaveOrchestratorSession(session)
 
+            ' ✅ STATELESS: Esegui orchestrator senza delay artificiale (sincronizzazione via Redis/PubSub)
             Dim backgroundTask = System.Threading.Tasks.Task.Run(Async Function()
                                                                      Try
-                                                                         Await System.Threading.Tasks.Task.Delay(100)
                                                                          If session.Orchestrator IsNot Nothing Then
                                                                              Await session.Orchestrator.ExecuteDialogueAsync()
                                                                          End If
@@ -222,11 +242,54 @@ Public Class SessionManager
     ''' Recupera una sessione esistente
     ''' </summary>
     ''' <summary>
-    ''' ✅ STATELESS: Recupera sessione da Redis
+    ''' ✅ STATELESS: Recupera sessione da Redis e ricrea FlowOrchestrator con ExecutionStateStorage
     ''' </summary>
     Public Shared Function GetSession(sessionId As String) As OrchestratorSession
         SyncLock _lock
-            Return _storage.GetOrchestratorSession(sessionId)
+            Dim session = _storage.GetOrchestratorSession(sessionId)
+            If session IsNot Nothing AndAlso session.CompilationResult IsNot Nothing AndAlso session.Orchestrator Is Nothing Then
+                ' ✅ STATELESS: Ricrea FlowOrchestrator con ExecutionStateStorage se non presente
+                Dim taskEngine = If(session.TaskEngine, New Motore())
+                session.TaskEngine = taskEngine
+                session.Orchestrator = New TaskEngine.Orchestrator.FlowOrchestrator(session.CompilationResult, taskEngine, sessionId, _executionStateStorage)
+
+                ' Ricollega eventi
+                AddHandler session.Orchestrator.MessageToShow, Sub(sender, text)
+                                                                   Dim msgId = $"{sessionId}-{DateTime.UtcNow.Ticks}-{Guid.NewGuid().ToString().Substring(0, 8)}"
+                                                                   Dim msg = New With {
+                                                                       .id = msgId,
+                                                                       .text = text,
+                                                                       .stepType = "message",
+                                                                       .timestamp = DateTime.UtcNow.ToString("O"),
+                                                                       .taskId = ""
+                                                                   }
+                                                                   session.Messages.Add(msg)
+                                                                   session.EventEmitter.Emit("message", msg)
+                                                               End Sub
+                AddHandler session.Orchestrator.StateUpdated, Sub(sender, state)
+                                                                  Dim stateData = New With {
+                                                                      .currentNodeId = state.CurrentNodeId,
+                                                                      .executedTaskIds = state.ExecutedTaskIds.ToList(),
+                                                                      .variableStore = state.VariableStore
+                                                                  }
+                                                                  session.EventEmitter.Emit("stateUpdate", stateData)
+                                                              End Sub
+                AddHandler session.Orchestrator.ExecutionCompleted, Sub(sender, e)
+                                                                        Dim completeData = New With {
+                                                                            .success = True,
+                                                                            .timestamp = DateTime.UtcNow.ToString("O")
+                                                                        }
+                                                                        session.EventEmitter.Emit("complete", completeData)
+                                                                    End Sub
+                AddHandler session.Orchestrator.ExecutionError, Sub(sender, ex)
+                                                                    Dim errorData = New With {
+                                                                        .error = ex.Message,
+                                                                        .timestamp = DateTime.UtcNow.ToString("O")
+                                                                    }
+                                                                    session.EventEmitter.Emit("error", errorData)
+                                                                End Sub
+            End If
+            Return session
         End SyncLock
     End Function
 
@@ -365,7 +428,7 @@ Public Class SessionManager
     ''' <summary>
     ''' ✅ STATELESS: Collega gli event handler del Motore all'EventEmitter (per sessioni recuperate da Redis)
     ''' </summary>
-    Private Shared Sub AttachTaskEngineHandlers(session As TaskSession)
+    Public Shared Sub AttachTaskEngineHandlers(session As TaskSession)
         ' Rimuovi eventuali handler esistenti
         RemoveHandler session.TaskEngine.MessageToShow, Nothing
 
@@ -391,19 +454,27 @@ Public Class SessionManager
                                                         sharedEmitter.Emit("message", msg)
                                                         Console.WriteLine($"[MOTORE] 💬 Message emitted: '{e.Message}'")
 
-                                                        session.IsWaitingForInput = True
-                                                        Dim firstNodeId As String = ""
-                                                        If session.RuntimeTask IsNot Nothing Then
-                                                            If session.RuntimeTask.SubTasks IsNot Nothing AndAlso session.RuntimeTask.SubTasks.Count > 0 Then
-                                                                firstNodeId = session.RuntimeTask.SubTasks(0).Id
-                                                            Else
-                                                                firstNodeId = session.RuntimeTask.Id
+                                                        ' ✅ STATELESS: Imposta waitingForInput solo se non tutti i task sono completati
+                                                        Dim allCompleted = session.TaskInstance IsNot Nothing AndAlso session.TaskInstance.TaskList.All(Function(t) t.State = DialogueState.Success OrElse t.State = DialogueState.AcquisitionFailed)
+                                                        If Not allCompleted Then
+                                                            session.IsWaitingForInput = True
+                                                            Dim firstNodeId As String = ""
+                                                            If session.RuntimeTask IsNot Nothing Then
+                                                                If session.RuntimeTask.SubTasks IsNot Nothing AndAlso session.RuntimeTask.SubTasks.Count > 0 Then
+                                                                    firstNodeId = session.RuntimeTask.SubTasks(0).Id
+                                                                Else
+                                                                    firstNodeId = session.RuntimeTask.Id
+                                                                End If
                                                             End If
+                                                            session.WaitingForInputData = New With {.nodeId = firstNodeId}
+                                                            ' ✅ STATELESS: Usa EventEmitter condiviso
+                                                            sharedEmitter.Emit("waitingForInput", session.WaitingForInputData)
+                                                            Console.WriteLine($"[MOTORE] ⏳ Waiting for input")
+                                                        Else
+                                                            ' Tutti i task sono completati, non impostare waitingForInput
+                                                            session.IsWaitingForInput = False
+                                                            session.WaitingForInputData = Nothing
                                                         End If
-                                                        session.WaitingForInputData = New With {.nodeId = firstNodeId}
-                                                        ' ✅ STATELESS: Usa EventEmitter condiviso
-                                                        sharedEmitter.Emit("waitingForInput", session.WaitingForInputData)
-                                                        Console.WriteLine($"[MOTORE] ⏳ Waiting for input")
 
                                                         ' ✅ STATELESS: Salva su Redis dopo ogni messaggio
                                                         Try

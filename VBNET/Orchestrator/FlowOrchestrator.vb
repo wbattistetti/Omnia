@@ -8,6 +8,7 @@ Imports Compiler
 ''' - Esegue task
 ''' - Chiama Task Engine per task GetData
 ''' - Gestisce stato globale
+''' ✅ STATELESS: ExecutionState viene salvato/caricato da Redis
 ''' </summary>
 Public Class FlowOrchestrator
     Private ReadOnly _compiledTasks As List(Of CompiledTask)
@@ -17,6 +18,10 @@ Public Class FlowOrchestrator
     Private ReadOnly _state As ExecutionState
     Private _isRunning As Boolean = False
     Private _entryTaskGroupId As String
+    ' ✅ STATELESS: Storage per ExecutionState (opzionale per retrocompatibilità)
+    ' Nota: Usa Object invece di IExecutionStateStorage per evitare dipendenza circolare
+    Private ReadOnly _executionStateStorage As Object
+    Private ReadOnly _sessionId As String
 
     ''' <summary>
     ''' Evento sollevato quando un messaggio deve essere mostrato
@@ -38,18 +43,26 @@ Public Class FlowOrchestrator
     ''' </summary>
     Public Event ExecutionError As EventHandler(Of Exception)
 
+    ''' <summary>
+    ''' Costruttore per retrocompatibilità (senza storage - stato solo in memoria)
+    ''' </summary>
     Public Sub New(compiledTasks As List(Of CompiledTask), taskEngine As Motore)
         _compiledTasks = compiledTasks
         _compilationResult = Nothing
         _taskEngine = taskEngine
         _taskExecutor = New TaskExecutor(taskEngine)
+        _executionStateStorage = Nothing
+        _sessionId = Nothing
         _state = New ExecutionState()
 
         ' Collega eventi Task Engine
         AddHandler _taskEngine.MessageToShow, AddressOf OnTaskEngineMessage
     End Sub
 
-    Public Sub New(compilationResult As FlowCompilationResult, taskEngine As Motore)
+    ''' <summary>
+    ''' ✅ STATELESS: Costruttore con storage per salvare/caricare ExecutionState da Redis
+    ''' </summary>
+    Public Sub New(compilationResult As FlowCompilationResult, taskEngine As Motore, Optional sessionId As String = Nothing, Optional executionStateStorage As Object = Nothing)
         _compilationResult = compilationResult
         If compilationResult IsNot Nothing AndAlso compilationResult.Tasks IsNot Nothing Then
             _compiledTasks = compilationResult.Tasks
@@ -60,7 +73,27 @@ Public Class FlowOrchestrator
         End If
         _taskEngine = taskEngine
         _taskExecutor = New TaskExecutor(taskEngine)
-        _state = New ExecutionState()
+        _executionStateStorage = executionStateStorage
+        _sessionId = sessionId
+
+        ' ✅ STATELESS: Carica ExecutionState da Redis se storage disponibile
+        If _executionStateStorage IsNot Nothing AndAlso Not String.IsNullOrEmpty(_sessionId) Then
+            Try
+                ' Usa reflection per chiamare GetExecutionState senza dipendenza diretta
+                Dim getExecutionStateMethod = _executionStateStorage.GetType().GetMethod("GetExecutionState")
+                If getExecutionStateMethod IsNot Nothing Then
+                    _state = DirectCast(getExecutionStateMethod.Invoke(_executionStateStorage, {_sessionId}), ExecutionState)
+                    Console.WriteLine($"[FlowOrchestrator] ✅ Loaded ExecutionState from Redis for session: {_sessionId}")
+                Else
+                    _state = New ExecutionState()
+                End If
+            Catch ex As Exception
+                Console.WriteLine($"[FlowOrchestrator] ⚠️ Failed to load ExecutionState from Redis: {ex.Message}, using new state")
+                _state = New ExecutionState()
+            End Try
+        Else
+            _state = New ExecutionState()
+        End If
 
         ' Collega eventi Task Engine
         AddHandler _taskEngine.MessageToShow, AddressOf OnTaskEngineMessage
@@ -98,6 +131,10 @@ Public Class FlowOrchestrator
 
                 _state.ExecutedTaskIds.Add(nextTask.Id)
                 _state.CurrentNodeId = nextTask.Id
+
+                ' ✅ STATELESS: Salva ExecutionState su Redis dopo ogni modifica
+                SaveState()
+
                 RaiseEvent StateUpdated(Me, _state)
 
                 ' ✅ STATELESS: Nessun delay artificiale - il loop è guidato da stato, non da timing
@@ -204,6 +241,24 @@ Public Class FlowOrchestrator
     ''' </summary>
     Public Sub [Stop]()
         _isRunning = False
+    End Sub
+
+    ''' <summary>
+    ''' ✅ STATELESS: Salva ExecutionState su Redis
+    ''' </summary>
+    Private Sub SaveState()
+        If _executionStateStorage IsNot Nothing AndAlso Not String.IsNullOrEmpty(_sessionId) Then
+            Try
+                ' Usa reflection per chiamare SaveExecutionState senza dipendenza diretta
+                Dim saveExecutionStateMethod = _executionStateStorage.GetType().GetMethod("SaveExecutionState")
+                If saveExecutionStateMethod IsNot Nothing Then
+                    saveExecutionStateMethod.Invoke(_executionStateStorage, {_sessionId, _state})
+                End If
+            Catch ex As Exception
+                Console.WriteLine($"[FlowOrchestrator] ⚠️ Failed to save ExecutionState to Redis: {ex.Message}")
+                ' Non solleviamo eccezione per non interrompere l'esecuzione, ma loggiamo l'errore
+            End Try
+        End If
     End Sub
 End Class
 

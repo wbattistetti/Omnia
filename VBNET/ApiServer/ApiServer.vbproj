@@ -27,6 +27,7 @@
     <!-- FASE 1: Structured Logging + Interfacce (DEVE essere prima per ordine di compilazione) -->
     <Compile Include="Interfaces\ILogger.vb" />
     <Compile Include="Interfaces\ISessionStorage.vb" />
+    <Compile Include="Interfaces\IExecutionStateStorage.vb" />
     <Compile Include="Logging\StdoutLogger.vb" />
     <!-- ✅ STATELESS: InMemorySessionStorage rimosso - solo Redis -->
     <!-- Fine FASE 1 -->
@@ -36,6 +37,8 @@
     <!-- Fine FASE 4 -->
     <!-- FASE 4: Redis Session Storage (implementazione completa) -->
     <Compile Include="SessionStorage\RedisSessionStorage.vb" />
+    <!-- ✅ STATELESS: Redis ExecutionState Storage -->
+    <Compile Include="SessionStorage\RedisExecutionStateStorage.vb" />
     <!-- Fine FASE 4 -->
     <Compile Include="Commands\CompileFlowCommand.vb" />
     <Compile Include="Commands\CompileDDTCommand.vb" />

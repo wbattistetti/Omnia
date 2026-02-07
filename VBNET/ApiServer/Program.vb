@@ -74,8 +74,8 @@ Module Program
 
             builder.Services.AddSingleton(Of ApiServer.Interfaces.ISessionStorage)(storage)
 
-            ' Configura SessionManager con i servizi registrati e connection string per Pub/Sub
-            SessionManager.ConfigureStorage(storage, redisConnectionString)
+            ' ✅ STATELESS: Configura SessionManager con storage, connection string, key prefix e TTL per Pub/Sub e ExecutionStateStorage
+            SessionManager.ConfigureStorage(storage, redisConnectionString, redisKeyPrefix, sessionTTL)
             SessionManager.ConfigureLogger(logger)
 
             ' Configura TaskSessionHandlers con logger

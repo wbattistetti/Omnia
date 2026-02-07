@@ -139,7 +139,10 @@ Namespace ApiServer.SessionStorage
                 Dim json = _database.StringGet(key)
 
                 If json.HasValue Then
-                    Return SessionSerializer.DeserializeOrchestratorSession(json, sessionId)
+                    ' ✅ STATELESS: Passa executionStateStorage a DeserializeOrchestratorSession
+                    ' Nota: Non abbiamo accesso diretto a _executionStateStorage qui, quindi passiamo Nothing
+                    ' SessionManager si occuperà di ricreare FlowOrchestrator con lo storage se necessario
+                    Return SessionSerializer.DeserializeOrchestratorSession(json, sessionId, Nothing)
                 End If
 
                 Return Nothing

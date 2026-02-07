@@ -168,8 +168,9 @@ Namespace ApiServer.SessionStorage
 
         ''' <summary>
         ''' Deserializza OrchestratorSession e ricostruisce oggetti runtime
+        ''' ✅ STATELESS: Accetta executionStateStorage opzionale per ricreare FlowOrchestrator con storage
         ''' </summary>
-        Public Shared Function DeserializeOrchestratorSession(json As String, Optional sessionId As String = Nothing) As OrchestratorSession
+        Public Shared Function DeserializeOrchestratorSession(json As String, Optional sessionId As String = Nothing, Optional executionStateStorage As ApiServer.Interfaces.IExecutionStateStorage = Nothing) As OrchestratorSession
             Try
                 ' ✅ STATELESS: Usa TypeNameHandling per deserializzare correttamente interfacce
                 Dim settings As New JsonSerializerSettings With {
@@ -196,14 +197,12 @@ Namespace ApiServer.SessionStorage
                     .TaskEngine = taskEngine
                 }
 
-                ' Ricrea FlowOrchestrator se CompilationResult è disponibile
+                ' ✅ STATELESS: Ricrea FlowOrchestrator con ExecutionStateStorage se disponibile
                 If data.CompilationResult IsNot Nothing Then
                     Try
-                        ' FlowOrchestrator richiede List(Of CompiledTask), non FlowCompilationResult
-                        ' Per ora lasciamo Orchestrator = Nothing, verrà ricreato da SessionManager quando necessario
-                        ' session.Orchestrator = New FlowOrchestrator(data.CompilationResult, taskEngine)
+                        session.Orchestrator = New TaskEngine.Orchestrator.FlowOrchestrator(data.CompilationResult, taskEngine, sessionId, executionStateStorage)
                     Catch ex As Exception
-                        Console.WriteLine($"[SessionSerializer] Warning: Could not recreate FlowOrchestrator: {ex.Message}")
+                        Console.WriteLine($"[SessionSerializer] ⚠️ Warning: Could not recreate FlowOrchestrator: {ex.Message}")
                         ' Orchestrator sarà Nothing, verrà ricreato quando necessario
                     End Try
                 End If
