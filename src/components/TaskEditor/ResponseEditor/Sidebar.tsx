@@ -704,15 +704,18 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                 node={main}
                 inline={true}
                 onCreateClick={() => {
-                  const nodeId = main.id || main.templateId || getNodeIdStrict(main);
+                  // After validation strict, main.id is always present
+                  const nodeId = getNodeIdStrict(main);
                   onParserCreate?.(nodeId, main);
                 }}
                 onModifyClick={() => {
-                  const nodeId = main.id || main.templateId || getNodeIdStrict(main);
+                  // After validation strict, main.id is always present
+                  const nodeId = getNodeIdStrict(main);
                   onParserModify?.(nodeId, main);
                 }}
                 onEngineChipClick={(engineType) => {
-                  const nodeId = main.id || main.templateId || getNodeIdStrict(main);
+                  // After validation strict, main.id is always present
+                  const nodeId = getNodeIdStrict(main);
                   // Map EngineType to editor type
                   const editorTypeMap: Record<EngineType, 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings'> = {
                     regex: 'regex',
@@ -823,15 +826,18 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                           node={sub}
                           inline={true}
                           onCreateClick={() => {
-                            const nodeId = sub.id || sub.templateId || getNodeIdStrict(sub);
+                            // After validation strict, sub.id is always present
+                            const nodeId = getNodeIdStrict(sub);
                             onParserCreate?.(nodeId, sub);
                           }}
                           onModifyClick={() => {
-                            const nodeId = sub.id || sub.templateId || getNodeIdStrict(sub);
+                            // After validation strict, sub.id is always present
+                            const nodeId = getNodeIdStrict(sub);
                             onParserModify?.(nodeId, sub);
                           }}
                           onEngineChipClick={(engineType) => {
-                            const nodeId = sub.id || sub.templateId || getNodeIdStrict(sub);
+                            // After validation strict, sub.id is always present
+                            const nodeId = getNodeIdStrict(sub);
                             // Map EngineType to editor type
                             const editorTypeMap: Record<EngineType, 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings'> = {
                               regex: 'regex',

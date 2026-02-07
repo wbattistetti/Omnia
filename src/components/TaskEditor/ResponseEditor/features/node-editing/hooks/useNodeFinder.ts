@@ -32,8 +32,12 @@ export function useNodeFinder(params: UseNodeFinderParams) {
     const mains = getMainNodes(currentTaskTree);
     for (let mIdx = 0; mIdx < mains.length; mIdx++) {
       const main = mains[mIdx];
-      const mainNodeId = main.id || main.templateId || getNodeIdStrict(main);
-      if (mainNodeId === nodeId) {
+      // After validation strict, main.id is always present
+      // Also check templateId (optional) in case nodeId is a templateId
+      const mainNodeId = getNodeIdStrict(main);
+      const mainTemplateId = main.templateId;
+
+      if (mainNodeId === nodeId || (mainTemplateId && mainTemplateId === nodeId)) {
         handleSelectMain(mIdx);
         handleSelectSub(undefined);
         return;
@@ -41,8 +45,12 @@ export function useNodeFinder(params: UseNodeFinderParams) {
       const subs = getSubNodes(main) || [];
       for (let sIdx = 0; sIdx < subs.length; sIdx++) {
         const sub = subs[sIdx];
-        const subNodeId = sub.id || sub.templateId || getNodeIdStrict(sub);
-        if (subNodeId === nodeId) {
+        // After validation strict, sub.id is always present
+        // Also check templateId (optional) in case nodeId is a templateId
+        const subNodeId = getNodeIdStrict(sub);
+        const subTemplateId = sub.templateId;
+
+        if (subNodeId === nodeId || (subTemplateId && subTemplateId === nodeId)) {
           handleSelectMain(mIdx);
           handleSelectSub(sIdx, mIdx);
           return;

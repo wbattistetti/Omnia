@@ -162,7 +162,21 @@ export default function IntentMessagesBuilder({ intentLabel: initialIntentLabel,
       setProgress(80);
 
       // Parse and validate messages
-      const rawMessages: any = data.messages || data;
+      // Normalize API response - NO FALLBACKS
+      // API may return messages directly or wrapped in { messages: ... }
+      let rawMessages: any;
+      if (data.messages && typeof data.messages === 'object') {
+        rawMessages = data.messages;
+      } else if (data && typeof data === 'object' && !data.messages) {
+        // API returned messages directly (not wrapped)
+        rawMessages = data;
+      } else {
+        throw new Error(
+          `[IntentMessagesBuilder] Invalid API response format. ` +
+          `Expected { messages: {...} } or direct messages object. ` +
+          `Got: ${JSON.stringify(Object.keys(data || {})).substring(0, 200)}`
+        );
+      }
 
       if (!rawMessages.start || !rawMessages.noInput || !rawMessages.noMatch || !rawMessages.confirmation) {
         throw new Error('Invalid message structure received from AI');

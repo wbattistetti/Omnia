@@ -68,7 +68,9 @@ export function updateStepEscalations(
     } else {
       // Step non esiste, crealo con struttura MaterializedStep corretta
       const escalations = updater([]);
-      const nodeTemplateId = node.templateId || node.id;
+      // After validation strict, node.id is always present
+      // templateId is optional (preferred for lookup, but id works as fallback)
+      const nodeTemplateId = node.templateId ?? node.id;
       const templateStepId = `${nodeTemplateId}:${stepKey}`;
       const newStep = {
         id: uuidv4(), // Nuovo GUID per l'istanza

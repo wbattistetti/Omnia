@@ -46,7 +46,9 @@ export function useTemplateSync(params: UseTemplateSyncParams) {
       }
     };
 
-    if (taskTreeFromStore && task?.templateId && prevInstanceRef.current === (task?.instanceId || task?.id)) {
+    // After validation strict, task.id is always present
+    // instanceId is optional (preferred, but id works as fallback)
+    if (taskTreeFromStore && task?.templateId && prevInstanceRef.current === (task?.instanceId ?? task?.id)) {
       checkTemplateSync();
     }
   }, [taskTreeFromStore, task?.templateId, task?.instanceId, task?.id, replaceSelectedTaskTree, currentProjectId, prevInstanceRef, setTaskTree]);

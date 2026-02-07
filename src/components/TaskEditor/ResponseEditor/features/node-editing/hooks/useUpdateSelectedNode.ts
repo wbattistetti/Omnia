@@ -154,7 +154,9 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
       // ✅ FASE 2.3: Update steps in store only
       // This is needed because applyNodeUpdate mutates task.steps
       if (task && result.updatedTaskTree) {
-        const nodeTemplateId = updated.templateId || updated.id;
+        // After validation strict, updated.id is always present
+        // templateId is optional (preferred for lookup, but id works as fallback)
+        const nodeTemplateId = updated.templateId ?? updated.id;
         if (nodeTemplateId && updated.steps) {
           // Get the steps dict from task.steps (already updated by applyNodeUpdate)
           const nodeStepsDict = task.steps?.[nodeTemplateId];

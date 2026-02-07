@@ -68,7 +68,9 @@ export default function ParserStatusRow({
     async function loadState() {
       setLoading(true);
       try {
-        const nodeId = node.id || node.templateId;
+        // After validation strict, node.id is always present
+        // templateId is optional (preferred for lookup, but id works as fallback)
+        const nodeId = node.templateId ?? node.id;
 
         // Check if contract exists
         const hasContract = await SemanticContractService.exists(nodeId);
@@ -121,7 +123,9 @@ export default function ParserStatusRow({
 
   // Refresh state when node changes
   const refreshState = React.useCallback(async () => {
-    const nodeId = node.id || node.templateId;
+    // After validation strict, node.id is always present
+    // templateId is optional (preferred for lookup, but id works as fallback)
+    const nodeId = node.templateId ?? node.id;
     const hasContract = await SemanticContractService.exists(nodeId);
     const escalation = await EngineEscalationService.load(nodeId);
     const enabledEngines = escalation?.engines

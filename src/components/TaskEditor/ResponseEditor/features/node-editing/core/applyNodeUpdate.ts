@@ -6,8 +6,8 @@ import { getTemplateId } from '@utils/taskHelpers';
 import { taskRepository } from '@services/TaskRepository';
 import { saveTaskToRepository } from '@responseEditor/features/persistence/ResponseEditorPersistence';
 import { mapNode } from '@dock/ops';
-import { normalizeStepsToDictionary } from '@responseEditor/core/domain';
 import { validateNodeStructure } from '@responseEditor/core/domain/validators';
+import { getNodeIdStrict } from '@responseEditor/core/domain/nodeStrict';
 import type { Task, TaskTree } from '@types/taskTypes';
 
 export interface ApplyNodeUpdateParams {
@@ -118,48 +118,62 @@ export function applyNodeUpdate(params: ApplyNodeUpdateParams): ApplyNodeUpdateR
       }
 
       // CRITICAL: Save updated.steps as dictionary
-      const nodeTemplateId = updatedNode.templateId || updatedNode.id;
+      // After validation strict, updatedNode.steps MUST be dictionary format
+      const nodeTemplateId = getNodeIdStrict(updatedNode);
       if (nodeTemplateId && updatedNode.steps && task) {
         // Initialize task.steps as dictionary if it doesn't exist
         if (!task.steps || typeof task.steps !== 'object' || Array.isArray(task.steps)) {
           task.steps = {};
         }
 
-        // Normalize steps to dictionary format (handles both array and dictionary)
-        const nodeStepsDict = normalizeStepsToDictionary(updatedNode.steps);
+        // Steps MUST be dictionary format (validated by validateNodeStructure)
         if (Array.isArray(updatedNode.steps)) {
-          console.warn('[updateSelectedNode] Converting legacy array to dictionary', { nodeTemplateId });
+          throw new Error(
+            `[applyNodeUpdate] updatedNode.steps is array. Expected dictionary format. ` +
+            `Node id: ${nodeTemplateId}. This should have been caught by validateNodeStructure.`
+          );
         }
 
         // Save in dictionary using nodeTemplateId as key
-        task.steps[nodeTemplateId] = nodeStepsDict;
+        task.steps[nodeTemplateId] = updatedNode.steps;
       }
     } else {
       // Sub node
-      const subList = [...(main.subTasks || [])];
+      // After validation strict, main.subNodes MUST exist (not subTasks)
+      if (!main.subNodes || !Array.isArray(main.subNodes)) {
+        throw new Error(
+          `[applyNodeUpdate] Main node missing subNodes array. ` +
+          `Main id: ${main.id || main.templateId}. This should have been caught by validateNodeStructure.`
+        );
+      }
+
+      const subList = [...main.subNodes];
       const subIdx = subList.findIndex((s: any, idx: number) => idx === subIndex);
       if (subIdx >= 0) {
         subList[subIdx] = updatedNode;
-        main.subTasks = subList;
+        main.subNodes = subList;
         mains[mainIndex] = main;
         updatedTaskTree.nodes = mains;
 
         // CRITICAL: Save updated.steps as dictionary
-        const nodeTemplateId = updatedNode.templateId || updatedNode.id;
+        // After validation strict, updatedNode.steps MUST be dictionary format
+        const nodeTemplateId = getNodeIdStrict(updatedNode);
         if (nodeTemplateId && updatedNode.steps && task) {
           // Initialize task.steps as dictionary if it doesn't exist
           if (!task.steps || typeof task.steps !== 'object' || Array.isArray(task.steps)) {
             task.steps = {};
           }
 
-          // Normalize steps to dictionary format (handles both array and dictionary)
-          const nodeStepsDict = normalizeStepsToDictionary(updatedNode.steps);
+          // Steps MUST be dictionary format (validated by validateNodeStructure)
           if (Array.isArray(updatedNode.steps)) {
-            console.warn('[updateSelectedNode] Converting legacy array to dictionary (sub)', { nodeTemplateId });
+            throw new Error(
+              `[applyNodeUpdate] updatedNode.steps is array. Expected dictionary format. ` +
+              `Node id: ${nodeTemplateId}. This should have been caught by validateNodeStructure.`
+            );
           }
 
           // Save in dictionary using nodeTemplateId as key
-          task.steps[nodeTemplateId] = nodeStepsDict;
+          task.steps[nodeTemplateId] = updatedNode.steps;
         }
       }
     }

@@ -16,7 +16,9 @@ export function hasIntentMessages(ddt: any, task?: any): boolean {
   }
 
   // ✅ CRITICAL: Leggi steps usando lookup diretto (dictionary)
-  const firstMainTemplateId = firstMain.templateId || firstMain.id; // ✅ Fallback a id se templateId non presente
+  // After validation strict, firstMain.id is always present
+  // templateId is optional (preferred for lookup, but id works as fallback)
+  const firstMainTemplateId = firstMain.templateId ?? firstMain.id;
 
   // ✅ Lookup diretto: O(1) invece di O(n) filter
   const nodeSteps = task?.steps?.[firstMainTemplateId] || {};

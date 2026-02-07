@@ -190,25 +190,15 @@ export function collectNodeMessages(
             });
         }
 
-        // Priority 2: Check legacy messages field ONLY if no escalations were found
-        if (!hasEscalations) {
-            const msgs = node?.messages || {};
-            const m = msgs[stepKey];
-            const key = typeof m?.textKey === 'string' ? m.textKey : undefined;
-            if (key && !collectedTextKeys.has(key)) {
-                collectedTextKeys.add(key);
-                out.push({
-                    id: `${pathLabel}|${stepKey}|-1|-1`,
-                    stepKey,
-                    escIndex: null,
-                    taskIndex: null,
-                    textKey: key,
-                    text: translations[key] || key,
-                    pathLabel,
-                    taskId: 'sayMessage', // Default for legacy messages
-                    color: undefined,
-                });
-            }
+        // Priority 2: Legacy messages field removed - NO FALLBACKS
+        // After validation strict, node.messages should not exist
+        // If no escalations found and messages exist, log warning
+        if (!hasEscalations && node?.messages) {
+            console.warn(
+                `[collectNodeMessages] Node has legacy 'messages' field but no escalations. ` +
+                `Node id: ${node.id || 'unknown'}, stepKey: ${stepKey}. ` +
+                `Legacy messages field is deprecated. Use steps dictionary with escalations instead.`
+            );
         }
     });
 

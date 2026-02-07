@@ -104,7 +104,9 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
         // CRITICAL: Usa node.templateId come chiave (non node.id)
         // task.steps[node.templateId] = steps clonati
         // node.id potrebbe essere diverso (nel caso di template aggregato)
-        const nodeTemplateId = node.templateId || node.id; // Fallback a node.id se templateId non presente
+        // After validation strict, node.id is always present
+        // templateId is optional (preferred for lookup, but id works as fallback)
+        const nodeTemplateId = node.templateId ?? node.id;
 
         // DEBUG: Log node.nlpProfile.examples quando viene caricato
         const nodeNlpProfileExamples = (node as any)?.nlpProfile?.examples;

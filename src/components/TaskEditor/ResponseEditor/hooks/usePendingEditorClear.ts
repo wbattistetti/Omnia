@@ -24,7 +24,9 @@ export function usePendingEditorClear(params: UsePendingEditorClearParams) {
 
   useEffect(() => {
     if (pendingEditorOpen && showSynonyms && selectedNode) {
-      const nodeId = selectedNode.id || selectedNode.templateId;
+      // After validation strict, selectedNode.id is always present
+      // templateId is optional (preferred for lookup, but id works as fallback)
+      const nodeId = selectedNode.templateId ?? selectedNode.id;
       if (nodeId === pendingEditorOpen.nodeId) {
         const timer = setTimeout(() => {
           setPendingEditorOpen(null);

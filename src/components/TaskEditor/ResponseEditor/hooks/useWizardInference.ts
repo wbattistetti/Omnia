@@ -118,7 +118,9 @@ export function useWizardInference({
     if (!empty && currentTaskTree?.nodes && currentTaskTree.nodes.length > 0) {
       const firstMain = currentTaskTree.nodes[0];
       const firstMainId = firstMain?.id;
-      const firstMainTemplateId = firstMain?.templateId || firstMain?.id; // ✅ Fallback a id se templateId non presente
+      // After validation strict, firstMain.id is always present
+      // templateId is optional (preferred for lookup, but id works as fallback)
+      const firstMainTemplateId = firstMain?.templateId ?? firstMainId;
 
       // ✅ Lookup diretto: O(1) invece di O(n) filter
       const nodeSteps = task?.steps?.[firstMainTemplateId] || {};
@@ -166,7 +168,7 @@ export function useWizardInference({
         taskId: task?.id,
         taskStepsCount: Array.isArray(task?.steps) ? task.steps.length : (task?.steps ? Object.keys(task.steps).length : 0),
         taskStepsIsArray: Array.isArray(task?.steps),
-        firstMainTemplateId: currentTaskTree?.nodes?.[0]?.templateId || currentTaskTree?.nodes?.[0]?.id
+        firstMainTemplateId: currentTaskTree?.nodes?.[0]?.templateId ?? currentTaskTree?.nodes?.[0]?.id
       });
 
       // Apri wizard con initialTaskTree che contiene i nodes esistenti

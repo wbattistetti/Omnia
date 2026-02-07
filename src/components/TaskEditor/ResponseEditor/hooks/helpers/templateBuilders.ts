@@ -46,13 +46,17 @@ export function extractTranslationGuids(data: any[]): string[] {
   };
 
   data.forEach((main) => {
-    const mainNodeId = main.templateId || main.id;
+    // After validation strict, main.id is always present
+    // templateId is optional (preferred for lookup, but id works as fallback)
+    const mainNodeId = main.templateId ?? main.id;
     if (main.steps && mainNodeId) {
       extractFromSteps(main.steps, String(mainNodeId));
     }
     if (main.subData) {
       main.subData.forEach((sub: any) => {
-        const subNodeId = sub.templateId || sub.id;
+        // After validation strict, sub.id is always present
+        // templateId is optional (preferred for lookup, but id works as fallback)
+        const subNodeId = sub.templateId ?? sub.id;
         if (sub.steps && subNodeId) {
           extractFromSteps(sub.steps, String(subNodeId));
         }

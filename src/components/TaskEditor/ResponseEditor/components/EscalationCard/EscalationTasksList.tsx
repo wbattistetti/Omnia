@@ -41,7 +41,9 @@ export function EscalationTasksList({
   // Handler per aggiungere task (drop su zona vuota)
   const handleAppend = React.useCallback((task: any) => {
     if (allowedActions && allowedActions.length > 0) {
-      const templateId = task?.templateId || task?.id || '';
+      // After validation strict, task.id is always present
+      // templateId is optional (preferred for lookup, but id works as fallback)
+      const templateId = task?.templateId ?? task?.id ?? '';
       if (!allowedActions.includes(templateId)) {
         return;
       }
@@ -100,9 +102,11 @@ export function EscalationTasksList({
     // ✅ Estrai templateId: se il task ha templateId, usalo; altrimenti usa id come templateId (per task dal pannello Tasks)
     // I task dal pannello Tasks hanno id che è l'id del template, quindi usalo come templateId
     // ✅ IMPORTANTE: templateId può essere null per task standalone, ma deve essere esplicitamente presente (non undefined)
+    // After validation strict, task.id is always present
+    // templateId is optional (preferred, but id works as fallback)
     const templateId = task?.templateId !== undefined
       ? task.templateId
-      : (task?.id || null); // ✅ Usa id come templateId se templateId non è presente (per task dal pannello Tasks)
+      : (task?.id ?? null); // ✅ Usa id come templateId se templateId non è presente (per task dal pannello Tasks)
 
     // ✅ Estrai type: deve essere presente (TaskType enum)
     // Il type può essere in task.type (TaskType enum) o in incoming.type (ma questo è "TASK_VIEWER", non il TaskType)

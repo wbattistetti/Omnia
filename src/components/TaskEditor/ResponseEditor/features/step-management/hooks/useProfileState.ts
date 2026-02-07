@@ -66,7 +66,9 @@ export function useProfileState(
       }
 
       const result = {
-      slotId: node ? (getNodeIdStrict(node) || getNodeLabelStrict(node) || 'slot') : 'slot',
+      // After validation strict, node.id is always present
+      // Use id as slotId (deterministic, no fallback)
+      slotId: node ? getNodeIdStrict(node) : 'slot',
       locale,
       kind: ((node?.kind && node.kind !== 'generic') ? node.kind : (p.kind && p.kind !== 'generic') ? p.kind : inferKindFromNode(node)) as string,
       synonyms: Array.isArray(p.synonyms)
