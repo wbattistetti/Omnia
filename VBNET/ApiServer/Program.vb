@@ -4,6 +4,9 @@ Imports System.IO
 Imports System.Threading
 Imports ApiServer.Helpers
 Imports ApiServer.Models
+Imports ApiServer.Interfaces
+Imports ApiServer.Logging
+Imports ApiServer.SessionStorage
 Imports Microsoft.AspNetCore.Builder
 Imports Microsoft.AspNetCore.Hosting
 Imports Microsoft.AspNetCore.Http
@@ -31,6 +34,24 @@ Module Program
         Console.WriteLine("🌐 [RunHttpServerMode] Initializing ASP.NET Core Web API...")
         Try
             Dim builder = WebApplication.CreateBuilder(args)
+
+            ' ✅ FASE 2: Configura Dependency Injection
+            ' Registra ILogger come singleton
+            Dim logger As ApiServer.Interfaces.ILogger = New ApiServer.Logging.StdoutLogger()
+            builder.Services.AddSingleton(Of ApiServer.Interfaces.ILogger)(logger)
+
+            ' Registra ISessionStorage come singleton (default: InMemory)
+            Dim storage As ApiServer.Interfaces.ISessionStorage = New ApiServer.SessionStorage.InMemorySessionStorage()
+            builder.Services.AddSingleton(Of ApiServer.Interfaces.ISessionStorage)(storage)
+
+            ' Configura SessionManager con i servizi registrati
+            SessionManager.ConfigureStorage(storage)
+            SessionManager.ConfigureLogger(logger)
+
+            ' Configura TaskSessionHandlers con logger
+            ApiServer.Handlers.TaskSessionHandlers.ConfigureLogger(logger)
+
+            Console.WriteLine("✅ [FASE 2] Dependency Injection configured: ILogger and ISessionStorage")
 
             ' Add services
             builder.Services.AddControllers().AddNewtonsoftJson(Sub(options)

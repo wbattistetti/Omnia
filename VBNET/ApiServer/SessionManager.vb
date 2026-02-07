@@ -99,6 +99,8 @@ End Class
 Public Class SessionManager
     ' ✅ FASE 1: Aggiunto supporto per ISessionStorage (backward compatible)
     Private Shared _storage As ApiServer.Interfaces.ISessionStorage = New ApiServer.SessionStorage.InMemorySessionStorage()
+    ' ✅ FASE 2: Aggiunto supporto per ILogger
+    Private Shared _logger As ApiServer.Interfaces.ILogger = New ApiServer.Logging.StdoutLogger()
     Private Shared ReadOnly _lock As New Object
 
     ' ⚠️ MANTENUTO per backward compatibility (verrà rimosso in futuro)
@@ -111,6 +113,15 @@ Public Class SessionManager
     Public Shared Sub ConfigureStorage(storage As ApiServer.Interfaces.ISessionStorage)
         SyncLock _lock
             _storage = storage
+        End SyncLock
+    End Sub
+
+    ''' <summary>
+    ''' ✅ FASE 2: Configura il logger da usare
+    ''' </summary>
+    Public Shared Sub ConfigureLogger(logger As ApiServer.Interfaces.ILogger)
+        SyncLock _lock
+            _logger = logger
         End SyncLock
     End Sub
 
@@ -258,7 +269,11 @@ Public Class SessionManager
         ' Qui assumiamo che le traduzioni siano già state validate
 
         SyncLock _lock
-            Console.WriteLine($"[SESSION] CreateTaskSession: sessionId={sessionId}, Language={language}")
+            ' ✅ FASE 2: Usa ILogger invece di Console.WriteLine
+            _logger.LogInfo("Creating task session", New With {
+                .sessionId = sessionId,
+                .language = language
+            })
             Dim taskEngine As New Motore()
             Dim session As New TaskSession() With {
                 .SessionId = sessionId,
@@ -271,8 +286,11 @@ Public Class SessionManager
             }
 
             AddHandler taskEngine.MessageToShow, Sub(sender, e)
-                                                     Console.WriteLine($"[DIAG] MessageToShow event raised: message='{e.Message}', sessionId={sessionId}")
-                                                     Console.WriteLine($"[SESSION] MessageToShow event: {e.Message}")
+                                                     ' ✅ FASE 2: Usa ILogger invece di Console.WriteLine
+                                                     _logger.LogDebug("MessageToShow event raised", New With {
+                                                         .sessionId = sessionId,
+                                                         .message = e.Message
+                                                     })
                                                      Dim msgId = $"{sessionId}-{DateTime.UtcNow.Ticks}-{Guid.NewGuid().ToString().Substring(0, 8)}"
                                                      Dim msg = New With {
                            .id = msgId,
@@ -301,19 +319,26 @@ Public Class SessionManager
             ' ⚠️ MANTENUTO per backward compatibility
             _taskSessions(sessionId) = session
 
-            Console.WriteLine($"[SESSION] Starting runtime execution for session: {sessionId}")
+            ' ✅ FASE 2: Usa ILogger invece di Console.WriteLine
+            _logger.LogInfo("Starting runtime execution for session", New With {.sessionId = sessionId})
             Dim backgroundTask = System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
                                                                      Try
                                                                          Await System.Threading.Tasks.Task.Delay(100)
                                                                          Dim taskInstance = ConvertRuntimeTaskToTaskInstance(session.RuntimeTask, session.Translations)
-                                                                         Console.WriteLine($"[SESSION] Converted to TaskInstance: TaskList.Count={taskInstance.TaskList.Count}")
+                                                                         _logger.LogDebug("Converted to TaskInstance", New With {
+                                                                             .sessionId = sessionId,
+                                                                             .taskListCount = taskInstance.TaskList.Count
+                                                                         })
                                                                          session.TaskInstance = taskInstance
-                                                                         Console.WriteLine($"[SESSION] TaskInstance saved to session")
+                                                                         _logger.LogDebug("TaskInstance saved to session", New With {.sessionId = sessionId})
                                                                          taskEngine.ExecuteTask(taskInstance)
 
                                                                          ' ✅ Check if all tasks are completed
                                                                          Dim allCompleted = taskInstance.TaskList.All(Function(t) t.State = DialogueState.Success OrElse t.State = DialogueState.AcquisitionFailed)
-                                                                         Console.WriteLine($"[SESSION] All tasks completed: {allCompleted}")
+                                                                         _logger.LogDebug("Tasks completion check", New With {
+                                                                             .sessionId = sessionId,
+                                                                             .allCompleted = allCompleted
+                                                                         })
                                                                          If allCompleted Then
                                                                              Dim completeData = New With {
                                                                                  .success = True,
@@ -322,8 +347,7 @@ Public Class SessionManager
                                                                              session.EventEmitter.Emit("complete", completeData)
                                                                          End If
                                                                      Catch ex As Exception
-                                                                         Console.WriteLine($"[SESSION] ERROR: Runtime execution error: {ex.GetType().Name} - {ex.Message}")
-                                                                         Console.WriteLine($"[SESSION] ERROR: Stack trace: {ex.StackTrace}")
+                                                                         _logger.LogError("Runtime execution error", ex, New With {.sessionId = sessionId})
                                                                          Dim errorData = New With {
                                                                              .error = ex.Message,
                                                                              .timestamp = DateTime.UtcNow.ToString("O")
@@ -463,7 +487,15 @@ Public Class SessionManager
             Throw New ArgumentException("Translations dictionary cannot be Nothing or empty. TaskInstance requires translations for runtime execution.", NameOf(translations))
         End If
 
-        Console.WriteLine($"[SESSION] ConvertRuntimeTaskToTaskInstance: runtimeTaskId={runtimeTask.Id}, HasSubTasks={runtimeTask.HasSubTasks()}")
+        ' ✅ FASE 2: Usa ILogger invece di Console.WriteLine (se disponibile, altrimenti fallback)
+        If _logger IsNot Nothing Then
+            _logger.LogDebug("Converting RuntimeTask to TaskInstance", New With {
+                .runtimeTaskId = runtimeTask.Id,
+                .hasSubTasks = runtimeTask.HasSubTasks()
+            })
+        Else
+            Console.WriteLine($"[SESSION] ConvertRuntimeTaskToTaskInstance: runtimeTaskId={runtimeTask.Id}, HasSubTasks={runtimeTask.HasSubTasks()}")
+        End If
 
         Dim taskInstance As New TaskEngine.TaskInstance() With {
             .Id = runtimeTask.Id,
@@ -477,7 +509,16 @@ Public Class SessionManager
 
         Dim rootNode = ConvertRuntimeTaskToTaskNode(runtimeTask)
         taskInstance.TaskList.Add(rootNode)
-        Console.WriteLine($"[SESSION] ConvertRuntimeTaskToTaskInstance: rootNodeId={rootNode.Id}, Steps.Count={rootNode.Steps.Count}, SubTasks.Count={rootNode.SubTasks.Count}")
+        ' ✅ FASE 2: Usa ILogger invece di Console.WriteLine
+        If _logger IsNot Nothing Then
+            _logger.LogDebug("TaskInstance conversion completed", New With {
+                .rootNodeId = rootNode.Id,
+                .stepsCount = rootNode.Steps.Count,
+                .subTasksCount = rootNode.SubTasks.Count
+            })
+        Else
+            Console.WriteLine($"[SESSION] ConvertRuntimeTaskToTaskInstance: rootNodeId={rootNode.Id}, Steps.Count={rootNode.Steps.Count}, SubTasks.Count={rootNode.SubTasks.Count}")
+        End If
 
         Return taskInstance
     End Function

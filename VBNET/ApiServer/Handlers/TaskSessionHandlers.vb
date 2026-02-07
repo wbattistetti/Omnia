@@ -4,6 +4,8 @@ Imports System.IO
 Imports System.Threading.Tasks
 Imports ApiServer.Converters
 Imports ApiServer.Helpers
+Imports ApiServer.Interfaces
+Imports ApiServer.Logging
 Imports ApiServer.Models
 Imports ApiServer.Services
 Imports ApiServer.Validators
@@ -18,6 +20,42 @@ Namespace ApiServer.Handlers
     ''' Handles task session-related API endpoints (Chat Simulator)
     ''' </summary>
     Public Module TaskSessionHandlers
+        ' ✅ FASE 2: Logger statico (default: StdoutLogger per backward compatibility)
+        Private _logger As ApiServer.Interfaces.ILogger = New ApiServer.Logging.StdoutLogger()
+
+        ''' <summary>
+        ''' ✅ FASE 2: Configura il logger da usare
+        ''' </summary>
+        Public Sub ConfigureLogger(logger As ApiServer.Interfaces.ILogger)
+            _logger = logger
+        End Sub
+
+        ''' <summary>
+        ''' ✅ FASE 2: Helper per logging (usa logger se disponibile, altrimenti Console.WriteLine)
+        ''' </summary>
+        Private Sub LogDebug(message As String, Optional data As Object = Nothing)
+            If _logger IsNot Nothing Then
+                _logger.LogDebug(message, data)
+            Else
+                Console.WriteLine($"[DEBUG] {message}")
+            End If
+        End Sub
+
+        Private Sub LogInfo(message As String, Optional data As Object = Nothing)
+            If _logger IsNot Nothing Then
+                _logger.LogInfo(message, data)
+            Else
+                Console.WriteLine($"[INFO] {message}")
+            End If
+        End Sub
+
+        Private Sub LogError(message As String, ex As Exception, Optional data As Object = Nothing)
+            If _logger IsNot Nothing Then
+                _logger.LogError(message, ex, data)
+            Else
+                Console.WriteLine($"[ERROR] {message}: {ex.Message}")
+            End If
+        End Sub
         ''' <summary>
         ''' Reads and parses the request body for task session start
         ''' </summary>
@@ -471,8 +509,12 @@ Namespace ApiServer.Handlers
                         Console.Out.Flush()
                         Dim newSessionId = CreateTaskSession(compiledTask, translationsValue, language)
 
-                        Console.WriteLine($"🔵 [HandleTaskSessionStart] Session created: sessionId={newSessionId}")
-                        Console.Out.Flush()
+                        ' ✅ FASE 2: Usa logger invece di Console.WriteLine
+                        LogInfo("Task session created", New With {
+                            .sessionId = newSessionId,
+                            .taskId = taskIdForCompilation,
+                            .language = language
+                        })
 
                         Dim responseObj = New With {
                             .sessionId = newSessionId,
@@ -480,19 +522,19 @@ Namespace ApiServer.Handlers
                             .language = language
                         }
 
-                        Console.WriteLine($"🔵 [HandleTaskSessionStart] Creating success response...")
-                        Console.Out.Flush()
+                        LogDebug("Creating success response")
                         Dim successResponse = ResponseHelpers.CreateSuccessResponse(responseObj)
 
-                        Console.WriteLine($"🔵 [HandleTaskSessionStart] Success response created, returning...")
-                        Console.WriteLine($"🔵 [HandleTaskSessionStart] Response type: {If(successResponse IsNot Nothing, successResponse.GetType().Name, "Nothing")}")
-                        Console.Out.Flush()
+                        LogDebug("Success response created", New With {
+                            .responseType = If(successResponse IsNot Nothing, successResponse.GetType().Name, "Nothing")
+                        })
 
                         Return successResponse
                     Catch ex As Exception
-                        Console.WriteLine($"🔵 [HandleTaskSessionStart] EXCEPTION in TaskTree path: {ex.GetType().Name} - {ex.Message}")
-                        Console.WriteLine($"🔵 [HandleTaskSessionStart] StackTrace: {ex.StackTrace}")
-                        Console.Out.Flush()
+                        ' ✅ FASE 2: Usa logger invece di Console.WriteLine
+                        LogError("Exception in TaskTree path", ex, New With {
+                            .taskId = If(taskIdForCompilation IsNot Nothing, taskIdForCompilation, If(taskIdForConversion IsNot Nothing, taskIdForConversion, taskIdForLog))
+                        })
                         Dim taskIdForError As String = If(taskIdForCompilation IsNot Nothing, taskIdForCompilation, If(taskIdForConversion IsNot Nothing, taskIdForConversion, taskIdForLog))
                         Return ResponseHelpers.CreateErrorResponse($"Failed to process TaskTree for task '{taskIdForError}'. Error: {ex.Message}", 400)
                     End Try
@@ -514,6 +556,9 @@ Namespace ApiServer.Handlers
             End Try
         End Function
 
+        ''' <summary>
+        ''' Handles GET /api/runtime/task/session/{id}/stream (SSE) - Chat Simulator diretto
+        ''' </summary>
         ''' <summary>
         ''' Handles GET /api/runtime/task/session/{id}/stream (SSE) - Chat Simulator diretto
         ''' </summary>
@@ -662,15 +707,20 @@ Namespace ApiServer.Handlers
                     heartbeatTimer.Dispose()
                 End Try
             Catch ex As Exception
-                Console.WriteLine($"[API] ERROR: HandleTaskSessionStream exception: {ex.GetType().Name} - {ex.Message}")
+                ' ✅ FASE 2: Usa logger invece di Console.WriteLine
+                LogError("HandleTaskSessionStream exception", ex, New With {.sessionId = sessionId})
             End Try
         End Function
 
         ''' <summary>
         ''' Handles POST /api/runtime/task/session/{id}/input - Chat Simulator diretto
         ''' </summary>
+        ''' <summary>
+        ''' Handles POST /api/runtime/task/session/{id}/input - Chat Simulator diretto
+        ''' </summary>
         Public Async Function HandleTaskSessionInput(context As HttpContext, sessionId As String) As Task(Of IResult)
-            Console.WriteLine($"[DIAG] HandleTaskSessionInput ENTRY: sessionId={sessionId}")
+            ' ✅ FASE 2: Usa logger invece di Console.WriteLine
+            LogDebug("HandleTaskSessionInput entry", New With {.sessionId = sessionId})
             Try
                 Dim reader As New StreamReader(context.Request.Body)
                 Dim body = Await reader.ReadToEndAsync()
@@ -735,7 +785,8 @@ Namespace ApiServer.Handlers
                     .timestamp = DateTime.UtcNow.ToString("O")
                 })
             Catch ex As Exception
-                Console.WriteLine($"[API] ERROR: HandleTaskSessionInput exception: {ex.GetType().Name} - {ex.Message}")
+                ' ✅ FASE 2: Usa logger invece di Console.WriteLine
+                LogError("HandleTaskSessionInput exception", ex, New With {.sessionId = sessionId})
                 Return Results.Problem(
                     title:="Failed to provide input",
                     detail:=ex.Message,

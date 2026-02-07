@@ -3,6 +3,11 @@
 
 Option Strict On
 Option Explicit On
+' ✅ FASE 2: Import per ILogger (opzionale, per backward compatibility)
+#If False Then
+Imports ApiServer.Interfaces
+Imports ApiServer.Logging
+#End If
 
 ''' <summary>
 ''' Classe principale del Task Engine (runtime)
@@ -12,14 +17,27 @@ Public Class Motore
     Public ReadOnly Property Parser As Parser
     Private ReadOnly _counters As New Dictionary(Of DialogueState, Integer)()
     Private ReadOnly _maxRecovery As New Dictionary(Of DialogueState, Integer)()
+    ' ✅ FASE 2: Logger opzionale (per backward compatibility)
+    Private ReadOnly _logger As Object = Nothing
 
     ''' <summary>
     ''' Evento che viene sollevato quando un messaggio deve essere mostrato
     ''' </summary>
     Public Event MessageToShow As EventHandler(Of MessageEventArgs)
 
+    ''' <summary>
+    ''' Costruttore standard (backward compatible)
+    ''' </summary>
     Public Sub New()
         Parser = New Parser()
+    End Sub
+
+    ''' <summary>
+    ''' ✅ FASE 2: Costruttore con logger (per future estensioni)
+    ''' </summary>
+    Public Sub New(logger As Object)
+        Parser = New Parser()
+        _logger = logger
     End Sub
 
 
