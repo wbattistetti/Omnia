@@ -23,8 +23,6 @@ export {
 
 // Steps operations
 export {
-  convertStepsArrayToDictionary,
-  normalizeStepsToDictionary,
   hasStepsContent,
   getStepsAsArray,
   getStepsForNode,
