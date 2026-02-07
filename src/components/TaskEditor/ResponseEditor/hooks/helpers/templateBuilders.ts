@@ -52,16 +52,16 @@ export function extractTranslationGuids(data: any[]): string[] {
     if (main.steps && mainNodeId) {
       extractFromSteps(main.steps, String(mainNodeId));
     }
-    if (main.subData) {
-      main.subData.forEach((sub: any) => {
-        // After validation strict, sub.id is always present
-        // templateId is optional (preferred for lookup, but id works as fallback)
-        const subNodeId = sub.templateId ?? sub.id;
-        if (sub.steps && subNodeId) {
-          extractFromSteps(sub.steps, String(subNodeId));
-        }
-      });
-    }
+    // After validation strict, use subNodes (not subData)
+    const subNodes = main.subNodes || [];
+    subNodes.forEach((sub: any) => {
+      // After validation strict, sub.id is always present
+      // templateId is optional (preferred for lookup, but id works as fallback)
+      const subNodeId = sub.templateId ?? sub.id;
+      if (sub.steps && subNodeId) {
+        extractFromSteps(sub.steps, String(subNodeId));
+      }
+    });
   });
 
   return [...new Set(guids)];

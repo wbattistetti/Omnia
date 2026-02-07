@@ -157,8 +157,17 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
         const main = mains[mainIndex];
 
         if (isRoot) {
-          const newIntroStep = selectedNode?.steps?.find((s: any) => s.type === 'introduction');
-          const hasTasks = newIntroStep?.escalations?.some((esc: any) =>
+          // ✅ NO FALLBACKS: Steps must be dictionary format
+          // Handle both array and dictionary formats (for compatibility during migration)
+          let introStepData: any = null;
+          if (selectedNode?.steps) {
+            if (Array.isArray(selectedNode.steps)) {
+              introStepData = selectedNode.steps.find((s: any) => s.type === 'introduction');
+            } else if (typeof selectedNode.steps === 'object' && selectedNode.steps.introduction) {
+              introStepData = selectedNode.steps.introduction;
+            }
+          }
+          const hasTasks = introStepData?.escalations?.some((esc: any) =>
             esc?.tasks && Array.isArray(esc.tasks) && esc.tasks.length > 0
           );
           if (hasTasks) {

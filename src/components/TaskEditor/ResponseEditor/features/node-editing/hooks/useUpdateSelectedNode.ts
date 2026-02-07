@@ -183,14 +183,35 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
 
       try {
         if (localStorage.getItem('debug.nodeSync') === '1') {
-          const steps = updated?.steps || [];
-          const escalationsCount = steps.reduce((acc: number, step: any) =>
-            acc + (step?.escalations?.length || 0), 0);
-          const tasksCount = steps.reduce((acc: number, step: any) =>
-            acc + (step?.escalations?.reduce((a: number, esc: any) =>
-              a + (esc?.tasks?.length || 0), 0) || 0), 0);
+          // ✅ NO FALLBACKS: Steps must be dictionary format
+          // Handle both array and dictionary formats for debug logging (compatibility during migration)
+          let stepsCount = 0;
+          let escalationsCount = 0;
+          let tasksCount = 0;
+          if (updated?.steps) {
+            if (Array.isArray(updated.steps)) {
+              stepsCount = updated.steps.length;
+              escalationsCount = updated.steps.reduce((acc: number, step: any) =>
+                acc + (step?.escalations?.length || 0), 0);
+              tasksCount = updated.steps.reduce((acc: number, step: any) =>
+                acc + (step?.escalations?.reduce((a: number, esc: any) =>
+                  a + (esc?.tasks?.length || 0), 0) || 0), 0);
+            } else if (typeof updated.steps === 'object') {
+              stepsCount = Object.keys(updated.steps).length;
+              Object.values(updated.steps).forEach((stepData: any) => {
+                if (stepData?.escalations && Array.isArray(stepData.escalations)) {
+                  escalationsCount += stepData.escalations.length;
+                  stepData.escalations.forEach((esc: any) => {
+                    if (esc?.tasks && Array.isArray(esc.tasks)) {
+                      tasksCount += esc.tasks.length;
+                    }
+                  });
+                }
+              });
+            }
+          }
           console.log('[NODE_SYNC][UPDATE] ✅ selectedNode updated + dockTree updated', {
-            stepsCount: steps.length,
+            stepsCount,
             escalationsCount,
             tasksCount
           });

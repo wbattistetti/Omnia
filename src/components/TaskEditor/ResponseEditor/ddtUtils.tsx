@@ -31,18 +31,33 @@ export function ordinalIt(n: number): string {
 export function buildDDTForUI(ddt: any, selectedNode: any) {
   if (!ddt) return ddt;
 
+  // ✅ NO FALLBACKS: Steps must be dictionary format
+  // If selectedNode.steps is array (MaterializedStep[]), convert to dictionary first
+  let stepsDict: Record<string, any> = {};
+  if (selectedNode?.steps) {
+    if (Array.isArray(selectedNode.steps)) {
+      // Convert array format to dictionary
+      stepsDict = Object.fromEntries(
+        selectedNode.steps.map((stepGroup: any) => [
+          stepGroup.type,
+          {
+            escalations: (stepGroup.escalations || []).map((escalation: any) => ({
+              type: 'escalation',
+              id: escalation.escalationId,
+              actions: escalation.actions
+            }))
+          }
+        ])
+      );
+    } else if (typeof selectedNode.steps === 'object') {
+      // Already dictionary format
+      stepsDict = selectedNode.steps;
+    }
+  }
+
   return {
     ...ddt,
-    steps: Object.fromEntries(
-      (selectedNode?.steps || []).map((stepGroup: any) => [
-        stepGroup.type,
-        (stepGroup.escalations || []).map((escalation: any) => ({
-          type: 'escalation',
-          id: escalation.escalationId,
-          actions: escalation.actions
-        }))
-      ])
-    )
+    steps: stepsDict
   };
 }
 
