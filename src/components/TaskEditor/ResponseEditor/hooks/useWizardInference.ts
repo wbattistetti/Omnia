@@ -328,7 +328,18 @@ export function useWizardInference({
           wizardOwnsDataRef.current = true;
 
           // Pre-assembly in background
-          const templateId = localMatch.ai.schema.nodes?.[0]?.templateId || localMatch.ai.schema.data?.[0]?.templateId;
+          // Normalize schema - use nodes (standard) or throw error if legacy format
+          let templateId: string | undefined;
+          if (localMatch.ai.schema.nodes && Array.isArray(localMatch.ai.schema.nodes) && localMatch.ai.schema.nodes.length > 0) {
+            templateId = localMatch.ai.schema.nodes[0]?.templateId;
+          } else if (localMatch.ai.schema.data && Array.isArray(localMatch.ai.schema.data) && localMatch.ai.schema.data.length > 0) {
+            console.warn('[useWizardInference] Using legacy schema.data format, expected schema.nodes');
+            templateId = localMatch.ai.schema.data[0]?.templateId;
+          }
+
+          if (!templateId) {
+            console.warn('[useWizardInference] No templateId found in schema.nodes or schema.data');
+          }
           await preAssembleTaskTree(
             localMatch.ai.schema,
             localMatch.ai.translationGuids,

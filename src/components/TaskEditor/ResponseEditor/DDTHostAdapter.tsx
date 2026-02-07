@@ -150,17 +150,34 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
 
   // 3. Quando completi il wizard, salva nel Task E aggiorna lo state
   const handleComplete = React.useCallback(async (finalTaskTreeOrLegacy: any) => {
-    // ✅ NUOVO: Supporta sia TaskTree (nuovo formato) che formato legacy (backward compatibility)
-    const finalTaskTree: TaskTree = finalTaskTreeOrLegacy.nodes
-      ? finalTaskTreeOrLegacy as TaskTree
-      : {
-          label: finalTaskTreeOrLegacy.label || '',
-          nodes: finalTaskTreeOrLegacy.data || [],
-          steps: finalTaskTreeOrLegacy.steps || {},
-          constraints: finalTaskTreeOrLegacy.constraints,
-          dataContract: finalTaskTreeOrLegacy.dataContract,
-          introduction: finalTaskTreeOrLegacy.introduction
-        };
+    // Normalize to TaskTree format - NO FALLBACKS
+    // If data doesn't match expected format, throw explicit error
+    if (!finalTaskTreeOrLegacy) {
+      throw new Error('[DDTHostAdapter] handleComplete: finalTaskTreeOrLegacy is null or undefined');
+    }
+
+    let finalTaskTree: TaskTree;
+
+    if (finalTaskTreeOrLegacy.nodes) {
+      // Already in TaskTree format
+      finalTaskTree = finalTaskTreeOrLegacy as TaskTree;
+    } else if (finalTaskTreeOrLegacy.data) {
+      // Legacy format - normalize explicitly (not fallback, but transformation)
+      console.warn('[DDTHostAdapter] Converting legacy format (data) to TaskTree format (nodes)');
+      finalTaskTree = {
+        label: finalTaskTreeOrLegacy.label || '',
+        nodes: finalTaskTreeOrLegacy.data,
+        steps: finalTaskTreeOrLegacy.steps || {},
+        constraints: finalTaskTreeOrLegacy.constraints,
+        dataContract: finalTaskTreeOrLegacy.dataContract,
+        introduction: finalTaskTreeOrLegacy.introduction
+      };
+    } else {
+      throw new Error(
+        `[DDTHostAdapter] handleComplete: Invalid format. Expected TaskTree with 'nodes' or legacy with 'data'. ` +
+        `Got: ${JSON.stringify(Object.keys(finalTaskTreeOrLegacy)).substring(0, 200)}`
+      );
+    }
 
     console.log('[TaskTreeHostAdapter][handleComplete] 🔍 finalTaskTree received', {
       instanceKey,

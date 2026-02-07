@@ -44,9 +44,20 @@ export async function preAssembleTaskTree(
     const projectLang = (localStorage.getItem('project.lang') || 'pt') as 'en' | 'it' | 'pt';
 
     // ✅ assembleFinalTaskTree restituisce ancora formato legacy, convertiamo a TaskTree
+    // Normalize schema.nodes - use standard format or log warning for legacy
+    let schemaNodes: any[] = [];
+    if (schema.nodes && Array.isArray(schema.nodes)) {
+      schemaNodes = schema.nodes;
+    } else if (schema.data && Array.isArray(schema.data)) {
+      console.warn('[preAssembleTaskTree] Using legacy schema.data format, expected schema.nodes');
+      schemaNodes = schema.data;
+    } else {
+      console.warn('[preAssembleTaskTree] No schema.nodes or schema.data found, using empty array');
+    }
+
     const preAssembledLegacy = await assembleFinalTaskTree(
       schema.label || 'Data',
-      schema.nodes || schema.data || [],
+      schemaNodes,
       emptyStore,
       {
         escalationCounts: { noMatch: 2, noInput: 2, confirmation: 2 },
@@ -57,9 +68,20 @@ export async function preAssembleTaskTree(
     );
 
     // ✅ Converti formato legacy a TaskTree
+    // Normalize nodes - use standard format or throw error
+    let normalizedNodes: any[] = [];
+    if (preAssembledLegacy.nodes && Array.isArray(preAssembledLegacy.nodes)) {
+      normalizedNodes = preAssembledLegacy.nodes;
+    } else if (preAssembledLegacy.data && Array.isArray(preAssembledLegacy.data)) {
+      console.warn('[preAssembleTaskTree] Converting legacy preAssembledLegacy.data to nodes format');
+      normalizedNodes = preAssembledLegacy.data;
+    } else {
+      console.warn('[preAssembleTaskTree] No nodes or data found in preAssembledLegacy, using empty array');
+    }
+
     const preAssembledTaskTree = {
       label: preAssembledLegacy.label || schema.label || 'Data',
-      nodes: preAssembledLegacy.data || [],
+      nodes: normalizedNodes,
       steps: preAssembledLegacy.dialogueSteps || {},
       constraints: preAssembledLegacy.constraints,
       dataContract: preAssembledLegacy.dataContract,

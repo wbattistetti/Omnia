@@ -2,16 +2,45 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useEffect } from 'react';
-import { getNodeIdStrict, getNodeLabelStrict } from '@responseEditor/core/domain/nodeStrict';
 
 export interface UseEscalationTasksParams {
   setEscalationTasks: React.Dispatch<React.SetStateAction<any[]>>;
 }
 
 /**
+ * Normalize API template to standard format (NO FALLBACKS)
+ * Transforms legacy API data (_id, name) to standard format (id, label)
+ * Throws error if data cannot be normalized
+ */
+function normalizeApiTemplate(template: any): { id: string; label: string; [key: string]: any } {
+  // Extract id - normalize from _id if needed (explicit transformation, not fallback)
+  const id = template.id || (template._id ? String(template._id).replace('-template', '') : null);
+  if (!id) {
+    throw new Error(`[normalizeApiTemplate] Template missing id: ${JSON.stringify(template).substring(0, 200)}`);
+  }
+
+  // Extract label - normalize from name if needed (explicit transformation, not fallback)
+  const label = template.label || (template.name ? String(template.name) : '');
+  if (!label) {
+    console.warn(`[normalizeApiTemplate] Template missing label, using id as fallback: ${id}`);
+  }
+
+  // Return normalized structure
+  return {
+    id,
+    label: label || id,
+    description: template.description || '',
+    icon: template.icon || 'Circle',
+    color: template.color || 'text-gray-500',
+    params: template.structure || template.params || {},
+    type: template.type,
+    allowedContexts: template.allowedContexts || []
+  };
+}
+
+/**
  * Hook that loads tasks for escalation palette.
- * Note: Templates from external API may have legacy structure (_id instead of id),
- * so we use try-catch fallback here. This is the ONLY place where fallback is allowed.
+ * NO FALLBACKS - Normalizes data at API boundary
  */
 export function useEscalationTasks(params: UseEscalationTasksParams) {
   const { setEscalationTasks } = params;
@@ -32,37 +61,17 @@ export function useEscalationTasks(params: UseEscalationTasksParams) {
           return;
         }
 
+        // Normalize all templates - filter out invalid ones
         const tasks = templates
           .map((template: any) => {
-            // Templates from API might have legacy structure - extract id safely
-            let templateId: string;
             try {
-              templateId = getNodeIdStrict(template);
+              return normalizeApiTemplate(template);
             } catch (error) {
-              // Fallback for legacy API templates that might have _id
-              templateId = template.id || template._id || '';
+              console.error(`[useEscalationTasks] Failed to normalize template:`, error);
+              return null;
             }
-
-            let templateLabel: string;
-            try {
-              templateLabel = getNodeLabelStrict(template);
-            } catch (error) {
-              // Fallback for legacy API templates
-              templateLabel = template.label || template.name || '';
-            }
-
-            return {
-              id: templateId,
-              label: templateLabel,
-              description: template.description || '',
-              icon: template.icon || 'Circle',
-              color: template.color || 'text-gray-500',
-              params: template.structure || template.params || {},
-              type: template.type,
-              allowedContexts: template.allowedContexts || []
-            };
           })
-          .filter(task => task.id); // Filter out tasks without valid id
+          .filter((task): task is NonNullable<typeof task> => task !== null);
 
         setEscalationTasks(tasks);
       })
