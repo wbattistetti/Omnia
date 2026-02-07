@@ -36,7 +36,8 @@ export function EscalationTasksList({
   stepKey
 }: EscalationTasksListProps) {
   const { handleEditingChange, isEditing: isEditingRow } = useTaskEditing();
-  const tasks = escalation.tasks || [];
+  // ✅ NO FALLBACKS: escalation.tasks can be undefined (legitimate default)
+  const tasks = escalation.tasks ?? [];
 
   // Handler per aggiungere task (drop su zona vuota)
   const handleAppend = React.useCallback((task: any) => {
@@ -51,7 +52,7 @@ export function EscalationTasksList({
 
     const taskRef = normalizeTaskForEscalation(task);
     updateEscalation((esc) => {
-      const newTasks = [...(esc.tasks || []), taskRef];
+      const newTasks = [...(esc.tasks ?? []), taskRef];
       const newTaskIdx = newTasks.length - 1;
       setTimeout(() => {
         onAutoEditTargetChange({ escIdx: escalationIdx, taskIdx: newTaskIdx });
@@ -63,7 +64,7 @@ export function EscalationTasksList({
   // Handler per modificare task
   const handleEdit = React.useCallback((taskIdx: number, newText: string) => {
     updateEscalation((esc) => {
-      const tasks = [...(esc.tasks || [])];
+      const tasks = [...(esc.tasks ?? [])];
       tasks[taskIdx] = { ...tasks[taskIdx], text: newText };
       return { ...esc, tasks };
     });
@@ -76,7 +77,7 @@ export function EscalationTasksList({
   // Handler per eliminare task
   const handleDelete = React.useCallback((taskIdx: number) => {
     updateEscalation((esc) => {
-      const tasks = (esc.tasks || []).filter((_: any, j: number) => j !== taskIdx);
+      const tasks = (esc.tasks ?? []).filter((_: any, j: number) => j !== taskIdx);
       return { ...esc, tasks };
     });
 
@@ -153,7 +154,7 @@ export function EscalationTasksList({
     const insertIdx = position === 'after' ? to.taskIdx + 1 : to.taskIdx;
 
     updateEscalation((esc) => {
-      const tasks = [...(esc.tasks || [])];
+      const tasks = [...(esc.tasks ?? [])];
       tasks.splice(insertIdx, 0, normalized);
       return { ...esc, tasks };
     });
@@ -180,7 +181,7 @@ export function EscalationTasksList({
         const fromEsc = updated[fromEscIdx];
         if (!fromEsc) return escalations;
 
-        const tasks = [...(fromEsc.tasks || [])];
+        const tasks = [...(fromEsc.tasks ?? [])];
         const task = tasks[fromTaskIdx];
         if (!task) return escalations;
 
@@ -192,7 +193,7 @@ export function EscalationTasksList({
         if (!updated[toEscIdx]) {
           updated[toEscIdx] = { tasks: [] };
         }
-        const toTasks = [...(updated[toEscIdx].tasks || [])];
+        const toTasks = [...(updated[toEscIdx].tasks ?? [])];
         const insertIdx = position === 'after' ? toTaskIdx + 1 : toTaskIdx;
         toTasks.splice(insertIdx, 0, task);
         updated[toEscIdx] = { ...updated[toEscIdx], tasks: toTasks };
@@ -208,12 +209,13 @@ export function EscalationTasksList({
         <PanelEmptyDropZone color={color} onDropTask={handleAppend} />
       ) : (
         tasks.map((task: any, j: number) => {
-          const templateId = task.templateId || 'sayMessage';
+          // ✅ NO FALLBACKS: templateId must exist, use 'sayMessage' only as explicit default for logging
+          const templateId = task.templateId ?? 'sayMessage';
           const isEditing = isEditingRow(j);
 
           return (
             <TaskRowDnDWrapper
-              key={`${escalationIdx}-${j}-${task.id || j}`}
+                key={`${escalationIdx}-${j}-${task.id ?? j}`}
               escalationIdx={escalationIdx}
               taskIdx={j}
               task={task}
@@ -231,7 +233,7 @@ export function EscalationTasksList({
                 draggable
                 selected={false}
                 taskId={templateId}
-                label={task.label || getTaskLabel(templateId)}
+                label={task.label ?? getTaskLabel(templateId)}
                 onEdit={templateId === 'sayMessage' ? (newText) => handleEdit(j, newText) : undefined}
                 onDelete={() => handleDelete(j)}
                 autoEdit={Boolean(autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.taskIdx === j)}

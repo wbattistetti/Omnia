@@ -169,7 +169,7 @@ export default function DDEBubbleChat({
           projectId: projectId,
           language: projectLanguage,
           hasTaskTree: !!taskTree,
-          taskTreeNodesCount: taskTree?.nodes?.length || 0,
+          taskTreeNodesCount: taskTree?.nodes?.length ?? 0,
           // ✅ NUOVO: Mostra chiavi del dictionary invece di count array
           taskTreeStepsType: typeof taskTree?.steps,
           taskTreeStepsIsDictionary: taskTree?.steps && typeof taskTree.steps === 'object' && !Array.isArray(taskTree.steps),

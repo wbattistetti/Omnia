@@ -40,7 +40,8 @@ export default function IntentListEditor({
 
   // FASE 3: Get current intents from Task
   const intents = useMemo(() => {
-    return (task?.value?.intents || []) as ProblemIntent[];
+    // ✅ NO FALLBACKS: task.value.intents can be undefined (legitimate default)
+    return (task?.value?.intents ?? []) as ProblemIntent[];
   }, [task?.value?.intents]);
 
   // Listen for instance updates from instanceRepository
@@ -60,13 +61,14 @@ export default function IntentListEditor({
   // Convert ProblemIntent[] to ListItem[]
   const items: ListItem[] = useMemo(() => {
     return intents.map(intent => ({
-      id: intent.id || intent.name,
+      // ✅ NO FALLBACKS: Use id as primary, name as fallback (both are valid properties)
+      id: intent.id ?? intent.name ?? '',
       label: intent.name,
       meta: {
         threshold: intent.threshold,
-        matchingCount: intent.phrases?.matching?.length || 0,
-        notMatchingCount: intent.phrases?.notMatching?.length || 0,
-        keywordsCount: intent.phrases?.keywords?.length || 0,
+        matchingCount: intent.phrases?.matching?.length ?? 0,
+        notMatchingCount: intent.phrases?.notMatching?.length ?? 0,
+        keywordsCount: intent.phrases?.keywords?.length ?? 0,
       }
     }));
   }, [intents]);
@@ -97,7 +99,7 @@ export default function IntentListEditor({
 
   const handleEdit = (id: string, newLabel: string) => {
     const updatedIntents = intents.map(intent =>
-      intent.id === id || intent.name === id
+      intent.id === id || (intent.name && intent.name === id)
         ? { ...intent, name: newLabel.trim() }
         : intent
     );
@@ -145,7 +147,7 @@ export default function IntentListEditor({
   // Handle select all / deselect all
   const handleSelectAll = () => {
     // Select all intents
-    const allIds = intents.map(intent => intent.id || intent.name);
+    const allIds = intents.map(intent => intent.id ?? intent.name ?? '');
     if (allIds.length > 0) {
       // Toggle selection: if all are selected, deselect all; otherwise select all
       const allSelected = allIds.every(id => selectedId === id);
@@ -178,11 +180,11 @@ export default function IntentListEditor({
         status: 'draft' as const,
         enabled: true,
         variants: {
-          curated: (intent.phrases?.matching || []).map(p => ({ id: p.id, text: p.text, lang: (p.lang as any) || 'it' })),
+          curated: (intent.phrases?.matching ?? []).map(p => ({ id: p.id, text: p.text, lang: (p.lang as any) ?? 'it' })),
           staging: [],
-          hardNeg: (intent.phrases?.notMatching || []).map(p => ({ id: p.id, text: p.text, lang: (p.lang as any) || 'it' })),
+          hardNeg: (intent.phrases?.notMatching ?? []).map(p => ({ id: p.id, text: p.text, lang: (p.lang as any) ?? 'it' })),
         },
-        signals: { keywords: (intent.phrases?.keywords || []), synonymSets: [], patterns: [] },
+        signals: { keywords: (intent.phrases?.keywords ?? []), synonymSets: [], patterns: [] },
       }));
       useIntentStore.setState({ intents: intentsForStore });
 
@@ -196,7 +198,7 @@ export default function IntentListEditor({
       // Calculate balancing
       let maxExistingPhrases = 0;
       for (const intent of intents) {
-        const count = (intent.phrases?.matching || []).length;
+        const count = (intent.phrases?.matching ?? []).length;
         if (count > maxExistingPhrases) {
           maxExistingPhrases = count;
         }
@@ -213,12 +215,12 @@ export default function IntentListEditor({
         await new Promise(resolve => setTimeout(resolve, 50));
 
         try {
-          const currentCount = (intent.phrases?.matching || []).length;
+          const currentCount = (intent.phrases?.matching ?? []).length;
           const phrasesToGenerate = currentCount === 0 ? phrasesForEmpty : genN;
 
-          const positive = intent.phrases?.matching || [];
-          const negative = intent.phrases?.notMatching || [];
-          const keywords = intent.phrases?.keywords || [];
+          const positive = intent.phrases?.matching ?? [];
+          const negative = intent.phrases?.notMatching ?? [];
+          const keywords = intent.phrases?.keywords ?? [];
 
           const allExisting = [
             ...positive.map(p => p.text),
@@ -241,18 +243,18 @@ export default function IntentListEditor({
           }
 
           // Sync with instanceRepository
-          const updatedStoreIntents = useIntentStore.getState().intents || [];
+          const updatedStoreIntents = useIntentStore.getState().intents ?? [];
           // FASE 3: Get intents from Task
-          const updatedIntents = (task?.value?.intents || []).map(pi => {
+          const updatedIntents = (task?.value?.intents ?? []).map(pi => {
             if (pi.id === intent.id || pi.name === intent.name) {
               const storeIntent = updatedStoreIntents.find(i => i.id === intent.id);
               if (storeIntent) {
                 return {
                   ...pi,
                   phrases: {
-                    matching: (storeIntent.variants?.curated || []).map(v => ({ id: v.id, text: v.text, lang: v.lang })),
-                    notMatching: (storeIntent.variants?.hardNeg || []).map(v => ({ id: v.id, text: v.text, lang: v.lang })),
-                    keywords: (storeIntent.signals?.keywords || []),
+                    matching: (storeIntent.variants?.curated ?? []).map(v => ({ id: v.id, text: v.text, lang: v.lang })),
+                    notMatching: (storeIntent.variants?.hardNeg ?? []).map(v => ({ id: v.id, text: v.text, lang: v.lang })),
+                    keywords: (storeIntent.signals?.keywords ?? []),
                   }
                 };
               }
@@ -294,7 +296,7 @@ export default function IntentListEditor({
 
     // If an intent is selected, add phrases to it; otherwise add to all intents
     if (selectedId) {
-      const intent = intents.find(i => (i.id || i.name) === selectedId);
+      const intent = intents.find(i => (i.id ?? i.name ?? '') === selectedId);
       if (intent) {
         const updatedIntents = intents.map(i => {
           if ((i.id || i.name) === selectedId) {
@@ -303,7 +305,7 @@ export default function IntentListEditor({
               phrases: {
                 ...i.phrases,
                 matching: [
-                  ...(i.phrases?.matching || []),
+                  ...(i.phrases?.matching ?? []),
                   ...values.map(text => ({ id: crypto.randomUUID(), text, lang: 'it' as any }))
                 ]
               }
@@ -347,16 +349,16 @@ export default function IntentListEditor({
 
       // If an intent is selected, add phrases to it; otherwise add to all intents
       if (selectedId) {
-        const intent = intents.find(i => (i.id || i.name) === selectedId);
+        const intent = intents.find(i => (i.id ?? i.name ?? '') === selectedId);
         if (intent) {
           const updatedIntents = intents.map(i => {
-            if ((i.id || i.name) === selectedId) {
+            if ((i.id ?? i.name ?? '') === selectedId) {
               return {
                 ...i,
                 phrases: {
                   ...i.phrases,
                   matching: [
-                    ...(i.phrases?.matching || []),
+                    ...(i.phrases?.matching ?? []),
                     ...values.map(text => ({ id: crypto.randomUUID(), text, lang: 'it' as any }))
                   ]
                 }
@@ -399,7 +401,7 @@ export default function IntentListEditor({
 
   const handleToggleEnabled = (id: string) => {
     const updatedIntents = intents.map(intent =>
-      (intent.id === id || intent.name === id)
+      (intent.id === id || (intent.name && intent.name === id))
         ? { ...intent, threshold: intent.threshold === undefined || intent.threshold < 0 ? 0.6 : -1 }
         : intent
     );
@@ -409,7 +411,7 @@ export default function IntentListEditor({
   };
 
   const itemEnabled = (item: ListItem) => {
-    const intent = intents.find(i => (i.id || i.name) === item.id);
+    const intent = intents.find(i => (i.id ?? i.name ?? '') === item.id);
     return intent ? (intent.threshold !== undefined && intent.threshold >= 0) : true;
   };
 

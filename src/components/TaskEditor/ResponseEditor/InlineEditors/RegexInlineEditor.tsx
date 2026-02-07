@@ -12,6 +12,7 @@ import { NLPProfile } from '@responseEditor/DataExtractionEditor';
 import { getIsTesting } from '@responseEditor/testingState';
 import { useNotesStore } from '@responseEditor/features/step-management/stores/notesStore';
 import { generateBaseRegexWithNamedGroups, generateBaseRegexSimple } from '@responseEditor/utils/regexGroupUtils';
+import { getSubNodesStrict } from '@responseEditor/core/domain/nodeStrict';
 import type { TaskTreeNode } from '@types/taskTypes';
 
 import { RowResult } from '@responseEditor/hooks/useExtractionTesting';
@@ -56,6 +57,68 @@ export default function RegexInlineEditor({
   // ✅ Use Zustand store for notes
   const getNote = useNotesStore((s) => s.getNote);
 
+  // Debounce timer for profile updates to avoid too many calls
+  const profileUpdateTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ✅ Usa testCases da props se disponibili, altrimenti fallback a profile
+  const testCases = testCasesProp || profile?.testCases || [];
+
+  const setTestCases = React.useCallback((cases: string[]) => {
+    // ✅ Usa setter diretto se disponibile
+    if (setTestCasesProp) {
+      setTestCasesProp(cases);
+    } else if (onProfileUpdate && profile) {
+      // Fallback: aggiorna tramite onProfileUpdate
+      onProfileUpdate({ ...profile, testCases: cases });
+    }
+  }, [setTestCasesProp, profile, onProfileUpdate]);
+
+  // ✅ Refs to store updateBaseline and setRegex for use in onSuccess callback
+  const updateBaselineRef = React.useRef<((generatedRegex: string) => void) | null>(null);
+  const setRegexRef = React.useRef<((value: string) => void) | null>(null);
+  const onProfileUpdateRef = React.useRef<((profile: NLPProfile) => void) | undefined>(onProfileUpdate);
+  const profileRef = React.useRef<NLPProfile | undefined>(profile);
+
+  // ✅ Update refs when values change
+  React.useEffect(() => {
+    onProfileUpdateRef.current = onProfileUpdate;
+    profileRef.current = profile;
+  }, [onProfileUpdate, profile]);
+
+  // ✅ AI generation hook (must be before useRegex to provide generatingRegex state)
+  const {
+    generatingRegex,
+    regexBackup,
+    generateRegex,
+  } = useRegexAIGeneration({
+    node,
+    kind,
+    testCases,
+    examplesList,
+    rowResults,
+    // ✅ REMOVED: getNote prop - now managed via Zustand store
+    onSuccess: (newRegex: string) => {
+      // ✅ Update baseline after AI generation using refs
+      if (updateBaselineRef.current) {
+        updateBaselineRef.current(newRegex);
+      }
+      if (setRegexRef.current) {
+        setRegexRef.current(newRegex);
+      }
+      // ✅ Save regex to profile immediately
+      if (onProfileUpdateRef.current && profileRef.current) {
+        const updatedProfile = {
+          ...profileRef.current,
+          regex: newRegex || undefined
+        };
+        onProfileUpdateRef.current(updatedProfile);
+      }
+    },
+    onError: (error: Error) => {
+      alert(`Error generating regex: ${error.message}`);
+    },
+  });
+
   // ✅ FASE 2.2: Consolidated regex state and validation
   const {
     baselineRegex,
@@ -75,21 +138,11 @@ export default function RegexInlineEditor({
     generatingRegex,
   });
 
-  // Debounce timer for profile updates to avoid too many calls
-  const profileUpdateTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // ✅ Usa testCases da props se disponibili, altrimenti fallback a profile
-  const testCases = testCasesProp || profile?.testCases || [];
-
-  const setTestCases = React.useCallback((cases: string[]) => {
-    // ✅ Usa setter diretto se disponibile
-    if (setTestCasesProp) {
-      setTestCasesProp(cases);
-    } else if (onProfileUpdate && profile) {
-      // Fallback: aggiorna tramite onProfileUpdate
-      onProfileUpdate({ ...profile, testCases: cases });
-    }
-  }, [setTestCasesProp, profile, onProfileUpdate]);
+  // ✅ Update refs with actual functions from useRegex
+  React.useEffect(() => {
+    updateBaselineRef.current = updateBaseline;
+    setRegexRef.current = setRegex;
+  }, [updateBaseline, setRegex]);
 
   // ✅ Refs per gestire i timeout e l'editor
   const placeholderTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -187,36 +240,6 @@ export default function RegexInlineEditor({
       }
     }
   }, [baselineRegex, isDirty, node, kind, updateBaseline, setRegex, onProfileUpdate, profile]); // Run when baselineRegex changes
-
-  // ✅ AI generation hook (must be before validation to get generatingRegex state)
-  const {
-    generatingRegex,
-    regexBackup,
-    generateRegex,
-  } = useRegexAIGeneration({
-    node,
-    kind,
-    testCases,
-    examplesList,
-    rowResults,
-    // ✅ REMOVED: getNote prop - now managed via Zustand store
-    onSuccess: (newRegex: string) => {
-      // ✅ Update baseline after AI generation
-      updateBaseline(newRegex);
-      setRegex(newRegex);
-      // ✅ Save regex to profile immediately
-      if (onProfileUpdate && profile) {
-        const updatedProfile = {
-          ...profile,
-          regex: newRegex || undefined
-        };
-        onProfileUpdate(updatedProfile);
-      }
-    },
-    onError: (error: Error) => {
-      alert(`Error generating regex: ${error.message}`);
-    },
-  });
 
   // ✅ Debounced value for validation (prevents flickering)
   const debouncedRegexRef = React.useRef<string>(currentText);

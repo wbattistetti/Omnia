@@ -201,7 +201,7 @@ export function ResponseEditorNormalLayout({
             selectedSubIndex={selectedSubIndex}
             onSelectSub={handleSelectSub}
             aggregated={isAggregatedAtomic}
-            rootLabel={taskTree?.label || 'Data'}
+            rootLabel={taskTree?.label ?? 'Data'}
             style={sidebarManualWidth ? { width: sidebarManualWidth, flexShrink: 0 } : { flexShrink: 0 }}
             onChangeSubRequired={onChangeSubRequired}
             onReorderSub={onReorderSub}
