@@ -12,19 +12,37 @@ import { getNodesWithFallback } from '@utils/taskTreeMigrationHelpers';
 import type { TaskTree } from '@types/taskTypes';
 
 /**
- * Get main nodes list from TaskTree
- * Uses migration helper with fallback support
+ * Get main nodes list from TaskTree.
+ * Uses migration helper with fallback support for legacy formats.
+ *
+ * @param taskTree - The TaskTree to extract nodes from, or null/undefined
+ * @returns Array of main nodes (empty array if taskTree is null/undefined)
+ *
+ * @example
+ * ```ts
+ * const nodes = getMainNodes(taskTree);
+ * // Returns: [{ id: '1', label: 'Node 1', ... }, ...]
+ * ```
  */
-export function getMainNodes(taskTree: TaskTree | null | undefined): any[] {
+export function getMainNodes(taskTree: TaskTree | null | undefined): TaskTree['nodes'] {
   if (!taskTree) return [];
   return getNodesWithFallback(taskTree, 'getdataList');
 }
 
 /**
- * Get sub-nodes list from a main node
- * Uses only TaskTreeNode.subNodes (no backward compatibility)
+ * Get sub-nodes list from a main node.
+ * Uses only TaskTreeNode.subNodes (no backward compatibility with subData/subSlots).
+ *
+ * @param main - The main node to extract sub-nodes from
+ * @returns Array of sub-nodes (empty array if main is null/undefined or has no subNodes)
+ *
+ * @example
+ * ```ts
+ * const subNodes = getSubNodes(mainNode);
+ * // Returns: [{ id: '1.1', label: 'Sub-node 1', ... }, ...]
+ * ```
  */
-export function getSubNodes(main: any): any[] {
+export function getSubNodes(main: TaskTree['nodes'][number] | null | undefined): TaskTree['nodes'][number]['subNodes'] {
   if (!main) return [];
   if (Array.isArray(main.subNodes)) {
     return main.subNodes.filter(Boolean);

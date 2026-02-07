@@ -50,7 +50,7 @@ export interface ResponseEditorNormalLayoutProps {
   isAggregatedAtomic: boolean;
   sidebarManualWidth: number | null;
   isDraggingSidebar: boolean;
-  handleSidebarResizeStart: (e: React.MouseEvent) => void;
+  handleSidebarResizeStart: (e: React.MouseEvent) => void; // ✅ FASE 2.1: Now comes from sidebar composito hook
 
   // Content state
   showMessageReview: boolean;

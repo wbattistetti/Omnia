@@ -57,8 +57,7 @@ export interface UseResponseEditorResult {
   generalizationReason: ReturnType<typeof useResponseEditorCore>['generalizationReason'];
 
   // Handlers
-  sidebarHandlers: ReturnType<typeof useResponseEditorHandlers>['sidebarHandlers'];
-  handleSidebarResizeStart: ReturnType<typeof useResponseEditorHandlers>['handleSidebarResizeStart'];
+  sidebar: ReturnType<typeof useResponseEditorHandlers>['sidebar']; // ✅ FASE 2.1: Consolidated sidebar hook
   handleEditorClose: ReturnType<typeof useResponseEditorHandlers>['handleEditorClose'];
   contractDialogHandlers: ReturnType<typeof useResponseEditorHandlers>['contractDialogHandlers'];
   handleParserCreate: ReturnType<typeof useResponseEditorCore>['handleParserCreate'];
@@ -192,8 +191,7 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
   } = core;
 
   const {
-    sidebarHandlers,
-    handleSidebarResizeStart,
+    sidebar,
     handleEditorClose,
     contractDialogHandlers,
   } = handlers;
@@ -280,8 +278,7 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     iconColor,
     isGeneralizable,
     generalizationReason,
-    sidebarHandlers,
-    handleSidebarResizeStart,
+    sidebar, // ✅ FASE 2.1: Consolidated sidebar hook (replaces sidebarHandlers + handleSidebarResizeStart)
     handleEditorClose,
     contractDialogHandlers,
     handleParserCreate,

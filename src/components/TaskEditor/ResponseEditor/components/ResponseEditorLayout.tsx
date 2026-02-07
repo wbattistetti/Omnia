@@ -64,7 +64,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     handleSelectSub,
     handleSelectAggregator,
     sidebarRef,
-    sidebarHandlers,
+    sidebar, // ✅ FASE 2.1: Consolidated sidebar hook
     handleParserCreate,
     handleParserModify,
     handleEngineChipClick,
@@ -72,7 +72,6 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     isAggregatedAtomic,
     sidebarManualWidth,
     isDraggingSidebar,
-    handleSidebarResizeStart,
     showMessageReview,
     showSynonyms,
     selectedIntentIdForTraining,
@@ -170,14 +169,14 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
               handleSelectSub={handleSelectSub}
               handleSelectAggregator={handleSelectAggregator}
               sidebarRef={sidebarRef}
-              onChangeSubRequired={sidebarHandlers.onChangeSubRequired}
-              onReorderSub={sidebarHandlers.onReorderSub}
-              onAddMain={sidebarHandlers.onAddMain}
-              onRenameMain={sidebarHandlers.onRenameMain}
-              onDeleteMain={sidebarHandlers.onDeleteMain}
-              onAddSub={sidebarHandlers.onAddSub}
-              onRenameSub={sidebarHandlers.onRenameSub}
-              onDeleteSub={sidebarHandlers.onDeleteSub}
+              onChangeSubRequired={sidebar.onChangeSubRequired}
+              onReorderSub={sidebar.onReorderSub}
+              onAddMain={sidebar.onAddMain}
+              onRenameMain={sidebar.onRenameMain}
+              onDeleteMain={sidebar.onDeleteMain}
+              onAddSub={sidebar.onAddSub}
+              onRenameSub={sidebar.onRenameSub}
+              onDeleteSub={sidebar.onDeleteSub}
               handleParserCreate={handleParserCreate}
               handleParserModify={handleParserModify}
               handleEngineChipClick={handleEngineChipClick}
@@ -185,7 +184,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
               isAggregatedAtomic={isAggregatedAtomic}
               sidebarManualWidth={sidebarManualWidth}
               isDraggingSidebar={isDraggingSidebar}
-              handleSidebarResizeStart={handleSidebarResizeStart}
+              handleSidebarResizeStart={sidebar.handleSidebarResizeStart}
               showMessageReview={showMessageReview}
               showSynonyms={showSynonyms}
               selectedIntentIdForTraining={selectedIntentIdForTraining}

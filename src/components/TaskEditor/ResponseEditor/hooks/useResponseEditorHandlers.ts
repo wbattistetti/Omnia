@@ -11,8 +11,8 @@
  */
 
 import React from 'react';
-import { useSidebarHandlers } from '@responseEditor/hooks/useSidebarHandlers';
-import { useSidebarResize } from '@responseEditor/hooks/useSidebarResize';
+// ✅ FASE 2.1: Sidebar hooks consolidated into useSidebar composito
+import { useSidebar } from '@responseEditor/hooks/useSidebar';
 import { useResponseEditorClose } from '@responseEditor/hooks/useResponseEditorClose';
 import { useContractUpdateDialog } from '@responseEditor/hooks/useContractUpdateDialog';
 import { useResponseEditorSideEffects } from '@responseEditor/hooks/useResponseEditorSideEffects';
@@ -46,9 +46,8 @@ export interface UseResponseEditorHandlersParams {
 }
 
 export interface UseResponseEditorHandlersResult {
-  // Sidebar handlers
-  sidebarHandlers: ReturnType<typeof useSidebarHandlers>;
-  handleSidebarResizeStart: ReturnType<typeof useSidebarResize>;
+  // Sidebar (consolidated from useSidebarHandlers + useSidebarResize)
+  sidebar: ReturnType<typeof useSidebar>;
 
   // Editor close
   handleEditorClose: ReturnType<typeof useResponseEditorClose>;
@@ -136,18 +135,16 @@ export function useResponseEditorHandlers(params: UseResponseEditorHandlersParam
     toolbarButtons,
   } = initialization;
 
-  // Sidebar handlers
-  const sidebarHandlers = useSidebarHandlers({
-    taskTree,
-    replaceSelectedTaskTree: replaceSelectedTaskTreeFromInit,
-  });
-
-  // Sidebar resize
-  const handleSidebarResizeStart = useSidebarResize({
-    sidebarRef: sidebarRefFromSelection,
+  // ✅ FASE 2.1: Sidebar consolidated into single composito hook
+  const sidebar = useSidebar({
+    isDraggingSidebar,
+    setIsDraggingSidebar,
     sidebarStartWidthRef,
     sidebarStartXRef,
-    setIsDraggingSidebar,
+    setSidebarManualWidth,
+    sidebarRef: sidebarRefFromSelection,
+    taskTree,
+    replaceSelectedTaskTree: replaceSelectedTaskTreeFromInit,
   });
 
   // Editor close
@@ -218,8 +215,7 @@ export function useResponseEditorHandlers(params: UseResponseEditorHandlersParam
   });
 
   return {
-    sidebarHandlers,
-    handleSidebarResizeStart,
+    sidebar,
     handleEditorClose,
     contractDialogHandlers,
   };

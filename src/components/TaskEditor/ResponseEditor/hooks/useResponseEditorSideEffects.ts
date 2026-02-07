@@ -24,8 +24,9 @@ import { usePendingEditorClear } from './usePendingEditorClear';
 import { useTemplateSync } from './useTemplateSync';
 import { useDebugFlags } from './useDebugFlags';
 import { useProjectSave } from './useProjectSave';
-import { useSidebarCleanup } from './useSidebarCleanup';
-import { useSidebarDrag } from './useSidebarDrag';
+// ✅ FASE 2.1: Sidebar hooks consolidated into useSidebar composito
+// import { useSidebarCleanup } from './useSidebarCleanup'; // Consolidated
+// import { useSidebarDrag } from './useSidebarDrag'; // Consolidated
 import { useEditorCloseRegistration } from './useEditorCloseRegistration';
 import { useSplitterDrag } from './useSplitterDrag';
 import { useToolbarSync } from './useToolbarSync';
@@ -142,8 +143,9 @@ export function useResponseEditorSideEffects(props: UseResponseEditorSideEffects
   useTemplateSync({ task, taskTree, currentProjectId, prevInstanceRef, replaceSelectedTaskTree });
   useDebugFlags();
   useProjectSave({ task, currentProjectId });
-  useSidebarCleanup();
-  useSidebarDrag({ isDraggingSidebar, sidebarStartWidthRef, sidebarStartXRef, setSidebarManualWidth, setIsDraggingSidebar });
+  // ✅ FASE 2.1: Sidebar functionality now handled by useSidebar composito in useResponseEditorHandlers
+  // useSidebarCleanup(); // Consolidated into useSidebar
+  // useSidebarDrag({ isDraggingSidebar, sidebarStartWidthRef, sidebarStartXRef, setSidebarManualWidth, setIsDraggingSidebar }); // Consolidated into useSidebar
   useEditorCloseRegistration({ handleEditorClose, registerOnClose });
   useSplitterDrag({ draggingPanel, setDraggingPanel, rightWidth, setRightWidth, testPanelWidth, setTestPanelWidth, tasksPanelWidth, setTasksPanelWidth, tasksPanelMode, testPanelMode, tasksStartWidthRef, tasksStartXRef });
   useToolbarSync({ hideHeader, onToolbarUpdate, toolbarButtons });

@@ -3,16 +3,16 @@ import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 import EditorPanel, { type CustomLanguage } from '@components/CodeEditor/EditorPanel';
 import EditorHeader from '@responseEditor/InlineEditors/shared/EditorHeader';
 import { useEditorMode } from '@responseEditor/hooks/useEditorMode';
-import { useRegexValidation } from '@responseEditor/hooks/useRegexValidation';
+// ✅ FASE 2.2: Consolidated useRegexState + useRegexValidation into useRegex
+import { useRegex } from '@responseEditor/hooks/useRegex';
 import { useRegexButtonMode } from '@responseEditor/hooks/useRegexButtonMode';
 import { usePlaceholderSelection } from '@responseEditor/hooks/usePlaceholderSelection';
-import { useRegexAIGeneration } from '@responseEditor/hooks/useRegexAIGeneration';
+import { useRegexAIGeneration } from '@responseEditor/hooks/useRegexAIGeneration'; // ✅ Remains separate (distinct feature)
 import { NLPProfile } from '@responseEditor/DataExtractionEditor';
 import { getIsTesting } from '@responseEditor/testingState';
 import { useNotesStore } from '@responseEditor/features/step-management/stores/notesStore';
 import { generateBaseRegexWithNamedGroups, generateBaseRegexSimple } from '@responseEditor/utils/regexGroupUtils';
 import type { TaskTreeNode } from '@types/taskTypes';
-import { useRegexState } from '@responseEditor/hooks/useRegexState';
 
 import { RowResult } from '@responseEditor/hooks/useExtractionTesting';
 
@@ -56,16 +56,23 @@ export default function RegexInlineEditor({
   // ✅ Use Zustand store for notes
   const getNote = useNotesStore((s) => s.getNote);
 
-  // ✅ Simple state management: baselineRegex, currentText, dirty flag
+  // ✅ FASE 2.2: Consolidated regex state and validation
   const {
     baselineRegex,
     currentText,
     isDirty,
     updateBaseline,
     updateCurrentText,
-  } = useRegexState({
+    validationResult,
+    shouldShowValidation,
+    setShouldShowValidation,
+  } = useRegex({
     initialRegex: regex || '',
     examplesList,
+    node,
+    shouldValidateOnChange: true,
+    shouldValidateOnAIFinish: true,
+    generatingRegex,
   });
 
   // Debounce timer for profile updates to avoid too many calls
@@ -242,19 +249,8 @@ export default function RegexInlineEditor({
     };
   }, [currentText]);
 
-  // ✅ Regex validation hook (validates on manual changes AND when AI finishes)
-  // ✅ Use debounced value to prevent flickering
-  const {
-    validationResult,
-    shouldShowValidation,
-    setShouldShowValidation,
-  } = useRegexValidation({
-    regex: debouncedRegex,
-    node,
-    shouldValidateOnChange: true, // ✅ NEW: Validate also on manual changes
-    shouldValidateOnAIFinish: true,
-    generatingRegex, // ✅ Now correctly passed from useRegexAIGeneration
-  });
+  // ✅ FASE 2.2: Validation now included in useRegex composito hook (above)
+  // Removed separate useRegexValidation call - validation is handled by useRegex
 
   // ✅ Simple button mode: one button with dynamic caption
   const {
