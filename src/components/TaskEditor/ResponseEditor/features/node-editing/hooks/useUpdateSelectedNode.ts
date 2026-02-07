@@ -2,10 +2,10 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useCallback } from 'react';
-import { getIsTesting } from '../../../../testingState';
-import { applyNodeUpdate, updateDockTreeWithTaskTree, saveTaskAsync } from './applyNodeUpdate';
-import { useTaskTreeStore } from '../../../../core/state';
-import type { Task, TaskTree } from '../../../../../../../types/taskTypes';
+import { getIsTesting } from '../../../testingState';
+import { applyNodeUpdate, updateDockTreeWithTaskTree, saveTaskAsync } from '../core/applyNodeUpdate';
+import { useTaskTreeStore } from '../../../core/state';
+import type { Task, TaskTree } from '../../../../../../types/taskTypes';
 
 export interface UseUpdateSelectedNodeParams {
   selectedNodePath: {

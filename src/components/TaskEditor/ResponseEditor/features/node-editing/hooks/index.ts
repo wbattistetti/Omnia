@@ -11,6 +11,8 @@
 export { useNodeSelection } from './useNodeSelection';
 export { useNodeLoading } from './useNodeLoading';
 export { useNodeFinder } from './useNodeFinder';
+export { useUpdateSelectedNode } from './useUpdateSelectedNode';
 
 export type { UseNodeLoadingParams } from './useNodeLoading';
 export type { UseNodeFinderParams } from './useNodeFinder';
+export type { UseUpdateSelectedNodeParams } from './useUpdateSelectedNode';

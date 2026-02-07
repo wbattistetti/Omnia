@@ -26,7 +26,7 @@ import { useResponseEditorInitialization } from './useResponseEditorInitializati
 import { usePanelModes } from './usePanelModes';
 import { usePanelWidths } from './usePanelWidths';
 import { useParserHandlers, useProfileUpdate } from '../features/step-management/hooks';
-import { useUpdateSelectedNode } from '../modules/ResponseEditor/core/node/useUpdateSelectedNode';
+import { useUpdateSelectedNode } from '../features/node-editing/hooks/useUpdateSelectedNode';
 import { useIntentMessagesHandler } from './useIntentMessagesHandler';
 import { useGeneralizabilityCheck } from './useGeneralizabilityCheck';
 import { getTaskMeta, getStepsForNode, getStepsAsArray } from '../utils/responseEditorUtils';

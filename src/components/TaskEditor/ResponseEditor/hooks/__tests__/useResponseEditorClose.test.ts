@@ -37,7 +37,7 @@ vi.mock('../../../../../dock/ops', () => ({
   closeTab: vi.fn(),
 }));
 
-import { saveTaskOnEditorClose, saveTaskToRepository } from '../../modules/ResponseEditor/persistence/ResponseEditorPersistence';
+import { saveTaskOnEditorClose, saveTaskToRepository } from '../../features/persistence/ResponseEditorPersistence';
 import { getdataList } from '../../ddtSelectors';
 import DialogueTaskService from '../../../../../services/DialogueTaskService';
 import { closeTab } from '../../../../../dock/ops';

@@ -2,7 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useEffect } from 'react';
-import { saveTaskOnProjectSave } from '../modules/ResponseEditor/persistence/ResponseEditorPersistence';
+import { saveTaskOnProjectSave } from '../features/persistence/ResponseEditorPersistence';
 import { useTaskTreeFromStore } from '../core/state';
 import type { Task, TaskTree } from '../../../../types/taskTypes';
 
