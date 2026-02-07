@@ -29,7 +29,9 @@
       "@context/*": ["context/*"],
       "@hooks/*": ["hooks/*"],
       "@dock/*": ["dock/*"],
-      "@components/*": ["components/*"]
+      "@components/*": ["components/*"],
+      "@taskEditor/*": ["components/TaskEditor/*"],
+      "@responseEditor/*": ["components/TaskEditor/ResponseEditor/*"]
     }
   },
   "include": ["src"]

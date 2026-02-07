@@ -2,13 +2,13 @@ import React from 'react';
 import TesterGridPhraseColumn from './TesterGridPhraseColumn';
 import TesterGridActionsColumn from './TesterGridActionsColumn';
 import ExtractionResultCell from './ExtractionResultCell';
-import NoteButton from '../../CellNote/NoteButton';
-import NoteEditor from '../../CellNote/NoteEditor';
-import NoteDisplay from '../../CellNote/NoteDisplay';
-import NoteSeparator from '../../CellNote/NoteSeparator';
-import { RowResult } from '../../hooks/useExtractionTesting';
-import type { DataContract } from '../../../DialogueDataEngine/contracts/contractLoader';
-import { useNotesStore, getCellKeyFromPhrase } from '../../stores/notesStore';
+import NoteButton from '@responseEditor/CellNote/NoteButton';
+import NoteEditor from '@responseEditor/CellNote/NoteEditor';
+import NoteDisplay from '@responseEditor/CellNote/NoteDisplay';
+import NoteSeparator from '@responseEditor/CellNote/NoteSeparator';
+import { RowResult } from '@responseEditor/hooks/useExtractionTesting';
+import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
+import { useNotesStore, getCellKeyFromPhrase } from '@responseEditor/stores/notesStore';
 
 interface TesterGridRowProps {
   rowIndex: number;

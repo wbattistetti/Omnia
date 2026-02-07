@@ -3,7 +3,7 @@ import { MessageCircle } from 'lucide-react';
 import KindSelector from './Config/KindSelector';
 import ConfidenceInput from './Config/ConfidenceInput';
 import WaitingMessagesConfig from './Config/WaitingMessagesConfig';
-import TesterGrid from './TesterGrid';
+import TesterGrid from './features/step-management/components/TesterGrid';
 import { RowResult } from './hooks/useExtractionTesting';
 import { loadContractFromNode } from './ContractSelector/contractHelpers';
 import type { DataContract } from '../../DialogueDataEngine/contracts/contractLoader';

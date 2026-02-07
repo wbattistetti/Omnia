@@ -1,10 +1,12 @@
 import React from 'react';
 import { Plus } from 'lucide-react';
-import { stepMeta, hasEscalationCard } from './ddtUtils';
-import { updateStepEscalations } from './utils/stepHelpers';
-import { EscalationCard } from './components/EscalationCard/EscalationCard';
-import { useEscalationUpdate } from './hooks/useEscalationUpdate';
-import { getEscalationName } from './utils/escalationHelpers';
+import { stepMeta, hasEscalationCard } from '../../../ddtUtils';
+import { updateStepEscalations } from '../../../utils/stepHelpers';
+import { EscalationCard } from '../../../components/EscalationCard/EscalationCard';
+import { useEscalationUpdate } from '../../../hooks/useEscalationUpdate';
+import { getEscalationName } from '../../../utils/escalationHelpers';
+
+// Force Vite cache refresh
 
 type Props = {
   escalations: any[];

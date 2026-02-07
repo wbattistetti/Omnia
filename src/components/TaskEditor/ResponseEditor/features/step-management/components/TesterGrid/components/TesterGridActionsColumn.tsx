@@ -1,7 +1,7 @@
 import React from 'react';
 import { flushSync } from 'react-dom';
 import { Plus, ChevronsRight, BarChart2, Play } from 'lucide-react';
-import * as testingState from '../../testingState';
+import * as testingState from '@responseEditor/testingState';
 
 interface TesterGridActionsColumnProps {
   rowIndex: number;

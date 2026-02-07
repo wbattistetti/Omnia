@@ -3,12 +3,12 @@ import { Eye, EyeOff } from 'lucide-react';
 import { renderTimeBar } from '../helpers/renderTimeBar';
 import { parseSummaryToGroups } from '../helpers/parseSummaryToGroups';
 import GroupDetailsExpander from './GroupDetailsExpander';
-import NoteButton from '../../CellNote/NoteButton';
-import NoteEditor from '../../CellNote/NoteEditor';
-import NoteDisplay from '../../CellNote/NoteDisplay';
-import NoteSeparator from '../../CellNote/NoteSeparator';
-import { useNotesStore, getCellKeyFromPhrase } from '../../stores/notesStore';
-import { useCellOverridesStore } from '../../stores/cellOverridesStore';
+import NoteButton from '@responseEditor/CellNote/NoteButton';
+import NoteEditor from '@responseEditor/CellNote/NoteEditor';
+import NoteDisplay from '@responseEditor/CellNote/NoteDisplay';
+import NoteSeparator from '@responseEditor/CellNote/NoteSeparator';
+import { useNotesStore, getCellKeyFromPhrase } from '@responseEditor/stores/notesStore';
+import { useCellOverridesStore } from '@responseEditor/stores/cellOverridesStore';
 
 interface ExtractionResultCellProps {
   summary: string | undefined;

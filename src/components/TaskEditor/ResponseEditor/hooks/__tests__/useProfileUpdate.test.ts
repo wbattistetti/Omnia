@@ -3,7 +3,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useProfileUpdate } from '../useProfileUpdate';
+import { useProfileUpdate } from '../../features/step-management/hooks/useProfileUpdate';
 
 /**
  * Tests for useProfileUpdate

@@ -9,8 +9,7 @@ import type { Task, TaskTree } from '../../../../types/taskTypes';
 export interface UseTemplateSyncParams {
   task?: Task | null;
   taskTree?: TaskTree | null;
-  // ✅ FASE 2.3: taskTreeRef opzionale per backward compatibility temporanea
-  taskTreeRef?: React.MutableRefObject<TaskTree | null | undefined>;
+  // ✅ FASE 3: taskTreeRef rimosso - store è single source of truth
   currentProjectId: string | null;
   prevInstanceRef: React.MutableRefObject<string | undefined>;
   replaceSelectedTaskTree: (taskTree: TaskTree) => void;
@@ -23,7 +22,6 @@ export function useTemplateSync(params: UseTemplateSyncParams) {
   const {
     task,
     taskTree,
-    taskTreeRef,
     currentProjectId,
     prevInstanceRef,
     replaceSelectedTaskTree,

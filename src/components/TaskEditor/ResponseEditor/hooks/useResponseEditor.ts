@@ -217,6 +217,11 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     replaceSelectedTaskTree: replaceSelectedTaskTreeFromInit,
   } = initialization;
 
+  // Safety check: ensure replaceSelectedTaskTreeFromInit is defined
+  if (!replaceSelectedTaskTreeFromInit) {
+    console.error('[useResponseEditor] replaceSelectedTaskTree is undefined from initialization', { initialization });
+  }
+
   const {
     rightWidth,
     setRightWidth,

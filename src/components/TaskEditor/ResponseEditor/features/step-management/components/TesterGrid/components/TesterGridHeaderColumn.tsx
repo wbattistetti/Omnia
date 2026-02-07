@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Wand2, TypeIcon, Plus, X } from 'lucide-react';
-import SmartTooltip from '../../../../SmartTooltip';
+import SmartTooltip from '../../../../../../../SmartTooltip';
 import { getEditorTypeFromContractType } from '../helpers/contractTypeMapper';
 
 interface TesterGridHeaderColumnProps {

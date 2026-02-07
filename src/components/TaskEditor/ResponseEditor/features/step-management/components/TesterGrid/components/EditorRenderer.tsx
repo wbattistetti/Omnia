@@ -1,11 +1,11 @@
 import React from 'react';
-import RegexInlineEditor from '../../InlineEditors/RegexInlineEditor';
-import ExtractorInlineEditor from '../../InlineEditors/ExtractorInlineEditor';
-import NERInlineEditor from '../../InlineEditors/NERInlineEditor';
-import LLMInlineEditor from '../../InlineEditors/LLMInlineEditor';
-import IntentEditorInlineEditor from '../../InlineEditors/IntentEditorInlineEditor';
+import RegexInlineEditor from '@responseEditor/InlineEditors/RegexInlineEditor';
+import ExtractorInlineEditor from '@responseEditor/InlineEditors/ExtractorInlineEditor';
+import NERInlineEditor from '@responseEditor/InlineEditors/NERInlineEditor';
+import LLMInlineEditor from '@responseEditor/InlineEditors/LLMInlineEditor';
+import IntentEditorInlineEditor from '@responseEditor/InlineEditors/IntentEditorInlineEditor';
 
-import { RowResult } from '../../hooks/useExtractionTesting';
+import { RowResult } from '@responseEditor/hooks/useExtractionTesting';
 
 interface EditorRendererProps {
   activeEditor: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings' | null;

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { NLPProfile } from '../DataExtractionEditor';
-import { getIsTesting } from '../testingState';
+import { NLPProfile } from '../../../DataExtractionEditor';
+import { getIsTesting } from '../../../testingState';
 
 // Helper functions
 function toCommaList(list?: string[] | null): string {

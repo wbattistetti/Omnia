@@ -25,7 +25,6 @@ export interface ResponseEditorContentProps {
   // Data
   task: Task | null | undefined;
   taskTree: TaskTree | null | undefined;
-  taskTreeRef: React.MutableRefObject<TaskTree | null | undefined>;
 
   // ContractWizard handlers
   handleContractWizardClose: () => void;
@@ -47,7 +46,6 @@ export function ResponseEditorContent({
   needsIntentMessages,
   task,
   taskTree,
-  taskTreeRef,
   handleContractWizardClose,
   handleContractWizardNodeUpdate,
   handleContractWizardComplete,

@@ -37,8 +37,7 @@ interface UseResponseEditorSideEffectsProps {
   // Task and tree
   task?: Task | null;
   taskTree?: TaskTree | null;
-  // ✅ FASE 2.3: taskTreeRef opzionale per backward compatibility temporanea
-  taskTreeRef?: React.MutableRefObject<TaskTree | null | undefined>;
+  // ✅ FASE 3: taskTreeRef rimosso - store è single source of truth
   currentProjectId: string | null;
   setTaskTreeVersion: React.Dispatch<React.SetStateAction<number>>;
   prevInstanceRef: React.MutableRefObject<string | undefined>;
@@ -104,7 +103,6 @@ export function useResponseEditorSideEffects(props: UseResponseEditorSideEffects
   const {
     task,
     taskTree,
-    taskTreeRef,
     currentProjectId,
     setTaskTreeVersion,
     prevInstanceRef,

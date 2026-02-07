@@ -13,25 +13,22 @@ export interface UseUpdateSelectedNodeParams {
     subIndex?: number;
   } | null;
   selectedRoot: boolean;
-  // ✅ FASE 2.3: Parametri opzionali per backward compatibility temporanea
-  taskTreeRef?: React.MutableRefObject<TaskTree | null | undefined>;
-  taskTree?: TaskTree | null | undefined;
+  // ✅ FASE 3: Parametri opzionali rimossi - store è single source of truth
   task?: Task | null | undefined;
   currentProjectId: string | null;
   tabId?: string;
   setDockTree?: (updater: (prev: any) => any) => void;
   setSelectedNode: React.Dispatch<React.SetStateAction<any>>;
-  setTaskTreeVersion?: React.Dispatch<React.SetStateAction<number>>; // Opzionale - useremo incrementVersion dello store
-  taskTreeVersion?: number; // Opzionale - useremo quello dello store
+  setTaskTreeVersion?: React.Dispatch<React.SetStateAction<number>>; // Opzionale - per backward compatibility
 }
 
 /**
  * Hook that provides the updateSelectedNode callback.
  *
- * ✅ FASE 2.3: Migrato a usare solo Zustand store (single source of truth)
+ * ✅ FASE 3: Completamente migrato a Zustand store (single source of truth)
  * - Usa taskTreeFromStore come unica fonte
  * - Aggiorna solo lo store (non taskTreeRef)
- * - Rimossi fallback a taskTreeRef e taskTree prop
+ * - Rimossi completamente taskTreeRef e taskTree prop
  */
 export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
   const {

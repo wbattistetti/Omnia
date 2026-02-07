@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import StepsStrip from './StepsStrip';
-import StepEditor from './StepEditor';
+import StepEditor from './features/step-management/components/StepEditor';
 import { getNodeSteps } from './ddtSelectors';
 import { stepMeta } from './ddtUtils';
 

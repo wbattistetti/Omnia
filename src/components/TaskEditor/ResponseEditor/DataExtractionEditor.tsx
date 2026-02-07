@@ -10,7 +10,7 @@ import { Calendar, Mail, Phone, Hash, Globe, MapPin, User, FileText, CreditCard,
 // 🎯 Custom Hooks
 import { useNotes } from './hooks/useNotes';
 import { useEditorState } from './hooks/useEditorState';
-import { useProfileState } from './hooks/useProfileState';
+import { useProfileState } from './features/step-management/hooks/useProfileState';
 import { useExtractionTesting } from './hooks/useExtractionTesting';
 import { useCellOverridesStore } from './stores/cellOverridesStore';
 
@@ -27,8 +27,8 @@ import NoteSeparator from './CellNote/NoteSeparator';
 import IntentEditorInlineEditor from './InlineEditors/IntentEditorInlineEditor';
 
 // 📊 Tester Components
-import TesterGrid from './TesterGrid';
-import TesterControls from './TesterControls';
+import TesterGrid from './features/step-management/components/TesterGrid';
+import TesterControls from './features/step-management/components/TesterControls';
 
 
 // 🔧 Utilities

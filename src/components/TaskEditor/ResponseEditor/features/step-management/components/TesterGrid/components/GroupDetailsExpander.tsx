@@ -1,6 +1,6 @@
 import React from 'react';
 import { parseSummaryToGroups } from '../helpers/parseSummaryToGroups';
-import { useCellOverridesStore } from '../../stores/cellOverridesStore';
+import { useCellOverridesStore } from '@responseEditor/stores/cellOverridesStore';
 
 interface GroupDetailsExpanderProps {
   summary: string | undefined;

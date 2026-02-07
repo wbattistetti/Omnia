@@ -7,11 +7,7 @@ import { useTaskTreeFromStore, useTaskTreeVersion } from '../core/state';
 import type { TaskTree } from '../../../../types/taskTypes';
 
 export interface UseTaskTreeDerivedParams {
-  // ✅ FASE 2.3: Parametri opzionali per backward compatibility temporanea
-  // Verranno rimossi completamente dopo migrazione di tutti gli hook
-  taskTree?: TaskTree | null | undefined;
-  taskTreeRef?: React.MutableRefObject<TaskTree | null | undefined>;
-  taskTreeVersion?: number; // Opzionale - useremo quello dello store
+  // ✅ FASE 3: Parametri opzionali rimossi - store è single source of truth
   isTaskTreeLoading?: boolean;
 }
 
@@ -24,10 +20,10 @@ export interface UseTaskTreeDerivedResult {
 /**
  * Hook that provides derived values from TaskTree (mainList, isAggregatedAtomic, introduction).
  *
- * ✅ FASE 2.3: Migrato a usare solo Zustand store (single source of truth)
+ * ✅ FASE 3: Completamente migrato a Zustand store (single source of truth)
  * - Usa taskTreeFromStore come unica fonte
  * - Usa taskTreeVersion dallo store
- * - Rimossi fallback a taskTreeRef e taskTree prop
+ * - Rimossi completamente taskTreeRef e taskTree prop
  */
 export function useTaskTreeDerived(params: UseTaskTreeDerivedParams = {}): UseTaskTreeDerivedResult {
   const {
