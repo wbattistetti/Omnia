@@ -2,7 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useMemo } from 'react';
-import { getdataList } from '../ddtSelectors';
+import { getMainNodes } from '../core/domain';
 import { useTaskTreeFromStore, useTaskTreeVersion } from '../core/state';
 import type { TaskTree } from '../../../../types/taskTypes';
 
@@ -42,8 +42,8 @@ export function useTaskTreeDerived(params: UseTaskTreeDerivedParams = {}): UseTa
   // ✅ CRITICAL: Don't include taskTreeFromStore in deps - it changes reference on every store update
   // Use taskTreeVersion as the only trigger (stable, increments only when needed)
   const mainList = useMemo(() => {
-    // ✅ FASE 2.3: Usa solo store - no fallback chain
-    const list = getdataList(taskTreeFromStore);
+    // ✅ FASE 3: Usa solo store - no fallback chain
+    const list = getMainNodes(taskTreeFromStore);
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskTreeVersion, stableIsTaskTreeLoading]); // ✅ taskTreeVersion ONLY - primary trigger

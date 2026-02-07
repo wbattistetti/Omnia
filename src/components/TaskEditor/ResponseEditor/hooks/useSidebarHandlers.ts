@@ -6,7 +6,7 @@
  */
 
 import { useCallback } from 'react';
-import { getdataList, getSubDataList } from '../ddtSelectors';
+import { getMainNodes, getSubNodes } from '../core/domain';
 import type { TaskTree } from '../../../../types/taskTypes';
 
 export interface UseSidebarHandlersProps {
@@ -35,7 +35,7 @@ export function useSidebarHandlers({
   const onChangeSubRequired = useCallback((mIdx: number, sIdx: number, required: boolean) => {
     if (!taskTree) return;
     const next = JSON.parse(JSON.stringify(taskTree));
-    const mains = getdataList(next);
+    const mains = getMainNodes(next);
     const main = mains[mIdx];
     if (!main) return;
     const subList = Array.isArray(main.subTasks) ? main.subTasks : [];
@@ -45,7 +45,7 @@ export function useSidebarHandlers({
     mains[mIdx] = main;
     next.nodes = mains;
     try {
-      const subs = getSubDataList(main) || [];
+      const subs = getSubNodes(main) || [];
       const target = subs[sIdx];
       if (localStorage.getItem('debug.responseEditor') === '1') {
         console.log('[DDT][subRequiredToggle][persist]', { main: main?.label, label: target?.label, required });
@@ -57,7 +57,7 @@ export function useSidebarHandlers({
   const onReorderSub = useCallback((mIdx: number, fromIdx: number, toIdx: number) => {
     if (!taskTree) return;
     const next = JSON.parse(JSON.stringify(taskTree));
-    const mains = getdataList(next);
+    const mains = getMainNodes(next);
     const main = mains[mIdx];
     if (!main) return;
     const subList = Array.isArray(main.subTasks) ? main.subTasks : [];
@@ -78,7 +78,7 @@ export function useSidebarHandlers({
   const onAddMain = useCallback((label: string) => {
     if (!taskTree) return;
     const next = JSON.parse(JSON.stringify(taskTree));
-    const mains = getdataList(next);
+    const mains = getMainNodes(next);
     mains.push({ label, subTasks: [] });
     next.nodes = mains;
     try { replaceSelectedTaskTree(next); } catch { }
@@ -87,7 +87,7 @@ export function useSidebarHandlers({
   const onRenameMain = useCallback((mIdx: number, label: string) => {
     if (!taskTree) return;
     const next = JSON.parse(JSON.stringify(taskTree));
-    const mains = getdataList(next);
+    const mains = getMainNodes(next);
     if (!mains[mIdx]) return;
     mains[mIdx].label = label;
     next.nodes = mains;
@@ -97,7 +97,7 @@ export function useSidebarHandlers({
   const onDeleteMain = useCallback((mIdx: number) => {
     if (!taskTree) return;
     const next = JSON.parse(JSON.stringify(taskTree));
-    const mains = getdataList(next);
+    const mains = getMainNodes(next);
     if (mIdx < 0 || mIdx >= mains.length) return;
     mains.splice(mIdx, 1);
     next.nodes = mains;
@@ -107,7 +107,7 @@ export function useSidebarHandlers({
   const onAddSub = useCallback((mIdx: number, label: string) => {
     if (!taskTree) return;
     const next = JSON.parse(JSON.stringify(taskTree));
-    const mains = getdataList(next);
+    const mains = getMainNodes(next);
     const main = mains[mIdx];
     if (!main) return;
     const list = Array.isArray(main.subTasks) ? main.subTasks : [];
@@ -121,7 +121,7 @@ export function useSidebarHandlers({
   const onRenameSub = useCallback((mIdx: number, sIdx: number, label: string) => {
     if (!taskTree) return;
     const next = JSON.parse(JSON.stringify(taskTree));
-    const mains = getdataList(next);
+    const mains = getMainNodes(next);
     const main = mains[mIdx];
     if (!main) return;
     const list = Array.isArray(main.subTasks) ? main.subTasks : [];
@@ -136,7 +136,7 @@ export function useSidebarHandlers({
   const onDeleteSub = useCallback((mIdx: number, sIdx: number) => {
     if (!taskTree) return;
     const next = JSON.parse(JSON.stringify(taskTree));
-    const mains = getdataList(next);
+    const mains = getMainNodes(next);
     const main = mains[mIdx];
     if (!main) return;
     const list = Array.isArray(main.subTasks) ? main.subTasks : [];

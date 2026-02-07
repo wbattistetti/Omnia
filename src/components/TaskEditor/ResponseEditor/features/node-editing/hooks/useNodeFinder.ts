@@ -2,7 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useCallback } from 'react';
-import { getdataList, getSubDataList } from '../../../ddtSelectors';
+import { getMainNodes, getSubNodes } from '../../../core/domain';
 import { useTaskTreeFromStore } from '../../../core/state';
 import type { TaskTree } from '../../../../types/taskTypes';
 
@@ -26,9 +26,9 @@ export function useNodeFinder(params: UseNodeFinderParams) {
   const taskTreeFromStore = useTaskTreeFromStore();
 
   const findAndSelectNodeById = useCallback((nodeId: string) => {
-    // ✅ FASE 2.3: Usa solo store - no fallback chain
+    // ✅ FASE 3: Usa solo store - no fallback chain
     const currentTaskTree = taskTreeFromStore;
-    const mains = getdataList(currentTaskTree);
+    const mains = getMainNodes(currentTaskTree);
     for (let mIdx = 0; mIdx < mains.length; mIdx++) {
       const main = mains[mIdx];
       const mainNodeId = main.id || main.templateId || main._id;
@@ -37,7 +37,7 @@ export function useNodeFinder(params: UseNodeFinderParams) {
         handleSelectSub(undefined);
         return;
       }
-      const subs = getSubDataList(main) || [];
+      const subs = getSubNodes(main) || [];
       for (let sIdx = 0; sIdx < subs.length; sIdx++) {
         const sub = subs[sIdx];
         const subNodeId = sub.id || sub.templateId || sub._id;

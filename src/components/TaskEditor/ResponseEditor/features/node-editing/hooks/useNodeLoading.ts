@@ -2,7 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useEffect } from 'react';
-import { getdataList, getSubDataList } from '../../../ddtSelectors';
+import { getMainNodes, getSubNodes } from '../../../core/domain';
 import { useTaskTreeFromStore, useTaskTreeVersion } from '../../../core/state';
 import type { Task, TaskTree } from '../../../../types/taskTypes';
 
@@ -55,9 +55,9 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
   const taskTreeVersion = useTaskTreeVersion();
 
   useEffect(() => {
-    // ✅ FASE 2.3: Usa solo store - no fallback chain
+    // ✅ FASE 3: Usa solo store - no fallback chain
     const currentTaskTree = taskTreeFromStore;
-    const currentMainList = getdataList(currentTaskTree);
+    const currentMainList = getMainNodes(currentTaskTree);
 
     if (currentMainList.length === 0) {
       return;
@@ -98,7 +98,7 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
       // Usa currentMainList invece di mainList per leggere sempre l'ultima versione
       const node = selectedSubIndex == null
         ? currentMainList[selectedMainIndex]
-        : getSubDataList(currentMainList[selectedMainIndex])?.[selectedSubIndex];
+        : getSubNodes(currentMainList[selectedMainIndex])?.[selectedSubIndex];
 
       if (node) {
         // CRITICAL: Usa node.templateId come chiave (non node.id)

@@ -11,7 +11,7 @@ import { TaskType } from '../../../../types/taskTypes';
 import { taskRepository } from '../../../../services/TaskRepository';
 import { getTemplateId } from '../../../../utils/taskHelpers';
 import { isTaskTreeEmpty, hasdataButNosteps } from '../../../../utils/ddt';
-import { getdataList } from '../ddtSelectors';
+import { getMainNodes } from '../core/domain';
 import { useTaskTreeFromStore } from '../core/state';
 import type { Task } from '../../../../types/taskTypes';
 import { findLocalTemplate } from './helpers/templateMatcher';
@@ -103,7 +103,7 @@ export function useWizardInference({
     // ========================================================================
 
     // Se kind === "intent" non mostrare wizard
-    const currentMainList = getdataList(currentTaskTree);
+    const currentMainList = getMainNodes(currentTaskTree);
     const firstMain = currentMainList[0];
     if (firstMain?.kind === 'intent') {
       setShowWizard(false);

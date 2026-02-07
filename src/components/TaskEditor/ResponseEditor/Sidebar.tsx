@@ -2,7 +2,7 @@ import React, { forwardRef } from 'react';
 import { createPortal } from 'react-dom';
 import * as ReactDOM from 'react-dom/client';
 import { Check, Plus, Pencil, Trash2 } from 'lucide-react';
-import { getLabel, getSubDataList } from './ddtSelectors';
+import { getNodeLabel, getSubNodes } from './core/domain';
 import getIconComponent from './icons';
 import styles from './ResponseEditor.module.css';
 import { useFontContext } from '../../../context/FontContext';
@@ -97,7 +97,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
     const flatList: Array<{ type: 'main' | 'sub'; mainIdx: number; subIdx?: number }> = [];
     mainList.forEach((main, mIdx) => {
       flatList.push({ type: 'main', mainIdx: mIdx });
-      const subs = getSubDataList(main) || [];
+      const subs = getSubNodes(main) || [];
       subs.forEach((_, sIdx) => {
         flatList.push({ type: 'sub', mainIdx: mIdx, subIdx: sIdx });
       });
@@ -196,8 +196,8 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
 
     // ✅ Calcola per tutti i main items e sub-items (IDENTICO al ghost container)
     mainList.forEach((main) => {
-      const label = getLabel(main, translations);
-      const subs = getSubDataList(main) || [];
+      const label = getNodeLabel(main, translations);
+      const subs = getSubNodes(main) || [];
       const hasSubs = subs.length > 0;
 
       // Main item width (stesso calcolo del ghost)
@@ -211,7 +211,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
 
       // ✅ Sub items (sempre considerati, anche se collassati - IDENTICO al ghost)
       subs.forEach((sub: any) => {
-        const subLabel = getLabel(sub, translations);
+        const subLabel = getNodeLabel(sub, translations);
         const subLabelWidth = measureTextWidth(subLabel, 400);
         let subWidth = SUB_INDENT + ICON_WIDTH + GAP + subLabelWidth;
         subWidth += CHECKBOX_WIDTH;
@@ -339,7 +339,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
             </button>
           )}
           {mainList.map((main, idx) => {
-            const subs = getSubDataList(main) || [];
+            const subs = getSubNodes(main) || [];
             const hasSubs = subs.length > 0;
             const MainIcon = getIconComponent(main?.icon || 'FileText');
             return (
@@ -349,7 +349,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                     <span style={{ width: 14, height: 14, marginRight: 6, display: 'inline-block', border: '1px solid #9ca3af', borderRadius: 3 }} />
                   )}
                   <span style={{ display: 'inline-flex', alignItems: 'center' }}>{MainIcon}</span>
-                  <span style={{ whiteSpace: 'nowrap' }}>{getLabel(main, translations)}</span>
+                  <span style={{ whiteSpace: 'nowrap' }}>{getNodeLabel(main, translations)}</span>
                   {hasSubs && (
                     <span style={{ marginLeft: 6, width: 10, height: 10, display: 'inline-block' }}>▼</span>
                   )}
@@ -361,7 +361,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                     <button key={sidx} style={{ ...itemStyle(false, true), marginLeft: 36 }}>
                       <span style={{ width: 14, height: 14, marginRight: 6, display: 'inline-block', border: '1px solid #9ca3af', borderRadius: 3 }} />
                       <span style={{ display: 'inline-flex', alignItems: 'center' }}>{SubIcon}</span>
-                      <span style={{ whiteSpace: 'nowrap' }}>{getLabel(sub, translations)}</span>
+                      <span style={{ whiteSpace: 'nowrap' }}>{getNodeLabel(sub, translations)}</span>
                     </button>
                   );
                 })}
@@ -625,7 +625,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
         const activeMain = selectedMainIndex === idx;
         const disabledMain = !isMainIncluded(idx);
         const Icon = getIconComponent(main?.icon || 'FileText');
-        const subs = getSubDataList(main) || [];
+        const subs = getSubNodes(main) || [];
         return (
           <div key={idx}>
             <button
@@ -660,7 +660,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                 </span>
               )}
               <span style={{ display: 'inline-flex', alignItems: 'center' }}>{Icon}</span>
-              <span style={{ whiteSpace: 'nowrap', flex: 1 }}>{getLabel(main, translations)}</span>
+              <span style={{ whiteSpace: 'nowrap', flex: 1 }}>{getNodeLabel(main, translations)}</span>
               {(subs.length > 0) && (
                 <span
                   role="button"
@@ -755,7 +755,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                         onDragStart={(e) => {
                           dragStateRef.current = { mainIdx: idx, fromIdx: sidx };
                           try { e.dataTransfer?.setData('text/plain', String(sidx)); e.dataTransfer.dropEffect = 'move'; e.dataTransfer.effectAllowed = 'move'; } catch {}
-                          try { if (localStorage.getItem('debug.sidebar')==='1') console.log('[DDT][sub.dragStart]', { main: getLabel(main, translations), from: sidx }); } catch {}
+                          try { if (localStorage.getItem('debug.sidebar')==='1') console.log('[DDT][sub.dragStart]', { main: getNodeLabel(main, translations), from: sidx }); } catch {}
                         }}
                         onDragEnter={(e) => {
                           // same-main only
@@ -774,7 +774,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                           if (st.mainIdx === idx && st.fromIdx !== null && typeof onReorderSub === 'function') {
                             if (st.fromIdx !== sidx) {
                               onReorderSub(idx, st.fromIdx, sidx);
-                              try { if (localStorage.getItem('debug.sidebar')==='1') console.log('[DDT][sub.drop]', { main: getLabel(main, translations), from: st.fromIdx, to: sidx }); } catch {}
+                              try { if (localStorage.getItem('debug.sidebar')==='1') console.log('[DDT][sub.drop]', { main: getNodeLabel(main, translations), from: st.fromIdx, to: sidx }); } catch {}
                             }
                           }
                           dragStateRef.current = { mainIdx: null, fromIdx: null };
@@ -816,7 +816,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                           )}
                         </span>
                         <span style={{ display: 'inline-flex', alignItems: 'center' }}>{SubIcon}</span>
-                        <span style={{ whiteSpace: 'nowrap', flex: 1 }}>{getLabel(sub, translations)}</span>
+                        <span style={{ whiteSpace: 'nowrap', flex: 1 }}>{getNodeLabel(sub, translations)}</span>
                         {/* ✅ Parser icon inline in button (right side) */}
                         <ParserStatusRow
                           node={sub}
@@ -925,7 +925,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
               <button title="Add sub-data" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number') { setAddingSubFor(overlay.mainIdx); setDraftLabel(''); setOverlay(null); } }}>
                 <Plus size={14} color="#e5e7eb" />
               </button>
-              <button title="Rename" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number') { setEditingMainIdx(overlay.mainIdx); setEditDraft(getLabel(mainList[overlay.mainIdx], translations)); setOverlay(null); } }}>
+              <button title="Rename" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number') { setEditingMainIdx(overlay.mainIdx); setEditDraft(getNodeLabel(mainList[overlay.mainIdx], translations)); setOverlay(null); } }}>
                 <Pencil size={14} color="#e5e7eb" />
               </button>
               <button title="Delete" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number' && onDeleteMain) { onDeleteMain(overlay.mainIdx); setOverlay(null); } }}>
@@ -935,7 +935,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
           )}
           {overlay.type === 'sub' && (
             <>
-              <button title="Rename sub" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number' && typeof overlay.subIdx === 'number') { setEditingSub({ mainIdx: overlay.mainIdx, subIdx: overlay.subIdx }); const sub = getSubDataList(mainList[overlay.mainIdx])[overlay.subIdx]; setEditDraft(getLabel(sub, translations)); setOverlay(null); } }}>
+              <button title="Rename sub" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number' && typeof overlay.subIdx === 'number') { setEditingSub({ mainIdx: overlay.mainIdx, subIdx: overlay.subIdx }); const sub = getSubNodes(mainList[overlay.mainIdx])[overlay.subIdx]; setEditDraft(getNodeLabel(sub, translations)); setOverlay(null); } }}>
                 <Pencil size={12} color="#e5e7eb" />
               </button>
               <button title="Delete sub" style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => { if (typeof overlay.mainIdx === 'number' && typeof overlay.subIdx === 'number' && onDeleteSub) { onDeleteSub(overlay.mainIdx, overlay.subIdx); setOverlay(null); } }}>

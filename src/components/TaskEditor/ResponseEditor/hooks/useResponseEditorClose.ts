@@ -3,7 +3,7 @@
 
 import { useCallback } from 'react';
 import { saveTaskToRepository, saveTaskOnEditorClose } from '../modules/ResponseEditor/persistence/ResponseEditorPersistence';
-import { getdataList } from '../ddtSelectors';
+import { getMainNodes } from '../core/domain';
 import DialogueTaskService from '../../../../services/DialogueTaskService';
 import { closeTab } from '../../../../dock/ops';
 import { useTaskTreeStore, useTaskTreeFromStore } from '../core/state';
@@ -146,9 +146,9 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
 
     // ✅ FASE 2.3: Salva selectedNode corrente nello store prima di chiudere (se non già salvato)
     if (selectedNode && selectedNodePath) {
-      // ✅ FASE 2.3: Usa store invece di taskTreeRef
+      // ✅ FASE 3: Usa store invece di taskTreeRef
       const currentTaskTree = taskTreeFromStore;
-      const mains = getdataList(currentTaskTree);
+      const mains = getMainNodes(currentTaskTree);
       const { mainIndex, subIndex } = selectedNodePath;
       const isRoot = selectedRoot || false;
 
@@ -216,9 +216,9 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
       }
     }
 
-    // ✅ FASE 2.3: Usa store (già contiene tutte le modifiche)
+    // ✅ FASE 3: Usa store (già contiene tutte le modifiche)
     const finalTaskTree = taskTreeFromStore || { label: '', nodes: [], steps: {} };
-    const finalMainList = getdataList(finalTaskTree);
+    const finalMainList = getMainNodes(finalTaskTree);
     const firstNode = finalMainList?.[0];
     const firstNodeRegex = firstNode?.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
     const firstNodeNlpProfileExamples = firstNode?.nlpProfile?.examples;

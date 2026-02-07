@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import StepsStrip from './StepsStrip';
 import StepEditor from './features/step-management/components/StepEditor';
-import { getNodeSteps } from './ddtSelectors';
+import { getNodeStepKeys } from './core/domain';
 import { stepMeta } from './ddtUtils';
 
 interface BehaviourEditorProps {
@@ -24,7 +24,7 @@ export default function BehaviourEditor({
     if (selectedRoot) {
       return ['introduction'];
     }
-    const steps = node ? getNodeSteps(node) : [];
+    const steps = node ? getNodeStepKeys(node) : [];
     return steps;
   }, [node, selectedRoot, selectedSubIndex]);
 
