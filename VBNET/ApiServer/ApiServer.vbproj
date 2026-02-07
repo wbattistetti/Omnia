@@ -23,6 +23,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- FASE 1: Structured Logging + Interfacce (DEVE essere prima per ordine di compilazione) -->
+    <Compile Include="Interfaces\ILogger.vb" />
+    <Compile Include="Interfaces\ISessionStorage.vb" />
+    <Compile Include="Logging\StdoutLogger.vb" />
+    <Compile Include="SessionStorage\InMemorySessionStorage.vb" />
+    <!-- Fine FASE 1 -->
     <Compile Include="Commands\CompileFlowCommand.vb" />
     <Compile Include="Commands\CompileDDTCommand.vb" />
     <Compile Include="Commands\RunDDTCommand.vb" />

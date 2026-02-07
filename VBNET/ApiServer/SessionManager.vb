@@ -2,6 +2,8 @@ Option Strict On
 Option Explicit On
 Imports Compiler
 Imports TaskEngine
+Imports ApiServer.Interfaces
+Imports ApiServer.SessionStorage
 
 ''' <summary>
 ''' Orchestrator Session: contiene tutto lo stato di una sessione di esecuzione
@@ -95,9 +97,22 @@ End Class
 ''' SessionManager: gestisce tutte le sessioni attive
 ''' </summary>
 Public Class SessionManager
+    ' ✅ FASE 1: Aggiunto supporto per ISessionStorage (backward compatible)
+    Private Shared _storage As ApiServer.Interfaces.ISessionStorage = New ApiServer.SessionStorage.InMemorySessionStorage()
+    Private Shared ReadOnly _lock As New Object
+
+    ' ⚠️ MANTENUTO per backward compatibility (verrà rimosso in futuro)
     Private Shared ReadOnly _sessions As New Dictionary(Of String, OrchestratorSession)
     Private Shared ReadOnly _taskSessions As New Dictionary(Of String, TaskSession)
-    Private Shared ReadOnly _lock As New Object
+
+    ''' <summary>
+    ''' Configura il storage da usare (per test futuri e migrazione a Redis)
+    ''' </summary>
+    Public Shared Sub ConfigureStorage(storage As ApiServer.Interfaces.ISessionStorage)
+        SyncLock _lock
+            _storage = storage
+        End SyncLock
+    End Sub
 
     ''' <summary>
     ''' Crea una nuova sessione e avvia l'orchestrator
@@ -159,6 +174,9 @@ Public Class SessionManager
                                                                 session.EventEmitter.Emit("error", errorData)
                                                             End Sub
 
+            ' ✅ FASE 1: Salva usando ISessionStorage
+            _storage.SaveOrchestratorSession(session)
+            ' ⚠️ MANTENUTO per backward compatibility
             _sessions(sessionId) = session
 
             Dim backgroundTask = System.Threading.Tasks.Task.Run(Async Function()
@@ -186,6 +204,12 @@ Public Class SessionManager
     ''' </summary>
     Public Shared Function GetSession(sessionId As String) As OrchestratorSession
         SyncLock _lock
+            ' ✅ FASE 1: Prova prima con ISessionStorage
+            Dim session = _storage.GetOrchestratorSession(sessionId)
+            If session IsNot Nothing Then
+                Return session
+            End If
+            ' ⚠️ FALLBACK per backward compatibility
             If _sessions.ContainsKey(sessionId) Then
                 Return _sessions(sessionId)
             End If
@@ -198,6 +222,9 @@ Public Class SessionManager
     ''' </summary>
     Public Shared Sub DeleteSession(sessionId As String)
         SyncLock _lock
+            ' ✅ FASE 1: Elimina usando ISessionStorage
+            _storage.DeleteOrchestratorSession(sessionId)
+            ' ⚠️ MANTENUTO per backward compatibility
             If _sessions.ContainsKey(sessionId) Then
                 Dim session = _sessions(sessionId)
                 If session.Orchestrator IsNot Nothing Then
@@ -269,6 +296,9 @@ Public Class SessionManager
                                                      session.EventEmitter.Emit("waitingForInput", session.WaitingForInputData)
                                                  End Sub
 
+            ' ✅ FASE 1: Salva usando ISessionStorage
+            _storage.SaveTaskSession(session)
+            ' ⚠️ MANTENUTO per backward compatibility
             _taskSessions(sessionId) = session
 
             Console.WriteLine($"[SESSION] Starting runtime execution for session: {sessionId}")
@@ -311,6 +341,12 @@ Public Class SessionManager
     ''' </summary>
     Public Shared Function GetTaskSession(sessionId As String) As TaskSession
         SyncLock _lock
+            ' ✅ FASE 1: Prova prima con ISessionStorage
+            Dim session = _storage.GetTaskSession(sessionId)
+            If session IsNot Nothing Then
+                Return session
+            End If
+            ' ⚠️ FALLBACK per backward compatibility
             If _taskSessions.ContainsKey(sessionId) Then
                 Return _taskSessions(sessionId)
             End If
@@ -323,6 +359,9 @@ Public Class SessionManager
     ''' </summary>
     Public Shared Sub DeleteTaskSession(sessionId As String)
         SyncLock _lock
+            ' ✅ FASE 1: Elimina usando ISessionStorage
+            _storage.DeleteTaskSession(sessionId)
+            ' ⚠️ MANTENUTO per backward compatibility
             If _taskSessions.ContainsKey(sessionId) Then
                 _taskSessions.Remove(sessionId)
             End If
