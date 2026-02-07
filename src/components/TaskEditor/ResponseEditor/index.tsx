@@ -6,19 +6,18 @@ import TaskDragLayer from './TaskDragLayer';
 import { FontProvider, useFontContext } from '../../../context/FontContext';
 import { ToolbarButton } from '../../../dock/types';
 import { ResponseEditorLayout } from './components/ResponseEditorLayout';
-import { useResponseEditorCore } from './hooks/useResponseEditorCore';
-import { useResponseEditorHandlers } from './hooks/useResponseEditorHandlers';
+import { useResponseEditor } from './hooks/useResponseEditor';
 
 import type { TaskMeta } from '../EditorHost/types';
-import type { Task } from '../../../types/taskTypes';
+import type { Task, TaskTree } from '../../../types/taskTypes';
 
 function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTaskTreeLoading, hideHeader, onToolbarUpdate, tabId, setDockTree, registerOnClose }: { taskTree?: TaskTree | null, onClose?: () => void, onWizardComplete?: (finalTaskTree: TaskTree) => void, task?: TaskMeta | Task, isTaskTreeLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void, registerOnClose?: (fn: () => Promise<boolean>) => void }) {
   const pdUpdate = useProjectDataUpdate();
   const currentProjectId = pdUpdate?.getCurrentProjectId() || null;
   const { combinedClass } = useFontContext();
 
-  // ✅ FASE 3.1: Use composite hooks to reduce complexity
-  const core = useResponseEditorCore({
+  // ✅ FASE 3.1: Use main composite hook
+  const editor = useResponseEditor({
     taskTree,
     task,
     isTaskTreeLoading,
@@ -26,11 +25,14 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     currentProjectId,
     tabId,
     setDockTree,
+    onClose,
+    hideHeader,
+    onToolbarUpdate,
+    registerOnClose,
   });
 
+  // Extract all needed values
   const {
-    state,
-    refs,
     taskMeta,
     localTranslations,
     mainList,
@@ -40,25 +42,21 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     headerTitle,
     icon: Icon,
     iconColor,
-    rightMode,
     isGeneralizable,
     generalizationReason,
-    nodeSelection,
+    sidebarHandlers,
+    handleSidebarResizeStart,
+    handleEditorClose,
+    contractDialogHandlers,
     handleParserCreate,
     handleParserModify,
     handleEngineChipClick,
-    updateSelectedNode,
     handleProfileUpdate,
     handleIntentMessagesComplete,
-    initialization,
-    panelWidths,
-  } = core;
-
-  const {
-    rootRef,
-  } = refs;
-
-  const {
+    handleGenerateAll,
+    handleContractWizardClose,
+    handleContractWizardNodeUpdate,
+    handleContractWizardComplete,
     selectedMainIndex,
     selectedSubIndex,
     selectedRoot,
@@ -66,81 +64,40 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     handleSelectMain,
     handleSelectSub,
     handleSelectAggregator,
-  } = nodeSelection;
-
-  const {
-    handleGenerateAll,
-    handleContractWizardClose,
-    handleContractWizardNodeUpdate,
-    handleContractWizardComplete,
+    selectedNode,
+    selectedNodePath,
+    showContractWizard,
     toolbarButtons,
-    replaceSelectedTaskTree: replaceSelectedTaskTreeFromInit,
-  } = initialization;
-
-  const {
     rightWidth,
-    setRightWidth,
     testPanelWidth,
-    setTestPanelWidth,
     tasksPanelWidth,
+    draggingPanel,
+    setDraggingPanel,
+    setRightWidth,
+    setTestPanelWidth,
     setTasksPanelWidth,
-  } = panelWidths;
-
-  const {
+    leftPanelMode,
+    testPanelMode,
+    tasksPanelMode,
+    sidebarManualWidth,
+    isDraggingSidebar,
+    showMessageReview,
+    showSynonyms,
+    selectedIntentIdForTraining,
+    setSelectedIntentIdForTraining,
+    pendingEditorOpen,
     serviceUnavailable,
     setServiceUnavailable,
     showContractDialog,
     pendingContractChange,
-    escalationTasks,
-    showContractWizard,
-    selectedNode,
-    selectedNodePath,
-    isDraggingSidebar,
-    draggingPanel,
-    setDraggingPanel,
-    sidebarManualWidth,
-    leftPanelMode,
-    testPanelMode,
-    tasksPanelMode,
-    showSynonyms,
-    showMessageReview,
-    selectedIntentIdForTraining,
-    setSelectedIntentIdForTraining,
-    pendingEditorOpen,
-  } = state;
-
-  const {
+    updateSelectedNode,
+    rootRef,
     contractChangeRef,
     tasksStartWidthRef,
     tasksStartXRef,
-  } = refs;
-
-  // ✅ FASE 3.1: Use composite handlers hook
-  const handlers = useResponseEditorHandlers({
-    taskTree,
-    task,
-    currentProjectId,
-    state,
-    refs,
-    nodeSelection,
-    panelWidths,
-    initialization,
-    updateSelectedNode,
-    handleProfileUpdate,
-    tabId,
-    setDockTree,
-    onClose,
-    hideHeader,
-    onToolbarUpdate,
-    registerOnClose,
-  });
-
-  const {
-    sidebarHandlers,
-    handleSidebarResizeStart,
-    handleEditorClose,
-    contractDialogHandlers,
-  } = handlers;
+    replaceSelectedTaskTree,
+    escalationTasks,
+  } = editor;
 
   return (
     <ResponseEditorLayout
@@ -206,7 +163,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       setTasksPanelWidth={setTasksPanelWidth}
       tasksStartWidthRef={tasksStartWidthRef}
       tasksStartXRef={tasksStartXRef}
-      replaceSelectedTaskTree={replaceSelectedTaskTreeFromInit}
+      replaceSelectedTaskTree={replaceSelectedTaskTree}
       serviceUnavailable={serviceUnavailable}
       setServiceUnavailable={setServiceUnavailable}
       showContractDialog={showContractDialog}
