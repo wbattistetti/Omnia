@@ -102,25 +102,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
           setTaskTree(tree);
           initializedRef.current = true;
 
-          console.log('[🔍 TaskTreeHostAdapter] ✅ TaskTree caricato', {
-            taskId: fullTask.id,
-            taskTreeNodesLength: tree.nodes?.length ?? 0,
-            mainNodesTemplateIds: tree.nodes?.map((n: any) => ({
-              id: n.id,
-              templateId: n.templateId,
-              label: n.label
-            })) ?? [],
-            hasSteps: !!tree.steps,
-            stepsType: typeof tree.steps,
-            stepsKeys: tree.steps && typeof tree.steps === 'object' && !Array.isArray(tree.steps)
-              ? Object.keys(tree.steps)
-              : [],
-            updatedTaskHasSteps: !!updatedTask?.steps,
-            updatedTaskStepsKeys: updatedTask?.steps && typeof updatedTask.steps === 'object' && !Array.isArray(updatedTask.steps)
-              ? Object.keys(updatedTask.steps)
-              : [],
-            storeInitialized: initializedRef.current
-          });
+          // Log rimosso: non essenziale per flusso motore
         } else {
           // ✅ FASE 3: Store è primary - aggiorna sempre lo store
           setTaskTreeInStore(null);

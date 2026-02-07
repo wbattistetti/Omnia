@@ -1717,34 +1717,18 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                 // ✅ Sempre permesso per DataRequest, anche se isUndefined o !hasTaskTree
                 return async () => {
                   try {
-                    console.log('[🔍 NodeRow][onOpenTaskTree] START', {
-                      rowId: row.id,
-                      rowText: row.text,
-                      hasTaskId: !!(row as any)?.taskId,
-                      taskId: (row as any)?.taskId || row.id,
-                      taskType: resolveTaskType(row)
-                    });
+                    // Log rimosso: non essenziale per flusso motore
 
                     // ✅ REGOLA ARCHITETTURALE: task.id = row.id, quindi row.taskId = row.id
                     // Se row.taskId è corretto, il task esiste e può essere trovato
                     // ✅ FIX: taskForType deve essere let perché può essere riassegnato nel fallback
                     let taskForType = row.taskId ? taskRepository.getTask(row.taskId) : null;
 
-                    console.log('[🔍 NodeRow][onOpenTaskTree] Task check', {
-                      rowId: row.id,
-                      rowTaskId: row.taskId,
-                      taskExists: !!taskForType,
-                      hasTemplateId: !!taskForType?.templateId
-                    });
+                    // Log rimosso: non essenziale per flusso motore
 
                     // ✅ CASO 1: Task esiste → apri direttamente (comportamento attuale)
                     if (taskForType) {
-                      console.log('[🔍 NodeRow][onOpenTaskTree] ✅ CASO 1: Task esiste, aprendo direttamente ResponseEditor', {
-                        rowId: row.id,
-                        rowTaskId: row.taskId,
-                        taskType: taskForType.type,
-                        hasTemplateId: !!taskForType.templateId
-                      });
+                      // Log rimosso: non essenziale per flusso motore
 
                       // Task già esiste, apri direttamente ResponseEditor
                       const finalTaskType = taskForType.type as TaskType;

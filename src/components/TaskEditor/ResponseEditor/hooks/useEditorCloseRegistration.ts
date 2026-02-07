@@ -24,7 +24,7 @@ export function useEditorCloseRegistration(params: UseEditorCloseRegistrationPar
   useEffect(() => {
     if (registerOnClose) {
       registerOnClose(() => handleEditorCloseRef.current());
-      console.log('[ResponseEditor] ✅ Registered handleEditorClose');
+      // Log rimosso: non essenziale per flusso motore
     } else {
       console.warn('[ResponseEditor] ⚠️ registerOnClose not provided');
     }

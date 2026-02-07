@@ -746,11 +746,7 @@ export const AppContent: React.FC<AppContentProps> = ({
             // Tab already open: per 'ddt' (TaskTree), salva TaskTree nel taskRepository e attiva il tab
             // TaskEditorHost leggerà il TaskTree dal taskRepository
             if (editorKind === 'ddt' && preparedTaskTree) {
-              console.log('[DOCK_SYNC] 🔄 Updating taskRepository with TaskTree for existing tab', {
-                tabId,
-                instanceId,
-                nodesLength: preparedTaskTree?.nodes?.length
-              });
+              // Log rimosso: non essenziale per flusso motore
 
               // ✅ Salva TaskTree nel taskRepository (TaskEditorHost lo leggerà)
               let task = taskRepository.getTask(instanceId);
@@ -1188,9 +1184,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   const fetchRecentProjects = React.useCallback(async () => {
     try {
       setProjectsLoadError(null);
-      console.log('[AppContent] Fetching recent projects...');
       const projects = await ProjectService.getRecentProjects();
-      console.log('[AppContent] Recent projects loaded:', projects.length);
       setRecentProjects(projects);
     } catch (e) {
       console.error('[AppContent] Error loading recent projects:', e);
@@ -1209,9 +1203,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   const fetchAllProjects = React.useCallback(async () => {
     try {
       setProjectsLoadError(null);
-      console.log('[AppContent] Fetching all projects...');
       const projects = await ProjectService.getAllProjects();
-      console.log('[AppContent] All projects loaded:', projects.length);
       setAllProjects(projects);
       return projects; // Restituisce i progetti per verificare se ce ne sono ancora
     } catch (e) {
@@ -1594,7 +1586,7 @@ export const AppContent: React.FC<AppContentProps> = ({
   // Carica progetti recenti e tutti i progetti ogni volta che si entra nella landing
   useEffect(() => {
     if (appState === 'landing') {
-      console.log('[AppContent] Landing page active, loading projects...');
+      // Log rimosso: non essenziale per flusso motore
       fetchRecentProjects();
       fetchAllProjects(); // Carica anche tutti i progetti per la vista "tutti"
     }

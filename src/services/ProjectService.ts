@@ -54,7 +54,7 @@ async function fetchWithRetry(
 export const ProjectService = {
   async getRecentProjects(): Promise<ProjectData[]> {
     try {
-      console.log('[ProjectService] Fetching recent projects from /api/projects/catalog');
+      // Log rimosso: non essenziale per flusso motore
       const res = await fetchWithRetry(`/api/projects/catalog`, {}, 3, 1000, 30000);
       if (!res.ok) {
         const errorText = await res.text();
@@ -66,7 +66,7 @@ export const ProjectService = {
         console.warn('[ProjectService] Response is not an array:', typeof data, data);
         return [];
       }
-      console.log('[ProjectService] Loaded recent projects:', data.length);
+      // Log rimosso: non essenziale per flusso motore
       return data;
     } catch (error) {
       console.error('[ProjectService] Exception fetching recent projects:', error);
@@ -79,7 +79,7 @@ export const ProjectService = {
   },
   async getAllProjects(): Promise<ProjectData[]> {
     try {
-      console.log('[ProjectService] Fetching all projects from /api/projects/catalog');
+      // Log rimosso: non essenziale per flusso motore
       const res = await fetchWithRetry(`/api/projects/catalog`, {}, 3, 1000, 30000);
       if (!res.ok) {
         const errorText = await res.text();
@@ -91,7 +91,7 @@ export const ProjectService = {
         console.warn('[ProjectService] Response is not an array:', typeof data, data);
         return [];
       }
-      console.log('[ProjectService] Loaded all projects:', data.length);
+      // Log rimosso: non essenziale per flusso motore
       return data;
     } catch (error) {
       console.error('[ProjectService] Exception fetching all projects:', error);

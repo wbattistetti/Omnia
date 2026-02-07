@@ -107,30 +107,13 @@ export function useDDTTranslations(ddt: any | null | undefined, task?: any, vers
       }
 
       if (typeof localStorage !== 'undefined' && localStorage.getItem('debug.useDDTTranslations') === '1' && taskStepsGuids.length > 0) {
-        console.log('[useDDTTranslations] ✅ Extracted GUIDs from task.steps', {
-          taskStepsIsArray: Array.isArray(task.steps),
-          taskStepsCount: Array.isArray(task.steps) ? task.steps.length : Object.keys(task.steps).length,
-          guidsFromTaskSteps: taskStepsGuids.length,
-          sampleGuids: taskStepsGuids.slice(0, 5)
-        });
+        // Log rimosso: non essenziale per flusso motore
       }
     }
 
     const guids = Array.from(guidsSet);
     if (guids.length === 0) {
-      // 🔍 DEBUG: Log se non ci sono GUID
-      if (typeof localStorage !== 'undefined' && localStorage.getItem('debug.useDDTTranslations') === '1') {
-        console.log('[useDDTTranslations] ⚠️ No GUIDs found', {
-          ddtId: ddt?.id || ddt?._id,
-          hasTask: !!task,
-          taskStepsIsArray: Array.isArray(task?.steps),
-          taskStepsCount: task?.steps
-            ? (Array.isArray(task.steps) ? task.steps.length : Object.keys(task.steps).length)
-            : 0,
-          hasdata: !!ddt?.data,
-          dataLength: ddt?.data?.length || 0
-        });
-      }
+      // Log rimosso: non essenziale per flusso motore
       return {};
     }
 
@@ -151,21 +134,7 @@ export function useDDTTranslations(ddt: any | null | undefined, task?: any, vers
 
     // 🔍 DEBUG: Log sempre (non solo se mancano traduzioni)
     if (typeof localStorage !== 'undefined' && localStorage.getItem('debug.useDDTTranslations') === '1') {
-      console.log('[useDDTTranslations] 📚 Translation lookup', {
-        ddtId: ddt?.id || ddt?._id,
-        totalGuids: guids.length,
-        foundTranslations: foundGuids.length,
-        missingTranslations: missingGuids.length,
-        globalTranslationsCount: Object.keys(globalTranslations).length,
-        sampleGuids: guids.slice(0, 5),
-        sampleFound: foundGuids.slice(0, 5),
-        sampleMissing: missingGuids.slice(0, 5),
-          hasTask: !!task,
-          taskStepsIsArray: Array.isArray(task?.steps),
-          taskStepsCount: task?.steps
-            ? (Array.isArray(task.steps) ? task.steps.length : Object.keys(task.steps).length)
-            : 0
-        });
+      // Log rimosso: non essenziale per flusso motore
     }
 
     // ✅ Log warning only if state actually changed (not just reference change)

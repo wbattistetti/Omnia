@@ -73,33 +73,18 @@ export default function DDEBubbleChat({
       return;
     }
 
-    // ✅ STATELESS: Log iniziale modalità stateless
-    console.log('%c═══════════════════════════════════════════════════════════════', 'color: #00ffff; font-weight: bold; font-size: 14px;');
-    console.log('%c🔴 STATELESS MODE: Chat Simulator Initialized', 'color: #00ffff; font-weight: bold; font-size: 16px;');
-    console.log('%c═══════════════════════════════════════════════════════════════', 'color: #00ffff; font-weight: bold; font-size: 14px;');
-    console.log('%c📦 Storage:', 'color: #00ffff; font-weight: bold;', 'Redis (stateless)');
-    console.log('%c🌐 Backend:', 'color: #00ffff; font-weight: bold;', 'http://localhost:5000 (VB.NET)');
-    console.log('%c📝 Task ID:', 'color: #00ffff; font-weight: bold;', task.id);
-    console.log('%c🔑 Project ID:', 'color: #00ffff; font-weight: bold;', projectId);
-    console.log('%c⏱️  Timestamp:', 'color: #00ffff; font-weight: bold;', new Date().toISOString());
-    console.log('%c═══════════════════════════════════════════════════════════════', 'color: #00ffff; font-weight: bold; font-size: 14px;');
-
     // ✅ Create a unique key for this task/project combination
     const sessionKey = `${task.id}-${projectId}`;
-    console.log('[DDEBubbleChat] Computed sessionKey:', sessionKey, 'lastSessionKeyRef:', lastSessionKeyRef.current);
 
     // ✅ Prevent duplicate session starts for the same task/project combination
     if (lastSessionKeyRef.current === sessionKey) {
-      console.log('[DDEBubbleChat] ⚠️ Session already started for this task/project combination, skipping');
       return;
     }
 
     lastSessionKeyRef.current = sessionKey;
-    console.log('[DDEBubbleChat] ✅ Starting new session for key:', sessionKey);
 
     // ✅ Prevent multiple simultaneous session starts
     if (sessionStartingRef.current) {
-      console.log('[DDEBubbleChat] ⚠️ Session start already in progress, skipping duplicate call');
       return;
     }
 
@@ -174,35 +159,6 @@ export default function DDEBubbleChat({
             steps: stepsDict  // ✅ Dictionary: { "templateId": { "start": {...}, "noMatch": {...} } }
           }
         };
-        console.log('[DDEBubbleChat] 📤 Sending request to backend with TaskTree:', {
-          url: `${baseUrl}/api/runtime/task/session/start`,
-          method: 'POST',
-          taskId: task.id,
-          taskInstanceId: task.id, // ✅ ID dell'istanza del task
-          projectId: projectId,
-          language: projectLanguage,
-          hasTaskTree: !!taskTree,
-          taskTreeNodesCount: taskTree?.nodes?.length ?? 0,
-          // ✅ NUOVO: Mostra chiavi del dictionary invece di count array
-          taskTreeStepsType: typeof taskTree?.steps,
-          taskTreeStepsIsDictionary: taskTree?.steps && typeof taskTree.steps === 'object' && !Array.isArray(taskTree.steps),
-          taskTreeStepsKeys: taskTree?.steps && typeof taskTree.steps === 'object' && !Array.isArray(taskTree.steps)
-            ? Object.keys(taskTree.steps)
-            : [],
-          taskTreeStepsCount: taskTree?.steps && typeof taskTree.steps === 'object' && !Array.isArray(taskTree.steps)
-            ? Object.keys(taskTree.steps).length
-            : 0,
-          stepsDictKeys: stepsDict && typeof stepsDict === 'object' && !Array.isArray(stepsDict)
-            ? Object.keys(stepsDict)
-            : [],
-          stepsDictPreview: stepsDict && typeof stepsDict === 'object' && !Array.isArray(stepsDict)
-            ? Object.entries(stepsDict).slice(0, 2).map(([templateId, nodeSteps]) => ({
-                templateId,
-                stepTypes: typeof nodeSteps === 'object' && !Array.isArray(nodeSteps) ? Object.keys(nodeSteps) : []
-              }))
-            : [],
-          bodyString: JSON.stringify(requestBody).substring(0, 500) + '...'
-        });
 
         const startResponse = await fetch(`${baseUrl}/api/runtime/task/session/start`, {
           method: 'POST',
@@ -210,46 +166,18 @@ export default function DDEBubbleChat({
           body: JSON.stringify(requestBody)
         });
 
-        console.log('[DDEBubbleChat] 📥 Response received:', {
-          status: startResponse.status,
-          statusText: startResponse.statusText,
-          ok: startResponse.ok,
-          headers: Object.fromEntries(startResponse.headers.entries()),
-          url: startResponse.url
-        });
-
         if (!startResponse.ok) {
           const errorText = await startResponse.text();
-          console.error('[DDEBubbleChat] ❌ Error response:', {
-            status: startResponse.status,
-            statusText: startResponse.statusText,
-            body: errorText,
-            bodyLength: errorText.length,
-            bodyPreview: errorText.substring(0, 200)
-          });
-          // Clear any existing messages when backend is not available
+          console.error('[DDEBubbleChat] ❌ Backend error:', startResponse.status, errorText);
           setMessages([]);
           throw new Error(`Backend server not available: ${startResponse.statusText} - ${errorText}`);
         }
 
         // ✅ Verifica che la risposta abbia contenuto prima di fare parsing JSON
         const responseText = await startResponse.text();
-        console.log('[DDEBubbleChat] 📥 Response text:', {
-          length: responseText.length,
-          isEmpty: !responseText || responseText.trim().length === 0,
-          preview: responseText.substring(0, 200),
-          fullText: responseText
-        });
 
         if (!responseText || responseText.trim().length === 0) {
-          console.error('[DDEBubbleChat] ❌ EMPTY RESPONSE DETECTED', {
-            status: startResponse.status,
-            statusText: startResponse.statusText,
-            headers: Object.fromEntries(startResponse.headers.entries()),
-            url: startResponse.url,
-            contentType: startResponse.headers.get('content-type'),
-            contentLength: startResponse.headers.get('content-length')
-          });
+          console.error('[DDEBubbleChat] ❌ Empty response from backend');
           throw new Error('Backend returned empty response');
         }
 
@@ -265,28 +193,11 @@ export default function DDEBubbleChat({
         const { sessionId: newSessionId } = responseData;
         setSessionId(newSessionId);
 
-        // ✅ STATELESS: Log dettagliato per verifica modalità stateless
-        console.log('%c═══════════════════════════════════════════════════════════════', 'color: #00ff00; font-weight: bold; font-size: 14px;');
-        console.log('%c🔴 STATELESS MODE: Session Created', 'color: #00ff00; font-weight: bold; font-size: 16px;');
-        console.log('%c═══════════════════════════════════════════════════════════════', 'color: #00ff00; font-weight: bold; font-size: 14px;');
-        console.log('%c✅ Session ID:', 'color: #00ff00; font-weight: bold;', newSessionId);
-        console.log('%c📦 Storage:', 'color: #00ff00; font-weight: bold;', 'Redis (stateless)');
-        console.log('%c🌐 Backend:', 'color: #00ff00; font-weight: bold;', baseUrl);
-        console.log('%c📝 Task ID:', 'color: #00ff00; font-weight: bold;', task.id);
-        console.log('%c🔑 Session Key:', 'color: #00ff00; font-weight: bold;', `omnia:session:task:${newSessionId}`);
-        console.log('%c⏱️  Timestamp:', 'color: #00ff00; font-weight: bold;', new Date().toISOString());
-        console.log('%c═══════════════════════════════════════════════════════════════', 'color: #00ff00; font-weight: bold; font-size: 14px;');
-        console.log('[DDEBubbleChat] ✅ Backend session created:', { sessionId: newSessionId });
-
         // ✅ NUOVO: SSE stream diretto da VB.NET backend
-        console.log('[DDEBubbleChat] Opening SSE stream:', `${baseUrl}/api/runtime/task/session/${newSessionId}/stream`);
         const eventSource = new EventSource(`${baseUrl}/api/runtime/task/session/${newSessionId}/stream`);
         eventSourceRef.current = eventSource;
 
-        // Log connection state changes
         eventSource.onopen = () => {
-          console.log('[DDEBubbleChat] ✅ SSE stream opened successfully');
-          // ✅ Reset flag when session is fully initialized
           sessionStartingRef.current = false;
         };
 
@@ -295,23 +206,11 @@ export default function DDEBubbleChat({
         eventSource.addEventListener('message', (e: MessageEvent) => {
           try {
             const msg = JSON.parse(e.data);
-
-            // ✅ STATELESS: Log ricezione messaggio con info Redis
-            console.log('%c═══════════════════════════════════════════════════════════════', 'color: #ffaa00; font-weight: bold; font-size: 14px;');
-            console.log('%c📨 STATELESS: Backend Message Received', 'color: #ffaa00; font-weight: bold; font-size: 16px;');
-            console.log('%c═══════════════════════════════════════════════════════════════', 'color: #ffaa00; font-weight: bold; font-size: 14px;');
-            console.log('%c✅ Session ID:', 'color: #ffaa00; font-weight: bold;', newSessionId);
-            console.log('%c🔑 Redis Key:', 'color: #ffaa00; font-weight: bold;', `omnia:session:task:${newSessionId}`);
-            console.log('%c💬 Message:', 'color: #ffaa00; font-weight: bold;', msg.text || msg.message || '');
-            console.log('%c📦 Storage:', 'color: #ffaa00; font-weight: bold;', 'Redis (stateless) - Message retrieved from Redis session');
-            console.log('%c⏱️  Timestamp:', 'color: #ffaa00; font-weight: bold;', new Date().toISOString());
-            console.log('%c═══════════════════════════════════════════════════════════════', 'color: #ffaa00; font-weight: bold; font-size: 14px;');
-            console.log('[DDEBubbleChat] 📨 Backend message received:', msg);
+            console.log('[MOTORE] 💬 Message received:', msg.text || msg.message || '');
 
             // Only add message if it has actual text from backend
             const messageText = msg.text || msg.message || '';
             if (!messageText.trim()) {
-              console.warn('[DDEBubbleChat] Received empty message from backend, ignoring');
               return;
             }
 
@@ -338,27 +237,10 @@ export default function DDEBubbleChat({
         eventSource.addEventListener('waitingForInput', (e: MessageEvent) => {
           try {
             const data = JSON.parse(e.data);
-
-            // ✅ STATELESS: Log stato waiting for input
-            console.log('%c⏳ STATELESS: Waiting for Input', 'color: #ffff00; font-weight: bold;', {
-              sessionId: newSessionId,
-              redisKey: `omnia:session:task:${newSessionId}`,
-              message: 'Session state saved to Redis, waiting for user input',
-              timestamp: new Date().toISOString()
-            });
-
-            console.log('[DDEBubbleChat] waitingForInput event received');
-            console.log('[DDEBubbleChat] waitingForInput raw data:', e.data);
-            console.log('[DDEBubbleChat] waitingForInput data type:', typeof e.data);
-            console.log('[DDEBubbleChat] waitingForInput data length:', e.data?.length);
-            console.log('[DDEBubbleChat] waitingForInput data preview:', e.data?.substring(0, 100));
-            console.log('[DDEBubbleChat] waitingForInput data char codes:', Array.from(e.data || '').slice(0, 100).map(c => c.charCodeAt(0)));
-            console.log('[DDEBubbleChat] Backend waiting for input:', data);
+            console.log('[MOTORE] ⏳ Waiting for input');
             setIsWaitingForInput(true);
           } catch (error) {
             console.error('[DDEBubbleChat] Error parsing waitingForInput', error);
-            console.error('[DDEBubbleChat] Raw data that failed:', JSON.stringify(e.data));
-            console.error('[DDEBubbleChat] Full event object:', e);
           }
         });
 
@@ -368,16 +250,7 @@ export default function DDEBubbleChat({
             const data = JSON.parse(e.data);
 
             // ✅ STATELESS: Log aggiornamento stato
-            console.log('%c🔄 STATELESS: State Update', 'color: #00ffaa; font-weight: bold;', {
-              sessionId: newSessionId,
-              redisKey: `omnia:session:task:${newSessionId}`,
-              message: 'Session state updated and saved to Redis',
-              state: data,
-              timestamp: new Date().toISOString()
-            });
-
-            console.log('[DDEBubbleChat] Backend state update:', data);
-            // State updates are handled by backend, we just log them
+            // State updates are handled by backend
           } catch (error) {
             console.error('[DDEBubbleChat] Error parsing stateUpdate', error);
           }
@@ -388,7 +261,7 @@ export default function DDEBubbleChat({
         eventSource.addEventListener('complete', (e: MessageEvent) => {
           try {
             const result = JSON.parse(e.data);
-            console.log('[DDEBubbleChat] Backend complete:', result);
+            console.log('[MOTORE] 🎉 Task completed');
             // ❌ Only add message if backend explicitly sends a message in the result
             // Do NOT generate frontend messages like "✅ Dati raccolti con successo!"
             if (result.success && result.message) {
@@ -420,14 +293,7 @@ export default function DDEBubbleChat({
         });
 
         eventSource.onerror = (error) => {
-          console.error('%c❌ STATELESS: SSE connection error', 'color: #ff0000; font-weight: bold;', {
-            error,
-            readyState: eventSource.readyState,
-            sessionId: newSessionId,
-            redisKey: `omnia:session:task:${newSessionId}`,
-            url: eventSource.url
-          });
-          console.error('[DDEBubbleChat] SSE connection error', error);
+          console.error('[MOTORE] ❌ SSE connection error:', error);
           if (eventSource.readyState === EventSource.CLOSED) {
             // Clear messages when connection is closed - backend is not available
             setMessages([]);
@@ -463,14 +329,7 @@ export default function DDEBubbleChat({
         const baseUrl = 'http://localhost:5000';
 
         // ✅ STATELESS: Log eliminazione sessione
-        console.log('%c═══════════════════════════════════════════════════════════════', 'color: #ff0000; font-weight: bold; font-size: 14px;');
-        console.log('%c🗑️  STATELESS: Deleting Session', 'color: #ff0000; font-weight: bold; font-size: 16px;');
-        console.log('%c═══════════════════════════════════════════════════════════════', 'color: #ff0000; font-weight: bold; font-size: 14px;');
-        console.log('%c✅ Session ID:', 'color: #ff0000; font-weight: bold;', sessionId);
-        console.log('%c🔑 Redis Key:', 'color: #ff0000; font-weight: bold;', `omnia:session:task:${sessionId}`);
-        console.log('%c📦 Storage:', 'color: #ff0000; font-weight: bold;', 'Redis (stateless) - Session will be deleted from Redis');
-        console.log('%c⏱️  Timestamp:', 'color: #ff0000; font-weight: bold;', new Date().toISOString());
-        console.log('%c═══════════════════════════════════════════════════════════════', 'color: #ff0000; font-weight: bold; font-size: 14px;');
+        // Session cleanup
 
         fetch(`${baseUrl}/api/runtime/task/session/${sessionId}`, {
           method: 'DELETE'
@@ -511,16 +370,7 @@ export default function DDEBubbleChat({
     if (!trimmed || !sessionId) return;
 
     try {
-      // ✅ STATELESS: Log invio messaggio con info Redis
-      console.log('%c═══════════════════════════════════════════════════════════════', 'color: #00aaff; font-weight: bold; font-size: 14px;');
-      console.log('%c📤 STATELESS: Sending User Input', 'color: #00aaff; font-weight: bold; font-size: 16px;');
-      console.log('%c═══════════════════════════════════════════════════════════════', 'color: #00aaff; font-weight: bold; font-size: 14px;');
-      console.log('%c✅ Session ID:', 'color: #00aaff; font-weight: bold;', sessionId);
-      console.log('%c🔑 Redis Key:', 'color: #00aaff; font-weight: bold;', `omnia:session:task:${sessionId}`);
-      console.log('%c💬 User Input:', 'color: #00aaff; font-weight: bold;', trimmed);
-      console.log('%c📦 Storage:', 'color: #00aaff; font-weight: bold;', 'Redis (stateless) - Session will be retrieved from Redis');
-      console.log('%c⏱️  Timestamp:', 'color: #00aaff; font-weight: bold;', new Date().toISOString());
-      console.log('%c═══════════════════════════════════════════════════════════════', 'color: #00aaff; font-weight: bold; font-size: 14px;');
+      console.log('[MOTORE] 📤 Sending input:', trimmed);
 
       // Add user message immediately
       setMessages((prev) => [...prev, {
@@ -548,24 +398,13 @@ export default function DDEBubbleChat({
         throw new Error(`Failed to send input: ${response.statusText} - ${errorText}`);
       }
 
-      // ✅ STATELESS: Log successo invio
-      console.log('%c✅ STATELESS: Input sent successfully', 'color: #00ff00; font-weight: bold;', {
-        sessionId,
-        redisKey: `omnia:session:task:${sessionId}`,
-        status: response.status,
-        message: 'Session state will be saved to Redis after processing'
-      });
+      console.log('[MOTORE] ✅ Input sent successfully');
 
       // ✅ Lo stato isWaitingForInput verrà gestito dall'evento SSE waitingForInput
       // Non impostiamo false qui perché il backend potrebbe ancora processare l'input
       // e inviare un nuovo evento waitingForInput dopo aver eseguito il messaggio di risposta
     } catch (error) {
-      console.error('%c❌ STATELESS: Error sending input', 'color: #ff0000; font-weight: bold;', {
-        sessionId,
-        redisKey: `omnia:session:task:${sessionId}`,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      console.error('[DDEBubbleChat] Error sending input', error);
+      console.error('[MOTORE] ❌ Error sending input:', error instanceof Error ? error.message : 'Unknown error');
       setBackendError(error instanceof Error ? error.message : 'Failed to send input to backend');
       // ✅ In caso di errore, riabilita l'input per permettere un nuovo tentativo
       setIsWaitingForInput(true);

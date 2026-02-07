@@ -21,7 +21,7 @@ export async function listFlows(projectId: string): Promise<{ id: FlowId; update
  */
 export async function loadFlow(projectId: string, flowId: FlowId): Promise<{ nodes: Node<FlowNode>[]; edges: any[] }> {
   const url = `/api/projects/${encodeURIComponent(projectId)}/flow?flowId=${encodeURIComponent(flowId)}`;
-  console.log(`[LOAD][loadFlow] 🚀 START loading flow`, { projectId, flowId });
+  // Log rimosso: non essenziale per flusso motore
 
   const res = await fetch(url);
   if (!res.ok) throw new Error('loadFlow_failed');
@@ -31,35 +31,11 @@ export async function loadFlow(projectId: string, flowId: FlowId): Promise<{ nod
   const simplifiedNodes = Array.isArray(json?.nodes) ? json.nodes : [];
   const simplifiedEdges = Array.isArray(json?.edges) ? json.edges : [];
 
-  // ✅ LOG: Traccia cosa viene ricevuto dal backend
-  console.log(`[LOAD][loadFlow] 📥 Received from backend`, {
-    projectId,
-    flowId,
-    nodesCount: simplifiedNodes.length,
-    edgesCount: simplifiedEdges.length,
-    nodes: simplifiedNodes.map((n: any) => ({
-      id: n.id,
-      label: n.label,
-      rowsCount: n.rows?.length || 0,
-      rows: n.rows?.map((r: any) => ({
-        id: r.id,
-        text: r.text,
-        taskId: r.taskId,
-        hasTaskId: !!r.taskId
-      })) || []
-    }))
-  });
+  // Log rimosso: non essenziale per flusso motore
 
   // Transform to ReactFlow format: { id, data: { label, rows, ... } }
   const nodes = transformNodesToReactFlow(simplifiedNodes);
   const edges = transformEdgesToReactFlow(simplifiedEdges);
-
-  console.log(`[LOAD][loadFlow] ✅ END loading flow`, {
-    projectId,
-    flowId,
-    nodesCount: nodes.length,
-    edgesCount: edges.length
-  });
 
   return { nodes, edges };
 }

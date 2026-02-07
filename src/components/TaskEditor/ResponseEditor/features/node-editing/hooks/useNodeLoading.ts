@@ -65,12 +65,7 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
 
     try {
       if (localStorage.getItem('debug.nodeSync') === '1') {
-        console.log('[NODE_SYNC][LOAD] 🔄 Loading node from taskTree', {
-          selectedMainIndex,
-          selectedSubIndex,
-          selectedRoot,
-          mainListLength: currentMainList.length
-        });
+        // Log rimosso: non essenziale per flusso motore
       }
     } catch { }
 
@@ -137,17 +132,7 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
           : 0;
         const nodeStepTypes = Object.keys(nodeStepsDict);
 
-        console.log('[🔍 ResponseEditor][NODE_SELECT] 🔍 Loading steps for node', {
-          nodeId: node.id,
-          nodeTemplateId,
-          nodeLabel: node?.label,
-          hasTaskSteps: nodeStepTypes.length > 0,
-          taskTemplateIdsCount,
-          nodeStepTypes,
-          nodeStepsCount: nodeStepTypes.length,
-          stepsSource: currentTaskTree?.steps ? 'taskTree.steps' : 'task.steps',
-          stepsIsDictionary: stepsSource && typeof stepsSource === 'object' && !Array.isArray(stepsSource)
-        });
+        // Log rimosso: non essenziale per flusso motore
         const nodeStepsDetails = nodeStepTypes.length > 0 ? (() => {
           let escalationsCount = 0;
           let tasksCount = 0;
@@ -189,18 +174,7 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
             }
           }
 
-          console.log('[ResponseEditor][NODE_SELECT] ✅ Steps copied to node', {
-            nodeId: node.id,
-            nodeTemplateId,
-            nodeLabel: node?.label,
-            stepsCopied: true,
-            nodeStepsType: typeof node.steps,
-            nodeStepsIsDictionary: node.steps && typeof node.steps === 'object' && !Array.isArray(node.steps),
-            nodeStepTypes,
-            stepTypesCount: nodeStepTypes.length,
-            escalationsCount: totalEscalations,
-            tasksCount: totalTasks
-          });
+          // Log rimosso: non essenziale per flusso motore
         } else {
           console.log('[🔍 ResponseEditor][NODE_SELECT] ❌ CRITICAL - No steps found for node', {
             nodeId: node.id,
@@ -260,15 +234,7 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
               };
             });
 
-            console.log('[NODE_SYNC][LOAD] ✅ Node loaded from taskTree', {
-              mainIndex: selectedMainIndex,
-              subIndex: selectedSubIndex,
-              nodeLabel: node?.label,
-              stepsCount: steps.length,
-              escalationsCount,
-              tasksCount,
-              stepDetails
-            });
+            // Log rimosso: non essenziale per flusso motore
           }
         } catch (e) {
           // Error logging details (gated by debug flag)

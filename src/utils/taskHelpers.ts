@@ -328,7 +328,7 @@ export function updateRowData(
  * @returns Array of rows with taskId set correctly (row.taskId = row.id if task exists)
  */
 export function enrichRowsWithTaskId(rows: NodeRowData[]): NodeRowData[] {
-  console.log(`[LOAD][enrichRowsWithTaskId] 🚀 START enriching ${rows.length} rows`);
+  // Log rimosso: non essenziale per flusso motore
 
   const result = rows.map(row => {
     // ✅ REGOLA ARCHITETTURALE: task.id = row.id (sempre)
@@ -360,17 +360,6 @@ export function enrichRowsWithTaskId(rows: NodeRowData[]): NodeRowData[] {
   });
 
   const enrichedCount = result.filter(r => r.taskId).length;
-  console.log(`[LOAD][enrichRowsWithTaskId] ✅ END enriching`, {
-    totalRows: rows.length,
-    enrichedCount,
-    withoutTaskId: rows.length - enrichedCount,
-    rows: result.map((r: any) => ({
-      id: r.id,
-      text: r.text,
-      taskId: r.taskId,
-      hasTaskId: !!r.taskId
-    }))
-  });
 
   return result;
 }

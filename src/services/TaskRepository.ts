@@ -291,17 +291,7 @@ class TaskRepository {
         const { id, templateId, createdAt, updatedAt, projectId: _projectId, value, type, Type, ...directFields } = item;
         const taskType = type !== undefined && type !== null ? type : (Type !== undefined && Type !== null ? Type : undefined);
 
-        // ✅ LOG: Verifica templateId dal database
-        console.log('[🔍 TaskRepository][LOAD] 📥 Task caricato dal database', {
-          taskId: id,
-          itemTemplateId: item.templateId,
-          extractedTemplateId: templateId,
-          valueTemplateId: value?.templateId,
-          directFieldsTemplateId: directFields.templateId,
-          valueKeys: value ? Object.keys(value) : [],
-          directFieldsKeys: Object.keys(directFields),
-          itemKeys: Object.keys(item)
-        });
+        // Log rimosso: non essenziale per flusso motore
 
         // ✅ CRITICAL: type is REQUIRED - must be saved correctly in database
         if (taskType === undefined || taskType === null) {
@@ -339,17 +329,6 @@ class TaskRepository {
             firstNodeNlpProfileExamples: firstNodeNlpProfileExamples?.slice(0, 3)
           });
         }
-
-        // ✅ LOG: Verifica templateId dopo il merge
-        console.log('[🔍 TaskRepository][LOAD] ✅ Task dopo merge', {
-          taskId: task.id,
-          finalTemplateId: task.templateId,
-          itemTemplateId: item.templateId,
-          valueHadTemplateId: value?.templateId !== undefined,
-          directFieldsHadTemplateId: directFields.templateId !== undefined,
-          valueTemplateIdValue: value?.templateId,
-          directFieldsTemplateIdValue: directFields.templateId
-        });
 
         // ✅ LOG: Check dataContract in loaded task
         if (task.data && Array.isArray(task.data) && task.data.length > 0) {
