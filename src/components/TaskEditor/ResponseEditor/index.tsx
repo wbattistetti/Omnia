@@ -5,10 +5,7 @@ import EditorHeader from '../../common/EditorHeader';
 import TaskDragLayer from './TaskDragLayer';
 import { FontProvider, useFontContext } from '../../../context/FontContext';
 import { ToolbarButton } from '../../../dock/types';
-import { ResponseEditorContent } from './components/ResponseEditorContent';
-import { ResponseEditorNormalLayout } from './components/ResponseEditorNormalLayout';
-import { ServiceUnavailableModal } from './components/ServiceUnavailableModal';
-import { GeneralizabilityBanner } from './components/GeneralizabilityBanner';
+import { ResponseEditorLayout } from './components/ResponseEditorLayout';
 import { useResponseEditorCore } from './hooks/useResponseEditorCore';
 import { useResponseEditorHandlers } from './hooks/useResponseEditorHandlers';
 
@@ -146,123 +143,76 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   } = handlers;
 
   return (
-    <div ref={rootRef} className={combinedClass} style={{ background: '#0b0f17', display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1, minHeight: 0, height: '100%' }}>
-
-      {!hideHeader && (
-        <EditorHeader
-          icon={<Icon size={18} style={{ color: iconColor }} />}
-          title={headerTitle}
-          toolbarButtons={toolbarButtons}
-          onClose={handleEditorClose}
-          color="orange"
-        />
-      )}
-
-      {/* Generalizability Banner */}
-      {isGeneralizable && (
-        <GeneralizabilityBanner
-          isGeneralizable={isGeneralizable}
-          generalizationReason={generalizationReason}
-          onSaveToFactory={() => {
-            // TODO: Implement save to factory logic
-            console.log('[GeneralizabilityBanner] Save to Factory clicked');
-          }}
-          onIgnore={() => {
-            // Banner will be dismissed automatically
-            console.log('[GeneralizabilityBanner] Ignore clicked');
-          }}
-        />
-      )}
-
-      <div style={{ display: 'flex', flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
-        <ResponseEditorContent
-          showContractWizard={showContractWizard}
-          needsIntentMessages={needsIntentMessages}
-          task={taskMeta}
-          taskTree={taskTree}
-          handleContractWizardClose={handleContractWizardClose}
-          handleContractWizardNodeUpdate={handleContractWizardNodeUpdate}
-          handleContractWizardComplete={handleContractWizardComplete}
-          onIntentMessagesComplete={handleIntentMessagesComplete}
-          normalEditorLayout={
-            <ResponseEditorNormalLayout
-              mainList={mainList}
-              taskTree={taskTree}
-              task={taskMeta}
-              currentProjectId={currentProjectId}
-              localTranslations={localTranslations}
-              escalationTasks={escalationTasks}
-                  selectedMainIndex={selectedMainIndex}
-                  selectedSubIndex={selectedSubIndex}
-              selectedRoot={selectedRoot}
-              selectedNode={selectedNode}
-              selectedNodePath={selectedNodePath}
-              handleSelectMain={handleSelectMain}
-              handleSelectSub={handleSelectSub}
-              handleSelectAggregator={handleSelectAggregator}
-              sidebarRef={sidebarRef}
-              onChangeSubRequired={sidebarHandlers.onChangeSubRequired}
-              onReorderSub={sidebarHandlers.onReorderSub}
-              onAddMain={sidebarHandlers.onAddMain}
-              onRenameMain={sidebarHandlers.onRenameMain}
-              onDeleteMain={sidebarHandlers.onDeleteMain}
-              onAddSub={sidebarHandlers.onAddSub}
-              onRenameSub={sidebarHandlers.onRenameSub}
-              onDeleteSub={sidebarHandlers.onDeleteSub}
-              handleParserCreate={handleParserCreate}
-              handleParserModify={handleParserModify}
-              handleEngineChipClick={handleEngineChipClick}
-              handleGenerateAll={handleGenerateAll}
-              isAggregatedAtomic={isAggregatedAtomic}
-              sidebarManualWidth={sidebarManualWidth}
-              isDraggingSidebar={isDraggingSidebar}
-              handleSidebarResizeStart={handleSidebarResizeStart}
-              showMessageReview={showMessageReview}
-              showSynonyms={showSynonyms}
-              selectedIntentIdForTraining={selectedIntentIdForTraining}
-              setSelectedIntentIdForTraining={setSelectedIntentIdForTraining}
-              pendingEditorOpen={pendingEditorOpen}
-              contractChangeRef={contractChangeRef}
-                            taskType={taskType}
-              handleProfileUpdate={handleProfileUpdate}
-                            updateSelectedNode={updateSelectedNode}
-              leftPanelMode={leftPanelMode}
-              testPanelMode={testPanelMode}
-              tasksPanelMode={tasksPanelMode}
-              rightWidth={rightWidth}
-              testPanelWidth={testPanelWidth}
-              tasksPanelWidth={tasksPanelWidth}
-              draggingPanel={draggingPanel}
-              setDraggingPanel={setDraggingPanel}
-              setRightWidth={setRightWidth}
-              setTestPanelWidth={setTestPanelWidth}
-              setTasksPanelWidth={setTasksPanelWidth}
-              tasksStartWidthRef={tasksStartWidthRef}
-              tasksStartXRef={tasksStartXRef}
-              replaceSelectedTaskTree={replaceSelectedTaskTreeFromInit}
-            />
-          }
-        />
-      </div>
-
-      <TaskDragLayer />
-      {serviceUnavailable && (
-        <ServiceUnavailableModal
-          serviceUnavailable={serviceUnavailable}
-          onClose={() => setServiceUnavailable(null)}
-        />
-      )}
-
-      {showContractDialog && pendingContractChange && (
-        <ContractUpdateDialog
-          open={showContractDialog}
-          templateLabel={pendingContractChange.templateLabel}
-          onKeep={contractDialogHandlers.handleKeep}
-          onDiscard={contractDialogHandlers.handleDiscard}
-          onCancel={contractDialogHandlers.handleCancel}
-        />
-      )}
-    </div>
+    <ResponseEditorLayout
+      rootRef={rootRef}
+      combinedClass={combinedClass}
+      hideHeader={hideHeader}
+      icon={Icon}
+      iconColor={iconColor}
+      headerTitle={headerTitle}
+      toolbarButtons={toolbarButtons}
+      handleEditorClose={handleEditorClose}
+      isGeneralizable={isGeneralizable}
+      generalizationReason={generalizationReason}
+      showContractWizard={showContractWizard}
+      needsIntentMessages={needsIntentMessages}
+      task={taskMeta}
+      taskTree={taskTree}
+      currentProjectId={currentProjectId}
+      handleContractWizardClose={handleContractWizardClose}
+      handleContractWizardNodeUpdate={handleContractWizardNodeUpdate}
+      handleContractWizardComplete={handleContractWizardComplete}
+      handleIntentMessagesComplete={handleIntentMessagesComplete}
+      mainList={mainList}
+      localTranslations={localTranslations}
+      escalationTasks={escalationTasks}
+      selectedMainIndex={selectedMainIndex}
+      selectedSubIndex={selectedSubIndex}
+      selectedRoot={selectedRoot}
+      selectedNode={selectedNode}
+      selectedNodePath={selectedNodePath}
+      handleSelectMain={handleSelectMain}
+      handleSelectSub={handleSelectSub}
+      handleSelectAggregator={handleSelectAggregator}
+      sidebarRef={sidebarRef}
+      sidebarHandlers={sidebarHandlers}
+      handleParserCreate={handleParserCreate}
+      handleParserModify={handleParserModify}
+      handleEngineChipClick={handleEngineChipClick}
+      handleGenerateAll={handleGenerateAll}
+      isAggregatedAtomic={isAggregatedAtomic}
+      sidebarManualWidth={sidebarManualWidth}
+      isDraggingSidebar={isDraggingSidebar}
+      handleSidebarResizeStart={handleSidebarResizeStart}
+      showMessageReview={showMessageReview}
+      showSynonyms={showSynonyms}
+      selectedIntentIdForTraining={selectedIntentIdForTraining}
+      setSelectedIntentIdForTraining={setSelectedIntentIdForTraining}
+      pendingEditorOpen={pendingEditorOpen}
+      contractChangeRef={contractChangeRef}
+      taskType={taskType}
+      handleProfileUpdate={handleProfileUpdate}
+      updateSelectedNode={updateSelectedNode}
+      leftPanelMode={leftPanelMode}
+      testPanelMode={testPanelMode}
+      tasksPanelMode={tasksPanelMode}
+      rightWidth={rightWidth}
+      testPanelWidth={testPanelWidth}
+      tasksPanelWidth={tasksPanelWidth}
+      draggingPanel={draggingPanel}
+      setDraggingPanel={setDraggingPanel}
+      setRightWidth={setRightWidth}
+      setTestPanelWidth={setTestPanelWidth}
+      setTasksPanelWidth={setTasksPanelWidth}
+      tasksStartWidthRef={tasksStartWidthRef}
+      tasksStartXRef={tasksStartXRef}
+      replaceSelectedTaskTree={replaceSelectedTaskTreeFromInit}
+      serviceUnavailable={serviceUnavailable}
+      setServiceUnavailable={setServiceUnavailable}
+      showContractDialog={showContractDialog}
+      pendingContractChange={pendingContractChange}
+      contractDialogHandlers={contractDialogHandlers}
+    />
   );
 }
 
