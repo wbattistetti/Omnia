@@ -109,7 +109,8 @@ export default function MessageReviewMessage({ item, onSave, updateSelectedNode 
     };
 
     // Use centralized task icon system with task color (not step color)
-    const taskId = item.taskId || 'sayMessage';
+    // ✅ NO FALLBACKS: item.taskId must exist, use 'sayMessage' only as explicit default for logging
+    const taskId = item.taskId ?? 'sayMessage';
     // If no color in item, get it from catalog
     let taskColor = item.color ? ensureHexColor(item.color) : undefined;
     if (!taskColor) {

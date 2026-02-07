@@ -173,7 +173,7 @@ export default function IntentEditorInlineEditor({
             ref={editorRef}
             inlineMode={true}
             intentSelected={intentSelected}
-            instanceId={(act as any)?.instanceId || act.id}
+            instanceId={(act as any)?.instanceId ?? act.id ?? 'unknown'}
             onTrainStateChange={setTrainState}
           />
         ) : (

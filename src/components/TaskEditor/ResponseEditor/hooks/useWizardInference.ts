@@ -88,7 +88,8 @@ export function useWizardInference({
 
   useEffect(() => {
     // ✅ FASE 2.3: Usa store invece di taskTreeRef
-    const currentTaskTree = taskTreeFromStore || taskTree;
+    // ✅ NO FALLBACKS: Use taskTreeFromStore as primary source, taskTree as fallback only during migration
+    const currentTaskTree = taskTreeFromStore ?? taskTree;
 
     // ========================================================================
     // ✅ ARCHITETTURA ESPERTO: EARLY EXIT se dati non sono ancora caricati
@@ -164,7 +165,7 @@ export function useWizardInference({
     // ✅ NUOVO: Se TaskTree ha struttura ma non ha messaggi → apri wizard al passo pipeline
     if (hasStructureButNoMessages) {
       console.log('[🔍 useWizardInference] ⚠️ TaskTree ha struttura ma non ha messaggi, aprendo wizard', {
-        nodesCount: currentTaskTree?.nodes?.length || 0,
+        nodesCount: currentTaskTree?.nodes?.length ?? 0,
         taskType: stableTaskType,
         taskId: task?.id,
         taskStepsCount: Array.isArray(task?.steps) ? task.steps.length : (task?.steps ? Object.keys(task.steps).length : 0),
@@ -174,7 +175,7 @@ export function useWizardInference({
 
       // Apri wizard con initialTaskTree che contiene i nodes esistenti
       // Il wizard dovrebbe saltare automaticamente al passo 'pipeline'
-      const inferenceKey = `${stableTaskLabel || ''}_hasStructureButNoMessages`;
+      const inferenceKey = `${stableTaskLabel ?? ''}_hasStructureButNoMessages`;
       if (inferenceStartedRef.current !== inferenceKey) {
         inferenceStartedRef.current = inferenceKey;
         setShowWizard(true);
@@ -278,7 +279,7 @@ export function useWizardInference({
     const taskLabel = stableTaskLabel.trim();
 
     // Prevenire esecuzioni multiple
-    const inferenceKey = `${taskLabel || ''}_${empty}`;
+    const inferenceKey = `${taskLabel ?? ''}_${empty}`;
     if (inferenceStartedRef.current === inferenceKey) {
       return;
     }

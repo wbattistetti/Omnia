@@ -98,7 +98,7 @@ export function applyNodeUpdate(params: ApplyNodeUpdateParams): ApplyNodeUpdateR
       if (newIntroStep?.escalations?.some((esc: any) => esc?.tasks?.length > 0)) {
         updatedTaskTree.introduction = {
           type: 'introduction',
-          escalations: newIntroStep.escalations || []
+          escalations: newIntroStep.escalations ?? []
         };
       } else {
         delete updatedTaskTree.introduction;

@@ -57,7 +57,12 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
         return prev;
       }
 
-      const updated = updater(prev) || prev;
+      // ✅ NO FALLBACKS: updater must return a valid node, not null/undefined
+      const updated = updater(prev);
+      if (!updated) {
+        console.error('[useUpdateSelectedNode] updater returned null/undefined. This should not happen.');
+        return;
+      }
 
       // ✅ FIX 1: Guard - Evita aggiornamenti se il nodo non è cambiato
       // Confronta solo ID e contenuto critico (non tutto l'oggetto per performance)

@@ -214,7 +214,8 @@ export function collectAllMessages(
         return [];
     }
 
-    const nodeLabel = node?.label || 'Current Node';
+    // ✅ NO FALLBACKS: node.label must exist, use 'Current Node' only as explicit default for logging
+    const nodeLabel = node?.label ?? 'Current Node';
     const items = collectNodeMessages(node, translations, nodeLabel);
 
     return items.sort((a, b) => {

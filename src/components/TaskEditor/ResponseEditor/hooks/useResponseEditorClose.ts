@@ -130,13 +130,13 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
       const template = DialogueTaskService.getTemplate(contractChange.nodeTemplateId);
       console.log('[ResponseEditor][CLOSE] 🟡 Showing dialog...', {
         templateId: contractChange.nodeTemplateId,
-        templateLabel: template?.label || contractChange.nodeLabel || 'Template',
+        templateLabel: template?.label ?? contractChange.nodeLabel ?? 'Template',
         hasModifiedContract: !!contractChange.modifiedContract
       });
 
       setPendingContractChange({
         templateId: contractChange.nodeTemplateId,
-        templateLabel: template?.label || contractChange.nodeLabel || 'Template',
+        templateLabel: template?.label ?? contractChange.nodeLabel ?? 'Template',
         modifiedContract: contractChange.modifiedContract
       });
       setShowContractDialog(true);

@@ -104,12 +104,12 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
 
           console.log('[🔍 TaskTreeHostAdapter] ✅ TaskTree caricato', {
             taskId: fullTask.id,
-            taskTreeNodesLength: tree.nodes?.length || 0,
+            taskTreeNodesLength: tree.nodes?.length ?? 0,
             mainNodesTemplateIds: tree.nodes?.map((n: any) => ({
               id: n.id,
               templateId: n.templateId,
               label: n.label
-            })) || [],
+            })) ?? [],
             hasSteps: !!tree.steps,
             stepsType: typeof tree.steps,
             stepsKeys: tree.steps && typeof tree.steps === 'object' && !Array.isArray(tree.steps)
@@ -166,7 +166,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
       // Legacy format - normalize explicitly (not fallback, but transformation)
       console.warn('[DDTHostAdapter] Converting legacy format (data) to TaskTree format (nodes)');
       finalTaskTree = {
-        label: finalTaskTreeOrLegacy.label || '',
+        label: finalTaskTreeOrLegacy.label ?? '',
         nodes: finalTaskTreeOrLegacy.data,
         steps: finalTaskTreeOrLegacy.steps ?? {},
         constraints: finalTaskTreeOrLegacy.constraints,
@@ -183,7 +183,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
     console.log('[TaskTreeHostAdapter][handleComplete] 🔍 finalTaskTree received', {
       instanceKey,
       hasTaskTree: !!finalTaskTree,
-      nodesLength: finalTaskTree.nodes?.length || 0,
+      nodesLength: finalTaskTree.nodes?.length ?? 0,
       hasSteps: !!finalTaskTree.steps,
       stepsCount: Array.isArray(finalTaskTree.steps) ? finalTaskTree.steps.length : 0
     });
@@ -254,7 +254,8 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
 
         // Get row text from task (this is the label of the row)
         const taskInstance = taskRepository.getTask(instanceKey);
-        const rowText = taskInstance?.text || taskMeta.label || 'Task';
+        // ✅ NO FALLBACKS: Use taskInstance.text as primary, taskMeta.label as fallback, 'Task' as explicit default
+        const rowText = taskInstance?.text ?? taskMeta.label ?? 'Task';
 
         // ✅ BACKWARD COMPATIBILITY: Converti TaskTree in formato legacy per extractVariablesFromDDT
         const taskTreeForVariables = {

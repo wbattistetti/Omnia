@@ -212,7 +212,7 @@ export default function RecognitionEditor({
           // ✅ Sincronizza regex dal contract al node.nlpProfile
           updated.nlpProfile = {
             ...updated.nlpProfile,
-            regex: regexPattern || undefined
+            regex: regexPattern ?? undefined
           };
           console.log('[CONTRACT] INIT - Synced regex to node.nlpProfile', {
             nodeId: node.id,
@@ -229,7 +229,8 @@ export default function RecognitionEditor({
       setModifiedContract(null);
 
       // ✅ Load test notes from node
-      const testNotes = node.testNotes || {};
+      // ✅ NO FALLBACKS: node.testNotes can be undefined (legitimate default)
+      const testNotes = node.testNotes ?? {};
       const notesStore = useNotesStore.getState();
 
       // ✅ Migrate old notes if needed
@@ -275,7 +276,8 @@ export default function RecognitionEditor({
     const nodeTestNotes = (node as any)?.testNotes;
     if (nodeTestNotes && typeof nodeTestNotes === 'object' && Object.keys(nodeTestNotes).length > 0) {
       // ✅ Migrate old notes if present
-      const examplesList = editorProps?.examplesList || [];
+      // ✅ NO FALLBACKS: examplesList can be undefined (legitimate default)
+      const examplesList = editorProps?.examplesList ?? [];
       const migratedNotes = notesStore.migrateOldNotes(nodeTestNotes, examplesList);
 
       // ✅ Load notes into store
@@ -439,7 +441,7 @@ export default function RecognitionEditor({
           // ✅ Sincronizza regex dal contract al node.nlpProfile
           updated.nlpProfile = {
             ...updated.nlpProfile,
-            regex: regexPattern || undefined
+            regex: regexPattern ?? undefined
           };
           console.log('[CONTRACT] CHANGE - Synced regex to node.nlpProfile', {
             nodeId: node.id,
@@ -469,7 +471,8 @@ export default function RecognitionEditor({
     } else {
       // ✅ Nessun cambiamento: usa template
       const template = DialogueTaskService.getTemplate(nodeTemplateId);
-      setLocalContract(template?.dataContract || null);
+      // ✅ NO FALLBACKS: template.dataContract can be null/undefined (legitimate)
+      setLocalContract(template?.dataContract ?? null);
       setHasUnsavedContractChanges(false);
       setModifiedContract(null);
       console.log('[CONTRACT] CHANGE - No changes detected, using template contract');
@@ -544,7 +547,7 @@ export default function RecognitionEditor({
       case 'regex':
         return {
           ...baseProps,
-          regex: contractItem?.patterns?.[0] || editorProps?.regex || '',
+          regex: contractItem?.patterns?.[0] ?? editorProps?.regex ?? '',
           setRegex: (value: string) => {
             console.log('[REGEX] USER_INPUT - setRegex', { newValue: value });
             // Update the specific contract item using contractItem.type
@@ -566,7 +569,7 @@ export default function RecognitionEditor({
         // ExtractorInlineEditor gestisce extractorCode internamente, ma potremmo sincronizzarlo
         return {
           ...baseProps,
-          extractorCode: contractItem?.extractorCode || '',
+          extractorCode: contractItem?.extractorCode ?? '',
           setExtractorCode: (value: string) => {
             if (contractItem && contract) {
               const contractType = contractItem.type; // Should be 'rules'
@@ -581,7 +584,7 @@ export default function RecognitionEditor({
       case 'ner':
         return {
           ...baseProps,
-          entityTypes: contractItem?.entityTypes || [],
+          entityTypes: contractItem?.entityTypes ?? [],
           setEntityTypes: (value: string[]) => {
             if (contractItem && contract) {
               const contractType = contractItem.type;

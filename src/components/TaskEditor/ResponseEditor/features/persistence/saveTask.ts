@@ -131,7 +131,7 @@ export async function saveTaskOnProjectSave(
       await taskRepository.updateTask(key, modifiedFields, currentProjectId || undefined);
     }
   } else if (taskTree) {
-    const currentTemplateId = task?.templateId || null;
+    const currentTemplateId = task?.templateId ?? null;
     const templateExpanded = currentTemplateId
       ? await buildTemplateExpanded(currentTemplateId, currentProjectId || undefined)
       : null;

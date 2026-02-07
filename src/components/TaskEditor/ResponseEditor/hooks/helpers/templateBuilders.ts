@@ -102,12 +102,12 @@ export function createSubDataInstance(subTemplate: any): any {
   return {
     label: getNodeLabelStrict(subTemplate) || 'Sub',
     type: subTemplate.type,
-    icon: subTemplate.icon || 'FileText',
+    icon: subTemplate.icon ?? 'FileText',
     steps: filteredSteps, // ✅ Usa steps invece di steps
-    constraints: subTemplate.dataContracts || subTemplate.constraints || [],
-    examples: subTemplate.examples || [],
+    constraints: subTemplate.dataContracts ?? subTemplate.constraints ?? [],
+    examples: subTemplate.examples ?? [],
     subNodes: [], // ✅ Use subNodes (not subData)
-    nlpContract: subTemplate.nlpContract || undefined,
+    nlpContract: subTemplate.nlpContract ?? undefined,
     templateId: getNodeIdStrict(subTemplate), // ✅ GUID del task referenziato
     referenceId: referenceId, // ✅ dataId del data[0] del template referenziato
     kind: subTemplate.type || 'generic'
@@ -122,12 +122,12 @@ export function createSimpledataInstance(template: any): any {
   return {
     label: getNodeLabelStrict(template) || 'Data',
     type: template.type,
-    icon: template.icon || 'Calendar',
+    icon: template.icon ?? 'Calendar',
     steps: templateId && template.steps ? { [String(templateId)]: template.steps[String(templateId)] } : undefined, // ✅ Usa steps invece di steps
-    constraints: template.dataContracts || template.constraints || [],
-    examples: template.examples || [],
+    constraints: template.dataContracts ?? template.constraints ?? [],
+    examples: template.examples ?? [],
     subNodes: [], // ✅ Use subNodes (not subData)
-    nlpContract: template.nlpContract || undefined,
+    nlpContract: template.nlpContract ?? undefined,
     templateId: getNodeIdStrict(template),
     kind: template.type || 'generic'
   };
@@ -151,12 +151,12 @@ export function createCompositedata(template: any): any[] {
   const mainInstance = {
     label: getNodeLabelStrict(template) || 'Data',
     type: template.type,
-    icon: template.icon || 'Calendar',
+    icon: template.icon ?? 'Calendar',
     steps: mainTemplateId && template.steps ? { [String(mainTemplateId)]: template.steps[String(mainTemplateId)] } : undefined, // ✅ Usa steps invece di steps
-    constraints: template.dataContracts || template.constraints || [],
-    examples: template.examples || [],
+    constraints: template.dataContracts ?? template.constraints ?? [],
+    examples: template.examples ?? [],
     subNodes: subDataInstances, // ✅ Use subNodes (not subData)
-    nlpContract: template.nlpContract || undefined,
+    nlpContract: template.nlpContract ?? undefined,
     templateId: getNodeIdStrict(template),
     kind: template.type || 'generic'
   };
@@ -183,7 +183,7 @@ export async function buildTemplateMatchResult(template: any): Promise<TemplateM
         data: data
         // ❌ RIMOSSO: steps - usa steps nei nodi invece
       },
-      icon: template.icon || 'Calendar',
+      icon: template.icon ?? 'Calendar',
       translationGuids: translationGuids
     }
   };
