@@ -165,7 +165,7 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
             const updatedTaskTreeWithSteps = {
               ...result.updatedTaskTree,
               steps: {
-                ...(result.updatedTaskTree.steps || {}),
+                ...(result.updatedTaskTree.steps ?? {}),
                 [nodeTemplateId]: nodeStepsDict
               }
             };

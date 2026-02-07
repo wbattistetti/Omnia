@@ -316,7 +316,8 @@ export default function RecognitionEditor({
       updated.testNotes = { ...notes };
 
       // ✅ CRITICAL: Aggiorna anche la cache del TaskRepository
-      const taskId = editorProps?.task?.id || editorProps?.task?.instanceId;
+      // ✅ NO FALLBACKS: Use id as primary, instanceId as fallback (both are valid properties)
+      const taskId = editorProps?.task?.id ?? editorProps?.task?.instanceId ?? 'unknown';
       if (taskId) {
         try {
           const currentTask = taskRepository.getTask(taskId);
@@ -342,7 +343,8 @@ export default function RecognitionEditor({
     const node = editorProps?.node;
     if (!node || !updateSelectedNode) return;
 
-    const taskId = editorProps?.task?.id || editorProps?.task?.instanceId;
+    // ✅ NO FALLBACKS: Use id as primary, instanceId as fallback (both are valid properties)
+    const taskId = editorProps?.task?.id ?? editorProps?.task?.instanceId ?? 'unknown';
 
     // Use centralized service - single point of synchronization
     ExamplesPersistenceService.setExamplesForNode(

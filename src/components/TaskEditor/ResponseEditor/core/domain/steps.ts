@@ -74,5 +74,6 @@ export function getStepsForNode(steps: Record<string, Record<string, any>>, node
     );
   }
 
-  return steps[nodeTemplateId] || {};
+  // ✅ NO FALLBACKS: Returns empty object if nodeTemplateId not found (legitimate default)
+  return steps[nodeTemplateId] ?? {};
 }

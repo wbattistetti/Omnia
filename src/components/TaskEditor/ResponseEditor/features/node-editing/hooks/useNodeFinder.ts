@@ -42,7 +42,8 @@ export function useNodeFinder(params: UseNodeFinderParams) {
         handleSelectSub(undefined);
         return;
       }
-      const subs = getSubNodes(main) || [];
+      // ✅ NO FALLBACKS: getSubNodes always returns array (can be empty)
+      const subs = getSubNodes(main);
       for (let sIdx = 0; sIdx < subs.length; sIdx++) {
         const sub = subs[sIdx];
         // After validation strict, sub.id is always present

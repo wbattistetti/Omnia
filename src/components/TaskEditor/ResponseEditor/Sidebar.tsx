@@ -98,7 +98,8 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
     const flatList: Array<{ type: 'main' | 'sub'; mainIdx: number; subIdx?: number }> = [];
     mainList.forEach((main, mIdx) => {
       flatList.push({ type: 'main', mainIdx: mIdx });
-      const subs = getSubNodes(main) || [];
+      // ✅ NO FALLBACKS: getSubNodes always returns array (can be empty)
+      const subs = getSubNodes(main);
       subs.forEach((_, sIdx) => {
         flatList.push({ type: 'sub', mainIdx: mIdx, subIdx: sIdx });
       });
@@ -198,7 +199,8 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
     // ✅ Calcola per tutti i main items e sub-items (IDENTICO al ghost container)
     mainList.forEach((main) => {
       const label = getNodeLabel(main, translations);
-      const subs = getSubNodes(main) || [];
+      // ✅ NO FALLBACKS: getSubNodes always returns array (can be empty)
+      const subs = getSubNodes(main);
       const hasSubs = subs.length > 0;
 
       // Main item width (stesso calcolo del ghost)
@@ -340,7 +342,8 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
             </button>
           )}
           {mainList.map((main, idx) => {
-            const subs = getSubNodes(main) || [];
+            // ✅ NO FALLBACKS: getSubNodes always returns array (can be empty)
+      const subs = getSubNodes(main);
             const hasSubs = subs.length > 0;
             const MainIcon = getIconComponent(main?.icon || 'FileText');
             return (
@@ -626,7 +629,8 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
         const activeMain = selectedMainIndex === idx;
         const disabledMain = !isMainIncluded(idx);
         const Icon = getIconComponent(main?.icon || 'FileText');
-        const subs = getSubNodes(main) || [];
+        // ✅ NO FALLBACKS: getSubNodes always returns array (can be empty)
+      const subs = getSubNodes(main);
         return (
           <div key={idx}>
             <button

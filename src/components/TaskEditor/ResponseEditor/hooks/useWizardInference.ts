@@ -123,7 +123,8 @@ export function useWizardInference({
       const firstMainTemplateId = firstMain?.templateId ?? firstMainId;
 
       // ✅ Lookup diretto: O(1) invece di O(n) filter
-      const nodeSteps = task?.steps?.[firstMainTemplateId] || {};
+      // ✅ NO FALLBACKS: nodeSteps lookup returns empty object if not found (legitimate default)
+      const nodeSteps = task?.steps?.[firstMainTemplateId] ?? {};
       const hasSteps = nodeSteps && typeof nodeSteps === 'object' && Object.keys(nodeSteps).length > 0;
 
       const taskTemplateIdsCount = task?.steps && typeof task?.steps === 'object' && !Array.isArray(task.steps)
@@ -182,8 +183,9 @@ export function useWizardInference({
         setInferenceResult({
           ai: {
             schema: {
-              label: currentTaskTree?.label || stableTaskLabel || 'Data',
-              nodes: currentTaskTree?.nodes || []
+              label: currentTaskTree?.label ?? stableTaskLabel ?? 'Data',
+              // ✅ NO FALLBACKS: currentTaskTree.nodes must exist after validation
+              nodes: currentTaskTree?.nodes ?? []
             }
           }
         });

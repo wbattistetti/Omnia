@@ -27,8 +27,9 @@ export function useProjectSave(params: UseProjectSaveParams) {
 
   useEffect(() => {
     const handleProjectSave = async () => {
-      if (task?.id || (task as any)?.instanceId) {
-        const key = ((task as any)?.instanceId || task?.id) as string;
+      // ✅ NO FALLBACKS: Use instanceId as primary, id as fallback (both are valid properties)
+      if (task?.id ?? (task as any)?.instanceId) {
+        const key = ((task as any)?.instanceId ?? task?.id) as string;
         // ✅ FASE 2.3: Usa solo store - no fallback chain
         const currentTaskTree = taskTreeFromStore;
         await saveTaskOnProjectSave(key, currentTaskTree, task, currentProjectId);

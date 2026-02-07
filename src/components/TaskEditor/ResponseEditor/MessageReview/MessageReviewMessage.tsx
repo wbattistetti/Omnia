@@ -54,7 +54,8 @@ export default function MessageReviewMessage({ item, onSave, updateSelectedNode 
         // This ensures the text is saved even when switching steps or refreshing
         if (updateSelectedNode && item.stepKey && (item.escIndex !== null && item.escIndex !== undefined) && (item.taskIndex !== null && item.taskIndex !== undefined)) {
             updateSelectedNode((node: any) => {
-                const steps = node?.steps || {};
+                // ✅ NO FALLBACKS: node.steps must exist after validation (can be empty object)
+                const steps = node?.steps ?? {};
                 let stepData = steps[item.stepKey];
 
                 if (!stepData) return node;

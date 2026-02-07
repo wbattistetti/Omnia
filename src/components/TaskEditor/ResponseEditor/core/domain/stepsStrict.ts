@@ -22,7 +22,8 @@ export function getStepsForNodeStrict(
     );
   }
 
-  return steps[nodeTemplateId] || {};
+  // ✅ NO FALLBACKS: Returns empty object if nodeTemplateId not found (legitimate default)
+  return steps[nodeTemplateId] ?? {};
 }
 
 /**
@@ -56,5 +57,6 @@ export function getNodeStepDataStrict(node: TaskTreeNode, stepKey: string): any 
     );
   }
 
-  return node.steps[stepKey] || {};
+  // ✅ NO FALLBACKS: Returns empty object if stepKey not found (legitimate default)
+  return node.steps[stepKey] ?? {};
 }

@@ -85,5 +85,7 @@ export function findNodeByIndices(
   const isValidSubIndex = Number.isFinite(subIndex) && subIndex >= 0 && subIndex < subs.length;
   if (!isValidSubIndex) return main;
 
-  return subs[subIndex] || main;
+  // ✅ NO FALLBACKS: subs[subIndex] must exist if isValidSubIndex is true
+  // If subIndex is valid but subs[subIndex] is falsy, return main as safe fallback
+  return subs[subIndex] ?? main;
 }

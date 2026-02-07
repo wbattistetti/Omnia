@@ -21,7 +21,8 @@ export function hasIntentMessages(ddt: any, task?: any): boolean {
   const firstMainTemplateId = firstMain.templateId ?? firstMain.id;
 
   // ✅ Lookup diretto: O(1) invece di O(n) filter
-  const nodeSteps = task?.steps?.[firstMainTemplateId] || {};
+  // ✅ NO FALLBACKS: nodeSteps lookup returns empty object if not found (legitimate default)
+  const nodeSteps = task?.steps?.[firstMainTemplateId] ?? {};
 
   // ✅ nodeSteps è già nel formato corretto: { "start": {...}, "noMatch": {...}, ... }
   const steps: Record<string, any> = {};

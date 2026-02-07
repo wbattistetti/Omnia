@@ -77,11 +77,19 @@ export function updateStepEscalations(
         templateStepId, // Riferimento al template step
         escalations
       };
-      next.steps = [...(node.steps || []), newStep];
+      // ✅ NO FALLBACKS: node.steps must exist as array after validation
+      if (!Array.isArray(node.steps)) {
+        throw new Error('[updateStepEscalations] node.steps must be an array in MaterializedStep format. This should have been caught by validation.');
+      }
+      next.steps = [...node.steps, newStep];
     }
   } else {
     // ✅ RETROCOMPATIBILITÀ: Gestisce formato dictionary legacy
-    next.steps = { ...(node.steps || {}) };
+    // ✅ NO FALLBACKS: node.steps must exist as dictionary after validation
+    if (!node.steps || typeof node.steps !== 'object' || Array.isArray(node.steps)) {
+      throw new Error('[updateStepEscalations] node.steps must be a dictionary. This should have been caught by validation.');
+    }
+    next.steps = { ...node.steps };
     const escalations = updater([...(next.steps[stepKey]?.escalations || [])]);
     next.steps[stepKey] = { type: stepKey, escalations };
   }

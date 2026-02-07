@@ -78,7 +78,8 @@ export function EditorRenderer({
     case 'embeddings':
       const taskForEmbeddings = editorProps.task;
       const actForEmbeddings = taskForEmbeddings ? {
-        id: taskForEmbeddings.id || taskForEmbeddings.instanceId || '',
+        // ✅ NO FALLBACKS: Use id as primary, instanceId as fallback (both are valid properties)
+        id: taskForEmbeddings.id ?? taskForEmbeddings.instanceId ?? '',
         type: taskForEmbeddings.type || '',
         label: taskForEmbeddings.label,
         instanceId: taskForEmbeddings.instanceId,

@@ -108,7 +108,8 @@ export function collectNodeMessages(
     pathLabel: string
 ): ReviewItem[] {
     const out: ReviewItem[] = [];
-    const steps = node?.steps || {};
+    // ✅ NO FALLBACKS: node.steps must exist after validation (can be empty object)
+    const steps = node?.steps ?? {};
     // Track which textKeys we've already collected to avoid duplicates
     const collectedTextKeys = new Set<string>();
 

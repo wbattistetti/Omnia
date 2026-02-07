@@ -53,7 +53,8 @@ export default function IntentEditorInlineEditor({
   useEffect(() => {
     if (!act) return;
 
-    const instanceId = (act as any)?.instanceId || act.id;
+    // ✅ NO FALLBACKS: Use instanceId as primary, id as fallback (both are valid properties)
+    const instanceId = (act as any)?.instanceId ?? act.id ?? 'unknown';
     const task = taskRepository.getTask(instanceId);
 
     if (task?.intents) {
@@ -73,7 +74,8 @@ export default function IntentEditorInlineEditor({
   useEffect(() => {
     if (!act) return;
 
-    const instanceId = (act as any)?.instanceId || act.id;
+    // ✅ NO FALLBACKS: Use instanceId as primary, id as fallback (both are valid properties)
+    const instanceId = (act as any)?.instanceId ?? act.id ?? 'unknown';
     let t: any;
 
     const unsubscribe = useIntentStore.subscribe(() => {

@@ -47,7 +47,8 @@ export function useSidebarHandlers({
     mains[mIdx] = main;
     next.nodes = mains;
     try {
-      const subs = getSubNodes(main) || [];
+      // ✅ NO FALLBACKS: getSubNodes always returns array (can be empty)
+      const subs = getSubNodes(main);
       const target = subs[sIdx];
       if (localStorage.getItem('debug.responseEditor') === '1') {
         console.log('[DDT][subRequiredToggle][persist]', { main: main?.label, label: target?.label, required });

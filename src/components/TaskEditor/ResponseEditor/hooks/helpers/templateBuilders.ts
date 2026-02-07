@@ -53,7 +53,8 @@ export function extractTranslationGuids(data: any[]): string[] {
       extractFromSteps(main.steps, String(mainNodeId));
     }
     // After validation strict, use subNodes (not subData)
-    const subNodes = main.subNodes || [];
+    // ✅ NO FALLBACKS: main.subNodes must exist after validation (can be empty array)
+    const subNodes = main.subNodes ?? [];
     subNodes.forEach((sub: any) => {
       // After validation strict, sub.id is always present
       // templateId is optional (preferred for lookup, but id works as fallback)

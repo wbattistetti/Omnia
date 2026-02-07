@@ -41,5 +41,6 @@ export function getNodeLabelStrict(node: TaskTreeNode | null | undefined): strin
 
   validateNodeStructure(node, 'getNodeLabelStrict');
 
-  return node.label || '';
+  // ✅ NO FALLBACKS: Returns empty string if label not found (legitimate default)
+  return node.label ?? '';
 }

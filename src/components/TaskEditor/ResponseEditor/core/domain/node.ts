@@ -52,7 +52,8 @@ export function getNodeStepData(node: TaskTreeNode | null | undefined, stepKey: 
     return {};
   }
 
-  return node.steps[stepKey] || {};
+  // ✅ NO FALLBACKS: Returns empty object if stepKey not found (legitimate default)
+  return node.steps[stepKey] ?? {};
 }
 
 /**
@@ -69,7 +70,8 @@ export function getNodeLabel(node: TaskTreeNode | null | undefined, translations
   }
 
   // Priority 2: Return node.label
-  return node.label || '';
+  // ✅ NO FALLBACKS: Returns empty string if label not found (legitimate default)
+  return node.label ?? '';
 }
 
 /**

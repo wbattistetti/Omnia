@@ -83,7 +83,11 @@ export function applyNodeUpdate(params: ApplyNodeUpdateParams): ApplyNodeUpdateR
 
   // STEP 1: Build complete updated TaskTree
   const updatedTaskTree = { ...currentTaskTree };
-  const mains = [...(currentTaskTree?.nodes || [])];
+  // ✅ NO FALLBACKS: currentTaskTree.nodes must exist after validation
+  if (!currentTaskTree?.nodes) {
+    throw new Error('[applyNodeUpdate] currentTaskTree.nodes is missing. This should have been caught by validateTaskTreeStructure.');
+  }
+  const mains = [...currentTaskTree.nodes];
 
   if (mainIndex < mains.length) {
     const main = { ...mains[mainIndex] };
@@ -198,8 +202,9 @@ export function applyNodeUpdate(params: ApplyNodeUpdateParams): ApplyNodeUpdateR
 
   // STEP 4: Determine if should save
   const taskToSave = task;
-  const shouldSave = !!(taskToSave?.id || (taskToSave as any)?.instanceId);
-  const saveKey = shouldSave ? ((taskToSave as any)?.instanceId || taskToSave?.id) as string : undefined;
+  // ✅ NO FALLBACKS: Use instanceId as primary, id as fallback (both are valid properties)
+  const shouldSave = !!(taskToSave?.id ?? (taskToSave as any)?.instanceId);
+  const saveKey = shouldSave ? ((taskToSave as any)?.instanceId ?? taskToSave?.id) as string : undefined;
   const hasTaskTree = updatedTaskTree && (
     (updatedTaskTree.nodes && updatedTaskTree.nodes.length > 0) ||
     (updatedTaskTree.steps && Array.isArray(updatedTaskTree.steps) && updatedTaskTree.steps.length > 0)

@@ -38,7 +38,8 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
   // Ottieni projectId corrente per salvare le istanze nel progetto corretto
   const pdUpdate = useProjectDataUpdate();
   const currentProjectId = pdUpdate?.getCurrentProjectId() || null;
-  const instanceKey = React.useMemo(() => taskMeta.instanceId || taskMeta.id, [taskMeta.instanceId, taskMeta.id]); // ✅ RINOMINATO: act → taskMeta
+  // ✅ NO FALLBACKS: Use instanceId as primary, id as fallback (both are valid properties)
+  const instanceKey = React.useMemo(() => taskMeta.instanceId ?? taskMeta.id ?? 'unknown', [taskMeta.instanceId, taskMeta.id]); // ✅ RINOMINATO: act → taskMeta
 
   // ✅ FIX: Carica task in modo sincrono nel render iniziale (getTask è sincrono)
   // Non usare useTaskInstance che introduce delay inutile con useEffect
@@ -167,7 +168,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
       finalTaskTree = {
         label: finalTaskTreeOrLegacy.label || '',
         nodes: finalTaskTreeOrLegacy.data,
-        steps: finalTaskTreeOrLegacy.steps || {},
+        steps: finalTaskTreeOrLegacy.steps ?? {},
         constraints: finalTaskTreeOrLegacy.constraints,
         dataContract: finalTaskTreeOrLegacy.dataContract,
         introduction: finalTaskTreeOrLegacy.introduction
@@ -306,7 +307,8 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
 
   // ✅ Stable key per impedire re-mount durante l'editing
   const editorKey = React.useMemo(() => {
-    const instanceKey = taskMeta.instanceId || taskMeta.id || 'unknown';
+    // ✅ NO FALLBACKS: Use instanceId as primary, id as fallback (both are valid properties)
+    const instanceKey = taskMeta.instanceId ?? taskMeta.id ?? 'unknown';
     return `response-editor-${instanceKey}`;
   }, [taskMeta.instanceId, taskMeta.id]);
 

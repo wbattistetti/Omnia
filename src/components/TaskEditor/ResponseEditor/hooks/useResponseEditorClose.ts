@@ -74,7 +74,7 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
 
   const handleEditorClose = useCallback(async (): Promise<boolean> => {
     console.log('[ResponseEditor][CLOSE] 🚪 Editor close initiated', {
-      taskId: task?.id || (task as any)?.instanceId,
+      taskId: task?.id ?? (task as any)?.instanceId ?? 'unknown',
       hasTask: !!task,
       hasSelectedNode: !!selectedNode,
       hasSelectedNodePath: !!selectedNodePath,
@@ -172,10 +172,15 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
           );
           if (hasTasks) {
             // ✅ FASE 2.3: Aggiorna store invece di taskTreeRef
-            const updatedTaskTree = currentTaskTree || { label: '', nodes: [], steps: {} };
+            // ✅ NO FALLBACKS: currentTaskTree must exist after validation
+            if (!currentTaskTree) {
+              console.error('[useResponseEditorClose] currentTaskTree is null/undefined. This should not happen after validation.');
+              return false;
+            }
+            const updatedTaskTree = currentTaskTree;
             updatedTaskTree.introduction = {
               type: 'introduction',
-              escalations: newIntroStep.escalations || []
+              escalations: introStepData?.escalations ?? []
             };
             setTaskTree(updatedTaskTree);
           } else {
@@ -219,7 +224,12 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
             main.subNodes = subList;
             mains[mainIndex] = main;
             // ✅ FASE 2.3: Aggiorna store invece di taskTreeRef
-            const updatedTaskTree = currentTaskTree || { label: '', nodes: [], steps: {} };
+            // ✅ NO FALLBACKS: currentTaskTree must exist after validation
+            if (!currentTaskTree) {
+              console.error('[useResponseEditorClose] currentTaskTree is null/undefined. This should not happen after validation.');
+              return false;
+            }
+            const updatedTaskTree = { ...currentTaskTree, nodes: mains };
             updatedTaskTree.nodes = mains;
             setTaskTree(updatedTaskTree);
           }
@@ -228,7 +238,12 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
     }
 
     // ✅ FASE 3: Usa store (già contiene tutte le modifiche)
-    const finalTaskTree = taskTreeFromStore || { label: '', nodes: [], steps: {} };
+    // ✅ NO FALLBACKS: taskTreeFromStore must exist after validation
+    if (!taskTreeFromStore) {
+      console.error('[useResponseEditorClose] taskTreeFromStore is null/undefined. This should not happen after validation.');
+      return false;
+    }
+    const finalTaskTree = taskTreeFromStore;
     const finalMainList = getMainNodes(finalTaskTree);
     const firstNode = finalMainList?.[0];
     const firstNodeRegex = firstNode?.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
@@ -245,8 +260,8 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
 
     try {
       // Se abbiamo un instanceId o task.id (caso DDTHostAdapter), salva nell'istanza
-      if (task?.id || (task as any)?.instanceId) {
-        const key = ((task as any)?.instanceId || task?.id) as string;
+      if (task?.id ?? (task as any)?.instanceId) {
+        const key = ((task as any)?.instanceId ?? task?.id) as string;
         const hasTaskTree = finalTaskTree && Object.keys(finalTaskTree).length > 0 && finalTaskTree.nodes && finalTaskTree.nodes.length > 0;
 
         // ✅ NUOVO MODELLO: Aggiorna solo la cache in memoria (NON salvataggio DB)
@@ -271,7 +286,7 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
         }
 
         console.log('[ResponseEditor][CLOSE] 🔍 Pre-save check', {
-          taskId: task?.id || (task as any)?.instanceId,
+          taskId: task?.id ?? (task as any)?.instanceId ?? 'unknown',
           key,
           hasTaskTree,
           finalTaskTreeKeys: finalTaskTree ? Object.keys(finalTaskTree) : [],
@@ -280,7 +295,7 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
         });
 
         console.log('[ResponseEditor][CLOSE] 💾 Starting save process', {
-          taskId: task?.id || (task as any)?.instanceId,
+          taskId: task?.id ?? (task as any)?.instanceId ?? 'unknown',
           key,
           hasTask: !!task,
           taskStepsCount: Array.isArray(task?.steps) ? task.steps.length : 0,
@@ -333,7 +348,7 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
           setTaskTree(finalTaskTreeWithSteps);
 
           console.log('[ResponseEditor][CLOSE] 📦 Final TaskTree with steps prepared', {
-            taskId: task?.id || (task as any)?.instanceId,
+            taskId: task?.id ?? (task as any)?.instanceId ?? 'unknown',
             key,
             finalStepsKeys: finalTaskTreeWithSteps.steps ? Object.keys(finalTaskTreeWithSteps.steps) : [],
             finalStepsCount: finalTaskTreeWithSteps.steps ? Object.keys(finalTaskTreeWithSteps.steps).length : 0,
@@ -346,7 +361,7 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
           await saveTaskOnEditorClose(key, finalTaskTreeWithSteps, task, currentProjectId);
 
           console.log('[ResponseEditor][CLOSE] ✅ Save completed successfully', {
-            taskId: task?.id || (task as any)?.instanceId,
+            taskId: task?.id ?? (task as any)?.instanceId ?? 'unknown',
             key,
             nodesLength: finalTaskTree.nodes?.length || 0,
             finalStartTasks
@@ -366,7 +381,7 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
       }
     } catch (e) {
       console.error('[ResponseEditor][CLOSE] ❌ Persist error', {
-        taskId: task?.id || (task as any)?.instanceId,
+        taskId: task?.id ?? (task as any)?.instanceId ?? 'unknown',
         error: e,
         errorMessage: e instanceof Error ? e.message : String(e),
         errorStack: e instanceof Error ? e.stack : undefined
@@ -377,7 +392,7 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
     // tab.onClose chiamerà closeTab solo se questo handleEditorClose ritorna true
     // onClose() è solo per compatibilità legacy e non deve chiudere il tab
     console.log('[ResponseEditor][CLOSE] ✅ Close process completed, returning true to allow tab closure', {
-      taskId: task?.id || (task as any)?.instanceId
+      taskId: task?.id ?? (task as any)?.instanceId ?? 'unknown'
     });
 
     // ✅ Ritorna true per indicare che la chiusura può procedere

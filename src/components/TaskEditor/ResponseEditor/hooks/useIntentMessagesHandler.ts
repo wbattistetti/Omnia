@@ -33,8 +33,9 @@ export function useIntentMessagesHandler(params: UseIntentMessagesHandlerParams)
 
     // CRITICO: Salva il DDT nell'istanza IMMEDIATAMENTE quando si completano i messaggi
     // Questo assicura che quando si fa "Save" globale, l'istanza abbia il DDT aggiornato
-    if (task?.id || (task as any)?.instanceId) {
-      const key = ((task as any)?.instanceId || task?.id) as string;
+    // ✅ NO FALLBACKS: Use instanceId as primary, id as fallback (both are valid properties)
+    if (task?.id ?? (task as any)?.instanceId) {
+      const key = ((task as any)?.instanceId ?? task?.id) as string;
       // MIGRATION: Use getTemplateId() helper
       // FIX: Se c'è un DDT, assicurati che il templateId sia 'UtteranceInterpretation'
       const taskInstance = taskRepository.getTask(key);

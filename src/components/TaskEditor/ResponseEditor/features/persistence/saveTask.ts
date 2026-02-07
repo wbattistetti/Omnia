@@ -141,7 +141,7 @@ export async function saveTaskOnProjectSave(
       type: task?.type || TaskType.UtteranceInterpretation,
       templateId: currentTemplateId,
       label: taskTree.label,
-      steps: taskTree.steps || {}
+      steps: taskTree.steps ?? {}
     };
 
     const overrides = await extractTaskOverrides(

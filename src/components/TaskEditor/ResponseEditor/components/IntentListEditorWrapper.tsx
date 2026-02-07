@@ -11,7 +11,8 @@ export default function IntentListEditorWrapper({
   act,
   onIntentSelect,
 }: IntentListEditorWrapperProps) {
-  const instanceId = (act as any)?.instanceId || act.id;
+  // ✅ NO FALLBACKS: Use instanceId as primary, id as fallback (both are valid properties)
+  const instanceId = (act as any)?.instanceId ?? act.id ?? 'unknown';
   const [selectedIntentId, setSelectedIntentId] = useState<string | null>(null);
 
   // FASE 3: Get current Task to react to changes

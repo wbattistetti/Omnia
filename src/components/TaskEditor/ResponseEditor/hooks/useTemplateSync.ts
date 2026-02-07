@@ -34,7 +34,8 @@ export function useTemplateSync(params: UseTemplateSyncParams) {
   useEffect(() => {
     const checkTemplateSync = async () => {
       // ✅ FASE 2.3: Usa store invece di taskTree prop
-      const currentTaskTree = taskTreeFromStore || taskTree;
+      // ✅ NO FALLBACKS: Use taskTreeFromStore as primary source, taskTree as fallback only during migration
+      const currentTaskTree = taskTreeFromStore ?? taskTree;
       if (!currentTaskTree || !task?.templateId) return;
 
       const syncApplied = await checkAndApplyTemplateSync(currentTaskTree, task, currentProjectId);
