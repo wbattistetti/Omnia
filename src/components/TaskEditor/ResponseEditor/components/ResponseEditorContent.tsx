@@ -54,10 +54,13 @@ export function ResponseEditorContent({
   onIntentMessagesComplete,
   normalEditorLayout,
 }: ResponseEditorContentProps) {
+  // ✅ FASE 2.3: Use store as SINGLE source of truth
+  const taskTreeFromStore = useTaskTreeFromStore();
+
   // Contract Wizard
   if (showContractWizard) {
-    // ✅ FASE 2.2: Use store as primary source, fallback to ref, then prop
-    const currentTaskTree = taskTreeFromStore ?? taskTreeRef.current ?? taskTree;
+    // ✅ FASE 2.3: Usa solo store - no fallback chain
+    const currentTaskTree = taskTreeFromStore;
     return (
       <div style={{ flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
         <ContractWizard

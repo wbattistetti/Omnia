@@ -50,11 +50,16 @@ export const useTaskTreeStore = create<TaskTreeStore>((set, get) => ({
 
   // Actions
   setTaskTree: (taskTree) => {
-    set((state) => ({
-      ...state,
-      taskTree,
-      taskTreeVersion: state.taskTreeVersion + 1
-    }));
+    set((state) => {
+      // ✅ CRITICAL: Only increment version if taskTree actually changed
+      // This prevents infinite loops when same taskTree is set multiple times
+      const taskTreeChanged = state.taskTree !== taskTree;
+      return {
+        ...state,
+        taskTree,
+        taskTreeVersion: taskTreeChanged ? state.taskTreeVersion + 1 : state.taskTreeVersion
+      };
+    });
   },
 
   updateTaskTree: (updater) => {

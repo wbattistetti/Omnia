@@ -3,7 +3,7 @@
 
 import { useEffect } from 'react';
 import { getdataList, getSubDataList } from '../ddtSelectors';
-import { useTaskTreeFromStore } from '../core/state';
+import { useTaskTreeFromStore, useTaskTreeVersion } from '../core/state';
 import type { Task, TaskTree } from '../../../../types/taskTypes';
 
 export interface UseNodeLoadingParams {
@@ -14,9 +14,11 @@ export interface UseNodeLoadingParams {
   introduction: any;
 
   // Task and tree
-  task: Task | null | undefined;
-  taskTree: TaskTree | null | undefined;
-  taskTreeRef: React.MutableRefObject<TaskTree | null | undefined>;
+  // ✅ FASE 2.3: Parametri opzionali per backward compatibility temporanea
+  task?: Task | null | undefined;
+  taskTree?: TaskTree | null | undefined;
+  taskTreeRef?: React.MutableRefObject<TaskTree | null | undefined>;
+  taskTreeVersion?: number; // Opzionale - useremo quello dello store
 
   // Setters
   setSelectedNode: React.Dispatch<React.SetStateAction<any>>;
@@ -32,7 +34,11 @@ export interface UseNodeLoadingParams {
 
 /**
  * Hook that manages node loading when selection changes.
- * This hook loads the selected node from taskTreeRef and sets it in state.
+ *
+ * ✅ FASE 2.3: Migrato a usare solo Zustand store (single source of truth)
+ * - Usa taskTreeFromStore come unica fonte
+ * - Usa taskTreeVersion dallo store
+ * - Rimossi fallback a taskTreeRef e taskTree prop
  */
 export function useNodeLoading(params: UseNodeLoadingParams) {
   const {
@@ -41,22 +47,20 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
     selectedRoot,
     introduction,
     task,
-    taskTree,
-    taskTreeRef,
     setSelectedNode,
     setSelectedNodePath,
     getStepsForNode,
     getStepsAsArray,
   } = params;
 
-  // ✅ FASE 2.2: Use Zustand store as primary source
+  // ✅ FASE 2.3: Use Zustand store as SINGLE source of truth
   const taskTreeFromStore = useTaskTreeFromStore();
+  const taskTreeVersion = useTaskTreeVersion();
 
   useEffect(() => {
-    // LOG CHIRURGICO 3: Caricamento nodo
-    // ✅ FASE 2.2: Use store as primary source, fallback to ref
-    const currentTaskTree = taskTreeFromStore ?? taskTreeRef.current;
-    const currentMainList = getdataList(currentTaskTree); // Leggi dallo store/ref, non dal prop
+    // ✅ FASE 2.3: Usa solo store - no fallback chain
+    const currentTaskTree = taskTreeFromStore;
+    const currentMainList = getdataList(currentTaskTree);
 
     if (currentMainList.length === 0) {
       return;
@@ -280,7 +284,9 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
     }
 
 
-    // Carica il nodo quando cambiano gli indici O quando taskTree prop cambia (dal dockTree)
-    // ✅ FASE 2.2: Store is already synced with taskTreeRef via useTaskTreeSync
-  }, [selectedMainIndex, selectedSubIndex, selectedRoot, introduction, taskTree?.label, taskTree?.nodes?.length, task?.steps, taskTreeFromStore, taskTreeRef, setSelectedNode, setSelectedNodePath, getStepsForNode, getStepsAsArray]);
+    // ✅ FASE 2.3: Carica il nodo quando cambiano gli indici O quando taskTreeVersion cambia
+    // ✅ CRITICAL: Use taskTreeVersion as primary trigger (stable, increments only when needed)
+    // Don't include taskTreeFromStore in deps - it changes reference on every store update
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMainIndex, selectedSubIndex, selectedRoot, introduction, taskTreeVersion, setSelectedNode, setSelectedNodePath, getStepsForNode, getStepsAsArray]);
 }

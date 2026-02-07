@@ -17,7 +17,7 @@
  * ```
  */
 
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useTaskTreeStore } from './taskTreeStore';
 import type { TaskTree } from '@types/taskTypes';
 
@@ -58,12 +58,11 @@ export function useTaskTreeSync(
     const currentRefValue = taskTreeRef.current;
     const currentValue = currentRefValue || taskTree;
 
-    // Only sync if value actually changed
-    if (currentValue !== lastSyncedRef.current) {
+    // ✅ CRITICAL: Only sync if value actually changed AND is not null
+    // Don't overwrite store with null if store already has a value (DDTHostAdapter may have populated it)
+    if (currentValue !== lastSyncedRef.current && currentValue) {
       lastSyncedRef.current = currentValue;
-      if (currentValue) {
-        setTaskTree(currentValue);
-      }
+      setTaskTree(currentValue);
     }
   }, [taskTreeRef.current, taskTree, enabled, setTaskTree]);
 

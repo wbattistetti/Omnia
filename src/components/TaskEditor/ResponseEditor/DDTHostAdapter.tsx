@@ -8,6 +8,7 @@ import { getTemplateId } from '../../../utils/taskHelpers';
 import { buildTaskTree } from '../../../utils/taskUtils';
 import { TaskType, taskIdToTaskType, getEditorFromTaskType } from '../../../types/taskTypes';
 import type { TaskTree } from '../../../types/taskTypes';
+import { useTaskTreeStore } from './core/state';
 
 export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeader, onToolbarUpdate, registerOnClose }: EditorProps) { // ✅ PATTERN CENTRALIZZATO: Accetta hideHeader e onToolbarUpdate
   // ✅ ARCHITETTURA ESPERTO: Verifica che questo componente sia usato solo per TaskTree
@@ -53,9 +54,25 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
     }
   }, [instanceKey]);
 
-  // ✅ TaskTree state (sostituisce ddt)
+  // ✅ FIX STRUTTURALE: Store è solo un sink, non un anello di ritorno
+  // L'editor vive su taskTree locale, lo store è solo un mirror
+  const { setTaskTree: setTaskTreeInStore } = useTaskTreeStore();
+
+  // ✅ TaskTree state (sostituisce ddt) - Keep for backward compatibility
   const [taskTree, setTaskTree] = React.useState<TaskTree | null>(null);
   const [taskTreeLoading, setTaskTreeLoading] = React.useState(true);
+
+  // ✅ FIX STRUTTURALE: Non leggere più dallo store per ricalcolare safeTaskTree
+  // L'editor vive su taskTree locale, non su currentTaskTree che dipende dallo store
+  // const currentTaskTree = taskTreeFromStore ?? taskTree; // ❌ RIMOSSO - causava feedback loop
+
+  // ✅ FIX STRUTTURALE: Popola lo store solo una volta per istanza
+  const initializedRef = React.useRef(false);
+
+  // ✅ Reset initializedRef quando cambia istanza
+  React.useEffect(() => {
+    initializedRef.current = false;
+  }, [instanceKey]);
 
   // ✅ ARCHITETTURA ESPERTO: Carica TaskTree async usando buildTaskTree
   React.useEffect(() => {
@@ -77,7 +94,14 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
 
         // ✅ TaskTree caricato
         if (tree) {
+          // ✅ FIX STRUTTURALE: Aggiorna solo local state (editor vive su questo)
           setTaskTree(tree);
+
+          // ✅ FIX STRUTTURALE: Popola store solo se non ancora inizializzato (solo una volta per istanza)
+          if (!initializedRef.current) {
+            setTaskTreeInStore(tree);
+            initializedRef.current = true;
+          }
 
           console.log('[🔍 TaskTreeHostAdapter] ✅ TaskTree caricato', {
             taskId: fullTask.id,
@@ -95,21 +119,37 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
             updatedTaskHasSteps: !!updatedTask?.steps,
             updatedTaskStepsKeys: updatedTask?.steps && typeof updatedTask.steps === 'object' && !Array.isArray(updatedTask.steps)
               ? Object.keys(updatedTask.steps)
-              : []
+              : [],
+            storeInitialized: initializedRef.current
           });
         } else {
+          // ✅ FIX STRUTTURALE: Aggiorna solo local state
           setTaskTree(null);
+          // ✅ Popola store solo se non ancora inizializzato
+          if (!initializedRef.current) {
+            setTaskTreeInStore(null);
+            initializedRef.current = true;
+          }
         }
       } catch (error) {
         console.error('[TaskTreeHostAdapter] Error loading TaskTree:', error);
+        // ✅ FIX STRUTTURALE: Aggiorna solo local state
         setTaskTree(null);
+        // ✅ Popola store solo se non ancora inizializzato
+        if (!initializedRef.current) {
+          setTaskTreeInStore(null);
+          initializedRef.current = true;
+        }
       } finally {
         setTaskTreeLoading(false);
       }
     };
 
     loadTaskTree();
-  }, [fullTask, currentProjectId, instanceKey]);
+    // ✅ CRITICAL: setTaskTreeInStore is stable from Zustand, but we don't need it in deps
+    // ✅ FIX STRUTTURALE: Dipende solo da fullTask?.id, non da fullTask (evita loop)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fullTask?.id, currentProjectId, instanceKey]);
 
   // ✅ ARCHITETTURA ESPERTO: Loading solo se serve async
   const loading = taskTreeLoading;
@@ -232,21 +272,28 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
     }
 
     // ✅ ARCHITETTURA ESPERTO: Aggiorna immediatamente taskTree per aggiornare i props
-    // ✅ Aggiorna taskTree
+    // ✅ FIX STRUTTURALE: Aggiorna solo local state (editor vive su questo)
     setTaskTree(finalTaskTree);
-  }, [instanceKey, currentProjectId, taskMeta.label]);
+    // ✅ FIX STRUTTURALE: Aggiorna store solo se non ancora inizializzato (o se è un nuovo wizard)
+    // In questo caso, il wizard completa, quindi aggiorniamo sempre lo store
+    setTaskTreeInStore(finalTaskTree);
+    initializedRef.current = true; // ✅ Marca come inizializzato dopo wizard
+  }, [instanceKey, currentProjectId, taskMeta.label, setTaskTreeInStore]);
 
   // ✅ ARCHITETTURA ESPERTO: Ensure nodes is always an array before passing to ResponseEditor
+  // ✅ FIX STRUTTURALE: safeTaskTree dipende solo da taskTree locale, non da currentTaskTree che legge dallo store
+  // Questo rompe il feedback loop: l'editor vive su taskTree locale, lo store è solo un mirror
   const safeTaskTree = React.useMemo(() => {
-    if (!taskTree) {
+    const source = taskTree; // ✅ Solo taskTree locale, non currentTaskTree
+    if (!source) {
       return null;
     }
     const safe = {
-      ...taskTree,
-      nodes: Array.isArray(taskTree.nodes) ? taskTree.nodes : []
+      ...source,
+      nodes: Array.isArray(source.nodes) ? source.nodes : []
     };
     return safe;
-  }, [taskTree, loading]);
+  }, [taskTree?.id, taskTree?.nodes?.length, loading]); // ✅ Dipendenze stabili (solo ID e lunghezza, non tutto l'oggetto)
 
   // ✅ Stable key per impedire re-mount durante l'editing
   const editorKey = React.useMemo(() => {

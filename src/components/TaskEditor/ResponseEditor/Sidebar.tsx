@@ -558,8 +558,10 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
   const finalWidth = manualWidth ?? measuredW ?? 280; // Fallback a 280 invece di 'auto'
   const hasFlex = !manualWidth && measuredW === null; // ✅ CRITICO: Solo flex se non c'è manualWidth E measuredW è null
 
-  // ✅ Early return check moved here (after all hooks) to comply with React Hooks rules
-  if (!Array.isArray(mainList) || mainList.length === 0) return null;
+      // ✅ Early return check moved here (after all hooks) to comply with React Hooks rules
+      if (!Array.isArray(mainList) || mainList.length === 0) {
+        return null;
+      }
 
   return (
     <div

@@ -209,6 +209,9 @@ export function useDDTTranslations(ddt: any | null | undefined, task?: any): Rec
     }
 
     return translationsFromGlobal;
-  }, [ddtId, taskStepsKeys, translationsKeys, ddt, task, globalTranslations]);
+    // ✅ CRITICAL: Don't include ddt/task in deps - they change reference on every render
+    // Use only stable keys: ddtId, taskStepsKeys, translationsKeys
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ddtId, taskStepsKeys, translationsKeys]);
 }
 

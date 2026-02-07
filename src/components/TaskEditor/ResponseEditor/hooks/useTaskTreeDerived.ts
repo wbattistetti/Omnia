@@ -3,13 +3,15 @@
 
 import { useMemo } from 'react';
 import { getdataList } from '../ddtSelectors';
-import { useTaskTreeFromStore } from '../core/state';
+import { useTaskTreeFromStore, useTaskTreeVersion } from '../core/state';
 import type { TaskTree } from '../../../../types/taskTypes';
 
 export interface UseTaskTreeDerivedParams {
-  taskTree: TaskTree | null | undefined;
-  taskTreeRef: React.MutableRefObject<TaskTree | null | undefined>;
-  taskTreeVersion: number;
+  // ✅ FASE 2.3: Parametri opzionali per backward compatibility temporanea
+  // Verranno rimossi completamente dopo migrazione di tutti gli hook
+  taskTree?: TaskTree | null | undefined;
+  taskTreeRef?: React.MutableRefObject<TaskTree | null | undefined>;
+  taskTreeVersion?: number; // Opzionale - useremo quello dello store
   isTaskTreeLoading?: boolean;
 }
 
@@ -21,46 +23,51 @@ export interface UseTaskTreeDerivedResult {
 
 /**
  * Hook that provides derived values from TaskTree (mainList, isAggregatedAtomic, introduction).
+ *
+ * ✅ FASE 2.3: Migrato a usare solo Zustand store (single source of truth)
+ * - Usa taskTreeFromStore come unica fonte
+ * - Usa taskTreeVersion dallo store
+ * - Rimossi fallback a taskTreeRef e taskTree prop
  */
-export function useTaskTreeDerived(params: UseTaskTreeDerivedParams): UseTaskTreeDerivedResult {
+export function useTaskTreeDerived(params: UseTaskTreeDerivedParams = {}): UseTaskTreeDerivedResult {
   const {
-    taskTree,
-    taskTreeRef,
-    taskTreeVersion,
     isTaskTreeLoading,
   } = params;
 
   // Stabilizza isTaskTreeLoading per evitare problemi con dipendenze undefined
   const stableIsTaskTreeLoading = isTaskTreeLoading ?? false;
 
-  // ✅ FASE 2.2: Use Zustand store as primary source, fallback to ref/prop
+  // ✅ FASE 2.3: Use Zustand store as SINGLE source of truth
   const taskTreeFromStore = useTaskTreeFromStore();
+  const taskTreeVersion = useTaskTreeVersion();
 
-  // Usa store come fonte primaria, poi ref, poi prop (priorità: store > ref > prop)
-  // Forza re-render quando taskTreeRef cambia usando uno stato trigger
+  // ✅ CRITICAL: taskTreeVersion is PRIMARY dependency to force re-render
+  // This ensures mainList recalculates when store changes, even if nodes.length === 0
+  // ✅ CRITICAL: Don't include taskTreeFromStore in deps - it changes reference on every store update
+  // Use taskTreeVersion as the only trigger (stable, increments only when needed)
   const mainList = useMemo(() => {
-    // ARCHITETTURA ESPERTO: Usa store se disponibile, poi taskTree prop, poi taskTreeRef.current
-    // Questo garantisce che mainList sia aggiornato quando DDTHostAdapter carica il TaskTree
-    const currentTaskTree = taskTreeFromStore ?? taskTree ?? taskTreeRef.current;
-    const list = getdataList(currentTaskTree);
+    // ✅ FASE 2.3: Usa solo store - no fallback chain
+    const list = getdataList(taskTreeFromStore);
     return list;
-  }, [taskTreeFromStore, taskTree?.label ?? '', taskTree?.nodes?.length ?? 0, taskTreeVersion ?? 0, stableIsTaskTreeLoading]); // Usa valori primitivi sempre definiti
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskTreeVersion, stableIsTaskTreeLoading]); // ✅ taskTreeVersion ONLY - primary trigger
 
   // Aggregated view: show a group header when there are multiple mains
   const isAggregatedAtomic = useMemo(() => (
     Array.isArray(mainList) && mainList.length > 1
   ), [mainList]);
 
-  // Stabilizza i valori primitivi per evitare problemi con array di dipendenze
-  const stableTaskTreeVersion = taskTreeVersion ?? 0;
   // Serializza introduction per confronto stabile (evita problemi con oggetti)
   // Usa sempre stringa (non null) per evitare problemi con React
-  const stableIntroductionKey = taskTree?.introduction ? JSON.stringify(taskTree.introduction) : '';
+  const stableIntroductionKey = taskTreeFromStore?.introduction
+    ? JSON.stringify(taskTreeFromStore.introduction)
+    : '';
 
   const introduction = useMemo(() => {
-    // ✅ FASE 2.2: Use store as primary source
-    return taskTreeFromStore?.introduction ?? taskTreeRef.current?.introduction ?? null;
-  }, [taskTreeFromStore, stableTaskTreeVersion, stableIntroductionKey]); // Usa chiave serializzata sempre stringa
+    // ✅ FASE 2.3: Usa solo store - no fallback chain
+    return taskTreeFromStore?.introduction ?? null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskTreeVersion, stableIntroductionKey]); // ✅ taskTreeVersion ONLY - primary trigger
 
   return {
     mainList,

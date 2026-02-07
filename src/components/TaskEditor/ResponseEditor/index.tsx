@@ -13,7 +13,7 @@ import { ToolbarButton } from '../../../dock/types';
 import { useResponseEditorSideEffects } from './hooks/useResponseEditorSideEffects';
 import { useResponseEditorState } from './hooks/useResponseEditorState';
 import { useResponseEditorInitialization } from './hooks/useResponseEditorInitialization';
-import { useTaskTreeSync, useTaskTreeVersion } from './core/state';
+import { useTaskTreeSync, useTaskTreeVersion, useTaskTreeFromStore } from './core/state';
 import { ResponseEditorContent } from './components/ResponseEditorContent';
 import { ResponseEditorNormalLayout } from './components/ResponseEditorNormalLayout';
 import { useSidebarHandlers } from './hooks/useSidebarHandlers';
@@ -147,7 +147,9 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     replaceSelectedTaskTree,
   });
 
-  const localTranslations = useDDTTranslations(taskTree, task);
+  // ✅ FASE 2.3: Use store as source for translations (taskTree prop might not be updated)
+  const taskTreeFromStore = useTaskTreeFromStore();
+  const localTranslations = useDDTTranslations(taskTreeFromStore || taskTree, task);
 
   const {
     mainList,
@@ -261,13 +263,14 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   });
 
   useNodeLoading({
-          selectedMainIndex,
-          selectedSubIndex,
-          selectedRoot,
+    selectedMainIndex,
+    selectedSubIndex,
+    selectedRoot,
     introduction,
     task,
     taskTree,
     taskTreeRef,
+    taskTreeVersion, // ✅ Add taskTreeVersion as trigger
     setSelectedNode,
     setSelectedNodePath,
     getStepsForNode,
@@ -285,6 +288,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     setDockTree,
     setSelectedNode,
     setTaskTreeVersion,
+    taskTreeVersion, // ✅ FIX: Passa taskTreeVersion come dipendenza stabile
   });
 
   const handleProfileUpdate = useProfileUpdate({ updateSelectedNode });

@@ -7,24 +7,29 @@ import { useTaskTreeFromStore } from '../core/state';
 import type { TaskTree } from '../../../../types/taskTypes';
 
 export interface UseNodeFinderParams {
-  taskTree: TaskTree | null | undefined;
-  taskTreeRef: React.MutableRefObject<TaskTree | null | undefined>;
+  // ✅ FASE 2.3: Parametri opzionali per backward compatibility temporanea
+  taskTree?: TaskTree | null | undefined;
+  taskTreeRef?: React.MutableRefObject<TaskTree | null | undefined>;
   handleSelectMain: (idx: number) => void;
   handleSelectSub: (idx: number | undefined, mainIdx?: number) => void;
 }
 
 /**
  * Hook that provides findAndSelectNodeById function for finding and selecting nodes by ID.
+ *
+ * ✅ FASE 2.3: Migrato a usare solo Zustand store (single source of truth)
+ * - Usa taskTreeFromStore come unica fonte
+ * - Rimossi fallback a taskTreeRef e taskTree prop
  */
 export function useNodeFinder(params: UseNodeFinderParams) {
-  const { taskTree, taskTreeRef, handleSelectMain, handleSelectSub } = params;
+  const { handleSelectMain, handleSelectSub } = params;
 
-  // ✅ FASE 2.2: Use Zustand store as primary source
+  // ✅ FASE 2.3: Use Zustand store as SINGLE source of truth
   const taskTreeFromStore = useTaskTreeFromStore();
 
   const findAndSelectNodeById = useCallback((nodeId: string) => {
-    // ✅ FASE 2.2: Use store as primary source, fallback to ref, then prop
-    const currentTaskTree = taskTreeFromStore ?? taskTreeRef.current ?? taskTree;
+    // ✅ FASE 2.3: Usa solo store - no fallback chain
+    const currentTaskTree = taskTreeFromStore;
     const mains = getdataList(currentTaskTree);
     for (let mIdx = 0; mIdx < mains.length; mIdx++) {
       const main = mains[mIdx];
@@ -45,7 +50,7 @@ export function useNodeFinder(params: UseNodeFinderParams) {
         }
       }
     }
-  }, [taskTreeFromStore, taskTree, taskTreeRef, handleSelectMain, handleSelectSub]);
+  }, [taskTreeFromStore, handleSelectMain, handleSelectSub]);
 
   return findAndSelectNodeById;
 }
