@@ -7,6 +7,7 @@
 
 import { useCallback } from 'react';
 import { getMainNodes, getSubNodes } from '@responseEditor/core/domain';
+import { getSubNodesStrict } from '@responseEditor/core/domain/nodeStrict';
 import type { TaskTree } from '@types/taskTypes';
 
 export interface UseSidebarHandlersProps {
@@ -38,10 +39,11 @@ export function useSidebarHandlers({
     const mains = getMainNodes(next);
     const main = mains[mIdx];
     if (!main) return;
-    const subList = Array.isArray(main.subTasks) ? main.subTasks : [];
+    // After validation strict, use subNodes (not subTasks)
+    const subList = [...getSubNodesStrict(main)];
     if (sIdx < 0 || sIdx >= subList.length) return;
     subList[sIdx] = { ...subList[sIdx], required };
-    main.subTasks = subList;
+    main.subNodes = subList;
     mains[mIdx] = main;
     next.nodes = mains;
     try {
@@ -60,11 +62,12 @@ export function useSidebarHandlers({
     const mains = getMainNodes(next);
     const main = mains[mIdx];
     if (!main) return;
-    const subList = Array.isArray(main.subTasks) ? main.subTasks : [];
+    // After validation strict, use subNodes (not subTasks)
+    const subList = [...getSubNodesStrict(main)];
     if (fromIdx < 0 || fromIdx >= subList.length || toIdx < 0 || toIdx >= subList.length) return;
     const [moved] = subList.splice(fromIdx, 1);
     subList.splice(toIdx, 0, moved);
-    main.subTasks = subList;
+    main.subNodes = subList;
     mains[mIdx] = main;
     next.nodes = mains;
     try {
@@ -79,7 +82,7 @@ export function useSidebarHandlers({
     if (!taskTree) return;
     const next = JSON.parse(JSON.stringify(taskTree));
     const mains = getMainNodes(next);
-    mains.push({ label, subTasks: [] });
+    mains.push({ label, subNodes: [] });
     next.nodes = mains;
     try { replaceSelectedTaskTree(next); } catch { }
   }, [taskTree, replaceSelectedTaskTree]);
@@ -110,9 +113,10 @@ export function useSidebarHandlers({
     const mains = getMainNodes(next);
     const main = mains[mIdx];
     if (!main) return;
-    const list = Array.isArray(main.subTasks) ? main.subTasks : [];
+    // After validation strict, use subNodes (not subTasks)
+    const list = [...getSubNodesStrict(main)];
     list.push({ label, required: true });
-    main.subTasks = list;
+    main.subNodes = list;
     mains[mIdx] = main;
     next.nodes = mains;
     try { replaceSelectedTaskTree(next); } catch { }
@@ -124,10 +128,11 @@ export function useSidebarHandlers({
     const mains = getMainNodes(next);
     const main = mains[mIdx];
     if (!main) return;
-    const list = Array.isArray(main.subTasks) ? main.subTasks : [];
+    // After validation strict, use subNodes (not subTasks)
+    const list = [...getSubNodesStrict(main)];
     if (sIdx < 0 || sIdx >= list.length) return;
     list[sIdx] = { ...(list[sIdx] || {}), label };
-    main.subTasks = list;
+    main.subNodes = list;
     mains[mIdx] = main;
     next.nodes = mains;
     try { replaceSelectedTaskTree(next); } catch { }
@@ -139,10 +144,11 @@ export function useSidebarHandlers({
     const mains = getMainNodes(next);
     const main = mains[mIdx];
     if (!main) return;
-    const list = Array.isArray(main.subTasks) ? main.subTasks : [];
+    // After validation strict, use subNodes (not subTasks)
+    const list = [...getSubNodesStrict(main)];
     if (sIdx < 0 || sIdx >= list.length) return;
     list.splice(sIdx, 1);
-    main.subTasks = list;
+    main.subNodes = list;
     mains[mIdx] = main;
     next.nodes = mains;
     try { replaceSelectedTaskTree(next); } catch { }

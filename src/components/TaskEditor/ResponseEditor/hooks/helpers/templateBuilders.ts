@@ -105,7 +105,7 @@ export function createSubDataInstance(subTemplate: any): any {
     steps: filteredSteps, // ✅ Usa steps invece di steps
     constraints: subTemplate.dataContracts || subTemplate.constraints || [],
     examples: subTemplate.examples || [],
-    subData: [],
+    subNodes: [], // ✅ Use subNodes (not subData)
     nlpContract: subTemplate.nlpContract || undefined,
     templateId: getNodeIdStrict(subTemplate), // ✅ GUID del task referenziato
     referenceId: referenceId, // ✅ dataId del data[0] del template referenziato
@@ -125,7 +125,7 @@ export function createSimpledataInstance(template: any): any {
     steps: templateId && template.steps ? { [String(templateId)]: template.steps[String(templateId)] } : undefined, // ✅ Usa steps invece di steps
     constraints: template.dataContracts || template.constraints || [],
     examples: template.examples || [],
-    subData: [],
+    subNodes: [], // ✅ Use subNodes (not subData)
     nlpContract: template.nlpContract || undefined,
     templateId: getNodeIdStrict(template),
     kind: template.type || 'generic'
@@ -154,7 +154,7 @@ export function createCompositedata(template: any): any[] {
     steps: mainTemplateId && template.steps ? { [String(mainTemplateId)]: template.steps[String(mainTemplateId)] } : undefined, // ✅ Usa steps invece di steps
     constraints: template.dataContracts || template.constraints || [],
     examples: template.examples || [],
-    subData: subDataInstances,
+    subNodes: subDataInstances, // ✅ Use subNodes (not subData)
     nlpContract: template.nlpContract || undefined,
     templateId: getNodeIdStrict(template),
     kind: template.type || 'generic'

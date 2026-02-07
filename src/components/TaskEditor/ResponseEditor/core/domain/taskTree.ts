@@ -8,7 +8,6 @@
  * to create a clean domain layer.
  */
 
-import { getNodesWithFallback } from '@utils/taskTreeMigrationHelpers';
 import { validateTaskTreeStructure } from './validators';
 import type { TaskTree } from '@types/taskTypes';
 

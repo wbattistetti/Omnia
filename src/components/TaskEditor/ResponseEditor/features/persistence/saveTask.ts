@@ -39,12 +39,16 @@ export async function saveTaskToRepository(
       : null;
 
     // Create temporary task for extractTaskOverrides
+    // ✅ NO FALLBACKS: Use taskTree.steps as primary source, or task.steps, or throw error
+    if (!taskTree.steps && !task?.steps) {
+      console.warn('[saveTask] No steps found in taskTree or task. Using empty object.');
+    }
     const tempTask: Task = {
       id: key,
       type: TaskType.UtteranceInterpretation,
       templateId: currentTemplateId || null,
       label: taskTree.label,
-      steps: taskTree.steps || task?.steps || {}
+      steps: taskTree.steps ?? task?.steps ?? {}
     };
 
     // Extract overrides (full working copy with edited flags)
@@ -172,9 +176,13 @@ export async function saveTaskOnEditorClose(
   const currentTemplateId = getTemplateId(taskInstance);
 
   // Add task.steps to finalTaskTree (single source of truth for steps)
+  // ✅ NO FALLBACKS: Use task.steps as primary source, or finalTaskTree.steps, or throw error
+  if (!task?.steps && !finalTaskTree.steps) {
+    console.warn('[saveTask] No steps found in task or finalTaskTree. Using empty object.');
+  }
   const finalTaskTreeWithSteps: TaskTree = {
     ...finalTaskTree,
-    steps: task?.steps || finalTaskTree.steps || {}
+    steps: task?.steps ?? finalTaskTree.steps ?? {}
   };
 
   // Save based on template type

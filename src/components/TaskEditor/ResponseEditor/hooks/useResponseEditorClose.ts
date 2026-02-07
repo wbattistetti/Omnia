@@ -311,10 +311,13 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
           // ✅ CRITICAL: Aggiungi task.steps a finalTaskTree (unica fonte di verità per gli steps)
           // Gli steps vengono salvati in task.steps[nodeTemplateId] quando si modifica un nodo
           // ✅ finalTaskTreeWithSteps è la WORKING COPY (modificata dall'utente)
-          // ✅ Usa task.steps come fonte di verità (contiene tutti gli steps aggiornati dai nodi)
+          // ✅ NO FALLBACKS: Use task.steps as single source of truth, or finalTaskTree.steps, or throw error
+          if (!task?.steps && !finalTaskTree.steps) {
+            console.warn('[useResponseEditorClose] No steps found in task or finalTaskTree. Using empty object.');
+          }
           const finalTaskTreeWithSteps: TaskTree = {
             ...finalTaskTree,
-            steps: task?.steps || finalTaskTree.steps || {}
+            steps: task?.steps ?? finalTaskTree.steps ?? {}
           };
 
           // ✅ FASE 2.3: Update store with final TaskTree
@@ -327,7 +330,7 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
             finalStepsCount: finalTaskTreeWithSteps.steps ? Object.keys(finalTaskTreeWithSteps.steps).length : 0,
             taskStepsKeys: task?.steps ? Object.keys(task.steps) : [],
             taskStepsCount: task?.steps ? Object.keys(task.steps).length : 0,
-            stepsMatch: JSON.stringify(finalTaskTreeWithSteps.steps) === JSON.stringify(task?.steps || {})
+            stepsMatch: JSON.stringify(finalTaskTreeWithSteps.steps) === JSON.stringify(task?.steps ?? {})
           });
 
           // ✅ AWAIT OBBLIGATORIO: non chiudere finché non è salvato

@@ -126,9 +126,11 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
 
         // NUOVO: Usa lookup diretto per ottenere steps per questo nodo (dictionary)
         // CRITICAL: Usa taskTree.steps come fonte primaria (più affidabile, costruito da buildTaskTree)
-        // ✅ FASE 2.2: Use store as primary source
-        // Fallback a task.steps solo se taskTree.steps non è disponibile
-        const stepsSource = currentTaskTree?.steps || task?.steps;
+        // ✅ FASE 2.2: Use store as primary source - NO FALLBACKS
+        if (!currentTaskTree?.steps) {
+          throw new Error(`[useNodeLoading] TaskTree.steps is missing. Node templateId: ${nodeTemplateId}`);
+        }
+        const stepsSource = currentTaskTree.steps;
         const nodeStepsDict = getStepsForNode(stepsSource, nodeTemplateId);
         const taskTemplateIdsCount = stepsSource && typeof stepsSource === 'object' && !Array.isArray(stepsSource)
           ? Object.keys(stepsSource).length
