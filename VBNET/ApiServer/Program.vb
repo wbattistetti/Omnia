@@ -120,12 +120,15 @@ Module Program
             app.UseRouting()
 
             ' Map API endpoints (we map manually, so we don't need MapControllers())
-            Console.WriteLine("🔥 MapApiEndpoints CALLED")
-            Console.Out.Flush()
+            ' ✅ FASE 3: Usa logger invece di Console.WriteLine
+            logger.LogInfo("Mapping API endpoints")
             MapApiEndpoints(app)
 
             ' Start server on port 5000
-            Console.WriteLine("🚀 ApiServer starting on http://localhost:5000")
+            logger.LogInfo("ApiServer starting", New With {
+                .url = "http://localhost:5000",
+                .phase = "FASE 3"
+            })
             Console.WriteLine("✅ Server is running. Press Ctrl+C to stop.")
 
             ' Run the server (this blocks until the server is stopped)
