@@ -6,6 +6,7 @@ import type { TaskType, TaskTree } from '@types/taskTypes';
 import type { TaskMeta, TaskWizardMode } from '@taskEditor/EditorHost/types';
 import { resolveEditorKind } from '@taskEditor/EditorHost/resolveKind';
 import { taskRepository } from '@services/TaskRepository';
+import { activateTab } from '@dock/ops';
 import type { TaskEditorOpenEvent } from '../../domain/editorEvents';
 import { validateTaskEditorEvent } from '../../domain/editorEvents';
 
@@ -95,7 +96,7 @@ export class TaskEditorEventHandler {
               templateId: event.templateId || task.templateId,
             }, this.params.pdUpdate?.getCurrentProjectId());
           }
-          return require('@dock/ops').activateTab(tree, tabId);
+          return activateTab(tree, tabId);
         }
       : undefined;
 

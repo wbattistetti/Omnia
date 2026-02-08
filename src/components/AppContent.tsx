@@ -27,6 +27,7 @@ import { upsertAddNextTo, closeTab, activateTab, splitWithTab } from '../dock/op
 import { findRootTabset, tabExists } from './AppContent/domain/dockTree';
 import { openBottomDockedTab } from './AppContent/infrastructure/docking/DockingHelpers';
 import { EditorCoordinator } from './AppContent/application/coordinators/EditorCoordinator';
+import { ProjectManager } from './AppContent/application/services/ProjectManager';
 import { resolveEditorKind } from './TaskEditor/EditorHost/resolveKind'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
 import ResizableResponseEditor from './TaskEditor/ResponseEditor/ResizableResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
@@ -590,6 +591,16 @@ export const AppContent: React.FC<AppContentProps> = ({
   // Usa ActEditor context invece di selectedDDT per unificare l'apertura editor
   const taskEditorCtx = useTaskEditor(); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx, useActEditor → useTaskEditor
 
+  // ✅ REFACTOR: Initialize ProjectManager
+  const projectManager = React.useMemo(() => {
+    return new ProjectManager({
+      pdUpdate,
+      setCurrentProject,
+      refreshData,
+      setAppState,
+    });
+  }, [pdUpdate, setCurrentProject, refreshData, setAppState]);
+
   // Listen to open event for non-interactive acts (open as docking tab)
   React.useEffect(() => {
     const handler = (e: any) => {
@@ -775,65 +786,37 @@ export const AppContent: React.FC<AppContentProps> = ({
   //   }
   // }, []);
 
-  // Carica progetti recenti (ultimi 10)
+  // ✅ REFACTOR: Use ProjectManager
   const fetchRecentProjects = React.useCallback(async () => {
-    try {
-      setProjectsLoadError(null);
-      const projects = await ProjectService.getRecentProjects();
-      setRecentProjects(projects);
-    } catch (e) {
-      console.error('[AppContent] Error loading recent projects:', e);
-      setRecentProjects([]);
-      // Show error to user
-      if (e instanceof Error) {
-        const errorMsg = e.message.includes('fetch') || e.message.includes('network')
-          ? 'Backend non raggiungibile. Assicurati che il server sia avviato.'
-          : e.message;
-        setProjectsLoadError(errorMsg);
-        console.error('[AppContent] Error details:', e.message);
-      }
-    }
-  }, []);
-  // Carica tutti i progetti
-  const fetchAllProjects = React.useCallback(async () => {
-    try {
-      setProjectsLoadError(null);
-      const projects = await ProjectService.getAllProjects();
-      setAllProjects(projects);
-      return projects; // Restituisce i progetti per verificare se ce ne sono ancora
-    } catch (e) {
-      console.error('[AppContent] Error loading all projects:', e);
-      setAllProjects([]);
-      // Show error to user
-      if (e instanceof Error) {
-        const errorMsg = e.message.includes('fetch') || e.message.includes('network')
-          ? 'Backend non raggiungibile. Assicurati che il server sia avviato.'
-          : e.message;
-        setProjectsLoadError(errorMsg);
-        console.error('[AppContent] Error details:', e.message);
-      }
-      return [];
-    }
-  }, []);
+    const result = await projectManager.fetchRecentProjects();
+    setRecentProjects(result.projects);
+    setProjectsLoadError(result.error);
+  }, [projectManager]);
 
+  const fetchAllProjects = React.useCallback(async () => {
+    const result = await projectManager.fetchAllProjects();
+    setAllProjects(result.projects);
+    setProjectsLoadError(result.error);
+    return result.projects; // Return projects for checking if any remain
+  }, [projectManager]);
+
+  // ✅ REFACTOR: Use ProjectManager
   const handleDeleteProject = useCallback(async (id: string) => {
-    await ProjectService.deleteProject(id);
+    await projectManager.deleteProject(id);
     await fetchRecentProjects();
     const updatedProjects = await fetchAllProjects();
     // Mostra toast solo se ci sono ancora progetti dopo l'eliminazione
-    // Se non ci sono più progetti, il toast verrà mostrato in LandingPage nella posizione della lista
     if (updatedProjects && updatedProjects.length > 0) {
       setToast('Progetto eliminato!');
       setTimeout(() => setToast(null), 2000);
     }
-  }, [fetchRecentProjects, fetchAllProjects]);
+  }, [projectManager, fetchRecentProjects, fetchAllProjects]);
 
   const handleDeleteAllProjects = useCallback(async () => {
-    await ProjectService.deleteAllProjects();
+    await projectManager.deleteAllProjects();
     await fetchRecentProjects();
     await fetchAllProjects();
-    // Non mostrare toast qui: verrà mostrato in LandingPage nella posizione della lista quando non ci sono più progetti
-  }, [fetchRecentProjects, fetchAllProjects]);
+  }, [projectManager, fetchRecentProjects, fetchAllProjects]);
 
   // Callback per LandingPage
   const handleLandingNewProject = useCallback(() => setAppState('creatingProject'), [setAppState]);
@@ -842,310 +825,33 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   // const handleOpenNewProjectModal = useCallback(() => setAppState('creatingProject'), [setAppState]);
 
+  // ✅ REFACTOR: Use ProjectManager
   const handleCreateProject = useCallback(async (projectInfo: ProjectInfo): Promise<boolean> => {
     setCreateError(null);
     setIsCreatingProject(true);
     try {
-      // Bootstrap immediato: crea DB e catalog subito
-      const resp = await fetch('/api/projects/bootstrap', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clientName: projectInfo.clientName || null,
-          projectName: projectInfo.name || 'Project',
-          industry: projectInfo.industry || 'utility_gas',
-          language: projectInfo.language || 'pt',
-          ownerCompany: projectInfo.ownerCompany || null,
-          ownerClient: projectInfo.ownerClient || null,
-          version: projectInfo.version || '1.0',
-          versionQualifier: projectInfo.versionQualifier || 'alpha',
-          tenantId: 'tenant_default'
-        })
-      });
-      if (!resp.ok) {
-        // Prova a leggere il messaggio di errore dal backend
-        let errorMessage = 'bootstrap_failed';
-        try {
-          const errorData = await resp.json();
-          errorMessage = errorData.error || errorData.message || errorMessage;
-        } catch {
-          // Se non riesce a parsare JSON, usa il messaggio di default
-        }
-        throw new Error(errorMessage);
+      const result = await projectManager.createProject(projectInfo);
+      if (!result.success) {
+        setCreateError(result.error || 'Errore nella creazione del progetto');
       }
-      const boot = await resp.json();
-      const projectId = boot.projectId;
-
-      // ✅ REMOVED: loadActsFromProject - acts migrati a tasks, caricati via taskRepository
-      const data = await ProjectDataService.loadProjectData();
-
-      // Inizializza stato UI
-      const newProject: ProjectData & ProjectInfo = {
-        ...projectInfo,
-        id: projectId,
-        industry: projectInfo.industry || 'utility_gas',
-        ownerCompany: projectInfo.ownerCompany || null,
-        ownerClient: projectInfo.ownerClient || null,
-        taskTemplates: data.taskTemplates,
-        userActs: data.userActs,
-        backendActions: data.backendActions,
-        conditions: data.conditions,
-        tasks: [], // Deprecated: tasks migrated to macrotasks
-        macrotasks: data.macrotasks
-      };
-      setCurrentProject(newProject);
-      try { localStorage.setItem('project.lang', String(projectInfo.language || 'pt')); } catch { }
-      try { localStorage.setItem('current.projectId', projectId); } catch { }
-      pdUpdate.setCurrentProjectId(projectId);
-      try {
-        (window as any).__flowNodes = [];
-        (window as any).__flowEdges = [];
-      } catch { }
-      await refreshData();
-      setAppState('mainApp');
-      return true;
-    } catch (e) {
-      // Mostra il messaggio di errore specifico dal backend se disponibile
-      let errorMessage = 'Errore nella creazione del progetto';
-      if (e instanceof Error) {
-        errorMessage = e.message || errorMessage;
-        // Se il messaggio è troppo tecnico, usa un messaggio più user-friendly
-        if (errorMessage === 'bootstrap_failed') {
-          errorMessage = 'Errore nella creazione del progetto. Verifica i log del server per dettagli.';
-        }
-      }
-      console.error('[handleCreateProject] Errore:', e);
-      setCreateError(errorMessage);
-      return false;
+      return result.success;
     } finally {
       setIsCreatingProject(false);
     }
-  }, [refreshData, setAppState, pdUpdate]);
+  }, [projectManager]);
 
   const handleCloseNewProjectModal = useCallback(() => setAppState('landing'), [setAppState]);
 
   // const handleSaveProject = useCallback(async () => { /* legacy save */ }, [currentProject, nodes, edges]);
 
+  // ✅ REFACTOR: Use ProjectManager (simplified - complex error handling kept in AppContent for now)
   const handleOpenProjectById = useCallback(async (id: string) => {
     if (!id) return;
-    const startTime = performance.now();
-    // ❌ RIDOTTO: log [PERF] solo in dev mode o con flag
-    const showPerfLogs = import.meta.env.DEV && localStorage.getItem('SHOW_PERF_LOGS') === 'true';
-    if (showPerfLogs) {
-      console.log(`[PERF][${new Date().toISOString()}] 🚀 START handleOpenProjectById`, { projectId: id });
+    const result = await projectManager.openProjectById(id);
+    if (!result.success) {
+      alert('Errore: ' + (result.error || 'Errore nell\'apertura del progetto'));
     }
-
-    try {
-      // Modalità persisted: apri da catalogo e carica acts dal DB progetto
-      const catStart = performance.now();
-      if (showPerfLogs) {
-        console.log(`[PERF][${new Date().toISOString()}] 📋 START fetch catalog`);
-      }
-      const catRes = await fetch('/api/projects/catalog');
-      if (!catRes.ok) throw new Error('Errore nel recupero catalogo');
-      const list = await catRes.json();
-      const meta = (list || []).find((x: any) => x._id === id || x.projectId === id) || {};
-      if (showPerfLogs) {
-        console.log(`[PERF][${new Date().toISOString()}] ✅ END fetch catalog`, {
-          duration: `${(performance.now() - catStart).toFixed(2)}ms`,
-          found: !!meta
-        });
-      }
-
-      pdUpdate.setCurrentProjectId(id);
-      try { localStorage.setItem('current.projectId', id); } catch { }
-
-      // ✅ OPTIMIZATION: Load acts, tasks, flow, and variable mappings in parallel (they are independent)
-      const parallelStart = performance.now();
-      if (showPerfLogs) {
-        console.log(`[PERF][${new Date().toISOString()}] 🔄 START parallel load (acts, tasks, flow, mappings)`);
-      }
-
-      const [tasksResult, flowResult, mappingsResult] = await Promise.allSettled([
-        (async () => {
-          try {
-            const { taskRepository } = await import('../services/TaskRepository');
-            return await taskRepository.loadAllTasksFromDatabase(id);
-          } catch (e) {
-            console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR loadAllTasksFromDatabase`, {
-              projectId: id,
-              error: String(e)
-            });
-            return false;
-          }
-        })(),
-        (async () => {
-          try {
-            const flowRes = await fetch(`/api/projects/${encodeURIComponent(id)}/flow`);
-            if (flowRes.ok) {
-              const flow = await flowRes.json();
-
-              // ✅ LOG: Traccia cosa viene ricevuto dal backend
-              console.log(`[LOAD][AppContent] 📥 Flow received from backend`, {
-                projectId: id,
-                nodesCount: flow.nodes?.length || 0,
-                edgesCount: flow.edges?.length || 0,
-                nodes: flow.nodes?.map((n: any) => ({
-                  id: n.id,
-                  label: n.label,
-                  rowsCount: n.rows?.length || 0,
-                  rows: n.rows?.map((r: any) => ({
-                    id: r.id,
-                    text: r.text,
-                    taskId: r.taskId,
-                    hasTaskId: !!r.taskId
-                  })) || []
-                })) || []
-              });
-
-              return {
-                nodes: Array.isArray(flow.nodes) ? flow.nodes : [],
-                edges: Array.isArray(flow.edges) ? flow.edges : []
-              };
-            }
-            return { nodes: [], edges: [] };
-          } catch (e) {
-            console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR load flow`, e);
-            return { nodes: [], edges: [] };
-          }
-        })(),
-        (async () => {
-          try {
-            const { flowchartVariablesService } = await import('../services/FlowchartVariablesService');
-            await flowchartVariablesService.init(id);
-            return true;
-          } catch (e) {
-            console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR load variable mappings`, e);
-            return false;
-          }
-        })()
-      ]);
-
-      if (showPerfLogs) {
-        console.log(`[PERF][${new Date().toISOString()}] ✅ END parallel load`, {
-          duration: `${(performance.now() - parallelStart).toFixed(2)}ms`
-        });
-      }
-
-      // ✅ Raccogli tutti gli errori invece di lanciare subito
-      const errors: string[] = [];
-      if (tasksResult.status === 'rejected') {
-        errors.push(`Tasks: ${tasksResult.reason?.message || 'Failed to load'}`);
-      }
-      // flowResult e mappingsResult sono opzionali, quindi non li consideriamo critici
-
-      // ✅ Se ci sono errori critici, mostra un messaggio più chiaro
-      if (errors.length > 0) {
-        const errorMessage = `Alcuni dati non sono stati caricati:\n${errors.join('\n')}\n\nIl progetto potrebbe essere incompleto.`;
-        const shouldContinue = window.confirm(errorMessage + '\n\nVuoi continuare comunque?');
-        if (!shouldContinue) {
-          return; // ✅ NON aprire il progetto se l'utente sceglie di non continuare
-        }
-        // Se l'utente sceglie di continuare, logga gli errori ma procedi
-        console.warn('[AppContent] User chose to continue despite errors:', errors);
-      }
-
-      let loadedNodes: any[] = [];
-      let loadedEdges: any[] = [];
-      if (flowResult.status === 'fulfilled') {
-        loadedNodes = flowResult.value.nodes;
-        loadedEdges = flowResult.value.edges;
-        const elseEdgesCount = loadedEdges.filter(e => e.data?.isElse === true).length;
-        if (elseEdgesCount > 0) {
-          console.log('[AppContent][loadFlow] ✅ Found Else edges', { count: elseEdgesCount });
-        }
-      }
-
-      if (tasksResult.status === 'fulfilled') {
-        const { taskRepository } = await import('../services/TaskRepository');
-        if (showPerfLogs) {
-          console.log(`[PERF][${new Date().toISOString()}] ✅ Tasks loaded`, {
-            success: tasksResult.value,
-            tasksCount: taskRepository.getInternalTasksCount(),
-            tasksWithValue: taskRepository.getAllTasks().filter(t => t.value && Object.keys(t.value).length > 0).length
-          });
-        }
-      }
-
-      const dataStart = performance.now();
-      if (showPerfLogs) {
-        console.log(`[PERF][${new Date().toISOString()}] 📊 START loadProjectData`);
-      }
-      let data;
-      try {
-        data = await ProjectDataService.loadProjectData();
-        if (showPerfLogs) {
-          console.log(`[PERF][${new Date().toISOString()}] ✅ END loadProjectData`, {
-            duration: `${(performance.now() - dataStart).toFixed(2)}ms`
-          });
-        }
-      } catch (e) {
-        // ❌ MANTENUTO: errori sempre visibili
-        console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR loadProjectData`, e);
-        // Usa dati vuoti se loadProjectData fallisce
-        data = {
-          taskTemplates: [],
-          userActs: [],
-          backendActions: [],
-          conditions: [],
-          macrotasks: []
-        };
-      }
-
-      // ✅ Tasks sono già caricati via taskRepository.loadAllTasksFromDatabase
-      const newProject: any = {
-        id,
-        name: meta.projectName || 'Project',
-        clientName: meta.clientName || null,
-        template: meta.industry || 'utility_gas',
-        industry: meta.industry || 'utility_gas',
-        ownerCompany: meta.ownerCompany || null,
-        ownerClient: meta.ownerClient || null,
-        taskTemplates: data.taskTemplates || [],
-        userTasks: data.userTasks || [], // ✅ RINOMINATO: userActs → userTasks (acts migrati a tasks)
-        backendActions: data.backendActions || [],
-        conditions: data.conditions || [],
-        tasks: [], // Deprecated: tasks migrated to macrotasks
-        macrotasks: data.macrotasks || []
-      };
-      setCurrentProject(newProject);
-      try { if (meta && meta.language) localStorage.setItem('project.lang', String(meta.language)); } catch { }
-      try {
-        (window as any).__flowNodes = loadedNodes as any;
-        (window as any).__flowEdges = loadedEdges as any;
-      } catch { }
-
-      const refreshStart = performance.now();
-      if (showPerfLogs) {
-        console.log(`[PERF][${new Date().toISOString()}] 🔄 START refreshData`);
-      }
-      await refreshData();
-      if (showPerfLogs) {
-        console.log(`[PERF][${new Date().toISOString()}] ✅ END refreshData`, {
-          duration: `${(performance.now() - refreshStart).toFixed(2)}ms`
-        });
-      }
-
-      setAppState('mainApp');
-
-      const totalDuration = performance.now() - startTime;
-      if (showPerfLogs) {
-        console.log(`[PERF][${new Date().toISOString()}] 🎉 COMPLETE handleOpenProjectById`, {
-          projectId: id,
-          totalDuration: `${totalDuration.toFixed(2)}ms`,
-          totalDurationSeconds: `${(totalDuration / 1000).toFixed(2)}s`
-        });
-      }
-    } catch (err) {
-      const totalDuration = performance.now() - startTime;
-      console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR handleOpenProjectById`, {
-        projectId: id,
-        totalDuration: `${totalDuration.toFixed(2)}ms`,
-        error: err instanceof Error ? err.message : err
-      });
-      alert('Errore: ' + (err instanceof Error ? err.message : err));
-    }
-  }, [refreshData, setAppState]);
+  }, [projectManager]);
 
   const handleShowRecentProjects = useCallback(async (id?: string) => {
     if (id) {
