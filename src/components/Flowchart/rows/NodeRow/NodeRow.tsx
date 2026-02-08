@@ -802,56 +802,45 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     }
 
     // ✅ Fallback: comportamento originale se onCreateFactoryTask non è disponibile
-    const immediate = (patch: any) => {
-      if (onUpdateWithCategory) {
-        (onUpdateWithCategory as any)(row, label, 'taskTemplates', patch);
-      } else {
-        onUpdate(row, label);
+    // ✅ REFACTOR: Use RowTypeHandler for business logic
+    const typeHandler = new RowTypeHandler({
+      row,
+      getProjectId,
+    });
+
+    // Determine key from selectedTaskType
+    const key = selectedTaskType !== null ? taskTypeToTemplateId(selectedTaskType) || '' : '';
+    const taskType = taskIdToTaskType(key);
+
+    const result = await typeHandler.createTaskForNewRow(selectedTaskType, selectedTask, label);
+
+    if (result.success) {
+      // Update row with task metadata
+      const immediate = (patch: any) => {
+        if (onUpdateWithCategory) {
+          (onUpdateWithCategory as any)(row, label, 'taskTemplates', patch);
+        } else {
+          onUpdate(row, label);
+        }
+      };
+
+      console.log('🎯 [INSTANCE_CREATION] Instance/Task created successfully', {
+        projectId: getProjectId?.() || 'N/A',
+        taskId: result.taskId,
+      });
+
+      immediate({
+        id: row.id,
+        type: key,
+        mode: undefined, // mode removed
+      });
+
+      try {
+        emitSidebarRefresh();
+      } catch {
+        // Ignore errors
       }
-    };
-
-    // ✅ Create instance when type is determined (Intellisense or inference)
-    console.log('🎯 [INSTANCE_CREATION] Creating instance for type:', key);
-    const instanceId = row.id; // ✅ Use existing row ID as instance ID
-    console.log('🎯 [INSTANCE_CREATION] Instance ID:', instanceId);
-
-    // Get projectId if available
-    const projectId = getProjectId?.() || undefined;
-
-    // Migration: Create or update Task
-    // ✅ Converti key (stringa da Intellisense) a TaskType enum
-    const taskType = taskIdToTaskType(key); // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
-    if (!row.taskId) {
-      // Create Task for this row
-      const task = createRowWithTask(instanceId, taskType, row.text || '', projectId); // ✅ TaskType enum
-      // ✅ REGOLA ARCHITETTURALE: task.id = row.id (task.id === instanceId === row.id)
-      // ✅ NON modificare row.taskId direttamente (row è una prop immutabile)
-      // ✅ Il task è già stato creato con instanceId come ID, quindi task.id === instanceId è sempre vero
-    } else {
-      // Update Task type
-      updateRowTaskType(row, taskType, projectId); // ✅ RINOMINATO: updateRowTaskAction → updateRowTaskType
     }
-    console.log('🎯 [INSTANCE_CREATION] Instance/Task created successfully', {
-      projectId: projectId || 'N/A',
-      taskId: row.taskId
-    });
-
-    console.log('🎯 [INSTANCE_CREATION] Row will be updated with ID:', instanceId);
-
-    // ✅ Simple row update without createAndAttachAct - ELIMINATED!
-    // ✅ mode removed - use type (TaskType enum) only
-    console.log('🎯 [DIRECT_UPDATE] Updating row directly:', {
-      id: instanceId,
-      type: key // ✅ TaskType enum only, no mode
-    });
-
-    immediate({
-      id: instanceId,
-      type: key,
-      mode
-    });
-
-    try { emitSidebarRefresh(); } catch { }
   };
 
   const handleIntellisenseSelect = async (item: IntellisenseItem) => {
