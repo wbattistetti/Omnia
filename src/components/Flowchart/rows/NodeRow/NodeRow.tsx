@@ -2,9 +2,7 @@ import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from
 import { useProjectData } from '../../../../context/ProjectDataContext';
 import { useTaskTreeManager } from '../../../../context/DDTManagerContext';
 import { useTaskTreeContext } from '../../../../context/DDTContext';
-import { ProjectDataService } from '../../../../services/ProjectDataService';
 import { EntityCreationService } from '../../../../services/EntityCreationService';
-import { createAndAttachTask } from '../../../../services/TaskFactory';
 import { useTaskEditor } from '../../../TaskEditor/EditorHost/TaskEditorContext'; // ✅ RINOMINATO: ActEditor → TaskEditor, useActEditor → useTaskEditor
 import { emitSidebarRefresh } from '../../../../ui/events';
 import { createPortal } from 'react-dom';
@@ -26,7 +24,7 @@ import { useIntellisensePosition } from './hooks/useIntellisensePosition';
 import { useRowRegistry } from './hooks/useRowRegistry';
 import { isInsideWithPadding, getToolbarRect } from './utils/geometry';
 import { getTaskVisualsByType, getTaskVisuals, resolveTaskType, hasTaskTree } from '../../utils/taskVisuals';
-import { TaskType, taskTypeToTemplateId, taskTypeToHeuristicString, taskIdToTaskType } from '../../../../types/taskTypes'; // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
+import { TaskType, taskTypeToTemplateId, taskIdToTaskType } from '../../../../types/taskTypes'; // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
 import getIconComponent from '../../../TaskEditor/ResponseEditor/icons';
 import { ensureHexColor } from '../../../TaskEditor/ResponseEditor/utils/color';
 // ❌ RIMOSSO: modeToType, typeToMode - usa TaskType enum direttamente
