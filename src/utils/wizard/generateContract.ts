@@ -3,7 +3,7 @@
 
 import type { TaskTreeNode } from '../../types/taskTypes';
 import type { SemanticContract } from '../../types/semanticContract';
-import { buildSemanticContract } from '../semanticContractBuilder';
+import { buildSemanticContract } from '../contract/buildEntity';
 import { SemanticContractService } from '../../services/SemanticContractService';
 import type { GenerationProgress } from './types';
 

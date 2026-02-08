@@ -5,7 +5,7 @@ import { useNotesStore, getCellKeyFromPhrase } from '@responseEditor/features/st
 import { getSubTasksInfo } from '@responseEditor/utils/regexGroupUtils';
 import { deriveSubTaskKey } from '@utils/taskUtils';
 import type { TaskTreeNode } from '@types/taskTypes';
-import { buildSemanticContract } from '@utils/semanticContractBuilder';
+import { buildSemanticContract } from '@utils/contract/buildEntity';
 import { buildAIPrompt, getSystemMessageForEngine } from '@utils/aiPromptTemplates';
 import { SemanticContractService } from '@services/SemanticContractService';
 import { EngineService } from '@services/EngineService';

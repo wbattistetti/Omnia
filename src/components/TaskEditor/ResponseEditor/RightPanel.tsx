@@ -2,7 +2,7 @@ import React from 'react';
 import TaskList from '@taskEditor/TaskPalette/TaskList';
 // ❌ REMOVED: ResponseSimulator - contains duplicate runtime logic
 // ✅ Using clean DDEBubbleChat from ResponseEditor (SSE-only, no runtime logic)
-import DDEBubbleChat from './ChatSimulator/DDEBubbleChat';
+import DDEBubbleChat from '@responseEditor/ChatSimulator/DDEBubbleChat';
 import { stepMeta } from './ddtUtils';
 import { useTaskTreeManager } from '@context/DDTManagerContext';
 import { useFontContext } from '@context/FontContext';

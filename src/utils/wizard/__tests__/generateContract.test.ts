@@ -4,13 +4,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { generateContractForNode } from '../generateContract';
 import { SemanticContractService } from '../../../services/SemanticContractService';
-import { buildSemanticContract } from '../../semanticContractBuilder';
+import { buildSemanticContract } from '../../contract/buildEntity';
 import type { TaskTreeNode } from '../../../types/taskTypes';
 import type { SemanticContract } from '../../../types/semanticContract';
 import type { GenerationProgress } from '../types';
 
 vi.mock('../../../services/SemanticContractService');
-vi.mock('../../semanticContractBuilder');
+vi.mock('../../contract/buildEntity');
 
 describe('generateContractForNode', () => {
   beforeEach(() => {

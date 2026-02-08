@@ -4,8 +4,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { X, Check, AlertCircle, Loader2, Sparkles } from 'lucide-react';
 import type { TaskTree } from '@types/taskTypes';
-import type { TreeAnalysis, GenerationPlan, GenerationProgress, NodeGenerationResult } from '@utils/contractWizardOrchestrator';
-import { analyzeTree, proposeEngines, buildGenerationPlan, executeGenerationPlan } from '@utils/contractWizardOrchestrator';
+import type { TreeAnalysis, GenerationPlan, GenerationProgress, NodeGenerationResult } from '@utils/wizard/types';
+import { analyzeTree } from '@utils/wizard/analyzeTree';
+import { proposeEngines } from '@utils/wizard/proposeEngines';
+import { buildGenerationPlan } from '@utils/wizard/buildGenerationPlan';
+import { executeGenerationPlan } from '@utils/wizard/executeGenerationPlan';
 
 interface ContractWizardProps {
   taskTree: TaskTree | null;

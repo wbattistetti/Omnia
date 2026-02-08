@@ -36,7 +36,7 @@ import ResizableNonInteractiveEditor from './TaskEditor/ResponseEditor/Resizable
 import ResizableTaskEditorHost from './TaskEditor/EditorHost/ResizableTaskEditorHost'; // ✅ RINOMINATO: ActEditor → TaskEditor, ResizableActEditorHost → ResizableTaskEditorHost
 import { useTaskEditor } from './TaskEditor/EditorHost/TaskEditorContext'; // ✅ RINOMINATO: ActEditor → TaskEditor, useActEditor → useTaskEditor
 import ConditionEditor from './conditions/ConditionEditor';
-import DDEBubbleChat from './ChatSimulator/DDEBubbleChat';
+import DDEBubbleChat from './TaskEditor/ResponseEditor/ChatSimulator/DDEBubbleChat';
 import { useTaskTreeContext } from '../context/DDTContext';
 // ✅ REMOVED: Imports moved to handlers (SIDEBAR_TYPE_COLORS, flowchartVariablesService, getNodesWithFallback)
 // FASE 2: InstanceRepository import removed - using TaskRepository instead
