@@ -15,10 +15,11 @@ Refactoring of `NodeRow.tsx` following Clean Architecture principles, extracting
   - Hard to test and maintain
 
 ### Current State
-- **File Size:** 1,347 lines (-1,018 lines, -43% reduction)
+- **File Size:** 851 lines (-1,514 lines, -64% reduction)
 - **Architecture:** Clean Architecture with separated layers
 - **Test Coverage:** Unit tests created for extracted services
 - **Import Optimization:** ✅ All imports converted to aliases
+- **Event Handlers:** ✅ Extracted to `useNodeRowEventHandlers` hook
 
 ## Extracted Services (Application Layer)
 
@@ -67,6 +68,16 @@ Refactoring of `NodeRow.tsx` following Clean Architecture principles, extracting
   - Handles Task "Other" with icon and color
 - **Status:** ✅ Extracted and integrated
 
+### 6. FactoryTaskCreator
+- **File:** `src/components/Flowchart/rows/NodeRow/application/FactoryTaskCreator.ts`
+- **Purpose:** Handles factory task creation from NodeRow
+- **Responsibilities:**
+  - Creates factory tasks via EntityCreationService
+  - Updates task repository after creation
+  - Updates row metadata with created task info
+  - Handles callback from EntityCreationService
+- **Status:** ✅ Extracted and integrated
+
 ## Code Quality Improvements
 
 ### Removed Duplications
@@ -99,14 +110,17 @@ src/components/Flowchart/rows/NodeRow/
 │   ├── RowSaveHandler.ts          # Handles row saving
 │   ├── RowHeuristicsHandler.ts   # Handles heuristic analysis
 │   ├── IntellisenseSelectionHandler.ts  # Handles intellisense selection
-│   └── RowTypeHandler.ts         # Handles type changes
+│   ├── RowTypeHandler.ts         # Handles type changes
+│   └── FactoryTaskCreator.ts     # Handles factory task creation
 ├── hooks/                         # Custom React hooks
 │   ├── useRowState.ts
 │   ├── useIntellisensePosition.ts
 │   └── useRowRegistry.ts
 ├── utils/                         # Utility functions
 │   └── geometry.ts
-├── NodeRow.tsx                    # Main component (1,350 lines)
+├── NodeRow.tsx                    # Main component (851 lines)
+├── hooks/
+│   ├── useNodeRowEventHandlers.ts # Event handlers hook (~500 lines)
 ├── NodeRowLabel.tsx               # Presentation component
 ├── NodeRowIntellisense.tsx        # Presentation component
 └── RowTypePickerToolbar.tsx       # Presentation component
@@ -116,13 +130,13 @@ src/components/Flowchart/rows/NodeRow/
 
 ### Size Reduction
 - **Before:** 2,365 lines
-- **After:** 1,350 lines
-- **Reduction:** 1,015 lines (-43%)
+- **After:** 851 lines
+- **Reduction:** 1,514 lines (-64%)
 
 ### Services Created
-- **Total:** 5 application layer services
+- **Total:** 6 application layer services
 - **Average Size:** ~150-200 lines per service
-- **Total Service Code:** ~900 lines (well-organized, testable)
+- **Total Service Code:** ~1,100 lines (well-organized, testable)
 
 ### Test Coverage
 - Unit tests created for:
@@ -133,16 +147,17 @@ src/components/Flowchart/rows/NodeRow/
 
 ## Next Steps
 
-### Phase 3 (In Progress)
+### Phase 3 (Completed ✅)
 - [x] Extract TaskTreeOpener
 - [x] Extract RowSaveHandler
 - [x] Extract RowHeuristicsHandler
 - [x] Extract IntellisenseSelectionHandler
 - [x] Extract RowTypeHandler
+- [x] Extract FactoryTaskCreator
+- [x] Extract event handlers to `useNodeRowEventHandlers` hook
 - [x] Convert all imports to aliases
 - [x] Remove unused imports
-- [ ] Extract Factory Task Creation logic
-- [ ] Extract presentation layer components
+- [ ] Extract presentation layer components (optional, low priority)
 
 ### Phase 4 (Future)
 - Extract ConditionEditor.tsx refactoring

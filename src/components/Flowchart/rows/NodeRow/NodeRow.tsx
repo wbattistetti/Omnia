@@ -22,6 +22,7 @@ import { useRowToolbar } from '@components/Flowchart/hooks/useRowToolbar';
 import { useRowState } from './hooks/useRowState';
 import { useIntellisensePosition } from './hooks/useIntellisensePosition';
 import { useRowRegistry } from './hooks/useRowRegistry';
+import { useNodeRowEventHandlers } from './hooks/useNodeRowEventHandlers';
 import { isInsideWithPadding, getToolbarRect } from './utils/geometry';
 import { getTaskVisualsByType, getTaskVisuals, resolveTaskType, hasTaskTree } from '@components/Flowchart/utils/taskVisuals';
 import { TaskType, taskTypeToTemplateId, taskIdToTaskType } from '@types/taskTypes';
@@ -227,15 +228,46 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   const { openTaskTree } = useTaskTreeManager();
   const hoverHideTimerRef = useRef<number | null>(null);
 
-  // Calcola la posizione e dimensione della zona buffer (already computed above)
-
-  // Helper per entrare in editing
-  const enterEditing = () => {
-    setIsEditing(true);
-    // assicurati che la toolbar dei tipi sia sempre chiusa quando inizi a scrivere
-    setShowCreatePicker(false);
-    setAllowCreatePicker(false);
-  };
+  // ✅ REFACTOR: Extract event handlers to custom hook
+  const {
+    handleSave,
+    handleCancel,
+    handleKeyDownInternal,
+    handleTextChange,
+    handlePickType,
+    handleIntellisenseSelect,
+    handleIntellisenseClose,
+    handleDoubleClick,
+    enterEditing,
+  } = useNodeRowEventHandlers({
+    row,
+    currentText,
+    setCurrentText,
+    isEditing,
+    setIsEditing,
+    showIntellisense,
+    setShowIntellisense,
+    intellisenseQuery,
+    setIntellisenseQuery,
+    setShowCreatePicker,
+    setAllowCreatePicker,
+    setPickerPosition,
+    setPickerCurrentType,
+    setShowIcons,
+    suppressIntellisenseRef,
+    intellisenseTimerRef,
+    inputRef,
+    labelRef,
+    projectData: projectDataCtx,
+    onUpdate,
+    onUpdateWithCategory,
+    onDelete,
+    onKeyDown,
+    onEditingEnd,
+    onCreateFactoryTask,
+    getProjectId,
+    toolbarSM,
+  });
 
   // Intercetta tasti globali quando la type toolbar è aperta, per evitare che raggiungano il canvas
   useEffect(() => {
@@ -329,495 +361,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     return () => window.removeEventListener('flow:canvas:click', handleCanvasClick as any);
   }, [isEditing, showIntellisense, row.text, onEditingEnd]);
 
-  const handleSave = async () => {
-    const label = currentText.trim() || row.text;
-    onUpdate(row, label);
-    try {
-      // aggiorna cache locale del testo messaggio
-      if (onUpdateWithCategory) {
-        (onUpdateWithCategory as any)(row, label, (row as any)?.categoryType, { message: { text: label } });
-      }
-    } catch { }
-    setIsEditing(false);
-    setShowIntellisense(false);
-    setIntellisenseQuery('');
-
-    // ✅ REFACTOR: Use RowSaveHandler for business logic
-    try {
-      let getCurrentProjectId: (() => string | undefined) | undefined = undefined;
-      try {
-        const runtime = require('../../state/runtime') as any;
-        getCurrentProjectId = runtime.getCurrentProjectId;
-      } catch {
-        // Ignore if runtime module is not available
-      }
-
-      const saveHandler = new RowSaveHandler({
-        row,
-        getProjectId,
-        getCurrentProjectId,
-      });
-
-      await saveHandler.saveRow(label);
-    } catch (err) {
-      console.error('[NodeRow][handleSave] Error saving row:', err);
-    }
-
-    if (typeof onEditingEnd === 'function') {
-      onEditingEnd();
-    }
-  };
-
-  const handleCancel = () => {
-    if (currentText.trim() === '') {
-      onDelete(row);
-    } else {
-      setCurrentText(row.text);
-      setIsEditing(false);
-      setShowIntellisense(false);
-      setIntellisenseQuery('');
-      if (typeof onEditingEnd === 'function') {
-        onEditingEnd(row.id);
-      }
-    }
-  };
-
-  const handleKeyDownInternal = async (e: React.KeyboardEvent) => {
-    const dbg = (() => { try { return Boolean(localStorage.getItem('debug.picker')); } catch { return false; } })();
-
-    if (e.key === '/' && !showIntellisense) {
-      // Activate intellisense with slash
-      // Log rimosso per evitare spam
-      setIntellisenseQuery('');
-      setShowIntellisense(true);
-      setAllowCreatePicker(false);
-      e.preventDefault();
-    } else if (e.key === 'Escape') {
-      if (showIntellisense) {
-        setShowIntellisense(false);
-        setIntellisenseQuery('');
-        setShowCreatePicker(false);
-      } else {
-        if (onKeyDown) onKeyDown(e); // Propaga ESC al parent
-        handleCancel();
-      }
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      const q = (currentText || '').trim();
-      // Quick-create Conditions: se questa riga appartiene alle conditions, crea subito senza intellisense
-      if ((row as any)?.categoryType === 'conditions') {
-        try {
-          const created = EntityCreationService.createCondition({
-            name: q,
-            projectData,
-            projectIndustry: (projectData as any)?.industry,
-            scope: 'industry'
-          });
-          if (created) {
-            if (onUpdateWithCategory) {
-              (onUpdateWithCategory as any)(row, q, 'conditions', { conditionId: created.id });
-            } else {
-              onUpdate(row, q);
-            }
-            setIsEditing(false);
-            setShowIntellisense(false);
-            setIntellisenseQuery('');
-            try { emitSidebarRefresh(); } catch { }
-          }
-        } catch (err) {
-          try { console.warn('[CondFlow] quick-create failed', err); } catch { }
-        }
-        return;
-      }
-
-      // Alt+Enter: apri la toolbar manuale dei tipi
-      if (e.altKey) {
-        if (dbg) { }
-        setIntellisenseQuery(q);
-        setShowIntellisense(false);
-        setAllowCreatePicker(true);
-        setShowCreatePicker(true);
-        try { inputRef.current?.blur(); } catch { }
-        return;
-      }
-      // ✅ REFACTOR: Use RowHeuristicsHandler for heuristic analysis
-      const heuristicsResult = await RowHeuristicsHandler.analyzeRowLabel(q);
-
-      if (heuristicsResult.success) {
-        // ✅ LAZY APPROACH: Store metadata in row instead of creating task immediately
-        // ✅ Task will be created only when editor is opened (lazy creation)
-
-        // ✅ Prepare row update data with metadata
-        const rowUpdateData = RowHeuristicsHandler.prepareRowUpdateData(row, q, heuristicsResult);
-
-        // ✅ Update row with metadata
-        const updatedRow = {
-          ...row,
-          ...rowUpdateData,
-        };
-
-        onUpdate(updatedRow as any, q);
-        setIsEditing(false);
-
-        return;
-      } else {
-        // Fallback to picker if heuristic analysis failed
-        console.warn('[NodeRow] Heuristics failed, fallback to picker', heuristicsResult.error);
-        setIntellisenseQuery(q);
-        setShowIntellisense(false);
-        setAllowCreatePicker(true);
-        setShowCreatePicker(true);
-        try { inputRef.current?.blur(); } catch { }
-        return;
-      }
-    }
-  };
-
-  // Handle text change and trigger intellisense
-  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newText = e.target.value;
-    setCurrentText(newText);
-    // Mostra intellisense mentre scrivi; non mostrare il picker finché non premi Enter
-    const q = newText.trim();
-    setAllowCreatePicker(false);
-    setShowCreatePicker(false);
-    if (intellisenseTimerRef.current) { window.clearTimeout(intellisenseTimerRef.current); intellisenseTimerRef.current = null; }
-    if (q.length >= 2) {
-      setIntellisenseQuery(newText);
-      intellisenseTimerRef.current = window.setTimeout(() => {
-        if (!suppressIntellisenseRef.current) {
-          // Log rimosso per evitare spam
-          setShowIntellisense(true);
-        }
-      }, 100);
-    } else {
-      setShowIntellisense(false);
-      setIntellisenseQuery('');
-    }
-  };
-
-  // Common handler invoked by keyboard or mouse pick
-  const handlePickType = async (selectedTaskTypeOrTask: TaskType | { task: any }) => { // ✅ Riceve TaskType enum o task object per "Other"
-    // ✅ Determina se è un TaskType enum o un task object
-    const isTaskObject = typeof selectedTaskTypeOrTask === 'object' && 'task' in selectedTaskTypeOrTask;
-    const selectedTaskType: TaskType | null = isTaskObject ? null : (selectedTaskTypeOrTask as TaskType);
-    const selectedTask = isTaskObject ? (selectedTaskTypeOrTask as { task: any }).task : null;
-
-    console.log('🎯 [HANDLE_PICK_TYPE][START]', {
-      isTaskObject,
-      taskType: selectedTaskType,
-      taskTypeName: selectedTaskType ? TaskType[selectedTaskType] : 'Other',
-      taskId: selectedTask?.id,
-      taskTemplateId: selectedTask?.templateId,
-      currentText,
-      rowId: row.id,
-      rowText: row.text,
-      isEditing,
-      hasOnCreateFactoryTask: !!onCreateFactoryTask,
-      timestamp: Date.now()
-    });
-
-    setShowCreatePicker(false);
-    setAllowCreatePicker(false);
-    setShowIntellisense(false);
-    const label = (currentText || '').trim();
-
-    console.log('🎯 [HANDLE_PICK_TYPE][LABEL]', {
-      label,
-      labelLength: label.length,
-      currentTextBeforeTrim: currentText,
-      isEmpty: !label,
-      isEditing,
-      timestamp: Date.now()
-    });
-
-    if (!label) {
-      console.log('🎯 [HANDLE_PICK_TYPE][EMPTY_LABEL] - Exiting early');
-      setIsEditing(false);
-      return;
-    }
-
-    // ✅ CAMBIO TIPO: Se non siamo in editing, stiamo cambiando il tipo di una riga esistente
-    // In questo caso aggiorniamo solo il tipo senza aprire il ResponseEditor (si apre solo con l'ingranaggio)
-    if (!isEditing && onUpdateWithCategory) {
-      // ✅ REFACTOR: Use RowTypeHandler for business logic
-      const typeHandler = new RowTypeHandler({
-        row,
-        getProjectId,
-      });
-
-      const result = await typeHandler.changeRowType(selectedTaskType, selectedTask, row.text);
-
-      if (!result.success) {
-        console.error('❌ [CHANGE_TYPE] Failed to change row type:', result.error);
-        toolbarSM.picker.close();
-        return;
-      }
-
-      // Convert TaskType enum to string for backward compatibility
-      const typeString =
-        result.taskType === TaskType.SayMessage
-          ? 'Message'
-          : result.taskType === TaskType.UtteranceInterpretation
-            ? 'UtteranceInterpretation'
-            : result.taskType === TaskType.BackendCall
-              ? 'BackendCall'
-              : result.taskType === TaskType.ClassifyProblem
-                ? 'ProblemClassification'
-                : result.taskType === TaskType.AIAgent
-                  ? 'AIAgent'
-                  : result.taskType === TaskType.Summarizer
-                    ? 'Summarizer'
-                    : result.taskType === TaskType.Negotiation
-                      ? 'Negotiation'
-                      : isTaskObject && selectedTask
-                        ? 'Other'
-                        : 'Message';
-
-      // ✅ mode removed - use type (TaskType enum) only
-      // ✅ Aggiorna anche row.meta.type con il TaskType enum (numero) per resolveTaskType
-      const updateMeta = {
-        id: row.id,
-        type: typeString, // ✅ Stringa per backward compatibility
-        meta: {
-          ...((row as any)?.meta || {}),
-          type: result.taskType, // ✅ TaskType enum (numero) per resolveTaskType
-        },
-        factoryId: (row as any).factoryId,
-        instanceId: (row as any).instanceId,
-        // ✅ Rimuovi flag isUndefined quando viene selezionato un tipo
-        isUndefined: false,
-      };
-
-      console.log('🎯 [CHANGE_TYPE][CALLING_UPDATE]', {
-        rowId: row.id,
-        label: row.text,
-        categoryType: 'taskTemplates',
-        meta: updateMeta,
-        isUndefinedRemoved: true,
-      });
-
-      (onUpdateWithCategory as any)(row, row.text, 'taskTemplates', updateMeta);
-
-      console.log('🎯 [CHANGE_TYPE][COMPLETE]', {
-        rowId: row.id,
-        timestamp: Date.now(),
-      });
-
-      // ✅ NON aprire automaticamente il ResponseEditor - si apre solo con l'ingranaggio
-      // Chiudi il picker e aggiorna lo stato del toolbar
-      toolbarSM.picker.close();
-      return;
-    }
-
-    // ❌ NON chiudere la riga qui: aspetta che il testo sia salvato nel callback
-
-    // ✅ NUOVO: Crea il factory task se onCreateFactoryTask è disponibile
-    // Questo permette di ritrovare la riga nell'Intellisense quando viene riutilizzata
-    // NOTA: Questo branch viene usato solo quando si crea una nuova riga (isEditing = true)
-    // Quando si cambia il tipo di una riga esistente (isEditing = false), usiamo il branch sopra
-    if (onCreateFactoryTask && isEditing) { // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
-      // ✅ Se è un task "Other", non usiamo onCreateFactoryTask (non ha senso per task esistenti)
-      if (isTaskObject && selectedTask) {
-        console.log('🎯 [HANDLE_PICK_TYPE][OTHER_TASK_IN_EDITING]', {
-          label,
-          taskId: selectedTask.id,
-          taskTemplateId: selectedTask.templateId,
-          timestamp: Date.now(),
-        });
-
-        // ✅ REFACTOR: Use RowTypeHandler for business logic
-        const typeHandler = new RowTypeHandler({
-          row,
-          getProjectId,
-        });
-
-        const result = await typeHandler.createTaskForNewRow(selectedTaskType, selectedTask, label);
-
-        if (result.success) {
-        // Aggiorna la riga
-        const updateMeta = {
-            id: row.id,
-          type: 'Other',
-          meta: {
-            ...((row as any)?.meta || {}),
-              type: result.taskType,
-          },
-            isUndefined: false,
-        };
-
-        if (onUpdateWithCategory) {
-          (onUpdateWithCategory as any)(row, label, 'taskTemplates', updateMeta);
-        } else {
-          onUpdate({ ...row, isUndefined: false } as any, label);
-          }
-        }
-
-        setIsEditing(false);
-        setShowIntellisense(false);
-        setIntellisenseQuery('');
-        toolbarSM.picker.close();
-        return;
-      }
-
-      // ✅ REFACTOR: Use FactoryTaskCreator service
-      const factoryTaskCreator = new FactoryTaskCreator({
-        row,
-        getProjectId,
-        onCreateFactoryTask,
-        onUpdate,
-        onUpdateWithCategory,
-        onStateUpdate: {
-          setIsEditing,
-          setShowIntellisense,
-          setIntellisenseQuery,
-          closePicker: () => toolbarSM.picker.close(),
-        },
-      });
-
-      const result = await factoryTaskCreator.createFactoryTask(label, selectedTaskType);
-
-      if (result.success) {
-        // ✅ The callback is called immediately, so no fallback needed
-        return;
-      } else {
-        // Error already handled in FactoryTaskCreator
-        setIsEditing(false);
-        return;
-      }
-    }
-
-    // ✅ Fallback: comportamento originale se onCreateFactoryTask non è disponibile
-    // ✅ REFACTOR: Use RowTypeHandler for business logic
-    const typeHandler = new RowTypeHandler({
-      row,
-      getProjectId,
-    });
-
-    // Determine key from selectedTaskType
-    const key = selectedTaskType !== null ? taskTypeToTemplateId(selectedTaskType) || '' : '';
-    const taskType = taskIdToTaskType(key);
-
-    const result = await typeHandler.createTaskForNewRow(selectedTaskType, selectedTask, label);
-
-    if (result.success) {
-      // Update row with task metadata
-    const immediate = (patch: any) => {
-      if (onUpdateWithCategory) {
-        (onUpdateWithCategory as any)(row, label, 'taskTemplates', patch);
-      } else {
-        onUpdate(row, label);
-      }
-    };
-
-    console.log('🎯 [INSTANCE_CREATION] Instance/Task created successfully', {
-        projectId: getProjectId?.() || 'N/A',
-        taskId: result.taskId,
-    });
-
-    immediate({
-        id: row.id,
-      type: key,
-        mode: undefined, // mode removed
-      });
-
-      try {
-        emitSidebarRefresh();
-      } catch {
-        // Ignore errors
-      }
-    }
-  };
-
-  const handleIntellisenseSelect = async (item: IntellisenseItem) => {
-    console.log('[🔍 INTELLISENSE] handleIntellisenseSelect called', {
-      itemName: item.name,
-      itemCategoryType: item.categoryType,
-      rowId: row.id,
-      nodeCanvasPosition,
-      timestamp: Date.now()
-    });
-
-    // Update UI state
-    setCurrentText(item.name);
-    setShowIntellisense(false);
-    setIntellisenseQuery('');
-
-    // ✅ REFACTOR: Use IntellisenseSelectionHandler for business logic
-    try {
-      let getCurrentProjectId: (() => string | undefined) | undefined = undefined;
-      try {
-        const runtime = require('../../state/runtime') as any;
-        getCurrentProjectId = runtime.getCurrentProjectId;
-      } catch {
-        // Ignore if runtime module is not available
-      }
-
-      const handler = new IntellisenseSelectionHandler({
-        row,
-        item,
-        getProjectId,
-        getCurrentProjectId,
-      });
-
-      const result = await handler.handleSelection();
-
-      if (result.success && result.updateData) {
-        // Auto-save the selection with category type
-        if (onUpdateWithCategory) {
-          (onUpdateWithCategory as any)(row, item.name, item.categoryType, result.updateData);
-        } else {
-          onUpdate(row, item.name);
-        }
-      } else {
-        // Fallback: update row without task creation
-        if (onUpdateWithCategory) {
-      (onUpdateWithCategory as any)(row, item.name, item.categoryType, {
-        factoryId: item.factoryId,
-        type: (item as any)?.type,
-        mode: (item as any)?.mode,
-        userActs: item.userActs,
-            categoryType: item.categoryType,
-      });
-    } else {
-      onUpdate(row, item.name);
-    }
-      }
-    } catch (error) {
-      console.error('[NodeRow][handleIntellisenseSelect] Error handling selection:', error);
-      // Fallback: update row without task creation
-        if (onUpdateWithCategory) {
-          (onUpdateWithCategory as any)(row, item.name, item.categoryType, {
-          factoryId: item.factoryId,
-            type: (item as any)?.type,
-          mode: (item as any)?.mode,
-          userActs: item.userActs,
-          categoryType: item.categoryType,
-        });
-      } else {
-        onUpdate(row, item.name);
-      }
-    }
-
-    // Exit editing mode
-    setIsEditing(false);
-    setShowCreatePicker(false);
-  };
-
-  const handleIntellisenseClose = () => {
-    setShowIntellisense(false);
-    setIntellisenseQuery('');
-    setShowCreatePicker(false);
-  };
-
-  // Removed previous force-visible effects for toolbar while picker is open.
-
-  const handleDoubleClick = (e?: React.MouseEvent) => {
-    setIsEditing(true);
-  };
-
-  // Open type picker when clicking the label icon (outside editing)
-  // Note: pickerCurrentType and pickerPosition are declared above for use in handleKeyDownInternal
+  // ✅ All event handlers are now extracted to useNodeRowEventHandlers hook (see above)
+  // Note: openTypePickerFromIcon and handleMouseDown remain in component due to complex event listener logic
 
   const openTypePickerFromIcon = (anchor?: DOMRect, currentType?: TaskType) => { // ✅ TaskType enum invece di stringa
     const rect = anchor || labelRef.current?.getBoundingClientRect();
