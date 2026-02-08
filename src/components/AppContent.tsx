@@ -28,6 +28,7 @@ import { findRootTabset, tabExists } from './AppContent/domain/dockTree';
 import { openBottomDockedTab } from './AppContent/infrastructure/docking/DockingHelpers';
 import { EditorCoordinator } from './AppContent/application/coordinators/EditorCoordinator';
 import { ProjectManager } from './AppContent/application/services/ProjectManager';
+import { TabRenderer } from './AppContent/presentation/TabRenderer';
 import { resolveEditorKind } from './TaskEditor/EditorHost/resolveKind'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
 import ResizableResponseEditor from './TaskEditor/ResponseEditor/ResizableResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
@@ -101,475 +102,54 @@ export const AppContent: React.FC<AppContentProps> = ({
     active: 0
   });
 
-  // ✅ Unified tab content renderer - Memoizzato con comparatore per evitare re-render inutili
-  // ✅ Map globale per tenere traccia di tutti i refs di chiusura per tutti i tab
+  // ✅ REFACTOR: Map globale per tenere traccia di tutti i refs di chiusura per tutti i tab
   // Questo risolve il problema delle closure stale: quando tab.onClose viene chiamato,
   // legge sempre il valore più recente dal Map invece di una closure catturata
   const editorCloseRefsMap = React.useRef<Map<string, () => Promise<boolean>>>(new Map());
 
-  const UnifiedTabContent: React.FC<{ tab: DockTab }> = React.memo(
-    ({ tab }) => {
-      // 🔴 LOG CHIRURGICO 3: UnifiedTabContent render (DISABILITATO - troppo rumoroso)
-      // console.log('[DEBUG_UNIFIED_RENDER]', {
-      //   tabId: tab.id,
-      //   type: tab.type,
-      //   toolbarButtons: tab.toolbarButtons,
-      //   headerColor: tab.headerColor
-      // });
+  // ✅ REFACTOR: TabRenderer component estratto in presentation/TabRenderer.tsx
+  // UnifiedTabContent completamente rimosso - ora usiamo TabRenderer
 
-      const { upsertFlow, openFlowBackground } = useFlowActions();
-
-      // Flow tab
-      if (tab.type === 'flow') {
-        // Check projectId is valid before rendering
-        if (!currentPid) {
-          return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>Waiting for project...</div>;
-        }
-        return (
-          <FlowCanvasHost
-            projectId={currentPid}
-            flowId={tab.flowId}
-            onCreateTaskFlow={(newFlowId, title, nodes, edges) => {
-              // 1) upsert nel workspace per avere contenuto immediato
-              upsertFlow({ id: newFlowId, title: title || newFlowId, nodes, edges });
-              openFlowBackground(newFlowId);
-              // 2) aggiungi tab accanto a quella corrente nel dock tree
-              setDockTree(prev => upsertAddNextTo(prev, tab.id, { id: `tab_${newFlowId}`, title: title || 'Task', type: 'flow', flowId: newFlowId }));
-            }}
-            onOpenTaskFlow={(taskFlowId, title) => {
-              // Apri la tab del task accanto a quella corrente (senza duplicati)
-              setDockTree(prev => upsertAddNextTo(prev, tab.id, { id: `tab_${taskFlowId}`, title: title || 'Task', type: 'flow', flowId: taskFlowId }));
-              openFlowBackground(taskFlowId);
-            }}
-          />
-        );
-      }
-
-      // Response Editor tab
-      if (tab.type === 'responseEditor') {
-        // ✅ Reset ref nel Map quando cambia il tab
-        React.useEffect(() => {
-          return () => {
-            editorCloseRefsMap.current.delete(tab.id);
-          };
-        }, [tab.id]);
-
-        // ✅ Stabilizza key, task, taskTree, onToolbarUpdate per evitare re-mount
-        const editorKey = useMemo(() => {
-          const instanceKey = tab.task?.instanceId || tab.task?.id || tab.id;
-          const key = `response-editor-${instanceKey}`;
-          console.log('[DEBUG_MEMO] editorKey calculated', {
-            instanceKey,
-            key,
-            tabId: tab.id,
-            taskInstanceId: tab.task?.instanceId,
-            taskId: tab.task?.id
-          });
-          return key;
-        }, [tab.task?.instanceId, tab.task?.id, tab.id]);
-
-        const stableTask = useMemo(() => {
-          if (!tab.task) return undefined; // ✅ RINOMINATO: act → task
-          return tab.task; // ✅ Restituisce direttamente TaskMeta (già con TaskType enum)
-        }, [tab.task?.id, tab.task?.type, tab.task?.label, tab.task?.instanceId]); // ✅ RINOMINATO: act → task
-
-        const stableTaskTree = useMemo(() => {
-          const startStepTasksCount = (tab as any).taskTree?.nodes?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
-          console.log('[STABLE_TASKTREE] Memoizing TaskTree', {
-            tabId: tab.id,
-            nodesLength: (tab as any).taskTree?.nodes?.length,
-            startStepTasksCount
-          });
-          return tab.taskTree;
-        }, [tab.taskTree, tab.id]);
-
-        const stableOnToolbarUpdate = useCallback(
-          (toolbar: ToolbarButton[], color: string) => {
+  // ✅ REFACTOR: Use TabRenderer component
+  // Note: FlowCanvasHost handles useFlowActions internally, we only need to update dock tree
+  const renderTabContent = React.useCallback(
+    (tab: DockTab) => {
+      return (
+        <TabRenderer
+          tab={tab}
+          currentPid={currentPid}
+          setDockTree={setDockTree}
+          editorCloseRefsMap={editorCloseRefsMap}
+          pdUpdate={pdUpdate}
+          onFlowCreateTaskFlow={(tabId, newFlowId, title) => {
+            // FlowCanvasHost already handles upsertFlow and openFlowBackground
+            // We just need to update the dock tree
             setDockTree(prev =>
-              mapNode(prev, n => {
-                if (n.kind === 'tabset') {
-                  const idx = n.tabs.findIndex(t => t.id === tab.id);
-                  if (idx !== -1 && n.tabs[idx].type === 'responseEditor') {
-                    const updatedTab = {
-                      ...n.tabs[idx],
-                      toolbarButtons: toolbar,
-                      headerColor: color
-                    } as DockTabResponseEditor;
-                    return {
-                      ...n,
-                      tabs: [
-                        ...n.tabs.slice(0, idx),
-                        updatedTab,
-                        ...n.tabs.slice(idx + 1)
-                      ]
-                    };
-                  }
-                }
-                return n;
+              upsertAddNextTo(prev, tabId, {
+                id: `tab_${newFlowId}`,
+                title: title || 'Task',
+                type: 'flow',
+                flowId: newFlowId,
               })
             );
-          },
-          [tab.id, setDockTree]
-        );
-
-        // ✅ Funzione event-driven: imposta tab.onClose immediatamente quando registerOnClose viene chiamato
-        const handleRegisterOnClose = React.useCallback(
-          (fn: () => Promise<boolean>) => {
-            if (!tab.id || !setDockTree) return;
-
-            // ✅ Salva nel Map globale (legge sempre il valore più recente)
-            editorCloseRefsMap.current.set(tab.id, fn);
-
-            // ✅ Aggiorna SEMPRE tab.onClose per leggere dal Map al momento della chiamata
+          }}
+          onFlowOpenTaskFlow={(tabId, taskFlowId, title) => {
+            // FlowCanvasHost already handles openFlowBackground
+            // We just need to update the dock tree
             setDockTree(prev =>
-              mapNode(prev, n => {
-                if (n.kind === 'tabset') {
-                  const idx = n.tabs.findIndex(t => t.id === tab.id);
-                  if (idx !== -1 && n.tabs[idx].type === 'responseEditor') {
-                    const updatedTab = {
-                      ...n.tabs[idx],
-                      onClose: async (tab: DockTabResponseEditor) => {
-                        // ✅ Legge dal Map al momento della chiamata (non closure stale)
-                        const fn = editorCloseRefsMap.current.get(tab.id);
-                        if (fn) {
-                          try {
-                            return await fn();
-                          } catch (err) {
-                            console.error('[AppContent] ❌ Error in editorCloseRef.current()', err);
-                            return true;
-                          }
-                        }
-                        return true;
-                      }
-                    } as DockTabResponseEditor;
-                    return {
-                      ...n,
-                      tabs: [
-                        ...n.tabs.slice(0, idx),
-                        updatedTab,
-                        ...n.tabs.slice(idx + 1)
-                      ]
-                    };
-                  }
-                }
-                return n;
+              upsertAddNextTo(prev, tabId, {
+                id: `tab_${taskFlowId}`,
+                title: title || 'Task',
+                type: 'flow',
+                flowId: taskFlowId,
               })
             );
-          },
-          [tab.id, setDockTree]
-        );
-
-        // ✅ Reset ref quando cambia il tab
-        React.useEffect(() => {
-          tabOnCloseSetRef.current = false;
-          editorCloseRef.current = null;
-        }, [tab.id]);
-
-        return (
-          <div style={{ width: '100%', flex: 1, minHeight: 0, backgroundColor: '#0b1220', display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100%' }}>
-            <ResponseEditor
-              key={editorKey}
-              taskTree={stableTaskTree}
-              task={stableTask} // ✅ RINOMINATO: act → task (ResponseEditor si aspetta task, non act)
-              tabId={tab.id}
-              setDockTree={setDockTree}
-              hideHeader={true}
-              onToolbarUpdate={stableOnToolbarUpdate}
-              registerOnClose={handleRegisterOnClose}
-              onClose={() => {
-                // ✅ NON chiudere il tab qui - la chiusura è gestita completamente da tab.onClose nel DockManager
-                // Questo callback serve solo per compatibilità legacy, ma non deve fare nulla
-                // Il tab viene chiuso da tab.onClose solo se handleEditorClose ritorna true
-              }}
-            />
-          </div>
-        );
-      }
-
-      // Non-Interactive Editor tab
-      if (tab.type === 'nonInteractive') {
-        return (
-          <div style={{ width: '100%', flex: 1, minHeight: 0, backgroundColor: '#0b1220', display: 'flex', flexDirection: 'column' }}>
-            <NonInteractiveResponseEditor
-              title={tab.title}
-              value={tab.value}
-              instanceId={tab.instanceId}
-              onChange={(next) => {
-                // Update tab data in place
-                setDockTree(prev => mapNode(prev, n => {
-                  if (n.kind === 'tabset') {
-                    const idx = n.tabs.findIndex(t => t.id === tab.id);
-                    if (idx !== -1) {
-                      const updated = [...n.tabs];
-                      updated[idx] = { ...tab, value: next };
-                      return { ...n, tabs: updated };
-                    }
-                  }
-                  return n;
-                }));
-              }}
-              onClose={async () => {
-                const t0 = performance.now();
-                try {
-                  const svc = await import('../services/ProjectDataService');
-                  const dataSvc: any = (svc as any).ProjectDataService;
-                  const pid = pdUpdate.getCurrentProjectId() || undefined;
-                  if (pid && tab.instanceId) {
-                    const text = tab.value?.template || '';
-                    // ✅ REMOVED: updateInstance (legacy act_instances) - use taskRepository.updateTask instead
-                    try {
-                      console.log('[NI][close][PUT ok]', { instanceId: tab.instanceId, text });
-                      taskRepository.updateTask(tab.instanceId, { text }, pid);
-                      try { document.dispatchEvent(new CustomEvent('rowMessage:update', { detail: { instanceId: tab.instanceId, text } })); } catch { }
-                    } catch { }
-                  }
-                } catch (e) { try { console.warn('[NI][close] background persist setup failed', e); } catch { } }
-                setDockTree(prev => closeTab(prev, tab.id));
-                const t1 = performance.now();
-                try { console.log('[NI][close] panel closed in', Math.round(t1 - t0), 'ms'); } catch { }
-              }}
-              accentColor={tab.accentColor}
-            />
-          </div>
-        );
-      }
-
-      // Condition Editor tab
-      if (tab.type === 'conditionEditor') {
-        return (
-          <div style={{ width: '100%', flex: 1, minHeight: 0, backgroundColor: '#1e1e1e', display: 'flex', flexDirection: 'column' }}>
-            <ConditionEditor
-              open={true}
-              onClose={() => {
-                // ✅ FIX: Chiusura istantanea - rimuove setTimeout
-                setDockTree(prev => closeTab(prev, tab.id));
-                // Restore previous viewport position (istantaneo)
-                try {
-                  // Usa requestAnimationFrame per essere sicuri che il DOM sia aggiornato
-                  requestAnimationFrame(() => {
-                    document.dispatchEvent(new CustomEvent('flowchart:restoreViewport', { bubbles: true }));
-                  });
-                } catch (err) {
-                  console.warn('[ConditionEditor] Failed to emit restore viewport event', err);
-                }
-              }}
-              variables={tab.variables}
-              initialScript={tab.script}
-              variablesTree={tab.variablesTree}
-              label={tab.label}
-              dockWithinParent={false}
-              onRename={(next) => {
-                // Update tab title and label
-                setDockTree(prev => mapNode(prev, n => {
-                  if (n.kind === 'tabset') {
-                    const idx = n.tabs.findIndex(t => t.id === tab.id);
-                    if (idx !== -1) {
-                      const updated = [...n.tabs];
-                      updated[idx] = { ...tab, title: next, label: next };
-                      return { ...n, tabs: updated };
-                    }
-                  }
-                  return n;
-                }));
-                try { (async () => { (await import('../ui/events')).emitConditionEditorRename(next); })(); } catch { }
-              }}
-              onSave={(script) => {
-                // Update tab script
-                setDockTree(prev => mapNode(prev, n => {
-                  if (n.kind === 'tabset') {
-                    const idx = n.tabs.findIndex(t => t.id === tab.id);
-                    if (idx !== -1) {
-                      const updated = [...n.tabs];
-                      updated[idx] = { ...tab, script };
-                      return { ...n, tabs: updated };
-                    }
-                  }
-                  return n;
-                }));
-                try { (async () => { (await import('../ui/events')).emitConditionEditorSave(script); })(); } catch { }
-              }}
-            />
-          </div>
-        );
-      }
-
-      // Task Editor tab (BackendCall, etc.)
-      if (tab.type === 'taskEditor') { // ✅ RINOMINATO: 'actEditor' → 'taskEditor'
-        const taskEditorTab = tab as DockTabTaskEditor; // ✅ RINOMINATO: actEditorTab → taskEditorTab, DockTabActEditor → DockTabTaskEditor
-        // ✅ Verifica se questo taskEditor contiene un ResponseEditor (editorKind === 'taskTree')
-        const editorKind = resolveEditorKind(tab.task || { id: '', type: TaskType.SayMessage, label: '' });
-        const isTaskTreeEditor = editorKind === 'ddt'; // ✅ 'ddt' è ancora il valore enum, ma il concetto è TaskTree
-
-        // ✅ Reset ref nel Map quando cambia il tab
-        React.useEffect(() => {
-          return () => {
-            editorCloseRefsMap.current.delete(tab.id);
-          };
-        }, [tab.id]);
-
-        // ✅ Funzione event-driven: imposta tab.onClose immediatamente quando registerOnClose viene chiamato
-        const handleRegisterOnClose = React.useCallback((fn: () => Promise<boolean>) => {
-          if (!isTaskTreeEditor || !tab.id || !setDockTree) {
-            return;
-          }
-
-          // ✅ Salva nel Map globale (legge sempre il valore più recente)
-          editorCloseRefsMap.current.set(tab.id, fn);
-
-          // ✅ Aggiorna SEMPRE tab.onClose per leggere dal Map al momento della chiamata
-          setDockTree(prev =>
-            mapNode(prev, n => {
-              if (n.kind === 'tabset') {
-                const idx = n.tabs.findIndex(t => t.id === tab.id);
-                if (idx !== -1 && n.tabs[idx].type === 'taskEditor') {
-                  const updatedTab = {
-                    ...n.tabs[idx],
-                    onClose: async (tab: DockTabTaskEditor) => {
-                      // ✅ Legge dal Map al momento della chiamata (non closure stale)
-                      const fn = editorCloseRefsMap.current.get(tab.id);
-                      if (fn) {
-                        try {
-                          return await fn();
-                        } catch (err) {
-                          console.error('[AppContent][taskEditor] ❌ Error in editorCloseRef.current()', err);
-                          return true;
-                        }
-                      }
-                      return true;
-                    }
-                  } as DockTabTaskEditor;
-                  return {
-                    ...n,
-                    tabs: [
-                      ...n.tabs.slice(0, idx),
-                      updatedTab,
-                      ...n.tabs.slice(idx + 1)
-                    ]
-                  };
-                }
-              }
-              return n;
-            })
-          );
-        }, [tab.id, setDockTree, isTaskTreeEditor]);
-
-        return (
-          <div style={{ width: '100%', flex: 1, minHeight: 0, backgroundColor: '#0b1220', display: 'flex', flexDirection: 'column' }}>
-            <ResizableTaskEditorHost // ✅ RINOMINATO: ResizableActEditorHost → ResizableTaskEditorHost
-              task={tab.task || { id: '', type: TaskType.SayMessage, label: '' }} // ✅ RINOMINATO: act → task, usa TaskMeta con TaskType enum
-              onClose={() => {
-                // ✅ NON chiudere il tab qui - la chiusura è gestita da tab.onClose (solo per TaskTree editor)
-              }}
-              onToolbarUpdate={(toolbar, color) => {
-                // Update tab with toolbar and color
-                setDockTree(prev => {
-                  return mapNode(prev, n => {
-                    if (n.kind === 'tabset') {
-                      const idx = n.tabs.findIndex(t => t.id === tab.id);
-                      if (idx !== -1 && n.tabs[idx].type === 'taskEditor') { // ✅ RINOMINATO: 'actEditor' → 'taskEditor'
-                        const updatedTab = { ...n.tabs[idx], toolbarButtons: toolbar, headerColor: color } as DockTabTaskEditor; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
-                        return { ...n, tabs: [...n.tabs.slice(0, idx), updatedTab, ...n.tabs.slice(idx + 1)] };
-                      }
-                    }
-                    return n;
-                  });
-                });
-              }}
-              hideHeader={true}
-              registerOnClose={isTaskTreeEditor ? handleRegisterOnClose : undefined}
-            />
-          </div>
-        );
-      }
-
-      return <div>Unknown tab type</div>;
+          }}
+        />
+      );
     },
-    // ✅ Comparatore personalizzato: ignora toolbarButtons e headerColor per responseEditor
-    (prev, next) => {
-      // 🔴 LOG CHIRURGICO CRITICO: Comparatore (DISABILITATO - troppo rumoroso)
-      // console.log('[DEBUG_MEMO] UnifiedTabContent compare', {
-      //   prevId: prev.tab.id,
-      //   nextId: next.tab.id,
-      //   prevToolbar: prev.tab.toolbarButtons,
-      //   nextToolbar: next.tab.toolbarButtons,
-      //   prevHeader: prev.tab.headerColor,
-      //   nextHeader: next.tab.headerColor,
-      //   prevTaskTree: prev.tab.taskTree,
-      //   nextTaskTree: next.tab.taskTree,
-      //   sameTabObject: prev.tab === next.tab
-      // });
-
-      const prevTab = prev.tab;
-      const nextTab = next.tab;
-
-      // 🔴 LOG CHIRURGICO 1: Comparatore (dettagli) (DISABILITATO - troppo rumoroso)
-      // console.log('[DEBUG_MEMO] Comparatore chiamato', {
-      //   prevId: prevTab.id,
-      //   nextId: nextTab.id,
-      //   prevType: prevTab.type,
-      //   nextType: nextTab.type,
-      //   prevTaskTreeRef: prevTab.taskTree,
-      //   nextTaskTreeRef: nextTab.taskTree,
-      //   taskTreeRefChanged: prevTab.taskTree !== nextTab.taskTree,
-      //   prevTaskId: prevTab.task?.id,
-      //   nextTaskId: nextTab.task?.id,
-      //   prevInstanceId: prevTab.task?.instanceId,
-      //   nextInstanceId: nextTab.task?.instanceId,
-      //   prevTaskTreeNodesLength: prevTab.taskTree?.nodes?.length,
-      //   nextTaskTreeNodesLength: nextTab.taskTree?.nodes?.length,
-      //   prevTaskTreeNodesFirstLabel: prevTab.taskTree?.nodes?.[0]?.label,
-      //   nextTaskTreeNodesFirstLabel: nextTab.taskTree?.nodes?.[0]?.label
-      // });
-
-      // Se cambia id o type, re-render sempre
-      if (prevTab.id !== nextTab.id || prevTab.type !== nextTab.type) {
-        // console.log('[DEBUG_MEMO] DECISIONE: re-render (id/type changed)');
-        return false; // Re-render
-      }
-
-      // ✅ Per responseEditor: dockTree è la fonte di verità - se taskTree cambia, re-render
-      if (prevTab.type === 'responseEditor' && nextTab.type === 'responseEditor') {
-        // ✅ Se taskTree cambia reference, re-render SEMPRE (dockTree è stato aggiornato)
-        if (prevTab.taskTree !== nextTab.taskTree) {
-          const prevStartTasksCount = prevTab.taskTree?.nodes?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
-          const nextStartTasksCount = nextTab.taskTree?.nodes?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
-          // console.log('[DEBUG_MEMO] DECISIONE: re-render (taskTree changed from dockTree)', {
-          //   prevStartTasksCount,
-          //   nextStartTasksCount,
-          //   taskTreeRefChanged: true
-          // });
-          return false; // Re-render (taskTree cambiato dal dockTree)
-        }
-
-        // Se cambia task (id o instanceId), re-render
-        if (
-          prevTab.task?.id !== nextTab.task?.id ||
-          prevTab.task?.instanceId !== nextTab.task?.instanceId
-        ) {
-          // console.log('[DEBUG_MEMO] DECISIONE: re-render (task changed)');
-          return false; // Re-render
-        }
-
-        // ✅ Ignora toolbarButtons e headerColor - non causano re-render
-        // console.log('[DEBUG_MEMO] DECISIONE: SKIP re-render (only toolbar/color changed or no significant change)');
-        return true; // NO re-render
-      }
-
-      // Per altri tipi di tab, usa il comportamento di default (re-render se qualsiasi prop cambia)
-      return false; // Re-render
-    }
+    [currentPid, setDockTree, pdUpdate]
   );
-
-  // ✅ Memoize renderTabContent - senza dipendere da setDockTree
-  const renderTabContent = React.useCallback((tab: DockTab) => {
-    // 🔴 LOG CHIRURGICO 2: renderTabContent (DISABILITATO - troppo rumoroso)
-    // console.log('[DEBUG_RENDER_TAB_CONTENT]', {
-    //   tabId: tab.id,
-    //   tabType: tab.type,
-    //   renderTabContentCalled: true
-    // });
-    return <UnifiedTabContent tab={tab} />;
-  }, [currentPid]); // ✅ Rimossa dipendenza da setDockTree
   // Safe access: avoid calling context hook if provider not mounted (e.g., during hot reload glitches)
   let refreshData: () => Promise<void> = async () => { };
   try {
