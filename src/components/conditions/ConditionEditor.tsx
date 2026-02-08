@@ -42,6 +42,7 @@ import { ScriptManagerService } from './application/ScriptManagerService';
 import { VariablesIntellisenseService } from './application/VariablesIntellisenseService';
 import { useConditionEditorState } from './hooks/useConditionEditorState';
 import { useVariablesIntellisense } from './hooks/useVariablesIntellisense';
+import { ConditionEditorHeader } from './presentation/ConditionEditorHeader';
 
 // No local template; EditorPanel injects the scaffold
 
@@ -501,63 +502,26 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     try { return getDDTIconFromRE(String(kind || '')); } catch { return null as any; }
   };
 
-  // removed legacy handleKeyDownForField (monaco/contenteditable handle own shortcuts)
-
-  const ConditionIcon = SIDEBAR_ICON_COMPONENTS[SIDEBAR_TYPE_ICONS.conditions];
+  // ✅ REFACTOR: Header extracted to ConditionEditorHeader component
 
   return (
     <div ref={containerRef} style={{ ...containerStyle, background: 'var(--sidebar-bg, #0b1220)', display: 'grid', gridTemplateRows: 'auto auto 1fr', gap: 6, padding: 12, zIndex: 1000 }}>
       {/* Top drag handle for vertical resize */}
       <div onMouseDown={onStartResize} title="Drag to resize" style={{ cursor: 'ns-resize', height: 6, margin: '-12px -12px 6px -12px' }} />
-      {/* Header with editable title and close */}
-      <div
-        onMouseEnter={() => setHeaderHover(true)}
-        onMouseLeave={() => setHeaderHover(false)}
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', border: 'none', background: '#f59e0b', margin: '-12px -12px 6px -12px', borderTopLeftRadius: 6, borderTopRightRadius: 6 }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {!isEditingTitle ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {ConditionIcon ? <ConditionIcon className="w-4 h-4" style={{ color: '#0b1220' }} /> : null}
-              <span style={{ fontWeight: 700, color: '#0b1220' }}>{titleValue}</span>
-              <button title="Edit title" onClick={() => setIsEditingTitle(true)} style={{ color: '#0b1220', visibility: headerHover ? 'visible' : 'hidden' }}>
-                <Pencil className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <input
-                ref={titleInputRef}
-                value={titleValue}
-                onChange={(e) => setTitleValue(e.target.value)}
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') { e.preventDefault(); setIsEditingTitle(false); onRename?.(titleValue.trim() || 'Condition'); }
-                  else if (e.key === 'Escape') { e.preventDefault(); setIsEditingTitle(false); setTitleValue(label || 'Condition'); }
-                }}
-                style={{ width: titleInputPx, padding: '4px 6px', border: '1px solid #0b1220', borderRadius: 6, background: 'transparent', color: '#0b1220' }}
-              />
-              <button
-                title="Confirm"
-                onClick={() => { setIsEditingTitle(false); onRename?.(titleValue.trim() || 'Condition'); }}
-                style={{ color: '#22c55e' }}
-              >
-                <Check className="w-4 h-4" />
-              </button>
-              <button
-                title="Cancel"
-                onClick={() => { setIsEditingTitle(false); setTitleValue(label || 'Condition'); }}
-                style={{ color: '#ef4444' }}
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-        </div>
-        <button onClick={onClose} title="Close" style={{ color: '#0b1220' }}>
-          <X className="w-4 h-4" />
-        </button>
-      </div>
+      {/* ✅ REFACTOR: Use ConditionEditorHeader component */}
+      <ConditionEditorHeader
+        titleValue={titleValue}
+        setTitleValue={setTitleValue}
+        isEditingTitle={isEditingTitle}
+        setIsEditingTitle={setIsEditingTitle}
+        headerHover={headerHover}
+        setHeaderHover={setHeaderHover}
+        titleInputPx={titleInputPx}
+        titleInputRef={titleInputRef}
+        label={label}
+        onRename={onRename}
+        onClose={onClose}
+      />
       {/* hidden measurer for title autosize */}
       <span ref={titleMeasureRef} style={{ position: 'absolute', visibility: 'hidden', whiteSpace: 'pre', fontWeight: 700, fontFamily: 'inherit', fontSize: '14px', padding: '4px 6px', border: '1px solid transparent' }} />
       {/* Controls + editor */}
