@@ -37,6 +37,7 @@ import { RowSaveHandler } from './application/RowSaveHandler';
 import { RowHeuristicsHandler } from './application/RowHeuristicsHandler';
 import { IntellisenseSelectionHandler } from './application/IntellisenseSelectionHandler';
 import { RowTypeHandler } from './application/RowTypeHandler';
+import { FactoryTaskCreator } from './application/FactoryTaskCreator';
 
 const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps> = (
   {
@@ -634,21 +635,21 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         const result = await typeHandler.createTaskForNewRow(selectedTaskType, selectedTask, label);
 
         if (result.success) {
-          // Aggiorna la riga
-          const updateMeta = {
+        // Aggiorna la riga
+        const updateMeta = {
             id: row.id,
-            type: 'Other',
-            meta: {
-              ...((row as any)?.meta || {}),
+          type: 'Other',
+          meta: {
+            ...((row as any)?.meta || {}),
               type: result.taskType,
-            },
+          },
             isUndefined: false,
-          };
+        };
 
-          if (onUpdateWithCategory) {
-            (onUpdateWithCategory as any)(row, label, 'taskTemplates', updateMeta);
-          } else {
-            onUpdate({ ...row, isUndefined: false } as any, label);
+        if (onUpdateWithCategory) {
+          (onUpdateWithCategory as any)(row, label, 'taskTemplates', updateMeta);
+        } else {
+          onUpdate({ ...row, isUndefined: false } as any, label);
           }
         }
 
@@ -659,142 +660,30 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         return;
       }
 
-      // ✅ Per TaskType enum, usa la logica esistente con key (da Intellisense)
-      // NOTA: key non è definita quando si chiama dal picker, quindi questo branch
-      // viene usato solo quando si seleziona da Intellisense, non dal picker
-      console.log('🎯 [HANDLE_PICK_TYPE][CALLING_CREATE_FACTORY_TASK]', {
-        label,
-        taskType: selectedTaskType,
-        timestamp: Date.now()
+      // ✅ REFACTOR: Use FactoryTaskCreator service
+      const factoryTaskCreator = new FactoryTaskCreator({
+        row,
+        getProjectId,
+        onCreateFactoryTask,
+        onUpdate,
+        onUpdateWithCategory,
+        onStateUpdate: {
+          setIsEditing,
+          setShowIntellisense,
+          setIntellisenseQuery,
+          closePicker: () => toolbarSM.picker.close(),
+        },
       });
 
-      try {
-        // ✅ Per TaskType enum, determina la key da usare
-        const key = selectedTaskType !== null ? taskTypeToTemplateId(selectedTaskType) || '' : '';
+      const result = await factoryTaskCreator.createFactoryTask(label, selectedTaskType);
 
-        // Crea il factory task con il nome della riga e il tipo inferito
-        // Il callback onRowUpdate viene chiamato immediatamente da EntityCreationService
-        onCreateFactoryTask(label, (createdItem: any) => { // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
-          console.log('🎯 [TEMPLATE_CREATION][CALLBACK_START]', {
-            label,
-            createdItem,
-            hasCreatedItem: !!createdItem,
-            id: createdItem?.id,
-            type: createdItem?.type,
-            mode: createdItem?.mode,
-            timestamp: Date.now()
-          });
-
-          // Callback che riceve l'item creato
-          const createdItemId = createdItem?.id;
-          console.log('🎯 [TEMPLATE_CREATION] Factory task created:', { // ✅ RINOMINATO: Agent act → Factory task
-            label,
-            id: createdItemId,
-            type: createdItem?.type,
-            mode: createdItem?.mode
-          });
-
-          // Aggiorna la riga con i metadati del template creato
-          const instanceId = row.id;
-          const projectId = getProjectId?.() || undefined;
-
-          // Migration: Create or update Task
-          // ✅ Converti key (stringa da Intellisense) a TaskType enum
-          const taskType = taskIdToTaskType(key); // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
-          if (!row.taskId) {
-            // Create Task for this row
-            const task = createRowWithTask(instanceId, taskType, '', projectId); // ✅ TaskType enum
-            // ✅ REGOLA ARCHITETTURALE: task.id = row.id (task.id === instanceId === row.id)
-            // ✅ NON modificare row.taskId direttamente (row è una prop immutabile)
-            // ✅ Il task è già stato creato con instanceId come ID, quindi task.id === instanceId è sempre vero
-          } else {
-            // Update Task type
-            updateRowTaskType(row, taskType, projectId); // ✅ RINOMINATO: updateRowTaskAction → updateRowTaskType
-          }
-
-          const finalType = createdItem?.type ?? key;
-          // ✅ mode removed - use type (TaskType enum) only
-
-          const updateMeta = {
-            id: instanceId,
-            type: finalType, // ✅ TaskType enum only, no mode
-            factoryId: createdItem?.factoryId,
-            // ✅ Rimuovi flag isUndefined quando viene selezionato un tipo
-            isUndefined: false
-          };
-
-          console.log('🎯 [TEMPLATE_CREATION][BEFORE_UPDATE]', {
-            rowId: row.id,
-            rowTextBefore: row.text,
-            label,
-            updateMeta,
-            hasOnUpdateWithCategory: !!onUpdateWithCategory,
-            hasOnUpdate: !!onUpdate,
-            timestamp: Date.now()
-          });
-
-          if (onUpdateWithCategory) {
-            console.log('🎯 [TEMPLATE_CREATION][CALLING_ON_UPDATE_WITH_CATEGORY]', {
-              rowId: row.id,
-              label,
-              categoryType: 'taskTemplates',
-              meta: updateMeta
-            });
-            (onUpdateWithCategory as any)(row, label, 'taskTemplates', updateMeta);
-            console.log('🎯 [TEMPLATE_CREATION][AFTER_ON_UPDATE_WITH_CATEGORY]', {
-              rowId: row.id,
-              label,
-              timestamp: Date.now()
-            });
-          } else {
-            console.log('🎯 [TEMPLATE_CREATION][CALLING_ON_UPDATE]', {
-              rowId: row.id,
-              label,
-              wasUndefined: (row as any)?.isUndefined
-            });
-            // ✅ Rimuovi flag isUndefined quando viene selezionato un tipo
-            onUpdate({ ...row, isUndefined: false } as any, label);
-            console.log('🎯 [TEMPLATE_CREATION][AFTER_ON_UPDATE]', {
-              rowId: row.id,
-              label,
-              timestamp: Date.now()
-            });
-          }
-
-          // ✅ CHIUDI LA RIGA DOPO aver salvato il testo
-          console.log('🎯 [TEMPLATE_CREATION][CLOSING_ROW]', {
-            rowId: row.id,
-            timestamp: Date.now()
-          });
-          setIsEditing(false);
-          setShowIntellisense(false);
-          setIntellisenseQuery('');
-
-          // ✅ Log dello stato finale della riga dopo un breve delay
-          setTimeout(() => {
-            console.log('🎯 [TEMPLATE_CREATION][FINAL_STATE_CHECK]', {
-              rowId: row.id,
-              rowTextAfter: row.text,
-              label,
-              textsMatch: row.text === label,
-              timestamp: Date.now()
-            });
-          }, 100);
-
-          try { emitSidebarRefresh(); } catch { }
-        }, 'industry', undefined, key);
-
-        console.log('🎯 [HANDLE_PICK_TYPE][AFTER_CALLING_CREATE_AGENT_ACT]', {
-          label,
-          timestamp: Date.now()
-        });
-
-        // ✅ Il callback viene chiamato immediatamente, quindi non serve il fallback
+      if (result.success) {
+        // ✅ The callback is called immediately, so no fallback needed
         return;
-      } catch (err) {
-        console.warn('[Row][TemplateCreation] Failed to create agent act template:', err);
-        // Fallback al comportamento originale se la creazione fallisce
-        setIsEditing(false); // Chiudi la riga anche in caso di errore
+      } else {
+        // Error already handled in FactoryTaskCreator
+        setIsEditing(false);
+        return;
       }
     }
 
@@ -813,22 +702,22 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
     if (result.success) {
       // Update row with task metadata
-      const immediate = (patch: any) => {
-        if (onUpdateWithCategory) {
-          (onUpdateWithCategory as any)(row, label, 'taskTemplates', patch);
-        } else {
-          onUpdate(row, label);
-        }
-      };
+    const immediate = (patch: any) => {
+      if (onUpdateWithCategory) {
+        (onUpdateWithCategory as any)(row, label, 'taskTemplates', patch);
+      } else {
+        onUpdate(row, label);
+      }
+    };
 
-      console.log('🎯 [INSTANCE_CREATION] Instance/Task created successfully', {
+    console.log('🎯 [INSTANCE_CREATION] Instance/Task created successfully', {
         projectId: getProjectId?.() || 'N/A',
         taskId: result.taskId,
-      });
+    });
 
-      immediate({
+    immediate({
         id: row.id,
-        type: key,
+      type: key,
         mode: undefined, // mode removed
       });
 
@@ -883,24 +772,24 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       } else {
         // Fallback: update row without task creation
         if (onUpdateWithCategory) {
-          (onUpdateWithCategory as any)(row, item.name, item.categoryType, {
-            factoryId: item.factoryId,
-            type: (item as any)?.type,
-            mode: (item as any)?.mode,
-            userActs: item.userActs,
+      (onUpdateWithCategory as any)(row, item.name, item.categoryType, {
+        factoryId: item.factoryId,
+        type: (item as any)?.type,
+        mode: (item as any)?.mode,
+        userActs: item.userActs,
             categoryType: item.categoryType,
-          });
-        } else {
-          onUpdate(row, item.name);
-        }
+      });
+    } else {
+      onUpdate(row, item.name);
+    }
       }
     } catch (error) {
       console.error('[NodeRow][handleIntellisenseSelect] Error handling selection:', error);
       // Fallback: update row without task creation
-      if (onUpdateWithCategory) {
-        (onUpdateWithCategory as any)(row, item.name, item.categoryType, {
+        if (onUpdateWithCategory) {
+          (onUpdateWithCategory as any)(row, item.name, item.categoryType, {
           factoryId: item.factoryId,
-          type: (item as any)?.type,
+            type: (item as any)?.type,
           mode: (item as any)?.mode,
           userActs: item.userActs,
           categoryType: item.categoryType,
