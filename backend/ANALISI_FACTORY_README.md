@@ -14,10 +14,10 @@ Questo script analizza tutti i template nel database Factory e genera un report 
 
 ```bash
 # Esegui lo script e salva il report in un file markdown
-node backend/analyze_factory_templates.js > report_factory_analysis.md
+node scripts/archive/analysis/analyze_factory_templates.js > report_factory_analysis.md
 
 # Oppure visualizza direttamente nel terminale
-node backend/analyze_factory_templates.js
+node scripts/archive/analysis/analyze_factory_templates.js
 ```
 
 ## Output

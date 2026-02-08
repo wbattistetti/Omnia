@@ -9,7 +9,7 @@
  * 4. Proposta struttura corretta
  * 5. Piano di migrazione dettagliato
  *
- * Uso: node backend/analyze_factory_templates.js > report_factory_analysis.md
+ * Uso: node scripts/archive/analysis/analyze_factory_templates.js > report_factory_analysis.md
  */
 
 const { MongoClient, ObjectId } = require('mongodb');
