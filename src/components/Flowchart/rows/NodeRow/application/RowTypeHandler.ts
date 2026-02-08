@@ -1,10 +1,10 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { TaskType, taskTypeToTemplateId, taskIdToTaskType } from '../../../../../types/taskTypes';
-import { taskRepository } from '../../../../../services/TaskRepository';
-import { createRowWithTask, updateRowTaskType } from '../../../../../utils/taskHelpers';
-import type { Row } from '../../../../../types/NodeRowTypes';
+import { TaskType, taskTypeToTemplateId, taskIdToTaskType } from '@types/taskTypes';
+import { taskRepository } from '@services/TaskRepository';
+import { createRowWithTask, updateRowTaskType } from '@utils/taskHelpers';
+import type { Row } from '@types/NodeRowTypes';
 
 export interface RowTypeHandlerDependencies {
   row: Row;

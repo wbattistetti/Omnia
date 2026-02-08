@@ -37,6 +37,7 @@ import { taskRepository } from '../../../../services/TaskRepository';
 import { useRowExecutionHighlight } from '../../executionHighlight/useExecutionHighlight';
 import { getTaskIdFromRow, updateRowTaskType, createRowWithTask, getTemplateId } from '../../../../utils/taskHelpers'; // ✅ RINOMINATO: updateRowTaskAction → updateRowTaskType
 import { TaskTreeOpener } from './application/TaskTreeOpener';
+import { RowSaveHandler } from './application/RowSaveHandler';
 
 const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps> = (
   {
@@ -340,95 +341,28 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     setIsEditing(false);
     setShowIntellisense(false);
     setIntellisenseQuery('');
-    // PUT non-bloccante: salva in background
+
+    // ✅ REFACTOR: Use RowSaveHandler for business logic
     try {
-      let pid: string | undefined = undefined;
-      try { pid = ((require('../../state/runtime') as any).getCurrentProjectId?.() || undefined); } catch { }
-      if (pid && ((row as any)?.mode === 'Message' || !(row as any)?.mode)) {
-        // Per Message, usa row.id come instanceId (row.id è l'instanceId per le righe Message)
-        const instanceId = (row as any)?.instanceId ?? row.id;
-
-        console.log('[Message][SAVE][START]', {
-          rowId: row.id,
-          rowInstanceId: (row as any)?.instanceId,
-          finalInstanceId: instanceId,
-          label,
-          labelLength: label.length,
-          projectId: pid,
-          rowMode: (row as any)?.mode
-        });
-
-        // FASE 4: Assicurati che il Task esista in memoria prima di salvare
-        // Se non esiste, crealo (questo può succedere se la riga è stata creata senza intellisense)
-        const task = taskRepository.getTask(instanceId);
-        console.log('[Message][SAVE][MEMORY_CHECK]', {
-          instanceId,
-          taskExists: !!task,
-          taskMessage: task?.value?.text || 'N/A'
-        });
-
-        if (!task) {
-          // Crea l'istanza in memoria se non esiste
-          console.log('[Message][SAVE][CREATE_IN_MEMORY]', { instanceId });
-          const projectId = getProjectId?.() ?? undefined;
-
-          // FASE 4: Create Task if row doesn't have taskId
-          if (!row.taskId) {
-            // Create Task for this row (default to Message type)
-            const newTask = createRowWithTask(instanceId, TaskType.SayMessage, label, projectId); // ✅ TaskType enum invece di stringa
-            // ✅ REGOLA ARCHITETTURALE: task.id = row.id (newTask.id === instanceId === row.id)
-            // ✅ NON modificare row.taskId direttamente (row è una prop immutabile)
-            // ✅ Il task è già stato creato con instanceId come ID, quindi newTask.id === instanceId è sempre vero
-          } else {
-            // Row already has Task, update it
-            taskRepository.updateTask(row.taskId, { text: label }, projectId);
-          }
-
-          console.log('[Message][SAVE][CREATED_AND_UPDATED]', {
-            instanceId,
-            taskId: row.taskId,
-            messageText: label.substring(0, 50)
-          });
-        } else {
-          // FASE 4: Aggiorna il messaggio nel Task esistente
-          console.log('[Message][SAVE][UPDATE_IN_MEMORY]', {
-            instanceId,
-            oldText: task.text?.substring(0, 50) || 'N/A',
-            newText: label.substring(0, 50)
-          });
-
-          // FASE 4: Update Task (TaskRepository internally updates InstanceRepository)
-          // ✅ Task viene creato solo quando si apre ResponseEditor, non qui
-          const taskId = getTaskIdFromRow(row);
-          if (taskId) {
-            taskRepository.updateTask(taskId, { text: label }, getProjectId?.() ?? undefined);
-          }
-        }
-
-        // FASE 4: Verifica dopo l'aggiornamento
-        const taskAfter = taskRepository.getTask(instanceId);
-        console.log('[Message][SAVE][MEMORY_AFTER_UPDATE]', {
-          instanceId,
-          taskExists: !!taskAfter,
-          messageText: taskAfter?.value?.text?.substring(0, 50) || 'N/A'
-        });
-
-        // ✅ REMOVED: updateInstance (legacy act_instances) - taskRepository.updateTask already saves to database
-      } else {
-        console.log('[Message][SAVE][SKIPPED]', {
-          hasProjectId: !!pid,
-          rowMode: (row as any)?.mode,
-          rowInstanceId: (row as any)?.instanceId,
-          reason: !pid ? 'NO_PROJECT_ID' : 'NOT_MESSAGE_MODE'
-        });
+      let getCurrentProjectId: (() => string | undefined) | undefined = undefined;
+      try {
+        const runtime = require('../../state/runtime') as any;
+        getCurrentProjectId = runtime.getCurrentProjectId;
+      } catch {
+        // Ignore if runtime module is not available
       }
-    } catch (err) {
-      console.error('[Message][SAVE][ERROR]', {
-        error: String(err),
-        rowId: row.id,
-        label: label.substring(0, 50)
+
+      const saveHandler = new RowSaveHandler({
+        row,
+        getProjectId,
+        getCurrentProjectId,
       });
+
+      await saveHandler.saveRow(label);
+    } catch (err) {
+      console.error('[NodeRow][handleSave] Error saving row:', err);
     }
+
     if (typeof onEditingEnd === 'function') {
       onEditingEnd();
     }

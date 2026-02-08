@@ -1,10 +1,10 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { TaskType } from '../../../../../types/taskTypes';
-import { taskRepository } from '../../../../../services/TaskRepository';
+import { TaskType } from '@types/taskTypes';
+import { taskRepository } from '@services/TaskRepository';
 import { resolveTaskType } from '../../../utils/taskVisuals';
-import type { Row } from '../../../../../types/NodeRowTypes';
+import type { Row } from '@types/NodeRowTypes';
 
 export interface TaskTreeOpenerDependencies {
   taskEditorCtx: {
@@ -109,14 +109,14 @@ export class TaskTreeOpener {
     // Build TaskTree if necessary
     let taskTree: any = null;
     if (taskForType?.templateId && taskForType.templateId !== 'UNDEFINED') {
-      const DialogueTaskService = (await import('../../../../../services/DialogueTaskService'))
+      const DialogueTaskService = (await import('@services/DialogueTaskService'))
         .default;
       const template = DialogueTaskService.getTemplate(taskForType.templateId);
       if (template) {
-        const { RowHeuristicsService } = await import('../../../../../services/RowHeuristicsService');
+        const { RowHeuristicsService } = await import('@services/RowHeuristicsService');
         const templateType = RowHeuristicsService.getTemplateType(template);
         if (templateType === TaskType.UtteranceInterpretation) {
-          const { buildTaskTree } = await import('../../../../../utils/taskUtils');
+          const { buildTaskTree } = await import('@utils/taskUtils');
           const projectId = getProjectId?.() || undefined;
           taskTree = await buildTaskTree(taskForType, projectId);
         }
@@ -152,7 +152,7 @@ export class TaskTreeOpener {
         }
       );
 
-      const DialogueTaskService = (await import('../../../../../services/DialogueTaskService'))
+      const DialogueTaskService = (await import('@services/DialogueTaskService'))
         .default;
 
       if (!DialogueTaskService.isCacheLoaded()) {
@@ -282,7 +282,7 @@ export class TaskTreeOpener {
         getdataLabelForCategory,
         getDefaultValuesForCategory,
         getCurrentProjectLocale,
-      } = await import('../../../../../utils/categoryPresets');
+      } = await import('@utils/categoryPresets');
 
       initialTaskData.category = inferredCategory;
       initialTaskData.templateId = null;
@@ -373,7 +373,7 @@ export class TaskTreeOpener {
 
       try {
         const { loadAndAdaptTaskTreeForExistingTask } = await import(
-          '../../../../../utils/taskTreeManager'
+          '@utils/taskTreeManager'
         );
 
         const { taskTree, adapted } = await loadAndAdaptTaskTreeForExistingTask(
@@ -436,16 +436,16 @@ export class TaskTreeOpener {
     let taskTree: any = null;
 
     if (taskForType?.templateId && taskForType.templateId !== 'UNDEFINED') {
-      const DialogueTaskService = (await import('../../../../../services/DialogueTaskService'))
+      const DialogueTaskService = (await import('@services/DialogueTaskService'))
         .default;
       const template = DialogueTaskService.getTemplate(taskForType.templateId);
 
       if (template) {
-        const { RowHeuristicsService } = await import('../../../../../services/RowHeuristicsService');
+        const { RowHeuristicsService } = await import('@services/RowHeuristicsService');
         const templateType = RowHeuristicsService.getTemplateType(template);
 
         if (templateType === TaskType.UtteranceInterpretation) {
-          const { buildTaskTree } = await import('../../../../../utils/taskUtils');
+          const { buildTaskTree } = await import('@utils/taskUtils');
           const projectId = getProjectId?.() || undefined;
           taskTree = await buildTaskTree(taskForType, projectId);
           if (!taskTree) {
@@ -506,12 +506,12 @@ export class TaskTreeOpener {
         console.log('📋 [TaskTreeOpener][LAZY] Copiando steps dal template', {
           templateId: metaTemplateId,
         });
-        const DialogueTaskService = (await import('../../../../../services/DialogueTaskService'))
+        const DialogueTaskService = (await import('@services/DialogueTaskService'))
           .default;
         const template = DialogueTaskService.getTemplate(metaTemplateId);
 
         if (template) {
-          const { buildTaskTreeNodes } = await import('../../../../../utils/taskUtils');
+          const { buildTaskTreeNodes } = await import('@utils/taskUtils');
           const nodes = buildTaskTreeNodes(template);
           // Note: data is not saved - structure is rebuilt at runtime from template.subTasksIds
         }
@@ -522,7 +522,7 @@ export class TaskTreeOpener {
       ? (taskForType.type as TaskType)
       : ((row as any)?.meta?.type || resolveTaskType(row) || TaskType.SayMessage);
 
-    const { getEditorFromTaskType } = await import('../../../../../types/taskTypes');
+    const { getEditorFromTaskType } = await import('@types/taskTypes');
     const editorKind = getEditorFromTaskType(taskType);
 
     taskEditorCtx.open({
@@ -537,16 +537,16 @@ export class TaskTreeOpener {
       let taskTree: any = null;
 
       if (taskForType?.templateId && taskForType.templateId !== 'UNDEFINED') {
-        const DialogueTaskService = (await import('../../../../../services/DialogueTaskService'))
+        const DialogueTaskService = (await import('@services/DialogueTaskService'))
           .default;
         const template = DialogueTaskService.getTemplate(taskForType.templateId);
 
         if (template) {
-          const { RowHeuristicsService } = await import('../../../../../services/RowHeuristicsService');
+          const { RowHeuristicsService } = await import('@services/RowHeuristicsService');
           const templateType = RowHeuristicsService.getTemplateType(template);
 
           if (templateType === TaskType.UtteranceInterpretation) {
-            const { buildTaskTree } = await import('../../../../../utils/taskUtils');
+            const { buildTaskTree } = await import('@utils/taskUtils');
             const projectId = getProjectId?.() || undefined;
             taskTree = await buildTaskTree(taskForType, projectId);
             if (!taskTree) {
