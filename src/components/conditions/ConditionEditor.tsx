@@ -41,6 +41,7 @@ import { ConditionAIService } from './application/ConditionAIService';
 import { ScriptManagerService } from './application/ScriptManagerService';
 import { VariablesIntellisenseService } from './application/VariablesIntellisenseService';
 import { useConditionEditorState } from './hooks/useConditionEditorState';
+import { useVariablesIntellisense } from './hooks/useVariablesIntellisense';
 
 // No local template; EditorPanel injects the scaffold
 
@@ -182,123 +183,57 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
 
   // caret handling for contenteditable is done inline in handlers
 
-  // Simple variables intellisense state
-  const [showVarsMenu, setShowVarsMenu] = React.useState(false);
-  const [varsMenuFilter, setVarsMenuFilter] = React.useState('');
-  const [varsMenuActiveField] = React.useState<'nl' | 'script' | null>(null);
-  const [varsMenuAnchor] = React.useState<HTMLElement | null>(null);
-  const [varsMenuPos] = React.useState<{ left: number; top: number } | null>(null);
+  // ✅ REFACTOR: Use useVariablesIntellisense hook
+  // Serialize contentEditable helper (needed for intellisense)
+  const serializeCE = React.useCallback((): string => {
+    const root = nlCERef.current;
+    if (!root) return nl;
+    const collect = (node: Node): string => {
+      if (node.nodeType === 3) return node.textContent || '';
+      const el = node as HTMLElement;
+      if (el.getAttribute && el.getAttribute('data-token')) return el.textContent || '';
+      let out = '';
+      el.childNodes.forEach(ch => { out += collect(ch); });
+      return out;
+    };
+    return collect(root).replace(/\u00A0/g, ' ');
+  }, [nl]);
+
+  const intellisense = useVariablesIntellisense({
+    variablesTree,
+    varsKeys,
+    script,
+    setScript,
+    nl,
+    setNl,
+    serializeCE,
+    scriptCaretRef,
+    nlCERef,
+    scriptRef,
+  });
+
+  const {
+    showVarsMenu,
+    setShowVarsMenu,
+    varsMenuFilter,
+    setVarsMenuFilter,
+    varsMenuAnchor,
+    varsMenuPos,
+    varsMenuRef,
+    varsMenuHover,
+    setVarsMenuHover,
+    expandedActs,
+    setExpandedActs,
+    expandedMains,
+    setExpandedMains,
+    navEntries,
+    navigateIntellisense,
+    insertVariableToken,
+    toggleAct,
+    toggleMain,
+  } = intellisense;
+
   const [varsMenuMaxH] = React.useState<number>(280);
-  const varsMenuRef = React.useRef<HTMLDivElement>(null);
-  const [varsMenuHover, setVarsMenuHover] = React.useState<boolean>(false);
-  const [varsNavIndex, setVarsNavIndex] = React.useState<number>(0);
-  const [expandedActs, setExpandedActs] = React.useState<Record<string, boolean>>({});
-  const [expandedMains, setExpandedMains] = React.useState<Record<string, boolean>>({});
-  const filteredVarsForMenu = React.useMemo(() => {
-    const f = (varsMenuFilter || '').trim().toLowerCase();
-    if (!f) return varsKeys;
-    return varsKeys.filter(k => k.toLowerCase().includes(f));
-  }, [varsKeys, varsMenuFilter]);
-  // const flatTreeTokens = React.useMemo(() => [], [variablesTree]);
-  // ✅ REFACTOR: Use domain function
-  const filteredTreeActs = React.useMemo(() => {
-    return filterVariablesTree(variablesTree || [], varsMenuFilter);
-  }, [variablesTree, varsMenuFilter]);
-
-  // Navigation entries (include act rows so Enter toggles expansion)
-  type NavEntry = { key: string; kind: 'act' | 'main' | 'sub' | 'token'; token?: string; act?: string; main?: string; sub?: string };
-  const { navEntries, navIndexByKey } = React.useMemo(() => {
-    const entries: NavEntry[] = [];
-    const indexByKey = new Map<string, number>();
-    if (variablesTree && (variablesTree.length > 0)) {
-      (filteredTreeActs || []).forEach(act => {
-        // Act row always visible
-        entries.push({ key: `ACT::${act.label}`, kind: 'act', act: act.label });
-        indexByKey.set(`ACT::${act.label}`, entries.length - 1);
-        // Visible mains only when act expanded
-        if (expandedActs[act.label]) {
-          (act.mains || []).forEach(m => {
-            entries.push({ key: `${act.label}.${m.label}`, kind: 'main', token: `${act.label}.${m.label}`, act: act.label, main: m.label });
-            indexByKey.set(`${act.label}.${m.label}`, entries.length - 1);
-            // Visible subs only when main expanded
-            if (expandedMains[`${act.label}::${m.label}`]) {
-              (m.subs || []).forEach(s => {
-                const k = `${act.label}.${m.label}.${s.label}`;
-                entries.push({ key: k, kind: 'sub', token: k, act: act.label, main: m.label, sub: s.label });
-                indexByKey.set(k, entries.length - 1);
-              });
-            }
-          });
-        }
-      });
-    } else {
-      filteredVarsForMenu.forEach(k => { entries.push({ key: k, kind: 'token', token: k }); indexByKey.set(k, entries.length - 1); });
-    }
-    return { navEntries: entries, navIndexByKey: indexByKey };
-  }, [variablesTree, filteredTreeActs, filteredVarsForMenu, expandedActs, expandedMains]);
-
-  const navigateIntellisense = React.useCallback((key: 'ArrowUp' | 'ArrowDown' | 'Enter') => {
-    const len = navEntries.length;
-    if (len === 0) return;
-    if (key === 'Enter') {
-      const entry = navEntries[Math.max(0, Math.min(varsNavIndex, len - 1))];
-      if (!entry) return;
-      if (entry.kind === 'act' && entry.act) {
-        setExpandedActs(prev => ({ ...prev, [entry.act!]: !prev[entry.act!] }));
-      } else if (entry.token) {
-        insertVariableToken(entry.token);
-      }
-      return;
-    }
-    setVarsNavIndex(prev => {
-      const next = key === 'ArrowDown' ? (prev + 1) % len : (prev - 1 + len) % len;
-      setTimeout(() => {
-        const el = varsMenuRef.current?.querySelector(`[data-nav-index="${next}"]`) as HTMLElement | null;
-        if (el) el.scrollIntoView({ block: 'nearest' });
-      }, 0);
-      return next;
-    });
-  }, [varsNavIndex, navEntries]);
-
-  // Move selection with Up/Down and commit with Enter even if focus stays in textarea
-  React.useEffect(() => {
-    if (!showVarsMenu) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (!showVarsMenu) return;
-      const key = e.key;
-      const target: any = e.target as any;
-      const tag = (target && target.tagName && String(target.tagName).toLowerCase()) || '';
-      const isInField = tag === 'textarea' || tag === 'input' || (target && target.isContentEditable);
-      if (isInField) return; // field handlers already processed arrows; avoid double step
-      if (key === 'ArrowDown' || key === 'ArrowUp') {
-        e.preventDefault();
-        navigateIntellisense(key);
-      } else if (key === 'Enter') {
-        if (navEntries.length > 0) { e.preventDefault(); navigateIntellisense('Enter'); }
-      } else if (key === 'Escape') {
-        e.preventDefault();
-        setShowVarsMenu(false);
-      }
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [showVarsMenu, navEntries, varsNavIndex, navigateIntellisense]);
-
-  // While hovering the menu, Up/Down arrows scroll the list
-  React.useEffect(() => {
-    if (!showVarsMenu) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (!varsMenuHover) return;
-      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-      const el = varsMenuRef.current;
-      if (!el) return;
-      e.preventDefault();
-      const delta = 48; // scroll step
-      el.scrollBy({ top: e.key === 'ArrowDown' ? delta : -delta, behavior: 'smooth' });
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [showVarsMenu, varsMenuHover]);
 
   // ✅ Update script when initialScript changes, converting GUID → label for display
   React.useEffect(() => {
@@ -560,53 +495,10 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
 
   // removed old single-result tester header (replaced by right panel)
 
-  // ✅ REFACTOR: Use VariablesIntellisenseService
-  const insertVariableToken = (varKey: string) => {
-    const target = varsMenuActiveField === 'nl' ? (nlCERef.current as any) : scriptRef.current;
-    if (!target) return;
-
-    if (varsMenuActiveField === 'nl') {
-      intellisenseService.insertVariableTokenInContentEditable(varKey, target as HTMLElement, () => setNl(serializeCE()));
-    } else if (varsMenuActiveField === 'script') {
-      const current = script;
-      const caret = scriptCaretRef.current || { start: current.length, end: current.length };
-      const result = intellisenseService.insertVariableTokenInScript(varKey, current, caret);
-      setScript(result.newScript);
-      scriptCaretRef.current = result.newCaret;
-      setTimeout(() => {
-        try {
-          target.focus();
-          (target as any).setSelectionRange(result.newCaret.start, result.newCaret.end);
-        } catch {}
-      }, 0);
-    }
-
-    setShowVarsMenu(false);
-  };
-
-  const toggleAct = (label: string) => setExpandedActs(prev => ({ ...prev, [label]: !prev[label] }));
-  const toggleMain = (actLabel: string, mainLabel: string) => {
-    const key = `${actLabel}::${mainLabel}`;
-    setExpandedMains(prev => ({ ...prev, [key]: !prev[key] }));
-  };
+  // ✅ REFACTOR: insertVariableToken, toggleAct, toggleMain are now in useVariablesIntellisense hook
 
   const getDDTIcon = (kind?: string) => {
     try { return getDDTIconFromRE(String(kind || '')); } catch { return null as any; }
-  };
-
-  // Serialize contentEditable into NL string preserving tokens as {token}
-  const serializeCE = (): string => {
-    const root = nlCERef.current;
-    if (!root) return nl;
-    const collect = (node: Node): string => {
-      if (node.nodeType === 3) return node.textContent || '';
-      const el = node as HTMLElement;
-      if (el.getAttribute && el.getAttribute('data-token')) return el.textContent || '';
-      let out = '';
-      el.childNodes.forEach(ch => { out += collect(ch); });
-      return out;
-    };
-    return collect(root).replace(/\u00A0/g, ' ');
   };
 
   // removed legacy handleKeyDownForField (monaco/contenteditable handle own shortcuts)
