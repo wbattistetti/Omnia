@@ -1,13 +1,11 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import React from 'react';
-import { CenterPanel } from '../../../../TaskBuilderAIWizard/components/CenterPanel';
+import React, { useState, useEffect } from 'react';
+import { WizardApp } from '../../../../../TaskBuilderAIWizard/WizardApp';
 import { convertFakeTaskTreeToTaskTree } from '../../../TaskTreeBuilder/TaskBuilderAIWizardAdapter';
 import type { TaskTree } from '@types/taskTypes';
-import { FakeTaskTreeNode, FakeStepMessages } from '../../../../TaskBuilderAIWizard/types';
-import { PipelineStep } from '../../../../TaskBuilderAIWizard/hooks/useWizardState';
-import { WizardStep } from '../../../../TaskBuilderAIWizard/types';
+import { FakeTaskTreeNode, FakeStepMessages } from '../../../../../TaskBuilderAIWizard/types';
 
 export interface TaskBuilderWizardPanelProps {
   taskLabel: string;
@@ -17,56 +15,100 @@ export interface TaskBuilderWizardPanelProps {
 
 /**
  * Panel that integrates TaskBuilderAIWizard in ResponseEditor
- * Shown when heuristic did not find a candidate
+ * Shown when heuristic did not find a candidate (Scenario 2B)
  */
 export function TaskBuilderWizardPanel({
   taskLabel,
   onComplete,
   onCancel,
 }: TaskBuilderWizardPanelProps) {
-  // TODO: Integrate with wizard state hooks
-  // For now, this is a placeholder that will be fully implemented in Phase 15
-  const handleWizardComplete = (fakeTree: FakeTaskTreeNode[], messages?: FakeStepMessages) => {
-    // Convert FakeTaskTreeNode[] to TaskTree
-    const taskTree = convertFakeTaskTreeToTaskTree(
-      fakeTree,
-      generateLabelKey(taskLabel),
-      messages
-    );
-    onComplete(taskTree, messages);
-  };
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [wizardData, setWizardData] = useState<{
+    taskTree: FakeTaskTreeNode[];
+    messages?: FakeStepMessages;
+  } | null>(null);
 
-  // Placeholder state - will be replaced with real wizard state in Phase 15
-  const placeholderPipelineSteps: PipelineStep[] = [
-    { id: 'structure', label: 'Struttura dati', status: 'pending' },
-    { id: 'constraints', label: 'Vincoli', status: 'pending' },
-    { id: 'parsers', label: 'Parser', status: 'pending' },
-    { id: 'messages', label: 'Messaggi', status: 'pending' },
-  ];
+  useEffect(() => {
+    if (wizardData && onComplete) {
+      const handleComplete = async () => {
+        try {
+          setIsCompleting(true);
+          const taskTree = convertFakeTaskTreeToTaskTree(
+            wizardData.taskTree,
+            generateLabelKey(taskLabel),
+            wizardData.messages
+          );
+          await onComplete(taskTree, wizardData.messages);
+        } catch (error) {
+          console.error('[TaskBuilderWizardPanel] Error converting task tree:', error);
+          setIsCompleting(false);
+        }
+      };
+      handleComplete();
+    }
+  }, [wizardData, onComplete, taskLabel]);
+
+  const generateLabelKey = (label: string): string => {
+    return label
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+  };
 
   return (
     <div
       style={{
         width: '100%',
         height: '100%',
+        flex: 1,
         display: 'flex',
         flexDirection: 'column',
         backgroundColor: '#0f172a',
+        overflow: 'hidden',
+        position: 'relative',
+        zIndex: 10,
       }}
     >
-      {/* TODO: Full integration in Phase 15 */}
-      <div style={{ padding: '24px', color: '#e2e8f0' }}>
-        <p>TaskBuilderWizardPanel - Placeholder</p>
-        <p>Task Label: {taskLabel}</p>
-        <p>Full integration will be completed in Phase 15</p>
+      {/* ✅ ARCHITECTURE: WizardApp needs full height container */}
+      {/* ✅ CRITICAL: Container deve occupare tutto lo spazio disponibile */}
+      {/* ✅ FIX: Override h-screen from WizardApp with height: 100% for flex container */}
+      {/* ✅ FIX: Use CSS to override Tailwind's h-screen class */}
+      <div
+        style={{
+          flex: 1,
+          overflow: 'hidden',
+          width: '100%',
+          height: '100%',
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'relative',
+        }}
+        className="w-full h-full"
+      >
+        {/* ✅ FIX: Override WizardApp's h-screen class by wrapping it */}
+        {/* ✅ CRITICAL: This wrapper forces WizardApp to respect flex container height */}
+        {/* ✅ FIX: Use a style tag to override Tailwind's h-screen class */}
+        <style>{`
+          .wizard-app-wrapper > div[class*="h-screen"] {
+            height: 100% !important;
+            max-height: 100% !important;
+          }
+        `}</style>
+        <div
+          className="wizard-app-wrapper"
+          style={{
+            width: '100%',
+            height: '100%',
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
+          <WizardApp />
+        </div>
       </div>
     </div>
   );
-}
-
-function generateLabelKey(label: string): string {
-  return label
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
 }

@@ -7,7 +7,6 @@ import { useSimulation } from './hooks/useSimulation';
 import { useSidebarSync } from './hooks/useSidebarSync';
 import { FakeTaskTreeNode } from './types';
 import { MOCK_MODULES } from './utils/mockData';
-import { Zap } from 'lucide-react';
 
 export function WizardApp() {
   const {
@@ -283,52 +282,6 @@ export function WizardApp() {
 
   return (
     <div className="h-screen flex flex-col bg-gray-100">
-      {/* Apple-style Header */}
-      <header className="border-b bg-white px-8 py-5 flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Zap className="w-8 h-8 text-blue-500" />
-            <div>
-              <div className="text-xs uppercase tracking-wide text-gray-500 font-medium">
-                Task Builder AI Wizard
-              </div>
-              <div className="text-xl font-semibold text-gray-900">
-                {userInput || 'Nuovo Task'}
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-6">
-            <div className="text-sm font-medium text-gray-600">
-              {overallProgress}% completato
-            </div>
-
-            {/* Controls compatti */}
-            <div className="flex items-center gap-3 border-l border-gray-300 pl-6">
-              <button
-                onClick={handleSimulateEuristicaTrovata}
-                className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors bg-green-100 text-green-700 hover:bg-green-200"
-              >
-                Euristica Trovata
-              </button>
-              <button
-                onClick={handleSimulateEuristicaNonTrovata}
-                className="px-3 py-1.5 text-xs font-medium rounded-md transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200"
-              >
-                Non Trovata
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Progress bar globale con gradient blu */}
-        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden mt-2">
-          <div
-            className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-500 ease-out"
-            style={{ width: `${overallProgress}%` }}
-          />
-        </div>
-      </header>
-
       <div className="flex-1 flex overflow-hidden">
         <Sidebar
           taskTree={taskTree}

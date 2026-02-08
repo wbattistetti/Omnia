@@ -13,6 +13,8 @@ export interface UseResponseEditorDerivedParams {
   mainList: any[];
   leftPanelMode: RightPanelMode;
   testPanelMode: RightPanelMode;
+  // ✅ NEW: taskMeta for wizard mode (when task is null)
+  taskMeta?: { type?: number; label?: string } | null;
 }
 
 export interface UseResponseEditorDerivedResult {
@@ -34,6 +36,7 @@ export function useResponseEditorDerived(params: UseResponseEditorDerivedParams)
     mainList,
     leftPanelMode,
     testPanelMode,
+    taskMeta,
   } = params;
 
   // Verifica se kind === "intent" e non ha messaggi (mostra IntentMessagesBuilder se non ci sono)
@@ -44,12 +47,16 @@ export function useResponseEditorDerived(params: UseResponseEditorDerivedParams)
   }, [mainList, taskTree, task]);
 
   // CRITICAL: NO FALLBACK - type MUST be present
+  // ✅ NEW: Use taskMeta.type when task is null (wizard mode)
   const taskType = useMemo(() => {
-    if (!task?.type) {
-      throw new Error(`[ResponseEditor] Task is missing required field 'type'. Task: ${JSON.stringify(task, null, 2)}`);
+    if (task?.type) {
+      return task.type;
     }
-    return task.type;
-  }, [task?.type]);
+    if (taskMeta?.type !== undefined && taskMeta?.type !== null) {
+      return taskMeta.type;
+    }
+    throw new Error(`[ResponseEditor] Task is missing required field 'type'. Task: ${JSON.stringify(task, null, 2)}, taskMeta: ${JSON.stringify(taskMeta, null, 2)}`);
+  }, [task?.type, taskMeta?.type]);
 
   // Aggiornare per usare getTaskVisuals(taskType, task?.category, task?.categoryCustom, !!taskTree)
   const { Icon, color: iconColor } = useMemo(() =>

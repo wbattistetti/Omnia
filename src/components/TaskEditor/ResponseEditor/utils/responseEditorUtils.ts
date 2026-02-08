@@ -46,10 +46,18 @@ export function isEditingActive(): boolean {
 }
 
 /**
- * Type guard: checks if task has templateId (is a TaskMeta)
+ * Type guard: checks if task has type (is a TaskMeta)
+ * ✅ CORRETTO: Usa 'type' (obbligatorio) invece di 'templateId' (opzionale)
+ * type è il fondamento semantico di TaskMeta e sempre presente quando entriamo nel flusso editor/wizard
  */
 export function isTaskMeta(task: any): task is TaskMeta {
-  return task && typeof task === 'object' && 'templateId' in task;
+  return (
+    task &&
+    typeof task === 'object' &&
+    'type' in task &&
+    task.type !== undefined &&
+    task.type !== null
+  );
 }
 
 /**

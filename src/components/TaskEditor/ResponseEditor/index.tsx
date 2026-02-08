@@ -44,13 +44,84 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     registerOnClose,
   });
 
+  // ✅ ARCHITECTURE: Pass only necessary props (no monolithic editor object)
   return (
     <ResponseEditorLayout
-      editor={editor}
       combinedClass={combinedClass}
       hideHeader={hideHeader}
       taskTree={taskTree}
       currentProjectId={currentProjectId}
+      rootRef={editor.rootRef}
+      icon={editor.icon}
+      iconColor={editor.iconColor}
+      headerTitle={editor.headerTitle}
+      toolbarButtons={editor.toolbarButtons}
+      handleEditorClose={editor.handleEditorClose}
+      isGeneralizable={editor.isGeneralizable}
+      generalizationReason={editor.generalizationReason}
+      showContractWizard={editor.showContractWizard}
+      handleContractWizardClose={editor.handleContractWizardClose}
+      handleContractWizardNodeUpdate={editor.handleContractWizardNodeUpdate}
+      handleContractWizardComplete={editor.handleContractWizardComplete}
+      needsIntentMessages={editor.needsIntentMessages}
+      handleIntentMessagesComplete={editor.handleIntentMessagesComplete}
+      taskMeta={editor.taskMeta}
+      mainList={editor.mainList}
+      localTranslations={editor.localTranslations}
+      escalationTasks={editor.escalationTasks}
+      selectedMainIndex={editor.selectedMainIndex}
+      selectedSubIndex={editor.selectedSubIndex}
+      selectedRoot={editor.selectedRoot}
+      selectedNode={editor.selectedNode}
+      selectedNodePath={editor.selectedNodePath}
+      handleSelectMain={editor.handleSelectMain}
+      handleSelectSub={editor.handleSelectSub}
+      handleSelectAggregator={editor.handleSelectAggregator}
+      sidebarRef={editor.sidebarRef}
+      sidebar={editor.sidebar}
+      handleParserCreate={editor.handleParserCreate}
+      handleParserModify={editor.handleParserModify}
+      handleEngineChipClick={editor.handleEngineChipClick}
+      handleGenerateAll={editor.handleGenerateAll}
+      isAggregatedAtomic={editor.isAggregatedAtomic}
+      sidebarManualWidth={editor.sidebarManualWidth}
+      isDraggingSidebar={editor.isDraggingSidebar}
+      showMessageReview={editor.showMessageReview}
+      showSynonyms={editor.showSynonyms}
+      selectedIntentIdForTraining={editor.selectedIntentIdForTraining}
+      setSelectedIntentIdForTraining={editor.setSelectedIntentIdForTraining}
+      pendingEditorOpen={editor.pendingEditorOpen}
+      contractChangeRef={editor.contractChangeRef}
+      taskType={editor.taskType}
+      handleProfileUpdate={editor.handleProfileUpdate}
+      updateSelectedNode={editor.updateSelectedNode}
+      leftPanelMode={editor.leftPanelMode}
+      testPanelMode={editor.testPanelMode}
+      tasksPanelMode={editor.tasksPanelMode}
+      rightWidth={editor.rightWidth}
+      testPanelWidth={editor.testPanelWidth}
+      tasksPanelWidth={editor.tasksPanelWidth}
+      draggingPanel={editor.draggingPanel}
+      setDraggingPanel={editor.setDraggingPanel}
+      setRightWidth={editor.setRightWidth}
+      setTestPanelWidth={editor.setTestPanelWidth}
+      setTasksPanelWidth={editor.setTasksPanelWidth}
+      tasksStartWidthRef={editor.tasksStartWidthRef}
+      tasksStartXRef={editor.tasksStartXRef}
+      replaceSelectedTaskTree={editor.replaceSelectedTaskTree}
+      serviceUnavailable={editor.serviceUnavailable}
+      setServiceUnavailable={editor.setServiceUnavailable}
+      showContractDialog={editor.showContractDialog}
+      pendingContractChange={editor.pendingContractChange}
+      contractDialogHandlers={editor.contractDialogHandlers}
+      taskWizardMode={editor.taskWizardMode}
+      needsTaskContextualization={editor.needsTaskContextualization}
+      needsTaskBuilder={editor.needsTaskBuilder}
+      contextualizationTemplateId={editor.contextualizationTemplateId}
+      taskLabel={editor.taskLabel}
+      onTaskContextualizationComplete={editor.onTaskContextualizationComplete}
+      onTaskBuilderComplete={editor.onTaskBuilderComplete}
+      onTaskBuilderCancel={editor.onTaskBuilderCancel}
     />
   );
 }

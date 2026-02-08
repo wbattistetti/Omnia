@@ -1726,13 +1726,18 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
 
                     // Log rimosso: non essenziale per flusso motore
 
-                    // ✅ CASO 1: Task esiste → apri direttamente (comportamento attuale)
+                    // ✅ STATO 1: Task esiste → taskWizardMode = 'none'
                     if (taskForType) {
-                      // Log rimosso: non essenziale per flusso motore
-
                       // Task già esiste, apri direttamente ResponseEditor
                       const finalTaskType = taskForType.type as TaskType;
-                      taskEditorCtx.open({ id: String(row.taskId), type: finalTaskType, label: row.text, instanceId: row.id });
+                      taskEditorCtx.open({
+                        id: String(row.taskId),
+                        type: finalTaskType,
+                        label: row.text,
+                        instanceId: row.id,
+                        // ✅ NEW: taskWizardMode = 'none' (task exists)
+                        taskWizardMode: 'none'
+                      });
 
                       // Costruisci TaskTree se necessario
                       let taskTree: any = null;
@@ -1760,7 +1765,9 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                           label: row.text,
                           taskTree: taskTree,
                           instanceId: row.id,
-                          templateId: taskForType?.templateId || undefined
+                          templateId: taskForType?.templateId || undefined,
+                          // ✅ NEW: taskWizardMode = 'none' (task exists)
+                          taskWizardMode: 'none'
                         },
                         bubbles: true
                       });
@@ -1768,7 +1775,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       return;
                     }
 
-                    // ✅ CASO 2: Task non esiste → cerca task nella libreria prima di aprire wizard
+                    // ✅ STATO 2/3: Task non esiste → determina taskWizardMode in base a templateId
                     const rowMeta = (row as any)?.meta;
                     const metaTaskType = (rowMeta?.type !== undefined && rowMeta?.type !== null)
                       ? rowMeta.type
@@ -1776,7 +1783,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                     const metaTemplateId = rowMeta?.templateId || null;
                     const projectId = getProjectId?.() || undefined;
 
-                    // ✅ Sotto-caso 2a: C'è templateId → apri ResponseEditor direttamente (salta wizard)
+                    // ✅ STATO 2: Template trovato, nessun task → taskWizardMode = 'adaptation'
                     if (metaTemplateId && metaTaskType === TaskType.UtteranceInterpretation) {
                       try {
                         console.log('[🔍 NodeRow][onOpenTaskTree] ✅ CASO 2a: Template trovato dall\'euristica, aprendo ResponseEditor direttamente', {
@@ -1807,12 +1814,16 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                           // DDTHostAdapter chiamerà buildTaskTree che clonerà gli step correttamente
                           // Questo evita race condition: gli step saranno già disponibili quando viene selezionato il primo nodo
 
-                          // Apri ResponseEditor direttamente
+                          // Apri ResponseEditor con taskWizardMode = 'adaptation'
                           taskEditorCtx.open({
                             id: String(newTask.id),
                             type: metaTaskType,
                             label: row.text || '',
-                            instanceId: row.id
+                            instanceId: row.id,
+                            // ✅ NEW: taskWizardMode = 'adaptation' (template found, no instance)
+                            taskWizardMode: 'adaptation',
+                            contextualizationTemplateId: metaTemplateId,
+                            taskLabel: row.text || ''
                           });
 
                           // Emit event to open ResponseEditor tab
@@ -1824,7 +1835,11 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                               label: row.text || '',
                               // ✅ RIMOSSO: taskTree - DDTHostAdapter lo costruirà con buildTaskTree (clona step correttamente)
                               instanceId: row.id,
-                              templateId: metaTemplateId
+                              templateId: metaTemplateId,
+                              // ✅ NEW: taskWizardMode = 'adaptation' (template found, no instance)
+                              taskWizardMode: 'adaptation',
+                              contextualizationTemplateId: metaTemplateId,
+                              taskLabel: row.text || ''
                             },
                             bubbles: true
                           });
@@ -1837,27 +1852,53 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
                       }
                     }
 
-                    // ✅ Sotto-caso 2b: NON c'è templateId → apri wizard esterno direttamente (non generare AI qui)
+                    // ✅ STATO 3: Nessun template, nessun task → taskWizardMode = 'full'
                     if (!metaTemplateId && metaTaskType === TaskType.UtteranceInterpretation && row.text && row.text.trim().length >= 3) {
-                      console.log('[🔍 NodeRow][onOpenTaskTree] ✅ CASO 2b: Nessun template, aprendo wizard esterno', {
+                      console.log('[🔍 NodeRow][onOpenTaskTree] ✅ STATO 3: Nessun template, nessun task, aprendo ResponseEditor in modalità wizard full', {
                         label: row.text,
                         labelLength: row.text.trim().length
                       });
 
-                      // ✅ Apri wizard esterno direttamente (il wizard gestirà la generazione AI internamente se necessario)
-                      const wizardEvent = new CustomEvent('taskTreeWizard:open', {
+                      // ✅ NON creare task qui - il wizard lo creerà quando completato
+                      // ✅ Usa row.id come instanceId temporaneo (non come taskId)
+                      const temporaryId = `wizard-${row.id}-${Date.now()}`;
+
+                      // ✅ Apri ResponseEditor con taskWizardMode = 'full'
+                      console.log('[🔍 NodeRow][STATO 3] Aprendo ResponseEditor con taskWizardMode = "full"', {
+                        temporaryId,
+                        rowId: row.id,
+                        label: row.text,
+                        taskWizardMode: 'full'
+                      });
+                      taskEditorCtx.open({
+                        id: temporaryId, // ID temporaneo, non un task reale
+                        type: TaskType.UtteranceInterpretation,
+                        label: row.text || '',
+                        instanceId: row.id, // Questo sarà usato quando il wizard crea il task
+                        // ✅ NEW: taskWizardMode = 'full' (no template, no instance)
+                        taskWizardMode: 'full',
+                        taskLabel: row.text || ''
+                      });
+
+                      // ✅ Emit event to open ResponseEditor tab with wizard
+                      console.log('[🔍 NodeRow][STATO 3] Emettendo evento taskEditor:open con taskWizardMode = "full"', {
+                        temporaryId,
+                        taskWizardMode: 'full'
+                      });
+                      const event = new CustomEvent('taskEditor:open', {
                         detail: {
-                          taskLabel: row.text || '',
-                          taskType: TaskType.UtteranceInterpretation,
-                          initialTaskTree: undefined, // Wizard parte da zero
-                          startOnStructure: false, // Wizard parte da input step
-                          rowId: row.id,
-                          instanceId: row.id
+                          id: temporaryId,
+                          type: TaskType.UtteranceInterpretation,
+                          label: row.text || '',
+                          instanceId: row.id,
+                          // ✅ NEW: taskWizardMode = 'full' (no template, no instance)
+                          taskWizardMode: 'full',
+                          taskLabel: row.text || ''
                         },
                         bubbles: true
                       });
-                      document.dispatchEvent(wizardEvent);
-                      return; // ✅ Esci qui, non mostrare preview
+                      document.dispatchEvent(event);
+                      return; // ✅ Esci qui, ResponseEditor aprirà il wizard
                     }
 
                     // ✅ Fallback: Crea task base senza preview (comportamento legacy)

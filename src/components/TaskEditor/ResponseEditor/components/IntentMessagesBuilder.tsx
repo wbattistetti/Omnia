@@ -1,7 +1,37 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
-import ProgressBar from '@components/TaskTreeBuilder/TaskTreeWizard/components/ProgressBar';
 import { useAIProvider } from '@context/AIProviderContext';
+
+// Simple progress bar component (inline to avoid dependency on old wizard)
+const ProgressBar: React.FC<{ progress: number }> = ({ progress }) => {
+  const percentage = Math.round(progress * 100);
+  const isComplete = percentage >= 100;
+  const barColor = isComplete ? '#22c55e' : '#fbbf24';
+  const barStyle = isComplete
+    ? { background: barColor }
+    : {
+        background: `repeating-linear-gradient(
+          to right,
+          ${barColor} 0px,
+          ${barColor} 8px,
+          transparent 8px,
+          transparent 12px
+        )`
+      };
+
+  return (
+    <div style={{ width: '100%', height: 4, background: '#1f2937', borderRadius: 9999, overflow: 'hidden' }}>
+      <div
+        style={{
+          width: `${percentage}%`,
+          height: '100%',
+          ...barStyle,
+          transition: 'width 0.8s ease, background 0.3s ease'
+        }}
+      />
+    </div>
+  );
+};
 
 interface IntentMessagesBuilderProps {
   intentLabel: string;

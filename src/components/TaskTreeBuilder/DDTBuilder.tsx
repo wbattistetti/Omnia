@@ -1,14 +1,18 @@
 import React from 'react';
-import TaskWizard from './TaskTreeWizard/TaskWizard';
+import TaskBuilderAIWizardWrapper from './TaskBuilderAIWizardWrapper';
 
 const DDTBuilder: React.FC<{ onCancel: () => void; onComplete?: (newDDT: any, messages?: any) => void; initialDDT?: any; startOnStructure?: boolean }> = ({ onCancel, onComplete, initialDDT, startOnStructure }) => {
   React.useEffect(() => {
+    console.log('[DDTBuilder] Using new TaskBuilderAIWizard');
   });
+
   return (
-    <TaskWizard
+    <TaskBuilderAIWizardWrapper
       onCancel={onCancel}
-      onComplete={(ddt, messages) => { if (onComplete) onComplete(ddt, messages); }}
-      initialDDT={initialDDT}
+      onComplete={(ddt, messages) => {
+        if (onComplete) onComplete(ddt, messages);
+      }}
+      initialTaskTree={initialDDT}
       startOnStructure={startOnStructure}
     />
   );

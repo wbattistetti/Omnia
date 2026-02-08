@@ -42,9 +42,7 @@ import NonInteractiveResponseEditor from './TaskEditor/ResponseEditor/NonInterac
 import { taskRepository } from '../services/TaskRepository';
 import { getTemplateId } from '../utils/taskHelpers';
 import { TaskType } from '../types/taskTypes'; // ✅ RIMOSSO: taskIdToTaskType - non più necessario, le fonti emettono direttamente TaskType enum
-import type { TaskMeta } from './TaskEditor/EditorHost/types'; // ✅ RINOMINATO: ActEditor → TaskEditor
-import TaskTreeWizardModal from './TaskTreeBuilder/TaskTreeWizard/TaskTreeWizardModal';
-import { useTaskTreeWizardModal } from './TaskTreeBuilder/TaskTreeWizard/useTaskTreeWizardModal';
+import type { TaskMeta, TaskWizardMode } from './TaskEditor/EditorHost/types'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import { getNodesWithFallback } from '../utils/taskTreeMigrationHelpers';
 import type { TaskTree } from '../types/taskTypes';
 
@@ -92,9 +90,6 @@ export const AppContent: React.FC<AppContentProps> = ({
 }) => {
   const pdUpdate = useProjectDataUpdate();
   const currentPid = (() => { try { return pdUpdate.getCurrentProjectId(); } catch { return undefined; } })();
-
-  // ✅ External TaskTree Wizard Modal
-  const { modalState, openWizard, closeWizard, handleWizardComplete } = useTaskTreeWizardModal();
 
   // Dock tree (new dock manager)
   const [dockTree, setDockTree] = useState<DockNode>({
@@ -655,11 +650,47 @@ export const AppContent: React.FC<AppContentProps> = ({
 
         // ✅ Build taskMeta from event detail
         const taskType = d.type as TaskType; // d.type is already TaskType enum
+
+        // ✅ NEW: Determine taskWizardMode from event detail
+        // Priority: explicit taskWizardMode > backward compatibility with booleans
+        let taskWizardMode: TaskWizardMode | undefined;
+        if (d.taskWizardMode && (d.taskWizardMode === 'none' || d.taskWizardMode === 'adaptation' || d.taskWizardMode === 'full')) {
+          taskWizardMode = d.taskWizardMode;
+          console.log('[📥 AppContent] taskWizardMode esplicito dall\'evento:', taskWizardMode);
+        } else {
+          // ✅ Backward compatibility: derive from boolean flags
+          if (d.needsTaskBuilder === true) {
+            taskWizardMode = 'full';
+          } else if (d.needsTaskContextualization === true) {
+            taskWizardMode = 'adaptation';
+          } else {
+            taskWizardMode = 'none';
+          }
+          console.log('[📥 AppContent] taskWizardMode derivato da booleani:', taskWizardMode, {
+            needsTaskBuilder: d.needsTaskBuilder,
+            needsTaskContextualization: d.needsTaskContextualization
+          });
+        }
+
+        console.log('[📥 AppContent] Costruendo TaskMeta con taskWizardMode:', taskWizardMode, {
+          id: d.id,
+          type: taskType,
+          label: d.label || d.name,
+          instanceId: d.instanceId || d.id
+        });
+
         const taskMeta: TaskMeta = {
           id: d.id,
           type: taskType,
           label: d.label || d.name || 'Task',
-          instanceId: d.instanceId || d.id
+          instanceId: d.instanceId || d.id,
+          // ✅ NEW: taskWizardMode (primary)
+          taskWizardMode,
+          // ✅ DEPRECATED: Backward compatibility flags (will be removed after migration)
+          needsTaskContextualization: d.needsTaskContextualization === true,
+          needsTaskBuilder: d.needsTaskBuilder === true,
+          contextualizationTemplateId: d.contextualizationTemplateId || undefined,
+          taskLabel: d.taskLabel || d.label || d.name || undefined
         };
 
         // Open as docking tab in bottom split (1/3 height)
@@ -678,8 +709,15 @@ export const AppContent: React.FC<AppContentProps> = ({
             // Assicurati che il task esista
             let task = taskRepository.getTask(instanceId);
             if (!task) {
-              // ✅ Usa taskType da taskMeta
-              task = taskRepository.createTask(taskMeta.type, null, undefined, instanceId);
+              // ✅ NEW: Crea task SOLO se c'è un templateId (euristica ha trovato candidato)
+              // Se non c'è templateId, il wizard creerà il task al termine
+              if (d.templateId) {
+                // ✅ Usa taskType da taskMeta
+                task = taskRepository.createTask(taskMeta.type, d.templateId, undefined, instanceId);
+              } else {
+                // ✅ Nessun template → wizard creerà il task
+                console.log('[AppContent] No templateId - wizard will create task', { instanceId });
+              }
             }
             // ✅ NUOVO MODELLO: Estrai solo override (label, steps, introduction)
             // ❌ NON salvare: nodes, constraints, dataContract (vengono dal template)
@@ -695,13 +733,20 @@ export const AppContent: React.FC<AppContentProps> = ({
             let task = taskRepository.getTask(instanceId);
 
             if (!task) {
-              // ✅ Task doesn't exist, create it
-              // ✅ NUOVO MODELLO: Crea task senza data (la struttura viene dal template)
-              // ✅ Usa taskType da taskMeta
-              task = taskRepository.createTask(taskMeta.type, null, {
-                label: d.label || 'New Task'
-                // ❌ NON salvare: data (viene dal template usando subTasksIds)
-              }, instanceId);
+              // ✅ NEW: Crea task SOLO se c'è un templateId (euristica ha trovato candidato)
+              // Se non c'è templateId, il wizard creerà il task al termine
+              if (d.templateId) {
+                // ✅ Task doesn't exist, create it (solo se c'è template)
+                // ✅ NUOVO MODELLO: Crea task senza data (la struttura viene dal template)
+                // ✅ Usa taskType da taskMeta
+                task = taskRepository.createTask(taskMeta.type, d.templateId, {
+                  label: d.label || 'New Task'
+                  // ❌ NON salvare: data (viene dal template usando subTasksIds)
+                }, instanceId);
+              } else {
+                // ✅ Nessun template → wizard creerà il task
+                console.log('[AppContent] No templateId - wizard will create task', { instanceId });
+              }
             }
 
             // ✅ Load TaskTree async (if task has templateId, build from template)
@@ -719,9 +764,9 @@ export const AppContent: React.FC<AppContentProps> = ({
               }
             }
 
-            // ✅ Fallback: if no TaskTree loaded, create empty one
-            if (!taskTree) {
-              // TaskTree doesn't exist, create empty one
+            // ✅ NEW: Crea TaskTree vuoto SOLO se il task esiste (se non c'è templateId, il task non esiste)
+            if (task && !taskTree) {
+              // ✅ Fallback: if no TaskTree loaded, create empty one
               taskTree = { label: d.label || 'New Task', nodes: [] };
               // Update task with empty label (structure comes from template)
               taskRepository.updateTask(instanceId, {
@@ -729,7 +774,8 @@ export const AppContent: React.FC<AppContentProps> = ({
               }, pdUpdate?.getCurrentProjectId());
             }
 
-            preparedTaskTree = taskTree;
+            // ✅ NEW: preparedTaskTree è null se non c'è task (wizard creerà tutto)
+            preparedTaskTree = task ? taskTree : null;
           }
         }
 
@@ -751,14 +797,23 @@ export const AppContent: React.FC<AppContentProps> = ({
               // ✅ Salva TaskTree nel taskRepository (TaskEditorHost lo leggerà)
               let task = taskRepository.getTask(instanceId);
               if (!task) {
-                task = taskRepository.createTask(taskMeta.type, null, undefined, instanceId);
+                // ✅ NEW: Crea task SOLO se c'è un templateId (euristica ha trovato candidato)
+                if (d.templateId) {
+                  task = taskRepository.createTask(taskMeta.type, d.templateId, undefined, instanceId);
+                } else {
+                  // ✅ Nessun template → wizard creerà il task
+                  console.log('[AppContent] No templateId - wizard will create task (existing tab)', { instanceId });
+                }
               }
-              // ✅ CRITICAL: Non salvare steps qui - steps sono gestiti da ResponseEditor/DDTHostAdapter
-              const { steps: _, ...preparedTaskTreeWithoutSteps } = preparedTaskTree;
-              taskRepository.updateTask(instanceId, {
-                ...preparedTaskTreeWithoutSteps,
-                templateId: d.templateId || task.templateId
-              }, pdUpdate?.getCurrentProjectId());
+              // ✅ NEW: Salva TaskTree SOLO se il task esiste (se non c'è templateId, il task non esiste)
+              if (task) {
+                // ✅ CRITICAL: Non salvare steps qui - steps sono gestiti da ResponseEditor/DDTHostAdapter
+                const { steps: _, ...preparedTaskTreeWithoutSteps } = preparedTaskTree;
+                taskRepository.updateTask(instanceId, {
+                  ...preparedTaskTreeWithoutSteps,
+                  templateId: d.templateId || task.templateId
+                }, pdUpdate?.getCurrentProjectId());
+              }
             }
             // Tab already open, just activate it
             return activateTab(prev, tabId);
@@ -800,16 +855,25 @@ export const AppContent: React.FC<AppContentProps> = ({
             if (preparedTaskTree) {
               let task = taskRepository.getTask(instanceId);
               if (!task) {
-                task = taskRepository.createTask(taskMeta.type, null, undefined, instanceId);
+                // ✅ NEW: Crea task SOLO se c'è un templateId (euristica ha trovato candidato)
+                if (d.templateId) {
+                  task = taskRepository.createTask(taskMeta.type, d.templateId, undefined, instanceId);
+                } else {
+                  // ✅ Nessun template → wizard creerà il task
+                  console.log('[AppContent] No templateId - wizard will create task (new tab)', { instanceId });
+                }
               }
-              // ✅ CRITICAL: Non salvare steps qui - steps sono gestiti da ResponseEditor/DDTHostAdapter
-              // ✅ Steps devono avere struttura corretta (chiavi = templateId, non step types)
-              // ✅ Se preparedTaskTree.steps ha struttura sbagliata, rimuovilo e lascia che DDTHostAdapter lo ricostruisca
-              const { steps: _, ...preparedTaskTreeWithoutSteps } = preparedTaskTree;
-              taskRepository.updateTask(instanceId, {
-                ...preparedTaskTreeWithoutSteps,  // Spread: label, nodes, ecc. (SENZA steps)
-                templateId: d.templateId || task.templateId  // Mantieni templateId se presente
-              }, pdUpdate?.getCurrentProjectId());
+              // ✅ NEW: Salva TaskTree SOLO se il task esiste (se non c'è templateId, il task non esiste)
+              if (task) {
+                // ✅ CRITICAL: Non salvare steps qui - steps sono gestiti da ResponseEditor/DDTHostAdapter
+                // ✅ Steps devono avere struttura corretta (chiavi = templateId, non step types)
+                // ✅ Se preparedTaskTree.steps ha struttura sbagliata, rimuovilo e lascia che DDTHostAdapter lo ricostruisca
+                const { steps: _, ...preparedTaskTreeWithoutSteps } = preparedTaskTree;
+                taskRepository.updateTask(instanceId, {
+                  ...preparedTaskTreeWithoutSteps,  // Spread: label, nodes, ecc. (SENZA steps)
+                  templateId: d.templateId || task.templateId  // Mantieni templateId se presente
+                }, pdUpdate?.getCurrentProjectId());
+              }
             }
 
             return splitWithTab(prev, rootTabsetId, 'bottom', {
@@ -881,72 +945,13 @@ export const AppContent: React.FC<AppContentProps> = ({
     };
     document.addEventListener('taskEditor:open', h as any); // ✅ RINOMINATO: actEditor:open → taskEditor:open
 
-    // ✅ External TaskTree Wizard: Listen for wizard open events
-    const handleWizardOpen = (e: any) => {
-      const detail = e.detail || {};
-      const { taskLabel, taskType, initialTaskTree, startOnStructure, rowId, instanceId } = detail;
-
-      openWizard({
-        taskLabel: taskLabel || '',
-        taskType: taskType,
-        initialTaskTree: initialTaskTree,
-        startOnStructure: startOnStructure ?? false,
-        onComplete: async (taskTree: TaskTree, messages?: any) => {
-          // ✅ After wizard completes, create task and open ResponseEditor
-          if (!currentPid) {
-            console.error('[AppContent] Cannot create task: no project ID');
-            return;
-          }
-
-          try {
-            // Create task with the TaskTree from wizard
-            const taskTypeEnum = typeof taskType === 'string'
-              ? (TaskType[taskType as keyof typeof TaskType] || TaskType.UtteranceInterpretation)
-              : (taskType || TaskType.UtteranceInterpretation);
-
-            const task = taskRepository.createTask(
-              taskTypeEnum,
-              null,
-              { label: taskLabel || '' },
-              rowId || instanceId || `task_${Date.now()}`,
-              currentPid
-            );
-
-            // Save TaskTree to task
-            const { saveTaskToRepository } = await import('@responseEditor/features/persistence/ResponseEditorPersistence');
-            await saveTaskToRepository(task.id, taskTree, task, currentPid);
-
-            // Open ResponseEditor with created task
-            // ✅ Use existing taskEditorCtx from component scope
-            taskEditorCtx.open({
-              id: task.id,
-              type: taskTypeEnum,
-              label: taskLabel || '',
-              instanceId: rowId || instanceId
-            });
-
-            // Emit event to open ResponseEditor tab
-            const event = new CustomEvent('taskEditor:open', {
-              detail: {
-                id: task.id,
-                type: taskTypeEnum,
-                label: taskLabel || '',
-                taskTree: taskTree,
-                instanceId: rowId || instanceId
-              },
-              bubbles: true
-            });
-            document.dispatchEvent(event);
-          } catch (error) {
-            console.error('[AppContent] Error creating task after wizard completion:', error);
-          }
-        },
-      });
+    // ✅ Old 'taskTreeWizard:open' event listener removed
+    // The new wizard is integrated directly in ResponseEditor via 'taskEditor:open' event
+    // The new TaskBuilderAIWizard is opened through ResponseEditor when needsTaskBuilder flag is set
+    return () => {
+      document.removeEventListener('taskEditor:open', h as any);
     };
-
-    document.addEventListener('taskTreeWizard:open', handleWizardOpen as any);
-    return () => document.removeEventListener('taskTreeWizard:open', handleWizardOpen as any);
-  }, [openWizard, currentPid, taskEditorCtx]);
+  }, [currentPid, setDockTree, taskEditorCtx]);
 
   // Note: nodes/edges are read directly from window.__flowNodes by DDEBubbleChat in flow mode
   // No local state needed to avoid flickering and synchronization issues
@@ -1126,10 +1131,29 @@ export const AppContent: React.FC<AppContentProps> = ({
           return false;
         })(prev);
 
-        if (existing) return prev; // Already open, don't duplicate
+        if (existing) {
+          // Tab already open, just activate it
+          return activateTab(prev, tabId);
+        }
 
-        // Add next to active tab
-        return upsertAddNextTo(prev, 'tab_main', {
+        // ✅ FIX: Usa splitWithTab come ResponseEditor per aprire come pannello docked in basso
+        // Find the root tabset (main canvas)
+        const findRootTabset = (n: DockNode): string | null => {
+          if (n.kind === 'tabset') return n.id;
+          if (n.kind === 'split') {
+            // Prefer the first child (usually the main canvas)
+            if (n.children.length > 0) {
+              const found = findRootTabset(n.children[0]);
+              if (found) return found;
+            }
+          }
+          return null;
+        };
+
+        const rootTabsetId = findRootTabset(prev) || 'ts_main';
+
+        // ✅ Open as bottom docked panel (same as ResponseEditor)
+        return splitWithTab(prev, rootTabsetId, 'bottom', {
           id: tabId,
           title: conditionLabel,
           type: 'conditionEditor',
@@ -2029,16 +2053,7 @@ export const AppContent: React.FC<AppContentProps> = ({
         </div>
       )}
 
-      {/* ✅ External TaskTree Wizard Modal */}
-      <TaskTreeWizardModal
-        isOpen={modalState.isOpen}
-        onClose={closeWizard}
-        onComplete={handleWizardComplete}
-        taskLabel={modalState.taskLabel}
-        taskType={modalState.taskType}
-        initialTaskTree={modalState.initialTaskTree}
-        startOnStructure={modalState.startOnStructure}
-      />
+      {/* ✅ Old TaskTree Wizard Modal removed - now using new TaskBuilderAIWizard integrated in ResponseEditor */}
     </div>
   );
 };

@@ -10,10 +10,12 @@
  * ✅ FASE 3.1: Extracted from index.tsx to reduce complexity
  */
 
+import React from 'react';
 import { useResponseEditorCore } from '@responseEditor/hooks/useResponseEditorCore';
 import { useResponseEditorHandlers } from '@responseEditor/hooks/useResponseEditorHandlers';
 import type { TaskMeta, Task } from '@types/taskTypes';
 import type { TaskTree } from '@types/taskTypes';
+import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
 
 export interface UseResponseEditorParams {
   taskTree?: TaskTree | null;
@@ -114,13 +116,25 @@ export interface UseResponseEditorResult {
   replaceSelectedTaskTree: (taskTree: TaskTree) => void;
   escalationTasks: any[];
 
-  // ✅ NEW: Wizard states
+  // ✅ NEW: Wizard mode state (primary)
+  taskWizardMode: TaskWizardMode;
+  setTaskWizardMode: React.Dispatch<React.SetStateAction<TaskWizardMode>>;
+  // ✅ DEPRECATED: Backward compatibility wizard states
   needsTaskContextualization: boolean;
   needsTaskBuilder: boolean;
   isContextualizing: boolean;
   contextualizationTemplateId: string | null;
   taskLabel: string;
   wizardMode: 'library' | 'ai' | null;
+
+  // ✅ NEW: Wizard complete handler
+  onWizardComplete?: (finalTaskTree: TaskTree) => void;
+  setNeedsTaskBuilder: React.Dispatch<React.SetStateAction<boolean>>;
+
+  // ✅ NEW: Wizard callbacks (stable references)
+  onTaskContextualizationComplete?: (taskTree: TaskTree) => void;
+  onTaskBuilderComplete?: (taskTree: TaskTree, messages?: any) => void;
+  onTaskBuilderCancel?: () => void;
 }
 
 /**
@@ -265,15 +279,47 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     draggingPanel,
     setDraggingPanel,
     escalationTasks,
-    // ✅ NEW: Wizard states
+    // ✅ NEW: Wizard mode state (primary)
+    taskWizardMode,
+    setTaskWizardMode,
+    // ✅ DEPRECATED: Backward compatibility wizard states
     needsTaskContextualization,
     needsTaskBuilder,
     isContextualizing,
     contextualizationTemplateId,
     taskLabel,
     wizardMode,
+    setNeedsTaskBuilder,
   } = state;
 
+  // ✅ ARCHITECTURE: Stable wizard callbacks wrapped in useCallback
+  const handleTaskContextualizationComplete = React.useCallback((contextualizedTaskTree: TaskTree) => {
+    // TODO: Implement in Phase 13 - save contextualized task tree
+    console.log('[useResponseEditor] Task contextualization complete', contextualizedTaskTree);
+    // Future: Save contextualized task tree to store/repository
+  }, []);
+
+  const handleTaskBuilderComplete = React.useCallback(async (taskTree: TaskTree, messages?: any) => {
+    // ✅ Create task when wizard completes (Scenario 2B)
+    // Pass to onWizardComplete which will be handled by DDTHostAdapter's handleComplete
+    // The handleComplete will create the task if it doesn't exist yet
+    if (onWizardComplete) {
+      await onWizardComplete(taskTree);
+      // Switch from wizard mode to normal editing mode
+      setNeedsTaskBuilder(false);
+    } else {
+      console.error('[useResponseEditor] onWizardComplete not available');
+    }
+  }, [onWizardComplete, setNeedsTaskBuilder]);
+
+  const handleTaskBuilderCancel = React.useCallback(() => {
+    // TODO: Implement in Phase 10 - cancel wizard
+    console.log('[useResponseEditor] Task builder cancelled');
+  }, []);
+
+  // ✅ ARCHITECTURE: Return object directly (NO memoization)
+  // ✅ Callbacks are already stable from useCallback
+  // ✅ Components should receive only the props they need, not the entire object
   return {
     core,
     handlers,
@@ -345,12 +391,22 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     tasksStartXRef,
     replaceSelectedTaskTree: replaceSelectedTaskTreeFromInit,
     escalationTasks,
-    // ✅ NEW: Wizard states
+    // ✅ NEW: Wizard mode state (primary)
+    taskWizardMode,
+    setTaskWizardMode,
+    // ✅ DEPRECATED: Backward compatibility wizard states
     needsTaskContextualization,
     needsTaskBuilder,
     isContextualizing,
     contextualizationTemplateId,
     taskLabel,
     wizardMode,
+    // ✅ NEW: Expose onWizardComplete and setNeedsTaskBuilder
+    onWizardComplete,
+    setNeedsTaskBuilder,
+    // ✅ NEW: Stable wizard callbacks
+    onTaskContextualizationComplete: handleTaskContextualizationComplete,
+    onTaskBuilderComplete: handleTaskBuilderComplete,
+    onTaskBuilderCancel: handleTaskBuilderCancel,
   };
 }

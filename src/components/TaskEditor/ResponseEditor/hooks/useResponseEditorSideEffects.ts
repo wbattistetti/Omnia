@@ -31,6 +31,7 @@ import { useEditorCloseRegistration } from './useEditorCloseRegistration';
 import { useSplitterDrag } from './useSplitterDrag';
 import { useToolbarSync } from './useToolbarSync';
 import type { Task, TaskTree } from '@types/taskTypes';
+import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
 
 interface UseResponseEditorSideEffectsProps {
   // Task and tree
@@ -96,6 +97,7 @@ interface UseResponseEditorSideEffectsProps {
   hideHeader?: boolean;
   onToolbarUpdate?: (toolbar: any[], color: string) => void;
   toolbarButtons: any[];
+  taskWizardMode?: TaskWizardMode;
 }
 
 export function useResponseEditorSideEffects(props: UseResponseEditorSideEffectsProps) {
@@ -134,6 +136,7 @@ export function useResponseEditorSideEffects(props: UseResponseEditorSideEffects
     hideHeader,
     onToolbarUpdate,
     toolbarButtons,
+    taskWizardMode,
   } = props;
 
   // Delegate to thematic hooks
@@ -148,5 +151,5 @@ export function useResponseEditorSideEffects(props: UseResponseEditorSideEffects
   // useSidebarDrag({ isDraggingSidebar, sidebarStartWidthRef, sidebarStartXRef, setSidebarManualWidth, setIsDraggingSidebar }); // Consolidated into useSidebar
   useEditorCloseRegistration({ handleEditorClose, registerOnClose });
   useSplitterDrag({ draggingPanel, setDraggingPanel, rightWidth, setRightWidth, testPanelWidth, setTestPanelWidth, tasksPanelWidth, setTasksPanelWidth, tasksPanelMode, testPanelMode, tasksStartWidthRef, tasksStartXRef });
-  useToolbarSync({ hideHeader, onToolbarUpdate, toolbarButtons });
+  useToolbarSync({ hideHeader, onToolbarUpdate, toolbarButtons, taskWizardMode });
 }

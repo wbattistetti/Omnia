@@ -9,6 +9,7 @@ import DialogueTaskService from '@services/DialogueTaskService';
 import { closeTab } from '@dock/ops';
 import { useTaskTreeStore, useTaskTreeFromStore } from '@responseEditor/core/state';
 import type { Task, TaskTree } from '@types/taskTypes';
+import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
 
 export interface UseResponseEditorCloseParams {
   // Contract change state
@@ -46,6 +47,9 @@ export interface UseResponseEditorCloseParams {
 
   // DDT replacement (legacy)
   replaceSelectedDDT?: (taskTree: TaskTree) => void;
+
+  // ✅ NEW: Wizard mode (per permettere chiusura in modalità wizard senza taskTree)
+  taskWizardMode?: TaskWizardMode;
 }
 
 /**
@@ -66,6 +70,7 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
     setDockTree,
     onClose,
     replaceSelectedDDT,
+    taskWizardMode,
   } = params;
 
   // ✅ FASE 2.3: Use Zustand store as SINGLE source of truth
@@ -238,9 +243,22 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
     }
 
     // ✅ FASE 3: Usa store (già contiene tutte le modifiche)
-    // ✅ NO FALLBACKS: taskTreeFromStore must exist after validation
+    // ✅ IMPORTANTE: In modalità wizard (adaptation/full), taskTreeFromStore può essere null
+    // perché il wizard non è ancora stato completato. In questo caso, permettere la chiusura.
     if (!taskTreeFromStore) {
-      console.error('[useResponseEditorClose] taskTreeFromStore is null/undefined. This should not happen after validation.');
+      // ✅ Se siamo in modalità wizard, permettere la chiusura senza salvare
+      if (taskWizardMode === 'full' || taskWizardMode === 'adaptation') {
+        console.log('[useResponseEditorClose] ✅ Wizard mode - allowing close without taskTree', {
+          taskWizardMode,
+          taskId: task?.id ?? (task as any)?.instanceId ?? 'unknown'
+        });
+        return true; // ✅ Permetti chiusura in modalità wizard
+      }
+      // ✅ Se NON siamo in wizard mode, bloccare la chiusura (comportamento originale)
+      console.error('[useResponseEditorClose] taskTreeFromStore is null/undefined. This should not happen after validation.', {
+        taskWizardMode,
+        taskId: task?.id ?? (task as any)?.instanceId ?? 'unknown'
+      });
       return false;
     }
     const finalTaskTree = taskTreeFromStore;
@@ -409,6 +427,7 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
     currentProjectId,
     setTaskTree,
     replaceSelectedDDT,
+    taskWizardMode,
   ]);
 
   return handleEditorClose;

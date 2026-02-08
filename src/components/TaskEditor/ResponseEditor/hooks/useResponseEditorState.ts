@@ -10,6 +10,7 @@
 
 import { useState } from 'react';
 import type { RightPanelMode } from '@responseEditor/RightPanel';
+import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
 
 export interface ResponseEditorState {
   // Service unavailable
@@ -98,7 +99,10 @@ export interface ResponseEditorState {
   draggingPanel: 'left' | 'test' | 'tasks' | 'shared' | null;
   setDraggingPanel: React.Dispatch<React.SetStateAction<'left' | 'test' | 'tasks' | 'shared' | null>>;
 
-  // ✅ NEW: Wizard and contextualization states (opt-in, non-invasive)
+  // ✅ NEW: Wizard mode state (replaces needsTaskContextualization and needsTaskBuilder)
+  taskWizardMode: TaskWizardMode;
+  setTaskWizardMode: React.Dispatch<React.SetStateAction<TaskWizardMode>>;
+  // ✅ DEPRECATED: Backward compatibility (will be removed after migration)
   needsTaskContextualization: boolean;
   setNeedsTaskContextualization: React.Dispatch<React.SetStateAction<boolean>>;
   needsTaskBuilder: boolean;
@@ -172,7 +176,9 @@ export function useResponseEditorState(): ResponseEditorState {
   // Splitter drag state
   const [draggingPanel, setDraggingPanel] = useState<'left' | 'test' | 'tasks' | 'shared' | null>(null);
 
-  // ✅ NEW: Wizard and contextualization states (opt-in, default false)
+  // ✅ NEW: Wizard mode state (primary)
+  const [taskWizardMode, setTaskWizardMode] = useState<TaskWizardMode>('none');
+  // ✅ DEPRECATED: Backward compatibility states (will be removed after migration)
   const [needsTaskContextualization, setNeedsTaskContextualization] = useState(false);
   const [needsTaskBuilder, setNeedsTaskBuilder] = useState(false);
   const [isContextualizing, setIsContextualizing] = useState(false);
@@ -238,7 +244,10 @@ export function useResponseEditorState(): ResponseEditorState {
     draggingPanel,
     setDraggingPanel,
 
-    // ✅ NEW: Wizard and contextualization states
+    // ✅ NEW: Wizard mode state (primary)
+    taskWizardMode,
+    setTaskWizardMode,
+    // ✅ DEPRECATED: Backward compatibility states
     needsTaskContextualization,
     setNeedsTaskContextualization,
     needsTaskBuilder,

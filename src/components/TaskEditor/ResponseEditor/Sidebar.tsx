@@ -10,6 +10,7 @@ import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import ParserStatusRow from '@responseEditor/Sidebar/ParserStatusRow';
 import type { EngineType } from '@types/semanticContract';
 import { getNodeIdStrict } from '@responseEditor/core/domain/nodeStrict';
+import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
 
 interface SidebarProps {
   mainList: any[];
@@ -35,6 +36,8 @@ interface SidebarProps {
   onParserModify?: (nodeId: string, node: any) => void;
   onEngineChipClick?: (nodeId: string, node: any, engineType: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings') => void;
   onGenerateAll?: () => void; // ✅ Pulsante globale Generate All
+  // ✅ NEW: Wizard mode to conditionally render overlay
+  taskWizardMode?: TaskWizardMode;
 }
 
 function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivElement>) {
@@ -61,6 +64,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
   const onParserModify = props.onParserModify;
   const onEngineChipClick = props.onEngineChipClick;
   const onGenerateAll = props.onGenerateAll;
+  const taskWizardMode = props.taskWizardMode; // ✅ NEW: Get taskWizardMode prop
 
   const { combinedClass } = useFontContext();
   const { translations } = useProjectTranslations(); // ✅ Get translations for node labels
@@ -919,8 +923,10 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
           </button>
         </div>
       )}
-      {/* floating overlay */}
-      {overlay && createPortal(
+      {/* ✅ FIX: floating overlay - render ONLY when taskWizardMode === 'none' */}
+      {/* ✅ CRITICAL: Overlay must be completely unmounted when taskWizardMode !== 'none' */}
+      {/* ✅ This prevents overlay from covering the wizard in full mode */}
+      {overlay && (taskWizardMode === 'none' || taskWizardMode === undefined) && createPortal(
         <div
           onMouseEnter={() => { overlayHoverRef.current = true; if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current); }}
           onMouseLeave={() => { overlayHoverRef.current = false; maybeHideOverlay(200); }}

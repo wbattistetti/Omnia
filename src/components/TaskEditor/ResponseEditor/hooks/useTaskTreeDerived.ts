@@ -42,6 +42,11 @@ export function useTaskTreeDerived(params: UseTaskTreeDerivedParams = {}): UseTa
   // ✅ CRITICAL: Don't include taskTreeFromStore in deps - it changes reference on every store update
   // Use taskTreeVersion as the only trigger (stable, increments only when needed)
   const mainList = useMemo(() => {
+    // ✅ FIX: Return empty array when taskTreeFromStore is null/undefined
+    // This prevents sidebar from rendering when in full wizard mode
+    if (!taskTreeFromStore) {
+      return [];
+    }
     // ✅ FASE 3: Usa solo store - no fallback chain
     const list = getMainNodes(taskTreeFromStore);
     return list;

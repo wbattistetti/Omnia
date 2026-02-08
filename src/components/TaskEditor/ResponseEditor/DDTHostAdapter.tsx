@@ -79,8 +79,35 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
   // ✅ ARCHITETTURA ESPERTO: Carica TaskTree async usando buildTaskTree
   React.useEffect(() => {
     const loadTaskTree = async () => {
+      // ✅ NEW: Skip buildTaskTree if needsTaskBuilder is true AND no task exists yet
+      // In this case, the wizard will create the task when completed
+      if ((taskMeta as any).needsTaskBuilder === true && !fullTask) {
+        console.log('[DDTHostAdapter] Wizard mode - no task exists yet, wizard will create it', {
+          instanceKey,
+          taskLabel: taskMeta.label
+        });
+        setTaskTreeInStore(null);
+        setTaskTree(null);
+        setTaskTreeLoading(false);
+        initializedRef.current = true;
+        return;
+      }
+
       if (!fullTask) {
         setTaskTreeLoading(false);
+        return;
+      }
+
+      // ✅ NEW: Skip buildTaskTree if needsTaskBuilder is true (wizard will create TaskTree)
+      if ((taskMeta as any).needsTaskBuilder === true) {
+        console.log('[DDTHostAdapter] Skipping buildTaskTree - wizard will create TaskTree', {
+          instanceKey,
+          taskLabel: taskMeta.label
+        });
+        setTaskTreeInStore(null);
+        setTaskTree(null);
+        setTaskTreeLoading(false);
+        initializedRef.current = true;
         return;
       }
 
@@ -314,9 +341,52 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
     } catch {}
   }, [onClose]);
 
-  const stableOnWizardComplete = React.useCallback((finalTaskTree: TaskTree) => {
-    handleComplete(finalTaskTree);
-  }, [handleComplete]);
+  const stableOnWizardComplete = React.useCallback(async (finalTaskTree: TaskTree) => {
+    // ✅ NEW: If task doesn't exist yet (wizard mode), create it first
+    if (!fullTask && (taskMeta as any).needsTaskBuilder === true) {
+      const instanceId = taskMeta.instanceId ?? taskMeta.id;
+      if (instanceId && instanceId.startsWith('wizard-')) {
+        // Extract real instanceId from temporary wizard ID
+        const realInstanceId = taskMeta.instanceId || taskMeta.id?.replace(/^wizard-/, '').split('-')[0];
+        const projectId = currentProjectId || undefined;
+        const taskType = taskMeta.type || 0;
+        const taskLabel = (taskMeta as any).taskLabel || taskMeta.label || 'Task';
+
+        console.log('[DDTHostAdapter] Creating task from wizard completion', {
+          temporaryId: instanceKey,
+          realInstanceId,
+          taskLabel
+        });
+
+        // Create task
+        const newTask = taskRepository.createTask(
+          taskType,
+          null, // templateId - will be set from taskTree
+          undefined, // parentTaskId
+          realInstanceId,
+          projectId
+        );
+
+        // Update taskMeta to use real task ID
+        taskMeta.id = String(newTask.id);
+        taskMeta.instanceId = realInstanceId;
+      }
+    }
+
+    // Now save TaskTree using handleComplete
+    await handleComplete(finalTaskTree);
+
+    // ✅ Switch from wizard mode to normal editing mode
+    if ((taskMeta as any).needsTaskBuilder === true) {
+      // Clear wizard flag - this will cause ResponseEditor to show normal layout
+      // Note: We can't directly modify taskMeta, but the next render will see fullTask exists
+      console.log('[DDTHostAdapter] Wizard complete - switching to normal editing mode');
+    }
+  }, [handleComplete, fullTask, taskMeta, instanceKey, currentProjectId]);
+
+  // ✅ NEW: Use taskMeta when task is null (wizard mode)
+  // When needsTaskBuilder === true, fullTask is null, so we need to pass taskMeta
+  const taskToPass = updatedFullTask || fullTask || taskMeta;
 
   return (
     <ResponseEditor
@@ -324,7 +394,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
       taskTree={safeTaskTree}
       onClose={stableOnClose}
       onWizardComplete={stableOnWizardComplete}
-      task={updatedFullTask || fullTask} // ✅ Usa task aggiornato con step clonati
+      task={taskToPass} // ✅ Usa task aggiornato, o fullTask, o taskMeta (per wizard mode)
       isTaskTreeLoading={loading} // ✅ ARCHITETTURA ESPERTO: Stato di loading
       hideHeader={hideHeader} // ✅ PATTERN CENTRALIZZATO: Passa hideHeader al wrapper
       onToolbarUpdate={onToolbarUpdate} // ✅ PATTERN CENTRALIZZATO: Passa onToolbarUpdate per ereditare header

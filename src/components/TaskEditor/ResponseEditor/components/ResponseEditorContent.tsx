@@ -18,6 +18,7 @@ import { TaskContextualizationPanel } from './TaskContextualizationPanel';
 import { TaskBuilderWizardPanel } from './TaskBuilderWizardPanel';
 import { useTaskTreeFromStore } from '@responseEditor/core/state';
 import type { Task, TaskTree } from '@types/taskTypes';
+import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
 
 export interface ResponseEditorContentProps {
   // State flags
@@ -36,7 +37,9 @@ export interface ResponseEditorContentProps {
   // Intent messages handler
   onIntentMessagesComplete: (messages: any) => void;
 
-  // ✅ NEW: Wizard props (optional, opt-in)
+  // ✅ NEW: Wizard mode (primary)
+  taskWizardMode?: TaskWizardMode;
+  // ✅ DEPRECATED: Backward compatibility wizard props
   needsTaskContextualization?: boolean;
   needsTaskBuilder?: boolean;
   taskLabel?: string;
@@ -45,8 +48,11 @@ export interface ResponseEditorContentProps {
   onTaskBuilderComplete?: (taskTree: TaskTree, messages?: any) => void;
   onTaskBuilderCancel?: () => void;
 
-  // Normal editor layout (rendered when none of the above conditions are true)
-  normalEditorLayout: React.ReactNode;
+  // ✅ NEW: Sidebar component (for STATO 2 - adaptation mode)
+  sidebar?: React.ReactNode;
+
+  // Normal editor layout (rendered ONLY when taskWizardMode === 'none' - STATO 1)
+  normalEditorLayout?: React.ReactNode;
 }
 
 /**
@@ -62,7 +68,9 @@ export function ResponseEditorContent({
   handleContractWizardComplete,
   onIntentMessagesComplete,
   normalEditorLayout,
-  // ✅ NEW: Wizard props
+  // ✅ NEW: Wizard mode (primary)
+  taskWizardMode,
+  // ✅ DEPRECATED: Backward compatibility wizard props
   needsTaskContextualization,
   needsTaskBuilder,
   taskLabel,
@@ -70,26 +78,83 @@ export function ResponseEditorContent({
   onTaskContextualizationComplete,
   onTaskBuilderComplete,
   onTaskBuilderCancel,
+  sidebar,
 }: ResponseEditorContentProps) {
   // ✅ FASE 2.3: Use store as SINGLE source of truth
   const taskTreeFromStore = useTaskTreeFromStore();
 
-  // ✅ NEW: Task Contextualization (heuristic found candidate)
-  // Checked BEFORE existing conditions to ensure opt-in behavior
-  if (needsTaskContextualization && taskTreeFromStore && templateId) {
+  // ✅ ARCHITECTURE: Extract only primitive values from taskTreeFromStore to prevent reference changes
+  const taskTreeId = React.useMemo(() => taskTreeFromStore?.id, [taskTreeFromStore?.id]);
+  const taskTreeNodesCount = React.useMemo(() => taskTreeFromStore?.nodes?.length, [taskTreeFromStore?.nodes?.length]);
+
+  // ✅ ARCHITECTURE: Stabilize effectiveWizardMode with useMemo
+  const effectiveWizardMode = React.useMemo<TaskWizardMode>(() => {
+    return taskWizardMode ||
+      (needsTaskBuilder ? 'full' : needsTaskContextualization ? 'adaptation' : 'none');
+  }, [taskWizardMode, needsTaskBuilder, needsTaskContextualization]);
+
+  // ✅ LOG: Verification log for debugging (moved to useEffect to keep render pure)
+  // ✅ FIX: Use only primitive dependencies to prevent loop
+  const mainListLength = taskTreeFromStore?.nodes?.length || 0;
+  const hasNormalEditorLayout = !!normalEditorLayout;
+  const hasSidebar = !!sidebar;
+  React.useEffect(() => {
+    if (effectiveWizardMode === 'full') {
+      console.log('[ResponseEditorContent] ✅ FULL WIZARD MODE - Rendering TaskBuilderWizardPanel', {
+        taskWizardMode,
+        effectiveWizardMode,
+        mainListLength,
+        hasNormalEditorLayout,
+        hasSidebar,
+      });
+    }
+  }, [effectiveWizardMode, taskWizardMode, mainListLength, hasNormalEditorLayout, hasSidebar]);
+
+  // ✅ CRITICAL: Early return for full wizard mode - MUST be FIRST check
+  // ✅ This prevents ANY rendering of normalEditorLayout, sidebar, toolbar, or preview
+  if (effectiveWizardMode === 'full') {
+    return (
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          height: '100%',
+          width: '100%',
+          overflow: 'hidden',
+          position: 'relative',
+          zIndex: 10,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        <TaskBuilderWizardPanel
+          taskLabel={taskLabel || ''}
+          onComplete={onTaskBuilderComplete}
+          onCancel={onTaskBuilderCancel}
+        />
+      </div>
+    );
+  }
+
+  // ✅ PRIORITY 2: Wizard modes (checked AFTER full mode)
+  // ✅ STATO 2: taskWizardMode = 'adaptation' (template found, no instance)
+  // Sidebar visible + wizard adattamento (genera solo messaggi)
+  if (effectiveWizardMode === 'adaptation' && taskTreeFromStore && templateId) {
     return (
       <div style={{ flex: 1, minHeight: 0, height: '100%', overflow: 'hidden', display: 'flex' }}>
-        {/* TODO: Render existing sidebar here - will be done in Phase 14 */}
-        <div style={{ width: '320px', borderRight: '1px solid #334155', backgroundColor: '#0f172a' }}>
-          {/* Placeholder for sidebar - will be replaced in Phase 14 */}
-        </div>
-        {/* Contextualization panel */}
+        {/* Sidebar: visible (structure from template) */}
+        {sidebar && (
+          <div style={{ width: '320px', borderRight: '1px solid #334155', backgroundColor: '#0f172a' }}>
+            {sidebar}
+          </div>
+        )}
+        {/* Contextualization panel: generates only messages */}
         <div style={{ flex: 1 }}>
           <TaskContextualizationPanel
             taskTree={taskTreeFromStore}
             taskLabel={taskLabel || ''}
             templateId={templateId}
-            onComplete={onTaskContextualizationComplete || (() => {})}
+            onComplete={onTaskContextualizationComplete}
             onCancel={onTaskBuilderCancel}
           />
         </div>
@@ -97,21 +162,12 @@ export function ResponseEditorContent({
     );
   }
 
-  // ✅ NEW: Task Builder (heuristic did not find candidate)
-  if (needsTaskBuilder) {
-    return (
-      <div style={{ flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
-        <TaskBuilderWizardPanel
-          taskLabel={taskLabel || ''}
-          onComplete={onTaskBuilderComplete || (() => {})}
-          onCancel={onTaskBuilderCancel}
-        />
-      </div>
-    );
-  }
+  // ✅ STATO 1: taskWizardMode = 'none' (task exists)
+  // Layout classico: sidebar + editor + preview (handled by normalEditorLayout)
 
   // ✅ EXISTING: Contract Wizard (unchanged)
-  if (showContractWizard) {
+  // ✅ IMPORTANTE: Solo se NON siamo in wizard mode
+  if (showContractWizard && effectiveWizardMode === 'none') {
     // ✅ FASE 2.3: Usa solo store - no fallback chain
     const currentTaskTree = taskTreeFromStore;
     return (
@@ -128,7 +184,8 @@ export function ResponseEditorContent({
   }
 
   // Intent Messages Builder
-  if (needsIntentMessages) {
+  // ✅ IMPORTANTE: Solo se NON siamo in wizard mode
+  if (needsIntentMessages && effectiveWizardMode === 'none') {
     return (
       <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start', padding: '16px 20px' }}>
         <IntentMessagesBuilder
@@ -139,10 +196,28 @@ export function ResponseEditorContent({
     );
   }
 
-  // Normal editor layout
+  // ✅ STATO 1: Normal editor layout (solo se effectiveWizardMode === 'none')
+  if (effectiveWizardMode === 'none') {
+    // ✅ NormalEditorLayout viene passato solo quando taskWizardMode === 'none'
+    if (normalEditorLayout) {
+      return (
+        <div style={{ flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
+          {normalEditorLayout}
+        </div>
+      );
+    }
+    // ✅ Fallback: Se normalEditorLayout non è passato ma siamo in STATO 1, c'è un problema
+    return (
+      <div style={{ flex: 1, minHeight: 0, height: '100%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+        <div>No layout available</div>
+      </div>
+    );
+  }
+
+  // ✅ Fallback: Se per qualche motivo effectiveWizardMode non è 'none' ma non è neanche 'full' o 'adaptation'
   return (
-    <div style={{ flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
-      {normalEditorLayout}
+    <div style={{ flex: 1, minHeight: 0, height: '100%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+      <div>Unexpected wizard mode: {effectiveWizardMode}</div>
     </div>
   );
 }

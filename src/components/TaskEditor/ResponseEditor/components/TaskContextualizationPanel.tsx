@@ -44,23 +44,30 @@ export function TaskContextualizationPanel({
         setCurrentStep('Personalizzazione messaggi root...');
         setProgress(20);
 
-        // TODO: Replace with real API call
+        // ✅ MOCK: Simulate API call with delay
+        // TODO: Replace with real API call: POST /api/tasks/contextualize-messages
         // The API should take template and node label
         // and transform generic prompts into contextualized prompts
-        const response = await fetch('/api/tasks/contextualize-messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            templateId,
-            taskLabel,
-            taskTree,
-          }),
-          signal: controller.signal,
-        });
+        await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
+        setProgress(40);
 
-        if (!response.ok) throw new Error('Contextualization failed');
+        setCurrentStep('Adattamento messaggi per il contesto...');
+        await new Promise(resolve => setTimeout(resolve, 500));
+        setProgress(60);
 
-        const contextualizedTaskTree = await response.json();
+        setCurrentStep('Personalizzazione step di dialogo...');
+        await new Promise(resolve => setTimeout(resolve, 500));
+        setProgress(80);
+
+        // ✅ MOCK: Create contextualized TaskTree
+        // In real implementation, this would come from the API
+        // For now, we just return the same taskTree (it will be contextualized by backend later)
+        const contextualizedTaskTree: TaskTree = {
+          ...taskTree,
+          // In real implementation, steps would be contextualized here
+          // For now, we keep the same structure
+        };
+
         setProgress(100);
         setStatus('completed');
         setCurrentStep('Contestualizzazione completata!');

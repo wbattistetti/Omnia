@@ -29,10 +29,11 @@ import { useParserHandlers, useProfileUpdate } from '@responseEditor/features/st
 import { useUpdateSelectedNode } from '@responseEditor/features/node-editing/hooks/useUpdateSelectedNode';
 import { useIntentMessagesHandler } from '@responseEditor/hooks/useIntentMessagesHandler';
 import { useGeneralizabilityCheck } from '@responseEditor/hooks/useGeneralizabilityCheck';
-import { getTaskMeta } from '@responseEditor/utils/responseEditorUtils';
+import { getTaskMeta, isTaskMeta } from '@responseEditor/utils/responseEditorUtils';
 import { getStepsForNode, getStepsAsArray } from '@responseEditor/core/domain';
 import type { TaskMeta, Task } from '@types/taskTypes';
 import type { TaskTree } from '@types/taskTypes';
+import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
 
 export interface UseResponseEditorCoreParams {
   taskTree?: TaskTree | null;
@@ -142,7 +143,10 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     tasksPanelMode,
     setTasksPanelMode,
     sidebarManualWidth,
-    // ✅ NEW: Wizard states
+    // ✅ NEW: Wizard mode state (primary)
+    taskWizardMode,
+    setTaskWizardMode,
+    // ✅ DEPRECATED: Backward compatibility wizard states
     needsTaskContextualization,
     setNeedsTaskContextualization,
     needsTaskBuilder,
@@ -184,26 +188,69 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
   const taskTreeFromStore = useTaskTreeFromStore();
 
   // Task meta
-  const taskMeta = getTaskMeta(task);
+  // ✅ Se task è già un TaskMeta valido (ha type), lo uso direttamente
+  // Altrimenti, provo a estrarlo da Task usando getTaskMeta
+  const taskMeta = isTaskMeta(task) ? task : getTaskMeta(task);
 
-  // ✅ NEW: Read wizard flags from taskMeta (if present)
+  // ✅ NEW: Read taskWizardMode from taskMeta (if present)
   // These flags are set when opening ResponseEditor from NodeRow
   React.useEffect(() => {
     if (taskMeta) {
-      // Read flags from taskMeta (set by NodeRow when opening ResponseEditor)
-      const needsContextualization = (taskMeta as any).needsTaskContextualization === true;
-      const needsBuilder = (taskMeta as any).needsTaskBuilder === true;
+      console.log('[🔄 useResponseEditorCore] Leggendo taskWizardMode da taskMeta:', {
+        taskMetaId: taskMeta.id,
+        taskMetaLabel: taskMeta.label,
+        taskWizardModeFromMeta: taskMeta.taskWizardMode,
+        needsTaskContextualization: (taskMeta as any).needsTaskContextualization,
+        needsTaskBuilder: (taskMeta as any).needsTaskBuilder
+      });
+
+      // ✅ Priority: explicit taskWizardMode > backward compatibility with booleans
+      let wizardMode: TaskWizardMode = 'none';
+      if (taskMeta.taskWizardMode && (taskMeta.taskWizardMode === 'none' || taskMeta.taskWizardMode === 'adaptation' || taskMeta.taskWizardMode === 'full')) {
+        wizardMode = taskMeta.taskWizardMode;
+        console.log('[🔄 useResponseEditorCore] ✅ Usando taskWizardMode esplicito:', wizardMode);
+      } else {
+        // ✅ Backward compatibility: derive from boolean flags
+        const needsContextualization = (taskMeta as any).needsTaskContextualization === true;
+        const needsBuilder = (taskMeta as any).needsTaskBuilder === true;
+        if (needsBuilder) {
+          wizardMode = 'full';
+        } else if (needsContextualization) {
+          wizardMode = 'adaptation';
+        } else {
+          wizardMode = 'none';
+        }
+        console.log('[🔄 useResponseEditorCore] ⚠️ Derivando taskWizardMode da booleani:', wizardMode, {
+          needsContextualization,
+          needsBuilder
+        });
+      }
+
       const contextualizationTemplateId = (taskMeta as any).contextualizationTemplateId || null;
       const taskLabelFromMeta = (taskMeta as any).taskLabel || taskMeta.label || '';
 
-      if (needsContextualization || needsBuilder) {
-        setNeedsTaskContextualization(needsContextualization);
-        setNeedsTaskBuilder(needsBuilder);
-        setContextualizationTemplateId(contextualizationTemplateId);
-        setTaskLabel(taskLabelFromMeta);
+      console.log('[🔄 useResponseEditorCore] Impostando state con wizardMode:', wizardMode);
+
+      // ✅ Set primary state
+      setTaskWizardMode(wizardMode);
+      setContextualizationTemplateId(contextualizationTemplateId);
+      setTaskLabel(taskLabelFromMeta);
+
+      // ✅ DEPRECATED: Backward compatibility - sync boolean flags
+      if (wizardMode === 'adaptation') {
+        setNeedsTaskContextualization(true);
+        setNeedsTaskBuilder(false);
+      } else if (wizardMode === 'full') {
+        setNeedsTaskContextualization(false);
+        setNeedsTaskBuilder(true);
+      } else {
+        setNeedsTaskContextualization(false);
+        setNeedsTaskBuilder(false);
       }
+    } else {
+      console.log('[🔄 useResponseEditorCore] ⚠️ taskMeta è null/undefined, wizardMode rimane default "none"');
     }
-  }, [taskMeta, setNeedsTaskContextualization, setNeedsTaskBuilder, setContextualizationTemplateId, setTaskLabel]);
+  }, [taskMeta, setTaskWizardMode, setNeedsTaskContextualization, setNeedsTaskBuilder, setContextualizationTemplateId, setTaskLabel]);
 
   // Replace selected task tree
   const { replaceSelectedTaskTree: replaceSelectedTaskTreeFromContext } = useTaskTreeManager();
@@ -288,10 +335,11 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     iconColor,
     rightMode,
   } = useResponseEditorDerived({
-    task: taskMeta,
+    task: taskMeta, // ✅ taskMeta (TaskMeta | null) - null quando task non è un TaskMeta valido
     taskTree,
     mainList,
     leftPanelMode,
+    taskMeta: task, // ✅ Pass original task (TaskMeta | Task) per wizard mode quando taskMeta è null
     testPanelMode,
   });
 
@@ -421,7 +469,10 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     initialization,
     panelModes,
     panelWidths,
-    // ✅ NEW: Wizard states
+    // ✅ NEW: Wizard mode state (primary)
+    taskWizardMode,
+    setTaskWizardMode,
+    // ✅ DEPRECATED: Backward compatibility wizard states
     needsTaskContextualization,
     needsTaskBuilder,
     isContextualizing,

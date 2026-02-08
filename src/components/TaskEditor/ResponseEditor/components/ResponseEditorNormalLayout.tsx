@@ -86,6 +86,12 @@ export interface ResponseEditorNormalLayoutProps {
 
   // Tree operations
   replaceSelectedTaskTree: (taskTree: TaskTree) => void;
+
+  // ✅ NEW: Optional flag to render only sidebar (for STATO 2 - adaptation mode)
+  sidebarOnly?: boolean;
+
+  // ✅ NEW: Wizard mode to conditionally render overlay
+  taskWizardMode?: TaskWizardMode;
 }
 
 /**
@@ -145,10 +151,47 @@ export function ResponseEditorNormalLayout({
   tasksStartWidthRef,
   tasksStartXRef,
   replaceSelectedTaskTree,
+  sidebarOnly = false,
+  taskWizardMode,
 }: ResponseEditorNormalLayoutProps) {
+  // ✅ CRITICAL: Early return when taskWizardMode === 'full' - do not render anything
+  if (taskWizardMode === 'full') {
+    return null;
+  }
+
   // ✅ Determina la struttura del grid in base alle condizioni
   const hasIntentEditor = mainList[0]?.kind === 'intent' && task;
   const hasSidebar = mainList[0]?.kind !== 'intent';
+
+  // ✅ Se sidebarOnly è true, renderizza solo la sidebar (per STATO 2 - adaptation mode)
+  if (sidebarOnly && hasSidebar) {
+    return (
+      <Sidebar
+        ref={sidebarRef}
+        mainList={mainList}
+        selectedMainIndex={selectedMainIndex}
+        onSelectMain={handleSelectMain}
+        selectedSubIndex={selectedSubIndex}
+        onSelectSub={handleSelectSub}
+        aggregated={isAggregatedAtomic}
+        rootLabel={taskTree?.label ?? 'Data'}
+        style={sidebarManualWidth ? { width: sidebarManualWidth, flexShrink: 0 } : { flexShrink: 0 }}
+        onChangeSubRequired={onChangeSubRequired}
+        onReorderSub={onReorderSub}
+        onAddMain={onAddMain}
+        onRenameMain={onRenameMain}
+        onDeleteMain={onDeleteMain}
+        onAddSub={onAddSub}
+        onRenameSub={onRenameSub}
+        onDeleteSub={onDeleteSub}
+        onSelectAggregator={handleSelectAggregator}
+        onParserCreate={handleParserCreate}
+        onParserModify={handleParserModify}
+        onEngineChipClick={handleEngineChipClick}
+        onGenerateAll={handleGenerateAll}
+      />
+    );
+  }
 
   // ✅ Calcola gridTemplateColumns in base alle condizioni
   const gridTemplateColumns = hasSidebar
@@ -216,6 +259,7 @@ export function ResponseEditorNormalLayout({
             onParserModify={handleParserModify}
             onEngineChipClick={handleEngineChipClick}
             onGenerateAll={handleGenerateAll}
+            taskWizardMode={taskWizardMode}
           />
           {/* Resizer verticale tra Sidebar e contenuto principale */}
           <div

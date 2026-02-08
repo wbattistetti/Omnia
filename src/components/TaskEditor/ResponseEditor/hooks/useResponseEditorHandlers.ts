@@ -161,6 +161,8 @@ export function useResponseEditorHandlers(params: UseResponseEditorHandlersParam
     setDockTree,
     onClose,
     replaceSelectedTaskTree: replaceSelectedTaskTreeFromInit,
+    // ✅ NEW: Pass taskWizardMode per permettere chiusura in modalità wizard
+    taskWizardMode: state.taskWizardMode,
   });
 
   // Contract dialog handlers
@@ -212,6 +214,7 @@ export function useResponseEditorHandlers(params: UseResponseEditorHandlersParam
     hideHeader,
     onToolbarUpdate,
     toolbarButtons,
+    taskWizardMode: state.taskWizardMode,
   });
 
   return {
