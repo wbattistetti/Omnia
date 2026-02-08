@@ -24,6 +24,8 @@ import { FlowCanvasHost } from './FlowWorkspace/FlowCanvasHost';
 import { FlowWorkspaceProvider } from '../flows/FlowStore.tsx';
 import { useFlowActions } from '../flows/FlowStore.tsx';
 import { upsertAddNextTo, closeTab, activateTab, splitWithTab } from '../dock/ops';
+import { findRootTabset, tabExists } from './AppContent/domain/dockTree';
+import { openBottomDockedTab } from './AppContent/infrastructure/docking/DockingHelpers';
 import { resolveEditorKind } from './TaskEditor/EditorHost/resolveKind'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
 import ResizableResponseEditor from './TaskEditor/ResponseEditor/ResizableResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
@@ -339,15 +341,17 @@ export const AppContent: React.FC<AppContentProps> = ({
             <ConditionEditor
               open={true}
               onClose={() => {
+                // ✅ FIX: Chiusura istantanea - rimuove setTimeout
                 setDockTree(prev => closeTab(prev, tab.id));
-                // Restore previous viewport position
-                setTimeout(() => {
-                  try {
+                // Restore previous viewport position (istantaneo)
+                try {
+                  // Usa requestAnimationFrame per essere sicuri che il DOM sia aggiornato
+                  requestAnimationFrame(() => {
                     document.dispatchEvent(new CustomEvent('flowchart:restoreViewport', { bubbles: true }));
-                  } catch (err) {
-                    console.warn('[ConditionEditor] Failed to emit restore viewport event', err);
-                  }
-                }, 100);
+                  });
+                } catch (err) {
+                  console.warn('[ConditionEditor] Failed to emit restore viewport event', err);
+                }
               }}
               variables={tab.variables}
               initialScript={tab.script}
@@ -608,14 +612,8 @@ export const AppContent: React.FC<AppContentProps> = ({
       // Open as docking tab instead of fixed panel
       const tabId = `ni_${instanceId}`;
       setDockTree(prev => {
-        // Check if already open
-        const existing = (function findTab(n: DockNode): boolean {
-          if (n.kind === 'tabset') return n.tabs.some(t => t.id === tabId);
-          if (n.kind === 'split') return n.children.some(findTab);
-          return false;
-        })(prev);
-
-        if (existing) return prev; // Already open, don't duplicate
+        // ✅ REFACTOR: Use extracted domain function
+        if (tabExists(prev, tabId)) return prev; // Already open, don't duplicate
 
         // Add next to active tab
         return upsertAddNextTo(prev, 'tab_main', {
@@ -781,14 +779,8 @@ export const AppContent: React.FC<AppContentProps> = ({
 
         // ✅ Now call setDockTree with prepared data (synchronous function)
         setDockTree(prev => {
-          // Check if already open
-          const existing = (function findTab(n: DockNode): boolean {
-            if (n.kind === 'tabset') return n.tabs.some(t => t.id === tabId);
-            if (n.kind === 'split') return n.children.some(findTab);
-            return false;
-          })(prev);
-
-          if (existing) {
+          // ✅ REFACTOR: Use extracted domain function
+          if (tabExists(prev, tabId)) {
             // Tab already open: per 'ddt' (TaskTree), salva TaskTree nel taskRepository e attiva il tab
             // TaskEditorHost leggerà il TaskTree dal taskRepository
             if (editorKind === 'ddt' && preparedTaskTree) {
@@ -819,19 +811,7 @@ export const AppContent: React.FC<AppContentProps> = ({
             return activateTab(prev, tabId);
           }
 
-          // Find the root tabset (main canvas)
-          const findRootTabset = (n: DockNode): string | null => {
-            if (n.kind === 'tabset') return n.id;
-            if (n.kind === 'split') {
-              // Prefer the first child (usually the main canvas)
-              if (n.children.length > 0) {
-                const found = findRootTabset(n.children[0]);
-                if (found) return found;
-              }
-            }
-            return null;
-          };
-
+          // ✅ REFACTOR: Use extracted domain function
           const rootTabsetId = findRootTabset(prev) || 'ts_main';
 
           // Open correct editor based on editorKind
@@ -1107,53 +1087,15 @@ export const AppContent: React.FC<AppContentProps> = ({
       const conditionLabel = d.label || d.name || 'Condition';
       const conditionScript = d.script || '';
 
-      // Scroll to node using ReactFlow viewport (if nodeId is provided)
-      if (d.nodeId) {
-        setTimeout(() => {
-          try {
-            document.dispatchEvent(new CustomEvent('flowchart:scrollToNode', {
-              detail: { nodeId: d.nodeId },
-              bubbles: true
-            }));
-          } catch (err) {
-            console.warn('[ConditionEditor] Failed to emit scroll event', err);
-          }
-        }, 100);
-      }
+      // ✅ REMOVED: Scroll to node - mantiene viewport invariato come ResponseEditor
+      // Il ConditionEditor deve comportarsi come ResponseEditor: non spostare il viewport
 
       // Open as docking tab instead of fixed panel
       const tabId = `cond_${d.nodeId || Date.now()}`;
-      setDockTree(prev => {
-        // Check if already open
-        const existing = (function findTab(n: DockNode): boolean {
-          if (n.kind === 'tabset') return n.tabs.some(t => t.id === tabId);
-          if (n.kind === 'split') return n.children.some(findTab);
-          return false;
-        })(prev);
-
-        if (existing) {
-          // Tab already open, just activate it
-          return activateTab(prev, tabId);
-        }
-
-        // ✅ FIX: Usa splitWithTab come ResponseEditor per aprire come pannello docked in basso
-        // Find the root tabset (main canvas)
-        const findRootTabset = (n: DockNode): string | null => {
-          if (n.kind === 'tabset') return n.id;
-          if (n.kind === 'split') {
-            // Prefer the first child (usually the main canvas)
-            if (n.children.length > 0) {
-              const found = findRootTabset(n.children[0]);
-              if (found) return found;
-            }
-          }
-          return null;
-        };
-
-        const rootTabsetId = findRootTabset(prev) || 'ts_main';
-
-        // ✅ Open as bottom docked panel (same as ResponseEditor)
-        return splitWithTab(prev, rootTabsetId, 'bottom', {
+      // ✅ REFACTOR: Use extracted helper function
+      setDockTree(prev => openBottomDockedTab(prev, {
+        tabId,
+        newTab: {
           id: tabId,
           title: conditionLabel,
           type: 'conditionEditor',
@@ -1161,8 +1103,8 @@ export const AppContent: React.FC<AppContentProps> = ({
           script: conditionScript,
           variablesTree: (d as any).variablesTree || varsTree,
           label: conditionLabel
-        });
-      });
+        }
+      }));
     };
     document.addEventListener('conditionEditor:open', handler as any);
 
