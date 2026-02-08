@@ -15,11 +15,12 @@ Refactoring of `NodeRow.tsx` following Clean Architecture principles, extracting
   - Hard to test and maintain
 
 ### Current State
-- **File Size:** 851 lines (-1,514 lines, -64% reduction)
+- **File Size:** 763 lines (-1,602 lines, -68% reduction)
 - **Architecture:** Clean Architecture with separated layers
 - **Test Coverage:** Unit tests created for extracted services
 - **Import Optimization:** ✅ All imports converted to aliases
 - **Event Handlers:** ✅ Extracted to `useNodeRowEventHandlers` hook
+- **Side Effects:** ✅ Extracted to `useNodeRowEffects` hook
 
 ## Extracted Services (Application Layer)
 
@@ -118,9 +119,10 @@ src/components/Flowchart/rows/NodeRow/
 │   └── useRowRegistry.ts
 ├── utils/                         # Utility functions
 │   └── geometry.ts
-├── NodeRow.tsx                    # Main component (851 lines)
+├── NodeRow.tsx                    # Main component (763 lines)
 ├── hooks/
 │   ├── useNodeRowEventHandlers.ts # Event handlers hook (~500 lines)
+│   ├── useNodeRowEffects.ts       # Side effects hook (~200 lines)
 ├── NodeRowLabel.tsx               # Presentation component
 ├── NodeRowIntellisense.tsx        # Presentation component
 └── RowTypePickerToolbar.tsx       # Presentation component
@@ -130,8 +132,8 @@ src/components/Flowchart/rows/NodeRow/
 
 ### Size Reduction
 - **Before:** 2,365 lines
-- **After:** 851 lines
-- **Reduction:** 1,514 lines (-64%)
+- **After:** 763 lines
+- **Reduction:** 1,602 lines (-68%)
 
 ### Services Created
 - **Total:** 6 application layer services
@@ -155,6 +157,7 @@ src/components/Flowchart/rows/NodeRow/
 - [x] Extract RowTypeHandler
 - [x] Extract FactoryTaskCreator
 - [x] Extract event handlers to `useNodeRowEventHandlers` hook
+- [x] Extract side effects to `useNodeRowEffects` hook
 - [x] Convert all imports to aliases
 - [x] Remove unused imports
 - [ ] Extract presentation layer components (optional, low priority)

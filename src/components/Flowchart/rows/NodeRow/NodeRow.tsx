@@ -23,6 +23,7 @@ import { useRowState } from './hooks/useRowState';
 import { useIntellisensePosition } from './hooks/useIntellisensePosition';
 import { useRowRegistry } from './hooks/useRowRegistry';
 import { useNodeRowEventHandlers } from './hooks/useNodeRowEventHandlers';
+import { useNodeRowEffects } from './hooks/useNodeRowEffects';
 import { isInsideWithPadding, getToolbarRect } from './utils/geometry';
 import { getTaskVisualsByType, getTaskVisuals, resolveTaskType, hasTaskTree } from '@components/Flowchart/utils/taskVisuals';
 import { TaskType, taskTypeToTemplateId, taskIdToTaskType } from '@types/taskTypes';
@@ -162,12 +163,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   }, []);
 
 
-  // Register component in registry
-  useEffect(() => {
-    registerRow(row.id, { fade, highlight, normal });
-    return () => unregisterRow(row.id);
-  }, [row.id, fade, highlight, normal, registerRow, unregisterRow]);
-
   // Expose methods via ref for external access
   React.useImperativeHandle(ref, () => ({
     fade,
@@ -189,42 +184,6 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   // State machine for toolbar/picker visibility (after refs are initialized)
   const toolbarSM = useRowToolbar({ rowRef: nodeContainerRef as any, overlayRef: overlayRef as any, pickerRef: typeToolbarRef as any });
 
-
-  // ESC: when type toolbar is open, close it and refocus textbox without propagating to canvas
-  useEffect(() => {
-    if (!showCreatePicker) return;
-    const onEsc = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      try {
-        e.preventDefault();
-        e.stopPropagation();
-      } catch { }
-      setShowCreatePicker(false);
-      setAllowCreatePicker(false);
-      suppressIntellisenseRef.current = true;
-      // restore focus to the editor textarea
-      try {
-        if (inputRef.current) {
-          const el = inputRef.current;
-          el.focus();
-          // place caret at end
-          const val = el.value || '';
-          el.setSelectionRange(val.length, val.length);
-        }
-      } catch { }
-    };
-    document.addEventListener('keydown', onEsc, true);
-    return () => document.removeEventListener('keydown', onEsc, true);
-  }, [showCreatePicker]);
-
-  // Debug: track picker visibility/position
-  useEffect(() => {
-  }, [showCreatePicker, nodeOverlayPosition]);
-
-  // reset suppression when editing ends
-  useEffect(() => {
-    if (!isEditing) suppressIntellisenseRef.current = false;
-  }, [isEditing]);
   const { openTaskTree } = useTaskTreeManager();
   const hoverHideTimerRef = useRef<number | null>(null);
 
@@ -269,99 +228,42 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     toolbarSM,
   });
 
-  // Intercetta tasti globali quando la type toolbar è aperta, per evitare che raggiungano il canvas
-  useEffect(() => {
-    if (!showCreatePicker) return;
-    const onGlobalKeyDown = (ev: KeyboardEvent) => {
-      const keys = ['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown', 'Enter', 'Escape'];
-      if (keys.includes(ev.key)) {
-        const t = ev.target as Node | null;
-        if (typeToolbarRef.current && t instanceof Node && typeToolbarRef.current.contains(t)) {
-          return; // lascia passare alla toolbar
-        }
-        ev.preventDefault();
-        ev.stopPropagation();
-      }
-    };
-    window.addEventListener('keydown', onGlobalKeyDown, { capture: true });
-    return () => window.removeEventListener('keydown', onGlobalKeyDown, { capture: true } as any);
-  }, [showCreatePicker]);
-
-  // Calcola la posizione delle icone: appena FUORI dal bordo destro del nodo, all'altezza della label
-  // Con piccolo gap per evitare sovrapposizione al bordo
-  useEffect(() => {
-    if (showIcons && labelRef.current) {
-      const labelRect = labelRef.current.getBoundingClientRect();
-      const nodeEl = labelRef.current.closest('.react-flow__node') as HTMLElement | null;
-      const nodeRect = nodeEl ? nodeEl.getBoundingClientRect() : labelRect;
-      setIconPos({
-        top: labelRect.top,
-        left: nodeRect.right + 4 // Piccolo gap per evitare sovrapposizione al bordo
-      });
-    } else {
-      setIconPos(null);
-    }
-  }, [showIcons]);
-
-  // Bridge SM → local booleans used by layout effects
-  useEffect(() => {
-    if (toolbarSM.showIcons !== showIcons) setShowIcons(toolbarSM.showIcons);
-    if (toolbarSM.showPicker !== showCreatePicker) setShowCreatePicker(toolbarSM.showPicker);
-  }, [toolbarSM.showIcons, toolbarSM.showPicker]);
-
-  useEffect(() => {
-    if (forceEditing) {
-      setIsEditing(true);
-    } else {
-      // ✅ Quando forceEditing diventa false, esci dalla modalità editing
-      // Questo assicura che la riga torni a essere una label quando perde il focus
-      setIsEditing(false);
-    }
-  }, [forceEditing]);
-
-  // Debug disattivato di default (abilitabile via debug.flowIcons)
-  useEffect(() => {
-    // no-op
-  }, [showIcons, row.id, iconPos, debugFlowIcons]);
-
-  useEffect(() => {
-    // Traccia se siamo mai entrati in editing
-    if (isEditing) {
-      setHasEverBeenEditing(true);
-    }
-  }, [isEditing]);
-
-  useEffect(() => {
-    // Solo chiamare onEditingEnd se stiamo uscendo dall'editing (era true, ora false)
-    // E se siamo mai entrati in editing
-    if (!isEditing && hasEverBeenEditing && typeof onEditingEnd === 'function') {
-      onEditingEnd(row.id);
-    }
-  }, [isEditing, hasEverBeenEditing, row.id, onEditingEnd]);
-
-  // Canvas click = ESC semantics: close intellisense if open, otherwise end editing without deleting
-  useEffect(() => {
-    const handleCanvasClick = () => {
-      if (!isEditing) return;
-      if (showIntellisense) {
-        setShowIntellisense(false);
-        setIntellisenseQuery('');
-        return;
-      }
-      // End editing gracefully, keep the row/node even if empty
-      setCurrentText(row.text);
-      setIsEditing(false);
-      setShowIntellisense(false);
-      setIntellisenseQuery('');
-      if (typeof onEditingEnd === 'function') {
-        onEditingEnd(row.id);
-      }
-    };
-    window.addEventListener('flow:canvas:click', handleCanvasClick as any, { capture: false } as any);
-    return () => window.removeEventListener('flow:canvas:click', handleCanvasClick as any);
-  }, [isEditing, showIntellisense, row.text, onEditingEnd]);
+  // ✅ REFACTOR: Extract all useEffect logic to custom hook
+  useNodeRowEffects({
+    row,
+    isEditing,
+    setIsEditing,
+    showIntellisense,
+    setShowIntellisense,
+    setIntellisenseQuery,
+    showCreatePicker,
+    setShowCreatePicker,
+    setAllowCreatePicker,
+    showIcons,
+    setShowIcons,
+    setIconPos,
+    hasEverBeenEditing,
+    setHasEverBeenEditing,
+    currentText,
+    setCurrentText,
+    forceEditing,
+    suppressIntellisenseRef,
+    inputRef,
+    labelRef,
+    typeToolbarRef,
+    toolbarSM,
+    onEditingEnd,
+    registerRow,
+    unregisterRow,
+    fade,
+    highlight,
+    normal,
+    debugFlowIcons,
+    nodeOverlayPosition,
+  });
 
   // ✅ All event handlers are now extracted to useNodeRowEventHandlers hook (see above)
+  // ✅ All useEffect logic is now extracted to useNodeRowEffects hook (see above)
   // Note: openTypePickerFromIcon and handleMouseDown remain in component due to complex event listener logic
 
   const openTypePickerFromIcon = (anchor?: DOMRect, currentType?: TaskType) => { // ✅ TaskType enum invece di stringa
