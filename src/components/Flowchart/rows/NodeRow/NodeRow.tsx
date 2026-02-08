@@ -29,7 +29,6 @@ import { getTaskVisualsByType, getTaskVisuals, resolveTaskType, hasTaskTree } fr
 import { TaskType, taskTypeToTemplateId, taskTypeToHeuristicString, taskIdToTaskType } from '../../../../types/taskTypes'; // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
 import getIconComponent from '../../../TaskEditor/ResponseEditor/icons';
 import { ensureHexColor } from '../../../TaskEditor/ResponseEditor/utils/color';
-import { RowHeuristicsService } from '../../../../services/RowHeuristicsService'; // ✅ Service centralizzato per euristiche
 // ❌ RIMOSSO: modeToType, typeToMode - usa TaskType enum direttamente
 import { idMappingService } from '../../../../services/IdMappingService';
 import { generateId } from '../../../../utils/idGenerator';
@@ -38,6 +37,9 @@ import { useRowExecutionHighlight } from '../../executionHighlight/useExecutionH
 import { getTaskIdFromRow, updateRowTaskType, createRowWithTask, getTemplateId } from '../../../../utils/taskHelpers'; // ✅ RINOMINATO: updateRowTaskAction → updateRowTaskType
 import { TaskTreeOpener } from './application/TaskTreeOpener';
 import { RowSaveHandler } from './application/RowSaveHandler';
+import { RowHeuristicsHandler } from './application/RowHeuristicsHandler';
+import { IntellisenseSelectionHandler } from './application/IntellisenseSelectionHandler';
+import { RowTypeHandler } from './application/RowTypeHandler';
 
 const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps> = (
   {
@@ -440,55 +442,29 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         try { inputRef.current?.blur(); } catch { }
         return;
       }
-      // ✅ FLUSSO CENTRALIZZATO: Usa RowHeuristicsService per analisi euristica
-      try {
-        // ✅ Usa servizio centralizzato per analisi euristica
-        const heuristicsResult = await RowHeuristicsService.analyzeRowLabel(q);
-        const { taskType, templateId, isUndefined, inferredCategory } = heuristicsResult;
+      // ✅ REFACTOR: Use RowHeuristicsHandler for heuristic analysis
+      const heuristicsResult = await RowHeuristicsHandler.analyzeRowLabel(q);
 
-        // ✅ LAZY APPROACH: Memorizza metadati nella riga invece di creare task subito
-        // ✅ Il task verrà creato solo quando si apre l'editor (lazy creation)
+      if (heuristicsResult.success) {
+        // ✅ LAZY APPROACH: Store metadata in row instead of creating task immediately
+        // ✅ Task will be created only when editor is opened (lazy creation)
 
-        // ✅ LAZY: NON creiamo/aggiorniamo il task qui - solo memorizziamo metadati nella riga
-        // ✅ Il task verrà creato solo quando si apre l'editor (cliccando sul gear)
+        // ✅ Prepare row update data with metadata
+        const rowUpdateData = RowHeuristicsHandler.prepareRowUpdateData(row, q, heuristicsResult);
 
-        // ✅ AGGIORNA RIGA con metadati
-        // ✅ Converti TaskType enum → string per row.type (compatibilità con codice esistente)
-        const rowType = taskType === TaskType.UtteranceInterpretation ? 'UtteranceInterpretation' :
-          taskType === TaskType.SayMessage ? 'Message' :
-            taskType === TaskType.ClassifyProblem ? 'ProblemClassification' :
-              taskType === TaskType.BackendCall ? 'BackendCall' : undefined;
-
-        // ✅ Memorizza metadati nella riga per lazy task creation
-        // ✅ LAZY: NON impostiamo taskId - il task verrà creato solo quando si apre l'editor
+        // ✅ Update row with metadata
         const updatedRow = {
           ...row,
-          text: q,
-          type: rowType as any,
-          mode: rowType as any,
-          isUndefined: isUndefined, // ✅ Usa isUndefined dal servizio
-          // ✅ LAZY: Memorizza metadati per creazione task quando si apre l'editor
-          meta: {
-            type: taskType,  // TaskType enum
-            templateId: templateId,  // GUID del template se trovato
-            inferredCategory: inferredCategory || null  // ✅ Categoria semantica dedotta automaticamente
-          }
+          ...rowUpdateData,
         };
 
         onUpdate(updatedRow as any, q);
         setIsEditing(false);
 
         return;
-      } catch (err) {
-        console.error('❌ [EURISTICA] ERRORE durante creazione riga', {
-          text: q,
-          rowId: row.id,
-          error: err,
-          errorMessage: err instanceof Error ? err.message : String(err),
-          stack: err instanceof Error ? err.stack : undefined,
-          timestamp: new Date().toISOString()
-        });
-        try { console.warn('[Heuristics] failed, fallback to picker', err); } catch { }
+      } else {
+        // Fallback to picker if heuristic analysis failed
+        console.warn('[NodeRow] Heuristics failed, fallback to picker', heuristicsResult.error);
         setIntellisenseQuery(q);
         setShowIntellisense(false);
         setAllowCreatePicker(true);
@@ -566,90 +542,39 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     // ✅ CAMBIO TIPO: Se non siamo in editing, stiamo cambiando il tipo di una riga esistente
     // In questo caso aggiorniamo solo il tipo senza aprire il ResponseEditor (si apre solo con l'ingranaggio)
     if (!isEditing && onUpdateWithCategory) {
-      const taskId = row.id;
-      let finalTaskType: TaskType;
-      let typeString: string;
-      let templateId: string | null = null;
+      // ✅ REFACTOR: Use RowTypeHandler for business logic
+      const typeHandler = new RowTypeHandler({
+        row,
+        getProjectId,
+      });
 
-      if (isTaskObject && selectedTask) {
-        // ✅ Task "Other": usa il templateId, icon e color del task selezionato
-        templateId = selectedTask.id || selectedTask.templateId || null;
-        finalTaskType = selectedTask.type !== undefined ? selectedTask.type : TaskType.UNDEFINED;
-        typeString = 'Other'; // Per backward compatibility
+      const result = await typeHandler.changeRowType(selectedTaskType, selectedTask, row.text);
 
-        // ✅ Salva icon e color nel task per usarli nei visuals
-        const updateDataWithVisuals: any = {
-          type: finalTaskType,
-          icon: selectedTask.icon || selectedTask.iconName || null,
-          color: selectedTask.color || null
-        };
-        if (templateId) {
-          updateDataWithVisuals.templateId = templateId;
-        }
-
-        const existingTask = taskRepository.getTask(taskId);
-        if (existingTask) {
-          taskRepository.updateTask(taskId, updateDataWithVisuals, getProjectId?.() ?? undefined);
-        } else {
-          taskRepository.createTask(
-            finalTaskType,
-            templateId,
-            {
-              ...(finalTaskType === TaskType.SayMessage ? { text: row.text || '' } : {}),
-              icon: selectedTask.icon || selectedTask.iconName || null,
-              color: selectedTask.color || null
-            },
-            taskId,
-            getProjectId?.() ?? undefined
-          );
-        }
-      } else if (selectedTaskType !== null) {
-        // ✅ TaskType enum: usa direttamente
-        finalTaskType = selectedTaskType;
-        typeString = finalTaskType === TaskType.SayMessage ? 'Message' :
-          finalTaskType === TaskType.UtteranceInterpretation ? 'UtteranceInterpretation' :
-            finalTaskType === TaskType.BackendCall ? 'BackendCall' :
-              finalTaskType === TaskType.ClassifyProblem ? 'ProblemClassification' :
-                finalTaskType === TaskType.AIAgent ? 'AIAgent' :
-                  finalTaskType === TaskType.Summarizer ? 'Summarizer' :
-                    finalTaskType === TaskType.Negotiation ? 'Negotiation' : 'Message';
-      } else {
-        console.error('❌ [CHANGE_TYPE] Nessun tipo valido fornito');
+      if (!result.success) {
+        console.error('❌ [CHANGE_TYPE] Failed to change row type:', result.error);
         toolbarSM.picker.close();
         return;
       }
 
-      console.log('🎯 [CHANGE_TYPE][EXISTING_ROW]', {
-        rowId: row.id,
-        oldType: row.categoryType,
-        newType: finalTaskType,
-        newTypeString: typeString,
-        templateId,
-        isTaskObject,
-        wasUndefined: (row as any)?.isUndefined,
-        timestamp: Date.now()
-      });
-
-      // ✅ Aggiorna il task nel repository PRIMA di aggiornare la riga (solo se non è già stato fatto per task "Other")
-      if (!isTaskObject || !selectedTask) {
-        const existingTask = taskRepository.getTask(taskId);
-        if (existingTask) {
-          const updateData: any = { type: finalTaskType };
-          if (templateId) {
-            updateData.templateId = templateId;
-          }
-          taskRepository.updateTask(taskId, updateData, getProjectId?.() ?? undefined);
-        } else {
-          // Crea il task se non esiste
-          taskRepository.createTask(
-            finalTaskType,
-            templateId,
-            finalTaskType === TaskType.SayMessage ? { text: row.text || '' } : undefined,
-            taskId,
-            getProjectId?.() ?? undefined
-          );
-        }
-      }
+      // Convert TaskType enum to string for backward compatibility
+      const typeString =
+        result.taskType === TaskType.SayMessage
+          ? 'Message'
+          : result.taskType === TaskType.UtteranceInterpretation
+            ? 'UtteranceInterpretation'
+            : result.taskType === TaskType.BackendCall
+              ? 'BackendCall'
+              : result.taskType === TaskType.ClassifyProblem
+                ? 'ProblemClassification'
+                : result.taskType === TaskType.AIAgent
+                  ? 'AIAgent'
+                  : result.taskType === TaskType.Summarizer
+                    ? 'Summarizer'
+                    : result.taskType === TaskType.Negotiation
+                      ? 'Negotiation'
+                      : isTaskObject && selectedTask
+                        ? 'Other'
+                        : 'Message';
 
       // ✅ mode removed - use type (TaskType enum) only
       // ✅ Aggiorna anche row.meta.type con il TaskType enum (numero) per resolveTaskType
@@ -658,12 +583,12 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         type: typeString, // ✅ Stringa per backward compatibility
         meta: {
           ...((row as any)?.meta || {}),
-          type: finalTaskType // ✅ TaskType enum (numero) per resolveTaskType
+          type: result.taskType, // ✅ TaskType enum (numero) per resolveTaskType
         },
         factoryId: (row as any).factoryId,
         instanceId: (row as any).instanceId,
         // ✅ Rimuovi flag isUndefined quando viene selezionato un tipo
-        isUndefined: false
+        isUndefined: false,
       };
 
       console.log('🎯 [CHANGE_TYPE][CALLING_UPDATE]', {
@@ -671,14 +596,14 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
         label: row.text,
         categoryType: 'taskTemplates',
         meta: updateMeta,
-        isUndefinedRemoved: true
+        isUndefinedRemoved: true,
       });
 
       (onUpdateWithCategory as any)(row, row.text, 'taskTemplates', updateMeta);
 
       console.log('🎯 [CHANGE_TYPE][COMPLETE]', {
         rowId: row.id,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       // ✅ NON aprire automaticamente il ResponseEditor - si apre solo con l'ingranaggio
@@ -700,41 +625,34 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
           label,
           taskId: selectedTask.id,
           taskTemplateId: selectedTask.templateId,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         });
-        // Per task "Other" in editing, creiamo direttamente il task con templateId
-        const taskId = row.id;
-        const projectId = getProjectId?.() || undefined;
-        const taskType = selectedTask.type !== undefined ? selectedTask.type : TaskType.UNDEFINED;
-        const templateId = selectedTask.id || selectedTask.templateId || null;
 
-        if (!row.taskId) {
-          taskRepository.createTask(
-            taskType,
-            templateId,
-            taskType === TaskType.SayMessage ? { text: label } : undefined,
-            taskId,
-            projectId
-          );
-        } else {
-          taskRepository.updateTask(taskId, { type: taskType, templateId }, projectId);
-        }
+        // ✅ REFACTOR: Use RowTypeHandler for business logic
+        const typeHandler = new RowTypeHandler({
+          row,
+          getProjectId,
+        });
 
-        // Aggiorna la riga
-        const updateMeta = {
-          id: taskId,
-          type: 'Other',
-          meta: {
-            ...((row as any)?.meta || {}),
-            type: taskType
-          },
-          isUndefined: false
-        };
+        const result = await typeHandler.createTaskForNewRow(selectedTaskType, selectedTask, label);
 
-        if (onUpdateWithCategory) {
-          (onUpdateWithCategory as any)(row, label, 'taskTemplates', updateMeta);
-        } else {
-          onUpdate({ ...row, isUndefined: false } as any, label);
+        if (result.success) {
+          // Aggiorna la riga
+          const updateMeta = {
+            id: row.id,
+            type: 'Other',
+            meta: {
+              ...((row as any)?.meta || {}),
+              type: result.taskType,
+            },
+            isUndefined: false,
+          };
+
+          if (onUpdateWithCategory) {
+            (onUpdateWithCategory as any)(row, label, 'taskTemplates', updateMeta);
+          } else {
+            onUpdate({ ...row, isUndefined: false } as any, label);
+          }
         }
 
         setIsEditing(false);
@@ -945,206 +863,68 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
       timestamp: Date.now()
     });
 
+    // Update UI state
     setCurrentText(item.name);
-    console.log('[🔍 INTELLISENSE] Closing intellisense', {
-      itemName: item.name,
-      rowId: row.id,
-      timestamp: Date.now()
-    });
     setShowIntellisense(false);
     setIntellisenseQuery('');
-    // Auto-save the selection with category type (legacy path keeps row label)
-    if (onUpdateWithCategory) {
-      console.log('[🔍 INTELLISENSE] Calling onUpdateWithCategory', {
-        rowId: row.id,
-        itemName: item.name,
-        categoryType: item.categoryType
-      });
-      (onUpdateWithCategory as any)(row, item.name, item.categoryType, {
-        factoryId: item.factoryId,
-        type: (item as any)?.type,
-        mode: (item as any)?.mode,
-        userActs: item.userActs,
-        categoryType: item.categoryType
-      });
-    } else {
-      console.log('[🔍 INTELLISENSE] Calling onUpdate', {
-        rowId: row.id,
-        itemName: item.name
-      });
-      onUpdate(row, item.name);
-    }
-    // Create instance asynchronously (best-effort)
+
+    // ✅ REFACTOR: Use IntellisenseSelectionHandler for business logic
     try {
-      let pid: string | undefined = undefined;
-      try { pid = ((require('../../state/runtime') as any).getCurrentProjectId?.() ?? undefined); } catch { }
-
-      console.log('[🔍 ROW_CREATION] Item details:', {
-        pid,
-        itemId: item.id,
-        itemCategoryType: item.categoryType,
-        hasCategoryType: item.categoryType === 'taskTemplates',
-        willCreateInstance: pid && item.id && item.categoryType === 'taskTemplates'
-      });
-
-      let backendInstanceId: string | undefined = undefined;
-      if (pid && item.id && item.categoryType === 'taskTemplates') {
-        // ✅ REMOVED: createInstance (legacy act_instances) - replaced with taskRepository.createTask
-        // ✅ Create task using taskRepository (unified model)
-        const chosenType = (item as any)?.type ?? TaskType.UNDEFINED; // ✅ TaskType enum only, no mode
-
-        // ✅ Use row.id as taskId (1:1 relationship)
-        const taskId = row.id || generateId();
-
-        // ✅ Create task in taskRepository (saves to tasks collection)
-        const task = taskRepository.createTask(chosenType, item.id || null, undefined, taskId, pid);
-
-        console.log('[🔍 INTELLISENSE] taskRepository.createTask result', {
-          success: !!task,
-          task: task,
-          taskId: task?.id,
-          templateId: task?.templateId,
-          timestamp: Date.now()
-        });
-
-        if (task && (onUpdateWithCategory as any)) {
-          backendInstanceId = task.id;
-
-          console.log('[🔍 INTELLISENSE] Task created', {
-            taskId: task.id,
-            type: chosenType,
-            timestamp: Date.now()
-          });
-
-          (onUpdateWithCategory as any)(row, item.name, item.categoryType, {
-            instanceId: task.id,
-            type: chosenType,
-            mode: (item as any)?.mode ?? modeFromType
-          });
-        } else {
-          console.log('[⚠️ INTELLISENSE] taskRepository.createTask failed or returned null', {
-            pid,
-            itemId: item.id,
-            itemCategoryType: item.categoryType,
-            timestamp: Date.now()
-          });
-        }
+      let getCurrentProjectId: (() => string | undefined) | undefined = undefined;
+      try {
+        const runtime = require('../../state/runtime') as any;
+        getCurrentProjectId = runtime.getCurrentProjectId;
+      } catch {
+        // Ignore if runtime module is not available
       }
-    } catch (e) { try { console.warn('[Row][instance:create] failed', e); } catch { } }
 
-    // Create instance in InstanceRepository for ProblemClassification
-    try {
-      const itemCategoryType = (item as any)?.categoryType;
-      const itemType = (item as any)?.type;
-      // ✅ MIGRATION: Use getTemplateId() helper instead of direct task.action access
-      // FASE 4: Get row type from Task (since we removed it from NodeRowData)
-      const rowTask = taskRepository.getTask(row.id);
-      // Map templateId to task type
-      const templateIdToTaskType: Record<string, string> = {
-        'SayMessage': 'Message',
-        'UtteranceInterpretation': 'UtteranceInterpretation',
-        'ClassifyProblem': 'ProblemClassification',
-        'callBackend': 'BackendCall'
-      };
-      const rowType = rowTask ? (templateIdToTaskType[getTemplateId(rowTask)] ?? getTemplateId(rowTask)) : undefined;
-
-      const isProblemClassification = itemCategoryType === 'taskTemplates' &&
-        (itemType === 'ProblemClassification' || rowType === 'ProblemClassification');
-
-      console.log('[🔍 INTELLISENSE] Checking if should create instance', {
-        isProblemClassification,
-        itemCategoryType,
-        itemType,
-        rowType,
-        rowInstanceId: row.id, // row.id IS the instanceId now
-        itemId: item.id,
-        categoryMatch: itemCategoryType === 'taskTemplates',
-        typeMatch: itemType === 'ProblemClassification' || rowType === 'ProblemClassification',
-        timestamp: Date.now()
+      const handler = new IntellisenseSelectionHandler({
+        row,
+        item,
+        getProjectId,
+        getCurrentProjectId,
       });
 
-      if (isProblemClassification) {
-        // Use row.id as instanceId (they are the same now)
-        const instanceIdToUse = row.id ?? (await import('uuid')).v4();
-        const taskTypeToUse = item.type ?? 'ProblemClassification';
+      const result = await handler.handleSelection();
 
-        console.log('[🔍 INTELLISENSE] Creating instance in InstanceRepository', {
-          rowId: row.id,
-          instanceId: instanceIdToUse,
-          taskType: taskTypeToUse,
-          hadExistingInstanceId: !!row.id, // row.id IS the instanceId now
-          timestamp: Date.now()
-        });
-
-        // TaskRepository handles all task operations
-
-        // ✅ RIMOSSO: findAgentAct - non esiste più il concetto di Act
-        // ✅ Gli intents sono nel task.intents (campi diretti)
-        let initialIntents: any[] = [];
-        try {
-          const task = taskRepository.getTask(instanceIdToUse);
-          if (task?.intents) {
-            initialIntents = task.intents;
-          }
-        } catch (err) {
-          console.warn('[🔍 INTELLISENSE] Could not load template intents:', err);
-        }
-
-        // Create instance with intents
-        const instanceId = row.id ?? generateId(); // Use row.id if available, otherwise generate
-        const projectId = getProjectId?.() ?? undefined;
-
-        // Migration: Create or update Task
-        // ✅ Converti taskTypeToUse (stringa) a TaskType enum
-        const taskTypeEnum = typeof taskTypeToUse === 'string' ? taskIdToTaskType(taskTypeToUse) : taskTypeToUse; // ✅ RINOMINATO: actIdToTaskType → taskIdToTaskType
-        if (!row.taskId) {
-          // Create Task for this row (dual mode)
-          const task = createRowWithTask(instanceId, taskTypeEnum, row.text ?? '', projectId); // ✅ TaskType enum
-          // FASE 4: Update Task with intents if ProblemClassification
-          if (initialIntents.length > 0) {
-            taskRepository.updateTask(task.id, { intents: initialIntents }, projectId);
-          }
-          // ✅ REGOLA ARCHITETTURALE: task.id = row.id (task.id === instanceId === row.id)
-          // ✅ NON modificare row.taskId direttamente (row è una prop immutabile)
-          // ✅ Il task è già stato creato con instanceId come ID, quindi task.id === instanceId è sempre vero
-        } else {
-          // Update Task type
-          updateRowTaskType(row, taskTypeEnum, projectId); // ✅ RINOMINATO: updateRowTaskAction → updateRowTaskType
-        }
-
-        console.log('[✅ INTELLISENSE] Instance/Task created in repository', {
-          instanceId: instanceId,
-          taskId: row.taskId,
-          taskType: taskTypeToUse,
-          intentsCount: initialIntents.length,
-          timestamp: Date.now()
-        });
-
-        // Update row (row.id is already the instanceId)
+      if (result.success && result.updateData) {
+        // Auto-save the selection with category type
         if (onUpdateWithCategory) {
-          console.log('[🔍 INTELLISENSE] Updating row', {
-            rowId: row.id,
-            instanceId: instanceId,
-            taskId: row.taskId,
-            timestamp: Date.now()
-          });
-
+          (onUpdateWithCategory as any)(row, item.name, item.categoryType, result.updateData);
+        } else {
+          onUpdate(row, item.name);
+        }
+      } else {
+        // Fallback: update row without task creation
+        if (onUpdateWithCategory) {
           (onUpdateWithCategory as any)(row, item.name, item.categoryType, {
-            instanceId: instanceId,
-            taskId: row.taskId, // Include taskId in meta
+            factoryId: item.factoryId,
             type: (item as any)?.type,
-            mode: (item as any)?.mode
+            mode: (item as any)?.mode,
+            userActs: item.userActs,
+            categoryType: item.categoryType,
           });
+        } else {
+          onUpdate(row, item.name);
         }
       }
-    } catch (e) {
-      try { console.warn('[Row][InstanceRepository:create] failed', e); } catch { }
+    } catch (error) {
+      console.error('[NodeRow][handleIntellisenseSelect] Error handling selection:', error);
+      // Fallback: update row without task creation
+      if (onUpdateWithCategory) {
+        (onUpdateWithCategory as any)(row, item.name, item.categoryType, {
+          factoryId: item.factoryId,
+          type: (item as any)?.type,
+          mode: (item as any)?.mode,
+          userActs: item.userActs,
+          categoryType: item.categoryType,
+        });
+      } else {
+        onUpdate(row, item.name);
+      }
     }
-    console.log('[🔍 INTELLISENSE] Exiting editing mode', {
-      rowId: row.id,
-      itemName: item.name,
-      timestamp: Date.now()
-    });
+
+    // Exit editing mode
     setIsEditing(false);
     setShowCreatePicker(false);
   };

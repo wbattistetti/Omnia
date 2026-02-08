@@ -56,7 +56,7 @@ export class RowTypeHandler {
         const updateDataWithVisuals: any = {
           type: finalTaskType,
           icon: selectedTask.icon || selectedTask.iconName || null,
-          color: selectedTask.color || null
+          color: selectedTask.color || null,
         };
         if (templateId) {
           updateDataWithVisuals.templateId = templateId;
@@ -66,17 +66,12 @@ export class RowTypeHandler {
         if (existingTask) {
           taskRepository.updateTask(taskId, updateDataWithVisuals, projectId);
         } else {
-          taskRepository.createTask(
-            finalTaskType,
-            templateId,
-            {
-              ...(finalTaskType === TaskType.SayMessage ? { text: this.row.text || '' } : {}),
-              icon: selectedTask.icon || selectedTask.iconName || null,
-              color: selectedTask.color || null
-            },
-            taskId,
-            projectId
-          );
+          const taskData: any = {
+            ...(finalTaskType === TaskType.SayMessage ? { text: this.row.text || '' } : {}),
+            icon: selectedTask.icon || selectedTask.iconName || null,
+            color: selectedTask.color || null,
+          };
+          taskRepository.createTask(finalTaskType, templateId, taskData, taskId, projectId);
         }
       } else if (selectedTaskType !== null) {
         // TaskType enum: use directly
