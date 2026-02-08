@@ -21,10 +21,25 @@ const removedFiles = [
 ];
 
 const patternsToCheck = [
-  { pattern: /SidebarOLD/g, name: 'SidebarOLD' },
-  { pattern: /ChatSimulator\/DDEBubbleChat/g, name: 'ChatSimulator/DDEBubbleChat' },
-  { pattern: /contractWizardOrchestrator/g, name: 'contractWizardOrchestrator' },
-  { pattern: /semanticContractBuilder/g, name: 'semanticContractBuilder' },
+  { pattern: /SidebarOLD/g, name: 'SidebarOLD', exclude: [] },
+  { 
+    pattern: /ChatSimulator\/DDEBubbleChat/g, 
+    name: 'ChatSimulator/DDEBubbleChat',
+    exclude: [
+      /@responseEditor\/ChatSimulator\/DDEBubbleChat/g,
+      /\.\/TaskEditor\/ResponseEditor\/ChatSimulator\/DDEBubbleChat/g,
+    ]
+  },
+  { 
+    pattern: /contractWizardOrchestrator/g, 
+    name: 'contractWizardOrchestrator',
+    exclude: [/@utils\/wizard\/orchestrator/g]
+  },
+  { 
+    pattern: /semanticContractBuilder/g, 
+    name: 'semanticContractBuilder',
+    exclude: [/@utils\/contract\/buildEntity/g]
+  },
 ];
 
 function getAllFiles(dir, fileList = []) {
@@ -59,7 +74,8 @@ function checkPatterns() {
 
   let foundIssues = false;
 
-  patternsToCheck.forEach(({ pattern, name }) => {
+  patternsToCheck.forEach((patternConfig) => {
+    const { pattern, name } = patternConfig;
     console.log(`Checking for: ${name}...`);
     const matches = [];
 
@@ -69,8 +85,15 @@ function checkPatterns() {
         const fileMatches = content.match(pattern);
 
         if (fileMatches) {
-          const relativePath = path.relative(projectRoot, filePath);
-          matches.push(relativePath);
+          // Check if it's an excluded (new correct) path
+          const isExcluded = patternConfig.exclude && patternConfig.exclude.some(excludePattern => 
+            content.match(excludePattern)
+          );
+          
+          if (!isExcluded) {
+            const relativePath = path.relative(projectRoot, filePath);
+            matches.push(relativePath);
+          }
         }
       } catch (error) {
         // Skip binary files or read errors
