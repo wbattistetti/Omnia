@@ -30,7 +30,7 @@ Il sistema DDT Builder è stato esteso per supportare la generazione di prompt s
 ```json
 {
   "name": "day",
-  "label": "Day", 
+  "label": "Day",
   "type": "number",
   "parentField": "birthDate",
   "constraints": [
@@ -89,7 +89,7 @@ Input: "data di nascita"
 ### 2. Generazione Struttura
 ```
 Input: "date"
-→ Backend: suggestStructureAndConstraints  
+→ Backend: suggestStructureAndConstraints
 → Output: { name: "birthDate", subData: ["day", "month", "year"] }
 ```
 
@@ -154,7 +154,7 @@ Input: { name: "year", parentField: "birthDate", constraints: [...] }
         "variable": "day",
         "steps": [
           {
-            "type": "start", 
+            "type": "start",
             "escalations": [
               {
                 "actions": [
@@ -195,7 +195,7 @@ Input: { name: "year", parentField: "birthDate", constraints: [...] }
 - `end_to_end_subdata.test.ts` - Test end-to-end completo
 
 ### Manual Tests
-- `test_subdata_prompts.py` - Test manuale per verificare i backend endpoints
+- `test_subdata_prompts.py` - Test manuale per verificare i backend endpoints (archiviato in `tests/archive/`)
 
 ## Vantaggi
 
@@ -217,4 +217,4 @@ Input: { name: "year", parentField: "birthDate", constraints: [...] }
 1. **Ottimizzazione Performance**: Caching delle risposte AI
 2. **Validazione Avanzata**: Script di validazione più sofisticati
 3. **Supporto Multilingua**: Traduzioni automatiche per i prompt
-4. **Template Library**: Libreria di template predefiniti per subData comuni 
+4. **Template Library**: Libreria di template predefiniti per subData comuni
