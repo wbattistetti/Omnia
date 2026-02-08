@@ -8,7 +8,6 @@ import { emitSidebarRefresh } from '@ui/events';
 import { createPortal } from 'react-dom';
 import { useReactFlow } from 'reactflow';
 import { SIDEBAR_TYPE_ICONS, getSidebarIconComponent, SIDEBAR_ICON_COMPONENTS } from '@components/Sidebar/sidebarTheme';
-import { HelpCircle } from 'lucide-react';
 import { IntellisenseItem } from '@components/Intellisense/IntellisenseTypes';
 import { getLabelColor } from '@utils/labelColor';
 import { NodeRowEditor } from '@components/Flowchart/NodeRowEditor';
@@ -24,16 +23,14 @@ import { useIntellisensePosition } from './hooks/useIntellisensePosition';
 import { useRowRegistry } from './hooks/useRowRegistry';
 import { useNodeRowEventHandlers } from './hooks/useNodeRowEventHandlers';
 import { useNodeRowEffects } from './hooks/useNodeRowEffects';
+import { useNodeRowVisuals } from './hooks/useNodeRowVisuals';
+import { useNodeRowStyles } from './hooks/useNodeRowStyles';
 import { isInsideWithPadding, getToolbarRect } from './utils/geometry';
-import { getTaskVisualsByType, getTaskVisuals, resolveTaskType, hasTaskTree } from '@components/Flowchart/utils/taskVisuals';
+import { resolveTaskType, hasTaskTree } from '@components/Flowchart/utils/taskVisuals';
 import { TaskType, taskTypeToTemplateId, taskIdToTaskType } from '@types/taskTypes';
-import getIconComponent from '@responseEditor/icons';
-import { ensureHexColor } from '@responseEditor/utils/color';
 import { idMappingService } from '@services/IdMappingService';
 import { generateId } from '@utils/idGenerator';
-import { taskRepository } from '@services/TaskRepository';
-import { useRowExecutionHighlight } from '@components/Flowchart/executionHighlight/useExecutionHighlight';
-import { getTaskIdFromRow, updateRowTaskType, createRowWithTask, getTemplateId } from '@utils/taskHelpers';
+import { updateRowTaskType, createRowWithTask, getTemplateId } from '@utils/taskHelpers';
 import { TaskTreeOpener } from './application/TaskTreeOpener';
 import { RowSaveHandler } from './application/RowSaveHandler';
 import { RowHeuristicsHandler } from './application/RowHeuristicsHandler';
@@ -433,206 +430,21 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   // Ghost preview while dragging - DISABILITATO per evitare duplicazione
   // Il ghost element è ora gestito da NodeRowList.tsx
 
-  // Visual state styles
-  const getVisualStyles = (): React.CSSProperties => {
-    switch (visualState) {
-      case 'fade':
-        return { opacity: 0.3, transition: 'opacity 0.2s ease' };
-      case 'highlight':
-        return {
-          backgroundColor: 'rgba(16, 185, 129, 0.6)', // ✅ Verde emerald-500 con trasparenza
-          borderRadius: '8px',
-          // ✅ Nessun bordo, nessuna transizione per evitare il "bianco prima del verde"
-          // ✅ Deve partire subito verde senza effetti di transizione
-        };
-      default:
-        return {};
-    }
-  };
-
-  // Checkbox visual effect: always grey when unchecked
-  const getCheckboxStyles = (): React.CSSProperties => {
-    if (!included) {
-      return {
-        opacity: 0.5,
-        transition: 'opacity 0.2s ease'
-      };
-    }
-    return {};
-  };
-
-  // Stili condizionali
-  let conditionalStyles: React.CSSProperties = {};
-  let conditionalClasses = '';
-
-  if (isPlaceholder) {
-    conditionalStyles = {
-      display: 'none'
-    };
-  } else if (isBeingDragged) {
-    conditionalStyles = {
-      ...style,
-      position: 'relative',
-      zIndex: 0,
-      opacity: 1,
-      boxShadow: 'none',
-      backgroundColor: 'transparent',
-      outline: '1px dashed #94a3b8',
-      outlineOffset: 2,
-      pointerEvents: 'auto'
-    };
-  }
-
-  // Merge visual styles with conditional styles
-  conditionalStyles = { ...conditionalStyles, ...getVisualStyles() };
-
-  // ✅ EXECUTION HIGHLIGHT: Get execution highlight styles for row
-  // ✅ Task può non esistere ancora (viene creato solo quando si apre ResponseEditor)
-  const taskId = getTaskIdFromRow(row);
-  const rowHighlight = useRowExecutionHighlight(row.id, taskId || undefined);
-
-  // ✅ Applica bordo invece di background
-  const rowBorderStyle = rowHighlight.border !== 'transparent'
-    ? {
-      border: `${rowHighlight.borderWidth}px solid ${rowHighlight.border}`,
-      borderRadius: '4px' // Opzionale: per rendere il bordo più visibile
-    }
-    : {};
-
-  // Checkbox styles (always applied based on included state)
-  const checkboxStyles = getCheckboxStyles();
-
-  // Final styles that preserve highlight but apply defaults
-  const finalStyles = visualState === 'highlight'
-    ? {} // Don't override highlight styles
-    : {
-      backgroundColor: 'transparent',
-      border: 'none',
-      outline: 'none',
-      boxShadow: 'none',
-      paddingLeft: 0,
-      paddingRight: 0,
-      marginTop: 0,
-      marginBottom: 0,
-      paddingTop: 4,
-      paddingBottom: 4,
-      minHeight: 0,
-      height: 'auto',
-      width: '100%'
-    };
-
-  // Colore solo testo come in sidebar; sfondo trasparente
-  let bgColor = 'transparent';
-  let labelTextColor = '';
-  let iconColor = '#94a3b8'; // Default grigio per l'icona
-
-  // Icona e colore coerenti con la sidebar
-  // ✅ NUOVO: Usa solo TaskRepository, non più AgentAct
-
-  let Icon: React.ComponentType<any> | null = null;
-  let currentTypeForPicker: TaskType | undefined = undefined; // ✅ TaskType enum invece di stringa
-
-  // Check if this is an undefined node (no heuristic match found)
-  const isUndefined = (row as any)?.isUndefined === true;
-
-  // ✅ NUOVO: Usa solo TaskRepository (taskId già dichiarato sopra per useRowExecutionHighlight)
-  if (taskId) {
-    try {
-      const task = taskRepository.getTask(taskId);
-      if (task) {
-        // ✅ Usa direttamente task.type (TaskType enum) se disponibile
-        if (task.type !== undefined && task.type !== null && task.type !== TaskType.UNDEFINED) {
-          // ✅ Se il task ha icon e color personalizzati (task "Other"), usali invece di getTaskVisualsByType
-          if (task.icon || task.color) {
-            const iconName = task.icon || task.iconName || 'Tag';
-            const taskColor = task.color ? ensureHexColor(task.color) : '#94a3b8';
-
-            // ✅ Crea un componente wrapper che renderizza l'icona usando getIconComponent
-            Icon = isUndefined ? HelpCircle : (({ className, style, size, ...props }: any) => {
-              const iconEl = getIconComponent(iconName, taskColor);
-              return <span className={className} style={style} {...props}>{iconEl}</span>;
-            }) as React.ComponentType<any>;
-            labelTextColor = isUndefined ? '#94a3b8' : (taskColor || '#94a3b8');
-            iconColor = isUndefined ? '#94a3b8' : (taskColor || '#94a3b8');
-          } else {
-            // ✅ Usa direttamente task.type (enum) per visuals invece di resolveTaskType
-            // Questo garantisce che i visuals siano sempre aggiornati con il tipo corretto
-            const taskTypeEnum = task.type;
-            const has = hasTaskTree(row);
-            // ✅ NUOVO: Usa getTaskVisuals con supporto per categorie
-            // ✅ Leggi categoria da task.category OPPURE da row.meta.inferredCategory (se task non esiste ancora)
-            const taskCategory = task.category || ((row as any)?.meta?.inferredCategory) || null;
-            const visuals = getTaskVisuals(
-              taskTypeEnum,
-              taskCategory, // Preset category (da task o da row.meta)
-              task.categoryCustom, // Custom category
-              has
-            );
-
-            // Se è undefined, usa icona punto interrogativo invece dell'icona normale
-            Icon = isUndefined ? HelpCircle : visuals.Icon;
-            labelTextColor = isUndefined ? '#94a3b8' : visuals.labelColor;
-            iconColor = isUndefined ? '#94a3b8' : visuals.iconColor;
-          }
-
-          // ✅ Imposta currentTypeForPicker con TaskType enum
-          if (!isUndefined) {
-            currentTypeForPicker = task.type; // ✅ Usa direttamente task.type (enum)
-          }
-        } else {
-          // ✅ Task con tipo UNDEFINED - stato valido (euristica non ha determinato tipo)
-          // L'utente deve selezionare manualmente il tipo tramite type picker
-          // NON è un errore, quindi non loggare
-          // ❌ RIMOSSO: Fallback visivo - se UNDEFINED, resta UNDEFINED (punto interrogativo)
-          Icon = HelpCircle;
-          labelTextColor = '#94a3b8';
-          iconColor = '#94a3b8';
-        }
-      } else {
-        // Task non trovato - questo è un problema reale, ma logga solo se necessario
-        // (es. se il taskId esiste ma il task non è nel repository)
-        if (row.taskId && process.env.NODE_ENV === 'development') {
-          // Solo in dev e solo se c'è un taskId che dovrebbe esistere
-          console.debug('[🎨 NODEROW] Task not found in repository', {
-            taskId,
-            rowId: row.id,
-            hasTaskId: !!row.taskId
-          });
-        }
-      }
-    } catch (err) {
-      console.error('[🎨 NODEROW] Error', { taskId, rowId: row.id, error: err });
-    }
-  }
-
-  // ✅ Se non c'è task o non è stato possibile determinare il tipo
-  // ✅ FIX: Usa sempre resolveTaskType per leggere row.meta.type (lazy creation)
-  if (!Icon) {
-    const resolvedType = resolveTaskType(row);
-
-    // ✅ Se il tipo è stato risolto dai metadati, usa i visuals corretti
-    if (resolvedType !== TaskType.UNDEFINED) {
-      const has = hasTaskTree(row);
-      // ✅ Leggi categoria da row.meta.inferredCategory (per lazy creation)
-      const rowCategory = (row as any)?.meta?.inferredCategory || null;
-      const visuals = getTaskVisuals(
-        resolvedType,
-        rowCategory, // Preset category da row.meta
-        null, // Custom category (non disponibile in row.meta)
-        has
-      );
-
-      Icon = visuals.Icon;
-      labelTextColor = visuals.labelColor;
-      iconColor = visuals.iconColor;
-      currentTypeForPicker = resolvedType;
-    } else {
-      // ✅ Se UNDEFINED, mostra punto interrogativo (nessun fallback)
-      Icon = HelpCircle;
-      labelTextColor = '#94a3b8';
-      iconColor = '#94a3b8';
-    }
-  }
+  // ✅ REFACTOR: Extract styles calculation to custom hook
+  const {
+    conditionalStyles,
+    conditionalClasses,
+    checkboxStyles,
+    finalStyles,
+    rowBorderStyle,
+  } = useNodeRowStyles({
+    row,
+    visualState,
+    included,
+    isPlaceholder,
+    isBeingDragged,
+    style,
+  });
 
   // FASE 4: Listen for instance updates to force re-render and update icon color
   // Note: TaskRepository doesn't emit events yet, but InstanceRepository still does
@@ -665,8 +477,17 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
   // Editor host context (for opening the right editor per ActType) - host is always present
   const taskEditorCtx = useTaskEditor(); // ✅ RINOMINATO: actEditorCtx → taskEditorCtx, useActEditor → useTaskEditor
 
-
-  // Icon già determinata sopra
+  // ✅ REFACTOR: Extract visuals calculation to custom hook
+  const {
+    Icon,
+    labelTextColor,
+    iconColor,
+    currentTypeForPicker,
+    isUndefined,
+  } = useNodeRowVisuals({
+    row,
+    instanceUpdateTrigger,
+  });
 
   return (
     <>
@@ -733,7 +554,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
             onLabelDragStart={handleMouseDown}
             isEditing={isEditing}
             setIsEditing={setIsEditing}
-            bgColor={bgColor}
+            bgColor="transparent"
             labelTextColor={labelTextColor}
             iconColor={iconColor}
             hasTaskTree={isUndefined ? false : hasTaskTree(row)} // ✅ Usa hasTaskTree senza actFound

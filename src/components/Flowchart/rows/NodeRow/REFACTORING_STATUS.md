@@ -15,12 +15,14 @@ Refactoring of `NodeRow.tsx` following Clean Architecture principles, extracting
   - Hard to test and maintain
 
 ### Current State
-- **File Size:** 763 lines (-1,602 lines, -68% reduction)
+- **File Size:** 604 lines (-1,761 lines, -74% reduction)
 - **Architecture:** Clean Architecture with separated layers
 - **Test Coverage:** Unit tests created for extracted services
 - **Import Optimization:** ✅ All imports converted to aliases
 - **Event Handlers:** ✅ Extracted to `useNodeRowEventHandlers` hook
 - **Side Effects:** ✅ Extracted to `useNodeRowEffects` hook
+- **Visuals Logic:** ✅ Extracted to `useNodeRowVisuals` hook
+- **Styles Logic:** ✅ Extracted to `useNodeRowStyles` hook
 
 ## Extracted Services (Application Layer)
 
@@ -116,13 +118,14 @@ src/components/Flowchart/rows/NodeRow/
 ├── hooks/                         # Custom React hooks
 │   ├── useRowState.ts
 │   ├── useIntellisensePosition.ts
-│   └── useRowRegistry.ts
-├── utils/                         # Utility functions
-│   └── geometry.ts
-├── NodeRow.tsx                    # Main component (763 lines)
-├── hooks/
+│   ├── useRowRegistry.ts
 │   ├── useNodeRowEventHandlers.ts # Event handlers hook (~500 lines)
 │   ├── useNodeRowEffects.ts       # Side effects hook (~200 lines)
+│   ├── useNodeRowVisuals.ts      # Visuals calculation hook (~110 lines)
+│   └── useNodeRowStyles.ts       # Styles calculation hook (~87 lines)
+├── utils/                         # Utility functions
+│   └── geometry.ts
+├── NodeRow.tsx                    # Main component (604 lines)
 ├── NodeRowLabel.tsx               # Presentation component
 ├── NodeRowIntellisense.tsx        # Presentation component
 └── RowTypePickerToolbar.tsx       # Presentation component
@@ -132,13 +135,21 @@ src/components/Flowchart/rows/NodeRow/
 
 ### Size Reduction
 - **Before:** 2,365 lines
-- **After:** 763 lines
-- **Reduction:** 1,602 lines (-68%)
+- **After:** 604 lines
+- **Reduction:** 1,761 lines (-74%)
 
 ### Services Created
 - **Total:** 6 application layer services
 - **Average Size:** ~150-200 lines per service
 - **Total Service Code:** ~1,100 lines (well-organized, testable)
+
+### Hooks Created
+- **Total:** 4 custom hooks
+- **useNodeRowEventHandlers:** ~500 lines (event handlers)
+- **useNodeRowEffects:** ~200 lines (side effects)
+- **useNodeRowVisuals:** ~110 lines (visuals calculation)
+- **useNodeRowStyles:** ~87 lines (styles calculation)
+- **Total Hook Code:** ~897 lines (well-organized, testable)
 
 ### Test Coverage
 - Unit tests created for:
@@ -158,6 +169,8 @@ src/components/Flowchart/rows/NodeRow/
 - [x] Extract FactoryTaskCreator
 - [x] Extract event handlers to `useNodeRowEventHandlers` hook
 - [x] Extract side effects to `useNodeRowEffects` hook
+- [x] Extract visuals logic to `useNodeRowVisuals` hook
+- [x] Extract styles logic to `useNodeRowStyles` hook
 - [x] Convert all imports to aliases
 - [x] Remove unused imports
 - [ ] Extract presentation layer components (optional, low priority)
