@@ -26,6 +26,7 @@ import { useFlowActions } from '../flows/FlowStore.tsx';
 import { upsertAddNextTo, closeTab, activateTab, splitWithTab } from '../dock/ops';
 import { findRootTabset, tabExists } from './AppContent/domain/dockTree';
 import { openBottomDockedTab } from './AppContent/infrastructure/docking/DockingHelpers';
+import { EditorCoordinator } from './AppContent/application/coordinators/EditorCoordinator';
 import { resolveEditorKind } from './TaskEditor/EditorHost/resolveKind'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import BackendBuilderStudio from '../BackendBuilder/ui/Studio';
 import ResizableResponseEditor from './TaskEditor/ResponseEditor/ResizableResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
@@ -35,17 +36,15 @@ import { useTaskEditor } from './TaskEditor/EditorHost/TaskEditorContext'; // �
 import ConditionEditor from './conditions/ConditionEditor';
 import DDEBubbleChat from './ChatSimulator/DDEBubbleChat';
 import { useTaskTreeContext } from '../context/DDTContext';
-import { SIDEBAR_TYPE_COLORS, SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS } from './Sidebar/sidebarTheme';
+// ✅ REMOVED: Imports moved to handlers (SIDEBAR_TYPE_COLORS, flowchartVariablesService, getNodesWithFallback)
 // FASE 2: InstanceRepository import removed - using TaskRepository instead
 // TaskRepository automatically syncs with InstanceRepository for backward compatibility
-import { flowchartVariablesService } from '../services/FlowchartVariablesService';
 import ResponseEditor from './TaskEditor/ResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import NonInteractiveResponseEditor from './TaskEditor/ResponseEditor/NonInteractiveResponseEditor'; // ✅ RINOMINATO: ActEditor → TaskEditor
 import { taskRepository } from '../services/TaskRepository';
 import { getTemplateId } from '../utils/taskHelpers';
 import { TaskType } from '../types/taskTypes'; // ✅ RIMOSSO: taskIdToTaskType - non più necessario, le fonti emettono direttamente TaskType enum
 import type { TaskMeta, TaskWizardMode } from './TaskEditor/EditorHost/types'; // ✅ RINOMINATO: ActEditor → TaskEditor
-import { getNodesWithFallback } from '../utils/taskTreeMigrationHelpers';
 import type { TaskTree } from '../types/taskTypes';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
@@ -630,6 +629,15 @@ export const AppContent: React.FC<AppContentProps> = ({
     return () => document.removeEventListener('nonInteractiveEditor:open', handler as any);
   }, []);
 
+  // ✅ REFACTOR: Initialize EditorCoordinator
+  const editorCoordinator = React.useMemo(() => {
+    return new EditorCoordinator({
+      currentProjectId: currentPid,
+      projectData,
+      pdUpdate,
+    });
+  }, [currentPid, projectData, pdUpdate]);
+
   // Listen for TaskEditor open events (open as docking tab)
   React.useEffect(() => {
     const h = async (e: any) => {
@@ -640,298 +648,22 @@ export const AppContent: React.FC<AppContentProps> = ({
           return;
         }
 
-        // Get instanceId from event
-        const instanceId = d.instanceId || d.id;
-
-        // Determine editor kind based on task type
-        const editorKind = resolveEditorKind({ type: d.type, id: d.id, label: d.label || d.name });
-
-        // ✅ Build taskMeta from event detail
-        const taskType = d.type as TaskType; // d.type is already TaskType enum
-
-        // ✅ NEW: Determine taskWizardMode from event detail
-        // Priority: explicit taskWizardMode > backward compatibility with booleans
-        let taskWizardMode: TaskWizardMode | undefined;
-        if (d.taskWizardMode && (d.taskWizardMode === 'none' || d.taskWizardMode === 'adaptation' || d.taskWizardMode === 'full')) {
-          taskWizardMode = d.taskWizardMode;
-          console.log('[📥 AppContent] taskWizardMode esplicito dall\'evento:', taskWizardMode);
-        } else {
-          // ✅ Backward compatibility: derive from boolean flags
-          if (d.needsTaskBuilder === true) {
-            taskWizardMode = 'full';
-          } else if (d.needsTaskContextualization === true) {
-            taskWizardMode = 'adaptation';
-          } else {
-            taskWizardMode = 'none';
-          }
-          console.log('[📥 AppContent] taskWizardMode derivato da booleani:', taskWizardMode, {
-            needsTaskBuilder: d.needsTaskBuilder,
-            needsTaskContextualization: d.needsTaskContextualization
-          });
-        }
-
-        console.log('[📥 AppContent] Costruendo TaskMeta con taskWizardMode:', taskWizardMode, {
-          id: d.id,
-          type: taskType,
-          label: d.label || d.name,
-          instanceId: d.instanceId || d.id
-        });
-
-        const taskMeta: TaskMeta = {
-          id: d.id,
-          type: taskType,
-          label: d.label || d.name || 'Task',
-          instanceId: d.instanceId || d.id,
-          // ✅ NEW: taskWizardMode (primary)
-          taskWizardMode,
-          // ✅ DEPRECATED: Backward compatibility flags (will be removed after migration)
-          needsTaskContextualization: d.needsTaskContextualization === true,
-          needsTaskBuilder: d.needsTaskBuilder === true,
-          contextualizationTemplateId: d.contextualizationTemplateId || undefined,
-          taskLabel: d.taskLabel || d.label || d.name || undefined
-        };
-
-        // Open as docking tab in bottom split (1/3 height)
-        const tabId = `act_${d.id}`;
-
-        // ✅ Prepare TaskTree BEFORE calling setDockTree (all async work here)
-        let preparedTaskTree: any = null;
-
-        if (editorKind === 'ddt') { // ✅ 'ddt' è ancora il valore enum, ma il concetto è TaskTree
-          // Open ResponseEditor for Task types (DataRequest, ProblemClassification, etc.)
-          // ✅ PRIORITÀ: Usa TaskTree dall'evento se presente (copia del template già costruita)
-          let taskTree = d.taskTree; // ✅ Usa TaskTree dall'evento (se presente)
-
-          if (taskTree) {
-            // ✅ NUOVO MODELLO: Usa extractTaskOverrides per salvare solo override
-            // Assicurati che il task esista
-            let task = taskRepository.getTask(instanceId);
-            if (!task) {
-              // ✅ NEW: Crea task SOLO se c'è un templateId (euristica ha trovato candidato)
-              // Se non c'è templateId, il wizard creerà il task al termine
-              if (d.templateId) {
-                // ✅ Usa taskType da taskMeta
-                task = taskRepository.createTask(taskMeta.type, d.templateId, undefined, instanceId);
-              } else {
-                // ✅ Nessun template → wizard creerà il task
-                console.log('[AppContent] No templateId - wizard will create task', { instanceId });
-              }
-            }
-            // ✅ NUOVO MODELLO: Estrai solo override (label, steps, introduction)
-            // ❌ NON salvare: nodes, constraints, dataContract (vengono dal template)
-            const { extractTaskOverrides } = await import('../utils/taskUtils');
-            const overrides = await extractTaskOverrides(task, taskTree, pdUpdate?.getCurrentProjectId() || undefined);
-            taskRepository.updateTask(instanceId, {
-              ...overrides,  // Solo override: label, steps, introduction
-              templateId: d.templateId || task.templateId  // Mantieni templateId se presente
-            }, pdUpdate?.getCurrentProjectId());
-            preparedTaskTree = taskTree;
-          } else {
-            // Se non presente nell'evento, carica dal task
-            let task = taskRepository.getTask(instanceId);
-
-            if (!task) {
-              // ✅ NEW: Crea task SOLO se c'è un templateId (euristica ha trovato candidato)
-              // Se non c'è templateId, il wizard creerà il task al termine
-              if (d.templateId) {
-                // ✅ Task doesn't exist, create it (solo se c'è template)
-                // ✅ NUOVO MODELLO: Crea task senza data (la struttura viene dal template)
-                // ✅ Usa taskType da taskMeta
-                task = taskRepository.createTask(taskMeta.type, d.templateId, {
-                  label: d.label || 'New Task'
-                  // ❌ NON salvare: data (viene dal template usando subTasksIds)
-                }, instanceId);
-              } else {
-                // ✅ Nessun template → wizard creerà il task
-                console.log('[AppContent] No templateId - wizard will create task', { instanceId });
-              }
-            }
-
-            // ✅ Load TaskTree async (if task has templateId, build from template)
-            // ✅ IMPORTANTE: buildTaskTree ora salva automaticamente gli step clonati nell'istanza in memoria
-            if (task && task.templateId) {
-              try {
-                const { buildTaskTree } = await import('../utils/taskUtils');
-                const projectId = currentProject?.id || undefined;
-                taskTree = await buildTaskTree(task, projectId);
-                // ✅ buildTaskTree ha già salvato gli step clonati nell'istanza in memoria se necessario
-                // Ricarica il task per avere la versione aggiornata con gli step
-                task = taskRepository.getTask(instanceId);
-              } catch (err) {
-                console.error('[AppContent] Error loading TaskTree from template:', err);
-              }
-            }
-
-            // ✅ NEW: Crea TaskTree vuoto SOLO se il task esiste (se non c'è templateId, il task non esiste)
-            if (task && !taskTree) {
-              // ✅ Fallback: if no TaskTree loaded, create empty one
-              taskTree = { label: d.label || 'New Task', nodes: [] };
-              // Update task with empty label (structure comes from template)
-              taskRepository.updateTask(instanceId, {
-                label: taskTree.label
-              }, pdUpdate?.getCurrentProjectId());
-            }
-
-            // ✅ NEW: preparedTaskTree è null se non c'è task (wizard creerà tutto)
-            preparedTaskTree = task ? taskTree : null;
-          }
-        }
-
-        // ✅ Now call setDockTree with prepared data (synchronous function)
+        // ✅ REFACTOR: Use EditorCoordinator (async)
         setDockTree(prev => {
-          // ✅ REFACTOR: Use extracted domain function
-          if (tabExists(prev, tabId)) {
-            // Tab already open: per 'ddt' (TaskTree), salva TaskTree nel taskRepository e attiva il tab
-            // TaskEditorHost leggerà il TaskTree dal taskRepository
-            if (editorKind === 'ddt' && preparedTaskTree) {
-              // Log rimosso: non essenziale per flusso motore
-
-              // ✅ Salva TaskTree nel taskRepository (TaskEditorHost lo leggerà)
-              let task = taskRepository.getTask(instanceId);
-              if (!task) {
-                // ✅ NEW: Crea task SOLO se c'è un templateId (euristica ha trovato candidato)
-                if (d.templateId) {
-                  task = taskRepository.createTask(taskMeta.type, d.templateId, undefined, instanceId);
-                } else {
-                  // ✅ Nessun template → wizard creerà il task
-                  console.log('[AppContent] No templateId - wizard will create task (existing tab)', { instanceId });
-                }
-              }
-              // ✅ NEW: Salva TaskTree SOLO se il task esiste (se non c'è templateId, il task non esiste)
-              if (task) {
-                // ✅ CRITICAL: Non salvare steps qui - steps sono gestiti da ResponseEditor/DDTHostAdapter
-                const { steps: _, ...preparedTaskTreeWithoutSteps } = preparedTaskTree;
-                taskRepository.updateTask(instanceId, {
-                  ...preparedTaskTreeWithoutSteps,
-                  templateId: d.templateId || task.templateId
-                }, pdUpdate?.getCurrentProjectId());
-              }
-            }
-            // Tab already open, just activate it
-            return activateTab(prev, tabId);
-          }
-
-          // ✅ REFACTOR: Use extracted domain function
-          const rootTabsetId = findRootTabset(prev) || 'ts_main';
-
-          // Open correct editor based on editorKind
-          if (editorKind === 'message') {
-            // ✅ Open TextMessageEditor via TaskEditorHost for Message type (SayMessage, CloseSession, Transfer)
-            return splitWithTab(prev, rootTabsetId, 'bottom', {
-              id: tabId,
-              title: d.label || d.name || 'Message',
-              type: 'taskEditor', // ✅ Usa TaskEditorHost che aprirà TextMessageEditor
-              task: taskMeta, // ✅ Passa TaskMeta con TaskType enum
-              headerColor: '#059669', // Green color for SayMessage
-              toolbarButtons: []
-            } as DockTabTaskEditor);
-          } else if (editorKind === 'ddt') { // ✅ 'ddt' è ancora il valore enum, ma il concetto è TaskTree
-            // ✅ UNIFICATO: Usa TaskEditorHost anche per 'ddt' (TaskTree) (come per 'message' e 'backend')
-            // TaskEditorHost → DDTHostAdapter → ResponseEditor gestirà il TaskTree
-            // Il TaskTree viene preparato e salvato nel taskRepository prima di aprire l'editor
-            const startStepTasksCount = preparedTaskTree?.nodes?.[0]?.steps?.start?.escalations?.[0]?.tasks?.length || 0;
-            // Creating new tab with TaskTree via TaskEditorHost
-            // ✅ Salva TaskTree nel taskRepository prima di aprire l'editor (TaskEditorHost lo leggerà)
-            if (preparedTaskTree) {
-              let task = taskRepository.getTask(instanceId);
-              if (!task) {
-                // ✅ NEW: Crea task SOLO se c'è un templateId (euristica ha trovato candidato)
-                if (d.templateId) {
-                  task = taskRepository.createTask(taskMeta.type, d.templateId, undefined, instanceId);
-                } else {
-                  // ✅ Nessun template → wizard creerà il task
-                  console.log('[AppContent] No templateId - wizard will create task (new tab)', { instanceId });
-                }
-              }
-              // ✅ NEW: Salva TaskTree SOLO se il task esiste (se non c'è templateId, il task non esiste)
-              if (task) {
-                // ✅ CRITICAL: Non salvare steps qui - steps sono gestiti da ResponseEditor/DDTHostAdapter
-                // ✅ Steps devono avere struttura corretta (chiavi = templateId, non step types)
-                // ✅ Se preparedTaskTree.steps ha struttura sbagliata, rimuovilo e lascia che DDTHostAdapter lo ricostruisca
-                const { steps: _, ...preparedTaskTreeWithoutSteps } = preparedTaskTree;
-                taskRepository.updateTask(instanceId, {
-                  ...preparedTaskTreeWithoutSteps,  // Spread: label, nodes, ecc. (SENZA steps)
-                  templateId: d.templateId || task.templateId  // Mantieni templateId se presente
-                }, pdUpdate?.getCurrentProjectId());
-              }
-            }
-
-            return splitWithTab(prev, rootTabsetId, 'bottom', {
-              id: tabId,
-              title: d.label || d.name || 'Response Editor',
-              type: 'taskEditor', // ✅ UNIFICATO: Usa TaskEditorHost invece di responseEditor diretto
-              task: taskMeta, // ✅ Passa TaskMeta con TaskType enum
-              headerColor: '#9a4f00', // Orange color from ResponseEditor header
-              toolbarButtons: []
-            } as DockTabTaskEditor);
-          } else if (editorKind === 'backend') {
-            // Open BackendCallEditor for BackendCall type
-            return splitWithTab(prev, rootTabsetId, 'bottom', {
-              id: tabId,
-              title: d.label || d.name || 'Backend Call',
-              type: 'taskEditor', // ✅ RINOMINATO: 'actEditor' → 'taskEditor'
-              task: taskMeta, // ✅ RINOMINATO: act → task, usa TaskMeta con TaskType enum
-              headerColor: '#94a3b8', // Gray color for BackendCall
-              toolbarButtons: []
-            } as DockTabTaskEditor); // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
-          } else if (editorKind === 'intent') {
-            // ✅ Open IntentEditor via TaskEditorHost for ClassifyProblem type
-            return splitWithTab(prev, rootTabsetId, 'bottom', {
-              id: tabId,
-              title: d.label || d.name || 'Problem Classification',
-              type: 'taskEditor', // ✅ Usa TaskEditorHost che aprirà IntentEditor
-              task: taskMeta, // ✅ Passa TaskMeta con TaskType enum
-              headerColor: '#f59e0b', // Orange color for ClassifyProblem
-              toolbarButtons: []
-            } as DockTabTaskEditor);
-          } else if (editorKind === 'aiagent') {
-            // ✅ Open AIAgentEditor via TaskEditorHost for AIAgent type
-            return splitWithTab(prev, rootTabsetId, 'bottom', {
-              id: tabId,
-              title: d.label || d.name || 'AI Agent',
-              type: 'taskEditor', // ✅ Usa TaskEditorHost che aprirà AIAgentEditor
-              task: taskMeta, // ✅ Passa TaskMeta con TaskType enum
-              headerColor: '#a855f7', // Purple color for AIAgent
-              toolbarButtons: []
-            } as DockTabTaskEditor);
-          } else if (editorKind === 'summarizer') {
-            // ✅ Open SummarizerEditor via TaskEditorHost for Summarizer type
-            return splitWithTab(prev, rootTabsetId, 'bottom', {
-              id: tabId,
-              title: d.label || d.name || 'Summarizer',
-              type: 'taskEditor', // ✅ Usa TaskEditorHost che aprirà SummarizerEditor
-              task: taskMeta, // ✅ Passa TaskMeta con TaskType enum
-              headerColor: '#06b6d4', // Cyan color for Summarizer
-              toolbarButtons: []
-            } as DockTabTaskEditor);
-          } else if (editorKind === 'negotiation') {
-            // ✅ Open NegotiationEditor via TaskEditorHost for Negotiation type
-            return splitWithTab(prev, rootTabsetId, 'bottom', {
-              id: tabId,
-              title: d.label || d.name || 'Negotiation',
-              type: 'taskEditor', // ✅ Usa TaskEditorHost che aprirà NegotiationEditor
-              task: taskMeta, // ✅ Passa TaskMeta con TaskType enum
-              headerColor: '#6366f1', // Indigo color for Negotiation
-              toolbarButtons: []
-            } as DockTabTaskEditor);
-          } else {
-            // For other types, don't open editor if not supported
-            return prev;
-          }
+          // Start async operation
+          editorCoordinator.openTaskEditor(prev, d)
+            .then(result => setDockTree(result))
+            .catch(err => console.error('[TaskEditor] Error in coordinator', err));
+          // Return current state immediately (async update will happen via setDockTree in then)
+          return prev;
         });
       } catch (err) {
         console.error('[TaskEditor] Failed to open', err);
       }
     };
-    document.addEventListener('taskEditor:open', h as any); // ✅ RINOMINATO: actEditor:open → taskEditor:open
-
-    // ✅ Old 'taskTreeWizard:open' event listener removed
-    // The new wizard is integrated directly in ResponseEditor via 'taskEditor:open' event
-    // The new TaskBuilderAIWizard is opened through ResponseEditor when needsTaskBuilder flag is set
-    return () => {
-      document.removeEventListener('taskEditor:open', h as any);
-    };
-  }, [currentPid, setDockTree, taskEditorCtx]);
+    document.addEventListener('taskEditor:open', h as any);
+    return () => document.removeEventListener('taskEditor:open', h as any);
+  }, [editorCoordinator]);
 
   // Note: nodes/edges are read directly from window.__flowNodes by DDEBubbleChat in flow mode
   // No local state needed to avoid flickering and synchronization issues
@@ -990,128 +722,25 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   // Open ConditionEditor as docking tab
   React.useEffect(() => {
-    // Helper: build static variables from all Agent Tasks' TaskTree structure
-    const buildStaticVars = (): Record<string, any> => {
-      const vars: Record<string, any> = {};
-      const data = projectData as any;
-      try {
-        const categories: any[] = (data?.taskTemplates || []) as any[];
-        for (const cat of categories) {
-          const items: any[] = (cat?.items || []) as any[];
-          for (const it of items) {
-            const taskName: string = String(it?.name || it?.label || '').trim(); // ✅ RINOMINATO: actName → taskName
-            if (!taskName) continue;
-            const taskTree: any = it?.ddt || it?.taskTree; // ✅ Support both old 'ddt' and new 'taskTree' property names
-            if (!taskTree) continue;
-            // ✅ Use migration helper for consistent fallback handling
-            const mains: any[] = getNodesWithFallback(taskTree, 'AppContent.saveTaskToRepository');
-            for (const m of (mains || [])) {
-              const mainLabel: string = String(m?.labelKey || m?.label || m?.name || 'Data').trim();
-              const mainKey = `${taskName}.${mainLabel}`; // ✅ RINOMINATO: actName → taskName
-              vars[mainKey] = vars[mainKey] ?? '';
-              const subsArr: any[] = Array.isArray(m?.subData) ? m.subData : (Array.isArray(m?.subs) ? m.subs : []);
-              for (const s of (subsArr || [])) {
-                const subLabel: string = String(s?.labelKey || s?.label || s?.name || 'Field').trim();
-                const subKey = `${taskName}.${mainLabel}.${subLabel}`; // ✅ RINOMINATO: actName → taskName
-                vars[subKey] = vars[subKey] ?? '';
-              }
-            }
-          }
-        }
-      } catch { }
-      return vars;
-    };
-
-    // Helper: build a hierarchical tree with icons/colors for Intellisense
-    const buildVarsTree = (): any[] => {
-      const tasks: any[] = []; // ✅ RINOMINATO: acts → tasks
-      const data = projectData as any;
-      try {
-        const categories: any[] = (data?.taskTemplates || []) as any[];
-        const taskColor = (SIDEBAR_TYPE_COLORS as any)?.taskTemplates?.color || '#34d399'; // ✅ RINOMINATO: actColor → taskColor
-        const iconKey = (SIDEBAR_TYPE_ICONS as any)?.taskTemplates;
-        const Icon = (SIDEBAR_ICON_COMPONENTS as any)?.[iconKey];
-        for (const cat of categories) {
-          const items: any[] = (cat?.items || []) as any[];
-          for (const it of items) {
-            const taskName: string = String(it?.name || it?.label || '').trim(); // ✅ RINOMINATO: actName → taskName
-            if (!taskName) continue;
-            const taskTree: any = it?.ddt || it?.taskTree; // ✅ Support both old 'ddt' and new 'taskTree' property names
-            if (!taskTree) continue;
-            // ✅ Phase 4A: Use only nodes (no fallback to data)
-            const mains: any[] = Array.isArray(taskTree?.nodes)
-              ? taskTree.nodes
-              : (Array.isArray(taskTree?.mains) ? taskTree.mains : []);
-            const mainsOut: any[] = [];
-            for (const m of (mains || [])) {
-              const mainLabel: string = String(m?.labelKey || m?.label || m?.name || 'Data').trim();
-              const subsArr: any[] = Array.isArray(m?.subData) ? m.subData : (Array.isArray(m?.subs) ? m.subs : []);
-              const subsOut = (subsArr || []).map((s: any) => ({ label: String(s?.labelKey || s?.label || s?.name || 'Field').trim(), kind: String(s?.kind || s?.type || '') }));
-              mainsOut.push({ label: mainLabel, kind: String(m?.kind || m?.type || ''), subs: subsOut });
-            }
-            tasks.push({ label: taskName, color: taskColor, Icon, mains: mainsOut }); // ✅ RINOMINATO: acts → tasks, actName → taskName, actColor → taskColor
-          }
-        }
-      } catch { }
-      return tasks; // ✅ RINOMINATO: acts → tasks
-    };
-
-    // ✅ NEW: Build flowchart variables
-    const buildFlowchartVars = async (): Promise<Record<string, any>> => {
-      const vars: Record<string, any> = {};
-      try {
-        const projectId = pdUpdate?.getCurrentProjectId();
-        if (projectId) {
-          await flowchartVariablesService.init(projectId);
-          const varNames = flowchartVariablesService.getAllReadableNames();
-          varNames.forEach(name => {
-            vars[name] = ''; // Empty value, just for autocomplete
-          });
-        }
-      } catch { }
-      return vars;
-    };
-
     const handler = async (e: any) => {
       const d = (e && e.detail) || {};
-      const provided = d.variables || {};
-      const hasProvided = provided && Object.keys(provided).length > 0;
-      const staticVars = buildStaticVars();
-      const flowchartVars = await buildFlowchartVars(); // ✅ NEW
-      const varsTree = buildVarsTree();
-
-      // Merge static vars with flowchart vars
-      const allVars = { ...staticVars, ...flowchartVars }; // ✅ NEW
-
-      const finalVars = hasProvided ? provided : allVars;
-      const conditionLabel = d.label || d.name || 'Condition';
-      const conditionScript = d.script || '';
-
-      // ✅ REMOVED: Scroll to node - mantiene viewport invariato come ResponseEditor
-      // Il ConditionEditor deve comportarsi come ResponseEditor: non spostare il viewport
-
-      // Open as docking tab instead of fixed panel
-      const tabId = `cond_${d.nodeId || Date.now()}`;
-      // ✅ REFACTOR: Use extracted helper function
-      setDockTree(prev => openBottomDockedTab(prev, {
-        tabId,
-        newTab: {
-          id: tabId,
-          title: conditionLabel,
-          type: 'conditionEditor',
-          variables: finalVars,
-          script: conditionScript,
-          variablesTree: (d as any).variablesTree || varsTree,
-          label: conditionLabel
-        }
-      }));
+      try {
+        // ✅ REFACTOR: Use EditorCoordinator (async)
+        setDockTree(prev => {
+          // Start async operation
+          editorCoordinator.openConditionEditor(prev, d)
+            .then(result => setDockTree(result))
+            .catch(err => console.error('[ConditionEditor] Error in coordinator', err));
+          // Return current state immediately (async update will happen via setDockTree in then)
+          return prev;
+        });
+      } catch (err) {
+        console.error('[ConditionEditor] Failed to open', err);
+      }
     };
     document.addEventListener('conditionEditor:open', handler as any);
-
-    return () => {
-      document.removeEventListener('conditionEditor:open', handler as any);
-    };
-  }, [projectData, pdUpdate]);
+    return () => document.removeEventListener('conditionEditor:open', handler as any);
+  }, [editorCoordinator]);
 
   // Stato per gestione progetti
   const [recentProjects, setRecentProjects] = useState<any[]>([]);
