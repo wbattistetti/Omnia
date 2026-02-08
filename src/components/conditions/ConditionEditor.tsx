@@ -34,9 +34,9 @@ interface Props {
   onRename?: (next: string) => void;
 }
 
-const listKeys = (vars: VarsMap): string[] => {
-  try { return Object.keys(vars || {}).sort(); } catch { return []; }
-};
+// ✅ REFACTOR: Use domain function
+import { listKeys, flattenVariablesTree, filterVariablesTree, findDuplicateGroups, extractUsedVariables, filterVariablesForTester } from './domain/variablesDomain';
+import { normalizeCode, parseTemplate, synthesizeDateVariables, fixDateAliases } from './domain/scriptDomain';
 
 // No local template; EditorPanel injects the scaffold
 
@@ -183,9 +183,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
   // Use global AI provider from context
   const { provider } = useAIProvider();
 
-  const normalizeCode = React.useCallback((txt: string) => {
-    try { return String(txt || '').replace(/\r/g, '').trim(); } catch { return ''; }
-  }, []);
+  // ✅ REFACTOR: Use domain function (no need for useCallback, it's a pure function)
 
   // Reset transient UI state whenever the panel is opened
   React.useEffect(() => {
@@ -260,21 +258,9 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     return varsKeys.filter(k => k.toLowerCase().includes(f));
   }, [varsKeys, varsMenuFilter]);
   // const flatTreeTokens = React.useMemo(() => [], [variablesTree]);
+  // ✅ REFACTOR: Use domain function
   const filteredTreeActs = React.useMemo(() => {
-    const q = (varsMenuFilter || '').trim().toLowerCase();
-    if (!q) return variablesTree || [];
-    const match = (label?: string) => String(label || '').toLowerCase().includes(q);
-    const res: VarsTreeAct[] = [];
-    (variablesTree || []).forEach(act => {
-      const mains: VarsTreeMain[] = [];
-      (act.mains || []).forEach(m => {
-        const subs: VarsTreeSub[] = [];
-        (m.subs || []).forEach(s => { if (match(`${act.label}.${m.label}.${s.label}`) || match(s.label)) subs.push(s); });
-        if (subs.length || match(`${act.label}.${m.label}`) || match(m.label)) mains.push({ ...m, subs });
-      });
-      if (mains.length || match(act.label)) res.push({ ...act, mains });
-    });
-    return res;
+    return filterVariablesTree(variablesTree || [], varsMenuFilter);
   }, [variablesTree, varsMenuFilter]);
 
   // Navigation entries (include act rows so Enter toggles expansion)
@@ -397,91 +383,17 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
 
   // legacy filtered list removed (hierarchical tree used instead)
 
-  // Flatten variables for AI prompt
+  // ✅ REFACTOR: Use domain function
   const variablesFlat = React.useMemo(() => {
     if (variablesTree && variablesTree.length) {
-      const out: string[] = [];
-      (variablesTree || []).forEach(a => {
-        (a.mains || []).forEach(m => {
-          out.push(`${a.label}.${m.label}`);
-          (m.subs || []).forEach(s => out.push(`${a.label}.${m.label}.${s.label}`));
-        });
-      });
-      return out;
+      return flattenVariablesTree(variablesTree);
     }
     return Object.keys(variables || {});
   }, [variablesTree, variables]);
 
-  // Variables actually referenced inside the script (robust multi-source detection)
+  // ✅ REFACTOR: Use domain function
   const usedVarsInScript = React.useMemo(() => {
-    try {
-      const source = String(script || '');
-
-      // 1) CONDITION.inputs (priority — if present, we will return ONLY these later)
-      const inputs: string[] = [];
-      try {
-        const inputsBlockMatch = source.match(/CONDITION[\s\S]*?inputs\s*:\s*\[([\s\S]*?)\]/m);
-        if (inputsBlockMatch) {
-          const block = inputsBlockMatch[1] || '';
-          const singleQuoted = Array.from(block.matchAll(/'([^']+)'/g)).map(m => m[1]);
-          const doubleQuoted = Array.from(block.matchAll(/"([^"]+)"/g)).map(m => m[1]);
-          const backticked = Array.from(block.matchAll(/`([^`]+)`/g)).map(m => m[1]);
-          const ordered: string[] = [];
-          const once = new Set<string>();
-          [...singleQuoted, ...doubleQuoted, ...backticked].forEach(k => { if (!once.has(k)) { once.add(k); ordered.push(k); } });
-          inputs.push(...ordered);
-        }
-      } catch {}
-
-      // 2) Other reads — union of explicit patterns
-      const reads = new Set<string>();
-
-      // 2a) getVar(ctx, "...")
-      try {
-        const re = /getVar\s*\(\s*ctx\s*,\s*(["'`])([^"'`]+)\1\s*\)/g;
-        let mm: RegExpExecArray | null;
-        while ((mm = re.exec(source)) !== null) reads.add(mm[2]);
-      } catch {}
-
-      // 2b) ctx["..."] direct
-      try {
-        const re = /ctx\s*\[\s*(["'`])([^"'`]+)\1\s*\]/g;
-        let mm: RegExpExecArray | null;
-        while ((mm = re.exec(source)) !== null) reads.add(mm[2]);
-      } catch {}
-
-      // 2c) const k = "..." ; then ctx[k] (1-step constant propagation)
-      try {
-        const constMap = new Map<string, string>();
-        const constDeclRe = /const\s+([A-Za-z_$][\w$]*)\s*=\s*(["'`])([^"'`]+)\2\s*;?/g;
-        let mm: RegExpExecArray | null;
-        while ((mm = constDeclRe.exec(source)) !== null) {
-          constMap.set(mm[1], mm[3]);
-        }
-        if (constMap.size > 0) {
-          const ctxIdRe = /ctx\s*\[\s*([A-Za-z_$][\w$]*)\s*\]/g;
-          let m2: RegExpExecArray | null;
-          while ((m2 = ctxIdRe.exec(source)) !== null) {
-            const idName = m2[1];
-            const value = constMap.get(idName);
-            if (value) reads.add(value);
-          }
-        }
-      } catch {}
-
-      // 2d) legacy vars["..."]
-      try {
-        const re = /vars\s*\[\s*(["'`])([^"'`]+)\1\s*\]/g;
-        let mm: RegExpExecArray | null;
-        while ((mm = re.exec(source)) !== null) reads.add(mm[2]);
-      } catch {}
-
-      // Return priority set: CONDITION.inputs if present, else union reads
-      if (inputs.length > 0) return inputs;
-      return Array.from(reads);
-    } catch {
-      return [];
-    }
+    return extractUsedVariables(script);
   }, [script]);
 
   const hasVarsInScript = React.useMemo(() => (usedVarsInScript.length > 0), [usedVarsInScript]);
@@ -495,31 +407,15 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
     return Array.from(set);
   }, [hasCreated, variablesUsedInScript, selectedVars]);
 
-  // Variables to show inside the tester: strictly and only those actually read by the code
-  // Deduplicate case-insensitively to avoid duplicates with different casing
+  // ✅ REFACTOR: Use domain function
   const variablesForTester = React.useMemo(() => {
-    const usedArr = (variablesUsedInScript || []).filter(Boolean);
-    const seen = new Set<string>();
-    const out: string[] = [];
-    usedArr.forEach((k) => {
-      const lc = String(k).toLowerCase();
-      if (!seen.has(lc)) { seen.add(lc); out.push(k); }
-    });
-    // If multiple remain but the script logically handles a single input, prefer the first
-    return out.length > 1 ? [out[0]] : out;
+    return filterVariablesForTester(variablesUsedInScript || []);
   }, [variablesUsedInScript]);
 
-  // Duplicate-variable preference (choose among same trailing label)
+  // ✅ REFACTOR: Use domain function
   const [preferredVarByTail, setPreferredVarByTail] = React.useState<Record<string, string>>({});
   const duplicateGroups = React.useMemo(() => {
-    const map: Record<string, string[]> = {};
-    variablesFlat.forEach(full => {
-      const tail = full.split('.').slice(-2).join('.') || full;
-      map[tail] = map[tail] ? [...map[tail], full] : [full];
-    });
-    const dups: Array<{ tail: string; options: string[] }> = [];
-    Object.keys(map).forEach(tail => { if ((map[tail] || []).length > 1) dups.push({ tail, options: map[tail] }); });
-    return dups;
+    return findDuplicateGroups(variablesFlat);
   }, [variablesFlat]);
   const variablesFlatWithPreference = React.useMemo(() => {
     if (duplicateGroups.length === 0) return variablesFlat;
@@ -647,17 +543,7 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
       setAiQuestion('Nessuna variabile disponibile: controlla la struttura DDT o le variabili di progetto.');
       return;
     }
-    // Parse simplified Italian template with comments and quoted label
-    const parseTemplate = (txt: string): { label?: string; when?: string; vars?: string[] } => {
-      const src = String(txt || '');
-      // label: first quoted line after the first comment
-      const mLabel = src.match(/^[ \t]*\/\/\s*Puoi cambiare[^\n]*\n[ \t]*"([^"]*)"/m);
-      const label = mLabel ? mLabel[1].trim() : undefined;
-      // when: text between the second and third comment blocks
-      const mWhen = src.match(/\/\/\s*Descrivi[^\n]*\n([\s\S]*?)\n\/\/\s*Indica\s*o\s*descrivi/i);
-      const when = mWhen ? mWhen[1].trim() : undefined;
-      return { label, when, vars: undefined };
-    };
+    // ✅ REFACTOR: Use domain function
     const parsed = parseTemplate(nlText);
     if (!parsed.when) {
       // If user wrote any non-empty line after the second comment, still proceed using entire editor content as pseudo
@@ -734,21 +620,8 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
       setAiQuestion('');
       if (!titleValue || titleValue === 'Condition') setTitleValue(aiLabel || 'Nuova condizione');
       let nextScript = aiScript || 'try { return false; } catch { return false; }';
-      // Post-fix common alias mistakes (e.g., Act.DOB) by rewriting to the selected Date key when unique
-      try {
-        const all = varsForAI || [];
-        const dateCandidates = all.filter(k => /date of birth/i.test(k) || /\.Date$/.test(k));
-        if (dateCandidates.length === 1) {
-          const target = dateCandidates[0].replace(/"/g, ''); // guard
-          const patterns = [
-            /vars\[\s*(["'`])Act\.?DOB\1\s*\]/gi,
-            /vars\[\s*(["'`])DateOfBirth\1\s*\]/gi,
-            /vars\[\s*(["'`])DOB\1\s*\]/gi,
-            /vars\[\s*(["'`])Act\.?DateOfBirth\1\s*\]/gi
-          ];
-          patterns.forEach(re => { nextScript = nextScript.replace(re, `vars["${target}"]`); });
-        }
-      } catch {}
+      // ✅ REFACTOR: Use domain function
+      nextScript = fixDateAliases(nextScript, varsForAI || []);
       setScript(nextScript);
       // Ensure CodeEditor receives the new script immediately even if Diff is empty
       // by toggling showCode on and syncing initialCode via prop (handled by CodeEditor effect)
@@ -770,27 +643,9 @@ export default function ConditionEditor({ open, onClose, variables, initialScrip
       try {
         const cases = await suggestConditionCases(nlText, varsForAI);
         const rows: CaseRow[] = [];
-        const synth = (varsIn: Record<string, any> | undefined): Record<string, any> | undefined => {
-          if (!varsIn) return varsIn;
-          const out = { ...varsIn };
-          // If script uses a composite date like "...Date" but AI suggested Year/Month/Day, synth ISO date
-          variablesUsedInScript.forEach((k) => {
-            if (out[k]) return;
-            const base = k.endsWith('.Date') ? k.slice(0, -('.Date'.length)) : '';
-            if (!base) return;
-            const y = out[`${base}.Date.Year`] ?? out[`${base}.Year`];
-            const m = out[`${base}.Date.Month`] ?? out[`${base}.Month`];
-            const d = out[`${base}.Date.Day`] ?? out[`${base}.Day`];
-            if (y != null && m != null && d != null) {
-              const mm = String(m).padStart(2, '0');
-              const dd = String(d).padStart(2, '0');
-              out[k] = `${y}-${mm}-${dd}`;
-            }
-          });
-          return out;
-        };
-        if (cases.trueCase) rows.push({ id: String(Math.random()), label: 'true', vars: synth(cases.trueCase) || cases.trueCase });
-        if (cases.falseCase) rows.push({ id: String(Math.random()), label: 'false', vars: synth(cases.falseCase) || cases.falseCase });
+        // ✅ REFACTOR: Use domain function
+        if (cases.trueCase) rows.push({ id: String(Math.random()), label: 'true', vars: synthesizeDateVariables(cases.trueCase, variablesUsedInScript) || cases.trueCase });
+        if (cases.falseCase) rows.push({ id: String(Math.random()), label: 'false', vars: synthesizeDateVariables(cases.falseCase, variablesUsedInScript) || cases.falseCase });
         if (rows.length) setTestRows(rows);
         setTesterHints({ hintTrue: (cases as any).hintTrue, hintFalse: (cases as any).hintFalse, labelTrue: (cases as any).labelTrue, labelFalse: (cases as any).labelFalse });
       } catch {}
