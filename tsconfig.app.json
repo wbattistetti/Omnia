@@ -30,6 +30,7 @@
       "@hooks/*": ["hooks/*"],
       "@dock/*": ["dock/*"],
       "@components/*": ["components/*"],
+      "@ui/*": ["ui/*"],
       "@features/*": ["../features/*"],
       "@config/*": ["../config/*"],
       "@taskEditor/*": ["components/TaskEditor/*"],
