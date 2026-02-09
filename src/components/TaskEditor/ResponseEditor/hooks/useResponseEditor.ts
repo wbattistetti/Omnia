@@ -29,6 +29,10 @@ export interface UseResponseEditorParams {
   hideHeader?: boolean;
   onToolbarUpdate?: (toolbar: any[], color: string) => void;
   registerOnClose?: (fn: () => Promise<boolean>) => void;
+  // ✅ NEW: Generalization params
+  shouldBeGeneral?: boolean;
+  saveDecisionMade?: boolean;
+  onOpenSaveDialog?: () => void;
 }
 
 export interface UseResponseEditorResult {
@@ -164,6 +168,10 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     currentProjectId,
     tabId,
     setDockTree,
+    // ✅ NEW: Pass generalization params to core
+    shouldBeGeneral: params.shouldBeGeneral,
+    saveDecisionMade: params.saveDecisionMade,
+    onOpenSaveDialog: params.onOpenSaveDialog,
   });
 
   // Handlers

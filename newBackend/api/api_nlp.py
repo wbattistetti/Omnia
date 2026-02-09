@@ -1103,14 +1103,18 @@ async def generate_structure(body: dict = Body(...)):
             return {"success": False, "error": error}
 
         # Parse and validate
-        structure, errors = parse_and_validate_structure(ai_response)
+        structure, errors, generalization_info = parse_and_validate_structure(ai_response)
 
         if errors:
             return {"success": False, "error": "; ".join(errors), "structure": []}
 
         return {
             "success": True,
-            "structure": structure
+            "structure": structure,
+            "shouldBeGeneral": generalization_info.get("shouldBeGeneral", False),
+            "generalizedLabel": generalization_info.get("generalizedLabel"),
+            "generalizationReason": generalization_info.get("generalizationReason"),
+            "generalizedMessages": generalization_info.get("generalizedMessages")
         }
 
     except Exception as e:

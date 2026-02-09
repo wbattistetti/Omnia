@@ -266,11 +266,15 @@ export function useResponseEditorToolbar({
     // ✅ NEW: Generalization button (only if shouldBeGeneral and decision not made)
     ...(shouldBeGeneral && !saveDecisionMade && onOpenSaveDialog ? [{
       icon: <Star size={16} />,
-      label: "Where do you want to save this task?",
-      onClick: onOpenSaveDialog,
-      title: "Template with general value - click to decide",
+      label: "Vuoi salvare in libreria?",
+      onClick: () => {
+        console.log('[ResponseEditorToolbar] 🔔 Button clicked, calling onOpenSaveDialog');
+        onOpenSaveDialog();
+      },
+      title: "Template con valenza generale - clicca per decidere",
       primary: true,  // Highlight if not decided
-      active: false
+      active: false,
+      buttonId: "save-to-library" // ✅ For positioning popover
     }] : []),
   ];
 }

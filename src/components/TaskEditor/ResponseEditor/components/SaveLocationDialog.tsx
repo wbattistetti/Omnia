@@ -1,7 +1,7 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import React from 'react';
+import React, { useState, useLayoutEffect, useRef } from 'react';
 
 interface SaveLocationDialogProps {
   isOpen: boolean;
@@ -9,81 +9,207 @@ interface SaveLocationDialogProps {
   onSaveToFactory: () => void;
   onSaveToProject: () => void;
   onCancel: () => void;
+  originalLabel: string;
+  generalizedLabel: string | null;
+  generalizationReason: string | null;
+  generalizedMessages: string[] | null;
+  anchorRef?: React.RefObject<HTMLElement> | null;
 }
 
 /**
- * Dialog component for choosing where to save a generalizable template
+ * Popover component for choosing where to save a generalizable template
  *
  * Shows when shouldBeGeneral === true and user hasn't made a decision yet
+ * Positioned as a popover below the "Vuoi salvare in libreria?" button
  */
 export function SaveLocationDialog({
   isOpen,
   onClose,
   onSaveToFactory,
   onSaveToProject,
-  onCancel
+  onCancel,
+  originalLabel,
+  generalizedLabel,
+  generalizationReason,
+  generalizedMessages,
+  anchorRef,
+  toolbarButtons // ✅ 2. Aggiunto per dipendenza del layout effect
 }: SaveLocationDialogProps) {
-  if (!isOpen) return null;
+  const [showMessages, setShowMessages] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+
+  // Calculate position based on anchor element
+  // ✅ 1. SOSTITUITO useEffect con useLayoutEffect per garantire che il DOM sia montato
+  useLayoutEffect(() => {
+    if (!isOpen) {
+      setPosition(null);
+      return;
+    }
+
+    const updatePosition = () => {
+      // Try to get button from anchorRef first
+      let anchorElement: HTMLElement | null = null;
+
+      if (anchorRef?.current) {
+        anchorElement = anchorRef.current;
+      } else {
+        // Fallback: find button by data attribute (should not be needed, but keep as safety)
+        anchorElement = document.querySelector('[data-button-id="save-to-library"]') as HTMLElement;
+      }
+
+      if (!anchorElement) {
+        setPosition(null);
+        return;
+      }
+
+      const anchorRect = anchorElement.getBoundingClientRect();
+      const popoverWidth = 400;
+      const popoverHeight = 300;
+      const spacing = 8;
+
+      // Position below the button, aligned to the right edge
+      let top = anchorRect.bottom + spacing;
+      let left = anchorRect.right - popoverWidth;
+
+      // Ensure popover stays within viewport
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      // Adjust horizontally if needed
+      if (left < 10) {
+        left = 10;
+      } else if (left + popoverWidth > viewportWidth - 10) {
+        left = viewportWidth - popoverWidth - 10;
+      }
+
+      // Adjust vertically if not enough space below
+      if (top + popoverHeight > viewportHeight - 10) {
+        top = anchorRect.top - popoverHeight - spacing;
+        if (top < 10) {
+          top = 10;
+        }
+      }
+
+      setPosition({ top, left });
+    };
+
+    // ✅ 3. RIMOSSI tutti i setTimeout - chiamata diretta
+    updatePosition();
+
+    // Update on scroll/resize
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [isOpen, anchorRef, toolbarButtons]); // ✅ 2. Aggiunto toolbarButtons come dipendenza per ricalcolare quando la toolbar viene sincronizzata nel dock
+
+  // ✅ REMOVED: Debug log che causa loop infinito
+
+  if (!isOpen) {
+    return null;
+  }
+
+  // ✅ NON mostriamo il popover se la posizione non è pronta (il pulsante deve essere trovato)
+  if (!position) {
+    return null; // ✅ Non mostriamo nulla finché il pulsante non viene trovato
+  }
+
+  const handleShowMessagesClick = () => {
+    setShowMessages(!showMessages);
+  };
 
   return (
-    <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-      onClick={onClose}
-    >
+    <>
+      {/* Backdrop - only for click outside detection, not fullscreen */}
       <div
-        className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl"
+        className="fixed inset-0 z-40"
+        onClick={(e) => {
+          // Close on backdrop click, but allow clicks inside popover
+          if (e.target === e.currentTarget) {
+            onCancel();
+          }
+        }}
+        style={{ pointerEvents: isOpen ? 'auto' : 'none' }}
+      />
+
+      {/* Popover positioned below button */}
+      <div
+        ref={popoverRef}
+        className="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200"
+        style={{
+          top: `${position.top}px`,
+          left: `${position.left}px`,
+          width: '400px',
+          maxHeight: '500px',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-          <span className="text-2xl">⭐</span>
-          <span>Where do you want to save this task?</span>
-        </h2>
+        <div className="p-4 flex-1 overflow-y-auto">
+          {/* ✅ REMOVED: Titolo ridondante "Vuoi salvare in libreria?" */}
 
-        <p className="text-sm text-gray-700 mb-4">
-          This task has been recognized as potentially general.
-          This means that the logic, messages, and rules that compose it do not depend on a specific context, but represent a universal concept.
-        </p>
+          <p className="text-sm text-gray-700 mb-2">
+            "<span className="font-semibold">{originalLabel}</span>" può essere generalizzato per contesti diversi.
+            <br />
+            Consiglio di salvarla nella libreria generale.
+            <br />
+            <span
+              onClick={handleShowMessagesClick}
+              className="text-blue-600 hover:text-blue-800 cursor-pointer underline"
+            >
+              Vuoi vedere come generalizzerei i messaggi? (puoi ovviamente modificarli)
+            </span>
+          </p>
 
-        <p className="text-sm text-gray-700 mb-6">
-          If you choose to save it as a Factory Template:
-        </p>
+          {/* ✅ Lista messaggi generalizzati - appare solo dopo click */}
+          {showMessages && generalizedMessages && generalizedMessages.length > 0 && (
+            <div className="mt-4 p-3 bg-gray-50 rounded border border-gray-200 max-h-48 overflow-y-auto">
+              <p className="text-xs font-semibold text-gray-700 mb-2">Messaggi generalizzati:</p>
+              <ul className="list-disc list-inside space-y-1">
+                {generalizedMessages.map((msg, idx) => (
+                  <li key={idx} className="text-xs text-gray-600">
+                    {msg}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
 
-        <ul className="list-disc list-inside text-sm text-gray-700 mb-6 space-y-1 ml-4">
-          <li>Generalized messages will be saved</li>
-          <li>The template will become reusable in other projects</li>
-          <li>It can be automatically suggested by the Wizard in the future</li>
-        </ul>
-
-        <div className="flex gap-2 justify-end">
-          <button
-            onClick={() => {
-              onSaveToFactory();
-              onClose();
-            }}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-          >
-            Save to Factory DB
-          </button>
+        <div className="flex gap-2 justify-end p-4 border-t border-gray-200">
           <button
             onClick={() => {
               onSaveToProject();
               onClose();
             }}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors text-sm"
           >
-            Save only to project
+            Salva nel progetto
+          </button>
+          <button
+            onClick={() => {
+              onSaveToFactory();
+              onClose();
+            }}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm"
+          >
+            Salva nella libreria generale
           </button>
           <button
             onClick={() => {
               onCancel();
-              onClose();
             }}
-            className="px-4 py-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors"
+            className="px-4 py-2 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors text-sm"
           >
-            Cancel
+            Annulla
           </button>
         </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -375,6 +375,10 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     setNeedsTaskContextualization,
     setNeedsTaskBuilder,
     setWizardMode,
+    // ✅ NEW: Generalization params (passed from useResponseEditor)
+    shouldBeGeneral: params.shouldBeGeneral,
+    saveDecisionMade: params.saveDecisionMade,
+    onOpenSaveDialog: params.onOpenSaveDialog,
   });
   const {
     replaceSelectedTaskTree: replaceSelectedTaskTreeFromInit,

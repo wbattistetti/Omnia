@@ -20,8 +20,8 @@ import { GeneralizabilityBanner } from '@responseEditor/components/Generalizabil
 import { ContractUpdateDialog } from '@responseEditor/ContractUpdateDialog';
 import { SaveLocationDialog } from '@responseEditor/components/SaveLocationDialog';
 import { MainViewMode } from '@responseEditor/types/mainViewMode';
-import { Star } from 'lucide-react';
-import { useWizardIntegration } from '@responseEditor/hooks/useWizardIntegration';
+// ✅ REMOVED: useWizardIntegration - ora viene chiamato in ResponseEditorInner
+// ✅ REMOVED: Star import - non più necessario
 import { convertWizardTaskTreeToMainList } from '@responseEditor/utils/convertWizardTaskTreeToMainList';
 import { WizardMode } from '../../../../../TaskBuilderAIWizard/types/WizardMode';
 import type { TaskTree, TaskMeta } from '@types/taskTypes';
@@ -148,6 +148,22 @@ export interface ResponseEditorLayoutProps {
   onTaskContextualizationComplete?: (taskTree: TaskTree) => void;
   onTaskBuilderComplete?: (taskTree: TaskTree, messages?: any) => void;
   onTaskBuilderCancel?: () => void;
+
+  // ✅ NEW: Toolbar update callback (for hideHeader === true mode)
+  onToolbarUpdate?: (toolbar: any[], color: string) => void;
+
+  // ✅ NEW: Wizard generalization props (calculated in ResponseEditorInner)
+  shouldBeGeneral?: boolean;
+  generalizedLabel?: string | null;
+  generalizedMessages?: string[] | null;
+  generalizationReason?: string | null;
+  saveDecisionMade?: boolean;
+  onOpenSaveDialog?: () => void;
+  showSaveDialog?: boolean;
+  setShowSaveDialog?: (show: boolean) => void;
+  setSaveDecisionMade?: (made: boolean) => void;
+  wizardIntegration?: any; // For wizardProps
+  originalLabel?: string;
 }
 
 /**
@@ -231,51 +247,68 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     onTaskContextualizationComplete,
     onTaskBuilderComplete,
     onTaskBuilderCancel,
+    onToolbarUpdate,
+    // ✅ NEW: Wizard generalization props
+    shouldBeGeneral: shouldBeGeneralProp,
+    generalizedLabel: generalizedLabelProp,
+    generalizedMessages: generalizedMessagesProp,
+    generalizationReason: generalizationReasonProp,
+    saveDecisionMade: saveDecisionMadeProp,
+    onOpenSaveDialog: onOpenSaveDialogProp,
+    showSaveDialog: showSaveDialogProp,
+    setShowSaveDialog: setShowSaveDialogProp,
+    setSaveDecisionMade: setSaveDecisionMadeProp,
+    wizardIntegration: wizardIntegrationProp,
+    originalLabel: originalLabelProp,
   } = props;
 
-  // ✅ NEW: Usa hook per integrazione wizard
-  // ✅ IMPORTANTE: Hook deve essere sempre chiamato (regole React), ma usato solo quando taskWizardMode === 'full'
-  // ✅ NEW: Passa taskLabel, taskId, rowId, projectId, locale per avvio automatico e sincronizzazione
-  const taskLabelForWizard = taskWizardMode === 'full' ? taskLabel : undefined;
-  const taskIdForWizard = taskWizardMode === 'full' && taskMeta ? taskMeta.id : undefined;
-  const rowIdForWizard = taskWizardMode === 'full' && taskMeta ? taskMeta.id : undefined; // ✅ rowId = taskId (regola architetturale)
-  const projectIdForWizard = taskWizardMode === 'full' ? currentProjectId || undefined : undefined;
-  const localeForWizard = 'it'; // TODO: Get from project settings or context
+  // ✅ REMOVED: useWizardIntegration - ora viene chiamato in ResponseEditorInner
+  // ✅ Usa i valori ricevuti come props invece di calcolarli
+  const wizardIntegration = wizardIntegrationProp;
+  const shouldBeGeneral = shouldBeGeneralProp ?? false;
+  const generalizedLabel = generalizedLabelProp ?? null;
+  const generalizedMessages = generalizedMessagesProp ?? null;
+  const generalizationReasonEffective = generalizationReasonProp ?? generalizationReason ?? null;
+  const originalLabel = originalLabelProp ?? (taskLabel || 'Task');
 
-  console.log('[ResponseEditorLayout] 🔍 useWizardIntegration chiamato', {
-    taskWizardMode,
-    taskLabel,
-    taskLabelForWizard,
-    taskId: taskIdForWizard,
-    rowId: rowIdForWizard,
-    projectId: projectIdForWizard,
-    willCallHook: taskWizardMode === 'full',
-  });
-  const wizardIntegrationRaw = useWizardIntegration(
-    taskLabelForWizard,
-    taskIdForWizard,
-    rowIdForWizard,
-    projectIdForWizard,
-    localeForWizard,
-    onTaskBuilderComplete
-  );
-  const wizardIntegration = taskWizardMode === 'full' ? wizardIntegrationRaw : null;
-
-  // ✅ NEW: State for save location dialog
-  const [showSaveDialog, setShowSaveDialog] = React.useState(false);
-  const [saveDecisionMade, setSaveDecisionMade] = React.useState(false);
+  // ✅ State for save location dialog (usa props se disponibili, altrimenti state locale)
+  const [localShowSaveDialog, setLocalShowSaveDialog] = React.useState(false);
+  const [localSaveDecisionMade, setLocalSaveDecisionMade] = React.useState(false);
   const [saveDecision, setSaveDecision] = React.useState<'factory' | 'project' | null>(null);
 
-  // ✅ NEW: Get shouldBeGeneral from wizardIntegration
-  const shouldBeGeneral = wizardIntegration?.shouldBeGeneral || false;
+  const showSaveDialog = showSaveDialogProp !== undefined ? showSaveDialogProp : localShowSaveDialog;
+  const setShowSaveDialog = setShowSaveDialogProp || setLocalShowSaveDialog;
+  const saveDecisionMade = saveDecisionMadeProp !== undefined ? saveDecisionMadeProp : localSaveDecisionMade;
+  const setSaveDecisionMade = setSaveDecisionMadeProp || setLocalSaveDecisionMade;
 
-  // ✅ NEW: Auto-open dialog when wizard completes and shouldBeGeneral is true
-  React.useEffect(() => {
-    if (wizardIntegration?.wizardMode === WizardMode.COMPLETED && shouldBeGeneral && !saveDecisionMade) {
-      console.log('[ResponseEditorLayout] ⭐ Wizard completed with shouldBeGeneral=true, opening save dialog');
-      setShowSaveDialog(true);
+  // ✅ Wrapper per onOpenSaveDialog che apre il dialog
+  const handleOpenSaveDialog = React.useCallback(() => {
+    // Apri il dialog
+    setShowSaveDialog(true);
+
+    // Chiama anche il prop se presente
+    if (onOpenSaveDialogProp) {
+      onOpenSaveDialogProp();
     }
-  }, [wizardIntegration?.wizardMode, shouldBeGeneral, saveDecisionMade]);
+  }, [onOpenSaveDialogProp, setShowSaveDialog]);
+
+  // ✅ DEBUG: Log generalization state
+  React.useEffect(() => {
+    console.log('[ResponseEditorLayout] 🔍 Generalization state check', {
+      shouldBeGeneral,
+      saveDecisionMade,
+      taskWizardMode,
+      wizardMode: wizardIntegration?.wizardMode,
+      hasWizardIntegration: !!wizardIntegration,
+      wizardIntegrationShouldBeGeneral: wizardIntegration?.shouldBeGeneral,
+      generalizedLabel,
+      generalizedMessagesCount: generalizedMessages?.length || 0,
+      originalLabel,
+      generalizationReason: generalizationReasonEffective
+    });
+  }, [shouldBeGeneral, saveDecisionMade, taskWizardMode, wizardIntegration, generalizedLabel, generalizedMessages, originalLabel, generalizationReasonEffective]);
+
+  // ✅ REMOVED: Auto-open dialog - dialog opens only when user clicks button or tries to close
 
   // ✅ NEW: Handler to save to Factory
   const handleSaveToFactory = React.useCallback(async () => {
@@ -295,17 +328,36 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         return;
       }
 
+      // ✅ Use generalizedLabel for template name and label if available
+      const templatesToSave = wizardTemplates.map(t => {
+        if (generalizedLabel && wizardIntegration.dataSchema?.[0]?.id === (t.id || t._id)) {
+          // Root template: use generalizedLabel
+          return {
+            ...t,
+            name: generalizedLabel.toLowerCase().replace(/\s+/g, '_'),
+            label: generalizedLabel
+          };
+        }
+        return t;
+      });
+
       // Save templates to Factory DB
       const response = await fetch('/api/factory/dialogue-templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(wizardTemplates)
+        body: JSON.stringify(templatesToSave)
       });
 
       if (response.ok) {
         console.log('[ResponseEditorLayout] ✅ Templates saved to Factory', {
-          templatesCount: wizardTemplates.length
+          templatesCount: templatesToSave.length,
+          generalizedLabel
         });
+
+        // ✅ Reload Factory templates cache immediately
+        await DialogueTaskService.reloadFactoryTemplates();
+        console.log('[ResponseEditorLayout] ✅ Factory templates cache reloaded');
+
         setSaveDecision('factory');
         setSaveDecisionMade(true);
         setShowSaveDialog(false);
@@ -317,7 +369,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
       console.error('[ResponseEditorLayout] ❌ Error saving to Factory:', error);
       alert(`Error saving to Factory: ${error instanceof Error ? error.message : String(error)}`);
     }
-  }, [wizardIntegration]);
+  }, [wizardIntegration, generalizedLabel]);
 
   // ✅ NEW: Handler to save only to project
   const handleSaveToProject = React.useCallback(() => {
@@ -336,17 +388,33 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
 
   // ✅ NEW: Wrapper for handleEditorClose to add tutor on close
   const handleEditorCloseWithTutor = React.useCallback(async (): Promise<boolean> => {
+    console.log('[ResponseEditorLayout] 🚪 handleEditorCloseWithTutor called', {
+      shouldBeGeneral,
+      saveDecisionMade,
+      condition1: shouldBeGeneral,
+      condition2: !saveDecisionMade,
+      shouldBlock: shouldBeGeneral && !saveDecisionMade,
+      wizardIntegrationExists: !!wizardIntegration,
+      wizardIntegrationShouldBeGeneral: wizardIntegration?.shouldBeGeneral,
+      wizardMode: wizardIntegration?.wizardMode,
+      taskWizardMode
+    });
+
     // ✅ Tutor alla chiusura - verifica se deve essere scelto dove salvare
     if (shouldBeGeneral && !saveDecisionMade) {
       console.log('[ResponseEditorLayout] ⚠️ Template generalizable but decision not made, blocking close');
-      alert('Before closing, you must tell me where you want to save this task.');
+      console.log('[ResponseEditorLayout] 🔔 Opening save dialog automatically');
+      // ✅ Auto-open dialog instead of alert
       setShowSaveDialog(true);
-      return false;  // ✅ Blocca chiusura
+      return false;  // ✅ Blocca chiusura - obbligatorio
     }
 
+    console.log('[ResponseEditorLayout] ✅ Allowing close - proceeding with normal close', {
+      reason: shouldBeGeneral ? 'saveDecisionMade is true' : 'shouldBeGeneral is false'
+    });
     // ✅ Se tutto ok, procedi con chiusura normale
     return handleEditorClose();
-  }, [shouldBeGeneral, saveDecisionMade, handleEditorClose]);
+  }, [shouldBeGeneral, saveDecisionMade, handleEditorClose, wizardIntegration, taskWizardMode]);
 
   // ✅ NEW: Calcola mainViewMode in base a taskWizardMode, wizardMode e showMessageReview/showSynonyms
   // ✅ IMPORTANTE: Questo useMemo deve venire DOPO la dichiarazione di wizardIntegration
@@ -751,29 +819,44 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     replaceSelectedTaskTree,
   ]);
 
-  // ✅ NEW: Add shouldBeGeneral button to toolbar if needed
-  const enhancedToolbarButtons = React.useMemo(() => {
-    if (shouldBeGeneral && !saveDecisionMade && taskWizardMode === 'none') {
-      return [
-        ...toolbarButtons,
-        {
-          icon: React.createElement(Star, { size: 16 }),
-          label: "Where do you want to save this task?",
-          onClick: () => setShowSaveDialog(true),
-          title: "Template with general value - click to decide",
-          primary: true,
-          active: false
-        }
-      ];
+  // ✅ REMOVED: enhancedToolbarButtons - ora il pulsante viene aggiunto direttamente in useResponseEditorToolbar
+  // ✅ Il pulsante "Vuoi salvare in libreria?" viene aggiunto automaticamente quando shouldBeGeneral === true
+
+  // ✅ NEW: Ref per il pulsante "Vuoi salvare in libreria?" per posizionare il popover
+  const saveToLibraryButtonRef = React.useRef<HTMLButtonElement>(null);
+
+  // ✅ NEW: Trova il pulsante nella toolbarButtons array e assegna il ref direttamente
+  const toolbarButtonsWithRef = React.useMemo(() => {
+    return toolbarButtons.map(btn => {
+      if (btn.buttonId === 'save-to-library') {
+        return {
+          ...btn,
+          buttonRef: saveToLibraryButtonRef, // ✅ Passa il ref direttamente
+        };
+      }
+      return btn;
+    });
+  }, [toolbarButtons]);
+
+  // ✅ NEW: Sync toolbarButtons to onToolbarUpdate when hideHeader is true
+  // Questo assicura che il pulsante "Vuoi salvare in libreria?" appaia anche quando hideHeader === true
+  React.useEffect(() => {
+    if (hideHeader && onToolbarUpdate && taskWizardMode === 'none') {
+      console.log('[ResponseEditorLayout] 🔄 Syncing toolbarButtons to onToolbarUpdate', {
+        count: toolbarButtons.length,
+        labels: toolbarButtons.map(b => b.label),
+        shouldBeGeneral,
+        saveDecisionMade
+      });
+      onToolbarUpdate(toolbarButtons, 'orange');
     }
-    return toolbarButtons;
-  }, [toolbarButtons, shouldBeGeneral, saveDecisionMade, taskWizardMode]);
+  }, [hideHeader, onToolbarUpdate, toolbarButtons, taskWizardMode, shouldBeGeneral, saveDecisionMade]);
 
   // ✅ LOG: Verification log for debugging (moved to useEffect to keep render pure)
   // ✅ FIX: Use only primitive dependencies to prevent loop
   const hasNormalEditorLayoutElement = normalEditorLayoutElement !== null;
   const hasSidebarElement = sidebarElement != null; // ✅ FIX: Use != to check both null and undefined
-  const toolbarButtonsCount = enhancedToolbarButtons.length;
+  const toolbarButtonsCount = toolbarButtons.length;
   const shouldShowHeader = !hideHeader && taskWizardMode === 'none';
   const shouldShowBanner = isGeneralizable && taskWizardMode === 'none';
   React.useEffect(() => {
@@ -809,7 +892,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         <EditorHeader
           icon={<Icon size={18} style={{ color: iconColor }} />}
           title={headerTitle}
-          toolbarButtons={enhancedToolbarButtons}
+          toolbarButtons={toolbarButtonsWithRef} // ✅ Usa toolbarButtonsWithRef con ref
           onClose={handleEditorCloseWithTutor}
           color="orange"
         />
@@ -888,13 +971,25 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         />
       )}
 
-      {/* ✅ NEW: Save Location Dialog for generalizable templates */}
+      {/* ✅ NEW: Save Location Popover for generalizable templates */}
       <SaveLocationDialog
         isOpen={showSaveDialog}
-        onClose={() => setShowSaveDialog(false)}
+        onClose={() => {
+          // Don't allow closing without decision if shouldBeGeneral
+          if (shouldBeGeneral && !saveDecisionMade) {
+            return; // Block close
+          }
+          setShowSaveDialog(false);
+        }}
         onSaveToFactory={handleSaveToFactory}
         onSaveToProject={handleSaveToProject}
         onCancel={handleCancelSaveDialog}
+        originalLabel={originalLabel}
+        generalizedLabel={generalizedLabel}
+        generalizationReason={generalizationReasonEffective}
+        generalizedMessages={generalizedMessages}
+        anchorRef={saveToLibraryButtonRef}
+        toolbarButtons={toolbarButtons} // ✅ 2. Passato per dipendenza del layout effect
       />
     </div>
   );

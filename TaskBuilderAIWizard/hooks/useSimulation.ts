@@ -16,6 +16,7 @@ type UseSimulationProps = {
   updateTaskProgress: (taskId: string, phase: 'constraints' | 'parser' | 'messages', progress: number) => void;
   updateParserSubstep?: (substep: string | null) => void;
   updateMessageSubstep?: (substep: string | null) => void;
+  setShouldBeGeneral?: (value: boolean) => void;
 };
 
 export function useSimulation(props: UseSimulationProps) {
@@ -31,7 +32,8 @@ export function useSimulation(props: UseSimulationProps) {
     updateTaskPipelineStatus,
     updateTaskProgress,
     updateParserSubstep,
-    updateMessageSubstep
+    updateMessageSubstep,
+    setShouldBeGeneral
   } = props;
 
   /**
@@ -44,14 +46,20 @@ export function useSimulation(props: UseSimulationProps) {
     console.log('[useSimulation] 📊 Pipeline step structure -> running');
 
     console.log('[useSimulation] ⏳ Chiamando generateStructure...');
-    const { schema, shouldBeGeneral } = await generateStructure(userInput, taskId, locale);
+    const { schema, shouldBeGeneral, generalizedLabel, generalizationReason } = await generateStructure(userInput, taskId, locale);
     console.log('[useSimulation] ✅ generateStructure completato', {
       schemaLength: schema?.length,
-      shouldBeGeneral
+      shouldBeGeneral,
+      generalizedLabel,
+      generalizationReason
     });
 
     setDataSchema(schema);
-    console.log('[useSimulation] 📝 dataSchema aggiornato');
+    if (setShouldBeGeneral) {
+      setShouldBeGeneral(shouldBeGeneral);
+    }
+    // ✅ generalizedLabel and generalizationReason are already in the root node of schema
+    console.log('[useSimulation] 📝 dataSchema aggiornato con generalization fields');
 
     // Update message when structure is generated (before confirmation)
     updatePipelineStep('structure', 'running', 'Confermami la struttura che vedi sulla sinistra...');

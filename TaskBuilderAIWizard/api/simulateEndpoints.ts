@@ -46,20 +46,42 @@ export async function generateStructure(
     }
 
     const shouldBeGeneral = data.shouldBeGeneral || false;
+    const generalizedLabel = data.generalizedLabel || null;
+    const generalizationReason = data.generalizationReason || null;
+    const generalizedMessages = data.generalizedMessages || null;
 
     console.log('[generateStructure] ✅ API response received', {
       structureLength: data.structure?.length,
-      shouldBeGeneral
+      shouldBeGeneral,
+      generalizedLabel,
+      generalizationReason,
+      generalizedMessagesCount: generalizedMessages?.length || 0
     });
 
     // Convert API structure to WizardTaskTreeNode format
     const converted = convertApiStructureToWizardTaskTree(data.structure, taskId || 'temp-task-id');
 
+    // ✅ Apply generalization fields to root node only
+    if (converted.length > 0 && (shouldBeGeneral || generalizedLabel || generalizationReason || generalizedMessages)) {
+      converted[0].shouldBeGeneral = shouldBeGeneral;
+      converted[0].generalizedLabel = generalizedLabel;
+      converted[0].generalizationReason = generalizationReason;
+      converted[0].generalizedMessages = generalizedMessages;
+    }
+
     console.log('[generateStructure] ✅ Converted to WizardTaskTreeNode', {
-      convertedLength: converted.length
+      convertedLength: converted.length,
+      rootShouldBeGeneral: converted[0]?.shouldBeGeneral,
+      rootGeneralizedLabel: converted[0]?.generalizedLabel
     });
 
-    return { schema: converted, shouldBeGeneral };
+    return {
+      schema: converted,
+      shouldBeGeneral,
+      generalizedLabel,
+      generalizationReason,
+      generalizedMessages
+    };
   } catch (error) {
     console.error('[generateStructure] ❌ Error:', error);
     throw error;

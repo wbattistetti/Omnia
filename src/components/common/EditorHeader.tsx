@@ -11,6 +11,8 @@ type ToolbarButton = {
   active?: boolean;
   primary?: boolean;
   disabled?: boolean;
+  buttonRef?: React.RefObject<HTMLButtonElement> | ((ref: HTMLButtonElement | null) => void);
+  buttonId?: string; // For identifying specific buttons
 };
 
 type EditorHeaderProps = {
@@ -33,6 +35,21 @@ const THEMES: Record<string, { bg: string; fg: string; border: string; accent?: 
 };
 
 export function EditorHeader({ icon, title, subtitle, titleActions, toolbarButtons = [], rightActions, onClose, color = 'orange', className, style }: EditorHeaderProps) {
+  // ✅ DEBUG: Log toolbar buttons received
+  React.useEffect(() => {
+    console.log('[EditorHeader] 📥 Received toolbarButtons', {
+      count: toolbarButtons.length,
+      buttons: toolbarButtons.map((btn, i) => ({
+        index: i,
+        label: btn.label,
+        hasIcon: !!btn.icon,
+        primary: btn.primary,
+        active: btn.active,
+        hasTitle: !!btn.title,
+        iconType: btn.icon?.type?.name || btn.icon?.type || 'unknown'
+      }))
+    });
+  }, [toolbarButtons]);
   const theme = THEMES[color] || THEMES.orange;
   let combinedClass = '';
   try {
@@ -79,56 +96,48 @@ export function EditorHeader({ icon, title, subtitle, titleActions, toolbarButto
         {/* Toolbar (auto-hidden if empty) */}
         {toolbarButtons.length > 0 && (
           <>
-            {toolbarButtons.map((btn, i) => (
-              btn.title ? (
-                <SmartTooltip key={i} text={btn.title} tutorId={`toolbar_btn_${i}_help`} placement="bottom">
-                  <button
-                    onClick={btn.onClick}
-                    disabled={btn.disabled}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      background: btn.primary ? '#0b1220' : (btn.active ? '#fff' : 'transparent'),
-                      color: btn.primary ? '#fff' : (btn.active ? theme.bg : theme.fg),
-                      border: btn.primary ? 'none' : `1px solid rgba(255,255,255,0.3)`,
-                      borderRadius: 8,
-                      padding: btn.label ? '8px 14px' : '6px 10px',
-                      cursor: btn.disabled ? 'not-allowed' : 'pointer',
-                      opacity: btn.disabled ? 0.5 : 1,
-                      fontWeight: btn.primary ? 600 : 400,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {btn.icon}
-                    {btn.label && <span>{btn.label}</span>}
-                  </button>
-                </SmartTooltip>
-              ) : (
-                <button
-                  key={i}
-                  onClick={btn.onClick}
-                  disabled={btn.disabled}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    background: btn.primary ? '#0b1220' : (btn.active ? '#fff' : 'transparent'),
-                    color: btn.primary ? '#fff' : (btn.active ? theme.bg : theme.fg),
-                    border: btn.primary ? 'none' : `1px solid rgba(255,255,255,0.3)`,
-                    borderRadius: 8,
-                    padding: btn.label ? '8px 14px' : '6px 10px',
-                    cursor: btn.disabled ? 'not-allowed' : 'pointer',
-                    opacity: btn.disabled ? 0.5 : 1,
-                    fontWeight: btn.primary ? 600 : 400,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
+            {toolbarButtons.map((btn, i) => {
+              // ✅ FIX: Usa il ref passato dalla prop se disponibile, altrimenti null
+              const buttonRef = btn.buttonRef && 'current' in btn.buttonRef
+                ? btn.buttonRef as React.RefObject<HTMLButtonElement>
+                : null;
+
+              const buttonProps = {
+                ref: buttonRef, // ✅ Usa direttamente il ref passato (può essere null)
+                onClick: btn.onClick,
+                disabled: btn.disabled,
+                'data-button-id': btn.buttonId,
+                style: {
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  background: btn.primary ? '#0b1220' : (btn.active ? '#fff' : 'transparent'),
+                  color: btn.primary ? '#fff' : (btn.active ? theme.bg : theme.fg),
+                  border: btn.primary ? 'none' : `1px solid rgba(255,255,255,0.3)`,
+                  borderRadius: 8,
+                  padding: btn.label ? '8px 14px' : '6px 10px',
+                  cursor: btn.disabled ? 'not-allowed' : 'pointer',
+                  opacity: btn.disabled ? 0.5 : 1,
+                  fontWeight: btn.primary ? 600 : 400,
+                  whiteSpace: 'nowrap' as const,
+                },
+              };
+
+              const button = (
+                <button {...buttonProps}>
                   {btn.icon}
                   {btn.label && <span>{btn.label}</span>}
                 </button>
-              )
-            ))}
+              );
+
+              return btn.title ? (
+                <SmartTooltip key={i} text={btn.title} tutorId={`toolbar_btn_${i}_help`} placement="bottom">
+                  {button}
+                </SmartTooltip>
+              ) : (
+                <React.Fragment key={i}>{button}</React.Fragment>
+              );
+            })}
           </>
         )}
         {rightActions}

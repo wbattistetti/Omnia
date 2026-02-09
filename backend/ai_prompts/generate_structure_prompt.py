@@ -82,8 +82,30 @@ The structure must be:
         }}
       ]
     }}
-  ]
+  ],
+  "shouldBeGeneral": boolean,
+  "generalizedLabel": "string | null",
+  "generalizationReason": "string | null",
+  "generalizedMessages": ["string"] | null
 }}
+
+🎯 GENERALIZATION RULES:
+Analyze the task label to determine if it can be generalized (removed from specific context).
+
+Examples:
+- "Chiedi la data di nascita del paziente" → shouldBeGeneral: true, generalizedLabel: "Chiedi la data di nascita", reason: "La data di nascita è un concetto generale non legato al dominio 'paziente'."
+- "Chiedi il codice fiscale del cliente" → shouldBeGeneral: true, generalizedLabel: "Chiedi il codice fiscale", reason: "Il codice fiscale è un dato standard che non dipende dal contesto 'cliente'."
+- "Chiedi l'indirizzo email dell'utente" → shouldBeGeneral: true, generalizedLabel: "Chiedi l'indirizzo email", reason: "L'email è un dato universale non specifico del dominio."
+- "Chiedi il numero di telefono del paziente" → shouldBeGeneral: true, generalizedLabel: "Chiedi il numero di telefono", reason: "Il numero di telefono è un dato standard riutilizzabile."
+
+If the task is domain-specific and cannot be generalized:
+- "Chiedi il referto medico del paziente" → shouldBeGeneral: false, generalizedLabel: null, generalizationReason: null
+
+Rules:
+- shouldBeGeneral: true if the task can be used in multiple contexts without domain-specific references
+- generalizedLabel: Remove context-specific words (e.g., "del paziente", "del cliente", "dell'utente")
+- generalizationReason: Explain why it's generalizable in one sentence
+- generalizedMessages: If shouldBeGeneral is true, provide 3-5 example messages that are generalized (without context-specific references). These are example messages that would be used in the generalized template. If shouldBeGeneral is false, set to null.
 
 📌 EXAMPLES:
 

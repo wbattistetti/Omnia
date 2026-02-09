@@ -8,14 +8,74 @@ import { ToolbarButton } from '@dock/types';
 import { ResponseEditorLayout } from '@responseEditor/components/ResponseEditorLayout';
 import { useResponseEditor } from '@responseEditor/hooks/useResponseEditor';
 import { validateTaskTreeStructure } from '@responseEditor/core/domain/validators';
+import { useWizardIntegration } from '@responseEditor/hooks/useWizardIntegration';
 
 import type { TaskMeta } from '@taskEditor/EditorHost/types';
 import type { Task, TaskTree } from '@types/taskTypes';
 
-function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTaskTreeLoading, hideHeader, onToolbarUpdate, tabId, setDockTree, registerOnClose }: { taskTree?: TaskTree | null, onClose?: () => void, onWizardComplete?: (finalTaskTree: TaskTree) => void, task?: TaskMeta | Task, isTaskTreeLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void, registerOnClose?: (fn: () => Promise<boolean>) => void }) {
+function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTaskTreeLoading, hideHeader, onToolbarUpdate, tabId, setDockTree, registerOnClose, shouldBeGeneral, saveDecisionMade, onOpenSaveDialog }: { taskTree?: TaskTree | null, onClose?: () => void, onWizardComplete?: (finalTaskTree: TaskTree) => void, task?: TaskMeta | Task, isTaskTreeLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void, registerOnClose?: (fn: () => Promise<boolean>) => void, shouldBeGeneral?: boolean, saveDecisionMade?: boolean, onOpenSaveDialog?: () => void }) {
   const pdUpdate = useProjectDataUpdate();
   const currentProjectId = pdUpdate?.getCurrentProjectId() || null;
   const { combinedClass } = useFontContext();
+
+  // ✅ 1️⃣ Chiama useWizardIntegration UNA SOLA VOLTA qui
+  // Determina taskWizardMode e parametri per il wizard
+  const taskWizardMode = (task as any)?.taskWizardMode || 'none';
+  const taskLabel = (task as any)?.label || (task as any)?.taskLabel || '';
+  const taskLabelForWizard = taskWizardMode === 'full' ? taskLabel : undefined;
+  const taskIdForWizard = taskWizardMode === 'full' && task ? (task as any).id : undefined;
+  const rowIdForWizard = taskWizardMode === 'full' && task ? (task as any).id : undefined;
+  const projectIdForWizard = taskWizardMode === 'full' ? currentProjectId || undefined : undefined;
+  const localeForWizard = 'it';
+
+  console.log('[ResponseEditorInner] 🔍 useWizardIntegration chiamato', {
+    taskWizardMode,
+    taskLabel,
+    taskLabelForWizard,
+    taskId: taskIdForWizard,
+    rowId: rowIdForWizard,
+    projectId: projectIdForWizard,
+    willCallHook: taskWizardMode === 'full',
+  });
+
+  const wizardIntegrationRaw = useWizardIntegration(
+    taskLabelForWizard,
+    taskIdForWizard,
+    rowIdForWizard,
+    projectIdForWizard,
+    localeForWizard,
+    onWizardComplete // ✅ CORRETTO: usa onWizardComplete dalla prop
+  );
+
+  // ✅ FIX: Mantieni wizardIntegration anche dopo completamento se shouldBeGeneral è true
+  const wizardIntegration = (taskWizardMode === 'full' || wizardIntegrationRaw?.shouldBeGeneral) ? wizardIntegrationRaw : null;
+
+  // ✅ 2️⃣ Calcola tutti i valori qui
+  const effectiveShouldBeGeneral = shouldBeGeneral ?? wizardIntegration?.shouldBeGeneral ?? false;
+  const generalizedLabel = wizardIntegration?.generalizedLabel || null;
+  const generalizedMessages = wizardIntegration?.generalizedMessages || null;
+  const generalizationReason = wizardIntegration?.generalizationReason || null;
+
+  // ✅ State per save location dialog
+  const [showSaveDialog, setShowSaveDialog] = React.useState(false);
+  const [effectiveSaveDecisionMade, setEffectiveSaveDecisionMade] = React.useState(saveDecisionMade || false);
+  const [saveDecision, setSaveDecision] = React.useState<'factory' | 'project' | null>(null);
+
+  // ✅ Handler per aprire dialog
+  const handleOpenSaveDialog = React.useCallback(() => {
+    console.log('[ResponseEditorInner] 🔔 Opening save dialog');
+    setShowSaveDialog(true);
+  }, []);
+
+  console.log('[ResponseEditorInner] 🔍 Wizard integration computed', {
+    taskWizardMode,
+    wizardMode: wizardIntegrationRaw?.wizardMode,
+    shouldBeGeneral: wizardIntegrationRaw?.shouldBeGeneral,
+    effectiveShouldBeGeneral,
+    wizardIntegrationExists: !!wizardIntegration,
+    generalizedLabel,
+    generalizedMessagesCount: generalizedMessages?.length || 0,
+  });
 
   // Validate TaskTree structure on mount/update
   useEffect(() => {
@@ -42,6 +102,10 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     hideHeader,
     onToolbarUpdate,
     registerOnClose,
+    // ✅ NEW: Pass generalization params
+    shouldBeGeneral: effectiveShouldBeGeneral,
+    saveDecisionMade: effectiveSaveDecisionMade,
+    onOpenSaveDialog: handleOpenSaveDialog,
   });
 
   // ✅ ARCHITECTURE: Pass only necessary props (no monolithic editor object)
@@ -122,15 +186,28 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       onTaskContextualizationComplete={editor.onTaskContextualizationComplete}
       onTaskBuilderComplete={editor.onTaskBuilderComplete}
       onTaskBuilderCancel={editor.onTaskBuilderCancel}
+      onToolbarUpdate={onToolbarUpdate}
+      // ✅ 3️⃣ Passa valori del Wizard come props
+      shouldBeGeneral={effectiveShouldBeGeneral}
+      generalizedLabel={generalizedLabel}
+      generalizedMessages={generalizedMessages}
+      generalizationReason={generalizationReason}
+      saveDecisionMade={effectiveSaveDecisionMade}
+      onOpenSaveDialog={handleOpenSaveDialog}
+      showSaveDialog={showSaveDialog}
+      setShowSaveDialog={setShowSaveDialog}
+      setSaveDecisionMade={setEffectiveSaveDecisionMade}
+      wizardIntegration={wizardIntegration}
+      originalLabel={taskLabel || 'Task'}
     />
   );
 }
 
-export default function ResponseEditor({ taskTree, onClose, onWizardComplete, task, isTaskTreeLoading, hideHeader, onToolbarUpdate, tabId, setDockTree, registerOnClose }: { taskTree?: TaskTree | null, onClose?: () => void, onWizardComplete?: (finalTaskTree: TaskTree) => void, task?: TaskMeta | Task, isTaskTreeLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void, registerOnClose?: (fn: () => Promise<boolean>) => void }) {
+export default function ResponseEditor({ taskTree, onClose, onWizardComplete, task, isTaskTreeLoading, hideHeader, onToolbarUpdate, tabId, setDockTree, registerOnClose, shouldBeGeneral, saveDecisionMade, onOpenSaveDialog }: { taskTree?: TaskTree | null, onClose?: () => void, onWizardComplete?: (finalTaskTree: TaskTree) => void, task?: TaskMeta | Task, isTaskTreeLoading?: boolean, hideHeader?: boolean, onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void, tabId?: string, setDockTree?: (updater: (prev: any) => any) => void, registerOnClose?: (fn: () => Promise<boolean>) => void, shouldBeGeneral?: boolean, saveDecisionMade?: boolean, onOpenSaveDialog?: () => void }) {
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <FontProvider>
-        <ResponseEditorInner taskTree={taskTree} onClose={onClose} onWizardComplete={onWizardComplete} task={task} isTaskTreeLoading={isTaskTreeLoading} hideHeader={hideHeader} onToolbarUpdate={onToolbarUpdate} tabId={tabId} setDockTree={setDockTree} registerOnClose={registerOnClose} />
+        <ResponseEditorInner taskTree={taskTree} onClose={onClose} onWizardComplete={onWizardComplete} task={task} isTaskTreeLoading={isTaskTreeLoading} hideHeader={hideHeader} onToolbarUpdate={onToolbarUpdate} tabId={tabId} setDockTree={setDockTree} registerOnClose={registerOnClose} shouldBeGeneral={shouldBeGeneral} saveDecisionMade={saveDecisionMade} onOpenSaveDialog={onOpenSaveDialog} />
       </FontProvider>
     </div>
   );

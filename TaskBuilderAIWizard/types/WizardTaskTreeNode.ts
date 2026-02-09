@@ -30,6 +30,12 @@ export type WizardTaskTreeNode = {
   dottedName?: string;        // Nome gerarchico (es: "Data di nascita del paziente.Giorno")
   taskId?: string;            // Task ID (per mapping variabili in FlowchartVariablesService)
 
+  // ✅ NEW: Generalization fields (solo sul nodo root)
+  shouldBeGeneral?: boolean;
+  generalizedLabel?: string | null;
+  generalizationReason?: string | null;
+  generalizedMessages?: string[] | null;
+
   // Dati generati dalla pipeline
   constraints?: WizardConstraint[];
   dataContract?: WizardNLPContract;

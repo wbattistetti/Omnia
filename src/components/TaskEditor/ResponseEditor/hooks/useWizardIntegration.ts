@@ -55,6 +55,8 @@ export function useWizardIntegration(
     // ✅ NEW: Callback per parte variabile dinamica
     updateParserSubstep: wizardState.updateParserSubstep,
     updateMessageSubstep: wizardState.updateMessageSubstep,
+    // ✅ NEW: Setter per shouldBeGeneral
+    setShouldBeGeneral: wizardState.setShouldBeGeneral,
   });
 
   // ✅ NEW: Avvia automaticamente la generazione quando taskLabel è disponibile
@@ -458,6 +460,10 @@ export function useWizardIntegration(
     messagesGeneralized: wizardState.messagesGeneralized,
     messagesContextualized: wizardState.messagesContextualized,
     shouldBeGeneral: wizardState.shouldBeGeneral,
+    // ✅ NEW: Generalization fields from root node
+    generalizedLabel: wizardState.dataSchema?.[0]?.generalizedLabel || null,
+    generalizationReason: wizardState.dataSchema?.[0]?.generalizationReason || null,
+    generalizedMessages: wizardState.dataSchema?.[0]?.generalizedMessages || null,
     constraints: wizardState.constraints,
     nlpContract: wizardState.nlpContract,
 

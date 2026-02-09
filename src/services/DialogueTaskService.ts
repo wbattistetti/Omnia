@@ -56,6 +56,17 @@ export class DialogueTaskService {
     return result;
   }
 
+  /**
+   * ✅ NEW: Force reload Factory templates from database (even if cache is loaded)
+   * Used after saving new templates to Factory
+   */
+  static async reloadFactoryTemplates(): Promise<DialogueTask[]> {
+    console.log('[DialogueTaskService] 🔄 Force reloading Factory templates');
+    this.cacheLoaded = false; // Reset cache flag to force reload
+    this.loadingPromise = null; // Clear any pending promise
+    return this.loadTemplates();
+  }
+
   private static async _loadTemplatesFromAPI(): Promise<DialogueTask[]> {
     try {
       const response = await fetch('/api/factory/dialogue-templates');

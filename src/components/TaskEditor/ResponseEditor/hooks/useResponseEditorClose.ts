@@ -95,9 +95,16 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
     });
 
     // ✅ NEW: Tutor alla chiusura - verifica se deve essere scelto dove salvare
+    console.log('[ResponseEditor][CLOSE] 🔍 Checking generalization block', {
+      shouldBeGeneral,
+      saveDecisionMade,
+      hasOnOpenSaveDialog: !!onOpenSaveDialog,
+      shouldBlock: shouldBeGeneral && !saveDecisionMade && onOpenSaveDialog
+    });
+
     if (shouldBeGeneral && !saveDecisionMade && onOpenSaveDialog) {
       console.log('[ResponseEditor][CLOSE] ⚠️ Template generalizable but decision not made, blocking close');
-      alert('Before closing, you must tell me where you want to save this task.');
+      console.log('[ResponseEditor][CLOSE] 🔔 Calling onOpenSaveDialog');
       onOpenSaveDialog();
       return false;  // ✅ Blocca chiusura
     }
