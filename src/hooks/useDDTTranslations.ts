@@ -46,6 +46,12 @@ export function useDDTTranslations(ddt: any | null | undefined, task?: any, vers
     }
 
     const guidsArray = extractGUIDsFromDDT(ddt);
+    console.log('[useDDTTranslations] 🔍 GUIDs extracted from DDT', {
+      ddtId: ddt?.id || ddt?._id || 'no-id',
+      guidsCount: guidsArray.length,
+      sampleGuids: guidsArray.slice(0, 5)
+    });
+
     const guidsSet = new Set(guidsArray);
 
     // ✅ Also extract GUIDs from task.steps (unified model)
@@ -112,8 +118,15 @@ export function useDDTTranslations(ddt: any | null | undefined, task?: any, vers
     }
 
     const guids = Array.from(guidsSet);
+    console.log('[useDDTTranslations] 🔍 Total GUIDs after task.steps extraction', {
+      totalGuids: guids.length,
+      fromDDT: guidsArray.length,
+      fromTaskSteps: guids.length - guidsArray.length,
+      sampleGuids: guids.slice(0, 10)
+    });
+
     if (guids.length === 0) {
-      // Log rimosso: non essenziale per flusso motore
+      console.warn('[useDDTTranslations] ⚠️ No GUIDs found, returning empty translations');
       return {};
     }
 
@@ -130,6 +143,15 @@ export function useDDTTranslations(ddt: any | null | undefined, task?: any, vers
       } else {
         missingGuids.push(guid);
       }
+    });
+
+    console.log('[useDDTTranslations] 📊 Translation lookup results', {
+      requestedGuids: guids.length,
+      foundTranslations: foundGuids.length,
+      missingTranslations: missingGuids.length,
+      globalTranslationsCount: Object.keys(globalTranslations).length,
+      sampleFound: foundGuids.slice(0, 5),
+      sampleMissing: missingGuids.slice(0, 5)
     });
 
     // 🔍 DEBUG: Log sempre (non solo se mancano traduzioni)

@@ -1,6 +1,7 @@
 Option Strict On
 Option Explicit On
 Imports System.IO
+Imports System.Linq
 Imports System.Threading.Tasks
 Imports ApiServer.Converters
 Imports ApiServer.Helpers
@@ -371,9 +372,48 @@ Namespace ApiServer.Handlers
                 Console.WriteLine($"🔵 [HandleTaskSessionStart] Validating translations: Count={If(translationsValue IsNot Nothing, translationsValue.Count, 0)}")
                 Console.Out.Flush()
 
+                ' ✅ ADD: Detailed logging of translations received
+                If translationsValue IsNot Nothing Then
+                    Console.WriteLine($"🔵 [HandleTaskSessionStart] Translations received: {translationsValue.Count} entries")
+                    Console.Out.Flush()
+
+                    ' Log first 5 translation keys
+                    Dim sampleKeys = translationsValue.Keys.Take(5).ToList()
+                    Console.WriteLine($"🔵 [HandleTaskSessionStart] Sample translation keys: {String.Join(", ", sampleKeys)}")
+                    Console.Out.Flush()
+                Else
+                    Console.WriteLine($"🔵 [HandleTaskSessionStart] ⚠️ translationsValue is Nothing")
+                    Console.Out.Flush()
+                End If
+
                 If translationsValue Is Nothing OrElse translationsValue.Count = 0 Then
                     Console.WriteLine($"🔵 [HandleTaskSessionStart] Translations empty, returning error")
                     Console.Out.Flush()
+
+                    ' ✅ ADD: Log taskTree structure to understand what was sent
+                    If taskTreeForLog IsNot Nothing Then
+                        Try
+                            Dim taskTreeJson = Newtonsoft.Json.JsonConvert.SerializeObject(taskTreeForLog)
+                            Dim previewLength = Math.Min(500, taskTreeJson.Length)
+                            Console.WriteLine($"🔵 [HandleTaskSessionStart] TaskTree structure (first {previewLength} chars): {taskTreeJson.Substring(0, previewLength)}")
+                            Console.Out.Flush()
+
+                            ' Also log taskTree.steps keys if present
+                            Dim taskTreeObj = TryCast(taskTreeForLog, Newtonsoft.Json.Linq.JObject)
+                            If taskTreeObj IsNot Nothing AndAlso taskTreeObj("steps") IsNot Nothing Then
+                                Dim stepsObj = TryCast(taskTreeObj("steps"), Newtonsoft.Json.Linq.JObject)
+                                If stepsObj IsNot Nothing Then
+                                    Dim stepsKeys = stepsObj.Properties().Select(Function(p) p.Name).ToList()
+                                    Console.WriteLine($"🔵 [HandleTaskSessionStart] TaskTree.steps keys: {String.Join(", ", stepsKeys)}")
+                                    Console.Out.Flush()
+                                End If
+                            End If
+                        Catch ex As Exception
+                            Console.WriteLine($"🔵 [HandleTaskSessionStart] Could not serialize TaskTree: {ex.Message}")
+                            Console.Out.Flush()
+                        End Try
+                    End If
+
                     Return ResponseHelpers.CreateErrorResponse(
                         "Translations dictionary is required and cannot be empty. The session cannot start without translations.",
                         400

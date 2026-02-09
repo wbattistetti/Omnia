@@ -134,6 +134,34 @@ export default function DDEBubbleChat({
         setBackendError(null);
         const translationsData = translations || {};
 
+        console.log('[DDEBubbleChat] 🔍 Translations check before sending', {
+          hasTranslations: !!translations,
+          translationsCount: translations ? Object.keys(translations).length : 0,
+          translationsDataCount: Object.keys(translationsData).length,
+          hasTaskTree: !!taskTree,
+          taskTreeStepsKeys: taskTree?.steps ? Object.keys(taskTree.steps) : [],
+          taskTreeNodesCount: taskTree?.nodes?.length || 0,
+          sampleTranslations: Object.entries(translationsData).slice(0, 5).map(([k, v]) => ({ guid: k, text: String(v).substring(0, 50) }))
+        });
+
+        // ✅ Safety check: Log if translations are empty (for debugging multi-data tasks)
+        if (Object.keys(translationsData).length === 0) {
+          console.error('[DDEBubbleChat] ❌ Translations empty before sending', {
+            hasTranslations: !!translations,
+            translationsCount: translations ? Object.keys(translations).length : 0,
+            hasTaskTree: !!taskTree,
+            taskTreeStepsKeys: taskTree?.steps ? Object.keys(taskTree.steps) : [],
+            taskTreeNodesCount: taskTree?.nodes?.length || 0,
+            taskTreeNodes: taskTree?.nodes?.map((n: any) => ({
+              id: n.id,
+              templateId: n.templateId,
+              label: n.label,
+              hasSubNodes: !!(n.subNodes && n.subNodes.length > 0),
+              subNodesCount: n.subNodes?.length || 0
+            })) || []
+          });
+        }
+
         // ✅ CRITICAL: TaskTree è OBBLIGATORIO - non inviare solo taskId
         if (!taskTree) {
           throw new Error('[DDEBubbleChat] TaskTree is required. Cannot start session without complete instance.');
