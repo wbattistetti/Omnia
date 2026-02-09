@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Sidebar } from './components/Sidebar';
+// ❌ RIMOSSO: Sidebar nuovo (ora usiamo quello di ResponseEditor)
+// import { Sidebar } from './components/Sidebar';
 import { CenterPanel } from './components/CenterPanel';
 import { RightPanel } from './components/RightPanel';
 import { useWizardState } from './hooks/useWizardState';
 import { useSimulation } from './hooks/useSimulation';
-import { useSidebarSync } from './hooks/useSidebarSync';
-import { FakeTaskTreeNode } from './types';
-import { MOCK_MODULES } from './utils/mockData';
+// ❌ RIMOSSO: useSidebarSync non più necessario
+// import { useSidebarSync } from './hooks/useSidebarSync';
+import { WizardTaskTreeNode } from './types';
+// MOCK_MODULES removed - use real API endpoint when available
+const EMPTY_MODULES: any[] = [];
 
 export function WizardApp() {
   const {
@@ -45,10 +48,7 @@ export function WizardApp() {
     setCorrectionInput
   } = useWizardState();
 
-  const [taskTime, setTaskTime] = useState(3);
-
   const { runGenerationPipeline, continueAfterStructureConfirmation } = useSimulation({
-    taskTime,
     updatePipelineStep,
     setDataSchema,
     setConstraints,
@@ -60,11 +60,12 @@ export function WizardApp() {
     updateTaskProgress
   });
 
-  const { registerNode } = useSidebarSync(activeNodeId);
+  // ❌ RIMOSSO: useSidebarSync non più necessario (Sidebar gestito da ResponseEditor)
+  // const { registerNode } = useSidebarSync(activeNodeId);
   const [previewModuleId, setPreviewModuleId] = useState<string | null>(null);
 
-  // dataSchema è già un FakeTaskTreeNode[], quindi lo usiamo direttamente
-  const taskTree: FakeTaskTreeNode[] = dataSchema;
+  // dataSchema è già un WizardTaskTreeNode[], quindi lo usiamo direttamente
+  const taskTree: WizardTaskTreeNode[] = dataSchema;
 
   const handleStartGeneration = async () => {
     if (!userInput.trim()) return;
@@ -82,7 +83,7 @@ export function WizardApp() {
     setSelectedModuleId('medical-appointment');
 
     // Popola immediatamente la sidebar con la struttura dati del modulo candidato
-    const candidateStructure: FakeTaskTreeNode[] = [
+    const candidateStructure: WizardTaskTreeNode[] = [
       {
         id: 'date',
         templateId: 'date',
@@ -244,8 +245,8 @@ export function WizardApp() {
   };
 
   const calculateOverallProgress = (): number => {
-    const flattenTaskTree = (nodes: FakeTaskTreeNode[]): FakeTaskTreeNode[] => {
-      const result: FakeTaskTreeNode[] = [];
+    const flattenTaskTree = (nodes: WizardTaskTreeNode[]): WizardTaskTreeNode[] => {
+      const result: WizardTaskTreeNode[] = [];
       nodes.forEach(node => {
         result.push(node);
         if (node.subNodes && node.subNodes.length > 0) {
@@ -283,16 +284,8 @@ export function WizardApp() {
   return (
     <div className="h-screen flex flex-col bg-gray-100">
       <div className="flex-1 flex overflow-hidden">
-        <Sidebar
-          taskTree={taskTree}
-          activeNodeId={activeNodeId}
-          onNodeClick={setActiveNodeId}
-          registerNode={registerNode}
-          showStructureConfirmation={showStructureConfirmation}
-          onStructureConfirm={handleStructureConfirm}
-          onStructureReject={handleStructureReject}
-          structureConfirmed={structureConfirmed}
-        />
+        {/* ❌ RIMOSSO: Sidebar nuovo (ora usiamo quello di ResponseEditor) */}
+        {/* Il Sidebar viene renderizzato da ResponseEditorNormalLayout */}
 
         <CenterPanel
           currentStep={currentStep}
@@ -305,7 +298,7 @@ export function WizardApp() {
           onShowModuleList={handleShowModuleList}
           onSelectModule={handleSelectModule}
           onPreviewModule={setPreviewModuleId}
-          availableModules={MOCK_MODULES}
+          availableModules={EMPTY_MODULES}
           foundModuleId={currentStep === 'euristica_trovata' ? selectedModuleId : undefined}
           showCorrectionMode={showCorrectionMode}
           correctionInput={correctionInput}
@@ -317,7 +310,7 @@ export function WizardApp() {
           isVisible={currentStep === 'modulo_pronto' || currentStep === 'euristica_trovata'}
           userInput={userInput}
           previewModuleId={previewModuleId}
-          availableModules={MOCK_MODULES}
+          availableModules={EMPTY_MODULES}
         />
       </div>
     </div>

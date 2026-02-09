@@ -132,6 +132,36 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
           : 0;
         const nodeStepTypes = Object.keys(nodeStepsDict);
 
+        // ✅ NEW: Log dettagliato per debug
+        console.log('[useNodeLoading] 🔍 Loading steps for node', {
+          nodeId: node.id,
+          nodeTemplateId,
+          nodeLabel: node?.label,
+          stepsSourceKeys: stepsSource && typeof stepsSource === 'object' && !Array.isArray(stepsSource)
+            ? Object.keys(stepsSource)
+            : [],
+          nodeStepsDictKeys: Object.keys(nodeStepsDict),
+          nodeStepsDict,
+          hasSteps: Object.keys(nodeStepsDict).length > 0,
+          stepsSourceType: typeof stepsSource,
+          isStepsSourceArray: Array.isArray(stepsSource),
+          // ✅ NEW: Verifica mismatch dettagliato
+          templateIdMismatch: {
+            nodeTemplateId,
+            stepsSourceKeys: stepsSource && typeof stepsSource === 'object' && !Array.isArray(stepsSource)
+              ? Object.keys(stepsSource)
+              : [],
+            match: stepsSource && typeof stepsSource === 'object' && !Array.isArray(stepsSource)
+              ? Object.keys(stepsSource).includes(nodeTemplateId)
+              : false,
+            allTemplateIdsInSteps: stepsSource && typeof stepsSource === 'object' && !Array.isArray(stepsSource)
+              ? Object.keys(stepsSource)
+              : [],
+            nodeId: node.id,
+            nodeLabel: node.label,
+          },
+        });
+
         // Log rimosso: non essenziale per flusso motore
         const nodeStepsDetails = nodeStepTypes.length > 0 ? (() => {
           let escalationsCount = 0;

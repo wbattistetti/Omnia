@@ -1,4 +1,4 @@
-export type FakeStepMessages = {
+export type WizardStepMessages = {
   ask: { base: string[]; reask?: string[] };
   confirm?: { base: string[]; reask?: string[] };
   notConfirmed?: { base: string[] };

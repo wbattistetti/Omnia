@@ -7,8 +7,8 @@ import { buildArtifactStore } from '../TaskTreeWizard/artifactStore';
 import { assembleFinalTaskTree } from '../TaskTreeWizard/assembleFinal';
 import type { SchemaNode } from '../TaskTreeWizard/dataCollection';
 import type { PlanRunResult } from '../TaskTreeWizard/planRunner';
-import { convertFakeTaskTreeToTaskTree } from '../TaskBuilderAIWizardAdapter';
-import type { FakeTaskTreeNode } from '../../../TaskBuilderAIWizard/types';
+import { convertWizardTaskTreeToTaskTree } from '../TaskBuilderAIWizardAdapter';
+import type { WizardTaskTreeNode } from '../../../TaskBuilderAIWizard/types';
 
 describe('E2E: New Wizard Integration with Backend Pipeline', () => {
   beforeEach(() => {
@@ -90,9 +90,9 @@ describe('E2E: New Wizard Integration with Backend Pipeline', () => {
     expect(taskTree.label).toBe('Date of Birth');
     expect(taskTree.id).toBeDefined();
 
-    // 7. Simulate conversion to FakeTaskTreeNode (for new wizard UI)
+    // 7. Simulate conversion to WizardTaskTreeNode (for new wizard UI)
     // This simulates what the new wizard would receive
-    const fakeNodes: FakeTaskTreeNode[] = [
+    const wizardNodes: WizardTaskTreeNode[] = [
       {
         id: taskTree.nodes[0]?.id || 'test-id',
         templateId: taskTree.nodes[0]?.templateId || 'test-template',
@@ -110,8 +110,8 @@ describe('E2E: New Wizard Integration with Backend Pipeline', () => {
     ];
 
     // 8. Convert back to TaskTree (simulating new wizard completion)
-    const convertedTaskTree = convertFakeTaskTreeToTaskTree(
-      fakeNodes,
+    const convertedTaskTree = convertWizardTaskTreeToTaskTree(
+      wizardNodes,
       'date_of_birth',
       undefined // No messages in this test
     );
@@ -223,7 +223,7 @@ describe('E2E: New Wizard Integration with Backend Pipeline', () => {
     expect(assembleFinalTaskTree).toBeDefined();
     expect(typeof assembleFinalTaskTree).toBe('function');
 
-    expect(convertFakeTaskTreeToTaskTree).toBeDefined();
-    expect(typeof convertFakeTaskTreeToTaskTree).toBe('function');
+    expect(convertWizardTaskTreeToTaskTree).toBeDefined();
+    expect(typeof convertWizardTaskTreeToTaskTree).toBe('function');
   });
 });

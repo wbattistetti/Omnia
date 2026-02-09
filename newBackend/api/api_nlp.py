@@ -825,8 +825,35 @@ def generate_test_examples(body: dict = Body(...)):
 def generate_ai_messages(body: dict = Body(...)):
     """
     Generate AI dialogue messages for a semantic contract.
-    Returns messages for all dialogue steps: start, noInput, noMatch, confirmation, success.
-    This is an additive operation that preserves existing messages if present.
+
+    If stepType is provided, generates messages only for that specific step.
+    If stepType is not provided, generates messages for all steps (legacy behavior).
+
+    Args:
+        body: Request body containing:
+            - contract: SemanticContract object (required)
+            - nodeLabel: Optional node label for context
+            - stepType: Optional step type (start, noInput, noMatch, confirmation, notConfirmed, violation, disambiguation, success)
+            - locale: Optional locale code (default: "it")
+            - provider: Optional AI provider (default: "openai")
+            - model: Optional AI model
+
+    Returns:
+        If stepType provided:
+            {
+                "success": True,
+                "messages": ["message1", "message2", ...],
+                "options": []  // Only for disambiguation step
+            }
+        If stepType not provided (legacy):
+            {
+                "success": True,
+                "messages": {
+                    "start": [...],
+                    "noInput": [...],
+                    ...
+                }
+            }
     """
     from newBackend.services.svc_ai_client import chat_json
     from newBackend.core.core_settings import OPENAI_KEY
@@ -838,10 +865,12 @@ def generate_ai_messages(body: dict = Body(...)):
     if backend_path not in sys.path:
         sys.path.insert(0, backend_path)
 
-    from ai_prompts.generate_ai_messages_prompt import get_ai_messages_prompt
+    from ai_prompts.generate_ai_messages_prompt import get_ai_messages_prompt, get_ai_messages_prompt_for_step
 
     contract = (body or {}).get("contract")
     node_label = (body or {}).get("nodeLabel")
+    step_type = (body or {}).get("stepType")  # ✅ NEW: stepType parameter
+    locale = (body or {}).get("locale", "it")  # ✅ NEW: locale parameter
     provider = (body or {}).get("provider", "openai")
     model = (body or {}).get("model")
 
@@ -852,81 +881,162 @@ def generate_ai_messages(body: dict = Body(...)):
         return {"error": "OPENAI_KEY not configured"}
 
     try:
-        # Generate prompt
-        prompt = get_ai_messages_prompt(contract, node_label)
+        # ✅ NEW: If stepType is provided, generate only for that step
+        if step_type:
+            # Validate stepType
+            valid_step_types = ["start", "noInput", "noMatch", "confirmation", "notConfirmed", "violation", "disambiguation", "success"]
+            if step_type not in valid_step_types:
+                return {
+                    "success": False,
+                    "error": f"Invalid stepType: {step_type}. Must be one of: {valid_step_types}"
+                }
 
-        # System message for AI messages generation
-        system_message = (
-            "You are a Dialogue Messages Generator. "
-            "Your task is to generate natural, spoken messages for voice-based customer care systems. "
-            "You must generate messages for: start, noInput, noMatch, confirmation, and success. "
-            "Return ONLY valid JSON, no markdown, no code fences, no comments."
-        )
+            # Generate prompt for specific step
+            prompt = get_ai_messages_prompt_for_step(contract, step_type, node_label, locale)
 
-        # Call AI
-        ai_response = chat_json([
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": prompt}
-        ], provider=provider if provider else "openai")
+            # System message for specific step
+            system_message = (
+                f"You are a Dialogue Messages Generator. "
+                f"Your task is to generate natural, spoken messages for the **{step_type}** step "
+                f"in a voice-based customer care system. "
+                f"Return ONLY valid JSON, no markdown, no code fences, no comments."
+            )
 
-        # Parse response
-        if isinstance(ai_response, str):
-            import json
-            result = json.loads(ai_response)
+            # Call AI
+            ai_response = chat_json([
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": prompt}
+            ], provider=provider if provider else "openai")
+
+            # Parse response
+            if isinstance(ai_response, str):
+                import json
+                result = json.loads(ai_response)
+            else:
+                result = ai_response
+
+            # Validate response structure
+            if not isinstance(result, dict):
+                raise ValueError("AI response is not a dictionary")
+
+            # Extract messages array
+            messages = result.get("messages", [])
+            if not isinstance(messages, list):
+                # If messages is a string, convert to array
+                if isinstance(messages, str):
+                    messages = [messages]
+                else:
+                    messages = []
+
+            # Filter to ensure all items are strings
+            validated_messages = [str(msg) for msg in messages if isinstance(msg, str) and msg.strip()]
+
+            # Extract options (only for disambiguation)
+            options = result.get("options", [])
+            if not isinstance(options, list):
+                options = []
+
+            # Fallback if no messages generated
+            if len(validated_messages) == 0:
+                print(f"[generate-ai-messages] Warning: No messages generated for stepType: {step_type}", flush=True)
+                entity_label = contract.get("entity", {}).get("label", "value")
+
+                # Step-specific fallbacks
+                fallbacks = {
+                    "start": [f"What's your {entity_label.lower()}?"],
+                    "noInput": [f"Could you share the {entity_label.lower()}?"],
+                    "noMatch": ["I didn't catch that. Could you repeat?"],
+                    "confirmation": ["Is this correct: {{ '{{input}}' }}?"],
+                    "notConfirmed": [f"Could you provide the correct {entity_label.lower()}?"],
+                    "violation": [f"Could you provide a valid {entity_label.lower()}?"],
+                    "disambiguation": ["Which one did you mean?"],
+                    "success": ["Thanks, got it."]
+                }
+                validated_messages = fallbacks.get(step_type, ["Please provide the information."])
+
+            return {
+                "success": True,
+                "messages": validated_messages,
+                "options": options if step_type == "disambiguation" else []
+            }
+
+        # ✅ LEGACY: If stepType not provided, generate all steps (backward compatibility)
         else:
-            result = ai_response
+            # Generate prompt for all steps
+            prompt = get_ai_messages_prompt(contract, node_label)
 
-        # Validate response structure
-        if not isinstance(result, dict):
-            raise ValueError("AI response is not a dictionary")
+            # System message for AI messages generation
+            system_message = (
+                "You are a Dialogue Messages Generator. "
+                "Your task is to generate natural, spoken messages for voice-based customer care systems. "
+                "You must generate messages for: start, noInput, noMatch, confirmation, and success. "
+                "Return ONLY valid JSON, no markdown, no code fences, no comments."
+            )
 
-        # Ensure all required message types exist
-        required_types = ["start", "noInput", "noMatch", "confirmation", "success"]
-        validated = {}
+            # Call AI
+            ai_response = chat_json([
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": prompt}
+            ], provider=provider if provider else "openai")
 
-        for msg_type in required_types:
-            if msg_type in result:
-                value = result[msg_type]
-                if isinstance(value, list):
-                    # Filter to ensure all items are strings
-                    validated[msg_type] = [str(msg) for msg in value if isinstance(msg, str) and msg.strip()]
-                elif isinstance(value, str):
-                    # Single value -> convert to array
-                    validated[msg_type] = [value.strip()] if value.strip() else []
+            # Parse response
+            if isinstance(ai_response, str):
+                import json
+                result = json.loads(ai_response)
+            else:
+                result = ai_response
+
+            # Validate response structure
+            if not isinstance(result, dict):
+                raise ValueError("AI response is not a dictionary")
+
+            # Ensure all required message types exist
+            required_types = ["start", "noInput", "noMatch", "confirmation", "success"]
+            validated = {}
+
+            for msg_type in required_types:
+                if msg_type in result:
+                    value = result[msg_type]
+                    if isinstance(value, list):
+                        # Filter to ensure all items are strings
+                        validated[msg_type] = [str(msg) for msg in value if isinstance(msg, str) and msg.strip()]
+                    elif isinstance(value, str):
+                        # Single value -> convert to array
+                        validated[msg_type] = [value.strip()] if value.strip() else []
+                    else:
+                        validated[msg_type] = []
                 else:
                     validated[msg_type] = []
-            else:
-                validated[msg_type] = []
 
-        # Validate minimum requirements
-        if len(validated["start"]) == 0:
-            print("[generate-ai-messages] Warning: No start messages generated", flush=True)
-            # Create fallback
-            entity_label = contract.get("entity", {}).get("label", "value")
-            validated["start"] = [f"What's your {entity_label.lower()}?"]
+            # Validate minimum requirements
+            if len(validated["start"]) == 0:
+                print("[generate-ai-messages] Warning: No start messages generated", flush=True)
+                # Create fallback
+                entity_label = contract.get("entity", {}).get("label", "value")
+                validated["start"] = [f"What's your {entity_label.lower()}?"]
 
-        # Ensure noInput has 3 variations (or at least 1)
-        if len(validated["noInput"]) == 0:
-            entity_label = contract.get("entity", {}).get("label", "value")
-            validated["noInput"] = [f"Could you share the {entity_label.lower()}?"]
+            # Ensure noInput has 3 variations (or at least 1)
+            if len(validated["noInput"]) == 0:
+                entity_label = contract.get("entity", {}).get("label", "value")
+                validated["noInput"] = [f"Could you share the {entity_label.lower()}?"]
 
-        # Ensure noMatch has 3 variations (or at least 1)
-        if len(validated["noMatch"]) == 0:
-            entity_label = contract.get("entity", {}).get("label", "value")
-            validated["noMatch"] = ["I didn't catch that. Could you repeat?"]
+            # Ensure noMatch has 3 variations (or at least 1)
+            if len(validated["noMatch"]) == 0:
+                entity_label = contract.get("entity", {}).get("label", "value")
+                validated["noMatch"] = ["I didn't catch that. Could you repeat?"]
 
-        # Ensure confirmation has at least 1 message
-        if len(validated["confirmation"]) == 0:
-            validated["confirmation"] = ["Is this correct: {{ '{{input}}' }}?"]
+            # Ensure confirmation has at least 1 message
+            if len(validated["confirmation"]) == 0:
+                validated["confirmation"] = ["Is this correct: {{ '{{input}}' }}?"]
 
-        # Ensure success has at least 1 message
-        if len(validated["success"]) == 0:
-            validated["success"] = ["Thanks, got it."]
+            # Ensure success has at least 1 message
+            if len(validated["success"]) == 0:
+                validated["success"] = ["Thanks, got it."]
 
-        return {
-            "success": True,
-            "messages": validated
-        }
+            return {
+                "success": True,
+                "messages": validated
+            }
 
     except Exception as e:
         print(f"[generate-ai-messages] Error: {str(e)}", flush=True)

@@ -88,13 +88,13 @@ def validate_structure(structure: List[Dict[str, Any]]) -> Tuple[bool, List[str]
             # Will be auto-generated, but log warning
             pass
 
-        # Validate subData recursively
-        sub_data = node.get("subData", [])
-        if sub_data:
-            if not isinstance(sub_data, list):
-                errors.append(f"Node at path {'/'.join(path)} has invalid subData (must be array)")
+        # Validate subNodes recursively (preferred) or subData (backward compatibility)
+        sub_nodes = node.get("subNodes", node.get("subData", []))
+        if sub_nodes:
+            if not isinstance(sub_nodes, list):
+                errors.append(f"Node at path {'/'.join(path)} has invalid subNodes/subData (must be array)")
             else:
-                for i, sub_node in enumerate(sub_data):
+                for i, sub_node in enumerate(sub_nodes):
                     validate_node(sub_node, path + [node.get("label", f"node-{i}")], depth + 1)
 
     for i, node in enumerate(structure):
@@ -103,9 +103,34 @@ def validate_structure(structure: List[Dict[str, Any]]) -> Tuple[bool, List[str]
     return len(errors) == 0, errors
 
 
+def normalize_subdata_to_subnodes(node: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Normalize node structure: convert subData to subNodes (backward compatibility).
+
+    Args:
+        node: Node dictionary (may have subData or subNodes)
+
+    Returns:
+        Normalized node with subNodes (subData converted if present)
+    """
+    normalized = node.copy()
+
+    # If subData exists but subNodes doesn't, convert subData to subNodes
+    if "subData" in normalized and "subNodes" not in normalized:
+        sub_data = normalized.pop("subData", [])
+        if sub_data:
+            normalized["subNodes"] = [normalize_subdata_to_subnodes(child) for child in sub_data]
+    # If subNodes exists, normalize recursively
+    elif "subNodes" in normalized:
+        normalized["subNodes"] = [normalize_subdata_to_subnodes(child) for child in normalized["subNodes"]]
+
+    return normalized
+
+
 def parse_and_validate_structure(response: str) -> Tuple[List[Dict[str, Any]], List[str]]:
     """
     Parse and validate structure in one step.
+    Normalizes subData to subNodes for backward compatibility.
 
     Args:
         response: AI response
@@ -118,6 +143,10 @@ def parse_and_validate_structure(response: str) -> Tuple[List[Dict[str, Any]], L
         is_valid, errors = validate_structure(structure)
         if not is_valid:
             return [], errors
-        return structure, []
+
+        # Normalize: convert subData to subNodes (backward compatibility)
+        normalized_structure = [normalize_subdata_to_subnodes(node) for node in structure]
+
+        return normalized_structure, []
     except Exception as e:
         return [], [str(e)]

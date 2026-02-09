@@ -49,7 +49,7 @@ The structure must be:
 3. **Node Properties**:
    - Each node must have: id, label
    - Optional: type (string, number, date, email, phone, etc.), icon
-   - Nodes can have subData array (for children)
+   - Nodes can have subNodes array (for children)
 
 4. **Semantic Correctness**:
    - Structure must match the task label semantically
@@ -73,12 +73,12 @@ The structure must be:
       "label": "Main entity label (e.g., 'Date of Birth', 'Address', 'Email')",
       "type": "entity type (e.g., 'date', 'address', 'email')",
       "icon": "optional icon (e.g., 'calendar', 'home', 'mail')",
-      "subData": [
+      "subNodes": [
         {{
           "id": "child-1",
           "label": "Child node label (e.g., 'Day', 'Month', 'Year')",
           "type": "child type (e.g., 'number', 'string')",
-          "subData": []
+          "subNodes": []
         }}
       ]
     }}
@@ -95,7 +95,7 @@ Example 1: Date of Birth
       "label": "Date of Birth",
       "type": "date",
       "icon": "calendar",
-      "subData": [
+      "subNodes": [
         {{"id": "day", "label": "Day", "type": "number"}},
         {{"id": "month", "label": "Month", "type": "number"}},
         {{"id": "year", "label": "Year", "type": "number"}}
@@ -112,7 +112,7 @@ Example 2: Email (simple)
       "label": "Email",
       "type": "email",
       "icon": "mail",
-      "subData": []
+      "subNodes": []
     }}
   ]
 }}
@@ -125,7 +125,7 @@ Example 3: Address (composite)
       "label": "Address",
       "type": "address",
       "icon": "home",
-      "subData": [
+      "subNodes": [
         {{"id": "street", "label": "Street", "type": "string"}},
         {{"id": "city", "label": "City", "type": "string"}},
         {{"id": "postalCode", "label": "Postal Code", "type": "string"}},

@@ -1,14 +1,14 @@
 import { useState } from 'react';
-import { FakeStepMessages, FakeModuleTemplate } from '../types';
+import { WizardStepMessages, WizardModuleTemplate } from '../types';
 
 type DialogScenario = 'happy' | 'partial' | 'error';
 
 type RightPanelProps = {
-  messages: FakeStepMessages | null;
+  messages: WizardStepMessages | null;
   isVisible: boolean;
   userInput?: string;
   previewModuleId?: string | null;
-  availableModules?: FakeModuleTemplate[];
+  availableModules?: WizardModuleTemplate[];
 };
 
 export function RightPanel({ messages, isVisible, userInput = '', previewModuleId = null, availableModules = [] }: RightPanelProps) {
@@ -16,7 +16,7 @@ export function RightPanel({ messages, isVisible, userInput = '', previewModuleI
 
   const previewModule = previewModuleId ? availableModules.find(m => m.id === previewModuleId) : null;
 
-  const getModuleDialogs = (module: FakeModuleTemplate, scenario: DialogScenario) => {
+  const getModuleDialogs = (module: WizardModuleTemplate, scenario: DialogScenario) => {
     switch (module.id) {
       case 'booking-restaurant':
         return scenario === 'happy' ? [

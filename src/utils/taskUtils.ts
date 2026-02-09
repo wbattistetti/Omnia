@@ -1175,6 +1175,29 @@ export async function buildTaskTree(
       : {};
   let stepsWereCloned = false;
 
+  console.log('[buildTaskTree] 🔍 Loading steps from instance', {
+    taskId: instance.id,
+    hasInstanceSteps: !!instance.steps,
+    instanceStepsType: typeof instance.steps,
+    isInstanceStepsArray: Array.isArray(instance.steps),
+    instanceStepsKeys: instance.steps && typeof instance.steps === 'object' && !Array.isArray(instance.steps)
+      ? Object.keys(instance.steps)
+      : [],
+    instanceStepsContent: instance.steps,
+    nodeTemplateIds: nodes.map(n => n.templateId),
+    // ✅ NEW: Verifica mismatch templateId
+    templateIdMismatch: nodes.length > 0 && instance.steps && typeof instance.steps === 'object' && !Array.isArray(instance.steps)
+      ? {
+          nodeTemplateId: nodes[0].templateId,
+          stepsTemplateIds: Object.keys(instance.steps),
+          match: Object.keys(instance.steps).includes(nodes[0].templateId || ''),
+          nodeId: nodes[0].id,
+          nodeLabel: nodes[0].label,
+          instanceTemplateId: instance.templateId,
+        }
+      : null,
+  });
+
   if (!finalSteps || Object.keys(finalSteps).length === 0) {
     // ✅ Prima creazione: clona steps dal template
     const { steps: clonedSteps } = cloneTemplateSteps(template, nodes);
@@ -1214,7 +1237,7 @@ export async function buildTaskTree(
   // ✅ Carica templateVersion dal template (per drift detection)
   const templateVersion = template.version || 1;
 
-  return {
+  const result = {
     labelKey: instance.labelKey ?? template.labelKey ?? template.label,  // ✅ Usa labelKey (fallback a label per retrocompatibilità)
     nodes,  // ✅ Già TaskTreeNode[] con subNodes[]
     steps: finalSteps,  // ✅ Dictionary: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
@@ -1222,6 +1245,28 @@ export async function buildTaskTree(
     dataContract: template.dataContract ?? undefined,
     introduction: template.introduction ?? instance.introduction
   };
+
+  // ✅ NEW: Log finale con verifica mismatch
+  console.log('[buildTaskTree] ✅ TaskTree built', {
+    taskId: instance.id,
+    nodesLength: nodes.length,
+    stepsKeys: Object.keys(finalSteps),
+    stepsCount: Object.keys(finalSteps).length,
+    // ✅ NEW: Verifica mismatch finale
+    templateIdMismatch: nodes.length > 0 && finalSteps && typeof finalSteps === 'object' && !Array.isArray(finalSteps)
+      ? {
+          nodeTemplateId: nodes[0].templateId,
+          stepsTemplateIds: Object.keys(finalSteps),
+          match: Object.keys(finalSteps).includes(nodes[0].templateId || ''),
+          nodeId: nodes[0].id,
+          nodeLabel: nodes[0].label,
+          instanceTemplateId: instance.templateId,
+          templateId: template.id,
+        }
+      : null,
+  });
+
+  return result;
 }
 
 // ❌ RIMOSSO: buildDataTree() - sostituito da buildTaskTreeNodes()

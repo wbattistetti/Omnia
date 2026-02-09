@@ -194,7 +194,24 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
       hasTaskTree: !!finalTaskTree,
       nodesLength: finalTaskTree.nodes?.length ?? 0,
       hasSteps: !!finalTaskTree.steps,
-      stepsCount: Array.isArray(finalTaskTree.steps) ? finalTaskTree.steps.length : 0
+      // ✅ FIX: stepsCount per dictionary (non array)
+      stepsCount: finalTaskTree.steps && typeof finalTaskTree.steps === 'object' && !Array.isArray(finalTaskTree.steps)
+        ? Object.keys(finalTaskTree.steps).length
+        : 0,
+      // ✅ NEW: Log dettagliato steps
+      stepsKeys: finalTaskTree.steps && typeof finalTaskTree.steps === 'object' && !Array.isArray(finalTaskTree.steps)
+        ? Object.keys(finalTaskTree.steps)
+        : [],
+      stepsContent: finalTaskTree.steps,
+      nodeTemplateIds: finalTaskTree.nodes?.map(n => n.templateId) || [],
+      // ✅ NEW: Verifica mismatch templateId
+      templateIdMismatch: finalTaskTree.nodes?.length > 0 && finalTaskTree.steps && typeof finalTaskTree.steps === 'object' && !Array.isArray(finalTaskTree.steps)
+        ? {
+            nodeTemplateId: finalTaskTree.nodes[0].templateId,
+            stepsTemplateIds: Object.keys(finalTaskTree.steps),
+            match: Object.keys(finalTaskTree.steps).includes(finalTaskTree.nodes[0].templateId || ''),
+          }
+        : null,
     });
 
     // ✅ Salva TaskTree nel Task usando extractTaskOverrides
@@ -206,7 +223,14 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
         instanceKey,
         hasTaskInstance: !!taskInstance,
         taskInstanceHasSteps: !!taskInstance?.steps,
-        taskInstanceStepsCount: Array.isArray(taskInstance?.steps) ? taskInstance.steps.length : 0
+        // ✅ FIX: stepsCount per dictionary (non array)
+        taskInstanceStepsCount: taskInstance?.steps && typeof taskInstance.steps === 'object' && !Array.isArray(taskInstance.steps)
+          ? Object.keys(taskInstance.steps).length
+          : 0,
+        taskInstanceStepsKeys: taskInstance?.steps && typeof taskInstance.steps === 'object' && !Array.isArray(taskInstance.steps)
+          ? Object.keys(taskInstance.steps)
+          : [],
+        taskInstanceTemplateId: taskInstance?.templateId,
       });
 
       // ✅ NUOVO: Usa extractTaskOverrides per salvare solo override
@@ -220,18 +244,56 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
         if (overrides.introduction !== undefined) taskInstance.introduction = overrides.introduction;
         // ❌ NON salvare: constraints, dataContract (vengono dal template)
 
+        console.log('[TaskTreeHostAdapter][handleComplete] 💾 Saving task with overrides', {
+          instanceKey,
+          hasOverridesSteps: !!overrides.steps,
+          overridesStepsKeys: overrides.steps && typeof overrides.steps === 'object' && !Array.isArray(overrides.steps)
+            ? Object.keys(overrides.steps)
+            : [],
+          overridesStepsContent: overrides.steps,
+        });
+
         taskInstance.type = TaskType.UtteranceInterpretation;
         taskInstance.updatedAt = new Date();
 
         // ✅ Salva nel database
         await taskRepository.updateTask(instanceKey, overrides, currentProjectId);
+
+        console.log('[TaskTreeHostAdapter][handleComplete] ✅ Task saved, verifying', {
+          instanceKey,
+          savedTask: taskRepository.getTask(instanceKey),
+          savedTaskSteps: taskRepository.getTask(instanceKey)?.steps,
+          savedTaskStepsKeys: taskRepository.getTask(instanceKey)?.steps && typeof taskRepository.getTask(instanceKey)?.steps === 'object' && !Array.isArray(taskRepository.getTask(instanceKey)?.steps)
+            ? Object.keys(taskRepository.getTask(instanceKey)!.steps!)
+            : [],
+        });
       } else if (!taskInstance) {
-        // ✅ Task non esiste, crealo (extractTaskOverrides crea automaticamente il template se necessario)
+        // ✅ Task non esiste, crealo
+        // ✅ CRITICAL: Prendi templateId dal finalTaskTree invece di null
+        const rootNodeTemplateId = finalTaskTree.nodes?.[0]?.templateId || null;
+
+        if (!rootNodeTemplateId) {
+          console.error('[TaskTreeHostAdapter][handleComplete] ❌ CRITICAL: Cannot create task without templateId', {
+            instanceKey,
+            hasNodes: !!finalTaskTree.nodes,
+            nodesLength: finalTaskTree.nodes?.length || 0,
+            firstNode: finalTaskTree.nodes?.[0]
+          });
+          throw new Error('Cannot create task: templateId is required but not found in TaskTree nodes');
+        }
+
+        console.log('[TaskTreeHostAdapter][handleComplete] 📝 Creating new task with templateId from TaskTree', {
+          instanceKey,
+          templateId: rootNodeTemplateId,
+          nodeId: finalTaskTree.nodes[0].id,
+          nodeLabel: finalTaskTree.nodes[0].label
+        });
+
         const { extractTaskOverrides } = await import('../../../utils/taskUtils');
         const tempTask: Task = {
           id: instanceKey,
           type: TaskType.UtteranceInterpretation,
-          templateId: null,  // Verrà creato automaticamente da extractTaskOverrides
+          templateId: rootNodeTemplateId,  // ✅ FIX: Usa templateId dal TaskTree invece di null
           label: finalTaskTree.label,
           steps: finalTaskTree.steps
         };
@@ -239,7 +301,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
 
         taskRepository.createTask(
           TaskType.UtteranceInterpretation,
-          tempTask.templateId,  // Ora ha templateId dopo extractTaskOverrides
+          tempTask.templateId,  // Ora ha templateId corretto
           overrides,
           instanceKey,
           currentProjectId || undefined
@@ -251,8 +313,22 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
       console.log('[TaskTreeHostAdapter][handleComplete] ✅ Task saved', {
         instanceKey,
         savedTaskHasSteps: !!savedTask?.steps,
-        savedTaskStepsCount: Array.isArray(savedTask?.steps) ? savedTask.steps.length : 0,
-        templateId: savedTask?.templateId
+        // ✅ FIX: stepsCount per dictionary (non array)
+        savedTaskStepsCount: savedTask?.steps && typeof savedTask.steps === 'object' && !Array.isArray(savedTask.steps)
+          ? Object.keys(savedTask.steps).length
+          : 0,
+        savedTaskStepsKeys: savedTask?.steps && typeof savedTask.steps === 'object' && !Array.isArray(savedTask.steps)
+          ? Object.keys(savedTask.steps)
+          : [],
+        templateId: savedTask?.templateId,
+        // ✅ NEW: Verifica mismatch dopo salvataggio
+        nodeTemplateIdAfterSave: finalTaskTree.nodes?.[0]?.templateId,
+        stepsTemplateIdsAfterSave: savedTask?.steps && typeof savedTask.steps === 'object' && !Array.isArray(savedTask.steps)
+          ? Object.keys(savedTask.steps)
+          : [],
+        templateIdMatchAfterSave: finalTaskTree.nodes?.[0]?.templateId && savedTask?.steps && typeof savedTask.steps === 'object' && !Array.isArray(savedTask.steps)
+          ? Object.keys(savedTask.steps).includes(finalTaskTree.nodes[0].templateId)
+          : false,
       });
     }
 

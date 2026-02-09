@@ -1,36 +1,36 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { FakeTaskTreeNode, FakeStepMessages } from '../../TaskBuilderAIWizard/types';
+import { WizardTaskTreeNode, WizardStepMessages } from '../../TaskBuilderAIWizard/types';
 import type { TaskTree, TaskTreeNode } from '../../types/taskTypes';
 
 /**
- * Converts FakeTaskTreeNode[] to TaskTree (format expected by the system)
+ * Converts WizardTaskTreeNode[] to TaskTree (format expected by the system)
  */
-export function convertFakeTaskTreeToTaskTree(
-  fakeTree: FakeTaskTreeNode[],
+export function convertWizardTaskTreeToTaskTree(
+  wizardTree: WizardTaskTreeNode[],
   labelKey?: string,
-  messages?: FakeStepMessages
+  messages?: WizardStepMessages
 ): TaskTree {
-  // Convert fake nodes to TaskTreeNode
-  const nodes: TaskTreeNode[] = fakeTree.map(convertFakeNodeToTaskNode);
+  // Convert wizard nodes to TaskTreeNode
+  const nodes: TaskTreeNode[] = wizardTree.map(convertWizardNodeToTaskNode);
 
   // Build steps from messages if available
   const steps: Record<string, Record<string, any>> = {};
   if (messages) {
-    fakeTree.forEach((fakeNode) => {
-      steps[fakeNode.templateId] = convertMessagesToSteps(messages, fakeNode.templateId);
+    wizardTree.forEach((wizardNode) => {
+      steps[wizardNode.templateId] = convertMessagesToSteps(messages, wizardNode.templateId);
     });
   }
 
   // Extract constraints from first root node (if present)
-  const rootConstraints = fakeTree[0]?.constraints || [];
+  const rootConstraints = wizardTree[0]?.constraints || [];
 
   // Extract dataContract from first root node (if present)
-  const rootDataContract = fakeTree[0]?.dataContract;
+  const rootDataContract = wizardTree[0]?.dataContract;
 
   return {
-    labelKey: labelKey || generateLabelKey(fakeTree[0]?.label || 'task'),
+    labelKey: labelKey || generateLabelKey(wizardTree[0]?.label || 'task'),
     nodes,
     steps,
     constraints: rootConstraints.length > 0 ? rootConstraints : undefined,
@@ -39,32 +39,32 @@ export function convertFakeTaskTreeToTaskTree(
 }
 
 /**
- * Converts a single FakeTaskTreeNode to TaskTreeNode
+ * Converts a single WizardTaskTreeNode to TaskTreeNode
  */
-function convertFakeNodeToTaskNode(fakeNode: FakeTaskTreeNode): TaskTreeNode {
+function convertWizardNodeToTaskNode(wizardNode: WizardTaskTreeNode): TaskTreeNode {
   const node: TaskTreeNode = {
-    id: fakeNode.id,
-    templateId: fakeNode.templateId,
-    label: fakeNode.label,
-    type: fakeNode.type,
-    icon: fakeNode.icon,
-    constraints: fakeNode.constraints,
-    dataContract: fakeNode.dataContract,
+    id: wizardNode.id,
+    templateId: wizardNode.templateId,
+    label: wizardNode.label,
+    type: wizardNode.type,
+    icon: wizardNode.icon,
+    constraints: wizardNode.constraints,
+    dataContract: wizardNode.dataContract,
   };
 
   // Recursively convert subNodes
-  if (fakeNode.subNodes && fakeNode.subNodes.length > 0) {
-    node.subNodes = fakeNode.subNodes.map(convertFakeNodeToTaskNode);
+  if (wizardNode.subNodes && wizardNode.subNodes.length > 0) {
+    node.subNodes = wizardNode.subNodes.map(convertWizardNodeToTaskNode);
   }
 
   return node;
 }
 
 /**
- * Converts FakeStepMessages to steps format for TaskTree
+ * Converts WizardStepMessages to steps format for TaskTree
  */
 function convertMessagesToSteps(
-  messages: FakeStepMessages,
+  messages: WizardStepMessages,
   templateId: string
 ): Record<string, any> {
   const stepRecord: Record<string, any> = {};
@@ -125,14 +125,14 @@ function generateLabelKey(label: string): string {
 }
 
 /**
- * Converts TaskTree to FakeTaskTreeNode[] (for edit mode)
+ * Converts TaskTree to WizardTaskTreeNode[] (for edit mode)
  */
-export function convertTaskTreeToFakeTaskTree(taskTree: TaskTree): FakeTaskTreeNode[] {
-  return taskTree.nodes.map((node) => convertTaskNodeToFakeNode(node));
+export function convertTaskTreeToWizardTaskTree(taskTree: TaskTree): WizardTaskTreeNode[] {
+  return taskTree.nodes.map((node) => convertTaskNodeToWizardNode(node));
 }
 
-function convertTaskNodeToFakeNode(node: TaskTreeNode): FakeTaskTreeNode {
-  const fakeNode: FakeTaskTreeNode = {
+function convertTaskNodeToWizardNode(node: TaskTreeNode): WizardTaskTreeNode {
+  const wizardNode: WizardTaskTreeNode = {
     id: node.id,
     templateId: node.templateId,
     label: node.label,
@@ -148,8 +148,8 @@ function convertTaskNodeToFakeNode(node: TaskTreeNode): FakeTaskTreeNode {
   };
 
   if (node.subNodes && node.subNodes.length > 0) {
-    fakeNode.subNodes = node.subNodes.map(convertTaskNodeToFakeNode);
+    wizardNode.subNodes = node.subNodes.map(convertTaskNodeToWizardNode);
   }
 
-  return fakeNode;
+  return wizardNode;
 }

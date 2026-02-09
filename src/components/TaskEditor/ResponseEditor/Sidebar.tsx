@@ -38,6 +38,11 @@ interface SidebarProps {
   onGenerateAll?: () => void; // ✅ Pulsante globale Generate All
   // ✅ NEW: Wizard mode to conditionally render overlay
   taskWizardMode?: TaskWizardMode;
+  // ✅ NEW: Props per pulsanti conferma struttura (Wizard)
+  showStructureConfirmation?: boolean;
+  onStructureConfirm?: () => void;
+  onStructureReject?: () => void;
+  structureConfirmed?: boolean;
 }
 
 function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivElement>) {
@@ -65,10 +70,15 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
   const onEngineChipClick = props.onEngineChipClick;
   const onGenerateAll = props.onGenerateAll;
   const taskWizardMode = props.taskWizardMode; // ✅ NEW: Get taskWizardMode prop
+  // ✅ NEW: Props per pulsanti conferma struttura
+  const showStructureConfirmation = props.showStructureConfirmation ?? false;
+  const onStructureConfirm = props.onStructureConfirm;
+  const onStructureReject = props.onStructureReject;
+  const structureConfirmed = props.structureConfirmed ?? false;
 
   const { combinedClass } = useFontContext();
   const { translations } = useProjectTranslations(); // ✅ Get translations for node labels
-  const dbg = (...args: any[]) => { try { if (localStorage.getItem('debug.sidebar') === '1') console.log(...args); } catch {} };
+  const dbg = (...args: any[]) => { try { if (localStorage.getItem('debug.sidebar') === '1') console.log(...args); } catch { } };
 
   // ✅ IMPORTANT: All hooks must be called before any early returns
   // Early return moved to render section to comply with React Hooks rules
@@ -347,7 +357,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
           )}
           {mainList.map((main, idx) => {
             // ✅ NO FALLBACKS: getSubNodes always returns array (can be empty)
-      const subs = getSubNodes(main);
+            const subs = getSubNodes(main);
             const hasSubs = subs.length > 0;
             const MainIcon = getIconComponent(main?.icon || 'FileText');
             return (
@@ -545,7 +555,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
               ghostRootRef.current = null;
             }
           }, 0);
-        } catch {}
+        } catch { }
       }
       if (ghostContainerRef.current) {
         try {
@@ -556,7 +566,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
               ghostContainerRef.current = null;
             }
           }, 0);
-        } catch {}
+        } catch { }
       }
     };
   }, []);
@@ -566,10 +576,13 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
   const finalWidth = manualWidth ?? measuredW ?? 280; // Fallback a 280 invece di 'auto'
   const hasFlex = !manualWidth && measuredW === null; // ✅ CRITICO: Solo flex se non c'è manualWidth E measuredW è null
 
-      // ✅ Early return check moved here (after all hooks) to comply with React Hooks rules
-      if (!Array.isArray(mainList) || mainList.length === 0) {
-        return null;
-      }
+  // ✅ Early return check moved here (after all hooks) to comply with React Hooks rules
+  if (!Array.isArray(mainList) || mainList.length === 0) {
+    return null;
+  }
+
+  // ✅ Calcola se mostrare i pulsanti Sì/No (stessa logica del Sidebar nuovo)
+  const shouldShowStructureButtons = showStructureConfirmation && !structureConfirmed && mainList.length > 0;
 
   return (
     <div
@@ -595,6 +608,83 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
         ...(style ? Object.fromEntries(Object.entries(style).filter(([key]) => key !== 'width')) : {})
       }}
     >
+      {/* ✅ NEW: Pulsanti Sì/No per conferma struttura (in alto, prima dell'albero) */}
+      {shouldShowStructureButtons && (
+        <div style={{
+          marginBottom: '16px',
+          paddingBottom: '16px',
+          borderBottom: `1px solid ${borderColor}`,
+          // ✅ DEBUG: Bordo colorato per i pulsanti Sì/No
+          border: '3px solid #22c55e',
+          backgroundColor: '#dcfce7',
+          padding: '12px',
+          borderRadius: '8px',
+        }}>
+          <div style={{
+            fontSize: '13px',
+            fontWeight: 600,
+            color: textBase,
+            marginBottom: '12px',
+            textAlign: 'center'
+          }}>
+            Va bene questa struttura dati?
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={onStructureConfirm}
+              style={{
+                flex: 1,
+                background: 'linear-gradient(to right, #3b82f6, #2563eb)',
+                color: '#fff',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                fontWeight: 600,
+                fontSize: '12px',
+                cursor: 'pointer',
+                border: 'none',
+                transition: 'all 0.2s',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(to right, #2563eb, #1d4ed8)';
+                e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(to right, #3b82f6, #2563eb)';
+                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.2)';
+              }}
+            >
+              Sì
+            </button>
+
+            <button
+              onClick={onStructureReject}
+              style={{
+                flex: 1,
+                background: bgBase,
+                color: textBase,
+                padding: '8px 12px',
+                borderRadius: '8px',
+                fontWeight: 600,
+                fontSize: '12px',
+                cursor: 'pointer',
+                border: `1px solid ${borderColor}`,
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = bgGroup;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = bgBase;
+              }}
+            >
+              No
+            </button>
+          </div>
+        </div>
+      )}
+
       {aggregated && (
         <button
           onClick={(e) => { (onSelectAggregator ? onSelectAggregator() : undefined); (e.currentTarget as HTMLButtonElement).blur(); ref && typeof ref !== 'function' && ref.current && ref.current.focus && ref.current.focus(); }}
@@ -634,7 +724,7 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
         const disabledMain = !isMainIncluded(idx);
         const Icon = getIconComponent(main?.icon || 'FileText');
         // ✅ NO FALLBACKS: getSubNodes always returns array (can be empty)
-      const subs = getSubNodes(main);
+        const subs = getSubNodes(main);
         return (
           <div key={idx}>
             <button
@@ -766,8 +856,8 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                         draggable
                         onDragStart={(e) => {
                           dragStateRef.current = { mainIdx: idx, fromIdx: sidx };
-                          try { e.dataTransfer?.setData('text/plain', String(sidx)); e.dataTransfer.dropEffect = 'move'; e.dataTransfer.effectAllowed = 'move'; } catch {}
-                          try { if (localStorage.getItem('debug.sidebar')==='1') console.log('[DDT][sub.dragStart]', { main: getNodeLabel(main, translations), from: sidx }); } catch {}
+                          try { e.dataTransfer?.setData('text/plain', String(sidx)); e.dataTransfer.dropEffect = 'move'; e.dataTransfer.effectAllowed = 'move'; } catch { }
+                          try { if (localStorage.getItem('debug.sidebar') === '1') console.log('[DDT][sub.dragStart]', { main: getNodeLabel(main, translations), from: sidx }); } catch { }
                         }}
                         onDragEnter={(e) => {
                           // same-main only
@@ -786,11 +876,11 @@ function SidebarComponent(props: SidebarProps, ref: React.ForwardedRef<HTMLDivEl
                           if (st.mainIdx === idx && st.fromIdx !== null && typeof onReorderSub === 'function') {
                             if (st.fromIdx !== sidx) {
                               onReorderSub(idx, st.fromIdx, sidx);
-                              try { if (localStorage.getItem('debug.sidebar')==='1') console.log('[DDT][sub.drop]', { main: getNodeLabel(main, translations), from: st.fromIdx, to: sidx }); } catch {}
+                              try { if (localStorage.getItem('debug.sidebar') === '1') console.log('[DDT][sub.drop]', { main: getNodeLabel(main, translations), from: st.fromIdx, to: sidx }); } catch { }
                             }
                           }
                           dragStateRef.current = { mainIdx: null, fromIdx: null };
-                          try { e.preventDefault(); } catch {}
+                          try { e.preventDefault(); } catch { }
                         }}
                         onDragEnd={() => { dragStateRef.current = { mainIdx: null, fromIdx: null }; }}
                         onClick={(e) => {

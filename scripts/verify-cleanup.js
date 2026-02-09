@@ -22,21 +22,21 @@ const removedFiles = [
 
 const patternsToCheck = [
   { pattern: /SidebarOLD/g, name: 'SidebarOLD', exclude: [] },
-  { 
-    pattern: /ChatSimulator\/DDEBubbleChat/g, 
+  {
+    pattern: /ChatSimulator\/DDEBubbleChat/g,
     name: 'ChatSimulator/DDEBubbleChat',
     exclude: [
       /@responseEditor\/ChatSimulator\/DDEBubbleChat/g,
       /\.\/TaskEditor\/ResponseEditor\/ChatSimulator\/DDEBubbleChat/g,
     ]
   },
-  { 
-    pattern: /contractWizardOrchestrator/g, 
+  {
+    pattern: /contractWizardOrchestrator/g,
     name: 'contractWizardOrchestrator',
     exclude: [/@utils\/wizard\/orchestrator/g]
   },
-  { 
-    pattern: /semanticContractBuilder/g, 
+  {
+    pattern: /semanticContractBuilder/g,
     name: 'semanticContractBuilder',
     exclude: [/@utils\/contract\/buildEntity/g]
   },
@@ -86,10 +86,10 @@ function checkPatterns() {
 
         if (fileMatches) {
           // Check if it's an excluded (new correct) path
-          const isExcluded = patternConfig.exclude && patternConfig.exclude.some(excludePattern => 
+          const isExcluded = patternConfig.exclude && patternConfig.exclude.some(excludePattern =>
             content.match(excludePattern)
           );
-          
+
           if (!isExcluded) {
             const relativePath = path.relative(projectRoot, filePath);
             matches.push(relativePath);

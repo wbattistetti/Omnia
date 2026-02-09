@@ -15,7 +15,8 @@ import React from 'react';
 import ContractWizard from '@responseEditor/ContractWizard/ContractWizard';
 import IntentMessagesBuilder from '@responseEditor/components/IntentMessagesBuilder';
 import { TaskContextualizationPanel } from './TaskContextualizationPanel';
-import { TaskBuilderWizardPanel } from './TaskBuilderWizardPanel';
+// ❌ RIMOSSO: TaskBuilderWizardPanel non più usato (wizard integrato in MainContentArea)
+// import { TaskBuilderWizardPanel } from './TaskBuilderWizardPanel';
 import { useTaskTreeFromStore } from '@responseEditor/core/state';
 import type { Task, TaskTree } from '@types/taskTypes';
 import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
@@ -100,7 +101,7 @@ export function ResponseEditorContent({
   const hasSidebar = !!sidebar;
   React.useEffect(() => {
     if (effectiveWizardMode === 'full') {
-      console.log('[ResponseEditorContent] ✅ FULL WIZARD MODE - Rendering TaskBuilderWizardPanel', {
+      console.log('[ResponseEditorContent] ✅ FULL WIZARD MODE - Rendering CenterPanel in MainContentArea', {
         taskWizardMode,
         effectiveWizardMode,
         mainListLength,
@@ -110,31 +111,9 @@ export function ResponseEditorContent({
     }
   }, [effectiveWizardMode, taskWizardMode, mainListLength, hasNormalEditorLayout, hasSidebar]);
 
-  // ✅ CRITICAL: Early return for full wizard mode - MUST be FIRST check
-  // ✅ This prevents ANY rendering of normalEditorLayout, sidebar, toolbar, or preview
-  if (effectiveWizardMode === 'full') {
-    return (
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          height: '100%',
-          width: '100%',
-          overflow: 'hidden',
-          position: 'relative',
-          zIndex: 10,
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        <TaskBuilderWizardPanel
-          taskLabel={taskLabel || ''}
-          onComplete={onTaskBuilderComplete}
-          onCancel={onTaskBuilderCancel}
-        />
-      </div>
-    );
-  }
+  // ❌ RIMOSSO: Early return per full wizard mode
+  // Ora il wizard viene gestito tramite mainViewMode nel MainContentArea
+  // Il normalEditorLayout viene sempre passato, anche quando taskWizardMode === 'full'
 
   // ✅ PRIORITY 2: Wizard modes (checked AFTER full mode)
   // ✅ STATO 2: taskWizardMode = 'adaptation' (template found, no instance)
@@ -196,23 +175,28 @@ export function ResponseEditorContent({
     );
   }
 
-  // ✅ STATO 1: Normal editor layout (solo se effectiveWizardMode === 'none')
-  if (effectiveWizardMode === 'none') {
-    // ✅ NormalEditorLayout viene passato solo quando taskWizardMode === 'none'
-    if (normalEditorLayout) {
-      return (
-        <div style={{ flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
-          {normalEditorLayout}
-        </div>
-      );
-    }
-    // ✅ Fallback: Se normalEditorLayout non è passato ma siamo in STATO 1, c'è un problema
+  // ✅ STATO 1: Normal editor layout (sempre, anche quando taskWizardMode === 'full')
+  // ✅ NormalEditorLayout viene sempre passato, anche quando taskWizardMode === 'full'
+  // Il wizard viene gestito tramite mainViewMode nel MainContentArea
+  if (normalEditorLayout) {
     return (
-      <div style={{ flex: 1, minHeight: 0, height: '100%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-        <div>No layout available</div>
+      <div style={{
+        flex: 1,
+        minHeight: 0,
+        height: '100%',
+        overflow: 'hidden',
+      }}>
+        {normalEditorLayout}
       </div>
     );
   }
+
+  // ✅ Fallback: Se normalEditorLayout non è passato, c'è un problema
+  return (
+    <div style={{ flex: 1, minHeight: 0, height: '100%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+      <div>No layout available</div>
+    </div>
+  );
 
   // ✅ Fallback: Se per qualche motivo effectiveWizardMode non è 'none' ma non è neanche 'full' o 'adaptation'
   return (

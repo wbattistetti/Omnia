@@ -184,6 +184,10 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     hideHeader,
     onToolbarUpdate,
     registerOnClose,
+    // ✅ NEW: Generalization params (will be passed from ResponseEditorLayout)
+    shouldBeGeneral: params.shouldBeGeneral,
+    saveDecisionMade: params.saveDecisionMade,
+    onOpenSaveDialog: params.onOpenSaveDialog,
   });
 
   // Extract convenience values

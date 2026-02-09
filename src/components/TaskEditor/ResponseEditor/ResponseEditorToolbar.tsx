@@ -1,5 +1,5 @@
 import React from 'react';
-import { Undo2, Redo2, MessageSquare, Rocket, BookOpen, List, CheckSquare, Sparkles, Wand2 } from 'lucide-react';
+import { Undo2, Redo2, MessageSquare, Rocket, BookOpen, List, CheckSquare, Sparkles, Wand2, Star } from 'lucide-react';
 import { RightPanelMode } from './RightPanel';
 
 interface ResponseEditorToolbarProps {
@@ -25,6 +25,10 @@ interface ResponseEditorToolbarProps {
   // ✅ NEW: Wizard handlers
   onChooseFromLibrary?: () => void;
   onGenerateNewTask?: () => void;
+  // ✅ NEW: Generalization handlers
+  shouldBeGeneral?: boolean;
+  saveDecisionMade?: boolean;
+  onOpenSaveDialog?: () => void;
 }
 
 /**
@@ -54,6 +58,10 @@ export function useResponseEditorToolbar({
   // ✅ NEW: Wizard handlers
   onChooseFromLibrary,
   onGenerateNewTask,
+  // ✅ NEW: Generalization handlers
+  shouldBeGeneral = false,
+  saveDecisionMade = false,
+  onOpenSaveDialog,
 }: ResponseEditorToolbarProps) {
   // ✅ CRITICAL: Hooks devono essere chiamati PRIMA di qualsiasi return condizionale
   // ✅ Test è un toggle indipendente per mostrare/nascondere il pannello debugger
@@ -255,6 +263,15 @@ export function useResponseEditorToolbar({
       title: "Genera un nuovo task usando AI",
       active: false
     },
+    // ✅ NEW: Generalization button (only if shouldBeGeneral and decision not made)
+    ...(shouldBeGeneral && !saveDecisionMade && onOpenSaveDialog ? [{
+      icon: <Star size={16} />,
+      label: "Where do you want to save this task?",
+      onClick: onOpenSaveDialog,
+      title: "Template with general value - click to decide",
+      primary: true,  // Highlight if not decided
+      active: false
+    }] : []),
   ];
 }
 

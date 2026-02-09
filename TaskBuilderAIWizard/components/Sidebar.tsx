@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { ChevronRight, ChevronDown, Calendar, Hash, Type, MapPin, Clock, User, Phone, FileText, Package, CreditCard, Home, Utensils, Stethoscope } from 'lucide-react';
-import { FakeTaskTreeNode } from '../types';
+import { WizardTaskTreeNode } from '../types';
 
 type SidebarProps = {
-  taskTree: FakeTaskTreeNode[];
+  taskTree: WizardTaskTreeNode[];
   activeNodeId: string | null;
   onNodeClick: (nodeId: string) => void;
   registerNode: (id: string, element: HTMLDivElement | null) => void;
@@ -26,7 +26,7 @@ export function Sidebar({
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['root']));
 
   useEffect(() => {
-    const collectAllNodeIds = (nodes: FakeTaskTreeNode[]): string[] => {
+    const collectAllNodeIds = (nodes: WizardTaskTreeNode[]): string[] => {
       const ids: string[] = [];
       nodes.forEach(node => {
         ids.push(node.id);
@@ -55,7 +55,7 @@ export function Sidebar({
     });
   };
 
-  const getNodeIcon = (node: FakeTaskTreeNode) => {
+  const getNodeIcon = (node: WizardTaskTreeNode) => {
     const label = node.label.toLowerCase();
     const iconClass = "w-4 h-4";
 
@@ -92,7 +92,7 @@ export function Sidebar({
    * - running: almeno una fase è in running
    * - pending: nessuna fase è partita
    */
-  const getTaskStatus = (node: FakeTaskTreeNode): 'pending' | 'running' | 'completed' => {
+  const getTaskStatus = (node: WizardTaskTreeNode): 'pending' | 'running' | 'completed' => {
     if (!node.pipelineStatus) return 'pending';
 
     const { constraints, parser, messages } = node.pipelineStatus;
@@ -111,7 +111,7 @@ export function Sidebar({
   /**
    * Calcola la percentuale di completamento per un task
    */
-  const getTaskProgress = (node: FakeTaskTreeNode): string => {
+  const getTaskProgress = (node: WizardTaskTreeNode): string => {
     if (!node.pipelineStatus) return '';
 
     const { constraints, parser, messages, constraintsProgress = 0, parserProgress = 0, messagesProgress = 0 } = node.pipelineStatus;
@@ -154,7 +154,7 @@ export function Sidebar({
     return `${Math.round(avgProgress)}%`;
   };
 
-  const renderNode = (node: FakeTaskTreeNode, level: number = 0) => {
+  const renderNode = (node: WizardTaskTreeNode, level: number = 0) => {
     const isExpanded = expandedNodes.has(node.id);
     const isActive = activeNodeId === node.id;
     const hasChildren = node.subNodes && node.subNodes.length > 0;

@@ -1,13 +1,13 @@
 import { Loader2, Check } from 'lucide-react';
 import { PipelineStep } from '../hooks/useWizardState';
-import { FakeStepMessages, FakeTaskTreeNode } from '../types';
+import { WizardStepMessages, WizardTaskTreeNode } from '../types';
 
 type PipelineProps = {
   steps: PipelineStep[];
   showStructureConfirmation?: boolean;
   onStructureConfirm?: () => void;
-  messages: FakeStepMessages | null;
-  dataSchema: FakeTaskTreeNode[];
+  messages: WizardStepMessages | null;
+  dataSchema: WizardTaskTreeNode[];
   onHighlightNodes: (nodes: Set<string>) => void;
   onHighlightColor: (color: 'blue' | 'orange') => void;
 };
@@ -22,7 +22,7 @@ export function Pipeline({
   onHighlightColor
 }: PipelineProps) {
   // Funzione helper per raccogliere tutti gli ID dei nodi
-  const getAllNodeIds = (nodes: FakeTaskTreeNode[]): string[] => {
+  const getAllNodeIds = (nodes: WizardTaskTreeNode[]): string[] => {
     const ids: string[] = [];
     nodes.forEach(node => {
       ids.push(node.id);
@@ -34,8 +34,8 @@ export function Pipeline({
   };
 
   // Funzione per raccogliere tutti i nodi in una lista piatta
-  const flattenTaskTree = (nodes: FakeTaskTreeNode[]): FakeTaskTreeNode[] => {
-    const result: FakeTaskTreeNode[] = [];
+  const flattenTaskTree = (nodes: WizardTaskTreeNode[]): WizardTaskTreeNode[] => {
+    const result: WizardTaskTreeNode[] = [];
     nodes.forEach(node => {
       result.push(node);
       if (node.subNodes && node.subNodes.length > 0) {

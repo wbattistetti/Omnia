@@ -4,8 +4,8 @@
 import React, { useState, useEffect } from 'react';
 import { WizardApp } from '../../../TaskBuilderAIWizard/WizardApp';
 import type { TaskTree } from '../../types/taskTypes';
-import { convertFakeTaskTreeToTaskTree } from './TaskBuilderAIWizardAdapter';
-import { FakeTaskTreeNode, FakeStepMessages } from '../../../TaskBuilderAIWizard/types';
+import { convertWizardTaskTreeToTaskTree } from './TaskBuilderAIWizardAdapter';
+import { WizardTaskTreeNode, WizardStepMessages } from '../../../TaskBuilderAIWizard/types';
 
 export interface TaskBuilderAIWizardWrapperProps {
   onCancel: () => void;
@@ -26,8 +26,8 @@ export const TaskBuilderAIWizardWrapper: React.FC<TaskBuilderAIWizardWrapperProp
 }) => {
   const [isCompleting, setIsCompleting] = useState(false);
   const [wizardData, setWizardData] = useState<{
-    taskTree: FakeTaskTreeNode[];
-    messages?: FakeStepMessages;
+    taskTree: WizardTaskTreeNode[];
+    messages?: WizardStepMessages;
   } | null>(null);
 
   useEffect(() => {
@@ -35,7 +35,7 @@ export const TaskBuilderAIWizardWrapper: React.FC<TaskBuilderAIWizardWrapperProp
       const handleComplete = async () => {
         try {
           setIsCompleting(true);
-          const taskTree = convertFakeTaskTreeToTaskTree(
+          const taskTree = convertWizardTaskTreeToTaskTree(
             wizardData.taskTree,
             taskLabel ? generateLabelKey(taskLabel) : undefined,
             wizardData.messages

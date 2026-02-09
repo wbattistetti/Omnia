@@ -1,5 +1,5 @@
-import { FakeConstraint } from './FakeConstraint';
-import { FakeNLPContract } from './FakeNLPContract';
+import { WizardConstraint } from './WizardConstraint';
+import { WizardNLPContract } from './WizardNLPContract';
 
 /**
  * Stato di esecuzione della pipeline per un singolo task
@@ -18,20 +18,25 @@ export type TaskPipelineStatus = {
  * Nodo dell'albero gerarchico dei task
  * Ogni nodo può avere subtask e ciascuno ha il proprio stato di pipeline
  */
-export type FakeTaskTreeNode = {
+export type WizardTaskTreeNode = {
   id: string;
   templateId: string;
   label: string;
   type?: string;
   icon?: string;
 
+  // ✅ NUOVO: Variabili (generati da VariableNameGeneratorService)
+  readableName?: string;      // Nome completo variabile (es: "Data di nascita del paziente")
+  dottedName?: string;        // Nome gerarchico (es: "Data di nascita del paziente.Giorno")
+  taskId?: string;            // Task ID (per mapping variabili in FlowchartVariablesService)
+
   // Dati generati dalla pipeline
-  constraints?: FakeConstraint[];
-  dataContract?: FakeNLPContract;
+  constraints?: WizardConstraint[];
+  dataContract?: WizardNLPContract;
 
   // Stato di esecuzione della pipeline per questo task
   pipelineStatus?: TaskPipelineStatus;
 
   // Subtask (es: Data di nascita -> Giorno, Mese, Anno)
-  subNodes?: FakeTaskTreeNode[];
+  subNodes?: WizardTaskTreeNode[];
 };

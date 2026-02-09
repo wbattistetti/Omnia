@@ -5,31 +5,9 @@
  * No side effects, no dependencies on React or state.
  */
 
-/**
- * @deprecated Use dictionary format directly. This function will throw error in strict mode.
- * DO NOT USE - Steps must be dictionary format
- */
-export function convertStepsArrayToDictionary(steps: any): Record<string, any> {
-  if (Array.isArray(steps)) {
-    throw new Error(
-      '[convertStepsArrayToDictionary] DEPRECATED: Steps must be dictionary format, not array. ' +
-      'Update your data structure to use dictionary format.'
-    );
-  }
-
-  if (!steps) return {};
-  if (typeof steps === 'object' && !Array.isArray(steps)) {
-    return steps;
-  }
-  return {};
-}
-
-/**
- * @deprecated Use dictionary format directly. This function will throw error in strict mode.
- */
-export function normalizeStepsToDictionary(steps: any): Record<string, any> {
-  return convertStepsArrayToDictionary(steps);
-}
+// REMOVED: convertStepsArrayToDictionary and normalizeStepsToDictionary
+// These functions were deprecated and threw errors when used with array format.
+// All code now uses dictionary format directly.
 
 /**
  * Check if steps have content (non-empty)

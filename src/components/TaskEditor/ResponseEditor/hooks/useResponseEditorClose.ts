@@ -71,6 +71,10 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
     onClose,
     replaceSelectedDDT,
     taskWizardMode,
+    // ✅ NEW: Generalization params
+    shouldBeGeneral = false,
+    saveDecisionMade = false,
+    onOpenSaveDialog,
   } = params;
 
   // ✅ FASE 2.3: Use Zustand store as SINGLE source of truth
@@ -85,8 +89,18 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
       hasSelectedNodePath: !!selectedNodePath,
       taskStepsCount: task?.steps ? Object.keys(task.steps).length : 0,
       contractChangeRefType: typeof contractChangeRef.current,
-      contractChangeRefExists: !!contractChangeRef.current
+      contractChangeRefExists: !!contractChangeRef.current,
+      shouldBeGeneral,
+      saveDecisionMade
     });
+
+    // ✅ NEW: Tutor alla chiusura - verifica se deve essere scelto dove salvare
+    if (shouldBeGeneral && !saveDecisionMade && onOpenSaveDialog) {
+      console.log('[ResponseEditor][CLOSE] ⚠️ Template generalizable but decision not made, blocking close');
+      alert('Before closing, you must tell me where you want to save this task.');
+      onOpenSaveDialog();
+      return false;  // ✅ Blocca chiusura
+    }
 
     // ✅ Verifica se ci sono modifiche ai contracts non salvate
     const contractChange = contractChangeRef.current;
@@ -428,6 +442,9 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
     setTaskTree,
     replaceSelectedDDT,
     taskWizardMode,
+    shouldBeGeneral,
+    saveDecisionMade,
+    onOpenSaveDialog,
   ]);
 
   return handleEditorClose;

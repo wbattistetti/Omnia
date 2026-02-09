@@ -11,7 +11,10 @@ import { RightPanelMode } from '@responseEditor/RightPanel';
 import IntentListEditorWrapper from '@responseEditor/components/IntentListEditorWrapper';
 import { MainContentArea } from '@responseEditor/components/MainContentArea';
 import { PanelContainer } from '@responseEditor/components/PanelContainer';
+import { MainViewMode } from '@responseEditor/types/mainViewMode';
 import type { Task, TaskTree } from '@types/taskTypes';
+import type { PipelineStep } from '../../../../../TaskBuilderAIWizard/hooks/useWizardState';
+import type { WizardTaskTreeNode, WizardStep, WizardModuleTemplate } from '../../../../../TaskBuilderAIWizard/types';
 
 export interface ResponseEditorNormalLayoutProps {
   // Data
@@ -53,8 +56,7 @@ export interface ResponseEditorNormalLayoutProps {
   handleSidebarResizeStart: (e: React.MouseEvent) => void; // ✅ FASE 2.1: Now comes from sidebar composito hook
 
   // Content state
-  showMessageReview: boolean;
-  showSynonyms: boolean;
+  // ❌ RIMOSSO: showMessageReview e showSynonyms (ora usiamo mainViewMode in MainContentArea)
   selectedIntentIdForTraining: string | null;
   setSelectedIntentIdForTraining: React.Dispatch<React.SetStateAction<string | null>>;
   pendingEditorOpen: { editorType: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings'; nodeId: string } | null;
@@ -92,6 +94,30 @@ export interface ResponseEditorNormalLayoutProps {
 
   // ✅ NEW: Wizard mode to conditionally render overlay
   taskWizardMode?: TaskWizardMode;
+
+  // ✅ NEW: Main view mode enum
+  mainViewMode?: MainViewMode;
+
+  // ✅ NEW: Props per Wizard (quando mainViewMode === 'wizard')
+  wizardProps?: {
+    showStructureConfirmation?: boolean;
+    onStructureConfirm?: () => void;
+    onStructureReject?: () => void;
+    structureConfirmed?: boolean;
+    currentStep?: WizardStep;
+    pipelineSteps?: PipelineStep[];
+    userInput?: string;
+    dataSchema?: WizardTaskTreeNode[];
+    onProceedFromEuristica?: () => void;
+    onShowModuleList?: () => void;
+    onSelectModule?: (moduleId: string) => void;
+    onPreviewModule?: (moduleId: string | null) => void;
+    availableModules?: WizardModuleTemplate[];
+    foundModuleId?: string;
+    showCorrectionMode?: boolean;
+    correctionInput?: string;
+    onCorrectionInputChange?: (value: string) => void;
+  };
 }
 
 /**
@@ -128,8 +154,9 @@ export function ResponseEditorNormalLayout({
   sidebarManualWidth,
   isDraggingSidebar,
   handleSidebarResizeStart,
-  showMessageReview,
-  showSynonyms,
+  // ❌ RIMOSSO: showMessageReview e showSynonyms (ora usiamo mainViewMode)
+  // showMessageReview,
+  // showSynonyms,
   selectedIntentIdForTraining,
   setSelectedIntentIdForTraining,
   pendingEditorOpen,
@@ -153,11 +180,11 @@ export function ResponseEditorNormalLayout({
   replaceSelectedTaskTree,
   sidebarOnly = false,
   taskWizardMode,
+  mainViewMode = MainViewMode.BEHAVIOUR,
+  wizardProps,
 }: ResponseEditorNormalLayoutProps) {
-  // ✅ CRITICAL: Early return when taskWizardMode === 'full' - do not render anything
-  if (taskWizardMode === 'full') {
-    return null;
-  }
+  // ❌ RIMOSSO: Early return quando taskWizardMode === 'full'
+  // Ora il wizard viene gestito tramite mainViewMode nel MainContentArea
 
   // ✅ Determina la struttura del grid in base alle condizioni
   const hasIntentEditor = mainList[0]?.kind === 'intent' && task;
@@ -189,6 +216,12 @@ export function ResponseEditorNormalLayout({
         onParserModify={handleParserModify}
         onEngineChipClick={handleEngineChipClick}
         onGenerateAll={handleGenerateAll}
+        taskWizardMode={taskWizardMode}
+        // ✅ NEW: Props per pulsanti Sì/No quando wizardMode === DATA_STRUCTURE_PROPOSED
+        showStructureConfirmation={wizardProps?.showStructureConfirmation}
+        onStructureConfirm={wizardProps?.onStructureConfirm}
+        onStructureReject={wizardProps?.onStructureReject}
+        structureConfirmed={wizardProps?.structureConfirmed}
       />
     );
   }
@@ -260,6 +293,11 @@ export function ResponseEditorNormalLayout({
             onEngineChipClick={handleEngineChipClick}
             onGenerateAll={handleGenerateAll}
             taskWizardMode={taskWizardMode}
+            // ✅ NEW: Props per pulsanti Sì/No (Wizard)
+            showStructureConfirmation={wizardProps?.showStructureConfirmation}
+            onStructureConfirm={wizardProps?.onStructureConfirm}
+            onStructureReject={wizardProps?.onStructureReject}
+            structureConfirmed={wizardProps?.structureConfirmed}
           />
           {/* Resizer verticale tra Sidebar e contenuto principale */}
           <div
@@ -285,8 +323,8 @@ export function ResponseEditorNormalLayout({
       {/* Content Area: MainContentArea + PanelContainer */}
       <div style={contentAreaStyle}>
         <MainContentArea
-          showMessageReview={showMessageReview}
-          showSynonyms={showSynonyms}
+          // ✅ NEW: Usa mainViewMode invece di showMessageReview/showSynonyms
+          mainViewMode={mainViewMode}
           selectedNode={selectedNode}
           selectedRoot={selectedRoot}
           selectedSubIndex={selectedSubIndex}
@@ -299,6 +337,8 @@ export function ResponseEditorNormalLayout({
           handleProfileUpdate={handleProfileUpdate}
           contractChangeRef={contractChangeRef}
           pendingEditorOpen={pendingEditorOpen}
+          // ✅ NEW: Passa wizardProps quando mainViewMode === 'wizard'
+          wizardProps={mainViewMode === MainViewMode.WIZARD ? wizardProps : undefined}
         />
         <PanelContainer
           leftPanelMode={leftPanelMode}
@@ -314,8 +354,9 @@ export function ResponseEditorNormalLayout({
           setTasksPanelWidth={setTasksPanelWidth}
           tasksStartWidthRef={tasksStartWidthRef}
           tasksStartXRef={tasksStartXRef}
-          showSynonyms={showSynonyms}
-          showMessageReview={showMessageReview}
+          // ✅ Converti mainViewMode in showSynonyms/showMessageReview per PanelContainer
+          showSynonyms={mainViewMode === MainViewMode.DATA_CONTRACTS}
+          showMessageReview={mainViewMode === MainViewMode.MESSAGE_REVIEW}
           taskTree={taskTree}
           task={task}
           currentProjectId={currentProjectId}

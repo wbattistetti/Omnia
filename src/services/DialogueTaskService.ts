@@ -319,6 +319,46 @@ export class DialogueTaskService {
     this.modifiedTemplates.clear();
     console.log('[DialogueTaskService] 🧹 All modified templates cleared');
   }
+
+  /**
+   * Aggiunge un template alla cache in memoria (senza salvare nel DB)
+   * Utile per template generati dal Wizard che devono essere disponibili in memoria
+   * ma non ancora salvati nel database
+   */
+  static addTemplate(template: DialogueTask): void {
+    // ✅ Assicura che la cache sia marcata come caricata (prima di getTemplate)
+    if (!this.cacheLoaded) {
+      this.cacheLoaded = true;
+    }
+
+    // Verifica che non esista già
+    const templateId = template.id || template._id || '';
+    const existing = this.cache.find(t =>
+      (t.id || t._id) === templateId
+    );
+
+    if (existing) {
+      console.warn('[DialogueTaskService] Template già esistente, aggiornando', {
+        templateId,
+        label: template.label
+      });
+      // Aggiorna template esistente
+      const index = this.cache.findIndex(t =>
+        (t.id || t._id) === templateId
+      );
+      if (index >= 0) {
+        this.cache[index] = template;
+      }
+    } else {
+      // Aggiungi nuovo template
+      this.cache.push(template);
+      console.log('[DialogueTaskService] ✅ Template aggiunto in memoria', {
+        templateId,
+        label: template.label,
+        totalTemplates: this.cache.length
+      });
+    }
+  }
 }
 
 // Export per compatibilità

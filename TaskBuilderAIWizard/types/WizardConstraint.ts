@@ -1,4 +1,4 @@
-export type FakeConstraint = {
+export type WizardConstraint = {
   kind: string;
   title: string;
   payoff: string;

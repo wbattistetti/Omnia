@@ -1,4 +1,4 @@
-export type FakeNLPContract = {
+export type WizardNLPContract = {
   templateName: string;
   templateId: string;
   subDataMapping: Record<string, {

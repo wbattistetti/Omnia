@@ -1,31 +1,34 @@
 import { PhaseCard } from './PhaseCard';
 import { PipelineStep } from '../hooks/useWizardState';
-import { WizardStep, FakeTaskTreeNode, FakeModuleTemplate } from '../types';
+import { WizardStep, WizardTaskTreeNode, WizardModuleTemplate } from '../types';
 import { Boxes, Shield, Brain, MessageSquare, Calendar, Sparkles, Utensils, Info, Truck, ChevronDown, ChevronRight, Check } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 type CenterPanelProps = {
-  currentStep: WizardStep;
+  currentStep: WizardStep | 'idle'; // DEPRECATED: mantenuto per compatibilità
   pipelineSteps: PipelineStep[];
-  userInput: string;
-  dataSchema: FakeTaskTreeNode[];
+  userInput: string; // DEPRECATED: non più usato, mantenuto per compatibilità
+  dataSchema: WizardTaskTreeNode[];
   showStructureConfirmation?: boolean;
   onStructureConfirm?: () => void;
   onProceedFromEuristica?: () => void;
   onShowModuleList?: () => void;
   onSelectModule?: (moduleId: string) => void;
   onPreviewModule?: (moduleId: string | null) => void;
-  availableModules?: FakeModuleTemplate[];
+  availableModules?: WizardModuleTemplate[];
   foundModuleId?: string;
   showCorrectionMode?: boolean;
   correctionInput?: string;
   onCorrectionInputChange?: (value: string) => void;
+  // ✅ NEW: Sotto-stati per parte variabile dinamica
+  currentParserSubstep?: string | null;
+  currentMessageSubstep?: string | null;
 };
 
 export function CenterPanel({
   currentStep,
   pipelineSteps,
-  userInput,
+  userInput, // DEPRECATED: non più usato
   dataSchema,
   showStructureConfirmation,
   onStructureConfirm,
@@ -37,10 +40,21 @@ export function CenterPanel({
   foundModuleId,
   showCorrectionMode = false,
   correctionInput = '',
-  onCorrectionInputChange
+  onCorrectionInputChange,
+  currentParserSubstep = null,
+  currentMessageSubstep = null
 }: CenterPanelProps) {
+  console.log('[CenterPanel] 🎯 Rendering CenterPanel', {
+    currentStep,
+    pipelineStepsLength: pipelineSteps?.length,
+    pipelineSteps: pipelineSteps,
+    dataSchemaLength: dataSchema?.length,
+    showStructureConfirmation,
+    currentParserSubstep,
+    currentMessageSubstep,
+  });
   const [isAccordionOpen, setIsAccordionOpen] = useState(false);
-  const [selectedModule, setSelectedModule] = useState<FakeModuleTemplate | null>(() => {
+  const [selectedModule, setSelectedModule] = useState<WizardModuleTemplate | null>(() => {
     // Se c'è un modulo trovato dall'euristica, pre-selezionalo
     if (foundModuleId && currentStep === 'euristica_trovata') {
       return availableModules.find(m => m.id === foundModuleId) || null;
@@ -63,8 +77,8 @@ export function CenterPanel({
     }
   }, [currentStep, foundModuleId, availableModules]);
 
-  const flattenTaskTree = (nodes: FakeTaskTreeNode[]): FakeTaskTreeNode[] => {
-    const result: FakeTaskTreeNode[] = [];
+  const flattenTaskTree = (nodes: WizardTaskTreeNode[]): WizardTaskTreeNode[] => {
+    const result: WizardTaskTreeNode[] = [];
     nodes.forEach(node => {
       result.push(node);
       if (node.subNodes && node.subNodes.length > 0) {
@@ -96,37 +110,81 @@ export function CenterPanel({
     return pipelineStep.status === 'error' ? 'pending' : pipelineStep.status;
   };
 
+  console.log('[CenterPanel] 📋 Building phases array', {
+    pipelineStepsLength: pipelineSteps?.length,
+    pipelineSteps: pipelineSteps,
+    structureStep: pipelineSteps?.find(s => s.id === 'structure'),
+    constraintsStep: pipelineSteps?.find(s => s.id === 'constraints'),
+    parsersStep: pipelineSteps?.find(s => s.id === 'parsers'),
+    messagesStep: pipelineSteps?.find(s => s.id === 'messages'),
+  });
+
   const phases = [
     {
       icon: Boxes,
       title: 'Struttura dati',
-      payoff: 'Schema gerarchico e campi',
       step: pipelineSteps.find(s => s.id === 'structure')!,
-      description: 'Definizione della struttura dati e organizzazione gerarchica dei campi necessari.'
+      dynamicMessage: (() => {
+        const step = pipelineSteps.find(s => s.id === 'structure');
+        if (step?.status === 'running') {
+          if (showStructureConfirmation) {
+            return 'Confermami la struttura che vedi sulla sinistra...';
+          }
+          return 'sto pensando a qual è la migliore struttura dati per questo task...';
+        }
+        if (step?.status === 'completed') {
+          return step.payload; // "Confermata!"
+        }
+        return undefined;
+      })()
     },
     {
       icon: Shield,
-      title: 'Vincoli',
-      payoff: 'Regole di validazione',
+      title: 'Regole di validazione',
       step: pipelineSteps.find(s => s.id === 'constraints')!,
       phase: 'constraints' as const,
-      description: 'Regole di validazione per garantire che i dati raccolti siano corretti e completi.'
+      dynamicMessage: (() => {
+        const step = pipelineSteps.find(s => s.id === 'constraints');
+        if (step?.status === 'running') {
+          return step.payload;
+        }
+        if (step?.status === 'completed') {
+          return step.payload; // "Generate!"
+        }
+        return undefined;
+      })()
     },
     {
       icon: Brain,
       title: 'Parser',
-      payoff: 'Comprensione linguaggio naturale',
       step: pipelineSteps.find(s => s.id === 'parsers')!,
       phase: 'parser' as const,
-      description: 'Interpretazione delle frasi dell\'utente attraverso NLP e pattern matching.'
+      dynamicMessage: (() => {
+        const step = pipelineSteps.find(s => s.id === 'parsers');
+        if (step?.status === 'running' && step.payload) {
+          return step.payload; // Contiene già la parte variabile in grassetto
+        }
+        if (step?.status === 'completed') {
+          return step.payload; // "Generati!"
+        }
+        return undefined;
+      })()
     },
     {
       icon: MessageSquare,
       title: 'Messaggi',
-      payoff: 'Dialogo conversazionale',
       step: pipelineSteps.find(s => s.id === 'messages')!,
       phase: 'messages' as const,
-      description: 'Generazione messaggi per ogni situazione: richiesta, conferma, errore, chiarimento.'
+      dynamicMessage: (() => {
+        const step = pipelineSteps.find(s => s.id === 'messages');
+        if (step?.status === 'running' && step.payload) {
+          return step.payload; // Contiene già la parte variabile in grassetto
+        }
+        if (step?.status === 'completed') {
+          return step.payload; // "Generati!"
+        }
+        return undefined;
+      })()
     }
   ];
 
@@ -426,26 +484,39 @@ export function CenterPanel({
         )}
 
         {/* Fasi di generazione */}
-        {isGenerating && (
+        {(() => {
+          console.log('[CenterPanel] 🔄 Checking isGenerating condition', {
+            isGenerating,
+            currentStep,
+            phasesLength: phases.length,
+            pipelineStepsLength: pipelineSteps.length,
+          });
+          return isGenerating;
+        })() && (
           <>
-          {phases.map(({ icon, title, payoff, step, phase, description }) => {
+          {(() => {
+            console.log('[CenterPanel] 🎨 Rendering phases', {
+              phasesLength: phases.length,
+              phases: phases.map(p => ({ id: p.step.id, title: p.title, status: p.step.status })),
+            });
+            return phases.map(({ icon, title, step, phase, dynamicMessage }) => {
             const isStructurePhase = step.id === 'structure';
             return (
               <PhaseCard
                 key={step.id}
                 icon={icon}
                 title={title}
-                payoff={payoff}
                 state={getPhaseState(step)}
                 progress={phase ? calculatePhaseProgress(phase) : undefined}
-                description={description}
                 isExpanded={isStructurePhase && showCorrectionMode}
                 showCorrectionForm={isStructurePhase && showCorrectionMode}
                 correctionInput={correctionInput}
                 onCorrectionInputChange={onCorrectionInputChange}
+                dynamicMessage={dynamicMessage}
               />
             );
-          })}
+          });
+          })()}
 
           {showStructureConfirmation && !showCorrectionMode && (
             <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 shadow-sm">
@@ -456,20 +527,31 @@ export function CenterPanel({
             </div>
           )}
 
-          {currentStep === 'modulo_pronto' && (
-            <div className="bg-green-50 border-2 border-green-500 rounded-2xl p-5 shadow-lg">
-              <div className="flex items-center gap-3 mb-2">
-                <span className="text-2xl">✔</span>
-                <h3 className="text-lg font-semibold text-green-900">
-                  Task completato con successo!
-                </h3>
-              </div>
-              <p className="text-sm text-green-700">
-                Puoi visualizzare la struttura completa nella sidebar e i dialoghi di esempio nel pannello di destra.
-              </p>
-            </div>
-          )}
+          {/* ✅ RIMOSSO: Pannello verde finale - il wizard si chiude automaticamente quando tutti gli step sono completati */}
         </>
+        )}
+
+        {/* ✅ RIMOSSO: Step idle non più necessario - il wizard parte automaticamente con taskLabel */}
+
+        {/* ✅ FALLBACK: Se nessuna condizione è vera, mostra un messaggio */}
+        {currentStep !== 'idle' &&
+         currentStep !== 'euristica_trovata' &&
+         currentStep !== 'euristica_non_trovata' &&
+         currentStep !== 'lista_moduli' &&
+         !isGenerating && (
+          <div className="bg-yellow-50 border-2 border-yellow-500 rounded-2xl p-6 shadow-md">
+            <h3 className="text-lg font-semibold text-yellow-900 mb-2">
+              Wizard in attesa
+            </h3>
+            <p className="text-sm text-yellow-700 mb-4">
+              Stato corrente: <code className="bg-yellow-100 px-2 py-1 rounded">{currentStep}</code>
+            </p>
+            <p className="text-sm text-yellow-600">
+              Il wizard è attivo ma non ci sono contenuti da mostrare per questo step.
+              {pipelineSteps.length === 0 && ' La pipeline non è ancora stata inizializzata.'}
+              {dataSchema.length === 0 && ' Non ci sono dati nello schema.'}
+            </p>
+          </div>
         )}
 
       </div>
