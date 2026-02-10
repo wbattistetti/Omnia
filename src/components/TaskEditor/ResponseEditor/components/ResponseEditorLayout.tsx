@@ -292,21 +292,18 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     }
   }, [onOpenSaveDialogProp, setShowSaveDialog]);
 
-  // ✅ DEBUG: Log generalization state
+  // ✅ DEBUG: Log per verificare stato del dialog (solo quando showSaveDialog cambia)
   React.useEffect(() => {
-    console.log('[ResponseEditorLayout] 🔍 Generalization state check', {
-      shouldBeGeneral,
-      saveDecisionMade,
-      taskWizardMode,
-      wizardMode: wizardIntegration?.wizardMode,
-      hasWizardIntegration: !!wizardIntegration,
-      wizardIntegrationShouldBeGeneral: wizardIntegration?.shouldBeGeneral,
-      generalizedLabel,
-      generalizedMessagesCount: generalizedMessages?.length || 0,
-      originalLabel,
-      generalizationReason: generalizationReasonEffective
-    });
-  }, [shouldBeGeneral, saveDecisionMade, taskWizardMode, wizardIntegration, generalizedLabel, generalizedMessages, originalLabel, generalizationReasonEffective]);
+    if (showSaveDialog) {
+      console.log('[ResponseEditorLayout] 📊 SaveLocationDialog OPENED:', {
+        hasAnchorRef: !!saveToLibraryButtonRef,
+        anchorRefCurrent: saveToLibraryButtonRef?.current,
+        anchorRefTagName: saveToLibraryButtonRef?.current?.tagName,
+        anchorRefDataId: saveToLibraryButtonRef?.current?.getAttribute('data-button-id'),
+        anchorRefRect: saveToLibraryButtonRef?.current?.getBoundingClientRect()
+      });
+    }
+  }, [showSaveDialog]); // ✅ Solo quando showSaveDialog cambia
 
   // ✅ REMOVED: Auto-open dialog - dialog opens only when user clicks button or tries to close
 
@@ -419,60 +416,30 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   // ✅ NEW: Calcola mainViewMode in base a taskWizardMode, wizardMode e showMessageReview/showSynonyms
   // ✅ IMPORTANTE: Questo useMemo deve venire DOPO la dichiarazione di wizardIntegration
   const mainViewMode = React.useMemo<MainViewMode>(() => {
-    console.log('[ResponseEditorLayout] 🎯 Computing mainViewMode', {
-      taskWizardMode,
-      wizardMode: wizardIntegration?.wizardMode,
-      showMessageReview,
-      showSynonyms,
-    });
-
     // ✅ NEW: Se wizard è completato, passa a BEHAVIOUR (auto-chiusura)
     if (taskWizardMode === 'full' && wizardIntegration?.wizardMode === 'completed') {
-      console.log('[ResponseEditorLayout] ✅ Wizard completed, returning BEHAVIOUR');
       return MainViewMode.BEHAVIOUR;
     }
 
     if (taskWizardMode === 'full') {
-      console.log('[ResponseEditorLayout] ✅ taskWizardMode is full, returning WIZARD');
       return MainViewMode.WIZARD;
     }
     if (showMessageReview) {
-      console.log('[ResponseEditorLayout] ✅ showMessageReview is true, returning MESSAGE_REVIEW');
       return MainViewMode.MESSAGE_REVIEW;
     }
     if (showSynonyms) {
-      console.log('[ResponseEditorLayout] ✅ showSynonyms is true, returning DATA_CONTRACTS');
       return MainViewMode.DATA_CONTRACTS;
     }
-    console.log('[ResponseEditorLayout] ✅ Default, returning BEHAVIOUR');
     return MainViewMode.BEHAVIOUR;
   }, [taskWizardMode, wizardIntegration?.wizardMode, showMessageReview, showSynonyms]);
 
-  console.log('[ResponseEditorLayout] 🔍 wizardIntegration stato', {
-    taskWizardMode,
-    hasWizardIntegration: !!wizardIntegration,
-    wizardMode: wizardIntegration?.wizardMode,
-    dataSchemaLength: wizardIntegration?.dataSchema?.length,
-    showStructureConfirmation: wizardIntegration?.showStructureConfirmation,
-    pipelineStepsLength: wizardIntegration?.pipelineSteps?.length,
-    pipelineSteps: wizardIntegration?.pipelineSteps,
-  });
-
   // ✅ NEW: Prepara wizardProps per CenterPanel e Sidebar (con useMemo per evitare ricostruzioni)
   const wizardProps = React.useMemo(() => {
-    console.log('[ResponseEditorLayout] 🧙 Building wizardProps', {
-      hasWizardIntegration: !!wizardIntegration,
-      wizardMode: wizardIntegration?.wizardMode,
-      pipelineStepsLength: wizardIntegration?.pipelineSteps?.length,
-      dataSchemaLength: wizardIntegration?.dataSchema?.length,
-    });
-
     if (!wizardIntegration) {
-      console.warn('[ResponseEditorLayout] ⚠️ wizardIntegration is null/undefined, returning undefined wizardProps');
       return undefined;
     }
 
-    const props = {
+    return {
       wizardMode: wizardIntegration.wizardMode,
       showStructureConfirmation: wizardIntegration.showStructureConfirmation,
       onStructureConfirm: wizardIntegration.handleStructureConfirm,
@@ -494,17 +461,28 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
       currentParserSubstep: wizardIntegration.currentParserSubstep,
       currentMessageSubstep: wizardIntegration.currentMessageSubstep,
     };
-
-    console.log('[ResponseEditorLayout] ✅ wizardProps built', {
-      hasProps: !!props,
-      pipelineStepsLength: props.pipelineSteps?.length,
-      pipelineSteps: props.pipelineSteps,
-      dataSchemaLength: props.dataSchema?.length,
-      wizardMode: props.wizardMode,
-    });
-
-    return props;
-  }, [wizardIntegration]);
+  }, [
+    // ✅ USA solo primitive values e funzioni stabili - evita dipendere dall'intero oggetto wizardIntegration
+    wizardIntegration?.wizardMode,
+    wizardIntegration?.showStructureConfirmation,
+    wizardIntegration?.structureConfirmed,
+    wizardIntegration?.currentStep,
+    wizardIntegration?.pipelineSteps,
+    wizardIntegration?.dataSchema,
+    wizardIntegration?.availableModules,
+    wizardIntegration?.foundModuleId,
+    wizardIntegration?.showCorrectionMode,
+    wizardIntegration?.correctionInput,
+    wizardIntegration?.currentParserSubstep,
+    wizardIntegration?.currentMessageSubstep,
+    wizardIntegration?.handleStructureConfirm,
+    wizardIntegration?.handleStructureReject,
+    wizardIntegration?.onProceedFromEuristica,
+    wizardIntegration?.onShowModuleList,
+    wizardIntegration?.onSelectModule,
+    wizardIntegration?.onPreviewModule,
+    wizardIntegration?.setCorrectionInput,
+  ]);
 
   // ✅ NEW: Converti dataSchema in mainList quando taskWizardMode === 'full'
   // La Sidebar ha bisogno di mainList, non di WizardTaskTreeNode[]
@@ -842,15 +820,10 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   // Questo assicura che il pulsante "Vuoi salvare in libreria?" appaia anche quando hideHeader === true
   React.useEffect(() => {
     if (hideHeader && onToolbarUpdate && taskWizardMode === 'none') {
-      console.log('[ResponseEditorLayout] 🔄 Syncing toolbarButtons to onToolbarUpdate', {
-        count: toolbarButtons.length,
-        labels: toolbarButtons.map(b => b.label),
-        shouldBeGeneral,
-        saveDecisionMade
-      });
-      onToolbarUpdate(toolbarButtons, 'orange');
+      // Usa toolbarButtonsWithRef che è già memoizzato
+      onToolbarUpdate(toolbarButtonsWithRef, 'orange'); // ✅ FIX: Passa toolbarButtonsWithRef con ref
     }
-  }, [hideHeader, onToolbarUpdate, toolbarButtons, taskWizardMode, shouldBeGeneral, saveDecisionMade]);
+  }, [hideHeader, onToolbarUpdate, taskWizardMode, shouldBeGeneral, saveDecisionMade, toolbarButtonsWithRef]); // ✅ toolbarButtonsWithRef è memoizzato, quindi non causa loop
 
   // ✅ LOG: Verification log for debugging (moved to useEffect to keep render pure)
   // ✅ FIX: Use only primitive dependencies to prevent loop
@@ -989,7 +962,6 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         generalizationReason={generalizationReasonEffective}
         generalizedMessages={generalizedMessages}
         anchorRef={saveToLibraryButtonRef}
-        toolbarButtons={toolbarButtons} // ✅ 2. Passato per dipendenza del layout effect
       />
     </div>
   );

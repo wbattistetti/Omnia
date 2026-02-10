@@ -120,16 +120,6 @@ export function MainContentArea({
   pendingEditorOpen,
   wizardProps,
 }: MainContentAreaProps) {
-  console.log('[MainContentArea] 🎨 Rendering', {
-    mainViewMode,
-    hasWizardProps: !!wizardProps,
-    wizardPropsKeys: wizardProps ? Object.keys(wizardProps) : [],
-    pipelineStepsLength: wizardProps?.pipelineSteps?.length,
-    pipelineSteps: wizardProps?.pipelineSteps,
-    dataSchemaLength: wizardProps?.dataSchema?.length,
-    wizardMode: wizardProps?.wizardMode,
-  });
-
   // ✅ Switch su enum invece di booleani multipli
   switch (mainViewMode) {
     case MainViewMode.MESSAGE_REVIEW:
@@ -183,31 +173,13 @@ export function MainContentArea({
 
     case MainViewMode.WIZARD:
       // ✅ NEW: CenterPanel al posto di BehaviourEditor
-      console.log('[MainContentArea] 🧙 Rendering WIZARD mode', {
-        hasWizardProps: !!wizardProps,
-        pipelineStepsLength: wizardProps?.pipelineSteps?.length,
-        pipelineSteps: wizardProps?.pipelineSteps,
-        dataSchemaLength: wizardProps?.dataSchema?.length,
-        wizardMode: wizardProps?.wizardMode,
-      });
-
       if (!wizardProps) {
-        console.error('[MainContentArea] ❌ Wizard props missing when mainViewMode === WIZARD');
         return (
           <div style={DEFAULT_CONTAINER_STYLE}>
             <div style={{ padding: 16, color: '#ef4444' }}>Wizard configuration error</div>
           </div>
         );
       }
-
-      console.log('[MainContentArea] ✅ Rendering CenterPanel with props', {
-        currentStep: wizardProps.currentStep,
-        pipelineSteps: wizardProps.pipelineSteps,
-        dataSchemaLength: wizardProps.dataSchema?.length,
-        showStructureConfirmation: wizardProps.showStructureConfirmation,
-        currentParserSubstep: wizardProps.currentParserSubstep,
-        currentMessageSubstep: wizardProps.currentMessageSubstep,
-      });
 
       return (
         <div style={DEFAULT_CONTAINER_STYLE}>

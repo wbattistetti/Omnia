@@ -193,7 +193,6 @@ export function useResponseEditorInitialization(params: UseResponseEditorInitial
     onTasksPanelModeChange: saveTasksPanelMode,
     onToggleSynonyms: () => setShowSynonyms(v => !v),
     onToggleMessageReview: () => setShowMessageReview(v => !v),
-    onOpenContractWizard: handleGenerateAll,
     rightWidth,
     onRightWidthChange: setRightWidth,
     testPanelWidth,

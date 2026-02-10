@@ -28,16 +28,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   const projectIdForWizard = taskWizardMode === 'full' ? currentProjectId || undefined : undefined;
   const localeForWizard = 'it';
 
-  console.log('[ResponseEditorInner] 🔍 useWizardIntegration chiamato', {
-    taskWizardMode,
-    taskLabel,
-    taskLabelForWizard,
-    taskId: taskIdForWizard,
-    rowId: rowIdForWizard,
-    projectId: projectIdForWizard,
-    willCallHook: taskWizardMode === 'full',
-  });
-
   const wizardIntegrationRaw = useWizardIntegration(
     taskLabelForWizard,
     taskIdForWizard,
@@ -67,15 +57,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     setShowSaveDialog(true);
   }, []);
 
-  console.log('[ResponseEditorInner] 🔍 Wizard integration computed', {
-    taskWizardMode,
-    wizardMode: wizardIntegrationRaw?.wizardMode,
-    shouldBeGeneral: wizardIntegrationRaw?.shouldBeGeneral,
-    effectiveShouldBeGeneral,
-    wizardIntegrationExists: !!wizardIntegration,
-    generalizedLabel,
-    generalizedMessagesCount: generalizedMessages?.length || 0,
-  });
+  // ✅ Log rimosso - causava loop infinito per dipendenze instabili
 
   // Validate TaskTree structure on mount/update
   useEffect(() => {

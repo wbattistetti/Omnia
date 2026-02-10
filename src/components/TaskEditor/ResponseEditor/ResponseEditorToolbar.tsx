@@ -1,5 +1,5 @@
 import React from 'react';
-import { Undo2, Redo2, MessageSquare, Rocket, BookOpen, List, CheckSquare, Sparkles, Wand2, Star } from 'lucide-react';
+import { Undo2, Redo2, MessageSquare, Rocket, BookOpen, List, CheckSquare, Wand2, Star } from 'lucide-react';
 import { RightPanelMode } from './RightPanel';
 
 interface ResponseEditorToolbarProps {
@@ -15,7 +15,6 @@ interface ResponseEditorToolbarProps {
   onTasksPanelModeChange: (mode: RightPanelMode) => void; // Nuovo handler
   onToggleSynonyms: () => void;
   onToggleMessageReview: () => void;
-  onOpenContractWizard?: () => void; // Nuovo: handler per aprire wizard contract
   rightWidth?: number;
   onRightWidthChange?: (width: number) => void;
   testPanelWidth?: number;
@@ -48,7 +47,6 @@ export function useResponseEditorToolbar({
   onTasksPanelModeChange, // Nuovo
   onToggleSynonyms,
   onToggleMessageReview,
-  onOpenContractWizard, // Nuovo
   rightWidth = 360,
   onRightWidthChange,
   testPanelWidth = 360,
@@ -202,13 +200,7 @@ export function useResponseEditorToolbar({
   return [
     { icon: <Undo2 size={16} />, onClick: () => { }, title: "Undo" },
     { icon: <Redo2 size={16} />, onClick: () => { }, title: "Redo" },
-    {
-      icon: <Sparkles size={16} />,
-      label: "Generate Contracts",
-      onClick: onOpenContractWizard || (() => {}),
-      title: "Automatically generate semantic contracts and parser engines for all nodes in the task tree.",
-      active: false
-    },
+    // ✅ REORDERED: Central buttons in the specified order
     {
       icon: <Rocket size={16} />,
       label: "Behaviour",
@@ -217,11 +209,11 @@ export function useResponseEditorToolbar({
       active: leftPanelMode === 'actions'
     },
     {
-      icon: <List size={16} />,
-      label: "Personality",
-      onClick: handlePersonalityClick,
-      title: "Customize the agent's tone, empathy level, and linguistic style to match your target audience.",
-      active: showMessageReview
+      icon: <CheckSquare size={16} />,
+      label: "Tasks",
+      onClick: handleTasksClick,
+      title: "View and manage available tasks for the dialogue flow.",
+      active: tasksPanelMode === 'actions'
     },
     {
       icon: <BookOpen size={16} />,
@@ -231,51 +223,65 @@ export function useResponseEditorToolbar({
       active: showSynonyms
     },
     {
+      icon: <List size={16} />,
+      label: "Personality",
+      onClick: handlePersonalityClick,
+      title: "Customize the agent's tone, empathy level, and linguistic style to match your target audience.",
+      active: showMessageReview
+    },
+    {
       icon: <MessageSquare size={16} />,
       label: "Test",
       onClick: handleTestClick,
       title: "Simulate and validate the dialogue flow to ensure correct behavior and data recognition.",
       active: testPanelMode === 'chat'
     },
-    {
-      icon: <CheckSquare size={16} />,
-      label: "Tasks",
-      onClick: handleTasksClick,
-      title: "View and manage available tasks for the dialogue flow.",
-      active: tasksPanelMode === 'actions'
-    },
-    // ✅ NEW: Wizard buttons (always visible)
-    {
-      icon: <BookOpen size={16} />,
-      label: "Scegli dalla libreria",
-      onClick: onChooseFromLibrary || (() => {
-        console.warn('[Toolbar] onChooseFromLibrary handler not provided');
-      }),
-      title: "Scegli un task dalla libreria di template predefiniti",
-      active: false
-    },
-    {
-      icon: <Wand2 size={16} />,
-      label: "Genera nuovo task",
-      onClick: onGenerateNewTask || (() => {
-        console.warn('[Toolbar] onGenerateNewTask handler not provided');
-      }),
-      title: "Genera un nuovo task usando AI",
-      active: false
-    },
     // ✅ NEW: Generalization button (only if shouldBeGeneral and decision not made)
     ...(shouldBeGeneral && !saveDecisionMade && onOpenSaveDialog ? [{
       icon: <Star size={16} />,
       label: "Vuoi salvare in libreria?",
       onClick: () => {
-        console.log('[ResponseEditorToolbar] 🔔 Button clicked, calling onOpenSaveDialog');
-        onOpenSaveDialog();
+        console.log('[ResponseEditorToolbar] 🔔 Opening save dialog');
+        try {
+          if (!onOpenSaveDialog) {
+            console.error('[ResponseEditorToolbar] ❌ onOpenSaveDialog is NULL/UNDEFINED!');
+            return;
+          }
+          onOpenSaveDialog();
+        } catch (error) {
+          console.error('[ResponseEditorToolbar] ❌ ERROR calling onOpenSaveDialog:', error);
+        }
       },
       title: "Template con valenza generale - clicca per decidere",
       primary: true,  // Highlight if not decided
       active: false,
       buttonId: "save-to-library" // ✅ For positioning popover
     }] : []),
+    // ✅ NEW: Magic wand button with dropdown (always visible, at the end before X)
+    {
+      icon: <Wand2 size={16} />,
+      label: undefined, // Icon only
+      onClick: () => {}, // Handled by dropdown
+      title: "Task creation options",
+      active: false,
+      buttonId: "magic-wand",
+      dropdownItems: [
+        {
+          label: "Scegli dalla libreria",
+          onClick: onChooseFromLibrary || (() => {
+            console.warn('[Toolbar] onChooseFromLibrary handler not provided');
+          }),
+          icon: <BookOpen size={16} />
+        },
+        {
+          label: "Rigenera task",
+          onClick: onGenerateNewTask || (() => {
+            console.warn('[Toolbar] onGenerateNewTask handler not provided');
+          }),
+          icon: <Wand2 size={16} />
+        }
+      ]
+    },
   ];
 }
 

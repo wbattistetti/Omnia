@@ -1,9 +1,14 @@
-﻿export type { WizardDataNode } from './WizardDataNode';
+export type { FakeDataNode } from './FakeDataNode';
+export type { FakeConstraint } from './FakeConstraint';
+export type { FakeNLPContract } from './FakeNLPContract';
+export type { FakeStepMessages } from './FakeStepMessages';
+export type { FakeModuleTemplate } from './FakeModuleTemplate';
+export type { FakeTaskTreeNode } from './FakeTaskTreeNode';
+export type { WizardStep } from './WizardStep';
+export { WizardMode } from './WizardMode';
+export type { WizardModeType } from './WizardMode';
 export type { WizardConstraint } from './WizardConstraint';
 export type { WizardNLPContract } from './WizardNLPContract';
 export type { WizardStepMessages } from './WizardStepMessages';
 export type { WizardModuleTemplate } from './WizardModuleTemplate';
 export type { WizardTaskTreeNode } from './WizardTaskTreeNode';
-export type { WizardStep } from './WizardStep';
-export { WizardMode } from './WizardMode';
-export type { WizardModeType } from './WizardMode';

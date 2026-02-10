@@ -196,19 +196,10 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
   // These flags are set when opening ResponseEditor from NodeRow
   React.useEffect(() => {
     if (taskMeta) {
-      console.log('[🔄 useResponseEditorCore] Leggendo taskWizardMode da taskMeta:', {
-        taskMetaId: taskMeta.id,
-        taskMetaLabel: taskMeta.label,
-        taskWizardModeFromMeta: taskMeta.taskWizardMode,
-        needsTaskContextualization: (taskMeta as any).needsTaskContextualization,
-        needsTaskBuilder: (taskMeta as any).needsTaskBuilder
-      });
-
       // ✅ Priority: explicit taskWizardMode > backward compatibility with booleans
       let wizardMode: TaskWizardMode = 'none';
       if (taskMeta.taskWizardMode && (taskMeta.taskWizardMode === 'none' || taskMeta.taskWizardMode === 'adaptation' || taskMeta.taskWizardMode === 'full')) {
         wizardMode = taskMeta.taskWizardMode;
-        console.log('[🔄 useResponseEditorCore] ✅ Usando taskWizardMode esplicito:', wizardMode);
       } else {
         // ✅ Backward compatibility: derive from boolean flags
         const needsContextualization = (taskMeta as any).needsTaskContextualization === true;
@@ -220,16 +211,10 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
         } else {
           wizardMode = 'none';
         }
-        console.log('[🔄 useResponseEditorCore] ⚠️ Derivando taskWizardMode da booleani:', wizardMode, {
-          needsContextualization,
-          needsBuilder
-        });
       }
 
       const contextualizationTemplateId = (taskMeta as any).contextualizationTemplateId || null;
       const taskLabelFromMeta = (taskMeta as any).taskLabel || taskMeta.label || '';
-
-      console.log('[🔄 useResponseEditorCore] Impostando state con wizardMode:', wizardMode);
 
       // ✅ Set primary state
       setTaskWizardMode(wizardMode);
@@ -247,8 +232,6 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
         setNeedsTaskContextualization(false);
         setNeedsTaskBuilder(false);
       }
-    } else {
-      console.log('[🔄 useResponseEditorCore] ⚠️ taskMeta è null/undefined, wizardMode rimane default "none"');
     }
   }, [taskMeta, setTaskWizardMode, setNeedsTaskContextualization, setNeedsTaskBuilder, setContextualizationTemplateId, setTaskLabel]);
 

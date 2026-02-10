@@ -389,7 +389,17 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
       nodes: Array.isArray(source.nodes) ? source.nodes : []
     };
     return safe;
-  }, [taskTree?.id, taskTree?.nodes?.length, loading]); // ✅ Dipendenze stabili (solo ID e lunghezza, non tutto l'oggetto)
+  }, [
+    taskTree?.id,
+    taskTree?.nodes?.length,
+    // ✅ FIX: Aggiungi dipendenza per steps per forzare ricalcolo quando cambiano
+    taskTree?.steps && typeof taskTree.steps === 'object' && !Array.isArray(taskTree.steps)
+      ? Object.keys(taskTree.steps).length
+      : taskTree?.steps && Array.isArray(taskTree.steps)
+      ? taskTree.steps.length
+      : 0,
+    loading
+  ]); // ✅ Dipendenze stabili (ID, lunghezza nodes, numero di steps)
 
   // ✅ Stable key per impedire re-mount durante l'editing
   const editorKey = React.useMemo(() => {
