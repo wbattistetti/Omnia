@@ -22,7 +22,8 @@ def generate_structure_ai(
     task_label: str,
     task_description: Optional[str] = None,
     provider: str = "openai",
-    model: Optional[str] = None
+    model: Optional[str] = None,
+    locale: str = "it"
 ) -> Dict[str, Any]:
     """
     Generate structure using AI.
@@ -32,11 +33,12 @@ def generate_structure_ai(
         task_description: Optional task description
         provider: AI provider (openai/groq)
         model: Optional model override
+        locale: Language code (e.g., "it", "en", "pt") - used to maintain language consistency
 
     Returns:
         AI response (should be JSON string or dict)
     """
-    prompt = get_structure_generation_prompt(task_label, task_description)
+    prompt = get_structure_generation_prompt(task_label, task_description, locale)
 
     system_message = (
         "You are a Data Structure Generator. "

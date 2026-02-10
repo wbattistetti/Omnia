@@ -43,6 +43,12 @@ export interface UseResponseEditorCoreParams {
   currentProjectId: string | null;
   tabId?: string;
   setDockTree?: (updater: (prev: any) => any) => void;
+  // ✅ NEW: Generalization params
+  shouldBeGeneral?: boolean;
+  saveDecisionMade?: boolean;
+  onOpenSaveDialog?: () => void;
+  // ✅ NEW: Ref per il pulsante save-to-library
+  saveToLibraryButtonRef?: React.RefObject<HTMLButtonElement>;
 }
 
 export interface UseResponseEditorCoreResult {
@@ -102,6 +108,11 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     currentProjectId,
     tabId,
     setDockTree,
+    // ✅ NEW: Generalization params
+    shouldBeGeneral,
+    saveDecisionMade,
+    onOpenSaveDialog,
+    saveToLibraryButtonRef,
   } = params;
 
   // Context hooks
@@ -359,9 +370,11 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     setNeedsTaskBuilder,
     setWizardMode,
     // ✅ NEW: Generalization params (passed from useResponseEditor)
-    shouldBeGeneral: params.shouldBeGeneral,
-    saveDecisionMade: params.saveDecisionMade,
-    onOpenSaveDialog: params.onOpenSaveDialog,
+    shouldBeGeneral: shouldBeGeneral,
+    saveDecisionMade: saveDecisionMade,
+    onOpenSaveDialog: onOpenSaveDialog,
+    // ✅ NEW: Ref per il pulsante save-to-library
+    saveToLibraryButtonRef: saveToLibraryButtonRef,
   });
   const {
     replaceSelectedTaskTree: replaceSelectedTaskTreeFromInit,

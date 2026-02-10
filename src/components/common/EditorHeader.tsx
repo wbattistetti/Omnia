@@ -21,6 +21,7 @@ type ToolbarButton = {
   buttonRef?: React.RefObject<HTMLButtonElement> | ((ref: HTMLButtonElement | null) => void);
   buttonId?: string; // For identifying specific buttons
   dropdownItems?: ToolbarDropdownItem[]; // ✅ NEW: Support for dropdown menu
+  visible?: boolean; // ✅ NEW: Control visibility instead of adding/removing dynamically
 };
 
 type EditorHeaderProps = {
@@ -259,6 +260,11 @@ export function EditorHeader({ icon, title, subtitle, titleActions, toolbarButto
         {toolbarButtons.length > 0 && (
           <>
             {toolbarButtons.map((btn, i) => {
+              // ✅ FIX: Controlla visibilità - se visible è false, non renderizzare
+              if (btn.visible === false) {
+                return null;
+              }
+
               // ✅ FIX: Usa il ref passato dalla prop se disponibile, altrimenti null
               const buttonRef = btn.buttonRef && 'current' in btn.buttonRef
                 ? btn.buttonRef as React.RefObject<HTMLButtonElement>

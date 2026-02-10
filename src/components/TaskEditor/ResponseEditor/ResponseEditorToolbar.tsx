@@ -28,6 +28,8 @@ interface ResponseEditorToolbarProps {
   shouldBeGeneral?: boolean;
   saveDecisionMade?: boolean;
   onOpenSaveDialog?: () => void;
+  // ✅ NEW: Ref per il pulsante save-to-library (sempre presente, visibilità controllata)
+  saveToLibraryButtonRef?: React.RefObject<HTMLButtonElement>;
 }
 
 /**
@@ -60,6 +62,8 @@ export function useResponseEditorToolbar({
   shouldBeGeneral = false,
   saveDecisionMade = false,
   onOpenSaveDialog,
+  // ✅ NEW: Ref per il pulsante save-to-library
+  saveToLibraryButtonRef,
 }: ResponseEditorToolbarProps) {
   // ✅ CRITICAL: Hooks devono essere chiamati PRIMA di qualsiasi return condizionale
   // ✅ Test è un toggle indipendente per mostrare/nascondere il pannello debugger
@@ -236,8 +240,8 @@ export function useResponseEditorToolbar({
       title: "Simulate and validate the dialogue flow to ensure correct behavior and data recognition.",
       active: testPanelMode === 'chat'
     },
-    // ✅ NEW: Generalization button (only if shouldBeGeneral and decision not made)
-    ...(shouldBeGeneral && !saveDecisionMade && onOpenSaveDialog ? [{
+    // ✅ FIX: Generalization button - sempre presente, visibilità controllata dinamicamente
+    {
       icon: <Star size={16} />,
       label: "Vuoi salvare in libreria?",
       onClick: () => {
@@ -255,8 +259,11 @@ export function useResponseEditorToolbar({
       title: "Template con valenza generale - clicca per decidere",
       primary: true,  // Highlight if not decided
       active: false,
-      buttonId: "save-to-library" // ✅ For positioning popover
-    }] : []),
+      buttonId: "save-to-library", // ✅ For positioning popover
+      buttonRef: saveToLibraryButtonRef, // ✅ Ref assegnato direttamente
+      // ✅ FIX: Controllo visibilità invece di aggiungere/rimuovere
+      visible: shouldBeGeneral && !saveDecisionMade && !!onOpenSaveDialog,
+    },
     // ✅ NEW: Magic wand button with dropdown (always visible, at the end before X)
     {
       icon: <Wand2 size={16} />,

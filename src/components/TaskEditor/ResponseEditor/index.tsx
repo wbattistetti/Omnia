@@ -46,6 +46,9 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   const generalizedMessages = wizardIntegration?.generalizedMessages || null;
   const generalizationReason = wizardIntegration?.generalizationReason || null;
 
+  // ✅ FIX: Ref per il pulsante save-to-library - creato qui e passato a useResponseEditor
+  const saveToLibraryButtonRef = React.useRef<HTMLButtonElement>(null);
+
   // ✅ State per save location dialog
   const [showSaveDialog, setShowSaveDialog] = React.useState(false);
   const [effectiveSaveDecisionMade, setEffectiveSaveDecisionMade] = React.useState(saveDecisionMade || false);
@@ -88,6 +91,8 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     shouldBeGeneral: effectiveShouldBeGeneral,
     saveDecisionMade: effectiveSaveDecisionMade,
     onOpenSaveDialog: handleOpenSaveDialog,
+    // ✅ FIX: Pass ref per il pulsante save-to-library
+    saveToLibraryButtonRef: saveToLibraryButtonRef,
   });
 
   // ✅ ARCHITECTURE: Pass only necessary props (no monolithic editor object)
@@ -180,7 +185,15 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       setShowSaveDialog={setShowSaveDialog}
       setSaveDecisionMade={setEffectiveSaveDecisionMade}
       wizardIntegration={wizardIntegration}
-      originalLabel={taskLabel || 'Task'}
+      originalLabel={(() => {
+        if (!taskLabel) {
+          console.error('[ResponseEditorInner] ❌ CRITICAL: taskLabel is required but not provided.');
+          throw new Error('taskLabel is required but not provided. This should never happen - taskLabel must always be available.');
+        }
+        return taskLabel;
+      })()}
+      // ✅ FIX: Pass ref per il pulsante save-to-library
+      saveToLibraryButtonRef={saveToLibraryButtonRef}
     />
   );
 }

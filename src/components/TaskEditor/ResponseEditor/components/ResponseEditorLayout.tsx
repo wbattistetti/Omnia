@@ -164,6 +164,8 @@ export interface ResponseEditorLayoutProps {
   setSaveDecisionMade?: (made: boolean) => void;
   wizardIntegration?: any; // For wizardProps
   originalLabel?: string;
+  // ✅ FIX: Ref per il pulsante save-to-library (passato da ResponseEditorInner)
+  saveToLibraryButtonRef?: React.RefObject<HTMLButtonElement>;
 }
 
 /**
@@ -260,6 +262,8 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     setSaveDecisionMade: setSaveDecisionMadeProp,
     wizardIntegration: wizardIntegrationProp,
     originalLabel: originalLabelProp,
+    // ✅ FIX: Ref per il pulsante save-to-library (passato da ResponseEditorInner)
+    saveToLibraryButtonRef: saveToLibraryButtonRefProp,
   } = props;
 
   // ✅ REMOVED: useWizardIntegration - ora viene chiamato in ResponseEditorInner
@@ -269,7 +273,12 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   const generalizedLabel = generalizedLabelProp ?? null;
   const generalizedMessages = generalizedMessagesProp ?? null;
   const generalizationReasonEffective = generalizationReasonProp ?? generalizationReason ?? null;
-  const originalLabel = originalLabelProp ?? (taskLabel || 'Task');
+  // ✅ FIX: originalLabel must always be available - no fallback, throw error if missing
+  if (!originalLabelProp && !taskLabel) {
+    console.error('[ResponseEditorLayout] ❌ CRITICAL: originalLabel is required but not provided. taskLabel is also missing.');
+    throw new Error('originalLabel is required but not provided. This should never happen - taskLabel must always be available.');
+  }
+  const originalLabel = originalLabelProp ?? taskLabel;
 
   // ✅ State for save location dialog (usa props se disponibili, altrimenti state locale)
   const [localShowSaveDialog, setLocalShowSaveDialog] = React.useState(false);
@@ -307,9 +316,11 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
 
   // ✅ REMOVED: Auto-open dialog - dialog opens only when user clicks button or tries to close
 
-  // ✅ NEW: Handler to save to Factory
+  // ✅ FIX: Handler to save to Factory with loading state and dematerialization filter
   const handleSaveToFactory = React.useCallback(async () => {
     if (!wizardIntegration?.shouldBeGeneral) return;
+
+    setIsSaving(true);
 
     try {
       // Get all templates from DialogueTaskService cache
@@ -322,23 +333,28 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
 
       if (wizardTemplates.length === 0) {
         console.warn('[ResponseEditorLayout] ⚠️ No templates found to save to Factory');
+        setIsSaving(false);
         return;
       }
 
-      // ✅ Use generalizedLabel for template name and label if available
+      // ✅ FIX: Dematerialize templates - remove any materialized fields (nodes, subNodes, data)
+      // Templates should only contain references (subTasksIds), not materialized children
       const templatesToSave = wizardTemplates.map(t => {
+        // Remove any materialized fields that shouldn't be in the template
+        const { nodes, subNodes, data, ...templateFields } = t;
+
         if (generalizedLabel && wizardIntegration.dataSchema?.[0]?.id === (t.id || t._id)) {
           // Root template: use generalizedLabel
           return {
-            ...t,
+            ...templateFields,
             name: generalizedLabel.toLowerCase().replace(/\s+/g, '_'),
             label: generalizedLabel
           };
         }
-        return t;
+        return templateFields;
       });
 
-      // Save templates to Factory DB
+      // ✅ Save templates to Factory DB in bulk (faster)
       const response = await fetch('/api/factory/dialogue-templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -348,7 +364,18 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
       if (response.ok) {
         console.log('[ResponseEditorLayout] ✅ Templates saved to Factory', {
           templatesCount: templatesToSave.length,
-          generalizedLabel
+          generalizedLabel,
+          templatesStructure: templatesToSave.map(t => ({
+            id: t.id,
+            label: t.label,
+            hasSubTasksIds: !!t.subTasksIds,
+            subTasksIdsCount: t.subTasksIds?.length || 0,
+            hasSteps: !!t.steps,
+            hasConstraints: !!t.constraints,
+            hasNodes: 'nodes' in t,
+            hasSubNodes: 'subNodes' in t,
+            hasData: 'data' in t
+          }))
         });
 
         // ✅ Reload Factory templates cache immediately
@@ -365,6 +392,8 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     } catch (error) {
       console.error('[ResponseEditorLayout] ❌ Error saving to Factory:', error);
       alert(`Error saving to Factory: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsSaving(false);
     }
   }, [wizardIntegration, generalizedLabel]);
 
@@ -797,33 +826,20 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     replaceSelectedTaskTree,
   ]);
 
-  // ✅ REMOVED: enhancedToolbarButtons - ora il pulsante viene aggiunto direttamente in useResponseEditorToolbar
-  // ✅ Il pulsante "Vuoi salvare in libreria?" viene aggiunto automaticamente quando shouldBeGeneral === true
+  // ✅ FIX: Usa il ref passato come prop (creato in ResponseEditorInner)
+  const saveToLibraryButtonRef = saveToLibraryButtonRefProp || React.useRef<HTMLButtonElement>(null);
 
-  // ✅ NEW: Ref per il pulsante "Vuoi salvare in libreria?" per posizionare il popover
-  const saveToLibraryButtonRef = React.useRef<HTMLButtonElement>(null);
+  // ✅ NEW: State for saving operation
+  const [isSaving, setIsSaving] = React.useState(false);
 
-  // ✅ NEW: Trova il pulsante nella toolbarButtons array e assegna il ref direttamente
-  const toolbarButtonsWithRef = React.useMemo(() => {
-    return toolbarButtons.map(btn => {
-      if (btn.buttonId === 'save-to-library') {
-        return {
-          ...btn,
-          buttonRef: saveToLibraryButtonRef, // ✅ Passa il ref direttamente
-        };
-      }
-      return btn;
-    });
-  }, [toolbarButtons]);
-
-  // ✅ NEW: Sync toolbarButtons to onToolbarUpdate when hideHeader is true
-  // Questo assicura che il pulsante "Vuoi salvare in libreria?" appaia anche quando hideHeader === true
+  // ✅ FIX: Sync toolbarButtons to onToolbarUpdate when hideHeader is true
+  // Il pulsante è sempre presente nella toolbar, quindi non serve più toolbarButtonsWithRef
   React.useEffect(() => {
     if (hideHeader && onToolbarUpdate && taskWizardMode === 'none') {
-      // Usa toolbarButtonsWithRef che è già memoizzato
-      onToolbarUpdate(toolbarButtonsWithRef, 'orange'); // ✅ FIX: Passa toolbarButtonsWithRef con ref
+      // ✅ FIX: Passa direttamente toolbarButtons (il pulsante è sempre presente con ref)
+      onToolbarUpdate(toolbarButtons, 'orange');
     }
-  }, [hideHeader, onToolbarUpdate, taskWizardMode, shouldBeGeneral, saveDecisionMade, toolbarButtonsWithRef]); // ✅ toolbarButtonsWithRef è memoizzato, quindi non causa loop
+  }, [hideHeader, onToolbarUpdate, taskWizardMode, toolbarButtons]);
 
   // ✅ LOG: Verification log for debugging (moved to useEffect to keep render pure)
   // ✅ FIX: Use only primitive dependencies to prevent loop
@@ -865,7 +881,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         <EditorHeader
           icon={<Icon size={18} style={{ color: iconColor }} />}
           title={headerTitle}
-          toolbarButtons={toolbarButtonsWithRef} // ✅ Usa toolbarButtonsWithRef con ref
+          toolbarButtons={toolbarButtons} // ✅ FIX: Il pulsante è sempre presente con ref nella toolbar
           onClose={handleEditorCloseWithTutor}
           color="orange"
         />
@@ -962,6 +978,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         generalizationReason={generalizationReasonEffective}
         generalizedMessages={generalizedMessages}
         anchorRef={saveToLibraryButtonRef}
+        isSaving={isSaving} // ✅ NEW: Pass saving state to dialog
       />
     </div>
   );

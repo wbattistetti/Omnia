@@ -378,60 +378,72 @@ function TabSet(props: {
               {/* Toolbar dalla tab (solo se tab attiva e ResponseEditor) */}
               {showToolbar && (
                 <div style={{ display: 'flex', gap: 4, marginLeft: 8, alignItems: 'center' }}>
-                  {toolbarButtons.map((btn, idx) => (
-                    btn.title ? (
+                  {toolbarButtons.map((btn, idx) => {
+                    // ✅ FIX: Controlla visibilità - se visible è false, non renderizzare
+                    if (btn.visible === false) {
+                      return null;
+                    }
+
+                    // ✅ FIX: Estrai buttonRef e buttonId
+                    const buttonRef = btn.buttonRef && 'current' in btn.buttonRef
+                      ? btn.buttonRef as React.RefObject<HTMLButtonElement>
+                      : null;
+                    const buttonId = btn.buttonId;
+
+                    const buttonProps = {
+                      onClick: (e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        btn.onClick();
+                      },
+                      disabled: btn.disabled,
+                      'data-button-id': buttonId, // ✅ FIX: Aggiungi data-button-id per fallback
+                      style: {
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        background: btn.primary ? '#0b1220' : (btn.active ? 'rgba(255,255,255,0.2)' : 'transparent'),
+                        color: '#ffffff',
+                        border: btn.primary ? 'none' : '1px solid rgba(255,255,255,0.3)',
+                        borderRadius: 6,
+                        padding: btn.label ? '4px 8px' : '4px 6px',
+                        cursor: btn.disabled ? 'not-allowed' : 'pointer',
+                        opacity: btn.disabled ? 0.5 : 1,
+                        fontSize: '11px',
+                        whiteSpace: 'nowrap' as const,
+                      },
+                    };
+
+                    const button = (
+                      <button {...buttonProps}>
+                        {btn.icon}
+                        {btn.label && <span>{btn.label}</span>}
+                      </button>
+                    );
+
+                    // ✅ FIX: Gestisci il ref per entrambi i casi (con e senza title)
+                    const buttonWithRef = buttonRef ? React.cloneElement(button, {
+                      ref: (el: HTMLButtonElement | null) => {
+                        // ✅ FIX: Propaga il ref
+                        if (buttonId === 'save-to-library' && el) {
+                          console.log('[DockManager] 🎯 Ref assigned for save-to-library button', {
+                            tagName: el?.tagName,
+                            dataButtonId: el?.getAttribute('data-button-id')
+                          });
+                        }
+                        if (buttonRef && 'current' in buttonRef) {
+                          (buttonRef as React.MutableRefObject<HTMLButtonElement | null>).current = el;
+                        }
+                      }
+                    }) : button;
+
+                    return btn.title ? (
                       <SmartTooltip key={idx} text={btn.title} tutorId={`toolbar_btn_${idx}_help`} placement="bottom">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            btn.onClick();
-                          }}
-                          disabled={btn.disabled}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            background: btn.primary ? '#0b1220' : (btn.active ? 'rgba(255,255,255,0.2)' : 'transparent'),
-                            color: '#ffffff',
-                            border: btn.primary ? 'none' : '1px solid rgba(255,255,255,0.3)',
-                            borderRadius: 6,
-                            padding: btn.label ? '4px 8px' : '4px 6px',
-                            cursor: btn.disabled ? 'not-allowed' : 'pointer',
-                            opacity: btn.disabled ? 0.5 : 1,
-                            fontSize: '11px',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {btn.icon}
-                          {btn.label && <span>{btn.label}</span>}
-                        </button>
+                        {buttonWithRef}
                       </SmartTooltip>
                     ) : (
-                      <button
-                        key={idx}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          btn.onClick();
-                        }}
-                        disabled={btn.disabled}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          background: 'transparent',
-                          color: '#ffffff',
-                          border: '1px solid rgba(255,255,255,0.3)',
-                          borderRadius: 6,
-                          padding: '4px 6px',
-                          cursor: btn.disabled ? 'not-allowed' : 'pointer',
-                          opacity: btn.disabled ? 0.5 : 1,
-                          fontSize: '11px',
-                        }}
-                      >
-                        {btn.icon}
-                      </button>
-                    )
-                  ))}
+                      <React.Fragment key={idx}>{buttonWithRef}</React.Fragment>
+                    );
+                  })}
                 </div>
               )}
 

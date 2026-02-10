@@ -33,6 +33,8 @@ export interface UseResponseEditorParams {
   shouldBeGeneral?: boolean;
   saveDecisionMade?: boolean;
   onOpenSaveDialog?: () => void;
+  // ✅ NEW: Ref per il pulsante save-to-library
+  saveToLibraryButtonRef?: React.RefObject<HTMLButtonElement>;
 }
 
 export interface UseResponseEditorResult {
@@ -172,6 +174,8 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     shouldBeGeneral: params.shouldBeGeneral,
     saveDecisionMade: params.saveDecisionMade,
     onOpenSaveDialog: params.onOpenSaveDialog,
+    // ✅ NEW: Pass ref to core
+    saveToLibraryButtonRef: params.saveToLibraryButtonRef,
   });
 
   // Handlers

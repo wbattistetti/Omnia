@@ -8,22 +8,43 @@ Used by the /api/nlp/generate-structure endpoint.
 import json
 
 
-def get_structure_generation_prompt(task_label: str, task_description: str = None) -> str:
+def get_structure_generation_prompt(task_label: str, task_description: str = None, locale: str = "it") -> str:
     """
     Generate prompt for structure generation.
 
     Args:
-        task_label: Task label (e.g., "Date of Birth")
+        task_label: Task label (e.g., "Date of Birth" or "Data di nascita")
         task_description: Optional task description
+        locale: Language code (e.g., "it", "en", "pt") - used to maintain language consistency
 
     Returns:
         Formatted prompt string for AI
     """
     desc_context = f"\nTASK DESCRIPTION: {task_description}" if task_description else ""
 
+    # Map locale to language name for prompt
+    lang_names = {
+        "it": "Italian",
+        "en": "English",
+        "pt": "Portuguese",
+        "es": "Spanish",
+        "fr": "French",
+        "de": "German"
+    }
+    lang_name = lang_names.get(locale.lower(), locale.upper())
+
     return f"""You are a Data Structure Generator. Your task is to generate a hierarchical data structure for a task.
 
 TASK LABEL: {task_label}{desc_context}
+
+🌐 LANGUAGE REQUIREMENT:
+⚠️ CRITICAL: The task label above is in {lang_name}. You MUST generate ALL node labels (root and children) in the SAME LANGUAGE as the task label.
+- If task_label is in Italian → ALL labels must be in Italian (e.g., "Data di nascita", "Giorno", "Mese", "Anno")
+- If task_label is in English → ALL labels must be in English (e.g., "Date of Birth", "Day", "Month", "Year")
+- If task_label is in Portuguese → ALL labels must be in Portuguese (e.g., "Data de nascimento", "Dia", "Mês", "Ano")
+- DO NOT translate labels to English or any other language
+- DO NOT mix languages
+- Maintain the exact same language as the task_label throughout the entire structure
 
 🎯 OBJECTIVE:
 Generate a hierarchical data structure (tree of nodes) that represents what data needs to be collected for this task.
@@ -64,6 +85,7 @@ The structure must be:
 - Use semantic, meaningful labels
 - Structure must be valid JSON
 - Root node is always required
+- ⚠️ LANGUAGE CONSISTENCY: ALL labels (root and children) MUST be in the SAME LANGUAGE as the task_label ({lang_name})
 
 📏 RESPONSE FORMAT (strict JSON, no markdown, no comments):
 {{
@@ -107,31 +129,31 @@ Rules:
 - generalizationReason: Explain why it's generalizable in one sentence
 - generalizedMessages: If shouldBeGeneral is true, provide 3-5 example messages that are generalized (without context-specific references). These are example messages that would be used in the generalized template. If shouldBeGeneral is false, set to null.
 
-📌 EXAMPLES:
+📌 EXAMPLES (Note: Examples below are in English, but you MUST use the same language as task_label):
 
-Example 1: Date of Birth
+Example 1: Date of Birth (English) / Data di nascita (Italian)
 {{
   "structure": [
     {{
       "id": "root",
-      "label": "Date of Birth",
+      "label": "Date of Birth",  // If task_label is Italian: "Data di nascita"
       "type": "date",
       "icon": "calendar",
       "subNodes": [
-        {{"id": "day", "label": "Day", "type": "number"}},
-        {{"id": "month", "label": "Month", "type": "number"}},
-        {{"id": "year", "label": "Year", "type": "number"}}
+        {{"id": "day", "label": "Day", "type": "number"}},  // If task_label is Italian: "Giorno"
+        {{"id": "month", "label": "Month", "type": "number"}},  // If task_label is Italian: "Mese"
+        {{"id": "year", "label": "Year", "type": "number"}}  // If task_label is Italian: "Anno"
       ]
     }}
   ]
 }}
 
-Example 2: Email (simple)
+Example 2: Email (simple) / Email (Italian: same)
 {{
   "structure": [
     {{
       "id": "root",
-      "label": "Email",
+      "label": "Email",  // Same in both languages
       "type": "email",
       "icon": "mail",
       "subNodes": []
@@ -139,19 +161,19 @@ Example 2: Email (simple)
   ]
 }}
 
-Example 3: Address (composite)
+Example 3: Address (composite) / Indirizzo (Italian)
 {{
   "structure": [
     {{
       "id": "root",
-      "label": "Address",
+      "label": "Address",  // If task_label is Italian: "Indirizzo"
       "type": "address",
       "icon": "home",
       "subNodes": [
-        {{"id": "street", "label": "Street", "type": "string"}},
-        {{"id": "city", "label": "City", "type": "string"}},
-        {{"id": "postalCode", "label": "Postal Code", "type": "string"}},
-        {{"id": "country", "label": "Country", "type": "string"}}
+        {{"id": "street", "label": "Street", "type": "string"}},  // If task_label is Italian: "Via"
+        {{"id": "city", "label": "City", "type": "string"}},  // If task_label is Italian: "Città"
+        {{"id": "postalCode", "label": "Postal Code", "type": "string"}},  // If task_label is Italian: "Codice postale"
+        {{"id": "country", "label": "Country", "type": "string"}}  // If task_label is Italian: "Paese"
       ]
     }}
   ]

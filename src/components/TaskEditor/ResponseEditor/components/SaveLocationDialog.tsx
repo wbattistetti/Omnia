@@ -2,6 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import React, { useState, useLayoutEffect, useRef } from 'react';
+import { Loader2 } from 'lucide-react';
 
 interface SaveLocationDialogProps {
   isOpen: boolean;
@@ -14,6 +15,7 @@ interface SaveLocationDialogProps {
   generalizationReason: string | null;
   generalizedMessages: string[] | null;
   anchorRef?: React.RefObject<HTMLElement> | null;
+  isSaving?: boolean; // ✅ NEW: State for saving operation
 }
 
 /**
@@ -32,10 +34,13 @@ export function SaveLocationDialog({
   generalizedLabel,
   generalizationReason,
   generalizedMessages,
-  anchorRef
+  anchorRef,
+  isSaving = false // ✅ NEW: Default to false
 }: SaveLocationDialogProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+  // ✅ NEW: State to show/hide messages list
+  const [showMessages, setShowMessages] = useState(false);
 
   // Calculate position based on anchor element
   // ✅ 1. SOSTITUITO useEffect con useLayoutEffect per garantire che il DOM sia montato
@@ -180,16 +185,29 @@ export function SaveLocationDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-4 flex-1 overflow-y-auto">
-          {/* ✅ REMOVED: Titolo ridondante "Vuoi salvare in libreria?" */}
-
+          {/* ✅ FIX: Testo introduttivo con link cliccabile */}
           <p className="text-sm text-gray-700 mb-3">
             "<span className="font-semibold">{originalLabel}</span>" può essere generalizzato per contesti diversi.
             <br />
-            Consiglio di salvarla nella libreria generale.
+            Consiglio di salvarlo nella libreria generale.
+            {generalizedMessages && generalizedMessages.length > 0 && (
+              <>
+                {' '}
+                <button
+                  type="button"
+                  onClick={() => setShowMessages(!showMessages)}
+                  className="text-blue-600 hover:text-blue-800 underline cursor-pointer font-medium"
+                  style={{ background: 'none', border: 'none', padding: 0 }}
+                >
+                  {showMessages ? 'Nascondi messaggi generalizzati' : 'Clicca qui per vedere i messaggi generalizzati'}
+                </button>
+                .
+              </>
+            )}
           </p>
 
-          {/* ✅ Lista messaggi generalizzati - sempre visibile quando ci sono messaggi */}
-          {generalizedMessages && generalizedMessages.length > 0 && (
+          {/* ✅ FIX: Lista messaggi generalizzati - visibile solo dopo click */}
+          {showMessages && generalizedMessages && generalizedMessages.length > 0 && (
             <div className="mt-3 p-3 bg-gray-50 rounded border border-gray-200 max-h-48 overflow-y-auto">
               <p className="text-xs font-semibold text-gray-700 mb-2">Messaggi generalizzati:</p>
               <ul className="list-disc list-inside space-y-1">
@@ -216,11 +234,19 @@ export function SaveLocationDialog({
           <button
             onClick={() => {
               onSaveToFactory();
-              onClose();
+              // ✅ FIX: onClose viene chiamato dopo il salvataggio in handleSaveToFactory
             }}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm"
+            disabled={isSaving}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
-            Salva nella libreria generale
+            {isSaving ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                <span>Sto salvando...</span>
+              </>
+            ) : (
+              <span>Salva nella libreria generale</span>
+            )}
           </button>
           <button
             onClick={() => {

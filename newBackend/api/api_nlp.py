@@ -1077,6 +1077,7 @@ async def generate_structure(body: dict = Body(...)):
 
     task_label = (body or {}).get("taskLabel")
     task_description = (body or {}).get("taskDescription")
+    locale = (body or {}).get("locale", "it")  # ✅ NEW: locale parameter for language consistency
     provider = (body or {}).get("provider", "openai")
     model = (body or {}).get("model")
 
@@ -1096,7 +1097,8 @@ async def generate_structure(body: dict = Body(...)):
             task_label=task_label,
             task_description=task_description,
             provider=provider,
-            model=model
+            model=model,
+            locale=locale  # ✅ NEW: Pass locale to maintain language consistency
         )
 
         if error:
