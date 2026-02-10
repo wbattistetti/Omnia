@@ -128,30 +128,6 @@ export function useWizardInference({
       const nodeSteps = task?.steps?.[firstMainTemplateId] ?? {};
       const hasSteps = nodeSteps && typeof nodeSteps === 'object' && Object.keys(nodeSteps).length > 0;
 
-      const taskTemplateIdsCount = task?.steps && typeof task?.steps === 'object' && !Array.isArray(task.steps)
-        ? Object.keys(task.steps).length
-        : 0;
-
-      console.log('[🔍 useWizardInference] 🔍 Steps for node', {
-        firstMainTemplateId,
-        hasSteps,
-        taskTemplateIdsCount,
-        nodeStepTypes: hasSteps ? Object.keys(nodeSteps) : []
-      });
-
-      console.log('[🔍 useWizardInference] CRITICAL steps check', {
-        nodesCount: currentTaskTree.nodes.length,
-        firstMainLabel: firstMain?.label,
-        firstMainId: firstMainId,
-        firstMainTemplateId: firstMainTemplateId,
-        hasSteps,
-        stepsType: typeof task?.steps,
-        taskStepsIsDictionary: task?.steps && typeof task.steps === 'object' && !Array.isArray(task.steps),
-        taskTemplateIdsCount: taskTemplateIdsCount,
-        nodeStepTypes: hasSteps ? Object.keys(nodeSteps) : [],
-        lookingForTemplateId: firstMainTemplateId,
-        hasStructureButNoMessages
-      });
     }
 
     // Se TaskTree non è vuoto e wizard aveva ownership → chiudi wizard
@@ -164,15 +140,6 @@ export function useWizardInference({
 
     // ✅ NUOVO: Se TaskTree ha struttura ma non ha messaggi → apri wizard al passo pipeline
     if (hasStructureButNoMessages) {
-      console.log('[🔍 useWizardInference] ⚠️ TaskTree ha struttura ma non ha messaggi, aprendo wizard', {
-        nodesCount: currentTaskTree?.nodes?.length ?? 0,
-        taskType: stableTaskType,
-        taskId: task?.id,
-        taskStepsCount: Array.isArray(task?.steps) ? task.steps.length : (task?.steps ? Object.keys(task.steps).length : 0),
-        taskStepsIsArray: Array.isArray(task?.steps),
-        firstMainTemplateId: currentTaskTree?.nodes?.[0]?.templateId ?? currentTaskTree?.nodes?.[0]?.id
-      });
-
       // Apri wizard con initialTaskTree che contiene i nodes esistenti
       // Il wizard dovrebbe saltare automaticamente al passo 'pipeline'
       const inferenceKey = `${stableTaskLabel ?? ''}_hasStructureButNoMessages`;
@@ -210,10 +177,6 @@ export function useWizardInference({
     // TaskTreeHostAdapter gestisce tutto (caricamento + adattamento automatico)
     // ========================================================================
     if (isValidTemplateId(stableTemplateId)) {
-      console.log('[useWizardInference] Template già trovato, DDTHostAdapter gestisce tutto', {
-        templateId: stableTemplateId,
-        taskType: stableTaskType
-      });
       return; // ✅ Early exit - non serve wizard
     }
 
@@ -223,11 +186,6 @@ export function useWizardInference({
       : false;
 
     if (hasSteps) {
-      const templateIdsCount = Object.keys(task.steps).length;
-      console.log('[useWizardInference] Task con steps, non serve wizard', {
-        taskId: task.id,
-        templateIdsCount
-      });
       return; // ✅ Early exit - non serve wizard
     }
 
@@ -241,16 +199,10 @@ export function useWizardInference({
           const templateHasSteps = Object.keys(template.steps).length > 0;
 
           if (templateHasSteps) {
-            console.log('[useWizardInference] Template ha steps, non serve wizard', {
-              taskId: task.id,
-              templateId: task.templateId,
-              templateStepsKeys: Object.keys(template.steps)
-            });
             return; // ✅ Early exit - non serve wizard, gli steps verranno clonati da buildTaskTree
           }
         }
       } catch (e) {
-        console.warn('[useWizardInference] Errore verificando steps del template', e);
         // Continua normalmente se c'è errore
       }
     }
@@ -324,7 +276,7 @@ export function useWizardInference({
                 templateId: null
               }, currentProjectId || undefined);
             } catch (err) {
-              console.error('[useWizardInference] Errore aggiornamento task:', err);
+              // Error updating task
             }
           }
 
@@ -338,12 +290,7 @@ export function useWizardInference({
           if (localMatch.ai.schema.nodes && Array.isArray(localMatch.ai.schema.nodes) && localMatch.ai.schema.nodes.length > 0) {
             templateId = localMatch.ai.schema.nodes[0]?.templateId;
           } else if (localMatch.ai.schema.data && Array.isArray(localMatch.ai.schema.data) && localMatch.ai.schema.data.length > 0) {
-            console.warn('[useWizardInference] Using legacy schema.data format, expected schema.nodes');
             templateId = localMatch.ai.schema.data[0]?.templateId;
-          }
-
-          if (!templateId) {
-            console.warn('[useWizardInference] No templateId found in schema.nodes or schema.data');
           }
           await preAssembleTaskTree(
             localMatch.ai.schema,
@@ -382,7 +329,6 @@ export function useWizardInference({
           setShowWizard(true);
           wizardOwnsDataRef.current = true;
         } catch (error) {
-          console.error('[useWizardInference] Errore inferenza AI:', error);
           setInferenceResult(null);
           setShowWizard(true);
           wizardOwnsDataRef.current = true;
@@ -391,7 +337,6 @@ export function useWizardInference({
           isProcessingRef.current = false;
         }
       } catch (error) {
-        console.error('[useWizardInference] Errore nel flusso di inferenza:', error);
         isProcessingRef.current = false;
       }
     })();

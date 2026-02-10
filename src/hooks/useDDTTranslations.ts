@@ -46,12 +46,6 @@ export function useDDTTranslations(ddt: any | null | undefined, task?: any, vers
     }
 
     const guidsArray = extractGUIDsFromDDT(ddt);
-    console.log('[useDDTTranslations] 🔍 GUIDs extracted from DDT', {
-      ddtId: ddt?.id || ddt?._id || 'no-id',
-      guidsCount: guidsArray.length,
-      sampleGuids: guidsArray.slice(0, 5)
-    });
-
     const guidsSet = new Set(guidsArray);
 
     // ✅ Also extract GUIDs from task.steps (unified model)
@@ -82,9 +76,6 @@ export function useDDTTranslations(ddt: any | null | undefined, task?: any, vers
         // ✅ RETROCOMPATIBILITÀ: Dictionary format { [nodeId]: steps }
         Object.entries(task.steps).forEach(([nodeId, steps]: [string, any]) => {
           if (!steps || typeof steps !== 'object') {
-            if (typeof localStorage !== 'undefined' && localStorage.getItem('debug.useDDTTranslations') === '1') {
-              console.log('[useDDTTranslations] ⚠️ Invalid steps structure', { nodeId, steps, stepsType: typeof steps });
-            }
             return;
           }
 
@@ -118,15 +109,8 @@ export function useDDTTranslations(ddt: any | null | undefined, task?: any, vers
     }
 
     const guids = Array.from(guidsSet);
-    console.log('[useDDTTranslations] 🔍 Total GUIDs after task.steps extraction', {
-      totalGuids: guids.length,
-      fromDDT: guidsArray.length,
-      fromTaskSteps: guids.length - guidsArray.length,
-      sampleGuids: guids.slice(0, 10)
-    });
 
     if (guids.length === 0) {
-      console.warn('[useDDTTranslations] ⚠️ No GUIDs found, returning empty translations');
       return {};
     }
 
@@ -145,14 +129,6 @@ export function useDDTTranslations(ddt: any | null | undefined, task?: any, vers
       }
     });
 
-    console.log('[useDDTTranslations] 📊 Translation lookup results', {
-      requestedGuids: guids.length,
-      foundTranslations: foundGuids.length,
-      missingTranslations: missingGuids.length,
-      globalTranslationsCount: Object.keys(globalTranslations).length,
-      sampleFound: foundGuids.slice(0, 5),
-      sampleMissing: missingGuids.slice(0, 5)
-    });
 
     // 🔍 DEBUG: Log sempre (non solo se mancano traduzioni)
     if (typeof localStorage !== 'undefined' && localStorage.getItem('debug.useDDTTranslations') === '1') {
@@ -175,23 +151,7 @@ export function useDDTTranslations(ddt: any | null | undefined, task?: any, vers
       lastState.translationsCount !== currentTranslationsCount;
 
     if (missingGuids.length > 0 && hasStateChanged) {
-      console.warn('[useDDTTranslations] ⚠️ Missing translations', {
-        ddtId: ddt.id || ddt._id || 'undefined',
-        ddtLabel: ddt.label || 'no-label',
-        requestedGuids: guids.length,
-        foundTranslations: foundGuids.length,
-        missingGuids: missingGuids.length,
-        missingGuidsList: missingGuids,
-        totalTranslationsInContext: currentTranslationsCount,
-        sampleMissing: missingGuids.slice(0, 10),
-        // Debug info to understand why translations are missing
-        debug: {
-          hasGlobalTranslations: Object.keys(globalTranslations).length > 0,
-          sampleGuids: guids.slice(0, 5),
-          sampleFound: foundGuids.slice(0, 5),
-        sampleMissing: missingGuids.slice(0, 5)
-        }
-      });
+      // Missing translations detected
 
       // Update last logged state
       lastLoggedStateRef.current = {

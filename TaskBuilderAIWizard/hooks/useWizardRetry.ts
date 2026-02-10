@@ -43,7 +43,6 @@ export function useWizardRetry() {
         // ✅ Backoff esponenziale: delay = baseDelay * 2^(attempt-1)
         const delay = baseDelay * Math.pow(2, attempt - 1);
         if (attempt > 1) {
-          console.log(`[useWizardRetry] 🔄 Retry attempt ${attempt}/${maxAttempts} for ${nodeId}:${phase} after ${delay}ms`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
 
@@ -52,15 +51,12 @@ export function useWizardRetry() {
 
         // ✅ Successo
         retryStateRef.current.set(key, { attempt, status: 'succeeded' });
-        console.log(`[useWizardRetry] ✅ Success on attempt ${attempt}/${maxAttempts} for ${nodeId}:${phase}`);
         return result;
       } catch (error) {
-        console.error(`[useWizardRetry] ❌ Attempt ${attempt}/${maxAttempts} failed for ${nodeId}:${phase}`, error);
 
         if (attempt === maxAttempts) {
           // ✅ Fallito dopo tutti i tentativi
           retryStateRef.current.set(key, { attempt, status: 'failed' });
-          console.error(`[useWizardRetry] ❌ All ${maxAttempts} attempts failed for ${nodeId}:${phase}`);
           throw error;
         }
         // ✅ Continua al prossimo tentativo

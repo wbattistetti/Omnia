@@ -89,83 +89,20 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
   const taskTreeFromStore = useTaskTreeFromStore();
 
   const handleEditorClose = useCallback(async (): Promise<boolean> => {
-    console.log('[ResponseEditor][CLOSE] 🚪 Editor close initiated', {
-      taskId: task?.id ?? (task as any)?.instanceId ?? 'unknown',
-      hasTask: !!task,
-      hasSelectedNode: !!selectedNode,
-      hasSelectedNodePath: !!selectedNodePath,
-      taskStepsCount: task?.steps ? Object.keys(task.steps).length : 0,
-      contractChangeRefType: typeof contractChangeRef.current,
-      contractChangeRefExists: !!contractChangeRef.current,
-      shouldBeGeneral,
-      saveDecisionMade
-    });
-
     // ✅ NEW: Tutor alla chiusura - verifica se deve essere scelto dove salvare
-    console.log('[ResponseEditor][CLOSE] 🔍 Checking generalization block', {
-      shouldBeGeneral,
-      saveDecisionMade,
-      hasOnOpenSaveDialog: !!onOpenSaveDialog,
-      shouldBlock: shouldBeGeneral && !saveDecisionMade && onOpenSaveDialog
-    });
-
     if (shouldBeGeneral && !saveDecisionMade && onOpenSaveDialog) {
-      console.log('[ResponseEditor][CLOSE] ⚠️ Template generalizable but decision not made, blocking close');
-      console.log('[ResponseEditor][CLOSE] 🔔 Calling onOpenSaveDialog');
       onOpenSaveDialog();
       return false;  // ✅ Blocca chiusura
     }
 
     // ✅ Verifica se ci sono modifiche ai contracts non salvate
     const contractChange = contractChangeRef.current;
-    console.log('[ResponseEditor][CLOSE] 🔍 Checking contract changes', {
-      hasUnsavedChanges: contractChange?.hasUnsavedChanges,
-      hasModifiedContract: !!contractChange?.modifiedContract,
-      hasOriginalContract: !!contractChange?.originalContract,
-      nodeTemplateId: contractChange?.nodeTemplateId,
-      nodeLabel: contractChange?.nodeLabel,
-      refKeys: contractChange ? Object.keys(contractChange) : [],
-      contractChangeRefExists: !!contractChangeRef.current,
-      contractChangeType: typeof contractChange
-    });
 
     // ✅ CRITICAL: Controlla anche se contractChangeRef.current è stato aggiornato via useImperativeHandle
     // Se contractChange è null/undefined, prova a leggere direttamente dal RecognitionEditor ref
-    if (!contractChange) {
-      console.log('[ResponseEditor][CLOSE] ⚠️ contractChangeRef.current is null/undefined');
-    } else if (!contractChange.hasUnsavedChanges) {
-      console.log('[ResponseEditor][CLOSE] ⚠️ No unsaved changes', {
-        hasUnsavedChanges: contractChange.hasUnsavedChanges,
-        hasModifiedContract: !!contractChange.modifiedContract,
-        hasNodeTemplateId: !!contractChange.nodeTemplateId
-      });
-    } else if (!contractChange.modifiedContract) {
-      console.log('[ResponseEditor][CLOSE] ⚠️ hasUnsavedChanges is true but modifiedContract is null', {
-        hasUnsavedChanges: contractChange.hasUnsavedChanges,
-        modifiedContract: contractChange.modifiedContract,
-        nodeTemplateId: contractChange.nodeTemplateId
-      });
-    } else if (!contractChange.nodeTemplateId) {
-      console.log('[ResponseEditor][CLOSE] ⚠️ hasUnsavedChanges and modifiedContract are set but nodeTemplateId is missing', {
-        hasUnsavedChanges: contractChange.hasUnsavedChanges,
-        hasModifiedContract: !!contractChange.modifiedContract,
-        nodeTemplateId: contractChange.nodeTemplateId
-      });
-    } else if (contractChange.hasUnsavedChanges && contractChange.modifiedContract && contractChange.nodeTemplateId) {
-      console.log('[ResponseEditor][CLOSE] ⚠️ Unsaved contract changes detected', {
-        nodeTemplateId: contractChange.nodeTemplateId,
-        nodeLabel: contractChange.nodeLabel,
-        hasModifiedContract: !!contractChange.modifiedContract,
-        hasOriginalContract: !!contractChange.originalContract
-      });
-
+    if (contractChange?.hasUnsavedChanges && contractChange.modifiedContract && contractChange.nodeTemplateId) {
       // ✅ Mostra dialog e blocca chiusura
       const template = DialogueTaskService.getTemplate(contractChange.nodeTemplateId);
-      console.log('[ResponseEditor][CLOSE] 🟡 Showing dialog...', {
-        templateId: contractChange.nodeTemplateId,
-        templateLabel: template?.label ?? contractChange.nodeLabel ?? 'Template',
-        hasModifiedContract: !!contractChange.modifiedContract
-      });
 
       setPendingContractChange({
         templateId: contractChange.nodeTemplateId,
@@ -173,7 +110,6 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
         modifiedContract: contractChange.modifiedContract
       });
       setShowContractDialog(true);
-      console.log('[ResponseEditor][CLOSE] ✅ Dialog state set to true, blocking close');
       // ✅ Ritorna false per bloccare la chiusura del tab
       return false;
     }
@@ -225,29 +161,10 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
             }
           }
         } else if (subIndex === undefined) {
-          const regexPattern = selectedNode?.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
-          const nlpProfileExamples = selectedNode?.nlpProfile?.examples;
-          console.log('[REGEX] CLOSE - Saving to taskTreeRef', {
-            nodeId: selectedNode?.id,
-            regexPattern: regexPattern || '(none)',
-            hasNlpProfile: !!selectedNode?.nlpProfile,
-            hasNlpProfileExamples: !!nlpProfileExamples,
-            nlpProfileExamplesCount: Array.isArray(nlpProfileExamples) ? nlpProfileExamples.length : 0,
-            nlpProfileExamples: nlpProfileExamples?.slice(0, 3)
-          });
           mains[mainIndex] = selectedNode;
           // ✅ FASE 2.3: Aggiorna store invece di taskTreeRef
           const updatedTaskTree = { ...currentTaskTree, nodes: mains };
           setTaskTree(updatedTaskTree);
-
-          // ✅ VERIFICA: Controlla se nlpProfile.examples è presente dopo il salvataggio
-          const savedNode = updatedTaskTree.nodes[mainIndex];
-          console.log('[EXAMPLES] CLOSE - Verifying saved node', {
-            nodeId: savedNode?.id,
-            hasNlpProfile: !!savedNode?.nlpProfile,
-            hasNlpProfileExamples: !!savedNode?.nlpProfile?.examples,
-            nlpProfileExamplesCount: Array.isArray(savedNode?.nlpProfile?.examples) ? savedNode.nlpProfile.examples.length : 0
-          });
         } else {
           // After validation strict, main.subNodes MUST exist (not subTasks)
           const subList = getSubNodesStrict(main);
@@ -276,33 +193,15 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
     if (!taskTreeFromStore) {
       // ✅ Se siamo in modalità wizard, permettere la chiusura senza salvare
       if (taskWizardMode === 'full' || taskWizardMode === 'adaptation') {
-        console.log('[useResponseEditorClose] ✅ Wizard mode - allowing close without taskTree', {
-          taskWizardMode,
-          taskId: task?.id ?? (task as any)?.instanceId ?? 'unknown'
-        });
         return true; // ✅ Permetti chiusura in modalità wizard
       }
       // ✅ Se NON siamo in wizard mode, bloccare la chiusura (comportamento originale)
-      console.error('[useResponseEditorClose] taskTreeFromStore is null/undefined. This should not happen after validation.', {
-        taskWizardMode,
-        taskId: task?.id ?? (task as any)?.instanceId ?? 'unknown'
-      });
       return false;
     }
     const finalTaskTree = taskTreeFromStore;
     const finalMainList = getMainNodes(finalTaskTree);
     const firstNode = finalMainList?.[0];
-    const firstNodeRegex = firstNode?.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
     const firstNodeNlpProfileExamples = firstNode?.nlpProfile?.examples;
-    console.log('[REGEX] CLOSE - Final TaskTree before save', {
-      hasData: !!finalMainList && finalMainList.length > 0,
-      firstNodeRegex: firstNodeRegex || '(none)',
-      firstNodeId: firstNode?.id,
-      hasFirstNodeNlpProfile: !!firstNode?.nlpProfile,
-      hasFirstNodeNlpProfileExamples: !!firstNodeNlpProfileExamples,
-      firstNodeNlpProfileExamplesCount: Array.isArray(firstNodeNlpProfileExamples) ? firstNodeNlpProfileExamples.length : 0,
-      firstNodeNlpProfileExamples: firstNodeNlpProfileExamples?.slice(0, 3)
-    });
 
     try {
       // Se abbiamo un instanceId o task.id (caso DDTHostAdapter), salva nell'istanza
@@ -315,51 +214,7 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
         if (hasTaskTree) {
           // ✅ Usa funzione di persistenza per salvare
           await saveTaskToRepository(key, finalTaskTree, task, currentProjectId);
-
-          const firstNodeTestNotes = firstNode?.testNotes;
-          console.log('[EXAMPLES] CLOSE - Updated TaskRepository cache with final TaskTree', {
-            taskId: key,
-            dataLength: finalMainList?.length || 0,
-            firstNodeId: firstNode?.id,
-            hasFirstNodeNlpProfile: !!firstNode?.nlpProfile,
-            hasFirstNodeNlpProfileExamples: !!firstNodeNlpProfileExamples,
-            firstNodeNlpProfileExamplesCount: Array.isArray(firstNodeNlpProfileExamples) ? firstNodeNlpProfileExamples.length : 0,
-            firstNodeNlpProfileExamples: firstNodeNlpProfileExamples?.slice(0, 3),
-            hasFirstNodeTestNotes: !!firstNodeTestNotes,
-            firstNodeTestNotesCount: firstNodeTestNotes ? Object.keys(firstNodeTestNotes).length : 0,
-            firstNodeTestNotesKeys: firstNodeTestNotes ? Object.keys(firstNodeTestNotes).slice(0, 3) : []
-          });
         }
-
-        console.log('[ResponseEditor][CLOSE] 🔍 Pre-save check', {
-          taskId: task?.id ?? (task as any)?.instanceId ?? 'unknown',
-          key,
-          hasTaskTree,
-          finalTaskTreeKeys: finalTaskTree ? Object.keys(finalTaskTree) : [],
-          hasNodes: !!finalMainList && finalMainList.length > 0,
-          nodesLength: finalMainList?.length || 0
-        });
-
-        console.log('[ResponseEditor][CLOSE] 💾 Starting save process', {
-          taskId: task?.id ?? (task as any)?.instanceId ?? 'unknown',
-          key,
-          hasTask: !!task,
-          taskStepsCount: Array.isArray(task?.steps) ? task.steps.length : 0,
-          taskStepsIsArray: Array.isArray(task?.steps),
-          taskStepsDetails: Array.isArray(task?.steps) ? task.steps.map((step: any) => {
-            const escalationsCount = step.escalations?.length || 0;
-            const tasksCount = step.escalations?.reduce((a: number, esc: any) => a + (esc?.tasks?.length || 0), 0) || 0;
-            return {
-              stepId: step.id,
-              templateStepId: step.templateStepId,
-              stepsType: 'array',
-              isArray: true,
-              isObject: false,
-              escalationsCount,
-              tasksCount
-            };
-          }) : []
-        });
 
         // ✅ NUOVO MODELLO: Alla chiusura NON si salva automaticamente nel DB
         // Il salvataggio avviene solo su comando esplicito ("Salva progetto")
@@ -369,22 +224,9 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
           // After validation strict, use subNodes (not subTasks)
           const subNodes = getSubNodesStrict(finaldata);
           const finalSubData = subNodes?.[0];
-          const finalStartTasks = finalSubData?.steps?.start?.escalations?.reduce((acc: number, esc: any) => acc + (esc?.tasks?.length || 0), 0) || 0;
-
-          console.log('[handleEditorClose] 🔄 Aggiornando cache in memoria (NON salvataggio DB)', {
-            key,
-            finalStartTasks,
-            hasNodes: !!finalMainList,
-            nodesLength: finalMainList?.length || 0
-          });
-
           // ✅ CRITICAL: Aggiungi task.steps a finalTaskTree (unica fonte di verità per gli steps)
           // Gli steps vengono salvati in task.steps[nodeTemplateId] quando si modifica un nodo
           // ✅ finalTaskTreeWithSteps è la WORKING COPY (modificata dall'utente)
-          // ✅ NO FALLBACKS: Use task.steps as single source of truth, or finalTaskTree.steps, or throw error
-          if (!task?.steps && !finalTaskTree.steps) {
-            console.warn('[useResponseEditorClose] No steps found in task or finalTaskTree. Using empty object.');
-          }
           const finalTaskTreeWithSteps: TaskTree = {
             ...finalTaskTree,
             steps: task?.steps ?? finalTaskTree.steps ?? {}
@@ -393,29 +235,11 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
           // ✅ FASE 2.3: Update store with final TaskTree
           setTaskTree(finalTaskTreeWithSteps);
 
-          console.log('[ResponseEditor][CLOSE] 📦 Final TaskTree with steps prepared', {
-            taskId: task?.id ?? (task as any)?.instanceId ?? 'unknown',
-            key,
-            finalStepsKeys: finalTaskTreeWithSteps.steps ? Object.keys(finalTaskTreeWithSteps.steps) : [],
-            finalStepsCount: finalTaskTreeWithSteps.steps ? Object.keys(finalTaskTreeWithSteps.steps).length : 0,
-            taskStepsKeys: task?.steps ? Object.keys(task.steps) : [],
-            taskStepsCount: task?.steps ? Object.keys(task.steps).length : 0,
-            stepsMatch: JSON.stringify(finalTaskTreeWithSteps.steps) === JSON.stringify(task?.steps ?? {})
-          });
-
           // ✅ AWAIT OBBLIGATORIO: non chiudere finché non è salvato
           await saveTaskOnEditorClose(key, finalTaskTreeWithSteps, task, currentProjectId);
-
-          console.log('[ResponseEditor][CLOSE] ✅ Save completed successfully', {
-            taskId: task?.id ?? (task as any)?.instanceId ?? 'unknown',
-            key,
-            nodesLength: finalTaskTree.nodes?.length || 0,
-            finalStartTasks
-          });
         } else if (finalTaskTree) {
           // ✅ No TaskTree structure, but save other fields (e.g., Message text)
           await saveTaskToRepository(key, finalTaskTree, task, currentProjectId);
-          console.log('[handleEditorClose] ✅ Save completed (no data)', { key });
         }
       }
 
@@ -426,20 +250,12 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
         replaceSelectedDDT(finalTaskTree);
       }
     } catch (e) {
-      console.error('[ResponseEditor][CLOSE] ❌ Persist error', {
-        taskId: task?.id ?? (task as any)?.instanceId ?? 'unknown',
-        error: e,
-        errorMessage: e instanceof Error ? e.message : String(e),
-        errorStack: e instanceof Error ? e.stack : undefined
-      });
+      // Error during save - allow close anyway
     }
 
     // ✅ NON chiamare onClose() qui - la chiusura del tab è gestita da tab.onClose nel DockManager
     // tab.onClose chiamerà closeTab solo se questo handleEditorClose ritorna true
     // onClose() è solo per compatibilità legacy e non deve chiudere il tab
-    console.log('[ResponseEditor][CLOSE] ✅ Close process completed, returning true to allow tab closure', {
-      taskId: task?.id ?? (task as any)?.instanceId ?? 'unknown'
-    });
 
     // ✅ Ritorna true per indicare che la chiusura può procedere
     return true;

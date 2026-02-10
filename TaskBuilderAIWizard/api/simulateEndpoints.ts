@@ -17,8 +17,6 @@ export async function generateStructure(
   locale: string = 'it'
 ): Promise<{ schema: WizardTaskTreeNode[]; shouldBeGeneral: boolean }> {
   try {
-    console.log('[generateStructure] 🚀 Calling API /api/nlp/generate-structure', { description, taskId, locale });
-
     const provider = localStorage.getItem('omnia.aiProvider') || 'openai';
     const model = localStorage.getItem('omnia.aiModel') || undefined;
 
@@ -50,14 +48,6 @@ export async function generateStructure(
     const generalizationReason = data.generalizationReason || null;
     const generalizedMessages = data.generalizedMessages || null;
 
-    console.log('[generateStructure] ✅ API response received', {
-      structureLength: data.structure?.length,
-      shouldBeGeneral,
-      generalizedLabel,
-      generalizationReason,
-      generalizedMessagesCount: generalizedMessages?.length || 0
-    });
-
     // Convert API structure to WizardTaskTreeNode format
     const converted = convertApiStructureToWizardTaskTree(data.structure, taskId || 'temp-task-id');
 
@@ -69,12 +59,6 @@ export async function generateStructure(
       converted[0].generalizedMessages = generalizedMessages;
     }
 
-    console.log('[generateStructure] ✅ Converted to WizardTaskTreeNode', {
-      convertedLength: converted.length,
-      rootShouldBeGeneral: converted[0]?.shouldBeGeneral,
-      rootGeneralizedLabel: converted[0]?.generalizedLabel
-    });
-
     return {
       schema: converted,
       shouldBeGeneral,
@@ -83,7 +67,6 @@ export async function generateStructure(
       generalizedMessages
     };
   } catch (error) {
-    console.error('[generateStructure] ❌ Error:', error);
     throw error;
   }
 }
@@ -119,7 +102,6 @@ function convertApiConstraintsToWizardConstraints(
   // Convert constraints object to array
   Object.entries(constraintsObj).forEach(([key, value]: [string, any]) => {
     if (!value || value === null) {
-      console.warn(`[convertApiConstraintsToWizardConstraints] ⚠️ Constraint value is null for key ${key} in node ${nodeLabel}`);
       return; // Skip this constraint
     }
     constraints.push({
@@ -224,7 +206,6 @@ export async function generateConstraints(
   locale: string = 'it'
 ): Promise<WizardConstraint[]> {
   try {
-    console.log('[generateConstraints] 🚀 Calling API /api/nlp/generate-constraints', { schemaLength: schema.length });
 
     const allConstraints: WizardConstraint[] = [];
     const provider = localStorage.getItem('omnia.aiProvider') || 'openai';
@@ -254,7 +235,6 @@ export async function generateConstraints(
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[generateConstraints] ❌ API error for node ${node.id}:`, response.status, errorText);
         continue;
       }
 
@@ -266,11 +246,9 @@ export async function generateConstraints(
       }
     }
 
-    console.log('[generateConstraints] ✅ Generated constraints', { count: allConstraints.length });
     return allConstraints;
 
   } catch (error) {
-    console.error('[generateConstraints] ❌ Error:', error);
     // Fallback: return empty array instead of mock
     return [];
   }
@@ -296,7 +274,6 @@ export async function generateParsers(
   locale: string = 'it'
 ): Promise<WizardNLPContract> {
   try {
-    console.log('[generateParsers] 🚀 Calling API /api/nlp/generate-engines', { schemaLength: schema.length });
 
     const provider = localStorage.getItem('omnia.aiProvider') || 'openai';
     const model = localStorage.getItem('omnia.aiModel') || undefined;
@@ -348,11 +325,9 @@ export async function generateParsers(
       onProgress(100);
     }
 
-    console.log('[generateParsers] ✅ Generated engines/contract', nlpContract);
     return nlpContract;
 
   } catch (error) {
-    console.error('[generateParsers] ❌ Error:', error);
     throw error;
   }
 }
@@ -402,12 +377,6 @@ export async function generateMessages(
   onSubstepChange?: (substep: string | null) => void
 ): Promise<WizardStepMessages> {
   try {
-    console.log('[generateMessages] 🚀 Starting 8 separate API calls (one per step type)', {
-      schemaLength: schema.length,
-      locale,
-      stepTypes: STEP_TYPES
-    });
-
     const provider = localStorage.getItem('omnia.aiProvider') || 'openai';
     const model = localStorage.getItem('omnia.aiModel') || undefined;
 
@@ -417,11 +386,6 @@ export async function generateMessages(
       throw new Error('generateMessages: schema must contain at least one node');
     }
     const targetNode = schema[0];
-    console.log('[generateMessages] 🎯 Processing messages for single node', {
-      nodeId: targetNode.id,
-      nodeLabel: targetNode.label,
-      schemaLength: schema.length
-    });
 
     // ✅ Initialize result structure for this single node
     const allMessages: WizardStepMessages = {
@@ -446,7 +410,6 @@ export async function generateMessages(
         onSubstepChange(substepLabel);
       }
 
-      console.log(`[generateMessages] 📞 Calling API for step: ${stepType} (${stepIndex + 1}/${totalSteps}) for node: ${targetNode.label}`);
 
       // ✅ Generate messages for the target node only
       {
@@ -472,12 +435,6 @@ export async function generateMessages(
             // ✅ API returns: { messages: ["msg1", "msg2", ...], options: [...] }
             const messages = Array.isArray(data.messages) ? data.messages : [data.messages];
 
-            console.log(`[generateMessages] ✅ Received ${messages.length} messages for ${stepType}`, {
-              stepType,
-              messagesCount: messages.length,
-              nodeId: node.id,
-              nodeLabel: node.label
-            });
 
             // ✅ Map step type to WizardStepMessages structure
             switch (stepType) {
@@ -517,11 +474,9 @@ export async function generateMessages(
                 break;
             }
           } else {
-            console.warn(`[generateMessages] ⚠️ API returned success=false for ${stepType}`, data);
           }
         } else {
           const errorText = await response.text();
-            console.error(`[generateMessages] ❌ API error for ${stepType} (node ${targetNode.id}):`, response.status, errorText);
         }
       }
 
@@ -543,22 +498,10 @@ export async function generateMessages(
       onProgress(100);
     }
 
-    console.log('[generateMessages] ✅ Generated all messages', {
-      askCount: allMessages.ask.base.length,
-      askReaskCount: allMessages.ask.reask?.length || 0,
-      noInputCount: allMessages.noInput?.base.length || 0,
-      confirmCount: allMessages.confirm?.base.length || 0,
-      notConfirmedCount: allMessages.notConfirmed?.base.length || 0,
-      violationCount: allMessages.violation?.base.length || 0,
-      disambiguationCount: allMessages.disambiguation?.base.length || 0,
-      disambiguationOptionsCount: allMessages.disambiguation?.options.length || 0,
-      successCount: allMessages.success?.base.length || 0
-    });
 
     return allMessages;
 
   } catch (error) {
-    console.error('[generateMessages] ❌ Error:', error);
     // Fallback: return empty messages
     return {
       ask: { base: [] },

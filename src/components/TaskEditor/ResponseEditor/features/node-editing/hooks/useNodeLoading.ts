@@ -77,14 +77,6 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
       const newNode = { ...currentTaskTree, steps: [introStep] };
 
       try {
-        if (localStorage.getItem('debug.nodeSync') === '1') {
-          const tasksCount = introStep.escalations?.reduce((acc: number, esc: any) =>
-            acc + (esc?.tasks?.length || 0), 0) || 0;
-          console.log('[NODE_SYNC][LOAD] ✅ Root node loaded', {
-            escalationsCount: introStep.escalations?.length || 0,
-            tasksCount
-          });
-        }
       } catch { }
 
       setSelectedNode(newNode);
@@ -103,21 +95,6 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
         // templateId is optional (preferred for lookup, but id works as fallback)
         const nodeTemplateId = node.templateId ?? node.id;
 
-        // DEBUG: Log node.nlpProfile.examples quando viene caricato
-        const nodeNlpProfileExamples = (node as any)?.nlpProfile?.examples;
-        if (nodeNlpProfileExamples || (node as any)?.nlpProfile) {
-          console.log('[NODE_SELECT] Node loaded with nlpProfile', {
-            nodeId: node.id,
-            nodeTemplateId,
-            hasNlpProfile: !!(node as any)?.nlpProfile,
-            nlpProfileKeys: (node as any)?.nlpProfile ? Object.keys((node as any).nlpProfile) : [],
-            hasNlpProfileExamples: !!nodeNlpProfileExamples,
-            nlpProfileExamplesCount: Array.isArray(nodeNlpProfileExamples) ? nodeNlpProfileExamples.length : 0,
-            nlpProfileExamples: nodeNlpProfileExamples?.slice(0, 3),
-            hasTestNotes: !!(node as any)?.testNotes,
-            testNotesCount: (node as any)?.testNotes ? Object.keys((node as any).testNotes).length : 0
-          });
-        }
 
         // NUOVO: Usa lookup diretto per ottenere steps per questo nodo (dictionary)
         // CRITICAL: Usa taskTree.steps come fonte primaria (più affidabile, costruito da buildTaskTree)
@@ -132,35 +109,6 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
           : 0;
         const nodeStepTypes = Object.keys(nodeStepsDict);
 
-        // ✅ NEW: Log dettagliato per debug
-        console.log('[useNodeLoading] 🔍 Loading steps for node', {
-          nodeId: node.id,
-          nodeTemplateId,
-          nodeLabel: node?.label,
-          stepsSourceKeys: stepsSource && typeof stepsSource === 'object' && !Array.isArray(stepsSource)
-            ? Object.keys(stepsSource)
-            : [],
-          nodeStepsDictKeys: Object.keys(nodeStepsDict),
-          nodeStepsDict,
-          hasSteps: Object.keys(nodeStepsDict).length > 0,
-          stepsSourceType: typeof stepsSource,
-          isStepsSourceArray: Array.isArray(stepsSource),
-          // ✅ NEW: Verifica mismatch dettagliato
-          templateIdMismatch: {
-            nodeTemplateId,
-            stepsSourceKeys: stepsSource && typeof stepsSource === 'object' && !Array.isArray(stepsSource)
-              ? Object.keys(stepsSource)
-              : [],
-            match: stepsSource && typeof stepsSource === 'object' && !Array.isArray(stepsSource)
-              ? Object.keys(stepsSource).includes(nodeTemplateId)
-              : false,
-            allTemplateIdsInSteps: stepsSource && typeof stepsSource === 'object' && !Array.isArray(stepsSource)
-              ? Object.keys(stepsSource)
-              : [],
-            nodeId: node.id,
-            nodeLabel: node.label,
-          },
-        });
 
         // Log rimosso: non essenziale per flusso motore
         const nodeStepsDetails = nodeStepTypes.length > 0 ? (() => {
@@ -206,31 +154,7 @@ export function useNodeLoading(params: UseNodeLoadingParams) {
 
           // Log rimosso: non essenziale per flusso motore
         } else {
-          console.log('[🔍 ResponseEditor][NODE_SELECT] ❌ CRITICAL - No steps found for node', {
-            nodeId: node.id,
-            nodeTemplateId,
-            nodeLabel: node?.label,
-            stepsSource: currentTaskTree?.steps ? 'taskTree.steps' : 'task.steps',
-            hasTaskSteps: !!(nodeTemplateId && stepsSource?.[nodeTemplateId]),
-            taskStepsKeys: stepsSource && typeof stepsSource === 'object' && !Array.isArray(stepsSource)
-              ? Object.keys(stepsSource)
-              : [],
-            taskTemplateIdsCount: stepsSource && typeof stepsSource === 'object' && !Array.isArray(stepsSource)
-              ? Object.keys(stepsSource).length
-              : 0,
-            nodeHasTemplateId: !!node.templateId,
-            nodeTemplateIdMatches: node.templateId ? stepsSource?.[node.templateId] : false,
-            keyMatchAnalysis: nodeTemplateId && stepsSource && typeof stepsSource === 'object' && !Array.isArray(stepsSource) ? {
-              lookingFor: nodeTemplateId,
-              availableKeys: Object.keys(stepsSource),
-              keyComparison: Object.keys(stepsSource).map(k => ({
-                key: k,
-                matches: k === nodeTemplateId,
-                keyPreview: k.substring(0, 40),
-                templateIdPreview: nodeTemplateId.substring(0, 40)
-              }))
-            } : null
-          });
+          // No steps found for node
         }
 
         // LOG CHIRURGICO 3 (continuazione): Dettagli del nodo caricato

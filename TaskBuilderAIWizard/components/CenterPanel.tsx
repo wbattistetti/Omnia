@@ -44,15 +44,6 @@ export function CenterPanel({
   currentParserSubstep = null,
   currentMessageSubstep = null
 }: CenterPanelProps) {
-  console.log('[CenterPanel] 🎯 Rendering CenterPanel', {
-    currentStep,
-    pipelineStepsLength: pipelineSteps?.length,
-    pipelineSteps: pipelineSteps,
-    dataSchemaLength: dataSchema?.length,
-    showStructureConfirmation,
-    currentParserSubstep,
-    currentMessageSubstep,
-  });
   const [isAccordionOpen, setIsAccordionOpen] = useState(false);
   const [selectedModule, setSelectedModule] = useState<WizardModuleTemplate | null>(() => {
     // Se c'è un modulo trovato dall'euristica, pre-selezionalo
@@ -109,15 +100,6 @@ export function CenterPanel({
   const getPhaseState = (pipelineStep: PipelineStep): 'pending' | 'running' | 'completed' => {
     return pipelineStep.status === 'error' ? 'pending' : pipelineStep.status;
   };
-
-  console.log('[CenterPanel] 📋 Building phases array', {
-    pipelineStepsLength: pipelineSteps?.length,
-    pipelineSteps: pipelineSteps,
-    structureStep: pipelineSteps?.find(s => s.id === 'structure'),
-    constraintsStep: pipelineSteps?.find(s => s.id === 'constraints'),
-    parsersStep: pipelineSteps?.find(s => s.id === 'parsers'),
-    messagesStep: pipelineSteps?.find(s => s.id === 'messages'),
-  });
 
   const phases = [
     {
@@ -491,23 +473,9 @@ export function CenterPanel({
         )}
 
         {/* Fasi di generazione */}
-        {(() => {
-          console.log('[CenterPanel] 🔄 Checking shouldShowCards condition', {
-            shouldShowCards,
-            isGenerating,
-            currentStep,
-            phasesLength: phases.length,
-            pipelineStepsLength: pipelineSteps.length,
-          });
-          return shouldShowCards;
-        })() && (
+        {shouldShowCards && (
           <>
-          {(() => {
-            console.log('[CenterPanel] 🎨 Rendering phases', {
-              phasesLength: phases.length,
-              phases: phases.map(p => ({ id: p.step.id, title: p.title, status: p.step.status })),
-            });
-            return phases.map(({ icon, title, step, phase, dynamicMessage }) => {
+          {phases.map(({ icon, title, step, phase, dynamicMessage }) => {
             const isStructurePhase = step.id === 'structure';
             return (
               <PhaseCard
@@ -523,8 +491,7 @@ export function CenterPanel({
                 dynamicMessage={dynamicMessage}
               />
             );
-          });
-          })()}
+          })}
 
           {showStructureConfirmation && !showCorrectionMode && (
             <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 shadow-sm">
