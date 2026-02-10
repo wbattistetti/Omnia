@@ -248,27 +248,11 @@ export function useWizardGeneration(props: UseWizardGenerationProps) {
   const generateMessagesForTask = useCallback(async (task: WizardTaskTreeNode) => {
     // ✅ INVARIANT CHECK: task.id MUST equal task.templateId (single source of truth)
     if (task.id !== task.templateId) {
-      console.error('[useWizardGeneration][generateMessagesForTask] ❌ CRITICAL: task.id !== task.templateId', {
-        taskId: task.id,
-        taskTemplateId: task.templateId,
-        taskLabel: task.label,
-      });
       throw new Error(
         `[useWizardGeneration] CRITICAL: task.id (${task.id}) !== task.templateId (${task.templateId}) for task "${task.label}". ` +
         `This should never happen. The ID must be consistent throughout the wizard lifecycle.`
       );
     }
-
-    // ✅ LOGGING PLAN B: Log before message generation
-    console.log('[useWizardGeneration][generateMessagesForTask] 🚀 LOGGING PLAN B: Starting message generation', {
-      taskId: task.id,
-      taskTemplateId: task.templateId,
-      taskLabel: task.label,
-      taskType: task.type,
-      taskIcon: task.icon,
-      idMatchesTemplateId: task.id === task.templateId,
-      locale,
-    });
 
     updateTaskPipelineStatus(task.id, 'messages', 'running');
     updateTaskProgress(task.id, 'messages', 0);
@@ -302,43 +286,11 @@ export function useWizardGeneration(props: UseWizardGenerationProps) {
       );
     } catch (error) {
       generationError = error instanceof Error ? error : new Error(String(error));
-      console.error('[useWizardGeneration][generateMessagesForTask] ❌ LOGGING PLAN B: Message generation failed', {
-        taskId: task.id,
-        taskLabel: task.label,
-        error: generationError.message,
-        errorStack: generationError.stack,
-      });
       // ✅ C3: Dopo tutti i retry falliti, imposta stato 'failed'
       updateTaskPipelineStatus(task.id, 'messages', 'failed');
       // Re-throw to let caller handle
       throw error;
     }
-
-    // ✅ LOGGING PLAN B: Log after message generation
-    console.log('[useWizardGeneration][generateMessagesForTask] ✅ LOGGING PLAN B: Message generation completed', {
-      taskId: task.id,
-      taskTemplateId: task.templateId,
-      taskLabel: task.label,
-      hasMessages: !!generatedMessages,
-      messagesStructure: {
-        hasAsk: !!generatedMessages.ask,
-        hasNoInput: !!generatedMessages.noInput,
-        hasConfirm: !!generatedMessages.confirm,
-        hasNotConfirmed: !!generatedMessages.notConfirmed,
-        hasViolation: !!generatedMessages.violation,
-        hasSuccess: !!generatedMessages.success,
-      },
-      messageCounts: {
-        askCount: generatedMessages.ask?.base?.length || 0,
-        noInputCount: generatedMessages.noInput?.base?.length || 0,
-        noMatchCount: generatedMessages.ask?.reask?.length || 0,
-        confirmCount: generatedMessages.confirm?.base?.length || 0,
-        notConfirmedCount: generatedMessages.notConfirmed?.base?.length || 0,
-        violationCount: generatedMessages.violation?.base?.length || 0,
-        successCount: generatedMessages.success?.base?.length || 0,
-      },
-      errorOccurred: !!generationError,
-    });
 
     setMessages(task.id, generatedMessages);
   }, [locale, updatePipelineStep, updateTaskPipelineStatus, updateTaskProgress, updateMessageSubstep, setMessages, wizardRetry]);
@@ -351,41 +303,10 @@ export function useWizardGeneration(props: UseWizardGenerationProps) {
     const totalParsers = calculateTotalParsers(taskTree);
     const allTasks = flattenTaskTree(taskTree);
 
-    // ✅ LOGGING PLAN A: Log complete flattenTaskTree before generation
-    console.log('[useWizardGeneration][continueAfterStructureConfirmation] 📊 LOGGING PLAN A: Complete task tree structure', {
-      totalNodes: allTasks.length,
-      totalParsers,
-      nodes: allTasks.map(task => ({
-        id: task.id,
-        templateId: task.templateId,
-        label: task.label,
-        type: task.type,
-        icon: task.icon,
-        hasSubNodes: !!task.subNodes,
-        subNodesCount: task.subNodes?.length || 0,
-        subNodesIds: task.subNodes?.map(s => ({ id: s.id, label: s.label })) || [],
-        idMatchesTemplateId: task.id === task.templateId,
-      })),
-      rootNodes: taskTree.map(root => ({
-        id: root.id,
-        templateId: root.templateId,
-        label: root.label,
-        subNodesCount: root.subNodes?.length || 0,
-      })),
-    });
 
     // ✅ INVARIANT CHECK: Verify all nodes have id === templateId
     const nodesWithMismatch = allTasks.filter(t => t.id !== t.templateId);
     if (nodesWithMismatch.length > 0) {
-      console.error('[useWizardGeneration][continueAfterStructureConfirmation] ❌ CRITICAL: Nodes with id !== templateId', {
-        nodesWithMismatch: nodesWithMismatch.map(n => ({
-          id: n.id,
-          templateId: n.templateId,
-          label: n.label,
-        })),
-        totalNodes: allTasks.length,
-        mismatchedCount: nodesWithMismatch.length,
-      });
       throw new Error(
         `[useWizardGeneration] CRITICAL: Found ${nodesWithMismatch.length} nodes with id !== templateId. ` +
         `This should never happen. The ID must be consistent throughout the wizard lifecycle. ` +
@@ -398,28 +319,11 @@ export function useWizardGeneration(props: UseWizardGenerationProps) {
     const duplicateIds = nodeIds.filter((id, index) => nodeIds.indexOf(id) !== index);
     if (duplicateIds.length > 0) {
       const uniqueDuplicates = [...new Set(duplicateIds)];
-      console.error('[useWizardGeneration][continueAfterStructureConfirmation] ❌ CRITICAL: Duplicate node IDs', {
-        duplicateIds: uniqueDuplicates,
-        totalNodes: allTasks.length,
-        duplicateCount: duplicateIds.length,
-        nodesWithDuplicates: allTasks.filter(t => uniqueDuplicates.includes(t.id)).map(n => ({
-          id: n.id,
-          label: n.label,
-        })),
-      });
       throw new Error(
         `[useWizardGeneration] CRITICAL: Found duplicate node IDs: ${uniqueDuplicates.join(', ')}. ` +
         `This should never happen. Each node must have a unique ID.`
       );
     }
-
-    // ✅ VERIFY: All nodes must be included (root + all sub-nodes)
-    console.log('[useWizardGeneration][continueAfterStructureConfirmation] ✅ All nodes validated', {
-      totalNodes: allTasks.length,
-      nodeIds: allTasks.map(t => ({ id: t.id, label: t.label })),
-      allIdsUnique: duplicateIds.length === 0,
-      allIdsMatchTemplateIds: nodesWithMismatch.length === 0,
-    });
 
     // Inizializzo lo stato di tutti i task
     allTasks.forEach(task => {
@@ -440,17 +344,7 @@ export function useWizardGeneration(props: UseWizardGenerationProps) {
     const allPromises: Promise<void>[] = [];
 
     // Per ogni task, creo 3 promise (una per fase) - esecuzione reale in parallelo
-    console.log('[useWizardGeneration][continueAfterStructureConfirmation] 📊 Starting parallel generation', {
-      allTasksCount: allTasks.length,
-      allTasksIds: allTasks.map(t => ({ id: t.id, templateId: t.templateId, label: t.label })),
-    });
-
     allTasks.forEach(task => {
-      console.log('[useWizardGeneration][continueAfterStructureConfirmation] 🔄 Adding promises for task', {
-        taskId: task.id,
-        taskTemplateId: task.templateId,
-        taskLabel: task.label,
-      });
       allPromises.push(generateConstraintsForTask(task));
       allPromises.push(generateParsersForTask(task));
       allPromises.push(generateMessagesForTask(task));
@@ -466,7 +360,6 @@ export function useWizardGeneration(props: UseWizardGenerationProps) {
         return currentSchema; // Non modifica, solo legge per calcolare aggregato
       });
     } catch (error) {
-      console.error('[useWizardGeneration] ❌ Errore durante esecuzione parallela:', error);
       throw error;
     }
   }, [

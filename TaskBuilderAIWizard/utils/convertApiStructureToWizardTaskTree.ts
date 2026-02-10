@@ -77,15 +77,6 @@ function convertNode(
 
     const originalId = nodeId;
     nodeId = `node-${uuidv4()}`;
-
-    console.log('[convertApiStructureToWizardTaskTree] 🔄 Generating GUID for node', {
-      originalId: originalId || '(missing)',
-      newId: nodeId,
-      label: apiNode.label,
-      reason: !originalId ? 'missing' :
-              !isValidGuid(originalId) ? 'not a valid GUID' :
-              'invalid value',
-    });
   }
 
   // ✅ CRITICAL: templateId MUST always equal id (single source of truth)

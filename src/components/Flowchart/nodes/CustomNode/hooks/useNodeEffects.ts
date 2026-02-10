@@ -182,17 +182,9 @@ export function useNodeEffects({
     // Canvas click: exit editing e elimina righe vuote
     useEffect(() => {
         const onCanvasClick = () => {
-            console.log("🎯 [CANVAS_CLICK] Canvas click detected", {
-                nodeId: id,
-                isTemporary: normalizedData.isTemporary,
-                nodeRowsCount: nodeRows.length,
-                timestamp: Date.now()
-            });
-
             // Elimina tutte le righe vuote
             const emptyRows = nodeRows.filter(row => !row.text || row.text.trim() === '');
             if (emptyRows.length > 0) {
-                console.log(`[useNodeEffects] Deleting ${emptyRows.length} empty rows on canvas click`);
                 const cleanedRows = nodeRows.filter(row => row.text && row.text.trim().length > 0);
                 setNodeRows(cleanedRows);
                 setIsEmpty(computeIsEmpty(cleanedRows));

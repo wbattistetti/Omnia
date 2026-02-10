@@ -1024,14 +1024,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   const shouldShowBanner = isGeneralizable && taskWizardMode === 'none';
   React.useEffect(() => {
     if (taskWizardMode === 'full') {
-      console.log('[ResponseEditorLayout] ✅ FULL WIZARD MODE - Layout check', {
-        taskWizardMode,
-        hasNormalEditorLayoutElement,
-        hasSidebarElement,
-        toolbarButtonsCount,
-        shouldShowHeader,
-        shouldShowBanner,
-      });
+      // Layout check (silent)
     }
   }, [taskWizardMode, hasNormalEditorLayoutElement, hasSidebarElement, toolbarButtonsCount, shouldShowHeader, shouldShowBanner]);
 

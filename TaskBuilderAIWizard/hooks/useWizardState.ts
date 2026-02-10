@@ -113,25 +113,6 @@ export function useWizardState() {
       const hadPreviousValue = newMap.has(nodeId);
       newMap.set(nodeId, nodeMessages);
 
-      // ✅ LOGGING PLAN C: Log during message saving
-      console.log('[useWizardState][setMessagesForNode] 💾 Saving messages', {
-        nodeId,
-        hadPreviousValue,
-        overwriting: hadPreviousValue,
-        messagesSize: newMap.size,
-        messageStructure: {
-          hasAsk: !!nodeMessages.ask,
-          hasNoInput: !!nodeMessages.noInput,
-          hasConfirm: !!nodeMessages.confirm,
-          hasNotConfirmed: !!nodeMessages.notConfirmed,
-          hasViolation: !!nodeMessages.violation,
-          hasSuccess: !!nodeMessages.success,
-        },
-        askCount: nodeMessages.ask?.base?.length || 0,
-        noInputCount: nodeMessages.noInput?.base?.length || 0,
-        allNodeIds: Array.from(newMap.keys()),
-      });
-
       return newMap;
     });
   };
