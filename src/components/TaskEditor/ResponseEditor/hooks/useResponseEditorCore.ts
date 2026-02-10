@@ -43,8 +43,7 @@ export interface UseResponseEditorCoreParams {
   currentProjectId: string | null;
   tabId?: string;
   setDockTree?: (updater: (prev: any) => any) => void;
-  // ✅ NEW: Generalization params
-  shouldBeGeneral?: boolean;
+  // ✅ REMOVED: shouldBeGeneral - now from WizardContext
   saveDecisionMade?: boolean;
   onOpenSaveDialog?: () => void;
   // ✅ NEW: Ref per il pulsante save-to-library
@@ -203,8 +202,9 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
   // Altrimenti, provo a estrarlo da Task usando getTaskMeta
   const taskMeta = isTaskMeta(task) ? task : getTaskMeta(task);
 
-  // ✅ NEW: Read taskWizardMode from taskMeta (if present)
+  // ✅ SINGLE SOURCE OF TRUTH: Read taskWizardMode and taskLabel from taskMeta
   // These flags are set when opening ResponseEditor from NodeRow
+  // taskLabel is ALWAYS set here - if taskMeta is not available, use empty string temporarily
   React.useEffect(() => {
     if (taskMeta) {
       // ✅ Priority: explicit taskWizardMode > backward compatibility with booleans
@@ -225,12 +225,14 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
       }
 
       const contextualizationTemplateId = (taskMeta as any).contextualizationTemplateId || null;
+      // ✅ SINGLE SOURCE OF TRUTH: Read taskLabel from taskMeta
+      // Priority: taskMeta.taskLabel > taskMeta.label > empty string (temporary)
       const taskLabelFromMeta = (taskMeta as any).taskLabel || taskMeta.label || '';
 
       // ✅ Set primary state
       setTaskWizardMode(wizardMode);
       setContextualizationTemplateId(contextualizationTemplateId);
-      setTaskLabel(taskLabelFromMeta);
+      setTaskLabel(taskLabelFromMeta); // ✅ ALWAYS set - empty string if not available yet
 
       // ✅ DEPRECATED: Backward compatibility - sync boolean flags
       if (wizardMode === 'adaptation') {
@@ -243,6 +245,10 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
         setNeedsTaskContextualization(false);
         setNeedsTaskBuilder(false);
       }
+    } else {
+      // ✅ If taskMeta is not available yet, use empty string temporarily
+      // This will be updated when taskMeta becomes available
+      setTaskLabel('');
     }
   }, [taskMeta, setTaskWizardMode, setNeedsTaskContextualization, setNeedsTaskBuilder, setContextualizationTemplateId, setTaskLabel]);
 

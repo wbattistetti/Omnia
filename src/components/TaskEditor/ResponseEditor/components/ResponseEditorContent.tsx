@@ -18,6 +18,7 @@ import { TaskContextualizationPanel } from './TaskContextualizationPanel';
 // ❌ RIMOSSO: TaskBuilderWizardPanel non più usato (wizard integrato in MainContentArea)
 // import { TaskBuilderWizardPanel } from './TaskBuilderWizardPanel';
 import { useTaskTreeFromStore } from '@responseEditor/core/state';
+import { useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
 import type { Task, TaskTree } from '@types/taskTypes';
 import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
 
@@ -26,9 +27,9 @@ export interface ResponseEditorContentProps {
   showContractWizard: boolean;
   needsIntentMessages: boolean;
 
-  // Data
-  task: Task | null | undefined;
-  taskTree: TaskTree | null | undefined;
+  // ✅ REMOVED: Data props - now from ResponseEditorContext
+  // task: Task | null | undefined;
+  // taskTree: TaskTree | null | undefined;
 
   // ContractWizard handlers
   handleContractWizardClose: () => void;
@@ -62,8 +63,7 @@ export interface ResponseEditorContentProps {
 export function ResponseEditorContent({
   showContractWizard,
   needsIntentMessages,
-  task,
-  taskTree,
+  // ✅ REMOVED: task, taskTree - now from Context
   handleContractWizardClose,
   handleContractWizardNodeUpdate,
   handleContractWizardComplete,
@@ -74,13 +74,16 @@ export function ResponseEditorContent({
   // ✅ DEPRECATED: Backward compatibility wizard props
   needsTaskContextualization,
   needsTaskBuilder,
-  taskLabel,
+  // ✅ REMOVED: taskLabel - now from Context
   templateId,
   onTaskContextualizationComplete,
   onTaskBuilderComplete,
   onTaskBuilderCancel,
   sidebar,
 }: ResponseEditorContentProps) {
+  // ✅ NEW: Get data from Context
+  const { taskTree, taskMeta, taskLabel } = useResponseEditorContext();
+
   // ✅ FASE 2.3: Use store as SINGLE source of truth
   const taskTreeFromStore = useTaskTreeFromStore();
 
@@ -168,7 +171,7 @@ export function ResponseEditorContent({
     return (
       <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-start', padding: '16px 20px' }}>
         <IntentMessagesBuilder
-          intentLabel={task?.label || taskTree?.label || 'chiedi il problema'}
+          intentLabel={taskMeta?.label || taskTree?.label || taskLabel || 'chiedi il problema'}
           onComplete={onIntentMessagesComplete}
         />
       </div>

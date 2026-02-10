@@ -165,6 +165,8 @@ function convertMessagesToStepsDictionary(
     askBaseCount: messages.ask?.base?.length,
     hasAskReask: !!messages.ask?.reask,
     askReaskCount: messages.ask?.reask?.length,
+    hasNoInput: !!messages.noInput?.base,
+    noInputCount: messages.noInput?.base?.length,
     hasConfirm: !!messages.confirm?.base,
     confirmCount: messages.confirm?.base?.length,
     hasNotConfirmed: !!messages.notConfirmed?.base,
@@ -193,6 +195,15 @@ function convertMessagesToStepsDictionary(
       messagesCount: messages.ask.reask.length,
     });
     stepRecord.noMatch = createStepWithEscalations('noMatch', messages.ask.reask);
+  }
+
+  // ✅ FIX: noInput messages -> noInput step (Non ho sentito)
+  if (messages.noInput?.base && messages.noInput.base.length > 0) {
+    console.log('[TemplateCreationService][convertMessagesToStepsDictionary] 📝 Creating noInput step', {
+      templateId,
+      messagesCount: messages.noInput.base.length,
+    });
+    stepRecord.noInput = createStepWithEscalations('noInput', messages.noInput.base);
   }
 
   // Confirm messages -> confirmation step
@@ -294,7 +305,21 @@ export function createTemplatesFromWizardData(
    * Recursive helper to create template for a node
    */
   const createTemplateForNode = (node: WizardTaskTreeNode): DialogueTask => {
-    const templateId = node.templateId || node.id;
+    // ✅ INVARIANT CHECK: node.id MUST equal node.templateId (single source of truth)
+    if (node.id !== node.templateId) {
+      console.error('[TemplateCreationService][createTemplateForNode] ❌ CRITICAL: node.id !== node.templateId', {
+        nodeId: node.id,
+        nodeTemplateId: node.templateId,
+        nodeLabel: node.label,
+      });
+      throw new Error(
+        `[TemplateCreationService] CRITICAL: node.id (${node.id}) !== node.templateId (${node.templateId}) for node "${node.label}". ` +
+        `This should never happen. The ID must be consistent throughout the wizard lifecycle.`
+      );
+    }
+
+    // ✅ ALWAYS use node.id as the single source of truth (no fallback, no templateId)
+    const templateId = node.id;
 
     console.log('[TemplateCreationService][createTemplateForNode] 🎯 Creating template for node', {
       nodeId: node.id,
@@ -308,7 +333,23 @@ export function createTemplatesFromWizardData(
     const subTasksIds: string[] = [];
     if (node.subNodes && node.subNodes.length > 0) {
       node.subNodes.forEach(subNode => {
-        const subTemplateId = subNode.templateId || subNode.id;
+        // ✅ INVARIANT CHECK: subNode.id MUST equal subNode.templateId
+        if (subNode.id !== subNode.templateId) {
+          console.error('[TemplateCreationService][createTemplateForNode] ❌ CRITICAL: subNode.id !== subNode.templateId', {
+            subNodeId: subNode.id,
+            subNodeTemplateId: subNode.templateId,
+            subNodeLabel: subNode.label,
+            parentNodeId: node.id,
+            parentNodeLabel: node.label,
+          });
+          throw new Error(
+            `[TemplateCreationService] CRITICAL: subNode.id (${subNode.id}) !== subNode.templateId (${subNode.templateId}) for subNode "${subNode.label}". ` +
+            `This should never happen. The ID must be consistent throughout the wizard lifecycle.`
+          );
+        }
+
+        // ✅ ALWAYS use subNode.id (no fallback)
+        const subTemplateId = subNode.id;
         subTasksIds.push(subTemplateId);
 
         // Create template for child (recursive)
@@ -325,24 +366,90 @@ export function createTemplatesFromWizardData(
     });
 
     // ✅ Get messages for this specific node from the map
+    // ✅ LOGGING PLAN E: Log detailed info before lookup
+    console.log('[TemplateCreationService][createTemplateForNode] 🔍 Looking up messages for node', {
+      nodeId: node.id,
+      templateId: node.templateId,
+      nodeLabel: node.label,
+      nodeType: node.type,
+      hasSubNodes: !!node.subNodes,
+      subNodesCount: node.subNodes?.length || 0,
+      messagesMapSize: messagesGeneralized.size,
+      availableMessageIds: Array.from(messagesGeneralized.keys()),
+      idMatchesTemplateId: node.id === node.templateId,
+    });
+
     const nodeMessages = messagesGeneralized.get(node.id);
     if (!nodeMessages) {
-      console.warn('[TemplateCreationService][createTemplateForNode] ⚠️ No messages found for node', {
+      // ✅ D2: RIMUOVERE fallback messaggi vuoti
+      // ✅ Se arriviamo qui, è un bug upstream (checkAndComplete non ha funzionato)
+      console.error('[TemplateCreationService][createTemplateForNode] ❌ CRITICAL: Node missing messages', {
         nodeId: node.id,
-        templateId,
-        availableNodeIds: Array.from(messagesGeneralized.keys())
+        nodeLabel: node.label,
+        templateId: node.templateId,
+        nodeType: node.type,
+        availableMessageIds: Array.from(messagesGeneralized.keys()),
+        expectedId: node.id,
+        actualTemplateId: node.templateId,
+        idMismatch: node.id !== node.templateId,
+        messagesMapSize: messagesGeneralized.size,
+        allAvailableIds: Array.from(messagesGeneralized.keys()),
+        // ✅ LOGGING PLAN E: Detailed diagnostic info
+        diagnostic: {
+          nodeIdInMap: messagesGeneralized.has(node.id),
+          templateIdInMap: messagesGeneralized.has(node.templateId),
+          similarIds: Array.from(messagesGeneralized.keys()).filter(id =>
+            id.includes(node.id.substring(0, 8)) || node.id.includes(id.substring(0, 8))
+          ),
+        },
       });
+
+      throw new Error(
+        `[TemplateCreationService] CRITICAL: Node "${node.label}" (id: ${node.id}) is missing messages. ` +
+        `This should never happen - checkAndComplete should have prevented this. ` +
+        `Available message IDs: ${Array.from(messagesGeneralized.keys()).join(', ')}.`
+      );
     }
 
+    // ✅ LOGGING PLAN E: Log successful message lookup
+    console.log('[TemplateCreationService][createTemplateForNode] ✅ Messages found for node', {
+      nodeId: node.id,
+      nodeLabel: node.label,
+      hasAsk: !!nodeMessages.ask,
+      hasNoInput: !!nodeMessages.noInput,
+      hasConfirm: !!nodeMessages.confirm,
+      hasNotConfirmed: !!nodeMessages.notConfirmed,
+      hasViolation: !!nodeMessages.violation,
+      hasSuccess: !!nodeMessages.success,
+      askCount: nodeMessages.ask?.base?.length || 0,
+      noInputCount: nodeMessages.noInput?.base?.length || 0,
+      confirmCount: nodeMessages.confirm?.base?.length || 0,
+      notConfirmedCount: nodeMessages.notConfirmed?.base?.length || 0,
+      violationCount: nodeMessages.violation?.base?.length || 0,
+      successCount: nodeMessages.success?.base?.length || 0,
+    });
+
+    // ✅ D2: Se arriviamo qui, nodeMessages esiste (garantito da verifiche upstream)
+    const messagesToUse = nodeMessages;
+
+    // ✅ LOGGING PLAN E: Log before converting to steps
+    console.log('[TemplateCreationService][createTemplateForNode] 📝 Converting messages to steps', {
+      templateId,
+      nodeId: node.id,
+      nodeLabel: node.label,
+      usingEmptyMessages: !nodeMessages,
+      messagesStructure: {
+        hasAsk: !!messagesToUse.ask,
+        hasNoInput: !!messagesToUse.noInput,
+        hasConfirm: !!messagesToUse.confirm,
+        hasNotConfirmed: !!messagesToUse.notConfirmed,
+        hasViolation: !!messagesToUse.violation,
+        hasSuccess: !!messagesToUse.success,
+      },
+    });
+
     // Convert generalized messages to steps dictionary (per-node messages)
-    const steps = convertMessagesToStepsDictionary(nodeMessages || {
-      ask: { base: [] },
-      confirm: { base: [] },
-      notConfirmed: { base: [] },
-      violation: { base: [] },
-      disambiguation: { base: [], options: [] },
-      success: { base: [] }
-    }, templateId);
+    const steps = convertMessagesToStepsDictionary(messagesToUse, templateId);
 
     console.log('[TemplateCreationService][createTemplateForNode] ✅ Steps converted', {
       templateId,
@@ -384,11 +491,57 @@ export function createTemplatesFromWizardData(
     return template;
   };
 
+  // ✅ LOGGING PLAN E: Log before creating templates for root nodes
+  console.log('[TemplateCreationService][createTemplatesFromWizardData] 📊 LOGGING PLAN E: Starting template creation for root nodes', {
+    rootNodesCount: fakeTree.length,
+    rootNodes: fakeTree.map(root => ({
+      id: root.id,
+      templateId: root.templateId,
+      label: root.label,
+      type: root.type,
+      hasSubNodes: !!root.subNodes,
+      subNodesCount: root.subNodes?.length || 0,
+      idMatchesTemplateId: root.id === root.templateId,
+    })),
+    messagesMapSize: messagesGeneralized.size,
+    availableMessageIds: Array.from(messagesGeneralized.keys()),
+  });
+
   // Create template for each root node
   fakeTree.forEach(rootNode => {
-    const rootTemplateId = rootNode.templateId || rootNode.id;
+    // ✅ INVARIANT CHECK: rootNode.id MUST equal rootNode.templateId
+    if (rootNode.id !== rootNode.templateId) {
+      console.error('[TemplateCreationService][createTemplatesFromWizardData] ❌ CRITICAL: rootNode.id !== rootNode.templateId', {
+        rootNodeId: rootNode.id,
+        rootNodeTemplateId: rootNode.templateId,
+        rootNodeLabel: rootNode.label,
+      });
+      throw new Error(
+        `[TemplateCreationService] CRITICAL: rootNode.id (${rootNode.id}) !== rootNode.templateId (${rootNode.templateId}) for rootNode "${rootNode.label}". ` +
+        `This should never happen. The ID must be consistent throughout the wizard lifecycle.`
+      );
+    }
+
+    // ✅ ALWAYS use rootNode.id (no fallback)
+    const rootTemplateId = rootNode.id;
+
+    // ✅ LOGGING PLAN E: Log before creating each root template
+    console.log('[TemplateCreationService][createTemplatesFromWizardData] 🔄 LOGGING PLAN E: Creating template for root node', {
+      rootNodeId: rootNode.id,
+      rootTemplateId,
+      rootNodeLabel: rootNode.label,
+      templateAlreadyExists: templates.has(rootTemplateId),
+      hasMessages: messagesGeneralized.has(rootNode.id),
+    });
+
     if (!templates.has(rootTemplateId)) {
       createTemplateForNode(rootNode);
+    } else {
+      console.log('[TemplateCreationService][createTemplatesFromWizardData] ⏭️ LOGGING PLAN E: Skipping root node (template already exists)', {
+        rootNodeId: rootNode.id,
+        rootTemplateId,
+        rootNodeLabel: rootNode.label,
+      });
     }
   });
 

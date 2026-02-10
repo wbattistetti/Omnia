@@ -42,8 +42,7 @@ export interface UseResponseEditorInitializationParams {
   setNeedsTaskContextualization: React.Dispatch<React.SetStateAction<boolean>>;
   setNeedsTaskBuilder: React.Dispatch<React.SetStateAction<boolean>>;
   setWizardMode: React.Dispatch<React.SetStateAction<'library' | 'ai' | null>>;
-  // ✅ NEW: Generalization params
-  shouldBeGeneral?: boolean;
+  // ✅ REMOVED: shouldBeGeneral - now from WizardContext
   saveDecisionMade?: boolean;
   onOpenSaveDialog?: () => void;
   // ✅ NEW: Ref per il pulsante save-to-library
@@ -204,8 +203,7 @@ export function useResponseEditorInitialization(params: UseResponseEditorInitial
     // ✅ NEW: Wizard handlers
     onChooseFromLibrary: handleChooseFromLibrary,
     onGenerateNewTask: handleGenerateNewTask,
-    // ✅ NEW: Generalization handlers
-    shouldBeGeneral: params.shouldBeGeneral,
+    // ✅ REMOVED: shouldBeGeneral - now from WizardContext
     saveDecisionMade: params.saveDecisionMade,
     onOpenSaveDialog: params.onOpenSaveDialog,
     // ✅ NEW: Ref per il pulsante save-to-library

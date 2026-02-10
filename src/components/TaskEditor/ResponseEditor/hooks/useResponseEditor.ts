@@ -29,8 +29,7 @@ export interface UseResponseEditorParams {
   hideHeader?: boolean;
   onToolbarUpdate?: (toolbar: any[], color: string) => void;
   registerOnClose?: (fn: () => Promise<boolean>) => void;
-  // ✅ NEW: Generalization params
-  shouldBeGeneral?: boolean;
+  // ✅ REMOVED: shouldBeGeneral - now from WizardContext
   saveDecisionMade?: boolean;
   onOpenSaveDialog?: () => void;
   // ✅ NEW: Ref per il pulsante save-to-library
@@ -170,8 +169,7 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     currentProjectId,
     tabId,
     setDockTree,
-    // ✅ NEW: Pass generalization params to core
-    shouldBeGeneral: params.shouldBeGeneral,
+    // ✅ REMOVED: shouldBeGeneral - now from WizardContext
     saveDecisionMade: params.saveDecisionMade,
     onOpenSaveDialog: params.onOpenSaveDialog,
     // ✅ NEW: Pass ref to core
@@ -196,8 +194,7 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
     hideHeader,
     onToolbarUpdate,
     registerOnClose,
-    // ✅ NEW: Generalization params (will be passed from ResponseEditorLayout)
-    shouldBeGeneral: params.shouldBeGeneral,
+    // ✅ REMOVED: shouldBeGeneral - now from WizardContext
     saveDecisionMade: params.saveDecisionMade,
     onOpenSaveDialog: params.onOpenSaveDialog,
   });

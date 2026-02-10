@@ -1,6 +1,7 @@
 import React from 'react';
 import { Undo2, Redo2, MessageSquare, Rocket, BookOpen, List, CheckSquare, Wand2, Star } from 'lucide-react';
 import { RightPanelMode } from './RightPanel';
+import { useWizardContext } from '@responseEditor/context/WizardContext';
 
 interface ResponseEditorToolbarProps {
   rightMode: RightPanelMode; // Per compatibilità
@@ -24,8 +25,7 @@ interface ResponseEditorToolbarProps {
   // ✅ NEW: Wizard handlers
   onChooseFromLibrary?: () => void;
   onGenerateNewTask?: () => void;
-  // ✅ NEW: Generalization handlers
-  shouldBeGeneral?: boolean;
+  // ✅ REMOVED: shouldBeGeneral - now from WizardContext
   saveDecisionMade?: boolean;
   onOpenSaveDialog?: () => void;
   // ✅ NEW: Ref per il pulsante save-to-library (sempre presente, visibilità controllata)
@@ -58,13 +58,30 @@ export function useResponseEditorToolbar({
   // ✅ NEW: Wizard handlers
   onChooseFromLibrary,
   onGenerateNewTask,
-  // ✅ NEW: Generalization handlers
-  shouldBeGeneral = false,
+  // ✅ REMOVED: shouldBeGeneral - now from WizardContext
   saveDecisionMade = false,
   onOpenSaveDialog,
   // ✅ NEW: Ref per il pulsante save-to-library
   saveToLibraryButtonRef,
 }: ResponseEditorToolbarProps) {
+  // ✅ ARCHITECTURE: Read shouldBeGeneral from WizardContext (single source of truth)
+  const wizardContext = useWizardContext();
+  const shouldBeGeneral = wizardContext?.shouldBeGeneral ?? false;
+
+  // ✅ LOGGING PLAN F: Log toolbar generation
+  React.useEffect(() => {
+    console.log('[useResponseEditorToolbar] 📊 LOGGING PLAN F: Toolbar generation', {
+      shouldBeGeneral,
+      hasWizardContext: !!wizardContext,
+      wizardMode: wizardContext?.wizardMode,
+      rightMode,
+      leftPanelMode,
+      testPanelMode,
+      tasksPanelMode,
+      showSynonyms,
+    });
+  }, [shouldBeGeneral, wizardContext, rightMode, leftPanelMode, testPanelMode, tasksPanelMode, showSynonyms]);
+
   // ✅ CRITICAL: Hooks devono essere chiamati PRIMA di qualsiasi return condizionale
   // ✅ Test è un toggle indipendente per mostrare/nascondere il pannello debugger
   // Salva la larghezza precedente per ripristinarla quando riapri

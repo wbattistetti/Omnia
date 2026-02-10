@@ -7,6 +7,8 @@ import type { TaskTreeNode } from '@types/taskTypes';
 import { SemanticContractService } from '@services/SemanticContractService';
 import { EngineEscalationService } from '@services/EngineEscalationService';
 import type { EngineType } from '@types/semanticContract';
+import { useWizardContext } from '@responseEditor/context/WizardContext';
+import { WizardMode } from '../../../../../TaskBuilderAIWizard/types/WizardMode';
 
 // Colors from TesterGrid (centralized palette)
 const EXTRACTOR_COLORS = {
@@ -61,12 +63,31 @@ export default function ParserStatusRow({
   const [parserState, setParserState] = React.useState<ParserState | null>(null);
   const [loading, setLoading] = React.useState(true);
 
+  // ✅ FIX 4: Check if wizard is active (templates don't exist during generation)
+  const wizardContext = useWizardContext();
+  const isWizardActive = wizardContext !== null && wizardContext.wizardMode !== WizardMode.COMPLETED;
+
   // Load parser state
   React.useEffect(() => {
     let cancelled = false;
 
     async function loadState() {
       setLoading(true);
+
+      // ✅ FIX 4: Skip template lookup during wizard generation
+      if (isWizardActive) {
+        // During wizard generation, templates don't exist yet - skip lookup silently
+        if (!cancelled) {
+          setParserState({
+            status: 'missing',
+            engines: [],
+            escalation: null,
+          });
+          setLoading(false);
+        }
+        return;
+      }
+
       try {
         // After validation strict, node.id is always present
         // templateId is optional (preferred for lookup, but id works as fallback)
@@ -119,7 +140,7 @@ export default function ParserStatusRow({
     return () => {
       cancelled = true;
     };
-  }, [node.id, node.templateId]);
+  }, [node.id, node.templateId, isWizardActive]);
 
   // Refresh state when node changes
   const refreshState = React.useCallback(async () => {

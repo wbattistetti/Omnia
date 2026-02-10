@@ -59,9 +59,17 @@ function convertNode(
     });
   }
 
-  // Generate templateId (same as id, but ensure it's a valid GUID)
-  // ✅ CRITICAL: templateId must be a valid GUID, not 'root' or 'UNDEFINED'
+  // ✅ CRITICAL: templateId MUST always equal id (single source of truth)
+  // This is an architectural invariant that must never be violated
   const templateId = nodeId;
+
+  // ✅ INVARIANT CHECK: Ensure id === templateId (this should never fail)
+  if (nodeId !== templateId) {
+    throw new Error(
+      `[convertApiStructureToWizardTaskTree] CRITICAL: node.id (${nodeId}) !== templateId (${templateId}). ` +
+      `This should never happen. The ID must be generated once and used consistently.`
+    );
+  }
 
   // Normalize children: prefer subNodes, fallback to subData (backward compatibility)
   const children = apiNode.subNodes || apiNode.subData || [];
@@ -81,9 +89,9 @@ function convertNode(
     messagesProgress: 0,
   };
 
-  return {
+  const result: WizardTaskTreeNode = {
     id: nodeId,
-    templateId,
+    templateId, // ✅ Always equals nodeId
     label: apiNode.label || 'Unnamed',
     type: apiNode.type,
     icon: apiNode.icon,
@@ -91,4 +99,14 @@ function convertNode(
     pipelineStatus,
     // Note: readableName, dottedName, taskId will be added later by VariableNameGeneratorService
   };
+
+  // ✅ FINAL INVARIANT CHECK: Verify the invariant is preserved in the result
+  if (result.id !== result.templateId) {
+    throw new Error(
+      `[convertApiStructureToWizardTaskTree] CRITICAL: result.id (${result.id}) !== result.templateId (${result.templateId}). ` +
+      `This should never happen. The invariant must be preserved.`
+    );
+  }
+
+  return result;
 }

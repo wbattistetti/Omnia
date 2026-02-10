@@ -110,7 +110,28 @@ export function useWizardState() {
   const setMessagesForNode = (nodeId: string, nodeMessages: WizardStepMessages) => {
     setMessages(prev => {
       const newMap = new Map(prev);
+      const hadPreviousValue = newMap.has(nodeId);
       newMap.set(nodeId, nodeMessages);
+
+      // ✅ LOGGING PLAN C: Log during message saving
+      console.log('[useWizardState][setMessagesForNode] 💾 Saving messages', {
+        nodeId,
+        hadPreviousValue,
+        overwriting: hadPreviousValue,
+        messagesSize: newMap.size,
+        messageStructure: {
+          hasAsk: !!nodeMessages.ask,
+          hasNoInput: !!nodeMessages.noInput,
+          hasConfirm: !!nodeMessages.confirm,
+          hasNotConfirmed: !!nodeMessages.notConfirmed,
+          hasViolation: !!nodeMessages.violation,
+          hasSuccess: !!nodeMessages.success,
+        },
+        askCount: nodeMessages.ask?.base?.length || 0,
+        noInputCount: nodeMessages.noInput?.base?.length || 0,
+        allNodeIds: Array.from(newMap.keys()),
+      });
+
       return newMap;
     });
   };
@@ -182,11 +203,12 @@ export function useWizardState() {
   /**
    * Aggiorna lo stato di pipeline di un singolo task
    * Setter semplice che aggiorna dataSchema
+   * ✅ C3: Aggiunto stato 'failed' per gestire nodi falliti
    */
   const updateTaskPipelineStatus = (
     taskId: string,
     phase: 'constraints' | 'parser' | 'messages',
-    status: 'pending' | 'running' | 'completed'
+    status: 'pending' | 'running' | 'completed' | 'failed'
   ) => {
     setDataSchema(prev => {
       const updateNode = (nodes: WizardTaskTreeNode[]): WizardTaskTreeNode[] => {

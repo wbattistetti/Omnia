@@ -12,6 +12,7 @@ import IntentListEditorWrapper from '@responseEditor/components/IntentListEditor
 import { MainContentArea } from '@responseEditor/components/MainContentArea';
 import { PanelContainer } from '@responseEditor/components/PanelContainer';
 import { MainViewMode } from '@responseEditor/types/mainViewMode';
+import { useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
 import type { Task, TaskTree } from '@types/taskTypes';
 import type { PipelineStep } from '../../../../../TaskBuilderAIWizard/hooks/useWizardState';
 import type { WizardTaskTreeNode, WizardStep, WizardModuleTemplate } from '../../../../../TaskBuilderAIWizard/types';
@@ -125,9 +126,7 @@ export interface ResponseEditorNormalLayoutProps {
  */
 export function ResponseEditorNormalLayout({
   mainList,
-  taskTree,
-  task,
-  currentProjectId,
+  // ✅ REMOVED: taskTree, task, currentProjectId - now from Context
   localTranslations,
   escalationTasks,
   selectedMainIndex,
@@ -183,6 +182,8 @@ export function ResponseEditorNormalLayout({
   mainViewMode = MainViewMode.BEHAVIOUR,
   wizardProps,
 }: ResponseEditorNormalLayoutProps) {
+  // ✅ NEW: Get data from Context
+  const { taskTree, taskMeta: task, currentProjectId } = useResponseEditorContext();
   // ❌ RIMOSSO: Early return quando taskWizardMode === 'full'
   // Ora il wizard viene gestito tramite mainViewMode nel MainContentArea
 

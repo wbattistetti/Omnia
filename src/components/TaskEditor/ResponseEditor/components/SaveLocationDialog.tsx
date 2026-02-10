@@ -3,6 +3,8 @@
 
 import React, { useState, useLayoutEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
+import { useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
+import { useWizardContext } from '@responseEditor/context/WizardContext';
 
 interface SaveLocationDialogProps {
   isOpen: boolean;
@@ -10,12 +12,10 @@ interface SaveLocationDialogProps {
   onSaveToFactory: () => void;
   onSaveToProject: () => void;
   onCancel: () => void;
-  originalLabel: string;
-  generalizedLabel: string | null;
-  generalizationReason: string | null;
-  generalizedMessages: string[] | null;
+  // ✅ REMOVED: originalLabel, generalizedLabel, generalizationReason, generalizedMessages - now from contexts
   anchorRef?: React.RefObject<HTMLElement> | null;
   isSaving?: boolean; // ✅ NEW: State for saving operation
+  responseEditorRef?: React.RefObject<HTMLElement> | null; // ✅ NEW: Ref to ResponseEditor container for positioning
 }
 
 /**
@@ -30,13 +30,17 @@ export function SaveLocationDialog({
   onSaveToFactory,
   onSaveToProject,
   onCancel,
-  originalLabel,
-  generalizedLabel,
-  generalizationReason,
-  generalizedMessages,
+  // ✅ REMOVED: originalLabel, generalizedLabel, generalizationReason, generalizedMessages - now from contexts
   anchorRef,
-  isSaving = false // ✅ NEW: Default to false
+  isSaving = false, // ✅ NEW: Default to false
+  responseEditorRef // ✅ NEW: Ref to ResponseEditor container
 }: SaveLocationDialogProps) {
+  // ✅ ARCHITECTURE: Read from contexts (single source of truth)
+  const { taskLabel } = useResponseEditorContext();
+  const wizardContext = useWizardContext();
+  const generalizedLabel = wizardContext?.generalizedLabel ?? null;
+  const generalizationReason = wizardContext?.generalizationReason ?? null;
+  const generalizedMessages = wizardContext?.generalizedMessages ?? null;
   const popoverRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
   // ✅ NEW: State to show/hide messages list
@@ -94,17 +98,25 @@ export function SaveLocationDialog({
       // Calculate dynamic height based on content (messages list)
       const hasMessages = generalizedMessages && generalizedMessages.length > 0;
       const estimatedPopoverHeight = hasMessages ? Math.min(500, 200 + (generalizedMessages.length * 30)) : 200;
-      const spacing = 8;
 
-      // Position below the button, aligned to the right edge
-      let top = anchorRect.bottom + spacing;
-      let left = anchorRect.right - popoverWidth;
+      // ✅ FIX: Get ResponseEditor container bounds for positioning
+      let responseEditorRight = window.innerWidth - 10; // Default to viewport right edge
+      if (responseEditorRef?.current) {
+        const editorRect = responseEditorRef.current.getBoundingClientRect();
+        responseEditorRight = editorRect.right;
+      }
+
+      // ✅ FIX: Position popover:
+      // - Top edge of popover = bottom edge of toolbar/button (no spacing)
+      // - Right edge of popover = right edge of ResponseEditor
+      let top = anchorRect.bottom; // ✅ No spacing - align top of popover with bottom of toolbar
+      let left = responseEditorRight - popoverWidth; // ✅ Right edge of popover = right edge of ResponseEditor
 
       // Ensure popover stays within viewport
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
 
-      // Adjust horizontally if needed
+      // Adjust horizontally if needed (should not happen if ResponseEditor is visible)
       if (left < 10) {
         left = 10;
       } else if (left + popoverWidth > viewportWidth - 10) {
@@ -113,7 +125,7 @@ export function SaveLocationDialog({
 
       // Adjust vertically if not enough space below
       if (top + estimatedPopoverHeight > viewportHeight - 10) {
-        top = anchorRect.top - estimatedPopoverHeight - spacing;
+        top = anchorRect.top - estimatedPopoverHeight;
         if (top < 10) {
           top = 10;
         }
@@ -133,7 +145,7 @@ export function SaveLocationDialog({
       window.removeEventListener('scroll', updatePosition, true);
       window.removeEventListener('resize', updatePosition);
     };
-  }, [isOpen, anchorRef]); // ✅ RIMOSSO toolbarButtons e generalizedMessages - causavano loop infinito
+  }, [isOpen, anchorRef, responseEditorRef]); // ✅ Added responseEditorRef dependency
 
   // ✅ Log quando position è null (solo quando cambia isOpen o position)
   React.useEffect(() => {
@@ -187,7 +199,7 @@ export function SaveLocationDialog({
         <div className="p-4 flex-1 overflow-y-auto">
           {/* ✅ FIX: Testo introduttivo con link cliccabile */}
           <p className="text-sm text-gray-700 mb-3">
-            "<span className="font-semibold">{originalLabel}</span>" può essere generalizzato per contesti diversi.
+            "<span className="font-semibold">{taskLabel}</span>" può essere generalizzato per contesti diversi.
             <br />
             Consiglio di salvarlo nella libreria generale.
             {generalizedMessages && generalizedMessages.length > 0 && (

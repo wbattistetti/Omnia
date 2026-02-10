@@ -29,14 +29,19 @@ import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
 import type { useResponseEditorCore } from '@responseEditor/hooks/useResponseEditorCore';
 import type { useResponseEditorHandlers } from '@responseEditor/hooks/useResponseEditorHandlers';
 import { DialogueTaskService } from '@services/DialogueTaskService';
+import { ResponseEditorContext, useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
 
 // ✅ ARCHITECTURE: Props interface with only necessary values (no monolithic editor object)
 export interface ResponseEditorLayoutProps {
   // Layout props
   combinedClass: string;
   hideHeader?: boolean;
+  // ✅ NOTE: taskTree, currentProjectId, taskMeta, taskLabel are still required
+  // for Context initialization (ResponseEditorLayout PROVIDES the Context)
   taskTree: TaskTree | null | undefined;
   currentProjectId: string | null;
+  taskMeta: TaskMeta | null;
+  taskLabel: string;
 
   // Header props
   rootRef: React.RefObject<HTMLDivElement>;
@@ -61,7 +66,8 @@ export interface ResponseEditorLayoutProps {
   handleIntentMessagesComplete: (messages: any) => void;
 
   // Task data
-  taskMeta: TaskMeta | null;
+  // ✅ NOTE: taskMeta is still required for Context initialization
+  // taskMeta: TaskMeta | null; (moved to top level)
   mainList: any[];
   localTranslations: Record<string, string>;
   escalationTasks: any[];
@@ -142,7 +148,8 @@ export interface ResponseEditorLayoutProps {
   needsTaskContextualization: boolean;
   needsTaskBuilder: boolean;
   contextualizationTemplateId: string | null;
-  taskLabel: string;
+  // ✅ NOTE: taskLabel is still required for Context initialization
+  // taskLabel: string; (moved to top level)
 
   // Wizard callbacks (stable)
   onTaskContextualizationComplete?: (taskTree: TaskTree) => void;
@@ -152,17 +159,13 @@ export interface ResponseEditorLayoutProps {
   // ✅ NEW: Toolbar update callback (for hideHeader === true mode)
   onToolbarUpdate?: (toolbar: any[], color: string) => void;
 
-  // ✅ NEW: Wizard generalization props (calculated in ResponseEditorInner)
-  shouldBeGeneral?: boolean;
-  generalizedLabel?: string | null;
-  generalizedMessages?: string[] | null;
-  generalizationReason?: string | null;
+  // ✅ REMOVED: shouldBeGeneral, generalizedLabel, generalizedMessages, generalizationReason - now from WizardContext
   saveDecisionMade?: boolean;
   onOpenSaveDialog?: () => void;
   showSaveDialog?: boolean;
   setShowSaveDialog?: (show: boolean) => void;
   setSaveDecisionMade?: (made: boolean) => void;
-  wizardIntegration?: any; // For wizardProps
+  // ✅ REMOVED: wizardIntegration - now from WizardContext
   originalLabel?: string;
   // ✅ FIX: Ref per il pulsante save-to-library (passato da ResponseEditorInner)
   saveToLibraryButtonRef?: React.RefObject<HTMLButtonElement>;
@@ -178,6 +181,8 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     hideHeader,
     taskTree,
     currentProjectId,
+    taskMeta,
+    taskLabel,
     rootRef,
     icon: Icon,
     iconColor,
@@ -192,7 +197,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     handleContractWizardComplete,
     needsIntentMessages,
     handleIntentMessagesComplete,
-    taskMeta,
+    // ✅ NOTE: taskMeta is still required for Context initialization
     mainList,
     localTranslations,
     escalationTasks,
@@ -245,40 +250,46 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     needsTaskContextualization,
     needsTaskBuilder,
     contextualizationTemplateId,
-    taskLabel,
+    // ✅ NOTE: taskLabel is still required for Context initialization
     onTaskContextualizationComplete,
     onTaskBuilderComplete,
     onTaskBuilderCancel,
     onToolbarUpdate,
-    // ✅ NEW: Wizard generalization props
-    shouldBeGeneral: shouldBeGeneralProp,
-    generalizedLabel: generalizedLabelProp,
-    generalizedMessages: generalizedMessagesProp,
-    generalizationReason: generalizationReasonProp,
+    // ✅ REMOVED: shouldBeGeneral, generalizedLabel, generalizedMessages, generalizationReason - now from wizardIntegration
     saveDecisionMade: saveDecisionMadeProp,
     onOpenSaveDialog: onOpenSaveDialogProp,
     showSaveDialog: showSaveDialogProp,
     setShowSaveDialog: setShowSaveDialogProp,
     setSaveDecisionMade: setSaveDecisionMadeProp,
+    // ✅ NOTE: wizardIntegration viene passato come prop per popolare WizardContext
     wizardIntegration: wizardIntegrationProp,
     originalLabel: originalLabelProp,
     // ✅ FIX: Ref per il pulsante save-to-library (passato da ResponseEditorInner)
     saveToLibraryButtonRef: saveToLibraryButtonRefProp,
   } = props;
 
-  // ✅ REMOVED: useWizardIntegration - ora viene chiamato in ResponseEditorInner
-  // ✅ Usa i valori ricevuti come props invece di calcolarli
-  const wizardIntegration = wizardIntegrationProp;
-  const shouldBeGeneral = shouldBeGeneralProp ?? false;
-  const generalizedLabel = generalizedLabelProp ?? null;
-  const generalizedMessages = generalizedMessagesProp ?? null;
-  const generalizationReasonEffective = generalizationReasonProp ?? generalizationReason ?? null;
-  // ✅ FIX: originalLabel must always be available - no fallback, throw error if missing
-  if (!originalLabelProp && !taskLabel) {
-    console.error('[ResponseEditorLayout] ❌ CRITICAL: originalLabel is required but not provided. taskLabel is also missing.');
-    throw new Error('originalLabel is required but not provided. This should never happen - taskLabel must always be available.');
-  }
-  const originalLabel = originalLabelProp ?? taskLabel;
+  // ✅ ARCHITECTURE: Extract generalization values from wizardIntegration to populate WizardContext
+  // These values come from useWizardIntegration in ResponseEditorInner
+  const shouldBeGeneral = wizardIntegrationProp?.shouldBeGeneral ?? false;
+  const generalizedLabel = wizardIntegrationProp?.generalizedLabel ?? null;
+  const generalizedMessages = wizardIntegrationProp?.generalizedMessages ?? null;
+  const generalizationReasonEffective = wizardIntegrationProp?.generalizationReason ?? null;
+
+  // ✅ NEW: ResponseEditorContext value (calculated from props received from ResponseEditorInner)
+  // taskLabel comes ONLY from useResponseEditorCore (single source of truth)
+  // If empty, it means useResponseEditorCore hasn't processed taskMeta yet (first render)
+  // Components should handle this by showing loading UI, NOT by using fallbacks
+  const responseEditorContextValue = React.useMemo(() => ({
+    taskTree,
+    taskMeta,
+    taskLabel: taskLabel || '', // ✅ SINGLE SOURCE: from useResponseEditorCore - empty string if not available yet
+    taskId: taskMeta?.id,
+    currentProjectId,
+    headerTitle,
+    taskType,
+  }), [taskTree, taskMeta, taskLabel, currentProjectId, headerTitle, taskType]);
+
+  // ✅ B1: WizardContext.Provider moved to ResponseEditorInner to avoid race condition
 
   // ✅ State for save location dialog (usa props se disponibili, altrimenti state locale)
   const [localShowSaveDialog, setLocalShowSaveDialog] = React.useState(false);
@@ -318,7 +329,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
 
   // ✅ FIX: Handler to save to Factory with loading state and dematerialization filter
   const handleSaveToFactory = React.useCallback(async () => {
-    if (!wizardIntegration?.shouldBeGeneral) return;
+    if (!shouldBeGeneral || !wizardIntegrationProp) return;
 
     setIsSaving(true);
 
@@ -326,7 +337,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
       // Get all templates from DialogueTaskService cache
       const templates = DialogueTaskService.getAllTemplates();
       const wizardTemplates = templates.filter(t =>
-        wizardIntegration.dataSchema?.some(node =>
+        wizardIntegrationProp.dataSchema?.some(node =>
           (node.templateId || node.id) === (t.id || t._id)
         )
       );
@@ -343,7 +354,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         // Remove any materialized fields that shouldn't be in the template
         const { nodes, subNodes, data, ...templateFields } = t;
 
-        if (generalizedLabel && wizardIntegration.dataSchema?.[0]?.id === (t.id || t._id)) {
+        if (generalizedLabel && wizardIntegrationProp.dataSchema?.[0]?.id === (t.id || t._id)) {
           // Root template: use generalizedLabel
           return {
             ...templateFields,
@@ -395,7 +406,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     } finally {
       setIsSaving(false);
     }
-  }, [wizardIntegration, generalizedLabel]);
+  }, [wizardIntegrationProp, shouldBeGeneral, generalizedLabel]);
 
   // ✅ NEW: Handler to save only to project
   const handleSaveToProject = React.useCallback(() => {
@@ -420,9 +431,9 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
       condition1: shouldBeGeneral,
       condition2: !saveDecisionMade,
       shouldBlock: shouldBeGeneral && !saveDecisionMade,
-      wizardIntegrationExists: !!wizardIntegration,
-      wizardIntegrationShouldBeGeneral: wizardIntegration?.shouldBeGeneral,
-      wizardMode: wizardIntegration?.wizardMode,
+      wizardIntegrationExists: !!wizardIntegrationProp,
+      wizardIntegrationShouldBeGeneral: wizardIntegrationProp?.shouldBeGeneral,
+      wizardMode: wizardIntegrationProp?.wizardMode,
       taskWizardMode
     });
 
@@ -440,13 +451,13 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     });
     // ✅ Se tutto ok, procedi con chiusura normale
     return handleEditorClose();
-  }, [shouldBeGeneral, saveDecisionMade, handleEditorClose, wizardIntegration, taskWizardMode]);
+  }, [shouldBeGeneral, saveDecisionMade, handleEditorClose, wizardIntegrationProp, taskWizardMode]);
 
   // ✅ NEW: Calcola mainViewMode in base a taskWizardMode, wizardMode e showMessageReview/showSynonyms
-  // ✅ IMPORTANTE: Questo useMemo deve venire DOPO la dichiarazione di wizardIntegration
+  // ✅ IMPORTANTE: Questo useMemo deve venire DOPO la dichiarazione di wizardIntegrationProp
   const mainViewMode = React.useMemo<MainViewMode>(() => {
     // ✅ NEW: Se wizard è completato, passa a BEHAVIOUR (auto-chiusura)
-    if (taskWizardMode === 'full' && wizardIntegration?.wizardMode === 'completed') {
+    if (taskWizardMode === 'full' && wizardIntegrationProp?.wizardMode === 'completed') {
       return MainViewMode.BEHAVIOUR;
     }
 
@@ -460,57 +471,57 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
       return MainViewMode.DATA_CONTRACTS;
     }
     return MainViewMode.BEHAVIOUR;
-  }, [taskWizardMode, wizardIntegration?.wizardMode, showMessageReview, showSynonyms]);
+  }, [taskWizardMode, wizardIntegrationProp?.wizardMode, showMessageReview, showSynonyms]);
 
   // ✅ NEW: Prepara wizardProps per CenterPanel e Sidebar (con useMemo per evitare ricostruzioni)
   const wizardProps = React.useMemo(() => {
-    if (!wizardIntegration) {
+    if (!wizardIntegrationProp) {
       return undefined;
     }
 
     return {
-      wizardMode: wizardIntegration.wizardMode,
-      showStructureConfirmation: wizardIntegration.showStructureConfirmation,
-      onStructureConfirm: wizardIntegration.handleStructureConfirm,
-      onStructureReject: wizardIntegration.handleStructureReject,
-      structureConfirmed: wizardIntegration.structureConfirmed,
-      currentStep: wizardIntegration.currentStep, // DEPRECATED
-      pipelineSteps: wizardIntegration.pipelineSteps,
-      dataSchema: wizardIntegration.dataSchema,
-      onProceedFromEuristica: wizardIntegration.onProceedFromEuristica,
-      onShowModuleList: wizardIntegration.onShowModuleList,
-      onSelectModule: wizardIntegration.onSelectModule,
-      onPreviewModule: wizardIntegration.onPreviewModule,
-      availableModules: wizardIntegration.availableModules,
-      foundModuleId: wizardIntegration.foundModuleId,
-      showCorrectionMode: wizardIntegration.showCorrectionMode,
-      correctionInput: wizardIntegration.correctionInput,
-      onCorrectionInputChange: wizardIntegration.setCorrectionInput,
+      wizardMode: wizardIntegrationProp.wizardMode,
+      showStructureConfirmation: wizardIntegrationProp.showStructureConfirmation,
+      onStructureConfirm: wizardIntegrationProp.handleStructureConfirm,
+      onStructureReject: wizardIntegrationProp.handleStructureReject,
+      structureConfirmed: wizardIntegrationProp.structureConfirmed,
+      currentStep: wizardIntegrationProp.currentStep, // DEPRECATED
+      pipelineSteps: wizardIntegrationProp.pipelineSteps,
+      dataSchema: wizardIntegrationProp.dataSchema,
+      onProceedFromEuristica: wizardIntegrationProp.onProceedFromEuristica,
+      onShowModuleList: wizardIntegrationProp.onShowModuleList,
+      onSelectModule: wizardIntegrationProp.onSelectModule,
+      onPreviewModule: wizardIntegrationProp.onPreviewModule,
+      availableModules: wizardIntegrationProp.availableModules,
+      foundModuleId: wizardIntegrationProp.foundModuleId,
+      showCorrectionMode: wizardIntegrationProp.showCorrectionMode,
+      correctionInput: wizardIntegrationProp.correctionInput,
+      onCorrectionInputChange: wizardIntegrationProp.setCorrectionInput,
       // ✅ NEW: Sotto-stati per parte variabile dinamica
-      currentParserSubstep: wizardIntegration.currentParserSubstep,
-      currentMessageSubstep: wizardIntegration.currentMessageSubstep,
+      currentParserSubstep: wizardIntegrationProp.currentParserSubstep,
+      currentMessageSubstep: wizardIntegrationProp.currentMessageSubstep,
     };
   }, [
-    // ✅ USA solo primitive values e funzioni stabili - evita dipendere dall'intero oggetto wizardIntegration
-    wizardIntegration?.wizardMode,
-    wizardIntegration?.showStructureConfirmation,
-    wizardIntegration?.structureConfirmed,
-    wizardIntegration?.currentStep,
-    wizardIntegration?.pipelineSteps,
-    wizardIntegration?.dataSchema,
-    wizardIntegration?.availableModules,
-    wizardIntegration?.foundModuleId,
-    wizardIntegration?.showCorrectionMode,
-    wizardIntegration?.correctionInput,
-    wizardIntegration?.currentParserSubstep,
-    wizardIntegration?.currentMessageSubstep,
-    wizardIntegration?.handleStructureConfirm,
-    wizardIntegration?.handleStructureReject,
-    wizardIntegration?.onProceedFromEuristica,
-    wizardIntegration?.onShowModuleList,
-    wizardIntegration?.onSelectModule,
-    wizardIntegration?.onPreviewModule,
-    wizardIntegration?.setCorrectionInput,
+    // ✅ USA solo primitive values e funzioni stabili - evita dipendere dall'intero oggetto wizardIntegrationProp
+    wizardIntegrationProp?.wizardMode,
+    wizardIntegrationProp?.showStructureConfirmation,
+    wizardIntegrationProp?.structureConfirmed,
+    wizardIntegrationProp?.currentStep,
+    wizardIntegrationProp?.pipelineSteps,
+    wizardIntegrationProp?.dataSchema,
+    wizardIntegrationProp?.availableModules,
+    wizardIntegrationProp?.foundModuleId,
+    wizardIntegrationProp?.showCorrectionMode,
+    wizardIntegrationProp?.correctionInput,
+    wizardIntegrationProp?.currentParserSubstep,
+    wizardIntegrationProp?.currentMessageSubstep,
+    wizardIntegrationProp?.handleStructureConfirm,
+    wizardIntegrationProp?.handleStructureReject,
+    wizardIntegrationProp?.onProceedFromEuristica,
+    wizardIntegrationProp?.onShowModuleList,
+    wizardIntegrationProp?.onSelectModule,
+    wizardIntegrationProp?.onPreviewModule,
+    wizardIntegrationProp?.setCorrectionInput,
   ]);
 
   // ✅ NEW: Converti dataSchema in mainList quando taskWizardMode === 'full'
@@ -518,9 +529,9 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   const effectiveMainList = React.useMemo(() => {
     console.log('[ResponseEditorLayout] 🔍 effectiveMainList calculation START', {
       taskWizardMode,
-      hasWizardIntegration: !!wizardIntegration,
-      dataSchemaLength: wizardIntegration?.dataSchema?.length,
-      dataSchemaStructure: wizardIntegration?.dataSchema?.map(n => ({
+      hasWizardIntegration: !!wizardIntegrationProp,
+      dataSchemaLength: wizardIntegrationProp?.dataSchema?.length,
+      dataSchemaStructure: wizardIntegrationProp?.dataSchema?.map(n => ({
         id: n.id,
         templateId: n.templateId,
         label: n.label,
@@ -537,16 +548,16 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
       })),
     });
 
-    if (taskWizardMode === 'full' && wizardIntegration?.dataSchema) {
+    if (taskWizardMode === 'full' && wizardIntegrationProp?.dataSchema) {
       console.log('[ResponseEditorLayout] 🔄 Converting dataSchema to mainList', {
-        dataSchemaLength: wizardIntegration.dataSchema.length,
-        dataSchemaFirstNode: wizardIntegration.dataSchema[0],
+        dataSchemaLength: wizardIntegrationProp.dataSchema.length,
+        dataSchemaFirstNode: wizardIntegrationProp.dataSchema[0],
       });
 
-      const converted = convertWizardTaskTreeToMainList(wizardIntegration.dataSchema);
+      const converted = convertWizardTaskTreeToMainList(wizardIntegrationProp.dataSchema);
 
       console.log('[ResponseEditorLayout] ✅ Converted dataSchema to mainList', {
-        dataSchemaLength: wizardIntegration.dataSchema.length,
+        dataSchemaLength: wizardIntegrationProp.dataSchema.length,
         convertedLength: converted.length,
         convertedStructure: converted.map(m => ({
           id: m.id,
@@ -570,17 +581,17 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     });
 
     return mainList;
-  }, [taskWizardMode, wizardIntegration?.dataSchema, mainList]);
+  }, [taskWizardMode, wizardIntegrationProp?.dataSchema, mainList]);
 
   // ✅ ARCHITECTURE: Memoize sidebar to prevent reference changes
   const sidebarElement = React.useMemo(() => {
     // ✅ NEW: Mostra sidebar quando wizardMode === DATA_STRUCTURE_PROPOSED o successivi
     if (taskWizardMode === 'full') {
       // ✅ Sidebar visibile solo quando la struttura è stata proposta o confermata
-      const shouldShowSidebar = wizardIntegration?.wizardMode === WizardMode.DATA_STRUCTURE_PROPOSED ||
-                                 wizardIntegration?.wizardMode === WizardMode.DATA_STRUCTURE_CONFIRMED ||
-                                 wizardIntegration?.wizardMode === WizardMode.GENERATING ||
-                                 wizardIntegration?.wizardMode === WizardMode.COMPLETED;
+      const shouldShowSidebar = wizardIntegrationProp?.wizardMode === WizardMode.DATA_STRUCTURE_PROPOSED ||
+                                 wizardIntegrationProp?.wizardMode === WizardMode.DATA_STRUCTURE_CONFIRMED ||
+                                 wizardIntegrationProp?.wizardMode === WizardMode.GENERATING ||
+                                 wizardIntegrationProp?.wizardMode === WizardMode.COMPLETED;
 
       if (!shouldShowSidebar) {
         return undefined;
@@ -595,9 +606,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     return (
       <ResponseEditorNormalLayout
         mainList={effectiveMainList}
-        taskTree={taskTree}
-        task={taskMeta}
-        currentProjectId={currentProjectId}
+        // ✅ REMOVED: taskTree, task, currentProjectId - now from Context
         localTranslations={localTranslations}
         escalationTasks={escalationTasks}
         selectedMainIndex={selectedMainIndex}
@@ -649,7 +658,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         sidebarOnly={false} // ✅ Quando taskWizardMode === 'full', mostra anche MainContentArea
         taskWizardMode={taskWizardMode}
         mainViewMode={mainViewMode}
-        wizardProps={wizardProps} // ✅ Passa wizardProps per pulsanti Sì/No nella sidebar
+        // ✅ REMOVED: wizardProps - now from WizardContext
       />
     );
   }, [
@@ -716,9 +725,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     return (
       <ResponseEditorNormalLayout
         mainList={effectiveMainList}
-        taskTree={taskTree}
-        task={taskMeta}
-        currentProjectId={currentProjectId}
+        // ✅ REMOVED: taskTree, task, currentProjectId - now from Context
         localTranslations={localTranslations}
         escalationTasks={escalationTasks}
         selectedMainIndex={selectedMainIndex}
@@ -861,7 +868,8 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     }
   }, [taskWizardMode, hasNormalEditorLayoutElement, hasSidebarElement, toolbarButtonsCount, shouldShowHeader, shouldShowBanner]);
 
-  return (
+  // ✅ NEW: Wrap content in Context Providers
+  const content = (
     <div
       ref={rootRef}
       className={combinedClass}
@@ -925,7 +933,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
           // ✅ DEPRECATED: Backward compatibility wizard props
           needsTaskContextualization={needsTaskContextualization}
           needsTaskBuilder={needsTaskBuilder}
-          taskLabel={taskLabel}
+          // ✅ REMOVED: taskLabel - now from Context
           templateId={contextualizationTemplateId || undefined}
           // ✅ ARCHITECTURE: Use memoized sidebar (stable reference)
           // ✅ CRITICAL: sidebar viene passato SOLO quando taskWizardMode === 'adaptation'
@@ -973,13 +981,19 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         onSaveToFactory={handleSaveToFactory}
         onSaveToProject={handleSaveToProject}
         onCancel={handleCancelSaveDialog}
-        originalLabel={originalLabel}
-        generalizedLabel={generalizedLabel}
-        generalizationReason={generalizationReasonEffective}
-        generalizedMessages={generalizedMessages}
+        // ✅ REMOVED: originalLabel, generalizedLabel, generalizationReason, generalizedMessages - now from contexts
         anchorRef={saveToLibraryButtonRef}
         isSaving={isSaving} // ✅ NEW: Pass saving state to dialog
+        responseEditorRef={rootRef} // ✅ NEW: Pass ResponseEditor container ref for positioning
       />
     </div>
+  );
+
+  // ✅ B1: WizardContext.Provider moved to ResponseEditorInner
+  // ✅ Only ResponseEditorContext.Provider remains here
+  return (
+    <ResponseEditorContext.Provider value={responseEditorContextValue}>
+      {content}
+    </ResponseEditorContext.Provider>
   );
 }

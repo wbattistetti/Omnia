@@ -13,6 +13,7 @@
 
 import React from 'react';
 import RightPanel, { RightPanelMode } from '@responseEditor/RightPanel';
+import { useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
 import type { Task, TaskTree } from '@types/taskTypes';
 
 export interface PanelContainerProps {
@@ -43,10 +44,10 @@ export interface PanelContainerProps {
   showSynonyms: boolean;
   showMessageReview: boolean;
 
-  // Data for panels
-  taskTree: TaskTree | null | undefined;
-  task: Task | null | undefined;
-  currentProjectId: string | null;
+  // ✅ REMOVED: Data for panels - now from ResponseEditorContext
+  // taskTree: TaskTree | null | undefined;
+  // task: Task | null | undefined;
+  // currentProjectId: string | null;
   translations: Record<string, string>;
   selectedNode: any;
   escalationTasks: any[];
@@ -74,14 +75,14 @@ export function PanelContainer({
   tasksStartXRef,
   showSynonyms,
   showMessageReview,
-  taskTree,
-  task,
-  currentProjectId,
+  // ✅ REMOVED: taskTree, task, currentProjectId - now from Context
   translations,
   selectedNode,
   escalationTasks,
   replaceSelectedTaskTree,
 }: PanelContainerProps) {
+  // ✅ NEW: Get data from Context
+  const { taskTree, taskMeta: task, currentProjectId } = useResponseEditorContext();
   // ✅ Left Panel: mostrato solo se non siamo in Recognition/Personality e se leftPanelMode è valido
   const hasLeftPanel = !showSynonyms && !showMessageReview && leftPanelMode !== 'none' && leftPanelMode !== 'chat' && leftPanelMode !== 'actions' && rightWidth > 1;
 

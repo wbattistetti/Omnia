@@ -104,11 +104,20 @@ export function useWizardIntegration(
   }, [taskLabel, taskId, wizardState.wizardMode, wizardState.setCurrentStep, wizardGeneration, wizardSync]);
 
   // Monitora completamento step per auto-chiusura
+  // ✅ D1: Pass messages and dataSchema to checkAndComplete for verification
   useEffect(() => {
     if (wizardState.wizardMode === WizardMode.GENERATING) {
-      wizardCompletion.checkAndComplete(wizardState.pipelineSteps, wizardState.wizardMode);
+      const messagesToCheck = wizardState.messagesGeneralized.size > 0
+        ? wizardState.messagesGeneralized
+        : wizardState.messages;
+      wizardCompletion.checkAndComplete(
+        wizardState.pipelineSteps,
+        wizardState.wizardMode,
+        messagesToCheck,
+        wizardState.dataSchema
+      );
     }
-  }, [wizardState.pipelineSteps, wizardState.wizardMode, wizardCompletion]);
+  }, [wizardState.pipelineSteps, wizardState.wizardMode, wizardState.messages, wizardState.messagesGeneralized, wizardState.dataSchema, wizardCompletion]);
 
   // Quando wizard completa, crea template e istanza
   useEffect(() => {

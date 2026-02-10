@@ -421,15 +421,10 @@ function TabSet(props: {
                     );
 
                     // ✅ FIX: Gestisci il ref per entrambi i casi (con e senza title)
+                    // ✅ FIX: Callback ref semplificato senza log per evitare loop infiniti
                     const buttonWithRef = buttonRef ? React.cloneElement(button, {
                       ref: (el: HTMLButtonElement | null) => {
-                        // ✅ FIX: Propaga il ref
-                        if (buttonId === 'save-to-library' && el) {
-                          console.log('[DockManager] 🎯 Ref assigned for save-to-library button', {
-                            tagName: el?.tagName,
-                            dataButtonId: el?.getAttribute('data-button-id')
-                          });
-                        }
+                        // ✅ FIX: Propaga il ref senza log (rimosso per evitare loop infiniti)
                         if (buttonRef && 'current' in buttonRef) {
                           (buttonRef as React.MutableRefObject<HTMLButtonElement | null>).current = el;
                         }

@@ -18,6 +18,8 @@ import DataExtractionEditor from '@responseEditor/DataExtractionEditor';
 import { CenterPanel } from '../../../../../TaskBuilderAIWizard/components/CenterPanel';
 import { MainViewMode } from '@responseEditor/types/mainViewMode';
 import { getIsTesting } from '@responseEditor/testingState';
+import { useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
+import { useWizardContext } from '@responseEditor/context/WizardContext';
 import type { Task } from '@types/taskTypes';
 import { TabContentContainer } from '@responseEditor/components/TabContentContainer';
 import type { PipelineStep } from '../../../../../TaskBuilderAIWizard/hooks/useWizardState';
@@ -55,9 +57,9 @@ export interface MainContentAreaProps {
   // Translations
   localTranslations: Record<string, string>;
 
-  // Task data
-  task: Task | null | undefined;
-  taskType: number;
+  // ✅ REMOVED: Task data - now from ResponseEditorContext
+  // task: Task | null | undefined;
+  // taskType: number;
   mainList: any[];
   selectedIntentIdForTraining: string | null;
 
@@ -77,27 +79,8 @@ export interface MainContentAreaProps {
   // Pending editor open
   pendingEditorOpen: { editorType: 'regex' | 'extractor' | 'ner' | 'llm' | 'embeddings'; nodeId: string } | null;
 
-  // ✅ NEW: Props per CenterPanel (quando mainViewMode === 'wizard')
-      wizardProps?: {
-        wizardMode?: any; // WizardMode enum
-        currentStep: WizardStep; // DEPRECATED
-        pipelineSteps: PipelineStep[];
-        dataSchema: WizardTaskTreeNode[];
-        showStructureConfirmation?: boolean;
-        onStructureConfirm?: () => void;
-        onProceedFromEuristica?: () => void;
-        onShowModuleList?: () => void;
-        onSelectModule?: (moduleId: string) => void;
-        onPreviewModule?: (moduleId: string | null) => void;
-        availableModules?: WizardModuleTemplate[];
-        foundModuleId?: string;
-        showCorrectionMode?: boolean;
-        correctionInput?: string;
-        onCorrectionInputChange?: (value: string) => void;
-        // ✅ NEW: Sotto-stati per parte variabile dinamica
-        currentParserSubstep?: string | null;
-        currentMessageSubstep?: string | null;
-      };
+  // ✅ REMOVED: wizardProps - now from WizardContext
+  // wizardProps?: { ... };
 }
 
 /**
@@ -110,16 +93,27 @@ export function MainContentArea({
   selectedRoot,
   selectedSubIndex,
   localTranslations,
-  task,
-  taskType,
+  // ✅ REMOVED: task, taskType - now from Context
   mainList,
   selectedIntentIdForTraining,
   updateSelectedNode,
   handleProfileUpdate,
   contractChangeRef,
   pendingEditorOpen,
-  wizardProps,
+  // ✅ REMOVED: wizardProps - now from Context
 }: MainContentAreaProps) {
+  // ✅ NEW: Get data from Context
+  const { taskMeta: task, taskType } = useResponseEditorContext();
+
+  // ✅ NEW: Get wizard context (may be null if wizard not active)
+  let wizardContext: ReturnType<typeof useWizardContext> | null = null;
+  try {
+    wizardContext = useWizardContext();
+  } catch {
+    // WizardContext not available (wizard not active) - this is expected
+    wizardContext = null;
+  }
+
   // ✅ Switch su enum invece di booleani multipli
   switch (mainViewMode) {
     case MainViewMode.MESSAGE_REVIEW:
@@ -173,7 +167,8 @@ export function MainContentArea({
 
     case MainViewMode.WIZARD:
       // ✅ NEW: CenterPanel al posto di BehaviourEditor
-      if (!wizardProps) {
+      // ✅ NEW: Get wizard data from Context
+      if (!wizardContext) {
         return (
           <div style={DEFAULT_CONTAINER_STYLE}>
             <div style={{ padding: 16, color: '#ef4444' }}>Wizard configuration error</div>
@@ -184,23 +179,23 @@ export function MainContentArea({
       return (
         <div style={DEFAULT_CONTAINER_STYLE}>
           <CenterPanel
-              currentStep={wizardProps.currentStep}
-              pipelineSteps={wizardProps.pipelineSteps}
+              currentStep={wizardContext.currentStep as any} // DEPRECATED
+              pipelineSteps={wizardContext.pipelineSteps}
               userInput={''} // ✅ Rimosso - non serve più
-              dataSchema={wizardProps.dataSchema}
-              showStructureConfirmation={wizardProps.showStructureConfirmation}
-              onStructureConfirm={wizardProps.onStructureConfirm}
-              onProceedFromEuristica={wizardProps.onProceedFromEuristica}
-              onShowModuleList={wizardProps.onShowModuleList}
-              onSelectModule={wizardProps.onSelectModule}
-              onPreviewModule={wizardProps.onPreviewModule}
-              availableModules={wizardProps.availableModules}
-              foundModuleId={wizardProps.foundModuleId}
-              showCorrectionMode={wizardProps.showCorrectionMode}
-              correctionInput={wizardProps.correctionInput}
-              onCorrectionInputChange={wizardProps.onCorrectionInputChange}
-              currentParserSubstep={wizardProps.currentParserSubstep}
-              currentMessageSubstep={wizardProps.currentMessageSubstep}
+              dataSchema={wizardContext.dataSchema}
+              showStructureConfirmation={wizardContext.showStructureConfirmation}
+              onStructureConfirm={wizardContext.handleStructureConfirm}
+              onProceedFromEuristica={wizardContext.onProceedFromEuristica}
+              onShowModuleList={wizardContext.onShowModuleList}
+              onSelectModule={wizardContext.onSelectModule}
+              onPreviewModule={wizardContext.onPreviewModule}
+              availableModules={wizardContext.availableModules}
+              foundModuleId={wizardContext.foundModuleId}
+              showCorrectionMode={wizardContext.showCorrectionMode}
+              correctionInput={wizardContext.correctionInput}
+              onCorrectionInputChange={wizardContext.setCorrectionInput}
+              currentParserSubstep={wizardContext.currentParserSubstep}
+              currentMessageSubstep={wizardContext.currentMessageSubstep}
             />
         </div>
       );

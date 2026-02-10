@@ -163,8 +163,7 @@ export function useResponseEditorHandlers(params: UseResponseEditorHandlersParam
     replaceSelectedTaskTree: replaceSelectedTaskTreeFromInit,
     // ✅ NEW: Pass taskWizardMode per permettere chiusura in modalità wizard
     taskWizardMode: state.taskWizardMode,
-    // ✅ NEW: Pass generalization params for tutor on close
-    shouldBeGeneral: params.shouldBeGeneral,
+    // ✅ REMOVED: shouldBeGeneral - now from WizardContext
     saveDecisionMade: params.saveDecisionMade,
     onOpenSaveDialog: params.onOpenSaveDialog,
   });

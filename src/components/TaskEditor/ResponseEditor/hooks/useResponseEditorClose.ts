@@ -8,6 +8,7 @@ import { getSubNodesStrict } from '@responseEditor/core/domain/nodeStrict';
 import DialogueTaskService from '@services/DialogueTaskService';
 import { closeTab } from '@dock/ops';
 import { useTaskTreeStore, useTaskTreeFromStore } from '@responseEditor/core/state';
+import { useWizardContext } from '@responseEditor/context/WizardContext';
 import type { Task, TaskTree } from '@types/taskTypes';
 import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
 
@@ -50,6 +51,9 @@ export interface UseResponseEditorCloseParams {
 
   // ✅ NEW: Wizard mode (per permettere chiusura in modalità wizard senza taskTree)
   taskWizardMode?: TaskWizardMode;
+  // ✅ REMOVED: shouldBeGeneral - now from WizardContext
+  saveDecisionMade?: boolean;
+  onOpenSaveDialog?: () => void;
 }
 
 /**
@@ -71,11 +75,14 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
     onClose,
     replaceSelectedDDT,
     taskWizardMode,
-    // ✅ NEW: Generalization params
-    shouldBeGeneral = false,
+    // ✅ REMOVED: shouldBeGeneral - now from WizardContext
     saveDecisionMade = false,
     onOpenSaveDialog,
   } = params;
+
+  // ✅ ARCHITECTURE: Read shouldBeGeneral from WizardContext (single source of truth)
+  const wizardContext = useWizardContext();
+  const shouldBeGeneral = wizardContext?.shouldBeGeneral ?? false;
 
   // ✅ FASE 2.3: Use Zustand store as SINGLE source of truth
   const { setTaskTree } = useTaskTreeStore();
@@ -449,7 +456,7 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
     setTaskTree,
     replaceSelectedDDT,
     taskWizardMode,
-    shouldBeGeneral,
+    shouldBeGeneral, // ✅ From WizardContext
     saveDecisionMade,
     onOpenSaveDialog,
   ]);

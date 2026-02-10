@@ -118,10 +118,14 @@ function convertApiConstraintsToWizardConstraints(
 
   // Convert constraints object to array
   Object.entries(constraintsObj).forEach(([key, value]: [string, any]) => {
+    if (!value || value === null) {
+      console.warn(`[convertApiConstraintsToWizardConstraints] ⚠️ Constraint value is null for key ${key} in node ${nodeLabel}`);
+      return; // Skip this constraint
+    }
     constraints.push({
       kind: key,
       title: key,
-      payoff: value.description || key,
+      payoff: value.description ?? key,
       min: value.min,
       max: value.max,
       minLength: value.minLength,
