@@ -194,6 +194,13 @@ export function CenterPanel({
                        currentStep === 'generazione_messaggi' ||
                        currentStep === 'modulo_pronto';
 
+  // ✅ FIX: Show cards immediately when wizard is active, even during START/idle
+  // Cards will be shown in placeholder/gray state until generation starts
+  const shouldShowCards = isGenerating ||
+                          currentStep === 'idle' ||
+                          currentStep === 'start' ||
+                          pipelineSteps.length > 0;
+
   return (
     <main className="flex-1 px-8 py-6 bg-gray-50 overflow-y-auto">
       <div className="space-y-4 max-w-2xl">
@@ -485,13 +492,14 @@ export function CenterPanel({
 
         {/* Fasi di generazione */}
         {(() => {
-          console.log('[CenterPanel] 🔄 Checking isGenerating condition', {
+          console.log('[CenterPanel] 🔄 Checking shouldShowCards condition', {
+            shouldShowCards,
             isGenerating,
             currentStep,
             phasesLength: phases.length,
             pipelineStepsLength: pipelineSteps.length,
           });
-          return isGenerating;
+          return shouldShowCards;
         })() && (
           <>
           {(() => {

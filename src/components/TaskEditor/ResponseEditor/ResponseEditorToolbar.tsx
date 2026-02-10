@@ -64,23 +64,6 @@ export function useResponseEditorToolbar({
   // ✅ NEW: Ref per il pulsante save-to-library
   saveToLibraryButtonRef,
 }: ResponseEditorToolbarProps) {
-  // ✅ ARCHITECTURE: Read shouldBeGeneral from WizardContext (single source of truth)
-  const wizardContext = useWizardContext();
-  const shouldBeGeneral = wizardContext?.shouldBeGeneral ?? false;
-
-  // ✅ LOGGING PLAN F: Log toolbar generation
-  React.useEffect(() => {
-    console.log('[useResponseEditorToolbar] 📊 LOGGING PLAN F: Toolbar generation', {
-      shouldBeGeneral,
-      hasWizardContext: !!wizardContext,
-      wizardMode: wizardContext?.wizardMode,
-      rightMode,
-      leftPanelMode,
-      testPanelMode,
-      tasksPanelMode,
-      showSynonyms,
-    });
-  }, [shouldBeGeneral, wizardContext, rightMode, leftPanelMode, testPanelMode, tasksPanelMode, showSynonyms]);
 
   // ✅ CRITICAL: Hooks devono essere chiamati PRIMA di qualsiasi return condizionale
   // ✅ Test è un toggle indipendente per mostrare/nascondere il pannello debugger
@@ -257,29 +240,20 @@ export function useResponseEditorToolbar({
       title: "Simulate and validate the dialogue flow to ensure correct behavior and data recognition.",
       active: testPanelMode === 'chat'
     },
-    // ✅ FIX: Generalization button - sempre presente, visibilità controllata dinamicamente
+    // ✅ FIX: Pulsante statico sempre presente (come gli altri)
     {
       icon: <Star size={16} />,
       label: "Vuoi salvare in libreria?",
       onClick: () => {
-        console.log('[ResponseEditorToolbar] 🔔 Opening save dialog');
-        try {
-          if (!onOpenSaveDialog) {
-            console.error('[ResponseEditorToolbar] ❌ onOpenSaveDialog is NULL/UNDEFINED!');
-            return;
-          }
+        if (onOpenSaveDialog) {
           onOpenSaveDialog();
-        } catch (error) {
-          console.error('[ResponseEditorToolbar] ❌ ERROR calling onOpenSaveDialog:', error);
         }
       },
-      title: "Template con valenza generale - clicca per decidere",
-      primary: true,  // Highlight if not decided
+      title: "Salva il template nella libreria generale",
+      primary: true,
       active: false,
-      buttonId: "save-to-library", // ✅ For positioning popover
-      buttonRef: saveToLibraryButtonRef, // ✅ Ref assegnato direttamente
-      // ✅ FIX: Controllo visibilità invece di aggiungere/rimuovere
-      visible: shouldBeGeneral && !saveDecisionMade && !!onOpenSaveDialog,
+      buttonId: "save-to-library",
+      buttonRef: saveToLibraryButtonRef,
     },
     // ✅ NEW: Magic wand button with dropdown (always visible, at the end before X)
     {

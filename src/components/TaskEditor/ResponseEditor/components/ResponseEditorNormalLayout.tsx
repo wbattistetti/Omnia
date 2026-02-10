@@ -109,6 +109,7 @@ export interface ResponseEditorNormalLayoutProps {
     pipelineSteps?: PipelineStep[];
     userInput?: string;
     dataSchema?: WizardTaskTreeNode[];
+    generalizedLabel?: string | null; // ✅ NEW: Generalized label from AI
     onProceedFromEuristica?: () => void;
     onShowModuleList?: () => void;
     onSelectModule?: (moduleId: string) => void;
@@ -187,6 +188,23 @@ export function ResponseEditorNormalLayout({
   // ❌ RIMOSSO: Early return quando taskWizardMode === 'full'
   // Ora il wizard viene gestito tramite mainViewMode nel MainContentArea
 
+  // ✅ FIX: Use generalizedLabel for rootLabel when wizard structure is proposed
+  const effectiveRootLabel = React.useMemo(() => {
+    // If wizard is active and structure is proposed, use generalizedLabel
+    if (taskWizardMode === 'full' && wizardProps) {
+      const generalizedLabel = wizardProps.generalizedLabel;
+      if (generalizedLabel) {
+        return generalizedLabel;
+      }
+      // Fallback to dataSchema[0].label (should already be generalized)
+      const dataSchemaLabel = wizardProps.dataSchema?.[0]?.label;
+      if (dataSchemaLabel) {
+        return dataSchemaLabel;
+      }
+    }
+    return taskTree?.label ?? 'Data';
+  }, [taskWizardMode, wizardProps?.generalizedLabel, wizardProps?.dataSchema, taskTree?.label]);
+
   // ✅ Determina la struttura del grid in base alle condizioni
   const hasIntentEditor = mainList[0]?.kind === 'intent' && task;
   const hasSidebar = mainList[0]?.kind !== 'intent';
@@ -202,7 +220,7 @@ export function ResponseEditorNormalLayout({
         selectedSubIndex={selectedSubIndex}
         onSelectSub={handleSelectSub}
         aggregated={isAggregatedAtomic}
-        rootLabel={taskTree?.label ?? 'Data'}
+        rootLabel={effectiveRootLabel}
         style={sidebarManualWidth ? { width: sidebarManualWidth, flexShrink: 0 } : { flexShrink: 0 }}
         onChangeSubRequired={onChangeSubRequired}
         onReorderSub={onReorderSub}
@@ -278,7 +296,7 @@ export function ResponseEditorNormalLayout({
             selectedSubIndex={selectedSubIndex}
             onSelectSub={handleSelectSub}
             aggregated={isAggregatedAtomic}
-            rootLabel={taskTree?.label ?? 'Data'}
+            rootLabel={effectiveRootLabel}
             style={sidebarManualWidth ? { width: sidebarManualWidth, flexShrink: 0 } : { flexShrink: 0 }}
             onChangeSubRequired={onChangeSubRequired}
             onReorderSub={onReorderSub}

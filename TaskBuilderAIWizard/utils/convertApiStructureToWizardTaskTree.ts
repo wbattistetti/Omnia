@@ -17,6 +17,23 @@ interface ApiStructureNode {
 }
 
 /**
+ * Check if a string is a valid GUID (UUID format or node-{uuid} format)
+ */
+function isValidGuid(id: string): boolean {
+  if (!id || typeof id !== 'string') return false;
+
+  // Check for UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (uuidRegex.test(id)) return true;
+
+  // Check for node-{uuid} format: node-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+  const nodeUuidRegex = /^node-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (nodeUuidRegex.test(id)) return true;
+
+  return false;
+}
+
+/**
  * Convert API structure response to WizardTaskTreeNode format.
  *
  * This function:
@@ -48,14 +65,26 @@ function convertNode(
   taskId: string,
   parentPath: string[] = []
 ): WizardTaskTreeNode {
-  // Generate ID if missing or invalid (e.g., 'root', 'UNDEFINED')
+  // ✅ FIX: Always generate GUID if ID is missing, invalid, or not a GUID
+  // This ensures every node has a stable GUID from the start, not simple names like "giorno", "mese", "anno"
   let nodeId = apiNode.id;
-  if (!nodeId || nodeId === 'root' || nodeId === 'UNDEFINED' || nodeId.trim() === '') {
+
+  if (!nodeId ||
+      nodeId === 'root' ||
+      nodeId === 'UNDEFINED' ||
+      nodeId.trim() === '' ||
+      !isValidGuid(nodeId)) {  // ✅ NEW: Check if ID is a valid GUID
+
+    const originalId = nodeId;
     nodeId = `node-${uuidv4()}`;
-    console.warn('[convertApiStructureToWizardTaskTree] ⚠️ Invalid node id from API, generating new GUID', {
-      originalId: apiNode.id,
+
+    console.log('[convertApiStructureToWizardTaskTree] 🔄 Generating GUID for node', {
+      originalId: originalId || '(missing)',
       newId: nodeId,
       label: apiNode.label,
+      reason: !originalId ? 'missing' :
+              !isValidGuid(originalId) ? 'not a valid GUID' :
+              'invalid value',
     });
   }
 

@@ -260,10 +260,8 @@ export function EditorHeader({ icon, title, subtitle, titleActions, toolbarButto
         {toolbarButtons.length > 0 && (
           <>
             {toolbarButtons.map((btn, i) => {
-              // ✅ FIX: Controlla visibilità - se visible è false, non renderizzare
-              if (btn.visible === false) {
-                return null;
-              }
+              // ✅ FIX: Monta sempre il pulsante, controlla visibilità con CSS
+              // NON usare return null - il pulsante deve essere sempre montato per il ref
 
               // ✅ FIX: Usa il ref passato dalla prop se disponibile, altrimenti null
               const buttonRef = btn.buttonRef && 'current' in btn.buttonRef
@@ -281,7 +279,7 @@ export function EditorHeader({ icon, title, subtitle, titleActions, toolbarButto
                 disabled: btn.disabled,
                 'data-button-id': btn.buttonId,
                 style: {
-                  display: 'flex',
+                  display: btn.visible === false ? 'none' : 'flex', // ✅ FIX: Usa display invece di return null
                   alignItems: 'center',
                   gap: 6,
                   background: btn.primary ? '#0b1220' : (btn.active ? '#fff' : 'transparent'),

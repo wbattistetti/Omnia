@@ -245,6 +245,9 @@ export function SaveLocationDialog({
           </button>
           <button
             onClick={() => {
+              console.log('[SaveLocationDialog] 🔍 CLICK su "Salva nella libreria generale"');
+              console.log('[SaveLocationDialog] 🔍 onSaveToFactory:', onSaveToFactory);
+              console.log('[SaveLocationDialog] 🔍 typeof onSaveToFactory:', typeof onSaveToFactory);
               onSaveToFactory();
               // ✅ FIX: onClose viene chiamato dopo il salvataggio in handleSaveToFactory
             }}

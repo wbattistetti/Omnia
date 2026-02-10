@@ -93,11 +93,24 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   const taskLabel = editor.taskLabel || '';
 
   // ✅ For wizard, use taskLabel from editor (which comes from useResponseEditorCore)
-  // If empty, pass undefined (wizard will handle it)
-  const taskLabelForWizard = taskWizardMode === 'full' ? (taskLabel || undefined) : undefined;
-  const taskIdForWizard = taskWizardMode === 'full' && task ? (task as any).id : undefined;
-  const rowIdForWizard = taskWizardMode === 'full' && task ? (task as any).id : undefined;
-  const projectIdForWizard = taskWizardMode === 'full' ? currentProjectId || undefined : undefined;
+  // ✅ FIX: Preserva wizardIntegrationRaw anche quando taskWizardMode diventa 'none' se shouldBeGeneral era true
+  const previousWizardIntegrationRef = React.useRef<any>(null);
+
+  // ✅ FIX: Determina se dobbiamo preservare wizardIntegration basandoci sul ref (che mantiene lo stato precedente)
+  const shouldPreserveWizardIntegration = previousWizardIntegrationRef.current?.shouldBeGeneral === true;
+
+  const taskLabelForWizard = (taskWizardMode === 'full' || shouldPreserveWizardIntegration)
+    ? (taskLabel || undefined)
+    : undefined;
+  const taskIdForWizard = (taskWizardMode === 'full' || shouldPreserveWizardIntegration) && task
+    ? (task as any).id
+    : undefined;
+  const rowIdForWizard = (taskWizardMode === 'full' || shouldPreserveWizardIntegration) && task
+    ? (task as any).id
+    : undefined;
+  const projectIdForWizard = (taskWizardMode === 'full' || shouldPreserveWizardIntegration)
+    ? currentProjectId || undefined
+    : undefined;
   const localeForWizard = 'it';
 
   const wizardIntegrationRaw = useWizardIntegration(
@@ -109,8 +122,63 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     onWizardComplete // ✅ CORRETTO: usa onWizardComplete dalla prop
   );
 
+  // ✅ FIX: Mantieni riferimento al wizardIntegrationRaw precedente per preservare shouldBeGeneral
+  // ✅ IMPORTANTE: Aggiorna il ref SEMPRE quando wizardIntegrationRaw ha shouldBeGeneral === true
+  // Questo garantisce che anche se wizardIntegrationRaw diventa null, manteniamo lo stato precedente
+  React.useEffect(() => {
+    if (wizardIntegrationRaw?.shouldBeGeneral) {
+      previousWizardIntegrationRef.current = wizardIntegrationRaw;
+    }
+    // ✅ Se wizardIntegrationRaw è null o shouldBeGeneral è false, mantieni il valore precedente nel ref
+  }, [wizardIntegrationRaw]);
+
   // ✅ FIX: Mantieni wizardIntegration anche dopo completamento se shouldBeGeneral è true
-  const wizardIntegration = (taskWizardMode === 'full' || wizardIntegrationRaw?.shouldBeGeneral) ? wizardIntegrationRaw : null;
+  // ✅ IMPORTANTE: Se shouldBeGeneral è true, wizardIntegration deve rimanere disponibile anche quando taskWizardMode è 'none'
+  // ✅ PROBLEMA: Quando taskLabel diventa undefined, useWizardIntegration crea una nuova istanza di useWizardState
+  // che resetta shouldBeGeneral a false. Devo preservare shouldBeGeneral leggendolo da dataSchema[0]?.shouldBeGeneral
+  // che viene salvato durante la generazione.
+  const wizardIntegration = React.useMemo(() => {
+    // ✅ PRIORITÀ 1: Se wizardIntegrationRaw ha shouldBeGeneral === true, mantieni sempre wizardIntegrationRaw
+    // anche quando taskWizardMode === 'none'
+    if (wizardIntegrationRaw?.shouldBeGeneral) {
+      // ✅ Aggiorna il ref immediatamente (non aspettare useEffect)
+      previousWizardIntegrationRef.current = wizardIntegrationRaw;
+      return wizardIntegrationRaw;
+    }
+
+    // ✅ PRIORITÀ 1.5: Se dataSchema[0] ha shouldBeGeneral === true, ricostruisci wizardIntegrationRaw.shouldBeGeneral
+    // Questo accade quando useWizardIntegration viene chiamato con taskLabel undefined e resetta lo stato
+    // ma dataSchema[0] mantiene il valore originale di shouldBeGeneral
+    if (wizardIntegrationRaw?.dataSchema?.[0]?.shouldBeGeneral === true) {
+      // ✅ Ricrea wizardIntegrationRaw con shouldBeGeneral corretto usando dataSchema[0]
+      const preservedWizardIntegration = {
+        ...wizardIntegrationRaw,
+        shouldBeGeneral: true, // ✅ Ricostruito da dataSchema[0]?.shouldBeGeneral
+        generalizedLabel: wizardIntegrationRaw.dataSchema[0].generalizedLabel || null,
+        generalizationReason: wizardIntegrationRaw.dataSchema[0].generalizationReason || null,
+        generalizedMessages: wizardIntegrationRaw.dataSchema[0].generalizedMessages || null,
+      };
+      // ✅ Aggiorna il ref per preservare lo stato anche in futuro
+      previousWizardIntegrationRef.current = preservedWizardIntegration;
+      return preservedWizardIntegration;
+    }
+
+    // ✅ PRIORITÀ 2: Se il ref precedente aveva shouldBeGeneral === true, usalo (preserva stato)
+    // Questo garantisce che anche se wizardIntegrationRaw diventa null, manteniamo lo stato
+    if (previousWizardIntegrationRef.current?.shouldBeGeneral) {
+      return previousWizardIntegrationRef.current;
+    }
+
+    // ✅ PRIORITÀ 3: Se wizard è attivo, usa wizardIntegrationRaw
+    if (taskWizardMode === 'full') {
+      return wizardIntegrationRaw;
+    }
+
+    // ✅ Altrimenti, null
+    return null;
+  }, [taskWizardMode, wizardIntegrationRaw]);
+
+  // ✅ REMOVED: Debug log che causava loop infinito
 
   // ✅ REMOVED: effectiveShouldBeGeneral, generalizedLabel, generalizedMessages, generalizationReason
   // ✅ These are now read from WizardContext in components that need them
@@ -135,15 +203,22 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     }
   }, [shouldTransitionToNone, effectiveTaskWizardMode]);
 
-  // ✅ B1: WizardContext value (only when wizard is active) - calculated here to avoid race condition
+  // ✅ B1: WizardContext value (only when wizard is active OR shouldBeGeneral is true) - calculated here to avoid race condition
+  // ✅ FIX: Usa useMemo con dipendenze MINIME - solo quelle che determinano se il context deve esistere
+  // I valori interni vengono letti direttamente da wizardIntegration (che è stabile grazie al useMemo precedente)
   const wizardContextValue = React.useMemo(() => {
-    if (!wizardIntegration || taskWizardMode !== 'full') {
+    if (!wizardIntegration) {
+      return null;
+    }
+    // ✅ FIX: Mantieni WizardContext anche dopo completamento se shouldBeGeneral è true
+    if (taskWizardMode !== 'full' && !wizardIntegration.shouldBeGeneral) {
       return null;
     }
 
+    // ✅ Leggi valori direttamente da wizardIntegration (non usarli come dipendenze)
     return {
       wizardMode: wizardIntegration.wizardMode || WizardMode.START,
-      currentStep: wizardIntegration.currentStep || 'idle', // DEPRECATED
+      currentStep: wizardIntegration.currentStep || 'idle',
       dataSchema: wizardIntegration.dataSchema || [],
       pipelineSteps: wizardIntegration.pipelineSteps || [],
       showStructureConfirmation: wizardIntegration.showStructureConfirmation || false,
@@ -171,30 +246,9 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       currentMessageSubstep: wizardIntegration.currentMessageSubstep || null,
     };
   }, [
-    wizardIntegration?.wizardMode,
-    wizardIntegration?.showStructureConfirmation,
-    wizardIntegration?.structureConfirmed,
-    wizardIntegration?.currentStep,
-    wizardIntegration?.pipelineSteps,
-    wizardIntegration?.dataSchema,
-    wizardIntegration?.availableModules,
-    wizardIntegration?.foundModuleId,
-    wizardIntegration?.showCorrectionMode,
-    wizardIntegration?.correctionInput,
-    wizardIntegration?.currentParserSubstep,
-    wizardIntegration?.currentMessageSubstep,
-    wizardIntegration?.handleStructureConfirm,
-    wizardIntegration?.handleStructureReject,
-    wizardIntegration?.onProceedFromEuristica,
-    wizardIntegration?.onShowModuleList,
-    wizardIntegration?.onSelectModule,
-    wizardIntegration?.onPreviewModule,
-    wizardIntegration?.setCorrectionInput,
-    wizardIntegration?.shouldBeGeneral,
-    wizardIntegration?.generalizedLabel,
-    wizardIntegration?.generalizedMessages,
-    wizardIntegration?.generalizationReason,
-    wizardIntegration?.runGenerationPipeline,
+    // ✅ FIX: SOLO dipendenze che determinano se il context deve esistere
+    // wizardIntegration è già stabilizzato dal useMemo precedente
+    wizardIntegration,
     taskWizardMode,
   ]);
 

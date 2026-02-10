@@ -22,6 +22,9 @@ import { TypeTemplateService } from '../services/TypeTemplateService';
 import { taskTemplateService } from '../services/TaskTemplateService';
 import { DialogueTaskService } from '../services/DialogueTaskService';
 import { TemplateTranslationsService } from '../services/TemplateTranslationsService';
+import { useLanguageChange } from '../hooks/useLanguageChange';
+import { MissingTranslationsDialog } from './common/MissingTranslationsDialog';
+import { generateMissingTranslations, type MissingTranslation } from '../services/TranslationIntegrityService';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -39,6 +42,56 @@ function AppInner() {
   const [userReplies, setUserReplies] = useState<(string | undefined)[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [showChat, setShowChat] = useState(true); // nuovo stato
+
+  // ✅ NEW: Missing translations dialog state
+  const [missingTranslations, setMissingTranslations] = useState<MissingTranslation[]>([]);
+  const [showMissingDialog, setShowMissingDialog] = useState(false);
+  const [isGeneratingTranslations, setIsGeneratingTranslations] = useState(false);
+
+  // ✅ NEW: Handle missing translations found
+  const handleMissingFound = async (missing: MissingTranslation[]): Promise<boolean> => {
+    setMissingTranslations(missing);
+    setShowMissingDialog(true);
+    // Return false to prevent auto-generation - user will decide via dialog
+    return false;
+  };
+
+  // ✅ NEW: Generate translations from dialog
+  const handleGenerateTranslations = async () => {
+    if (missingTranslations.length === 0) return;
+
+    setIsGeneratingTranslations(true);
+    try {
+      const targetLanguage = missingTranslations[0]?.targetLanguage || 'en';
+      const sourceLanguage = missingTranslations[0]?.sourceLanguage || 'it';
+      const missingIds = missingTranslations.map(m => m.guid);
+
+      const result = await generateMissingTranslations(missingIds, targetLanguage, sourceLanguage);
+
+      if (result.success) {
+        console.log('[App] Translations generated successfully', {
+          generated: result.generated,
+          errors: result.errors,
+        });
+        // Reload translations cache
+        await TemplateTranslationsService.reloadAll();
+      } else {
+        console.error('[App] Failed to generate translations', result.errors);
+        alert(`Failed to generate some translations. ${result.errors?.join(', ')}`);
+      }
+    } catch (error) {
+      console.error('[App] Error generating translations:', error);
+      alert(`Error generating translations: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsGeneratingTranslations(false);
+    }
+  };
+
+  // ✅ NEW: Monitor language changes
+  useLanguageChange({
+    onMissingFound: handleMissingFound,
+    enabled: appState === 'mainApp', // Only check when in main app
+  });
 
   // ✅ REMOVED: Tasks are now loaded directly in ResponseEditor, not in App.tsx
 
@@ -140,6 +193,15 @@ function AppInner() {
           />
         )}
       </DockPanel>
+
+      {/* ✅ NEW: Missing translations dialog */}
+      <MissingTranslationsDialog
+        open={showMissingDialog}
+        onClose={() => setShowMissingDialog(false)}
+        missing={missingTranslations}
+        onGenerate={handleGenerateTranslations}
+        isGenerating={isGeneratingTranslations}
+      />
     </>
   );
 }

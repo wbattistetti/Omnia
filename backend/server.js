@@ -3367,16 +3367,30 @@ app.post('/api/factory/dialogue-templates', async (req, res) => {
     const templates = Array.isArray(req.body) ? req.body : [req.body];
 
     for (const template of templates) {
-      if (!template.name) {
-        continue; // Skip templates without name
+      if (!template.id) {
+        console.log('[POST /api/factory/dialogue-templates] ⚠️ Skipping template without id', {
+          label: template.label,
+        });
+        continue; // Skip templates without id
       }
 
-      // Upsert by name
-      await coll.updateOne(
-        { name: template.name },
+      // ✅ FIX: Rimuovi _id, name, createdAt dal template prima dell'update
+      // name non è più necessario - templates sono identificati solo da id
+      const { _id, name, createdAt, ...templateWithoutId } = template;
+
+      console.log('[POST /api/factory/dialogue-templates] 💾 Saving template', {
+        id: template.id,
+        label: template.label,
+        hasSubTasksIds: !!template.subTasksIds,
+        subTasksIds: template.subTasksIds,
+      });
+
+      // ✅ FIX: Upsert by id (not by name)
+      const result = await coll.updateOne(
+        { id: template.id },
         {
           $set: {
-            ...template,
+            ...templateWithoutId,
             updatedAt: now
           },
           $setOnInsert: {
@@ -3385,6 +3399,14 @@ app.post('/api/factory/dialogue-templates', async (req, res) => {
         },
         { upsert: true }
       );
+
+      console.log('[POST /api/factory/dialogue-templates] ✅ Template saved', {
+        id: template.id,
+        label: template.label,
+        upserted: result.upsertedCount > 0,
+        modified: result.modifiedCount > 0,
+        matched: result.matchedCount > 0,
+      });
     }
 
     res.json({ success: true, count: templates.length });
@@ -3394,19 +3416,274 @@ app.post('/api/factory/dialogue-templates', async (req, res) => {
   }
 });
 
+// Save template label translations to Factory (IDE translations)
+// These translations use type: LABEL and projectId: null
+app.post('/api/factory/template-label-translations', async (req, res) => {
+  const client = await getMongoClient();
+  try {
+    const db = client.db(dbFactory);
+    const coll = db.collection('Translations');
+    const { translations } = req.body || {};
+
+    if (!Array.isArray(translations) || translations.length === 0) {
+      return res.json({ success: true, count: 0 });
+    }
+
+    console.log(`[FACTORY_TRANSLATIONS_SAVE] Saving ${translations.length} template label translations`);
+
+    const now = new Date();
+
+    // Prepare bulk operations for all translations
+    const bulkOps = translations
+      .filter(trans => trans.guid && trans.language && trans.text !== undefined)
+      .map(trans => {
+        // ✅ CRITICAL: Filter must include guid, language, AND projectId: null
+        // This ensures IDE translations (projectId: null) are separate from app translations (projectId !== null)
+        const filter = {
+          guid: trans.guid,
+          language: trans.language,
+          projectId: null, // ✅ IDE translations always have projectId: null
+          type: 'Label', // ✅ IDE translations always use type: LABEL
+        };
+
+        const update = {
+          $set: {
+            guid: trans.guid,
+            language: trans.language,
+            text: trans.text,
+            type: trans.type || 'Label', // ✅ Default to LABEL if not specified
+            projectId: null, // ✅ CRITICAL: IDE translations always have projectId: null
+            updatedAt: now
+          },
+          $setOnInsert: {
+            createdAt: now
+          }
+        };
+
+        return {
+          updateOne: {
+            filter,
+            update,
+            upsert: true
+          }
+        };
+      });
+
+    // Execute bulk write (much faster than sequential updates)
+    let savedCount = 0;
+    let result = null;
+    if (bulkOps.length > 0) {
+      result = await coll.bulkWrite(bulkOps, { ordered: false });
+      savedCount = result.upsertedCount + result.modifiedCount;
+    }
+
+    console.log(`[FACTORY_TRANSLATIONS_SAVE] ✅ Saved ${savedCount} template label translations (${result?.upsertedCount || 0} inserted, ${result?.modifiedCount || 0} updated)`);
+    res.json({ success: true, count: savedCount });
+  } catch (err) {
+    console.error('[FACTORY_TRANSLATIONS_SAVE] Error:', err);
+    res.status(500).json({ error: err.message, stack: err.stack });
+  }
+});
+
+// Check which template IDs are missing translations for a given language
+app.get('/api/factory/check-missing-translations', async (req, res) => {
+  const client = await getMongoClient();
+  try {
+    const { language } = req.query;
+
+    if (!language || !['it', 'en', 'pt'].includes(language)) {
+      return res.status(400).json({ error: 'Invalid language parameter. Must be it, en, or pt' });
+    }
+
+    const db = client.db(dbFactory);
+    const tasksColl = db.collection('tasks');
+    const translationsColl = db.collection('Translations');
+
+    // Get all template IDs from tasks collection
+    const allTemplates = await tasksColl.find({}, { projection: { id: 1, label: 1 } }).toArray();
+    const allTemplateIds = allTemplates.map(t => t.id || t._id?.toString()).filter(Boolean);
+
+    if (allTemplateIds.length === 0) {
+      return res.json({ missing: [] });
+    }
+
+    // Get existing translations for the target language (type: LABEL, projectId: null)
+    const existingTranslations = await translationsColl.find({
+      guid: { $in: allTemplateIds },
+      language: language,
+      type: 'Label',
+      projectId: null,
+    }, { projection: { guid: 1 } }).toArray();
+
+    const existingGuids = new Set(existingTranslations.map(t => t.guid));
+
+    // Find missing translations
+    // For each missing template, try to find its label in the source language (default: it)
+    const sourceLanguage = 'it'; // Default source language
+    const sourceTranslations = await translationsColl.find({
+      guid: { $in: allTemplateIds },
+      language: sourceLanguage,
+      type: 'Label',
+      projectId: null,
+    }, { projection: { guid: 1, text: 1 } }).toArray();
+
+    const sourceMap = new Map(sourceTranslations.map(t => [t.guid, t.text]));
+
+    const missing = allTemplateIds
+      .filter(id => !existingGuids.has(id))
+      .map(id => {
+        const template = allTemplates.find(t => (t.id || t._id?.toString()) === id);
+        return {
+          guid: id,
+          label: sourceMap.get(id) || template?.label || 'Unknown',
+          sourceLanguage: sourceLanguage,
+          targetLanguage: language,
+        };
+      });
+
+    console.log(`[CHECK_MISSING_TRANSLATIONS] Found ${missing.length} missing translations for language ${language}`);
+    res.json({ missing });
+  } catch (err) {
+    console.error('[CHECK_MISSING_TRANSLATIONS] Error:', err);
+    res.status(500).json({ error: err.message, stack: err.stack });
+  }
+});
+
+// Generate template translations via AI
+app.post('/api/factory/generate-template-translations', async (req, res) => {
+  const client = await getMongoClient();
+  try {
+    const { templateIds, targetLanguage, sourceLanguage = 'it' } = req.body;
+
+    if (!Array.isArray(templateIds) || templateIds.length === 0) {
+      return res.json({ success: true, generated: 0 });
+    }
+
+    if (!targetLanguage || !['it', 'en', 'pt'].includes(targetLanguage)) {
+      return res.status(400).json({ error: 'Invalid targetLanguage. Must be it, en, or pt' });
+    }
+
+    if (!sourceLanguage || !['it', 'en', 'pt'].includes(sourceLanguage)) {
+      return res.status(400).json({ error: 'Invalid sourceLanguage. Must be it, en, or pt' });
+    }
+
+    const db = client.db(dbFactory);
+    const translationsColl = db.collection('Translations');
+
+    // Load source translations
+    const sourceTranslations = await translationsColl.find({
+      guid: { $in: templateIds },
+      language: sourceLanguage,
+      type: 'Label',
+      projectId: null,
+    }, { projection: { guid: 1, text: 1 } }).toArray();
+
+    if (sourceTranslations.length === 0) {
+      return res.json({ success: false, generated: 0, error: 'No source translations found' });
+    }
+
+    // Generate translations via AI
+    const generatedTranslations = [];
+    const errors = [];
+
+    // Import AIProviderService
+    const AIProviderService = require('./services/AIProviderService');
+    const aiService = new AIProviderService();
+    await aiService.initializeProviders();
+
+    for (const sourceTrans of sourceTranslations) {
+      try {
+        // Build translation prompt
+        const languageNames = {
+          it: 'Italian',
+          en: 'English',
+          pt: 'Portuguese',
+        };
+
+        const prompt = `Translate the following ${languageNames[sourceLanguage]} text to ${languageNames[targetLanguage]}. Return ONLY the translation, no explanations, no quotes, no markdown.
+
+Text to translate: "${sourceTrans.text}"
+
+Translation:`;
+
+        // Call AI (use OpenAI by default, fallback to Groq)
+        const aiResponse = await aiService.callAI('openai', [
+          { role: 'system', content: 'You are a professional translator. Return only the translated text, nothing else.' },
+          { role: 'user', content: prompt },
+        ], { model: 'gpt-4o-mini' });
+
+        const translatedText = (aiResponse || '').trim().replace(/^["']|["']$/g, ''); // Remove quotes if present
+
+        if (!translatedText) {
+          errors.push(`No translation returned for ${sourceTrans.guid}`);
+          continue;
+        }
+
+        generatedTranslations.push({
+          guid: sourceTrans.guid,
+          language: targetLanguage,
+          text: translatedText,
+          type: 'Label',
+          projectId: null,
+        });
+      } catch (error) {
+        console.error(`[GENERATE_TEMPLATE_TRANSLATIONS] Error translating ${sourceTrans.guid}:`, error);
+        errors.push(`Error translating ${sourceTrans.guid}: ${error.message || String(error)}`);
+      }
+    }
+
+    // Save generated translations
+    if (generatedTranslations.length > 0) {
+      const now = new Date();
+      const bulkOps = generatedTranslations.map(trans => ({
+        updateOne: {
+          filter: {
+            guid: trans.guid,
+            language: trans.language,
+            projectId: null,
+            type: 'Label',
+          },
+          update: {
+            $set: {
+              ...trans,
+              updatedAt: now,
+            },
+            $setOnInsert: {
+              createdAt: now,
+            },
+          },
+          upsert: true,
+        },
+      }));
+
+      await translationsColl.bulkWrite(bulkOps, { ordered: false });
+    }
+
+    console.log(`[GENERATE_TEMPLATE_TRANSLATIONS] Generated ${generatedTranslations.length} translations (${errors.length} errors)`);
+    res.json({
+      success: generatedTranslations.length > 0,
+      generated: generatedTranslations.length,
+      errors: errors.length > 0 ? errors : undefined,
+    });
+  } catch (err) {
+    console.error('[GENERATE_TEMPLATE_TRANSLATIONS] Error:', err);
+    res.status(500).json({ error: err.message, stack: err.stack });
+  }
+});
+
 app.delete('/api/factory/dialogue-templates/:id', async (req, res) => {
   const id = req.params.id;
   const client = await getMongoClient();
   try {
     const db = client.db(dbFactory);
     const coll = db.collection('tasks');
-    // Delete by name or _id
+    // ✅ FIX: Delete by id only (name field removed)
     let filter;
     if (/^[a-fA-F0-9]{24}$/.test(id)) {
       filter = { _id: new ObjectId(id) };
     } else {
-      // Try by name first, then by _id
-      filter = { $or: [{ name: id }, { _id: id }] };
+      // Try by id field first, then by _id
+      filter = { $or: [{ id: id }, { _id: id }] };
     }
     const result = await coll.deleteOne(filter);
     if (result.deletedCount === 1) {

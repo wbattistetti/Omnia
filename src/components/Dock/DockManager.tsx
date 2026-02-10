@@ -379,10 +379,8 @@ function TabSet(props: {
               {showToolbar && (
                 <div style={{ display: 'flex', gap: 4, marginLeft: 8, alignItems: 'center' }}>
                   {toolbarButtons.map((btn, idx) => {
-                    // ✅ FIX: Controlla visibilità - se visible è false, non renderizzare
-                    if (btn.visible === false) {
-                      return null;
-                    }
+                    // ✅ FIX: Monta sempre il pulsante, controlla visibilità con CSS
+                    // NON usare return null - il pulsante deve essere sempre montato per il ref
 
                     // ✅ FIX: Estrai buttonRef e buttonId
                     const buttonRef = btn.buttonRef && 'current' in btn.buttonRef
@@ -398,7 +396,7 @@ function TabSet(props: {
                       disabled: btn.disabled,
                       'data-button-id': buttonId, // ✅ FIX: Aggiungi data-button-id per fallback
                       style: {
-                        display: 'flex',
+                        display: btn.visible === false ? 'none' : 'flex', // ✅ FIX: Usa display invece di return null
                         alignItems: 'center',
                         gap: 4,
                         background: btn.primary ? '#0b1220' : (btn.active ? 'rgba(255,255,255,0.2)' : 'transparent'),

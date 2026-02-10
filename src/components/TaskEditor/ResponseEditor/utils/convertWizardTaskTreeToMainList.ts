@@ -53,8 +53,13 @@ export function convertWizardTaskTreeToMainList(wizardTree: WizardTaskTreeNode[]
       subNodesCount: node.subNodes?.length,
     });
 
+    // ✅ FIX: For root node (idx === 0), use generalizedLabel if available
+    const nodeLabel = (idx === 0 && node.generalizedLabel)
+      ? node.generalizedLabel
+      : (node.label || 'Unnamed');
+
     const mainNode: any = {
-      label: node.label || 'Unnamed',
+      label: nodeLabel,
       icon: node.type === 'object' ? 'Folder' : node.type === 'number' ? 'Hash' : 'FileText',
       id: node.id,
       templateId: node.templateId || node.id,

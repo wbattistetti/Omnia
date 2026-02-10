@@ -30,6 +30,8 @@ import type { useResponseEditorCore } from '@responseEditor/hooks/useResponseEdi
 import type { useResponseEditorHandlers } from '@responseEditor/hooks/useResponseEditorHandlers';
 import { DialogueTaskService } from '@services/DialogueTaskService';
 import { ResponseEditorContext, useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
+import { generalizeLabel } from '../../../../../TaskBuilderAIWizard/services/TemplateCreationService';
+import { TranslationType } from '@types/translationTypes';
 
 // ✅ ARCHITECTURE: Props interface with only necessary values (no monolithic editor object)
 export interface ResponseEditorLayoutProps {
@@ -329,18 +331,83 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
 
   // ✅ FIX: Handler to save to Factory with loading state and dematerialization filter
   const handleSaveToFactory = React.useCallback(async () => {
-    if (!shouldBeGeneral || !wizardIntegrationProp) return;
+    if (!shouldBeGeneral || !wizardIntegrationProp) {
+      return;
+    }
 
     setIsSaving(true);
 
     try {
       // Get all templates from DialogueTaskService cache
       const templates = DialogueTaskService.getAllTemplates();
-      const wizardTemplates = templates.filter(t =>
-        wizardIntegrationProp.dataSchema?.some(node =>
-          (node.templateId || node.id) === (t.id || t._id)
-        )
-      );
+
+      // ✅ FIX: Raccogli TUTTI i nodi (root + sub-nodi) ricorsivamente
+      // Ogni nodo corrisponde a un task con: steps, contract, constraints, subTasksIds
+      const collectAllNodeIds = (nodes: typeof wizardIntegrationProp.dataSchema): string[] => {
+        const ids: string[] = [];
+        if (!nodes) return ids;
+        for (const node of nodes) {
+          const nodeId = node.templateId || node.id;
+          ids.push(nodeId);
+          console.log('[handleSaveToFactory] 🔍 Collecting node ID', {
+            nodeLabel: node.label,
+            nodeId,
+            templateId: node.templateId,
+            id: node.id,
+            hasSubNodes: !!node.subNodes,
+            subNodesCount: node.subNodes?.length,
+          });
+          if (node.subNodes && node.subNodes.length > 0) {
+            ids.push(...collectAllNodeIds(node.subNodes));
+          }
+        }
+        return ids;
+      };
+
+      const allWizardNodeIds = new Set(collectAllNodeIds(wizardIntegrationProp.dataSchema));
+
+      console.log('[handleSaveToFactory] 📊 Collected node IDs', {
+        totalNodes: allWizardNodeIds.size,
+        nodeIds: Array.from(allWizardNodeIds),
+        dataSchemaLength: wizardIntegrationProp.dataSchema?.length,
+        rootNode: wizardIntegrationProp.dataSchema?.[0] ? {
+          label: wizardIntegrationProp.dataSchema[0].label,
+          id: wizardIntegrationProp.dataSchema[0].id,
+          templateId: wizardIntegrationProp.dataSchema[0].templateId,
+        } : null,
+      });
+
+      console.log('[handleSaveToFactory] 📊 Templates in cache', {
+        totalTemplates: templates.length,
+        templateIds: templates.map(t => t.id || t._id),
+        templateLabels: templates.map(t => t.label),
+      });
+
+      // ✅ FIX: Filtra template che corrispondono a QUALSIASI nodo (root o sub-nodo)
+      // Ogni nodo = un task separato con i suoi step, contract, constraints, subTasksIds
+      const wizardTemplates = templates.filter(t => {
+        const templateId = t.id || t._id;
+        const matches = allWizardNodeIds.has(templateId);
+        if (matches) {
+          console.log('[handleSaveToFactory] ✅ Template matches', {
+            templateId,
+            label: t.label,
+            hasSubTasksIds: !!t.subTasksIds,
+            subTasksIds: t.subTasksIds,
+          });
+        }
+        return matches;
+      });
+
+      console.log('[handleSaveToFactory] 📊 Filtered wizard templates', {
+        count: wizardTemplates.length,
+        templates: wizardTemplates.map(t => ({
+          id: t.id || t._id,
+          label: t.label,
+          hasSubTasksIds: !!t.subTasksIds,
+          subTasksIds: t.subTasksIds,
+        })),
+      });
 
       if (wizardTemplates.length === 0) {
         console.warn('[ResponseEditorLayout] ⚠️ No templates found to save to Factory');
@@ -348,24 +415,120 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         return;
       }
 
+      // ✅ FIX: Create a map of original ID -> saved template ID for sub-tasks
+      // This ensures subTasksIds contains the actual IDs of saved templates (GUIDs), not simple names
+      const templateIdMap = new Map<string, string>();
+      wizardTemplates.forEach(t => {
+        const originalId = t.id || t._id;
+        // The saved template will have the same ID (or _id if MongoDB generates one)
+        // For now, we use the original ID, but we'll update subTasksIds after saving
+        templateIdMap.set(originalId, originalId);
+      });
+
       // ✅ FIX: Dematerialize templates - remove any materialized fields (nodes, subNodes, data)
       // Templates should only contain references (subTasksIds), not materialized children
+      // ✅ NEW: Remove 'name' field - templates are identified by 'id' only
       const templatesToSave = wizardTemplates.map(t => {
-        // Remove any materialized fields that shouldn't be in the template
-        const { nodes, subNodes, data, ...templateFields } = t;
+        // ✅ FIX: Rimuovi _id, nodes, subNodes, data, createdAt, name (campi che non devono essere salvati)
+        const { _id, nodes, subNodes, data, createdAt, name, ...templateFields } = t;
 
-        if (generalizedLabel && wizardIntegrationProp.dataSchema?.[0]?.id === (t.id || t._id)) {
-          // Root template: use generalizedLabel
-          return {
+        const isRoot = generalizedLabel && wizardIntegrationProp.dataSchema?.[0]?.id === (t.id || t._id);
+
+        if (isRoot) {
+          // Root template: use generalizedLabel for label
+          // ✅ FIX: Map subTasksIds to actual template IDs (GUIDs, not simple names)
+          const originalSubTasksIds = templateFields.subTasksIds || [];
+          const mappedSubTasksIds = originalSubTasksIds.map((subId: string) => {
+            // Find the corresponding template
+            const subTemplate = wizardTemplates.find(st => (st.id || st._id) === subId);
+            if (subTemplate) {
+              // Use the template's ID (which should be a GUID or the actual ID)
+              const mappedId = subTemplate.id || subTemplate._id;
+              const isGuid = mappedId.startsWith('node-') || mappedId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+              console.log('[handleSaveToFactory] 🔄 Mapping subTaskId', {
+                originalId: subId,
+                mappedId,
+                isGuid,
+                subTemplateLabel: subTemplate.label,
+              });
+              if (!isGuid) {
+                console.warn('[handleSaveToFactory] ⚠️ Sub-task ID is not a GUID', {
+                  subId,
+                  mappedId,
+                  subTemplateLabel: subTemplate.label,
+                  message: 'Sub-task should have GUID ID, not simple name. This may cause issues when loading templates.',
+                });
+              }
+              return mappedId;
+            }
+            // If not found, keep original (should not happen)
+            console.warn('[handleSaveToFactory] ⚠️ Sub-task template not found for ID', { subId });
+            return subId;
+          });
+
+          const rootTemplate = {
             ...templateFields,
-            name: generalizedLabel.toLowerCase().replace(/\s+/g, '_'),
-            label: generalizedLabel
+            // ✅ REMOVED: name field - templates are identified by id only
+            label: generalizedLabel,  // Keep full generalized label for display
+            subTasksIds: mappedSubTasksIds.length > 0 ? mappedSubTasksIds : undefined,
           };
+          console.log('[handleSaveToFactory] ✅ Root template prepared for save', {
+            originalId: t.id || t._id,
+            originalLabel: t.label,
+            generalizedLabel,
+            newLabel: rootTemplate.label,  // ✅ Uses full generalized label for display
+            originalSubTasksIds,
+            mappedSubTasksIds,
+            hasSubTasksIds: !!rootTemplate.subTasksIds,
+            subTasksIds: rootTemplate.subTasksIds,
+          });
+          return rootTemplate;
         }
+
+        console.log('[handleSaveToFactory] ✅ Sub-task template prepared for save', {
+          id: t.id || t._id,
+          label: t.label,
+          hasSubTasksIds: !!t.subTasksIds,
+          subTasksIds: t.subTasksIds,
+          // ✅ REMOVED: name field - templates are identified by id only
+        });
         return templateFields;
       });
 
+      console.log('[handleSaveToFactory] 📦 Final templates to save', {
+        count: templatesToSave.length,
+        templates: templatesToSave.map(t => ({
+          id: t.id,
+          label: t.label,
+          hasSubTasksIds: !!t.subTasksIds,
+          subTasksIds: t.subTasksIds,
+          isRoot: generalizedLabel && wizardIntegrationProp.dataSchema?.[0]?.id === (t.id || t._id),
+          // ✅ REMOVED: name field - templates are identified by id only
+        })),
+        rootTemplate: templatesToSave.find(t =>
+          generalizedLabel && wizardIntegrationProp.dataSchema?.[0]?.id === (t.id || t._id)
+        ) ? {
+          id: templatesToSave.find(t =>
+            generalizedLabel && wizardIntegrationProp.dataSchema?.[0]?.id === (t.id || t._id)
+          )?.id,
+          name: templatesToSave.find(t =>
+            generalizedLabel && wizardIntegrationProp.dataSchema?.[0]?.id === (t.id || t._id)
+          )?.name,
+          label: templatesToSave.find(t =>
+            generalizedLabel && wizardIntegrationProp.dataSchema?.[0]?.id === (t.id || t._id)
+          )?.label,
+        } : null,
+      });
+
       // ✅ Save templates to Factory DB in bulk (faster)
+      console.log('[handleSaveToFactory] 📤 Sending templates to backend', {
+        count: templatesToSave.length,
+        payload: templatesToSave.map(t => ({
+          id: t.id,
+          label: t.label,
+        })),
+      });
+
       const response = await fetch('/api/factory/dialogue-templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -389,13 +552,60 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
           }))
         });
 
+        // ✅ NEW: Save translations for all templates (type: LABEL, projectId: null)
+        // Get current IDE language
+        const currentLanguage = (() => {
+          try {
+            return (localStorage.getItem('project.lang') || 'it') as 'it' | 'en' | 'pt';
+          } catch {
+            return 'it';
+          }
+        })();
+
+        // Prepare translations array: one translation per template
+        const translationsToSave = templatesToSave
+          .filter(t => t.id && t.label) // Only templates with id and label
+          .map(t => ({
+            guid: t.id!,
+            language: currentLanguage,
+            text: t.label || '',
+            type: TranslationType.LABEL,
+            projectId: null, // ✅ CRITICAL: IDE translations have projectId: null
+          }));
+
+        if (translationsToSave.length > 0) {
+          console.log('[handleSaveToFactory] 📝 Saving translations', {
+            count: translationsToSave.length,
+            language: currentLanguage,
+            translations: translationsToSave.map(t => ({
+              guid: t.guid,
+              text: t.text,
+            })),
+          });
+
+          const translationResponse = await fetch('/api/factory/template-label-translations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ translations: translationsToSave }),
+          });
+
+          if (translationResponse.ok) {
+            console.log('[handleSaveToFactory] ✅ Translations saved to Factory');
+          } else {
+            const errorText = await translationResponse.text();
+            console.error('[handleSaveToFactory] ⚠️ Failed to save translations:', errorText);
+            // Don't throw - template save succeeded, translation save is secondary
+          }
+        }
+
         // ✅ Reload Factory templates cache immediately
         await DialogueTaskService.reloadFactoryTemplates();
         console.log('[ResponseEditorLayout] ✅ Factory templates cache reloaded');
 
         setSaveDecision('factory');
         setSaveDecisionMade(true);
-        setShowSaveDialog(false);
+        // ✅ FIX: Close dialog only after saving is complete (in finally block)
+        // Don't close here - let finally block handle it
       } else {
         const errorText = await response.text();
         throw new Error(`Failed to save to Factory: ${response.status} ${errorText}`);
@@ -404,7 +614,10 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
       console.error('[ResponseEditorLayout] ❌ Error saving to Factory:', error);
       alert(`Error saving to Factory: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
+      // ✅ FIX: Close dialog and reset saving state in finally block
+      // This ensures spinner is visible during the entire save operation
       setIsSaving(false);
+      setShowSaveDialog(false);
     }
   }, [wizardIntegrationProp, shouldBeGeneral, generalizedLabel]);
 
@@ -488,6 +701,8 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
       currentStep: wizardIntegrationProp.currentStep, // DEPRECATED
       pipelineSteps: wizardIntegrationProp.pipelineSteps,
       dataSchema: wizardIntegrationProp.dataSchema,
+      // ✅ NEW: Add generalizedLabel to wizardProps
+      generalizedLabel: wizardIntegrationProp.generalizedLabel,
       onProceedFromEuristica: wizardIntegrationProp.onProceedFromEuristica,
       onShowModuleList: wizardIntegrationProp.onShowModuleList,
       onSelectModule: wizardIntegrationProp.onSelectModule,
@@ -515,6 +730,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     wizardIntegrationProp?.correctionInput,
     wizardIntegrationProp?.currentParserSubstep,
     wizardIntegrationProp?.currentMessageSubstep,
+    wizardIntegrationProp?.generalizedLabel,
     wizardIntegrationProp?.handleStructureConfirm,
     wizardIntegrationProp?.handleStructureReject,
     wizardIntegrationProp?.onProceedFromEuristica,
@@ -527,59 +743,10 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   // ✅ NEW: Converti dataSchema in mainList quando taskWizardMode === 'full'
   // La Sidebar ha bisogno di mainList, non di WizardTaskTreeNode[]
   const effectiveMainList = React.useMemo(() => {
-    console.log('[ResponseEditorLayout] 🔍 effectiveMainList calculation START', {
-      taskWizardMode,
-      hasWizardIntegration: !!wizardIntegrationProp,
-      dataSchemaLength: wizardIntegrationProp?.dataSchema?.length,
-      dataSchemaStructure: wizardIntegrationProp?.dataSchema?.map(n => ({
-        id: n.id,
-        templateId: n.templateId,
-        label: n.label,
-        hasSubNodes: !!n.subNodes,
-        subNodesCount: n.subNodes?.length,
-      })),
-      mainListLength: mainList.length,
-      mainListStructure: mainList.map(m => ({
-        id: m.id,
-        templateId: m.templateId,
-        label: m.label,
-        hasSubNodes: !!m.subNodes,
-        subNodesCount: m.subNodes?.length,
-      })),
-    });
-
     if (taskWizardMode === 'full' && wizardIntegrationProp?.dataSchema) {
-      console.log('[ResponseEditorLayout] 🔄 Converting dataSchema to mainList', {
-        dataSchemaLength: wizardIntegrationProp.dataSchema.length,
-        dataSchemaFirstNode: wizardIntegrationProp.dataSchema[0],
-      });
-
       const converted = convertWizardTaskTreeToMainList(wizardIntegrationProp.dataSchema);
-
-      console.log('[ResponseEditorLayout] ✅ Converted dataSchema to mainList', {
-        dataSchemaLength: wizardIntegrationProp.dataSchema.length,
-        convertedLength: converted.length,
-        convertedStructure: converted.map(m => ({
-          id: m.id,
-          templateId: m.templateId,
-          label: m.label,
-          hasSubNodes: !!m.subNodes,
-          subNodesCount: m.subNodes?.length,
-        })),
-      });
-
       return converted;
     }
-
-    console.log('[ResponseEditorLayout] ⏸️ Using original mainList', {
-      mainListLength: mainList.length,
-      mainListStructure: mainList.map(m => ({
-        id: m.id,
-        templateId: m.templateId,
-        label: m.label,
-      })),
-    });
-
     return mainList;
   }, [taskWizardMode, wizardIntegrationProp?.dataSchema, mainList]);
 
