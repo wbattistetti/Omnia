@@ -4,6 +4,7 @@ import { ProjectData } from '../types/project';
 import { useAIProvider, AI_PROVIDERS } from '../context/AIProviderContext';
 import { useFontStore } from '../state/fontStore';
 import { useBackendType } from '../context/BackendTypeContext';
+import { useEngineType } from '../context/EngineTypeContext';
 
 export interface ToolbarProps {
   onHome: () => void;
@@ -29,6 +30,7 @@ export function Toolbar({
   const { provider, model, setProvider, setModel, providerConfig, availableModels } = useAIProvider();
   const { fontType, fontSize, setFontType, setFontSize } = useFontStore();
   const { backendType, setBackendType } = useBackendType();
+  const { engineType, setEngineType } = useEngineType();
   const [showSettingsDropdown, setShowSettingsDropdown] = useState(false);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -204,6 +206,33 @@ export function Toolbar({
             title="Use VB.NET backend (localhost:5000, debuggable in Visual Studio)"
           >
             VB.NET
+          </button>
+        </div>
+
+        {/* Engine Type Toggle (V1/Serverless) */}
+        <div className="flex items-center gap-1 px-2 py-1 rounded border bg-slate-700 border-slate-600">
+          <span className="text-xs text-slate-400">Engine:</span>
+          <button
+            onClick={() => setEngineType('v1')}
+            className={`px-2 py-0.5 text-xs rounded transition-colors ${
+              engineType === 'v1'
+                ? 'bg-green-600 text-white'
+                : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+            }`}
+            title="Use Engine V1 (original Motore.vb)"
+          >
+            V1
+          </button>
+          <button
+            onClick={() => setEngineType('serverless')}
+            className={`px-2 py-0.5 text-xs rounded transition-colors ${
+              engineType === 'serverless'
+                ? 'bg-green-600 text-white'
+                : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+            }`}
+            title="Use Serverless Engine (step-based, stateless)"
+          >
+            Serverless
           </button>
         </div>
 
