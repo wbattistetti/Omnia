@@ -49,7 +49,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
 
   // ✅ Handler per aprire dialog
   const handleOpenSaveDialog = React.useCallback(() => {
-    console.log('[ResponseEditorInner] 🔔 Opening save dialog');
     setShowSaveDialog(true);
   }, []);
 
@@ -59,7 +58,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       try {
         validateTaskTreeStructure(taskTree, 'ResponseEditor');
       } catch (error) {
-        console.error('[ResponseEditor] Invalid TaskTree structure:', error);
         // Error is logged but doesn't crash the app - allows graceful degradation
       }
     }
@@ -199,7 +197,6 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     ) {
       hasLocalOverrideRef.current = true;
       setEffectiveTaskWizardMode('none');
-      console.log('[ResponseEditorInner] ✅ A1: Resetting taskWizardMode to "none" after wizard completion');
     }
   }, [shouldTransitionToNone, effectiveTaskWizardMode]);
 
