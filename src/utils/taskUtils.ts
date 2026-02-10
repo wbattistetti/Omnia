@@ -297,13 +297,6 @@ async function loadTemplateFromProject(templateId: string, projectId: string): P
     const tasks = Array.isArray(data) ? data : (data.items || []);
 
     if (!Array.isArray(tasks)) {
-      console.error('[loadTemplateFromProject] Invalid response format - tasks is not an array', {
-        dataType: typeof data,
-        dataKeys: Object.keys(data || {}),
-        hasItems: !!data?.items,
-        itemsType: typeof data?.items,
-        itemsIsArray: Array.isArray(data?.items)
-      });
       return null;
     }
 
@@ -311,7 +304,6 @@ async function loadTemplateFromProject(templateId: string, projectId: string): P
     const template = tasks.find((t: any) => t.id === templateId && t.templateId === null);
     return template || null;
   } catch (error) {
-    console.error('[loadTemplateFromProject] Error loading template from project:', error);
     return null;
   }
 }
@@ -380,13 +372,6 @@ export async function ensureTemplateExists(
   }
 
   const saved = await response.json();
-
-  console.log('[ensureTemplateExists] ✅ Template creato automaticamente nel progetto', {
-    templateId: newTemplateId,
-    projectId,
-    label: saved.label,
-    subTasksIdsCount: saved.subTasksIds?.length || 0
-  });
 
   return saved;
 }
@@ -533,13 +518,11 @@ export function markTaskAsEdited(
   // ✅ Lookup diretto: O(1) invece di O(n) filter
   const nodeSteps = steps?.[templateId];
   if (!nodeSteps || typeof nodeSteps !== 'object') {
-    console.warn('[markTaskAsEdited] ⚠️ TemplateId non trovato', { templateId, availableKeys: Object.keys(steps || {}) });
     return;
   }
 
   const step = nodeSteps[stepType];
   if (!step || !Array.isArray(step.escalations)) {
-    console.warn('[markTaskAsEdited] ⚠️ StepType non trovato', { templateId, stepType, availableStepTypes: Object.keys(nodeSteps) });
     return;
   }
 
@@ -552,14 +535,6 @@ export function markTaskAsEdited(
       return; // ✅ Trovato e modificato
     }
   }
-
-  console.warn('[markTaskAsEdited] ⚠️ Escalation o task non trovato', {
-    templateId,
-    stepType,
-    escalationIndex,
-    taskIndex,
-    escalationsCount: step.escalations.length
-  });
 }
 
 /**
@@ -785,10 +760,6 @@ export function cloneTemplateSteps(
   // Helper function to materialize steps from a template
   const materializeStepsFromTemplate = (sourceTemplate: any, nodeTemplateId: string): void => {
     if (!sourceTemplate || !sourceTemplate.steps) {
-      console.warn('⚠️ [materializeStepsFromTemplate] Template senza steps', {
-        nodeTemplateId,
-        templateId: sourceTemplate?.id || sourceTemplate?._id
-      });
       return;
     }
 
@@ -849,13 +820,6 @@ export function cloneTemplateSteps(
       return;
     }
 
-    // ❌ Steps non trovati
-    console.warn('⚠️ [materializeStepsFromTemplate] Steps non trovati', {
-      nodeTemplateId,
-      templateId: sourceTemplate.id || sourceTemplate._id,
-      templateHasSteps: true,
-      templateStepsKeys: sourceStepsKeys
-    });
   };
 
   // ✅ Se nodes è fornito, usa i templateId dall'albero montato (PREFERRED)
@@ -864,7 +828,6 @@ export function cloneTemplateSteps(
     const processNode = (node: TaskTreeNode): void => {
       const templateId = node.templateId;
       if (!templateId) {
-        console.warn('⚠️ [cloneTemplateSteps] Node senza templateId', { nodeId: node.id, nodeLabel: node.label });
         return;
       }
 
@@ -876,8 +839,6 @@ export function cloneTemplateSteps(
         const atomicTemplate = DialogueTaskService.getTemplate(templateId);
         if (atomicTemplate) {
           materializeStepsFromTemplate(atomicTemplate, templateId);
-        } else {
-          console.warn('⚠️ [cloneTemplateSteps] Template atomico non trovato', { templateId });
         }
       } else {
         // ✅ This is a main data node - get steps from main template
@@ -897,23 +858,9 @@ export function cloneTemplateSteps(
       processNode(mainNode);
     });
 
-    console.log('[🔍 cloneTemplateSteps] ✅ Steps materializzati', {
-      templateIdsCount: Object.keys(stepsDict).length,
-      stepsDetails: Object.entries(stepsDict).map(([templateId, nodeSteps]) => ({
-        templateId,
-        stepTypes: Object.keys(nodeSteps),
-        totalSteps: Object.keys(nodeSteps).length
-      }))
-    });
-
     return { steps: stepsDict, guidMapping: allGuidMappings };
   }
 
-  // ❌ NO FALLBACK: nodes è richiesto
-  console.warn('⚠️ [cloneTemplateSteps] nodes non fornito - impossibile clonare steps', {
-    templateId: template.id || template._id,
-    templateLabel: template.label || template.name
-  });
   return { steps: {}, guidMapping: new Map<string, string>() };
 }
 
@@ -977,7 +924,6 @@ export function buildTaskTreeNodes(template: any): TaskTreeNode[] {
   const buildNode = (subTaskId: string): TaskTreeNode => {
     const subTemplate = DialogueTaskService.getTemplate(subTaskId);
     if (!subTemplate) {
-      console.warn('[buildTaskTreeNodes] Sub-template not found:', subTaskId);
       return {
         id: subTaskId,
         templateId: subTaskId,
@@ -1046,10 +992,6 @@ export function buildTaskTreeNodes(template: any): TaskTreeNode[] {
   // Template semplice
   if (!template.label && !template.name) {
     const labelForHeuristics = template.id || 'UNKNOWN';
-    console.warn('[buildTaskTreeNodes] Label mancante nel template semplice, uso ID come fallback tecnico per euristiche', {
-      templateId: template.id,
-      fallbackLabel: labelForHeuristics
-    });
   }
 
   const simpleNode: TaskTreeNode = {
@@ -1139,12 +1081,6 @@ export async function buildTaskTree(
     }
 
     // ✅ Crea template automaticamente nel progetto
-    console.warn('[buildTaskTree] Task senza templateId - creando template automaticamente', {
-      taskId: instance.id,
-      taskLabel: instance.label,
-      projectId
-    });
-
     const autoTemplate = await ensureTemplateExists(instance, undefined, projectId);
     instance.templateId = autoTemplate.id;
   }
@@ -1175,28 +1111,6 @@ export async function buildTaskTree(
       : {};
   let stepsWereCloned = false;
 
-  console.log('[buildTaskTree] 🔍 Loading steps from instance', {
-    taskId: instance.id,
-    hasInstanceSteps: !!instance.steps,
-    instanceStepsType: typeof instance.steps,
-    isInstanceStepsArray: Array.isArray(instance.steps),
-    instanceStepsKeys: instance.steps && typeof instance.steps === 'object' && !Array.isArray(instance.steps)
-      ? Object.keys(instance.steps)
-      : [],
-    instanceStepsContent: instance.steps,
-    nodeTemplateIds: nodes.map(n => n.templateId),
-    // ✅ NEW: Verifica mismatch templateId
-    templateIdMismatch: nodes.length > 0 && instance.steps && typeof instance.steps === 'object' && !Array.isArray(instance.steps)
-      ? {
-          nodeTemplateId: nodes[0].templateId,
-          stepsTemplateIds: Object.keys(instance.steps),
-          match: Object.keys(instance.steps).includes(nodes[0].templateId || ''),
-          nodeId: nodes[0].id,
-          nodeLabel: nodes[0].label,
-          instanceTemplateId: instance.templateId,
-        }
-      : null,
-  });
 
   if (!finalSteps || Object.keys(finalSteps).length === 0) {
     // ✅ Prima creazione: clona steps dal template
@@ -1206,7 +1120,6 @@ export async function buildTaskTree(
   } else {
     // ✅ Verifica che sia dictionary (non array legacy)
     if (Array.isArray(finalSteps)) {
-      console.warn('[buildTaskTree] ⚠️ Steps è un array (legacy), convertendo in dictionary');
       // ✅ Converti array legacy in dictionary (se necessario)
       finalSteps = {};
     }
@@ -1222,15 +1135,6 @@ export async function buildTaskTree(
     if (existingTask) {
       // ✅ Aggiorna solo gli step, mantenendo tutti gli altri campi
       taskRepository.updateTask(instance.id, { steps: finalSteps }, projectId);
-      console.log('[buildTaskTree] ✅ Steps clonati salvati nell\'istanza in memoria', {
-        taskId: instance.id,
-        templateId: instance.templateId,
-        templateIdsCount: Object.keys(finalSteps).length
-      });
-    } else {
-      console.warn('[buildTaskTree] ⚠️ Istanza non trovata in TaskRepository, non posso salvare gli step clonati', {
-        taskId: instance.id
-      });
     }
   }
 
@@ -1245,26 +1149,6 @@ export async function buildTaskTree(
     dataContract: template.dataContract ?? undefined,
     introduction: template.introduction ?? instance.introduction
   };
-
-  // ✅ NEW: Log finale con verifica mismatch
-  console.log('[buildTaskTree] ✅ TaskTree built', {
-    taskId: instance.id,
-    nodesLength: nodes.length,
-    stepsKeys: Object.keys(finalSteps),
-    stepsCount: Object.keys(finalSteps).length,
-    // ✅ NEW: Verifica mismatch finale
-    templateIdMismatch: nodes.length > 0 && finalSteps && typeof finalSteps === 'object' && !Array.isArray(finalSteps)
-      ? {
-          nodeTemplateId: nodes[0].templateId,
-          stepsTemplateIds: Object.keys(finalSteps),
-          match: Object.keys(finalSteps).includes(nodes[0].templateId || ''),
-          nodeId: nodes[0].id,
-          nodeLabel: nodes[0].label,
-          instanceTemplateId: instance.templateId,
-          templateId: template.id,
-        }
-      : null,
-  });
 
   return result;
 }
@@ -1319,8 +1203,6 @@ async function copyTranslationsForClonedSteps(_ddt: any, _templateId: string, gu
       const translationsContext = (window as any).__projectTranslationsContext;
       if (translationsContext && translationsContext.addTranslations) {
         translationsContext.addTranslations(instanceTranslations);
-      } else {
-        console.warn('[copyTranslationsForClonedSteps] ProjectTranslationsContext not available, will save to DB only');
       }
 
       // ✅ Always save directly to database (even if context is not available)
@@ -1359,18 +1241,16 @@ async function copyTranslationsForClonedSteps(_ddt: any, _templateId: string, gu
             try {
               await translationsContext.loadAllTranslations();
             } catch (reloadErr) {
-              console.warn('[copyTranslationsForClonedSteps] Failed to reload translations in context:', reloadErr);
+              // Silent fail
             }
           }
-        } else {
-          console.warn('[copyTranslationsForClonedSteps] No project ID available, cannot save to database');
         }
       } catch (saveErr) {
-        console.error('[copyTranslationsForClonedSteps] Error saving translations to database:', saveErr);
+        // Silent fail
       }
     }
   } catch (err) {
-    console.error('[copyTranslationsForClonedSteps] Error copying translations:', err);
+    // Silent fail
   }
 }
 

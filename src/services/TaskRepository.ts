@@ -35,7 +35,6 @@ class TaskRepository {
     if (cachedTask) {
       // ✅ CRITICAL: If task is missing 'type', it's invalid (loaded before type was added)
       if (cachedTask.type === undefined || cachedTask.type === null) {
-        console.warn(`[TaskRepository] Task ${taskId} in memory is missing 'type' field - this task needs to be reloaded from database`);
         // Return null to force reload from database
         return null;
       }
@@ -72,16 +71,6 @@ class TaskRepository {
       updatedAt: new Date()
     };
 
-    // ✅ LOG: Verifica templateId dopo creazione
-    console.log('[🔍 TaskRepository][CREATE] ✅ Task creato', {
-      taskId: finalTaskId,
-      templateId: task.templateId,
-      templateIdFromParam: templateId,
-      fieldsTemplateId: fields?.templateId,
-      finalTemplateId: task.templateId,
-      fieldsKeys: fields ? Object.keys(fields) : []
-    });
-
     // ✅ Save to internal storage only (in-memory)
     // ✅ NO automatic database save - save only on explicit user action (project:save event)
     this.tasks.set(finalTaskId, task);
@@ -96,7 +85,6 @@ class TaskRepository {
     // Check internal storage first
     const existingTask = this.tasks.get(taskId);
     if (!existingTask) {
-      console.warn('[TaskRepository] Task not found:', taskId);
       return false;
     }
 
@@ -109,7 +97,6 @@ class TaskRepository {
 
     // ✅ CRITICAL: Ensure type is always present
     if (finalType === undefined || finalType === null) {
-      console.error(`[TaskRepository] Cannot update task ${taskId} - type field is missing. This task is invalid.`);
       return false;
     }
 
@@ -128,17 +115,7 @@ class TaskRepository {
       const hasWrongStructure = stepsKeys.length === stepTypeKeys.length &&
         stepsKeys.every(key => stepTypeKeys.includes(key));
 
-      if (hasWrongStructure) {
-        const stackTrace = new Error().stack?.split('\n').slice(1, 6).join('\n') || 'No stack trace';
-        console.error('[🔍 TaskRepository][UPDATE] ❌ CRITICAL: Wrong steps structure detected!', {
-          taskId,
-          stepsKeys,
-          stepsKeysAsStrings: stepsKeys.join(', '),
-          expectedStructure: 'Object with templateId keys (e.g., { "templateId": { start: {...}, ... } })',
-          actualStructure: 'Object with step type keys (e.g., { "start": {...}, "noMatch": {...} })',
-          caller: stackTrace
-        });
-      }
+      // Structure validation (silent)
     }
 
     // ✅ CRITICAL: Se updates.data è presente, fa merge profondo dei node per preservare nlpProfile
@@ -169,22 +146,6 @@ class TaskRepository {
             testNotes: updatedNode.testNotes || existingNode.testNotes
           };
 
-          // ✅ DEBUG: Log del merge per verificare che examples sia preservato
-          if (mergedNode.nlpProfile?.examples) {
-            console.log('[TaskRepository] updateTask - Deep merge preserved nlpProfile.examples', {
-              taskId,
-              nodeId: mergedNode.id,
-              nodeTemplateId: mergedNode.templateId,
-              updatedNodeHasNlpProfile: !!updatedNode.nlpProfile,
-              updatedNodeHasExamples: !!updatedNode.nlpProfile?.examples,
-              updatedNodeExamplesCount: updatedNode.nlpProfile?.examples?.length || 0,
-              existingNodeHasNlpProfile: !!existingNode.nlpProfile,
-              existingNodeHasExamples: !!existingNode.nlpProfile?.examples,
-              existingNodeExamplesCount: existingNode.nlpProfile?.examples?.length || 0,
-              mergedNodeHasExamples: !!mergedNode.nlpProfile?.examples,
-              mergedNodeExamplesCount: mergedNode.nlpProfile.examples.length
-            });
-          }
 
           return mergedNode;
         }
@@ -207,14 +168,6 @@ class TaskRepository {
     // ✅ NO automatic database save - save only on explicit user action (project:save event)
     this.tasks.set(taskId, updatedTask);
 
-    // ✅ DEBUG: Verifica che data[0].nlpProfile.examples sia presente dopo l'aggiornamento
-    if (updatedTask.data?.[0]?.nlpProfile?.examples) {
-      console.log('[TaskRepository] updateTask - Cache updated with examples', {
-        taskId,
-        examplesCount: updatedTask.data[0].nlpProfile.examples.length,
-        examples: updatedTask.data[0].nlpProfile.examples.slice(0, 3)
-      });
-    }
 
     return true;
   }
@@ -234,11 +187,9 @@ class TaskRepository {
           method: 'DELETE'
         });
         if (!response.ok) {
-          console.error('[TaskRepository] Failed to delete task from database');
           return false;
         }
       } catch (err) {
-        console.error('[TaskRepository] Error deleting task from database:', err);
         return false;
       }
     }
@@ -271,13 +222,11 @@ class TaskRepository {
 
     try {
       if (!finalProjectId) {
-        console.warn('[📥 LOAD_TASKS] No project ID available');
         return false;
       }
 
       const response = await fetch(`/api/projects/${finalProjectId}/tasks`);
       if (!response.ok) {
-        console.error('[📥 LOAD_TASKS] Failed to fetch', { projectId: finalProjectId, status: response.status });
         return false;
       }
 
@@ -295,10 +244,6 @@ class TaskRepository {
 
         // ✅ CRITICAL: type is REQUIRED - must be saved correctly in database
         if (taskType === undefined || taskType === null) {
-          console.error('[TaskRepository] Task without type - SKIPPED', {
-            taskId: id,
-            availableFields: Object.keys(item)
-          });
           continue;
         }
 
@@ -314,48 +259,13 @@ class TaskRepository {
           updatedAt: item.updatedAt ? new Date(item.updatedAt) : undefined
         };
 
-        // ✅ DEBUG: Log nlpProfile.examples quando carichi dal database
-        const firstNodeNlpProfileExamples = task.data?.[0]?.nlpProfile?.examples;
-        if (firstNodeNlpProfileExamples || task.data?.[0]?.nlpProfile) {
-          console.log('[EXAMPLES] LOAD - From database', {
-            taskId: task.id,
-            hasData: !!task.data,
-            dataLength: task.data?.length || 0,
-            firstNodeId: task.data?.[0]?.id,
-            hasFirstNodeNlpProfile: !!task.data?.[0]?.nlpProfile,
-            firstNodeNlpProfileKeys: task.data?.[0]?.nlpProfile ? Object.keys(task.data[0].nlpProfile) : [],
-            hasFirstNodeNlpProfileExamples: !!firstNodeNlpProfileExamples,
-            firstNodeNlpProfileExamplesCount: Array.isArray(firstNodeNlpProfileExamples) ? firstNodeNlpProfileExamples.length : 0,
-            firstNodeNlpProfileExamples: firstNodeNlpProfileExamples?.slice(0, 3)
-          });
-        }
-
-        // ✅ LOG: Check dataContract in loaded task
-        if (task.data && Array.isArray(task.data) && task.data.length > 0) {
-          const firstNode = task.data[0];
-          const regexPattern = firstNode.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
-          console.log('[REGEX] LOAD - From database', {
-            taskId: task.id,
-            firstNodeId: firstNode.id,
-            regexPattern: regexPattern || '(none)'
-          });
-        }
-
         // ✅ CLEANUP: Rimuovi constraints/examples vuoti (sono referenziati dal template, non salvati)
         // ✅ Se constraints/examples sono array vuoti, rimuovili (useranno quelli del template)
         if (task.constraints && Array.isArray(task.constraints) && task.constraints.length === 0) {
           delete task.constraints;
-          console.log('[🔍 TaskRepository][LOAD] ✅ Cleanup: rimosso constraints vuoto (userà template)', {
-            taskId: task.id,
-            taskLabel: task.label
-          });
         }
         if (task.examples && Array.isArray(task.examples) && task.examples.length === 0) {
           delete task.examples;
-          console.log('[🔍 TaskRepository][LOAD] ✅ Cleanup: rimosso examples vuoto (userà template)', {
-            taskId: task.id,
-            taskLabel: task.label
-          });
         }
 
         // ✅ CRITICAL: Verifica e converte steps structure se necessario
@@ -371,11 +281,6 @@ class TaskRepository {
               stepsKeys.every(key => stepTypeKeys.includes(key));
 
             if (hasWrongStructure) {
-              console.warn('[🔍 TaskRepository][LOAD] ⚠️ Wrong steps structure detected - converting automatically', {
-                taskId: task.id,
-                oldStepsKeys: stepsKeys
-              });
-
               // ✅ CONVERSIONE AUTOMATICA: Converti dictionary in array MaterializedStep[]
               const stepsDict = task.steps as Record<string, any>;
               const materializedSteps: MaterializedStep[] = [];
@@ -392,11 +297,6 @@ class TaskRepository {
 
               // ✅ Sostituisci steps con la struttura corretta
               task.steps = materializedSteps;
-
-              console.log('[🔍 TaskRepository][LOAD] ✅ Steps converted to array', {
-                taskId: task.id,
-                newStepsCount: materializedSteps.length
-              });
             }
           }
         }
@@ -410,10 +310,6 @@ class TaskRepository {
       }));
       return true;
     } catch (error) {
-      console.error('[TaskRepository] Error loading tasks', {
-        projectId: finalProjectId,
-        error: error instanceof Error ? error.message : error
-      });
       return false;
     }
   }
@@ -428,7 +324,6 @@ class TaskRepository {
     try {
       const finalProjectId = projectId || this.getCurrentProjectId();
       if (!finalProjectId) {
-        console.warn('[TaskRepository] No project ID available for saving tasks');
         return false;
       }
 
@@ -441,7 +336,6 @@ class TaskRepository {
       const items = allTasks.map(task => {
         // ✅ CRITICAL: type is required - skip tasks without type
         if (task.type === undefined || task.type === null) {
-          console.error('[💾 SAVE_ALL] Task without type - SKIPPED', { taskId: task.id });
           return null;
         }
 
@@ -455,12 +349,6 @@ class TaskRepository {
         if (finalTemplateId !== null && typeof finalTemplateId === 'string') {
           const isSemanticString = ['SayMessage', 'Message', 'DataRequest', 'GetData', 'BackendCall', 'UNDEFINED'].includes(finalTemplateId);
           if (isSemanticString) {
-            console.warn('[💾 SAVE_ALL] Task has semantic templateId - converting to null', {
-              taskId: task.id,
-              templateId: finalTemplateId,
-              type: task.type,
-              typeName: TaskType[task.type]
-            });
             return {
               id: task.id,
               type: task.type,
@@ -477,28 +365,8 @@ class TaskRepository {
           ...fields  // ✅ Save fields directly
         };
 
-        // ✅ LOG: Verifica templateId prima del salvataggio
-        console.log('[🔍 TaskRepository][SAVE_ALL] 💾 Task da salvare', {
-          taskId: task.id,
-          taskTemplateId: task.templateId,
-          finalTemplateId: finalTemplateId,
-          hasTemplateId: !!finalTemplateId,
-          fieldsKeys: Object.keys(fields)
-        });
-
         return itemToSave;
       }).filter(item => item !== null);
-
-      console.log('[💾 SAVE_ALL] Sending', {
-        projectId: finalProjectId,
-        itemsCount: items.length,
-        itemsPreview: items.slice(0, 3).map(i => ({
-          id: i.id,
-          type: i.type,
-          typeName: TaskType[i.type],
-          templateId: i.templateId
-        }))
-      });
 
       const response = await fetch(`/api/projects/${finalProjectId}/tasks/bulk`, {
         method: 'POST',
@@ -507,18 +375,11 @@ class TaskRepository {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[💾 SAVE_ALL] Failed', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorText
-        });
         return false;
       }
 
       return true;
     } catch (error) {
-      console.error('[TaskRepository][SAVE_ALL] Error saving tasks:', error);
       return false;
     }
   }
@@ -531,7 +392,6 @@ class TaskRepository {
     try {
       // ✅ CRITICAL: type is required - cannot save task without type
       if (task.type === undefined || task.type === null) {
-        console.error('[💾 SAVE_TASK] Missing type - ABORT', { taskId: task.id });
         return false;
       }
 
@@ -571,14 +431,7 @@ class TaskRepository {
         const hasWrongStructure = stepsKeys.length === stepTypeKeys.length &&
           stepsKeys.every(key => stepTypeKeys.includes(key));
 
-        // ✅ Log solo se struttura sbagliata
-        if (hasWrongStructure) {
-          console.error('[🔍 TaskRepository][SAVE] ❌ CRITICAL: Saving wrong steps structure!', {
-            taskId: task.id,
-            stepsKeys,
-            stepsKeysAsStrings: stepsKeys.join(', ')
-          });
-        }
+        // Structure validation (silent)
         // ❌ RIMOSSO: log normale (troppo verboso)
       }
 
@@ -588,20 +441,13 @@ class TaskRepository {
         if (payload.steps) {
           const stepsString = JSON.stringify(payload.steps);
           if (stepsString.length > 10 * 1024 * 1024) { // 10MB limit
-            console.error('[TaskRepository] Steps too large:', {
-              taskId: task.id,
-              stepsSize: stepsString.length,
-              stepsKeys: Object.keys(payload.steps)
-            });
             // Remove steps if too large (should not happen, but safety check)
             delete payload.steps;
           }
         }
       } catch (e) {
-        console.error('[TaskRepository] Error validating payload:', e);
         // Remove steps if circular reference or other error
         if (payload.steps) {
-          console.warn('[TaskRepository] Removing steps due to serialization error');
           delete payload.steps;
         }
       }
@@ -615,31 +461,11 @@ class TaskRepository {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        let errorJson = null;
-        try {
-          errorJson = JSON.parse(errorText);
-        } catch {
-          // Not JSON, use text as is
-        }
-        console.error('[TaskRepository] Failed to save task:', {
-          taskId: task.id,
-          status: response.status,
-          error: errorJson || errorText.substring(0, 500),
-          taskType: task.type,
-          hasSteps: !!(task.steps),
-          stepsKeys: task.steps ? Object.keys(task.steps) : [],
-          hasData: !!(task.data),
-          dataLength: task.data ? task.data.length : 0,
-          payloadSize: payloadString.length,
-          payloadKeys: Object.keys(payload)
-        });
         return false;
       }
 
       return true;
     } catch (error) {
-      console.error('[TaskRepository] Error saving task:', { taskId: task.id, error });
       return false;
     }
   }
