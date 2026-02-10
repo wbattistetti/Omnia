@@ -122,12 +122,12 @@ export function registerDefaultElements(): void {
       id: 'sidebar-header',
       type: 'header',
       name: 'Header Sidebar',
-      properties: { 
-        background: '#3b82f6', 
-        color: '#ffffff', 
+      properties: {
+        background: '#3b82f6',
+        color: '#ffffff',
         borderColor: '#1d4ed8',
-        fontSize: '16px', 
-        fontWeight: '600' 
+        fontSize: '16px',
+        fontWeight: '600'
       },
       selector: '.sidebar-header, [data-theme-element="sidebar-header"]',
       editableProperties: ['background', 'color', 'borderColor', 'fontSize', 'fontWeight']
@@ -136,12 +136,12 @@ export function registerDefaultElements(): void {
       id: 'accordion-header',
       type: 'header',
       name: 'Header Accordion',
-      properties: { 
-        background: '#f3f4f6', 
-        color: '#374151', 
+      properties: {
+        background: '#f3f4f6',
+        color: '#374151',
         borderColor: '#d1d5db',
-        fontSize: '14px', 
-        fontWeight: '500' 
+        fontSize: '14px',
+        fontWeight: '500'
       },
       selector: '.sidebar-accordion-header, [data-theme-element="accordion-header"]',
       editableProperties: ['background', 'color', 'borderColor', 'fontSize', 'fontWeight']
@@ -150,12 +150,12 @@ export function registerDefaultElements(): void {
       id: 'flowchart-node',
       type: 'node',
       name: 'Nodo Flowchart',
-      properties: { 
-        background: '#ffffff', 
-        color: '#000000', 
-        borderColor: '#d1d5db', 
-        fontSize: '12px', 
-        fontWeight: '400' 
+      properties: {
+        background: '#ffffff',
+        color: '#000000',
+        borderColor: '#d1d5db',
+        fontSize: '12px',
+        fontWeight: '400'
       },
       selector: '.flowchart-node, [data-theme-element="flowchart-node"]',
       editableProperties: ['background', 'color', 'borderColor', 'fontSize', 'fontWeight']
@@ -164,8 +164,8 @@ export function registerDefaultElements(): void {
       id: 'flowchart-canvas',
       type: 'canvas',
       name: 'Canvas Flowchart',
-      properties: { 
-        background: '#f9fafb', 
+      properties: {
+        background: '#f9fafb',
         color: '#000000',
         borderColor: '#e5e7eb',
         fontSize: '12px',
@@ -178,12 +178,12 @@ export function registerDefaultElements(): void {
       id: 'button-primary',
       type: 'button',
       name: 'Pulsante Primario',
-      properties: { 
-        background: '#3b82f6', 
-        color: '#ffffff', 
+      properties: {
+        background: '#3b82f6',
+        color: '#ffffff',
         borderColor: '#1d4ed8',
-        fontSize: '14px', 
-        fontWeight: '500' 
+        fontSize: '14px',
+        fontWeight: '500'
       },
       selector: '.btn-primary, [data-theme-element="button-primary"]',
       editableProperties: ['background', 'color', 'borderColor', 'fontSize', 'fontWeight']
@@ -192,12 +192,12 @@ export function registerDefaultElements(): void {
       id: 'text-element',
       type: 'text',
       name: 'Elemento Testo',
-      properties: { 
+      properties: {
         background: 'transparent',
-        color: '#374151', 
+        color: '#374151',
         borderColor: 'transparent',
-        fontSize: '14px', 
-        fontWeight: '400' 
+        fontSize: '14px',
+        fontWeight: '400'
       },
       selector: '.text-element, [data-theme-element="text-element"]',
       editableProperties: ['color', 'fontSize', 'fontWeight']
@@ -239,4 +239,4 @@ export function useThemeElement(
 
   // Registra l'elemento immediatamente
   elementRegistry.register(element);
-} 
+}
