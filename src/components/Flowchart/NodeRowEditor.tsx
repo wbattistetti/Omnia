@@ -54,6 +54,9 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
     try { el.focus({ preventScroll: true } as any); el.select(); log('focused on mount'); } catch { log('focus error on mount'); }
   }, []);
 
+  // Determine if textbox is empty
+  const isEmpty = !value || value.trim() === '';
+
   return (
     <VoiceTextbox
       ref={inputRef}
@@ -62,6 +65,7 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
       onKeyDown={(e) => {
         onKeyDown(e);
       }}
+      autoStartWhenEmpty={isEmpty}
       onFocus={(e) => { log('onFocus', { valueLength: String(value||'').length }); }}
       onBlur={(e) => {
         log('onBlur');

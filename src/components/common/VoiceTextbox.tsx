@@ -26,6 +26,7 @@ interface VoiceTextboxProps extends React.TextareaHTMLAttributes<HTMLTextAreaEle
   className?: string;
   style?: React.CSSProperties;
   payoffConfig?: VoiceTextboxPayoffConfig;
+  autoStartWhenEmpty?: boolean;
 }
 
 /**
@@ -47,6 +48,7 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
   className,
   style,
   payoffConfig,
+  autoStartWhenEmpty = false,
   ...rest
 }, forwardedRef) => {
   const internalRef = useRef<HTMLTextAreaElement>(null);
@@ -160,6 +162,12 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
     // Stop propagation to prevent canvas click interference
     e.stopPropagation();
 
+    // ✅ If already listening, stop dictation on click
+    if (isListening) {
+      stopDictation();
+      return;
+    }
+
     // Clear any existing timeout
     if (longPressTimeoutRef.current) {
       clearTimeout(longPressTimeoutRef.current);
@@ -174,7 +182,7 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
       setIsLongPressing(true); // Show visual feedback (microphone cursor, green border)
       startDictation();
     }, 300);
-  }, [isSupported, startDictation]);
+  }, [isSupported, isListening, startDictation, stopDictation]);
 
   // Handle mouse up - check if it was a short click or long press release
   const handleMouseUp = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
@@ -370,12 +378,46 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
     };
   }, [isSupported]); // Only re-run if isSupported changes
 
+  // Auto-start dictation when textbox is empty and focused (handles autoFocus case)
+  useEffect(() => {
+    if (!autoStartWhenEmpty || !isSupported) return;
+
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const isEmpty = !value || value.trim() === '';
+    const isFocused = document.activeElement === textarea;
+
+    if (isEmpty && isFocused && !isListening && !isLongPressing) {
+      // Small delay to ensure focus is fully established
+      autoStartTimeoutRef.current = setTimeout(() => {
+        const currentTextarea = textareaRef.current;
+        if (currentTextarea && document.activeElement === currentTextarea && !isListeningRef.current) {
+          startDictation();
+        }
+        autoStartTimeoutRef.current = null;
+      }, 200);
+    }
+
+    return () => {
+      if (autoStartTimeoutRef.current) {
+        clearTimeout(autoStartTimeoutRef.current);
+        autoStartTimeoutRef.current = null;
+      }
+    };
+  }, [autoStartWhenEmpty, isSupported, value, isListening, isLongPressing, startDictation]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       // Clear long press timeout
       if (longPressTimeoutRef.current) {
         clearTimeout(longPressTimeoutRef.current);
+      }
+
+      // Clear auto-start timeout
+      if (autoStartTimeoutRef.current) {
+        clearTimeout(autoStartTimeoutRef.current);
       }
 
       // Stop recognition
@@ -392,6 +434,15 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
 
   // Handle keyboard events
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // ✅ Stop dictation when user presses any key (except Escape which is handled separately)
+    if (isListening) {
+      // Don't stop on Escape (handled below) or modifier keys alone
+      const isModifierOnly = e.key === 'Control' || e.key === 'Shift' || e.key === 'Alt' || e.key === 'Meta';
+      if (e.key !== 'Escape' && !isModifierOnly) {
+        stopDictation();
+      }
+    }
+
     // Stop dictation on Escape
     if (e.key === 'Escape' && isListening) {
       e.preventDefault();
@@ -403,6 +454,42 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
       onKeyDown(e);
     }
   }, [isListening, stopDictation, onKeyDown]);
+
+  // Track auto-start timeout for cleanup
+  const autoStartTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Handle focus - auto-start dictation if empty and autoStartWhenEmpty is enabled
+  const handleFocus = useCallback((e: React.FocusEvent<HTMLTextAreaElement>) => {
+    // Clear any existing auto-start timeout
+    if (autoStartTimeoutRef.current) {
+      clearTimeout(autoStartTimeoutRef.current);
+      autoStartTimeoutRef.current = null;
+    }
+
+    // ✅ If already listening and user clicks to focus, stop dictation
+    if (isListening) {
+      stopDictation();
+    }
+
+    if (autoStartWhenEmpty && isSupported) {
+      const isEmpty = !value || value.trim() === '';
+      if (isEmpty && !isListening && !isLongPressing) {
+        // Small delay to avoid conflicts with other handlers and ensure focus is fully established
+        autoStartTimeoutRef.current = setTimeout(() => {
+          const textarea = textareaRef.current;
+          if (textarea && document.activeElement === textarea && !isListeningRef.current) {
+            startDictation();
+          }
+          autoStartTimeoutRef.current = null;
+        }, 150);
+      }
+    }
+
+    // Call external onFocus handler if provided
+    if (rest.onFocus) {
+      rest.onFocus(e);
+    }
+  }, [autoStartWhenEmpty, isSupported, value, isListening, isLongPressing, startDictation, stopDictation, rest.onFocus]);
 
   // Also handle pointer events (works for both mouse and touch)
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLTextAreaElement>) => {
@@ -461,8 +548,16 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
     }
   }, [handleMouseLeave, rest.onMouseLeave]);
 
-  // Extract mouse/pointer handlers from rest to avoid passing them twice
-  const { onMouseDown, onMouseUp, onMouseLeave, onPointerDown, onPointerUp, ...restWithoutMouseHandlers } = rest;
+  // Handle onChange - pass through to external handler
+  // Note: We don't stop dictation here because onChange can be triggered by both
+  // user typing and speech recognition. We handle stopping in handleKeyDown instead.
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    // Call external onChange handler
+    onChange(e);
+  }, [onChange]);
+
+  // Extract mouse/pointer handlers and onFocus from rest to avoid passing them twice
+  const { onMouseDown, onMouseUp, onMouseLeave, onPointerDown, onPointerUp, onFocus, ...restWithoutHandlers } = rest;
 
   return (
     <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
@@ -493,8 +588,9 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
           <textarea
             ref={textareaRef}
             value={value}
-            onChange={onChange}
+            onChange={handleChange}
             onKeyDown={handleKeyDown}
+            onFocus={handleFocus}
             onMouseDown={combinedMouseDown}
             onMouseUp={combinedMouseUp}
             onMouseLeave={combinedMouseLeave}
@@ -513,15 +609,16 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
               transition: 'border-color 0.2s ease, border-width 0.2s ease',
               cursor: isLongPressing ? 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%2322c55e\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpath d=\'M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z\'/%3E%3Cpath d=\'M19 10v2a7 7 0 0 1-14 0v-2\'/%3E%3Cline x1=\'12\' y1=\'19\' x2=\'12\' y2=\'23\'/%3E%3Cline x1=\'8\' y1=\'23\' x2=\'16\' y2=\'23\'/%3E%3C/svg%3E") 12 12, auto' : isListening ? 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\'%3E%3Ccircle cx=\'12\' cy=\'12\' r=\'2\' fill=\'%2322c55e\' opacity=\'0.8\'%3E%3Canimate attributeName=\'r\' values=\'2;6;2\' dur=\'1s\' repeatCount=\'indefinite\'/%3E%3Canimate attributeName=\'opacity\' values=\'0.8;0.2;0.8\' dur=\'1s\' repeatCount=\'indefinite\'/%3E%3C/circle%3E%3Ccircle cx=\'12\' cy=\'12\' r=\'4\' fill=\'%2322c55e\' opacity=\'0.4\'%3E%3Canimate attributeName=\'r\' values=\'4;8;4\' dur=\'1.5s\' repeatCount=\'indefinite\'/%3E%3Canimate attributeName=\'opacity\' values=\'0.4;0;0.4\' dur=\'1.5s\' repeatCount=\'indefinite\'/%3E%3C/circle%3E%3C/svg%3E") 12 12, auto' : (style?.cursor || undefined),
             }}
-            {...restWithoutMouseHandlers}
+            {...restWithoutHandlers}
           />
         </SmartTooltip>
       ) : (
         <textarea
           ref={textareaRef}
           value={value}
-          onChange={onChange}
+          onChange={handleChange}
           onKeyDown={handleKeyDown}
+          onFocus={handleFocus}
           onMouseDown={combinedMouseDown}
           onMouseUp={combinedMouseUp}
           onMouseLeave={combinedMouseLeave}
@@ -540,7 +637,7 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
             transition: 'border-color 0.2s ease, border-width 0.2s ease',
             cursor: isLongPressing ? 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%2322c55e\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpath d=\'M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z\'/%3E%3Cpath d=\'M19 10v2a7 7 0 0 1-14 0v-2\'/%3E%3Cline x1=\'12\' y1=\'19\' x2=\'12\' y2=\'23\'/%3E%3Cline x1=\'8\' y1=\'23\' x2=\'16\' y2=\'23\'/%3E%3C/svg%3E") 12 12, auto' : isListening ? 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\'%3E%3Ccircle cx=\'12\' cy=\'12\' r=\'2\' fill=\'%2322c55e\' opacity=\'0.8\'%3E%3Canimate attributeName=\'r\' values=\'2;6;2\' dur=\'1s\' repeatCount=\'indefinite\'/%3E%3Canimate attributeName=\'opacity\' values=\'0.8;0.2;0.8\' dur=\'1s\' repeatCount=\'indefinite\'/%3E%3C/circle%3E%3Ccircle cx=\'12\' cy=\'12\' r=\'4\' fill=\'%2322c55e\' opacity=\'0.4\'%3E%3Canimate attributeName=\'r\' values=\'4;8;4\' dur=\'1.5s\' repeatCount=\'indefinite\'/%3E%3Canimate attributeName=\'opacity\' values=\'0.4;0;0.4\' dur=\'1.5s\' repeatCount=\'indefinite\'/%3E%3C/circle%3E%3C/svg%3E") 12 12, auto' : (style?.cursor || undefined),
           }}
-          {...restWithoutMouseHandlers}
+          {...restWithoutHandlers}
         />
       )}
 
