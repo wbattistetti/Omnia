@@ -39,7 +39,7 @@ function TaskRowInner({
   const { combinedClass } = useFontContext();
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(text);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Removed verbose log
   React.useEffect(() => {

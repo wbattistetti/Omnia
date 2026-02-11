@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState, useCallback, forwardRef } from 'react';
+import React, { useEffect, useRef, useCallback, forwardRef } from 'react';
 import { Mic } from 'lucide-react';
 import SmartTooltip, { ToolbarButton } from '../SmartTooltip';
+import { useVoiceRecognition } from '../../hooks/useVoiceRecognition';
 
 export interface VoiceTextboxPayoffConfig {
   message?: string;
@@ -54,156 +55,38 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = (forwardedRef as React.RefObject<HTMLTextAreaElement>) || internalRef;
 
-  const recognitionRef = useRef<any>(null);
-  const [isSupported, setIsSupported] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [isLongPressing, setIsLongPressing] = useState(false); // Track when long press is active (before dictation starts)
+  // Use voice recognition hook
+  const voiceRecognition = useVoiceRecognition({
+    value,
+    onChange: (e) => {
+      // Convert to proper ChangeEvent format
+      const syntheticEvent = {
+        ...e,
+        target: e.target as HTMLTextAreaElement,
+        currentTarget: e.currentTarget as HTMLTextAreaElement,
+      } as React.ChangeEvent<HTMLTextAreaElement>;
+      onChange(syntheticEvent);
+    },
+    autoStartWhenEmpty,
+    elementRef: textareaRef,
+  });
 
-  // Track long press state
-  const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isLongPressActiveRef = useRef<boolean>(false);
-
-  // Track recognition session
-  const baseTextRef = useRef<string>(''); // Text at start of dictation
-  const isListeningRef = useRef<boolean>(false); // Track listening state without causing re-renders
-  const onChangeRef = useRef(onChange); // Store onChange in ref to avoid dependency issues
-  const valueRef = useRef(value); // Store value in ref to avoid dependency issues
-  const lastProcessedIndexRef = useRef<number>(0); // Track last processed result index to avoid duplicates
-
-  // Update refs when values change
-  useEffect(() => {
-    isListeningRef.current = isListening;
-  }, [isListening]);
-
-  useEffect(() => {
-    onChangeRef.current = onChange;
-  }, [onChange]);
-
-  useEffect(() => {
-    valueRef.current = value;
-  }, [value]);
-
-  // Initialize Web Speech API
-  useEffect(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      setIsSupported(false);
-      return;
+  // Combine internal handlers with external ones from props
+  const combinedMouseDown = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
+    voiceRecognition.handleMouseDown(e);
+    if (rest.onMouseDown) {
+      rest.onMouseDown(e);
     }
+  }, [voiceRecognition, rest.onMouseDown]);
 
-    setIsSupported(true);
+  const combinedMouseUp = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
+    voiceRecognition.handleMouseUp(e);
 
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-
-    // Use browser language
-    const browserLang = navigator.language || navigator.languages?.[0] || 'en-US';
-    recognition.lang = browserLang;
-
-    recognitionRef.current = recognition;
-
-    return () => {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop();
-        } catch (e) {
-          // Ignore errors on cleanup
-        }
-        recognitionRef.current = null;
-      }
-    };
-  }, []);
-
-  // Start dictation
-  const startDictation = useCallback(() => {
-    const textarea = textareaRef.current;
-    const recognition = recognitionRef.current;
-
-    if (!textarea || !recognition || isListening) return;
-
-    // Save current text as base and reset processed index
-    baseTextRef.current = value || '';
-    lastProcessedIndexRef.current = 0; // Reset index to start fresh
-
-    try {
-      setIsListening(true);
-      recognition.start();
-    } catch (err: any) {
-      if (!err.message?.includes('already')) {
-        // Silent fail
-      }
-      setIsListening(false);
-    }
-  }, [value, isListening]);
-
-  // Stop dictation
-  const stopDictation = useCallback(() => {
-    const recognition = recognitionRef.current;
-    if (!recognition || !isListening) return;
-
-    try {
-      recognition.stop();
-    } catch (e) {
-      // Ignore errors
-    }
-    setIsListening(false);
-    baseTextRef.current = '';
-    lastProcessedIndexRef.current = 0; // Reset index
-  }, [isListening]);
-
-  // Handle mouse down - start long press timer
-  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
-    if (!isSupported) {
-      return;
-    }
-
-    // Stop propagation to prevent canvas click interference
-    e.stopPropagation();
-
-    // ✅ If already listening, stop dictation on click
-    if (isListening) {
-      stopDictation();
-      return;
-    }
-
-    // Clear any existing timeout
-    if (longPressTimeoutRef.current) {
-      clearTimeout(longPressTimeoutRef.current);
-    }
-
-    isLongPressActiveRef.current = false;
-    setIsLongPressing(false);
-
-    // Start timer for long press (300ms)
-    longPressTimeoutRef.current = setTimeout(() => {
-      isLongPressActiveRef.current = true;
-      setIsLongPressing(true); // Show visual feedback (microphone cursor, green border)
-      startDictation();
-    }, 300);
-  }, [isSupported, isListening, startDictation, stopDictation]);
-
-  // Handle mouse up - check if it was a short click or long press release
-  const handleMouseUp = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
-    // Stop propagation to prevent canvas click interference
-    e.stopPropagation();
-
-    // Clear long press timer if it hasn't fired yet (short click)
-    if (longPressTimeoutRef.current) {
-      clearTimeout(longPressTimeoutRef.current);
-      longPressTimeoutRef.current = null;
-    }
-
-    // If dictation was active, stop it and simulate Enter to finalize
-    if (isListening) {
-      stopDictation();
-
-      // Wait a bit for the recognition to finalize, then simulate Enter
+    // If dictation was active, simulate Enter to finalize (original behavior)
+    if (voiceRecognition.isListening) {
       setTimeout(() => {
         const textarea = textareaRef.current;
         if (textarea && onKeyDown) {
-          // Create a synthetic Enter keydown event
           const enterEvent = {
             key: 'Enter',
             code: 'Enter',
@@ -226,338 +109,65 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
             timeStamp: Date.now(),
             type: 'keydown',
           } as React.KeyboardEvent<HTMLTextAreaElement>;
-
           onKeyDown(enterEvent);
         }
-      }, 100); // Small delay to ensure recognition has finalized
+      }, 100);
     }
 
-    isLongPressActiveRef.current = false;
-    setIsLongPressing(false); // Reset visual feedback
-  }, [isListening, stopDictation, onKeyDown]);
-
-  // Handle mouse leave - cancel long press if mouse leaves
-  const handleMouseLeave = useCallback(() => {
-    if (longPressTimeoutRef.current) {
-      clearTimeout(longPressTimeoutRef.current);
-      longPressTimeoutRef.current = null;
-    }
-
-    // If dictation was active, stop it
-    if (isListening) {
-      stopDictation();
-    }
-
-    isLongPressActiveRef.current = false;
-    setIsLongPressing(false); // Reset visual feedback
-  }, [isListening, stopDictation]);
-
-  // Setup recognition event handlers (only once when supported)
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    const recognition = recognitionRef.current;
-
-    if (!textarea || !recognition || !isSupported) return;
-
-    const handleResult = (event: any) => {
-      const currentTextarea = textareaRef.current;
-      if (!isListeningRef.current || !currentTextarea || document.activeElement !== currentTextarea) {
-        return;
-      }
-
-      // Check if element is still in DOM
-      if (!document.body.contains(currentTextarea)) {
-        const recognition = recognitionRef.current;
-        if (recognition) {
-          try {
-            recognition.stop();
-          } catch (e) {}
-        }
-        setIsListening(false);
-        return;
-      }
-
-      const results = event.results;
-      if (!results || results.length === 0) return;
-
-      // Process only NEW final results (from lastProcessedIndex onwards)
-      // This prevents duplicates and overwrites when API reorganizes results
-      let finalText = baseTextRef.current;
-      let processedAnyNew = false;
-
-      for (let i = lastProcessedIndexRef.current; i < results.length; i++) {
-        const result = results[i];
-        if (result.isFinal && result[0]) {
-          const transcript = result[0].transcript;
-          // Add space if needed
-          if (finalText && !finalText.endsWith(' ') && !transcript.startsWith(' ')) {
-            finalText += ' ';
-          }
-          finalText += transcript;
-          processedAnyNew = true;
-        }
-      }
-
-      // Update last processed index only if we processed new results
-      if (processedAnyNew) {
-        lastProcessedIndexRef.current = results.length;
-        // Update baseTextRef to current finalText so next iteration starts from here
-        baseTextRef.current = finalText;
-      }
-
-      // Find last interim result for preview
-      let lastInterim = '';
-      for (let i = results.length - 1; i >= 0; i--) {
-        const result = results[i];
-        if (!result.isFinal && result[0]) {
-          lastInterim = result[0].transcript;
-          break;
-        }
-      }
-
-      // Build display value: current final text + last interim
-      let displayValue = finalText;
-      if (lastInterim) {
-        if (displayValue && !displayValue.endsWith(' ') && !lastInterim.startsWith(' ')) {
-          displayValue += ' ';
-        }
-        displayValue += lastInterim;
-      }
-
-      // Update React state
-      if (displayValue !== valueRef.current) {
-        const syntheticEvent = {
-          target: { value: displayValue },
-          currentTarget: { value: displayValue },
-          type: 'input',
-          bubbles: true,
-          cancelable: true,
-        } as React.ChangeEvent<HTMLTextAreaElement>;
-
-        onChangeRef.current(syntheticEvent);
-      }
-    };
-
-    const handleError = (event: any) => {
-      // Only stop on critical errors, not "no-speech" (which is temporary)
-      if (event.error === 'no-speech') {
-        return;
-      }
-      // For other errors (network, service, etc), stop listening
-      console.error('🎤 [ERROR]', event.error);
-      const recognition = recognitionRef.current;
-      if (recognition) {
-        try {
-          recognition.stop();
-        } catch (e) {}
-      }
-      setIsListening(false);
-      baseTextRef.current = '';
-      lastProcessedIndexRef.current = 0; // Reset index
-    };
-
-    const handleEnd = () => {
-      setIsListening(false);
-      baseTextRef.current = '';
-      lastProcessedIndexRef.current = 0; // Reset index
-    };
-
-    recognition.onresult = handleResult;
-    recognition.onerror = handleError;
-    recognition.onend = handleEnd;
-
-    return () => {
-      // Cleanup on unmount
-      if (isListeningRef.current) {
-        try {
-          recognition.stop();
-        } catch (e) {
-          // Ignore errors
-        }
-      }
-    };
-  }, [isSupported]); // Only re-run if isSupported changes
-
-  // Auto-start dictation when textbox is empty and focused (handles autoFocus case)
-  useEffect(() => {
-    if (!autoStartWhenEmpty || !isSupported) return;
-
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-
-    const isEmpty = !value || value.trim() === '';
-    const isFocused = document.activeElement === textarea;
-
-    if (isEmpty && isFocused && !isListening && !isLongPressing) {
-      // Small delay to ensure focus is fully established
-      autoStartTimeoutRef.current = setTimeout(() => {
-        const currentTextarea = textareaRef.current;
-        if (currentTextarea && document.activeElement === currentTextarea && !isListeningRef.current) {
-          startDictation();
-        }
-        autoStartTimeoutRef.current = null;
-      }, 200);
-    }
-
-    return () => {
-      if (autoStartTimeoutRef.current) {
-        clearTimeout(autoStartTimeoutRef.current);
-        autoStartTimeoutRef.current = null;
-      }
-    };
-  }, [autoStartWhenEmpty, isSupported, value, isListening, isLongPressing, startDictation]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      // Clear long press timeout
-      if (longPressTimeoutRef.current) {
-        clearTimeout(longPressTimeoutRef.current);
-      }
-
-      // Clear auto-start timeout
-      if (autoStartTimeoutRef.current) {
-        clearTimeout(autoStartTimeoutRef.current);
-      }
-
-      // Stop recognition
-      const recognition = recognitionRef.current;
-      if (recognition && isListening) {
-        try {
-          recognition.stop();
-        } catch (e) {
-          // Ignore errors
-        }
-      }
-    };
-  }, [isListening]);
-
-  // Handle keyboard events
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // ✅ Stop dictation when user presses any key (except Escape which is handled separately)
-    if (isListening) {
-      // Don't stop on Escape (handled below) or modifier keys alone
-      const isModifierOnly = e.key === 'Control' || e.key === 'Shift' || e.key === 'Alt' || e.key === 'Meta';
-      if (e.key !== 'Escape' && !isModifierOnly) {
-        stopDictation();
-      }
-    }
-
-    // Stop dictation on Escape
-    if (e.key === 'Escape' && isListening) {
-      e.preventDefault();
-      stopDictation();
-    }
-
-    // Call external onKeyDown if provided
-    if (onKeyDown) {
-      onKeyDown(e);
-    }
-  }, [isListening, stopDictation, onKeyDown]);
-
-  // Track auto-start timeout for cleanup
-  const autoStartTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Handle focus - auto-start dictation if empty and autoStartWhenEmpty is enabled
-  const handleFocus = useCallback((e: React.FocusEvent<HTMLTextAreaElement>) => {
-    // Clear any existing auto-start timeout
-    if (autoStartTimeoutRef.current) {
-      clearTimeout(autoStartTimeoutRef.current);
-      autoStartTimeoutRef.current = null;
-    }
-
-    // ✅ If already listening and user clicks to focus, stop dictation
-    if (isListening) {
-      stopDictation();
-    }
-
-    if (autoStartWhenEmpty && isSupported) {
-      const isEmpty = !value || value.trim() === '';
-      if (isEmpty && !isListening && !isLongPressing) {
-        // Small delay to avoid conflicts with other handlers and ensure focus is fully established
-        autoStartTimeoutRef.current = setTimeout(() => {
-          const textarea = textareaRef.current;
-          if (textarea && document.activeElement === textarea && !isListeningRef.current) {
-            startDictation();
-          }
-          autoStartTimeoutRef.current = null;
-        }, 150);
-      }
-    }
-
-    // Call external onFocus handler if provided
-    if (rest.onFocus) {
-      rest.onFocus(e);
-    }
-  }, [autoStartWhenEmpty, isSupported, value, isListening, isLongPressing, startDictation, stopDictation, rest.onFocus]);
-
-  // Also handle pointer events (works for both mouse and touch)
-  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLTextAreaElement>) => {
-    e.stopPropagation();
-    // Convert to mouse event format for our handler
-    const mouseEvent = e as unknown as React.MouseEvent<HTMLTextAreaElement>;
-    handleMouseDown(mouseEvent);
-  }, [handleMouseDown]);
-
-  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLTextAreaElement>) => {
-    e.stopPropagation();
-    // Convert to mouse event format for our handler
-    const mouseEvent = e as unknown as React.MouseEvent<HTMLTextAreaElement>;
-    handleMouseUp(mouseEvent);
-  }, [handleMouseUp]);
-
-  // Combine pointer handlers with external ones
-  const combinedPointerDown = useCallback((e: React.PointerEvent<HTMLTextAreaElement>) => {
-    handlePointerDown(e);
-    if (rest.onPointerDown) {
-      rest.onPointerDown(e);
-    }
-  }, [handlePointerDown, rest.onPointerDown]);
-
-  const combinedPointerUp = useCallback((e: React.PointerEvent<HTMLTextAreaElement>) => {
-    handlePointerUp(e);
-    if (rest.onPointerUp) {
-      rest.onPointerUp(e);
-    }
-  }, [handlePointerUp, rest.onPointerUp]);
-
-  // Combine internal handlers with external ones from props
-  // IMPORTANT: Call our handler FIRST, then external one
-  const combinedMouseDown = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
-    // Call our handler FIRST - it will stop propagation
-    handleMouseDown(e);
-    // Then call external handler if it exists
-    if (rest.onMouseDown) {
-      rest.onMouseDown(e);
-    }
-  }, [handleMouseDown, rest.onMouseDown]);
-
-  const combinedMouseUp = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
-    // Call our handler FIRST - it will stop propagation
-    handleMouseUp(e);
-    // Then call external handler if it exists
     if (rest.onMouseUp) {
       rest.onMouseUp(e);
     }
-  }, [handleMouseUp, rest.onMouseUp]);
+  }, [voiceRecognition, onKeyDown, rest.onMouseUp]);
 
   const combinedMouseLeave = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
-    handleMouseLeave(e);
+    voiceRecognition.handleMouseLeave();
     if (rest.onMouseLeave) {
       rest.onMouseLeave(e);
     }
-  }, [handleMouseLeave, rest.onMouseLeave]);
+  }, [voiceRecognition, rest.onMouseLeave]);
 
-  // Handle onChange - pass through to external handler
-  // Note: We don't stop dictation here because onChange can be triggered by both
-  // user typing and speech recognition. We handle stopping in handleKeyDown instead.
+  const combinedPointerDown = useCallback((e: React.PointerEvent<HTMLTextAreaElement>) => {
+    voiceRecognition.handlePointerDown(e);
+    if (rest.onPointerDown) {
+      rest.onPointerDown(e);
+    }
+  }, [voiceRecognition, rest.onPointerDown]);
+
+  const combinedPointerUp = useCallback((e: React.PointerEvent<HTMLTextAreaElement>) => {
+    voiceRecognition.handlePointerUp(e);
+    if (rest.onPointerUp) {
+      rest.onPointerUp(e);
+    }
+  }, [voiceRecognition, rest.onPointerUp]);
+
+  // Handle keyboard events
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    voiceRecognition.handleKeyDown(e);
+    if (onKeyDown) {
+      onKeyDown(e);
+    }
+  }, [voiceRecognition, onKeyDown]);
+
+  // Handle focus
+  const handleFocus = useCallback((e: React.FocusEvent<HTMLTextAreaElement>) => {
+    voiceRecognition.handleFocus(e);
+    if (rest.onFocus) {
+      rest.onFocus(e);
+    }
+  }, [voiceRecognition, rest.onFocus]);
+
+  // Handle change
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    // Call external onChange handler
+    voiceRecognition.handleChange(e);
     onChange(e);
-  }, [onChange]);
+  }, [voiceRecognition, onChange]);
 
-  // Extract mouse/pointer handlers and onFocus from rest to avoid passing them twice
+  // Extract handlers from rest to avoid passing them twice
   const { onMouseDown, onMouseUp, onMouseLeave, onPointerDown, onPointerUp, onFocus, ...restWithoutHandlers } = rest;
+
+  const isListening = voiceRecognition.isListening;
+  const isLongPressing = voiceRecognition.isLongPressing;
+  const isSupported = voiceRecognition.isSupported;
 
   return (
     <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
@@ -641,7 +251,7 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
         />
       )}
 
-      {/* Microphone icon - inside textarea, top-right corner, fixed position */}
+      {/* Microphone icon */}
       {isSupported && (
         <div
           style={{
@@ -657,7 +267,7 @@ export const VoiceTextbox = forwardRef<HTMLTextAreaElement, VoiceTextboxProps>((
         >
           <Mic
             size={12}
-            color={isListening ? '#22c55e' : '#6b7280'} // Green when listening, gray when not
+            color={isListening ? '#22c55e' : '#6b7280'}
             style={{
               animation: isListening ? 'speechMicPulse 1.5s ease-in-out infinite' : 'none',
             }}

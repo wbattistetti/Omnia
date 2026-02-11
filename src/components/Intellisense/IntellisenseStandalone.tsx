@@ -5,6 +5,7 @@ import { IntellisenseMenu } from './IntellisenseMenu';
 import { IntellisenseItem } from '../../types/intellisense';
 import { useDynamicFontSizes } from '../../hooks/useDynamicFontSizes';
 import { calculateFontBasedSizes } from '../../utils/fontSizeUtils';
+import { VoiceInput } from '../common/VoiceInput';
 
 interface IntellisenseStandaloneProps {
     position: { x: number; y: number };
@@ -261,18 +262,24 @@ export const IntellisenseStandalone: React.FC<IntellisenseStandaloneProps> = ({
                                 }}
                             />
                             {/* Textbox - larghezza dinamica basata sul contenuto */}
-                            <input
+                            <VoiceInput
                                 ref={inputRef}
                                 type="text"
                                 value={state.query}
                                 onChange={handleInputChange}
                                 onKeyDown={handleKeyDown}
                                 placeholder="Cerca condizioni o intenti..."
+                                autoStartWhenEmpty={true}
                                 style={{
                                     width: `${inputWidth}px`,
                                     minWidth: `${minInputWidth}px`, // ✅ Larghezza minima dinamica per 25 caratteri
-                                    padding: `${sizes.inputPaddingV}px ${sizes.inputPaddingH}px`,
-                                    border: '2px solid #3b82f6',
+                                    paddingTop: `${sizes.inputPaddingV}px`,
+                                    paddingBottom: `${sizes.inputPaddingV}px`,
+                                    paddingLeft: `${sizes.inputPaddingH}px`,
+                                    // paddingRight is managed by VoiceInput when voice is supported
+                                    borderWidth: '2px',
+                                    borderStyle: 'solid',
+                                    borderColor: '#3b82f6',
                                     borderRadius: '4px',
                                     fontSize: fontSizes.nodeRow,
                                     lineHeight: 1.2,

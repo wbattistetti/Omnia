@@ -8,6 +8,7 @@ import { taskRepository } from '../../../services/TaskRepository';
 import { useDynamicFontSizes } from '../../../hooks/useDynamicFontSizes';
 import { calculateFontBasedSizes } from '../../../utils/fontSizeUtils';
 import { getValuesFromTask, buildConditionName } from '../../TaskEditor/ResponseEditor/utils/getNodeValues';
+import { VoiceInput } from '../../common/VoiceInput';
 
 /**
  * Props per EdgeConditionSelector
@@ -45,6 +46,7 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
   sourceNodeId,
   sourceRows
 }) => {
+
   const [inputValue, setInputValue] = useState('');
   const [navSeq, setNavSeq] = useState(0);
   const [navDir, setNavDir] = useState<1 | -1>(1);
@@ -266,6 +268,7 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
     onSelectUnconditioned();
   };
 
+
   return (
     <div
       className="edge-condition-selector fixed z-50 bg-white border border-gray-300 rounded-lg shadow-xl p-3"
@@ -305,23 +308,63 @@ export const EdgeConditionSelector: React.FC<EdgeConditionSelectorProps> = ({
           return (
             <>
               {/* Campo input */}
-              <div className="flex-1" style={{ maxWidth: 360 }}>
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={inputValue}
-                  onChange={handleInputChange}
-                  onKeyDown={handleInputKeyDown}
-                  placeholder="Digita per cercare condizioni..."
-                  className="w-full border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  style={{
-                    fontSize: fontSizes.nodeRow,
-                    padding: `${sizes.inputPaddingV}px ${sizes.inputPaddingH}px`,
-                    height: `${sizes.inputHeight}px`,
-                    minHeight: `${sizes.inputHeight}px`,
-                    boxSizing: 'border-box'
-                  }}
-                />
+              <div className="flex-1" style={{ maxWidth: 360, overflow: 'visible', position: 'relative' }}>
+                {(() => {
+                  console.log('[EdgeConditionSelector] About to render VoiceInput:', {
+                    hasRef: !!inputRef,
+                    value: inputValue,
+                    placeholder: 'Digita per cercare condizioni...',
+                    VoiceInputType: typeof VoiceInput,
+                    VoiceInputValue: VoiceInput,
+                  });
+
+                  try {
+                    return (
+                      <VoiceInput
+                        ref={inputRef}
+                        type="text"
+                        value={inputValue}
+                        onChange={handleInputChange}
+                        onKeyDown={handleInputKeyDown}
+                        placeholder="Digita per cercare condizioni..."
+                        className="w-full border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        style={{
+                          fontSize: fontSizes.nodeRow,
+                          paddingTop: `${sizes.inputPaddingV}px`,
+                          paddingBottom: `${sizes.inputPaddingV}px`,
+                          paddingLeft: `${sizes.inputPaddingH}px`,
+                          // paddingRight is managed by VoiceInput when voice is supported
+                          height: `${sizes.inputHeight}px`,
+                          minHeight: `${sizes.inputHeight}px`,
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                    );
+                  } catch (error) {
+                    console.error('[EdgeConditionSelector] Error rendering VoiceInput:', error);
+                    // Fallback to regular input
+                    return (
+                      <input
+                        ref={inputRef}
+                        type="text"
+                        value={inputValue}
+                        onChange={handleInputChange}
+                        onKeyDown={handleInputKeyDown}
+                        placeholder="Digita per cercare condizioni..."
+                        className="w-full border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        style={{
+                          fontSize: fontSizes.nodeRow,
+                          paddingTop: `${sizes.inputPaddingV}px`,
+                          paddingBottom: `${sizes.inputPaddingV}px`,
+                          paddingLeft: `${sizes.inputPaddingH}px`,
+                          height: `${sizes.inputHeight}px`,
+                          minHeight: `${sizes.inputHeight}px`,
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                    );
+                  }
+                })()}
               </div>
               {/* Pulsante Else accanto alla textbox - proporzionale */}
               <button

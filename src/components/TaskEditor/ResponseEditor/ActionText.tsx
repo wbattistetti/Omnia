@@ -1,9 +1,10 @@
 import React from 'react';
+import { VoiceTextbox } from '../../common/VoiceTextbox';
 
 interface ActionTextProps {
   text: string;
   editing: boolean;
-  inputRef: React.RefObject<HTMLInputElement>;
+  inputRef: React.RefObject<HTMLTextAreaElement>;
   editValue: string;
   onChange: (v: string) => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
@@ -19,12 +20,13 @@ const ActionText: React.FC<ActionTextProps> = ({ text, editing, inputRef, editVa
     );
   }
   return (
-    <input
+    <VoiceTextbox
       ref={inputRef}
       value={editValue}
       onChange={e => onChange(e.target.value)}
       onKeyDown={onKeyDown}
       onBlur={onBlur}
+      rows={1}
       style={{
         fontWeight: 500,
         padding: '6px 10px',
@@ -38,6 +40,9 @@ const ActionText: React.FC<ActionTextProps> = ({ text, editing, inputRef, editVa
         background: '#fff',
         color: '#111',
         marginRight: 10,
+        resize: 'vertical',
+        overflowY: 'auto',
+        overflowX: 'hidden',
       }}
     />
   );

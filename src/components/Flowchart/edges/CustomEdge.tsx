@@ -94,8 +94,10 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
 
   // Handler per apertura EdgeConditionSelector
   const handleOpenConditionSelector = (x: number, y: number) => {
+    console.log('[CustomEdge] handleOpenConditionSelector called', { x, y });
     setConditionSelectorPos({ x, y });
     setShowConditionSelector(true);
+    console.log('[CustomEdge] showConditionSelector set to true');
   };
 
   // Callback per selezione condizione
@@ -408,12 +410,6 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
             onSelectElse={() => {
               if (props.data && typeof props.data.onUpdate === 'function') {
                 const newData = { ...(props.data || {}), isElse: true };
-                console.log('[CustomEdge][onSelectElse] ✅ Setting isElse flag', {
-                  edgeId: props.id,
-                  edgeLabel: props.label,
-                  oldIsElse: props.data?.isElse,
-                  newIsElse: true
-                });
                 props.data.onUpdate({ label: 'Else', data: newData });
               }
               setShowConditionSelector(false);

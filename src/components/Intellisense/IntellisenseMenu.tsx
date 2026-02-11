@@ -12,6 +12,7 @@ import { prepareIntellisenseData } from '../../services/ProjectDataService';
 import { SIDEBAR_TYPE_ICONS, SIDEBAR_ICON_COMPONENTS, SIDEBAR_TYPE_COLORS } from '../Sidebar/sidebarTheme';
 import { useIntellisense } from "../../context/IntellisenseContext"; // ✅ AGGIUNGI IMPORT
 import { useDynamicFontSizes } from '../../hooks/useDynamicFontSizes';
+import { VoiceInput } from '../common/VoiceInput';
 
 const defaultLayoutConfig: IntellisenseLayoutConfig = {
   maxVisibleItems: 12,
@@ -616,16 +617,18 @@ export const IntellisenseMenu: React.FC<IntellisenseMenuProps & { inlineAnchor?:
         // ✅ CASO 2: Edge - Crea textbox + lista
         <div style={menuStyle} ref={menuRef} className="intellisense-menu-standalone">
           {/* Textbox per edge */}
-          <input
+          <VoiceInput
             type="text"
             value={query}
             onChange={handleInputChange}
-            autoFocus
             placeholder="Cerca condizioni o intenti..."
             className="intellisense-search-input"
             style={{
               width: '100%',
-              padding: '8px 12px',
+              paddingTop: '8px',
+              paddingBottom: '8px',
+              paddingLeft: '12px',
+              // paddingRight is managed by VoiceInput when voice is supported
               border: '2px solid #3b82f6', // bordo blu
               borderRadius: '6px',
               fontSize: fontSizes.nodeRow,
