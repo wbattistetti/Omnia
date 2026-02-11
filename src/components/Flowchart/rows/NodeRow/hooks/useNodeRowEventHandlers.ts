@@ -179,6 +179,19 @@ export function useNodeRowEventHandlers(
       e.preventDefault();
       const q = (currentText || '').trim();
 
+      // ✅ Se la riga è vuota, cancellala immediatamente invece di processare Enter
+      if (q === '') {
+        console.log('[NodeRow][handleKeyDownInternal] Empty row on Enter - deleting immediately');
+        onDelete(row);
+        setIsEditing(false);
+        setShowIntellisense(false);
+        setIntellisenseQuery('');
+        if (typeof onEditingEnd === 'function') {
+          onEditingEnd();
+        }
+        return;
+      }
+
       if ((row as any)?.categoryType === 'conditions') {
         try {
           const created = EntityCreationService.createCondition({
@@ -235,7 +248,7 @@ export function useNodeRowEventHandlers(
         return;
       }
     }
-  }, [currentText, showIntellisense, row, projectData, onUpdate, onUpdateWithCategory, onKeyDown, handleCancel, setIsEditing, setShowIntellisense, setIntellisenseQuery, setShowCreatePicker, setAllowCreatePicker, inputRef]);
+  }, [currentText, showIntellisense, row, projectData, onUpdate, onUpdateWithCategory, onKeyDown, handleCancel, setIsEditing, setShowIntellisense, setIntellisenseQuery, setShowCreatePicker, setAllowCreatePicker, inputRef, onDelete, onEditingEnd]);
 
   const handleTextChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newText = e.target.value;
