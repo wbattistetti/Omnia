@@ -29,6 +29,7 @@ interface UseNodeRenderingProps {
     id: string;
     nodeWidth?: number | null;
     isEmpty?: boolean;
+    onWidthChange?: (width: number) => void;
 }
 
 /**
@@ -61,7 +62,8 @@ export function useNodeRendering({
     setIsHoverHeader,
     id,
     nodeWidth = null,
-    isEmpty = false
+    isEmpty = false,
+    onWidthChange
 }: UseNodeRenderingProps) {
     const fontSizes = useDynamicFontSizes();
 
@@ -104,14 +106,16 @@ export function useNodeRendering({
           return handleUpdateRow(row.id, newText, categoryType, mergedMeta);
         },
         onDelete: (row: any) => handleDeleteRow(row.id),
-        onDragStart: handleRowDragStart
+        onDragStart: handleRowDragStart,
+        onWidthChange: onWidthChange
     }), [
         visibleRows,
         editingRowId,
         handleUpdateRow,
         handleDeleteRow,
         handleInsertRow,
-        handleRowDragStart
+        handleRowDragStart,
+        onWidthChange
     ]);
 
     // Props per NodeDragHeader (toolbar permanente)

@@ -28,6 +28,7 @@ interface NodeRowListProps {
   onCreateBackendCall?: (name: string, onRowUpdate?: (item: any) => void) => void;
   onCreateTask?: (name: string, onRowUpdate?: (item: any) => void) => void;
   getProjectId?: () => string | null;
+  onWidthChange?: (width: number) => void;
 }
 
 export const NodeRowList: React.FC<NodeRowListProps> = ({
@@ -54,7 +55,8 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
   onCreateFactoryTask, // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
   onCreateBackendCall,
   onCreateTask,
-  getProjectId
+  getProjectId,
+  onWidthChange
 }) => {
 
   // Filter rows based on hideUnchecked setting
@@ -138,6 +140,7 @@ export const NodeRowList: React.FC<NodeRowListProps> = ({
             onCreateBackendCall={onCreateBackendCall}
             onCreateTask={onCreateTask}
             getProjectId={getProjectId}
+            onWidthChange={onWidthChange}
           />
         </React.Fragment>
       ))}

@@ -173,31 +173,66 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     });
   }, [nodeRows.length, id, findAllDescendants, setNodes]);
 
-  // Measure node width when not editing any row to preserve it during editing
-  useEffect(() => {
-    if (!editingRowId && nodeContainerRef.current) {
-      // Use multiple frames to ensure layout is stable
+  // ✅ Handler per aggiornare la larghezza del nodo (Regola 2: SOLO quando aumenta)
+  const handleRowWidthChange = useCallback((width: number) => {
+    if (!editingRowId || !nodeContainerRef.current) return;
+
+    const currentWidth = nodeWidthRef.current || 140;
+
+    // ✅ Regola 2: Aggiorna SOLO se la larghezza aumenta
+    if (width > currentWidth) {
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (!nodeContainerRef.current) return;
-          const rect = nodeContainerRef.current.getBoundingClientRect();
-          const computedStyle = window.getComputedStyle(nodeContainerRef.current);
-          const width = rect.width;
-          const height = rect.height;
-          setNodeWidth(width);
-          nodeWidthRef.current = width;
-          // ✅ Inizializza anche l'altezza se non è ancora stata misurata
-          if (nodeHeightRef.current === null) {
-            nodeHeightRef.current = height;
-            previousRowsCountRef.current = nodeRows.length;
-          }
-        });
+        if (!nodeContainerRef.current) return;
+
+        setNodeWidth(width);
+        nodeWidthRef.current = width;
+
+        // Aggiorna gli stili DOM
+        nodeContainerRef.current.style.setProperty('min-width', `${width}px`, 'important');
+        nodeContainerRef.current.style.setProperty('width', `${width}px`, 'important');
+        nodeContainerRef.current.style.setProperty('flex-shrink', '0', 'important');
       });
-    } else if (editingRowId && nodeWidthRef.current && nodeContainerRef.current) {
-      // When editing, enforce the saved width directly on DOM
-      nodeContainerRef.current.style.setProperty('min-width', `${nodeWidthRef.current}px`, 'important');
-      nodeContainerRef.current.style.setProperty('width', `${nodeWidthRef.current}px`, 'important');
-      nodeContainerRef.current.style.setProperty('flex-shrink', '0', 'important');
+    }
+  }, [editingRowId]);
+
+  // Measure node width ONLY when entering editing (not when exiting)
+  useEffect(() => {
+    if (!editingRowId) {
+      // ✅ Punto 3: Quando NON si sta editando: mantieni la larghezza attuale, NON ricalcolare
+      // Questo evita il restringimento post-ENTER
+      if (nodeContainerRef.current && nodeWidthRef.current) {
+        // Mantieni semplicemente la larghezza raggiunta
+        const currentWidth = nodeWidthRef.current;
+        nodeContainerRef.current.style.setProperty('min-width', `${currentWidth}px`, 'important');
+        nodeContainerRef.current.style.setProperty('width', `${currentWidth}px`, 'important');
+        nodeContainerRef.current.style.setProperty('flex-shrink', '0', 'important');
+      } else if (nodeContainerRef.current && !nodeWidthRef.current) {
+        // Solo al primo mount, misura la larghezza iniziale
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (!nodeContainerRef.current) return;
+            const rect = nodeContainerRef.current.getBoundingClientRect();
+            const width = rect.width;
+            const height = rect.height;
+            setNodeWidth(width);
+            nodeWidthRef.current = width;
+            if (nodeHeightRef.current === null) {
+              nodeHeightRef.current = height;
+              previousRowsCountRef.current = nodeRows.length;
+            }
+          });
+        });
+      }
+    } else {
+      // ✅ Punto 3: Quando si entra in editing: imposta larghezza minima ma permette espansione
+      if (!nodeContainerRef.current) return;
+
+      const container = nodeContainerRef.current;
+      const minWidth = nodeWidthRef.current || 140;
+
+      container.style.setProperty('min-width', `${minWidth}px`, 'important');
+      container.style.setProperty('width', 'auto', 'important'); // ✅ Permette espansione
+      container.style.setProperty('flex-shrink', '0', 'important');
     }
   }, [editingRowId, id, nodeRows.length]);
 
@@ -296,7 +331,8 @@ export const CustomNode: React.FC<NodeProps<CustomNodeData>> = ({
     setIsHoveredNode,
     setIsHoverHeader,
     id,
-    isEmpty
+    isEmpty,
+    onWidthChange: handleRowWidthChange
   });
   const {
     nodeRowListProps,

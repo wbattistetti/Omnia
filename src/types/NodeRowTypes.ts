@@ -28,4 +28,5 @@ export interface NodeRowProps {
   onCreateBackendCall?: (name: string, onRowUpdate?: (item: any) => void) => void;
   onCreateTask?: (name: string, onRowUpdate?: (item: any) => void) => void;
   getProjectId?: () => string | null;
+  onWidthChange?: (width: number) => void;
 }

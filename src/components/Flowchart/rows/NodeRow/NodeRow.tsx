@@ -67,7 +67,8 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
     onCreateFactoryTask, // ✅ RINOMINATO: onCreateAgentAct → onCreateFactoryTask
     onCreateBackendCall,
     onCreateTask,
-    getProjectId
+    getProjectId,
+    onWidthChange
   }: NodeRowProps,
   ref
 ) => {
@@ -530,6 +531,7 @@ const NodeRowInner: React.ForwardRefRenderFunction<HTMLDivElement, NodeRowProps>
               inputRef={inputRef}
               placeholder="Type what you need here..."
               fontStyles={labelFontStyles}
+              onWidthChange={onWidthChange}
             />
           </div>
         ) : (
