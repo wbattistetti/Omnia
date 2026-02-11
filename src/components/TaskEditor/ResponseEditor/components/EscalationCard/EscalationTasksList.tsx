@@ -204,7 +204,7 @@ export function EscalationTasksList({
   }, [updateSelectedNode, stepKey]);
 
   return (
-    <CanvasDropWrapper onDropTask={handleAppend}>
+    <CanvasDropWrapper onDropTask={handleAppend} isEmpty={tasks.length === 0}>
       {tasks.length === 0 ? (
         <PanelEmptyDropZone color={color} onDropTask={handleAppend} />
       ) : (

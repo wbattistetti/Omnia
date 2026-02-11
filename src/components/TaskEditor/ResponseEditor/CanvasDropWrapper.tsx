@@ -8,11 +8,12 @@ interface CanvasDropWrapperProps {
   onDropTask: (task: TaskReference) => void;
   color?: string;
   children: React.ReactNode;
+  isEmpty?: boolean; // ✅ NEW: Indicates if escalation is empty (for flex fix)
   // Legacy prop for backward compatibility
   onDropAction?: (task: TaskReference) => void; // @deprecated Use onDropTask instead
 }
 
-const CanvasDropWrapper: React.FC<CanvasDropWrapperProps> = ({ onDropTask, onDropAction, children }) => {
+const CanvasDropWrapper: React.FC<CanvasDropWrapperProps> = ({ onDropTask, onDropAction, children, isEmpty = false }) => {
   const handleDrop = onDropTask ?? onDropAction;
 
   const [, drop] = useDrop(() => ({
@@ -30,7 +31,14 @@ const CanvasDropWrapper: React.FC<CanvasDropWrapperProps> = ({ onDropTask, onDro
   }), [handleDrop]);
 
   return (
-    <div ref={drop} style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}>
+    <div ref={drop} style={{
+      position: 'relative',
+      display: 'flex',
+      flexDirection: 'column',
+      flex: 'none',
+      minHeight: isEmpty ? '120px' : 'auto',
+      width: '100%'
+    }}>
       {children}
     </div>
   );

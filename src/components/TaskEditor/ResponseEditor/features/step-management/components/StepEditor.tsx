@@ -96,6 +96,11 @@ export default function StepEditor({
 
   const showEscalationCard = hasEscalationCard(stepKey);
 
+  // ✅ Determina modalità: A (single escalation) vs B (multiple escalations)
+  const hasMultipleEscalations = escalations.length > 1;
+  const isModeA = !showEscalationCard || !hasMultipleEscalations;
+  const isModeB = showEscalationCard && hasMultipleEscalations;
+
   return (
     <div
       className="step-editor"
@@ -108,14 +113,42 @@ export default function StepEditor({
         overflow: 'hidden',
       }}
     >
-      {/* ✅ Contenuto scrollabile: escalations */}
-      <div style={{ flex: 1, minHeight: 0, height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+      {/* ✅ StepContentArea: unico container scrollabile */}
+      <div style={{
+        flex: 1,
+        minHeight: 0,
+        overflowY: 'auto',
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
         {escalations.length === 0 ? (
           <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
             No escalations
           </div>
+        ) : isModeA ? (
+          // ✅ Modalità A: DropArea/TaskList diretta (nessun accordion)
+          <EscalationCardWrapper
+            escalation={escalations[0]}
+            escalationIdx={0}
+            stepLabel={stepLabel}
+            color={color}
+            translations={translations}
+            allowedActions={allowedActions}
+            updateSelectedNode={updateSelectedNode}
+            stepKey={stepKey}
+            onDeleteEscalation={handleDeleteEscalation}
+            autoEditTarget={autoEditTarget}
+            onAutoEditTargetChange={setAutoEditTarget}
+          />
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: showEscalationCard ? '1rem' : '0', flex: 1, minHeight: 0 }}>
+          // ✅ Modalità B: EscalationsStack (pila di accordion)
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1rem',
+            flex: '0 0 auto',
+            minHeight: 'auto'
+          }}>
             {escalations.map((esc, idx) => (
               <EscalationCardWrapper
                 key={idx}

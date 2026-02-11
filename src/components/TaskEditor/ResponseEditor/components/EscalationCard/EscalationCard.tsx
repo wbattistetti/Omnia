@@ -33,8 +33,14 @@ export function EscalationCard({
   stepKey
 }: EscalationCardProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(true);
   const showCard = hasEscalationCard(stepKey);
+
+  // ✅ Calcola isEmpty PRIMA di useState
+  const tasks = escalation?.tasks ?? [];
+  const isEmpty = tasks.length === 0;
+
+  // ✅ Inizializza sempre true (accordion parte sempre aperto)
+  const [isExpanded, setIsExpanded] = useState(true);
 
   // Per step senza escalation card (start, success), renderizza solo la lista task
   if (!showCard) {
@@ -67,9 +73,9 @@ export function EscalationCard({
         transition: 'all 0.2s',
         display: 'flex',
         flexDirection: 'column',
-        flex: 1,
-        minHeight: 0,
-        overflow: 'hidden',
+        flex: '0 0 auto',
+        minHeight: 'auto',
+        overflow: 'visible',
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -83,7 +89,13 @@ export function EscalationCard({
         onDelete={onDeleteEscalation}
       />
       {isExpanded && (
-        <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+        <div style={{
+          flex: 'none',
+          minHeight: isEmpty ? '120px' : 'auto',
+          overflow: 'visible',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
           <EscalationTasksList
             escalation={escalation}
             escalationIdx={escalationIdx}
