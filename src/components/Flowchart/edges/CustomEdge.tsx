@@ -13,6 +13,7 @@ import { EdgePathRenderer } from './components/EdgePathRenderer';
 import { EdgeLabel } from './components/EdgeLabel';
 import { EdgeControls } from './components/EdgeControls';
 import { EdgeControlPoints } from './components/EdgeControlPoints';
+import { EdgeContextMenu } from './components/EdgeContextMenu';
 import { ControlPoint } from './hooks/useControlPointDrag';
 import { extractPathVertices } from './utils/pathUtils';
 import { useLabelDrag } from './hooks/useLabelDrag';
@@ -50,6 +51,9 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   const [intellisensePosition, setIntellisensePosition] = useState({ x: 0, y: 0 });
   const [showConditionSelector, setShowConditionSelector] = useState(false);
   const [conditionSelectorPos, setConditionSelectorPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // State for context menu
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   // Refs
   const pathRef = useRef<SVGPathElement>(null);
@@ -206,79 +210,23 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     // This should NOT be called on left click
     e.preventDefault();
     e.stopPropagation();
-    try {
-      const menu = document.createElement('div');
-      Object.assign(menu.style, {
-        position: 'fixed',
-        left: `${e.clientX}px`,
-        top: `${e.clientY}px`,
-        background: '#111827',
-        color: '#E5E7EB',
-        border: '1px solid #374151',
-        borderRadius: '6px',
-        padding: '6px',
-        zIndex: 99999,
-        fontSize: '12px',
-      } as CSSStyleDeclaration);
-
-      const mk = (label: string, style: LinkStyle) => {
-        const b = document.createElement('button');
-        b.textContent = label;
-        b.style.display = 'block';
-        b.style.width = '100%';
-        b.style.background = 'transparent';
-        b.style.color = 'inherit';
-        b.style.border = 'none';
-        b.style.textAlign = 'left';
-        b.style.padding = '4px 8px';
-        b.onmouseenter = () => {
-          b.style.background = '#1F2937';
-        };
-        b.onmouseleave = () => {
-          b.style.background = 'transparent';
-        };
-        b.onclick = () => {
-          try {
-            if (typeof (props as any)?.data?.onUpdate === 'function') {
-              (props as any).data.onUpdate({
-                data: {
-                  ...(props as any).data,
-                  linkStyle: style
-                }
-              });
-            }
-          } catch {
-            // Silent fail
-          }
-          try {
-            document.body.removeChild(menu);
-          } catch {
-            // Silent fail
-          }
-        };
-        return b;
-      };
-
-      menu.appendChild(mk('AutoOrtho', LinkStyle.AutoOrtho));
-      menu.appendChild(mk('Bezier', LinkStyle.Bezier));
-      menu.appendChild(mk('Ortogonale (smooth)', LinkStyle.SmoothStep));
-      menu.appendChild(mk('Ortogonale (step)', LinkStyle.Step));
-      menu.appendChild(mk('HVH', LinkStyle.HVH));
-      menu.appendChild(mk('VHV', LinkStyle.VHV));
-
-      const close = () => {
-        try {
-          document.body.removeChild(menu);
-        } catch {
-          // Silent fail
-        }
-      };
-      setTimeout(() => document.addEventListener('click', close, { once: true }), 0);
-      document.body.appendChild(menu);
-    } catch {
-      // Silent fail
-    }
+    setContextMenu({ x: e.clientX, y: e.clientY });
   };
+
+  const handleSelectLinkStyle = useCallback((style: LinkStyle) => {
+    if (props.data && typeof props.data.onUpdate === 'function') {
+      props.data.onUpdate({
+        data: {
+          ...(props.data || {}),
+          linkStyle: style,
+        },
+      });
+    }
+  }, [props.data]);
+
+  const handleCloseContextMenu = useCallback(() => {
+    setContextMenu(null);
+  }, []);
 
   const handleSelectCondition = (item: any) => {
     if (props.data && typeof props.data.onUpdate === 'function') {
@@ -635,6 +583,17 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
           />,
           document.body
         )}
+
+      {/* Edge Context Menu */}
+      {contextMenu && (
+        <EdgeContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          currentLinkStyle={linkStyle}
+          onSelectStyle={handleSelectLinkStyle}
+          onClose={handleCloseContextMenu}
+        />
+      )}
     </>
   );
 };

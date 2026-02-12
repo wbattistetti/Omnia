@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import type { Edge, EdgeData } from '../types/flowTypes';
+import type { Edge, EdgeData } from '@components/Flowchart/types/flowTypes';
 
 /**
  * Hook for managing edge data updates with safe merging

@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { Node } from 'reactflow';
-import type { FlowNode, EdgeData } from '../types/flowTypes';
+import type { FlowNode, EdgeData } from '@components/Flowchart/types/flowTypes';
 import type { Edge } from 'reactflow';
 import { dlog } from '@utils/debug';
 

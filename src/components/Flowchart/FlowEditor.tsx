@@ -38,6 +38,10 @@ import { SelectionMenu } from './components/SelectionMenu';
 import { useConditionCreation } from './hooks/useConditionCreation';
 import { useEdgeDataManager } from './hooks/useEdgeDataManager';
 import { useFlowEventHandlers } from './hooks/useFlowEventHandlers';
+import { useFlowViewport } from './hooks/useFlowViewport';
+import { useCursorTooltip } from './hooks/useCursorTooltip';
+import { useEdgeLabelManager } from './hooks/useEdgeLabelManager';
+import { useTaskCreationFromSelection } from './hooks/useTaskCreationFromSelection';
 import { CustomEdge } from './edges/CustomEdge';
 import { v4 as uuidv4 } from 'uuid';
 import { useIntellisense } from '../../context/IntellisenseContext';
@@ -95,8 +99,6 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // Rimuovo tempEdgeIdState
   const selection = useSelectionManager();
 
-  // Save/restore viewport for ConditionEditor scroll
-  const savedViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null);
   const { selectedEdgeId, setSelectedEdgeId, selectedNodeIds, setSelectedNodeIds, selectionMenu, setSelectionMenu, handleEdgeClick } = selection;
 
   // Node alignment and distribution
@@ -171,69 +173,19 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     }
   }, [propExecutionState, propCurrentTask, propIsRunning]);
 
-  // Helper functions for edge label logic
-  const handleExistingEdgeLabel = useCallback((pid: string, label: string) => {
-    setEdges(eds => eds.map(e => e.id === pid ? { ...e, label } : e));
-    setSelectedEdgeId(pid);
-    pendingEdgeIdRef.current = null;
-  }, [setEdges, setSelectedEdgeId]);
-
-  const handleTempEdgeStabilization = useCallback((tempNodeId: string, tempEdgeId: string, label: string, fp: any) => {
-    debug('FLOW_EDITOR', 'Starting stabilization', { tempNodeId, tempEdgeId, flowPosition: fp, timestamp: Date.now() });
-
-    setNodes(nds => {
-      const stabilizedNodes = nds.map(n => {
-        if (n.id === tempNodeId) {
-          debug('FLOW_EDITOR', 'Stabilizing temporary node', { tempNodeId, pos: n.position, fp, timestamp: Date.now() });
-          return { ...n, isTemporary: false };
-        }
-        return n;
-      });
-      return stabilizedNodes;
-    });
-
-    setEdges(eds => eds.map(e => e.id === tempEdgeId ? { ...e, label } : e));
-    setSelectedEdgeId(tempEdgeId);
-    closeMenu();
-  }, [setNodes, setEdges, setSelectedEdgeId, closeMenu]);
-
-  // Commit helper: apply a label to the current linkage context deterministically
-  const commitEdgeLabel = useCallback((label: string): boolean => {
-    // 1) Just-created edge between existing nodes
-    if (pendingEdgeIdRef.current) {
-      const pid = pendingEdgeIdRef.current;
-      // If not yet present in state, defer until it appears
-      const exists = (edgesRef.current || []).some(e => e.id === pid);
-      if (exists) {
-        handleExistingEdgeLabel(pid, label);
-      } else {
-        scheduleApplyLabel(pid, label);
-      }
-      return true;
-    }
-
-    // 2) Promote temp node/edge if present
-    const tempNodeId = connectionMenuRef.current.tempNodeId as string | null;
-    const tempEdgeId = connectionMenuRef.current.tempEdgeId as string | null;
-    if (tempNodeId && tempEdgeId) {
-      const fp = (connectionMenuRef.current as any).flowPosition;
-      handleTempEdgeStabilization(tempNodeId, tempEdgeId, label, fp);
-      return true;
-    }
-
-    return false;
-  }, [scheduleApplyLabel, handleExistingEdgeLabel, handleTempEdgeStabilization]);
-
-  // Also attempt apply on every edges change (fast path)
-  useEffect(() => {
-    const cur = pendingApplyRef.current;
-    if (!cur) return;
-    if ((edges || []).some(e => e.id === cur.id)) {
-      setEdges(eds => eds.map(e => e.id === cur.id ? { ...e, label: cur.label, data: cur.data } : e));
-      setSelectedEdgeId(cur.id);
-      pendingEdgeIdRef.current = null;
-    }
-  }, [edges, setEdges]);
+  // ✅ Use Edge Label Manager hook
+  const { commitEdgeLabel } = useEdgeLabelManager({
+    edges,
+    setEdges,
+    setSelectedEdgeId,
+    pendingEdgeIdRef,
+    edgesRef,
+    connectionMenuRef,
+    scheduleApplyLabel,
+    pendingApplyRef,
+    closeMenu,
+    setNodes,
+  });
 
   // --- Undo/Redo command stack ---
   const { undo, redo } = useUndoRedoManager();
@@ -684,89 +636,11 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   // ✅ REMOVED: applyRigidDragMovement, applyFinalRigidDragOffset
   // All moved to useFlowEventHandlers hook
 
-  // Wheel handler: zoom only when CTRL is pressed
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (!reactFlowInstance) return;
-    if (!e.ctrlKey) {
-      // Non zoomare senza CTRL; non chiamare preventDefault su passive listeners
-      return;
-    }
-    // Zoom keeping the cursor screen point fixed
-    const vp = (reactFlowInstance as any).getViewport ? (reactFlowInstance as any).getViewport() : { x: 0, y: 0, zoom: 1 };
-    const factor = e.deltaY < 0 ? 1.1 : 0.9;
-    const newZoom = Math.max(0.2, Math.min(4, vp.zoom * factor));
-    // Convert screen point to flow coordinates before zoom
-    const rect = (document.querySelector('.react-flow') as HTMLElement)?.getBoundingClientRect();
-    const screenX = e.clientX - (rect ? rect.left : 0);
-    const screenY = e.clientY - (rect ? rect.top : 0);
-    const flowX = (screenX - vp.x) / vp.zoom;
-    const flowY = (screenY - vp.y) / vp.zoom;
-    // Compute new pan so the same flow point stays under cursor after zoom
-    const newX = screenX - flowX * newZoom;
-    const newY = screenY - flowY * newZoom;
-    if ((reactFlowInstance as any).setViewport) {
-      (reactFlowInstance as any).setViewport({ x: newX, y: newY, zoom: newZoom }, { duration: 0 });
-    }
-  }, [reactFlowInstance]);
+  // ✅ Use Flow Viewport hook for zoom, pan, and scroll-to-node
+  const { handleWheel } = useFlowViewport(reactFlowInstance);
 
-  // Cursor tooltip follow mouse
-  const cursorTooltipRef = useRef<HTMLDivElement | null>(null);
-  const cursorIconRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const el = document.createElement('div');
-    el.style.position = 'fixed';
-    el.style.pointerEvents = 'none';
-    el.style.zIndex = '9999';
-    el.style.fontSize = '12px';
-    el.style.padding = '2px 6px';
-    el.style.border = '1px solid #eab308';
-    el.style.background = '#fef9c3';
-    el.style.color = '#0f172a';
-    el.style.borderRadius = '6px';
-    el.style.boxShadow = '0 2px 6px rgba(0,0,0,0.15)';
-    el.style.display = 'none';
-    document.body.appendChild(el);
-    cursorTooltipRef.current = el;
-    const icon = document.createElement('div');
-    icon.style.position = 'fixed';
-    icon.style.pointerEvents = 'none';
-    icon.style.zIndex = '10000';
-    icon.style.width = '14px';
-    icon.style.height = '14px';
-    icon.style.borderRadius = '50%';
-    icon.style.background = '#0ea5e9';
-    icon.style.boxShadow = '0 0 0 2px #bae6fd';
-    icon.style.display = 'none';
-    document.body.appendChild(icon);
-    cursorIconRef.current = icon;
-    return () => {
-      if (cursorTooltipRef.current && cursorTooltipRef.current.parentNode) {
-        cursorTooltipRef.current.parentNode.removeChild(cursorTooltipRef.current);
-      }
-      if (cursorIconRef.current && cursorIconRef.current.parentNode) {
-        cursorIconRef.current.parentNode.removeChild(cursorIconRef.current);
-      }
-      cursorTooltipRef.current = null;
-      cursorIconRef.current = null;
-    };
-  }, []);
-
-  const setCursorTooltip = useCallback((text: string | null, x?: number, y?: number) => {
-    const el = cursorTooltipRef.current;
-    const icon = cursorIconRef.current;
-    if (!el) return;
-    if (!text) { el.style.display = 'none'; if (icon) icon.style.display = 'none'; return; }
-    el.textContent = text;
-    if (typeof x === 'number' && typeof y === 'number') {
-      el.style.left = `${x + 12}px`;
-      el.style.top = `${y + 12}px`;
-      if (icon) { icon.style.left = `${x + 2}px`; icon.style.top = `${y + 2}px`; }
-    }
-    el.style.display = 'block';
-    if (icon) icon.style.display = 'block';
-  }, []);
-
-  // ✅ REMOVED: handlePaneMouseMove - now in useFlowEventHandlers
+  // ✅ Use Cursor Tooltip hook
+  const { setCursorTooltip } = useCursorTooltip(nodes.length);
 
   // Persisted selection rectangle (keeps the user-drawn area after mouseup)
   const [persistedSel, setPersistedSel] = useState<null | { x: number; y: number; w: number; h: number }>(null);
@@ -790,208 +664,20 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     onOpenTaskFlow
   );
 
-  // Hide tooltip when first node is created
-  useEffect(() => {
-    if (nodes.length > 0) {
-      setCursorTooltip(null);
-    }
-  }, [nodes.length, setCursorTooltip]);
+  // ✅ Use Task Creation from Selection hook
+  const { handleCreateTask } = useTaskCreationFromSelection({
+    nodes,
+    edges,
+    setNodes,
+    setEdges,
+    setSelectionMenu,
+    setSelectedNodeIds,
+    onCreateTaskFlow,
+    onOpenTaskFlow,
+  });
 
-  // ✅ Helper per verificare se c'è una riga in editing
-  const checkIfRowEditing = useCallback(() => {
-    const activeElement = document.activeElement;
-    const isTextInputFocused = activeElement?.tagName === 'TEXTAREA' ||
-      activeElement?.tagName === 'INPUT';
-
-    // ✅ Escludi l'input dell'intellisense standalone (non è una riga in editing)
-    const isIntellisenseInput = activeElement?.closest('.intellisense-menu-standalone') !== null ||
-      activeElement?.closest('.intellisense-standalone-wrapper') !== null;
-
-    // ✅ Verifica se c'è un textarea/input con focus che NON è dell'intellisense
-    const focusedTextarea = document.querySelector('textarea:focus');
-    const focusedInput = document.querySelector('input:focus');
-    const isFocusedTextareaIntellisense = focusedTextarea?.closest('.intellisense-menu-standalone') !== null ||
-      focusedTextarea?.closest('.intellisense-standalone-wrapper') !== null;
-    const isFocusedInputIntellisense = focusedInput?.closest('.intellisense-menu-standalone') !== null ||
-      focusedInput?.closest('.intellisense-standalone-wrapper') !== null;
-
-    // ✅ C'è una riga in editing se:
-    // 1. C'è un textarea/input con focus che NON è dell'intellisense
-    // 2. C'è un elemento con data-row-id (riga in editing)
-    const hasRowInEditing = document.querySelector('[data-row-id]') !== null;
-
-    return (isTextInputFocused && !isIntellisenseInput) ||
-      (focusedTextarea !== null && !isFocusedTextareaIntellisense) ||
-      (focusedInput !== null && !isFocusedInputIntellisense) ||
-      hasRowInEditing;
-  }, []);
-
-  // ✅ Nascondi tooltip quando una riga entra in editing (focus/blur)
-  useEffect(() => {
-    const onFocus = () => {
-      if (checkIfRowEditing()) {
-        setCursorTooltip(null);
-      }
-    };
-
-    const onBlur = () => {
-      // Non fare nulla su blur, il mousemove controllerà
-    };
-
-    document.addEventListener('focusin', onFocus, true);
-    document.addEventListener('focusout', onBlur, true);
-
-    return () => {
-      document.removeEventListener('focusin', onFocus, true);
-      document.removeEventListener('focusout', onBlur, true);
-    };
-  }, [checkIfRowEditing, setCursorTooltip]);
-
-  // Inserter hover: custom cursor + label
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      const el = e.target as HTMLElement;
-      const isInserter = el?.classList?.contains('row-inserter') || !!el?.closest?.('.row-inserter');
-
-      // Disabilita il tooltip durante il drag delle righe
-      const isDraggingRow = document.querySelector('.node-row-outer[data-being-dragged="true"]');
-
-      // Disabilita anche se c'è un elemento trascinato fisso
-      const isDraggedElement = document.querySelector('[key*="dragged-"]');
-
-      // ✅ Verifica se c'è una riga in editing
-      const isRowEditing = checkIfRowEditing();
-
-      if (isInserter && !isDraggingRow && !isDraggedElement && !isRowEditing) {
-        setCursorTooltip('Click to insert here...', e.clientX, e.clientY);
-      } else {
-        // Hide only if this effect showed the message
-        try {
-          const txt = cursorTooltipRef.current?.textContent || '';
-          if (txt === 'Click to insert here...') setCursorTooltip(null);
-        } catch { }
-      }
-    };
-    window.addEventListener('mousemove', onMove, { passive: true });
-    return () => window.removeEventListener('mousemove', onMove as any);
-  }, [setCursorTooltip, checkIfRowEditing]);
-
-  // Inizializza la viewport a zoom 1 solo al primissimo mount
-  const initializedRef = useRef(false);
-  useEffect(() => {
-    if (reactFlowInstance && !initializedRef.current) {
-      try { (reactFlowInstance as any).setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 0 }); } catch { }
-      initializedRef.current = true;
-    }
-  }, [reactFlowInstance]);
-
-  // Listen for scroll to node event (from ConditionEditor)
-  useEffect(() => {
-    if (!reactFlowInstance) return;
-
-    const handleScrollToNode = (e: any) => {
-      const nodeId = e.detail?.nodeId;
-      const clickPosition = e.detail?.clickPosition; // Screen coordinates of the click
-      console.log('[FlowEditor] Scroll to node event received', { nodeId, clickPosition, detail: e.detail });
-
-      if (!nodeId && !clickPosition) {
-        console.warn('[FlowEditor] No nodeId or clickPosition provided in scroll event');
-        return;
-      }
-
-      try {
-        // Save current viewport
-        const currentViewport = reactFlowInstance.getViewport();
-        savedViewportRef.current = { x: currentViewport.x, y: currentViewport.y, zoom: currentViewport.zoom };
-        console.log('[FlowEditor] Saved viewport', savedViewportRef.current);
-
-        // Get viewport dimensions
-        const viewport = reactFlowInstance.getViewport();
-        const pane = document.querySelector('.react-flow__pane') as HTMLElement;
-        if (!pane) {
-          console.warn('[FlowEditor] ReactFlow pane not found');
-          return;
-        }
-
-        const paneRect = pane.getBoundingClientRect();
-        const viewportWidth = paneRect.width;
-        const viewportHeight = paneRect.height;
-
-        let newX: number;
-        let newY: number;
-
-        // If we have click position, use it for precise scrolling
-        if (clickPosition && typeof clickPosition.x === 'number' && typeof clickPosition.y === 'number') {
-          // Convert screen coordinates to flow coordinates
-          const flowPosition = reactFlowInstance.screenToFlowPosition({
-            x: clickPosition.x,
-            y: clickPosition.y
-          });
-
-          console.log('[FlowEditor] Converted click position to flow coordinates', {
-            screen: clickPosition,
-            flow: flowPosition,
-            viewport
-          });
-
-          // Calculate viewport position to center the click point (with offset from top)
-          // We want the click point to be at the top of the viewport (with 20px padding)
-          newX = -flowPosition.x + (viewportWidth / 2);
-          newY = -flowPosition.y + 20; // 20px padding from top
-        } else if (nodeId) {
-          // Fallback: use node position
-          const node = reactFlowInstance.getNode(nodeId);
-          console.log('[FlowEditor] Node found', { nodeId, node, hasPosition: !!node?.position });
-
-          if (!node || !node.position) {
-            console.warn('[FlowEditor] Node not found or has no position', { nodeId, node });
-            return;
-          }
-
-          // Calculate viewport position to center node at top
-          const nodeX = node.position.x;
-          const nodeY = node.position.y;
-          const nodeWidth = node.width || 280; // Default node width
-
-          newX = -nodeX + (viewportWidth / 2) - (nodeWidth / 2);
-          newY = -nodeY + 20; // 20px padding from top
-        } else {
-          return;
-        }
-
-        console.log('[FlowEditor] Scrolling to position', {
-          nodeId,
-          clickPosition,
-          viewportSize: { width: viewportWidth, height: viewportHeight },
-          newViewport: { x: newX, y: newY, zoom: viewport.zoom }
-        });
-
-        // Set viewport with smooth animation
-        reactFlowInstance.setViewport({ x: newX, y: newY, zoom: viewport.zoom }, { duration: 300 });
-      } catch (err) {
-        console.error('[FlowEditor] Failed to scroll to node', err);
-      }
-    };
-
-    const handleRestoreViewport = () => {
-      if (savedViewportRef.current && reactFlowInstance) {
-        try {
-          reactFlowInstance.setViewport(savedViewportRef.current, { duration: 300 });
-          savedViewportRef.current = null;
-        } catch (err) {
-          console.warn('[FlowEditor] Failed to restore viewport', err);
-        }
-      }
-    };
-
-    document.addEventListener('flowchart:scrollToNode', handleScrollToNode);
-    document.addEventListener('flowchart:restoreViewport', handleRestoreViewport);
-
-    return () => {
-      document.removeEventListener('flowchart:scrollToNode', handleScrollToNode);
-      document.removeEventListener('flowchart:restoreViewport', handleRestoreViewport);
-    };
-  }, [reactFlowInstance]);
+  // ✅ REMOVED: Viewport initialization and scroll-to-node logic
+  // All moved to useFlowViewport hook
 
   // ✅ SOLUZIONE DEFINITIVA: Forza la griglia a coprire tutto il canvas con CSS semplice
   useEffect(() => {
@@ -1514,117 +1200,7 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
           selectedNodeIds={selectedNodeIds}
           selectionMenu={selectionMenu}
           nodes={nodes}
-          onCreateTask={() => {
-            if (selectedNodeIds.length < 2) return;
-
-            console.log('🎯 [CREATE_TASK] Starting task creation from', selectedNodeIds.length, 'selected nodes');
-
-            // 1. SALVA la selezione originale per rollback
-            const selectedNodes = nodes.filter(n => selectedNodeIds.includes(n.id));
-            const selectedEdges = edges.filter(e =>
-              selectedNodeIds.includes(e.source) && selectedNodeIds.includes(e.target)
-            );
-            const avgX = selectedNodes.reduce((sum, n) => sum + n.position.x, 0) / selectedNodes.length;
-            const avgY = selectedNodes.reduce((sum, n) => sum + n.position.y, 0) / selectedNodes.length;
-
-            // 2. Crea ID unico per il task flow e il task node
-            const newFlowId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            const taskNodeId = `node_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            const editingToken = `edit_${Date.now()}`; // Token immutabile per triggare editing
-
-            console.log('🎯 [CREATE_TASK] Task node will be created at:', { x: avgX, y: avgY, id: taskNodeId, flowId: newFlowId });
-            console.log('🎯 [CREATE_TASK] Saved original selection:', { nodes: selectedNodes.length, edges: selectedEdges.length });
-
-            // 3. NASCONDE i nodi selezionati (ma non li elimina ancora)
-            setNodes(nds => nds.map(n =>
-              selectedNodeIds.includes(n.id)
-                ? { ...n, hidden: true }
-                : n
-            ));
-
-            // 4. NASCONDE gli edges selezionati
-            setEdges(eds => eds.map(e =>
-              (selectedNodeIds.includes(e.source) && selectedNodeIds.includes(e.target))
-                ? { ...e, hidden: true }
-                : e
-            ));
-
-            // 5. Crea il nodo Task in editing (NON crea ancora il flow)
-            const taskNode: Node<any> = {
-              id: taskNodeId,
-              type: 'task',
-              position: { x: avgX, y: avgY },
-              data: {
-                label: '', // Vuoto all'inizio, sarà editato dall'utente
-                flowId: newFlowId,
-                editingToken, // Token immutabile per triggare editing immediato
-                onUpdate: (updates: any) => {
-                  console.log('🎯 [TASK_UPDATE] Task node data updated:', updates);
-                  setNodes(nds => nds.map(n =>
-                    n.id === taskNodeId
-                      ? { ...n, data: { ...n.data, ...updates } }
-                      : n
-                  ));
-                },
-                onCancelTitle: () => {
-                  console.log('🎯 [TASK_CANCEL] Task creation cancelled, restoring original selection');
-
-                  // ✅ ROLLBACK: Rimuovi il task node
-                  setNodes(nds => nds.filter(n => n.id !== taskNodeId));
-
-                  // ✅ ROLLBACK: Ripristina i nodi nascosti
-                  setNodes(nds => nds.map(n =>
-                    selectedNodeIds.includes(n.id)
-                      ? { ...n, hidden: false }
-                      : n
-                  ));
-
-                  // ✅ ROLLBACK: Ripristina gli edges nascosti
-                  setEdges(eds => eds.map(e =>
-                    (selectedNodeIds.includes(e.source) && selectedNodeIds.includes(e.target))
-                      ? { ...e, hidden: false }
-                      : e
-                  ));
-
-                  console.log('🎯 [TASK_CANCEL] Original selection restored');
-                },
-                onCommitTitle: (title: string) => {
-                  console.log('🎯 [TASK_COMMIT] Task title committed:', title);
-
-                  // ✅ FINALIZZA: SOLO ORA elimina i nodi nascosti
-                  setNodes(nds => nds.filter(n => !selectedNodeIds.includes(n.id)));
-
-                  // ✅ FINALIZZA: SOLO ORA elimina gli edges
-                  setEdges(eds => eds.filter(e =>
-                    !selectedNodeIds.includes(e.source) && !selectedNodeIds.includes(e.target)
-                  ));
-
-                  // ✅ FINALIZZA: SOLO ORA crea il flow
-                  if (onCreateTaskFlow) {
-                    console.log('🎯 [TASK_COMMIT] Creating task flow:', newFlowId);
-                    onCreateTaskFlow(newFlowId, title, selectedNodes, selectedEdges);
-                  }
-
-                  // ✅ FINALIZZA: SOLO ORA apre la tab
-                  if (onOpenTaskFlow) {
-                    console.log('🎯 [TASK_COMMIT] Opening task flow tab:', title);
-                    onOpenTaskFlow(newFlowId, title);
-                  }
-
-                  console.log('🎯 [TASK_COMMIT] Task finalized successfully');
-                }
-              }
-            };
-
-            console.log('🎯 [CREATE_TASK] Adding task node to flow (in editing mode)');
-            setNodes(nds => [...nds, taskNode]);
-
-            // 6. Chiudi il menu di selezione
-            setSelectionMenu({ show: false, x: 0, y: 0 });
-            setSelectedNodeIds([]);
-
-            console.log('🎯 [CREATE_TASK] Task node created, waiting for user input');
-          }}
+          onCreateTask={() => handleCreateTask(selectedNodeIds)}
           onAlign={(type) => handleAlign(type, selectedNodeIds)}
           onDistribute={(type) => handleDistribute(type, selectedNodeIds)}
           checkAlignmentOverlap={(type) => checkAlignmentOverlap(type, selectedNodeIds)}
