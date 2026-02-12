@@ -123,11 +123,16 @@ export function useNodeEffects({
     }, []);
 
     // Effetto per mantenere isEmpty allineato alle righe (fuori dalla finestra auto-append)
+    const prevComputedIsEmptyRef = useRef<boolean | null>(null);
     useEffect(() => {
         if (inAutoAppend()) return; // evita transizioni spurie durante auto-append
 
         const next = computeIsEmpty(nodeRows);
-        setIsEmpty(next);
+        // Only update if the computed value actually changed to prevent infinite loops
+        if (prevComputedIsEmptyRef.current === null || next !== prevComputedIsEmptyRef.current) {
+            prevComputedIsEmptyRef.current = next;
+            setIsEmpty(next);
+        }
     }, [nodeRows, inAutoAppend, computeIsEmpty, setIsEmpty]);
 
     // Focus per nodi nuovi (semplificato) - NON per nodi hidden!
