@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { Node, Edge } from 'reactflow';
 import { v4 as uuidv4 } from 'uuid';
 import type { FlowNode, EdgeData } from '../types/flowTypes';
+import { DEFAULT_LINK_STYLE } from '../types/flowTypes';
 
 export function useTemporaryNodes(
       setNodes: React.Dispatch<React.SetStateAction<Node<FlowNode>[]>>,
@@ -10,7 +11,8 @@ export function useTemporaryNodes(
   connectionMenuRef: React.MutableRefObject<any>,
   onDeleteEdge: () => void,
   setNodesWithLog: (updater: any) => void,
-  isCreatingTempNode?: React.MutableRefObject<boolean>
+  isCreatingTempNode: React.MutableRefObject<boolean> | undefined,
+  createOnUpdate: (edgeId: string) => (updates: any) => void
 ) {
   // Pulisce SOLO il nodo temporaneo corrente e il suo edge associato
   const cleanupAllTempNodesAndEdges = useCallback(() => {
@@ -82,7 +84,11 @@ export function useTemporaryNodes(
         target: tempNodeId,
         style: { stroke: '#8b5cf6' },
         type: 'custom',
-        data: { onDeleteEdge },
+        data: {
+          onDeleteEdge,
+          onUpdate: createOnUpdate(tempEdgeId),
+          linkStyle: DEFAULT_LINK_STYLE
+        },
         markerEnd: 'arrowhead',
       };
 
@@ -110,7 +116,7 @@ export function useTemporaryNodes(
         isCreatingTempNode.current = false;
       }
     }
-  }, [reactFlowInstance, setNodesWithLog, setEdges, onDeleteEdge, connectionMenuRef, isCreatingTempNode]);
+  }, [reactFlowInstance, setNodesWithLog, setEdges, onDeleteEdge, connectionMenuRef, isCreatingTempNode, createOnUpdate]);
 
   return {
     cleanupAllTempNodesAndEdges,

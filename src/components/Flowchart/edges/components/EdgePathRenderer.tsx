@@ -3,6 +3,7 @@ import { getBezierPath, getSmoothStepPath } from 'reactflow';
 import { LinkStyle } from '../../types/flowTypes';
 import { Highlight } from '../../executionHighlight/executionHighlightConstants';
 import { buildPathFromVertices } from '../utils/pathUtils';
+import { getAutoOrthoPath, getVHVPath, getHVHPath } from '../utils/edgeRouting';
 
 export interface EdgePathRendererProps {
   id: string;
@@ -73,7 +74,21 @@ export const EdgePathRenderer = forwardRef<SVGPathElement, EdgePathRendererProps
       edgePath = buildPathFromVertices(allVertices);
     } else {
       // Otherwise, use link style
+      // ✅ DEBUG: Log linkStyle to verify it's being received correctly
+      console.log('[EdgePathRenderer] Rendering path', { id, linkStyle });
       switch (linkStyle) {
+      case LinkStyle.AutoOrtho:
+        edgePath = getAutoOrthoPath(sourceX, sourceY, targetX, targetY);
+        break;
+
+      case LinkStyle.VHV:
+        edgePath = getVHVPath(sourceX, sourceY, targetX, targetY);
+        break;
+
+      case LinkStyle.HVH:
+        edgePath = getHVHPath(sourceX, sourceY, targetX, targetY);
+        break;
+
       case LinkStyle.Bezier:
         edgePath = getBezierPath({
           sourceX,
@@ -95,16 +110,6 @@ export const EdgePathRenderer = forwardRef<SVGPathElement, EdgePathRendererProps
           const midY = (sourceY + targetY) / 2;
           edgePath = `M ${sourceX},${sourceY} L ${sourceX},${midY} L ${targetX},${midY} L ${targetX},${targetY}`;
         }
-        break;
-
-      case LinkStyle.HVH:
-        const midX = (sourceX + targetX) / 2;
-        edgePath = `M ${sourceX},${sourceY} L ${midX},${sourceY} L ${midX},${targetY} L ${targetX},${targetY}`;
-        break;
-
-      case LinkStyle.VHV:
-        const midY = (sourceY + targetY) / 2;
-        edgePath = `M ${sourceX},${sourceY} L ${sourceX},${midY} L ${targetX},${midY} L ${targetX},${targetY}`;
         break;
 
       case LinkStyle.SmoothStep:

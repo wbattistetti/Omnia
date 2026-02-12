@@ -57,17 +57,25 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
 
   // Get link style
   const linkStyle = (data as any)?.linkStyle ?? DEFAULT_LINK_STYLE;
+  // ✅ DEBUG: Log linkStyle to verify it's being read correctly
+  useEffect(() => {
+    console.log('[CustomEdge] Render', { id, linkStyle, dataLinkStyle: (data as any)?.linkStyle });
+  }, [id, linkStyle, data]);
   const label = props.data?.label || props.label;
 
   // Get saved label position from data (now in SVG coordinates)
   const savedLabelSvgPosition = (data as any)?.labelPositionSvg;
 
-  // Debug: log only when position changes
+  // Debug: log when position changes or when data changes
   useEffect(() => {
-    if (savedLabelSvgPosition) {
-      console.log('Reading saved label position:', savedLabelSvgPosition);
-    }
-  }, [savedLabelSvgPosition?.x, savedLabelSvgPosition?.y]);
+    console.log('[CustomEdge][useEffect] 📖 Reading saved label position', {
+      edgeId: id,
+      savedLabelSvgPosition,
+      hasData: !!data,
+      dataKeys: data ? Object.keys(data) : [],
+      fullData: data
+    });
+  }, [savedLabelSvgPosition?.x, savedLabelSvgPosition?.y, id, data]);
 
   // ✅ Use positioning hook (eliminates polling)
   // Note: pathRef will be populated by EdgePathRenderer after first render
@@ -251,6 +259,7 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
         return b;
       };
 
+      menu.appendChild(mk('AutoOrtho', LinkStyle.AutoOrtho));
       menu.appendChild(mk('Bezier', LinkStyle.Bezier));
       menu.appendChild(mk('Ortogonale (smooth)', LinkStyle.SmoothStep));
       menu.appendChild(mk('Ortogonale (step)', LinkStyle.Step));
@@ -397,16 +406,42 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   // Label drag hook with intelligent snap logic
   const handleLabelPositionChange = useCallback((newSvgPosition: { x: number; y: number }) => {
     // La posizione è già in coordinate SVG
-    console.log('Saving label position:', newSvgPosition); // DEBUG
+    console.log('[CustomEdge][handleLabelPositionChange] 🎯 START', {
+      edgeId: id,
+      newSvgPosition,
+      hasOnUpdate: !!(props.data && typeof props.data.onUpdate === 'function'),
+      currentData: props.data,
+      currentLabelPosition: (props.data as any)?.labelPositionSvg
+    });
+
     if (props.data && typeof props.data.onUpdate === 'function') {
+      // ✅ CRITICAL: Pass only labelPositionSvg, not the entire props.data
+      // useEdgeDataManager will merge this with existing edge.data, preserving
+      // all other properties (linkStyle, controlPoints, isElse, etc.)
+      console.log('[CustomEdge][handleLabelPositionChange] 📤 Calling onUpdate', {
+        edgeId: id,
+        updates: {
+          data: {
+            labelPositionSvg: newSvgPosition,
+          }
+        }
+      });
+
       props.data.onUpdate({
         data: {
-          ...props.data,
           labelPositionSvg: newSvgPosition,
         }
       });
+
+      console.log('[CustomEdge][handleLabelPositionChange] ✅ onUpdate called');
+    } else {
+      console.error('[CustomEdge][handleLabelPositionChange] ❌ onUpdate not available', {
+        edgeId: id,
+        hasData: !!props.data,
+        onUpdateType: typeof props.data?.onUpdate
+      });
     }
-  }, [props.data]);
+  }, [props.data, id]);
 
   const labelDrag = useLabelDrag({
     labelRef: hoverRefs.labelRef,

@@ -36,6 +36,7 @@ import { IntellisensePopover } from '../Intellisense/IntellisensePopover';
 import { SelectionMenu } from './components/SelectionMenu';
 // RIMOSSO: import { EdgeConditionMenu } from './components/EdgeConditionMenu';
 import { useConditionCreation } from './hooks/useConditionCreation';
+import { useEdgeDataManager } from './hooks/useEdgeDataManager';
 import { CustomEdge } from './edges/CustomEdge';
 import { v4 as uuidv4 } from 'uuid';
 import { useIntellisense } from '../../context/IntellisenseContext';
@@ -116,6 +117,9 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
   const onDeleteEdge = useCallback((edgeId?: string) => {
     if (edgeId) deleteEdgeManaged(edgeId);
   }, [deleteEdgeManaged]);
+
+  // ✅ Use Edge Data Manager hook for safe edge data updates
+  const { createOnUpdate } = useEdgeDataManager(setEdges, onDeleteEdge);
 
   // Deferred apply for labels on just-created edges (avoids race with RF state)
   const { scheduleApplyLabel, pendingApplyRef } = useEdgeLabelScheduler(setEdges, setSelectedEdgeId, connectionMenuRef);
@@ -328,7 +332,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     createFactoryTaskAdapter, // ✅ RINOMINATO: createAgentActAdapter → createFactoryTaskAdapter
     createBackendCallAdapter,
     createTaskAdapter,
-    nodeIdCounterRef
+    nodeIdCounterRef,
+    createOnUpdate
   );
 
   // ✅ RIMOSSO: problemIntentSeedItems - ora calcolato manualmente in openIntellisense
@@ -415,67 +420,53 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     }
   }, [deleteNodeWithLog, updateNode, setNodes, onPlayNode, createFactoryTask, createBackendCall, createTask, nodes.length]); // ✅ RINOMINATO: createAgentAct → createFactoryTask
 
-  // Aggiorna edges con onUpdate per ogni edge custom
+  // ✅ Initialize edges with onUpdate/onDeleteEdge if missing (for existing edges loaded from saved project)
+  // This is different from the old useEffect: it only adds missing callbacks, doesn't recreate edges
   useEffect(() => {
-    setEdges(eds => eds.map(e => {
-      if (e.type === 'custom') {
-        // ✅ FIX: If edge has label 'Else' but isElse is not set, set it to true
-        const shouldHaveIsElse = e.label === 'Else' || (e.data as any)?.label === 'Else';
-        const hasIsElse = e.data?.isElse === true;
-        const dataWithIsElse = shouldHaveIsElse && !hasIsElse
-          ? { ...(e.data || {}), isElse: true }
-          : e.data;
+    setEdges(eds => {
+      const needsUpdate = eds.some(e =>
+        e.type === 'custom' && (!e.data?.onUpdate || !e.data?.onDeleteEdge)
+      );
 
-        return {
-          ...e,
-          data: {
-            ...dataWithIsElse, // ✅ CRITICAL: Preserve ALL existing data properties (including isElse)
-            onDeleteEdge,
-            onUpdate: (updates: any) => {
-              let safeUpdates = { ...updates };
-              if (typeof updates.label === 'object' && updates.label !== null) {
-                safeUpdates.label = updates.label.description || updates.label.name || '';
-              }
-              setEdges(prevEdges => {
-                const updated = prevEdges.map(edge => {
-                  if (edge.id === e.id) {
-                    // ✅ FIX: Preserve existing data properties when updating
-                    const mergedData = {
-                      ...(edge.data || {}),
-                      ...(safeUpdates.data || {})
-                    };
-                    // ✅ DEBUG: Log when isElse is being set or preserved
-                    if (safeUpdates.data?.isElse === true && edge.data?.isElse !== true) {
-                      console.log('[FlowEditor][onUpdate] ✅ Setting isElse to true', {
-                        edgeId: edge.id,
-                        edgeLabel: edge.label,
-                        oldIsElse: edge.data?.isElse,
-                        newIsElse: true
-                      });
-                    } else if (edge.data?.isElse === true && mergedData.isElse === true) {
-                      console.log('[FlowEditor][onUpdate] ✅ Preserving isElse flag', {
-                        edgeId: edge.id,
-                        edgeLabel: edge.label,
-                        isElse: true
-                      });
-                    }
-                    return {
-                      ...edge,
-                      ...safeUpdates,
-                      data: mergedData
-                    };
-                  }
-                  return edge;
-                });
-                return updated;
-              });
-            }
-          }
-        };
+      if (!needsUpdate) {
+        return eds; // No changes needed, return same array reference
       }
-      return e;
-    }));
-  }, [onDeleteEdge, setEdges]);
+
+      console.log('[FlowEditor][useEffect] 🔧 Initializing missing edge callbacks', {
+        totalEdges: eds.length,
+        customEdges: eds.filter(e => e.type === 'custom').length
+      });
+
+      return eds.map(e => {
+        if (e.type === 'custom') {
+          const existingData = e.data || {};
+
+          // Only add callbacks if they're missing (preserve all existing data)
+          const needsOnUpdate = !existingData.onUpdate;
+          const needsOnDeleteEdge = !existingData.onDeleteEdge;
+
+          if (needsOnUpdate || needsOnDeleteEdge) {
+            console.log('[FlowEditor][useEffect] 🔧 Adding missing callbacks to edge', {
+              edgeId: e.id,
+              needsOnUpdate,
+              needsOnDeleteEdge,
+              existingDataKeys: Object.keys(existingData)
+            });
+
+            return {
+              ...e,
+              data: {
+                ...existingData, // Preserve ALL existing data (linkStyle, labelPositionSvg, controlPoints, etc.)
+                ...(needsOnUpdate && { onUpdate: createOnUpdate(e.id) }),
+                ...(needsOnDeleteEdge && { onDeleteEdge })
+              }
+            };
+          }
+        }
+        return e;
+      });
+    });
+  }, [setEdges, createOnUpdate, onDeleteEdge]);
 
   // Forza tutti gli edge a solidi dopo il mount o ogni volta che edges cambiano
   useEffect(() => {
@@ -590,7 +581,8 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     connectionMenuRef,
     onDeleteEdge,
     setNodesWithLog,
-    isCreatingTempNode
+    isCreatingTempNode,
+    createOnUpdate
   );
 
   // ✅ Esporta cleanup per l'Intellisense (DOPO la definizione)

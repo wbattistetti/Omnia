@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { Connection, Node, Edge } from 'reactflow';
 import { v4 as uuidv4 } from 'uuid';
 import type { FlowNode, EdgeData } from '../types/flowTypes';
+import { DEFAULT_LINK_STYLE } from '../types/flowTypes';
 
 export function useFlowConnect(
   reactFlowInstance: any,
@@ -16,7 +17,8 @@ export function useFlowConnect(
   createFactoryTask: () => void, // ✅ RINOMINATO: createAgentAct → createFactoryTask
   createBackendCall: () => void,
   createTask: () => void,
-  nodeIdCounter: React.MutableRefObject<number>
+  nodeIdCounter: React.MutableRefObject<number>,
+  createOnUpdate: (edgeId: string) => (updates: any) => void
 ) {
   // Gestisce la connessione tra due nodi esistenti
   const onConnect = useCallback((connection: Connection) => {
@@ -36,11 +38,15 @@ export function useFlowConnect(
         targetHandle: targetHandle || undefined,
         style: { stroke: '#8b5cf6' },
         type: 'custom',
-        data: { onDeleteEdge },
+        data: {
+          onDeleteEdge,
+          onUpdate: createOnUpdate(id),
+          linkStyle: DEFAULT_LINK_STYLE
+        },
         markerEnd: 'arrowhead'
       }];
     });
-  }, [setEdges, onDeleteEdge]);
+  }, [setEdges, onDeleteEdge, createOnUpdate]);
 
   // Gestisce l'inizio di una connessione
   const onConnectStart = useCallback((event: any, params: any) => {
@@ -97,15 +103,20 @@ export function useFlowConnect(
 
     const targetHandle = getTargetHandle(connectionMenuRef.current.sourceHandleId || '');
 
+    const edgeId = `e${sourceNodeId}-${newNodeId}`;
     const newEdge: Edge<EdgeData> = {
-      id: `e${sourceNodeId}-${newNodeId}`,
+      id: edgeId,
       source: sourceNodeId || '',
       sourceHandle: connectionMenuRef.current.sourceHandleId || undefined,
       target: newNodeId,
       targetHandle: targetHandle,
       style: { stroke: '#8b5cf6' },
       type: 'custom',
-      data: { onDeleteEdge },
+      data: {
+        onDeleteEdge,
+        onUpdate: createOnUpdate(edgeId),
+        linkStyle: DEFAULT_LINK_STYLE
+      },
       markerEnd: 'arrowhead'
     };
 
@@ -115,7 +126,8 @@ export function useFlowConnect(
   }, [
     reactFlowInstance, connectionMenuRef, setNodes, setEdges,
     closeMenu, onDeleteEdge, deleteNodeWithLog, updateNode,
-    createFactoryTask, createBackendCall, createTask, nodeIdCounter // ✅ RINOMINATO: createAgentAct → createFactoryTask
+    createFactoryTask, createBackendCall, createTask, nodeIdCounter, // ✅ RINOMINATO: createAgentAct → createFactoryTask
+    createOnUpdate
   ]);
 
   return {

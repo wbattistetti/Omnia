@@ -5,6 +5,8 @@ import type { EdgeData as BaseEdgeData } from '../../hooks/useEdgeManager';
  * Defines how edges/links are visually rendered in the flowchart
  */
 export enum LinkStyle {
+  /** Auto-selects VHV or HVH based on geometry (dy > dx → VHV, otherwise HVH) */
+  AutoOrtho = 'auto-ortho',
   /** Smooth step with rounded corners */
   SmoothStep = 'smoothstep',
   /** Bezier curve */

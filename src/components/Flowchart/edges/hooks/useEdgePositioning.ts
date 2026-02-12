@@ -33,7 +33,10 @@ export function useEdgePositioning(
   });
 
   const updatePositions = useCallback(() => {
-    if (!pathRef.current) return;
+    if (!pathRef.current) {
+      console.log('[useEdgePositioning][updatePositions] ⚠️ No pathRef');
+      return;
+    }
 
     const path = pathRef.current;
     const pathLength = path.getTotalLength();
@@ -47,20 +50,39 @@ export function useEdgePositioning(
 
     let labelScreenPos: { x: number; y: number };
     if (savedLabelSvgPosition) {
+      console.log('[useEdgePositioning][updatePositions] 📍 Using saved label position', {
+        savedLabelSvgPosition,
+        midPoint: { x: midPoint.x, y: midPoint.y }
+      });
       labelScreenPos = flowToScreenPosition({
         x: savedLabelSvgPosition.x,
         y: savedLabelSvgPosition.y,
       });
+      console.log('[useEdgePositioning][updatePositions] 📍 Converted to screen', {
+        svg: savedLabelSvgPosition,
+        screen: labelScreenPos
+      });
     } else {
+      console.log('[useEdgePositioning][updatePositions] 📍 Using midpoint (no saved position)', {
+        midPoint: { x: midPoint.x, y: midPoint.y },
+        midPointScreen
+      });
       labelScreenPos = midPointScreen;
     }
 
-    setPositions({
+    const newPositions = {
       midPointSvg: { x: midPoint.x, y: midPoint.y },
       midPointScreen,
       labelScreenPosition: labelScreenPos,
       sourceScreenPosition: sourceScreen,
+    };
+
+    console.log('[useEdgePositioning][updatePositions] ✅ Setting positions', {
+      newPositions,
+      savedLabelSvgPosition
     });
+
+    setPositions(newPositions);
   }, [pathRef, sourceX, sourceY, savedLabelSvgPosition, flowToScreenPosition]);
 
   // Aggiorna su mount e quando cambia edgePath
@@ -87,6 +109,17 @@ export function useEdgePositioning(
 
     return unsubscribe;
   }, [reactFlowInstance, updatePositions]);
+
+  // ✅ CRITICAL: Update positions when savedLabelSvgPosition changes
+  // This ensures the label position is updated immediately after drag
+  useEffect(() => {
+    console.log('[useEdgePositioning][useEffect] 🔄 savedLabelSvgPosition changed', {
+      savedLabelSvgPosition,
+      x: savedLabelSvgPosition?.x,
+      y: savedLabelSvgPosition?.y
+    });
+    updatePositions();
+  }, [savedLabelSvgPosition?.x, savedLabelSvgPosition?.y, updatePositions]);
 
   return positions;
 }
