@@ -1,6 +1,28 @@
 import type { EdgeData as BaseEdgeData } from '../../hooks/useEdgeManager';
 
 /**
+ * Link style enumeration for edge rendering patterns
+ * Defines how edges/links are visually rendered in the flowchart
+ */
+export enum LinkStyle {
+  /** Smooth step with rounded corners */
+  SmoothStep = 'smoothstep',
+  /** Bezier curve */
+  Bezier = 'bezier',
+  /** Orthogonal step (auto HV or VH based on distance) */
+  Step = 'step',
+  /** Horizontal-Vertical-Horizontal pattern */
+  HVH = 'HVH',
+  /** Vertical-Horizontal-Vertical pattern */
+  VHV = 'VHV',
+}
+
+/**
+ * Default link style for new edges
+ */
+export const DEFAULT_LINK_STYLE = LinkStyle.VHV;
+
+/**
  * Simplified FlowNode model - directly contains rows without intermediate wrapper
  * This replaces the old NodeData wrapper for a cleaner, more direct structure
  */
@@ -41,6 +63,20 @@ export interface NodeRow {
 // NodeData removed - use FlowNode directly
 
 export interface EdgeData extends BaseEdgeData {
+  /**
+   * Link style pattern
+   */
+  linkStyle?: LinkStyle;
+  /**
+   * Control points for custom path editing (Phase 2)
+   * Array of {x, y} coordinates in SVG space
+   */
+  controlPoints?: Array<{ x: number; y: number }>;
+  /**
+   * Custom label position (SVG coordinates)
+   * If not set, label is positioned at edge midpoint
+   */
+  labelPositionSvg?: { x: number; y: number };
   // Eventuali estensioni specifiche per flowchart
 }
 
