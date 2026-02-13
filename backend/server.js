@@ -1505,8 +1505,8 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
       rows: n.rows?.map((r) => ({
         id: r.id,
         text: r.text,
-        taskId: r.taskId,
-        hasTaskId: !!r.taskId
+        hasHeuristics: !!(r.heuristics),
+        heuristicsType: r.heuristics?.type
       })) || []
     }))
   });

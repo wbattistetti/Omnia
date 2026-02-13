@@ -20,7 +20,7 @@ export interface RowUpdateData {
   type: string | undefined;
   mode: string | undefined;
   isUndefined: boolean;
-  meta: {
+  heuristics: {
     type: TaskType;
     templateId: string | null;
     inferredCategory: string | null;
@@ -102,8 +102,8 @@ export class RowHeuristicsHandler {
       type: heuristicsResult.rowType as any,
       mode: heuristicsResult.rowType as any,
       isUndefined: heuristicsResult.isUndefined,
-      // LAZY: Store metadata for task creation when editor is opened
-      meta: {
+      // LAZY: Store heuristics for task creation when editor is opened
+      heuristics: {
         type: heuristicsResult.taskType, // TaskType enum
         templateId: heuristicsResult.templateId, // GUID of template if found
         inferredCategory: heuristicsResult.inferredCategory || null, // Semantic category inferred automatically

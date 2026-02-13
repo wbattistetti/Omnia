@@ -163,14 +163,14 @@ export function generateVariableNames(
 export function applyVariableNamesToStructure(
   structure: WizardTaskTreeNode[],
   variableNames: Map<string, { readableName: string; dottedName: string }>,
-  taskId: string
+  rowId: string // ✅ ALWAYS equals row.id (which equals task.id when task exists)
 ): void {
   function applyToNode(node: WizardTaskTreeNode): void {
     const names = variableNames.get(node.id);
     if (names) {
       node.readableName = names.readableName;
       node.dottedName = names.dottedName;
-      node.taskId = taskId;
+      // ✅ REMOVED: node.taskId is redundant (task.id = row.id always)
     }
 
     // Apply recursively to children

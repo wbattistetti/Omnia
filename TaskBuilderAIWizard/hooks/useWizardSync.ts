@@ -12,8 +12,7 @@ type UseWizardSyncProps = {
   dataSchema: WizardTaskTreeNode[];
   setDataSchema: (schema: WizardTaskTreeNode[] | ((prev: WizardTaskTreeNode[]) => WizardTaskTreeNode[])) => void;
   taskLabel: string;
-  taskId?: string;
-  rowId?: string;
+  rowId?: string; // ✅ ALWAYS equals row.id (which equals task.id when task exists)
   projectId?: string;
   locale: string;
 };
@@ -27,8 +26,7 @@ export function useWizardSync(props: UseWizardSyncProps) {
     dataSchema,
     setDataSchema,
     taskLabel,
-    taskId,
-    rowId,
+    rowId, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
     projectId,
     locale,
   } = props;
@@ -42,7 +40,7 @@ export function useWizardSync(props: UseWizardSyncProps) {
    * - Aggiorna dataSchema con nomi variabili
    */
   const syncVariables = useCallback(async () => {
-    if (!dataSchema || dataSchema.length === 0 || !taskId || !rowId) {
+    if (!dataSchema || dataSchema.length === 0 || !rowId) {
       return;
     }
 
@@ -53,7 +51,7 @@ export function useWizardSync(props: UseWizardSyncProps) {
 
       // 2. Applica nomi alla struttura
       const schemaWithNames = [...dataSchema];
-      applyVariableNamesToStructure(schemaWithNames, variableNames, taskId);
+      applyVariableNamesToStructure(schemaWithNames, variableNames, rowId); // ✅ ALWAYS equals row.id
 
       // 3. Sincronizza con Translations (se projectId disponibile)
       if (projectId) {
@@ -61,7 +59,7 @@ export function useWizardSync(props: UseWizardSyncProps) {
       }
 
       // 4. Sincronizza con FlowchartVariablesService
-      await syncVariablesWithStructure(schemaWithNames, taskId, rowId, taskLabel.trim());
+      await syncVariablesWithStructure(schemaWithNames, rowId, taskLabel.trim()); // ✅ rowId equals row.id which equals task.id
 
       // 5. Aggiorna dataSchema con nomi variabili
       setDataSchema(schemaWithNames);
@@ -69,7 +67,7 @@ export function useWizardSync(props: UseWizardSyncProps) {
       console.error('[useWizardSync] ❌ Errore nella generazione variabili/sincronizzazione:', error);
       // Continua comunque: la struttura è stata generata
     }
-  }, [dataSchema, taskLabel, taskId, rowId, projectId, locale, setDataSchema]);
+  }, [dataSchema, taskLabel, rowId, projectId, locale, setDataSchema]);
 
   return {
     syncVariables,

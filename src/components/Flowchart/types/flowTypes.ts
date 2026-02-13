@@ -1,4 +1,5 @@
 import type { EdgeData as BaseEdgeData } from '../../hooks/useEdgeManager';
+import { TaskType } from '../../../types/taskTypes';
 
 /**
  * Link style enumeration for edge rendering patterns
@@ -52,14 +53,31 @@ export interface FlowNode {
 
 /**
  * NodeRow represents a single row in a FlowNode
- * Each row corresponds to a TaskInstance via row.id === task.id (GUID)
+ * Each row corresponds to a Task via row.id === task.id (ALWAYS)
+ *
+ * Architettura pulita:
+ * - row.id ALWAYS equals task.id (quando task esiste)
+ * - row.heuristics contiene solo dati euristici per lazy task creation
+ * - Tutti gli altri dati (type, category, templateId) vengono dal task o da heuristics
  */
 export interface NodeRow {
-  id: string;        // UUID della riga (topological ID)
-  text: string;      // Testo visualizzato
-  taskId?: string;   // Reference to Task (1:1)
-  included?: boolean; // true se la row è inclusa nel flusso
-  [key: string]: any;
+  // ✅ Dati strutturali UI
+  id: string;                    // UUID della riga - ALWAYS equals task.id when task exists
+  text: string;                  // Testo visualizzato
+  included?: boolean;            // Flag inclusione nel flusso
+
+  // ✅ Dati euristici (SOLO quando task non esiste ancora - lazy creation)
+  heuristics?: {
+    type?: TaskType;              // Tipo dedotto dall'euristica
+    templateId?: string | null;   // Template ID dedotto dall'euristica
+    inferredCategory?: string | null; // Categoria semantica dedotta (es. 'problem-classification', 'choice', 'confirmation')
+  };
+
+  // ✅ Metadati UI/organizzativi
+  factoryId?: string;             // ID template factory (quando la riga referenzia un template)
+  isUndefined?: boolean;          // Flag tipo undefined (per UI - mostra icona "?")
+
+  // ❌ RIMOSSO: [key: string]: any - non più necessario, struttura esplicita
 }
 
 // NodeData removed - use FlowNode directly

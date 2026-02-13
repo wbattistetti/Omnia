@@ -70,11 +70,11 @@ export function useNodeRowVisuals(props: UseNodeRowVisualsProps): UseNodeRowVisu
               const taskTypeEnum = task.type;
               const has = hasTaskTree(row);
               // Use getTaskVisuals with support for categories
-              // Read category from task.category OR from row.meta.inferredCategory (if task doesn't exist yet)
-              const taskCategory = task.category || ((row as any)?.meta?.inferredCategory) || null;
+              // Read category from task.category OR from row.heuristics.inferredCategory (if task doesn't exist yet)
+              const taskCategory = task.category || ((row as any)?.heuristics?.inferredCategory) || null;
               const visuals = getTaskVisuals(
                 taskTypeEnum,
-                taskCategory, // Preset category (from task or row.meta)
+                taskCategory, // Preset category (from task or row.heuristics)
                 task.categoryCustom, // Custom category
                 has
               );
@@ -100,13 +100,13 @@ export function useNodeRowVisuals(props: UseNodeRowVisualsProps): UseNodeRowVisu
           }
         } else {
           // Task not found - this is a real problem, but log only if necessary
-          // (e.g., if taskId exists but task is not in repository)
-          if (row.taskId && process.env.NODE_ENV === 'development') {
-            // Only in dev and only if there's a taskId that should exist
+          // (e.g., if row.id exists but task is not in repository)
+          if (row.id && process.env.NODE_ENV === 'development') {
+            // Only in dev and only if there's a row.id that should exist
             console.debug('[🎨 NODEROW] Task not found in repository', {
-              taskId,
+              taskId: taskId,
               rowId: row.id,
-              hasTaskId: !!row.taskId
+              hasRowId: !!row.id
             });
           }
         }
@@ -116,19 +116,19 @@ export function useNodeRowVisuals(props: UseNodeRowVisualsProps): UseNodeRowVisu
     }
 
     // If no task or couldn't determine type
-    // Use resolveTaskType to read row.meta.type (lazy creation)
+    // Use resolveTaskType to read row.heuristics.type (lazy creation)
     if (!Icon) {
       const resolvedType = resolveTaskType(row);
 
-      // If type was resolved from metadata, use correct visuals
+      // If type was resolved from heuristics, use correct visuals
       if (resolvedType !== TaskType.UNDEFINED) {
         const has = hasTaskTree(row);
-        // Read category from row.meta.inferredCategory (for lazy creation)
-        const rowCategory = (row as any)?.meta?.inferredCategory || null;
+        // Read category from row.heuristics.inferredCategory (for lazy creation)
+        const rowCategory = (row as any)?.heuristics?.inferredCategory || null;
         const visuals = getTaskVisuals(
           resolvedType,
-          rowCategory, // Preset category from row.meta
-          null, // Custom category (not available in row.meta)
+          rowCategory, // Preset category from row.heuristics
+          null, // Custom category (not available in row.heuristics)
           has
         );
 

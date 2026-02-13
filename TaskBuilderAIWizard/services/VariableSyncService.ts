@@ -20,8 +20,7 @@ import type { WizardTaskTreeNode } from '../types';
  */
 export async function syncVariablesWithStructure(
   structure: WizardTaskTreeNode[],
-  taskId: string,
-  rowId: string,
+  rowId: string, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
   taskLabel: string
 ): Promise<void> {
   if (!structure || structure.length === 0) {
@@ -35,7 +34,7 @@ export async function syncVariablesWithStructure(
 
   // Create a minimal DDT structure for FlowchartVariablesService
   const ddt = {
-    id: taskId,
+    id: rowId, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
     data: mainList,
   };
 
@@ -43,8 +42,8 @@ export async function syncVariablesWithStructure(
   // This will create mappings: readableName → nodeId
   await flowchartVariablesService.extractVariablesFromDDT(
     ddt,
-    taskId,
-    rowId,
+    rowId, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
+    rowId, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
     taskLabel
   );
 

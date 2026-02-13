@@ -361,11 +361,10 @@ export type TaskInstance = Task;
 /**
  * FlowRow: Topological element in the flowchart
  * Replaces: NodeRowData (but keeps topology separate from Task logic)
- * Relationship: 1:1 with Task (row.taskId → Task.id)
+ * Relationship: 1:1 with Task (row.id === task.id ALWAYS)
  */
 export interface FlowRow {
-  id: string;                    // Topological ID of the row (position in graph)
-  taskId: string;                // Reference to Task (1:1, always)
+  id: string;                    // Topological ID of the row (position in graph) - ALWAYS equals task.id when task exists
   text: string;                  // Display text
   included?: boolean;            // If included in flow
   order?: number;                 // Execution order in node (for sequence)

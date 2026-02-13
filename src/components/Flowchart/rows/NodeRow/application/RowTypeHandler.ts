@@ -135,7 +135,9 @@ export class RowTypeHandler {
         finalTaskType = selectedTask.type !== undefined ? selectedTask.type : TaskType.UNDEFINED;
         templateId = selectedTask.id || selectedTask.templateId || null;
 
-        if (!this.row.taskId) {
+        // Check if task exists in repository (row.id === task.id ALWAYS)
+        const existingTask = taskRepository.getTask(this.row.id);
+        if (!existingTask) {
           taskRepository.createTask(
             finalTaskType,
             templateId,
@@ -151,7 +153,9 @@ export class RowTypeHandler {
         const key = taskTypeToTemplateId(selectedTaskType) || '';
         const taskType = taskIdToTaskType(key);
 
-        if (!this.row.taskId) {
+        // Check if task exists in repository (row.id === task.id ALWAYS)
+        const existingTask = taskRepository.getTask(this.row.id);
+        if (!existingTask) {
           // Create Task for this row
           createRowWithTask(taskId, taskType, label, projectId);
         } else {

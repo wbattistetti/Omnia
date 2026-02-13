@@ -304,6 +304,54 @@ class TaskRepository {
         this.tasks.set(task.id, task);
       }
 
+      // ✅ LOG: LOAD TASKS FROM DATABASE TRACE
+      console.log('[TaskRepository] 🔍 LOAD TASKS FROM DATABASE TRACE', {
+        projectId: finalProjectId,
+        totalTasks: items.length,
+        taskIds: items.map(item => item.id),
+        taskDetails: items.map(item => ({
+          id: item.id,
+          templateId: item.templateId,
+          type: item.type || item.Type,
+          isInstance: !!item.templateId,
+          hasSteps: item.steps ? (Array.isArray(item.steps) ? item.steps.length > 0 : Object.keys(item.steps).length > 0) : false,
+          label: item.label || item.value?.label,
+        })),
+        instancesCount: items.filter(item => item.templateId).length,
+        templatesCount: items.filter(item => !item.templateId).length,
+        timestamp: new Date().toISOString(),
+      });
+
+      // ✅ NEW: Verifica se task specifici sono presenti
+      const loadedTaskIds = items.map(item => item.id);
+      const tasksInMemory = Array.from(this.tasks.keys());
+
+      // ✅ NEW: Verifica tutte le istanze (task con templateId)
+      const allInstances = items.filter(item => item.templateId);
+
+      console.log('[TaskRepository] 🔍 LOAD VERIFICATION - SUMMARY', {
+        projectId: finalProjectId,
+        loadedFromDb: items.length,
+        storedInMemory: this.tasks.size,
+        instancesCount: allInstances.length,
+        allMatch: loadedTaskIds.length === tasksInMemory.length &&
+                  loadedTaskIds.every(id => tasksInMemory.includes(id)),
+      });
+
+      // ✅ EXPANDED LOGS: Mostra tutti i dati completi
+      console.log('[TaskRepository] 🔍 ALL LOADED TASK IDs (from database)', loadedTaskIds);
+      console.log('[TaskRepository] 🔍 ALL TASK IDs (in memory)', tasksInMemory);
+      console.log('[TaskRepository] 🔍 ALL INSTANCE IDs (tasks with templateId)', allInstances.map(item => item.id));
+
+      // ✅ NEW: Dettagli completi per tutte le istanze
+      console.log('[TaskRepository] 🔍 ALL INSTANCES DETAILS', allInstances.map(item => ({
+        id: item.id,
+        templateId: item.templateId,
+        type: item.type || item.Type,
+        label: item.label || item.value?.label,
+        hasSteps: !!(item.steps || item.value?.steps),
+      })));
+
       // Emit event to notify components that tasks have been loaded
       window.dispatchEvent(new CustomEvent('tasks:loaded', {
         detail: { projectId: finalProjectId, tasksCount: this.tasks.size }
@@ -324,18 +372,42 @@ class TaskRepository {
     try {
       const finalProjectId = projectId || this.getCurrentProjectId();
       if (!finalProjectId) {
+        console.error('[TaskRepository] ❌ SAVE TASKS: No projectId', { projectId, finalProjectId });
         return false;
       }
 
       const allTasks = Array.from(this.tasks.values());
       if (allTasks.length === 0) {
+        console.log('[TaskRepository] ✅ SAVE TASKS: No tasks to save');
         return true; // Nothing to save
       }
+
+      // ✅ LOG: Tasks to save - BEFORE processing
+      console.log('[TaskRepository] 🔍 TASKS TO SAVE - BEFORE PROCESSING', {
+        projectId: finalProjectId,
+        totalTasks: allTasks.length,
+        taskIds: allTasks.map(t => t.id).slice(0, 30), // First 30 IDs
+        taskDetails: allTasks.slice(0, 10).map(t => ({ // First 10 details
+          id: t.id,
+          type: t.type,
+          templateId: t.templateId,
+          isInstance: !!t.templateId,
+          hasSteps: t.steps ? Object.keys(t.steps).length > 0 : false,
+          stepsCount: t.steps ? Object.keys(t.steps).length : 0,
+          label: t.label,
+        })),
+        instancesCount: allTasks.filter(t => t.templateId).length,
+        templatesCount: allTasks.filter(t => !t.templateId).length,
+      });
 
       // ✅ Prepare items for bulk save (fields directly, no value wrapper)
       const items = allTasks.map(task => {
         // ✅ CRITICAL: type is required - skip tasks without type
         if (task.type === undefined || task.type === null) {
+          console.warn('[TaskRepository] ⚠️ SKIPPING TASK: Missing type', {
+            taskId: task.id,
+            taskLabel: task.label,
+          });
           return null;
         }
 
@@ -349,6 +421,10 @@ class TaskRepository {
         if (finalTemplateId !== null && typeof finalTemplateId === 'string') {
           const isSemanticString = ['SayMessage', 'Message', 'DataRequest', 'GetData', 'BackendCall', 'UNDEFINED'].includes(finalTemplateId);
           if (isSemanticString) {
+            console.warn('[TaskRepository] ⚠️ CONVERTING SEMANTIC TEMPLATE ID TO NULL', {
+              taskId: task.id,
+              semanticTemplateId: finalTemplateId,
+            });
             return {
               id: task.id,
               type: task.type,
@@ -368,6 +444,20 @@ class TaskRepository {
         return itemToSave;
       }).filter(item => item !== null);
 
+      // ✅ LOG: Items prepared for save
+      console.log('[TaskRepository] 🔍 ITEMS PREPARED FOR SAVE', {
+        projectId: finalProjectId,
+        itemsCount: items.length,
+        skippedCount: allTasks.length - items.length,
+        itemIds: items.map(i => i.id).slice(0, 30), // First 30 IDs
+        itemDetails: items.slice(0, 10).map(i => ({ // First 10 details
+          id: i.id,
+          type: i.type,
+          templateId: i.templateId,
+          isInstance: !!i.templateId,
+        })),
+      });
+
       const response = await fetch(`/api/projects/${finalProjectId}/tasks/bulk`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -375,11 +465,51 @@ class TaskRepository {
       });
 
       if (!response.ok) {
+        // ✅ LOG: Error response details
+        let errorText = '';
+        try {
+          errorText = await response.text();
+        } catch (e) {
+          errorText = 'Unable to read error response';
+        }
+
+        console.error('[TaskRepository] ❌ SAVE TASKS FAILED - Backend Error', {
+          projectId: finalProjectId,
+          status: response.status,
+          statusText: response.statusText,
+          errorText: errorText.substring(0, 1000), // First 1000 chars
+          itemsCount: items.length,
+          itemsIds: items.map(i => i.id).slice(0, 20), // First 20 IDs for debugging
+          itemsDetails: items.slice(0, 5).map(i => ({ // First 5 details
+            id: i.id,
+            type: i.type,
+            templateId: i.templateId,
+            hasSteps: i.steps ? Object.keys(i.steps).length > 0 : false,
+          })),
+        });
         return false;
       }
 
+      const result = await response.json().catch(() => ({}));
+
+      // ✅ LOG: SAVE TASKS SUCCESS
+      console.log('[TaskRepository] ✅ SAVE TASKS SUCCESS', {
+        projectId: finalProjectId,
+        itemsCount: items.length,
+        itemsIds: items.map(i => i.id).slice(0, 30), // First 30 IDs
+        result: result,
+        inserted: result.inserted || 0,
+        updated: result.updated || 0,
+        timestamp: new Date().toISOString(),
+      });
+
       return true;
     } catch (error) {
+      console.error('[TaskRepository] ❌ SAVE TASKS ERROR - Exception', {
+        projectId: projectId || 'unknown',
+        error: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack?.substring(0, 500) : undefined,
+      });
       return false;
     }
   }
@@ -463,6 +593,21 @@ class TaskRepository {
       if (!response.ok) {
         return false;
       }
+
+      // ✅ LOG: SAVE TASK TO DATABASE TRACE
+      console.log('[TaskRepository] 🔍 SAVE TASK TO DATABASE TRACE', {
+        taskId: task.id,
+        instanceId: task.id, // Dovrebbe essere uguale a row.id
+        templateId: task.templateId,
+        isInstance: !!task.templateId, // Se ha templateId, è un'istanza
+        projectId,
+        hasSteps: task.steps ? Object.keys(task.steps).length > 0 : false,
+        stepsKeys: task.steps ? Object.keys(task.steps) : [],
+        taskType: task.type,
+        taskLabel: task.label,
+        payloadKeys: Object.keys(payload),
+        timestamp: new Date().toISOString(),
+      });
 
       return true;
     } catch (error) {

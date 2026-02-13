@@ -96,8 +96,8 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       enrichedNodes.forEach(node => {
         const rows = node.data?.rows || [];
         rows.forEach(row => {
-          // Use row.taskId if present, otherwise fallback to row.id
-          const taskId = row.taskId || row.id;
+          // ✅ UNIFIED MODEL: row.id ALWAYS equals task.id (when task exists)
+          const taskId = row.id;
           if (taskId) {
             referencedTaskIds.add(taskId);
           }

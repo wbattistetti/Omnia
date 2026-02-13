@@ -65,8 +65,8 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
             text: '',
             included: true,
             // ✅ NO taskId - il task verrà creato lazy quando si apre l'editor
-            // ✅ Metadati iniziali: UNDEFINED (verrà aggiornato dall'euristica quando l'utente digita)
-            meta: {
+            // ✅ Dati euristici iniziali: UNDEFINED (verrà aggiornato dall'euristica quando l'utente digita)
+            heuristics: {
                 type: TaskType.UNDEFINED,
                 templateId: null
             } as any,
@@ -149,10 +149,10 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
                         : (categoryType ?? row.categoryType),
                 // Preserva flag isUndefined
                 isUndefined: preserveIsUndefined,
-                // ✅ FIX: Preserva meta esplicitamente (contiene type e templateId dall'euristica)
-                meta: (incoming as any)?.meta !== undefined
-                    ? (incoming as any).meta
-                    : ((row as any)?.meta || undefined)
+                // ✅ FIX: Preserva heuristics esplicitamente (contiene type e templateId dall'euristica)
+                heuristics: (incoming as any)?.heuristics !== undefined
+                    ? (incoming as any).heuristics
+                    : ((row as any)?.heuristics || undefined)
             } as any;
 
             return updatedRow;
@@ -329,8 +329,8 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
             text: '',
             included: true,
             // ✅ NO taskId - il task verrà creato lazy quando si apre l'editor
-            // ✅ Metadati iniziali: UNDEFINED (verrà aggiornato dall'euristica quando l'utente digita)
-            meta: {
+            // ✅ Dati euristici iniziali: UNDEFINED (verrà aggiornato dall'euristica quando l'utente digita)
+            heuristics: {
                 type: TaskType.UNDEFINED,
                 templateId: null
             } as any,

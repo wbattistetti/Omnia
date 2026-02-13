@@ -117,10 +117,10 @@ export function useWizardGeneration(props: UseWizardGenerationProps) {
    * FASE 1: Generazione struttura dati (PREGIUDIZIALE)
    * Questa è l'unica fase sequenziale - deve completare prima di tutto il resto
    */
-  const runGenerationPipeline = useCallback(async (userInput: string, taskId?: string) => {
+  const runGenerationPipeline = useCallback(async (userInput: string, rowId?: string) => { // ✅ ALWAYS equals row.id (which equals task.id when task exists)
     updatePipelineStep('structure', 'running', 'sto pensando a qual è la migliore struttura dati per questo task...');
 
-    const { schema, shouldBeGeneral } = await generateStructure(userInput, taskId, locale);
+    const { schema, shouldBeGeneral } = await generateStructure(userInput, rowId, locale); // ✅ ALWAYS equals row.id
 
     setDataSchema(schema);
     if (setShouldBeGeneral) {

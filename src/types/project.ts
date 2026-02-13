@@ -101,17 +101,28 @@ export interface ProjectInfo {
 
 /**
  * Rappresenta una riga/azione di un nodo del flowchart
- * Tutti gli altri dati (type, templateId, intents) vengono dall'istanza
  *
- * Migration note: taskId is optional for backward compatibility
- * - If taskId is present: use it to reference Task
- * - If taskId is absent: use row.id as instanceId (legacy behavior)
+ * Architettura pulita:
+ * - row.id ALWAYS equals task.id (quando task esiste)
+ * - row.heuristics contiene solo dati euristici per lazy task creation
+ * - Tutti gli altri dati (type, category, templateId) vengono dal task o da heuristics
  */
 export interface NodeRowData {
-  id: string;     // UUID della riga (topological ID)
-  text: string;   // Testo visualizzato
-  included?: boolean; // true se la row è inclusa nel flusso
-  taskId?: string; // Reference to Task (new model) - if absent, row.id is used as instanceId (legacy)
+  // ✅ Dati strutturali UI
+  id: string;                    // UUID della riga - ALWAYS equals task.id when task exists
+  text: string;                  // Testo visualizzato
+  included?: boolean;            // Flag inclusione nel flusso
+
+  // ✅ Dati euristici (SOLO quando task non esiste ancora - lazy creation)
+  heuristics?: {
+    type?: TaskType;              // Tipo dedotto dall'euristica
+    templateId?: string | null;   // Template ID dedotto dall'euristica
+    inferredCategory?: string | null; // Categoria semantica dedotta (es. 'problem-classification', 'choice', 'confirmation')
+  };
+
+  // ✅ Metadati UI/organizzativi
+  factoryId?: string;             // ID template factory (quando la riga referenzia un template)
+  isUndefined?: boolean;          // Flag tipo undefined (per UI - mostra icona "?")
 }
 
 // --- Macrotask model (for grouping nodes into a macro action) ---

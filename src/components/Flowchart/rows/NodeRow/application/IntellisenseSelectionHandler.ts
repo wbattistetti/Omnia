@@ -169,7 +169,9 @@ export class IntellisenseSelectionHandler {
           ? taskIdToTaskType(taskTypeToUse)
           : taskTypeToUse;
 
-      if (!this.row.taskId) {
+      // Check if task exists in repository (row.id === task.id ALWAYS)
+      const existingTask = taskRepository.getTask(this.row.id);
+      if (!existingTask) {
         // Create Task for this row
         const task = createRowWithTask(instanceId, taskTypeEnum, this.row.text ?? '', projectId);
         // Update Task with intents if ProblemClassification
@@ -187,7 +189,7 @@ export class IntellisenseSelectionHandler {
         instanceId: instanceId,
         updateData: {
           instanceId: instanceId,
-          taskId: this.row.taskId,
+          taskId: this.row.id, // ✅ row.id === task.id ALWAYS
           type: (this.item as any)?.type,
           mode: (this.item as any)?.mode,
         },

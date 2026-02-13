@@ -80,17 +80,17 @@ export function useNodeRendering({
         editingRowId,
         handleInsertRow: handleInsertRow,
         onUpdate: (row: any, newText: string) => {
-          // Estrai tutti i campi importanti dalla row per preservarli (incluso isUndefined e meta)
+          // Estrai tutti i campi importanti dalla row per preservarli (incluso isUndefined e heuristics)
           const meta = {
             included: (row as any).included,
             type: (row as any).type,
             mode: (row as any).mode,
             isUndefined: (row as any).isUndefined, // ✅ Preserva flag isUndefined
             factoryId: (row as any).factoryId,
-            instanceId: (row as any).instanceId,
-            taskId: (row as any).taskId,
-            // ✅ FIX: Preserva row.meta esplicitamente (contiene type e templateId dall'euristica)
-            meta: (row as any).meta || undefined
+            // ❌ RIMOSSO: instanceId (row.id === task.id ALWAYS, non serve duplicato)
+            // ❌ RIMOSSO: taskId (row.id === task.id ALWAYS, non serve duplicato)
+            // ✅ FIX: Preserva row.heuristics esplicitamente (contiene type e templateId dall'euristica)
+            heuristics: (row as any).heuristics || undefined
           };
           return handleUpdateRow(row.id, newText, row.categoryType, meta);
         },
@@ -99,8 +99,8 @@ export function useNodeRendering({
           const mergedMeta = {
             included: (row as any).included,
             isUndefined: (row as any).isUndefined, // ✅ Preserva flag isUndefined
-            // ✅ FIX: Preserva row.meta se non è già presente nel meta passato
-            meta: (meta && (meta as any).meta !== undefined) ? (meta as any).meta : ((row as any).meta || undefined),
+            // ✅ FIX: Preserva row.heuristics se non è già presente nel meta passato
+            heuristics: (meta && (meta as any).heuristics !== undefined) ? (meta as any).heuristics : ((row as any).heuristics || undefined),
             ...(meta || {})
           };
           return handleUpdateRow(row.id, newText, categoryType, mergedMeta);

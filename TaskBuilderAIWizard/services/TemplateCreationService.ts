@@ -373,7 +373,7 @@ export function createContextualizedInstance(
   allTemplates: Map<string, DialogueTask>,
   contextualizedMessages: WizardStepMessages,
   taskLabel: string,
-  taskId: string
+  rowId: string // ✅ ALWAYS equals row.id (which equals task.id when task exists)
 ): any {
   // 1. Build nodes from templates (for cloneTemplateSteps)
   const nodes = buildNodesFromTemplates(rootTemplate, allTemplates);
@@ -392,7 +392,7 @@ export function createContextualizedInstance(
 
   // 4. Create instance
   const instance: any = {
-    id: taskId,
+    id: rowId, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
     type: rootTemplate.type || 3,  // TaskType.UtteranceInterpretation
     templateId: rootTemplate.id,  // Reference to root template
     label: taskLabel,  // Contextualized label

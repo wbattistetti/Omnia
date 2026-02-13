@@ -43,7 +43,7 @@ type UseWizardCompletionProps = {
   messagesContextualized: Map<string, any>;
   shouldBeGeneral: boolean;
   taskLabel?: string;
-  taskId?: string;
+  rowId?: string; // ✅ ALWAYS equals row.id (which equals task.id when task exists)
   projectId?: string;
   transitionToCompleted: () => void;
   onTaskBuilderComplete?: (taskTree: any) => void;
@@ -62,7 +62,7 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
     messagesContextualized,
     shouldBeGeneral,
     taskLabel,
-    taskId,
+    rowId, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
     projectId,
     transitionToCompleted,
     onTaskBuilderComplete,
@@ -182,17 +182,22 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
         success: { base: [] }
       };
 
+      // ✅ CRITICAL: rowId MUST be provided (it equals row.id which equals task.id)
+      if (!rowId) {
+        throw new Error('[useWizardCompletion] CRITICAL: rowId is required. It must equal row.id (which equals task.id when task exists).');
+      }
+
       const instance = createContextualizedInstance(
         rootTemplate,
         templates,
         rootContextualizedMessages,
         taskLabel || 'Task',
-        taskId || 'temp-task-id'
+        rowId // ✅ ALWAYS equals row.id (which equals task.id when task exists)
       );
 
       // 7. Salva istanza nel TaskRepository
-      if (taskId && projectId) {
-        const key = taskId;
+      if (rowId && projectId) {
+        const key = rowId; // ✅ ALWAYS equals row.id (which equals task.id when task exists)
 
         // Get or create task instance
         let taskInstance = taskRepository.getTask(key);
@@ -225,6 +230,42 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
         const finalNodesWithMessages = Array.from(messagesToUse.keys());
         const finalNodesWithoutMessages = Array.from(allNodeIdsFinal).filter(id => !finalNodesWithMessages.includes(id));
 
+        // ✅ LOG: WIZARD CREATION TRACE - Template e Istanza
+        console.log('[useWizardCompletion] 🔍 WIZARD CREATION TRACE', {
+          // Template creati
+          totalTemplates: templates.size,
+          templateIds: Array.from(templates.keys()),
+          templateDetails: Array.from(templates.entries()).map(([id, template]) => ({
+            id,
+            label: template.label,
+            subTasksIds: template.subTasksIds || [],
+          })),
+          rootTemplateId: rootTemplate.id,
+          rootTemplateLabel: rootTemplate.label,
+
+          // Istanza creata
+          instanceId: key,
+          rowId: rowId, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
+          instanceIdEqualsRowId: key === rowId, // Should always be true
+          instanceIdComparison: {
+            instanceId: key,
+            rowId: rowId,
+            areEqual: key === rowId,
+            instanceIdLength: key?.length || 0,
+            rowIdLength: rowId?.length || 0,
+          },
+
+          // Task instance
+          taskInstanceId: taskInstance?.id,
+          taskInstanceTemplateId: taskInstance?.templateId,
+          taskInstanceType: taskInstance?.type,
+          taskInstanceHasSteps: taskInstance?.steps ? Object.keys(taskInstance.steps).length > 0 : false,
+          taskInstanceStepsKeys: taskInstance?.steps ? Object.keys(taskInstance.steps) : [],
+
+          projectId,
+          timestamp: new Date().toISOString(),
+        });
+
         // 8. Build TaskTree from instance and call onTaskBuilderComplete
         try {
           const taskTree = await buildTaskTree(taskInstance, projectId);
@@ -246,7 +287,7 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
     messagesContextualized,
     shouldBeGeneral,
     taskLabel,
-    taskId,
+    rowId, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
     projectId,
     onTaskBuilderComplete,
   ]);

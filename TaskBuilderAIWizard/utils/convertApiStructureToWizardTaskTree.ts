@@ -6,9 +6,12 @@ import { v4 as uuidv4 } from 'uuid';
 
 /**
  * API Structure Node (from backend)
+ *
+ * NOTE: The AI does NOT generate IDs. The frontend generates GUIDs for each node
+ * when building the tree. The 'id' field from API is ignored.
  */
 interface ApiStructureNode {
-  id?: string;
+  id?: string;  // Ignored - frontend generates GUIDs
   label: string;
   type?: string;
   icon?: string;
@@ -17,67 +20,48 @@ interface ApiStructureNode {
 }
 
 /**
- * Check if a string is a valid GUID (UUID format or node-{uuid} format)
- */
-function isValidGuid(id: string): boolean {
-  if (!id || typeof id !== 'string') return false;
-
-  // Check for UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (uuidRegex.test(id)) return true;
-
-  // Check for node-{uuid} format: node-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-  const nodeUuidRegex = /^node-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (nodeUuidRegex.test(id)) return true;
-
-  return false;
-}
-
-/**
  * Convert API structure response to WizardTaskTreeNode format.
  *
  * This function:
  * 1. Converts subData → subNodes (if present, for backward compatibility)
- * 2. Generates templateId from id (if missing)
+ * 2. Generates GUID for each node (frontend always generates IDs, ignoring API ids)
  * 3. Initializes pipelineStatus with default values
  * 4. Recursively processes all nodes
  *
+ * CRITICAL: The AI does NOT generate IDs. The frontend generates a pure GUID
+ * for each node. This GUID becomes the template.id when the template is saved.
+ *
  * @param apiStructure Array of nodes from API response
- * @param taskId Task ID (for variable mapping)
+ * @param rowId Row ID (ALWAYS equals row.id which equals task.id when task exists)
  * @returns Array of WizardTaskTreeNode compatible with wizard
  */
 export function convertApiStructureToWizardTaskTree(
   apiStructure: ApiStructureNode[],
-  taskId: string
+  rowId: string // ✅ ALWAYS equals row.id (which equals task.id when task exists)
 ): WizardTaskTreeNode[] {
   if (!Array.isArray(apiStructure) || apiStructure.length === 0) {
     return [];
   }
 
-  return apiStructure.map((node) => convertNode(node, taskId));
+  return apiStructure.map((node) => convertNode(node, rowId));
 }
 
 /**
  * Convert a single API node to WizardTaskTreeNode (recursive)
+ *
+ * CRITICAL: The frontend ALWAYS generates a pure GUID for each node.
+ * The AI does NOT generate IDs - it only returns structure (label, type, icon, subNodes).
+ * This GUID becomes the template.id when the template is saved to Factory.
  */
 function convertNode(
   apiNode: ApiStructureNode,
-  taskId: string,
+  rowId: string, // ✅ ALWAYS equals row.id (which equals task.id when task exists) - not used but kept for consistency
   parentPath: string[] = []
 ): WizardTaskTreeNode {
-  // ✅ FIX: Always generate GUID if ID is missing, invalid, or not a GUID
-  // This ensures every node has a stable GUID from the start, not simple names like "giorno", "mese", "anno"
-  let nodeId = apiNode.id;
-
-  if (!nodeId ||
-      nodeId === 'root' ||
-      nodeId === 'UNDEFINED' ||
-      nodeId.trim() === '' ||
-      !isValidGuid(nodeId)) {  // ✅ NEW: Check if ID is a valid GUID
-
-    const originalId = nodeId;
-    nodeId = `node-${uuidv4()}`;
-  }
+  // ✅ CRITICAL: Frontend ALWAYS generates a pure GUID for each node
+  // Ignore apiNode.id completely - the AI does not generate IDs
+  // This GUID will become the template.id when saved to Factory
+  const nodeId = uuidv4(); // Pure GUID, no prefix
 
   // ✅ CRITICAL: templateId MUST always equal id (single source of truth)
   // This is an architectural invariant that must never be violated
@@ -96,7 +80,7 @@ function convertNode(
 
   // Convert children recursively
   const subNodes: WizardTaskTreeNode[] = children.length > 0
-    ? children.map((child) => convertNode(child, taskId, [...parentPath, apiNode.label]))
+    ? children.map((child) => convertNode(child, rowId, [...parentPath, apiNode.label]))
     : undefined;
 
   // Initialize pipeline status
@@ -117,7 +101,7 @@ function convertNode(
     icon: apiNode.icon,
     subNodes,
     pipelineStatus,
-    // Note: readableName, dottedName, taskId will be added later by VariableNameGeneratorService
+    // Note: readableName, dottedName will be added later by VariableNameGeneratorService
   };
 
   // ✅ FINAL INVARIANT CHECK: Verify the invariant is preserved in the result

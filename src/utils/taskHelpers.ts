@@ -84,50 +84,40 @@ export function normalizeTask(task: Task): TaskInstance {
 
 /**
  * Get Task ID from a row
- * Assumes taskId is always present (new model)
- * If missing, creates Task automatically
+ * ALWAYS returns row.id (task.id === row.id when task exists)
  *
  * @param row - NodeRowData row
- * @returns Task ID
+ * @returns Task ID (row.id) or null if task doesn't exist
  */
 export function getTaskIdFromRow(row: NodeRowData): string | null {
-  if (row.taskId) {
-    return row.taskId;
-  }
-
-  // ✅ NON creare automaticamente il task - restituisci null se non esiste
-  // LOGICA: Il task viene creato solo quando si apre ResponseEditor, dopo aver determinato il tipo con l'euristica
+  // ✅ CRITICAL: task.id === row.id ALWAYS
+  // Check if task exists - if yes, return row.id, otherwise null
   const task = taskRepository.getTask(row.id);
-  if (task) {
-    // Task exists, just add taskId to row
-    (row as any).taskId = task.id;
-    return task.id;
-  }
-
-  // ✅ Task non esiste - restituisci null (verrà creato quando si apre ResponseEditor)
-  return null;
+  return task ? row.id : null;
 }
 
 /**
- * Check if a row has been migrated to new Task model
+ * Check if a row has a task associated
+ * ALWAYS uses row.id to check (task.id === row.id when task exists)
  *
  * @param row - NodeRowData row
- * @returns true if row has taskId, false if using row.id as instanceId
+ * @returns true if task exists, false otherwise
  */
 export function isRowMigrated(row: NodeRowData): boolean {
-  return !!row.taskId;
+  // ✅ CRITICAL: task.id === row.id ALWAYS
+  return taskRepository.hasTask(row.id);
 }
 
 /**
  * Get instance ID from a row
+ * ALWAYS returns row.id (task.id === row.id when task exists)
  *
  * @param row - NodeRowData row
- * @returns Instance ID (taskId if present, otherwise row.id)
+ * @returns Instance ID (always row.id)
  */
 export function getInstanceIdFromRow(row: NodeRowData): string {
-  // For now, taskId and instanceId are the same (1:1 relationship)
-  // In the future, they might diverge, but for migration they're the same
-  return row.taskId || row.id;
+  // ✅ CRITICAL: task.id === row.id ALWAYS
+  return row.id;
 }
 
 /**
@@ -164,33 +154,32 @@ export function createRowWithTask(
     const existingTask = taskRepository.getTask(finalRowId);
     if (existingTask) {
       return {
-        id: finalRowId,
+        id: finalRowId,  // ALWAYS equals task.id
         text: initialText || existingTask.text || '',
         included: true,
-        taskId: existingTask.id,
         mode: 'Message' as const
       };
     }
   }
 
   // ✅ Create Task in TaskRepository with type (enum) and templateId (null = standalone)
+  // ✅ CRITICAL: task.id === row.id ALWAYS
   const task = taskRepository.createTask(
     taskType,                    // ✅ type: TaskType enum (obbligatorio)
     null,                        // ✅ templateId: null (standalone, non deriva da altri Task)
     taskType === TaskType.SayMessage ? { text: initialText } : undefined,  // Campi diretti
-    finalRowId, // Use same ID for Task and Instance (1:1 relationship)
+    finalRowId, // ✅ CRITICAL: Use row.id as task.id (task.id === row.id ALWAYS)
     projectId
   );
 
   // FASE 4: TaskRepository.createTask already creates InstanceRepository entry internally
   // No need to create it separately - TaskRepository handles synchronization
 
-  // Return row with taskId set
+  // Return row (task.id === row.id ALWAYS, no need for taskId field)
   const newRow: NodeRowData = {
-    id: finalRowId,
+    id: finalRowId,  // ALWAYS equals task.id
     text: initialText,
     included: true,
-    taskId: task.id, // Set taskId to mark as migrated
     mode: 'Message' as const
   };
 
@@ -314,53 +303,20 @@ export function updateRowData(
 }
 
 /**
- * Enrich loaded rows with taskId
+ * ✅ DEPRECATED: enrichRowsWithTaskId - NO LONGER NEEDED
  *
- * ✅ REGOLA ARCHITETTURALE: task.id = row.id (sempre)
- * Quindi: row.taskId = row.id (quando il task esiste)
+ * This function is deprecated because row.taskId no longer exists.
+ * The rule is: task.id === row.id ALWAYS (when task exists)
  *
- * IMPORTANT: row.text is a descriptive label written by the user in the node row
- * It remains fixed and is NOT synchronized with task.text
- * task.text is the message content (saved in instance, edited in ResponseEditor)
- * These are completely separate - row.text is just a label for the flowchart
+ * To check if a row has a task, use: taskRepository.hasTask(row.id)
+ * To get the task, use: taskRepository.getTask(row.id)
  *
- * @param rows - Array of NodeRowData rows to enrich
- * @returns Array of rows with taskId set correctly (row.taskId = row.id if task exists)
+ * @deprecated Use taskRepository.hasTask(row.id) or taskRepository.getTask(row.id) instead
  */
 export function enrichRowsWithTaskId(rows: NodeRowData[]): NodeRowData[] {
-  // Log rimosso: non essenziale per flusso motore
-
-  const result = rows.map(row => {
-    // ✅ REGOLA ARCHITETTURALE: task.id = row.id (sempre)
-    // Cerca il task con row.id
-    const task = taskRepository.getTask(row.id);
-
-    if (task) {
-      // ✅ Task esiste → row.taskId DEVE essere row.id
-      if (row.taskId !== row.id) {
-        console.log('[enrichRowsWithTaskId] ✅ FIX: Aggiorno row.taskId', {
-          rowId: row.id,
-          rowText: row.text,
-          oldTaskId: row.taskId,
-          newTaskId: row.id
-        });
-      }
-      return { ...row, taskId: row.id };
-    }
-
-    // ✅ Nessun task → row.taskId deve essere undefined
-    if (row.taskId) {
-      console.log('[enrichRowsWithTaskId] ⚠️ WARNING: row.taskId presente ma task non trovato', {
-        rowId: row.id,
-        rowText: row.text,
-        rowTaskId: row.taskId
-      });
-    }
-    return { ...row, taskId: undefined };
-  });
-
-  const enrichedCount = result.filter(r => r.taskId).length;
-
-  return result;
+  // ✅ CRITICAL: task.id === row.id ALWAYS (when task exists)
+  // No need to enrich - just return rows as-is
+  // If you need to check if a row has a task, use taskRepository.hasTask(row.id)
+  return rows;
 }
 

@@ -49,12 +49,12 @@ export class RowSaveHandler {
 
       // Only save task for Message type rows
       if (projectId && ((this.row as any)?.mode === 'Message' || !(this.row as any)?.mode)) {
-        const instanceId = (this.row as any)?.instanceId ?? this.row.id;
+        // ✅ UNIFIED MODEL: row.id === task.id ALWAYS
+        const instanceId = this.row.id;
 
         console.log('[RowSaveHandler][SAVE][START]', {
           rowId: this.row.id,
-          rowInstanceId: (this.row as any)?.instanceId,
-          finalInstanceId: instanceId,
+          instanceId: instanceId, // ✅ row.id === task.id ALWAYS
           label,
           labelLength: label.length,
           projectId,
@@ -73,22 +73,23 @@ export class RowSaveHandler {
           // Create task in memory if it doesn't exist
           console.log('[RowSaveHandler][SAVE][CREATE_IN_MEMORY]', { instanceId });
 
-          // Create Task if row doesn't have taskId
-          if (!this.row.taskId) {
+          // Check if task exists in repository (row.id === task.id ALWAYS)
+          const existingTask = taskRepository.getTask(this.row.id);
+          if (!existingTask) {
             // Create Task for this row (default to Message type)
             const newTask = createRowWithTask(instanceId, TaskType.SayMessage, label, projectId);
             // Architectural rule: task.id = row.id (newTask.id === instanceId === row.id)
             console.log('[RowSaveHandler][SAVE][CREATED_AND_UPDATED]', {
               instanceId,
-              taskId: this.row.taskId,
+              taskId: this.row.id, // ✅ row.id === task.id ALWAYS
               messageText: label.substring(0, 50),
             });
           } else {
             // Row already has Task, update it
-            taskRepository.updateTask(this.row.taskId, { text: label }, projectId);
+            taskRepository.updateTask(this.row.id, { text: label }, projectId); // ✅ row.id === task.id ALWAYS
             console.log('[RowSaveHandler][SAVE][UPDATED_EXISTING]', {
               instanceId,
-              taskId: this.row.taskId,
+              taskId: this.row.id, // ✅ row.id === task.id ALWAYS
               messageText: label.substring(0, 50),
             });
           }

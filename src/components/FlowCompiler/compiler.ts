@@ -76,15 +76,13 @@ export function compileFlow(
     // Process rows in sequence
     for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
       const row = rows[rowIndex];
-      // ✅ UNIFIED MODEL: Use row.taskId (NodeRowData.taskId is separate field, not Task.taskId)
-      const taskId = row.taskId || row.id;
+      // ✅ UNIFIED MODEL: row.id ALWAYS equals task.id (when task exists)
+      const taskId = row.id;
 
       console.log('[Compiler] 🔍 Looking for task', {
         rowId: row.id,
         rowText: row.text,
-        rowTaskId: row.taskId,
-        lookingForTaskId: taskId,
-        usingTaskId: !!row.taskId
+        taskId: taskId, // ✅ row.id === task.id ALWAYS
       });
 
       // Resolve task
@@ -95,7 +93,6 @@ export function compileFlow(
           nodeId: node.id,
           rowId: row.id,
           rowText: row.text,
-          rowTaskId: row.taskId,
           allTasksInMemory: taskRepository.getAllTasks().map(t => ({ id: t.id, templateId: getTemplateId(t) }))
         });
         throw new Error(`[Compiler] Task not found: ${taskId} in node ${node.id}, row ${row.id}. Task must exist in memory.`);

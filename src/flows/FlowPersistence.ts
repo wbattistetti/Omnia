@@ -72,8 +72,8 @@ export async function saveFlow(projectId: string, flowId: FlowId, nodes: Node<Fl
       rows: n.rows?.map((r: any) => ({
         id: r.id,
         text: r.text,
-        taskId: r.taskId,
-        hasTaskId: !!r.taskId
+        hasHeuristics: !!(r.heuristics),
+        heuristicsType: r.heuristics?.type
       })) || []
     }))
   });

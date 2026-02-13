@@ -19,8 +19,7 @@ const EMPTY_MODULES: any[] = [];
  */
 export function useWizardIntegration(
   taskLabel?: string,
-  taskId?: string,
-  rowId?: string,
+  rowId?: string, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
   projectId?: string,
   locale: string = 'it',
   onTaskBuilderComplete?: (taskTree: any) => void
@@ -54,8 +53,7 @@ export function useWizardIntegration(
     dataSchema: wizardState.dataSchema,
     setDataSchema: wizardState.setDataSchema,
     taskLabel: taskLabel || '',
-    taskId,
-    rowId,
+    rowId, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
     projectId,
     locale,
   });
@@ -68,7 +66,7 @@ export function useWizardIntegration(
     messagesContextualized: wizardState.messagesContextualized,
     shouldBeGeneral: wizardState.shouldBeGeneral,
     taskLabel,
-    taskId,
+    rowId, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
     projectId,
     transitionToCompleted: wizardFlow.transitionToCompleted,
     onTaskBuilderComplete,
@@ -88,7 +86,7 @@ export function useWizardIntegration(
       hasStartedRef.current = true;
       wizardState.setCurrentStep('generazione_struttura');
 
-      wizardGeneration.runGenerationPipeline(taskLabel.trim(), taskId)
+      wizardGeneration.runGenerationPipeline(taskLabel.trim(), rowId)
         .then(async () => {
           // Wait a bit for state to update
           await new Promise(resolve => setTimeout(resolve, 100));
@@ -101,7 +99,7 @@ export function useWizardIntegration(
           hasStartedRef.current = false; // Reset per permettere retry
         });
     }
-  }, [taskLabel, taskId, wizardState.wizardMode, wizardState.setCurrentStep, wizardGeneration, wizardSync]);
+  }, [taskLabel, rowId, wizardState.wizardMode, wizardState.setCurrentStep, wizardGeneration, wizardSync]);
 
   // Monitora completamento step per auto-chiusura
   // ✅ D1: Pass messages and dataSchema to checkAndComplete for verification
@@ -199,7 +197,7 @@ export function useWizardIntegration(
         hasStartedRef.current = false;
         wizardFlow.resetToStart();
         wizardState.setCurrentStep('generazione_struttura');
-        await wizardGeneration.runGenerationPipeline(taskLabel.trim(), taskId);
+        await wizardGeneration.runGenerationPipeline(taskLabel.trim(), rowId);
         await wizardSync.syncVariables();
       }
     },
@@ -213,7 +211,7 @@ export function useWizardIntegration(
         hasStartedRef.current = false;
         wizardFlow.resetToStart();
         wizardState.setCurrentStep('generazione_struttura');
-        await wizardGeneration.runGenerationPipeline(taskLabel.trim(), taskId);
+        await wizardGeneration.runGenerationPipeline(taskLabel.trim(), rowId);
         await wizardSync.syncVariables();
       }
     },

@@ -38,22 +38,22 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
   // Ottieni projectId corrente per salvare le istanze nel progetto corretto
   const pdUpdate = useProjectDataUpdate();
   const currentProjectId = pdUpdate?.getCurrentProjectId() || null;
-  // ✅ NO FALLBACKS: Use instanceId as primary, id as fallback (both are valid properties)
-  const instanceKey = React.useMemo(() => taskMeta.instanceId ?? taskMeta.id ?? 'unknown', [taskMeta.instanceId, taskMeta.id]); // ✅ RINOMINATO: act → taskMeta
+  // ✅ CRITICAL: taskMeta.id ALWAYS equals row.id (which equals task.id when task exists)
+  const taskId = React.useMemo(() => taskMeta.id ?? 'unknown', [taskMeta.id]);
 
   // ✅ FIX: Carica task in modo sincrono nel render iniziale (getTask è sincrono)
   // Non usare useTaskInstance che introduce delay inutile con useEffect
   const fullTask = React.useMemo(() => {
-    if (!instanceKey) return null;
+    if (!taskId) return null;
     try {
-      const loaded = taskRepository.getTask(instanceKey);
+      const loaded = taskRepository.getTask(taskId);
 
       return loaded;
     } catch (error) {
       console.error('[TaskTreeHostAdapter] Error loading task:', error);
       return null;
     }
-  }, [instanceKey]);
+  }, [taskId]);
 
   // ✅ FASE 3: Store è single source of truth
   const { setTaskTree: setTaskTreeInStore } = useTaskTreeStore();
@@ -74,7 +74,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
   // ✅ Reset initializedRef quando cambia istanza
   React.useEffect(() => {
     initializedRef.current = false;
-  }, [instanceKey]);
+  }, [taskId]);
 
   // ✅ ARCHITETTURA ESPERTO: Carica TaskTree async usando buildTaskTree
   React.useEffect(() => {
@@ -83,7 +83,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
       // In this case, the wizard will create the task when completed
       if ((taskMeta as any).needsTaskBuilder === true && !fullTask) {
         console.log('[DDTHostAdapter] Wizard mode - no task exists yet, wizard will create it', {
-          instanceKey,
+          taskId,
           taskLabel: taskMeta.label
         });
         setTaskTreeInStore(null);
@@ -101,7 +101,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
       // ✅ NEW: Skip buildTaskTree if needsTaskBuilder is true (wizard will create TaskTree)
       if ((taskMeta as any).needsTaskBuilder === true) {
         console.log('[DDTHostAdapter] Skipping buildTaskTree - wizard will create TaskTree', {
-          instanceKey,
+          taskId,
           taskLabel: taskMeta.label
         });
         setTaskTreeInStore(null);
@@ -119,7 +119,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
 
         // ✅ CRITICAL: Ricarica task dal repository dopo buildTaskTree
         // buildTaskTree clona gli step e li salva nel repository, ma fullTask non si aggiorna automaticamente
-        const updatedTask = taskRepository.getTask(instanceKey);
+        const updatedTask = taskRepository.getTask(taskId);
 
         // ✅ TaskTree caricato
         if (tree) {
@@ -153,7 +153,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
     // ✅ CRITICAL: setTaskTreeInStore is stable from Zustand, but we don't need it in deps
     // ✅ FIX STRUTTURALE: Dipende solo da fullTask?.id, non da fullTask (evita loop)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fullTask?.id, currentProjectId, instanceKey]);
+  }, [fullTask?.id, currentProjectId, taskId]);
 
   // ✅ ARCHITETTURA ESPERTO: Loading solo se serve async
   const loading = taskTreeLoading;
@@ -190,7 +190,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
     }
 
     console.log('[TaskTreeHostAdapter][handleComplete] 🔍 finalTaskTree received', {
-      instanceKey,
+      taskId,
       hasTaskTree: !!finalTaskTree,
       nodesLength: finalTaskTree.nodes?.length ?? 0,
       hasSteps: !!finalTaskTree.steps,
@@ -218,9 +218,9 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
     const hasTaskTree = finalTaskTree && Object.keys(finalTaskTree).length > 0 && finalTaskTree.nodes && finalTaskTree.nodes.length > 0;
     if (hasTaskTree) {
       // ✅ DEBUG: Verifica taskInstance prima del salvataggio
-      let taskInstance = taskRepository.getTask(instanceKey);
+      let taskInstance = taskRepository.getTask(taskId);
       console.log('[TaskTreeHostAdapter][handleComplete] 🔍 taskInstance before save', {
-        instanceKey,
+        taskId,
         hasTaskInstance: !!taskInstance,
         taskInstanceHasSteps: !!taskInstance?.steps,
         // ✅ FIX: stepsCount per dictionary (non array)
@@ -245,7 +245,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
         // ❌ NON salvare: constraints, dataContract (vengono dal template)
 
         console.log('[TaskTreeHostAdapter][handleComplete] 💾 Saving task with overrides', {
-          instanceKey,
+          taskId,
           hasOverridesSteps: !!overrides.steps,
           overridesStepsKeys: overrides.steps && typeof overrides.steps === 'object' && !Array.isArray(overrides.steps)
             ? Object.keys(overrides.steps)
@@ -257,14 +257,14 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
         taskInstance.updatedAt = new Date();
 
         // ✅ Salva nel database
-        await taskRepository.updateTask(instanceKey, overrides, currentProjectId);
+        await taskRepository.updateTask(taskId, overrides, currentProjectId);
 
         console.log('[TaskTreeHostAdapter][handleComplete] ✅ Task saved, verifying', {
-          instanceKey,
-          savedTask: taskRepository.getTask(instanceKey),
-          savedTaskSteps: taskRepository.getTask(instanceKey)?.steps,
-          savedTaskStepsKeys: taskRepository.getTask(instanceKey)?.steps && typeof taskRepository.getTask(instanceKey)?.steps === 'object' && !Array.isArray(taskRepository.getTask(instanceKey)?.steps)
-            ? Object.keys(taskRepository.getTask(instanceKey)!.steps!)
+          taskId,
+          savedTask: taskRepository.getTask(taskId),
+          savedTaskSteps: taskRepository.getTask(taskId)?.steps,
+          savedTaskStepsKeys: taskRepository.getTask(taskId)?.steps && typeof taskRepository.getTask(taskId)?.steps === 'object' && !Array.isArray(taskRepository.getTask(taskId)?.steps)
+            ? Object.keys(taskRepository.getTask(taskId)!.steps!)
             : [],
         });
       } else if (!taskInstance) {
@@ -274,7 +274,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
 
         if (!rootNodeTemplateId) {
           console.error('[TaskTreeHostAdapter][handleComplete] ❌ CRITICAL: Cannot create task without templateId', {
-            instanceKey,
+            taskId,
             hasNodes: !!finalTaskTree.nodes,
             nodesLength: finalTaskTree.nodes?.length || 0,
             firstNode: finalTaskTree.nodes?.[0]
@@ -283,7 +283,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
         }
 
         console.log('[TaskTreeHostAdapter][handleComplete] 📝 Creating new task with templateId from TaskTree', {
-          instanceKey,
+          taskId,  // ALWAYS equals row.id
           templateId: rootNodeTemplateId,
           nodeId: finalTaskTree.nodes[0].id,
           nodeLabel: finalTaskTree.nodes[0].label
@@ -291,7 +291,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
 
         const { extractTaskOverrides } = await import('../../../utils/taskUtils');
         const tempTask: Task = {
-          id: instanceKey,
+          id: taskId,  // ✅ CRITICAL: Use row.id (task.id === row.id ALWAYS)
           type: TaskType.UtteranceInterpretation,
           templateId: rootNodeTemplateId,  // ✅ FIX: Usa templateId dal TaskTree invece di null
           label: finalTaskTree.label,
@@ -303,15 +303,15 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
           TaskType.UtteranceInterpretation,
           tempTask.templateId,  // Ora ha templateId corretto
           overrides,
-          instanceKey,
+          taskId,  // ✅ CRITICAL: Use row.id (task.id === row.id ALWAYS)
           currentProjectId || undefined
         );
       }
 
       // ✅ DEBUG: Verifica task salvato dopo il salvataggio
-      const savedTask = taskRepository.getTask(instanceKey);
+      const savedTask = taskRepository.getTask(taskId);
       console.log('[TaskTreeHostAdapter][handleComplete] ✅ Task saved', {
-        instanceKey,
+        taskId,
         savedTaskHasSteps: !!savedTask?.steps,
         // ✅ FIX: stepsCount per dictionary (non array)
         savedTaskStepsCount: savedTask?.steps && typeof savedTask.steps === 'object' && !Array.isArray(savedTask.steps)
@@ -338,7 +338,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
         await flowchartVariablesService.init(currentProjectId);
 
         // Get row text from task (this is the label of the row)
-        const taskInstance = taskRepository.getTask(instanceKey);
+        const taskInstance = taskRepository.getTask(taskId);
         // ✅ NO FALLBACKS: Use taskInstance.text as primary, taskMeta.label as fallback, 'Task' as explicit default
         const rowText = taskInstance?.text ?? taskMeta.label ?? 'Task';
 
@@ -352,8 +352,8 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
         // Extract variables from TaskTree using row text and TaskTree labels
         const varNames = await flowchartVariablesService.extractVariablesFromDDT(
           taskTreeForVariables,
-          instanceKey, // taskId
-          instanceKey, // rowId (same as taskId)
+          taskId, // taskId (ALWAYS equals row.id)
+          taskId, // rowId (same as taskId, ALWAYS equals row.id)
           rowText, // Row text (e.g., "chiedi data di nascita")
           undefined // nodeId (not available here)
         );
@@ -374,7 +374,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
     // ✅ FASE 3: Local state mantenuto temporaneamente per backward compatibility
     setTaskTree(finalTaskTree);
     initializedRef.current = true; // ✅ Marca come inizializzato dopo wizard
-  }, [instanceKey, currentProjectId, taskMeta.label, setTaskTreeInStore]);
+  }, [taskId, currentProjectId, taskMeta.label, setTaskTreeInStore]);
 
   // ✅ ARCHITETTURA ESPERTO: Ensure nodes is always an array before passing to ResponseEditor
   // ✅ FIX STRUTTURALE: safeTaskTree dipende solo da taskTree locale, non da currentTaskTree che legge dallo store
@@ -403,22 +403,21 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
 
   // ✅ Stable key per impedire re-mount durante l'editing
   const editorKey = React.useMemo(() => {
-    // ✅ NO FALLBACKS: Use instanceId as primary, id as fallback (both are valid properties)
-    const instanceKey = taskMeta.instanceId ?? taskMeta.id ?? 'unknown';
-    return `response-editor-${instanceKey}`;
-  }, [taskMeta.instanceId, taskMeta.id]);
+    // ✅ CRITICAL: taskMeta.id ALWAYS equals row.id (which equals task.id when task exists)
+    return `response-editor-${taskId}`;
+  }, [taskId]);
 
   // ✅ ARCHITETTURA ESPERTO: Passa Task completo invece di TaskMeta
   // ✅ CRITICAL: Ricarica task dal repository per avere gli step aggiornati dopo buildTaskTree
   const updatedFullTask = React.useMemo(() => {
-    if (!instanceKey) return null;
+    if (!taskId) return null;
     try {
-      return taskRepository.getTask(instanceKey);
+      return taskRepository.getTask(taskId);
     } catch (error) {
       console.error('[TaskTreeHostAdapter] Error reloading task:', error);
       return fullTask; // Fallback al task originale
     }
-  }, [instanceKey, taskTree]); // ✅ Dipende da taskTree per ricaricare quando cambia
+  }, [taskId, taskTree]); // ✅ Dipende da taskTree per ricaricare quando cambia
 
   // ✅ Stable callbacks per evitare re-render
   const stableOnClose = React.useCallback(() => {
@@ -428,39 +427,36 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
   }, [onClose]);
 
   const stableOnWizardComplete = React.useCallback(async (finalTaskTree: TaskTree) => {
-    // ✅ NEW: If task doesn't exist yet (wizard mode), create it first
-    if (!fullTask && (taskMeta as any).needsTaskBuilder === true) {
-      const instanceId = taskMeta.instanceId ?? taskMeta.id;
-      if (instanceId && instanceId.startsWith('wizard-')) {
-        // Extract real instanceId from temporary wizard ID
-        const realInstanceId = taskMeta.instanceId || taskMeta.id?.replace(/^wizard-/, '').split('-')[0];
-        const projectId = currentProjectId || undefined;
-        const taskType = taskMeta.type || 0;
-        const taskLabel = (taskMeta as any).taskLabel || taskMeta.label || 'Task';
-
-        console.log('[DDTHostAdapter] Creating task from wizard completion', {
-          temporaryId: instanceKey,
-          realInstanceId,
-          taskLabel
-        });
-
-        // Create task
-        const newTask = taskRepository.createTask(
-          taskType,
-          null, // templateId - will be set from taskTree
-          undefined, // parentTaskId
-          realInstanceId,
-          projectId
-        );
-
-        // Update taskMeta to use real task ID
-        taskMeta.id = String(newTask.id);
-        taskMeta.instanceId = realInstanceId;
-      }
-    }
+    // ✅ CRITICAL: taskMeta.id ALWAYS equals row.id (which equals task.id when task exists)
+    // The wizard will create the task with task.id = row.id when completed
+    // No need to extract or convert IDs - just use taskMeta.id directly
 
     // Now save TaskTree using handleComplete
     await handleComplete(finalTaskTree);
+
+    // ✅ LOG: WIZARD COMPLETION TRACE - Dettagli completi
+    const taskAfterComplete = taskRepository.getTask(taskId);
+    console.log('[DDTHostAdapter] 🔍 WIZARD COMPLETION TRACE', {
+      // Task creato
+      taskId,  // ALWAYS equals row.id
+      rowId: taskMeta.id,  // ID della riga di nodo (ALWAYS equals task.id)
+      taskIdEqualsRowId: taskId === taskMeta.id,  // Should always be true
+
+      // TaskTree ricevuto
+      taskTreeNodesCount: finalTaskTree?.nodes?.length || 0,
+      taskTreeStepsCount: finalTaskTree?.steps ? Object.keys(finalTaskTree.steps).length : 0,
+      taskTreeStepsKeys: finalTaskTree?.steps ? Object.keys(finalTaskTree.steps) : [],
+
+      // Task dopo handleComplete
+      taskAfterComplete: taskAfterComplete ? {
+        id: taskAfterComplete.id,
+        templateId: taskAfterComplete.templateId,
+        hasSteps: taskAfterComplete.steps ? Object.keys(taskAfterComplete.steps).length > 0 : false,
+      } : null,
+
+      projectId: currentProjectId,
+      timestamp: new Date().toISOString(),
+    });
 
     // ✅ Switch from wizard mode to normal editing mode
     if ((taskMeta as any).needsTaskBuilder === true) {
@@ -468,7 +464,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
       // Note: We can't directly modify taskMeta, but the next render will see fullTask exists
       console.log('[DDTHostAdapter] Wizard complete - switching to normal editing mode');
     }
-  }, [handleComplete, fullTask, taskMeta, instanceKey, currentProjectId]);
+  }, [handleComplete, fullTask, taskMeta, taskId, currentProjectId]);
 
   // ✅ NEW: Use taskMeta when task is null (wizard mode)
   // When needsTaskBuilder === true, fullTask is null, so we need to pass taskMeta

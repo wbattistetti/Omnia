@@ -319,12 +319,12 @@ export function useNodeRowEventHandlers(
         const updateMeta = {
           id: row.id,
           type: typeString,
-          meta: {
-            ...((row as any)?.meta || {}),
+          heuristics: {
+            ...((row as any)?.heuristics || {}),
             type: result.taskType,
           },
           factoryId: (row as any).factoryId,
-          instanceId: (row as any).instanceId,
+          // ❌ RIMOSSO: instanceId (row.id === task.id ALWAYS, non serve duplicato)
           isUndefined: false,
         };
 
@@ -349,8 +349,8 @@ export function useNodeRowEventHandlers(
           const updateMeta = {
             id: row.id,
             type: 'Other',
-            meta: {
-              ...((row as any)?.meta || {}),
+            heuristics: {
+              ...((row as any)?.heuristics || {}),
               type: result.taskType,
             },
             isUndefined: false,

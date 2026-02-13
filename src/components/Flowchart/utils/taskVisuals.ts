@@ -20,16 +20,17 @@ export interface CustomCategory {
  * ✅ Restituisce TaskType enum invece di stringa semantica
  */
 export function resolveTaskType(row: any): TaskType {
-  // 1) Fonte primaria: row.meta.type (metadati dall'euristica - lazy task creation)
-  const rowMeta = (row as any)?.meta;
-  if (rowMeta?.type !== undefined && rowMeta?.type !== null) {
+  // 1) Fonte primaria: row.heuristics.type (dati dall'euristica - lazy task creation)
+  const rowHeuristics = (row as any)?.heuristics;
+  if (rowHeuristics?.type !== undefined && rowHeuristics?.type !== null) {
     // Se è un numero (TaskType enum), restituiscilo direttamente
-    if (typeof rowMeta.type === 'number') {
-      return rowMeta.type as TaskType;
+    if (typeof rowHeuristics.type === 'number') {
+      return rowHeuristics.type as TaskType;
     }
   }
 
-  // 2) Fonte secondaria: row.type (se è già TaskType enum)
+  // 2) ❌ LEGACY: row.type (backward compatibility temporanea - da rimuovere)
+  // TODO: Rimuovere questa fonte dopo migrazione completa a row.heuristics.type
   if (row?.type !== undefined && row?.type !== null) {
     // Se è un numero (TaskType enum), restituiscilo direttamente
     if (typeof row.type === 'number') {
@@ -51,8 +52,8 @@ export function resolveTaskType(row: any): TaskType {
     }
   }
 
-  // 3) Deriva dal task usando TaskRepository (NodeRowData.taskId is separate field)
-  const taskId = row?.taskId || row?.id;
+  // 3) Deriva dal task usando TaskRepository (row.id === task.id ALWAYS)
+  const taskId = row?.id;
   if (taskId) {
     try {
       const task = taskRepository.getTask(taskId);
@@ -84,8 +85,8 @@ export function resolveTaskType(row: any): TaskType {
  * ❌ RIMOSSO: parametro act (non esiste più il concetto di Act)
  */
 export function hasTaskTree(row: any): boolean {
-  // NodeRowData.taskId is separate field, not Task.taskId
-  const taskId = row?.taskId || row?.id;
+  // ✅ UNIFIED MODEL: row.id === task.id ALWAYS (when task exists)
+  const taskId = row?.id;
 
   if (!taskId) {
     return false;

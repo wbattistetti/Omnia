@@ -9,10 +9,9 @@ import type { Row } from '@types/NodeRowTypes';
 export interface TaskTreeOpenerDependencies {
   taskEditorCtx: {
     open: (params: {
-      id: string;
+      id: string;  // ALWAYS equals row.id (which equals task.id when task exists)
       type: TaskType;
       label: string;
-      instanceId: string;
       taskWizardMode?: 'none' | 'adaptation' | 'full';
       contextualizationTemplateId?: string;
       taskLabel?: string;
@@ -45,14 +44,84 @@ export class TaskTreeOpener {
     try {
       const { row, taskEditorCtx, getProjectId } = this.deps;
       const taskType = resolveTaskType(row);
+      const projectId = getProjectId?.() || undefined;
+
+      // ✅ LOG: OPEN TRACE - START
+      const taskInRepository = taskRepository.getTask(row.id);
+      const allTasks = taskRepository.getAllTasks();
+      const matchingTask = allTasks.find(t => t.id === row.id);
+
+      console.log('[TaskTreeOpener] 🔍 OPEN TRACE - START - SUMMARY', {
+        rowId: row.id,
+        rowText: row.text,
+        taskType: taskType,
+        projectId: projectId,
+        foundTask: !!taskInRepository,
+        foundMatchingTask: !!matchingTask,
+        totalTasksInRepository: allTasks.length,
+        rowIdInTaskIds: allTasks.some(t => t.id === row.id),
+        timestamp: new Date().toISOString(),
+      });
+
+      // ✅ EXPANDED LOGS: Mostra tutti i dati completi
+      console.log('[TaskTreeOpener] 🔍 ROW DETAILS', {
+        rowId: row.id,
+        rowText: row.text,
+        rowIdLength: row.id.length,
+      });
+
+      console.log('[TaskTreeOpener] 🔍 TASK IN REPOSITORY (by row.id)', taskInRepository ? {
+        id: taskInRepository.id,
+        templateId: taskInRepository.templateId,
+        type: taskInRepository.type,
+        hasSteps: taskInRepository.steps ? Object.keys(taskInRepository.steps).length > 0 : false,
+        stepsKeys: taskInRepository.steps ? Object.keys(taskInRepository.steps) : [],
+        label: taskInRepository.label || taskInRepository.value?.label,
+      } : null);
+
+      console.log('[TaskTreeOpener] 🔍 ALL TASK IDs IN REPOSITORY', allTasks.map(t => t.id));
+      console.log('[TaskTreeOpener] 🔍 ALL TASK DETAILS IN REPOSITORY', allTasks.map(t => ({
+        id: t.id,
+        templateId: t.templateId,
+        type: t.type,
+        label: t.label || t.value?.label,
+        idLength: t.id.length,
+        idMatchesRowId: t.id === row.id,
+      })));
+
+      if (matchingTask) {
+        console.log('[TaskTreeOpener] 🔍 MATCHING TASK FOUND', {
+          id: matchingTask.id,
+          templateId: matchingTask.templateId,
+          type: matchingTask.type,
+          label: matchingTask.label || matchingTask.value?.label,
+          hasSteps: matchingTask.steps ? Object.keys(matchingTask.steps).length > 0 : false,
+        });
+      } else {
+        console.log('[TaskTreeOpener] 🔍 NO MATCHING TASK FOUND - Searching for similar IDs...');
+        // Cerca task con ID simili (per debugging)
+        const similarTasks = allTasks.filter(t => {
+          const rowIdBase = row.id.split('-')[0];
+          const taskIdBase = t.id.split('-')[0];
+          return rowIdBase === taskIdBase || t.id.includes(rowIdBase) || row.id.includes(taskIdBase);
+        });
+        if (similarTasks.length > 0) {
+          console.log('[TaskTreeOpener] 🔍 SIMILAR TASK IDs FOUND', similarTasks.map(t => ({
+            id: t.id,
+            templateId: t.templateId,
+            type: t.type,
+            label: t.label || t.value?.label,
+          })));
+        }
+      }
 
       // Only handle UtteranceInterpretation (DataRequest) for now
       if (taskType !== TaskType.UtteranceInterpretation) {
         return this.handleNonDataRequestTask();
       }
 
-      // Check if task already exists
-      let taskForType = row.taskId ? taskRepository.getTask(row.taskId) : null;
+      // Check if task already exists - ALWAYS use row.id (task.id === row.id)
+      let taskForType = taskRepository.getTask(row.id);
 
       // STATE 1: Task exists → taskWizardMode = 'none'
       if (taskForType) {
@@ -60,13 +129,12 @@ export class TaskTreeOpener {
       }
 
       // STATE 2/3: Task doesn't exist → determine taskWizardMode based on templateId
-      const rowMeta = (row as any)?.meta;
+      const rowHeuristics = (row as any)?.heuristics;
       const metaTaskType =
-        rowMeta?.type !== undefined && rowMeta?.type !== null
-          ? rowMeta.type
+        rowHeuristics?.type !== undefined && rowHeuristics?.type !== null
+          ? rowHeuristics.type
           : TaskType.UNDEFINED;
-      const metaTemplateId = rowMeta?.templateId || null;
-      const projectId = getProjectId?.() || undefined;
+      const metaTemplateId = rowHeuristics?.templateId || null;
 
       // STATE 2: Template found, no task → taskWizardMode = 'adaptation'
       if (metaTemplateId && metaTaskType === TaskType.UtteranceInterpretation) {
@@ -84,7 +152,7 @@ export class TaskTreeOpener {
       }
 
       // Fallback: Create base task without preview (legacy behavior)
-      return await this.handleFallback(metaTaskType, metaTemplateId, projectId, rowMeta);
+      return await this.handleFallback(metaTaskType, metaTemplateId, projectId, rowHeuristics);
     } catch (error) {
       console.error('[TaskTreeOpener] Error opening editor:', error);
       return {
@@ -99,10 +167,9 @@ export class TaskTreeOpener {
     const finalTaskType = taskForType.type as TaskType;
 
     taskEditorCtx.open({
-      id: String(row.taskId),
+      id: row.id,  // ALWAYS equals task.id
       type: finalTaskType,
       label: row.text,
-      instanceId: row.id,
       taskWizardMode: 'none',
     });
 
@@ -124,11 +191,10 @@ export class TaskTreeOpener {
     }
 
     this.dispatchTaskEditorOpenEvent({
-      id: String(row.taskId),
+      id: row.id,  // ALWAYS equals task.id
       type: finalTaskType,
       label: row.text,
       taskTree,
-      instanceId: row.id,
       templateId: taskForType?.templateId || undefined,
       taskWizardMode: 'none',
     });
@@ -173,10 +239,9 @@ export class TaskTreeOpener {
 
         // Open ResponseEditor with taskWizardMode = 'adaptation'
         taskEditorCtx.open({
-          id: String(newTask.id),
+          id: row.id,  // ALWAYS equals task.id
           type: metaTaskType,
           label: row.text || '',
-          instanceId: row.id,
           taskWizardMode: 'adaptation',
           contextualizationTemplateId: metaTemplateId,
           taskLabel: row.text || '',
@@ -184,10 +249,9 @@ export class TaskTreeOpener {
 
         // Emit event to open ResponseEditor tab
         this.dispatchTaskEditorOpenEvent({
-          id: String(newTask.id),
+          id: row.id,  // ALWAYS equals task.id
           type: metaTaskType,
           label: row.text || '',
-          instanceId: row.id,
           templateId: metaTemplateId,
           taskWizardMode: 'adaptation',
           contextualizationTemplateId: metaTemplateId,
@@ -214,23 +278,16 @@ export class TaskTreeOpener {
       {
         label: row.text,
         labelLength: row.text.trim().length,
+        rowId: row.id,
       }
     );
 
-    const temporaryId = `wizard-${row.id}-${Date.now()}`;
-
-    console.log('[🔍 TaskTreeOpener][STATO 3] Aprendo ResponseEditor con taskWizardMode = "full"', {
-      temporaryId,
-      rowId: row.id,
-      label: row.text,
-      taskWizardMode: 'full',
-    });
-
+    // ✅ CRITICAL: Use row.id as task ID (task.id === row.id ALWAYS)
+    // The wizard will create the task with this ID when completed
     taskEditorCtx.open({
-      id: temporaryId,
+      id: row.id,  // ALWAYS equals task.id (wizard will create task with this ID)
       type: TaskType.UtteranceInterpretation,
       label: row.text || '',
-      instanceId: row.id,
       taskWizardMode: 'full',
       taskLabel: row.text || '',
     });
@@ -238,16 +295,15 @@ export class TaskTreeOpener {
     console.log(
       '[🔍 TaskTreeOpener][STATO 3] Emettendo evento taskEditor:open con taskWizardMode = "full"',
       {
-        temporaryId,
+        rowId: row.id,
         taskWizardMode: 'full',
       }
     );
 
     this.dispatchTaskEditorOpenEvent({
-      id: temporaryId,
+      id: row.id,  // ALWAYS equals task.id (wizard will create task with this ID)
       type: TaskType.UtteranceInterpretation,
       label: row.text || '',
-      instanceId: row.id,
       taskWizardMode: 'full',
       taskLabel: row.text || '',
     });
@@ -259,11 +315,11 @@ export class TaskTreeOpener {
     metaTaskType: TaskType,
     metaTemplateId: string | null,
     projectId: string | undefined,
-    rowMeta: any
+    rowHeuristics: any
   ): Promise<TaskTreeOpenerResult> {
     const { row, taskEditorCtx, getProjectId } = this.deps;
 
-    const inferredCategory = rowMeta?.inferredCategory || null;
+    const inferredCategory = rowHeuristics?.inferredCategory || null;
 
     console.log('🆕 [TaskTreeOpener][LAZY] Creando task usando metadati riga', {
       rowId: row.id,
@@ -342,8 +398,7 @@ export class TaskTreeOpener {
               : metaTaskType,
           initialTaskTree: undefined,
           startOnStructure: false,
-          rowId: row.id,
-          instanceId: row.id,
+          rowId: row.id,  // ALWAYS equals task.id
         },
         bubbles: true,
       });
@@ -423,13 +478,12 @@ export class TaskTreeOpener {
 
     const finalTaskType = taskForType
       ? (taskForType.type as TaskType)
-      : ((row as any)?.meta?.type || TaskType.UtteranceInterpretation);
+      : ((row as any)?.heuristics?.type || TaskType.UtteranceInterpretation);
 
     taskEditorCtx.open({
-      id: String(row.id),
+      id: row.id,  // ALWAYS equals task.id
       type: finalTaskType,
       label: row.text,
-      instanceId: row.id,
     });
 
     // Build TaskTree only for DataRequest
@@ -463,11 +517,10 @@ export class TaskTreeOpener {
     }
 
     this.dispatchTaskEditorOpenEvent({
-      id: String(row.id),
+      id: row.id,  // ALWAYS equals task.id
       type: finalTaskType,
       label: row.text,
       taskTree,
-      instanceId: row.id,
       templateId: taskForType?.templateId || undefined,
     });
 
@@ -477,13 +530,14 @@ export class TaskTreeOpener {
   private async handleNonDataRequestTask(): Promise<TaskTreeOpenerResult> {
     const { row, taskEditorCtx, getProjectId } = this.deps;
 
-    let taskForType = row.taskId ? taskRepository.getTask(row.taskId) : null;
+    // Check if task exists - ALWAYS use row.id (task.id === row.id)
+    let taskForType = taskRepository.getTask(row.id);
 
-    // If task doesn't exist, create it using row metadata
+    // If task doesn't exist, create it using row heuristics
     if (!taskForType) {
-      const rowMeta = (row as any)?.meta;
-      const metaTaskType = rowMeta?.type || resolveTaskType(row) || TaskType.SayMessage;
-      const metaTemplateId = rowMeta?.templateId || null;
+      const rowHeuristics = (row as any)?.heuristics;
+      const metaTaskType = rowHeuristics?.type || resolveTaskType(row) || TaskType.SayMessage;
+      const metaTemplateId = rowHeuristics?.templateId || null;
       const projectId = getProjectId?.() || undefined;
 
       console.log('🆕 [TaskTreeOpener][LAZY] Creando task usando metadati riga', {
@@ -520,16 +574,15 @@ export class TaskTreeOpener {
 
     const taskType = taskForType
       ? (taskForType.type as TaskType)
-      : ((row as any)?.meta?.type || resolveTaskType(row) || TaskType.SayMessage);
+      : ((row as any)?.heuristics?.type || resolveTaskType(row) || TaskType.SayMessage);
 
     const { getEditorFromTaskType } = await import('@types/taskTypes');
     const editorKind = getEditorFromTaskType(taskType);
 
     taskEditorCtx.open({
-      id: String(row.id),
+      id: row.id,  // ALWAYS equals task.id
       type: taskType,
       label: row.text,
-      instanceId: row.id,
     });
 
     // Only for DataRequest (editorKind === 'ddt'), prepare TaskTree and emit event
@@ -564,20 +617,18 @@ export class TaskTreeOpener {
       }
 
       this.dispatchTaskEditorOpenEvent({
-        id: String(row.id),
+        id: row.id,  // ALWAYS equals task.id
         type: taskType,
         label: row.text,
         taskTree,
-        instanceId: row.id,
         templateId: taskForType?.templateId || undefined,
       });
     } else {
       // For other types, emit event without TaskTree
       this.dispatchTaskEditorOpenEvent({
-        id: String(row.id),
+        id: row.id,  // ALWAYS equals task.id
         type: taskType,
         label: row.text,
-        instanceId: row.id,
       });
     }
 
@@ -585,11 +636,10 @@ export class TaskTreeOpener {
   }
 
   private dispatchTaskEditorOpenEvent(detail: {
-    id: string;
+    id: string;  // ALWAYS equals row.id (which equals task.id when task exists)
     type: TaskType;
     label: string;
     taskTree?: any;
-    instanceId: string;
     templateId?: string;
     taskWizardMode?: 'none' | 'adaptation' | 'full';
     contextualizationTemplateId?: string;

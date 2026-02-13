@@ -100,21 +100,42 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   const taskLabelForWizard = (taskWizardMode === 'full' || shouldPreserveWizardIntegration)
     ? (taskLabel || undefined)
     : undefined;
-  const taskIdForWizard = (taskWizardMode === 'full' || shouldPreserveWizardIntegration) && task
-    ? (task as any).id
-    : undefined;
+  // ✅ FIX: Usa sempre task.id (che è sempre row.id) quando task esiste
+  // Quando taskWizardMode === 'full', task può essere TaskMeta (che ha id = row.id)
+  // Per costruzione: task.id = row.id (sempre)
+  // ✅ CRITICAL: rowId MUST be available when wizard mode is 'full'
   const rowIdForWizard = (taskWizardMode === 'full' || shouldPreserveWizardIntegration) && task
-    ? (task as any).id
+    ? task.id  // ✅ ALWAYS equals row.id (task can be TaskMeta or Task, both have id)
     : undefined;
+
+  // ✅ DEBUG: Log per verificare che rowId sia disponibile
+  if (taskWizardMode === 'full' && !rowIdForWizard) {
+    console.error('[ResponseEditor] ❌ CRITICAL: rowIdForWizard is undefined when taskWizardMode === "full"', {
+      taskWizardMode,
+      task,
+      taskId: task?.id,
+      taskLabel,
+    });
+  }
   const projectIdForWizard = (taskWizardMode === 'full' || shouldPreserveWizardIntegration)
     ? currentProjectId || undefined
     : undefined;
   const localeForWizard = 'it';
 
+  // ✅ DEBUG: Log per verificare che rowId sia disponibile
+  if (taskWizardMode === 'full' && !rowIdForWizard) {
+    console.error('[ResponseEditor] ❌ CRITICAL: rowIdForWizard is undefined when taskWizardMode === "full"', {
+      taskWizardMode,
+      task,
+      taskId: task?.id,
+      taskLabel,
+      shouldPreserveWizardIntegration,
+    });
+  }
+
   const wizardIntegrationRaw = useWizardIntegration(
     taskLabelForWizard, // ✅ From editor.taskLabel (single source of truth)
-    taskIdForWizard,
-    rowIdForWizard,
+    rowIdForWizard, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
     projectIdForWizard,
     localeForWizard,
     onWizardComplete // ✅ CORRETTO: usa onWizardComplete dalla prop

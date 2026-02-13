@@ -3,6 +3,7 @@
 
 import { TaskType, taskTypeToTemplateId, taskIdToTaskType } from '@types/taskTypes';
 import { createRowWithTask, updateRowTaskType } from '@utils/taskHelpers';
+import { taskRepository } from '@services/TaskRepository';
 import { emitSidebarRefresh } from '@ui/events';
 import type { Row } from '@types/NodeRowTypes';
 
@@ -112,7 +113,9 @@ export class FactoryTaskCreator {
     // Migration: Create or update Task
     // Convert key (string from Intellisense) to TaskType enum
     const taskType = taskIdToTaskType(key);
-    if (!row.taskId) {
+    // Check if task exists in repository (row.id === task.id ALWAYS)
+    const existingTask = taskRepository.getTask(row.id);
+    if (!existingTask) {
       // Create Task for this row
       createRowWithTask(instanceId, taskType, '', projectId);
     } else {

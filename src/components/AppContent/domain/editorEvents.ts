@@ -6,13 +6,13 @@ import type { TaskMeta, TaskWizardMode } from '@taskEditor/EditorHost/types';
 
 /**
  * TaskEditor open event payload
+ * id: ALWAYS equals row.id (which equals task.id when task exists)
  */
 export interface TaskEditorOpenEvent {
-  id: string;
+  id: string;  // ALWAYS equals row.id (which equals task.id when task exists)
   type: TaskType;
   label?: string;
   name?: string;
-  instanceId?: string;
   taskWizardMode?: TaskWizardMode;
   needsTaskBuilder?: boolean;
   needsTaskContextualization?: boolean;

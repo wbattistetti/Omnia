@@ -441,9 +441,9 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
             // Find the corresponding template
             const subTemplate = wizardTemplates.find(st => (st.id || st._id) === subId);
             if (subTemplate) {
-              // Use the template's ID (which should be a GUID or the actual ID)
+              // Use the template's ID (which should be a pure GUID)
               const mappedId = subTemplate.id || subTemplate._id;
-              const isGuid = mappedId.startsWith('node-') || mappedId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+              const isGuid = mappedId && mappedId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
               console.log('[handleSaveToFactory] 🔄 Mapping subTaskId', {
                 originalId: subId,
                 mappedId,
@@ -517,6 +517,32 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
             generalizedLabel && wizardIntegrationProp.dataSchema?.[0]?.id === (t.id || t._id)
           )?.label,
         } : null,
+      });
+
+      // ✅ LOG: SAVE TO FACTORY TRACE
+      console.log('[handleSaveToFactory] 🔍 SAVE TO FACTORY TRACE', {
+        // Template da salvare
+        totalTemplates: templatesToSave.length,
+        templateIds: templatesToSave.map(t => t.id || t._id),
+        templateDetails: templatesToSave.map(t => ({
+          id: t.id || t._id,
+          label: t.label,
+          isRoot: generalizedLabel && wizardIntegrationProp.dataSchema?.[0]?.id === (t.id || t._id),
+          hasSubTasksIds: !!t.subTasksIds,
+          subTasksIds: t.subTasksIds || [],
+        })),
+
+        // Root template
+        rootTemplateId: templatesToSave.find(t =>
+          generalizedLabel && wizardIntegrationProp.dataSchema?.[0]?.id === (t.id || t._id)
+        )?.id,
+
+        // Istanza corrente
+        currentInstanceId: taskMeta?.id,
+        currentRowId: taskMeta?.id, // Dovrebbe essere l'ID della riga di nodo
+        instanceIdEqualsRowId: taskMeta?.id === taskMeta?.id,
+
+        timestamp: new Date().toISOString(),
       });
 
       // ✅ Save templates to Factory DB in bulk (faster)
@@ -754,9 +780,9 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     if (taskWizardMode === 'full') {
       // ✅ Sidebar visibile solo quando la struttura è stata proposta o confermata
       const shouldShowSidebar = wizardIntegrationProp?.wizardMode === WizardMode.DATA_STRUCTURE_PROPOSED ||
-                                 wizardIntegrationProp?.wizardMode === WizardMode.DATA_STRUCTURE_CONFIRMED ||
-                                 wizardIntegrationProp?.wizardMode === WizardMode.GENERATING ||
-                                 wizardIntegrationProp?.wizardMode === WizardMode.COMPLETED;
+        wizardIntegrationProp?.wizardMode === WizardMode.DATA_STRUCTURE_CONFIRMED ||
+        wizardIntegrationProp?.wizardMode === WizardMode.GENERATING ||
+        wizardIntegrationProp?.wizardMode === WizardMode.COMPLETED;
 
       if (!shouldShowSidebar) {
         return undefined;
@@ -823,7 +849,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         sidebarOnly={false} // ✅ Quando taskWizardMode === 'full', mostra anche MainContentArea
         taskWizardMode={taskWizardMode}
         mainViewMode={mainViewMode}
-        // ✅ REMOVED: wizardProps - now from WizardContext
+      // ✅ REMOVED: wizardProps - now from WizardContext
       />
     );
   }, [

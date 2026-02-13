@@ -246,6 +246,57 @@ export class ProjectManager {
         });
       }
 
+      // ✅ NEW: Verifica se i row.id del flow corrispondono ai task caricati
+      if (flowResult.status === 'fulfilled' && flowResult.value) {
+        const flow = flowResult.value;
+        const allRowIds: string[] = [];
+
+        // ✅ FIX: Il flow è in formato ReactFlow, quindi i rows sono in node.data.rows
+        flow.nodes?.forEach((node: any) => {
+          const rows = node.data?.rows || node.rows || [];
+          rows.forEach((row: any) => {
+            if (row.id) {
+              allRowIds.push(row.id);
+            }
+          });
+        });
+
+        const allTaskIds = taskRepository.getAllTasks().map(t => t.id);
+        const matchingRowIds = allRowIds.filter(rowId => allTaskIds.includes(rowId));
+        const missingRowIds = allRowIds.filter(rowId => !allTaskIds.includes(rowId));
+
+        // ✅ EXPANDED LOGS: Mostra tutti i dati completi
+        console.log('[ProjectManager] 🔍 ROW-TO-TASK VERIFICATION - SUMMARY', {
+          projectId: id,
+          totalRowIds: allRowIds.length,
+          totalTaskIds: allTaskIds.length,
+          matchingRowIds: matchingRowIds.length,
+          missingRowIds: missingRowIds.length,
+        });
+
+        console.log('[ProjectManager] 🔍 ALL ROW IDs (from flow)', allRowIds);
+        console.log('[ProjectManager] 🔍 ALL TASK IDs (from repository)', allTaskIds);
+        console.log('[ProjectManager] 🔍 MATCHING ROW IDs (have task)', matchingRowIds);
+        console.log('[ProjectManager] 🔍 MISSING ROW IDs (no task found)', missingRowIds);
+
+        // ✅ NEW: Dettagli per ogni row mancante
+        if (missingRowIds.length > 0) {
+          console.log('[ProjectManager] 🔍 MISSING ROW DETAILS', missingRowIds.map(rowId => {
+            const node = flow.nodes?.find((n: any) => {
+              const rows = n.data?.rows || n.rows || [];
+              return rows.some((r: any) => r.id === rowId);
+            });
+            const row = node ? (node.data?.rows || node.rows || []).find((r: any) => r.id === rowId) : null;
+            return {
+              rowId,
+              rowText: row?.text || 'N/A',
+              nodeId: node?.id || 'N/A',
+              nodeLabel: node?.data?.label || node?.label || 'N/A',
+            };
+          }));
+        }
+      }
+
       // Refresh data and set app state
       await this.params.refreshData();
       this.params.setAppState('mainApp');

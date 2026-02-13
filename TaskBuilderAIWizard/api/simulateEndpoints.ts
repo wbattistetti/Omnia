@@ -13,9 +13,15 @@ import { convertApiStructureToWizardTaskTree } from '../utils/convertApiStructur
  */
 export async function generateStructure(
   description: string,
-  taskId?: string,
+  rowId?: string, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
   locale: string = 'it'
-): Promise<{ schema: WizardTaskTreeNode[]; shouldBeGeneral: boolean }> {
+): Promise<{
+  schema: WizardTaskTreeNode[];
+  shouldBeGeneral: boolean;
+  generalizedLabel?: string | null;
+  generalizationReason?: string | null;
+  generalizedMessages?: any | null;
+}> {
   try {
     const provider = localStorage.getItem('omnia.aiProvider') || 'openai';
     const model = localStorage.getItem('omnia.aiModel') || undefined;
@@ -28,7 +34,7 @@ export async function generateStructure(
         provider,
         model,
         locale,
-        taskId
+        taskId: rowId // ✅ Backend still expects taskId, but we pass rowId (which equals task.id)
       })
     });
 
@@ -48,8 +54,13 @@ export async function generateStructure(
     const generalizationReason = data.generalizationReason || null;
     const generalizedMessages = data.generalizedMessages || null;
 
+    // ✅ CRITICAL: rowId MUST be provided (it equals row.id which equals task.id)
+    if (!rowId) {
+      throw new Error('[generateStructure] CRITICAL: rowId is required. It must equal row.id (which equals task.id when task exists).');
+    }
+
     // Convert API structure to WizardTaskTreeNode format
-    const converted = convertApiStructureToWizardTaskTree(data.structure, taskId || 'temp-task-id');
+    const converted = convertApiStructureToWizardTaskTree(data.structure, rowId); // ✅ ALWAYS equals row.id
 
     // ✅ Apply generalization fields to root node only
     if (converted.length > 0 && (shouldBeGeneral || generalizedLabel || generalizationReason || generalizedMessages)) {
