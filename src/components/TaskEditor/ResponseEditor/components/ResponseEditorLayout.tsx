@@ -22,7 +22,6 @@ import { SaveLocationDialog } from '@responseEditor/components/SaveLocationDialo
 import { MainViewMode } from '@responseEditor/types/mainViewMode';
 // ✅ REMOVED: useWizardIntegration - ora viene chiamato in ResponseEditorInner
 // ✅ REMOVED: Star import - non più necessario
-import { convertWizardTaskTreeToMainList } from '@responseEditor/utils/convertWizardTaskTreeToMainList';
 import { WizardMode } from '../../../../../TaskBuilderAIWizard/types/WizardMode';
 import type { TaskTree, TaskMeta } from '@types/taskTypes';
 import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
@@ -740,12 +739,11 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     wizardIntegrationProp?.setCorrectionInput,
   ]);
 
-  // ✅ NEW: Converti dataSchema in mainList quando taskWizardMode === 'full'
-  // La Sidebar ha bisogno di mainList, non di WizardTaskTreeNode[]
+  // ✅ NEW: Usa direttamente dataSchema quando taskWizardMode === 'full'
+  // La Sidebar può usare direttamente WizardTaskTreeNode[] senza conversione
   const effectiveMainList = React.useMemo(() => {
     if (taskWizardMode === 'full' && wizardIntegrationProp?.dataSchema) {
-      const converted = convertWizardTaskTreeToMainList(wizardIntegrationProp.dataSchema);
-      return converted;
+      return wizardIntegrationProp.dataSchema;
     }
     return mainList;
   }, [taskWizardMode, wizardIntegrationProp?.dataSchema, mainList]);
