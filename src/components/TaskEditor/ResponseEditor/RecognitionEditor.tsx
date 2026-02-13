@@ -144,12 +144,6 @@ export default function RecognitionEditor({
     const node = editorProps?.node;
     if (!node) return null;
     const contract = loadContractFromNode(node);
-    const regexPattern = contract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
-    console.log('[CONTRACT] INIT - Contract loaded', {
-      nodeId: node.id,
-      hasContract: !!contract,
-      regexPattern: regexPattern || '(none)'
-    });
     return contract;
   });
 
@@ -181,22 +175,11 @@ export default function RecognitionEditor({
       // ✅ Carica dal template UNA VOLTA quando apri l'editor
       const loadedContract = loadContractFromNode(node);
       const regexPattern = loadedContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
-      console.log('[REGEX] INIT - Contract loaded from template', {
-        nodeId: node.id,
-        hasContract: !!loadedContract,
-        regexPattern: regexPattern || '(none)'
-      });
 
       // ✅ SALVA ORIGINALE (deep copy) per poterlo ripristinare se l'utente sceglie "Scarta"
       originalContractRef.current = loadedContract
         ? JSON.parse(JSON.stringify(loadedContract))
         : null;
-
-      console.log('[CONTRACT] INIT - Original contract saved', {
-        nodeId: node.id,
-        hasOriginalContract: !!originalContractRef.current,
-        originalRegexPattern: originalContractRef.current?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0] || '(none)'
-      });
 
       setLocalContract(loadedContract);
 
@@ -214,14 +197,8 @@ export default function RecognitionEditor({
             ...updated.nlpProfile,
             regex: regexPattern ?? undefined
           };
-          console.log('[CONTRACT] INIT - Synced regex to node.nlpProfile', {
-            nodeId: node.id,
-            contractRegex: regexPattern || '(empty)',
-            nodeNlpProfileRegex: updated.nlpProfile.regex || '(empty)',
-            synced: true
-          });
           return updated;
-        }, false); // false = non notificare provider (solo sync locale)
+        });
       }
 
       // ✅ Reset stato modifiche quando cambi nodo
@@ -361,6 +338,24 @@ export default function RecognitionEditor({
   // ✅ Usa direttamente localContract come contract (non serve creare nuovo oggetto)
   const contract = localContract;
 
+  // ✅ FASE 3: Stato locale per regex (non salvato durante digitazione)
+  const contractItem = activeEditor && contract ? contract.contracts?.find((c: any) => {
+    const getContractTypeFromEditorType = (editorType: string): string => {
+      if (editorType === 'extractor') return 'rules';
+      return editorType;
+    };
+    const expectedContractType = getContractTypeFromEditorType(activeEditor);
+    return c.type === expectedContractType;
+  }) : null;
+
+  const savedRegexValue = contractItem?.patterns?.[0] ?? '';
+  const [localRegexValue, setLocalRegexValue] = useState(savedRegexValue);
+
+  // ✅ Sync localRegexValue when savedRegexValue changes externally
+  useEffect(() => {
+    setLocalRegexValue(savedRegexValue);
+  }, [savedRegexValue]);
+
   // Helper: confronta contract con template
   const hasContractChanged = useCallback((nodeTemplateId: string, modifiedContract: DataContract | null): boolean => {
     if (!nodeTemplateId) return false;
@@ -381,7 +376,7 @@ export default function RecognitionEditor({
   }, []);
 
   // Handle contract changes - traccia modifiche ma NON mostra dialog subito
-  const handleContractChange = useCallback((updatedContract: DataContract | null) => {
+  const handleContractChange = useCallback((updatedContract: DataContract | null, skipAutoSave: boolean = false) => {
     const node = editorProps?.node;
     if (!node || !node.templateId) {
       console.warn('[RecognitionEditor][handleContractChange] ❌ No node or templateId available');
@@ -390,17 +385,6 @@ export default function RecognitionEditor({
 
     const nodeTemplateId = node.templateId;
     const regexPattern = updatedContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
-    const nodeNlpProfileRegex = node?.nlpProfile?.regex;
-    const areTheySynced = regexPattern === nodeNlpProfileRegex;
-
-    console.log('[CONTRACT] CHANGE - Tracking modifications', {
-      nodeId: node.id,
-      nodeTemplateId,
-      regexPattern: regexPattern || '(empty)',
-      nodeNlpProfileRegex: nodeNlpProfileRegex || '(empty)',
-      areTheySynced,
-      '⚠️ SYNC ISSUE': !areTheySynced ? 'Contract and node.nlpProfile.regex are NOT synced!' : 'OK'
-    });
 
     // ✅ Confronta con template
     const changed = hasContractChanged(nodeTemplateId, updatedContract);
@@ -414,20 +398,12 @@ export default function RecognitionEditor({
           : null;
         // ✅ Marca template come modificato per salvataggio futuro
         DialogueTaskService.markTemplateAsModified(nodeTemplateId);
-        console.log('[CONTRACT] CHANGE - Template updated in memory', {
-          nodeTemplateId,
-          regexPattern: updatedContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0] || '(empty)'
-        });
       }
 
       // ✅ Contract modificato: traccia ma NON mostra dialog
       setHasUnsavedContractChanges(true);
       setModifiedContract(updatedContract);
       setLocalContract(updatedContract); // ✅ Aggiorna UI immediatamente
-      console.log('[CONTRACT] CHANGE - Contract modified, tracking for later', {
-        nodeTemplateId,
-        regexPattern: updatedContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0] || '(empty)'
-      });
 
       // ✅ CRITICAL FIX: Sincronizza contract.regex → node.nlpProfile.regex
       // Questo assicura che useProfileState legga la regex corretta per il tester
@@ -443,14 +419,8 @@ export default function RecognitionEditor({
             ...updated.nlpProfile,
             regex: regexPattern ?? undefined
           };
-          console.log('[CONTRACT] CHANGE - Synced regex to node.nlpProfile', {
-            nodeId: node.id,
-            contractRegex: regexPattern || '(empty)',
-            nodeNlpProfileRegex: updated.nlpProfile.regex || '(empty)',
-            synced: true
-          });
           return updated;
-        }, false); // false = non notificare provider (solo sync locale)
+        }, { skipAutoSave }); // ✅ Pass skipAutoSave to control persistence
       }
 
       // ✅ Aggiorna immediatamente il ref (non aspetta useImperativeHandle)
@@ -462,11 +432,6 @@ export default function RecognitionEditor({
           nodeTemplateId: node.templateId,
           nodeLabel: node.label
         };
-        console.log('[CONTRACT] CHANGE - Ref updated immediately', {
-          hasUnsavedChanges: contractChangeRef.current.hasUnsavedChanges,
-          nodeTemplateId: contractChangeRef.current.nodeTemplateId,
-          hasOriginalContract: !!contractChangeRef.current.originalContract
-        });
       }
     } else {
       // ✅ Nessun cambiamento: usa template
@@ -475,7 +440,6 @@ export default function RecognitionEditor({
       setLocalContract(template?.dataContract ?? null);
       setHasUnsavedContractChanges(false);
       setModifiedContract(null);
-      console.log('[CONTRACT] CHANGE - No changes detected, using template contract');
 
       // ✅ Reset ref
       if (contractChangeRef) {
@@ -488,23 +452,20 @@ export default function RecognitionEditor({
         };
       }
     }
-  }, [editorProps?.node, hasContractChanged, contractChangeRef]);
+  }, [editorProps?.node, hasContractChanged, contractChangeRef, updateSelectedNode]);
+
+  // ✅ FASE 3: Rimuoviamo handleSaveRegex - non serve più
+  // ✅ L'editor non salva più direttamente, solo commit alla chiusura
 
   // ✅ Esponi funzione per verificare modifiche non salvate
   React.useImperativeHandle(contractChangeRef, () => {
-    const result = {
+    return {
       hasUnsavedChanges: hasUnsavedContractChanges,
       modifiedContract,
       originalContract: originalContractRef.current, // ✅ Esponi originale per poterlo ripristinare
       nodeTemplateId: editorProps?.node?.templateId,
       nodeLabel: editorProps?.node?.label
     };
-    console.log('[CONTRACT] IMPERATIVE_HANDLE - Ref updated', {
-      hasUnsavedChanges: result.hasUnsavedChanges,
-      nodeTemplateId: result.nodeTemplateId,
-      hasOriginalContract: !!result.originalContract
-    });
-    return result;
   }, [hasUnsavedContractChanges, modifiedContract, editorProps?.node]);
 
   // Build dynamic editorProps based on activeEditor and contract
@@ -522,12 +483,11 @@ export default function RecognitionEditor({
       return editorType;
     };
 
-    const contractItem = activeEditor ? contract.contracts?.find((c: any) => {
+    // ✅ Ricalcola contractItem per altri editor (per regex usa quello calcolato sopra)
+    const contractItemForEditor = activeEditor && contract ? contract.contracts?.find((c: any) => {
       const expectedContractType = getContractTypeFromEditorType(activeEditor);
       return c.type === expectedContractType;
     }) : null;
-
-    // Log rimosso per evitare loop infinito
 
     const baseProps = {
       node,
@@ -547,67 +507,53 @@ export default function RecognitionEditor({
       case 'regex':
         return {
           ...baseProps,
-          regex: contractItem?.patterns?.[0] ?? editorProps?.regex ?? '',
-          setRegex: (value: string) => {
-            console.log('[REGEX] USER_INPUT - setRegex', { newValue: value });
-            // Update the specific contract item using contractItem.type
-            if (contractItem && contract) {
-              const contractType = contractItem.type;
-              const updatedContracts = contract.contracts.map((c: any) =>
-                c.type === contractType ? { ...c, patterns: [value] } : c
-              );
-              const updatedContract = { ...contract, contracts: updatedContracts };
-              handleContractChange(updatedContract);
-            } else if (editorProps?.setRegex) {
-              editorProps.setRegex(value);
-            } else {
-              console.error('[REGEX] ERROR - No way to save regex!');
-            }
-          },
+          regex: savedRegexValue, // ✅ CORREZIONE CRITICA: regex ufficiale (savedRegexValue), NON localRegexValue
+          setRegex: setLocalRegexValue, // ✅ Solo aggiorna locale (non salva)
+          // ✅ FASE 3: Rimuoviamo onSaveRegex - non serve più
         };
       case 'extractor':
         // ExtractorInlineEditor gestisce extractorCode internamente, ma potremmo sincronizzarlo
         return {
           ...baseProps,
-          extractorCode: contractItem?.extractorCode ?? '',
+          extractorCode: contractItemForEditor?.extractorCode ?? '',
           setExtractorCode: (value: string) => {
-            if (contractItem && contract) {
-              const contractType = contractItem.type; // Should be 'rules'
+            if (contractItemForEditor && contract) {
+              const contractType = contractItemForEditor.type; // Should be 'rules'
               const updatedContracts = contract.contracts.map((c: any) =>
                 c.type === contractType ? { ...c, extractorCode: value } : c
               );
               const updatedContract = { ...contract, contracts: updatedContracts };
-              handleContractChange(updatedContract);
+              handleContractChange(updatedContract, false); // ✅ Salva esplicitamente
             }
           },
         };
       case 'ner':
         return {
           ...baseProps,
-          entityTypes: contractItem?.entityTypes ?? [],
+          entityTypes: contractItemForEditor?.entityTypes ?? [],
           setEntityTypes: (value: string[]) => {
-            if (contractItem && contract) {
-              const contractType = contractItem.type;
+            if (contractItemForEditor && contract) {
+              const contractType = contractItemForEditor.type;
               const updatedContracts = contract.contracts.map((c: any) =>
                 c.type === contractType ? { ...c, entityTypes: value } : c
               );
               const updatedContract = { ...contract, contracts: updatedContracts };
-              handleContractChange(updatedContract);
+              handleContractChange(updatedContract, false); // ✅ Salva esplicitamente
             }
           },
         };
       case 'llm':
         return {
           ...baseProps,
-          systemPrompt: contractItem?.systemPrompt || '',
+          systemPrompt: contractItemForEditor?.systemPrompt || '',
           setSystemPrompt: (value: string) => {
-            if (contractItem && contract) {
-              const contractType = contractItem.type;
+            if (contractItemForEditor && contract) {
+              const contractType = contractItemForEditor.type;
               const updatedContracts = contract.contracts.map((c: any) =>
                 c.type === contractType ? { ...c, systemPrompt: value } : c
               );
               const updatedContract = { ...contract, contracts: updatedContracts };
-              handleContractChange(updatedContract);
+              handleContractChange(updatedContract, false); // ✅ Salva esplicitamente
             }
           },
         };

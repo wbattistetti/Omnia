@@ -57,10 +57,12 @@ def generate_regex(body: dict = Body(...)):
     print("[apiNew] MESSAGGIO COMPLETO ALL'AI (Refine Regex)")
     print("="*60)
     print(f"[apiNew] PROMPT (from fixed template):")
-    print(f"[apiNew] {description[:200]}...")  # First 200 chars
+    # Sanitize unicode for Windows console
+    safe_desc = description[:200].encode('ascii', 'ignore').decode('ascii')
+    print(f"[apiNew] {safe_desc}...")
     print("-"*60)
     print(f"[apiNew] REQUEST BODY COMPLETO:")
-    print(f"[apiNew] {json.dumps(body, indent=2, ensure_ascii=False)}")
+    print(f"[apiNew] {json.dumps(body, indent=2, ensure_ascii=True)}")  # FIX: ensure_ascii=True per Windows
     print("-"*60)
     print(f"[apiNew] CONFIGURAZIONE:")
     print(f"[apiNew]   - Provider: {provider}")
@@ -85,7 +87,9 @@ def generate_regex(body: dict = Body(...)):
 
     # ✅ LOG DEL PROMPT COMPLETO PRIMA DELL'INVIO
     print(f"[apiNew] PROMPT COMPLETO PRIMA DELL'INVIO ALL'AI:")
-    print(f"[apiNew] {prompt}")
+    # Sanitize unicode for Windows console
+    safe_prompt = prompt.encode('ascii', 'ignore').decode('ascii')
+    print(f"[apiNew] {safe_prompt}")
     print("="*60 + "\n")
 
     try:
@@ -116,7 +120,14 @@ def generate_regex(body: dict = Body(...)):
         }
 
     except Exception as e:
-        return {"error": f"Error generating regex: {str(e)}"}
+        import traceback
+        error_trace = traceback.format_exc()
+        # Sanitize error message for Windows console
+        safe_error = str(e).encode('ascii', 'ignore').decode('ascii')
+        safe_trace = error_trace.encode('ascii', 'ignore').decode('ascii')
+        print(f"[apiNew] ERROR generating regex: {safe_error}")
+        print(f"[apiNew] TRACEBACK: {safe_trace}")
+        return {"error": f"Error generating regex: {safe_error}"}
 
 def get_system_message_for_engine(engine: str) -> str:
     """Get system message based on engine type"""

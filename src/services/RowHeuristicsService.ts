@@ -3,8 +3,8 @@
 // Separa la logica di business dalla UI
 
 import { inferTaskType } from '../nlp/taskType';
-import { TaskType, taskTypeToHeuristicString } from '../types/taskTypes';
-import TaskTemplateMatcherService, { type TaskTemplateMatch } from './TaskTemplateMatcherService';
+import { TaskType } from '../types/taskTypes';
+import { type TaskTemplateMatch } from './TaskTemplateMatcherService';
 import { getRuleSet, getLanguageOrder } from '../nlp/taskType/registry';
 import type { CompiledCategoryPattern } from '../nlp/taskType/types';
 import { waitForCache } from '../nlp/taskType/patternLoader';
@@ -47,24 +47,35 @@ export class RowHeuristicsService {
     const heuristic1Result = await inferTaskType(trimmedLabel, { languageOrder: ['IT', 'EN', 'PT'] as any });
     let taskType = heuristic1Result.type;
 
-    // 2️⃣ EURISTICA 2: cerca template task che matcha la label
+    // 2️⃣ EURISTICA 2: cerca template task usando embedding matching
     let matchedTemplate: TaskTemplateMatch | null = null;
     let templateType: TaskType | null = null;
 
-    if (taskType !== TaskType.UNDEFINED) {
-      // Euristica 1 ha trovato un tipo → cerca template per quel tipo
-      const typeForMatch = taskTypeToHeuristicString(taskType);
-      if (typeForMatch) {
-        matchedTemplate = await TaskTemplateMatcherService.findTaskTemplate(trimmedLabel, typeForMatch);
-        if (matchedTemplate) {
-          templateType = this.getTemplateType(matchedTemplate.template);
+    // ✅ NUOVO: Usa SOLO embedding matching (no fallback a matching tradizionale)
+    if (taskType === TaskType.UtteranceInterpretation) {
+      try {
+        const { EmbeddingService } = await import('./EmbeddingService');
+        const matchedTaskId = await EmbeddingService.findBestMatch(trimmedLabel, 'task', 0.70);
+
+        if (matchedTaskId) {
+          // Embedding ha trovato un match → usa quello
+          const DialogueTaskService = (await import('./DialogueTaskService')).default;
+          const template = DialogueTaskService.getTemplate(matchedTaskId);
+          if (template) {
+            matchedTemplate = {
+              template,
+              templateId: matchedTaskId,
+              labelUsed: template.label,
+              language: heuristic1Result.lang || 'it',
+              matchType: 'embedding'
+            };
+            templateType = this.getTemplateType(template);
+          }
         }
-      }
-    } else {
-      // Euristica 1 è UNDEFINED → cerca template generico (qualsiasi tipo)
-      matchedTemplate = await TaskTemplateMatcherService.findTaskTemplate(trimmedLabel, null);
-      if (matchedTemplate) {
-        templateType = this.getTemplateType(matchedTemplate.template);
+        // Se embedding non trova match → matchedTemplate rimane null → wizard full
+      } catch (error) {
+        console.error('[RowHeuristicsService] ❌ Embedding matching failed:', error);
+        // Se embedding fallisce → matchedTemplate rimane null → wizard full
       }
     }
 

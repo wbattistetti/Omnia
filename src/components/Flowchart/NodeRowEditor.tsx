@@ -30,15 +30,8 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
 
   // ✅ Calcola e aggiorna la larghezza usando scrollWidth (Regola 1)
   const updateWidth = useCallback(() => {
-    console.log('[NodeRowEditor][updateWidth] START', {
-      hasEl: !!inputRef.current,
-      hasOnWidthChange: !!onWidthChange,
-      value: inputRef.current?.value?.substring(0, 20) || 'empty'
-    });
-
     const el = inputRef.current;
     if (!el || !onWidthChange) {
-      console.log('[NodeRowEditor][updateWidth] EARLY RETURN', { hasEl: !!el, hasOnWidthChange: !!onWidthChange });
       return;
     }
 
@@ -47,35 +40,19 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
       requestAnimationFrame(() => {
         const el = inputRef.current;
         if (!el || !onWidthChange) {
-          console.log('[NodeRowEditor][updateWidth] RAF EARLY RETURN', { hasEl: !!el, hasOnWidthChange: !!onWidthChange });
           return;
         }
 
         // ✅ Regola 1: Usa scrollWidth (l'unico valore affidabile)
         const scrollWidth = el.scrollWidth;
-        const currentValue = el.value || '';
-        const scrollLeftBefore = el.scrollLeft;
 
         // Calcola larghezza totale: scrollWidth + margine di sicurezza
         const totalWidth = Math.max(scrollWidth + 20, 140); // Larghezza minima 140px
-
-        console.log('[NodeRowEditor][updateWidth] CALCULATING', {
-          scrollWidth,
-          totalWidth,
-          valueLength: currentValue.length,
-          valuePreview: currentValue.substring(0, 30),
-          scrollLeftBefore
-        });
 
         onWidthChange(totalWidth);
 
         // ✅ Blocca lo scroll orizzontale - mantiene il testo sempre allineato a sinistra
         el.scrollLeft = 0;
-
-        console.log('[NodeRowEditor][updateWidth] DONE', {
-          scrollLeftAfter: el.scrollLeft,
-          scrollWidthAfter: el.scrollWidth
-        });
       });
     });
   }, [inputRef, onWidthChange]);
@@ -125,25 +102,10 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
 
   // ✅ Handler onChange che chiama anche updateWidth
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newValue = e.target.value;
-    console.log('[NodeRowEditor][handleChange] START', {
-      newValueLength: newValue.length,
-      newValuePreview: newValue.substring(0, 30),
-      oldValueLength: value?.length || 0,
-      oldValuePreview: value?.substring(0, 30) || 'empty'
-    });
-
     onChange(e);
-
-    console.log('[NodeRowEditor][handleChange] AFTER onChange', {
-      valueAfterOnChange: value?.substring(0, 30) || 'empty'
-    });
-
     // ✅ Regola 3: Aggiorna larghezza su ogni cambio (updateWidth già usa doppio RAF internamente)
     updateWidth();
-
-    console.log('[NodeRowEditor][handleChange] DONE');
-  }, [onChange, updateWidth, value]);
+  }, [onChange, updateWidth]);
 
   return (
     <VoiceTextbox
@@ -186,35 +148,17 @@ export const NodeRowEditor: React.FC<NodeRowEditorProps> = ({
       onInput={(e) => {
         const el = inputRef.current;
         if (!el) {
-          console.log('[NodeRowEditor][onInput] NO EL');
           return;
         }
 
-        const inputValue = (e.target as HTMLTextAreaElement).value || '';
-        console.log('[NodeRowEditor][onInput] START', {
-          valueLength: inputValue.length,
-          valuePreview: inputValue.substring(0, 30),
-          scrollWidth: el.scrollWidth,
-          scrollLeft: el.scrollLeft
-        });
-
         el.style.height = 'auto';
         el.style.height = `${Math.min(el.scrollHeight, 400)}px`;
-        log('onInput resize', { h: el.scrollHeight });
 
         // ✅ Regola 3: Aggiorna larghezza su ogni input
         updateWidth();
 
         // ✅ Blocca lo scroll orizzontale anche su input diretto
-        const scrollLeftBefore = el.scrollLeft;
         el.scrollLeft = 0;
-
-        console.log('[NodeRowEditor][onInput] DONE', {
-          scrollLeftBefore,
-          scrollLeftAfter: el.scrollLeft,
-          scrollWidth: el.scrollWidth,
-          valueAfter: el.value?.substring(0, 30) || 'empty'
-        });
       }}
       onPointerDown={(e) => { log('onPointerDown stop'); e.stopPropagation(); }}
       onMouseDown={(e) => { log('onMouseDown stop'); e.stopPropagation(); }}

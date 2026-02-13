@@ -17,7 +17,7 @@ type EscalationTasksListProps = {
   translations: Record<string, string>;
   allowedActions?: string[];
   updateEscalation: (updater: (esc: any) => any) => void;
-  updateSelectedNode: (updater: (node: any) => any, notifyProvider?: boolean) => void;
+  updateSelectedNode: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
   autoEditTarget: { escIdx: number; taskIdx: number } | null;
   onAutoEditTargetChange: (target: { escIdx: number; taskIdx: number } | null) => void;
   stepKey: string;

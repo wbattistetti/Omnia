@@ -26,8 +26,9 @@ export class TaskTemplateMatcherService {
     // 2. Rimuovi articoli e preposizioni comuni
     normalized = normalized.replace(/\b(di|del|della|dei|degli|delle|il|lo|la|l'|un|uno|una|un'|the|of|a|al|alla|ai|agli|alle)\b/gi, ' ');
 
-    // 3. Rimuovi parole comuni (paziente, cliente, utente)
-    normalized = normalized.replace(/\b(paziente|patient|cliente|customer|utente|user)\b/gi, ' ');
+    // 3. Rimuovi parole comuni che indicano il soggetto (paziente, cliente, utente, titolare, ecc.)
+    // Queste parole non cambiano il significato semantico del dato richiesto
+    normalized = normalized.replace(/\b(paziente|patient|cliente|customer|utente|user|titolare|holder|proprietario|owner|soggetto|subject|persona|person)\b/gi, ' ');
 
     // 4. Normalizza spazi multipli
     normalized = normalized.replace(/\s+/g, ' ').trim();

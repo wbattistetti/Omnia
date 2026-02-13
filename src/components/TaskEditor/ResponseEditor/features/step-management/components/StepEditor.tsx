@@ -13,7 +13,7 @@ type Props = {
   translations: Record<string, string>;
   color?: string;
   allowedActions?: string[];
-  updateSelectedNode: (updater: (node: any) => any, notifyProvider?: boolean) => void;
+  updateSelectedNode: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
   stepKey: string;
 };
 
@@ -37,7 +37,7 @@ function EscalationCardWrapper({
   color: string;
   translations: Record<string, string>;
   allowedActions?: string[];
-  updateSelectedNode: (updater: (node: any) => any, notifyProvider?: boolean) => void;
+  updateSelectedNode: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
   stepKey: string;
   onDeleteEscalation?: (escalationIdx: number) => void;
   autoEditTarget: { escIdx: number; taskIdx: number } | null;

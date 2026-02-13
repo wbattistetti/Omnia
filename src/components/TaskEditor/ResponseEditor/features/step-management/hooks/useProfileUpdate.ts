@@ -5,7 +5,7 @@ import { useCallback } from 'react';
 import { getIsTesting } from '@responseEditor/testingState';
 
 export interface UseProfileUpdateParams {
-  updateSelectedNode: (updater: (node: any) => any, notifyProvider?: boolean) => void;
+  updateSelectedNode: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
 }
 
 /**

@@ -89,7 +89,7 @@ export default function DataExtractionEditor({
   onChange?: (profile: NLPProfile) => void;
   intentSelected?: string; // Intent ID selected from IntentListEditor (when kind === 'intent')
   task?: TaskMeta; // Task info for syncing intents
-  updateSelectedNode?: (updater: (node: any) => any, notifyProvider?: boolean) => void;
+  updateSelectedNode?: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
   contractChangeRef?: React.RefObject<{
     hasUnsavedChanges: boolean;
     modifiedContract: any;

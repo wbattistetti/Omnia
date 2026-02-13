@@ -129,8 +129,25 @@ export function useRegexAIGeneration({
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to generate regex');
+        // ✅ FIX: Gestisci errori 500 con HTML invece di JSON
+        let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        try {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const error = await response.json();
+            errorMessage = error.detail || error.message || errorMessage;
+          } else {
+            // Se non è JSON, prova a leggere come testo
+            const text = await response.text();
+            if (text && text.length < 200) {
+              errorMessage = text;
+            }
+          }
+        } catch (parseError) {
+          // Se il parsing fallisce, usa il messaggio di default
+          console.error('[useRegexAIGeneration] Error parsing error response:', parseError);
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();

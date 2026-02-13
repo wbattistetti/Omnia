@@ -70,7 +70,7 @@ export interface ResponseEditorNormalLayoutProps {
   }>;
   taskType: number;
   handleProfileUpdate: (partialProfile: any) => void;
-  updateSelectedNode: (updater: (node: any) => any, notifyProvider?: boolean) => void;
+  updateSelectedNode: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
 
   // Panel state
   leftPanelMode: RightPanelMode;

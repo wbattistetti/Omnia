@@ -64,7 +64,7 @@ export interface MainContentAreaProps {
   selectedIntentIdForTraining: string | null;
 
   // Handlers
-  updateSelectedNode: (updater: (node: any) => any, notifyProvider?: boolean) => void;
+  updateSelectedNode: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
   handleProfileUpdate: (partialProfile: any) => void;
 
   // Contract change tracking

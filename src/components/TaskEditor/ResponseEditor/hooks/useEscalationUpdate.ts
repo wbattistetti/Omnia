@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { updateStepEscalations } from '@responseEditor/utils/stepHelpers';
 
-type UpdateSelectedNodeFn = (updater: (node: any) => any, notifyProvider?: boolean) => void;
+type UpdateSelectedNodeFn = (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
 
 /**
  * Hook per gestire l'update di una singola escalation

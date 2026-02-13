@@ -45,7 +45,8 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
   // ✅ FASE 2.3: Use Zustand store as SINGLE source of truth
   const { setTaskTree, incrementVersion } = useTaskTreeStore();
 
-  const updateSelectedNode = useCallback((updater: (node: any) => any, notifyProvider: boolean = true) => {
+  const updateSelectedNode = useCallback((updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => {
+    const skipAutoSave = options?.skipAutoSave ?? false;
     // CRITICAL: Block structural mutations during batch testing
     if (getIsTesting()) {
       console.log('[updateSelectedNode] Blocked: batch testing active');
@@ -123,7 +124,13 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
       }
 
       // ✅ FASE 2.3: Update only store (single source of truth)
-      setTaskTree(result.updatedTaskTree);
+      // ✅ FIX: Postpone setTaskTree and incrementVersion to avoid "Cannot update component during render" warning
+      // Use queueMicrotask to execute after current render cycle
+      queueMicrotask(() => {
+        setTaskTree(result.updatedTaskTree);
+        // ✅ Postpone incrementVersion to avoid React warning
+        incrementVersion();
+      });
 
       // LOG: Verify nlpProfile.examples is present in updated TaskTree after update
       const { mainIndex } = selectedNodePath;
@@ -146,7 +153,8 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
 
       // STEP 5: Implicit and immediate save (ALWAYS, even without tabId/setDockTree)
       // Every modification is saved immediately in taskRepository to ensure persistence
-      if (result.shouldSave && result.saveKey && result.taskInstance !== undefined) {
+      // ✅ FIX: Skip save if skipAutoSave is true (for editing without persistence)
+      if (!skipAutoSave && result.shouldSave && result.saveKey && result.taskInstance !== undefined) {
         // Save asynchronously (don't block UI)
         void saveTaskAsync(
           result.saveKey,
@@ -174,16 +182,20 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
                 [nodeTemplateId]: nodeStepsDict
               }
             };
-            setTaskTree(updatedTaskTreeWithSteps);
+            // ✅ FIX: Postpone setTaskTree to avoid "Cannot update component during render" warning
+            queueMicrotask(() => {
+              setTaskTree(updatedTaskTreeWithSteps);
+            });
           }
         }
       }
 
-      // ✅ FASE 2.3: Use store incrementVersion (single source of truth)
-      incrementVersion();
+      // ✅ FASE 2.3: incrementVersion is now called inside queueMicrotask (above)
       // Keep setTaskTreeVersion for backward compatibility (if provided)
       if (setTaskTreeVersion) {
-        setTaskTreeVersion(v => v + 1);
+        queueMicrotask(() => {
+          setTaskTreeVersion(v => v + 1);
+        });
       }
 
       try {
@@ -215,11 +227,6 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
               });
             }
           }
-          console.log('[NODE_SYNC][UPDATE] ✅ selectedNode updated + dockTree updated', {
-            stepsCount,
-            escalationsCount,
-            tasksCount
-          });
         }
       } catch { }
 

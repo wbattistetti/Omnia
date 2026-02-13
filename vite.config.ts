@@ -66,6 +66,7 @@ export default defineConfig({
       '/api/projects': { target: 'http://localhost:3100', changeOrigin: true },
       '/api/constants': { target: 'http://localhost:3100', changeOrigin: true },
       '/api/runtime': { target: 'http://localhost:3100', changeOrigin: true },
+      '/api/embeddings': { target: 'http://localhost:3100', changeOrigin: true },
       '/projects': { target: 'http://localhost:3100', changeOrigin: true },
 
       // FastAPI namespaced endpoints (other /api routes) - MUST come LAST

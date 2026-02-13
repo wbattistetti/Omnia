@@ -53,7 +53,27 @@ export class DialogueTaskService {
     this.loadingPromise = this._loadTemplatesFromAPI();
     const result = await this.loadingPromise;
     this.loadingPromise = null;
+
+    // ✅ NUOVO: Carica embedding in background dopo aver caricato i template
+    this._loadEmbeddingsInBackground().catch(err => {
+      console.warn('[DialogueTaskService] Failed to load embeddings:', err);
+      // Non blocca - embedding può essere caricato dopo
+    });
+
     return result;
+  }
+
+  /**
+   * Carica embedding in background (non blocca il caricamento template)
+   */
+  private static async _loadEmbeddingsInBackground(): Promise<void> {
+    try {
+      const { EmbeddingService } = await import('./EmbeddingService');
+      await EmbeddingService.loadEmbeddings('task');
+    } catch (error) {
+      console.error('[DialogueTaskService] Failed to load embeddings:', error);
+      // Non blocca - embedding può essere caricato dopo
+    }
   }
 
   /**
@@ -368,6 +388,66 @@ export class DialogueTaskService {
         label: template.label,
         totalTemplates: this.cache.length
       });
+    }
+
+    // ✅ NUOVO: Genera embedding in background (non blocca)
+    this.generateEmbeddingForTemplate(template).catch(err => {
+      console.warn('[DialogueTaskService] Failed to generate embedding:', err);
+      // Non blocca il flusso - embedding può essere generato dopo
+    });
+  }
+
+  /**
+   * Genera e salva embedding per un template in background
+   */
+  private static async generateEmbeddingForTemplate(template: DialogueTask): Promise<void> {
+    const templateId = template.id || template._id;
+    if (!templateId || !template.label) {
+      return;
+    }
+
+    // Solo per task di tipo UtteranceInterpretation (type === 3)
+    if (template.type !== 3) {
+      return;
+    }
+
+    try {
+      // 1. Calcola embedding
+      const computeResponse = await fetch('/api/embeddings/compute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: template.label.trim() })
+      });
+
+      if (!computeResponse.ok) {
+        throw new Error(`Failed to compute embedding: ${computeResponse.status}`);
+      }
+
+      const { embedding } = await computeResponse.json();
+
+      // 2. Salva in MongoDB
+      const saveResponse = await fetch('/api/embeddings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: templateId,
+          type: 'task',
+          text: template.label.trim(),
+          embedding
+        })
+      });
+
+      if (!saveResponse.ok) {
+        throw new Error(`Failed to save embedding: ${saveResponse.status}`);
+      }
+
+      console.log('[DialogueTaskService] ✅ Embedding generated for template', {
+        templateId,
+        label: template.label.substring(0, 50)
+      });
+    } catch (error) {
+      console.error('[DialogueTaskService] ❌ Failed to generate embedding:', error);
+      // Non blocca - embedding può essere generato dopo
     }
   }
 }

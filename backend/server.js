@@ -2942,6 +2942,161 @@ app.get('/api/factory/dialogue-templates', async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🧠 EMBEDDING ENDPOINTS - Task Template Matching
+// ═══════════════════════════════════════════════════════════════════════════
+
+// POST /api/embeddings/compute - Calcola embedding per un testo (delega a Python FastAPI)
+app.post('/api/embeddings/compute', async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text || typeof text !== 'string' || text.trim().length === 0) {
+      return res.status(400).json({ error: 'Text is required' });
+    }
+
+    // Delega a Python FastAPI service
+    const pythonServiceUrl = process.env.EMBEDDING_SERVICE_URL || 'http://localhost:8000';
+    const targetUrl = `${pythonServiceUrl}/api/embeddings/compute`;
+
+    console.log('[Embeddings][COMPUTE] Calling Python service', {
+      url: targetUrl,
+      textLength: text.trim().length,
+      textPreview: text.trim().substring(0, 50)
+    });
+
+    let response;
+    try {
+      const requestBody = { text: text.trim() };
+      console.log('[Embeddings][COMPUTE] Request body:', {
+        textLength: requestBody.text.length,
+        textPreview: requestBody.text.substring(0, 50)
+      });
+
+      response = await fetch(targetUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(requestBody),
+        signal: AbortSignal.timeout(30000) // ✅ Aumentato a 30 secondi (il modello può impiegare tempo a caricarsi)
+      });
+    } catch (fetchError) {
+      console.error('[Embeddings][COMPUTE] Fetch error (service not reachable):', {
+        error: fetchError.message,
+        errorName: fetchError.name,
+        url: targetUrl,
+        hint: 'Make sure Python FastAPI service (be:apiNew) is running on port 8000. Check if uvicorn is listening on port 8000.'
+      });
+      throw new Error(`Cannot reach Python embedding service at ${targetUrl}: ${fetchError.message}`);
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[Embeddings][COMPUTE] Python service error response', {
+        status: response.status,
+        statusText: response.statusText,
+        errorText: errorText.substring(0, 200),
+        url: targetUrl
+      });
+      throw new Error(`Python embedding service error: ${response.status} ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log('[Embeddings][COMPUTE] Success', {
+      embeddingLength: data.embedding?.length || 0,
+      model: data.model
+    });
+    res.json(data);
+  } catch (error) {
+    console.error('[Embeddings][COMPUTE] Error:', {
+      error: error.message,
+      stack: error.stack,
+      url: pythonServiceUrl
+    });
+    res.status(500).json({
+      error: error.message || 'Failed to compute embedding',
+      details: 'Make sure Python FastAPI service is running on port 8000. Check logs for: [apiNew] or uvicorn'
+    });
+  }
+});
+
+// POST /api/embeddings - Salva/aggiorna embedding (generico, filtra per type nel body)
+app.post('/api/embeddings', async (req, res) => {
+  try {
+    await withMongoClient(async (client) => {
+      const db = client.db(dbFactory);
+      const coll = db.collection('embeddings');
+
+      const { id, type, text, embedding } = req.body;
+      if (!id || !type || !text || !embedding || !Array.isArray(embedding)) {
+        return res.status(400).json({ error: 'id, type, text, and embedding (array) are required' });
+      }
+
+      const now = new Date();
+      const result = await coll.updateOne(
+        { id: id, type: type },
+        {
+          $set: {
+            id: id,
+            type: type,
+            text: text.trim(),
+            embedding: embedding,
+            model: 'paraphrase-multilingual-MiniLM-L12-v2',
+            updatedAt: now
+          },
+          $setOnInsert: {
+            createdAt: now
+          }
+        },
+        { upsert: true }
+      );
+
+      console.log('[Embeddings] Saved embedding', {
+        id,
+        type,
+        text: text.substring(0, 50),
+        upserted: result.upsertedCount > 0,
+        modified: result.modifiedCount > 0
+      });
+
+      res.json({ success: true, id, type, upserted: result.upsertedCount > 0 });
+    });
+  } catch (error) {
+    console.error('[Embeddings] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/embeddings - Carica embedding filtrati per type (query parameter)
+app.get('/api/embeddings', async (req, res) => {
+  try {
+    await withMongoClient(async (client) => {
+      const db = client.db(dbFactory);
+      const coll = db.collection('embeddings');
+
+      const { type } = req.query;
+      const filter = type ? { type: type } : {}; // Se type non specificato, carica tutto
+
+      const embeddings = await coll.find(filter).toArray();
+
+      // Rimuovi _id e ritorna solo i campi necessari
+      const result = embeddings.map(item => ({
+        id: item.id,
+        type: item.type,
+        text: item.text,
+        embedding: item.embedding
+      }));
+
+      console.log('[Embeddings] Loaded', result.length, 'embeddings', type ? `(type: ${type})` : '(all types)');
+      res.json(result);
+    });
+  } catch (error) {
+    console.error('[Embeddings] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // IDE translations (static, read-only from client perspective)
 app.get('/api/factory/ide-translations', async (req, res) => {
   const client = await getMongoClient();
@@ -3361,10 +3516,14 @@ app.post('/api/factory/dialogue-templates', async (req, res) => {
   try {
     const db = client.db(dbFactory);
     const coll = db.collection('tasks');
+    const embeddingsColl = db.collection('embeddings'); // ✅ NUOVO: Collection per embeddings
     const now = new Date();
 
     // Handle single template or array of templates
     const templates = Array.isArray(req.body) ? req.body : [req.body];
+
+    // ✅ NUOVO: Array per tracciare template che necessitano embedding
+    const templatesNeedingEmbedding = [];
 
     for (const template of templates) {
       if (!template.id) {
@@ -3406,6 +3565,98 @@ app.post('/api/factory/dialogue-templates', async (req, res) => {
         upserted: result.upsertedCount > 0,
         modified: result.modifiedCount > 0,
         matched: result.matchedCount > 0,
+      });
+
+      // ✅ NUOVO: Se è un template di tipo 3 (UtteranceInterpretation), aggiungi alla lista per embedding
+      const templateType = template.type || template.Type;
+      if (templateType === 3 && template.label) {
+        templatesNeedingEmbedding.push({
+          id: template.id,
+          label: template.label,
+          isNew: result.upsertedCount > 0, // Nuovo template
+          wasModified: result.modifiedCount > 0 // Template esistente modificato
+        });
+      }
+    }
+
+    // ✅ NUOVO: Genera embedding per tutti i template che ne necessitano (in background, non blocca la risposta)
+    if (templatesNeedingEmbedding.length > 0) {
+      console.log('[POST /api/factory/dialogue-templates] 🧠 Generating embeddings', {
+        count: templatesNeedingEmbedding.length,
+        templates: templatesNeedingEmbedding.map(t => ({
+          id: t.id,
+          label: t.label.substring(0, 50),
+          isNew: t.isNew
+        }))
+      });
+
+      // Genera embedding in parallelo (non blocca la risposta HTTP)
+      Promise.all(
+        templatesNeedingEmbedding.map(async (template) => {
+          try {
+            // 1. Calcola embedding usando Python FastAPI
+            const pythonServiceUrl = process.env.EMBEDDING_SERVICE_URL || 'http://localhost:8000';
+            const computeResponse = await fetch(`${pythonServiceUrl}/api/embeddings/compute`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: template.label.trim() }),
+              signal: AbortSignal.timeout(10000) // 10 second timeout
+            });
+
+            if (!computeResponse.ok) {
+              const errorText = await computeResponse.text();
+              throw new Error(`Failed to compute embedding: ${computeResponse.status} ${errorText}`);
+            }
+
+            const { embedding } = await computeResponse.json();
+
+            if (!embedding || !Array.isArray(embedding) || embedding.length === 0) {
+              throw new Error('Invalid embedding returned from service');
+            }
+
+            // 2. Salva embedding in MongoDB
+            await embeddingsColl.updateOne(
+              { id: template.id, type: 'task' },
+              {
+                $set: {
+                  id: template.id,
+                  type: 'task',
+                  text: template.label.trim(),
+                  embedding: embedding,
+                  model: 'paraphrase-multilingual-MiniLM-L12-v2',
+                  updatedAt: now
+                },
+                $setOnInsert: {
+                  createdAt: now
+                }
+              },
+              { upsert: true }
+            );
+
+            console.log('[POST /api/factory/dialogue-templates] ✅ Embedding generated', {
+              templateId: template.id,
+              label: template.label.substring(0, 50),
+              isNew: template.isNew,
+              embeddingDimensions: embedding.length
+            });
+          } catch (error) {
+            console.error('[POST /api/factory/dialogue-templates] ❌ Failed to generate embedding', {
+              templateId: template.id,
+              label: template.label,
+              error: error.message || String(error)
+            });
+            // Non blocca - embedding può essere generato dopo
+          }
+        })
+      ).then(() => {
+        console.log('[POST /api/factory/dialogue-templates] ✅ All embeddings generated', {
+          total: templatesNeedingEmbedding.length
+        });
+      }).catch((error) => {
+        console.error('[POST /api/factory/dialogue-templates] ⚠️ Some embeddings failed', {
+          error: error.message || String(error)
+        });
+        // Non blocca - embedding può essere generato dopo
       });
     }
 

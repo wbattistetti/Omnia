@@ -3,6 +3,7 @@
 
 import type { TaskTreeNode } from '@types/taskTypes';
 import { deriveSubTaskKey } from '@utils/taskUtils';
+import { getSubNodesStrict } from '@responseEditor/core/domain/nodeStrict';
 
 /**
  * Get subTasks info (subTaskKey and label) from a node

@@ -52,7 +52,8 @@ function heuristicSubgroupMeaning(
   info: { subTaskKey: string; label: string },
   subNode: TaskTreeNode | undefined
 ): string {
-  const subTaskKey = info.subTaskKey.toLowerCase();
+  // ✅ Fix: Ensure subTaskKey is a string before calling toLowerCase
+  const subTaskKey = (typeof info.subTaskKey === 'string' ? info.subTaskKey.toLowerCase() : '');
 
   // Date components
   if (subTaskKey.includes('day') || subTaskKey.includes('giorno')) {
@@ -88,7 +89,9 @@ function heuristicSubgroupMeaning(
   }
 
   // Generic fallback
-  return `${info.label.toLowerCase()} of the ${subNode?.type || 'value'}`;
+  // ✅ Fix: Ensure label is a string before calling toLowerCase
+  const label = typeof info.label === 'string' ? info.label.toLowerCase() : info.label || '';
+  return `${label} of the ${subNode?.type || 'value'}`;
 }
 
 /**
@@ -201,7 +204,8 @@ export function readSubgroupConstraints(subNode: TaskTreeNode | undefined): Stru
  * Infer allowed formats from subgroup
  */
 function inferFormats(subNode: TaskTreeNode | undefined): string[] {
-  const type = subNode?.type?.toLowerCase() || '';
+  // ✅ Fix: Ensure type is a string before calling toLowerCase
+  const type = (typeof subNode?.type === 'string' ? subNode.type.toLowerCase() : '') || '';
   if (type === 'number') return ['numeric'];
   if (type === 'text') return ['textual'];
   return ['numeric', 'textual'];
@@ -211,7 +215,8 @@ function inferFormats(subNode: TaskTreeNode | undefined): string[] {
  * Infer normalization rule from subgroup
  */
 function inferNormalization(subNode: TaskTreeNode | undefined): string | undefined {
-  const subTaskKey = subNode?.subTaskKey?.toLowerCase() || '';
+  // ✅ Fix: Ensure subTaskKey is a string before calling toLowerCase
+  const subTaskKey = (typeof subNode?.subTaskKey === 'string' ? subNode.subTaskKey.toLowerCase() : '') || '';
 
   if (subTaskKey.includes('year')) {
     return 'year always 4 digits (61 -> 1961, 05 -> 2005)';

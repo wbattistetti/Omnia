@@ -7,7 +7,7 @@ import { stepMeta } from '@responseEditor/ddtUtils';
 interface BehaviourEditorProps {
   node: any;
   translations: Record<string, string>;
-  updateSelectedNode: (updater: (node: any) => any, notifyProvider?: boolean) => void;
+  updateSelectedNode: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void;
   selectedRoot?: boolean;
   selectedSubIndex?: number | null;
 }

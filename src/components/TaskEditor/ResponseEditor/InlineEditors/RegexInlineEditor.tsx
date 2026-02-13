@@ -5,7 +5,7 @@ import EditorHeader from '@responseEditor/InlineEditors/shared/EditorHeader';
 import { useEditorMode } from '@responseEditor/hooks/useEditorMode';
 // ✅ FASE 2.2: Consolidated useRegexState + useRegexValidation into useRegex
 import { useRegex } from '@responseEditor/hooks/useRegex';
-import { useRegexButtonMode } from '@responseEditor/hooks/useRegexButtonMode';
+import { useTextEditorState } from '@responseEditor/hooks/useTextEditorState';
 import { usePlaceholderSelection } from '@responseEditor/hooks/usePlaceholderSelection';
 import { useRegexAIGeneration } from '@responseEditor/hooks/useRegexAIGeneration'; // ✅ Remains separate (distinct feature)
 import { NLPProfile } from '@responseEditor/DataExtractionEditor';
@@ -18,8 +18,8 @@ import type { TaskTreeNode } from '@types/taskTypes';
 import { RowResult } from '@responseEditor/hooks/useExtractionTesting';
 
 interface RegexInlineEditorProps {
-  regex: string;
-  setRegex: (value: string) => void;
+  regex: string; // ✅ regex ufficiale (prop)
+  setRegex: (value: string) => void; // ✅ Aggiorna solo locale (non salva)
   onClose: () => void;
   node?: any; // Optional: node with subData for AI regex generation
   kind?: string; // Optional: kind for AI regex generation
@@ -85,6 +85,9 @@ export default function RegexInlineEditor({
     profileRef.current = profile;
   }, [onProfileUpdate, profile]);
 
+  // ✅ FASE 2: Wrapper ref per Promise - DEVE essere PRIMA di useRegexAIGeneration
+  const aiRequestPromiseRef = React.useRef<{ resolve: (value: string) => void; reject: (error: Error) => void } | null>(null);
+
   // ✅ AI generation hook (must be before useRegex to provide generatingRegex state)
   const {
     generatingRegex,
@@ -98,6 +101,11 @@ export default function RegexInlineEditor({
     rowResults,
     // ✅ REMOVED: getNote prop - now managed via Zustand store
     onSuccess: (newRegex: string) => {
+      // ✅ FASE 2: Risolvi la Promise per onAIRequest
+      if (aiRequestPromiseRef.current) {
+        aiRequestPromiseRef.current.resolve(newRegex);
+        aiRequestPromiseRef.current = null;
+      }
       // ✅ Update baseline after AI generation using refs
       if (updateBaselineRef.current) {
         updateBaselineRef.current(newRegex);
@@ -115,6 +123,11 @@ export default function RegexInlineEditor({
       }
     },
     onError: (error: Error) => {
+      // ✅ FASE 2: Rifiuta la Promise per onAIRequest
+      if (aiRequestPromiseRef.current) {
+        aiRequestPromiseRef.current.reject(error);
+        aiRequestPromiseRef.current = null;
+      }
       alert(`Error generating regex: ${error.message}`);
     },
   });
@@ -123,7 +136,7 @@ export default function RegexInlineEditor({
   const {
     baselineRegex,
     currentText,
-    isDirty,
+    isDirty: isDirtyFromRegex,
     updateBaseline,
     updateCurrentText,
     validationResult,
@@ -137,6 +150,48 @@ export default function RegexInlineEditor({
     shouldValidateOnAIFinish: true,
     generatingRegex,
   });
+
+  // ✅ FASE 2: Use unified useTextEditorState with AI integration
+  const {
+    localValue: localRegexValue,
+    setLocalValue: setLocalRegexValue,
+    isDirty: isDirtyFromState,
+    buttonCaption,
+    buttonEnabled,
+    handleSave: handleAISave,
+    commitLocalValue,
+  } = useTextEditorState({
+    savedValue: regex || '', // ✅ regex ufficiale (prop)
+    onAIRequest: async (prompt: string) => {
+      // ✅ Wrapper per generateRegex: restituisce solo la regex generata
+      return new Promise<string>((resolve, reject) => {
+        aiRequestPromiseRef.current = { resolve, reject };
+        // ✅ generateRegex chiamerà onSuccess con la regex generata
+        generateRegex(prompt, validationResult).catch(reject);
+      });
+    },
+    createCaption: 'Create Regex',
+    refineCaption: 'Refine Regex',
+  });
+
+  // ✅ FASE 2: Commit localValue to regex ufficiale when editor closes
+  React.useEffect(() => {
+    return () => {
+      // ✅ Commit implicito alla chiusura: regex ufficiale = localValue
+      commitLocalValue();
+    };
+  }, [commitLocalValue]);
+
+  // ✅ Sync: useTextEditorState.localValue → useRegex.currentText (for validation)
+  // This ensures validation runs when user types
+  React.useEffect(() => {
+    if (localRegexValue !== currentText && localRegexValue !== PLACEHOLDER_TEXT) {
+      updateCurrentText(localRegexValue);
+    }
+  }, [localRegexValue, currentText, updateCurrentText]);
+
+  // ✅ Combined isDirty: either from regex validation or from state
+  const isDirty = isDirtyFromRegex || isDirtyFromState;
 
   // ✅ Update refs with actual functions from useRegex
   React.useEffect(() => {
@@ -225,21 +280,15 @@ export default function RegexInlineEditor({
       }
 
       if (baseRegex && baseRegex.trim().length > 0) {
-        console.log('[RegexEditor] Auto-generating base regex:', baseRegex);
+        console.log('[RegexEditor] Auto-generating placeholder regex (not saved):', baseRegex);
         updateBaseline(baseRegex);
-        setRegex(baseRegex);
-
-        // Save to profile if available
-        if (onProfileUpdate && profile) {
-          const updatedProfile = {
-            ...profile,
-            regex: baseRegex
-          };
-          onProfileUpdate(updatedProfile);
-        }
+        // ✅ Aggiorna solo localValue (placeholder), NON savedValue
+        setLocalRegexValue(baseRegex);
+        updateCurrentText(baseRegex);
+        // ❌ NON chiamare setRegex o onProfileUpdate - la regex auto-generata è solo placeholder
       }
     }
-  }, [baselineRegex, isDirty, node, kind, updateBaseline, setRegex, onProfileUpdate, profile]); // Run when baselineRegex changes
+  }, [baselineRegex, isDirty, node, kind, updateBaseline, setLocalRegexValue, updateCurrentText]); // Run when baselineRegex changes
 
   // ✅ Debounced value for validation (prevents flickering)
   const debouncedRegexRef = React.useRef<string>(currentText);
@@ -274,16 +323,25 @@ export default function RegexInlineEditor({
   // ✅ FASE 2.2: Validation now included in useRegex composito hook (above)
   // Removed separate useRegexValidation call - validation is handled by useRegex
 
-  // ✅ Simple button mode: one button with dynamic caption
-  const {
-    buttonCaption,
-    buttonEnabled,
-    isCreateMode,
-  } = useRegexButtonMode({
-    baselineRegex,
-    isDirty,
-    hasValidationErrors: validationResult !== null && !validationResult.valid && validationResult.errors.length > 0, // ✅ Include validation errors
-  });
+  // ✅ Button mode: useTextEditorState provides buttonCaption and buttonEnabled
+  // ✅ isCreateMode: determine from regex prop (actual saved value), NOT baselineRegex
+  const isCreateMode = (regex || '').trim() === '';
+
+  // ✅ UX CORRECTION: Check if localValue is empty or placeholder
+  // ✅ Placeholder is NOT valid content - editor is considered "empty"
+  const isEmptyOrPlaceholder = localRegexValue === PLACEHOLDER_TEXT || localRegexValue.trim() === '';
+
+  // ✅ CREATE/REFINE ENABLED SE:
+  //   localValue !== placeholder
+  //   AND localValue.trim() !== ""
+  //   AND localValue !== regex ufficiale (buttonEnabled from useTextEditorState)
+  const finalButtonEnabled = !isEmptyOrPlaceholder && buttonEnabled;
+
+  // ✅ VALIDATE ENABLED SE:
+  //   localValue !== placeholder
+  //   AND localValue.trim() !== ""
+  //   AND not generating
+  const validateButtonEnabled = !isEmptyOrPlaceholder && !generatingRegex;
 
   // ✅ Verifica se c'è contenuto reale (non solo placeholder)
   const hasRealContent = React.useMemo(() => {
@@ -333,7 +391,7 @@ export default function RegexInlineEditor({
   }, [currentText, selectPlaceholderIfNeeded, hasEverWritten]);
 
   // ✅ Button enabled: simple model - enabled only if dirty and not generating
-  const finalShouldShowButton = !generatingRegex && buttonEnabled;
+  const finalShouldShowButton = !generatingRegex && finalButtonEnabled;
 
   // Custom language configuration for regex
   const regexCustomLanguage: CustomLanguage = React.useMemo(() => ({
@@ -377,12 +435,63 @@ export default function RegexInlineEditor({
   // Note: Currently AI generation is immediate, so ESC cancellation is not implemented
   // If needed, can be added to useRegexAIGeneration hook
 
-  // ✅ Unified button click handler - delegates to AI generation hook
+  // ✅ FASE 2: Unified button click handler - ALWAYS calls AI
+  // ✅ If button is visible, it's clickable (no need to check finalButtonEnabled)
   const handleButtonClick = React.useCallback(async () => {
-    if (!buttonEnabled) return; // Don't generate if not dirty
-    console.log('[AI Regex] 🔵 ' + buttonCaption + ' clicked, starting generation');
-    await generateRegex(currentText, validationResult);
-  }, [currentText, validationResult, generateRegex, buttonCaption, buttonEnabled]);
+    console.log('[AI Regex] 🔵 ' + buttonCaption + ' clicked, starting AI generation');
+    // ✅ handleAISave() always calls AI with localValue as prompt
+    await handleAISave();
+  }, [handleAISave, buttonCaption]);
+
+  // ✅ FASE 5: Handle Validate Regex button click
+  // ✅ Always visible, no AI, no modifications, only shows syntax errors
+  const handleValidateRegex = React.useCallback(() => {
+    // ✅ Force validation to show
+    setShouldShowValidation(true);
+    // ✅ Validation result is already available from useRegex
+    // ✅ Errors are shown via onErrorRender callback
+  }, [setShouldShowValidation]);
+
+  // ✅ UX CORRECTION: Wrap onButtonRender to include Validate button
+  // ✅ Validate button is always visible, positioned to the left of Create/Refine button
+  const wrappedOnButtonRender = React.useCallback((mainButton: React.ReactNode) => {
+    if (!onButtonRender) return;
+
+    // ✅ Create Validate button - always visible
+    const validateButton = (
+      <button
+        type="button"
+        onClick={handleValidateRegex}
+        disabled={!validateButtonEnabled}
+        style={{
+          padding: '6px 12px',
+          background: 'transparent',
+          color: validateButtonEnabled ? '#6b7280' : '#9ca3af',
+          border: '1px solid #d1d5db',
+          borderRadius: 4,
+          cursor: validateButtonEnabled ? 'pointer' : 'not-allowed',
+          fontWeight: 500,
+          fontSize: 13,
+          opacity: validateButtonEnabled ? 1 : 0.5,
+          whiteSpace: 'nowrap',
+          flexShrink: 0,
+        }}
+      >
+        Validate Regex
+      </button>
+    );
+
+    // ✅ Render both buttons together: [ Validate ] [ Create/Refine ]
+    // ✅ Validate is always visible, Create/Refine only if shouldShowButton
+    const buttonGroup = (
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        {validateButton}
+        {mainButton}
+      </div>
+    );
+
+    onButtonRender(buttonGroup);
+  }, [onButtonRender, handleValidateRegex, validateButtonEnabled]);
 
   // ✅ Debounce timer for error message updates to prevent flickering
   const errorRenderTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -507,11 +616,12 @@ export default function RegexInlineEditor({
         onButtonClick={handleButtonClick}
         onClose={onClose}
         hideButton={true}
-        onButtonRender={onButtonRender}
+        onButtonRender={wrappedOnButtonRender}
+        buttonCaption={generatingRegex ? 'Sto creando l\'espressione regolare...' : buttonCaption} // ✅ Show generating state
         validationBadge={undefined} // ✅ Non mostrare più il validationBadge nell'EditorHeader, lo mostriamo nell'overlay header
         errorMessage={undefined} // ✅ Non mostrare più l'errorMessage nell'EditorHeader, lo mostriamo nell'overlay header
-        buttonCaption={buttonCaption} // ✅ Pass custom caption
       />
+
 
       <div style={{
         display: 'flex',
@@ -581,7 +691,7 @@ export default function RegexInlineEditor({
               </div>
             )}
             <EditorPanel
-              code={currentText || (hasEverWritten() ? '' : PLACEHOLDER_TEXT)}
+              code={localRegexValue || (hasEverWritten() ? '' : PLACEHOLDER_TEXT)}
               renderWhitespace="all" // ✅ Show all whitespace characters (spaces, tabs)
               onChange={(v: string) => {
                 if (!generatingRegex) {
@@ -600,7 +710,7 @@ export default function RegexInlineEditor({
                   } else if (newValue.trim() !== '' && newValue !== PLACEHOLDER_TEXT) {
                     // L'utente ha scritto qualcosa di reale (non placeholder)
                     // Se il valore precedente era il placeholder, significa che l'utente ha iniziato a scrivere
-                    if (currentText === PLACEHOLDER_TEXT) {
+                    if (localRegexValue === PLACEHOLDER_TEXT) {
                       markAsWritten();
                     }
                   } else if (newValue === '' && hasEverWritten()) {
@@ -608,16 +718,11 @@ export default function RegexInlineEditor({
                     // Flag già settato, non serve fare nulla
                   }
 
-                  // ✅ Update currentText (this will trigger dirty flag calculation)
-                  updateCurrentText(newValue);
-
-                  // ✅ Salva solo se non è vuoto (non salvare il placeholder)
-                  if (newValue !== PLACEHOLDER_TEXT && newValue.trim() !== '') {
-                    setRegex(newValue);
-                  } else if (newValue === '') {
-                    // Se è vuoto, salva stringa vuota (non placeholder)
-                    setRegex('');
-                  }
+                  // ✅ FASE 4: Update only local state (not saved)
+                  // setLocalRegexValue will sync to updateCurrentText via useEffect for validation
+                  setLocalRegexValue(newValue);
+                  // ✅ setRegex updates only local state (not saved) - syncs with RecognitionEditor
+                  setRegex(newValue);
 
                   // ✅ Debounce profile update to avoid too many calls and prevent editor freezing
                   if (profileUpdateTimeoutRef.current) {

@@ -11,7 +11,7 @@ import { TaskType, templateIdToTaskType } from '@types/taskTypes';
  */
 export function useNodePersistence(
   selectedStepKey: string,
-  updateSelectedNode: (updater: (node: any) => any, notifyProvider?: boolean) => void
+  updateSelectedNode: (updater: (node: any) => any, options?: { skipAutoSave?: boolean }) => void
 ) {
   const normalizeAndPersistModel = useCallback((nextEscalations: any[]) => {
     const debugDrop = () => {
@@ -138,7 +138,7 @@ export function useNodePersistence(
 
         return { ...(node || {}), steps: obj };
       }
-    }, false); // notifyProvider = false (gestito internamente)
+    });
   }, [selectedStepKey, updateSelectedNode]);
 
   return { normalizeAndPersistModel };

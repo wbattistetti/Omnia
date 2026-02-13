@@ -468,14 +468,14 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
           const rootTemplate = {
             ...templateFields,
             // ✅ REMOVED: name field - templates are identified by id only
-            label: generalizedLabel,  // Keep full generalized label for display
+            label: t.label,  // ✅ FIX: Use node label (already generalized in TemplateCreationService), NOT generalizedLabel
             subTasksIds: mappedSubTasksIds.length > 0 ? mappedSubTasksIds : undefined,
           };
           console.log('[handleSaveToFactory] ✅ Root template prepared for save', {
             originalId: t.id || t._id,
             originalLabel: t.label,
             generalizedLabel,
-            newLabel: rootTemplate.label,  // ✅ Uses full generalized label for display
+            newLabel: rootTemplate.label,  // ✅ Uses node label (already generalized in TemplateCreationService)
             originalSubTasksIds,
             mappedSubTasksIds,
             hasSubTasksIds: !!rootTemplate.subTasksIds,
