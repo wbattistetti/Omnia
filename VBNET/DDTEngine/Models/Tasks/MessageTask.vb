@@ -62,24 +62,32 @@ Public Class MessageTask
     End Sub
 
     ''' <summary>
-    ''' Risolve una chiave di traduzione nel testo usando il dizionario traduzioni
+    ''' ✅ STATELESS: Risolve una chiave di traduzione dal TranslationRepository
     ''' </summary>
     Private Function ResolveTranslationKey(key As String, taskInstance As TaskInstance) As String
         If String.IsNullOrWhiteSpace(key) Then
             Throw New ArgumentException("Translation key cannot be null, empty, or whitespace.", NameOf(key))
         End If
 
-        ' ✅ Lookup nel dizionario traduzioni del TaskInstance
-        If taskInstance.Translations IsNot Nothing AndAlso taskInstance.Translations.ContainsKey(key) Then
-            Dim translatedText = taskInstance.Translations(key)
-            If String.IsNullOrEmpty(translatedText) Then
-                Throw New InvalidOperationException($"Translation for key '{key}' exists but is empty in translations dictionary for task '{taskInstance.Id}'.")
-            End If
-            Return translatedText
+        ' ❌ ERRORE BLOCCANTE: ProjectId, Locale e TranslationResolver obbligatori
+        If String.IsNullOrWhiteSpace(taskInstance.ProjectId) Then
+            Throw New InvalidOperationException($"TaskInstance '{taskInstance.Id}' has no ProjectId. Cannot resolve translation key '{key}'.")
+        End If
+        If String.IsNullOrWhiteSpace(taskInstance.Locale) Then
+            Throw New InvalidOperationException($"TaskInstance '{taskInstance.Id}' has no Locale. Cannot resolve translation key '{key}'.")
+        End If
+        If taskInstance.TranslationResolver Is Nothing Then
+            Throw New InvalidOperationException($"TaskInstance '{taskInstance.Id}' has no TranslationResolver. Cannot resolve translation key '{key}'.")
         End If
 
-        ' ❌ Chiave non trovata: ERRORE BLOCCANTE
-        Return Nothing
+        ' ✅ STATELESS: Lookup tramite TranslationResolver (evita dipendenza circolare)
+        Dim translatedText = taskInstance.TranslationResolver.ResolveTranslation(taskInstance.ProjectId, taskInstance.Locale, key)
+
+        If String.IsNullOrEmpty(translatedText) Then
+            Throw New InvalidOperationException($"Translation key '{key}' not found in TranslationRepository for project '{taskInstance.ProjectId}' and locale '{taskInstance.Locale}'. The session cannot continue without this translation.")
+        End If
+
+        Return translatedText
     End Function
 End Class
 

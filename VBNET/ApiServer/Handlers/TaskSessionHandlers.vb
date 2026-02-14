@@ -112,8 +112,8 @@ Namespace ApiServer.Handlers
                     Return (False, Nothing, $"Failed to deserialize JSON. Error: {ex.Message}")
                 End Try
 
-                Console.WriteLine($"🔵 [ReadAndParseRequest] Deserialization successful: TaskId={If(request IsNot Nothing, request.TaskId, "Nothing")}")
-                System.Diagnostics.Debug.WriteLine($"🔵 [ReadAndParseRequest] Deserialization successful: TaskId={If(request IsNot Nothing, request.TaskId, "Nothing")}")
+                Console.WriteLine($"🔵 [ReadAndParseRequest] ✅ STATELESS: Deserialization successful: ProjectId={If(request IsNot Nothing, request.ProjectId, "Nothing")}, DialogVersion={If(request IsNot Nothing, request.DialogVersion, "Nothing")}, Locale={If(request IsNot Nothing, request.Locale, "Nothing")}")
+                System.Diagnostics.Debug.WriteLine($"🔵 [ReadAndParseRequest] ✅ STATELESS: Deserialization successful: ProjectId={If(request IsNot Nothing, request.ProjectId, "Nothing")}, DialogVersion={If(request IsNot Nothing, request.DialogVersion, "Nothing")}, Locale={If(request IsNot Nothing, request.Locale, "Nothing")}")
                 Console.Out.Flush()
 
                 Return (True, request, Nothing)
@@ -127,30 +127,27 @@ Namespace ApiServer.Handlers
         End Function
 
         ''' <summary>
-        ''' Creates a new task session and registers it in the SessionManager.
+        ''' ✅ STATELESS: Crea una nuova task session con solo stato runtime
+        ''' Il dialogo e le traduzioni sono nei repository, non nella sessione
         ''' </summary>
-        ''' <param name="compiledTask">The compiled task containing the runtime properties.</param>
-        ''' <param name="translations">Dictionary of translations for the session (OBBLIGATORIO).</param>
-        ''' <param name="language">Language code for the session (OBBLIGATORIO).</param>
-        ''' <returns>The session ID of the newly created session.</returns>
-        Private Function CreateTaskSession(compiledTask As Compiler.CompiledUtteranceTask, translations As Dictionary(Of String, String), language As String) As String
-            Console.WriteLine($"[API] CreateTaskSession ENTRY: TaskId={compiledTask.Id}, Language={language}")
-            System.Diagnostics.Debug.WriteLine($"[API] CreateTaskSession ENTRY: TaskId={compiledTask.Id}, Language={language}")
+        ''' <param name="projectId">ID del progetto</param>
+        ''' <param name="dialogVersion">Versione del dialogo</param>
+        ''' <param name="locale">Locale (es. "it-IT")</param>
+        ''' <returns>Session ID della sessione creata</returns>
+        Private Function CreateTaskSession(projectId As String, dialogVersion As String, locale As String) As String
+            Console.WriteLine($"[API] ✅ STATELESS: CreateTaskSession: projectId={projectId}, dialogVersion={dialogVersion}, locale={locale}")
+            System.Diagnostics.Debug.WriteLine($"[API] ✅ STATELESS: CreateTaskSession: projectId={projectId}, dialogVersion={dialogVersion}, locale={locale}")
             Console.Out.Flush()
             Dim sessionId = Guid.NewGuid().ToString()
             Console.WriteLine($"[API] ✅ STATELESS: CreateTaskSession: Generated sessionId={sessionId}")
             System.Diagnostics.Debug.WriteLine($"[API] ✅ STATELESS: CreateTaskSession: Generated sessionId={sessionId}")
             Console.Out.Flush()
-            Console.WriteLine($"[API] CreateTaskSession: Converting CompiledTask to RuntimeTask...")
-            System.Diagnostics.Debug.WriteLine($"[API] CreateTaskSession: Converting CompiledTask to RuntimeTask...")
-            Console.Out.Flush()
-            Dim runtimeTask = RuntimeTaskConverter.ConvertCompiledToRuntimeTask(compiledTask)
             Console.WriteLine($"[API] ✅ STATELESS: CreateTaskSession: Calling SessionManager.CreateTaskSession (will save to Redis)...")
             System.Diagnostics.Debug.WriteLine($"[API] ✅ STATELESS: CreateTaskSession: Calling SessionManager.CreateTaskSession (will save to Redis)...")
             Console.Out.Flush()
-            SessionManager.CreateTaskSession(sessionId, runtimeTask, language, translations)
-            Console.WriteLine($"[API] ✅ STATELESS: Session created and saved to Redis: {sessionId}, TaskId={compiledTask.Id}, Language={language}")
-            System.Diagnostics.Debug.WriteLine($"[API] ✅ STATELESS: Session created and saved to Redis: {sessionId}, TaskId={compiledTask.Id}, Language={language}")
+            SessionManager.CreateTaskSession(sessionId, projectId, dialogVersion, locale)
+            Console.WriteLine($"[API] ✅ STATELESS: Session created and saved to Redis: {sessionId}, ProjectId={projectId}, DialogVersion={dialogVersion}, Locale={locale}")
+            System.Diagnostics.Debug.WriteLine($"[API] ✅ STATELESS: Session created and saved to Redis: {sessionId}, ProjectId={projectId}, DialogVersion={dialogVersion}, Locale={locale}")
             Console.Out.Flush()
             Return sessionId
         End Function
@@ -227,343 +224,154 @@ Namespace ApiServer.Handlers
                     Return ResponseHelpers.CreateErrorResponse("Request is Nothing after parsing", 500)
                 End If
 
-                ' ═══════════════════════════════════════════════════════════════
-                ' DIAGNOSTIC: Accesso a request.TaskId per log iniziale
-                ' ═══════════════════════════════════════════════════════════════
-                Console.WriteLine("🔴 [DIAG] BEFORE: Accessing request.TaskId for initial log...")
+                ' ✅ STATELESS: Request parsed - ora estraiamo solo projectId, dialogVersion, locale
+                Console.WriteLine($"🔵 [HandleTaskSessionStart] ✅ STATELESS: Request parsed successfully")
+                System.Diagnostics.Debug.WriteLine($"🔵 [HandleTaskSessionStart] ✅ STATELESS: Request parsed successfully")
                 Console.Out.Flush()
-                Dim taskIdForLog As String = Nothing
+
+                ' ✅ STATELESS: STEP 1: Estrai projectId, dialogVersion, locale dal request
+                Console.WriteLine("🔵 [HandleTaskSessionStart] ✅ STATELESS: Extracting projectId, dialogVersion, locale...")
+                Console.Out.Flush()
+
+                Dim projectId As String = Nothing
+                Dim dialogVersion As String = Nothing
+                Dim locale As String = Nothing
+
                 Try
-                    taskIdForLog = request.TaskId
-                    Console.WriteLine($"🔴 [DIAG] OK: request.TaskId accessed = '{taskIdForLog}'")
+                    projectId = request.ProjectId
+                    dialogVersion = request.DialogVersion
+                    locale = request.Locale
+                    Console.WriteLine($"🔵 [HandleTaskSessionStart] ✅ STATELESS: projectId={projectId}, dialogVersion={dialogVersion}, locale={locale}")
                     Console.Out.Flush()
                 Catch ex As Exception
-                    Console.WriteLine($"🔴 [DIAG] EXCEPTION accessing request.TaskId: {ex.ToString()}")
+                    Console.WriteLine($"🔵 [HandleTaskSessionStart] ❌ Exception accessing request properties: {ex.Message}")
                     Console.Out.Flush()
-                    Return ResponseHelpers.CreateErrorResponse($"Exception accessing request.TaskId: {ex.Message}", 500)
+                    Return ResponseHelpers.CreateErrorResponse($"Exception accessing request properties: {ex.Message}", 500)
                 End Try
 
-                ' ═══════════════════════════════════════════════════════════════
-                ' DIAGNOSTIC: Accesso a request.TaskTree per log iniziale
-                ' ═══════════════════════════════════════════════════════════════
-                Console.WriteLine("🔴 [DIAG] BEFORE: Accessing request.TaskTree for initial log...")
-                Console.Out.Flush()
-                Dim taskTreeForLog As JObject = Nothing
-                Try
-                    taskTreeForLog = request.TaskTree
-                    Console.WriteLine($"🔴 [DIAG] OK: request.TaskTree accessed, IsNothing={taskTreeForLog Is Nothing}")
-                    Console.Out.Flush()
-                Catch ex As Exception
-                    Console.WriteLine($"🔴 [DIAG] EXCEPTION accessing request.TaskTree: {ex.ToString()}")
-                    Console.Out.Flush()
-                    Return ResponseHelpers.CreateErrorResponse($"Exception accessing request.TaskTree: {ex.Message}", 500)
-                End Try
-
-                ' ═══════════════════════════════════════════════════════════════
-                ' DIAGNOSTIC: Before Request parsed
-                ' ═══════════════════════════════════════════════════════════════
-                Console.WriteLine("🔴 [DIAG] BEFORE Request parsed — MUST APPEAR")
-                System.Diagnostics.Debug.WriteLine("🔴 [DIAG] BEFORE Request parsed — MUST APPEAR")
-                Console.Out.Flush()
-
-                Console.WriteLine($"🔵 [HandleTaskSessionStart] Request parsed: TaskId={taskIdForLog}, HasTaskTree={taskTreeForLog IsNot Nothing}")
-                System.Diagnostics.Debug.WriteLine($"🔵 [HandleTaskSessionStart] Request parsed: TaskId={taskIdForLog}, HasTaskTree={taskTreeForLog IsNot Nothing}")
-                Console.Out.Flush()
-
-                ' ═══════════════════════════════════════════════════════════════
-                ' DIAGNOSTIC: After Request parsed
-                ' ═══════════════════════════════════════════════════════════════
-                Console.WriteLine("🔴 [DIAG] AFTER Request parsed — MUST APPEAR")
-                System.Diagnostics.Debug.WriteLine("🔴 [DIAG] AFTER Request parsed — MUST APPEAR")
-                Console.Out.Flush()
-
-                ' ═══════════════════════════════════════════════════════════════
-                ' DIAGNOSTIC: Before ValidateRequest
-                ' ═══════════════════════════════════════════════════════════════
-                Console.WriteLine("🔴 [DIAG] BEFORE ValidateRequest call")
-                System.Diagnostics.Debug.WriteLine("🔴 [DIAG] BEFORE ValidateRequest call")
-                Console.Out.Flush()
-
-                Dim validationResult As (IsValid As Boolean, ErrorMessage As String)
-                Try
-                    validationResult = RequestValidators.ValidateRequest(request)
-                    Console.WriteLine($"🔴 [DIAG] OK: ValidateRequest completed, IsValid={validationResult.IsValid}")
-                    System.Diagnostics.Debug.WriteLine($"🔴 [DIAG] OK: ValidateRequest completed, IsValid={validationResult.IsValid}")
-                    Console.Out.Flush()
-                Catch ex As Exception
-                    Console.WriteLine($"🔴 [DIAG] EXCEPTION in ValidateRequest: {ex.ToString()}")
-                    System.Diagnostics.Debug.WriteLine($"🔴 [DIAG] EXCEPTION in ValidateRequest: {ex.ToString()}")
-                    Console.Out.Flush()
-                    Return ResponseHelpers.CreateErrorResponse($"Exception in ValidateRequest: {ex.Message}", 500)
-                End Try
-
-                ' ═══════════════════════════════════════════════════════════════
-                ' DIAGNOSTIC: After ValidateRequest try/catch
-                ' ═══════════════════════════════════════════════════════════════
-                Console.WriteLine("🔴 [DIAG] AFTER ValidateRequest try/catch — MUST APPEAR")
-                System.Diagnostics.Debug.WriteLine("🔴 [DIAG] AFTER ValidateRequest try/catch — MUST APPEAR")
-                Console.Out.Flush()
-
-                Console.WriteLine("🔴 [DIAG] BEFORE accessing validationResult.IsValid")
-                System.Diagnostics.Debug.WriteLine("🔴 [DIAG] BEFORE accessing validationResult.IsValid")
-                Console.Out.Flush()
-
-                Dim isValidValue As Boolean = validationResult.IsValid
-                Console.WriteLine($"🔴 [DIAG] OK: validationResult.IsValid accessed = {isValidValue}")
-                System.Diagnostics.Debug.WriteLine($"🔴 [DIAG] OK: validationResult.IsValid accessed = {isValidValue}")
-                Console.Out.Flush()
-
-                Console.WriteLine($"🔵 [HandleTaskSessionStart] Validation.IsValid: {isValidValue}")
-                Console.Out.Flush()
-
-                If Not validationResult.IsValid Then
-                    Console.WriteLine($"🔵 [HandleTaskSessionStart] Validation failed, returning error")
-                    Console.Out.Flush()
-                    Return ResponseHelpers.CreateErrorResponse(validationResult.ErrorMessage, 400)
+                ' ✅ STATELESS: Valida parametri obbligatori
+                If String.IsNullOrWhiteSpace(projectId) Then
+                    Return ResponseHelpers.CreateErrorResponse("ProjectId is required and cannot be empty.", 400)
+                End If
+                ' ✅ DialogVersion è obbligatorio - deve essere fornito dal frontend
+                If String.IsNullOrWhiteSpace(dialogVersion) Then
+                    Return ResponseHelpers.CreateErrorResponse("DialogVersion is required and cannot be empty. Please provide the project version.", 400)
+                End If
+                If String.IsNullOrWhiteSpace(locale) Then
+                    Return ResponseHelpers.CreateErrorResponse("Locale is required and cannot be empty.", 400)
                 End If
 
-                ' ✅ STEP 1: Valida lingua OBBLIGATORIA (prima di tutto)
-                ' ═══════════════════════════════════════════════════════════════
-                ' DIAGNOSTIC: Accesso a request.Language
-                ' ═══════════════════════════════════════════════════════════════
-                Console.WriteLine("🔴 [DIAG] BEFORE: Accessing request.Language...")
-                Console.Out.Flush()
-                Dim languageValue As String = Nothing
-                Try
-                    languageValue = request.Language
-                    Console.WriteLine($"🔴 [DIAG] OK: request.Language accessed = '{languageValue}'")
-                    Console.Out.Flush()
-                Catch ex As Exception
-                    Console.WriteLine($"🔴 [DIAG] EXCEPTION accessing request.Language: {ex.ToString()}")
-                    Console.Out.Flush()
-                    Return ResponseHelpers.CreateErrorResponse($"Exception accessing request.Language: {ex.Message}", 500)
-                End Try
-
-                Console.WriteLine($"🔵 [HandleTaskSessionStart] Validating language: '{languageValue}'")
+                ' ✅ STATELESS: STEP 2: Carica dialogo da DialogRepository
+                Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                Console.WriteLine($"🔵 [HandleTaskSessionStart] ✅ STATELESS: STEP 2 - Loading dialog from DialogRepository...")
+                Console.WriteLine($"   ProjectId: {projectId}")
+                Console.WriteLine($"   DialogVersion: {dialogVersion}")
+                Console.WriteLine($"   Locale: {locale}")
                 Console.Out.Flush()
 
-                If String.IsNullOrWhiteSpace(languageValue) Then
-                    Console.WriteLine($"🔵 [HandleTaskSessionStart] Language empty, returning error")
+                Dim dialogRepository = New ApiServer.Repositories.RedisDialogRepository(
+                    Program.GetRedisConnectionString(),
+                    Program.GetRedisKeyPrefix()
+                )
+                Console.WriteLine($"🔵 [HandleTaskSessionStart] ✅ DialogRepository created, calling GetDialog({projectId}, {dialogVersion})...")
+                Console.Out.Flush()
+
+                Dim runtimeTask = dialogRepository.GetDialog(projectId, dialogVersion)
+
+                If runtimeTask Is Nothing Then
+                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                    Console.WriteLine($"🔵 [HandleTaskSessionStart] ❌ Dialog not found in repository!")
+                    Console.WriteLine($"   ProjectId: {projectId}")
+                    Console.WriteLine($"   DialogVersion: {dialogVersion}")
+                    Console.WriteLine($"   Redis Key: omnia:dialog:{projectId}:{dialogVersion}")
+                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
                     Console.Out.Flush()
                     Return ResponseHelpers.CreateErrorResponse(
-                        "Language is required and cannot be empty. The session cannot start without a valid language.",
-                        400
+                        $"Dialog not found for projectId '{projectId}' and version '{dialogVersion}'. Please ensure the dialog is compiled and saved to the repository using POST /api/runtime/dialog/save.",
+                        404
                     )
                 End If
-                Dim language As String = languageValue.Trim()
 
-                ' ✅ STEP 2: Valida traduzioni OBBLIGATORIE (ma non ancora validate contro il grafo)
-                ' ═══════════════════════════════════════════════════════════════
-                ' DIAGNOSTIC: Accesso a request.Translations
-                ' ═══════════════════════════════════════════════════════════════
-                Console.WriteLine("🔴 [DIAG] BEFORE: Accessing request.Translations...")
-                Console.Out.Flush()
-                Dim translationsValue As Dictionary(Of String, String) = Nothing
-                Try
-                    translationsValue = request.Translations
-                    Console.WriteLine($"🔴 [DIAG] OK: request.Translations accessed, IsNothing={translationsValue Is Nothing}")
-                    Console.Out.Flush()
-                Catch ex As Exception
-                    Console.WriteLine($"🔴 [DIAG] EXCEPTION accessing request.Translations: {ex.ToString()}")
-                    Console.Out.Flush()
-                    Return ResponseHelpers.CreateErrorResponse($"Exception accessing request.Translations: {ex.Message}", 500)
-                End Try
-
-                Console.WriteLine($"🔵 [HandleTaskSessionStart] Validating translations: Count={If(translationsValue IsNot Nothing, translationsValue.Count, 0)}")
+                Console.WriteLine($"🔵 [HandleTaskSessionStart] ✅ Dialog loaded successfully from repository!")
+                Console.WriteLine($"   RuntimeTask.Id: {runtimeTask.Id}")
+                Console.WriteLine($"   HasSubTasks: {runtimeTask.HasSubTasks()}")
+                If runtimeTask.HasSubTasks() Then
+                    Console.WriteLine($"   SubTasks.Count: {runtimeTask.SubTasks.Count}")
+                End If
+                Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
                 Console.Out.Flush()
 
-                ' ✅ ADD: Detailed logging of translations received
-                If translationsValue IsNot Nothing Then
-                    Console.WriteLine($"🔵 [HandleTaskSessionStart] Translations received: {translationsValue.Count} entries")
-                    Console.Out.Flush()
+                ' ✅ STATELESS: STEP 3: Estrai textKeys dal dialogo
+                Console.WriteLine($"🔵 [HandleTaskSessionStart] ✅ STATELESS: Extracting textKeys from dialog...")
+                Console.Out.Flush()
+                Dim textKeys = SessionManager.ExtractTextKeysFromRuntimeTask(runtimeTask)
 
-                    ' Log first 5 translation keys
-                    Dim sampleKeys = translationsValue.Keys.Take(5).ToList()
-                    Console.WriteLine($"🔵 [HandleTaskSessionStart] Sample translation keys: {String.Join(", ", sampleKeys)}")
+                If textKeys Is Nothing OrElse textKeys.Count = 0 Then
+                    Console.WriteLine($"🔵 [HandleTaskSessionStart] ⚠️ No textKeys found in dialog (dialog may not have any messages)")
                     Console.Out.Flush()
                 Else
-                    Console.WriteLine($"🔵 [HandleTaskSessionStart] ⚠️ translationsValue is Nothing")
+                    Console.WriteLine($"🔵 [HandleTaskSessionStart] ✅ Found {textKeys.Count} textKeys in dialog")
                     Console.Out.Flush()
                 End If
 
-                ' ✅ PERMISSIVE: Allow empty translations dictionary - use empty dict as default
-                ' Translations will be resolved at runtime from the TaskTree textKey if needed
-                If translationsValue Is Nothing Then
-                    translationsValue = New Dictionary(Of String, String)()
-                    Console.WriteLine($"🔵 [HandleTaskSessionStart] ⚠️ Translations was Nothing, using empty dictionary")
-                    Console.Out.Flush()
-                ElseIf translationsValue.Count = 0 Then
-                    Console.WriteLine($"🔵 [HandleTaskSessionStart] ⚠️ Translations dictionary is empty, continuing with empty dict (translations will be resolved from TaskTree textKey at runtime)")
-                    Console.Out.Flush()
+                ' ✅ STATELESS: STEP 4: Valida che tutte le traduzioni esistano in TranslationRepository
+                Console.WriteLine($"🔵 [HandleTaskSessionStart] ✅ STATELESS: Validating translations in TranslationRepository...")
+                Console.Out.Flush()
+
+                Dim translationRepository = New ApiServer.Repositories.RedisTranslationRepository(
+                    Program.GetRedisConnectionString(),
+                    Program.GetRedisKeyPrefix()
+                )
+
+                If textKeys IsNot Nothing AndAlso textKeys.Count > 0 Then
+                    Dim missingKeys As New List(Of String)()
+                    For Each textKey In textKeys
+                        If Not translationRepository.TranslationExists(projectId, locale, textKey) Then
+                            missingKeys.Add(textKey)
+                        End If
+                    Next
+
+                    If missingKeys.Count > 0 Then
+                        Dim errorMsg = $"Translation validation failed: {missingKeys.Count} translation(s) not found in TranslationRepository for projectId '{projectId}' and locale '{locale}'. Missing keys: {String.Join(", ", missingKeys.Take(10))}"
+                        If missingKeys.Count > 10 Then
+                            errorMsg += $" ... and {missingKeys.Count - 10} more"
+                        End If
+                        Console.WriteLine($"🔵 [HandleTaskSessionStart] ❌ {errorMsg}")
+                        Console.Out.Flush()
+                        Return ResponseHelpers.CreateErrorResponse(errorMsg, 400)
+                    End If
                 End If
 
-                Dim compiledTask As Compiler.CompiledUtteranceTask = Nothing
+                Console.WriteLine($"🔵 [HandleTaskSessionStart] ✅ All translations validated")
+                Console.Out.Flush()
 
-                If taskTreeForLog IsNot Nothing Then
-                    Console.WriteLine($"🔵 [HandleTaskSessionStart] TaskTree path: Starting compilation...")
-                    Console.Out.Flush()
+                ' ✅ STATELESS: STEP 5: Crea sessione con solo stato runtime
+                Console.WriteLine($"🔵 [HandleTaskSessionStart] ✅ STATELESS: Creating session...")
+                Console.Out.Flush()
+                Dim newSessionId = CreateTaskSession(projectId, dialogVersion, locale)
 
-                    ' Dichiarare variabili fuori dal Try per renderle accessibili nel Catch
-                    Dim taskIdForConversion As String = Nothing
-                    Dim taskIdForCompilation As String = Nothing
-                    Dim projectIdForCompilation As String = Nothing
+                LogInfo("Task session created", New With {
+                    .sessionId = newSessionId,
+                    .projectId = projectId,
+                    .dialogVersion = dialogVersion,
+                    .locale = locale
+                })
 
-                    Try
-                        Console.WriteLine($"🔵 [HandleTaskSessionStart] Converting TaskTree to TaskTreeExpanded...")
-                        Console.Out.Flush()
+                Dim responseObj = New With {
+                    .sessionId = newSessionId,
+                    .projectId = projectId,
+                    .dialogVersion = dialogVersion,
+                    .locale = locale
+                }
 
-                        ' ═══════════════════════════════════════════════════════════════
-                        ' DIAGNOSTIC: Accesso a request.TaskId per ConvertTaskTreeToTaskTreeExpanded
-                        ' ═══════════════════════════════════════════════════════════════
-                        Console.WriteLine("🔴 [DIAG] BEFORE: Accessing request.TaskInstanceId/TaskId for ConvertTaskTreeToTaskTreeExpanded...")
-                        Console.Out.Flush()
-                        Try
-                            ' ✅ Estrai taskInstanceId dal request (o usa taskId come fallback)
-                            taskIdForConversion = If(String.IsNullOrWhiteSpace(request.TaskInstanceId), request.TaskId, request.TaskInstanceId)
-                            Console.WriteLine($"🔴 [DIAG] OK: taskInstanceId extracted = '{taskIdForConversion}' (from TaskInstanceId={request.TaskInstanceId}, TaskId={request.TaskId})")
-                            Console.Out.Flush()
-                        Catch ex As Exception
-                            Console.WriteLine($"🔴 [DIAG] EXCEPTION accessing request.TaskInstanceId/TaskId: {ex.ToString()}")
-                            Console.Out.Flush()
-                            Return ResponseHelpers.CreateErrorResponse($"Exception accessing request.TaskInstanceId/TaskId: {ex.Message}", 500)
-                        End Try
+                LogDebug("Creating success response")
+                Dim successResponse = ResponseHelpers.CreateSuccessResponse(responseObj)
 
-                        Dim taskTreeExpanded = TaskTreeConverter.ConvertTaskTreeToTaskTreeExpanded(taskTreeForLog, taskIdForConversion)
+                LogDebug("Success response created", New With {
+                    .responseType = If(successResponse IsNot Nothing, successResponse.GetType().Name, "Nothing")
+                })
 
-                        Console.WriteLine($"🔵 [HandleTaskSessionStart] TaskTreeExpanded: IsNothing={taskTreeExpanded Is Nothing}")
-                        Console.Out.Flush()
-
-                        If taskTreeExpanded Is Nothing Then
-                            Console.WriteLine($"🔵 [HandleTaskSessionStart] Conversion failed, returning error")
-                            Console.Out.Flush()
-                            Return ResponseHelpers.CreateErrorResponse($"Failed to convert TaskTree to TaskTreeExpanded for task '{taskIdForConversion}'.", 400)
-                        End If
-
-                        Console.WriteLine($"🔵 [HandleTaskSessionStart] Compiling TaskTreeExpanded...")
-                        Console.Out.Flush()
-
-                        ' ═══════════════════════════════════════════════════════════════
-                        ' DIAGNOSTIC: Accesso a request.ProjectId per CompileTaskTreeExpandedToCompiledTask
-                        ' ═══════════════════════════════════════════════════════════════
-                        Console.WriteLine("🔴 [DIAG] BEFORE: Accessing request.ProjectId for CompileTaskTreeExpandedToCompiledTask...")
-                        Console.Out.Flush()
-                        Try
-                            projectIdForCompilation = request.ProjectId
-                            Console.WriteLine($"🔴 [DIAG] OK: request.ProjectId accessed = '{projectIdForCompilation}'")
-                            Console.Out.Flush()
-                        Catch ex As Exception
-                            Console.WriteLine($"🔴 [DIAG] EXCEPTION accessing request.ProjectId: {ex.ToString()}")
-                            Console.Out.Flush()
-                            Return ResponseHelpers.CreateErrorResponse($"Exception accessing request.ProjectId: {ex.Message}", 500)
-                        End Try
-
-                        ' ═══════════════════════════════════════════════════════════════
-                        ' DIAGNOSTIC: Accesso a request.TaskId per CompileTaskTreeExpandedToCompiledTask
-                        ' ═══════════════════════════════════════════════════════════════
-                        Console.WriteLine("🔴 [DIAG] BEFORE: Accessing request.TaskId for CompileTaskTreeExpandedToCompiledTask...")
-                        Console.Out.Flush()
-                        Try
-                            taskIdForCompilation = request.TaskId
-                            Console.WriteLine($"🔴 [DIAG] OK: request.TaskId accessed = '{taskIdForCompilation}'")
-                            Console.Out.Flush()
-                        Catch ex As Exception
-                            Console.WriteLine($"🔴 [DIAG] EXCEPTION accessing request.TaskId: {ex.ToString()}")
-                            Console.Out.Flush()
-                            Return ResponseHelpers.CreateErrorResponse($"Exception accessing request.TaskId: {ex.Message}", 500)
-                        End Try
-
-                        Dim compileResult = Await TaskCompilationService.CompileTaskTreeExpandedToCompiledTask(taskTreeExpanded, translationsValue, projectIdForCompilation, taskIdForCompilation)
-
-                        Console.WriteLine($"🔵 [HandleTaskSessionStart] CompileResult: IsNothing={compileResult Is Nothing}, Success={If(compileResult IsNot Nothing, compileResult.Success, False)}")
-                        Console.Out.Flush()
-
-                        If compileResult Is Nothing Then
-                            Console.WriteLine($"🔵 [HandleTaskSessionStart] CompileResult is Nothing, returning error")
-                            Console.Out.Flush()
-                            Return ResponseHelpers.CreateErrorResponse("Compilation failed: compileResult is Nothing", 500)
-                        End If
-
-                        If Not compileResult.Success Then
-                            Console.WriteLine($"🔵 [HandleTaskSessionStart] Compilation failed: {compileResult.ErrorMessage}")
-                            Console.Out.Flush()
-                            Return ResponseHelpers.CreateErrorResponse($"Compilation failed for task '{taskIdForCompilation}'. Error: {compileResult.ErrorMessage}", 500)
-                        End If
-
-                        If compileResult.Result Is Nothing Then
-                            Console.WriteLine($"🔵 [HandleTaskSessionStart] CompileResult.Result is Nothing, returning error")
-                            Console.Out.Flush()
-                            Return ResponseHelpers.CreateErrorResponse($"Compilation succeeded but returned no task for task '{taskIdForCompilation}'.", 500)
-                        End If
-
-                        compiledTask = compileResult.Result
-                        Console.WriteLine($"🔵 [HandleTaskSessionStart] Compilation successful: TaskId={compiledTask.Id}")
-                        Console.Out.Flush()
-
-                        ' ✅ STEP 3: ORA abbiamo il CompiledUtteranceTask → converti in RuntimeTask per validazione
-                        Console.WriteLine($"🔵 [HandleTaskSessionStart] Converting to RuntimeTask for validation...")
-                        Console.Out.Flush()
-                        Dim runtimeTask = RuntimeTaskConverter.ConvertCompiledToRuntimeTask(compiledTask)
-
-                        ' ✅ STEP 4: Validazione FORTE traduzioni contro il grafo compilato
-                        Console.WriteLine($"🔵 [HandleTaskSessionStart] Validating translations against graph...")
-                        Console.Out.Flush()
-                        Dim translationValidationResult = SessionManager.ValidateTranslations(runtimeTask, translationsValue)
-
-                        Console.WriteLine($"🔵 [HandleTaskSessionStart] TranslationValidation.IsValid: {translationValidationResult.IsValid}")
-                        Console.Out.Flush()
-
-                        If Not translationValidationResult.IsValid Then
-                            Console.WriteLine($"🔵 [HandleTaskSessionStart] Translation validation failed: {translationValidationResult.ErrorMessage}")
-                            Console.Out.Flush()
-                            Return ResponseHelpers.CreateErrorResponse(
-                                $"Translation validation failed: {translationValidationResult.ErrorMessage}. The session cannot start with incomplete translations.",
-                                400
-                            )
-                        End If
-
-                        ' ✅ STEP 5: Solo se validazione passata → crea sessione
-                        Console.WriteLine($"🔵 [HandleTaskSessionStart] Creating session...")
-                        Console.Out.Flush()
-                        Dim newSessionId = CreateTaskSession(compiledTask, translationsValue, language)
-
-                        ' ✅ FASE 2: Usa logger invece di Console.WriteLine
-                        LogInfo("Task session created", New With {
-                            .sessionId = newSessionId,
-                            .taskId = taskIdForCompilation,
-                            .language = language
-                        })
-
-                        Dim responseObj = New With {
-                            .sessionId = newSessionId,
-                            .taskId = taskIdForCompilation,
-                            .language = language
-                        }
-
-                        LogDebug("Creating success response")
-                        Dim successResponse = ResponseHelpers.CreateSuccessResponse(responseObj)
-
-                        LogDebug("Success response created", New With {
-                            .responseType = If(successResponse IsNot Nothing, successResponse.GetType().Name, "Nothing")
-                        })
-
-                        Return successResponse
-                    Catch ex As Exception
-                        ' ✅ FASE 2: Usa logger invece di Console.WriteLine
-                        LogError("Exception in TaskTree path", ex, New With {
-                            .taskId = If(taskIdForCompilation IsNot Nothing, taskIdForCompilation, If(taskIdForConversion IsNot Nothing, taskIdForConversion, taskIdForLog))
-                        })
-                        Dim taskIdForError As String = If(taskIdForCompilation IsNot Nothing, taskIdForCompilation, If(taskIdForConversion IsNot Nothing, taskIdForConversion, taskIdForLog))
-                        Return ResponseHelpers.CreateErrorResponse($"Failed to process TaskTree for task '{taskIdForError}'. Error: {ex.Message}", 400)
-                    End Try
-                Else
-                    ' ❌ ERRORE BLOCCANTE: TaskTree è OBBLIGATORIO, nessun fallback database
-                    Console.WriteLine($"🔵 [HandleTaskSessionStart] TaskTree is Nothing, returning error")
-                    Console.Out.Flush()
-                    Return ResponseHelpers.CreateErrorResponse(
-                        "TaskTree is required and cannot be empty. The session cannot start without a valid TaskTree. Database fallback is not supported.",
-                        400
-                    )
-                End If
+                Return successResponse
 
             Catch ex As Exception
                 Console.WriteLine($"🔵 [HandleTaskSessionStart] UNHANDLED EXCEPTION: {ex.GetType().Name} - {ex.Message}")

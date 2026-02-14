@@ -9,7 +9,7 @@ Imports ApiServer.Models
 Namespace Validators
 
     ''' <summary>
-    ''' Validates that the TaskSessionStartRequest contains all required fields (taskId and projectId).
+    ''' ✅ STATELESS: Validates that the TaskSessionStartRequest contains all required fields (projectId, dialogVersion, locale).
     ''' </summary>
     ''' <param name="request">The request object to validate.</param>
     ''' <returns>A tuple containing: (IsValid As Boolean, ErrorMessage As String)</returns>
@@ -17,15 +17,19 @@ Namespace Validators
 
         Public Function ValidateRequest(request As TaskSessionStartRequest) As (IsValid As Boolean, ErrorMessage As String)
             If request Is Nothing Then
-                Return (False, "Request object is null. Expected a valid TaskSessionStartRequest with taskId and projectId.")
-            End If
-
-            If String.IsNullOrEmpty(request.TaskId) Then
-                Return (False, "TaskId is missing or empty. The request must include a valid taskId field.")
+                Return (False, "Request object is null. Expected a valid TaskSessionStartRequest with projectId, dialogVersion, and locale.")
             End If
 
             If String.IsNullOrEmpty(request.ProjectId) Then
                 Return (False, "ProjectId is missing or empty. The request must include a valid projectId field.")
+            End If
+
+            If String.IsNullOrEmpty(request.DialogVersion) Then
+                Return (False, "DialogVersion is missing or empty. The request must include a valid dialogVersion field.")
+            End If
+
+            If String.IsNullOrEmpty(request.Locale) Then
+                Return (False, "Locale is missing or empty. The request must include a valid locale field.")
             End If
 
             Return (True, Nothing)

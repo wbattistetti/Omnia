@@ -56,39 +56,33 @@ Namespace Models
     End Class
 
     ''' <summary>
-    ''' Task Session Start Request (Chat Simulator diretto)
-    ''' ✅ NUOVO MODELLO: Accetta TaskTree opzionale (working copy) invece di caricare dal database
+    ''' ✅ STATELESS: Task Session Start Request (minimale, solo riferimenti alla configurazione)
+    '''
+    ''' Il runtime carica dialogo e traduzioni dai repository (DialogRepository, TranslationRepository).
+    ''' Il frontend NON partecipa al runtime - questa API è usata solo dal connettore telefonico.
     ''' </summary>
     Public Class TaskSessionStartRequest
-        <JsonProperty("taskId")>
-        Public Property TaskId As String
-
         ''' <summary>
-        ''' ✅ NUOVO: ID dell'istanza del task (taskInstanceId)
-        ''' Concettualmente separato da TaskTree: l'identità appartiene all'istanza, non all'albero.
-        ''' Se non presente, viene usato taskId come fallback.
+        ''' ID del progetto - OBBLIGATORIO
         ''' </summary>
-        <JsonProperty("taskInstanceId")>
-        Public Property TaskInstanceId As String
-
         <JsonProperty("projectId")>
         Public Property ProjectId As String
 
-        <JsonProperty("translations")>
-        Public Property Translations As Dictionary(Of String, String)
+        ''' <summary>
+        ''' Versione del dialogo - OBBLIGATORIO
+        ''' </summary>
+        <JsonProperty("dialogVersion")>
+        Public Property DialogVersion As String
 
         ''' <summary>
-        ''' Lingua della sessione (es. "it-IT", "en-US") - OBBLIGATORIA
+        ''' Locale della sessione (es. "it-IT", "en-US") - OBBLIGATORIO
         ''' </summary>
-        <JsonProperty("language")>
-        Public Property Language As String
+        <JsonProperty("locale")>
+        Public Property Locale As String
 
-        ''' <summary>
-        ''' ✅ NUOVO: TaskTree completo (working copy) dalla memoria frontend
-        ''' Se presente, viene usato direttamente invece di caricare dal database
-        ''' </summary>
-        <JsonProperty("taskTree")>
-        Public Property TaskTree As JObject
+        ' ❌ RIMOSSO: TaskId, TaskInstanceId (non servono più)
+        ' ❌ RIMOSSO: Translations (configurazione immutabile - carica da TranslationRepository)
+        ' ❌ RIMOSSO: TaskTree (configurazione immutabile - carica da DialogRepository)
     End Class
 
     ''' <summary>

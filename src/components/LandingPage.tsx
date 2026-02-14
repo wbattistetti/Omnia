@@ -64,7 +64,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [searchingColumn, setSearchingColumn] = useState<string | null>(null);
 
   // Stato per tipo di progetti visualizzati
-  const [projectViewType, setProjectViewType] = useState<'all' | 'recent' | 'recovered'>('all');
+  const [projectViewType, setProjectViewType] = useState<'all' | 'recent' | 'recovered'>('recent');
   const [recoveredProjectsCount, setRecoveredProjectsCount] = useState(0);
 
   // Font centralizzato dal designer
@@ -362,8 +362,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </div>
           )}
 
-          {/* Pannello progetti visibile solo quando showDropdown è true, dati pronti E non sta caricando */}
-          {hasProjects && showDropdown && dataReady && !loadingProjects && (
+          {/* Pannello progetti visibile quando ci sono progetti, dati pronti E non sta caricando */}
+          {hasProjects && dataReady && !loadingProjects && (
             <div className={`mt-4 w-auto bg-white rounded-xl shadow-2xl relative animate-fade-in ${combinedClass}`} style={{ overflow: 'visible' }}>
             {/* Header con 3 pulsanti/tab */}
             <div className="flex items-center justify-between p-2 border-b border-emerald-200 bg-emerald-50 rounded-t-xl relative">

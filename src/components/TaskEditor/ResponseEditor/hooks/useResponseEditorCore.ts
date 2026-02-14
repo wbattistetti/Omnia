@@ -370,10 +370,13 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     setTasksPanelWidth,
     // ✅ NEW: Wizard states
     taskMeta,
+    currentProjectId, // ✅ NEW: Pass currentProjectId for test panel
     contextualizationAbortController,
     setContextualizationAbortController,
     setNeedsTaskContextualization,
     setNeedsTaskBuilder,
+    // ✅ NEW: Pass setDockTree for dockable chat panel
+    setDockTree,
     setWizardMode,
     // ✅ NEW: Generalization params (passed from useResponseEditor)
     shouldBeGeneral: shouldBeGeneral,

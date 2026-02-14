@@ -1,7 +1,7 @@
 import React from 'react';
 import { DockNode, DockRegion, DockTab, DockTabFlow, DockTabResponseEditor, DockTabNonInteractive, DockTabConditionEditor, DockTabTaskEditor } from '../../dock/types'; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
 import { splitWithTab, addTabCenter, closeTab, activateTab, moveTab, getTab, removeTab } from '../../dock/ops';
-import { Workflow, FileText, Code2, GitBranch } from 'lucide-react';
+import { Workflow, FileText, Code2, GitBranch, MessageSquare } from 'lucide-react';
 import SmartTooltip from '../SmartTooltip';
 
 // Helper to map over dock tree nodes
@@ -31,6 +31,7 @@ function getTabIcon(tab: DockTab) {
     case 'taskEditor': return <FileText size={14} color="#94a3b8" />; // ✅ RINOMINATO: 'actEditor' → 'taskEditor'
     case 'nonInteractive': return <FileText size={14} color="#059669" />;
     case 'conditionEditor': return <Code2 size={14} color="#dc2626" />;
+    case 'chat': return <MessageSquare size={14} color="#10b981" />;
     default: return <GitBranch size={14} color="#0c4a6e" />;
   }
 }

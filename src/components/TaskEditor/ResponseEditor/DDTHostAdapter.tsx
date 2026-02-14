@@ -10,7 +10,7 @@ import { TaskType, taskIdToTaskType, getEditorFromTaskType } from '@types/taskTy
 import type { TaskTree } from '@types/taskTypes';
 import { useTaskTreeStore } from '@responseEditor/core/state';
 
-export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeader, onToolbarUpdate, registerOnClose }: EditorProps) { // ✅ PATTERN CENTRALIZZATO: Accetta hideHeader e onToolbarUpdate
+export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeader, onToolbarUpdate, registerOnClose, setDockTree }: EditorProps) { // ✅ PATTERN CENTRALIZZATO: Accetta hideHeader e onToolbarUpdate
   // ✅ ARCHITETTURA ESPERTO: Verifica che questo componente sia usato solo per TaskTree
   // Se il task è di tipo Message, questo componente NON dovrebbe essere montato
   if (taskMeta?.type !== undefined && taskMeta.type !== null) {
@@ -481,6 +481,7 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
       hideHeader={hideHeader} // ✅ PATTERN CENTRALIZZATO: Passa hideHeader al wrapper
       onToolbarUpdate={onToolbarUpdate} // ✅ PATTERN CENTRALIZZATO: Passa onToolbarUpdate per ereditare header
       registerOnClose={registerOnClose} // ✅ Passa registerOnClose per gestire chiusura con controllo contracts
+      setDockTree={setDockTree} // ✅ Passa setDockTree per aprire chat panel come tab dockabile
     />
   );
 }

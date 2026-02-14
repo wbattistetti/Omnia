@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Home, Save, Settings, Play, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Home, Save, Settings, Play, Loader2, CheckCircle, AlertCircle, X } from 'lucide-react';
 import { ProjectData } from '../types/project';
 import { useAIProvider, AI_PROVIDERS } from '../context/AIProviderContext';
 import { useFontStore } from '../state/fontStore';
@@ -15,6 +15,7 @@ export interface ToolbarProps {
   isSaving?: boolean;
   saveSuccess?: boolean;
   saveError?: string | null;
+  onCloseProject?: () => void;
 }
 
 export function Toolbar({
@@ -25,7 +26,8 @@ export function Toolbar({
   saveError = null,
   onRun,
   onSettings,
-  currentProject
+  currentProject,
+  onCloseProject
 }: ToolbarProps) {
   const { provider, model, setProvider, setModel, providerConfig, availableModels } = useAIProvider();
   const { fontType, fontSize, setFontType, setFontSize } = useFontStore();
@@ -158,6 +160,18 @@ export function Toolbar({
         <div className="text-sm flex-1 min-w-0">
           {renderProjectInfo()}
         </div>
+
+        {/* Chiudi Progetto button - mostra solo se c'è un progetto aperto */}
+        {currentProject && onCloseProject && (
+          <button
+            onClick={onCloseProject}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors duration-200"
+            title="Chiudi progetto e torna alla home"
+          >
+            <X className="w-4 h-4" />
+            <span>Chiudi Progetto</span>
+          </button>
+        )}
       </div>
 
       {/* Center - Save button */}

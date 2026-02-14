@@ -14,19 +14,30 @@ Namespace ApiServer.SessionStorage
     ''' </summary>
     Public Class SessionSerializer
         ''' <summary>
-        ''' Dati serializzabili di TaskSession (senza oggetti runtime)
+        ''' ✅ STATELESS: Dati serializzabili di TaskSession (solo stato runtime, non configurazione immutabile)
         ''' </summary>
         Private Class TaskSessionData
+            ' ✅ STATELESS: Identificatori sessione
             Public Property SessionId As String
-            Public Property RuntimeTask As RuntimeTask
-            Public Property Language As String
-            Public Property Translations As Dictionary(Of String, String)
+
+            ' ✅ STATELESS: Riferimenti alla configurazione immutabile (non duplicata)
+            Public Property ProjectId As String
+            Public Property DialogVersion As String
+            Public Property Locale As String
+
+            ' ✅ STATELESS: Stato runtime (unico per questa chiamata)
+            Public Property CurrentNodeId As String
+            Public Property RuntimeData As Dictionary(Of String, Object)
+
+            ' ✅ STATELESS: Stato comunicazione
             Public Property Messages As List(Of Object)
             Public Property IsWaitingForInput As Boolean
             Public Property WaitingForInputData As Object
-            Public Property TaskInstanceData As String ' JSON serializzato di TaskInstance
-            ' ✅ STATELESS: Flag per indicare se lo stream SSE è connesso
             Public Property SseConnected As Boolean = False
+
+            ' ❌ RIMOSSO: RuntimeTask (configurazione immutabile - carica da DialogRepository)
+            ' ❌ RIMOSSO: Translations (configurazione immutabile - carica da TranslationRepository)
+            ' ❌ RIMOSSO: TaskInstanceData (ricreato quando necessario dal dialogo)
         End Class
 
         ''' <summary>
@@ -43,41 +54,28 @@ Namespace ApiServer.SessionStorage
         End Class
 
         ''' <summary>
-        ''' Serializza TaskSession (solo dati, non oggetti runtime)
+        ''' ✅ STATELESS: Serializza TaskSession (solo stato runtime, non configurazione immutabile)
         ''' </summary>
         Public Shared Function SerializeTaskSession(session As TaskSession) As String
             Try
                 Dim data As New TaskSessionData() With {
                     .SessionId = session.SessionId,
-                    .RuntimeTask = session.RuntimeTask,
-                    .Language = session.Language,
-                    .Translations = session.Translations,
+                    .ProjectId = session.ProjectId,
+                    .DialogVersion = session.DialogVersion,
+                    .Locale = session.Locale,
+                    .CurrentNodeId = session.CurrentNodeId,
+                    .RuntimeData = If(session.RuntimeData, New Dictionary(Of String, Object)()),
                     .Messages = session.Messages,
                     .IsWaitingForInput = session.IsWaitingForInput,
                     .WaitingForInputData = session.WaitingForInputData,
                     .SseConnected = session.SseConnected
                 }
 
-                ' Serializza TaskInstance se presente (può avere riferimenti circolari)
-                If session.TaskInstance IsNot Nothing Then
-                    Try
-                        data.TaskInstanceData = JsonConvert.SerializeObject(session.TaskInstance, New JsonSerializerSettings With {
-                            .ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-                            .NullValueHandling = NullValueHandling.Ignore,
-                            .MaxDepth = 32,
-                            .TypeNameHandling = TypeNameHandling.Auto ' ✅ STATELESS: Include type info for interfaces (ITask)
-                        })
-                    Catch ex As Exception
-                        ' Se TaskInstance non è serializzabile, salva Nothing
-                        data.TaskInstanceData = Nothing
-                        Console.WriteLine($"[SessionSerializer] Warning: Could not serialize TaskInstance: {ex.Message}")
-                    End Try
-                End If
+                ' ❌ RIMOSSO: TaskInstance non viene serializzato (ricreato quando necessario dal dialogo)
 
                 Return JsonConvert.SerializeObject(data, New JsonSerializerSettings With {
                     .ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-                    .NullValueHandling = NullValueHandling.Ignore,
-                    .TypeNameHandling = TypeNameHandling.Auto ' ✅ STATELESS: Include type info for interfaces (ITask)
+                    .NullValueHandling = NullValueHandling.Ignore
                 })
             Catch ex As Exception
                 Throw New Exception($"Failed to serialize TaskSession: {ex.Message}", ex)
@@ -85,31 +83,32 @@ Namespace ApiServer.SessionStorage
         End Function
 
         ''' <summary>
-        ''' Deserializza TaskSession e ricostruisce oggetti runtime
+        ''' ✅ STATELESS: Deserializza TaskSession (solo stato runtime, dialogo e traduzioni da repository)
         ''' </summary>
         Public Shared Function DeserializeTaskSession(json As String) As TaskSession
             Try
-                ' ✅ STATELESS: Usa TypeNameHandling per deserializzare correttamente interfacce (ITask)
                 Dim settings As New JsonSerializerSettings With {
                     .ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-                    .NullValueHandling = NullValueHandling.Ignore,
-                    .TypeNameHandling = TypeNameHandling.Auto ' Include type info for interfaces (ITask)
+                    .NullValueHandling = NullValueHandling.Ignore
                 }
                 Dim data = JsonConvert.DeserializeObject(Of TaskSessionData)(json, settings)
                 If data Is Nothing Then
                     Return Nothing
                 End If
 
-                ' Ricrea TaskSession con dati deserializzati
+                ' ✅ STATELESS: Ricrea TaskSession con solo stato runtime
                 Dim messagesList = If(data.Messages, New List(Of Object)())
-                Console.WriteLine($"[SessionSerializer] ✅ STATELESS: Deserializing TaskSession: SessionId={data.SessionId}, Messages.Count={messagesList.Count}, SseConnected={data.SseConnected}")
+                Console.WriteLine($"[SessionSerializer] ✅ STATELESS: Deserializing TaskSession: SessionId={data.SessionId}, ProjectId={data.ProjectId}, DialogVersion={data.DialogVersion}, Locale={data.Locale}, Messages.Count={messagesList.Count}, SseConnected={data.SseConnected}")
+
                 ' ✅ STATELESS: Usa EventEmitter condiviso (non creare nuovo EventEmitter)
                 Dim sharedEmitter = SessionManager.GetOrCreateEventEmitter(data.SessionId)
                 Dim session As New TaskSession() With {
                     .SessionId = data.SessionId,
-                    .RuntimeTask = data.RuntimeTask,
-                    .Language = data.Language,
-                    .Translations = data.Translations,
+                    .ProjectId = data.ProjectId,
+                    .DialogVersion = data.DialogVersion,
+                    .Locale = data.Locale,
+                    .CurrentNodeId = data.CurrentNodeId,
+                    .RuntimeData = If(data.RuntimeData, New Dictionary(Of String, Object)()),
                     .Messages = messagesList,
                     .IsWaitingForInput = data.IsWaitingForInput,
                     .WaitingForInputData = data.WaitingForInputData,
@@ -118,22 +117,8 @@ Namespace ApiServer.SessionStorage
                     .TaskEngine = New Motore()
                 }
                 Console.WriteLine($"[SessionSerializer] ✅ STATELESS: TaskSession deserialized: SessionId={session.SessionId}, Messages.Count={session.Messages.Count}, IsWaitingForInput={session.IsWaitingForInput}, SseConnected={session.SseConnected}")
-                ' TaskInstance verrà ricostruito quando necessario
 
-                ' Deserializza TaskInstance se presente
-                If Not String.IsNullOrEmpty(data.TaskInstanceData) Then
-                    Try
-                        ' ✅ STATELESS: Usa TypeNameHandling per deserializzare correttamente interfacce (ITask)
-                        session.TaskInstance = JsonConvert.DeserializeObject(Of TaskInstance)(data.TaskInstanceData, New JsonSerializerSettings With {
-                            .ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-                            .TypeNameHandling = TypeNameHandling.Auto ' Include type info for interfaces (ITask)
-                        })
-                    Catch ex As Exception
-                        ' Se deserializzazione fallisce, TaskInstance sarà Nothing
-                        ' Verrà ricostruito quando necessario
-                        Console.WriteLine($"[SessionSerializer] Warning: Could not deserialize TaskInstance: {ex.Message}")
-                    End Try
-                End If
+                ' ✅ STATELESS: RuntimeTask e TaskInstance verranno ricostruiti quando necessario dal DialogRepository
 
                 Return session
             Catch ex As Exception

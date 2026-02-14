@@ -6,6 +6,7 @@ import BotMessage from '@responseEditor/ChatSimulator/BotMessage';
 import { getStepColor } from '@responseEditor/ChatSimulator/chatSimulatorUtils';
 import { useFontContext } from '@context/FontContext';
 import { useMessageEditing } from '@responseEditor/ChatSimulator/hooks/useMessageEditing';
+import DialogueTaskService from '@services/DialogueTaskService';
 
 export default function DDEBubbleChat({
   task,
@@ -167,34 +168,63 @@ export default function DDEBubbleChat({
           throw new Error('[DDEBubbleChat] TaskTree is required. Cannot start session without complete instance.');
         }
 
-        // ✅ Recupera la lingua del progetto dal database
-        let projectLanguage = 'it-IT'; // Fallback
-        if (projectId) {
-          try {
-            const projectResponse = await fetch(`/api/projects/${projectId}`);
-            if (projectResponse.ok) {
-              const project = await projectResponse.json();
-              if (project.language) {
-                // Converti formato breve (es. 'it', 'en', 'pt') a formato completo (es. 'it-IT', 'en-US', 'pt-BR')
-                const langMap: Record<string, string> = {
-                  'it': 'it-IT',
-                  'en': 'en-US',
-                  'pt': 'pt-BR',
-                  'es': 'es-ES',
-                  'fr': 'fr-FR'
-                };
-                projectLanguage = langMap[project.language] || `${project.language}-${project.language.toUpperCase()}` || 'it-IT';
-              }
-            } else {
-              console.warn(`[DDEBubbleChat] ⚠️ Failed to load project metadata: ${projectResponse.status}, using fallback language 'it-IT'`);
-              // ✅ STATELESS: Continua con fallback - non bloccare la sessione
-            }
-          } catch (error) {
-            console.error('[DDEBubbleChat] ⚠️ Error loading project language (non critico):', error);
-            // ✅ STATELESS: Usa fallback - non bloccare la sessione
-            // Il backend VB.NET può funzionare anche senza la lingua del progetto
-          }
+        console.log('[DDEBubbleChat] 📋 STEP 1: Loading project metadata...', { projectId });
+
+        // ✅ Recupera lingua e versione del progetto - OBBLIGATORIO, nessun fallback
+        if (!projectId) {
+          throw new Error('[DDEBubbleChat] ProjectId is required');
         }
+
+        console.log(`[DDEBubbleChat] 📋 Fetching project metadata from /api/projects/${projectId}...`);
+        const projectResponse = await fetch(`/api/projects/${projectId}`);
+        console.log(`[DDEBubbleChat] 📋 Project metadata response status: ${projectResponse.status}`);
+
+        if (!projectResponse.ok) {
+          const errorText = await projectResponse.text();
+          console.error(`[DDEBubbleChat] ❌ Failed to load project metadata: ${projectResponse.status}`, {
+            status: projectResponse.status,
+            statusText: projectResponse.statusText,
+            error: errorText
+          });
+          throw new Error(`Failed to load project metadata: ${projectResponse.statusText} - ${errorText}`);
+        }
+
+        const project = await projectResponse.json();
+        console.log('[DDEBubbleChat] 📋 Project metadata loaded:', {
+          projectId: project._id || project.projectId,
+          language: project.language,
+          version: project.version,
+          versionQualifier: project.versionQualifier
+        });
+
+        if (!project.language) {
+          throw new Error('[DDEBubbleChat] Project language is required');
+        }
+
+        // Converti formato breve (es. 'it', 'en', 'pt') a formato completo (es. 'it-IT', 'en-US', 'pt-BR')
+        const langMap: Record<string, string> = {
+          'it': 'it-IT',
+          'en': 'en-US',
+          'pt': 'pt-BR',
+          'es': 'es-ES',
+          'fr': 'fr-FR'
+        };
+        const projectLanguage = langMap[project.language] || `${project.language}-${project.language.toUpperCase()}`;
+        console.log(`[DDEBubbleChat] 📋 Mapped language: ${project.language} -> ${projectLanguage}`);
+
+        // ✅ Recupera versione del progetto - OBBLIGATORIO
+        if (!project.version) {
+          throw new Error('[DDEBubbleChat] Project version is required');
+        }
+        const projectVersion = project.version;
+        const versionQualifier = project.versionQualifier || 'production';
+        // Costruisci dialogVersion: "1.0" o "1.0-alpha" se qualifier non è production
+        const dialogVersion = versionQualifier !== 'production'
+          ? `${projectVersion}-${versionQualifier}`
+          : projectVersion;
+        console.log(`[DDEBubbleChat] 📋 Dialog version: ${dialogVersion} (from version=${projectVersion}, qualifier=${versionQualifier})`);
+
+        console.log('[DDEBubbleChat] 📋 STEP 1 COMPLETE:', { projectLanguage, dialogVersion });
 
         // ✅ NUOVO MODELLO: Invia TaskTree completo (working copy) invece di solo taskId
         // L'istanza in memoria è la fonte di verità, non il database
@@ -204,23 +234,298 @@ export default function DDEBubbleChat({
           ? taskTree.steps
           : {};  // ✅ Se non è dictionary, usa vuoto (legacy format)
 
-        const requestBody = {
-          taskId: task.id,  // Mantieni per compatibilità/identificazione
-          taskInstanceId: task.id, // ✅ NUOVO: ID dell'istanza del task (non parte del TaskTree concettuale)
-          projectId: projectId,
-          language: projectLanguage, // ✅ Lingua del progetto dal database
-          translations: translationsData,
-          taskTree: {
-            ...taskTree,
-            // ❌ NON aggiungere id qui - TaskTree non ha identità concettuale
-            steps: stepsDict  // ✅ Dictionary: { "templateId": { "start": {...}, "noMatch": {...} } }
+        console.log('[DDEBubbleChat] 📋 STEP 2: Compiling and saving dialog...', {
+          projectId,
+          dialogVersion,
+          locale: projectLanguage,
+          hasTaskTree: !!taskTree,
+          hasTask: !!task
+        });
+
+        // ✅ STATELESS: STEP 2: Compila e salva il dialogo nel repository
+        // Il dialogo deve essere compilato e salvato prima di avviare la sessione
+        if (!task || !taskTree) {
+          throw new Error('[DDEBubbleChat] Task and TaskTree are required to compile and save the dialog.');
+        }
+
+        // ✅ STEP 2.1: Compila il TaskTree in RuntimeTask
+        console.log('[DDEBubbleChat] 📋 STEP 2.1: Compiling TaskTree to RuntimeTask...');
+
+        // Converti TaskTree in formato Task per la compilazione
+        const taskForCompilation = {
+          id: task.id,
+          templateId: task.templateId || task.id,
+          type: task.type || 1, // TaskTypes.UtteranceInterpretation
+          label: task.label || taskTree.label || '',
+          steps: taskTree.steps || {},
+          nodes: taskTree.nodes || [],
+          ...task
+        };
+
+        // ✅ Raccogli template referenziati (come fa useDialogueEngine.ts)
+        const referencedTemplateIds = new Set<string>();
+
+        // Aggiungi templateId del task
+        if (taskForCompilation.templateId) {
+          referencedTemplateIds.add(taskForCompilation.templateId);
+        }
+
+        // Raccogli templateId ricorsivamente da subTasksIds e data nodes
+        const collectTemplateIds = (nodes: any[]) => {
+          if (!nodes || !Array.isArray(nodes)) return;
+          nodes.forEach((node: any) => {
+            if (node.templateId) {
+              referencedTemplateIds.add(node.templateId);
+            }
+            if (node.subNodes && Array.isArray(node.subNodes)) {
+              collectTemplateIds(node.subNodes);
+            }
+            if (node.subTasksIds && Array.isArray(node.subTasksIds)) {
+              node.subTasksIds.forEach((id: string) => {
+                if (id) referencedTemplateIds.add(id);
+              });
+            }
+          });
+        };
+
+        if (taskTree.nodes) {
+          collectTemplateIds(taskTree.nodes);
+        }
+
+        // Carica template referenziati da DialogueTaskService
+        const referencedTemplates: any[] = [];
+        referencedTemplateIds.forEach(templateId => {
+          // Skip se il template è già il task stesso
+          if (templateId === task.id) {
+            return;
           }
+          try {
+            const template = DialogueTaskService.getTemplate(templateId);
+            if (template) {
+              referencedTemplates.push(template);
+              console.log(`[DDEBubbleChat] ✅ Added referenced template: ${templateId}`);
+            } else {
+              console.warn(`[DDEBubbleChat] ⚠️ Referenced template not found: ${templateId}`);
+            }
+          } catch (error) {
+            console.warn(`[DDEBubbleChat] ⚠️ Error loading template ${templateId}:`, error);
+          }
+        });
+
+        // Combina task e template (come fa useDialogueEngine.ts)
+        const allTasksWithTemplates = [taskForCompilation, ...referencedTemplates];
+
+        console.log('[DDEBubbleChat] 📋 Compiling task:', {
+          taskId: taskForCompilation.id,
+          templateId: taskForCompilation.templateId,
+          type: taskForCompilation.type,
+          referencedTemplatesCount: referencedTemplates.length,
+          totalTasksCount: allTasksWithTemplates.length
+        });
+
+        console.log('[DDEBubbleChat] 📋 Sending compilation request:', {
+          url: `${baseUrl}/api/runtime/compile`,
+          taskId: taskForCompilation.id,
+          templateId: taskForCompilation.templateId,
+          tasksCount: allTasksWithTemplates.length
+        });
+
+        // ✅ Crea un nodo dummy per il FlowCompiler (richiede almeno un nodo entry)
+        // Il FlowCompiler si aspetta nodi con rows, dove ogni row.id corrisponde a task.id
+        const dummyNode = {
+          id: `dummy-node-${task.id}`,
+          type: 'task',
+          position: { x: 0, y: 0 },
+          data: {
+            label: task.label || taskTree.label || 'Chat Simulator Task',
+            rows: [
+              {
+                id: task.id,  // ✅ row.id deve corrispondere a task.id
+                taskId: task.id,
+                label: task.label || taskTree.label || ''
+              }
+            ]
+          }
+        };
+
+        // ✅ Usa /api/runtime/compile (stessa soluzione robusta di useDialogueEngine.ts)
+        const compileResponse = await fetch(`${baseUrl}/api/runtime/compile`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nodes: [dummyNode],  // ✅ Nodo dummy con row che contiene il task
+            edges: [],  // Vuoto per singolo task
+            tasks: allTasksWithTemplates,  // ✅ Task + template referenziati
+            ddts: [],
+            translations: translations || {}
+          })
+        });
+
+        console.log('[DDEBubbleChat] 📋 Compilation response:', {
+          status: compileResponse.status,
+          statusText: compileResponse.statusText,
+          ok: compileResponse.ok,
+          contentType: compileResponse.headers.get('content-type')
+        });
+
+        if (!compileResponse.ok) {
+          const errorText = await compileResponse.text();
+          console.error('[DDEBubbleChat] ❌ Compilation failed:', {
+            status: compileResponse.status,
+            statusText: compileResponse.statusText,
+            error: errorText
+          });
+          throw new Error(`Failed to compile task: ${compileResponse.statusText} - ${errorText}`);
+        }
+
+        // ✅ Leggi la risposta (non la usiamo per costruire RuntimeTask, ma validiamo che la compilazione sia andata a buon fine)
+        const responseText = await compileResponse.text();
+        console.log('[DDEBubbleChat] 📋 Compilation response text:', {
+          length: responseText.length,
+          preview: responseText.substring(0, 500),
+          isEmpty: responseText.trim().length === 0
+        });
+
+        if (!responseText || responseText.trim().length === 0) {
+          throw new Error('[DDEBubbleChat] Compilation response is empty');
+        }
+
+        let compileResult: any;
+        try {
+          compileResult = JSON.parse(responseText);
+          console.log('[DDEBubbleChat] 📋 Compilation result:', {
+            taskGroups: compileResult.taskGroups?.length || 0,
+            tasks: compileResult.tasks?.length || 0,
+            compiledBy: compileResult.compiledBy
+          });
+        } catch (parseError) {
+          console.error('[DDEBubbleChat] ❌ Failed to parse compilation result as JSON:', parseError);
+          console.error('[DDEBubbleChat] ❌ Response text:', responseText);
+          throw new Error(`Failed to parse compilation result: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
+        }
+
+        // ✅ Validazione: se c'è un errore nella risposta, fallisci
+        if (compileResult.status === 'error' || compileResult.error) {
+          throw new Error(`Compilation failed: ${compileResult.error || compileResult.message || 'Unknown error'}`);
+        }
+
+        // ✅ STEP 2.2: Il backend ha compilato il task, ma dobbiamo ottenere il RuntimeTask
+        // Per ora, dobbiamo costruire il RuntimeTask dal TaskTree compilato
+        // TODO: Il backend dovrebbe restituire il RuntimeTask compilato direttamente
+
+        // ✅ STEP 2.3: Costruisci RuntimeTask dal TaskTree
+        // Il backend compila Task → CompiledUtteranceTask, ma dobbiamo RuntimeTask per il repository
+        // Costruiamo RuntimeTask dal TaskTree (workaround temporaneo)
+        console.log('[DDEBubbleChat] 📋 STEP 2.3: Building RuntimeTask from TaskTree...');
+
+        // Funzione ricorsiva per convertire TaskTreeNode in RuntimeTask
+        const buildRuntimeTaskFromNode = (node: any, stepsDict: Record<string, any>): any => {
+          // Estrai steps per questo nodo dal dictionary steps
+          // steps è: { "templateId": { "start": {...}, "noMatch": {...} } }
+          const nodeSteps = stepsDict[node.templateId] || stepsDict[node.id] || {};
+
+          // Converti steps dictionary in array di DialogueStep
+          // Ogni step ha: { id, textKey, type, ... }
+          const stepsArray: any[] = [];
+          if (nodeSteps.start) stepsArray.push(nodeSteps.start);
+          if (nodeSteps.noMatch) stepsArray.push(nodeSteps.noMatch);
+          if (nodeSteps.success) stepsArray.push(nodeSteps.success);
+          if (nodeSteps.failure) stepsArray.push(nodeSteps.failure);
+          // Aggiungi altri step se presenti
+          Object.keys(nodeSteps).forEach(key => {
+            if (!['start', 'noMatch', 'success', 'failure'].includes(key)) {
+              stepsArray.push(nodeSteps[key]);
+            }
+          });
+
+          const runtimeTask: any = {
+            id: node.id,
+            condition: null,
+            steps: stepsArray,
+            constraints: node.constraints || [],
+            nlpContract: node.dataContract || null,
+            subTasks: null
+          };
+
+          // Costruisci subTasks ricorsivamente
+          if (node.subNodes && node.subNodes.length > 0) {
+            runtimeTask.subTasks = node.subNodes.map((subNode: any) =>
+              buildRuntimeTaskFromNode(subNode, stepsDict)
+            );
+          }
+
+          return runtimeTask;
+        };
+
+        // Costruisci RuntimeTask dal root node del TaskTree
+        const rootNode = taskTree.nodes?.[0];
+        if (!rootNode) {
+          throw new Error('[DDEBubbleChat] TaskTree must have at least one node');
+        }
+
+        const runtimeTask = buildRuntimeTaskFromNode(rootNode, taskTree.steps || {});
+        // Imposta l'ID del root task
+        runtimeTask.id = task.id;
+
+        console.log('[DDEBubbleChat] 📋 RuntimeTask built:', {
+          id: runtimeTask.id,
+          stepsCount: runtimeTask.steps?.length || 0,
+          constraintsCount: runtimeTask.constraints?.length || 0,
+          hasSubTasks: !!runtimeTask.subTasks && runtimeTask.subTasks.length > 0,
+          subTasksCount: runtimeTask.subTasks?.length || 0
+        });
+
+        // ✅ STEP 2.4: Salva il RuntimeTask nel repository
+        console.log('[DDEBubbleChat] 📋 STEP 2.4: Saving dialog to repository...');
+
+        const saveResponse = await fetch(`${baseUrl}/api/runtime/dialog/save`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId: projectId,
+            dialogVersion: dialogVersion,
+            runtimeTask: runtimeTask
+          })
+        });
+
+        if (!saveResponse.ok) {
+          const errorText = await saveResponse.text();
+          console.error('[DDEBubbleChat] ❌ Failed to save dialog:', saveResponse.status, errorText);
+          throw new Error(`Failed to save dialog: ${saveResponse.statusText} - ${errorText}`);
+        }
+
+        const saveResult = await saveResponse.json();
+        console.log('[DDEBubbleChat] 📋 Dialog saved:', {
+          success: saveResult.success,
+          projectId: saveResult.projectId,
+          dialogVersion: saveResult.dialogVersion
+        });
+
+        // ✅ STATELESS: STEP 3: Avvia la sessione
+        console.log('[DDEBubbleChat] 📋 STEP 3: Starting session...', {
+          url: `${baseUrl}/api/runtime/task/session/start`,
+          projectId,
+          dialogVersion,
+          locale: projectLanguage
+        });
+
+        const requestBody = {
+          projectId: projectId,
+          dialogVersion: dialogVersion, // ✅ Versione reale del progetto
+          locale: projectLanguage, // ✅ Locale invece di language
+          // ❌ RIMOSSO: taskId, taskInstanceId, translations, taskTree (configurazione immutabile - carica da repository)
         };
 
         const startResponse = await fetch(`${baseUrl}/api/runtime/task/session/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestBody)
+        });
+
+        console.log('[DDEBubbleChat] 📋 STEP 3 RESPONSE:', {
+          status: startResponse.status,
+          statusText: startResponse.statusText,
+          ok: startResponse.ok
         });
 
         if (!startResponse.ok) {
@@ -231,19 +536,19 @@ export default function DDEBubbleChat({
         }
 
         // ✅ Verifica che la risposta abbia contenuto prima di fare parsing JSON
-        const responseText = await startResponse.text();
+        const startResponseText = await startResponse.text();
 
-        if (!responseText || responseText.trim().length === 0) {
+        if (!startResponseText || startResponseText.trim().length === 0) {
           console.error('[DDEBubbleChat] ❌ Empty response from backend');
           throw new Error('Backend returned empty response');
         }
 
         let responseData: any;
         try {
-          responseData = JSON.parse(responseText);
+          responseData = JSON.parse(startResponseText);
         } catch (parseError) {
           console.error('[DDEBubbleChat] Failed to parse JSON response:', parseError);
-          console.error('[DDEBubbleChat] Response text:', responseText);
+          console.error('[DDEBubbleChat] Response text:', startResponseText);
           throw new Error(`Failed to parse backend response: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
         }
 

@@ -33,6 +33,7 @@ export type EditorProps = {
   onToolbarUpdate?: (toolbar: ToolbarButton[], color: string) => void;
   hideHeader?: boolean;
   registerOnClose?: (fn: () => Promise<boolean>) => void; // ✅ Per gestire chiusura con controllo contracts
+  setDockTree?: (updater: (prev: any) => any) => void; // ✅ Per aprire chat panel come tab dockabile
 };
 
 import type { ToolbarButton } from '../../../dock/types';

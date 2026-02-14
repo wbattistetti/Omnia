@@ -1,7 +1,7 @@
 // Infrastructure layer: Docking helper functions
 // Uses domain layer and dock/ops utilities
 
-import type { DockNode, DockTab } from '@dock/types';
+import type { DockNode, DockTab, DockTabChat } from '@dock/types';
 import { findRootTabset, tabExists, type OpenBottomDockedTabRequest } from '../../domain/dockTree';
 import { activateTab, splitWithTab, getTab, addTabCenter } from '@dock/ops';
 
@@ -124,5 +124,60 @@ export function openBottomDockedTab(
   console.log('[openBottomDockedTab] 📍 Root tabset ID:', rootTabsetId);
   const result = splitWithTab(prev, rootTabsetId, 'bottom', newTab);
   console.log('[openBottomDockedTab] ✅ Created new bottom split');
+  return result;
+}
+
+export interface OpenLateralChatPanelRequest {
+  tabId: string;
+  newTab: DockTabChat;
+  position: 'left' | 'right';
+  onExisting?: (tree: DockNode, tabId: string) => DockNode;
+}
+
+/**
+ * Opens a chat panel as a lateral docked tab (left or right)
+ *
+ * @param prev - Current dock tree state
+ * @param options - Configuration for opening the chat panel
+ * @returns New dock tree with chat panel opened or activated
+ *
+ * @example
+ * ```typescript
+ * const newTree = openLateralChatPanel(prevTree, {
+ *   tabId: 'chat_panel',
+ *   newTab: { id: 'chat_panel', title: 'Chat', type: 'chat', ... },
+ *   position: 'left',
+ * });
+ * ```
+ */
+export function openLateralChatPanel(
+  prev: DockNode,
+  options: OpenLateralChatPanelRequest
+): DockNode {
+  const { tabId, newTab, position, onExisting } = options;
+
+  console.log('[openLateralChatPanel] 🚀 Opening chat panel:', {
+    tabId,
+    position,
+    tabTitle: newTab.title,
+  });
+
+  // Check if already open
+  const existing = getTab(prev, tabId);
+  if (existing) {
+    console.log('[openLateralChatPanel] ⚠️ Chat panel already exists, activating:', tabId);
+    if (onExisting) {
+      return onExisting(prev, tabId);
+    }
+    return activateTab(prev, tabId);
+  }
+
+  // Find root tabset and open as lateral panel
+  const rootTabsetId = findRootTabset(prev) || 'ts_main';
+  console.log('[openLateralChatPanel] 📍 Root tabset ID:', rootTabsetId);
+  // Default sizes: 25% for chat panel, 75% for main content
+  const sizes = position === 'left' ? [0.25, 0.75] : [0.75, 0.25];
+  const result = splitWithTab(prev, rootTabsetId, position, newTab, sizes);
+  console.log('[openLateralChatPanel] ✅ Created new lateral split');
   return result;
 }

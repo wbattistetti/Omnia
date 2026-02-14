@@ -37,6 +37,7 @@ export interface UseResponseEditorInitializationParams {
   setTasksPanelWidth: (width: number) => void;
   // ✅ NEW: Wizard states
   taskMeta?: TaskMeta | null;
+  currentProjectId?: string | null; // ✅ NEW: For test panel
   contextualizationAbortController: AbortController | null;
   setContextualizationAbortController: React.Dispatch<React.SetStateAction<AbortController | null>>;
   setNeedsTaskContextualization: React.Dispatch<React.SetStateAction<boolean>>;
@@ -47,6 +48,8 @@ export interface UseResponseEditorInitializationParams {
   onOpenSaveDialog?: () => void;
   // ✅ NEW: Ref per il pulsante save-to-library
   saveToLibraryButtonRef?: React.RefObject<HTMLButtonElement>;
+  // ✅ NEW: Dock tree setter for opening chat panel as dockable tab
+  setDockTree?: (updater: (prev: any) => any) => void;
 }
 
 export interface UseResponseEditorInitializationResult {
@@ -208,6 +211,12 @@ export function useResponseEditorInitialization(params: UseResponseEditorInitial
     onOpenSaveDialog: params.onOpenSaveDialog,
     // ✅ NEW: Ref per il pulsante save-to-library
     saveToLibraryButtonRef: params.saveToLibraryButtonRef,
+    // ✅ NEW: Pass task data for test panel
+    taskTree: params.taskTree,
+    taskMeta: params.taskMeta,
+    currentProjectId: params.currentProjectId,
+    // ✅ NEW: Pass setDockTree for dockable chat panel
+    setDockTree: params.setDockTree,
   });
 
   return {

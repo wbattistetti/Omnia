@@ -24,9 +24,21 @@ Public Class TaskInstance
     Public Property Label As String
 
     ''' <summary>
-    ''' Traduzioni (chiave → testo tradotto)
+    ''' ✅ STATELESS: ProjectId per lookup traduzioni da TranslationRepository
     ''' </summary>
-    Public Property Translations As Dictionary(Of String, String)
+    Public Property ProjectId As String
+
+    ''' <summary>
+    ''' ✅ STATELESS: Locale per lookup traduzioni da TranslationRepository
+    ''' </summary>
+    Public Property Locale As String
+
+    ''' <summary>
+    ''' ✅ STATELESS: TranslationResolver per risolvere traduzioni (evita dipendenza circolare)
+    ''' </summary>
+    Public Property TranslationResolver As TaskEngine.Interfaces.ITranslationResolver
+
+    ' ❌ RIMOSSO: Translations (configurazione immutabile - carica da TranslationRepository)
 
     ' ============================================================
     ' CAMPI RUNTIME
@@ -56,7 +68,6 @@ Public Class TaskInstance
     ''' Costruttore
     ''' </summary>
     Public Sub New()
-        Translations = New Dictionary(Of String, String)()
         TaskList = New List(Of TaskNode)()
     End Sub
 

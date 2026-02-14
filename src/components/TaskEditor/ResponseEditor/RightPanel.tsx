@@ -1,8 +1,6 @@
 import React from 'react';
 import TaskList from '@taskEditor/TaskPalette/TaskList';
-// ❌ REMOVED: ResponseSimulator - contains duplicate runtime logic
-// ✅ Using clean DDEBubbleChat from ResponseEditor (SSE-only, no runtime logic)
-import DDEBubbleChat from '@responseEditor/ChatSimulator/DDEBubbleChat';
+// ✅ REMOVED: DDEBubbleChat - moved to GlobalTestPanel
 import { stepMeta } from './ddtUtils';
 import { useTaskTreeManager } from '@context/DDTManagerContext';
 import { useFontContext } from '@context/FontContext';
@@ -193,24 +191,11 @@ export default function RightPanel({ mode, width, onWidthChange, onStartResize, 
           </div>
         )}
         {(() => {
+          // ✅ REMOVED: Chat Simulator moved to GlobalTestPanel
+          // The 'chat' mode is no longer used in RightPanel
+          // Test button now opens GlobalTestPanel instead
           if (mode === 'chat') {
-
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 8, borderBottom: '1px solid #e5e7eb' }}>
-                  <div style={{ fontWeight: 700, color: '#0b1220' }}>Chat Simulator</div>
-                </div>
-                <div style={{ flex: 1, minHeight: 0 }}>
-                  <DDEBubbleChat
-                    task={task}
-                    projectId={projectId}
-                    translations={translations}
-                    taskTree={taskTree}
-                    onUpdateTaskTree={onUpdateDDT}
-                  />
-                </div>
-              </div>
-            );
+            return null; // Chat Simulator is now in GlobalTestPanel
           }
 
           return null;

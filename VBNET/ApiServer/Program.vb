@@ -16,6 +16,25 @@ Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 
 Module Program
+    ' ✅ STATELESS: Configurazione Redis (condivisa)
+    Friend _redisConnectionString As String = Nothing
+    Friend _redisKeyPrefix As String = Nothing
+    Friend _sessionTTL As Integer = 3600
+
+    ''' <summary>
+    ''' ✅ STATELESS: Ottiene la connection string Redis
+    ''' </summary>
+    Public Function GetRedisConnectionString() As String
+        Return If(String.IsNullOrEmpty(_redisConnectionString), "localhost:6379", _redisConnectionString)
+    End Function
+
+    ''' <summary>
+    ''' ✅ STATELESS: Ottiene il key prefix Redis
+    ''' </summary>
+    Public Function GetRedisKeyPrefix() As String
+        Return If(String.IsNullOrEmpty(_redisKeyPrefix), "omnia:", _redisKeyPrefix)
+    End Function
+
     ''' <summary>
     ''' Main entry point - runs ASP.NET Core HTTP server
     ''' </summary>
@@ -46,6 +65,11 @@ Module Program
             Dim sessionTTLStr = If(builder.Configuration("Redis:SessionTTL"), "3600")
             Dim sessionTTL As Integer = 3600
             Integer.TryParse(sessionTTLStr, sessionTTL)
+
+            ' ✅ STATELESS: Salva configurazione Redis per accesso da altri moduli
+            _redisConnectionString = redisConnectionString
+            _redisKeyPrefix = redisKeyPrefix
+            _sessionTTL = sessionTTL
 
             Console.WriteLine($"[Program] ✅ STATELESS: Redis configuration loaded:")
             Console.WriteLine($"[Program]   ConnectionString: {redisConnectionString}")
@@ -187,9 +211,14 @@ Module Program
                                             End Function)
 
         ' POST /api/runtime/compile/task - Compile a single task (for chat simulator)
-        app.MapPost("/api/runtime/compile/task", Function(context As HttpContext) As System.Threading.Tasks.Task(Of IResult)
-                                                     Return ApiServer.Handlers.CompilationHandlers.HandleCompileTask(context)
-                                                 End Function)
+        app.MapPost("/api/runtime/compile/task", Function(context As HttpContext) As System.Threading.Tasks.Task
+                                                    Return ApiServer.Handlers.CompilationHandlers.HandleCompileTask(context)
+                                                End Function)
+
+        ' ✅ STATELESS: POST /api/runtime/dialog/save - Salva dialogo compilato nel repository
+        app.MapPost("/api/runtime/dialog/save", Function(context As HttpContext) As System.Threading.Tasks.Task(Of IResult)
+                                                    Return ApiServer.Handlers.CompilationHandlers.HandleSaveDialog(context)
+                                                End Function)
 
         ' POST /api/runtime/task/session/start - Chat Simulator diretto (solo UtteranceInterpretation)
         Console.WriteLine("🔥 REGISTERING ENDPOINT: /api/runtime/task/session/start")

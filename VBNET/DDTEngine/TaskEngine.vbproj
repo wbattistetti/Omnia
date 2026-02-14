@@ -17,6 +17,8 @@
 
   <!-- Includi esplicitamente tutti i file nell'ordine corretto -->
   <ItemGroup>
+    <!-- Interfaces (DEVE essere prima di Models che li usano) -->
+    <Compile Include="Interfaces\ITranslationResolver.vb" />
     <!-- Models - devono essere compilati per primi, nell'ordine delle dipendenze -->
     <Compile Include="Engine\Utils.vb" />
     <Compile Include="Models\DialogueState.vb" />

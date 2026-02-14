@@ -2,6 +2,11 @@ import React from 'react';
 import { Undo2, Redo2, MessageSquare, Rocket, BookOpen, List, CheckSquare, Wand2, Star } from 'lucide-react';
 import { RightPanelMode } from './RightPanel';
 import { useWizardContext } from '@responseEditor/context/WizardContext';
+import { useGlobalTestPanel } from '@context/GlobalTestPanelContext';
+import { useResponseEditorContextSafe } from '@hooks/useResponseEditorContextSafe';
+import { useProjectTranslations } from '@context/ProjectTranslationsContext';
+import { openLateralChatPanel } from '@components/AppContent/infrastructure/docking/DockingHelpers';
+import type { DockTabChat } from '@dock/types';
 
 interface ResponseEditorToolbarProps {
   rightMode: RightPanelMode; // Per compatibilità
@@ -30,6 +35,12 @@ interface ResponseEditorToolbarProps {
   onOpenSaveDialog?: () => void;
   // ✅ NEW: Ref per il pulsante save-to-library (sempre presente, visibilità controllata)
   saveToLibraryButtonRef?: React.RefObject<HTMLButtonElement>;
+  // ✅ NEW: Task data for test panel (optional - can come from context or props)
+  taskTree?: any;
+  taskMeta?: any;
+  currentProjectId?: string | null;
+  // ✅ NEW: Dock tree setter for opening chat panel as dockable tab
+  setDockTree?: (updater: (prev: any) => any) => void;
 }
 
 /**
@@ -63,9 +74,28 @@ export function useResponseEditorToolbar({
   onOpenSaveDialog,
   // ✅ NEW: Ref per il pulsante save-to-library
   saveToLibraryButtonRef,
+  // ✅ NEW: Task data for test panel (optional - can come from context or props)
+  taskTree: taskTreeProp,
+  taskMeta: taskMetaProp,
+  currentProjectId: currentProjectIdProp,
+  // ✅ NEW: Dock tree setter for opening chat panel as dockable tab
+  setDockTree,
 }: ResponseEditorToolbarProps) {
 
   // ✅ CRITICAL: Hooks devono essere chiamati PRIMA di qualsiasi return condizionale
+  // ✅ NEW: Get global test panel and context data (MUST be at the top - hooks rule)
+  const { isOpen: isGlobalTestPanelOpen, openWithTask, close: closeGlobalTestPanel } = useGlobalTestPanel();
+  const editorContext = useResponseEditorContextSafe(); // ✅ Safe hook that returns null if not available
+  const { getTranslations } = useProjectTranslations();
+
+  // ✅ Get task data from props (preferred) or context (fallback)
+  const taskTree = taskTreeProp || editorContext?.taskTree;
+  const taskMeta = taskMetaProp || editorContext?.taskMeta;
+  const currentProjectId = currentProjectIdProp || editorContext?.currentProjectId;
+
+  // ✅ Guard to prevent double-opening of chat panel (React StrictMode in dev)
+  const openingChatRef = React.useRef(false);
+
   // ✅ Test è un toggle indipendente per mostrare/nascondere il pannello debugger
   // Salva la larghezza precedente per ripristinarla quando riapri
   const previousTestWidthRef = React.useRef<number>(testPanelWidth);
@@ -140,41 +170,106 @@ export function useResponseEditorToolbar({
   };
 
   const handleTestClick = () => {
-    console.log('[Toolbar] 🧪 handleTestClick - testPanelMode:', testPanelMode, 'testPanelWidth:', testPanelWidth);
+    console.log('[Toolbar] 🧪 handleTestClick', {
+      isGlobalTestPanelOpen,
+      hasEditorContext: !!editorContext,
+      editorContextKeys: editorContext ? Object.keys(editorContext) : [],
+      hasSetDockTree: !!setDockTree,
+      setDockTreeType: typeof setDockTree,
+      hasTaskTree: !!taskTree,
+      hasTaskMeta: !!taskMeta,
+      hasCurrentProjectId: !!currentProjectId,
+    });
 
-    // Toggle: se è aperto, chiudi e collassa; se è chiuso, apri e espandi
-    // ✅ Usa testPanelMode invece di rightMode per non interferire con Behaviour
-    if (testPanelMode === 'chat') {
-      // Chiudi Test e collassa il pannello
-      console.log('[Toolbar] 🧪 Chiudo Test - salvo larghezza:', testPanelWidth);
-      previousTestWidthRef.current = testPanelWidth; // Salva la larghezza corrente
-
-      // ✅ Prima collassa la larghezza, poi cambia il mode
-      if (onTestPanelWidthChange) {
-        console.log('[Toolbar] 🧪 Imposto larghezza a COLLAPSED_WIDTH:', COLLAPSED_WIDTH);
-        onTestPanelWidthChange(COLLAPSED_WIDTH); // Collassa il pannello
+    // ✅ NEW: Use dockable chat panel if setDockTree is available, otherwise fallback to global test panel
+    if (setDockTree) {
+      // Close global test panel if open (to avoid confusion)
+      if (isGlobalTestPanelOpen) {
+        console.log('[Toolbar] 🧪 Closing global test panel before opening dockable tab');
+        closeGlobalTestPanel();
       }
 
-      // ✅ Poi cambia il mode a 'none' per nascondere completamente
-      setTimeout(() => {
-        console.log('[Toolbar] 🧪 Cambio testPanelMode a none');
-        onTestPanelModeChange('none'); // Chiudi Test (usa testPanelMode invece di rightMode)
-      }, 0);
+      // Open as dockable tab
+      if (!taskTree || !taskMeta || !currentProjectId) {
+        console.error('[Toolbar] ❌ Cannot open chat panel: missing task data', {
+          hasTaskTree: !!taskTree,
+          hasTaskMeta: !!taskMeta,
+          hasProjectId: !!currentProjectId,
+        });
+        return;
+      }
+
+      // Get translations for the current project
+      const translations = getTranslations?.(currentProjectId) || {};
+
+      // Convert taskMeta to Task format
+      const task = {
+        id: taskMeta.id || taskMeta._id,
+        templateId: taskMeta.templateId || taskMeta.id || taskMeta._id,
+        type: taskMeta.type || 1,
+        label: taskMeta.label || editorContext?.taskLabel || '',
+        ...taskMeta
+      };
+
+      // Create chat tab with stable ID (so clicking again activates existing tab)
+      const chatTabId = `chat_${task.id}`;
+      const chatTab: DockTabChat = {
+        id: chatTabId,
+        title: `Chat: ${task.label || 'Test'}`,
+        type: 'chat',
+        task: task as any,
+        projectId: currentProjectId,
+        translations,
+        taskTree,
+        mode: 'interactive',
+      };
+
+      console.log('[Toolbar] 🧪 Opening chat panel as dockable tab', {
+        tabId: chatTabId,
+        taskId: task.id,
+        projectId: currentProjectId,
+      });
+
+      setDockTree(prev => openLateralChatPanel(prev, {
+        tabId: chatTabId,
+        newTab: chatTab,
+        position: 'right',
+      }));
     } else {
-      // Apri Test e espandi il pannello
-      console.log('[Toolbar] 🧪 Apro Test - previousWidth:', previousTestWidthRef.current);
+      // Fallback to global test panel (for backward compatibility)
+      if (isGlobalTestPanelOpen) {
+        console.log('[Toolbar] 🧪 Closing global test panel');
+        closeGlobalTestPanel();
+      } else {
+        // Open global test panel with task context
+        console.log('[Toolbar] 🧪 Task data:', {
+          hasTaskTree: !!taskTree,
+          hasTaskMeta: !!taskMeta,
+          hasProjectId: !!currentProjectId,
+          source: taskTreeProp ? 'props' : (editorContext ? 'context' : 'none'),
+        });
 
-      // ✅ Prima cambia il mode, poi espandi
-      onTestPanelModeChange('chat'); // Apri Test (usa testPanelMode invece di rightMode)
+        if (!taskTree || !taskMeta || !currentProjectId) {
+          console.error('[Toolbar] ❌ Cannot open test panel: missing task data');
+          return;
+        }
 
-      if (onTestPanelWidthChange) {
-        // Ripristina la larghezza precedente o usa il default (360)
-        const widthToRestore = previousTestWidthRef.current > COLLAPSED_WIDTH ? previousTestWidthRef.current : 360;
-        console.log('[Toolbar] 🧪 Ripristino larghezza a:', widthToRestore);
-        onTestPanelWidthChange(widthToRestore);
+        // Get translations for the current project
+        const translations = getTranslations?.(currentProjectId) || {};
+
+        // Convert taskMeta to Task format
+        const task = {
+          id: taskMeta.id || taskMeta._id,
+          templateId: taskMeta.templateId || taskMeta.id || taskMeta._id,
+          type: taskMeta.type || 1,
+          label: taskMeta.label || editorContext?.taskLabel || '',
+          ...taskMeta
+        };
+
+        console.log('[Toolbar] 🧪 Opening global test panel with task context');
+        openWithTask(task as any, taskTree, currentProjectId, translations);
       }
     }
-    // Non toccare gli altri pannelli (Behaviour, Personality, Recognition)
   };
 
   const handleTasksClick = () => {

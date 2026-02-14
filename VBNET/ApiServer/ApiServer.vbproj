@@ -33,6 +33,12 @@
     <!-- Fine FASE 1 -->
     <!-- FASE 4: Redis Infrastructure (DEVE essere prima di RedisSessionStorage) -->
     <Compile Include="Infrastructure\RedisConnectionManager.vb" />
+    <!-- ✅ STATELESS: Repositories per configurazione immutabile -->
+    <Compile Include="Repositories\IDialogRepository.vb" />
+    <Compile Include="Repositories\DialogRepository.vb" />
+    <Compile Include="Repositories\ITranslationRepository.vb" />
+    <Compile Include="Repositories\TranslationRepository.vb" />
+    <Compile Include="Repositories\TranslationResolverAdapter.vb" />
     <Compile Include="SessionStorage\SessionSerializer.vb" />
     <!-- Fine FASE 4 -->
     <!-- FASE 4: Redis Session Storage (implementazione completa) -->

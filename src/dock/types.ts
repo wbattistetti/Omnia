@@ -60,8 +60,18 @@ export type DockTabTaskEditor = DockTabBase & { // ✅ RINOMINATO: DockTabActEdi
   onClose?: (tab: DockTabTaskEditor) => boolean | Promise<boolean> | void | Promise<void>; // Callback called before closing the tab. Return false to prevent closing.
 };
 
+// Chat Panel tab - for dockable chat interface
+export type DockTabChat = DockTabBase & {
+  type: 'chat';
+  task?: TaskMeta | null;
+  projectId?: string | null;
+  translations?: Record<string, string>;
+  taskTree?: any;
+  mode?: 'interactive' | 'preview';
+};
+
 // Union type for all tab types
-export type DockTab = DockTabFlow | DockTabResponseEditor | DockTabNonInteractive | DockTabConditionEditor | DockTabTaskEditor; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
+export type DockTab = DockTabFlow | DockTabResponseEditor | DockTabNonInteractive | DockTabConditionEditor | DockTabTaskEditor | DockTabChat; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
 
 export type SplitNode = {
   kind: 'split';

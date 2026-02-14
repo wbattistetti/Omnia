@@ -537,23 +537,42 @@ app.get('/api/projects/dbname/preview', async (req, res) => {
 
 app.get('/api/projects/catalog', async (req, res) => {
   const startTime = Date.now();
-  const client = await getMongoClient();
   try {
+    const client = await getMongoClient();
     const db = client.db(dbProjects);
     const queryStart = Date.now();
     // ✅ OPTIMIZATION: Sort by updatedAt (index should exist, but don't force hint if it doesn't)
+    // Sort semplice: prima updatedAt, poi createdAt come fallback
     const list = await db.collection('projects_catalog')
       .find({})
-      .sort({ updatedAt: -1 })
+      .sort({ updatedAt: -1, createdAt: -1 })
       .toArray();
     const queryDuration = Date.now() - queryStart;
     const duration = Date.now() - startTime;
+    console.log('[Catalog.list] Found', list.length, 'projects in catalog');
+    if (list.length > 0) {
+      console.log('[Catalog.list] First project:', {
+        _id: list[0]._id,
+        projectName: list[0].projectName,
+        updatedAt: list[0].updatedAt,
+        createdAt: list[0].createdAt
+      });
+    }
     logInfo('Catalog.list', { count: Array.isArray(list) ? list.length : 0, duration: `${duration}ms`, queryDuration: `${queryDuration}ms` });
     res.json(list);
   } catch (e) {
     const duration = Date.now() - startTime;
+    console.error('[Catalog.list] Error details:', {
+      message: e?.message,
+      stack: e?.stack,
+      name: e?.name,
+      duration: `${duration}ms`
+    });
     logError('Catalog.list', e, { duration: `${duration}ms` });
-    res.status(500).json({ error: String(e?.message || e) });
+    res.status(500).json({
+      error: String(e?.message || e),
+      details: process.env.NODE_ENV === 'development' ? e?.stack : undefined
+    });
   }
 });
 
@@ -4551,13 +4570,36 @@ app.post('/api/projects', async (req, res) => {
 });
 
 app.get('/api/projects/:id', async (req, res) => {
+  const projectId = req.params.id;
   const client = await getMongoClient();
   try {
-    const db = client.db(dbProjects);
-    const project = await db.collection('projects').findOne({ _id: new ObjectId(req.params.id) });
-    if (!project) return res.status(404).json({ error: 'Progetto non trovato' });
+    // ✅ Cerca prima nel catalogo (supporta projectId custom come "proj_xxx")
+    const catalogDb = client.db(dbProjects);
+    const catalog = catalogDb.collection('projects_catalog');
+
+    // Prova a cercare per _id o projectId
+    let project = await catalog.findOne({ _id: projectId });
+    if (!project) {
+      project = await catalog.findOne({ projectId: projectId });
+    }
+
+    // Se non trovato nel catalogo, prova nella collection projects (per ObjectId MongoDB)
+    if (!project) {
+      try {
+        const db = client.db(dbProjects);
+        project = await db.collection('projects').findOne({ _id: new ObjectId(projectId) });
+      } catch (objectIdError) {
+        // Se non è un ObjectId valido, ignora l'errore
+      }
+    }
+
+    if (!project) {
+      return res.status(404).json({ error: `Progetto non trovato: ${projectId}` });
+    }
+
     res.json(project);
   } catch (err) {
+    console.error(`[GET /api/projects/:id] Error:`, err);
     res.status(500).json({ error: err.message, stack: err.stack });
   // ✅ NON chiudere la connessione se usi il pool
   }
@@ -6381,27 +6423,39 @@ app.get('/api/factory/template-label-translations', async (req, res) => {
 // ✅ Pre-inizializza il MongoDB connection pool all'avvio del server
 async function initializeMongoPool() {
   try {
+    console.log('[MongoDB] Pre-initializing connection pool...');
     logInfo('MongoDB.Startup', { message: 'Pre-initializing connection pool...' });
     await getMongoClient();
+    console.log('[MongoDB] ✅ Connection pool pre-initialized successfully');
     logInfo('MongoDB.Startup', { message: 'Connection pool pre-initialized successfully' });
 
     // Create indexes after pool is initialized
+    console.log('[MongoDB] Ensuring catalog indexes...');
     await ensureCatalogIndexes();
+    console.log('[MongoDB] ✅ Catalog indexes ensured');
   } catch (error) {
+    console.error('[MongoDB] ❌ Failed to pre-initialize pool:', error);
     logError('MongoDB.Startup', error, { message: 'Failed to pre-initialize pool (will retry on first request)' });
     // Non bloccare l'avvio del server, il pool verrà inizializzato alla prima richiesta
+    throw error; // Rilancia l'errore per far partire il server comunque
   }
 }
 
 // Inizializza il pool prima di avviare il server
+console.log('[Server] Starting initialization...');
 initializeMongoPool().then(() => {
+  console.log('[Server] MongoDB pool initialized, starting Express server...');
   app.listen(3100, () => {
+    console.log('[Server] ✅ Express server ready on port 3100');
     logInfo('Express', { message: 'Server ready on port 3100' });
   });
 }).catch((error) => {
+  console.error('[Server] ❌ Error during initialization:', error);
   logError('Express', error, { message: 'Failed to start server' });
   // Avvia comunque il server, il pool verrà inizializzato alla prima richiesta
+  console.log('[Server] Starting Express server anyway (MongoDB will initialize on first request)...');
   app.listen(3100, () => {
+    console.log('[Server] ✅ Express server ready on port 3100 (MongoDB pool will initialize on first request)');
     logInfo('Express', { message: 'Server ready on port 3100 (MongoDB pool will initialize on first request)' });
   });
 });

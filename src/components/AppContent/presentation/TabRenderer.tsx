@@ -2,7 +2,7 @@
 // Renders different tab types (flow, responseEditor, conditionEditor, taskEditor, nonInteractive)
 
 import React, { useMemo, useCallback, useEffect } from 'react';
-import type { DockTab, DockTabResponseEditor, DockTabTaskEditor, ToolbarButton } from '@dock/types';
+import type { DockTab, DockTabResponseEditor, DockTabTaskEditor, DockTabChat, ToolbarButton } from '@dock/types';
 import type { DockNode } from '@dock/types';
 import { TaskType } from '@types/taskTypes';
 import { resolveEditorKind } from '@taskEditor/EditorHost/resolveKind';
@@ -13,6 +13,8 @@ import ResponseEditor from '../../TaskEditor/ResponseEditor';
 import NonInteractiveResponseEditor from '../../TaskEditor/ResponseEditor/NonInteractiveResponseEditor';
 import ConditionEditor from '../../conditions/ConditionEditor';
 import ResizableTaskEditorHost from '../../TaskEditor/EditorHost/ResizableTaskEditorHost';
+import DDEBubbleChat from '../../TaskEditor/ResponseEditor/ChatSimulator/DDEBubbleChat';
+import { FontProvider } from '@context/FontContext';
 
 export interface TabRendererProps {
   tab: DockTab;
@@ -445,7 +447,36 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
             }}
             hideHeader={true}
             registerOnClose={isTaskTreeEditor ? handleRegisterOnClose : undefined}
+            setDockTree={setDockTree}
           />
+        </div>
+      );
+    }
+
+    // Chat Panel tab
+    if (tab.type === 'chat') {
+      const chatTab = tab as DockTabChat;
+      return (
+        <div
+          style={{
+            width: '100%',
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
+          <FontProvider>
+            <DDEBubbleChat
+              task={chatTab.task || null}
+              projectId={chatTab.projectId || currentPid || null}
+              translations={chatTab.translations}
+              taskTree={chatTab.taskTree}
+              onUpdateTaskTree={() => {}}
+              mode={chatTab.mode || 'interactive'}
+            />
+          </FontProvider>
         </div>
       );
     }

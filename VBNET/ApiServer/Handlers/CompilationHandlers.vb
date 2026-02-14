@@ -316,7 +316,7 @@ Namespace ApiServer.Handlers
         ''' <summary>
         ''' Handles POST /api/runtime/compile/task - Compile a single task
         ''' </summary>
-        Public Async Function HandleCompileTask(context As HttpContext) As Task(Of IResult)
+        Public Async Function HandleCompileTask(context As HttpContext) As System.Threading.Tasks.Task
             Console.WriteLine("═══════════════════════════════════════════════════════════════════════════")
             Console.WriteLine("📥 [HandleCompileTask] Received single task compilation request")
             System.Diagnostics.Debug.WriteLine("📥 [HandleCompileTask] Received single task compilation request")
@@ -344,12 +344,20 @@ Namespace ApiServer.Handlers
                     Console.WriteLine($"📦 [HandleCompileTask] Body read successfully: {If(body IsNot Nothing, body.Length, 0)} characters")
                 Catch readEx As Exception
                     Console.WriteLine($"❌ [HandleCompileTask] Error reading request body: {readEx.Message}")
-                    Return Results.BadRequest(New With {.error = "Failed to read request body", .message = readEx.Message})
+                    Dim errorJson = JsonConvert.SerializeObject(New With {.error = "Failed to read request body", .message = readEx.Message})
+                    context.Response.ContentType = "application/json"
+                    context.Response.StatusCode = 400
+                    context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
+                    Return
                 End Try
 
                 If String.IsNullOrEmpty(body) Then
                     Console.WriteLine("❌ [HandleCompileTask] Empty request body")
-                    Return Results.BadRequest(New With {.error = "Empty request body"})
+                    Dim errorJson = JsonConvert.SerializeObject(New With {.error = "Empty request body"})
+                    context.Response.ContentType = "application/json"
+                    context.Response.StatusCode = 400
+                    context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
+                    Return
                 End If
 
                 ' Deserialize request - use JObject to parse and extract task
@@ -360,12 +368,20 @@ Namespace ApiServer.Handlers
                     Console.WriteLine($"✅ [HandleCompileTask] JSON deserialization completed")
                 Catch deserializeEx As Exception
                     Console.WriteLine($"❌ [HandleCompileTask] Deserialization error: {deserializeEx.Message}")
-                    Return Results.BadRequest(New With {.error = "Failed to deserialize request", .message = deserializeEx.Message})
+                    Dim errorJson = JsonConvert.SerializeObject(New With {.error = "Failed to deserialize request", .message = deserializeEx.Message})
+                    context.Response.ContentType = "application/json"
+                    context.Response.StatusCode = 400
+                    context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
+                    Return
                 End Try
 
                 If requestObj Is Nothing OrElse requestObj("task") Is Nothing Then
                     Console.WriteLine("❌ [HandleCompileTask] Request or task is Nothing")
-                    Return Results.BadRequest(New With {.error = "Missing task in request"})
+                    Dim errorJson = JsonConvert.SerializeObject(New With {.error = "Missing task in request"})
+                    context.Response.ContentType = "application/json"
+                    context.Response.StatusCode = 400
+                    context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
+                    Return
                 End If
 
                 ' Deserialize task
@@ -378,12 +394,20 @@ Namespace ApiServer.Handlers
                     })
                 Catch ex As Exception
                     Console.WriteLine($"❌ [HandleCompileTask] Error deserializing task: {ex.Message}")
-                    Return Results.BadRequest(New With {.error = "Failed to deserialize task", .message = ex.Message})
+                    Dim errorJson = JsonConvert.SerializeObject(New With {.error = "Failed to deserialize task", .message = ex.Message})
+                    context.Response.ContentType = "application/json"
+                    context.Response.StatusCode = 400
+                    context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
+                    Return
                 End Try
 
                 If task Is Nothing Then
                     Console.WriteLine("❌ [HandleCompileTask] Task is Nothing after deserialization")
-                    Return Results.BadRequest(New With {.error = "Task is null"})
+                    Dim errorJson = JsonConvert.SerializeObject(New With {.error = "Task is null"})
+                    context.Response.ContentType = "application/json"
+                    context.Response.StatusCode = 400
+                    context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
+                    Return
                 End If
 
                 ' ❌ RIMOSSO: Deserializzazione ddts legacy
@@ -393,13 +417,21 @@ Namespace ApiServer.Handlers
                 ' Validate task type
                 If Not task.Type.HasValue Then
                     Console.WriteLine("❌ [HandleCompileTask] Task has no Type")
-                    Return Results.BadRequest(New With {.error = "Task has no Type. Type is required."})
+                    Dim errorJson = JsonConvert.SerializeObject(New With {.error = "Task has no Type. Type is required."})
+                    context.Response.ContentType = "application/json"
+                    context.Response.StatusCode = 400
+                    context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
+                    Return
                 End If
 
                 Dim typeValue = task.Type.Value
                 If Not [Enum].IsDefined(GetType(TaskEngine.TaskTypes), typeValue) Then
                     Console.WriteLine($"❌ [HandleCompileTask] Invalid TaskType: {typeValue}")
-                    Return Results.BadRequest(New With {.error = $"Invalid TaskType: {typeValue}"})
+                    Dim errorJson = JsonConvert.SerializeObject(New With {.error = $"Invalid TaskType: {typeValue}"})
+                    context.Response.ContentType = "application/json"
+                    context.Response.StatusCode = 400
+                    context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
+                    Return
                 End If
 
                 Dim taskType = CType(typeValue, TaskEngine.TaskTypes)
@@ -432,9 +464,19 @@ Namespace ApiServer.Handlers
                 }
 
                 Console.WriteLine($"✅ [HandleCompileTask] Compilation completed successfully")
+                Console.WriteLine($"   Response object: success={responseObj.success}, taskId={responseObj.taskId}, taskType={responseObj.taskType}")
                 Console.WriteLine("═══════════════════════════════════════════════════════════════════════════")
 
-                Return Results.Ok(responseObj)
+                ' ✅ Serializza manualmente usando Newtonsoft.Json (come in HandleCompileFlow)
+                Console.WriteLine("📤 [HandleCompileTask] Serializing response manually...")
+                Dim jsonResponse = JsonConvert.SerializeObject(responseObj)
+                Console.WriteLine($"📤 [HandleCompileTask] Serialized response JSON length: {jsonResponse.Length}")
+                Console.WriteLine($"📤 [HandleCompileTask] Serialized response preview: {If(jsonResponse.Length > 200, jsonResponse.Substring(0, 200) & "...", jsonResponse)}")
+
+                ' ✅ Scrivi direttamente nella risposta (come in HandleCompileFlow)
+                context.Response.ContentType = "application/json"
+                Await context.Response.WriteAsync(jsonResponse)
+                Return ' ✅ Non restituire Results.Ok() se scrivi manualmente
 
             Catch ex As Exception
                 Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
@@ -445,11 +487,17 @@ Namespace ApiServer.Handlers
                     Console.WriteLine($"Inner exception: {ex.InnerException.Message}")
                 End If
                 Console.WriteLine("═══════════════════════════════════════════════════════════════════════════")
-                Return Results.Problem(
-                    title:="Compilation failed",
-                    detail:=ex.Message,
-                    statusCode:=500
-                )
+
+                ' ✅ Scrivi errore direttamente nella risposta (senza Await nel Catch)
+                Dim errorJson = JsonConvert.SerializeObject(New With {
+                    .status = "error",
+                    .title = "Compilation failed",
+                    .detail = ex.Message,
+                    .timestamp = DateTime.UtcNow.ToString("O")
+                })
+                context.Response.ContentType = "application/json"
+                context.Response.StatusCode = 500
+                context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
             End Try
         End Function
 
@@ -506,6 +554,173 @@ Namespace ApiServer.Handlers
                 End If
                 Return Results.Problem(
                     title:="Compilation failed",
+                    detail:=ex.Message,
+                    statusCode:=500
+                )
+            End Try
+        End Function
+
+        ''' <summary>
+        ''' ✅ STATELESS: Salva un dialogo compilato nel DialogRepository
+        ''' Endpoint: POST /api/runtime/dialog/save
+        ''' </summary>
+        Public Async Function HandleSaveDialog(context As HttpContext) As Task(Of IResult)
+            Console.WriteLine("📥 [HandleSaveDialog] Received dialog save request")
+            System.Diagnostics.Debug.WriteLine("📥 [HandleSaveDialog] Received dialog save request")
+
+            Try
+                ' Enable buffering
+                Try
+                    context.Request.EnableBuffering()
+                Catch ex As Exception
+                    Console.WriteLine($"⚠️ [HandleSaveDialog] EnableBuffering failed: {ex.Message}")
+                End Try
+
+                ' Reset stream position
+                Try
+                    context.Request.Body.Position = 0
+                Catch ex As Exception
+                    Console.WriteLine($"⚠️ [HandleSaveDialog] Cannot reset stream position: {ex.Message}")
+                End Try
+
+                ' Read request body
+                Dim body As String = Nothing
+                Try
+                    Dim reader As New StreamReader(context.Request.Body)
+                    body = Await reader.ReadToEndAsync()
+                    Console.WriteLine($"📦 [HandleSaveDialog] Body read successfully: {If(body IsNot Nothing, body.Length, 0)} characters")
+                Catch readEx As Exception
+                    Console.WriteLine($"❌ [HandleSaveDialog] Error reading request body: {readEx.Message}")
+                    Return Results.BadRequest(New With {.error = "Failed to read request body", .message = readEx.Message})
+                End Try
+
+                If String.IsNullOrEmpty(body) Then
+                    Console.WriteLine("❌ [HandleSaveDialog] Empty request body")
+                    Return Results.BadRequest(New With {.error = "Empty request body"})
+                End If
+
+                ' Deserialize request
+                Dim requestObj As Newtonsoft.Json.Linq.JObject = Nothing
+                Try
+                    Console.WriteLine("🔄 [HandleSaveDialog] Starting JSON deserialization...")
+                    requestObj = Newtonsoft.Json.Linq.JObject.Parse(body)
+                    Console.WriteLine($"✅ [HandleSaveDialog] JSON deserialization completed")
+                Catch deserializeEx As Exception
+                    Console.WriteLine($"❌ [HandleSaveDialog] Deserialization error: {deserializeEx.Message}")
+                    Return Results.BadRequest(New With {.error = "Failed to deserialize request", .message = deserializeEx.Message})
+                End Try
+
+                ' Extract required fields
+                Dim projectId As String = Nothing
+                Dim dialogVersion As String = Nothing
+                Dim runtimeTaskJson As String = Nothing
+
+                If requestObj("projectId") IsNot Nothing Then
+                    projectId = requestObj("projectId").ToString()
+                End If
+                If requestObj("dialogVersion") IsNot Nothing Then
+                    dialogVersion = requestObj("dialogVersion").ToString()
+                End If
+                If requestObj("runtimeTask") IsNot Nothing Then
+                    runtimeTaskJson = requestObj("runtimeTask").ToString()
+                End If
+
+                ' Validate required fields
+                If String.IsNullOrWhiteSpace(projectId) Then
+                    Console.WriteLine("❌ [HandleSaveDialog] Missing projectId")
+                    Return Results.BadRequest(New With {.error = "projectId is required"})
+                End If
+                If String.IsNullOrWhiteSpace(dialogVersion) Then
+                    Console.WriteLine("❌ [HandleSaveDialog] Missing dialogVersion")
+                    Return Results.BadRequest(New With {.error = "dialogVersion is required"})
+                End If
+                If String.IsNullOrWhiteSpace(runtimeTaskJson) Then
+                    Console.WriteLine("❌ [HandleSaveDialog] Missing runtimeTask")
+                    Return Results.BadRequest(New With {.error = "runtimeTask is required"})
+                End If
+
+                ' Deserialize RuntimeTask
+                Dim runtimeTask As Compiler.RuntimeTask = Nothing
+                Try
+                    Dim settings As New JsonSerializerSettings With {
+                        .TypeNameHandling = TypeNameHandling.Auto,
+                        .ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
+                        .NullValueHandling = NullValueHandling.Ignore
+                    }
+                    runtimeTask = JsonConvert.DeserializeObject(Of Compiler.RuntimeTask)(runtimeTaskJson, settings)
+                Catch ex As Exception
+                    Console.WriteLine($"❌ [HandleSaveDialog] Error deserializing RuntimeTask: {ex.Message}")
+                    Return Results.BadRequest(New With {.error = "Failed to deserialize runtimeTask", .message = ex.Message})
+                End Try
+
+                If runtimeTask Is Nothing Then
+                    Console.WriteLine("❌ [HandleSaveDialog] RuntimeTask is Nothing after deserialization")
+                    Return Results.BadRequest(New With {.error = "RuntimeTask is null"})
+                End If
+
+                ' Save to DialogRepository
+                Try
+                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                    Console.WriteLine($"🔵 [HandleSaveDialog] ✅ Saving dialog to repository...")
+                    Console.WriteLine($"   ProjectId: {projectId}")
+                    Console.WriteLine($"   DialogVersion: {dialogVersion}")
+                    Console.WriteLine($"   RuntimeTask.Id: {runtimeTask.Id}")
+                    Console.WriteLine($"   RuntimeTask.HasSubTasks: {runtimeTask.HasSubTasks()}")
+                    If runtimeTask.HasSubTasks() Then
+                        Console.WriteLine($"   RuntimeTask.SubTasks.Count: {runtimeTask.SubTasks.Count}")
+                    End If
+                    Console.Out.Flush()
+
+                    Dim dialogRepository = New ApiServer.Repositories.RedisDialogRepository(
+                        Program.GetRedisConnectionString(),
+                        Program.GetRedisKeyPrefix()
+                    )
+                    Console.WriteLine($"🔵 [HandleSaveDialog] ✅ DialogRepository created, calling SaveDialog...")
+                    Console.Out.Flush()
+
+                    dialogRepository.SaveDialog(projectId, dialogVersion, runtimeTask)
+
+                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                    Console.WriteLine($"🔵 [HandleSaveDialog] ✅ Dialog saved successfully to repository!")
+                    Console.WriteLine($"   ProjectId: {projectId}")
+                    Console.WriteLine($"   DialogVersion: {dialogVersion}")
+                    Console.WriteLine($"   Redis Key: omnia:dialog:{projectId}:{dialogVersion}")
+                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                    Console.Out.Flush()
+                Catch ex As Exception
+                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                    Console.WriteLine($"🔵 [HandleSaveDialog] ❌ Error saving dialog to repository!")
+                    Console.WriteLine($"   ProjectId: {projectId}")
+                    Console.WriteLine($"   DialogVersion: {dialogVersion}")
+                    Console.WriteLine($"   Error: {ex.Message}")
+                    Console.WriteLine($"   StackTrace: {ex.StackTrace}")
+                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                    Console.Out.Flush()
+                    Return Results.Problem(
+                        title:="Failed to save dialog",
+                        detail:=ex.Message,
+                        statusCode:=500
+                    )
+                End Try
+
+                ' Return success
+                Dim responseObj = New With {
+                    .success = True,
+                    .projectId = projectId,
+                    .dialogVersion = dialogVersion,
+                    .message = "Dialog saved successfully",
+                    .timestamp = DateTime.UtcNow.ToString("O")
+                }
+
+                Console.WriteLine($"✅ [HandleSaveDialog] Dialog save completed successfully")
+                Return Results.Ok(responseObj)
+
+            Catch ex As Exception
+                Console.WriteLine($"❌ [HandleSaveDialog] Exception: {ex.Message}")
+                Console.WriteLine($"Stack trace: {ex.StackTrace}")
+                System.Diagnostics.Debug.WriteLine($"❌ [HandleSaveDialog] Exception: {ex.Message}")
+                Return Results.Problem(
+                    title:="Dialog save failed",
                     detail:=ex.Message,
                     statusCode:=500
                 )

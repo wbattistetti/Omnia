@@ -526,6 +526,13 @@ export const AppContent: React.FC<AppContentProps> = ({
             onHome={() => setAppState('landing')}
             isSaving={isCreatingProject}
             currentProject={currentProject}
+            onCloseProject={() => {
+              // Chiudi progetto e torna alla home
+              setCurrentProject(null);
+              setAppState('landing');
+              // Pulisci localStorage del progetto corrente
+              localStorage.removeItem('currentProjectId');
+            }}
             onSave={async () => {
               try {
                 // show spinner in toolbar while saving

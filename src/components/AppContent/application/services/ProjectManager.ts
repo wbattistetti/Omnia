@@ -297,6 +297,32 @@ export class ProjectManager {
         }
       }
 
+      // Load project data and set currentProject
+      const data = await ProjectDataService.loadProjectData();
+
+      // Initialize UI state with project info
+      const openedProject: ProjectData & ProjectInfo = {
+        id: id,
+        name: meta.projectName || meta.name || '', // ✅ FIX: Mappa projectName -> name
+        description: meta.description || '',
+        template: meta.template || '',
+        language: meta.language || 'pt',
+        clientName: meta.clientName || null,
+        industry: meta.industry || 'utility_gas',
+        ownerCompany: meta.ownerCompany || null,
+        ownerClient: meta.ownerClient || null,
+        version: meta.version || '1.0', // ✅ Aggiungi versione
+        versionQualifier: meta.versionQualifier || 'production', // ✅ Aggiungi qualificatore
+        taskTemplates: data.taskTemplates,
+        userActs: data.userActs,
+        backendActions: data.backendActions,
+        conditions: data.conditions,
+        tasks: [], // Deprecated: tasks migrated to macrotasks
+        macrotasks: data.macrotasks,
+      };
+
+      this.params.setCurrentProject(openedProject);
+
       // Refresh data and set app state
       await this.params.refreshData();
       this.params.setAppState('mainApp');

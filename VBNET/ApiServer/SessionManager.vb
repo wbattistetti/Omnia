@@ -62,22 +62,42 @@ Public Class EventEmitter
 End Class
 
 ''' <summary>
-''' Task Session: sessione per Chat Simulator diretto (solo UtteranceInterpretation)
-''' Più semplice di OrchestratorSession, usa solo DDTEngine
+''' ✅ STATELESS: Task Session contiene solo stato runtime, non configurazione immutabile
+'''
+''' Configurazione immutabile (dialoghi, traduzioni) è in repository condivisi:
+''' - DialogRepository: projectId + dialogVersion → RuntimeTask
+''' - TranslationRepository: projectId + locale + textKey → testo
+'''
+''' La sessione contiene solo:
+''' - Stato runtime della chiamata (currentNodeId, runtimeData)
+''' - Riferimenti alla configurazione (projectId, dialogVersion, locale)
 ''' </summary>
 Public Class TaskSession
-    Public Property SessionId As String
-    Public Property RuntimeTask As Compiler.RuntimeTask
-    Public Property Language As String
-    Public Property Translations As Dictionary(Of String, String)
+    ' ✅ STATELESS: Identificatori sessione
+    Public Property SessionId As String  ' callId
+
+    ' ✅ STATELESS: Riferimenti alla configurazione immutabile (non duplicata)
+    Public Property ProjectId As String
+    Public Property DialogVersion As String
+    Public Property Locale As String
+
+    ' ✅ STATELESS: Stato runtime (unico per questa chiamata)
+    Public Property CurrentNodeId As String
+    Public Property RuntimeData As Dictionary(Of String, Object)  ' Dati raccolti durante la chiamata
+
+    ' ✅ STATELESS: Oggetti runtime (non serializzati, ricreati ad ogni accesso)
     Public Property TaskEngine As Motore
     Public Property TaskInstance As TaskEngine.TaskInstance
-    Public Property Messages As New List(Of Object)
     Public Property EventEmitter As EventEmitter
+
+    ' ✅ STATELESS: Stato comunicazione
+    Public Property Messages As New List(Of Object)
     Public Property IsWaitingForInput As Boolean
     Public Property WaitingForInputData As Object
-    ' ✅ STATELESS: Flag per indicare se lo stream SSE è connesso e pronto
     Public Property SseConnected As Boolean = False
+
+    ' ❌ RIMOSSO: RuntimeTask (configurazione immutabile - carica da DialogRepository)
+    ' ❌ RIMOSSO: Translations (configurazione immutabile - carica da TranslationRepository)
 End Class
 
 ''' <summary>
@@ -112,6 +132,9 @@ Public Class SessionManager
     Private Shared _redisConnectionString As String = Nothing
     Private Shared _redisKeyPrefix As String = Nothing
     Private Shared _sessionTTL As Integer = 3600
+    ' ✅ STATELESS: Repository per configurazione immutabile
+    Private Shared _dialogRepository As ApiServer.Repositories.IDialogRepository = Nothing
+    Private Shared _translationRepository As ApiServer.Repositories.ITranslationRepository = Nothing
 
     ' ✅ STATELESS: Dizionari rimossi - tutto lo stato è in Redis
 
@@ -140,6 +163,18 @@ Public Class SessionManager
                 Catch ex As Exception
                     Console.WriteLine($"[SessionManager] ⚠️ Failed to initialize RedisExecutionStateStorage: {ex.Message}")
                     ' Non solleviamo eccezione perché ExecutionState storage è opzionale per retrocompatibilità
+                End Try
+            End If
+
+            ' ✅ STATELESS: Crea repository per configurazione immutabile
+            If Not String.IsNullOrEmpty(_redisConnectionString) AndAlso Not String.IsNullOrEmpty(_redisKeyPrefix) Then
+                Try
+                    _dialogRepository = New ApiServer.Repositories.RedisDialogRepository(_redisConnectionString, _redisKeyPrefix)
+                    _translationRepository = New ApiServer.Repositories.RedisTranslationRepository(_redisConnectionString, _redisKeyPrefix)
+                    Console.WriteLine($"[SessionManager] ✅ DialogRepository and TranslationRepository initialized")
+                Catch ex As Exception
+                    Console.WriteLine($"[SessionManager] ⚠️ Failed to initialize repositories: {ex.Message}")
+                    Throw ' I repository sono obbligatori per il runtime stateless
                 End Try
             End If
         End SyncLock
@@ -310,41 +345,46 @@ Public Class SessionManager
     End Sub
 
     ''' <summary>
-    ''' Crea una nuova TaskSession per Chat Simulator diretto
+    ''' ✅ STATELESS: Crea una nuova TaskSession con solo stato runtime
+    '''
+    ''' Il dialogo e le traduzioni sono caricati dai repository quando necessario.
+    ''' La sessione contiene solo riferimenti (projectId, dialogVersion, locale) e stato runtime.
     ''' </summary>
     Public Shared Function CreateTaskSession(
         sessionId As String,
-        runtimeTask As Compiler.RuntimeTask,
-        language As String,
-        translations As Dictionary(Of String, String)
+        projectId As String,
+        dialogVersion As String,
+        locale As String
     ) As TaskSession
-        ' ❌ ERRORE BLOCCANTE: lingua OBBLIGATORIA
-        If String.IsNullOrWhiteSpace(language) Then
-            Throw New ArgumentException("Language cannot be null, empty, or whitespace. Language is mandatory.", NameOf(language))
+        ' ❌ ERRORE BLOCCANTE: parametri OBBLIGATORI
+        If String.IsNullOrWhiteSpace(projectId) Then
+            Throw New ArgumentException("ProjectId cannot be null or empty. ProjectId is mandatory.", NameOf(projectId))
         End If
-
-        ' ❌ ERRORE BLOCCANTE: traduzioni OBBLIGATORIE
-        If translations Is Nothing OrElse translations.Count = 0 Then
-            Throw New ArgumentException("Translations dictionary cannot be Nothing or empty. Translations are mandatory.", NameOf(translations))
+        If String.IsNullOrWhiteSpace(dialogVersion) Then
+            Throw New ArgumentException("DialogVersion cannot be null or empty. DialogVersion is mandatory.", NameOf(dialogVersion))
         End If
-
-        ' ✅ NOTA: La validazione traduzioni contro il grafo deve essere fatta PRIMA di chiamare questa funzione
-        ' Qui assumiamo che le traduzioni siano già state validate
+        If String.IsNullOrWhiteSpace(locale) Then
+            Throw New ArgumentException("Locale cannot be null or empty. Locale is mandatory.", NameOf(locale))
+        End If
 
         SyncLock _lock
             ' ✅ FASE 2: Usa ILogger invece di Console.WriteLine
             _logger.LogInfo("Creating task session", New With {
                 .sessionId = sessionId,
-                .language = language
+                .projectId = projectId,
+                .dialogVersion = dialogVersion,
+                .locale = locale
             })
             Dim taskEngine As New Motore()
             ' ✅ STATELESS: Usa EventEmitter condiviso (non serializzato, rimane in memoria)
             Dim sharedEmitter = GetOrCreateEventEmitter(sessionId)
             Dim session As New TaskSession() With {
                 .SessionId = sessionId,
-                .RuntimeTask = runtimeTask,
-                .Language = language.Trim(),
-                .Translations = translations,
+                .ProjectId = projectId.Trim(),
+                .DialogVersion = dialogVersion.Trim(),
+                .Locale = locale.Trim(),
+                .CurrentNodeId = Nothing,  ' Inizializzato quando il dialogo viene caricato
+                .RuntimeData = New Dictionary(Of String, Object)(),
                 .EventEmitter = sharedEmitter,
                 .TaskEngine = taskEngine,
                 .IsWaitingForInput = False
@@ -369,14 +409,8 @@ Public Class SessionManager
                                                      emitter.Emit("message", msg)
 
                                                      session.IsWaitingForInput = True
-                                                     Dim firstNodeId As String = ""
-                                                     If session.RuntimeTask IsNot Nothing Then
-                                                         If session.RuntimeTask.SubTasks IsNot Nothing AndAlso session.RuntimeTask.SubTasks.Count > 0 Then
-                                                             firstNodeId = session.RuntimeTask.SubTasks(0).Id
-                                                         Else
-                                                             firstNodeId = session.RuntimeTask.Id
-                                                         End If
-                                                     End If
+                                                     ' ✅ STATELESS: CurrentNodeId è già impostato quando il dialogo viene caricato
+                                                     Dim firstNodeId As String = If(String.IsNullOrEmpty(session.CurrentNodeId), "", session.CurrentNodeId)
                                                      session.WaitingForInputData = New With {.nodeId = firstNodeId}
                                                      Console.WriteLine($"[MOTORE] ⏳ Waiting for input: nodeId={firstNodeId}")
                                                      emitter.Emit("waitingForInput", session.WaitingForInputData)
@@ -458,14 +492,8 @@ Public Class SessionManager
                                                         Dim allCompleted = session.TaskInstance IsNot Nothing AndAlso session.TaskInstance.TaskList.All(Function(t) t.State = DialogueState.Success OrElse t.State = DialogueState.AcquisitionFailed)
                                                         If Not allCompleted Then
                                                             session.IsWaitingForInput = True
-                                                            Dim firstNodeId As String = ""
-                                                            If session.RuntimeTask IsNot Nothing Then
-                                                                If session.RuntimeTask.SubTasks IsNot Nothing AndAlso session.RuntimeTask.SubTasks.Count > 0 Then
-                                                                    firstNodeId = session.RuntimeTask.SubTasks(0).Id
-                                                                Else
-                                                                    firstNodeId = session.RuntimeTask.Id
-                                                                End If
-                                                            End If
+                                                            ' ✅ STATELESS: Usa CurrentNodeId dalla sessione (già impostato quando il dialogo viene caricato)
+                                                            Dim firstNodeId As String = If(String.IsNullOrEmpty(session.CurrentNodeId), "", session.CurrentNodeId)
                                                             session.WaitingForInputData = New With {.nodeId = firstNodeId}
                                                             ' ✅ STATELESS: Usa EventEmitter condiviso
                                                             sharedEmitter.Emit("waitingForInput", session.WaitingForInputData)
@@ -488,6 +516,36 @@ Public Class SessionManager
     End Sub
 
     ''' <summary>
+    ''' ✅ STATELESS: Carica il dialogo dal DialogRepository quando necessario
+    ''' </summary>
+    Private Shared Function LoadDialogForSession(session As TaskSession) As Compiler.RuntimeTask
+        If session Is Nothing Then
+            Return Nothing
+        End If
+
+        If String.IsNullOrWhiteSpace(session.ProjectId) OrElse String.IsNullOrWhiteSpace(session.DialogVersion) Then
+            Console.WriteLine($"[SessionManager] ⚠️ Cannot load dialog: ProjectId or DialogVersion is empty")
+            Return Nothing
+        End If
+
+        If _dialogRepository Is Nothing Then
+            Console.WriteLine($"[SessionManager] ⚠️ DialogRepository is not initialized")
+            Return Nothing
+        End If
+
+        Try
+            Dim runtimeTask = _dialogRepository.GetDialog(session.ProjectId, session.DialogVersion)
+            If runtimeTask Is Nothing Then
+                Console.WriteLine($"[SessionManager] ❌ Dialog not found: {session.ProjectId}:{session.DialogVersion}")
+            End If
+            Return runtimeTask
+        Catch ex As Exception
+            Console.WriteLine($"[SessionManager] ❌ Error loading dialog: {ex.Message}")
+            Return Nothing
+        End Try
+    End Function
+
+    ''' <summary>
     ''' ✅ STATELESS: Avvia l'esecuzione del task se necessario (per sessioni recuperate da Redis)
     ''' </summary>
     Public Shared Sub StartTaskExecutionIfNeeded(sessionId As String)
@@ -504,9 +562,10 @@ Public Class SessionManager
                 Return
             End If
 
-            ' Se non c'è RuntimeTask, non possiamo eseguire
-            If session.RuntimeTask Is Nothing Then
-                Console.WriteLine($"[SessionManager] ⚠️ Cannot start execution: RuntimeTask is Nothing for session {sessionId}")
+            ' ✅ STATELESS: Carica dialogo dal repository se necessario
+            Dim runtimeTask = LoadDialogForSession(session)
+            If runtimeTask Is Nothing Then
+                Console.WriteLine($"[SessionManager] ⚠️ Cannot start execution: Dialog not found for session {sessionId}")
                 Return
             End If
 
@@ -514,9 +573,9 @@ Public Class SessionManager
             AttachTaskEngineHandlers(session)
 
             ' Avvia l'esecuzione del task
-                Console.WriteLine($"[MOTORE] ▶️ Starting task execution (recovered session)")
+            Console.WriteLine($"[MOTORE] ▶️ Starting task execution (recovered session)")
             Try
-                Dim taskInstance = ConvertRuntimeTaskToTaskInstance(session.RuntimeTask, session.Translations)
+                Dim taskInstance = ConvertRuntimeTaskToTaskInstance(runtimeTask, session.ProjectId, session.Locale)
                 session.TaskInstance = taskInstance
                 _storage.SaveTaskSession(session) ' Salva su Redis
 
@@ -584,9 +643,10 @@ Public Class SessionManager
                 Return
             End If
 
-            ' Se non c'è RuntimeTask, non possiamo eseguire
-            If session.RuntimeTask Is Nothing Then
-                Console.WriteLine($"[SessionManager] ⚠️ Cannot start execution: RuntimeTask is Nothing for session {sessionId}")
+            ' ✅ STATELESS: Carica dialogo dal repository se necessario
+            Dim runtimeTask = LoadDialogForSession(session)
+            If runtimeTask Is Nothing Then
+                Console.WriteLine($"[SessionManager] ⚠️ Cannot start execution: Dialog not found for session {sessionId}")
                 Return
             End If
 
@@ -595,7 +655,13 @@ Public Class SessionManager
 
             Console.WriteLine($"[MOTORE] ▶️ Starting task execution (triggered by SSE connection)")
             Try
-                Dim taskInstance = ConvertRuntimeTaskToTaskInstance(session.RuntimeTask, session.Translations)
+                ' ✅ STATELESS: Carica dialogo dal repository se necessario
+                Dim loadedRuntimeTask = LoadDialogForSession(session)
+                If loadedRuntimeTask Is Nothing Then
+                    Console.WriteLine($"[SessionManager] ⚠️ Cannot start execution: Dialog not found for session {sessionId}")
+                    Return
+                End If
+                Dim taskInstance = ConvertRuntimeTaskToTaskInstance(loadedRuntimeTask, session.ProjectId, session.Locale)
                 session.TaskInstance = taskInstance
                 _storage.SaveTaskSession(session) ' Salva su Redis
 
@@ -656,6 +722,47 @@ Public Class SessionManager
             _storage.DeleteTaskSession(sessionId)
         End SyncLock
     End Sub
+
+    ''' <summary>
+    ''' ✅ STATELESS: Risolve una traduzione dal TranslationRepository
+    ''' Usato da MessageTask per risolvere textKey → testo
+    ''' </summary>
+    ''' <param name="projectId">ID del progetto</param>
+    ''' <param name="locale">Locale (es. "it-IT")</param>
+    ''' <param name="textKey">Chiave di traduzione (GUID)</param>
+    ''' <returns>Testo tradotto o Nothing se non trovato</returns>
+    Public Shared Function ResolveTranslation(projectId As String, locale As String, textKey As String) As String
+        If _translationRepository Is Nothing Then
+            Console.WriteLine($"[SessionManager] ⚠️ TranslationRepository is not initialized")
+            Return Nothing
+        End If
+
+        If String.IsNullOrWhiteSpace(projectId) OrElse String.IsNullOrWhiteSpace(locale) OrElse String.IsNullOrWhiteSpace(textKey) Then
+            Return Nothing
+        End If
+
+        Try
+            Return _translationRepository.GetTranslation(projectId, locale, textKey)
+        Catch ex As Exception
+            Console.WriteLine($"[SessionManager] ❌ Error resolving translation: {ex.Message}")
+            Return Nothing
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' ✅ STATELESS: Estrae tutte le chiavi di traduzione (textKey) dal dialogo compilato
+    ''' Usato per validare che tutte le traduzioni esistano nel TranslationRepository
+    ''' </summary>
+    ''' <param name="runtimeTask">RuntimeTask compilato</param>
+    ''' <returns>Lista di textKey (GUID) usate nel dialogo</returns>
+    Public Shared Function ExtractTextKeysFromRuntimeTask(runtimeTask As Compiler.RuntimeTask) As List(Of String)
+        If runtimeTask Is Nothing Then
+            Return New List(Of String)()
+        End If
+
+        Dim keys = CollectTranslationKeys(runtimeTask)
+        Return keys.ToList()
+    End Function
 
     ''' <summary>
     ''' Raccoglie tutte le chiavi di traduzione usate nel grafo
@@ -746,26 +853,45 @@ Public Class SessionManager
     ''' <summary>
     ''' ✅ Helper: Converte RuntimeTask in TaskInstance per compatibilità con ExecuteTask
     ''' </summary>
-    Private Shared Function ConvertRuntimeTaskToTaskInstance(runtimeTask As Compiler.RuntimeTask, translations As Dictionary(Of String, String)) As TaskEngine.TaskInstance
-        ' ❌ ERRORE BLOCCANTE: traduzioni OBBLIGATORIE
-        If translations Is Nothing OrElse translations.Count = 0 Then
-            Throw New ArgumentException("Translations dictionary cannot be Nothing or empty. TaskInstance requires translations for runtime execution.", NameOf(translations))
+    ''' <summary>
+    ''' ✅ STATELESS: Converte RuntimeTask in TaskInstance (senza traduzioni - risolte da TranslationRepository)
+    ''' </summary>
+    Private Shared Function ConvertRuntimeTaskToTaskInstance(runtimeTask As Compiler.RuntimeTask, projectId As String, locale As String) As TaskEngine.TaskInstance
+        ' ❌ ERRORE BLOCCANTE: parametri OBBLIGATORI
+        If runtimeTask Is Nothing Then
+            Throw New ArgumentNullException(NameOf(runtimeTask), "RuntimeTask cannot be Nothing")
+        End If
+        If String.IsNullOrWhiteSpace(projectId) Then
+            Throw New ArgumentException("ProjectId cannot be null or empty. TaskInstance requires ProjectId for translation lookup.", NameOf(projectId))
+        End If
+        If String.IsNullOrWhiteSpace(locale) Then
+            Throw New ArgumentException("Locale cannot be null or empty. TaskInstance requires Locale for translation lookup.", NameOf(locale))
         End If
 
         ' ✅ FASE 2: Usa ILogger invece di Console.WriteLine (se disponibile, altrimenti fallback)
         If _logger IsNot Nothing Then
             _logger.LogDebug("Converting RuntimeTask to TaskInstance", New With {
                 .runtimeTaskId = runtimeTask.Id,
-                .hasSubTasks = runtimeTask.HasSubTasks()
+                .hasSubTasks = runtimeTask.HasSubTasks(),
+                .projectId = projectId,
+                .locale = locale
             })
         Else
-            Console.WriteLine($"[SESSION] ConvertRuntimeTaskToTaskInstance: runtimeTaskId={runtimeTask.Id}, HasSubTasks={runtimeTask.HasSubTasks()}")
+            Console.WriteLine($"[SESSION] ConvertRuntimeTaskToTaskInstance: runtimeTaskId={runtimeTask.Id}, HasSubTasks={runtimeTask.HasSubTasks()}, ProjectId={projectId}, Locale={locale}")
+        End If
+
+        ' ✅ STATELESS: Crea TranslationResolverAdapter per TaskInstance
+        Dim translationResolver As TaskEngine.Interfaces.ITranslationResolver = Nothing
+        If _translationRepository IsNot Nothing Then
+            translationResolver = New ApiServer.Repositories.TranslationResolverAdapter(_translationRepository)
         End If
 
         Dim taskInstance As New TaskEngine.TaskInstance() With {
             .Id = runtimeTask.Id,
             .Label = "",
-            .Translations = translations, ' ✅ Sempre presente
+            .ProjectId = projectId,  ' ✅ STATELESS: Per lookup traduzioni
+            .Locale = locale,  ' ✅ STATELESS: Per lookup traduzioni
+            .TranslationResolver = translationResolver,  ' ✅ STATELESS: Per risolvere traduzioni
             .IsAggregate = False,
             .Introduction = Nothing,
             .SuccessResponse = Nothing,
