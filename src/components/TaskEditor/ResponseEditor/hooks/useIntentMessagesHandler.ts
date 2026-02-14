@@ -7,6 +7,7 @@ import { getTemplateId } from '@utils/taskHelpers';
 import { TaskType, isUtteranceInterpretationTemplateId } from '@types/taskTypes';
 import type { Task, TaskTree } from '@types/taskTypes';
 import { saveIntentMessagesToTaskTree } from '@responseEditor/utils/saveIntentMessages';
+import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 
 export interface UseIntentMessagesHandlerParams {
   task: Task | null | undefined;
@@ -28,8 +29,18 @@ export function useIntentMessagesHandler(params: UseIntentMessagesHandlerParams)
     replaceSelectedTaskTree,
   } = params;
 
+  // ✅ FASE 1.1: Get addTranslation from context
+  let addTranslation: ((guid: string, text: string) => void) | undefined;
+  try {
+    const { addTranslation: addTranslationFromContext } = useProjectTranslations();
+    addTranslation = addTranslationFromContext;
+  } catch {
+    // Context not available, will use fallback in saveIntentMessagesToTaskTree
+    addTranslation = undefined;
+  }
+
   const handleIntentMessagesComplete = useCallback((messages: any) => {
-    const updatedTaskTree = saveIntentMessagesToTaskTree(taskTree, messages);
+    const updatedTaskTree = saveIntentMessagesToTaskTree(taskTree, messages, addTranslation);
 
     // CRITICO: Salva il DDT nell'istanza IMMEDIATAMENTE quando si completano i messaggi
     // Questo assicura che quando si fa "Save" globale, l'istanza abbia il DDT aggiornato
@@ -76,7 +87,7 @@ export function useIntentMessagesHandler(params: UseIntentMessagesHandlerParams)
     }
 
     // After saving, show normal editor (needsIntentMessages will become false)
-  }, [task, taskTree, currentProjectId, onWizardComplete, replaceSelectedTaskTree]);
+  }, [task, taskTree, currentProjectId, onWizardComplete, replaceSelectedTaskTree, addTranslation]);
 
   return handleIntentMessagesComplete;
 }

@@ -10,6 +10,7 @@ import { taskRepository } from '@services/TaskRepository';
 import { TaskType } from '@types/taskTypes';
 import { buildTaskTree } from '@utils/taskUtils';
 import { WizardMode } from '../types/WizardMode';
+import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 
 // ✅ Helper function for logging plan D
 function findNodeById(nodes: WizardTaskTreeNode[], id: string): WizardTaskTreeNode | null {
@@ -67,6 +68,16 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
     transitionToCompleted,
     onTaskBuilderComplete,
   } = props;
+
+  // ✅ FASE 1.2: Get addTranslation from context (must be at top level, not in callback)
+  let addTranslation: ((guid: string, text: string) => void) | undefined;
+  try {
+    const { addTranslation: addTranslationFromContext } = useProjectTranslations();
+    addTranslation = addTranslationFromContext;
+  } catch {
+    // Context not available, will use fallback in TemplateCreationService
+    addTranslation = undefined;
+  }
 
   const hasCreatedTemplateRef = useRef(false);
 
@@ -136,7 +147,8 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
         messagesToUse,
         constraintsMap,
         nlpContractsMap,
-        shouldBeGeneral
+        shouldBeGeneral,
+        addTranslation
       );
 
 
@@ -192,7 +204,8 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
         templates,
         rootContextualizedMessages,
         taskLabel || 'Task',
-        rowId // ✅ ALWAYS equals row.id (which equals task.id when task exists)
+        rowId, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
+        addTranslation
       );
 
       // 7. Salva istanza nel TaskRepository

@@ -20,6 +20,13 @@ Public Class TaskGroup
     Public Property ExecCondition As Condition
 
     ''' <summary>
+    ''' Indice del task iniziale da eseguire (default 0)
+    ''' ✅ FASE 2.1: HFSM - Livello 1 (macro-stato)
+    ''' </summary>
+    <JsonProperty("startTaskIndex")>
+    Public Property StartTaskIndex As Integer = 0
+
+    ''' <summary>
     ''' Lista di task (righe) da eseguire in sequenza
     ''' ✅ Usa CompiledTaskListConverter per deserializzare le classi polimorfiche
     ''' </summary>

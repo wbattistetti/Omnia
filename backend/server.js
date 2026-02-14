@@ -1604,6 +1604,84 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
       await ecoll.bulkWrite(edgeOps, { ordered: false });
     }
 
+    // ✅ NEW: Cleanup orphan tasks (tasks not referenced by any row in ANY flow)
+    let orphanTasksDeleted = 0;
+    try {
+      // Extract all task IDs from rows in saved nodes (current flow)
+      const referencedTaskIds = new Set();
+      nodes.forEach((n) => {
+        if (n.rows && Array.isArray(n.rows)) {
+          n.rows.forEach((r) => {
+            // row.id is the taskId (unified model: row.id === task.id)
+            if (r.id) {
+              referencedTaskIds.add(r.id);
+            }
+            // Also check row.taskId if present (backward compatibility)
+            if (r.taskId) {
+              referencedTaskIds.add(r.taskId);
+            }
+          });
+        }
+      });
+
+      // ✅ IMPORTANT: Also check all other flows to avoid deleting tasks referenced elsewhere
+      // Note: We're already in the project database, so all nodes belong to this project
+      const allNodesInAllFlows = await ncoll.find({}, { projection: { _id: 0, rows: 1 } }).toArray();
+      allNodesInAllFlows.forEach((n) => {
+        if (n.rows && Array.isArray(n.rows)) {
+          n.rows.forEach((r) => {
+            if (r.id) {
+              referencedTaskIds.add(r.id);
+            }
+            if (r.taskId) {
+              referencedTaskIds.add(r.taskId);
+            }
+          });
+        }
+      });
+
+      // Get all tasks in database for this project
+      const tcoll = db.collection('tasks');
+      const allTasksInDb = await tcoll.find({ projectId: pid }, { projection: { _id: 0, id: 1 } }).toArray();
+      const allTaskIdsInDb = new Set(allTasksInDb.map(t => t.id));
+
+      // Find orphan tasks (tasks in DB but not referenced by any row in ANY flow)
+      const orphanTaskIds = Array.from(allTaskIdsInDb).filter(taskId => !referencedTaskIds.has(taskId));
+
+      // Delete orphan tasks
+      if (orphanTaskIds.length > 0) {
+        const deleteResult = await tcoll.deleteMany({
+          projectId: pid,
+          id: { $in: orphanTaskIds }
+        });
+        orphanTasksDeleted = deleteResult.deletedCount || 0;
+
+        console.log(`[SAVE][backend] 🗑️ Cleanup orphan tasks`, {
+          projectId: pid,
+          flowId,
+          referencedTaskIds: referencedTaskIds.size,
+          totalTasksInDb: allTaskIdsInDb.size,
+          orphanTaskIds: orphanTaskIds.length,
+          deleted: orphanTasksDeleted,
+          orphanTaskIdsList: orphanTaskIds.slice(0, 20) // First 20 for logging
+        });
+      } else {
+        console.log(`[SAVE][backend] ✅ No orphan tasks to cleanup`, {
+          projectId: pid,
+          flowId,
+          referencedTaskIds: referencedTaskIds.size,
+          totalTasksInDb: allTaskIdsInDb.size
+        });
+      }
+    } catch (orphanError) {
+      // Log error but don't fail the entire save operation
+      console.error(`[SAVE][backend] ⚠️ Error during orphan tasks cleanup`, {
+        projectId: pid,
+        flowId,
+        error: orphanError?.message || String(orphanError)
+      });
+    }
+
       // ✅ LOG: Traccia cosa viene salvato nel DB
       console.log(`[SAVE][backend] 💾 Saving to DB`, {
         projectId: pid,
@@ -1612,6 +1690,7 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
         nodesDeletes: nDeletes,
         edgesUpserts: eUpserts,
         edgesDeletes: eDeletes,
+        orphanTasksDeleted: orphanTasksDeleted,
         nodes: nodes.map((n) => ({
           id: n.id,
           label: n.label,
@@ -1629,9 +1708,9 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
         projectId: pid,
         flowId,
         payload: { nodes: nodes.length, edges: edges.length },
-        result: { upserts: { nodes: nUpserts, edges: eUpserts }, deletes: { nodes: nDeletes, edges: eDeletes } }
+        result: { upserts: { nodes: nUpserts, edges: eUpserts }, deletes: { nodes: nDeletes, edges: eDeletes }, orphanTasksDeleted }
       });
-      res.json({ ok: true, nodes: nodes.length, edges: edges.length });
+      res.json({ ok: true, nodes: nodes.length, edges: edges.length, orphanTasksDeleted });
     });
   } catch (e) {
     logError('Flow.put', e, { projectId: pid, flowId, payloadNodes: nodes.length, payloadEdges: edges.length });

@@ -86,7 +86,7 @@ export function useResponseEditorToolbar({
   // ✅ NEW: Get global test panel and context data (MUST be at the top - hooks rule)
   const { isOpen: isGlobalTestPanelOpen, openWithTask, close: closeGlobalTestPanel } = useGlobalTestPanel();
   const editorContext = useResponseEditorContextSafe(); // ✅ Safe hook that returns null if not available
-  const { getTranslations } = useProjectTranslations();
+  const { translations: globalTranslations } = useProjectTranslations();
 
   // ✅ Get task data from props (preferred) or context (fallback)
   const taskTree = taskTreeProp || editorContext?.taskTree;
@@ -179,10 +179,17 @@ export function useResponseEditorToolbar({
       hasTaskTree: !!taskTree,
       hasTaskMeta: !!taskMeta,
       hasCurrentProjectId: !!currentProjectId,
+      isOpening: openingChatRef.current,
     });
 
     // ✅ NEW: Use dockable chat panel if setDockTree is available, otherwise fallback to global test panel
     if (setDockTree) {
+      // Guard against double-opening (React StrictMode in dev)
+      if (openingChatRef.current) {
+        console.log('[Toolbar] 🧪 Already opening chat panel, skipping...');
+        return;
+      }
+
       // Close global test panel if open (to avoid confusion)
       if (isGlobalTestPanelOpen) {
         console.log('[Toolbar] 🧪 Closing global test panel before opening dockable tab');
@@ -199,8 +206,11 @@ export function useResponseEditorToolbar({
         return;
       }
 
-      // Get translations for the current project
-      const translations = getTranslations?.(currentProjectId) || {};
+      // Set guard
+      openingChatRef.current = true;
+
+      // Get translations for the current project (from global context)
+      const translations = globalTranslations || {};
 
       // Convert taskMeta to Task format
       const task = {
@@ -230,11 +240,18 @@ export function useResponseEditorToolbar({
         projectId: currentProjectId,
       });
 
-      setDockTree(prev => openLateralChatPanel(prev, {
-        tabId: chatTabId,
-        newTab: chatTab,
-        position: 'right',
-      }));
+      setDockTree(prev => {
+        const result = openLateralChatPanel(prev, {
+          tabId: chatTabId,
+          newTab: chatTab,
+          position: 'right',
+        });
+        // Reset guard after state update
+        setTimeout(() => {
+          openingChatRef.current = false;
+        }, 100);
+        return result;
+      });
     } else {
       // Fallback to global test panel (for backward compatibility)
       if (isGlobalTestPanelOpen) {
@@ -254,8 +271,8 @@ export function useResponseEditorToolbar({
           return;
         }
 
-        // Get translations for the current project
-        const translations = getTranslations?.(currentProjectId) || {};
+        // Get translations for the current project (from global context)
+        const translations = globalTranslations || {};
 
         // Convert taskMeta to Task format
         const task = {

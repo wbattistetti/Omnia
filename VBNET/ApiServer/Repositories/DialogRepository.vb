@@ -4,6 +4,7 @@ Imports Compiler
 Imports StackExchange.Redis
 Imports Newtonsoft.Json
 Imports System.Collections.Concurrent
+Imports TaskEngine
 
 Namespace ApiServer.Repositories
     ''' <summary>
@@ -85,13 +86,25 @@ Namespace ApiServer.Repositories
 
                 Console.WriteLine($"[DialogRepository] ✅ Dialog found in Redis: {redisKey} (JSON length: {json.ToString().Length} chars)")
 
-                ' ✅ STEP 3: Deserializza RuntimeTask
+                ' ✅ STEP 3: Normalizza JSON (violation → invalid) prima della deserializzazione
+                Dim jsonString = json.ToString()
+                If Not String.IsNullOrWhiteSpace(jsonString) Then
+                    jsonString = System.Text.RegularExpressions.Regex.Replace(
+                        jsonString,
+                        """type""\s*:\s*""violation""",
+                        """type"": ""invalid""",
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                    )
+                End If
+
+                ' ✅ STEP 4: Deserializza RuntimeTask
                 Dim settings As New JsonSerializerSettings With {
                     .TypeNameHandling = TypeNameHandling.Auto,
                     .ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-                    .NullValueHandling = NullValueHandling.Ignore
+                    .NullValueHandling = NullValueHandling.Ignore,
+                    .Converters = New List(Of JsonConverter) From {New ITaskConverter()}
                 }
-                Dim runtimeTask = JsonConvert.DeserializeObject(Of RuntimeTask)(json, settings)
+                Dim runtimeTask = JsonConvert.DeserializeObject(Of RuntimeTask)(jsonString, settings)
 
                 If runtimeTask Is Nothing Then
                     Console.WriteLine($"[DialogRepository] ❌ Failed to deserialize dialog: {projectId}:{version}")

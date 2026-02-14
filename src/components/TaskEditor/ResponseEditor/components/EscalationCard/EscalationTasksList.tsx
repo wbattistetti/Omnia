@@ -9,6 +9,7 @@ import PanelEmptyDropZone from '@responseEditor/PanelEmptyDropZone';
 import { getTaskText, normalizeTaskForEscalation, generateGuid } from '@responseEditor/utils/escalationHelpers';
 import { useTaskEditing } from '@responseEditor/hooks/useTaskEditing';
 import { updateStepEscalations } from '@responseEditor/utils/stepHelpers';
+import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 
 type EscalationTasksListProps = {
   escalation: any;
@@ -36,6 +37,15 @@ export function EscalationTasksList({
   stepKey
 }: EscalationTasksListProps) {
   const { handleEditingChange, isEditing: isEditingRow } = useTaskEditing();
+  // ✅ FASE 2: Get addTranslation from context for updating translations
+  let addTranslation: ((guid: string, text: string) => void) | undefined;
+  try {
+    const { addTranslation: addTranslationFromContext } = useProjectTranslations();
+    addTranslation = addTranslationFromContext;
+  } catch {
+    // Context not available, will log warning in handleEdit
+    addTranslation = undefined;
+  }
   // ✅ NO FALLBACKS: escalation.tasks can be undefined (legitimate default)
   const tasks = escalation.tasks ?? [];
 
@@ -61,18 +71,52 @@ export function EscalationTasksList({
     });
   }, [updateEscalation, escalationIdx, allowedActions, onAutoEditTargetChange]);
 
-  // Handler per modificare task
+  // ✅ FASE 2: Handler per modificare task - aggiorna traduzione invece di task.text
   const handleEdit = React.useCallback((taskIdx: number, newText: string) => {
-    updateEscalation((esc) => {
-      const tasks = [...(esc.tasks ?? [])];
-      tasks[taskIdx] = { ...tasks[taskIdx], text: newText };
-      return { ...esc, tasks };
-    });
+    const task = tasks[taskIdx];
+    if (!task) return;
+
+    // ✅ STEP 1: Estrai textKey dal task
+    const textParam = task.parameters?.find((p: any) => p?.parameterId === 'text');
+    const textKey = textParam?.value;
+
+    if (!textKey) {
+      console.warn('[EscalationTasksList] ⚠️ Task has no textKey, cannot update translation', { taskIdx, task });
+      return;
+    }
+
+    // ✅ STEP 2: Valida che textKey sia un GUID
+    const isGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textKey);
+    if (!isGuid) {
+      console.warn('[EscalationTasksList] ⚠️ textKey is not a GUID, cannot update translation', { textKey, taskIdx, task });
+      return;
+    }
+
+    // ✅ STEP 3: Aggiorna traduzione (NON task.text)
+    if (addTranslation && typeof addTranslation === 'function') {
+      addTranslation(textKey, newText);
+    } else {
+      // Fallback: use window context if available
+      if (typeof window !== 'undefined' && (window as any).__projectTranslationsContext) {
+        const ctx = (window as any).__projectTranslationsContext;
+        if (ctx.addTranslation) {
+          ctx.addTranslation(textKey, newText);
+        } else if (ctx.addTranslations) {
+          ctx.addTranslations({ [textKey]: newText });
+        } else {
+          console.warn('[EscalationTasksList] ⚠️ No translation context available, translation not saved', { textKey, newText: newText.substring(0, 50) });
+        }
+      } else {
+        console.warn('[EscalationTasksList] ⚠️ No translation context available, translation not saved', { textKey, newText: newText.substring(0, 50) });
+      }
+    }
+
+    // ❌ NON modificare task.text - il task deve restare con la chiave GUID
 
     if (autoEditTarget && autoEditTarget.escIdx === escalationIdx && autoEditTarget.taskIdx === taskIdx) {
       onAutoEditTargetChange(null);
     }
-  }, [updateEscalation, escalationIdx, autoEditTarget, onAutoEditTargetChange]);
+  }, [updateEscalation, escalationIdx, autoEditTarget, onAutoEditTargetChange, tasks, addTranslation]);
 
   // Handler per eliminare task
   const handleDelete = React.useCallback((taskIdx: number) => {

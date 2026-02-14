@@ -216,7 +216,8 @@ Public Class FlowCompiler
         Dim result = New FlowCompilationResult() With {
             .TaskGroups = taskGroups,
             .EntryTaskGroupId = entryTaskGroupId,
-            .Tasks = allTasks
+            .Tasks = allTasks,
+            .Edges = If(flow.Edges, New List(Of FlowEdge)()) ' ✅ FASE 2.4: Topologia separata
         }
 
         Console.WriteLine($"✅ [COMPILER][FlowCompiler] Compilation completed: {taskGroups.Count} task groups, {allTasks.Count} tasks")

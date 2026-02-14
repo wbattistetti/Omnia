@@ -1,5 +1,6 @@
 Option Strict On
 Option Explicit On
+Imports System.Linq
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 Imports TaskEngine
@@ -155,6 +156,20 @@ Public Class TaskAssembler
             Next
         End If
 
+        ' ✅ VALIDAZIONE: Verifica congruenza tra Constraints e step Invalid
+        ' Se ci sono Constraints, deve esistere uno step di tipo Invalid
+        ' Se non ci sono Constraints, non deve esistere uno step di tipo Invalid
+        Dim hasConstraints = task.Constraints IsNot Nothing AndAlso task.Constraints.Count > 0
+        Dim hasInvalidStep = task.Steps IsNot Nothing AndAlso task.Steps.Any(Function(s) s.Type = DialogueState.Invalid)
+
+        If hasConstraints AndAlso Not hasInvalidStep Then
+            Throw New InvalidOperationException($"Invalid task model: Node {ideNode.Id} has {task.Constraints.Count} constraint(s) but no step of type 'invalid'. When constraints are present, an 'invalid' step is mandatory to handle validation failures.")
+        End If
+
+        If Not hasConstraints AndAlso hasInvalidStep Then
+            Throw New InvalidOperationException($"Invalid task model: Node {ideNode.Id} has a step of type 'invalid' but no constraints. The 'invalid' step is only needed when constraints are present. Remove the 'invalid' step or add constraints.")
+        End If
+
         ' ✅ DIAG: Verifica dataContract quando arriva a CompileNode
         Console.WriteLine($"[DIAG] TaskAssembler.CompileNode: ideNode.Id={ideNode.Id}, ideNode.DataContract IsNothing={ideNode.DataContract Is Nothing}")
         If ideNode.DataContract IsNot Nothing Then
@@ -289,13 +304,20 @@ Public Class TaskAssembler
     ''' Compila stringa step type in DialogueState enum
     ''' Il compilatore NON fa fallback: se il tipo è invalido, fallisce immediatamente.
     ''' Fallback comportamentali sono gestiti dal motore runtime, non dal compilatore.
+    ''' ✅ NORMALIZZAZIONE: "violation" viene normalizzato a "invalid" per compatibilità con frontend
     ''' </summary>
     Private Function CompileStepType(typeStr As String) As DialogueState
         If String.IsNullOrEmpty(typeStr) Then
             Throw New InvalidOperationException($"Step type cannot be null or empty. This indicates a structural error in the task model. Every DialogueStep must have a valid type.")
         End If
 
-        Select Case typeStr.ToLower()
+        ' ✅ NORMALIZZAZIONE: "violation" → "invalid" (compatibilità con frontend ddt.v2.types.ts)
+        Dim normalizedType = typeStr.ToLower().Trim()
+        If normalizedType = "violation" Then
+            normalizedType = "invalid"
+        End If
+
+        Select Case normalizedType
             Case "start"
                 Return DialogueState.Start
             Case "nomatch"
@@ -306,6 +328,8 @@ Public Class TaskAssembler
                 Return DialogueState.Confirmation
             Case "notconfirmed"
                 Return DialogueState.NotConfirmed
+            Case "invalid"
+                Return DialogueState.Invalid
             Case "success"
                 Return DialogueState.Success
             Case "introduction"
@@ -315,7 +339,7 @@ Public Class TaskAssembler
             Case Else
                 ' ❌ RIMOSSO FALLBACK: Il compilatore NON deve indovinare o correggere errori strutturali
                 ' Se il tipo è sconosciuto, il modello è invalido e deve essere corretto a monte
-                Throw New InvalidOperationException($"Unknown step type '{typeStr}'. Valid types are: start, noMatch, noInput, confirmation, notConfirmed, success, introduction. This indicates a structural error in the task model that must be fixed at the source.")
+                Throw New InvalidOperationException($"Unknown step type '{typeStr}'. Valid types are: start, noMatch, noInput, confirmation, notConfirmed, invalid, violation, success, introduction. Note: 'violation' is automatically normalized to 'invalid'.")
         End Select
     End Function
 

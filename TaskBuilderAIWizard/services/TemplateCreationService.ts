@@ -31,17 +31,43 @@ export function generalizeLabel(label: string): string {
 /**
  * Helper per creare una escalation con un messaggio
  * Allineato con saveIntentMessages.ts per coerenza del modello dati
+ * ✅ FASE 1.2: Genera GUID e salva traduzioni invece di usare testo letterale
  *
  * LOG TRACING:
- * - Input: text (messaggio)
+ * - Input: text (messaggio), addTranslation callback
  * - Output: escalation con task nel formato corretto
  * - Validazione: templateIdToTaskType('sayMessage') deve restituire TaskType.SayMessage
  */
-function createEscalationFromMessage(text: string): any {
+function createEscalationFromMessage(
+  text: string,
+  addTranslation?: (guid: string, text: string) => void
+): any {
+  // ✅ STEP 1: Genera GUID per la chiave di traduzione
+  const textKey = uuidv4();
   const taskId = uuidv4();
   const templateId = 'sayMessage';
 
-  // CRITICAL: NO FALLBACK - type MUST be derived from templateId
+  // ✅ STEP 2: Salva traduzione
+  const addTranslationFn = addTranslation || (() => {
+    // Fallback: use window context if available
+    if (typeof window !== 'undefined' && (window as any).__projectTranslationsContext) {
+      const ctx = (window as any).__projectTranslationsContext;
+      if (ctx.addTranslation) {
+        return ctx.addTranslation;
+      } else if (ctx.addTranslations) {
+        return (guid: string, text: string) => ctx.addTranslations({ [guid]: text });
+      }
+    }
+    return (guid: string, text: string) => {
+      console.warn('[TemplateCreationService] ⚠️ No translation context available, translation not saved:', { guid, text: text.substring(0, 50) });
+    };
+  })();
+
+  if (addTranslationFn && typeof addTranslationFn === 'function') {
+    addTranslationFn(textKey, text);
+  }
+
+  // ✅ STEP 3: Determina taskType
   const taskType = templateIdToTaskType(templateId);
 
   if (taskType === TaskType.UNDEFINED) {
@@ -59,7 +85,7 @@ function createEscalationFromMessage(text: string): any {
         parameters: [
           {
             parameterId: 'text',
-            value: text, // Direct text value
+            value: textKey, // ✅ GUID invece di testo letterale
           },
         ],
       },
@@ -72,17 +98,19 @@ function createEscalationFromMessage(text: string): any {
 /**
  * Helper per creare uno step con escalations
  * Allineato con saveIntentMessages.ts per coerenza del modello dati
+ * ✅ FASE 1.2: Passa addTranslation attraverso la catena
  *
  * LOG TRACING:
- * - Input: stepType, messages[]
+ * - Input: stepType, messages[], addTranslation callback
  * - Output: step con escalations array
  */
 function createStepWithEscalations(
   stepType: string,
-  messages: string[]
+  messages: string[],
+  addTranslation?: (guid: string, text: string) => void
 ): any {
   const escalations = messages.map((msg) => {
-    return createEscalationFromMessage(msg);
+    return createEscalationFromMessage(msg, addTranslation);
   });
 
   const step = {
@@ -98,50 +126,52 @@ function createStepWithEscalations(
  * Dictionary: { "templateId": { "start": { type: "start", escalations: [...] }, ... } }
  *
  * ALLINEATO con saveIntentMessages.ts per coerenza del modello dati
+ * ✅ FASE 1.2: Passa addTranslation attraverso la catena
  *
  * LOG TRACING:
- * - Input: messages (WizardStepMessages), templateId
+ * - Input: messages (WizardStepMessages), templateId, addTranslation callback
  * - Output: steps dictionary con formato corretto
  */
 function convertMessagesToStepsDictionary(
   messages: WizardStepMessages,
-  templateId: string
+  templateId: string,
+  addTranslation?: (guid: string, text: string) => void
 ): Record<string, Record<string, any>> {
   const stepRecord: Record<string, any> = {};
 
   // Ask messages -> start step
   if (messages.ask?.base && messages.ask.base.length > 0) {
-    stepRecord.start = createStepWithEscalations('start', messages.ask.base);
+    stepRecord.start = createStepWithEscalations('start', messages.ask.base, addTranslation);
   }
 
   // Reask messages -> noMatch step
   if (messages.ask?.reask && messages.ask.reask.length > 0) {
-    stepRecord.noMatch = createStepWithEscalations('noMatch', messages.ask.reask);
+    stepRecord.noMatch = createStepWithEscalations('noMatch', messages.ask.reask, addTranslation);
   }
 
   // ✅ FIX: noInput messages -> noInput step (Non ho sentito)
   if (messages.noInput?.base && messages.noInput.base.length > 0) {
-    stepRecord.noInput = createStepWithEscalations('noInput', messages.noInput.base);
+    stepRecord.noInput = createStepWithEscalations('noInput', messages.noInput.base, addTranslation);
   }
 
   // Confirm messages -> confirmation step
   if (messages.confirm?.base && messages.confirm.base.length > 0) {
-    stepRecord.confirmation = createStepWithEscalations('confirmation', messages.confirm.base);
+    stepRecord.confirmation = createStepWithEscalations('confirmation', messages.confirm.base, addTranslation);
   }
 
   // Not confirmed -> notConfirmed step
   if (messages.notConfirmed?.base && messages.notConfirmed.base.length > 0) {
-    stepRecord.notConfirmed = createStepWithEscalations('notConfirmed', messages.notConfirmed.base);
+    stepRecord.notConfirmed = createStepWithEscalations('notConfirmed', messages.notConfirmed.base, addTranslation);
   }
 
   // Violation messages -> violation step
   if (messages.violation?.base && messages.violation.base.length > 0) {
-    stepRecord.violation = createStepWithEscalations('violation', messages.violation.base);
+    stepRecord.violation = createStepWithEscalations('violation', messages.violation.base, addTranslation);
   }
 
   // Success messages -> success step
   if (messages.success?.base && messages.success.base.length > 0) {
-    stepRecord.success = createStepWithEscalations('success', messages.success.base);
+    stepRecord.success = createStepWithEscalations('success', messages.success.base, addTranslation);
   }
 
   const result = { [templateId]: stepRecord };
@@ -170,7 +200,8 @@ export function createTemplatesFromWizardData(
   messagesGeneralized: Map<string, WizardStepMessages>,
   constraintsMap: Map<string, WizardConstraint[]>,
   nlpContractsMap: Map<string, WizardNLPContract>,
-  shouldBeGeneral: boolean = false
+  shouldBeGeneral: boolean = false,
+  addTranslation?: (guid: string, text: string) => void
 ): Map<string, DialogueTask> {
   const templates = new Map<string, DialogueTask>();
 
@@ -227,7 +258,7 @@ export function createTemplatesFromWizardData(
     const messagesToUse = nodeMessages;
 
     // Convert generalized messages to steps dictionary (per-node messages)
-    const steps = convertMessagesToStepsDictionary(messagesToUse, templateId);
+    const steps = convertMessagesToStepsDictionary(messagesToUse, templateId, addTranslation);
 
     // Get constraints and NLP contract for this node
     const constraints = constraintsMap.get(node.id) || [];
@@ -278,45 +309,47 @@ export function createTemplatesFromWizardData(
 /**
  * Converts contextualized messages to steps with escalations
  * ALLINEATO con saveIntentMessages.ts per coerenza del modello dati
+ * ✅ FASE 1.2: Passa addTranslation attraverso la catena
  *
  * LOG TRACING:
- * - Input: messages (WizardStepMessages), templateId
+ * - Input: messages (WizardStepMessages), templateId, addTranslation callback
  * - Output: stepRecord con formato corretto (senza wrapper templateId)
  */
 function convertContextualizedMessagesToSteps(
   messages: WizardStepMessages,
-  templateId: string
+  templateId: string,
+  addTranslation?: (guid: string, text: string) => void
 ): Record<string, any> {
   const stepRecord: Record<string, any> = {};
 
   // Ask messages -> start step
   if (messages.ask?.base && messages.ask.base.length > 0) {
-    stepRecord.start = createStepWithEscalations('start', messages.ask.base);
+    stepRecord.start = createStepWithEscalations('start', messages.ask.base, addTranslation);
   }
 
   // Reask messages -> noMatch step
   if (messages.ask?.reask && messages.ask.reask.length > 0) {
-    stepRecord.noMatch = createStepWithEscalations('noMatch', messages.ask.reask);
+    stepRecord.noMatch = createStepWithEscalations('noMatch', messages.ask.reask, addTranslation);
   }
 
   // Confirm messages -> confirmation step
   if (messages.confirm?.base && messages.confirm.base.length > 0) {
-    stepRecord.confirmation = createStepWithEscalations('confirmation', messages.confirm.base);
+    stepRecord.confirmation = createStepWithEscalations('confirmation', messages.confirm.base, addTranslation);
   }
 
   // Not confirmed -> notConfirmed step
   if (messages.notConfirmed?.base && messages.notConfirmed.base.length > 0) {
-    stepRecord.notConfirmed = createStepWithEscalations('notConfirmed', messages.notConfirmed.base);
+    stepRecord.notConfirmed = createStepWithEscalations('notConfirmed', messages.notConfirmed.base, addTranslation);
   }
 
   // Violation messages -> violation step
   if (messages.violation?.base && messages.violation.base.length > 0) {
-    stepRecord.violation = createStepWithEscalations('violation', messages.violation.base);
+    stepRecord.violation = createStepWithEscalations('violation', messages.violation.base, addTranslation);
   }
 
   // Success messages -> success step
   if (messages.success?.base && messages.success.base.length > 0) {
-    stepRecord.success = createStepWithEscalations('success', messages.success.base);
+    stepRecord.success = createStepWithEscalations('success', messages.success.base, addTranslation);
   }
 
   return stepRecord;
@@ -373,7 +406,8 @@ export function createContextualizedInstance(
   allTemplates: Map<string, DialogueTask>,
   contextualizedMessages: WizardStepMessages,
   taskLabel: string,
-  rowId: string // ✅ ALWAYS equals row.id (which equals task.id when task exists)
+  rowId: string, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
+  addTranslation?: (guid: string, text: string) => void
 ): any {
   // 1. Build nodes from templates (for cloneTemplateSteps)
   const nodes = buildNodesFromTemplates(rootTemplate, allTemplates);
@@ -383,7 +417,7 @@ export function createContextualizedInstance(
 
   // 3. Apply contextualized messages only to root node
   const rootTemplateId = rootTemplate.id || '';
-  const contextualizedRootSteps = convertContextualizedMessagesToSteps(contextualizedMessages, rootTemplateId);
+  const contextualizedRootSteps = convertContextualizedMessagesToSteps(contextualizedMessages, rootTemplateId, addTranslation);
   if (clonedSteps[rootTemplateId]) {
     clonedSteps[rootTemplateId] = contextualizedRootSteps;
   } else {

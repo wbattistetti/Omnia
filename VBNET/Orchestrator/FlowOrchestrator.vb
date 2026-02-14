@@ -153,70 +153,58 @@ Public Class FlowOrchestrator
     End Function
 
     ''' <summary>
-    ''' Trova il prossimo task eseguibile (condizione = true, non ancora eseguito)
+    ''' ✅ FASE 3: Trova il prossimo task eseguibile usando navigazione HFSM
+    ''' Step 1: Trova TaskGroup attivo (usando ExecCondition e CurrentNodeId)
+    ''' Step 2: Esegue task interni in sequenza usando CurrentRowIndex
+    ''' Step 3: Quando finiti i task, passa al nodo successivo usando topologia
     ''' </summary>
     Private Function FindNextExecutableTask() As CompiledTask
         If _compilationResult IsNot Nothing Then
-            Dim taskGroupsToCheck As New List(Of TaskGroup)()
-
-            ' Check entry TaskGroup first if it exists
-            If Not String.IsNullOrEmpty(_entryTaskGroupId) Then
-                Dim matchingTaskGroups = _compilationResult.TaskGroups.Where(Function(tg) tg.NodeId = _entryTaskGroupId).ToList()
-                If matchingTaskGroups.Count = 0 Then
-                    Throw New InvalidOperationException($"Entry TaskGroup with NodeId '{_entryTaskGroupId}' not found in compilation result. The entry TaskGroup must exist.")
-                ElseIf matchingTaskGroups.Count > 1 Then
-                    Throw New InvalidOperationException($"Entry TaskGroup with NodeId '{_entryTaskGroupId}' appears {matchingTaskGroups.Count} times. Each TaskGroup NodeId must be unique.")
-                End If
-                Dim entryTaskGroup = matchingTaskGroups.Single()
-                If Not entryTaskGroup.Executed Then
-                    taskGroupsToCheck.Add(entryTaskGroup)
-                End If
-
-                For Each tg In _compilationResult.TaskGroups
-                    If tg.NodeId <> _entryTaskGroupId Then
-                        taskGroupsToCheck.Add(tg)
-                    End If
-                Next
-            Else
-                taskGroupsToCheck = _compilationResult.TaskGroups
+            ' ✅ STEP 1: Trova TaskGroup attivo
+            Dim currentTaskGroup = GetCurrentTaskGroup()
+            If currentTaskGroup Is Nothing Then
+                Return Nothing
             End If
 
-            ' Find first non-executed TaskGroup with satisfied condition
-            For Each taskGroup In taskGroupsToCheck
-                If Not taskGroup.Executed Then
-                    Dim canExecute As Boolean = True
-                    If taskGroup.ExecCondition IsNot Nothing Then
-                        ' TODO: Evaluate condition using ConditionEvaluator
-                        canExecute = True
-                    End If
+            ' ✅ STEP 2: Esegui task interni in sequenza usando CurrentRowIndex
+            Dim taskIndex = _state.CurrentRowIndex
+            If taskIndex < currentTaskGroup.Tasks.Count Then
+                Dim task = currentTaskGroup.Tasks(taskIndex)
 
-                    If canExecute Then
-                        For Each task In taskGroup.Tasks
-                            If Not _state.ExecutedTaskIds.Contains(task.Id) Then
-                                Dim taskCanExecute As Boolean = True
-                                If task.Condition IsNot Nothing Then
-                                    ' TODO: Evaluate task condition
-                                    taskCanExecute = True
-                                End If
-
-                                If taskCanExecute Then
-                                    Return task
-                                End If
-                            End If
-                        Next
-
-                        taskGroup.Executed = True
-                    End If
+                ' Valuta executionCondition del task (default = True se Nothing)
+                If EvaluateTaskCondition(task) Then
+                    Return task
+                Else
+                    ' Task saltato (condizione non soddisfatta), passa al successivo
+                    _state.CurrentRowIndex += 1
+                    SaveState()
+                    Return FindNextExecutableTask() ' Ricorsione
                 End If
-            Next
+            End If
+
+            ' ✅ STEP 3: Finiti i task, passa al nodo successivo usando topologia
+            currentTaskGroup.Executed = True
+            SaveState()
+
+            Dim nextNodeId = FindNextNodeId(currentTaskGroup.NodeId)
+            If nextNodeId IsNot Nothing Then
+                _state.CurrentNodeId = nextNodeId
+                Dim nextTaskGroup = _compilationResult.TaskGroups.FirstOrDefault(Function(tg) tg.NodeId = nextNodeId)
+                If nextTaskGroup IsNot Nothing Then
+                    _state.CurrentRowIndex = nextTaskGroup.StartTaskIndex
+                    SaveState()
+                    Return FindNextExecutableTask() ' Ricorsione
+                End If
+            End If
+
+            Return Nothing ' Fine esecuzione
         Else
-            ' Fallback: flat list search
+            ' Fallback: flat list search (retrocompatibilità)
             For Each task In _compiledTasks
                 If Not _state.ExecutedTaskIds.Contains(task.Id) Then
                     Dim canExecute As Boolean = True
                     If task.Condition IsNot Nothing Then
-                        ' TODO: Evaluate condition
-                        canExecute = True
+                        canExecute = ConditionEvaluator.EvaluateCondition(task.Condition, _state)
                     End If
 
                     If canExecute Then
@@ -225,6 +213,86 @@ Public Class FlowOrchestrator
                 End If
             Next
         End If
+
+        Return Nothing
+    End Function
+
+    ''' <summary>
+    ''' ✅ FASE 3: Ottiene il TaskGroup corrente (inizializza se necessario)
+    ''' </summary>
+    Private Function GetCurrentTaskGroup() As TaskGroup
+        Dim nodeId = _state.CurrentNodeId
+        If String.IsNullOrEmpty(nodeId) Then
+            ' Inizializza con entry TaskGroup
+            If Not String.IsNullOrEmpty(_entryTaskGroupId) Then
+                nodeId = _entryTaskGroupId
+                _state.CurrentNodeId = nodeId
+                Dim entryTaskGroup = _compilationResult.TaskGroups.FirstOrDefault(Function(tg) tg.NodeId = nodeId)
+                If entryTaskGroup IsNot Nothing Then
+                    _state.CurrentRowIndex = entryTaskGroup.StartTaskIndex
+                    SaveState()
+                    Return entryTaskGroup
+                End If
+            End If
+            Return Nothing
+        End If
+
+        Dim taskGroup = _compilationResult.TaskGroups.FirstOrDefault(Function(tg) tg.NodeId = nodeId)
+        If taskGroup Is Nothing Then
+            Return Nothing
+        End If
+
+        ' Valuta ExecCondition del TaskGroup
+        If taskGroup.Executed Then
+            Return Nothing ' TaskGroup già eseguito
+        End If
+
+        Dim canExecute As Boolean = True
+        If taskGroup.ExecCondition IsNot Nothing Then
+            canExecute = ConditionEvaluator.EvaluateCondition(taskGroup.ExecCondition, _state)
+        End If
+
+        If Not canExecute Then
+            Return Nothing ' Condizione non soddisfatta
+        End If
+
+        Return taskGroup
+    End Function
+
+    ''' <summary>
+    ''' ✅ FASE 3: Valuta executionCondition del task (default = True)
+    ''' </summary>
+    Private Function EvaluateTaskCondition(task As CompiledTask) As Boolean
+        If task.Condition Is Nothing Then
+            Return True ' ✅ Default = True
+        End If
+
+        Return ConditionEvaluator.EvaluateCondition(task.Condition, _state)
+    End Function
+
+    ''' <summary>
+    ''' ✅ FASE 3: Trova il prossimo nodo usando topologia (Edges)
+    ''' </summary>
+    Private Function FindNextNodeId(currentNodeId As String) As String
+        If _compilationResult.Edges Is Nothing Then
+            Return Nothing
+        End If
+
+        ' Trova link uscenti dal nodo corrente
+        Dim outgoingLinks = _compilationResult.Edges.Where(Function(e) e.Source = currentNodeId).ToList()
+
+        ' Trova primo link con condizione soddisfatta
+        For Each link In outgoingLinks
+            Dim canFollow As Boolean = True
+            If link.Data IsNot Nothing AndAlso Not String.IsNullOrEmpty(link.Data.Condition) Then
+                ' TODO: Valuta condizione del link (per ora sempre True)
+                canFollow = True
+            End If
+
+            If canFollow Then
+                Return link.Target
+            End If
+        Next
 
         Return Nothing
     End Function

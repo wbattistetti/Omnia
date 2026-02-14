@@ -6,12 +6,33 @@ import { TaskType, templateIdToTaskType } from '@types/taskTypes';
  * Converte IntentMessages in formato TaskTree steps e li salva nel TaskTree
  * ✅ AGGIORNATO: Usa steps a root level (non più nodes[0].steps)
  * ✅ AGGIORNATO: Non crea più kind: 'intent' - tutto è DataRequest
+ * ✅ FASE 1.1: Genera GUID e salva traduzioni invece di usare testo letterale
  */
-export function saveIntentMessagesToTaskTree(taskTree: any, messages: IntentMessages): any {
+export function saveIntentMessagesToTaskTree(
+  taskTree: any,
+  messages: IntentMessages,
+  addTranslation?: (guid: string, text: string) => void
+): any {
   if (!taskTree || !messages) {
     console.warn('[saveIntentMessagesToTaskTree] Missing taskTree or messages');
     return taskTree;
   }
+
+  // ✅ Get addTranslation from context if not provided
+  const addTranslationFn = addTranslation || (() => {
+    // Fallback: use window context if available
+    if (typeof window !== 'undefined' && (window as any).__projectTranslationsContext) {
+      const ctx = (window as any).__projectTranslationsContext;
+      if (ctx.addTranslation) {
+        return ctx.addTranslation;
+      } else if (ctx.addTranslations) {
+        return (guid: string, text: string) => ctx.addTranslations({ [guid]: text });
+      }
+    }
+    return (guid: string, text: string) => {
+      console.warn('[saveIntentMessagesToTaskTree] ⚠️ No translation context available, translation not saved:', { guid, text: text.substring(0, 50) });
+    };
+  })();
 
   // Crea una copia del TaskTree
   const updated = JSON.parse(JSON.stringify(taskTree));
@@ -42,12 +63,19 @@ export function saveIntentMessagesToTaskTree(taskTree: any, messages: IntentMess
     updated.steps[firstMainId] = {};
   }
 
-  // Helper per creare una escalation con un messaggio
+  // ✅ FASE 1.1: Helper per creare una escalation con un messaggio (GUID → traduzione)
   const createEscalation = (text: string): any => {
+    // ✅ STEP 1: Genera GUID per la chiave di traduzione
+    const textKey = uuidv4();
     const taskId = uuidv4();
     const templateId = 'sayMessage';
 
-    // ✅ CRITICAL: NO FALLBACK - type MUST be derived from templateId
+    // ✅ STEP 2: Salva traduzione
+    if (addTranslationFn && typeof addTranslationFn === 'function') {
+      addTranslationFn(textKey, text);
+    }
+
+    // ✅ STEP 3: Determina taskType
     const taskType = templateIdToTaskType(templateId);
     if (taskType === TaskType.UNDEFINED) {
       throw new Error(`[saveIntentMessagesToTaskTree] Cannot determine task type from templateId '${templateId}'. This is a bug in task creation.`);
@@ -63,7 +91,7 @@ export function saveIntentMessagesToTaskTree(taskTree: any, messages: IntentMess
           parameters: [
             {
               parameterId: 'text',
-              value: text, // Direct text value (no textKey per semplicità iniziale)
+              value: textKey, // ✅ GUID invece di testo letterale
             },
           ],
         }

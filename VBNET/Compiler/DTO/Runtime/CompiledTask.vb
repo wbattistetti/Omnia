@@ -33,6 +33,12 @@ Public MustInherit Class CompiledTask
     ''' </summary>
     Public MustOverride ReadOnly Property TaskType As TaskTypes
 
+    ''' <summary>
+    ''' Indica se il task richiede input dall'utente
+    ''' ✅ FASE 2.2: HFSM - Livello 2 (micro-step)
+    ''' </summary>
+    Public MustOverride ReadOnly Property RequiresInput As Boolean
+
     Public Sub New()
         State = TaskState.UnExecuted
     End Sub
@@ -45,13 +51,21 @@ Public Class CompiledSayMessageTask
     Inherits CompiledTask
 
     ''' <summary>
-    ''' Testo del messaggio da inviare
+    ''' Chiave di traduzione (GUID) per il messaggio da inviare
+    ''' Il testo viene risolto a runtime tramite TranslationRepository
     ''' </summary>
-    Public Property Text As String
+    <Newtonsoft.Json.JsonProperty("text")>
+    Public Property TextKey As String
 
     Public Overrides ReadOnly Property TaskType As TaskTypes
         Get
             Return TaskTypes.SayMessage
+        End Get
+    End Property
+
+    Public Overrides ReadOnly Property RequiresInput As Boolean
+        Get
+            Return False ' SayMessage non richiede input
         End Get
     End Property
 End Class
@@ -90,6 +104,12 @@ Public Class CompiledUtteranceTask
     Public Overrides ReadOnly Property TaskType As TaskTypes
         Get
             Return TaskTypes.UtteranceInterpretation
+        End Get
+    End Property
+
+    Public Overrides ReadOnly Property RequiresInput As Boolean
+        Get
+            Return True ' UtteranceInterpretation richiede input
         End Get
     End Property
 
@@ -132,6 +152,12 @@ Public Class CompiledClassifyProblemTask
         End Get
     End Property
 
+    Public Overrides ReadOnly Property RequiresInput As Boolean
+        Get
+            Return True ' ClassifyProblem richiede input
+        End Get
+    End Property
+
     Public Sub New()
         MyBase.New()
         Intents = New List(Of String)()
@@ -165,6 +191,12 @@ Public Class CompiledBackendCallTask
         End Get
     End Property
 
+    Public Overrides ReadOnly Property RequiresInput As Boolean
+        Get
+            Return False ' BackendCall non richiede input utente
+        End Get
+    End Property
+
     Public Sub New()
         MyBase.New()
         Payload = New Dictionary(Of String, Object)()
@@ -180,6 +212,12 @@ Public Class CompiledCloseSessionTask
     Public Overrides ReadOnly Property TaskType As TaskTypes
         Get
             Return TaskTypes.CloseSession
+        End Get
+    End Property
+
+    Public Overrides ReadOnly Property RequiresInput As Boolean
+        Get
+            Return False ' CloseSession non richiede input
         End Get
     End Property
 End Class
@@ -198,6 +236,12 @@ Public Class CompiledTransferTask
     Public Overrides ReadOnly Property TaskType As TaskTypes
         Get
             Return TaskTypes.Transfer
+        End Get
+    End Property
+
+    Public Overrides ReadOnly Property RequiresInput As Boolean
+        Get
+            Return False ' Transfer non richiede input
         End Get
     End Property
 End Class

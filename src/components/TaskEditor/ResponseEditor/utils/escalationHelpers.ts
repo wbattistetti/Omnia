@@ -21,12 +21,11 @@ export function getTaskText(
   // 🔍 DEBUG: Log per capire cosa succede
   const debugEnabled = typeof localStorage !== 'undefined' && localStorage.getItem('debug.getTaskText') === '1';
 
-  // Se ha text diretto, usalo
-  if (task.text && typeof task.text === 'string' && task.text.trim().length > 0) {
-    return task.text;
-  }
+  // ✅ FASE 3: Rimuovere fallback task.text - il task deve contenere solo GUID
+  // ❌ RIMOSSO: Se ha text diretto, usalo
+  // Il modello corretto è: task contiene solo GUID, traduzione in translations
 
-  // Altrimenti cerca textKey nei parameters
+  // Cerca textKey nei parameters
   const textKeyParam = task.parameters?.find((p: any) => p?.parameterId === 'text');
   const textKey = textKeyParam?.value;
 

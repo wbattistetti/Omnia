@@ -10,11 +10,6 @@ export function extractTranslations(ddt: any, translations?: any): Record<string
     const isFlat = !translations.en && !translations.it && !translations.pt;
     if (isFlat) {
       // It's already filtered by locale, use it directly
-      console.log('[DDTAdapter][extractTranslations] ✅ Using flat translations dictionary from global table', {
-        keysCount: Object.keys(translations).length,
-        sampleKeys: Object.keys(translations).slice(0, 5),
-        sampleValues: Object.entries(translations).slice(0, 3).map(([k, v]) => ({ key: k, value: String(v).substring(0, 30) }))
-      });
       return translations as Record<string, string>;
     }
 
@@ -28,11 +23,6 @@ export function extractTranslations(ddt: any, translations?: any): Record<string
     })();
 
     const localeTranslations = translations[projectLang] || translations.en || {};
-    console.log('[DDTAdapter][extractTranslations] ✅ Using multilingual translations for locale', {
-      projectLang,
-      keysCount: Object.keys(localeTranslations).length,
-      sampleKeys: Object.keys(localeTranslations).slice(0, 5)
-    });
     return localeTranslations as Record<string, string>;
   }
 
@@ -82,91 +72,35 @@ export const getEscalationActions = getEscalationTasks;
 
 export function resolveTaskText(task: any, dict: Record<string, string>): string | undefined {
   if (!task) {
-    console.warn('[DEBUG][RESOLVE_TASK] ❌ Task is null/undefined');
     return undefined;
   }
 
-  // Priority: task.text (edited text in DDT instance) > dict[key] (old translation values)
-  if (task.text && typeof task.text === 'string' && task.text.trim().length > 0) {
-    console.log('[DEBUG][RESOLVE_TASK] ✅ Using task.text directly', {
-      text: task.text.substring(0, 50),
-      textLength: task.text.length
-    });
-    return task.text;
-  }
-
-  console.log('[DEBUG][RESOLVE_TASK] 🔍 Resolving from dict', {
-    templateId: task.templateId,
-    taskId: task.id,
-    hasParameters: !!task.parameters,
-    parametersCount: task.parameters?.length ?? 0,
-    parameters: task.parameters?.map((p: any) => ({
-      parameterId: p.parameterId,
-      key: p.key,
-      value: p.value,
-      valueType: typeof p.value,
-      isGuid: p.value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(p.value)
-    })) ?? [],
-    dictKeysCount: Object.keys(dict).length,
-    sampleDictKeys: Object.keys(dict).slice(0, 10)
-  });
+  // ✅ FASE 3: Rimuovere fallback task.text - il task deve contenere solo GUID
+  // ❌ RIMOSSO: Priority: task.text (edited text in DDT instance) > dict[key] (translation)
+  // Il modello corretto è: task contiene solo GUID, traduzione in dict
 
   const p = Array.isArray(task.parameters) ? task.parameters.find((x: any) => (x?.parameterId || x?.key) === 'text') : undefined;
   const key = p?.value;
 
-  console.log('[DEBUG][RESOLVE_TASK] 🔍 Text parameter found', {
-    hasParam: !!p,
-    param: p ? {
-      parameterId: p.parameterId,
-      key: p.key,
-      value: p.value
-    } : null,
-    key,
-    keyType: typeof key,
-    isGuid: key && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key)
-  });
+  if (!key) {
+    return undefined;
+  }
 
-  if (key) {
-    const isGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key);
-    const found = dict[key];
+  // ✅ LOG: Chiave trovata
+  console.log('[Translation] 🔑 Key found:', key);
 
-    console.log('[DEBUG][RESOLVE_TASK] 🔍 Looking up in dict', {
+  const found = dict[key];
+
+  if (found) {
+    // ✅ LOG: Traduzione trovata
+    console.log('[Translation] ✅ Translation found:', {
       key,
-      isGuid,
-      keyInDict: key in dict,
-      found: found ? found.substring(0, 50) : undefined,
-      dictKeysCount: Object.keys(dict).length,
-      allGuidsInDict: Object.keys(dict).filter(k => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)),
-      sampleDictKeys: Object.keys(dict).slice(0, 10),
-      keyMatches: Object.keys(dict).filter(k => k === key)
+      text: found.substring(0, 100) + (found.length > 100 ? '...' : '')
     });
-
-    if (found) {
-      console.log('[DEBUG][RESOLVE_TASK] ✅ Translation found', {
-        key,
-        value: found.substring(0, 50),
-        isGuid
-      });
-      return found;
-    } else {
-      console.warn('[DEBUG][RESOLVE_TASK] ❌ Translation NOT found', {
-        key,
-        isGuid,
-        taskId: task.id,
-        dictKeysCount: Object.keys(dict).length,
-        keyInDict: key in dict,
-        allGuidsInDict: Object.keys(dict).filter(k => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)),
-        sampleDictKeys: Object.keys(dict).slice(0, 10),
-        taskIdInDict: task.id ? (task.id in dict) : false
-      });
-    }
+    return found;
   } else {
-    console.warn('[DEBUG][RESOLVE_TASK] ❌ No key found in parameters', {
-      templateId: task.templateId,
-      taskId: task.id,
-      hasParameters: !!task.parameters,
-      parameters: task.parameters
-    });
+    // ✅ LOG: Traduzione NON trovata (solo warning, non verbose)
+    console.warn('[Translation] ❌ NOT FOUND:', key);
   }
 
   return undefined;

@@ -7,6 +7,8 @@ import { getStepColor } from '@responseEditor/ChatSimulator/chatSimulatorUtils';
 import { useFontContext } from '@context/FontContext';
 import { useMessageEditing } from '@responseEditor/ChatSimulator/hooks/useMessageEditing';
 import DialogueTaskService from '@services/DialogueTaskService';
+import { v4 as uuidv4 } from 'uuid';
+import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 
 export default function DDEBubbleChat({
   task,
@@ -36,6 +38,7 @@ export default function DDEBubbleChat({
   const [sessionId, setSessionId] = React.useState<string | null>(null);
   const [backendError, setBackendError] = React.useState<string | null>(null);
   const [isWaitingForInput, setIsWaitingForInput] = React.useState(false);
+  const [resetCounter, setResetCounter] = React.useState(0); // ✅ Counter per forzare riavvio dopo reset
   const eventSourceRef = React.useRef<EventSource | null>(null);
   const sentTextRef = React.useRef<string>('');
   const sessionStartingRef = React.useRef<boolean>(false);
@@ -418,23 +421,115 @@ export default function DDEBubbleChat({
         // Costruiamo RuntimeTask dal TaskTree (workaround temporaneo)
         console.log('[DDEBubbleChat] 📋 STEP 2.3: Building RuntimeTask from TaskTree...');
 
+        // ✅ FASE 2: Funzione per sanitizzare testi letterali → GUID
+        const GUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const sanitizeSteps = (steps: any): any => {
+          if (!steps) return steps;
+
+          const sanitized = Array.isArray(steps) ? [...steps] : { ...steps };
+
+          // Itera attraverso steps (può essere dictionary o array)
+          const stepsEntries = Array.isArray(sanitized)
+            ? sanitized.map((s, idx) => [idx.toString(), s])
+            : Object.entries(sanitized);
+
+          stepsEntries.forEach(([stepKey, step]: [string, any]) => {
+            if (!step || !step.escalations) return;
+
+            const escalations = Array.isArray(step.escalations) ? step.escalations : [step.escalations];
+
+            escalations.forEach((esc: any) => {
+              if (!esc || !esc.tasks) return;
+
+              const taskItems = Array.isArray(esc.tasks) ? esc.tasks : [esc.tasks];
+
+              taskItems.forEach((taskItem: any) => {
+                if (!taskItem || !taskItem.parameters) return;
+
+                const textParam = taskItem.parameters.find((p: any) =>
+                  (p.parameterId === 'text' || p.key === 'text')
+                );
+
+                if (!textParam || !textParam.value) return;
+
+                const value = String(textParam.value);
+                const isGUID = GUID_REGEX.test(value);
+
+                // ✅ Se non è un GUID, convertilo
+                if (!isGUID && value.trim().length > 0) {
+                  const newGuid = uuidv4();
+                  textParam.value = newGuid;
+
+                  // ✅ Salva traduzione
+                  const addTranslationFn = addTranslation || (() => {
+                    if (typeof window !== 'undefined' && (window as any).__projectTranslationsContext) {
+                      const ctx = (window as any).__projectTranslationsContext;
+                      if (ctx.addTranslation) {
+                        return ctx.addTranslation;
+                      } else if (ctx.addTranslations) {
+                        return (guid: string, text: string) => ctx.addTranslations({ [guid]: text });
+                      }
+                    }
+                    return (guid: string, text: string) => {
+                      console.warn('[DDEBubbleChat] ⚠️ No translation context, literal text converted but not saved:', { guid, text: text.substring(0, 50) });
+                    };
+                  })();
+
+                  if (addTranslationFn && typeof addTranslationFn === 'function') {
+                    addTranslationFn(newGuid, value);
+                    console.log('[DDEBubbleChat] ✅ Converted literal text to GUID:', {
+                      oldText: value.substring(0, 50) + (value.length > 50 ? '...' : ''),
+                      newGuid
+                    });
+                  }
+                }
+              });
+            });
+          });
+
+          return sanitized;
+        };
+
         // Funzione ricorsiva per convertire TaskTreeNode in RuntimeTask
         const buildRuntimeTaskFromNode = (node: any, stepsDict: Record<string, any>): any => {
           // Estrai steps per questo nodo dal dictionary steps
           // steps è: { "templateId": { "start": {...}, "noMatch": {...} } }
           const nodeSteps = stepsDict[node.templateId] || stepsDict[node.id] || {};
 
+          // ✅ NORMALIZZAZIONE: Funzione helper per normalizzare step type (violation → invalid)
+          const normalizeStepType = (stepType: string): string => {
+            return stepType === 'violation' ? 'invalid' : stepType;
+          };
+
           // Converti steps dictionary in array di DialogueStep
           // Ogni step ha: { id, textKey, type, ... }
           const stepsArray: any[] = [];
-          if (nodeSteps.start) stepsArray.push(nodeSteps.start);
-          if (nodeSteps.noMatch) stepsArray.push(nodeSteps.noMatch);
-          if (nodeSteps.success) stepsArray.push(nodeSteps.success);
-          if (nodeSteps.failure) stepsArray.push(nodeSteps.failure);
-          // Aggiungi altri step se presenti
+
+          // Helper per aggiungere step normalizzato
+          const addStep = (stepKey: string, step: any) => {
+            if (step) {
+              const normalizedKey = normalizeStepType(stepKey);
+              const normalizedStep = {
+                ...step,
+                type: step.type ? normalizeStepType(step.type) : normalizedKey
+              };
+              // Evita duplicati
+              if (!stepsArray.some(s => s.type === normalizedStep.type)) {
+                stepsArray.push(normalizedStep);
+              }
+            }
+          };
+
+          // Aggiungi step standard
+          addStep('start', nodeSteps.start);
+          addStep('noMatch', nodeSteps.noMatch);
+          addStep('success', nodeSteps.success);
+          addStep('failure', nodeSteps.failure);
+
+          // Aggiungi altri step se presenti (incluso violation che verrà normalizzato)
           Object.keys(nodeSteps).forEach(key => {
             if (!['start', 'noMatch', 'success', 'failure'].includes(key)) {
-              stepsArray.push(nodeSteps[key]);
+              addStep(key, nodeSteps[key]);
             }
           });
 
@@ -457,13 +552,16 @@ export default function DDEBubbleChat({
           return runtimeTask;
         };
 
+        // ✅ FASE 2: Sanitizza steps prima di costruire RuntimeTask (converte testi letterali → GUID)
+        const sanitizedSteps = sanitizeSteps(taskTree.steps);
+
         // Costruisci RuntimeTask dal root node del TaskTree
         const rootNode = taskTree.nodes?.[0];
         if (!rootNode) {
           throw new Error('[DDEBubbleChat] TaskTree must have at least one node');
         }
 
-        const runtimeTask = buildRuntimeTaskFromNode(rootNode, taskTree.steps || {});
+        const runtimeTask = buildRuntimeTaskFromNode(rootNode, sanitizedSteps || {});
         // Imposta l'ID del root task
         runtimeTask.id = task.id;
 
@@ -494,12 +592,25 @@ export default function DDEBubbleChat({
           throw new Error(`Failed to save dialog: ${saveResponse.statusText} - ${errorText}`);
         }
 
-        const saveResult = await saveResponse.json();
-        console.log('[DDEBubbleChat] 📋 Dialog saved:', {
-          success: saveResult.success,
-          projectId: saveResult.projectId,
-          dialogVersion: saveResult.dialogVersion
-        });
+        // ✅ Check if response has content before parsing JSON
+        const saveResponseText = await saveResponse.text();
+        if (!saveResponseText || saveResponseText.trim().length === 0) {
+          console.warn('[DDEBubbleChat] ⚠️ Empty response from save dialog endpoint, assuming success');
+          // Assume success if response is empty (backend might return 200 with no body)
+        } else {
+          try {
+            const saveResult = JSON.parse(saveResponseText);
+            console.log('[DDEBubbleChat] 📋 Dialog saved:', {
+              success: saveResult.success,
+              projectId: saveResult.projectId,
+              dialogVersion: saveResult.dialogVersion
+            });
+          } catch (jsonError) {
+            console.error('[DDEBubbleChat] ❌ Failed to parse save response JSON:', jsonError);
+            console.error('[DDEBubbleChat] Response text:', saveResponseText.substring(0, 200));
+            // Continue anyway - the save might have succeeded even if response parsing failed
+          }
+        }
 
         // ✅ STATELESS: STEP 3: Avvia la sessione
         console.log('[DDEBubbleChat] 📋 STEP 3: Starting session...', {
@@ -568,7 +679,6 @@ export default function DDEBubbleChat({
         eventSource.addEventListener('message', (e: MessageEvent) => {
           try {
             const msg = JSON.parse(e.data);
-            console.log('[MOTORE] 💬 Message received:', msg.text || msg.message || '');
 
             // Only add message if it has actual text from backend
             const messageText = msg.text || msg.message || '';
@@ -579,6 +689,13 @@ export default function DDEBubbleChat({
             // Determine message type from backend data
             const stepType = msg.stepType || 'ask';
             const textKey = msg.textKey || msg.key;
+
+            // ✅ LOG: Messaggio mostrato in chat
+            console.log('[Chat] 💬 Message displayed:', {
+              text: messageText.substring(0, 100) + (messageText.length > 100 ? '...' : ''),
+              stepType,
+              textKey: textKey || 'N/A'
+            });
 
             // ❌ ONLY backend can determine messages - frontend just displays them
             setMessages((m) => [...m, {
@@ -627,6 +744,12 @@ export default function DDEBubbleChat({
             // ❌ Only add message if backend explicitly sends a message in the result
             // Do NOT generate frontend messages like "✅ Dati raccolti con successo!"
             if (result.success && result.message) {
+              // ✅ LOG: Messaggio di completamento mostrato in chat
+              console.log('[Chat] 💬 Completion message displayed:', {
+                text: result.message.substring(0, 100) + (result.message.length > 100 ? '...' : ''),
+                stepType: 'success'
+              });
+
               setMessages((m) => [...m, {
                 id: generateMessageId('bot'),
                 type: 'bot',
@@ -698,7 +821,7 @@ export default function DDEBubbleChat({
         }).catch(() => { });
       }
     };
-  }, [task?.id, projectId, mode]); // ✅ Added mode dependency
+  }, [task?.id, projectId, mode, resetCounter]); // ✅ Added resetCounter to trigger restart on reset
 
   // Clear input when sent text appears as a user message
   React.useEffect(() => {
@@ -733,6 +856,11 @@ export default function DDEBubbleChat({
 
     try {
       console.log('[MOTORE] 📤 Sending input:', trimmed);
+
+      // ✅ LOG: Messaggio utente mostrato in chat
+      console.log('[Chat] 💬 User message displayed:', {
+        text: trimmed.substring(0, 100) + (trimmed.length > 100 ? '...' : '')
+      });
 
       // Add user message immediately
       setMessages((prev) => [...prev, {
@@ -775,12 +903,21 @@ export default function DDEBubbleChat({
 
   // Reset function - restart session with same task
   const handleReset = () => {
+    // Close existing SSE connection
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+
+    // Delete session on backend
     if (sessionId) {
       const baseUrl = 'http://localhost:5000';
       fetch(`${baseUrl}/api/runtime/task/session/${sessionId}`, {
         method: 'DELETE'
       }).catch(() => { });
     }
+
+    // Reset all state
     setMessages([]);
     messageIdCounter.current = 0;
     setBackendError(null);
@@ -788,7 +925,14 @@ export default function DDEBubbleChat({
     sentTextRef.current = '';
     setSessionId(null);
 
-    // Session will be restarted automatically by useEffect when sessionId becomes null
+    // ✅ CRITICAL: Reset refs to allow useEffect to restart session
+    sessionStartingRef.current = false;
+    lastSessionKeyRef.current = null; // Reset to allow new session start
+
+    // ✅ CRITICAL: Increment reset counter to trigger useEffect re-run
+    setResetCounter(prev => prev + 1);
+
+    // Session will be restarted automatically by useEffect when resetCounter changes
   };
 
   return (

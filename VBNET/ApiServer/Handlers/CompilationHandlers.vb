@@ -5,6 +5,7 @@ Imports ApiServer.Models
 Imports Compiler
 Imports Microsoft.AspNetCore.Http
 Imports Newtonsoft.Json
+Imports TaskEngine
 
 Namespace ApiServer.Handlers
     ''' <summary>
@@ -639,13 +640,25 @@ Namespace ApiServer.Handlers
                     Return Results.BadRequest(New With {.error = "runtimeTask is required"})
                 End If
 
+                ' ✅ NORMALIZZAZIONE: Sostituisci "violation" con "invalid" nel JSON prima della deserializzazione
+                ' Gestisce sia "type": "violation" che "type":"violation" (con/senza spazi)
+                If Not String.IsNullOrWhiteSpace(runtimeTaskJson) Then
+                    runtimeTaskJson = System.Text.RegularExpressions.Regex.Replace(
+                        runtimeTaskJson,
+                        """type""\s*:\s*""violation""",
+                        """type"": ""invalid""",
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                    )
+                End If
+
                 ' Deserialize RuntimeTask
                 Dim runtimeTask As Compiler.RuntimeTask = Nothing
                 Try
                     Dim settings As New JsonSerializerSettings With {
                         .TypeNameHandling = TypeNameHandling.Auto,
                         .ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-                        .NullValueHandling = NullValueHandling.Ignore
+                        .NullValueHandling = NullValueHandling.Ignore,
+                        .Converters = New List(Of JsonConverter) From {New ITaskConverter()}
                     }
                     runtimeTask = JsonConvert.DeserializeObject(Of Compiler.RuntimeTask)(runtimeTaskJson, settings)
                 Catch ex As Exception

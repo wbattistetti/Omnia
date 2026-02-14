@@ -27,9 +27,17 @@ Public Class FlowCompilationResult
     <JsonConverter(GetType(CompiledTaskListConverter))>
     Public Property Tasks As List(Of CompiledTask)
 
+    ''' <summary>
+    ''' Topologia del flow (link tra nodi)
+    ''' ✅ FASE 2.4: HFSM - Topologia separata (non dentro TaskGroup)
+    ''' </summary>
+    <JsonProperty("edges")>
+    Public Property Edges As List(Of FlowEdge)
+
     Public Sub New()
         TaskGroups = New List(Of TaskGroup)()
         Tasks = New List(Of CompiledTask)()
+        Edges = New List(Of FlowEdge)()
     End Sub
 End Class
 

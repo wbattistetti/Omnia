@@ -15,15 +15,20 @@ Public Class SayMessageTaskExecutor
     Public Overrides Function Execute(task As CompiledTask, state As ExecutionState) As TaskExecutionResult
         Dim sayMessageTask = DirectCast(task, CompiledSayMessageTask)
 
-        If String.IsNullOrEmpty(sayMessageTask.Text) Then
+        ' ✅ FASE 1.1: Usa TextKey invece di Text
+        ' NOTA: La risoluzione TextKey → testo deve essere fatta a livello superiore
+        ' (tramite TranslationResolver) prima di chiamare questo executor
+        If String.IsNullOrEmpty(sayMessageTask.TextKey) Then
             Return New TaskExecutionResult() With {
                 .Success = False,
-                .Err = "Message text is empty"
+                .Err = "Message TextKey is empty"
             }
         End If
 
+        ' ✅ TODO: Risolvere TextKey → testo usando TranslationResolver
+        ' Per ora, passa TextKey al callback (il livello superiore deve risolvere)
         If _messageCallback IsNot Nothing Then
-            _messageCallback(sayMessageTask.Text, "SayMessage", 0)
+            _messageCallback(sayMessageTask.TextKey, "SayMessage", 0)
         End If
 
         Return New TaskExecutionResult() With {

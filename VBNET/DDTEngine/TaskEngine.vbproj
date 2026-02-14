@@ -15,6 +15,10 @@
     <Optimize>false</Optimize>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
   <!-- Includi esplicitamente tutti i file nell'ordine corretto -->
   <ItemGroup>
     <!-- Interfaces (DEVE essere prima di Models che li usano) -->
@@ -30,6 +34,8 @@
     <Compile Include="Models\Tasks\MessageTask.vb" />
     <Compile Include="Models\Tasks\CloseSessionTask.vb" />
     <Compile Include="Models\Tasks\TransferTask.vb" />
+    <!-- Converters (dopo Tasks perché li usa) -->
+    <Compile Include="Models\Converters\ITaskConverter.vb" />
     <Compile Include="Models\Response.vb" />
     <Compile Include="Models\Escalation.vb" />
     <Compile Include="Models\DialogueStep.vb" />

@@ -37,78 +37,41 @@ export function getEscalationActions(node: any, stepType: string, level: number)
 }
 
 export function resolveActionText(action: any, dict: Record<string, string>): string | undefined {
-  console.log('[DDTAdapter][resolveActionText] 🔍 Starting resolution', {
-    hasAction: !!action,
-    actionId: action?.templateId || action?.actionId,  // ✅ Support both
-    actionInstanceId: action?.taskId || action?.actionInstanceId,  // ✅ Support both
-    hasActionText: !!action?.text,
-    actionText: action?.text ? String(action.text).substring(0, 50) : undefined,
-    hasDict: !!dict,
-    dictKeysCount: dict ? Object.keys(dict).length : 0,
-    sampleDictKeys: dict ? Object.keys(dict).slice(0, 5) : [],
-    hasParameters: !!action?.parameters,
-    parametersCount: action?.parameters ? action.parameters.length : 0
-  });
-
   if (!action) {
-    console.warn('[DDTAdapter][resolveActionText] ❌ Action is null/undefined');
     return undefined;
   }
 
-  // Priority: action.text (edited text in DDT instance) > dict[key] (old translation values) > direct value
-  // This ensures Chat Simulator uses the same source of truth as StepEditor
+  // Priority: action.text (edited text in DDT instance) > dict[key] (translation) > direct value
   if (action.text && typeof action.text === 'string' && action.text.trim().length > 0) {
-    console.log('[DDTAdapter][resolveActionText] ✅ Using action.text directly', {
-      text: action.text.substring(0, 50),
-      textLength: action.text.length
-    });
+    console.log('[Translation] ✅ Using direct text:', action.text.substring(0, 100) + (action.text.length > 100 ? '...' : ''));
     return action.text;
   }
 
   const p = Array.isArray(action.parameters) ? action.parameters.find((x: any) => (x?.parameterId || x?.key) === 'text') : undefined;
   if (!p) {
-    console.warn('[DDTAdapter][resolveActionText] ❌ No text parameter found', {
-      hasParameters: !!action.parameters,
-      parameters: action.parameters
-    });
     return undefined;
   }
 
   const key = p?.value;
   if (!key) {
-    console.warn('[DDTAdapter][resolveActionText] ❌ No key found in text parameter', {
-      parameter: p
-    });
     return undefined;
   }
 
-  console.log('[DDTAdapter][resolveActionText] 🔍 Looking up key in dict', {
-    key,
-    keyType: typeof key,
-    isGuid: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key),
-    keyInDict: key in (dict || {}),
-    dictKeysCount: dict ? Object.keys(dict).length : 0,
-    allDictKeys: dict ? Object.keys(dict) : [],
-    matchingKeys: dict ? Object.keys(dict).filter(k => k === key) : [],
-    found: dict ? dict[key] : undefined,
-    foundValue: dict && dict[key] ? String(dict[key]).substring(0, 50) : undefined
-  });
+  // ✅ LOG: Chiave trovata
+  console.log('[Translation] 🔑 Key found:', key);
 
   // Try as translation key first
   if (dict && dict[key]) {
-    console.log('[DDTAdapter][resolveActionText] ✅ Translation found in dict', {
+    // ✅ LOG: Traduzione trovata
+    console.log('[Translation] ✅ Translation found:', {
       key,
-      value: String(dict[key]).substring(0, 50)
+      text: String(dict[key]).substring(0, 100) + (String(dict[key]).length > 100 ? '...' : '')
     });
     return dict[key];
   }
 
-  console.warn('[DDTAdapter][resolveActionText] ❌ Translation NOT found in dict', {
-    key,
-    dictKeysCount: dict ? Object.keys(dict).length : 0,
-    keyInDict: dict ? (key in dict) : false,
-    allDictKeys: dict ? Object.keys(dict) : []
-  });
+  // ✅ LOG: Traduzione NON trovata (solo warning, non verbose)
+  console.warn('[Translation] ❌ NOT FOUND:', key);
 
   // If not found in dict, try as direct text value
   // A key is usually a short identifier like "start.1" or "ask.base"
