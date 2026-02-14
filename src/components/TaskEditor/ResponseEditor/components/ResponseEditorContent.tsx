@@ -136,6 +136,7 @@ export function ResponseEditorContent({
             taskTree={taskTreeFromStore}
             taskLabel={taskLabel || ''}
             templateId={templateId}
+            task={taskMeta as any} // ✅ Pass task completo per AdaptTaskTreePromptToContext
             onComplete={onTaskContextualizationComplete}
             onCancel={onTaskBuilderCancel}
           />

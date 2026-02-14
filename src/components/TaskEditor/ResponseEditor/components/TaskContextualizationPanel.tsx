@@ -3,12 +3,14 @@
 
 import React, { useState, useEffect } from 'react';
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
-import type { TaskTree } from '@types/taskTypes';
+import type { TaskTree, Task } from '@types/taskTypes';
+import { AdaptTaskTreePromptToContext } from '@utils/taskTreePromptAdapter';
 
 export interface TaskContextualizationPanelProps {
   taskTree: TaskTree | null;
   taskLabel: string;
   templateId: string;
+  task: Task | null; // ✅ NEW: Task completo necessario per AdaptTaskTreePromptToContext
   onComplete: (contextualizedTaskTree: TaskTree) => void;
   onCancel?: () => void;
   onAbort?: () => void;
@@ -22,6 +24,7 @@ export function TaskContextualizationPanel({
   taskTree,
   taskLabel,
   templateId,
+  task,
   onComplete,
   onCancel,
   onAbort,
@@ -32,40 +35,78 @@ export function TaskContextualizationPanel({
   const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   useEffect(() => {
-    if (!taskTree) return;
+    if (!taskTree || !task) return;
 
     // Create abort controller for cancellation
     const controller = new AbortController();
     setAbortController(controller);
 
-    // Simulate contextualization process
+    // ✅ REAL: Chiama AdaptTaskTreePromptToContext per adattare i prompt
     const contextualizeMessages = async () => {
       try {
+        setCurrentStep('Caricamento template e traduzioni...');
+        setProgress(10);
+
+        // ✅ STEP 1: Ricarica il task dal repository per assicurarsi che abbia gli steps clonati
+        // buildTaskTree clona gli steps e li salva nel repository, ma il task passato come prop
+        // potrebbe non essere aggiornato
+        const { taskRepository } = await import('@services/TaskRepository');
+        const updatedTask = taskRepository.getTask(task.id);
+
+        if (!updatedTask) {
+          console.error('[TaskContextualizationPanel] ❌ Task non trovato nel repository', { taskId: task.id });
+          setStatus('error');
+          setCurrentStep('Errore: Task non trovato');
+          return;
+        }
+
+        // ✅ STEP 2: Verifica che il task abbia steps (devono essere stati clonati da buildTaskTree)
+        if (!updatedTask.steps || Object.keys(updatedTask.steps).length === 0) {
+          console.warn('[TaskContextualizationPanel] ⚠️ Task senza steps, niente da adattare', {
+            taskId: updatedTask.id,
+            hasSteps: !!updatedTask.steps,
+            stepsKeys: updatedTask.steps ? Object.keys(updatedTask.steps) : []
+          });
+          setStatus('completed');
+          setProgress(100);
+          setCurrentStep('Nessun prompt da adattare');
+          setTimeout(() => {
+            onComplete(taskTree);
+          }, 500);
+          return;
+        }
+
+        console.log('[TaskContextualizationPanel] ✅ Task caricato con steps', {
+          taskId: updatedTask.id,
+          stepsCount: Object.keys(updatedTask.steps).length,
+          stepsKeys: Object.keys(updatedTask.steps)
+        });
+
         setCurrentStep('Personalizzazione messaggi root...');
-        setProgress(20);
+        setProgress(30);
 
-        // ✅ MOCK: Simulate API call with delay
-        // TODO: Replace with real API call: POST /api/tasks/contextualize-messages
-        // The API should take template and node label
-        // and transform generic prompts into contextualized prompts
-        await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
-        setProgress(40);
+        // ✅ STEP 3: Chiama AdaptTaskTreePromptToContext con il task aggiornato
+        // Questa funzione modifica updatedTask.steps in-place e salva le traduzioni adattate
+        await AdaptTaskTreePromptToContext(updatedTask, taskLabel, false); // false = solo nodi radice
 
+        setProgress(70);
         setCurrentStep('Adattamento messaggi per il contesto...');
-        await new Promise(resolve => setTimeout(resolve, 500));
-        setProgress(60);
 
-        setCurrentStep('Personalizzazione step di dialogo...');
-        await new Promise(resolve => setTimeout(resolve, 500));
-        setProgress(80);
+        // ✅ STEP 4: Ricarica il task dal repository dopo l'adattamento
+        // AdaptTaskTreePromptToContext modifica in-place, ma dobbiamo assicurarci che sia salvato
+        const finalTask = taskRepository.getTask(updatedTask.id);
 
-        // ✅ MOCK: Create contextualized TaskTree
-        // In real implementation, this would come from the API
-        // For now, we just return the same taskTree (it will be contextualized by backend later)
+        if (!finalTask || !finalTask.steps) {
+          console.error('[TaskContextualizationPanel] ❌ Task senza steps dopo adattamento', { taskId: updatedTask.id });
+          setStatus('error');
+          setCurrentStep('Errore: Steps non trovati dopo adattamento');
+          return;
+        }
+
+        // ✅ STEP 5: Costruisci TaskTree aggiornato con gli steps modificati
         const contextualizedTaskTree: TaskTree = {
           ...taskTree,
-          // In real implementation, steps would be contextualized here
-          // For now, we keep the same structure
+          steps: finalTask.steps, // ✅ Steps modificati in-place da AdaptTaskTreePromptToContext
         };
 
         setProgress(100);
@@ -84,9 +125,9 @@ export function TaskContextualizationPanel({
           }
           return;
         }
-        console.error('[TaskContextualizationPanel] Error:', error);
+        console.error('[TaskContextualizationPanel] ❌ Errore durante contestualizzazione:', error);
         setStatus('error');
-        setCurrentStep('Errore durante la contestualizzazione');
+        setCurrentStep(`Errore: ${error.message || 'Errore durante la contestualizzazione'}`);
       }
     };
 
@@ -98,7 +139,7 @@ export function TaskContextualizationPanel({
         controller.abort();
       }
     };
-  }, [taskTree, taskLabel, templateId, onComplete, onAbort]);
+  }, [taskTree, taskLabel, templateId, task, onComplete, onAbort]);
 
   const handleCancel = () => {
     if (abortController) {

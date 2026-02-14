@@ -484,6 +484,33 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
         throw new Error(`[cloneEscalationWithNewTaskIds] Template task ${task.id || 'unknown'} is missing required field 'templateId' (must be explicitly null for standalone tasks, or a GUID if derived from another template). The template is corrupted and must be fixed in the database. Task structure: ${JSON.stringify(task, null, 2)}`);
       }
 
+      // ✅ STEP 1: Clona i parametri e genera nuovi GUID per i parametri "text"
+      const clonedParameters = (task.parameters || []).map((param: any) => {
+        // ✅ Se è il parametro "text" e contiene un GUID, genera un nuovo GUID
+        if (param.parameterId === 'text' && param.value) {
+          const textValue = String(param.value);
+          // ✅ Verifica se è un GUID (formato UUID v4)
+          const GUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          if (GUID_REGEX.test(textValue)) {
+            // ✅ È un GUID del template, genera un nuovo GUID per l'istanza
+            const newTextGuid = uuidv4();
+            guidMapping.set(textValue, newTextGuid); // ✅ Aggiungi mapping per copiare traduzioni
+            return {
+              ...param,
+              value: newTextGuid // ✅ Sostituisci con nuovo GUID
+            };
+          }
+          // ❌ Se non è un GUID, è testo letterale (errore nel template)
+          // Mantieni il valore originale ma logga un warning
+          console.warn('[cloneEscalationWithNewTaskIds] ⚠️ Template parameter "text" contains literal text instead of GUID', {
+            taskId: task.id,
+            parameterValue: textValue.substring(0, 50) + (textValue.length > 50 ? '...' : '')
+          });
+        }
+        // ✅ Per tutti gli altri parametri, mantieni il valore originale
+        return param;
+      });
+
       return {
         ...task,
         id: newGuid,  // ✅ New ID for task instance
@@ -491,7 +518,7 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
         templateId: task.templateId,  // ✅ NO FALLBACK - must be present in template (can be null)
         templateTaskId: oldGuid || null,  // ✅ Save original template task ID
         edited: false,  // ✅ Mark as not edited (inherited from template)
-        // Keep params, text, etc. from original
+        parameters: clonedParameters, // ✅ Parametri clonati con nuovi GUID per "text"
       };
     })
     // ❌ RIMOSSO: actions - legacy field, non più necessario

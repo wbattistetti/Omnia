@@ -2,6 +2,7 @@ import type { Task } from '../types/taskTypes';
 import { extractStartPrompts } from './ddtPromptExtractor';
 import { buildTaskTreeNodes } from './taskUtils';
 import { DialogueTaskService } from '../services/DialogueTaskService';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * ============================================================================
@@ -294,30 +295,42 @@ export async function AdaptTaskTreePromptToContext(
       adaptedCount: data.adaptedTexts.length
     });
 
-    // ✅ Crea mappa GUID -> testo adattato
+    // ✅ STEP 1: Genera nuovi GUID per ogni prompt adattato
+    // Mappa: oldGuid (template) -> newGuid (instance)
+    const guidMapping = new Map<string, string>();
+    // Mappa: newGuid -> testo adattato (per salvare traduzioni)
     const adaptedTranslations: Record<string, string> = {};
+
     promptsToAdapt.forEach((p, idx) => {
-      adaptedTranslations[p.guid] = data.adaptedTexts[idx];
+      const oldGuid = p.guid; // GUID del template
+      const newGuid = uuidv4(); // Nuovo GUID per l'istanza
+      guidMapping.set(oldGuid, newGuid);
+      adaptedTranslations[newGuid] = data.adaptedTexts[idx]; // Testo adattato con nuovo GUID
     });
 
-    console.log('[🔍 AdaptTaskTreePromptToContext] Riassociazione prompt', {
-      adaptedCount: Object.keys(adaptedTranslations).length,
-      guids: Object.keys(adaptedTranslations)
+    console.log('[🔍 AdaptTaskTreePromptToContext] GUID mapping creato', {
+      promptsCount: promptsToAdapt.length,
+      guidMappings: Array.from(guidMapping.entries()).map(([old, newGuid]) => ({
+        oldGuid: old,
+        newGuid: newGuid
+      }))
     });
 
-    // ✅ 1. Aggiorna task.steps in-place con i nuovi prompt adattati
+    // ✅ STEP 2: Aggiorna task.steps in-place sostituendo i vecchi GUID con i nuovi GUID
     Object.values(task.steps).forEach((nodeSteps: any) => {
       const startStep = nodeSteps?.start || nodeSteps?.normal;
       if (startStep?.escalations?.[0]?.tasks) {
         startStep.escalations[0].tasks.forEach((t: any) => {
           const textParam = t.parameters?.find((p: any) => p.parameterId === 'text');
-          const textGuid = textParam?.value || t.taskId || t.id;
+          const oldGuid = textParam?.value || t.taskId || t.id;
 
-          // ✅ Se questo GUID ha un prompt adattato, aggiorna il parametro text
-          if (textGuid && adaptedTranslations[textGuid]) {
-            // ✅ Aggiorna il valore del parametro text direttamente in task.steps
+          // ✅ Se questo GUID ha un mapping (è un prompt adattato), sostituisci con nuovo GUID
+          if (oldGuid && guidMapping.has(oldGuid)) {
+            const newGuid = guidMapping.get(oldGuid)!;
+
+            // ✅ Sostituisci il vecchio GUID con il nuovo GUID nel parametro
             if (textParam) {
-              textParam.value = adaptedTranslations[textGuid];
+              textParam.value = newGuid; // ✅ NUOVO GUID, non il testo!
             } else {
               // Se non esiste il parametro, crealo
               if (!t.parameters) {
@@ -325,7 +338,7 @@ export async function AdaptTaskTreePromptToContext(
               }
               t.parameters.push({
                 parameterId: 'text',
-                value: adaptedTranslations[textGuid]
+                value: newGuid // ✅ NUOVO GUID, non il testo!
               });
             }
           }
@@ -333,17 +346,19 @@ export async function AdaptTaskTreePromptToContext(
       }
     });
 
-    console.log('[🔍 AdaptTaskTreePromptToContext] ✅ task.steps aggiornato in-place', {
+    console.log('[🔍 AdaptTaskTreePromptToContext] ✅ task.steps aggiornato in-place con nuovi GUID', {
       taskId: task.id,
-      promptsUpdated: Object.keys(adaptedTranslations).length
+      promptsUpdated: guidMapping.size,
+      oldGuids: Array.from(guidMapping.keys()),
+      newGuids: Array.from(guidMapping.values())
     });
 
-    // ✅ 2. Aggiungi traduzioni al ProjectTranslationsContext in memoria (NO salvataggio DB)
+    // ✅ STEP 3: Salva traduzioni adattate con i nuovi GUID
     if (typeof window !== 'undefined' && (window as any).__projectTranslationsContext) {
       (window as any).__projectTranslationsContext.addTranslations(adaptedTranslations);
       console.log('[🔍 AdaptTaskTreePromptToContext] ✅ Traduzioni aggiunte al context (in memoria)', {
         count: Object.keys(adaptedTranslations).length,
-        guids: Object.keys(adaptedTranslations),
+        newGuids: Object.keys(adaptedTranslations),
         sampleTexts: Object.entries(adaptedTranslations).slice(0, 3).map(([guid, text]) => ({
           guid,
           textPreview: text.substring(0, 50) + '...'
