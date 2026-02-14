@@ -386,38 +386,15 @@ Namespace ApiServer.Handlers
                     Console.Out.Flush()
                 End If
 
-                If translationsValue Is Nothing OrElse translationsValue.Count = 0 Then
-                    Console.WriteLine($"🔵 [HandleTaskSessionStart] Translations empty, returning error")
+                ' ✅ PERMISSIVE: Allow empty translations dictionary - use empty dict as default
+                ' Translations will be resolved at runtime from the TaskTree textKey if needed
+                If translationsValue Is Nothing Then
+                    translationsValue = New Dictionary(Of String, String)()
+                    Console.WriteLine($"🔵 [HandleTaskSessionStart] ⚠️ Translations was Nothing, using empty dictionary")
                     Console.Out.Flush()
-
-                    ' ✅ ADD: Log taskTree structure to understand what was sent
-                    If taskTreeForLog IsNot Nothing Then
-                        Try
-                            Dim taskTreeJson = Newtonsoft.Json.JsonConvert.SerializeObject(taskTreeForLog)
-                            Dim previewLength = Math.Min(500, taskTreeJson.Length)
-                            Console.WriteLine($"🔵 [HandleTaskSessionStart] TaskTree structure (first {previewLength} chars): {taskTreeJson.Substring(0, previewLength)}")
-                            Console.Out.Flush()
-
-                            ' Also log taskTree.steps keys if present
-                            Dim taskTreeObj = TryCast(taskTreeForLog, Newtonsoft.Json.Linq.JObject)
-                            If taskTreeObj IsNot Nothing AndAlso taskTreeObj("steps") IsNot Nothing Then
-                                Dim stepsObj = TryCast(taskTreeObj("steps"), Newtonsoft.Json.Linq.JObject)
-                                If stepsObj IsNot Nothing Then
-                                    Dim stepsKeys = stepsObj.Properties().Select(Function(p) p.Name).ToList()
-                                    Console.WriteLine($"🔵 [HandleTaskSessionStart] TaskTree.steps keys: {String.Join(", ", stepsKeys)}")
-                                    Console.Out.Flush()
-                                End If
-                            End If
-                        Catch ex As Exception
-                            Console.WriteLine($"🔵 [HandleTaskSessionStart] Could not serialize TaskTree: {ex.Message}")
-                            Console.Out.Flush()
-                        End Try
-                    End If
-
-                    Return ResponseHelpers.CreateErrorResponse(
-                        "Translations dictionary is required and cannot be empty. The session cannot start without translations.",
-                        400
-                    )
+                ElseIf translationsValue.Count = 0 Then
+                    Console.WriteLine($"🔵 [HandleTaskSessionStart] ⚠️ Translations dictionary is empty, continuing with empty dict (translations will be resolved from TaskTree textKey at runtime)")
+                    Console.Out.Flush()
                 End If
 
                 Dim compiledTask As Compiler.CompiledUtteranceTask = Nothing

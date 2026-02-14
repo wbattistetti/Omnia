@@ -38,57 +38,49 @@ export default function RegexInlineEditor({
   onButtonRender,
   onErrorRender,
 }: RegexInlineEditorProps) {
-  console.log('[RegexEditor] 🎬 Component mounted/updated, onRegexSave:', !!onRegexSave, typeof onRegexSave);
-
   // ========== ALGORITMO UTENTE: START ==========
-  const [lastTextboxText, setLastTextboxText] = useState(regex || '');
-  const [textboxText, setTextboxText] = useState(regex || '');
+  // ✅ Inizializza solo una volta con il valore iniziale
+  const [lastTextboxText, setLastTextboxText] = useState(() => regex || '');
+  const [textboxText, setTextboxText] = useState(() => regex || '');
 
   // ✅ CRITICAL: Use ref to preserve value during cleanup (prevents loss when component re-renders)
   const textboxTextRef = useRef<string>(regex || '');
   const onRegexSaveRef = useRef<((regex: string) => void) | undefined>(onRegexSave);
   // ✅ CRITICAL: Separate ref that NEVER gets reset (preserves AI-generated value even when regex prop becomes empty)
   const preservedValueRef = useRef<string>(regex || '');
+  // ✅ Track previous regex prop to avoid unnecessary updates
+  const prevRegexRef = useRef<string>(regex || '');
 
-  // Keep refs in sync
+  // Keep refs in sync (senza log eccessivi)
   useEffect(() => {
     textboxTextRef.current = textboxText;
     // ✅ Always update preservedValueRef when textboxText changes (but never reset it to empty)
     if (textboxText && textboxText.trim()) {
       preservedValueRef.current = textboxText;
-      console.log('[RegexEditor] 📝 preservedValueRef updated:', preservedValueRef.current);
     }
   }, [textboxText]);
 
   useEffect(() => {
-    console.log('[RegexEditor] 🔄 onRegexSave prop changed:', !!onRegexSave, typeof onRegexSave);
     onRegexSaveRef.current = onRegexSave;
-    console.log('[RegexEditor] ✅ onRegexSaveRef.current updated:', !!onRegexSaveRef.current);
   }, [onRegexSave]);
 
-  // Sync quando cambia nodo (contract.regex.value cambia)
+  // ✅ Sync quando cambia nodo (contract.regex.value cambia) - solo se realmente cambiato
   useEffect(() => {
-    console.log('[RegexEditor] 🔄 Regex prop changed:', regex);
-    const newValue = regex || '';
-    setLastTextboxText(newValue);
-    setTextboxText(newValue);
-    textboxTextRef.current = newValue; // ✅ Update ref too
-    // ✅ Only update preservedValueRef if newValue is not empty (don't reset it)
-    if (newValue && newValue.trim()) {
-      preservedValueRef.current = newValue;
+    const currentRegex = regex || '';
+    // ✅ Evita aggiornamenti inutili se il valore non è cambiato
+    if (currentRegex === prevRegexRef.current) {
+      return;
     }
-    console.log('[RegexEditor] ✅ Ref updated, textboxTextRef.current:', textboxTextRef.current, 'preservedValueRef.current:', preservedValueRef.current);
+
+    prevRegexRef.current = currentRegex;
+    setLastTextboxText(currentRegex);
+    setTextboxText(currentRegex);
+    textboxTextRef.current = currentRegex;
+    // ✅ Only update preservedValueRef if newValue is not empty (don't reset it)
+    if (currentRegex && currentRegex.trim()) {
+      preservedValueRef.current = currentRegex;
+    }
   }, [regex]);
-
-  // Debug: log quando textboxText cambia
-  useEffect(() => {
-    console.log('[RegexEditor] 📊 textboxText state changed:', textboxText);
-  }, [textboxText]);
-
-  // Debug: log quando lastTextboxText cambia
-  useEffect(() => {
-    console.log('[RegexEditor] 📊 lastTextboxText state changed:', lastTextboxText);
-  }, [lastTextboxText]);
 
   // Pulsante appare se diversi
   const showButton = textboxText !== lastTextboxText;
@@ -259,16 +251,23 @@ export default function RegexInlineEditor({
   const PLACEHOLDER_TEXT = "scrivi l'espressione regolare che ti serve";
   const editorRef = useRef<any>(null);
 
+  // ✅ Memoize editor value per evitare re-render inutili
+  // ✅ Mostra placeholder solo se textboxText è vuoto E non c'è un valore preservato
+  const editorValue = React.useMemo(() => {
+    // Se c'è un valore (anche vuoto ma non undefined), usalo
+    // Altrimenti mostra placeholder solo se non c'è nulla
+    return textboxText || (preservedValueRef.current || PLACEHOLDER_TEXT);
+  }, [textboxText]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <EditorPanel
         ref={editorRef}
-        code={textboxText || PLACEHOLDER_TEXT}
+        code={editorValue}
         language="regex"
         customLanguage={{ id: 'regex', tokenizer: { root: [] } } as CustomLanguage}
         onChange={(value) => {
           if (value && value !== PLACEHOLDER_TEXT) {
-            console.log('[RegexEditor] 📝 Textbox changed:', value);
             setTextboxText(value);
           }
         }}
