@@ -338,7 +338,7 @@ export default function RecognitionEditor({
   // ✅ Usa direttamente localContract come contract (non serve creare nuovo oggetto)
   const contract = localContract;
 
-  // ✅ FASE 3: Stato locale per regex (non salvato durante digitazione)
+  // ✅ Stato locale per regex (non salvato durante digitazione)
   const contractItem = activeEditor && contract ? contract.contracts?.find((c: any) => {
     const getContractTypeFromEditorType = (editorType: string): string => {
       if (editorType === 'extractor') return 'rules';
@@ -348,13 +348,7 @@ export default function RecognitionEditor({
     return c.type === expectedContractType;
   }) : null;
 
-  const savedRegexValue = contractItem?.patterns?.[0] ?? '';
-  const [localRegexValue, setLocalRegexValue] = useState(savedRegexValue);
-
-  // ✅ Sync localRegexValue when savedRegexValue changes externally
-  useEffect(() => {
-    setLocalRegexValue(savedRegexValue);
-  }, [savedRegexValue]);
+  const officialRegexValue = contractItem?.patterns?.[0] ?? '';
 
   // Helper: confronta contract con template
   const hasContractChanged = useCallback((nodeTemplateId: string, modifiedContract: DataContract | null): boolean => {
@@ -377,6 +371,13 @@ export default function RecognitionEditor({
 
   // Handle contract changes - traccia modifiche ma NON mostra dialog subito
   const handleContractChange = useCallback((updatedContract: DataContract | null, skipAutoSave: boolean = false) => {
+    console.log('[RecognitionEditor][handleContractChange] 🚀 START', {
+      hasNode: !!editorProps?.node,
+      nodeTemplateId: editorProps?.node?.templateId,
+      skipAutoSave,
+      updatedContractRegex: updatedContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0],
+    });
+
     const node = editorProps?.node;
     if (!node || !node.templateId) {
       console.warn('[RecognitionEditor][handleContractChange] ❌ No node or templateId available');
@@ -385,19 +386,27 @@ export default function RecognitionEditor({
 
     const nodeTemplateId = node.templateId;
     const regexPattern = updatedContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+    console.log('[RecognitionEditor][handleContractChange] 📊 Regex pattern extracted:', regexPattern);
 
     // ✅ Confronta con template
     const changed = hasContractChanged(nodeTemplateId, updatedContract);
+    console.log('[RecognitionEditor][handleContractChange] 📊 Contract changed:', changed);
 
     if (changed) {
       // ✅ AGGIORNA TEMPLATE IN MEMORIA (così quando riapri vedi le modifiche)
       const template = DialogueTaskService.getTemplate(nodeTemplateId);
+      console.log('[RecognitionEditor][handleContractChange] 📝 Template found:', !!template);
       if (template) {
         template.dataContract = updatedContract
           ? JSON.parse(JSON.stringify(updatedContract))
           : null;
+        console.log('[RecognitionEditor][handleContractChange] ✅ Template dataContract updated:', {
+          hasContract: !!template.dataContract,
+          regexInContract: template.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0],
+        });
         // ✅ Marca template come modificato per salvataggio futuro
         DialogueTaskService.markTemplateAsModified(nodeTemplateId);
+        console.log('[RecognitionEditor][handleContractChange] ✅ Template marked as modified');
       }
 
       // ✅ Contract modificato: traccia ma NON mostra dialog
@@ -468,6 +477,37 @@ export default function RecognitionEditor({
     };
   }, [hasUnsavedContractChanges, modifiedContract, editorProps?.node]);
 
+  // ✅ CRITICAL: Create stable handleRegexSave callback that doesn't depend on activeEditor
+  // This ensures onRegexSave is always available even when editor is closing
+  const handleRegexSave = useCallback((newRegex: string) => {
+    console.log('[RecognitionEditor] 💾 handleRegexSave called with regex:', newRegex);
+    console.log('[RecognitionEditor] Current contract:', contract);
+    if (!contract) {
+      console.warn('[RecognitionEditor] ⚠️ No contract available, cannot save regex');
+      return;
+    }
+    const regexContract = contract.contracts?.find((c: any) => c.type === 'regex');
+    if (regexContract) {
+      console.log('[RecognitionEditor] 📝 Updating existing regex contract');
+      const updatedContracts = contract.contracts.map((c: any) =>
+        c.type === 'regex' ? { ...c, patterns: [newRegex] } : c
+      );
+      const updatedContract = { ...contract, contracts: updatedContracts };
+      console.log('[RecognitionEditor] 📝 Updated contract:', updatedContract);
+      handleContractChange(updatedContract, false);
+    } else {
+      console.log('[RecognitionEditor] 📝 Creating new regex contract');
+      const newContracts = [...(contract.contracts || []), {
+        type: 'regex',
+        patterns: [newRegex]
+      }];
+      const updatedContract = { ...contract, contracts: newContracts };
+      console.log('[RecognitionEditor] 📝 New contract:', updatedContract);
+      handleContractChange(updatedContract, false);
+    }
+    console.log('[RecognitionEditor] ✅ handleContractChange called');
+  }, [contract, handleContractChange]); // ✅ Stable: depends only on contract and handleContractChange, NOT on activeEditor
+
   // Build dynamic editorProps based on activeEditor and contract
   // IMPORTANT: Include contract in dependencies to update when contract changes
   const dynamicEditorProps = useMemo(() => {
@@ -501,15 +541,16 @@ export default function RecognitionEditor({
       examplesList,
       rowResults,
       // ✅ REMOVED: getNote prop - now managed via Zustand store
+      // ✅ CRITICAL: Always pass onRegexSave so it's available even when editor is closing
+      onRegexSave: handleRegexSave,
     };
 
     switch (activeEditor) {
       case 'regex':
         return {
           ...baseProps,
-          regex: savedRegexValue, // ✅ CORREZIONE CRITICA: regex ufficiale (savedRegexValue), NON localRegexValue
-          setRegex: setLocalRegexValue, // ✅ Solo aggiorna locale (non salva)
-          // ✅ FASE 3: Rimuoviamo onSaveRegex - non serve più
+          regex: officialRegexValue,
+          // ✅ onRegexSave already in baseProps, no need to duplicate
         };
       case 'extractor':
         // ExtractorInlineEditor gestisce extractorCode internamente, ma potremmo sincronizzarlo
@@ -562,7 +603,7 @@ export default function RecognitionEditor({
     }
     // Include contract in dependencies to update when contract changes
     // handleContractChange creates a new object, so this won't cause infinite loops
-  }, [activeEditor, contract]);
+  }, [activeEditor, contract, handleRegexSave, officialRegexValue, editorProps, examplesList, rowResults]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
