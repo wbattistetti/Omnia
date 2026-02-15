@@ -152,6 +152,15 @@ export class DialogueTaskService {
     const normalizedId = String(id).trim();
     const normalizedIdLower = normalizedId.toLowerCase();
 
+    // ✅ DEBUG: Log search details
+    console.log('[DialogueTaskService] 🔍 Searching template', {
+      searchedId: normalizedId,
+      searchedIdType: typeof id,
+      searchedIdLength: normalizedId.length,
+      cacheSize: this.cache.length,
+      cacheLoaded: this.cacheLoaded
+    });
+
     // Cerca nella cache
     const found = this.cache.find(t => {
       // ✅ Confronta _id (supporta ObjectId come oggetto o stringa)
@@ -165,10 +174,14 @@ export class DialogueTaskService {
           if (tId.toLowerCase() === normalizedIdLower) return true;
         }
       }
-      // Confronta altri campi - case-insensitive per name e label
-      if (t.id && String(t.id).trim().toLowerCase() === normalizedIdLower) return true;
-      if (t.name && String(t.name).trim().toLowerCase() === normalizedIdLower) return true;
-      if (t.label && String(t.label).trim().toLowerCase() === normalizedIdLower) return true;
+      // ✅ CRITICAL: Confronta t.id (primary field) - case-insensitive
+      if (t.id) {
+        const tIdStr = String(t.id).trim();
+        if (tIdStr === normalizedId) return true; // Exact match first
+        if (tIdStr.toLowerCase() === normalizedIdLower) return true; // Case-insensitive match
+      }
+      // ⚠️ NOTE: name e label sono usati solo come fallback, non dovrebbero essere usati per template lookup
+      // Rimossi per evitare falsi positivi
       return false;
     });
 
@@ -179,17 +192,30 @@ export class DialogueTaskService {
       }
       if (!this._loggedMissingIds.has(normalizedId)) {
         this._loggedMissingIds.add(normalizedId);
-        console.warn('[DialogueTaskService] ❌ Task non trovato per ID:', normalizedId);
-        console.warn('[DialogueTaskService] 📋 Cache contiene', this.cache.length, 'templates');
-        // Log solo primi 5 per evitare spam
-        const sample = this.cache.slice(0, 5).map(t => ({
-          _id: t._id ? (typeof t._id === 'object' ? t._id.toString() : String(t._id)) : null,
+        const allTemplateIds = this.cache.map(t => ({
           id: t.id,
-          name: t.name,
-          label: t.label
+          _id: t._id ? (typeof t._id === 'object' ? t._id.toString() : String(t._id)) : null,
+          label: t.label,
+          name: t.name
         }));
-        console.warn('[DialogueTaskService] 🔍 Sample cache (first 5):', sample);
+        console.warn('[DialogueTaskService] ❌ Template non trovato per ID', {
+          searchedId: normalizedId,
+          searchedIdType: typeof id,
+          cacheSize: this.cache.length,
+          allTemplateIds,
+          // ✅ DEBUG: Check for similar IDs (case-insensitive)
+          similarIds: allTemplateIds.filter(t =>
+            t.id && String(t.id).trim().toLowerCase() === normalizedIdLower
+          )
+        });
       }
+    } else {
+      console.log('[DialogueTaskService] ✅ Template trovato', {
+        searchedId: normalizedId,
+        foundId: found.id || found._id,
+        foundLabel: found.label,
+        foundName: found.name
+      });
     }
 
     return found || null;
@@ -364,29 +390,58 @@ export class DialogueTaskService {
 
     // Verifica che non esista già
     const templateId = template.id || template._id || '';
-    const existing = this.cache.find(t =>
-      (t.id || t._id) === templateId
-    );
+    const templateIdStr = String(templateId).trim();
+
+    console.log('[DialogueTaskService] 🔍 Adding template to cache', {
+      templateId: templateIdStr,
+      templateIdType: typeof templateId,
+      templateIdLength: templateIdStr.length,
+      templateHasId: !!template.id,
+      templateHas_id: !!template._id,
+      templateLabel: template.label,
+      templateName: template.name,
+      currentCacheSize: this.cache.length
+    });
+
+    const existing = this.cache.find(t => {
+      const tId = t.id || t._id || '';
+      const tIdStr = String(tId).trim();
+      return tIdStr === templateIdStr ||
+             (t.id && String(t.id).trim().toLowerCase() === templateIdStr.toLowerCase());
+    });
 
     if (existing) {
-      console.warn('[DialogueTaskService] Template già esistente, aggiornando', {
-        templateId,
-        label: template.label
+      console.warn('[DialogueTaskService] ⚠️ Template già esistente, aggiornando', {
+        templateId: templateIdStr,
+        existingId: existing.id || existing._id,
+        label: template.label,
+        existingLabel: existing.label
       });
       // Aggiorna template esistente
-      const index = this.cache.findIndex(t =>
-        (t.id || t._id) === templateId
-      );
+      const index = this.cache.findIndex(t => {
+        const tId = t.id || t._id || '';
+        const tIdStr = String(tId).trim();
+        return tIdStr === templateIdStr ||
+               (t.id && String(t.id).trim().toLowerCase() === templateIdStr.toLowerCase());
+      });
       if (index >= 0) {
         this.cache[index] = template;
+        console.log('[DialogueTaskService] ✅ Template aggiornato in cache', {
+          templateId: templateIdStr,
+          label: template.label,
+          cacheSize: this.cache.length
+        });
       }
     } else {
       // Aggiungi nuovo template
       this.cache.push(template);
       console.log('[DialogueTaskService] ✅ Template aggiunto in memoria', {
-        templateId,
+        templateId: templateIdStr,
+        templateIdType: typeof templateId,
         label: template.label,
-        totalTemplates: this.cache.length
+        totalTemplates: this.cache.length,
+        // ✅ DEBUG: Verify template can be found immediately
+        canBeFound: !!this.getTemplate(templateIdStr)
       });
     }
 

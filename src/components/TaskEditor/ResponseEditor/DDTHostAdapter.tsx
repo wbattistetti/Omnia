@@ -139,6 +139,8 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
         }
       } catch (error) {
         console.error('[TaskTreeHostAdapter] Error loading TaskTree:', error);
+        // ✅ ARCHITECTURE: No fallback - template must exist by construction
+        // If template is missing, it's a critical error that must be fixed
         // ✅ FASE 3: Store è primary - aggiorna sempre lo store
         setTaskTreeInStore(null);
         // ✅ FASE 3: Local state mantenuto temporaneamente per backward compatibility
@@ -466,9 +468,24 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
     }
   }, [handleComplete, fullTask, taskMeta, taskId, currentProjectId]);
 
-  // ✅ NEW: Use taskMeta when task is null (wizard mode)
-  // When needsTaskBuilder === true, fullTask is null, so we need to pass taskMeta
-  const taskToPass = updatedFullTask || fullTask || taskMeta;
+  // ✅ FIX: Preserve wizard properties from taskMeta even when using fullTask
+  // These properties (taskWizardMode, contextualizationTemplateId) are not saved in repository Task,
+  // only in TaskMeta passed as prop. When fullTask exists, we must preserve wizard values from taskMeta.
+  const taskToPass = React.useMemo(() => {
+    const baseTask = updatedFullTask || fullTask || taskMeta;
+    if (!baseTask) return null;
+
+    // ✅ CRITICAL: Preserve wizard properties from taskMeta
+    // They're not in repository Task, only in TaskMeta passed as prop
+    return {
+      ...baseTask,
+      taskWizardMode: (taskMeta as any).taskWizardMode ?? (baseTask as any).taskWizardMode,
+      contextualizationTemplateId: (taskMeta as any).contextualizationTemplateId ?? (baseTask as any).contextualizationTemplateId,
+      taskLabel: (taskMeta as any).taskLabel ?? (baseTask as any).taskLabel,
+      needsTaskContextualization: (taskMeta as any).needsTaskContextualization ?? (baseTask as any).needsTaskContextualization,
+      needsTaskBuilder: (taskMeta as any).needsTaskBuilder ?? (baseTask as any).needsTaskBuilder,
+    };
+  }, [updatedFullTask, fullTask, taskMeta]);
 
   return (
     <ResponseEditor

@@ -31,6 +31,39 @@ export function useWizardIntegration(
   const wizardState = useWizardState();
   const wizardFlow = useWizardFlow(wizardState.wizardMode, wizardState.setWizardMode);
 
+  // ✅ NEW: Callback per segnalare che il primo step è completato (template + istanza pronti)
+  const handleFirstStepComplete = useCallback(() => {
+    console.log('[useWizardIntegration] ✅ First step complete - emitting DATA_STRUCTURE_PROPOSED');
+    // ✅ Emetti DATA_STRUCTURE_PROPOSED solo DOPO che template + istanza sono pronti
+    wizardFlow.transitionToProposed();
+  }, [wizardFlow]);
+
+  // ✅ Create wizardCompletion FIRST so we can pass createTemplateAndInstanceForProposed to wizardGeneration
+  const wizardCompletion = useWizardCompletion({
+    wizardMode: wizardState.wizardMode,
+    dataSchema: wizardState.dataSchema,
+    messages: wizardState.messages,
+    messagesGeneralized: wizardState.messagesGeneralized,
+    messagesContextualized: wizardState.messagesContextualized,
+    shouldBeGeneral: wizardState.shouldBeGeneral,
+    taskLabel,
+    rowId, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
+    projectId,
+    transitionToCompleted: wizardFlow.transitionToCompleted,
+    onTaskBuilderComplete,
+    onFirstStepComplete: handleFirstStepComplete, // ✅ NEW: Callback per segnalare completamento primo step
+  });
+
+  const wizardSync = useWizardSync({
+    dataSchema: wizardState.dataSchema,
+    setDataSchema: wizardState.setDataSchema,
+    taskLabel: taskLabel || '',
+    rowId, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
+    projectId,
+    locale,
+  });
+
+  // ✅ Create wizardGeneration AFTER wizardCompletion so we can pass createTemplateAndInstanceForProposed
   const wizardGeneration = useWizardGeneration({
     locale,
     dataSchema: wizardState.dataSchema,
@@ -47,29 +80,8 @@ export function useWizardIntegration(
     updateMessageSubstep: wizardState.setCurrentMessageSubstep,
     transitionToProposed: wizardFlow.transitionToProposed,
     transitionToGenerating: wizardFlow.transitionToGenerating,
-  });
-
-  const wizardSync = useWizardSync({
-    dataSchema: wizardState.dataSchema,
-    setDataSchema: wizardState.setDataSchema,
-    taskLabel: taskLabel || '',
-    rowId, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
-    projectId,
-    locale,
-  });
-
-  const wizardCompletion = useWizardCompletion({
-    wizardMode: wizardState.wizardMode,
-    dataSchema: wizardState.dataSchema,
-    messages: wizardState.messages,
-    messagesGeneralized: wizardState.messagesGeneralized,
-    messagesContextualized: wizardState.messagesContextualized,
-    shouldBeGeneral: wizardState.shouldBeGeneral,
-    taskLabel,
-    rowId, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
-    projectId,
-    transitionToCompleted: wizardFlow.transitionToCompleted,
-    onTaskBuilderComplete,
+    // ✅ NEW: Pass createTemplateAndInstanceForProposed from wizardCompletion
+    createTemplateAndInstanceForProposed: wizardCompletion.createTemplateAndInstanceForProposed,
   });
 
   // ============================================
@@ -103,6 +115,8 @@ export function useWizardIntegration(
 
   // Monitora completamento step per auto-chiusura
   // ✅ D1: Pass messages and dataSchema to checkAndComplete for verification
+  // ✅ CRITICAL: checkAndComplete now calls createTemplateAndInstance BEFORE transitionToCompleted
+  // This ensures taskTree is in store before wizardMode becomes COMPLETED
   useEffect(() => {
     if (wizardState.wizardMode === WizardMode.GENERATING) {
       const messagesToCheck = wizardState.messagesGeneralized.size > 0
@@ -117,12 +131,8 @@ export function useWizardIntegration(
     }
   }, [wizardState.pipelineSteps, wizardState.wizardMode, wizardState.messages, wizardState.messagesGeneralized, wizardState.dataSchema, wizardCompletion]);
 
-  // Quando wizard completa, crea template e istanza
-  useEffect(() => {
-    if (wizardState.wizardMode === WizardMode.COMPLETED && wizardState.dataSchema.length > 0) {
-      wizardCompletion.createTemplateAndInstance();
-    }
-  }, [wizardState.wizardMode, wizardState.dataSchema.length, wizardCompletion]);
+  // ❌ REMOVED: createTemplateAndInstance is now called in checkAndComplete BEFORE transitionToCompleted
+  // This ensures the correct causal order: createTemplateAndInstance → onTaskBuilderComplete → taskTree in store → transitionToCompleted
 
   // ============================================
   // HANDLERS - Orchestrazione

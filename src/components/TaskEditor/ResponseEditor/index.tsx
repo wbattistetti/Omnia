@@ -12,6 +12,7 @@ import { useWizardIntegration } from '@responseEditor/hooks/useWizardIntegration
 import { WizardContext } from '@responseEditor/context/WizardContext';
 import { WizardMode } from '../../../../TaskBuilderAIWizard/types/WizardMode';
 import { useWizardModeTransition } from '@responseEditor/hooks/useWizardModeTransition';
+import { useTaskTreeFromStore, useTaskTreeVersion } from '@responseEditor/core/state';
 import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
 
 import type { TaskMeta } from '@taskEditor/EditorHost/types';
@@ -22,23 +23,10 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   const currentProjectId = pdUpdate?.getCurrentProjectId() || null;
   const { combinedClass } = useFontContext();
 
-  // ✅ 1️⃣ Chiama useWizardIntegration UNA SOLA VOLTA qui
-  // Determina taskWizardMode e parametri per il wizard
-  const taskWizardModeFromTask = (task as any)?.taskWizardMode || 'none';
-
-  // ✅ A1: Stato locale con sincronizzazione controllata
-  const [effectiveTaskWizardMode, setEffectiveTaskWizardMode] = React.useState<TaskWizardMode>(taskWizardModeFromTask);
-  const hasLocalOverrideRef = React.useRef<boolean>(false);
-
-  // ✅ A1: Sincronizzazione unidirezionale: taskMeta → effective (solo se non c'è override)
-  React.useEffect(() => {
-    if (!hasLocalOverrideRef.current && taskWizardModeFromTask !== effectiveTaskWizardMode) {
-      setEffectiveTaskWizardMode(taskWizardModeFromTask);
-    }
-  }, [taskWizardModeFromTask]); // NOTA: effectiveTaskWizardMode NON in dipendenze per evitare loop
-
-  // ✅ A1: Usa effectiveTaskWizardMode invece di taskWizardModeFromTask
-  const taskWizardMode = effectiveTaskWizardMode;
+  // ✅ ARCHITECTURE: taskWizardMode is now SINGLE SOURCE OF TRUTH in Context
+  // No more local state, no more derives, no more synchronization
+  // taskWizardMode comes from useResponseEditorCore (which reads from taskMeta)
+  // All components read from Context via useResponseEditorContext()
 
   // ✅ FIX: Ref per il pulsante save-to-library - creato qui e passato a useResponseEditor
   const saveToLibraryButtonRef = React.useRef<HTMLButtonElement>(null);
@@ -89,6 +77,10 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   // If taskLabel is empty, it means useResponseEditorCore hasn't processed taskMeta yet
   // This is handled in ResponseEditorLayout with loading UI
   const taskLabel = editor.taskLabel || '';
+
+  // ✅ ARCHITECTURE: taskWizardMode is SINGLE SOURCE OF TRUTH from useResponseEditorCore
+  // No local state, no derives - just use editor.taskWizardMode directly
+  const taskWizardMode = editor.taskWizardMode;
 
   // ✅ For wizard, use taskLabel from editor (which comes from useResponseEditorCore)
   // ✅ FIX: Preserva wizardIntegrationRaw anche quando taskWizardMode diventa 'none' se shouldBeGeneral era true
@@ -202,24 +194,26 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
   // ✅ REMOVED: effectiveShouldBeGeneral, generalizedLabel, generalizedMessages, generalizationReason
   // ✅ These are now read from WizardContext in components that need them
 
-  // ✅ A1 + A3: Monitora completamento wizard e sovrascrivi effectiveTaskWizardMode a 'none'
+  // ✅ ARCHITECTURE: Monitor wizard completion and update Context (SINGLE SOURCE OF TRUTH)
+  // No local state, no derives - update Context directly via editor.setTaskWizardMode
+  // ✅ CRITICAL: Use taskTreeFromStore instead of taskTree prop
+  // The taskTree in store is updated when onTaskBuilderComplete is called
+  const taskTreeFromStore = useTaskTreeFromStore();
+  const taskTreeVersion = useTaskTreeVersion(); // ✅ NEW: Force re-render when store updates
   const shouldTransitionToNone = useWizardModeTransition(
     taskWizardMode,
     wizardIntegration?.wizardMode,
-    taskTree,
-    wizardIntegration?.pipelineSteps
+    taskTreeFromStore, // ✅ Use taskTreeFromStore instead of taskTree prop
+    wizardIntegration?.pipelineSteps,
+    taskTreeVersion // ✅ NEW: Pass version to force recalculation when store updates
   );
 
   React.useEffect(() => {
-    if (
-      shouldTransitionToNone &&
-      effectiveTaskWizardMode === 'full' &&
-      !hasLocalOverrideRef.current
-    ) {
-      hasLocalOverrideRef.current = true;
-      setEffectiveTaskWizardMode('none');
+    if (shouldTransitionToNone && taskWizardMode === 'full') {
+      // ✅ ARCHITECTURE: Update Context directly (updates state in useResponseEditorCore)
+      editor.setTaskWizardMode('none');
     }
-  }, [shouldTransitionToNone, effectiveTaskWizardMode]);
+  }, [shouldTransitionToNone, taskWizardMode, editor]);
 
   // ✅ B1: WizardContext value (only when wizard is active OR shouldBeGeneral is true) - calculated here to avoid race condition
   // ✅ FIX: Usa useMemo con dipendenze MINIME - solo quelle che determinano se il context deve esistere
@@ -347,6 +341,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       pendingContractChange={editor.pendingContractChange}
       contractDialogHandlers={editor.contractDialogHandlers}
       taskWizardMode={editor.taskWizardMode}
+      setTaskWizardMode={editor.setTaskWizardMode} // ✅ ARCHITECTURE: For Context single source of truth
       needsTaskContextualization={editor.needsTaskContextualization}
       needsTaskBuilder={editor.needsTaskBuilder}
       contextualizationTemplateId={editor.contextualizationTemplateId}

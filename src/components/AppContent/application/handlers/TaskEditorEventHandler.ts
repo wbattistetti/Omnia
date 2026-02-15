@@ -118,6 +118,11 @@ export class TaskEditorEventHandler {
     let taskWizardMode: TaskWizardMode | undefined;
     if (event.taskWizardMode && (event.taskWizardMode === 'none' || event.taskWizardMode === 'adaptation' || event.taskWizardMode === 'full')) {
       taskWizardMode = event.taskWizardMode;
+      console.log('[TaskEditorEventHandler] ✅ taskWizardMode esplicito dall\'evento', {
+        eventId: event.id,
+        taskWizardMode: event.taskWizardMode,
+        wizardMode: taskWizardMode
+      });
     } else {
       // Backward compatibility: derive from boolean flags
       if (event.needsTaskBuilder === true) {
@@ -127,9 +132,15 @@ export class TaskEditorEventHandler {
       } else {
         taskWizardMode = 'none';
       }
+      console.log('[TaskEditorEventHandler] 📊 taskWizardMode derivato da boolean flags', {
+        eventId: event.id,
+        needsTaskBuilder: event.needsTaskBuilder,
+        needsTaskContextualization: event.needsTaskContextualization,
+        wizardMode: taskWizardMode
+      });
     }
 
-    return {
+    const taskMeta: TaskMeta = {
       id: event.id,
       type: taskType,
       label: event.label || event.name || 'Task',
@@ -140,6 +151,17 @@ export class TaskEditorEventHandler {
       contextualizationTemplateId: event.contextualizationTemplateId || undefined,
       taskLabel: event.taskLabel || event.label || event.name || undefined,
     };
+
+    console.log('[TaskEditorEventHandler] 📋 TaskMeta costruito', {
+      taskMetaId: taskMeta.id,
+      taskMetaType: taskMeta.type,
+      taskWizardMode: taskMeta.taskWizardMode,
+      contextualizationTemplateId: taskMeta.contextualizationTemplateId,
+      taskLabel: taskMeta.taskLabel,
+      taskMetaKeys: Object.keys(taskMeta)
+    });
+
+    return taskMeta;
   }
 
   /**

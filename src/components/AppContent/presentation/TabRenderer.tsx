@@ -109,10 +109,34 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
         return `response-editor-${instanceKey}`;
       }, [tab.task?.instanceId, tab.task?.id, tab.id]);
 
+      // ✅ FIX: Restituisci un nuovo oggetto stabile solo con i valori necessari
+      // Questo evita che cambi riferimento quando tab.task viene ricreato dal padre
       const stableTask = useMemo(() => {
         if (!tab.task) return undefined;
-        return tab.task;
-      }, [tab.task?.id, tab.task?.type, tab.task?.label, tab.task?.instanceId]);
+        // ✅ Restituisci un nuovo oggetto stabile solo con i valori necessari
+        // Questo evita che cambi riferimento quando tab.task viene ricreato
+        return {
+          id: tab.task.id,
+          type: tab.task.type,
+          label: tab.task.label,
+          instanceId: tab.task.instanceId,
+          taskWizardMode: (tab.task as any).taskWizardMode,
+          contextualizationTemplateId: (tab.task as any).contextualizationTemplateId,
+          taskLabel: (tab.task as any).taskLabel,
+          needsTaskContextualization: (tab.task as any).needsTaskContextualization,
+          needsTaskBuilder: (tab.task as any).needsTaskBuilder,
+        };
+      }, [
+        tab.task?.id,
+        tab.task?.type,
+        tab.task?.label,
+        tab.task?.instanceId,
+        (tab.task as any)?.taskWizardMode,
+        (tab.task as any)?.contextualizationTemplateId,
+        (tab.task as any)?.taskLabel,
+        (tab.task as any)?.needsTaskContextualization,
+        (tab.task as any)?.needsTaskBuilder,
+      ]);
 
       const stableTaskTree = useMemo(() => {
         return tab.taskTree;

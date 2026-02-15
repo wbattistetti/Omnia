@@ -123,8 +123,22 @@ export class TaskTreeOpener {
       // Check if task already exists - ALWAYS use row.id (task.id === row.id)
       let taskForType = taskRepository.getTask(row.id);
 
+      console.log('[🔍 TaskTreeOpener] 📊 DEBUG: Verifica stato task', {
+        rowId: row.id,
+        rowText: row.text,
+        taskExists: !!taskForType,
+        taskId: taskForType?.id,
+        taskTemplateId: taskForType?.templateId,
+        taskPromptsAdapted: taskForType?.metadata?.promptsAdapted
+      });
+
       // STATE 1: Task exists → taskWizardMode = 'none'
       if (taskForType) {
+        console.log('[🔍 TaskTreeOpener] ✅ STATE 1: Task esiste → taskWizardMode = "none"', {
+          taskId: taskForType.id,
+          taskTemplateId: taskForType.templateId,
+          promptsAdapted: taskForType.metadata?.promptsAdapted
+        });
         return await this.handleExistingTask(taskForType);
       }
 
@@ -136,8 +150,23 @@ export class TaskTreeOpener {
           : TaskType.UNDEFINED;
       const metaTemplateId = rowHeuristics?.templateId || null;
 
+      console.log('[🔍 TaskTreeOpener] 📊 DEBUG: Euristica trovata', {
+        rowId: row.id,
+        rowText: row.text,
+        metaTaskType,
+        metaTemplateId,
+        hasHeuristics: !!rowHeuristics,
+        heuristicsKeys: rowHeuristics ? Object.keys(rowHeuristics) : []
+      });
+
       // STATE 2: Template found, no task → taskWizardMode = 'adaptation'
       if (metaTemplateId && metaTaskType === TaskType.UtteranceInterpretation) {
+        console.log('[🔍 TaskTreeOpener] ✅ STATE 2: Template trovato, task NON esiste → taskWizardMode = "adaptation"', {
+          rowId: row.id,
+          rowText: row.text,
+          metaTemplateId,
+          metaTaskType
+        });
         return await this.handleTemplateFound(metaTemplateId, metaTaskType, projectId);
       }
 
@@ -215,6 +244,7 @@ export class TaskTreeOpener {
         {
           templateId: metaTemplateId,
           rowText: row.text,
+          rowId: row.id,
         }
       );
 
@@ -228,6 +258,13 @@ export class TaskTreeOpener {
       const template = DialogueTaskService.getTemplate(metaTemplateId);
 
       if (template) {
+        console.log('[🔍 TaskTreeOpener] 📋 Template caricato, creando task...', {
+          templateId: metaTemplateId,
+          templateLabel: template.label || template.name,
+          rowId: row.id,
+          rowText: row.text
+        });
+
         // Create task from template found by heuristics
         const newTask = taskRepository.createTask(
           metaTaskType,
@@ -236,6 +273,15 @@ export class TaskTreeOpener {
           row.id,
           projectId
         );
+
+        console.log('[🔍 TaskTreeOpener] ✅ Task creato, aprendo ResponseEditor con taskWizardMode = "adaptation"', {
+          taskId: newTask.id,
+          taskTemplateId: newTask.templateId,
+          taskLabel: newTask.label,
+          taskWizardMode: 'adaptation',
+          contextualizationTemplateId: metaTemplateId,
+          taskLabel: row.text || ''
+        });
 
         // Open ResponseEditor with taskWizardMode = 'adaptation'
         taskEditorCtx.open({

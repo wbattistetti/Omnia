@@ -1,7 +1,6 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { useMemo } from 'react';
 import { WizardMode } from '../../../../../TaskBuilderAIWizard/types/WizardMode';
 import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
 import type { TaskTree } from '@types/taskTypes';
@@ -9,31 +8,32 @@ import type { PipelineStep } from '../../../../../TaskBuilderAIWizard/hooks/useW
 
 /**
  * Hook di supporto per determinare quando resettare taskWizardMode a 'none'.
- * Monitora: wizardMode, taskTree, pipelineSteps.
- * Ritorna: shouldTransitionToNone: boolean.
+ *
+ * ✅ TEMPORARY SIMPLIFICATION: Testing minimal conditions to isolate the issue.
+ * If this works, the problem is pipelineSteps. If not, wizardMode never becomes COMPLETED or taskTree is null.
  */
 export function useWizardModeTransition(
   taskWizardMode: TaskWizardMode,
   wizardMode: WizardMode | undefined,
   taskTree: TaskTree | null | undefined,
-  pipelineSteps: PipelineStep[] | undefined
+  pipelineSteps: PipelineStep[] | undefined,
+  taskTreeVersion?: number
 ): boolean {
-  return useMemo(() => {
-    // ✅ Transiziona a 'none' solo se:
-    // 1. taskWizardMode è 'full'
-    // 2. wizardMode è COMPLETED
-    // 3. taskTree è disponibile (task salvato)
-    // 4. Tutti gli step sono completati
-    if (
-      taskWizardMode === 'full' &&
-      wizardMode === WizardMode.COMPLETED &&
-      taskTree !== null &&
-      taskTree !== undefined &&
-      pipelineSteps &&
-      pipelineSteps.every(step => step.status === 'completed')
-    ) {
-      return true;
-    }
-    return false;
-  }, [taskWizardMode, wizardMode, taskTree, pipelineSteps]);
+  console.log('[useWizardModeTransition] DEBUG SIMPLE', {
+    taskWizardMode,
+    wizardMode,
+    wizardModeString: wizardMode ? String(wizardMode) : 'undefined',
+    hasTaskTree: !!taskTree,
+    taskTreeNodesCount: taskTree?.nodes?.length || 0,
+  });
+
+  // ✅ MINIMAL CONDITIONS: Only check wizardMode and taskTree
+  // If this works, the problem is pipelineSteps
+  // If this doesn't work, wizardMode never becomes COMPLETED or taskTree is null
+  return (
+    taskWizardMode === 'full' &&
+    wizardMode === WizardMode.COMPLETED &&
+    taskTree !== null &&
+    taskTree !== undefined
+  );
 }

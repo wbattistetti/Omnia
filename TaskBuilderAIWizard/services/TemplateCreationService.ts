@@ -391,23 +391,26 @@ function buildNodesFromTemplates(
  * Creates a contextualized instance from templates
  *
  * - Clones steps from template root (generalized)
- * - Applies contextualized messages only to root node
+ * - Applies contextualized messages to root node (or all nodes if adaptAllNormalSteps = true)
  * - Creates instance with templateId referencing root template
  *
  * @param rootTemplate - Root template (generalized)
  * @param allTemplates - All templates (including children)
- * @param contextualizedMessages - Contextualized messages (for root node only)
+ * @param contextualizedMessagesMap - Map of contextualized messages (nodeId -> WizardStepMessages)
  * @param taskLabel - Contextualized task label
- * @param taskId - Task instance ID
+ * @param rowId - Task instance ID (ALWAYS equals row.id which equals task.id when task exists)
+ * @param addTranslation - Optional callback to add translations
+ * @param adaptAllNormalSteps - If true, contextualize all nodes; if false, only root node (default: false)
  * @returns Task instance
  */
 export function createContextualizedInstance(
   rootTemplate: DialogueTask,
   allTemplates: Map<string, DialogueTask>,
-  contextualizedMessages: WizardStepMessages,
+  contextualizedMessagesMap: Map<string, WizardStepMessages>,
   taskLabel: string,
   rowId: string, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
-  addTranslation?: (guid: string, text: string) => void
+  addTranslation?: (guid: string, text: string) => void,
+  adaptAllNormalSteps: boolean = false // ✅ NEW: Flag to control contextualization scope
 ): any {
   // 1. Build nodes from templates (for cloneTemplateSteps)
   const nodes = buildNodesFromTemplates(rootTemplate, allTemplates);
@@ -415,13 +418,47 @@ export function createContextualizedInstance(
   // 2. Clone steps from template using cloneTemplateSteps (correct way)
   const { steps: clonedSteps } = cloneTemplateSteps(rootTemplate, nodes);
 
-  // 3. Apply contextualized messages only to root node
+  // 3. Apply contextualized messages based on adaptAllNormalSteps flag
   const rootTemplateId = rootTemplate.id || '';
-  const contextualizedRootSteps = convertContextualizedMessagesToSteps(contextualizedMessages, rootTemplateId, addTranslation);
-  if (clonedSteps[rootTemplateId]) {
-    clonedSteps[rootTemplateId] = contextualizedRootSteps;
+
+  if (adaptAllNormalSteps) {
+    // ✅ Apply contextualized messages to ALL nodes present in the Map
+    contextualizedMessagesMap.forEach((contextualizedMessages, nodeId) => {
+      // Find the template for this node
+      const nodeTemplate = allTemplates.get(nodeId);
+      if (nodeTemplate && nodeTemplate.id) {
+        const contextualizedSteps = convertContextualizedMessagesToSteps(
+          contextualizedMessages,
+          nodeTemplate.id,
+          addTranslation
+        );
+        if (clonedSteps[nodeTemplate.id]) {
+          clonedSteps[nodeTemplate.id] = contextualizedSteps;
+        } else {
+          clonedSteps[nodeTemplate.id] = contextualizedSteps;
+        }
+      }
+    });
   } else {
-    clonedSteps[rootTemplateId] = contextualizedRootSteps;
+    // ✅ Apply contextualized messages only to root node (backward compatibility)
+    const rootContextualizedMessages = contextualizedMessagesMap.get(rootTemplateId) || {
+      ask: { base: [] },
+      confirm: { base: [] },
+      notConfirmed: { base: [] },
+      violation: { base: [] },
+      disambiguation: { base: [], options: [] },
+      success: { base: [] }
+    };
+    const contextualizedRootSteps = convertContextualizedMessagesToSteps(
+      rootContextualizedMessages,
+      rootTemplateId,
+      addTranslation
+    );
+    if (clonedSteps[rootTemplateId]) {
+      clonedSteps[rootTemplateId] = contextualizedRootSteps;
+    } else {
+      clonedSteps[rootTemplateId] = contextualizedRootSteps;
+    }
   }
 
   // 4. Create instance
@@ -430,7 +467,7 @@ export function createContextualizedInstance(
     type: rootTemplate.type || 3,  // TaskType.UtteranceInterpretation
     templateId: rootTemplate.id,  // Reference to root template
     label: taskLabel,  // Contextualized label
-    steps: clonedSteps,  // Cloned steps with contextualized root
+    steps: clonedSteps,  // Cloned steps with contextualized messages
   };
 
   return instance;

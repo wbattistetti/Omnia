@@ -35,7 +35,19 @@ export function TaskContextualizationPanel({
   const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   useEffect(() => {
-    if (!taskTree || !task) return;
+    // ✅ FIX: taskTree può essere null inizialmente (viene caricato asincronamente)
+    // Attendiamo che sia disponibile prima di procedere con l'adattamento
+    if (!task) return;
+
+    // ✅ Se taskTree non è ancora disponibile, attendiamo (verrà ricaricato quando taskTree cambia)
+    if (!taskTree) {
+      console.log('[TaskContextualizationPanel] ⏳ In attesa di taskTree...', {
+        taskId: task.id,
+        hasTask: !!task,
+        hasTaskTree: false
+      });
+      return;
+    }
 
     // Create abort controller for cancellation
     const controller = new AbortController();

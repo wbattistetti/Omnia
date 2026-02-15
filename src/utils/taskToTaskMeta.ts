@@ -23,6 +23,12 @@ export function taskToTaskMeta(task: Task | any): TaskMeta {
     type: taskType, // ✅ Usa il type del Task, non assume sempre DataRequest
     label: task.label || task._userLabel || 'Data',
     instanceId: task.instanceId || task.id || task._id,
+    // ✅ Preserve wizard-related properties if present
+    taskWizardMode: (task as any).taskWizardMode,
+    contextualizationTemplateId: (task as any).contextualizationTemplateId,
+    taskLabel: (task as any).taskLabel,
+    needsTaskContextualization: (task as any).needsTaskContextualization,
+    needsTaskBuilder: (task as any).needsTaskBuilder,
   };
 }
 

@@ -200,7 +200,20 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
   // Task meta
   // ✅ Se task è già un TaskMeta valido (ha type), lo uso direttamente
   // Altrimenti, provo a estrarlo da Task usando getTaskMeta
-  const taskMeta = isTaskMeta(task) ? task : getTaskMeta(task);
+  // ✅ FIX: Memoize taskMeta to prevent reference changes on every render
+  const taskMeta = React.useMemo(() => {
+    return isTaskMeta(task) ? task : getTaskMeta(task);
+  }, [
+    task?.id,
+    task?.type,
+    (task as any)?.taskWizardMode,
+    (task as any)?.contextualizationTemplateId,
+    (task as any)?.needsTaskContextualization,
+    (task as any)?.needsTaskBuilder,
+    (task as any)?.taskLabel,
+    task?.label,
+    task?.instanceId
+  ]);
 
   // ✅ SINGLE SOURCE OF TRUTH: Read taskWizardMode and taskLabel from taskMeta
   // These flags are set when opening ResponseEditor from NodeRow
@@ -250,7 +263,23 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
       // This will be updated when taskMeta becomes available
       setTaskLabel('');
     }
-  }, [taskMeta, setTaskWizardMode, setNeedsTaskContextualization, setNeedsTaskBuilder, setContextualizationTemplateId, setTaskLabel]);
+    // ✅ FIX: Use primitive values instead of taskMeta object to prevent infinite loops
+  }, [
+    taskMeta?.id,
+    taskMeta?.type,
+    taskMeta?.taskWizardMode,
+    taskMeta?.contextualizationTemplateId,
+    (taskMeta as any)?.needsTaskContextualization,
+    (taskMeta as any)?.needsTaskBuilder,
+    (taskMeta as any)?.taskLabel,
+    taskMeta?.label,
+    // Setters are stable from useState, but we can include them for completeness
+    setTaskWizardMode,
+    setNeedsTaskContextualization,
+    setNeedsTaskBuilder,
+    setContextualizationTemplateId,
+    setTaskLabel
+  ]);
 
   // Replace selected task tree
   const { replaceSelectedTaskTree: replaceSelectedTaskTreeFromContext } = useTaskTreeManager();
@@ -260,7 +289,15 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
 
   // Translations
   const taskTreeForTranslations = taskTreeFromStore || taskTree;
-  const localTranslations = useDDTTranslations(taskTreeForTranslations, task, taskTreeVersionFromStore);
+  // ✅ CRITICAL FIX: Pass selectedNodeId to force recalculation when node selection changes
+  // When you change node, the context changes, so translations must be recalculated
+  const selectedNodeId = selectedNode?.id || selectedNode?._id || null;
+  const localTranslations = useDDTTranslations(
+    taskTreeForTranslations,
+    task,
+    taskTreeVersionFromStore,
+    selectedNodeId
+  );
 
   // Derived values
   const {

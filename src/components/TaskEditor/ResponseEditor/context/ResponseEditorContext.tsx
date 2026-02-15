@@ -3,6 +3,7 @@
 
 import React, { createContext, useContext } from 'react';
 import type { TaskTree, TaskMeta } from '@types/taskTypes';
+import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
 
 export interface ResponseEditorContextValue {
   // Global task data (always available)
@@ -15,6 +16,12 @@ export interface ResponseEditorContextValue {
   // Derived data (calculated once)
   headerTitle: string;
   taskType: number;
+
+  // ✅ ARCHITECTURE: Wizard configuration - SINGLE SOURCE OF TRUTH
+  // taskWizardMode is managed in Context, not derived locally
+  taskWizardMode: TaskWizardMode;
+  setTaskWizardMode: (mode: TaskWizardMode) => void;
+  contextualizationTemplateId?: string;
 }
 
 export const ResponseEditorContext = createContext<ResponseEditorContextValue | null>(null);

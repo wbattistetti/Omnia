@@ -3046,6 +3046,9 @@ app.get('/api/factory/dialogue-templates', async (req, res) => {
 
 // POST /api/embeddings/compute - Calcola embedding per un testo (delega a Python FastAPI)
 app.post('/api/embeddings/compute', async (req, res) => {
+  // ✅ Define pythonServiceUrl outside try block so it's accessible in catch
+  const pythonServiceUrl = process.env.EMBEDDING_SERVICE_URL || 'http://localhost:8000';
+
   try {
     const { text } = req.body;
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
@@ -3053,7 +3056,6 @@ app.post('/api/embeddings/compute', async (req, res) => {
     }
 
     // Delega a Python FastAPI service
-    const pythonServiceUrl = process.env.EMBEDDING_SERVICE_URL || 'http://localhost:8000';
     const targetUrl = `${pythonServiceUrl}/api/embeddings/compute`;
 
     console.log('[Embeddings][COMPUTE] Calling Python service', {

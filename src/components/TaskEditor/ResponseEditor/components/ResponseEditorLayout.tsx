@@ -146,6 +146,7 @@ export interface ResponseEditorLayoutProps {
 
   // Wizard state
   taskWizardMode: TaskWizardMode;
+  setTaskWizardMode: (mode: TaskWizardMode) => void; // ✅ ARCHITECTURE: For Context single source of truth
   needsTaskContextualization: boolean;
   needsTaskBuilder: boolean;
   contextualizationTemplateId: string | null;
@@ -248,6 +249,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     pendingContractChange,
     contractDialogHandlers,
     taskWizardMode,
+    setTaskWizardMode, // ✅ ARCHITECTURE: For Context single source of truth
     needsTaskContextualization,
     needsTaskBuilder,
     contextualizationTemplateId,
@@ -276,10 +278,27 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   const generalizedMessages = wizardIntegrationProp?.generalizedMessages ?? null;
   const generalizationReasonEffective = wizardIntegrationProp?.generalizationReason ?? null;
 
-  // ✅ NEW: ResponseEditorContext value (calculated from props received from ResponseEditorInner)
-  // taskLabel comes ONLY from useResponseEditorCore (single source of truth)
-  // If empty, it means useResponseEditorCore hasn't processed taskMeta yet (first render)
-  // Components should handle this by showing loading UI, NOT by using fallbacks
+  // ✅ DEBUG: Log per verificare perché contextualizationTemplateId potrebbe essere undefined
+  React.useEffect(() => {
+    if (taskWizardMode === 'adaptation' || contextualizationTemplateId) {
+      console.log('[ResponseEditorLayout] 📊 DEBUG: Parametri per ResponseEditorContent', {
+        taskWizardMode,
+        contextualizationTemplateId,
+        taskMetaId: taskMeta?.id,
+        taskMetaKeys: taskMeta ? Object.keys(taskMeta) : [],
+        taskMetaContextualizationTemplateId: (taskMeta as any)?.contextualizationTemplateId,
+        taskMetaTaskWizardMode: (taskMeta as any)?.taskWizardMode
+      });
+    }
+  }, [taskWizardMode, contextualizationTemplateId, taskMeta]);
+
+  // ✅ ARCHITECTURE: Context is SINGLE SOURCE OF TRUTH for taskWizardMode
+  // No derives from taskMeta - use prop directly (which comes from state in useResponseEditorCore)
+  // taskMeta.contextualizationTemplateId is still used as fallback for backward compatibility
+  const contextualizationTemplateIdFromMeta = taskMeta?.contextualizationTemplateId;
+
+  // ✅ ARCHITECTURE: Context is SINGLE SOURCE OF TRUTH for taskWizardMode
+  // No more derives, no more fallbacks - just use the value from props (which comes from state)
   const responseEditorContextValue = React.useMemo(() => ({
     taskTree,
     taskMeta,
@@ -287,8 +306,12 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     taskId: taskMeta?.id,
     currentProjectId,
     headerTitle,
-    taskType,
-  }), [taskTree, taskMeta, taskLabel, currentProjectId, headerTitle, taskType]);
+    taskType: typeof taskType === 'string' ? Number(taskType) || 0 : taskType, // ✅ Convert to number for Context
+    // ✅ ARCHITECTURE: taskWizardMode is SINGLE SOURCE OF TRUTH - no derives, no fallbacks
+    taskWizardMode: taskWizardMode, // ✅ Use prop directly (comes from state in useResponseEditorCore)
+    setTaskWizardMode, // ✅ ARCHITECTURE: Setter for updating wizard mode (updates state in useResponseEditorCore)
+    contextualizationTemplateId: contextualizationTemplateIdFromMeta || contextualizationTemplateId || undefined,
+  }), [taskTree, taskMeta, taskLabel, currentProjectId, headerTitle, taskType, taskWizardMode, setTaskWizardMode, contextualizationTemplateIdFromMeta, contextualizationTemplateId]);
 
   // ✅ B1: WizardContext.Provider moved to ResponseEditorInner to avoid race condition
 
@@ -1106,8 +1129,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         <ResponseEditorContent
           showContractWizard={showContractWizard}
           needsIntentMessages={needsIntentMessages}
-          task={taskMeta}
-          taskTree={taskTree}
+          // ✅ REMOVED: task, taskTree - now from Context
           handleContractWizardClose={handleContractWizardClose}
           handleContractWizardNodeUpdate={handleContractWizardNodeUpdate}
           handleContractWizardComplete={handleContractWizardComplete}

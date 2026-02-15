@@ -48,6 +48,9 @@ type UseWizardCompletionProps = {
   projectId?: string;
   transitionToCompleted: () => void;
   onTaskBuilderComplete?: (taskTree: any) => void;
+  adaptAllNormalSteps?: boolean; // ✅ NEW: If true, contextualize all nodes; if false, only root node (default: false)
+  // ✅ NEW: Callback to signal that template + instance are ready (for DATA_STRUCTURE_PROPOSED)
+  onFirstStepComplete?: () => void;
 };
 
 /**
@@ -67,6 +70,8 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
     projectId,
     transitionToCompleted,
     onTaskBuilderComplete,
+    adaptAllNormalSteps = false, // ✅ NEW: Default false for backward compatibility
+    onFirstStepComplete, // ✅ NEW: Callback to signal first step is complete
   } = props;
 
   // ✅ FASE 1.2: Get addTranslation from context (must be at top level, not in callback)
@@ -79,17 +84,257 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
     addTranslation = undefined;
   }
 
-  const hasCreatedTemplateRef = useRef(false);
+  // ✅ CRITICAL: Separate refs for two distinct phases
+  // - hasCreatedTemplateForProposedRef: for DATA_STRUCTURE_PROPOSED (first step)
+  // - hasCreatedTemplateForCompletedRef: for completion (when all steps are done)
+  const hasCreatedTemplateForProposedRef = useRef(false);
+  const hasCreatedTemplateForCompletedRef = useRef(false);
 
   /**
-   * Crea template e istanza quando il wizard è completato
+   * ✅ NEW: Crea template e istanza per il PRIMO STEP (quando dataSchema è pronto)
+   * Questa funzione viene chiamata PRIMA di emettere DATA_STRUCTURE_PROPOSED
+   * Dopo aver creato template + istanza, chiama buildTaskTree e onTaskBuilderComplete
+   * Solo dopo questi passaggi, chiama onFirstStepComplete per segnalare che è pronto
    */
-  const createTemplateAndInstance = useCallback(async () => {
-    if (wizardMode !== WizardMode.COMPLETED || dataSchema.length === 0 || hasCreatedTemplateRef.current) {
+  const createTemplateAndInstanceForProposed = useCallback(async () => {
+    // ✅ Solo quando dataSchema è disponibile e non è già stato creato
+    if (dataSchema.length === 0 || hasCreatedTemplateForProposedRef.current) {
+      // ✅ Se dataSchema è vuoto, chiama comunque onFirstStepComplete() per emettere DATA_STRUCTURE_PROPOSED
+      if (dataSchema.length === 0 && onFirstStepComplete) {
+        onFirstStepComplete();
+      }
       return;
     }
 
-    hasCreatedTemplateRef.current = true;
+    // ✅ Verifica che rowId sia disponibile (necessario per creare l'istanza)
+    if (!rowId) {
+      console.warn('[useWizardCompletion] ⚠️ Cannot create template+instance for proposed: rowId is required');
+      // ✅ CRITICAL: Chiama comunque onFirstStepComplete() per emettere DATA_STRUCTURE_PROPOSED
+      // I pulsanti "Sì"/"No" devono apparire anche se non possiamo creare template+istanza
+      if (onFirstStepComplete) {
+        onFirstStepComplete();
+      }
+      return;
+    }
+
+    hasCreatedTemplateForProposedRef.current = true;
+
+    try {
+      console.log('[useWizardCompletion] 🚀 FIRST STEP: Creating template + instance for proposed structure', {
+        dataSchemaLength: dataSchema.length,
+        rowId,
+        projectId
+      });
+
+      // 1. Raccogli constraints e nlpContracts in mappe (per nodo)
+      const constraintsMap = new Map<string, WizardConstraint[]>();
+      const nlpContractsMap = new Map<string, WizardNLPContract>();
+
+      const collectNodeData = (nodes: WizardTaskTreeNode[]) => {
+        nodes.forEach(node => {
+          if (node.constraints && node.constraints.length > 0) {
+            constraintsMap.set(node.id, node.constraints);
+          }
+          if (node.dataContract) {
+            nlpContractsMap.set(node.id, node.dataContract);
+          }
+          if (node.subNodes && node.subNodes.length > 0) {
+            collectNodeData(node.subNodes);
+          }
+        });
+      };
+      collectNodeData(dataSchema);
+
+      // 2. Usa messaggi generalizzati se disponibili, altrimenti usa messaggi normali
+      // ✅ Per il primo step, potrebbero non esserci ancora messaggi - usiamo messaggi vuoti come fallback
+      const messagesToUse = messagesGeneralized.size > 0 ? messagesGeneralized : messages;
+
+      // ✅ Se non ci sono messaggi, crea messaggi vuoti per ogni nodo (saranno generati dopo)
+      const allNodes = flattenTaskTree(dataSchema);
+      allNodes.forEach(node => {
+        if (!messagesToUse.has(node.id)) {
+          messagesToUse.set(node.id, {
+            ask: { base: [] },
+            confirm: { base: [] },
+            notConfirmed: { base: [] },
+            violation: { base: [] },
+            disambiguation: { base: [], options: [] },
+            success: { base: [] }
+          });
+        }
+      });
+
+      // 3. Usa messaggi contestualizzati se disponibili, altrimenti usa messaggi normali
+      const messagesContextualizedToUse = messagesContextualized.size > 0 ? messagesContextualized : messages;
+
+      // 4. Crea template generalizzati (un template per ogni nodo)
+      const templates = createTemplatesFromWizardData(
+        dataSchema,
+        messagesToUse,
+        constraintsMap,
+        nlpContractsMap,
+        shouldBeGeneral,
+        addTranslation
+      );
+
+      // 5. Registra template in memoria (DialogueTaskService)
+      console.log('[useWizardCompletion] 📝 FIRST STEP: Adding templates to memory cache', {
+        templatesCount: templates.size,
+        templateIds: Array.from(templates.keys())
+      });
+
+      templates.forEach(template => {
+        DialogueTaskService.addTemplate(template);
+      });
+
+      // 6. Crea istanza contestualizzata
+      const rootNode = dataSchema[0];
+      const rootNodeTemplateId = rootNode.id;
+      const rootTemplate = templates.get(rootNodeTemplateId);
+
+      if (!rootTemplate) {
+        console.error('[useWizardCompletion] ❌ FIRST STEP: Root template not found', {
+          rootNodeTemplateId,
+          availableTemplateIds: Array.from(templates.keys())
+        });
+        // ✅ CRITICAL: Chiama comunque onFirstStepComplete() per emettere DATA_STRUCTURE_PROPOSED
+        if (onFirstStepComplete) {
+          onFirstStepComplete();
+        }
+        return; // ✅ NON throw - permettere al wizard di continuare
+      }
+
+      const instance = createContextualizedInstance(
+        rootTemplate,
+        templates,
+        messagesContextualizedToUse,
+        taskLabel || 'Task',
+        rowId,
+        addTranslation,
+        adaptAllNormalSteps
+      );
+
+      // 7. Salva istanza nel TaskRepository
+      if (rowId && projectId) {
+        const key = rowId;
+        let taskInstance = taskRepository.getTask(key);
+        if (!taskInstance) {
+          taskInstance = taskRepository.createTask(
+            TaskType.UtteranceInterpretation,
+            rootTemplate.id,
+            undefined,
+            key,
+            projectId
+          );
+        }
+
+        taskRepository.updateTask(key, {
+          ...instance,
+          type: TaskType.UtteranceInterpretation,
+          templateId: rootTemplate.id,
+        }, projectId);
+
+        taskInstance = taskRepository.getTask(key);
+
+        console.log('[useWizardCompletion] ✅ FIRST STEP: Template + instance created', {
+          taskId: taskInstance?.id,
+          templateId: rootTemplate.id,
+          templateInCache: !!DialogueTaskService.getTemplate(rootTemplate.id)
+        });
+
+        // 8. Build TaskTree from instance (tollerante - non blocca se fallisce)
+        console.log('[useWizardCompletion] 🔍 FIRST STEP: About to build TaskTree', {
+          taskInstanceId: taskInstance?.id,
+          taskInstanceTemplateId: taskInstance?.templateId,
+          rootTemplateId: rootTemplate.id,
+          templateInCache: !!DialogueTaskService.getTemplate(rootTemplate.id),
+          projectId
+        });
+        try {
+          const taskTree = await buildTaskTree(taskInstance, projectId);
+          console.log('[useWizardCompletion] 🔍 FIRST STEP: buildTaskTree result', {
+            hasTaskTree: !!taskTree,
+            taskTreeNodesCount: taskTree?.nodes?.length || 0,
+            taskTreeId: taskTree?.id,
+            hasOnTaskBuilderComplete: !!onTaskBuilderComplete
+          });
+          if (taskTree && onTaskBuilderComplete) {
+            console.log('[useWizardCompletion] ✅ FIRST STEP: TaskTree built, calling onTaskBuilderComplete', {
+              taskTreeNodesCount: taskTree.nodes?.length || 0,
+              taskTreeId: taskTree.id
+            });
+            onTaskBuilderComplete(taskTree);
+          } else {
+            console.warn('[useWizardCompletion] ⚠️ FIRST STEP: TaskTree not built or onTaskBuilderComplete not provided', {
+              hasTaskTree: !!taskTree,
+              hasOnTaskBuilderComplete: !!onTaskBuilderComplete
+            });
+          }
+        } catch (error) {
+          // ✅ Tollerante: logga warning ma non blocca il flusso
+          console.error('[useWizardCompletion] ❌ FIRST STEP: Error building TaskTree (non-blocking)', {
+            error: error instanceof Error ? error.message : String(error),
+            errorStack: error instanceof Error ? error.stack : undefined,
+            rootTemplateId: rootTemplate.id,
+            taskInstanceId: taskInstance?.id,
+            templateInCache: !!DialogueTaskService.getTemplate(rootTemplate.id)
+          });
+        }
+
+        // 9. Segnala che il primo step è completato
+        if (onFirstStepComplete) {
+          console.log('[useWizardCompletion] ✅ FIRST STEP: Complete - signaling onFirstStepComplete');
+          onFirstStepComplete();
+        }
+      }
+    } catch (error) {
+      // ✅ Tollerante: logga errore ma non blocca il flusso
+      console.error('[useWizardCompletion] ❌ FIRST STEP: Error (non-blocking)', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+      // ✅ CRITICAL: Chiama comunque onFirstStepComplete() per emettere DATA_STRUCTURE_PROPOSED
+      // I pulsanti "Sì"/"No" devono apparire anche se c'è un errore
+      if (onFirstStepComplete) {
+        onFirstStepComplete();
+      }
+      // ✅ Reset ref per permettere retry
+      hasCreatedTemplateForProposedRef.current = false;
+    }
+  }, [
+    dataSchema,
+    messages,
+    messagesGeneralized,
+    messagesContextualized,
+    shouldBeGeneral,
+    taskLabel,
+    rowId,
+    projectId,
+    addTranslation,
+    adaptAllNormalSteps,
+    onTaskBuilderComplete,
+    onFirstStepComplete
+  ]);
+
+  /**
+   * Crea template e istanza quando il wizard è completato
+   * ✅ CRITICAL: Called from checkAndComplete BEFORE transitionToCompleted
+   * Uses separate guard (hasCreatedTemplateForCompletedRef) to avoid conflict with first step
+   */
+  const createTemplateAndInstanceForCompleted = useCallback(async () => {
+    // ✅ Guard: check wizardMode, dataSchema, and separate completion ref
+    if (wizardMode !== WizardMode.GENERATING || dataSchema.length === 0 || hasCreatedTemplateForCompletedRef.current) {
+      console.log('[useWizardCompletion] ⚠️ createTemplateAndInstanceForCompleted - Guard failed', {
+        wizardMode,
+        wizardModeString: wizardMode ? String(wizardMode) : 'undefined',
+        wizardModeEqualsGenerating: wizardMode === WizardMode.GENERATING,
+        dataSchemaLength: dataSchema.length,
+        hasCreatedTemplateForCompleted: hasCreatedTemplateForCompletedRef.current
+      });
+      return;
+    }
+
+    hasCreatedTemplateForCompletedRef.current = true;
+    console.log('[useWizardCompletion] ✅ createTemplateAndInstanceForCompleted - Guard passed, proceeding');
 
     try {
       // 1. Raccogli constraints e nlpContracts in mappe (per nodo)
@@ -153,8 +398,24 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
 
 
       // 5. Registra template in memoria (DialogueTaskService)
+      console.log('[useWizardCompletion] 📝 Adding templates to memory cache', {
+        templatesCount: templates.size,
+        templateIds: Array.from(templates.keys()),
+        templateDetails: Array.from(templates.entries()).map(([id, template]) => ({
+          id: template.id,
+          _id: template._id,
+          label: template.label,
+          name: template.name
+        }))
+      });
+
       templates.forEach(template => {
         DialogueTaskService.addTemplate(template);
+        console.log('[useWizardCompletion] ✅ Template added to cache', {
+          templateId: template.id || template._id,
+          templateLabel: template.label,
+          cacheSize: DialogueTaskService.getTemplateCount()
+        });
       });
 
       // 6. Crea istanza contestualizzata
@@ -170,6 +431,12 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
       // ✅ ALWAYS use rootNode.id (no fallback)
       const rootNodeTemplateId = rootNode.id;
       const rootTemplate = templates.get(rootNodeTemplateId);
+
+      console.log('[useWizardCompletion] ✅ All templates added to cache', {
+        totalTemplates: templates.size,
+        cacheSize: DialogueTaskService.getTemplateCount(),
+        rootTemplateId: rootTemplate?.id || rootNodeTemplateId
+      });
       if (!rootTemplate) {
         throw new Error(
           `[useWizardCompletion] CRITICAL: Root template not found for id: ${rootNodeTemplateId}. ` +
@@ -183,29 +450,21 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
         throw new Error(`Invalid rootTemplate.id: ${rootTemplate.id}. Expected a valid GUID.`);
       }
 
-      // Get contextualized messages for root node only
-      const rootNodeId = dataSchema[0].id;
-      const rootContextualizedMessages = messagesContextualizedToUse.get(rootNodeId) || {
-        ask: { base: [] },
-        confirm: { base: [] },
-        notConfirmed: { base: [] },
-        violation: { base: [] },
-        disambiguation: { base: [], options: [] },
-        success: { base: [] }
-      };
-
       // ✅ CRITICAL: rowId MUST be provided (it equals row.id which equals task.id)
       if (!rowId) {
         throw new Error('[useWizardCompletion] CRITICAL: rowId is required. It must equal row.id (which equals task.id when task exists).');
       }
 
+      // ✅ NEW: Pass entire messagesContextualizedToUse Map instead of only root messages
+      // If adaptAllNormalSteps = true, contextualize all nodes; if false, only root node
       const instance = createContextualizedInstance(
         rootTemplate,
         templates,
-        rootContextualizedMessages,
+        messagesContextualizedToUse, // ✅ Pass entire Map instead of only root messages
         taskLabel || 'Task',
         rowId, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
-        addTranslation
+        addTranslation,
+        adaptAllNormalSteps // ✅ Pass flag to control contextualization scope
       );
 
       // 7. Salva istanza nel TaskRepository
@@ -225,14 +484,32 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
         }
 
         // Update task with instance data
+        console.log('[useWizardCompletion] 💾 Saving task instance', {
+          taskId: key,
+          templateId: rootTemplate.id,
+          templateIdType: typeof rootTemplate.id,
+          instanceTemplateId: instance.templateId,
+          instanceTemplateIdType: typeof instance.templateId,
+          templatesMatch: rootTemplate.id === instance.templateId
+        });
+
         taskRepository.updateTask(key, {
           ...instance,
           type: TaskType.UtteranceInterpretation,
-          templateId: rootTemplate.id,
+          templateId: rootTemplate.id, // ✅ CRITICAL: Use rootTemplate.id (must match template in cache)
         }, projectId);
 
         // Ricarica taskInstance dopo update
         taskInstance = taskRepository.getTask(key);
+
+        console.log('[useWizardCompletion] ✅ Task instance saved', {
+          taskId: taskInstance?.id,
+          taskTemplateId: taskInstance?.templateId,
+          taskTemplateIdType: typeof taskInstance?.templateId,
+          rootTemplateId: rootTemplate.id,
+          idsMatch: taskInstance?.templateId === rootTemplate.id,
+          templateInCache: !!DialogueTaskService.getTemplate(rootTemplate.id)
+        });
 
         // ✅ LOGGING PLAN G: Final pipeline summary log (before building TaskTree)
         const allNodesFinal = flattenTaskTree(dataSchema);
@@ -280,17 +557,62 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
         });
 
         // 8. Build TaskTree from instance and call onTaskBuilderComplete
+        // ✅ Tollerante: verifica template in cache, ma non blocca se non trovato
+        const templateInCache = DialogueTaskService.getTemplate(rootTemplate.id);
+        if (!templateInCache) {
+          console.warn('[useWizardCompletion] ⚠️ Template not in cache before buildTaskTree (non-blocking)', {
+            rootTemplateId: rootTemplate.id,
+            cacheSize: DialogueTaskService.getTemplateCount(),
+            allTemplateIds: DialogueTaskService.getAllTemplates().map(t => t.id || t._id)
+          });
+          // ✅ NON throw - permettere al wizard di continuare
+        }
+
+        console.log('[useWizardCompletion] ✅ Template verified in cache, building TaskTree', {
+          rootTemplateId: rootTemplate.id,
+          taskInstanceId: taskInstance?.id,
+          taskInstanceTemplateId: taskInstance?.templateId,
+          templateInCache: !!templateInCache
+        });
+
         try {
           const taskTree = await buildTaskTree(taskInstance, projectId);
           if (taskTree && onTaskBuilderComplete) {
+            console.log('[useWizardCompletion] ✅ TaskTree built successfully, calling onTaskBuilderComplete', {
+              taskTreeNodesCount: taskTree.nodes?.length || 0,
+              taskTreeStepsCount: taskTree.steps ? Object.keys(taskTree.steps).length : 0
+            });
             onTaskBuilderComplete(taskTree);
+          } else {
+            console.warn('[useWizardCompletion] ⚠️ TaskTree not built or onTaskBuilderComplete not provided', {
+              hasTaskTree: !!taskTree,
+              hasOnTaskBuilderComplete: !!onTaskBuilderComplete
+            });
           }
         } catch (error) {
-          // Error in buildTaskTree
+          // ✅ Tollerante: logga errore ma non blocca il flusso
+          console.warn('[useWizardCompletion] ⚠️ Error building TaskTree (non-blocking)', {
+            error: error instanceof Error ? error.message : String(error),
+            rootTemplateId: rootTemplate.id,
+            taskInstanceId: taskInstance?.id,
+            taskInstanceTemplateId: taskInstance?.templateId,
+            templateInCache: !!DialogueTaskService.getTemplate(rootTemplate.id)
+          });
+          // ✅ NON throw - permettere al wizard di completarsi anche se buildTaskTree fallisce
         }
       }
     } catch (error) {
-      // Error in template/instance creation
+      // ✅ CRITICAL: Log error to diagnose why buildTaskTree is not called
+      console.error('[useWizardCompletion] ❌ Error in createTemplateAndInstanceForCompleted', {
+        error: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+        wizardMode,
+        dataSchemaLength: dataSchema.length,
+        hasRowId: !!rowId,
+        hasProjectId: !!projectId
+      });
+      // ✅ Reset ref to allow retry
+      hasCreatedTemplateForCompletedRef.current = false;
     }
   }, [
     wizardMode,
@@ -302,14 +624,19 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
     taskLabel,
     rowId, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
     projectId,
+    addTranslation,
     onTaskBuilderComplete,
+    adaptAllNormalSteps,
   ]);
 
   /**
    * Verifica se tutti gli step sono completati e transiziona a COMPLETED
    * ✅ D1: Verifica che tutti i nodi abbiano messaggi e non ci siano nodi falliti
+   *
+   * ✅ CRITICAL: createTemplateAndInstanceForCompleted must be called BEFORE transitionToCompleted
+   * This ensures taskTree is in store before wizardMode becomes COMPLETED
    */
-  const checkAndComplete = useCallback((
+  const checkAndComplete = useCallback(async (
     pipelineSteps: Array<{ status: string }>,
     currentWizardMode: WizardMode,
     messagesToCheck: Map<string, any>,
@@ -348,16 +675,24 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
       !hasFailedNodes &&
       currentWizardMode === WizardMode.GENERATING
     ) {
+      // ✅ CRITICAL: Create template + instance BEFORE transitioning to COMPLETED
+      // This ensures taskTree is in store before wizardMode becomes COMPLETED
+      // ✅ Use createTemplateAndInstanceForCompleted (separate from first step)
+      console.log('[useWizardCompletion] 🚀 All conditions met - creating template + instance BEFORE transition to COMPLETED');
+      await createTemplateAndInstanceForCompleted();
+      console.log('[useWizardCompletion] ✅ Template + instance created - now transitioning to COMPLETED');
+      // ✅ Only after createTemplateAndInstanceForCompleted has finished (and called onTaskBuilderComplete)
       transitionToCompleted();
     } else if (hasFailedNodes) {
       // ✅ D1: Log ma NON bloccare - l'utente può fare retry manuale
     } else if (!allNodesHaveMessages) {
       // ✅ D1: Log se mancano messaggi
     }
-  }, [transitionToCompleted]);
+  }, [transitionToCompleted, createTemplateAndInstanceForCompleted]);
 
   return {
-    createTemplateAndInstance,
+    createTemplateAndInstanceForCompleted, // ✅ Function for completion (when all steps are done)
+    createTemplateAndInstanceForProposed, // ✅ Function for first step (DATA_STRUCTURE_PROPOSED)
     checkAndComplete,
   };
 }

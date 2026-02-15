@@ -15,9 +15,15 @@ import { extractGUIDsFromDDT } from '../utils/ddtUtils';
  * @param ddt - The DDT object to extract translations for
  * @param task - Optional Task object to extract GUIDs from task.steps[nodeId]
  * @param version - Optional version number to force recalculation when it changes
+ * @param selectedNodeId - Optional selected node ID to force recalculation when node selection changes
  * @returns Record<string, string> - Dictionary of translations { guid: text }
  */
-export function useDDTTranslations(ddt: any | null | undefined, task?: any, version?: number): Record<string, string> {
+export function useDDTTranslations(
+  ddt: any | null | undefined,
+  task?: any,
+  version?: number,
+  selectedNodeId?: string | null
+): Record<string, string> {
   const { translations: globalTranslations } = useProjectTranslations();
 
   // Track last logged state to avoid duplicate logs - use stable keys
@@ -39,6 +45,9 @@ export function useDDTTranslations(ddt: any | null | undefined, task?: any, vers
   const translationsKeys = Object.keys(globalTranslations).sort().join(',');
   // ✅ FASE 2.3: Use version to force recalculation when store is populated
   const stableVersion = version ?? 0;
+  // ✅ CRITICAL FIX: Include selectedNodeId to force recalculation when node selection changes
+  // When you change node, the context changes, so translations must be recalculated
+  const stableSelectedNodeId = selectedNodeId ?? null;
 
   return useMemo(() => {
     if (!ddt) {
@@ -164,9 +173,10 @@ export function useDDTTranslations(ddt: any | null | undefined, task?: any, vers
 
     return translationsFromGlobal;
     // ✅ CRITICAL: Don't include ddt/task in deps - they change reference on every render
-    // Use only stable keys: ddtId, taskStepsKeys, translationsKeys, version
+    // Use only stable keys: ddtId, taskStepsKeys, translationsKeys, version, selectedNodeId
     // ✅ FASE 2.3: Added version to force recalculation when store is populated
+    // ✅ CRITICAL FIX: Added selectedNodeId to force recalculation when node selection changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ddtId, taskStepsKeys, translationsKeys, stableVersion]);
+  }, [ddtId, taskStepsKeys, translationsKeys, stableVersion, stableSelectedNodeId]);
 }
 

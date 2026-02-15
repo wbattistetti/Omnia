@@ -81,8 +81,9 @@ export function ResponseEditorContent({
   onTaskBuilderCancel,
   sidebar,
 }: ResponseEditorContentProps) {
-  // ✅ NEW: Get data from Context
-  const { taskTree, taskMeta, taskLabel } = useResponseEditorContext();
+  // ✅ ARCHITECTURE: Get data from Context - SINGLE SOURCE OF TRUTH
+  // No derives, no fallbacks - Context is the only source
+  const { taskTree, taskMeta, taskLabel, taskWizardMode: taskWizardModeFromContext, contextualizationTemplateId: contextualizationTemplateIdFromContext } = useResponseEditorContext();
 
   // ✅ FASE 2.3: Use store as SINGLE source of truth
   const taskTreeFromStore = useTaskTreeFromStore();
@@ -91,11 +92,39 @@ export function ResponseEditorContent({
   const taskTreeId = React.useMemo(() => taskTreeFromStore?.id, [taskTreeFromStore?.id]);
   const taskTreeNodesCount = React.useMemo(() => taskTreeFromStore?.nodes?.length, [taskTreeFromStore?.nodes?.length]);
 
-  // ✅ ARCHITECTURE: Stabilize effectiveWizardMode with useMemo
-  const effectiveWizardMode = React.useMemo<TaskWizardMode>(() => {
-    return taskWizardMode ||
-      (needsTaskBuilder ? 'full' : needsTaskContextualization ? 'adaptation' : 'none');
-  }, [taskWizardMode, needsTaskBuilder, needsTaskContextualization]);
+  // ✅ ARCHITECTURE: Use Context directly - NO DERIVES, NO FALLBACKS
+  // Context is SINGLE SOURCE OF TRUTH for taskWizardMode
+  const effectiveWizardMode = taskWizardModeFromContext; // ✅ Direct from Context, no derives
+  const effectiveTemplateId = contextualizationTemplateIdFromContext; // ✅ Direct from Context, no fallbacks
+
+  // ✅ DEBUG: Log completo per capire perché il wizard non si apre
+  React.useEffect(() => {
+    console.log('[ResponseEditorContent] 🔍 DEBUG valori wizard COMPLETO', {
+      // ✅ ARCHITECTURE: Valori dal Context - SINGLE SOURCE OF TRUTH
+      taskWizardModeFromContext,
+      contextualizationTemplateIdFromContext,
+      effectiveWizardMode, // ✅ Direct from Context, no derives
+      effectiveTemplateId, // ✅ Direct from Context, no fallbacks
+      // Valori backward compatibility (deprecated)
+      needsTaskBuilder,
+      needsTaskContextualization,
+      // Condizione finale
+      willShowAdaptationWizard: effectiveWizardMode === 'adaptation' && !!effectiveTemplateId,
+      // Altri valori utili
+      hasTaskTreeFromStore: !!taskTreeFromStore,
+      hasTaskMeta: !!taskMeta,
+      taskMetaId: taskMeta?.id,
+    });
+  }, [
+    taskWizardModeFromContext,
+    contextualizationTemplateIdFromContext,
+    effectiveWizardMode,
+    effectiveTemplateId,
+    needsTaskBuilder,
+    needsTaskContextualization,
+    taskTreeFromStore,
+    taskMeta?.id,
+  ]);
 
   // ✅ LOG: Verification log for debugging (moved to useEffect to keep render pure)
   // ✅ FIX: Use only primitive dependencies to prevent loop
@@ -121,7 +150,29 @@ export function ResponseEditorContent({
   // ✅ PRIORITY 2: Wizard modes (checked AFTER full mode)
   // ✅ STATO 2: taskWizardMode = 'adaptation' (template found, no instance)
   // Sidebar visible + wizard adattamento (genera solo messaggi)
-  if (effectiveWizardMode === 'adaptation' && taskTreeFromStore && templateId) {
+  // ✅ FIX: Rimuovere dipendenza da taskTreeFromStore - può essere null inizialmente e verrà caricato asincronamente
+
+  // ✅ DEBUG: Log solo quando cambiano i valori critici (evita loop infinito)
+  React.useEffect(() => {
+    if (effectiveWizardMode === 'adaptation') {
+      console.log('[ResponseEditorContent] 📊 DEBUG: Verifica wizard mode', {
+        effectiveWizardMode,
+        templateId: effectiveTemplateId,
+        hasTaskTreeFromStore: !!taskTreeFromStore,
+        taskTreeFromStoreKeys: taskTreeFromStore ? Object.keys(taskTreeFromStore) : [],
+        willShowAdaptationWizard: effectiveWizardMode === 'adaptation' && !!effectiveTemplateId
+      });
+    }
+  }, [effectiveWizardMode, effectiveTemplateId, taskTreeFromStore]);
+
+  if (effectiveWizardMode === 'adaptation' && effectiveTemplateId) {
+    console.log('[ResponseEditorContent] ✅ Mostrando wizard di adattamento', {
+      effectiveWizardMode,
+      templateId: effectiveTemplateId,
+      hasTaskTree: !!taskTreeFromStore,
+      hasSidebar: !!sidebar,
+      taskLabel
+    });
     return (
       <div style={{ flex: 1, minHeight: 0, height: '100%', overflow: 'hidden', display: 'flex' }}>
         {/* Sidebar: visible (structure from template) */}
@@ -133,9 +184,9 @@ export function ResponseEditorContent({
         {/* Contextualization panel: generates only messages */}
         <div style={{ flex: 1 }}>
           <TaskContextualizationPanel
-            taskTree={taskTreeFromStore}
+            taskTree={taskTreeFromStore} // ✅ Può essere null inizialmente, verrà caricato asincronamente
             taskLabel={taskLabel || ''}
-            templateId={templateId}
+            templateId={effectiveTemplateId}
             task={taskMeta as any} // ✅ Pass task completo per AdaptTaskTreePromptToContext
             onComplete={onTaskContextualizationComplete}
             onCancel={onTaskBuilderCancel}

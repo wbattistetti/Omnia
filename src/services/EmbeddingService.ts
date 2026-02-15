@@ -117,11 +117,23 @@ export class EmbeddingService {
       }
       inputEmbedding = new Float32Array(data.embedding);
     } catch (error) {
-      console.error(`[EmbeddingService] ❌ Failed to compute input embedding (type: ${type}):`, {
-        error: error instanceof Error ? error.message : String(error),
-        inputText: inputText.substring(0, 50),
-        hint: 'Make sure Python FastAPI service is running on port 8000 and sentence-transformers is installed'
-      });
+      // ✅ Silently fallback when service is unavailable (expected in dev without Python service)
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isServiceUnavailable = errorMessage.includes('Cannot reach') ||
+        errorMessage.includes('ECONNREFUSED') ||
+        errorMessage.includes('fetch failed');
+
+      if (isServiceUnavailable) {
+        console.warn(`[EmbeddingService] ⚠️ Embedding service unavailable, falling back to full wizard:`, {
+          inputText: inputText.substring(0, 50),
+          hint: 'Start Python FastAPI service with: npm run be:apiNew'
+        });
+      } else {
+        console.error(`[EmbeddingService] ❌ Failed to compute input embedding (type: ${type}):`, {
+          error: errorMessage,
+          inputText: inputText.substring(0, 50)
+        });
+      }
       return null; // Fallback a wizard full
     }
 

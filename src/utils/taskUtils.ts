@@ -1112,19 +1112,91 @@ export async function buildTaskTree(
     instance.templateId = autoTemplate.id;
   }
 
-  // ✅ SEMPRE costruisci da template
+  // ✅ ARCHITECTURE: Template must exist by construction
+  // First check in-memory cache (DialogueTaskService)
+  console.log('[buildTaskTree] 🔍 Searching for template', {
+    templateId: instance.templateId,
+    templateIdType: typeof instance.templateId,
+    taskId: instance.id,
+    taskLabel: instance.label,
+    cacheSize: DialogueTaskService.getTemplateCount(),
+    cacheLoaded: (DialogueTaskService as any).cacheLoaded
+  });
+
   let template = DialogueTaskService.getTemplate(instance.templateId);
 
-  // ✅ Se non è in cache, prova a caricarlo dal progetto
+  // ✅ DEBUG: Log all templates in cache if template not found
+  if (!template) {
+    const allTemplates = DialogueTaskService.getAllTemplates();
+    const allTemplateIds = allTemplates.map(t => ({
+      id: t.id,
+      _id: t._id ? (typeof t._id === 'object' ? t._id.toString() : String(t._id)) : null,
+      label: t.label,
+      name: t.name
+    }));
+    console.warn('[buildTaskTree] ⚠️ Template not found in cache - showing all templates', {
+      searchedTemplateId: instance.templateId,
+      searchedTemplateIdType: typeof instance.templateId,
+      cacheSize: allTemplates.length,
+      allTemplateIds,
+      // ✅ DEBUG: Check if there's a case mismatch or similar ID
+      similarIds: allTemplateIds.filter(t =>
+        t.id && String(t.id).toLowerCase() === String(instance.templateId).toLowerCase()
+      )
+    });
+  } else {
+    console.log('[buildTaskTree] ✅ Template found in cache', {
+      templateId: template.id || template._id,
+      templateLabel: template.label,
+      templateName: template.name
+    });
+  }
+
+  // ✅ If not in cache, try loading from project database
   if (!template && projectId) {
+    console.log('[buildTaskTree] 🔍 Trying to load template from project database', {
+      templateId: instance.templateId,
+      projectId
+    });
     const projectTemplate = await loadTemplateFromProject(instance.templateId, projectId);
     if (projectTemplate) {
       template = projectTemplate;
+      console.log('[buildTaskTree] ✅ Template loaded from project database', {
+        templateId: template.id || template._id,
+        templateLabel: template.label
+      });
+    } else {
+      console.warn('[buildTaskTree] ⚠️ Template not found in project database', {
+        templateId: instance.templateId,
+        projectId
+      });
     }
   }
 
+  // ✅ TOLERANT: Template should exist by construction, but don't block flow if not found
+  // Log warning but allow wizard to continue (template might be created later)
   if (!template) {
-    throw new Error(`Template ${instance.templateId} not found`);
+    const cacheSize = DialogueTaskService.getTemplateCount();
+    const cacheLoaded = (DialogueTaskService as any).cacheLoaded;
+    const allTemplates = DialogueTaskService.getAllTemplates();
+    const allTemplateIds = allTemplates.map(t => ({
+      id: t.id,
+      _id: t._id ? (typeof t._id === 'object' ? t._id.toString() : String(t._id)) : null,
+      label: t.label,
+      name: t.name
+    }));
+    console.warn('[buildTaskTree] ⚠️ Template not found (non-blocking)', {
+      templateId: instance.templateId,
+      templateIdType: typeof instance.templateId,
+      taskId: instance.id,
+      taskLabel: instance.label,
+      cacheSize,
+      cacheLoaded,
+      allTemplateIds,
+      hint: 'Template should exist by construction, but wizard will continue. Template might be created later or needs to be loaded from database.'
+    });
+    // ✅ Return null instead of throwing - allows wizard to continue
+    return null;
   }
 
   // ✅ Usa buildTaskTreeNodes() per costruire direttamente TaskTreeNode[] con subNodes[]
