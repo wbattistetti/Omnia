@@ -353,11 +353,26 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
 
   // ✅ FIX: Handler to save to Factory with loading state and dematerialization filter
   const handleSaveToFactory = React.useCallback(async () => {
+    console.log('[ResponseEditorLayout] 🔍 handleSaveToFactory - Guard check', {
+      shouldBeGeneral,
+      hasWizardIntegration: !!wizardIntegrationProp,
+      isSavingBefore: isSaving
+    });
+
     if (!shouldBeGeneral || !wizardIntegrationProp) {
+      console.warn('[ResponseEditorLayout] ⚠️ handleSaveToFactory - Guard failed, returning early', {
+        shouldBeGeneral,
+        hasWizardIntegration: !!wizardIntegrationProp
+      });
       return;
     }
 
+    console.log('[ResponseEditorLayout] 🚀 handleSaveToFactory - Setting isSaving to true');
     setIsSaving(true);
+    // ✅ CRITICAL: Force a re-render by using a small delay to ensure state update is processed
+    // React batches state updates, so we need to ensure the dialog sees the update
+    await new Promise(resolve => setTimeout(resolve, 0));
+    console.log('[ResponseEditorLayout] ✅ isSaving should now be true');
 
     try {
       // Get all templates from DialogueTaskService cache
@@ -652,8 +667,9 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
 
         setSaveDecision('factory');
         setSaveDecisionMade(true);
-        // ✅ FIX: Close dialog only after saving is complete (in finally block)
-        // Don't close here - let finally block handle it
+        setIsSaving(false);
+        // ✅ FIX: Close dialog only after successful save
+        setShowSaveDialog(false);
       } else {
         const errorText = await response.text();
         throw new Error(`Failed to save to Factory: ${response.status} ${errorText}`);
@@ -661,13 +677,11 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     } catch (error) {
       console.error('[ResponseEditorLayout] ❌ Error saving to Factory:', error);
       alert(`Error saving to Factory: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      // ✅ FIX: Close dialog and reset saving state in finally block
-      // This ensures spinner is visible during the entire save operation
+      // ✅ FIX: Reset saving state on error, but keep dialog open so user can retry
       setIsSaving(false);
-      setShowSaveDialog(false);
+      // Don't close dialog on error - let user see what happened and retry if needed
     }
-  }, [wizardIntegrationProp, shouldBeGeneral, generalizedLabel]);
+  }, [wizardIntegrationProp, shouldBeGeneral, generalizedLabel, taskMeta?.id]);
 
   // ✅ NEW: Handler to save only to project
   const handleSaveToProject = React.useCallback(() => {

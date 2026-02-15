@@ -1,7 +1,7 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import React, { useEffect, useCallback, useRef } from 'react';
+import React, { useEffect, useCallback, useRef, useMemo } from 'react';
 import { useWizardState } from '../../../../../TaskBuilderAIWizard/hooks/useWizardState';
 import { useWizardFlow } from '../../../../../TaskBuilderAIWizard/hooks/useWizardFlow';
 import { useWizardGeneration } from '../../../../../TaskBuilderAIWizard/hooks/useWizardGeneration';
@@ -163,11 +163,39 @@ export function useWizardIntegration(
     wizardFlow.transitionToCorrection();
   }, [wizardFlow]);
 
+  // ✅ FIX: Memoize callback functions to prevent re-renders
+  const onProceedFromEuristica = useCallback(async () => {
+    if (taskLabel) {
+      hasStartedRef.current = false;
+      wizardFlow.resetToStart();
+      wizardState.setCurrentStep('generazione_struttura');
+      await wizardGeneration.runGenerationPipeline(taskLabel.trim(), rowId);
+      await wizardSync.syncVariables();
+    }
+  }, [taskLabel, rowId, wizardFlow, wizardState.setCurrentStep, wizardGeneration, wizardSync]);
+
+  const onShowModuleList = useCallback(() => {
+    wizardState.setWizardMode(WizardMode.LISTA_MODULI);
+    wizardState.setCurrentStep('lista_moduli');
+  }, [wizardState.setWizardMode, wizardState.setCurrentStep]);
+
+  const onSelectModule = useCallback(async (moduleId: string) => {
+    if (taskLabel) {
+      wizardState.setSelectedModuleId(moduleId);
+      hasStartedRef.current = false;
+      wizardFlow.resetToStart();
+      wizardState.setCurrentStep('generazione_struttura');
+      await wizardGeneration.runGenerationPipeline(taskLabel.trim(), rowId);
+      await wizardSync.syncVariables();
+    }
+  }, [taskLabel, rowId, wizardState.setSelectedModuleId, wizardFlow, wizardState.setCurrentStep, wizardGeneration, wizardSync]);
+
   // ============================================
   // RETURN - API unificata per ResponseEditorLayout
   // ============================================
 
-  return {
+  // ✅ FIX: Memoize return object to prevent reference changes on every render
+  return useMemo(() => ({
     // Stato wizard
     wizardMode: wizardState.wizardMode,
     currentStep: wizardState.currentStep,
@@ -202,31 +230,40 @@ export function useWizardIntegration(
     currentMessageSubstep: wizardState.currentMessageSubstep,
 
     // Altri metodi wizard (per estendere wizardProps)
-    onProceedFromEuristica: async () => {
-      if (taskLabel) {
-        hasStartedRef.current = false;
-        wizardFlow.resetToStart();
-        wizardState.setCurrentStep('generazione_struttura');
-        await wizardGeneration.runGenerationPipeline(taskLabel.trim(), rowId);
-        await wizardSync.syncVariables();
-      }
-    },
-    onShowModuleList: () => {
-      wizardState.setWizardMode(WizardMode.LISTA_MODULI);
-      wizardState.setCurrentStep('lista_moduli');
-    },
-    onSelectModule: async (moduleId: string) => {
-      if (taskLabel) {
-        wizardState.setSelectedModuleId(moduleId);
-        hasStartedRef.current = false;
-        wizardFlow.resetToStart();
-        wizardState.setCurrentStep('generazione_struttura');
-        await wizardGeneration.runGenerationPipeline(taskLabel.trim(), rowId);
-        await wizardSync.syncVariables();
-      }
-    },
+    onProceedFromEuristica,
+    onShowModuleList,
+    onSelectModule,
     onPreviewModule: wizardState.setActiveNodeId,
     availableModules: EMPTY_MODULES,
     foundModuleId: wizardState.selectedModuleId,
-  };
+  }), [
+    // State values
+    wizardState.wizardMode,
+    wizardState.currentStep,
+    wizardState.pipelineSteps,
+    wizardState.dataSchema,
+    wizardState.showStructureConfirmation,
+    wizardState.structureConfirmed,
+    wizardState.showCorrectionMode,
+    wizardState.correctionInput,
+    wizardState.setCorrectionInput,
+    wizardState.messages,
+    wizardState.messagesGeneralized,
+    wizardState.messagesContextualized,
+    wizardState.shouldBeGeneral,
+    wizardState.constraints,
+    wizardState.nlpContract,
+    wizardState.currentParserSubstep,
+    wizardState.currentMessageSubstep,
+    wizardState.setActiveNodeId,
+    wizardState.selectedModuleId,
+    // Handlers
+    handleStructureConfirm,
+    handleStructureReject,
+    wizardGeneration.runGenerationPipeline,
+    // Callbacks
+    onProceedFromEuristica,
+    onShowModuleList,
+    onSelectModule,
+  ]);
 }

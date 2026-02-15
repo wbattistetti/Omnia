@@ -204,7 +204,7 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
         return; // ✅ NON throw - permettere al wizard di continuare
       }
 
-      const instance = createContextualizedInstance(
+      const instance = await createContextualizedInstance(
         rootTemplate,
         templates,
         messagesContextualizedToUse,
@@ -457,7 +457,7 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
 
       // ✅ NEW: Pass entire messagesContextualizedToUse Map instead of only root messages
       // If adaptAllNormalSteps = true, contextualize all nodes; if false, only root node
-      const instance = createContextualizedInstance(
+      const instance = await createContextualizedInstance(
         rootTemplate,
         templates,
         messagesContextualizedToUse, // ✅ Pass entire Map instead of only root messages

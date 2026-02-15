@@ -19,13 +19,8 @@ export function useWizardModeTransition(
   pipelineSteps: PipelineStep[] | undefined,
   taskTreeVersion?: number
 ): boolean {
-  console.log('[useWizardModeTransition] DEBUG SIMPLE', {
-    taskWizardMode,
-    wizardMode,
-    wizardModeString: wizardMode ? String(wizardMode) : 'undefined',
-    hasTaskTree: !!taskTree,
-    taskTreeNodesCount: taskTree?.nodes?.length || 0,
-  });
+  // ✅ REMOVED: Log rumoroso che causava spam in console
+  // Il problema di rendering continuo verrà risolto con refactoring architetturale
 
   // ✅ MINIMAL CONDITIONS: Only check wizardMode and taskTree
   // If this works, the problem is pipelineSteps

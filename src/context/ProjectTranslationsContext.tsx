@@ -78,6 +78,11 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
       if (hasChanges) {
         setIsDirty(true);
         setAllGuids((prev) => new Set([...prev, ...Object.keys(newTranslations)]));
+        // ✅ CRITICAL: Aggiorna immediatamente window.__projectTranslationsContext.translations
+        // per accesso sincrono (senza attendere il re-render di React)
+        if (typeof window !== 'undefined' && (window as any).__projectTranslationsContext) {
+          (window as any).__projectTranslationsContext.translations = updated;
+        }
       }
       return updated;
     });
@@ -194,7 +199,8 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
           await loadAllTranslations();
         },
         isDirty,
-        translationsCount: Object.keys(translations).length
+        translationsCount: Object.keys(translations).length,
+        translations: translations // ✅ CRITICAL: Espone le traduzioni direttamente per accesso sincrono
       };
     }
     return () => {

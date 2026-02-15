@@ -35,6 +35,8 @@ export function SaveLocationDialog({
   isSaving = false, // ✅ NEW: Default to false
   responseEditorRef // ✅ NEW: Ref to ResponseEditor container
 }: SaveLocationDialogProps) {
+  // ✅ REMOVED: Log rumoroso - verrà ripristinato se necessario durante refactoring
+
   // ✅ ARCHITECTURE: Read from contexts (single source of truth)
   const { taskLabel } = useResponseEditorContext();
   const wizardContext = useWizardContext();
@@ -244,12 +246,28 @@ export function SaveLocationDialog({
             Salva nel progetto
           </button>
           <button
-            onClick={() => {
-              console.log('[SaveLocationDialog] 🔍 CLICK su "Salva nella libreria generale"');
-              console.log('[SaveLocationDialog] 🔍 onSaveToFactory:', onSaveToFactory);
-              console.log('[SaveLocationDialog] 🔍 typeof onSaveToFactory:', typeof onSaveToFactory);
-              onSaveToFactory();
-              // ✅ FIX: onClose viene chiamato dopo il salvataggio in handleSaveToFactory
+            onClick={async () => {
+              console.log('[SaveLocationDialog] 🔍 CLICK su "Salva nella libreria generale"', {
+                isSavingBeforeClick: isSaving,
+                hasOnSaveToFactory: !!onSaveToFactory,
+                onSaveToFactoryType: typeof onSaveToFactory
+              });
+              // ✅ FIX: await the async function to ensure isSaving state updates correctly
+              try {
+                if (!onSaveToFactory) {
+                  console.error('[SaveLocationDialog] ❌ onSaveToFactory is not defined!');
+                  return;
+                }
+                console.log('[SaveLocationDialog] 🚀 Calling onSaveToFactory...');
+                await onSaveToFactory();
+                console.log('[SaveLocationDialog] ✅ onSaveToFactory completed');
+                // ✅ onClose viene chiamato dopo il salvataggio in handleSaveToFactory
+                // Non chiamare onClose qui perché handleSaveToFactory lo gestisce
+              } catch (error) {
+                console.error('[SaveLocationDialog] ❌ Error saving to factory:', error);
+                // ✅ Don't close dialog on error - let user see what happened
+                // handleSaveToFactory will set isSaving(false) in its catch block
+              }
             }}
             disabled={isSaving}
             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"

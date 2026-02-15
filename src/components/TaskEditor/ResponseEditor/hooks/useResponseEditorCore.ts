@@ -215,71 +215,79 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     task?.instanceId
   ]);
 
+  // ✅ MODIFICA MINIMA: Inizializza wizardMode UNA SOLA VOLTA quando task.id cambia
+  // NON quando taskMeta cambia riferimento - questo risolve il rendering continuo
+  const previousTaskIdRef = React.useRef<string | undefined>(undefined);
+
   // ✅ SINGLE SOURCE OF TRUTH: Read taskWizardMode and taskLabel from taskMeta
   // These flags are set when opening ResponseEditor from NodeRow
   // taskLabel is ALWAYS set here - if taskMeta is not available, use empty string temporarily
   React.useEffect(() => {
-    if (taskMeta) {
-      // ✅ Priority: explicit taskWizardMode > backward compatibility with booleans
-      let wizardMode: TaskWizardMode = 'none';
-      if (taskMeta.taskWizardMode && (taskMeta.taskWizardMode === 'none' || taskMeta.taskWizardMode === 'adaptation' || taskMeta.taskWizardMode === 'full')) {
-        wizardMode = taskMeta.taskWizardMode;
-      } else {
-        // ✅ Backward compatibility: derive from boolean flags
-        const needsContextualization = (taskMeta as any).needsTaskContextualization === true;
-        const needsBuilder = (taskMeta as any).needsTaskBuilder === true;
-        if (needsBuilder) {
-          wizardMode = 'full';
-        } else if (needsContextualization) {
-          wizardMode = 'adaptation';
-        } else {
-          wizardMode = 'none';
-        }
-      }
+    // ✅ SOLO se task.id è cambiato (nuovo task), inizializza
+    // Se task.id è lo stesso, NON fare nulla (anche se taskMeta cambia riferimento)
+    const currentTaskId = task?.id;
 
-      const contextualizationTemplateId = (taskMeta as any).contextualizationTemplateId || null;
-      // ✅ SINGLE SOURCE OF TRUTH: Read taskLabel from taskMeta
-      // Priority: taskMeta.taskLabel > taskMeta.label > empty string (temporary)
-      const taskLabelFromMeta = (taskMeta as any).taskLabel || taskMeta.label || '';
-
-      // ✅ Set primary state
-      setTaskWizardMode(wizardMode);
-      setContextualizationTemplateId(contextualizationTemplateId);
-      setTaskLabel(taskLabelFromMeta); // ✅ ALWAYS set - empty string if not available yet
-
-      // ✅ DEPRECATED: Backward compatibility - sync boolean flags
-      if (wizardMode === 'adaptation') {
-        setNeedsTaskContextualization(true);
-        setNeedsTaskBuilder(false);
-      } else if (wizardMode === 'full') {
-        setNeedsTaskContextualization(false);
-        setNeedsTaskBuilder(true);
-      } else {
-        setNeedsTaskContextualization(false);
-        setNeedsTaskBuilder(false);
-      }
-    } else {
-      // ✅ If taskMeta is not available yet, use empty string temporarily
-      // This will be updated when taskMeta becomes available
-      setTaskLabel('');
+    // ✅ Se task.id non è cambiato, NON fare nulla
+    if (currentTaskId === previousTaskIdRef.current) {
+      return;
     }
-    // ✅ FIX: Use primitive values instead of taskMeta object to prevent infinite loops
-  }, [
-    taskMeta?.id,
-    taskMeta?.type,
-    taskMeta?.taskWizardMode,
-    taskMeta?.contextualizationTemplateId,
-    (taskMeta as any)?.needsTaskContextualization,
-    (taskMeta as any)?.needsTaskBuilder,
-    (taskMeta as any)?.taskLabel,
-    taskMeta?.label,
-    // Setters are stable from useState, but we can include them for completeness
-    setTaskWizardMode,
-    setNeedsTaskContextualization,
-    setNeedsTaskBuilder,
-    setContextualizationTemplateId,
-    setTaskLabel
-  ]);
+
+    // ✅ Se non c'è task, resetta
+    if (!currentTaskId) {
+      if (previousTaskIdRef.current !== undefined) {
+        setTaskWizardMode('none');
+        setContextualizationTemplateId(null);
+        setTaskLabel('');
+        previousTaskIdRef.current = undefined;
+      }
+      return;
+    }
+
+    // ✅ Inizializza SOLO per nuovo task.id
+    const taskMeta = isTaskMeta(task) ? task : getTaskMeta(task);
+
+    // ✅ Priority: explicit taskWizardMode > backward compatibility with booleans
+    let wizardMode: TaskWizardMode = 'none';
+    if (taskMeta.taskWizardMode && (taskMeta.taskWizardMode === 'none' || taskMeta.taskWizardMode === 'adaptation' || taskMeta.taskWizardMode === 'full')) {
+      wizardMode = taskMeta.taskWizardMode;
+    } else {
+      // ✅ Backward compatibility: derive from boolean flags
+      const needsContextualization = (taskMeta as any).needsTaskContextualization === true;
+      const needsBuilder = (taskMeta as any).needsTaskBuilder === true;
+      if (needsBuilder) {
+        wizardMode = 'full';
+      } else if (needsContextualization) {
+        wizardMode = 'adaptation';
+      } else {
+        wizardMode = 'none';
+      }
+    }
+
+    const contextualizationTemplateId = (taskMeta as any).contextualizationTemplateId || null;
+    // ✅ SINGLE SOURCE OF TRUTH: Read taskLabel from taskMeta
+    // Priority: taskMeta.taskLabel > taskMeta.label > empty string (temporary)
+    const taskLabelFromMeta = (taskMeta as any).taskLabel || taskMeta.label || '';
+
+    // ✅ Set primary state
+    setTaskWizardMode(wizardMode);
+    setContextualizationTemplateId(contextualizationTemplateId);
+    setTaskLabel(taskLabelFromMeta); // ✅ ALWAYS set - empty string if not available yet
+
+    // ✅ DEPRECATED: Backward compatibility - sync boolean flags
+    if (wizardMode === 'adaptation') {
+      setNeedsTaskContextualization(true);
+      setNeedsTaskBuilder(false);
+    } else if (wizardMode === 'full') {
+      setNeedsTaskContextualization(false);
+      setNeedsTaskBuilder(true);
+    } else {
+      setNeedsTaskContextualization(false);
+      setNeedsTaskBuilder(false);
+    }
+
+    // ✅ Marca task.id come processato
+    previousTaskIdRef.current = currentTaskId;
+  }, [task?.id]); // ✅ SOLO task.id come dipendenza - NON taskMeta o altri campi
 
   // Replace selected task tree
   const { replaceSelectedTaskTree: replaceSelectedTaskTreeFromContext } = useTaskTreeManager();

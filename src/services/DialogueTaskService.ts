@@ -152,14 +152,7 @@ export class DialogueTaskService {
     const normalizedId = String(id).trim();
     const normalizedIdLower = normalizedId.toLowerCase();
 
-    // ✅ DEBUG: Log search details
-    console.log('[DialogueTaskService] 🔍 Searching template', {
-      searchedId: normalizedId,
-      searchedIdType: typeof id,
-      searchedIdLength: normalizedId.length,
-      cacheSize: this.cache.length,
-      cacheLoaded: this.cacheLoaded
-    });
+    // ✅ REMOVED: Log rumoroso di ricerca template - verrà ripristinato se necessario durante refactoring
 
     // Cerca nella cache
     const found = this.cache.find(t => {
@@ -209,14 +202,8 @@ export class DialogueTaskService {
           )
         });
       }
-    } else {
-      console.log('[DialogueTaskService] ✅ Template trovato', {
-        searchedId: normalizedId,
-        foundId: found.id || found._id,
-        foundLabel: found.label,
-        foundName: found.name
-      });
     }
+    // ✅ REMOVED: Log rumoroso quando template trovato - verrà ripristinato se necessario durante refactoring
 
     return found || null;
   }
@@ -426,23 +413,12 @@ export class DialogueTaskService {
       });
       if (index >= 0) {
         this.cache[index] = template;
-        console.log('[DialogueTaskService] ✅ Template aggiornato in cache', {
-          templateId: templateIdStr,
-          label: template.label,
-          cacheSize: this.cache.length
-        });
+        // ✅ REMOVED: Log rumoroso - verrà ripristinato se necessario durante refactoring
       }
     } else {
       // Aggiungi nuovo template
       this.cache.push(template);
-      console.log('[DialogueTaskService] ✅ Template aggiunto in memoria', {
-        templateId: templateIdStr,
-        templateIdType: typeof templateId,
-        label: template.label,
-        totalTemplates: this.cache.length,
-        // ✅ DEBUG: Verify template can be found immediately
-        canBeFound: !!this.getTemplate(templateIdStr)
-      });
+      // ✅ REMOVED: Log rumoroso - verrà ripristinato se necessario durante refactoring
     }
 
     // ✅ NUOVO: Genera embedding in background (non blocca)

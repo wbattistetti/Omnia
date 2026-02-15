@@ -97,51 +97,7 @@ export function ResponseEditorContent({
   const effectiveWizardMode = taskWizardModeFromContext; // ✅ Direct from Context, no derives
   const effectiveTemplateId = contextualizationTemplateIdFromContext; // ✅ Direct from Context, no fallbacks
 
-  // ✅ DEBUG: Log completo per capire perché il wizard non si apre
-  React.useEffect(() => {
-    console.log('[ResponseEditorContent] 🔍 DEBUG valori wizard COMPLETO', {
-      // ✅ ARCHITECTURE: Valori dal Context - SINGLE SOURCE OF TRUTH
-      taskWizardModeFromContext,
-      contextualizationTemplateIdFromContext,
-      effectiveWizardMode, // ✅ Direct from Context, no derives
-      effectiveTemplateId, // ✅ Direct from Context, no fallbacks
-      // Valori backward compatibility (deprecated)
-      needsTaskBuilder,
-      needsTaskContextualization,
-      // Condizione finale
-      willShowAdaptationWizard: effectiveWizardMode === 'adaptation' && !!effectiveTemplateId,
-      // Altri valori utili
-      hasTaskTreeFromStore: !!taskTreeFromStore,
-      hasTaskMeta: !!taskMeta,
-      taskMetaId: taskMeta?.id,
-    });
-  }, [
-    taskWizardModeFromContext,
-    contextualizationTemplateIdFromContext,
-    effectiveWizardMode,
-    effectiveTemplateId,
-    needsTaskBuilder,
-    needsTaskContextualization,
-    taskTreeFromStore,
-    taskMeta?.id,
-  ]);
-
-  // ✅ LOG: Verification log for debugging (moved to useEffect to keep render pure)
-  // ✅ FIX: Use only primitive dependencies to prevent loop
-  const mainListLength = taskTreeFromStore?.nodes?.length || 0;
-  const hasNormalEditorLayout = !!normalEditorLayout;
-  const hasSidebar = !!sidebar;
-  React.useEffect(() => {
-    if (effectiveWizardMode === 'full') {
-      console.log('[ResponseEditorContent] ✅ FULL WIZARD MODE - Rendering CenterPanel in MainContentArea', {
-        taskWizardMode,
-        effectiveWizardMode,
-        mainListLength,
-        hasNormalEditorLayout,
-        hasSidebar,
-      });
-    }
-  }, [effectiveWizardMode, taskWizardMode, mainListLength, hasNormalEditorLayout, hasSidebar]);
+  // ✅ REMOVED: Log rumorosi di debug - verranno ripristinati se necessario durante refactoring
 
   // ❌ RIMOSSO: Early return per full wizard mode
   // Ora il wizard viene gestito tramite mainViewMode nel MainContentArea

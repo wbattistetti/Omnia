@@ -651,18 +651,42 @@ function convertPatternsToNlpContract(template: any): any | undefined {
  * Uses guidMapping to map old GUIDs (from template) to new GUIDs (in instance)
  * Loads translations for old GUIDs and saves them for new GUIDs
  */
-async function copyTranslationsForClonedSteps(_ddt: any, _templateId: string, guidMapping: Map<string, string>): Promise<void> {
+export async function copyTranslationsForClonedSteps(_ddt: any, _templateId: string, guidMapping: Map<string, string>): Promise<void> {
   try {
     if (!guidMapping || guidMapping.size === 0) {
+      console.log('[copyTranslationsForClonedSteps] ⚠️ No GUID mapping provided, skipping translation copy');
       return; // No mappings to process
     }
 
+    console.log('[copyTranslationsForClonedSteps] 🔍 START - Analizzando mapping GUID', {
+      guidMappingSize: guidMapping.size,
+      templateId: _templateId
+    });
+
     // Get old GUIDs (from template) - these have translations in the database
     const oldGuids = Array.from(guidMapping.keys());
+    console.log('[copyTranslationsForClonedSteps] 📋 GUID mapping dettagliato', {
+      totalMappings: guidMapping.size,
+      sampleMappings: Array.from(guidMapping.entries()).slice(0, 5).map(([oldGuid, newGuid]) => ({
+        oldGuid,
+        newGuid
+      }))
+    });
 
     // Load template translations for OLD GUIDs (these exist in the database)
     const { getTemplateTranslations } = await import('../services/ProjectDataService');
+    console.log('[copyTranslationsForClonedSteps] 🔍 Caricando traduzioni del template per GUID vecchi', {
+      oldGuidsCount: oldGuids.length,
+      oldGuids: oldGuids.slice(0, 10)
+    });
+
     const templateTranslations = await getTemplateTranslations(oldGuids);
+    console.log('[copyTranslationsForClonedSteps] ✅ Traduzioni template caricate', {
+      requestedCount: oldGuids.length,
+      foundCount: Object.keys(templateTranslations).length,
+      foundGuids: Object.keys(templateTranslations).slice(0, 10),
+      missingGuids: oldGuids.filter(g => !templateTranslations[g]).slice(0, 10)
+    });
 
     // Get project locale
     const projectLocale = (localStorage.getItem('project.lang') || 'it') as 'en' | 'it' | 'pt';
@@ -670,9 +694,15 @@ async function copyTranslationsForClonedSteps(_ddt: any, _templateId: string, gu
     // Build translations dictionary for instance (NEW GUIDs -> text from template)
     // Map: oldGuid -> newGuid -> text
     const instanceTranslations: Record<string, string> = {};
+    const copiedCount = { success: 0, skipped: 0, failed: 0 };
+
     for (const oldGuid of oldGuids) {
       const newGuid = guidMapping.get(oldGuid);
-      if (!newGuid) continue;
+      if (!newGuid) {
+        console.warn('[copyTranslationsForClonedSteps] ⚠️ GUID mapping incompleto', { oldGuid, newGuid });
+        copiedCount.failed++;
+        continue;
+      }
 
       const templateTrans = templateTranslations[oldGuid];
       if (templateTrans) {
@@ -683,18 +713,69 @@ async function copyTranslationsForClonedSteps(_ddt: any, _templateId: string, gu
 
         if (text) {
           instanceTranslations[newGuid] = text; // ✅ Use NEW GUID as key
+          copiedCount.success++;
+          console.log('[copyTranslationsForClonedSteps] ✅ Copiata traduzione', {
+            oldGuid,
+            newGuid,
+            textPreview: text.substring(0, 50) + (text.length > 50 ? '...' : ''),
+            locale: projectLocale
+          });
+        } else {
+          console.warn('[copyTranslationsForClonedSteps] ⚠️ Traduzione template vuota', { oldGuid, newGuid, templateTrans });
+          copiedCount.skipped++;
         }
+      } else {
+        console.warn('[copyTranslationsForClonedSteps] ⚠️ Traduzione template non trovata', { oldGuid, newGuid });
+        copiedCount.skipped++;
       }
     }
 
+    console.log('[copyTranslationsForClonedSteps] 📊 Riepilogo copia traduzioni', {
+      total: guidMapping.size,
+      success: copiedCount.success,
+      skipped: copiedCount.skipped,
+      failed: copiedCount.failed,
+      instanceTranslationsCount: Object.keys(instanceTranslations).length
+    });
+
     // Add translations to global table via window context (in memory) AND save to database
     if (Object.keys(instanceTranslations).length > 0) {
+      console.log('[copyTranslationsForClonedSteps] ✅ Copiando traduzioni per istanza', {
+        translationsCount: Object.keys(instanceTranslations).length,
+        guidMappingSize: guidMapping.size,
+        oldGuidsCount: oldGuids.length,
+        templateTranslationsFound: Object.keys(templateTranslations).length,
+        sampleGuids: Object.keys(instanceTranslations).slice(0, 5),
+        sampleTexts: Object.entries(instanceTranslations).slice(0, 3).map(([guid, text]) => ({
+          guid,
+          textPreview: text.substring(0, 50) + '...'
+        })),
+        // ✅ DEBUG: Verifica se ci sono GUID nel mapping senza traduzioni
+        missingTranslations: oldGuids.filter(oldGuid => !templateTranslations[oldGuid]).slice(0, 5)
+      });
+
       // Try to add to in-memory context first
       const translationsContext = (window as any).__projectTranslationsContext;
       if (translationsContext && translationsContext.addTranslations) {
+        console.log('[copyTranslationsForClonedSteps] 🔍 Aggiungendo traduzioni al context in memoria', {
+          translationsToAdd: Object.keys(instanceTranslations).length,
+          sampleNewGuids: Object.keys(instanceTranslations).slice(0, 5)
+        });
         translationsContext.addTranslations(instanceTranslations);
+        console.log('[copyTranslationsForClonedSteps] ✅ Traduzioni aggiunte al context in memoria', {
+          addedCount: Object.keys(instanceTranslations).length,
+          // ✅ Verifica che siano state aggiunte
+          verification: Object.keys(instanceTranslations).slice(0, 3).map(guid => ({
+            guid,
+            inContext: guid in (translationsContext.translations || {})
+          }))
+        });
       } else {
-        console.warn('[copyTranslationsForClonedSteps] ProjectTranslationsContext not available, will save to DB only');
+        console.warn('[copyTranslationsForClonedSteps] ⚠️ ProjectTranslationsContext not available, will save to DB only', {
+          hasWindow: typeof window !== 'undefined',
+          hasContext: typeof window !== 'undefined' && !!(window as any).__projectTranslationsContext,
+          hasAddTranslations: typeof window !== 'undefined' && !!(window as any).__projectTranslationsContext?.addTranslations
+        });
       }
 
       // ✅ Always save directly to database (even if context is not available)
@@ -725,16 +806,36 @@ async function copyTranslationsForClonedSteps(_ddt: any, _templateId: string, gu
             type: 'Instance'
           }));
 
+          console.log('[copyTranslationsForClonedSteps] 💾 Salvando traduzioni nel database', {
+            projectId,
+            translationsToSaveCount: translationsToSave.length,
+            sampleTranslations: translationsToSave.slice(0, 3).map(t => ({
+              guid: t.guid,
+              language: t.language,
+              textPreview: t.text.substring(0, 50) + (t.text.length > 50 ? '...' : '')
+            }))
+          });
+
           await saveProjectTranslations(projectId, translationsToSave);
+          console.log('[copyTranslationsForClonedSteps] ✅ Traduzioni salvate nel database', {
+            savedCount: translationsToSave.length
+          });
 
           // ✅ Reload translations in context if available (to ensure UI sees the new translations)
           const translationsContext = (window as any).__projectTranslationsContext;
           if (translationsContext && translationsContext.loadAllTranslations) {
+            console.log('[copyTranslationsForClonedSteps] 🔄 Ricaricando traduzioni nel context');
             try {
               await translationsContext.loadAllTranslations();
+              console.log('[copyTranslationsForClonedSteps] ✅ Traduzioni ricaricate nel context');
             } catch (reloadErr) {
-              console.warn('[copyTranslationsForClonedSteps] Failed to reload translations in context:', reloadErr);
+              console.warn('[copyTranslationsForClonedSteps] ⚠️ Failed to reload translations in context:', reloadErr);
             }
+          } else {
+            console.warn('[copyTranslationsForClonedSteps] ⚠️ Context non disponibile per reload', {
+              hasContext: !!translationsContext,
+              hasLoadAllTranslations: !!translationsContext?.loadAllTranslations
+            });
           }
         } else {
           console.warn('[copyTranslationsForClonedSteps] No project ID available, cannot save to database');

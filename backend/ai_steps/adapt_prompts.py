@@ -27,13 +27,16 @@ def adapt_prompts(body: dict = Body(...)):
     Adapt template prompts to a new context using AI.
 
     Body:
-        originalTexts: list[str] - Original prompt texts from template
+        prompts: list[dict] - Array of {guid: str, text: str} pairs (instance GUIDs and template texts)
         contextLabel: str - New context label (e.g., "Chiedi la data di nascita del paziente")
         templateLabel: str - Original template label (e.g., "Date")
         locale: str - Language code (e.g., "it", "en", "pt")
         provider: str - AI provider ("groq" or "openai"), default "groq"
+
+    Returns:
+        adaptedTranslations: dict - Object {guid: adapted_text} mapping instance GUIDs to adapted texts
     """
-    original_texts = body.get('originalTexts', [])
+    prompts = body.get('prompts', [])
     context_label = body.get('contextLabel', '')
     template_label = body.get('templateLabel', '')
     locale = body.get('locale', 'it')
@@ -42,8 +45,18 @@ def adapt_prompts(body: dict = Body(...)):
     if isinstance(provider, str):
         provider = provider.lower()
 
-    if not original_texts or not isinstance(original_texts, list):
-        raise HTTPException(status_code=400, detail="originalTexts must be a non-empty list")
+    # ✅ Validate prompts format: must be array of {guid, text} objects
+    if not prompts or not isinstance(prompts, list):
+        raise HTTPException(status_code=400, detail="prompts must be a non-empty list of {guid, text} objects")
+
+    # Extract texts and GUIDs for validation
+    original_texts = []
+    prompt_guids = []
+    for p in prompts:
+        if not isinstance(p, dict) or 'guid' not in p or 'text' not in p:
+            raise HTTPException(status_code=400, detail="Each prompt must be {guid: str, text: str}")
+        original_texts.append(p['text'])
+        prompt_guids.append(p['guid'])
 
     if not context_label:
         raise HTTPException(status_code=400, detail="contextLabel is required")
@@ -91,10 +104,10 @@ def adapt_prompts(body: dict = Body(...)):
             print(f"[adaptPrompts][call_error][provider={provider}]", str(e))
             ai = None
 
-        # Fallback: return original texts if AI call failed
+        # Fallback: return original texts mapped to GUIDs if AI call failed
         if not ai:
-            print("[adaptPrompts][no_ai][fallback] Returning original texts")
-            return {"adaptedTexts": original_texts}
+            print("[adaptPrompts][no_ai][fallback] Returning original texts mapped to GUIDs")
+            return {"adaptedTranslations": {guid: text for guid, text in zip(prompt_guids, original_texts)}}
 
         try:
             cleaned = _clean_json_like(ai)
@@ -104,38 +117,63 @@ def adapt_prompts(body: dict = Body(...)):
         except Exception as pe:
             print(f"[adaptPrompts][warn][parse_failed]", str(pe))
             print(f"[adaptPrompts][ai_raw]", (str(ai)[:500]).encode('ascii', 'ignore').decode('ascii'))
-            # Fallback: return original texts
-            return {"adaptedTexts": original_texts}
+            # Fallback: return original texts mapped to GUIDs
+            return {"adaptedTranslations": {guid: text for guid, text in zip(prompt_guids, original_texts)}}
 
-        # Enforce array of strings
-        if isinstance(ai_obj, list):
-            arr = [str(x).strip() for x in ai_obj if isinstance(x, (str, int, float)) and str(x).strip()]
-            if len(arr) == len(original_texts):
-                print(f"[adaptPrompts][parsed_array] Adapted {len(arr)} prompts")
-                return {"adaptedTexts": arr}
-            elif len(arr) > 0:
-                # If AI returned fewer/more items, pad or truncate
-                print(f"[adaptPrompts][warn] AI returned {len(arr)} items, expected {len(original_texts)}")
-                while len(arr) < len(original_texts):
-                    arr.append(original_texts[len(arr)])  # Fill with original
-                return {"adaptedTexts": arr[:len(original_texts)]}
+        # ✅ NEW: AI should return object {guid: text} or array of strings (we'll map to GUIDs)
+        adapted_translations = {}
 
-        # Try to extract array from object
+        # Case 1: AI returned object {guid: text}
         if isinstance(ai_obj, dict):
+            # Check if it's already in the correct format {guid: text}
+            if all(isinstance(k, str) and isinstance(v, str) for k, v in ai_obj.items()):
+                # Verify all requested GUIDs are present
+                for guid in prompt_guids:
+                    if guid in ai_obj:
+                        adapted_translations[guid] = str(ai_obj[guid]).strip()
+                    else:
+                        # Use original text if GUID not found
+                        idx = prompt_guids.index(guid)
+                        adapted_translations[guid] = original_texts[idx]
+                print(f"[adaptPrompts][parsed_object] Adapted {len(adapted_translations)} prompts")
+                return {"adaptedTranslations": adapted_translations}
+
+            # Case 2: Try to extract array from object
             for k in ("adaptedTexts", "texts", "messages", "result", "data", "items"):
                 v = ai_obj.get(k)
                 if isinstance(v, list):
                     arr = [str(x).strip() for x in v if isinstance(x, (str, int, float)) and str(x).strip()]
                     if arr:
+                        # Map array to GUIDs by index
                         while len(arr) < len(original_texts):
                             arr.append(original_texts[len(arr)])
-                        return {"adaptedTexts": arr[:len(original_texts)]}
+                        for idx, guid in enumerate(prompt_guids):
+                            adapted_translations[guid] = arr[idx] if idx < len(arr) else original_texts[idx]
+                        print(f"[adaptPrompts][parsed_array_from_object] Adapted {len(adapted_translations)} prompts")
+                        return {"adaptedTranslations": adapted_translations}
 
-        # Final fallback: return original texts
-        print("[adaptPrompts][fallback] Returning original texts")
-        return {"adaptedTexts": original_texts}
+        # Case 3: AI returned array of strings - map to GUIDs by index
+        if isinstance(ai_obj, list):
+            arr = [str(x).strip() for x in ai_obj if isinstance(x, (str, int, float)) and str(x).strip()]
+            if len(arr) == len(original_texts):
+                for idx, guid in enumerate(prompt_guids):
+                    adapted_translations[guid] = arr[idx]
+                print(f"[adaptPrompts][parsed_array] Adapted {len(adapted_translations)} prompts")
+                return {"adaptedTranslations": adapted_translations}
+            elif len(arr) > 0:
+                # If AI returned fewer/more items, pad or truncate
+                print(f"[adaptPrompts][warn] AI returned {len(arr)} items, expected {len(original_texts)}")
+                while len(arr) < len(original_texts):
+                    arr.append(original_texts[len(arr)])
+                for idx, guid in enumerate(prompt_guids):
+                    adapted_translations[guid] = arr[idx] if idx < len(arr) else original_texts[idx]
+                return {"adaptedTranslations": adapted_translations}
+
+        # Final fallback: return original texts mapped to GUIDs
+        print("[adaptPrompts][fallback] Returning original texts mapped to GUIDs")
+        return {"adaptedTranslations": {guid: text for guid, text in zip(prompt_guids, original_texts)}}
 
     except Exception as e:
         print(f"[adaptPrompts][catch_all][error]", str(e))
-        # Non interrompere: ritorna i testi originali
-        return {"adaptedTexts": original_texts}
+        # Non interrompere: ritorna i testi originali mappati ai GUID
+        return {"adaptedTranslations": {guid: text for guid, text in zip(prompt_guids, original_texts)}}

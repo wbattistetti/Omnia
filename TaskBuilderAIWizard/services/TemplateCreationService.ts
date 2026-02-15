@@ -390,85 +390,86 @@ function buildNodesFromTemplates(
 /**
  * Creates a contextualized instance from templates
  *
- * - Clones steps from template root (generalized)
- * - Applies contextualized messages to root node (or all nodes if adaptAllNormalSteps = true)
- * - Creates instance with templateId referencing root template
+ * FLUSSO LINEARE:
+ * 1. Clona step esattamente come nel template (nuovi GUID, step identici)
+ * 2. Copia traduzioni template → nuovi GUID (root + sub-nodi)
+ * 3. POI chiama AI per adattare (genera messaggi contestualizzati e sovrascrive solo traduzioni)
  *
  * @param rootTemplate - Root template (generalized)
  * @param allTemplates - All templates (including children)
- * @param contextualizedMessagesMap - Map of contextualized messages (nodeId -> WizardStepMessages)
- * @param taskLabel - Contextualized task label
+ * @param contextualizedMessagesMap - ⚠️ DEPRECATED: Non più usato per applicare messaggi (mantenuto per backward compatibility)
+ * @param taskLabel - Contextualized task label (usato come contextLabel per AI)
  * @param rowId - Task instance ID (ALWAYS equals row.id which equals task.id when task exists)
  * @param addTranslation - Optional callback to add translations
  * @param adaptAllNormalSteps - If true, contextualize all nodes; if false, only root node (default: false)
  * @returns Task instance
  */
-export function createContextualizedInstance(
+export async function createContextualizedInstance(
   rootTemplate: DialogueTask,
   allTemplates: Map<string, DialogueTask>,
-  contextualizedMessagesMap: Map<string, WizardStepMessages>,
+  contextualizedMessagesMap: Map<string, WizardStepMessages>, // ⚠️ DEPRECATED: Non più usato
   taskLabel: string,
   rowId: string, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
   addTranslation?: (guid: string, text: string) => void,
-  adaptAllNormalSteps: boolean = false // ✅ NEW: Flag to control contextualization scope
-): any {
-  // 1. Build nodes from templates (for cloneTemplateSteps)
+  adaptAllNormalSteps: boolean = false // ✅ Flag to control contextualization scope
+): Promise<any> {
+  // ✅ FASE 1: Clona step esattamente come nel template (nuovi GUID, step identici)
   const nodes = buildNodesFromTemplates(rootTemplate, allTemplates);
+  const { steps: clonedSteps, guidMapping } = cloneTemplateSteps(rootTemplate, nodes);
 
-  // 2. Clone steps from template using cloneTemplateSteps (correct way)
-  const { steps: clonedSteps } = cloneTemplateSteps(rootTemplate, nodes);
-
-  // 3. Apply contextualized messages based on adaptAllNormalSteps flag
-  const rootTemplateId = rootTemplate.id || '';
-
-  if (adaptAllNormalSteps) {
-    // ✅ Apply contextualized messages to ALL nodes present in the Map
-    contextualizedMessagesMap.forEach((contextualizedMessages, nodeId) => {
-      // Find the template for this node
-      const nodeTemplate = allTemplates.get(nodeId);
-      if (nodeTemplate && nodeTemplate.id) {
-        const contextualizedSteps = convertContextualizedMessagesToSteps(
-          contextualizedMessages,
-          nodeTemplate.id,
-          addTranslation
-        );
-        if (clonedSteps[nodeTemplate.id]) {
-          clonedSteps[nodeTemplate.id] = contextualizedSteps;
-        } else {
-          clonedSteps[nodeTemplate.id] = contextualizedSteps;
-        }
-      }
-    });
-  } else {
-    // ✅ Apply contextualized messages only to root node (backward compatibility)
-    const rootContextualizedMessages = contextualizedMessagesMap.get(rootTemplateId) || {
-      ask: { base: [] },
-      confirm: { base: [] },
-      notConfirmed: { base: [] },
-      violation: { base: [] },
-      disambiguation: { base: [], options: [] },
-      success: { base: [] }
-    };
-    const contextualizedRootSteps = convertContextualizedMessagesToSteps(
-      rootContextualizedMessages,
-      rootTemplateId,
-      addTranslation
-    );
-    if (clonedSteps[rootTemplateId]) {
-      clonedSteps[rootTemplateId] = contextualizedRootSteps;
-    } else {
-      clonedSteps[rootTemplateId] = contextualizedRootSteps;
-    }
-  }
-
-  // 4. Create instance
+  // ✅ FASE 2: Crea istanza con step clonati (SENZA applicare messaggi contestualizzati)
   const instance: any = {
     id: rowId, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
     type: rootTemplate.type || 3,  // TaskType.UtteranceInterpretation
     templateId: rootTemplate.id,  // Reference to root template
     label: taskLabel,  // Contextualized label
-    steps: clonedSteps,  // Cloned steps with contextualized messages
+    steps: clonedSteps,  // ✅ Step clonati identici al template
   };
+
+  // ✅ FASE 3: Copia traduzioni template → nuovi GUID (root + sub-nodi)
+  // Questo è CRITICO: senza questa chiamata, i nuovi GUID non hanno traduzioni
+  if (guidMapping && guidMapping.size > 0) {
+    const rootTemplateId = rootTemplate.id || rootTemplate._id;
+    if (rootTemplateId) {
+      try {
+        const taskTreeMergeUtils = await import('@utils/taskTreeMergeUtils');
+        if (!taskTreeMergeUtils.copyTranslationsForClonedSteps) {
+          throw new Error('copyTranslationsForClonedSteps not found in taskTreeMergeUtils');
+        }
+        const copyTranslationsForClonedSteps = taskTreeMergeUtils.copyTranslationsForClonedSteps;
+        await copyTranslationsForClonedSteps(instance, rootTemplateId, guidMapping);
+        console.log('[createContextualizedInstance] ✅ Traduzioni copiate per istanza', {
+          instanceId: instance.id,
+          guidMappingSize: guidMapping.size,
+          rootTemplateId
+        });
+      } catch (err) {
+        console.error('[createContextualizedInstance] ❌ Errore copiando traduzioni:', err);
+        // Non bloccare il flusso - l'istanza viene comunque creata
+      }
+    }
+  } else {
+    console.warn('[createContextualizedInstance] ⚠️ Nessun GUID mapping disponibile per copiare traduzioni', {
+      instanceId: instance.id,
+      hasGuidMapping: !!guidMapping,
+      guidMappingSize: guidMapping?.size || 0
+    });
+  }
+
+  // ✅ FASE 4: POI chiama AI per adattare (genera messaggi contestualizzati e sovrascrive solo traduzioni)
+  // Questo avviene DOPO la clonazione e copia traduzioni
+  try {
+    const { AdaptTaskTreePromptToContext } = await import('@utils/taskTreePromptAdapter');
+    await AdaptTaskTreePromptToContext(instance, taskLabel, adaptAllNormalSteps);
+    console.log('[createContextualizedInstance] ✅ Prompt adattati al contesto', {
+      instanceId: instance.id,
+      adaptAllNormalSteps,
+      taskLabel
+    });
+  } catch (err) {
+    console.error('[createContextualizedInstance] ⚠️ Errore durante adattamento prompt (continua con template):', err);
+    // Non bloccare il flusso - l'istanza usa i prompt del template
+  }
 
   return instance;
 }

@@ -34,14 +34,20 @@ export function getTaskText(
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textKey)) {
       const translation = translations[textKey];
 
-      // ❌ RIMOSSO: log verboso quando la traduzione viene trovata (non necessario)
-      // ✅ MANTENUTO: log solo quando la traduzione NON viene trovata (utile per debug)
-      if (debugEnabled && !translation) {
+      // ✅ Log sempre quando la traduzione NON viene trovata (utile per debug)
+      if (!translation) {
+        // ✅ Verifica se il GUID è nei sub-nodi (non adattati) - questi dovrebbero avere traduzioni copiate dal template
+        const isSubNode = task.templateId === 'sayMessage' && task.id !== textKey;
         console.warn('[getTaskText] ⚠️ GUID found but translation missing', {
           textKey,
           translationsCount: Object.keys(translations).length,
           taskId: task.id,
-          templateId: task.templateId
+          templateId: task.templateId,
+          isSubNode,
+          availableGuids: Object.keys(translations).slice(0, 10), // Mostra primi 10 GUID disponibili
+          isGUIDInTranslations: textKey in translations,
+          // ✅ DEBUG: Verifica se il GUID è stato generato durante clonazione
+          guidFormat: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textKey) ? 'valid-uuid' : 'invalid'
         });
       }
 
