@@ -246,44 +246,44 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     // ✅ Inizializza SOLO per nuovo task.id
     const taskMeta = isTaskMeta(task) ? task : getTaskMeta(task);
 
-    // ✅ Priority: explicit taskWizardMode > backward compatibility with booleans
-    let wizardMode: TaskWizardMode = 'none';
-    if (taskMeta.taskWizardMode && (taskMeta.taskWizardMode === 'none' || taskMeta.taskWizardMode === 'adaptation' || taskMeta.taskWizardMode === 'full')) {
-      wizardMode = taskMeta.taskWizardMode;
-    } else {
-      // ✅ Backward compatibility: derive from boolean flags
-      const needsContextualization = (taskMeta as any).needsTaskContextualization === true;
-      const needsBuilder = (taskMeta as any).needsTaskBuilder === true;
-      if (needsBuilder) {
-        wizardMode = 'full';
-      } else if (needsContextualization) {
-        wizardMode = 'adaptation';
+      // ✅ Priority: explicit taskWizardMode > backward compatibility with booleans
+      let wizardMode: TaskWizardMode = 'none';
+      if (taskMeta.taskWizardMode && (taskMeta.taskWizardMode === 'none' || taskMeta.taskWizardMode === 'adaptation' || taskMeta.taskWizardMode === 'full')) {
+        wizardMode = taskMeta.taskWizardMode;
       } else {
-        wizardMode = 'none';
+        // ✅ Backward compatibility: derive from boolean flags
+        const needsContextualization = (taskMeta as any).needsTaskContextualization === true;
+        const needsBuilder = (taskMeta as any).needsTaskBuilder === true;
+        if (needsBuilder) {
+          wizardMode = 'full';
+        } else if (needsContextualization) {
+          wizardMode = 'adaptation';
+        } else {
+          wizardMode = 'none';
+        }
       }
-    }
 
-    const contextualizationTemplateId = (taskMeta as any).contextualizationTemplateId || null;
-    // ✅ SINGLE SOURCE OF TRUTH: Read taskLabel from taskMeta
-    // Priority: taskMeta.taskLabel > taskMeta.label > empty string (temporary)
-    const taskLabelFromMeta = (taskMeta as any).taskLabel || taskMeta.label || '';
+      const contextualizationTemplateId = (taskMeta as any).contextualizationTemplateId || null;
+      // ✅ SINGLE SOURCE OF TRUTH: Read taskLabel from taskMeta
+      // Priority: taskMeta.taskLabel > taskMeta.label > empty string (temporary)
+      const taskLabelFromMeta = (taskMeta as any).taskLabel || taskMeta.label || '';
 
-    // ✅ Set primary state
-    setTaskWizardMode(wizardMode);
-    setContextualizationTemplateId(contextualizationTemplateId);
-    setTaskLabel(taskLabelFromMeta); // ✅ ALWAYS set - empty string if not available yet
+      // ✅ Set primary state
+      setTaskWizardMode(wizardMode);
+      setContextualizationTemplateId(contextualizationTemplateId);
+      setTaskLabel(taskLabelFromMeta); // ✅ ALWAYS set - empty string if not available yet
 
-    // ✅ DEPRECATED: Backward compatibility - sync boolean flags
-    if (wizardMode === 'adaptation') {
-      setNeedsTaskContextualization(true);
-      setNeedsTaskBuilder(false);
-    } else if (wizardMode === 'full') {
-      setNeedsTaskContextualization(false);
-      setNeedsTaskBuilder(true);
-    } else {
-      setNeedsTaskContextualization(false);
-      setNeedsTaskBuilder(false);
-    }
+      // ✅ DEPRECATED: Backward compatibility - sync boolean flags
+      if (wizardMode === 'adaptation') {
+        setNeedsTaskContextualization(true);
+        setNeedsTaskBuilder(false);
+      } else if (wizardMode === 'full') {
+        setNeedsTaskContextualization(false);
+        setNeedsTaskBuilder(true);
+      } else {
+        setNeedsTaskContextualization(false);
+        setNeedsTaskBuilder(false);
+      }
 
     // ✅ Marca task.id come processato
     previousTaskIdRef.current = currentTaskId;

@@ -42,7 +42,70 @@ export function useDDTTranslations(
         ? `array:${task.steps.length}`
         : Object.keys(task.steps).sort().join(','))
     : '';
-  const translationsKeys = Object.keys(globalTranslations).sort().join(',');
+
+  // ✅ FASE 2 FIX: Create hash of translation VALUES (not just keys) to detect when translations are overwritten
+  // This is critical: when adaptation overwrites translations (same GUID, different text),
+  // the keys don't change, but the values do. We need to detect value changes.
+  const translationsHash = useMemo(() => {
+    if (!ddt || !globalTranslations || Object.keys(globalTranslations).length === 0) {
+      return '';
+    }
+
+    // Extract all GUIDs from DDT and task.steps
+    const guidsArray = extractGUIDsFromDDT(ddt);
+    const guidsSet = new Set(guidsArray);
+
+    // Also extract GUIDs from task.steps if available
+    if (task?.steps) {
+      if (Array.isArray(task.steps)) {
+        task.steps.forEach((step: any) => {
+          if (step?.escalations && Array.isArray(step.escalations)) {
+            step.escalations.forEach((esc: any) => {
+              if (esc?.tasks && Array.isArray(esc.tasks)) {
+                esc.tasks.forEach((taskItem: any) => {
+                  const textParam = taskItem.parameters?.find((p: any) => p?.parameterId === 'text');
+                  if (textParam?.value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textParam.value)) {
+                    guidsSet.add(textParam.value);
+                  }
+                });
+              }
+            });
+          }
+        });
+      } else {
+        Object.entries(task.steps).forEach(([nodeId, steps]: [string, any]) => {
+          if (!steps || typeof steps !== 'object') return;
+          const stepEntries = Array.isArray(steps)
+            ? steps.map((s: any, idx: number) => [`step_${idx}`, s])
+            : Object.entries(steps);
+          stepEntries.forEach(([stepKey, step]: [string, any]) => {
+            if (step?.escalations) {
+              step.escalations.forEach((esc: any) => {
+                if (esc?.tasks) {
+                  esc.tasks.forEach((taskItem: any) => {
+                    const textParam = taskItem.parameters?.find((p: any) => p?.parameterId === 'text');
+                    if (textParam?.value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textParam.value)) {
+                      guidsSet.add(textParam.value);
+                    }
+                  });
+                }
+              });
+            }
+          });
+        });
+      }
+    }
+
+    // Create hash from GUID + text pairs for relevant GUIDs only
+    const relevantEntries = Array.from(guidsSet)
+      .filter(guid => globalTranslations[guid]) // Only include GUIDs that have translations
+      .sort()
+      .map(guid => `${guid}:${globalTranslations[guid]}`)
+      .join('|');
+
+    return relevantEntries;
+  }, [ddt, task?.steps, globalTranslations]);
+
   // ✅ FASE 2.3: Use version to force recalculation when store is populated
   const stableVersion = version ?? 0;
   // ✅ CRITICAL FIX: Include selectedNodeId to force recalculation when node selection changes
@@ -173,10 +236,12 @@ export function useDDTTranslations(
 
     return translationsFromGlobal;
     // ✅ CRITICAL: Don't include ddt/task in deps - they change reference on every render
-    // Use only stable keys: ddtId, taskStepsKeys, translationsKeys, version, selectedNodeId
+    // Use only stable keys: ddtId, taskStepsKeys, translationsHash, version, selectedNodeId
+    // ✅ FASE 2 FIX: Use translationsHash (includes values) instead of translationsKeys (only keys)
+    // This allows detection of translation overwrites during adaptation (same GUID, different text)
     // ✅ FASE 2.3: Added version to force recalculation when store is populated
     // ✅ CRITICAL FIX: Added selectedNodeId to force recalculation when node selection changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ddtId, taskStepsKeys, translationsKeys, stableVersion, stableSelectedNodeId]);
+  }, [ddtId, taskStepsKeys, translationsHash, stableVersion, stableSelectedNodeId]);
 }
 

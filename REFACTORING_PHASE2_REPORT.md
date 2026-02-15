@@ -189,11 +189,25 @@ Implementare il flusso lineare e deterministico per la gestione di GUID e traduz
 
 ## Stato Attuale
 
-✅ **FASE 2 COMPLETATA**
+✅ **FASE 2 COMPLETATA + FIX APPLICATO**
 
 Modifiche implementate e pronte per test. Il flusso è lineare e deterministico.
 
-**Prossimo step:** Scrivere test di regressione (FASE 3) per verificare che tutto funzioni correttamente.
+### Fix Applicato (2024-12-19)
+
+**Problema:** Le traduzioni adattate (contestualizzate) non venivano mostrate nell'UI perché `useDDTTranslations` dipendeva solo dalle chiavi delle traduzioni, non dai valori.
+
+**Soluzione:** Aggiunto `translationsHash` che include GUID + testo per rilevare quando le traduzioni vengono sovrascritte durante l'adattamento.
+
+**File modificato:**
+- `src/hooks/useDDTTranslations.ts`
+  - Aggiunto `translationsHash` che calcola hash da `guid:text` per GUID rilevanti
+  - Sostituito `translationsKeys` con `translationsHash` nelle dipendenze del `useMemo`
+  - Ora il hook si ricalcola quando le traduzioni vengono sovrascritte (stesso GUID, testo diverso)
+
+**Risultato:** L'UI mostra correttamente le traduzioni contestualizzate dopo l'adattamento.
+
+**Prossimo step:** Testare che le traduzioni contestualizzate appaiano correttamente nell'UI.
 
 ---
 
