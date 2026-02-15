@@ -351,337 +351,130 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
 
   // ✅ REMOVED: Auto-open dialog - dialog opens only when user clicks button or tries to close
 
+  // ✅ State for saving operation (must be declared before handleSaveToFactory)
+  const [isSaving, setIsSaving] = React.useState(false);
+
   // ✅ FIX: Handler to save to Factory with loading state and dematerialization filter
   const handleSaveToFactory = React.useCallback(async () => {
-    console.log('[ResponseEditorLayout] 🔍 handleSaveToFactory - Guard check', {
-      shouldBeGeneral,
-      hasWizardIntegration: !!wizardIntegrationProp,
-      isSavingBefore: isSaving
-    });
+    // ✅ Set spinner immediately
+    setIsSaving(true);
+    await new Promise(resolve => setTimeout(resolve, 0));
 
-    if (!shouldBeGeneral || !wizardIntegrationProp) {
-      console.warn('[ResponseEditorLayout] ⚠️ handleSaveToFactory - Guard failed, returning early', {
-        shouldBeGeneral,
-        hasWizardIntegration: !!wizardIntegrationProp
-      });
+    // ✅ NO FALLBACK: wizardIntegrationProp.dataSchema is the single source of truth
+    if (!wizardIntegrationProp?.dataSchema || !Array.isArray(wizardIntegrationProp.dataSchema)) {
+      alert('Cannot save to Factory: wizard data is missing. Please ensure the wizard is completed.');
+      setIsSaving(false);
       return;
     }
 
-    console.log('[ResponseEditorLayout] 🚀 handleSaveToFactory - Setting isSaving to true');
-    setIsSaving(true);
-    // ✅ CRITICAL: Force a re-render by using a small delay to ensure state update is processed
-    // React batches state updates, so we need to ensure the dialog sees the update
-    await new Promise(resolve => setTimeout(resolve, 0));
-    console.log('[ResponseEditorLayout] ✅ isSaving should now be true');
+    // ✅ Count ALL nodes recursively (root + sub-nodes) - this is the TRUTH
+    const collectAllNodeIds = (nodes: any[]): string[] => {
+      const ids: string[] = [];
+      for (const node of nodes) {
+        const nodeId = node.id || node.templateId;
+        if (nodeId) ids.push(nodeId);
+        if (node.subNodes?.length > 0) {
+          ids.push(...collectAllNodeIds(node.subNodes));
+        }
+      }
+      return ids;
+    };
+
+    const expectedNodeIds = new Set(collectAllNodeIds(wizardIntegrationProp.dataSchema));
+    const expectedCount = expectedNodeIds.size;
+
+    console.log('[handleSaveToFactory] 📊 Expected templates from dataSchema', {
+      expectedCount,
+      nodeIds: Array.from(expectedNodeIds)
+    });
 
     try {
-      // Get all templates from DialogueTaskService cache
-      const templates = DialogueTaskService.getAllTemplates();
+      // Load cache
+      if (!DialogueTaskService.isCacheLoaded()) {
+        await DialogueTaskService.loadTemplates();
+      }
 
-      // ✅ FIX: Raccogli TUTTI i nodi (root + sub-nodi) ricorsivamente
-      // Ogni nodo corrisponde a un task con: steps, contract, constraints, subTasksIds
-      const collectAllNodeIds = (nodes: typeof wizardIntegrationProp.dataSchema): string[] => {
-        const ids: string[] = [];
-        if (!nodes) return ids;
-        for (const node of nodes) {
-          const nodeId = node.templateId || node.id;
-          ids.push(nodeId);
-          console.log('[handleSaveToFactory] 🔍 Collecting node ID', {
-            nodeLabel: node.label,
-            nodeId,
-            templateId: node.templateId,
-            id: node.id,
-            hasSubNodes: !!node.subNodes,
-            subNodesCount: node.subNodes?.length,
-          });
-          if (node.subNodes && node.subNodes.length > 0) {
-            ids.push(...collectAllNodeIds(node.subNodes));
-          }
-        }
-        return ids;
-      };
+      const allTemplates = DialogueTaskService.getAllTemplates();
 
-      const allWizardNodeIds = new Set(collectAllNodeIds(wizardIntegrationProp.dataSchema));
-
-      console.log('[handleSaveToFactory] 📊 Collected node IDs', {
-        totalNodes: allWizardNodeIds.size,
-        nodeIds: Array.from(allWizardNodeIds),
-        dataSchemaLength: wizardIntegrationProp.dataSchema?.length,
-        rootNode: wizardIntegrationProp.dataSchema?.[0] ? {
-          label: wizardIntegrationProp.dataSchema[0].label,
-          id: wizardIntegrationProp.dataSchema[0].id,
-          templateId: wizardIntegrationProp.dataSchema[0].templateId,
-        } : null,
-      });
-
-      console.log('[handleSaveToFactory] 📊 Templates in cache', {
-        totalTemplates: templates.length,
-        templateIds: templates.map(t => t.id || t._id),
-        templateLabels: templates.map(t => t.label),
-      });
-
-      // ✅ FIX: Filtra template che corrispondono a QUALSIASI nodo (root o sub-nodo)
-      // Ogni nodo = un task separato con i suoi step, contract, constraints, subTasksIds
-      const wizardTemplates = templates.filter(t => {
+      // ✅ Filter templates that match expected node IDs
+      const templatesToSave = allTemplates.filter(t => {
         const templateId = t.id || t._id;
-        const matches = allWizardNodeIds.has(templateId);
-        if (matches) {
-          console.log('[handleSaveToFactory] ✅ Template matches', {
-            templateId,
-            label: t.label,
-            hasSubTasksIds: !!t.subTasksIds,
-            subTasksIds: t.subTasksIds,
-          });
-        }
-        return matches;
+        return templateId && expectedNodeIds.has(templateId);
       });
 
-      console.log('[handleSaveToFactory] 📊 Filtered wizard templates', {
-        count: wizardTemplates.length,
-        templates: wizardTemplates.map(t => ({
-          id: t.id || t._id,
-          label: t.label,
-          hasSubTasksIds: !!t.subTasksIds,
-          subTasksIds: t.subTasksIds,
-        })),
-      });
-
-      if (wizardTemplates.length === 0) {
-        console.warn('[ResponseEditorLayout] ⚠️ No templates found to save to Factory');
+      // ✅ CRITICAL CHECK: If dataSchema has N nodes, there MUST be N templates
+      if (templatesToSave.length !== expectedCount) {
+        const missingIds = Array.from(expectedNodeIds).filter(id =>
+          !templatesToSave.some(t => (t.id || t._id) === id)
+        );
+        const errorMsg = `Cannot save to Factory: missing templates.\n\nExpected: ${expectedCount} templates\nFound: ${templatesToSave.length} templates\n\nMissing template IDs: ${missingIds.join(', ')}\n\nThis should not happen - all templates should be in cache after wizard completion.`;
+        console.error('[handleSaveToFactory] ❌ Template count mismatch', {
+          expectedCount,
+          foundCount: templatesToSave.length,
+          missingIds
+        });
+        alert(errorMsg);
         setIsSaving(false);
         return;
       }
 
-      // ✅ FIX: Create a map of original ID -> saved template ID for sub-tasks
-      // This ensures subTasksIds contains the actual IDs of saved templates (GUIDs), not simple names
-      const templateIdMap = new Map<string, string>();
-      wizardTemplates.forEach(t => {
-        const originalId = t.id || t._id;
-        // The saved template will have the same ID (or _id if MongoDB generates one)
-        // For now, we use the original ID, but we'll update subTasksIds after saving
-        templateIdMap.set(originalId, originalId);
-      });
+      // ✅ Dematerialize templates (remove nodes, subNodes, data, _id, name, createdAt)
+      const dematerializedTemplates = templatesToSave.map(t => {
+        const { _id, nodes, subNodes, data, createdAt, name, ...template } = t;
 
-      // ✅ FIX: Dematerialize templates - remove any materialized fields (nodes, subNodes, data)
-      // Templates should only contain references (subTasksIds), not materialized children
-      // ✅ NEW: Remove 'name' field - templates are identified by 'id' only
-      const templatesToSave = wizardTemplates.map(t => {
-        // ✅ FIX: Rimuovi _id, nodes, subNodes, data, createdAt, name (campi che non devono essere salvati)
-        const { _id, nodes, subNodes, data, createdAt, name, ...templateFields } = t;
-
-        const isRoot = generalizedLabel && wizardIntegrationProp.dataSchema?.[0]?.id === (t.id || t._id);
-
-        if (isRoot) {
-          // Root template: use generalizedLabel for label
-          // ✅ FIX: Map subTasksIds to actual template IDs (GUIDs, not simple names)
-          const originalSubTasksIds = templateFields.subTasksIds || [];
-          const mappedSubTasksIds = originalSubTasksIds.map((subId: string) => {
-            // Find the corresponding template
-            const subTemplate = wizardTemplates.find(st => (st.id || st._id) === subId);
-            if (subTemplate) {
-              // Use the template's ID (which should be a pure GUID)
-              const mappedId = subTemplate.id || subTemplate._id;
-              const isGuid = mappedId && mappedId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
-              console.log('[handleSaveToFactory] 🔄 Mapping subTaskId', {
-                originalId: subId,
-                mappedId,
-                isGuid,
-                subTemplateLabel: subTemplate.label,
-              });
-              if (!isGuid) {
-                console.warn('[handleSaveToFactory] ⚠️ Sub-task ID is not a GUID', {
-                  subId,
-                  mappedId,
-                  subTemplateLabel: subTemplate.label,
-                  message: 'Sub-task should have GUID ID, not simple name. This may cause issues when loading templates.',
-                });
-              }
-              return mappedId;
-            }
-            // If not found, keep original (should not happen)
-            console.warn('[handleSaveToFactory] ⚠️ Sub-task template not found for ID', { subId });
-            return subId;
-          });
-
-          const rootTemplate = {
-            ...templateFields,
-            // ✅ REMOVED: name field - templates are identified by id only
-            label: t.label,  // ✅ FIX: Use node label (already generalized in TemplateCreationService), NOT generalizedLabel
-            subTasksIds: mappedSubTasksIds.length > 0 ? mappedSubTasksIds : undefined,
-          };
-          console.log('[handleSaveToFactory] ✅ Root template prepared for save', {
-            originalId: t.id || t._id,
-            originalLabel: t.label,
-            generalizedLabel,
-            newLabel: rootTemplate.label,  // ✅ Uses node label (already generalized in TemplateCreationService)
-            originalSubTasksIds,
-            mappedSubTasksIds,
-            hasSubTasksIds: !!rootTemplate.subTasksIds,
-            subTasksIds: rootTemplate.subTasksIds,
-          });
-          return rootTemplate;
+        // Root template: use generalized label if available
+        const isRoot = wizardIntegrationProp.dataSchema[0]?.id === template.id;
+        if (isRoot && generalizedLabel) {
+          template.label = generalizedLabel;
         }
 
-        console.log('[handleSaveToFactory] ✅ Sub-task template prepared for save', {
-          id: t.id || t._id,
-          label: t.label,
-          hasSubTasksIds: !!t.subTasksIds,
-          subTasksIds: t.subTasksIds,
-          // ✅ REMOVED: name field - templates are identified by id only
-        });
-        return templateFields;
+        return template;
       });
 
-      console.log('[handleSaveToFactory] 📦 Final templates to save', {
-        count: templatesToSave.length,
-        templates: templatesToSave.map(t => ({
-          id: t.id,
-          label: t.label,
-          hasSubTasksIds: !!t.subTasksIds,
-          subTasksIds: t.subTasksIds,
-          isRoot: generalizedLabel && wizardIntegrationProp.dataSchema?.[0]?.id === (t.id || t._id),
-          // ✅ REMOVED: name field - templates are identified by id only
-        })),
-        rootTemplate: templatesToSave.find(t =>
-          generalizedLabel && wizardIntegrationProp.dataSchema?.[0]?.id === (t.id || t._id)
-        ) ? {
-          id: templatesToSave.find(t =>
-            generalizedLabel && wizardIntegrationProp.dataSchema?.[0]?.id === (t.id || t._id)
-          )?.id,
-          name: templatesToSave.find(t =>
-            generalizedLabel && wizardIntegrationProp.dataSchema?.[0]?.id === (t.id || t._id)
-          )?.name,
-          label: templatesToSave.find(t =>
-            generalizedLabel && wizardIntegrationProp.dataSchema?.[0]?.id === (t.id || t._id)
-          )?.label,
-        } : null,
-      });
-
-      // ✅ LOG: SAVE TO FACTORY TRACE
-      console.log('[handleSaveToFactory] 🔍 SAVE TO FACTORY TRACE', {
-        // Template da salvare
-        totalTemplates: templatesToSave.length,
-        templateIds: templatesToSave.map(t => t.id || t._id),
-        templateDetails: templatesToSave.map(t => ({
-          id: t.id || t._id,
-          label: t.label,
-          isRoot: generalizedLabel && wizardIntegrationProp.dataSchema?.[0]?.id === (t.id || t._id),
-          hasSubTasksIds: !!t.subTasksIds,
-          subTasksIds: t.subTasksIds || [],
-        })),
-
-        // Root template
-        rootTemplateId: templatesToSave.find(t =>
-          generalizedLabel && wizardIntegrationProp.dataSchema?.[0]?.id === (t.id || t._id)
-        )?.id,
-
-        // Istanza corrente
-        currentInstanceId: taskMeta?.id,
-        currentRowId: taskMeta?.id, // Dovrebbe essere l'ID della riga di nodo
-        instanceIdEqualsRowId: taskMeta?.id === taskMeta?.id,
-
-        timestamp: new Date().toISOString(),
-      });
-
-      // ✅ Save templates to Factory DB in bulk (faster)
-      console.log('[handleSaveToFactory] 📤 Sending templates to backend', {
-        count: templatesToSave.length,
-        payload: templatesToSave.map(t => ({
-          id: t.id,
-          label: t.label,
-        })),
-      });
-
+      // ✅ Save to backend
       const response = await fetch('/api/factory/dialogue-templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(templatesToSave)
+        body: JSON.stringify(dematerializedTemplates)
       });
 
-      if (response.ok) {
-        console.log('[ResponseEditorLayout] ✅ Templates saved to Factory', {
-          templatesCount: templatesToSave.length,
-          generalizedLabel,
-          templatesStructure: templatesToSave.map(t => ({
-            id: t.id,
-            label: t.label,
-            hasSubTasksIds: !!t.subTasksIds,
-            subTasksIdsCount: t.subTasksIds?.length || 0,
-            hasSteps: !!t.steps,
-            hasConstraints: !!t.constraints,
-            hasNodes: 'nodes' in t,
-            hasSubNodes: 'subNodes' in t,
-            hasData: 'data' in t
-          }))
-        });
-
-        // ✅ NEW: Save translations for all templates (type: LABEL, projectId: null)
-        // Get current IDE language
-        const currentLanguage = (() => {
-          try {
-            return (localStorage.getItem('project.lang') || 'it') as 'it' | 'en' | 'pt';
-          } catch {
-            return 'it';
-          }
-        })();
-
-        // Prepare translations array: one translation per template
-        const translationsToSave = templatesToSave
-          .filter(t => t.id && t.label) // Only templates with id and label
-          .map(t => ({
-            guid: t.id!,
-            language: currentLanguage,
-            text: t.label || '',
-            type: TranslationType.LABEL,
-            projectId: null, // ✅ CRITICAL: IDE translations have projectId: null
-          }));
-
-        if (translationsToSave.length > 0) {
-          console.log('[handleSaveToFactory] 📝 Saving translations', {
-            count: translationsToSave.length,
-            language: currentLanguage,
-            translations: translationsToSave.map(t => ({
-              guid: t.guid,
-              text: t.text,
-            })),
-          });
-
-          const translationResponse = await fetch('/api/factory/template-label-translations', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ translations: translationsToSave }),
-          });
-
-          if (translationResponse.ok) {
-            console.log('[handleSaveToFactory] ✅ Translations saved to Factory');
-          } else {
-            const errorText = await translationResponse.text();
-            console.error('[handleSaveToFactory] ⚠️ Failed to save translations:', errorText);
-            // Don't throw - template save succeeded, translation save is secondary
-          }
-        }
-
-        // ✅ Reload Factory templates cache immediately
-        await DialogueTaskService.reloadFactoryTemplates();
-        console.log('[ResponseEditorLayout] ✅ Factory templates cache reloaded');
-
-        setSaveDecision('factory');
-        setSaveDecisionMade(true);
-        setIsSaving(false);
-        // ✅ FIX: Close dialog only after successful save
-        setShowSaveDialog(false);
-      } else {
-        const errorText = await response.text();
-        throw new Error(`Failed to save to Factory: ${response.status} ${errorText}`);
+      if (!response.ok) {
+        throw new Error(`Failed to save: ${response.status}`);
       }
-    } catch (error) {
-      console.error('[ResponseEditorLayout] ❌ Error saving to Factory:', error);
-      alert(`Error saving to Factory: ${error instanceof Error ? error.message : String(error)}`);
-      // ✅ FIX: Reset saving state on error, but keep dialog open so user can retry
+
+      // ✅ Save translations
+      const currentLanguage = localStorage.getItem('project.lang') || 'it';
+      const translationsToSave = dematerializedTemplates
+        .filter(t => t.id && t.label)
+        .map(t => ({
+          guid: t.id!,
+          language: currentLanguage,
+          text: t.label || '',
+          type: TranslationType.LABEL,
+          projectId: null,
+        }));
+
+      if (translationsToSave.length > 0) {
+        await fetch('/api/factory/template-label-translations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ translations: translationsToSave }),
+        });
+      }
+
+      // ✅ Reload cache and close
+      await DialogueTaskService.reloadFactoryTemplates();
+      setSaveDecision('factory');
+      setSaveDecisionMade(true);
       setIsSaving(false);
-      // Don't close dialog on error - let user see what happened and retry if needed
+      setShowSaveDialog(false);
+
+    } catch (error) {
+      console.error('[handleSaveToFactory] ❌ Error:', error);
+      alert(`Error saving to Factory: ${error instanceof Error ? error.message : String(error)}`);
+      setIsSaving(false);
     }
-  }, [wizardIntegrationProp, shouldBeGeneral, generalizedLabel, taskMeta?.id]);
+  }, [wizardIntegrationProp, generalizedLabel, setSaveDecision, setSaveDecisionMade, setIsSaving, setShowSaveDialog]);
 
   // ✅ NEW: Handler to save only to project
   const handleSaveToProject = React.useCallback(() => {
@@ -1063,9 +856,6 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
 
   // ✅ FIX: Usa il ref passato come prop (creato in ResponseEditorInner)
   const saveToLibraryButtonRef = saveToLibraryButtonRefProp || React.useRef<HTMLButtonElement>(null);
-
-  // ✅ NEW: State for saving operation
-  const [isSaving, setIsSaving] = React.useState(false);
 
   // ✅ FIX: Sync toolbarButtons to onToolbarUpdate when hideHeader is true
   // Il pulsante è sempre presente nella toolbar, quindi non serve più toolbarButtonsWithRef
