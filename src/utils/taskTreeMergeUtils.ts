@@ -673,24 +673,85 @@ export async function copyTranslationsForClonedSteps(_ddt: any, _templateId: str
       }))
     });
 
-    // Load template translations for OLD GUIDs (these exist in the database)
-    const { getTemplateTranslations } = await import('../services/ProjectDataService');
-    console.log('[copyTranslationsForClonedSteps] 🔍 Caricando traduzioni del template per GUID vecchi', {
-      oldGuidsCount: oldGuids.length,
-      oldGuids: oldGuids.slice(0, 10)
-    });
+    // ✅ FASE 2: Carica traduzioni template SOLO da memoria (ProjectTranslationsContext)
+    // Durante la creazione del wizard, tutto è in memoria - NON cercare nel database
+    const { getCurrentProjectLocale } = await import('./categoryPresets');
+    const projectLocale = getCurrentProjectLocale() || 'it';
+    const templateTranslations: Record<string, string> = {};
 
-    const templateTranslations = await getTemplateTranslations(oldGuids);
-    console.log('[copyTranslationsForClonedSteps] ✅ Traduzioni template caricate', {
+    // ✅ PRIORITÀ 1: Cerca PRIMA in memoria (ProjectTranslationsContext)
+    if (typeof window !== 'undefined' && (window as any).__projectTranslationsContext) {
+      const context = (window as any).__projectTranslationsContext;
+      const contextTranslations = context.translations || {};
+
+      console.log('[copyTranslationsForClonedSteps] 🔍 Cercando traduzioni template in memoria', {
+        oldGuidsCount: oldGuids.length,
+        contextTranslationsCount: Object.keys(contextTranslations).length
+      });
+
+      for (const oldGuid of oldGuids) {
+        const trans = contextTranslations[oldGuid];
+        if (trans) {
+          const text = typeof trans === 'object'
+            ? (trans[projectLocale] || trans.en || trans.it || trans.pt || '')
+            : String(trans);
+          if (text) {
+            templateTranslations[oldGuid] = text;
+          }
+        }
+      }
+
+      console.log('[copyTranslationsForClonedSteps] ✅ Traduzioni template trovate in memoria', {
+        foundInMemory: Object.keys(templateTranslations).length,
+        requested: oldGuids.length
+      });
+    }
+
+    // ✅ PRIORITÀ 2: Se mancano traduzioni, cerca nel database (backward compatibility)
+    const missingGuids = oldGuids.filter(g => !templateTranslations[g]);
+    if (missingGuids.length > 0) {
+      console.log('[copyTranslationsForClonedSteps] 🔍 Cercando traduzioni mancanti nel database', {
+        missingCount: missingGuids.length,
+        missingGuids: missingGuids.slice(0, 5)
+      });
+
+      try {
+        const { getTemplateTranslations } = await import('../services/ProjectDataService');
+        const dbTranslations = await getTemplateTranslations(missingGuids);
+
+        for (const oldGuid of missingGuids) {
+          const trans = dbTranslations[oldGuid];
+          if (trans) {
+            const text = typeof trans === 'object'
+              ? (trans[projectLocale] || trans.en || trans.it || trans.pt || '')
+              : String(trans);
+            if (text) {
+              templateTranslations[oldGuid] = text;
+            }
+          }
+        }
+
+        console.log('[copyTranslationsForClonedSteps] ✅ Traduzioni template trovate nel database', {
+          foundInDb: Object.keys(templateTranslations).length - (oldGuids.length - missingGuids.length),
+          missingBefore: missingGuids.length
+        });
+      } catch (err) {
+        console.warn('[copyTranslationsForClonedSteps] ⚠️ Errore cercando traduzioni nel database (continua con quelle in memoria)', {
+          error: err instanceof Error ? err.message : String(err),
+          missingGuidsCount: missingGuids.length,
+          foundInMemory: Object.keys(templateTranslations).length
+        });
+      }
+    }
+
+    console.log('[copyTranslationsForClonedSteps] ✅ Traduzioni template caricate (finale)', {
       requestedCount: oldGuids.length,
       foundCount: Object.keys(templateTranslations).length,
       foundGuids: Object.keys(templateTranslations).slice(0, 10),
       missingGuids: oldGuids.filter(g => !templateTranslations[g]).slice(0, 10)
     });
 
-    // Get project locale
-    const projectLocale = (localStorage.getItem('project.lang') || 'it') as 'en' | 'it' | 'pt';
-
+    // ✅ projectLocale già definito sopra (linea 679)
     // Build translations dictionary for instance (NEW GUIDs -> text from template)
     // Map: oldGuid -> newGuid -> text
     const instanceTranslations: Record<string, string> = {};
@@ -797,7 +858,7 @@ export async function copyTranslationsForClonedSteps(_ddt: any, _templateId: str
 
         if (projectId) {
           const { saveProjectTranslations } = await import('../services/ProjectDataService');
-          const projectLocale = (localStorage.getItem('project.lang') || 'it') as 'en' | 'it' | 'pt';
+          // ✅ projectLocale già definito sopra (linea 679)
 
           const translationsToSave = Object.entries(instanceTranslations).map(([guid, text]) => ({
             guid,
