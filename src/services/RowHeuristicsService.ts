@@ -54,10 +54,21 @@ export class RowHeuristicsService {
     // ✅ NUOVO: Usa SOLO embedding matching (no fallback a matching tradizionale)
     if (taskType === TaskType.UtteranceInterpretation) {
       try {
+        console.log('[RowHeuristicsService] 🔍 Starting embedding matching', {
+          label: trimmedLabel,
+          taskType: TaskType[taskType],
+        });
+
         const { EmbeddingService } = await import('./EmbeddingService');
         const matchedTaskId = await EmbeddingService.findBestMatch(trimmedLabel, 'task', 0.70);
 
         if (matchedTaskId) {
+          console.log('[RowHeuristicsService] ✅ Embedding match found', {
+            label: trimmedLabel,
+            matchedTaskId,
+            threshold: 0.70,
+          });
+
           // Embedding ha trovato un match → usa quello
           const DialogueTaskService = (await import('./DialogueTaskService')).default;
           const template = DialogueTaskService.getTemplate(matchedTaskId);
@@ -70,7 +81,24 @@ export class RowHeuristicsService {
               matchType: 'embedding'
             };
             templateType = this.getTemplateType(template);
+
+            console.log('[RowHeuristicsService] ✅ Template loaded from embedding match', {
+              label: trimmedLabel,
+              templateId: matchedTaskId,
+              templateLabel: template.label,
+              templateType: templateType !== null ? TaskType[templateType] : null,
+            });
+          } else {
+            console.warn('[RowHeuristicsService] ⚠️ Embedding match found but template not in cache', {
+              label: trimmedLabel,
+              matchedTaskId,
+            });
           }
+        } else {
+          console.log('[RowHeuristicsService] ℹ️ No embedding match found (threshold: 0.70)', {
+            label: trimmedLabel,
+            willUseWizard: true,
+          });
         }
         // Se embedding non trova match → matchedTemplate rimane null → wizard full
       } catch (error) {

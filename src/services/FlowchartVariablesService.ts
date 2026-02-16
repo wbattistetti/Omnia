@@ -574,6 +574,9 @@ class FlowchartVariablesService {
         if (response.status === 404) {
           // No mappings yet for this project (first time) - still mark as initialized
           // This is expected for new projects, not an error
+          console.log('[FlowchartVariablesService] ℹ️ No variable mappings found (404) - this is normal for new projects', {
+            projectId: this.projectId,
+          });
           // Note: 404 errors are suppressed in console by fetchInterceptor
           return;
         }
