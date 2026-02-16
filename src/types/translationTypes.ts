@@ -18,6 +18,12 @@ export enum TranslationType {
   LABEL = 'Label',
 
   /**
+   * Instance prompt text (for template prompts saved to Factory).
+   * Used for prompt translations that will be cloned to instances.
+   */
+  INSTANCE = 'Instance',
+
+  /**
    * Variable readable name for Condition Editor and scripts.
    * Example: "Data di nascita del paziente", "Giorno di nascita del paziente"
    * Used for display in script editor (converted to GUID at runtime).

@@ -59,7 +59,13 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     setTranslations((prev) => {
       if (prev[guid] === text) return prev; // No change
       setIsDirty(true);
-      return { ...prev, [guid]: text };
+      const updated = { ...prev, [guid]: text };
+      // ✅ CRITICAL: Aggiorna immediatamente window.__projectTranslationsContext.translations
+      // per accesso sincrono (senza attendere il re-render di React)
+      if (typeof window !== 'undefined' && (window as any).__projectTranslationsContext) {
+        (window as any).__projectTranslationsContext.translations = updated;
+      }
+      return updated;
     });
     setAllGuids((prev) => new Set([...prev, guid]));
   }, []);
@@ -101,10 +107,15 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
 
     try {
       const allTranslations = await loadAllProjectTranslations(currentProjectId, projectLocale);
-      setTranslations(allTranslations);
+      // ✅ CRITICAL: Merge instead of replace to preserve in-memory translations (e.g., template translations not yet in DB)
+      setTranslations((prev) => {
+        const merged = { ...prev, ...allTranslations };
+        // Update allGuids to include both existing and new GUIDs
+        setAllGuids(new Set([...Object.keys(prev), ...Object.keys(allTranslations)]));
+        return merged;
+      });
       // Save original values for comparison (deep copy)
       setOriginalTranslations(JSON.parse(JSON.stringify(allTranslations)));
-      setAllGuids(new Set(Object.keys(allTranslations)));
       setIsDirty(false);
     } catch (err) {
       console.error('[ProjectTranslations] ❌ ERROR loadAllTranslations:', err);
@@ -160,17 +171,27 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
   }, [currentProjectId, translations, originalTranslations, projectLocale, isDirty]);
 
   // Load translations when project changes
+  // ✅ CRITICAL: Only reset if project actually changed, not on every loadAllTranslations change
+  const prevProjectIdRef = React.useRef<string | null>(null);
   useEffect(() => {
     if (currentProjectId) {
-      // Reset translations when project changes
-      setTranslations({});
-      setOriginalTranslations({});
-      setAllGuids(new Set());
-      setIsDirty(false);
-      // Load all translations for the project
-      loadAllTranslations();
+      const projectChanged = prevProjectIdRef.current !== currentProjectId;
+
+      if (projectChanged) {
+        // Only reset when project actually changes
+        prevProjectIdRef.current = currentProjectId;
+        setTranslations({});
+        setOriginalTranslations({});
+        setAllGuids(new Set());
+        setIsDirty(false);
+        // Load all translations for the project
+        loadAllTranslations();
+      }
+      // ✅ DO NOT reset if project hasn't changed - preserve in-memory translations
+    } else {
+      prevProjectIdRef.current = null;
     }
-  }, [currentProjectId, loadAllTranslations]);
+  }, [currentProjectId]); // ✅ Removed loadAllTranslations from dependencies to prevent unnecessary resets
 
   // Memoize context value to prevent unnecessary re-renders
   const value: ProjectTranslationsContextType = useMemo(() => ({

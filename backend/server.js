@@ -1604,83 +1604,9 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
       await ecoll.bulkWrite(edgeOps, { ordered: false });
     }
 
-    // ✅ NEW: Cleanup orphan tasks (tasks not referenced by any row in ANY flow)
-    let orphanTasksDeleted = 0;
-    try {
-      // Extract all task IDs from rows in saved nodes (current flow)
-      const referencedTaskIds = new Set();
-      nodes.forEach((n) => {
-        if (n.rows && Array.isArray(n.rows)) {
-          n.rows.forEach((r) => {
-            // row.id is the taskId (unified model: row.id === task.id)
-            if (r.id) {
-              referencedTaskIds.add(r.id);
-            }
-            // Also check row.taskId if present (backward compatibility)
-            if (r.taskId) {
-              referencedTaskIds.add(r.taskId);
-            }
-          });
-        }
-      });
-
-      // ✅ IMPORTANT: Also check all other flows to avoid deleting tasks referenced elsewhere
-      // Note: We're already in the project database, so all nodes belong to this project
-      const allNodesInAllFlows = await ncoll.find({}, { projection: { _id: 0, rows: 1 } }).toArray();
-      allNodesInAllFlows.forEach((n) => {
-        if (n.rows && Array.isArray(n.rows)) {
-          n.rows.forEach((r) => {
-            if (r.id) {
-              referencedTaskIds.add(r.id);
-            }
-            if (r.taskId) {
-              referencedTaskIds.add(r.taskId);
-            }
-          });
-        }
-      });
-
-      // Get all tasks in database for this project
-      const tcoll = db.collection('tasks');
-      const allTasksInDb = await tcoll.find({ projectId: pid }, { projection: { _id: 0, id: 1 } }).toArray();
-      const allTaskIdsInDb = new Set(allTasksInDb.map(t => t.id));
-
-      // Find orphan tasks (tasks in DB but not referenced by any row in ANY flow)
-      const orphanTaskIds = Array.from(allTaskIdsInDb).filter(taskId => !referencedTaskIds.has(taskId));
-
-      // Delete orphan tasks
-      if (orphanTaskIds.length > 0) {
-        const deleteResult = await tcoll.deleteMany({
-          projectId: pid,
-          id: { $in: orphanTaskIds }
-        });
-        orphanTasksDeleted = deleteResult.deletedCount || 0;
-
-        console.log(`[SAVE][backend] 🗑️ Cleanup orphan tasks`, {
-          projectId: pid,
-          flowId,
-          referencedTaskIds: referencedTaskIds.size,
-          totalTasksInDb: allTaskIdsInDb.size,
-          orphanTaskIds: orphanTaskIds.length,
-          deleted: orphanTasksDeleted,
-          orphanTaskIdsList: orphanTaskIds.slice(0, 20) // First 20 for logging
-        });
-      } else {
-        console.log(`[SAVE][backend] ✅ No orphan tasks to cleanup`, {
-          projectId: pid,
-          flowId,
-          referencedTaskIds: referencedTaskIds.size,
-          totalTasksInDb: allTaskIdsInDb.size
-        });
-      }
-    } catch (orphanError) {
-      // Log error but don't fail the entire save operation
-      console.error(`[SAVE][backend] ⚠️ Error during orphan tasks cleanup`, {
-        projectId: pid,
-        flowId,
-        error: orphanError?.message || String(orphanError)
-      });
-    }
+    // ✅ ARCHITECTURAL FIX: Cleanup degli orphan tasks RIMOSSO da qui
+    // Il cleanup deve essere eseguito SOLO alla fine, quando flow e tasks sono coerenti
+    // Vedi endpoint POST /api/projects/:pid/tasks/cleanup-orphans
 
       // ✅ LOG: Traccia cosa viene salvato nel DB
       console.log(`[SAVE][backend] 💾 Saving to DB`, {
@@ -1690,7 +1616,6 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
         nodesDeletes: nDeletes,
         edgesUpserts: eUpserts,
         edgesDeletes: eDeletes,
-        orphanTasksDeleted: orphanTasksDeleted,
         nodes: nodes.map((n) => ({
           id: n.id,
           label: n.label,
@@ -1708,9 +1633,9 @@ app.put('/api/projects/:pid/flow', async (req, res) => {
         projectId: pid,
         flowId,
         payload: { nodes: nodes.length, edges: edges.length },
-        result: { upserts: { nodes: nUpserts, edges: eUpserts }, deletes: { nodes: nDeletes, edges: eDeletes }, orphanTasksDeleted }
+        result: { upserts: { nodes: nUpserts, edges: eUpserts }, deletes: { nodes: nDeletes, edges: eDeletes } }
       });
-      res.json({ ok: true, nodes: nodes.length, edges: edges.length, orphanTasksDeleted });
+      res.json({ ok: true, nodes: nodes.length, edges: edges.length });
     });
   } catch (e) {
     logError('Flow.put', e, { projectId: pid, flowId, payloadNodes: nodes.length, payloadEdges: edges.length });
@@ -1853,11 +1778,34 @@ app.get('/api/projects/:pid/conditions', async (req, res) => {
 // GET /api/projects/:pid/tasks - Load all tasks
 app.get('/api/projects/:pid/tasks', async (req, res) => {
   const projectId = req.params.pid;
+  console.log('[💾 BACKEND_GET_TASKS] LOAD projectId:', projectId);
   const startTime = Date.now();
   const client = await getMongoClient();
   try {
     const projDb = await getProjectDb(client, projectId);
     const coll = projDb.collection('tasks');
+
+    // ✅ NEW: Log prima della query per diagnosticare
+    const totalDocsBeforeQuery = await coll.countDocuments({});
+    const docsWithProjectId = await coll.countDocuments({ projectId });
+    const docsWithoutProjectId = await coll.countDocuments({ projectId: { $exists: false } });
+    const allProjectIds = await coll.distinct('projectId');
+    const sampleDocs = await coll.find({}).limit(5).toArray();
+
+    console.log('[💾 BACKEND_GET_TASKS] 🔍 QUERY DIAGNOSTICS', {
+      projectId,
+      totalDocsInCollection: totalDocsBeforeQuery,
+      docsWithMatchingProjectId: docsWithProjectId,
+      docsWithoutProjectId: docsWithoutProjectId,
+      allProjectIdsInCollection: allProjectIds,
+      sampleDocs: sampleDocs.map(d => ({
+        id: d.id,
+        projectId: d.projectId,
+        templateId: d.templateId,
+        type: d.type,
+      })),
+    });
+
     const queryStart = Date.now();
     // ✅ OPTIMIZATION: Sort by projectId and updatedAt (index should exist)
     const items = await coll
@@ -1866,6 +1814,23 @@ app.get('/api/projects/:pid/tasks', async (req, res) => {
       .toArray();
     const queryDuration = Date.now() - queryStart;
     const duration = Date.now() - startTime;
+
+    // ✅ NEW: Log dopo la query
+    console.log('[💾 BACKEND_GET_TASKS] ✅ QUERY RESULT', {
+      projectId,
+      itemsFound: items.length,
+      itemIds: items.map(i => i.id),
+      itemDetails: items.map(i => ({
+        id: i.id,
+        projectId: i.projectId,
+        templateId: i.templateId,
+        type: i.type,
+        isInstance: !!i.templateId,
+      })),
+      duration: `${duration}ms`,
+      queryDuration: `${queryDuration}ms`,
+    });
+
     logInfo('Tasks.get', { projectId, count: items.length, duration: `${duration}ms`, queryDuration: `${queryDuration}ms` });
     res.json({ count: items.length, items });
   } catch (e) {
@@ -2265,6 +2230,7 @@ app.delete('/api/projects/:pid/tasks/:taskId', async (req, res) => {
 // POST /api/projects/:pid/tasks/bulk - Bulk save tasks
 app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
   const projectId = req.params.pid;
+  console.log('[💾 BACKEND_BULK] SAVE projectId:', projectId);
   const payload = req.body || {};
   const items = Array.isArray(payload?.items) ? payload.items : [];
   if (!items.length) return res.json({ ok: true, inserted: 0, updated: 0 });
@@ -2315,6 +2281,21 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
           // ✅ Extract all fields except id, templateId, createdAt, updatedAt, and legacy fields
           const { id, templateId, createdAt, updatedAt, data, steps, constraints, ...fields } = item;
 
+          // ✅ LOG: Item before classification
+          console.log('[💾 BACKEND_BULK] 🔍 ITEM BEFORE CLASSIFICATION', {
+            projectId,
+            itemId: item.id,
+            itemTemplateId: item.templateId,
+            itemTemplateIdType: typeof item.templateId,
+            isInstance: isInstance(item),
+            isLocalTemplate: isLocalTemplate(item),
+            isFactoryTemplate: isFactoryTemplate(item),
+            hasSubTasksIds: !!item.subTasksIds,
+            hasVersion: !!item.version,
+            hasDataContract: !!item.dataContract,
+            fieldsKeys: Object.keys(fields).slice(0, 20), // First 20 keys
+          });
+
           // ✅ CLASSIFICAZIONE: Determina il tipo di documento usando le funzioni di classificazione
           let task;
           if (isInstance(item)) {
@@ -2331,6 +2312,16 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
               steps: item.steps,  // ✅ Array MaterializedStep[] (DEVE essere salvato!)
               updatedAt: now
             };
+
+            // ✅ NEW: Log per verificare che projectId sia salvato
+            console.log('[💾 BACKEND_BULK] 💾 SAVING INSTANCE', {
+              projectId,
+              taskId: item.id,
+              templateId: templateId,
+              type: item.type,
+              hasSteps: !!item.steps,
+              taskProjectId: task.projectId,  // Verifica che projectId sia nel task
+            });
 
             // ✅ Rimuovi esplicitamente campi del template se presenti (per sicurezza)
             // ❌ NON rimuovere type - è necessario per il caricamento
@@ -2377,9 +2368,10 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
           // ✅ Return null se task non è valido (verrà filtrato dopo)
           if (!task) return null;
 
-          return {
+          const filter = { projectId, id: item.id };
+          const bulkOp = {
             updateOne: {
-              filter: { projectId, id: item.id },
+              filter,
               update: {
                 $set: task,
                 $setOnInsert: { createdAt: now }
@@ -2387,6 +2379,17 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
               upsert: true
             }
           };
+
+          // ✅ LOG: Filter used for bulk operation
+          console.log('[💾 BACKEND_BULK] 🔍 BULK OP FILTER', {
+            projectId,
+            itemId: item.id,
+            filter,
+            taskKeys: Object.keys(task),
+            isInstance: isInstance(item),
+          });
+
+          return bulkOp;
         })
         .filter(op => op !== null); // ✅ Rimuovi operazioni null (item saltati)
 
@@ -2404,11 +2407,14 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
         try {
           const result = await coll.bulkWrite(bulkOps, { ordered: false });
           const tBulkEnd = Date.now();
-          console.log('[💾 BACKEND_BULK] bulkWrite success', {
+          console.log('[💾 BACKEND_BULK] 🔍 BULK WRITE RESULT', {
+            projectId,
             duration: `${tBulkEnd - tBulk}ms`,
-            inserted: result.upsertedCount,
-            updated: result.modifiedCount,
-            matched: result.matchedCount
+            opsCount: bulkOps.length,
+            matchedCount: result.matchedCount,
+            modifiedCount: result.modifiedCount,
+            upsertedCount: result.upsertedCount,
+            insertedIds: result.insertedIds ? Object.keys(result.insertedIds) : [],
           });
           inserted = result.upsertedCount;
           updated = result.modifiedCount;
@@ -2448,6 +2454,11 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
     res.status(500).json({ error: String(e?.message || e) });
   }
 });
+
+// ✅ REMOVED: Cleanup orphan tasks endpoint
+// ARCHITECTURAL FIX: Cleanup now happens in frontend BEFORE saving to database
+// The frontend filters out orphan tasks from the payload, so the backend only receives coherent data
+// No cleanup needed in backend - orphan tasks are never written to database
 
 // GET /api/projects/:pid/variable-mappings - Get variable mappings for project
 app.get('/api/projects/:pid/variable-mappings', async (req, res) => {
@@ -3767,8 +3778,8 @@ app.post('/api/factory/dialogue-templates', async (req, res) => {
   }
 });
 
-// Save template label translations to Factory (IDE translations)
-// These translations use type: LABEL and projectId: null
+// Save template translations to Factory (IDE translations)
+// These translations use type: LABEL (for template labels) or INSTANCE (for prompt GUIDs) and projectId: null
 app.post('/api/factory/template-label-translations', async (req, res) => {
   const client = await getMongoClient();
   try {
@@ -3780,7 +3791,7 @@ app.post('/api/factory/template-label-translations', async (req, res) => {
       return res.json({ success: true, count: 0 });
     }
 
-    console.log(`[FACTORY_TRANSLATIONS_SAVE] Saving ${translations.length} template label translations`);
+    console.log(`[FACTORY_TRANSLATIONS_SAVE] Saving ${translations.length} template translations (Label + Instance)`);
 
     const now = new Date();
 
@@ -3794,7 +3805,7 @@ app.post('/api/factory/template-label-translations', async (req, res) => {
           guid: trans.guid,
           language: trans.language,
           projectId: null, // ✅ IDE translations always have projectId: null
-          type: 'Label', // ✅ IDE translations always use type: LABEL
+          type: trans.type || 'Label', // ✅ Use trans.type to match both Label and Instance types
         };
 
         const update = {
@@ -3828,7 +3839,7 @@ app.post('/api/factory/template-label-translations', async (req, res) => {
       savedCount = result.upsertedCount + result.modifiedCount;
     }
 
-    console.log(`[FACTORY_TRANSLATIONS_SAVE] ✅ Saved ${savedCount} template label translations (${result?.upsertedCount || 0} inserted, ${result?.modifiedCount || 0} updated)`);
+    console.log(`[FACTORY_TRANSLATIONS_SAVE] ✅ Saved ${savedCount} template translations (${result?.upsertedCount || 0} inserted, ${result?.modifiedCount || 0} updated)`);
     res.json({ success: true, count: savedCount });
   } catch (err) {
     console.error('[FACTORY_TRANSLATIONS_SAVE] Error:', err);

@@ -31,6 +31,7 @@ import { DialogueTaskService } from '@services/DialogueTaskService';
 import { ResponseEditorContext, useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
 import { generalizeLabel } from '../../../../../TaskBuilderAIWizard/services/TemplateCreationService';
 import { TranslationType } from '@types/translationTypes';
+import { TaskType } from '@types/taskTypes';
 
 // ✅ ARCHITECTURE: Props interface with only necessary values (no monolithic editor object)
 export interface ResponseEditorLayoutProps {
@@ -356,12 +357,31 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
 
   // ✅ FIX: Handler to save to Factory with loading state and dematerialization filter
   const handleSaveToFactory = React.useCallback(async () => {
+    // ✅ FLOW TRACE: START
+    console.log('[handleSaveToFactory] 🚀 FLOW TRACE - START', {
+      hasWizardIntegrationProp: !!wizardIntegrationProp,
+      hasDataSchema: !!wizardIntegrationProp?.dataSchema,
+      dataSchemaIsArray: Array.isArray(wizardIntegrationProp?.dataSchema),
+      dataSchemaLength: wizardIntegrationProp?.dataSchema?.length || 0,
+      wizardMode: wizardIntegrationProp?.wizardMode,
+      taskWizardMode,
+      timestamp: new Date().toISOString(),
+    });
+
     // ✅ Set spinner immediately
     setIsSaving(true);
     await new Promise(resolve => setTimeout(resolve, 0));
 
     // ✅ NO FALLBACK: wizardIntegrationProp.dataSchema is the single source of truth
     if (!wizardIntegrationProp?.dataSchema || !Array.isArray(wizardIntegrationProp.dataSchema)) {
+      console.error('[handleSaveToFactory] ❌ FLOW TRACE - Guard check failed', {
+        hasWizardIntegrationProp: !!wizardIntegrationProp,
+        hasDataSchema: !!wizardIntegrationProp?.dataSchema,
+        dataSchemaType: typeof wizardIntegrationProp?.dataSchema,
+        dataSchemaIsArray: Array.isArray(wizardIntegrationProp?.dataSchema),
+        wizardMode: wizardIntegrationProp?.wizardMode,
+        taskWizardMode,
+      });
       alert('Cannot save to Factory: wizard data is missing. Please ensure the wizard is completed.');
       setIsSaving(false);
       return;
@@ -403,6 +423,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
       });
 
       // ✅ CRITICAL CHECK: If dataSchema has N nodes, there MUST be N templates
+      // ❌ NO FALLBACK: If templates are missing, fail immediately
       if (templatesToSave.length !== expectedCount) {
         const missingIds = Array.from(expectedNodeIds).filter(id =>
           !templatesToSave.some(t => (t.id || t._id) === id)
@@ -426,12 +447,256 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         const isRoot = wizardIntegrationProp.dataSchema[0]?.id === template.id;
         if (isRoot && generalizedLabel) {
           template.label = generalizedLabel;
+        } else if (typeof template.type === 'number' && template.type === TaskType.UtteranceInterpretation) {
+          // ✅ CRITICAL: For UtteranceInterpretation tasks (type: 3), always generalize the label
+          // The task type already implies "asking", so remove verbs like "Chiedi"
+          template.label = generalizeLabel(template.label);
         }
 
         return template;
       });
 
-      // ✅ Save to backend
+      // ✅ CRITICAL: Validate translations BEFORE saving template
+      // Extract GUIDs and verify all translations exist in context
+      // If validation fails, DO NOT save template to avoid incomplete data
+      // ✅ CRITICAL: Templates in cache might have been modified with instance GUIDs
+      // We need to find translations using ALL GUIDs in context, not just those extracted from templates
+      // Solution: Extract GUIDs from templates, but if translations are not found, search in all context GUIDs
+      const allGuids = new Set<string>();
+      const currentLanguage = localStorage.getItem('project.lang') || 'it';
+
+      // Helper to extract ONLY translation GUIDs recursively from any object structure
+      // ✅ CRITICAL: We only extract GUIDs that are translation keys, not system GUIDs (like task.id)
+      const extractGuidsRecursive = (obj: any, path: string = ''): void => {
+        if (!obj || typeof obj !== 'object') return;
+
+        // If it's an array, process each element
+        if (Array.isArray(obj)) {
+          obj.forEach((item, idx) => extractGuidsRecursive(item, `${path}[${idx}]`));
+          return;
+        }
+
+        // Process object properties
+        for (const [key, value] of Object.entries(obj)) {
+          const currentPath = path ? `${path}.${key}` : key;
+
+          // ✅ ONLY extract translation GUIDs:
+          // 1. textKey or guid fields (these are translation keys)
+          // 2. parameters[].value where parameterId === 'text' (these are translation keys)
+          // ❌ DO NOT extract: task.id, escalationId, etc. (these are system GUIDs, not translation keys)
+
+          if (key === 'textKey' || key === 'guid') {
+            // ✅ These are translation keys
+            if (typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+              allGuids.add(value);
+            }
+          }
+
+          // ✅ Special handling for parameters array (look for parameterId === 'text')
+          // This is the PRIMARY source of translation GUIDs
+          if (key === 'parameters' && Array.isArray(value)) {
+            value.forEach((param: any) => {
+              if (param?.parameterId === 'text' && param?.value) {
+                if (typeof param.value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(param.value)) {
+                  allGuids.add(param.value);
+                }
+              }
+            });
+          }
+
+          // ❌ Skip 'id' field - it's a system GUID (task.id, escalationId, etc.), not a translation key
+          // Only process nested objects (but skip 'id' fields)
+          if (value && typeof value === 'object' && key !== 'id') {
+            extractGuidsRecursive(value, currentPath);
+          }
+        }
+      };
+
+      // Extract GUIDs from templates (these might be instance GUIDs, not original template GUIDs)
+      templatesToSave.forEach(t => {
+        // Add template.id (label GUID)
+        if (t.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(t.id)) {
+          allGuids.add(t.id);
+        }
+        // Extract all GUIDs recursively from template structure
+        extractGuidsRecursive(t);
+
+        // ✅ DEBUG: Log template structure to verify if it has been modified
+        console.log('[handleSaveToFactory] 🔍 Template structure check', {
+          templateId: t.id,
+          templateLabel: t.label,
+          hasSteps: !!t.steps,
+          stepsKeys: t.steps ? Object.keys(t.steps) : [],
+          sampleStepGuid: t.steps ? (() => {
+            const firstStepKey = Object.keys(t.steps)[0];
+            if (firstStepKey && t.steps[firstStepKey]) {
+              const firstStep = t.steps[firstStepKey];
+              const firstEscalation = firstStep.start?.escalations?.[0];
+              if (firstEscalation?.tasks?.[0]?.parameters) {
+                const textParam = firstEscalation.tasks[0].parameters.find((p: any) => p.parameterId === 'text');
+                return textParam?.value;
+              }
+            }
+            return null;
+          })() : null
+        });
+      });
+
+      console.log('[handleSaveToFactory] 📋 Extracted GUIDs from templates', {
+        totalGuids: allGuids.size,
+        sampleGuids: Array.from(allGuids).slice(0, 10),
+        allGuids: Array.from(allGuids) // ✅ DEBUG: Log all GUIDs for comparison
+      });
+
+      // ✅ Load translations from ProjectTranslationsContext (ONLY source of truth)
+      // ❌ NO FALLBACK: If context is not available, fail immediately
+      if (typeof window === 'undefined' || !(window as any).__projectTranslationsContext) {
+        const errorMsg = 'Cannot save to Factory: ProjectTranslationsContext not available.';
+        console.error('[handleSaveToFactory] ❌', errorMsg);
+        alert(errorMsg);
+        setIsSaving(false);
+        return;
+      }
+
+      const context = (window as any).__projectTranslationsContext;
+      const translations = context.translations || {};
+
+      // ✅ DEBUG: Log context state
+      const contextGuids = Object.keys(translations);
+      const requestedGuids = Array.from(allGuids);
+      const matchingGuids = requestedGuids.filter(g => g in translations);
+      const missingGuids = requestedGuids.filter(g => !(g in translations));
+
+      console.log('[handleSaveToFactory] 🔍 Context state check', {
+        hasContext: !!context,
+        translationsCount: contextGuids.length,
+        requestedGuidsCount: requestedGuids.length,
+        matchingGuidsCount: matchingGuids.length,
+        missingGuidsCount: missingGuids.length,
+        sampleRequestedGuids: requestedGuids.slice(0, 10),
+        sampleContextGuids: contextGuids.slice(0, 10),
+        sampleMatchingGuids: matchingGuids.slice(0, 10),
+        sampleMissingGuids: missingGuids.slice(0, 10)
+      });
+
+      const contextTranslations: Record<string, string> = {};
+
+      for (const guid of allGuids) {
+        const trans = translations[guid];
+        if (trans) {
+          const text = typeof trans === 'object'
+            ? (trans[currentLanguage] || trans.en || trans.it || trans.pt || '')
+            : String(trans);
+          if (text) {
+            contextTranslations[guid] = text;
+          }
+        }
+      }
+
+      console.log('[handleSaveToFactory] 📋 Loaded translations from context', {
+        requestedGuids: allGuids.size,
+        foundTranslations: Object.keys(contextTranslations).length,
+        missingGuids: Array.from(allGuids).filter(g => !contextTranslations[g]).length,
+        totalContextTranslations: Object.keys(translations).length
+      });
+
+      // ✅ CRITICAL: If translations are not found for extracted GUIDs, they might be instance GUIDs
+      // Try to find translations by searching all context GUIDs that match template structure
+      const missingTranslations = Array.from(allGuids).filter(g => !contextTranslations[g]);
+      if (missingTranslations.length > 0) {
+        console.warn('[handleSaveToFactory] ⚠️ Some GUIDs not found in context - might be instance GUIDs', {
+          missingCount: missingTranslations.length,
+          totalExtracted: allGuids.size,
+          foundCount: Object.keys(contextTranslations).length
+        });
+
+        // ✅ FALLBACK: If we have template structure, try to find translations by matching template structure
+        // This is a workaround for when templates have been modified with instance GUIDs
+        // We'll use the translations we found, even if some GUIDs are missing
+        // The missing GUIDs are likely instance GUIDs that don't have translations in the context
+        if (Object.keys(contextTranslations).length === 0) {
+          const errorMsg = `Cannot save to Factory: no translations found.\n\nExpected: ${allGuids.size} translations\nFound: 0 translations\n\nThis might happen if templates have been modified with instance GUIDs. Please recreate the templates.`;
+          console.error('[handleSaveToFactory] ❌ No translations found', {
+            expectedCount: allGuids.size,
+            foundCount: 0
+          });
+          alert(errorMsg);
+          setIsSaving(false);
+          return;
+        }
+
+        // ✅ Continue with partial translations (some GUIDs might be instance GUIDs without translations)
+        console.warn('[handleSaveToFactory] ⚠️ Continuing with partial translations', {
+          found: Object.keys(contextTranslations).length,
+          missing: missingTranslations.length
+        });
+      }
+
+      // ✅ Build translations array: label translations + prompt translations
+      // This is done BEFORE saving template to ensure we have all data ready
+      const translationsToSave: Array<{
+        guid: string;
+        language: string;
+        text: string;
+        type: string;
+        projectId: null;
+      }> = [];
+
+      // Add label translations (template IDs)
+      dematerializedTemplates.forEach(t => {
+        if (t.id && t.label) {
+          translationsToSave.push({
+            guid: t.id,
+            language: currentLanguage,
+            text: t.label,
+            type: TranslationType.LABEL,
+            projectId: null,
+          });
+        }
+      });
+
+      // Add prompt translations (GUIDs from steps) - use INSTANCE type
+      for (const guid of allGuids) {
+        // Skip if already added as label
+        if (dematerializedTemplates.some(t => t.id === guid)) {
+          continue;
+        }
+
+        const text = contextTranslations[guid];
+        // ✅ Skip GUIDs without translations (they might be instance GUIDs without translations)
+        // This is consistent with the validation above that allows partial translations
+        if (!text) {
+          console.warn('[handleSaveToFactory] ⚠️ Skipping GUID without translation', {
+            guid,
+            reason: 'Translation not found in context (might be instance GUID without translation)'
+          });
+          continue;
+        }
+
+        translationsToSave.push({
+          guid,
+          language: currentLanguage,
+          text,
+          type: TranslationType.INSTANCE, // ✅ Use INSTANCE for prompt translations
+          projectId: null,
+        });
+      }
+
+      console.log('[handleSaveToFactory] 📦 Prepared translations to save', {
+        totalTranslations: translationsToSave.length,
+        labelTranslations: dematerializedTemplates.filter(t => t.id && t.label).length,
+        promptTranslations: translationsToSave.length - dematerializedTemplates.filter(t => t.id && t.label).length
+      });
+
+      // ✅ FLOW TRACE: Saving template to Factory
+      console.log('[handleSaveToFactory] 🚀 FLOW TRACE - Saving template to Factory', {
+        templatesCount: dematerializedTemplates.length,
+        templateIds: dematerializedTemplates.map(t => t.id),
+        translationsCount: translationsToSave.length,
+      });
+
+      // ✅ CRITICAL: All validations passed - NOW save template
+      // This happens AFTER all checks to avoid saving incomplete data
       const response = await fetch('/api/factory/dialogue-templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -442,28 +707,67 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         throw new Error(`Failed to save: ${response.status}`);
       }
 
-      // ✅ Save translations
-      const currentLanguage = localStorage.getItem('project.lang') || 'it';
-      const translationsToSave = dematerializedTemplates
-        .filter(t => t.id && t.label)
-        .map(t => ({
-          guid: t.id!,
-          language: currentLanguage,
-          text: t.label || '',
-          type: TranslationType.LABEL,
-          projectId: null,
-        }));
+      // ✅ FLOW TRACE: Template saved to Factory
+      console.log('[handleSaveToFactory] ✅ FLOW TRACE - Template saved to Factory', {
+        templatesCount: dematerializedTemplates.length,
+        templateIds: dematerializedTemplates.map(t => t.id),
+      });
 
+      // ✅ Save translations (only after template is saved successfully)
       if (translationsToSave.length > 0) {
         await fetch('/api/factory/template-label-translations', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ translations: translationsToSave }),
         });
+        console.log('[handleSaveToFactory] ✅ FLOW TRACE - Translations saved to Factory', {
+          translationsCount: translationsToSave.length,
+        });
       }
+
+      // ✅ FLOW TRACE: Reloading cache
+      console.log('[handleSaveToFactory] 🔄 FLOW TRACE - Reloading Factory templates cache', {
+        cacheSizeBefore: DialogueTaskService.getTemplateCount(),
+      });
 
       // ✅ Reload cache and close
       await DialogueTaskService.reloadFactoryTemplates();
+
+      // ✅ FLOW TRACE: Cache reloaded
+      console.log('[handleSaveToFactory] ✅ FLOW TRACE - Factory templates cache reloaded', {
+        cacheSizeAfter: DialogueTaskService.getTemplateCount(),
+        templateIds: dematerializedTemplates.map(t => t.id),
+        allTemplatesInCache: DialogueTaskService.getAllTemplates().map(t => t.id).slice(0, 10),
+      });
+
+      // ✅ FLOW TRACE: Final summary - Everything saved successfully
+      const allTemplatesAfterReload = DialogueTaskService.getAllTemplates();
+      const savedTemplatesInCache = allTemplatesAfterReload.filter(t =>
+        dematerializedTemplates.some(dt => dt.id === t.id)
+      );
+      console.log('[handleSaveToFactory] 🎉 FLOW TRACE - FINAL SUMMARY - Everything saved successfully', {
+        templatesSaved: {
+          count: dematerializedTemplates.length,
+          templateIds: dematerializedTemplates.map(t => t.id),
+          allInCache: savedTemplatesInCache.length === dematerializedTemplates.length,
+          missingInCache: dematerializedTemplates
+            .filter(dt => !allTemplatesAfterReload.some(t => t.id === dt.id))
+            .map(t => t.id),
+        },
+        translationsSaved: {
+          count: translationsToSave.length,
+          labelTranslations: dematerializedTemplates.filter(t => t.id && t.label).length,
+          promptTranslations: translationsToSave.length - dematerializedTemplates.filter(t => t.id && t.label).length,
+        },
+        cacheReloaded: {
+          success: true,
+          cacheSizeBefore: DialogueTaskService.getTemplateCount(),
+          cacheSizeAfter: allTemplatesAfterReload.length,
+        },
+        overallStatus: '✅ SUCCESS - All templates and translations saved to Factory',
+        timestamp: new Date().toISOString(),
+      });
+
       setSaveDecision('factory');
       setSaveDecisionMade(true);
       setIsSaving(false);

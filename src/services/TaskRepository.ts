@@ -222,19 +222,53 @@ class TaskRepository {
 
     try {
       if (!finalProjectId) {
+        console.error('[TaskRepository] ❌ LOAD TASKS: No projectId', { projectId, finalProjectId });
         return false;
       }
 
+      console.log('[TaskRepository] 🔍 LOAD TASKS - START', {
+        projectId: finalProjectId,
+        repositorySizeBefore: this.tasks.size,
+        repositoryTaskIdsBefore: Array.from(this.tasks.keys()),
+        timestamp: new Date().toISOString(),
+      });
+
       const response = await fetch(`/api/projects/${finalProjectId}/tasks`);
       if (!response.ok) {
+        console.error('[TaskRepository] ❌ LOAD TASKS: HTTP Error', {
+          projectId: finalProjectId,
+          status: response.status,
+          statusText: response.statusText,
+        });
         return false;
       }
 
       const data = await response.json();
       const items: Task[] = data.items || [];
 
+      console.log('[TaskRepository] 🔍 LOAD TASKS - RAW RESPONSE', {
+        projectId: finalProjectId,
+        itemsCount: items.length,
+        rawItems: items.map(item => ({
+          id: item.id,
+          idLength: item.id?.length,
+          templateId: item.templateId,
+          type: item.type || item.Type,
+          hasSteps: !!(item.steps || item.value?.steps),
+          isInstance: !!item.templateId,
+          label: item.label || item.value?.label,
+        })),
+      });
+
       // Clear and populate internal storage
+      const clearedCount = this.tasks.size;
       this.tasks.clear();
+      console.log('[TaskRepository] 🔍 LOAD TASKS - CLEARED REPOSITORY', {
+        projectId: finalProjectId,
+        clearedCount,
+        timestamp: new Date().toISOString(),
+      });
+
       for (const item of items) {
         // ✅ Load task with fields directly (no value wrapper)
         const { id, templateId, createdAt, updatedAt, projectId: _projectId, value, type, Type, ...directFields } = item;
@@ -352,6 +386,25 @@ class TaskRepository {
         hasSteps: !!(item.steps || item.value?.steps),
       })));
 
+      // ✅ CRITICAL: Log after loading with instance details
+      const allInstancesInMemory = Array.from(this.tasks.values()).filter(t => t.templateId);
+      console.log('[TaskRepository] 🔍 LOAD TASKS - AFTER PROCESSING', {
+        projectId: finalProjectId,
+        itemsLoaded: items.length,
+        tasksInMemory: this.tasks.size,
+        allTaskIds: Array.from(this.tasks.keys()),
+        instancesCount: allInstancesInMemory.length,
+        allInstances: allInstancesInMemory.map(t => ({
+          id: t.id,
+          idLength: t.id.length,
+          templateId: t.templateId,
+          type: t.type,
+          label: t.label,
+          hasSteps: t.steps ? Object.keys(t.steps).length > 0 : false,
+        })),
+        timestamp: new Date().toISOString(),
+      });
+
       // Emit event to notify components that tasks have been loaded
       window.dispatchEvent(new CustomEvent('tasks:loaded', {
         detail: { projectId: finalProjectId, tasksCount: this.tasks.size }
@@ -368,7 +421,7 @@ class TaskRepository {
    * @param projectId - Project ID to save tasks for
    * @returns True if saved successfully
    */
-  async saveAllTasksToDatabase(projectId?: string): Promise<boolean> {
+  async saveAllTasksToDatabase(projectId?: string, tasksToSave?: Task[]): Promise<boolean> {
     try {
       const finalProjectId = projectId || this.getCurrentProjectId();
       if (!finalProjectId) {
@@ -376,7 +429,9 @@ class TaskRepository {
         return false;
       }
 
-      const allTasks = Array.from(this.tasks.values());
+      // ✅ ARCHITECTURAL FIX: Use provided tasksToSave if available, otherwise use all tasks in repository
+      // This allows frontend to filter orphan tasks BEFORE saving to database
+      const allTasks = tasksToSave || Array.from(this.tasks.values());
       if (allTasks.length === 0) {
         console.log('[TaskRepository] ✅ SAVE TASKS: No tasks to save');
         return true; // Nothing to save
@@ -458,6 +513,26 @@ class TaskRepository {
         })),
       });
 
+      // ✅ NEW: Log specifico per istanze
+      const instancesInPayload = items.filter(i => i.templateId);
+      console.log('[TaskRepository] 🔍 INSTANCES IN PAYLOAD', {
+        projectId: finalProjectId,
+        instancesCount: instancesInPayload.length,
+        allInstances: instancesInPayload.map(i => ({
+          id: i.id,
+          templateId: i.templateId,
+          type: i.type,
+          hasSteps: i.steps ? Object.keys(i.steps).length > 0 : false,
+        })),
+      });
+
+      // ✅ CRITICAL: Log the exact payload being sent
+      console.log('[TaskRepository] 🔍 PAYLOAD BEING SENT TO BACKEND', {
+        projectId: finalProjectId,
+        itemsCount: items.length,
+        payloadPreview: JSON.stringify({ items: items.slice(0, 2) }, null, 2).substring(0, 1000), // First 2 items, first 1000 chars
+      });
+
       const response = await fetch(`/api/projects/${finalProjectId}/tasks/bulk`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -497,11 +572,100 @@ class TaskRepository {
         projectId: finalProjectId,
         itemsCount: items.length,
         itemsIds: items.map(i => i.id).slice(0, 30), // First 30 IDs
+        itemsDetails: items.map(i => ({
+          id: i.id,
+          templateId: i.templateId,
+          type: i.type,
+          isInstance: !!i.templateId,
+        })),
         result: result,
         inserted: result.inserted || 0,
         updated: result.updated || 0,
         timestamp: new Date().toISOString(),
       });
+
+      // ✅ NEW: Log specifico per istanze salvate
+      const instancesSaved = items.filter(i => i.templateId);
+      console.log('[TaskRepository] 🔍 INSTANCES SAVED SUMMARY', {
+        projectId: finalProjectId,
+        instancesInPayload: instancesSaved.length,
+        instancesDetails: instancesSaved.map(i => ({
+          id: i.id,
+          templateId: i.templateId,
+          type: i.type,
+        })),
+        inserted: result.inserted || 0,
+        updated: result.updated || 0,
+      });
+
+      // ✅ CRITICAL: Verify what was actually saved by querying the database
+      if (result.inserted > 0 || result.updated > 0) {
+        console.log('[TaskRepository] 🔍 VERIFYING SAVED TASKS', {
+          projectId: finalProjectId,
+          inserted: result.inserted,
+          updated: result.updated,
+          savedItemIds: items.map(i => i.id),
+        });
+
+        // ✅ CRITICAL: Query database to verify tasks were actually saved
+        try {
+          const verifyResponse = await fetch(`/api/projects/${finalProjectId}/tasks`);
+          if (verifyResponse.ok) {
+            const verifyData = await verifyResponse.json();
+            const verifyItems = verifyData.items || [];
+            console.log('[TaskRepository] 🔍 DATABASE VERIFICATION AFTER SAVE', {
+              projectId: finalProjectId,
+              expectedCount: items.length,
+              actualCount: verifyItems.length,
+              expectedIds: items.map(i => i.id),
+              actualIds: verifyItems.map((i: any) => i.id),
+              missingIds: items.map(i => i.id).filter(id => !verifyItems.some((v: any) => v.id === id)),
+              foundIds: items.map(i => i.id).filter(id => verifyItems.some((v: any) => v.id === id)),
+              allSavedItems: verifyItems.map((i: any) => ({
+                id: i.id,
+                templateId: i.templateId,
+                type: i.type,
+                isInstance: !!i.templateId,
+                hasSteps: !!(i.steps || i.value?.steps),
+              })),
+            });
+
+            // ✅ NEW: Verifica specifica per istanze
+            const expectedInstances = items.filter(i => i.templateId);
+            const actualInstances = verifyItems.filter((i: any) => i.templateId);
+            console.log('[TaskRepository] 🔍 INSTANCES VERIFICATION', {
+              projectId: finalProjectId,
+              expectedInstancesCount: expectedInstances.length,
+              actualInstancesCount: actualInstances.length,
+              expectedInstanceIds: expectedInstances.map(i => i.id),
+              actualInstanceIds: actualInstances.map((i: any) => i.id),
+              missingInstanceIds: expectedInstances
+                .map(i => i.id)
+                .filter(id => !actualInstances.some((v: any) => v.id === id)),
+              foundInstanceIds: expectedInstances
+                .map(i => i.id)
+                .filter(id => actualInstances.some((v: any) => v.id === id)),
+              allActualInstances: actualInstances.map((i: any) => ({
+                id: i.id,
+                templateId: i.templateId,
+                type: i.type,
+                hasSteps: !!(i.steps || i.value?.steps),
+              })),
+            });
+          } else {
+            console.error('[TaskRepository] ❌ VERIFICATION REQUEST FAILED', {
+              projectId: finalProjectId,
+              status: verifyResponse.status,
+              statusText: verifyResponse.statusText,
+            });
+          }
+        } catch (verifyError) {
+          console.error('[TaskRepository] ❌ VERIFICATION ERROR', {
+            projectId: finalProjectId,
+            error: verifyError instanceof Error ? verifyError.message : String(verifyError),
+          });
+        }
+      }
 
       return true;
     } catch (error) {

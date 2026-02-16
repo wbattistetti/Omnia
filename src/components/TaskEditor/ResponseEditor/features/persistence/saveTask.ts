@@ -8,6 +8,7 @@ import { TaskType, isUtteranceInterpretationTemplateId } from '@types/taskTypes'
 import type { Task, TaskTree } from '@types/taskTypes';
 import { getMainNodes } from '@responseEditor/core/domain';
 import { info } from '@utils/logger';
+import { DialogueTaskService } from '@services/DialogueTaskService';
 
 /**
  * Save task data to repository (in-memory cache only, not DB).
@@ -102,17 +103,55 @@ export async function saveTaskOnProjectSave(
   const currentMainList = getMainNodes(taskTree);
   const hasTaskTree = taskTree && Object.keys(taskTree).length > 0 && currentMainList && currentMainList.length > 0;
 
+  // ✅ FLOW TRACE: START
+  console.log('[saveTaskOnProjectSave] 🚀 FLOW TRACE - START', {
+    taskId: key,
+    projectId: currentProjectId,
+    hasTaskTree,
+    taskExists: !!task,
+    taskTemplateId: task?.templateId,
+    timestamp: new Date().toISOString(),
+  });
+
   if (hasTaskTree) {
     let taskInstance = taskRepository.getTask(key);
     if (!taskInstance) {
       const taskType = task?.type ?? TaskType.UtteranceInterpretation;
       taskInstance = taskRepository.createTask(taskType, null, undefined, key, currentProjectId || undefined);
+      console.log('[saveTaskOnProjectSave] 📝 Created new task instance', {
+        taskId: key,
+        taskType,
+        templateId: null,
+      });
     }
 
     const currentTemplateId = getTemplateId(taskInstance);
-    const templateExpanded = currentTemplateId
-      ? await buildTemplateExpanded(currentTemplateId, currentProjectId || undefined)
-      : null;
+
+    // ✅ FLOW TRACE: Template ID check
+    console.log('[saveTaskOnProjectSave] 🔍 FLOW TRACE - Template ID Check', {
+      taskId: key,
+      currentTemplateId,
+      isInstance: !!currentTemplateId,
+      cacheSize: DialogueTaskService.getTemplateCount(),
+      templateInCache: currentTemplateId ? !!DialogueTaskService.getTemplate(currentTemplateId) : false,
+    });
+
+    // ✅ CRITICAL: Try to build templateExpanded, but don't block save if template not found
+    let templateExpanded: TaskTree | null = null;
+    if (currentTemplateId) {
+      try {
+        templateExpanded = await buildTemplateExpanded(currentTemplateId, currentProjectId || undefined);
+        console.log('[saveTaskOnProjectSave] ✅ FLOW TRACE - Template expanded built', {
+          templateId: currentTemplateId,
+          hasNodes: !!templateExpanded?.nodes,
+        });
+      } catch (error) {
+        console.warn('[saveTaskOnProjectSave] ⚠️ FLOW TRACE - Template not found, continuing', {
+          templateId: currentTemplateId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     const modifiedFields = await extractTaskOverrides(
       taskInstance,
@@ -121,15 +160,55 @@ export async function saveTaskOnProjectSave(
       templateExpanded || undefined
     );
 
-    if (!isUtteranceInterpretationTemplateId(currentTemplateId)) {
+    // ✅ CRITICAL: Check task TYPE, not templateId
+    // If task has a templateId (GUID), it's an instance and we must preserve it
+    // Only set templateId: null if task.type is UtteranceInterpretation AND templateId is null/undefined
+    if (taskInstance.type === TaskType.UtteranceInterpretation && !currentTemplateId) {
+      // Task is UtteranceInterpretation but has no templateId - it's a standalone template
       await taskRepository.updateTask(key, {
         type: TaskType.UtteranceInterpretation,
         templateId: null,
         ...modifiedFields
       }, currentProjectId || undefined);
+      console.log('[saveTaskOnProjectSave] ✅ FLOW TRACE - Saved as standalone template', {
+        taskId: key,
+        templateId: null,
+      });
     } else {
-      await taskRepository.updateTask(key, modifiedFields, currentProjectId || undefined);
+      // ✅ CRITICAL: Preserve templateId if it exists (it's an instance)
+      // modifiedFields doesn't include templateId, so we need to preserve it from taskInstance
+      await taskRepository.updateTask(key, {
+        ...modifiedFields,
+        // ✅ CRITICAL: Preserve templateId if it exists
+        ...(currentTemplateId ? { templateId: currentTemplateId } : {}),
+      }, currentProjectId || undefined);
+      console.log('[saveTaskOnProjectSave] ✅ FLOW TRACE - Saved as instance', {
+        taskId: key,
+        templateId: currentTemplateId,
+        preservedTemplateId: currentTemplateId,
+      });
     }
+
+    // ✅ FLOW TRACE: Verify saved task
+    const savedTask = taskRepository.getTask(key);
+    console.log('[saveTaskOnProjectSave] ✅ FLOW TRACE - Task saved and verified', {
+      taskId: key,
+      savedTemplateId: savedTask?.templateId,
+      savedType: savedTask?.type,
+      isInstance: !!savedTask?.templateId,
+    });
+
+    // ✅ NEW: Verifica che il task sia nel repository
+    const allTasksInRepo = taskRepository.getAllTasks();
+    const taskInRepo = allTasksInRepo.find(t => t.id === key);
+    console.log('[saveTaskOnProjectSave] 🔍 TASK IN REPOSITORY CHECK', {
+      taskId: key,
+      taskInRepository: !!taskInRepo,
+      taskTemplateId: taskInRepo?.templateId,
+      taskType: taskInRepo?.type,
+      repositorySize: allTasksInRepo.length,
+      allTaskIds: allTasksInRepo.map(t => t.id),
+    });
   } else if (taskTree) {
     const currentTemplateId = task?.templateId ?? null;
     const templateExpanded = currentTemplateId
@@ -151,7 +230,20 @@ export async function saveTaskOnProjectSave(
       templateExpanded || undefined
     );
     await taskRepository.updateTask(key, overrides, currentProjectId || undefined);
+
+    // ✅ FLOW TRACE: Saved task without taskTree structure
+    const savedTask = taskRepository.getTask(key);
+    console.log('[saveTaskOnProjectSave] ✅ FLOW TRACE - Task saved (no taskTree structure)', {
+      taskId: key,
+      savedTemplateId: savedTask?.templateId,
+    });
   }
+
+  // ✅ FLOW TRACE: END
+  console.log('[saveTaskOnProjectSave] 🎉 FLOW TRACE - END', {
+    taskId: key,
+    timestamp: new Date().toISOString(),
+  });
 }
 
 /**

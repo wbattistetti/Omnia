@@ -65,6 +65,17 @@ function createEscalationFromMessage(
 
   if (addTranslationFn && typeof addTranslationFn === 'function') {
     addTranslationFn(textKey, text);
+    // ✅ DEBUG: Log translation addition
+    if (typeof window !== 'undefined' && (window as any).__projectTranslationsContext) {
+      const ctx = (window as any).__projectTranslationsContext;
+      const hasTranslation = textKey in (ctx.translations || {});
+      console.log('[TemplateCreationService] ✅ Translation added', {
+        guid: textKey,
+        textPreview: text.substring(0, 50),
+        hasTranslationInContext: hasTranslation,
+        totalTranslations: Object.keys(ctx.translations || {}).length
+      });
+    }
   }
 
   // ✅ STEP 3: Determina taskType
@@ -258,6 +269,12 @@ export function createTemplatesFromWizardData(
     const messagesToUse = nodeMessages;
 
     // Convert generalized messages to steps dictionary (per-node messages)
+    console.log('[createTemplatesFromWizardData] 🔍 Creating template', {
+      templateId,
+      nodeLabel: node.label,
+      hasAddTranslation: !!addTranslation,
+      addTranslationType: typeof addTranslation
+    });
     const steps = convertMessagesToStepsDictionary(messagesToUse, templateId, addTranslation);
 
     // Get constraints and NLP contract for this node

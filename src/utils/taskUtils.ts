@@ -287,7 +287,7 @@ import { v4 as uuidv4 } from 'uuid';
  * Carica template dal progetto (non dalla Factory)
  * I template del progetto sono salvati nella collection 'tasks' del database del progetto
  */
-async function loadTemplateFromProject(templateId: string, projectId: string): Promise<any | null> {
+export async function loadTemplateFromProject(templateId: string, projectId: string): Promise<any | null> {
   try {
     const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/tasks`);
     if (!response.ok) return null;

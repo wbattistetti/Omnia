@@ -493,6 +493,16 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
           templatesMatch: rootTemplate.id === instance.templateId
         });
 
+        // ✅ FLOW TRACE: Creating instance
+        console.log('[useWizardCompletion] 🚀 FLOW TRACE - Creating instance', {
+          taskId: key,
+          templateId: rootTemplate.id,
+          rootTemplateLabel: rootTemplate.label,
+          instanceTemplateId: instance.templateId,
+          cacheSize: DialogueTaskService.getTemplateCount(),
+          templateInCache: !!DialogueTaskService.getTemplate(rootTemplate.id),
+        });
+
         taskRepository.updateTask(key, {
           ...instance,
           type: TaskType.UtteranceInterpretation,
@@ -502,13 +512,14 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
         // Ricarica taskInstance dopo update
         taskInstance = taskRepository.getTask(key);
 
-        console.log('[useWizardCompletion] ✅ Task instance saved', {
-          taskId: taskInstance?.id,
-          taskTemplateId: taskInstance?.templateId,
-          taskTemplateIdType: typeof taskInstance?.templateId,
+        // ✅ FLOW TRACE: Instance created
+        console.log('[useWizardCompletion] ✅ FLOW TRACE - Instance created', {
+          taskId: key,
+          savedTemplateId: taskInstance?.templateId,
+          isInstance: !!taskInstance?.templateId,
           rootTemplateId: rootTemplate.id,
           idsMatch: taskInstance?.templateId === rootTemplate.id,
-          templateInCache: !!DialogueTaskService.getTemplate(rootTemplate.id)
+          templateInCache: !!DialogueTaskService.getTemplate(rootTemplate.id),
         });
 
         // ✅ LOGGING PLAN G: Final pipeline summary log (before building TaskTree)

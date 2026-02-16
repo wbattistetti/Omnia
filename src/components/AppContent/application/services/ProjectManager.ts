@@ -190,24 +190,52 @@ export class ProjectManager {
         localStorage.setItem('current.projectId', id);
       } catch { }
 
-      // Load tasks, flow, and variable mappings in parallel
-      const parallelStart = performance.now();
+      // ✅ CRITICAL: Load tasks FIRST and wait for completion
+      // Tasks MUST be loaded before flowchart is rendered to prevent TaskTreeOpener from finding empty repository
+      const tasksLoadStart = performance.now();
       if (showPerfLogs) {
-        console.log(`[PERF][${new Date().toISOString()}] 🔄 START parallel load (tasks, flow, mappings)`);
+        console.log(`[PERF][${new Date().toISOString()}] 🔄 START loadAllTasksFromDatabase`);
       }
 
-      const [tasksResult, flowResult, mappingsResult] = await Promise.allSettled([
-        (async () => {
-          try {
-            return await taskRepository.loadAllTasksFromDatabase(id);
-          } catch (e) {
-            console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR loadAllTasksFromDatabase`, {
-              projectId: id,
-              error: String(e),
-            });
-            return false;
-          }
-        })(),
+      let tasksLoaded = false;
+      try {
+        tasksLoaded = await taskRepository.loadAllTasksFromDatabase(id);
+      } catch (e) {
+        console.error(`[PERF][${new Date().toISOString()}] ❌ ERROR loadAllTasksFromDatabase`, {
+          projectId: id,
+          error: String(e),
+        });
+        throw new Error(`Failed to load tasks: ${e instanceof Error ? e.message : String(e)}`);
+      }
+
+      if (!tasksLoaded) {
+        throw new Error('Failed to load tasks from database');
+      }
+
+      // ✅ CRITICAL: Verify repository is populated
+      const tasksCount = taskRepository.getAllTasks().length;
+      if (showPerfLogs) {
+        console.log(`[PERF][${new Date().toISOString()}] ✅ END loadAllTasksFromDatabase`, {
+          duration: `${(performance.now() - tasksLoadStart).toFixed(2)}ms`,
+          tasksCount,
+        });
+      }
+
+      // ✅ CRITICAL: Repository must be populated before proceeding
+      // This ensures TaskTreeOpener will always find tasks when gear icon is clicked
+      console.log('[ProjectManager] ✅ Tasks loaded and verified', {
+        projectId: id,
+        tasksCount,
+        repositoryReady: true,
+      });
+
+      // Load flow and variable mappings in parallel (tasks already loaded)
+      const parallelStart = performance.now();
+      if (showPerfLogs) {
+        console.log(`[PERF][${new Date().toISOString()}] 🔄 START parallel load (flow, mappings)`);
+      }
+
+      const [flowResult, mappingsResult] = await Promise.allSettled([
         (async () => {
           try {
             const flowRes = await fetch(`/api/projects/${encodeURIComponent(id)}/flow`);
@@ -323,7 +351,14 @@ export class ProjectManager {
 
       this.params.setCurrentProject(openedProject);
 
+      // ✅ CRITICAL: Verify repository is still populated before allowing UI to render
+      const finalTasksCount = taskRepository.getAllTasks().length;
+      if (finalTasksCount === 0) {
+        console.warn('[ProjectManager] ⚠️ Repository is empty after all operations - this should not happen');
+      }
+
       // Refresh data and set app state
+      // ✅ CRITICAL: Only set app state AFTER tasks are loaded and verified
       await this.params.refreshData();
       this.params.setAppState('mainApp');
 

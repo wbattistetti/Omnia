@@ -21,7 +21,7 @@ import { DockWorkspace } from './FlowWorkspace/DockWorkspace';
 import { DockManager } from './Dock/DockManager';
 import { DockNode, DockTab, DockTabResponseEditor, DockTabTaskEditor, ToolbarButton } from '../dock/types'; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
 import { FlowCanvasHost } from './FlowWorkspace/FlowCanvasHost';
-import { FlowWorkspaceProvider } from '../flows/FlowStore.tsx';
+import { FlowWorkspaceProvider, useFlowWorkspace } from '../flows/FlowStore.tsx';
 import { useFlowActions } from '../flows/FlowStore.tsx';
 import { upsertAddNextTo, closeTab, activateTab, splitWithTab } from '../dock/ops';
 import { findRootTabset, tabExists } from './AppContent/domain/dockTree';
@@ -47,7 +47,7 @@ import { taskRepository } from '../services/TaskRepository';
 import { getTemplateId } from '../utils/taskHelpers';
 import { TaskType } from '../types/taskTypes'; // ✅ RIMOSSO: taskIdToTaskType - non più necessario, le fonti emettono direttamente TaskType enum
 import type { TaskMeta, TaskWizardMode } from './TaskEditor/EditorHost/types'; // ✅ RINOMINATO: ActEditor → TaskEditor
-import type { TaskTree } from '../types/taskTypes';
+import type { TaskTree, Task } from '../types/taskTypes';
 
 type AppState = 'landing' | 'creatingProject' | 'mainApp';
 
@@ -63,6 +63,43 @@ function mapNode(n: DockNode, f: (n: DockNode) => DockNode): DockNode {
   const res = f(mapped);
   return res;
 }
+
+// ✅ ARCHITECTURAL FIX: Component that accesses FlowWorkspaceProvider and populates flowsRef
+// This allows handleSaveProject to access flows without using window.__flows
+const DockManagerWithFlows: React.FC<{
+  root: DockNode;
+  setRoot: (updater: (prev: DockNode) => DockNode) => void;
+  renderTabContent: (tab: DockTab) => React.ReactNode;
+  flowsRef: React.MutableRefObject<Record<string, any>>;
+}> = ({ root, setRoot, renderTabContent, flowsRef }) => {
+  const flowWorkspace = useFlowWorkspace<Node<FlowNode>, Edge<EdgeData>>();
+
+  // ✅ CRITICAL: Update flowsRef immediately (not just in useEffect)
+  // This ensures flowsRef is always up-to-date when handleSaveProject is called
+  flowsRef.current = flowWorkspace.flows;
+
+  // ✅ Also update in useEffect for safety (in case flows change during render)
+  React.useEffect(() => {
+    flowsRef.current = flowWorkspace.flows;
+  }, [flowWorkspace.flows]);
+
+  // ✅ Adapt setRoot to match DockManager's expected signature
+  const adaptedSetRoot = React.useCallback((n: DockNode | ((prev: DockNode) => DockNode)) => {
+    if (typeof n === 'function') {
+      setRoot(n);
+    } else {
+      setRoot(() => n);
+    }
+  }, [setRoot]);
+
+  return (
+    <DockManager
+      root={root}
+      setRoot={adaptedSetRoot}
+      renderTabContent={renderTabContent}
+    />
+  );
+};
 
 interface AppContentProps {
   appState: AppState;
@@ -106,6 +143,10 @@ export const AppContent: React.FC<AppContentProps> = ({
   // Questo risolve il problema delle closure stale: quando tab.onClose viene chiamato,
   // legge sempre il valore più recente dal Map invece di una closure catturata
   const editorCloseRefsMap = React.useRef<Map<string, () => Promise<boolean>>>(new Map());
+
+  // ✅ ARCHITECTURAL FIX: Ref per accedere ai flows dal FlowWorkspaceProvider
+  // Popolato da DockManagerWithFlows che è dentro FlowWorkspaceProvider
+  const flowsRef = React.useRef<Record<string, any>>({});
 
   // ✅ REFACTOR: TabRenderer component estratto in presentation/TabRenderer.tsx
   // UnifiedTabContent completamente rimosso - ora usiamo TabRenderer
@@ -359,7 +400,7 @@ export const AppContent: React.FC<AppContentProps> = ({
 
   // Pannello di test in alto a sinistra all'avvio
   // React.useEffect(() => {
-      //       taskTree: { label: 'Test Panel' },
+  //       taskTree: { label: 'Test Panel' },
   //       translations: {},
   //       lang: 'it'
   //     });
@@ -481,9 +522,8 @@ export const AppContent: React.FC<AppContentProps> = ({
       {/* overlay ricarico rimosso per test */}
       {/* Toast feedback */}
       {toast && (
-        <div className={`fixed top-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded shadow-lg z-50 animate-fade-in ${
-          toast.includes('⚠️') ? 'bg-yellow-600' : 'bg-emerald-700'
-        } text-white`}>
+        <div className={`fixed top-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded shadow-lg z-50 animate-fade-in ${toast.includes('⚠️') ? 'bg-yellow-600' : 'bg-emerald-700'
+          } text-white`}>
           {toast}
         </div>
       )}
@@ -552,6 +592,54 @@ export const AppContent: React.FC<AppContentProps> = ({
                   detail: { projectId: pid }
                 }));
 
+                // ✅ ARCHITECTURAL FIX: Cleanup orphan tasks BEFORE saving to database
+                // This ensures the database only receives coherent data
+                const cleanupStart = performance.now();
+                console.log('[Save][Cleanup] 🔍 START - Detecting orphan tasks from in-memory state');
+
+                // Get all flows and tasks from in-memory state
+                const allFlows = flowsRef.current;
+                const allTasksInMemory = taskRepository.getAllTasks();
+
+                // Extract all task IDs referenced in flows
+                const referencedTaskIds = new Set<string>();
+                Object.values(allFlows).forEach((flow: any) => {
+                  if (flow && flow.nodes && Array.isArray(flow.nodes)) {
+                    flow.nodes.forEach((node: any) => {
+                      const nodeData = node.data as FlowNode;
+                      if (nodeData.rows && Array.isArray(nodeData.rows)) {
+                        nodeData.rows.forEach((row: any) => {
+                          // row.id is the taskId (unified model: row.id === task.id)
+                          if (row.id) {
+                            referencedTaskIds.add(row.id);
+                          }
+                        });
+                      }
+                    });
+                  }
+                });
+
+                // Filter orphan tasks: tasks not referenced in any flow
+                const orphanTasks = allTasksInMemory.filter(task => !referencedTaskIds.has(task.id));
+                const tasksToSave = allTasksInMemory.filter(task => referencedTaskIds.has(task.id));
+
+                const cleanupEnd = performance.now();
+                console.log('[Save][Cleanup] ✅ DONE', {
+                  ms: Math.round(cleanupEnd - cleanupStart),
+                  totalTasks: allTasksInMemory.length,
+                  referencedTaskIds: referencedTaskIds.size,
+                  orphanTasks: orphanTasks.length,
+                  tasksToSave: tasksToSave.length,
+                  orphanTaskIds: orphanTasks.map(t => t.id)
+                });
+
+                if (orphanTasks.length > 0) {
+                  console.warn('[Save][Cleanup] ⚠️ Orphan tasks excluded from save', {
+                    count: orphanTasks.length,
+                    ids: orphanTasks.map(t => t.id)
+                  });
+                }
+
                 // ✅ OPTIMIZATION: Parallelize all independent save operations
                 const saveStart = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
 
@@ -599,142 +687,17 @@ export const AppContent: React.FC<AppContentProps> = ({
                     }
                   })(),
 
-                  // 3. Save tasks
+                  // 3. Save flow (SPOSTATO PRIMA dei tasks per evitare cleanup degli orphan tasks)
                   (async () => {
                     if (!pid) return;
                     const tStart = performance.now();
                     try {
-                      console.log('[Save][3-tasks] 🚀 START');
-                      const { taskRepository } = await import('../services/TaskRepository');
-                      const tasksCount = taskRepository.getInternalTasksCount();
-                      console.log('[Save][3-tasks] 📊 Tasks to save', { count: tasksCount });
-                      const saved = await taskRepository.saveAllTasksToDatabase(pid);
-                      const tEnd = performance.now();
-                      if (saved) {
-                        console.log('[Save][3-tasks] ✅ DONE', { ms: Math.round(tEnd - tStart), tasksCount });
-                      } else {
-                        console.warn('[Save][3-tasks] ⚠️ FAILED', { ms: Math.round(tEnd - tStart), tasksCount });
-                      }
-                    } catch (e) {
-                      const tEnd = performance.now();
-                      console.error('[Save][3-tasks] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
-                    }
-                  })(),
-
-                  // 4. Save variable mappings
-                  (async () => {
-                    if (!pid) return;
-                    const tStart = performance.now();
-                    try {
-                      console.log('[Save][4-mappings] 🚀 START');
-                      const { flowchartVariablesService } = await import('../services/FlowchartVariablesService');
-                      const stats = flowchartVariablesService.getStats();
-                      console.log('[Save][4-mappings] 📊 Mappings to save', stats);
-                      const mappingsSaved = await flowchartVariablesService.saveToDatabase(pid);
-                      const tEnd = performance.now();
-                      if (mappingsSaved) {
-                        console.log('[Save][4-mappings] ✅ DONE', { ms: Math.round(tEnd - tStart), stats });
-                      } else {
-                        console.warn('[Save][4-mappings] ⚠️ FAILED', { ms: Math.round(tEnd - tStart), stats });
-                      }
-                    } catch (e) {
-                      const tEnd = performance.now();
-                      console.error('[Save][4-mappings] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
-                    }
-                  })(),
-
-                  // 5. Save modified templates (templates with modified contracts)
-                  (async () => {
-                    if (!pid) return;
-                    const tStart = performance.now();
-                    try {
-                      console.log('[Save][5-templates] 🚀 START');
-                      const { DialogueTaskService } = await import('../services/DialogueTaskService');
-                      const modifiedIds = DialogueTaskService.getModifiedTemplateIds();
-                      console.log('[Save][5-templates] 📊 Templates to save', { count: modifiedIds.length, templateIds: modifiedIds });
-
-                      if (modifiedIds.length === 0) {
-                        const tEnd = performance.now();
-                        console.log('[Save][5-templates] ✅ DONE (no modified templates)', { ms: Math.round(tEnd - tStart) });
-                        return;
-                      }
-
-                      const result = await DialogueTaskService.saveModifiedTemplates();
-                      const tEnd = performance.now();
-                      if (result.failed === 0) {
-                        console.log('[Save][5-templates] ✅ DONE', {
-                          ms: Math.round(tEnd - tStart),
-                          saved: result.saved,
-                          total: modifiedIds.length
-                        });
-                      } else {
-                        console.warn('[Save][5-templates] ⚠️ PARTIAL', {
-                          ms: Math.round(tEnd - tStart),
-                          saved: result.saved,
-                          failed: result.failed,
-                          total: modifiedIds.length
-                        });
-                      }
-                    } catch (e) {
-                      const tEnd = performance.now();
-                      console.error('[Save][5-templates] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
-                    }
-                  })(),
-
-                  // 6. Save acts and conditions
-                  (async () => {
-                    if (!pid || !projectData) return;
-                    const tStart = performance.now();
-                    try {
-                      console.log('[Save][5-conditions] 🚀 START');
-                      const conditionsCount = projectData?.conditions?.flatMap((cat: any) => cat.items || []).length || 0;
-                      console.log('[Save][5-conditions] 📊 Items to save', { conditionsCount });
-
-                      // ✅ REMOVED: saveProjectActsToDb - acts migrati a tasks, salvati via taskRepository
-
-                      const tCond = performance.now();
-                      await (ProjectDataService as any).saveProjectConditionsToDb?.(pid, projectData);
-                      const tCondEnd = performance.now();
-                      console.log('[Save][5-conditions] ✅ DONE', { ms: Math.round(tCondEnd - tCond), conditionsCount });
-
-                      // Reload fresh project data so task.problem is populated from DB
-                      const tReload = performance.now();
-                      let tReloadEnd = tReload;
-                      try {
-                        const fresh = await (ProjectDataService as any).loadProjectData?.();
-                        tReloadEnd = performance.now();
-                        console.log('[Save][5-reload] ✅ DONE', { ms: Math.round(tReloadEnd - tReload) });
-                        if (fresh) {
-                          try { pdUpdate.setData && (pdUpdate as any).setData(fresh); } catch { }
-                        }
-                      } catch (e) {
-                        tReloadEnd = performance.now();
-                        console.error('[Save][5-reload] ❌ ERROR', { ms: Math.round(tReloadEnd - tReload), error: e });
-                      }
-
-                      const tEnd = performance.now();
-                      console.log('[Save][5-acts-conditions] ✅ DONE', {
-                        totalMs: Math.round(tEnd - tStart),
-                        conditionsMs: Math.round(tCondEnd - tCond),
-                        reloadMs: Math.round(tReloadEnd - tReload)
-                      });
-                    } catch (e) {
-                      const tEnd = performance.now();
-                      console.error('[Save][5-acts-conditions] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
-                    }
-                  })(),
-
-                  // 7. Save flow
-                  (async () => {
-                    if (!pid) return;
-                    const tStart = performance.now();
-                    try {
-                      console.log('[Save][6-flow] 🚀 START');
+                      console.log('[Save][3-flow] 🚀 START');
                       const svc = await import('../services/FlowPersistService');
                       const tFlush = performance.now();
                       await svc.flushFlowPersist();
                       const tFlushEnd = performance.now();
-                      console.log('[Save][6-flow][flush] ✅ DONE', { ms: Math.round(tFlushEnd - tFlush) });
+                      console.log('[Save][3-flow][flush] ✅ DONE', { ms: Math.round(tFlushEnd - tFlush) });
 
                       // Final PUT immediate (explicit Save)
                       const tPut = performance.now();
@@ -745,21 +708,163 @@ export const AppContent: React.FC<AppContentProps> = ({
                       });
                       const tPutEnd = performance.now();
                       if (!putRes.ok) {
-                        console.error('[Save][6-flow][put] ❌ ERROR', { ms: Math.round(tPutEnd - tPut), status: putRes.status, statusText: putRes.statusText });
+                        console.error('[Save][3-flow][put] ❌ ERROR', { ms: Math.round(tPutEnd - tPut), status: putRes.status, statusText: putRes.statusText });
                       } else {
-                        console.log('[Save][6-flow][put] ✅ DONE', { ms: Math.round(tPutEnd - tPut) });
+                        console.log('[Save][3-flow][put] ✅ DONE', { ms: Math.round(tPutEnd - tPut) });
                       }
 
                       const tEnd = performance.now();
-                      console.log('[Save][6-flow] ✅ DONE', {
+                      console.log('[Save][3-flow] ✅ DONE', {
                         totalMs: Math.round(tEnd - tStart),
                         flushMs: Math.round(tFlushEnd - tFlush),
                         putMs: Math.round(tPutEnd - tPut)
                       });
                     } catch (e) {
                       const tEnd = performance.now();
-                      console.error('[Save][6-flow] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
+                      console.error('[Save][3-flow] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
                     }
+                  })(),
+
+                  // 4. Save tasks (SPOSTATO DOPO il flow)
+                  (async () => {
+                    if (!pid) return;
+                    const tStart = performance.now();
+                    try {
+                      console.log('[Save][4-tasks] 🚀 START');
+                      const { taskRepository } = await import('../services/TaskRepository');
+                      const tasksCount = taskRepository.getInternalTasksCount();
+
+                      // ✅ NEW: Log dettagliato PRIMA del salvataggio
+                      const allTasksBefore = taskRepository.getAllTasks();
+                      const instancesBefore = allTasksBefore.filter(t => t.templateId);
+                      console.log('[Save][4-tasks] 🔍 REPOSITORY STATE BEFORE SAVE', {
+                        projectId: pid,
+                        totalTasks: allTasksBefore.length,
+                        instancesCount: instancesBefore.length,
+                        allTaskIds: allTasksBefore.map(t => t.id),
+                        allInstances: instancesBefore.map(t => ({
+                          id: t.id,
+                          templateId: t.templateId,
+                          type: t.type,
+                          hasSteps: t.steps ? Object.keys(t.steps).length > 0 : false,
+                        })),
+                      });
+
+                      // ✅ ARCHITECTURAL FIX: Use tasksToSave (filtered orphan tasks) instead of all tasks
+                      console.log('[Save][4-tasks] 📊 Tasks to save', {
+                        count: tasksToSave.length,
+                        orphanTasksExcluded: orphanTasks.length
+                      });
+                      const saved = await taskRepository.saveAllTasksToDatabase(pid, tasksToSave);
+                      const tEnd = performance.now();
+                      if (saved) {
+                        console.log('[Save][4-tasks] ✅ DONE', { ms: Math.round(tEnd - tStart), tasksCount });
+                      } else {
+                        console.warn('[Save][4-tasks] ⚠️ FAILED', { ms: Math.round(tEnd - tStart), tasksCount });
+                      }
+                    } catch (e) {
+                      const tEnd = performance.now();
+                      console.error('[Save][4-tasks] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
+                    }
+                  })(),
+
+                  // 5. Save variable mappings
+                  (async () => {
+                    if (!pid) return;
+                    const tStart = performance.now();
+                    try {
+                      console.log('[Save][5-mappings] 🚀 START');
+                      const { flowchartVariablesService } = await import('../services/FlowchartVariablesService');
+                      const stats = flowchartVariablesService.getStats();
+                      console.log('[Save][5-mappings] 📊 Mappings to save', stats);
+                      const mappingsSaved = await flowchartVariablesService.saveToDatabase(pid);
+                      const tEnd = performance.now();
+                      if (mappingsSaved) {
+                        console.log('[Save][5-mappings] ✅ DONE', { ms: Math.round(tEnd - tStart), stats });
+                      } else {
+                        console.warn('[Save][5-mappings] ⚠️ FAILED', { ms: Math.round(tEnd - tStart), stats });
+                      }
+                    } catch (e) {
+                      const tEnd = performance.now();
+                      console.error('[Save][5-mappings] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
+                    }
+                  })(),
+
+                  // 6. Save modified templates (templates with modified contracts)
+                  (async () => {
+                    if (!pid) return;
+                    const tStart = performance.now();
+                    try {
+                      console.log('[Save][6-templates] 🚀 START');
+                      const { DialogueTaskService } = await import('../services/DialogueTaskService');
+                      const modifiedIds = DialogueTaskService.getModifiedTemplateIds();
+                      console.log('[Save][6-templates] 📊 Templates to save', { count: modifiedIds.length, templateIds: modifiedIds });
+
+                      if (modifiedIds.length === 0) {
+                        const tEnd = performance.now();
+                        console.log('[Save][6-templates] ✅ DONE (no modified templates)', { ms: Math.round(tEnd - tStart) });
+                        return;
+                      }
+
+                      const result = await DialogueTaskService.saveModifiedTemplates();
+                      const tEnd = performance.now();
+                      if (result.failed === 0) {
+                        console.log('[Save][6-templates] ✅ DONE', {
+                          ms: Math.round(tEnd - tStart),
+                          saved: result.saved,
+                          total: modifiedIds.length
+                        });
+                      } else {
+                        console.warn('[Save][6-templates] ⚠️ PARTIAL', {
+                          ms: Math.round(tEnd - tStart),
+                          saved: result.saved,
+                          failed: result.failed,
+                          total: modifiedIds.length
+                        });
+                      }
+                    } catch (e) {
+                      const tEnd = performance.now();
+                      console.error('[Save][6-templates] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
+                    }
+                  })(),
+
+                  // 7. Save acts and conditions
+                  (async () => {
+                    if (!pid || !projectData) return;
+                    const tStart = performance.now();
+                    try {
+                      console.log('[Save][7-conditions] 🚀 START');
+                      const conditionsCount = projectData?.conditions?.flatMap((cat: any) => cat.items || []).length || 0;
+                      console.log('[Save][7-conditions] 📊 Items to save', { conditionsCount });
+
+                      // ✅ REMOVED: saveProjectActsToDb - acts migrati a tasks, salvati via taskRepository
+
+                      const tCond = performance.now();
+                      await (ProjectDataService as any).saveProjectConditionsToDb?.(pid, projectData);
+                      const tCondEnd = performance.now();
+                      console.log('[Save][7-conditions] ✅ DONE', { ms: Math.round(tCondEnd - tCond), conditionsCount });
+
+                      // ✅ REMOVED: Reload completo non necessario - i dati sono già in memoria e aggiornati
+                      // - task.problem è già nel TaskRepository dopo il salvataggio
+                      // - Non serve ricaricare tutto il progetto dal database
+                      // - Evita re-render inutili e perdita di stato in memoria (wizardIntegrationProp, template cache, etc.)
+
+                      const tEnd = performance.now();
+                      console.log('[Save][7-acts-conditions] ✅ DONE', {
+                        totalMs: Math.round(tEnd - tStart),
+                        conditionsMs: Math.round(tCondEnd - tCond)
+                      });
+                    } catch (e) {
+                      const tEnd = performance.now();
+                      console.error('[Save][7-acts-conditions] ❌ ERROR', { ms: Math.round(tEnd - tStart), error: e });
+                    }
+                  })(),
+
+                  // ✅ REMOVED: Cleanup orphan tasks endpoint - cleanup now happens in frontend BEFORE save
+                  // Orphan tasks are filtered out before sending to backend, so no cleanup needed
+                  (async () => {
+                    // No-op: cleanup is done in frontend before Promise.allSettled
+                    return Promise.resolve();
                   })()
                 ]);
 
@@ -771,7 +876,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                   totalMs,
                   timestamp: new Date().toISOString(),
                   results: saveResults.map((r, i) => ({
-                    operation: ['catalog', 'translations', 'tasks', 'mappings', 'acts-conditions', 'flow'][i],
+                    operation: ['catalog', 'translations', 'flow', 'tasks', 'mappings', 'templates', 'conditions'][i],
                     status: r.status,
                     error: r.status === 'rejected' ? String(r.reason) : undefined
                   }))
@@ -831,10 +936,11 @@ export const AppContent: React.FC<AppContentProps> = ({
                     <div style={{ position: 'relative', flex: 1, minHeight: 0, minWidth: 0 }}>
                       {currentPid ? (
                         <FlowWorkspaceProvider>
-                          <DockManager
+                          <DockManagerWithFlows
                             root={dockTree}
                             setRoot={setDockTree}
                             renderTabContent={renderTabContent}
+                            flowsRef={flowsRef}
                           />
                         </FlowWorkspaceProvider>
                       ) : (

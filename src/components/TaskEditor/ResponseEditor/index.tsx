@@ -177,6 +177,14 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     // ✅ PRIORITÀ 2: Se il ref precedente aveva shouldBeGeneral === true, usalo (preserva stato)
     // Questo garantisce che anche se wizardIntegrationRaw diventa null, manteniamo lo stato
     if (previousWizardIntegrationRef.current?.shouldBeGeneral) {
+      // ✅ CRITICAL: Verifica che dataSchema sia presente nel ref
+      if (!previousWizardIntegrationRef.current.dataSchema || !Array.isArray(previousWizardIntegrationRef.current.dataSchema)) {
+        console.error('[ResponseEditor] ❌ previousWizardIntegrationRef has shouldBeGeneral but missing dataSchema', {
+          hasDataSchema: !!previousWizardIntegrationRef.current.dataSchema,
+          dataSchemaType: typeof previousWizardIntegrationRef.current.dataSchema,
+          dataSchemaIsArray: Array.isArray(previousWizardIntegrationRef.current.dataSchema),
+        });
+      }
       return previousWizardIntegrationRef.current;
     }
 
