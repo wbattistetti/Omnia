@@ -258,6 +258,26 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
             taskTreeId: taskTree?.id,
             hasOnTaskBuilderComplete: !!onTaskBuilderComplete
           });
+
+          // ✅ ARCHITECTURAL RULE: Generate contracts for all nodes (idempotent, deterministic)
+          // Point of integration: AFTER buildTaskTree, BEFORE onTaskBuilderComplete
+          // This ensures TaskTree is complete and stable before contract generation
+          if (taskTree) {
+            try {
+              const { generateContractsForAllNodes } = await import('@utils/wizard/generateContract');
+              const generatedContracts = await generateContractsForAllNodes(taskTree);
+              console.log('[useWizardCompletion] ✅ FIRST STEP: Contracts generated', {
+                generatedCount: generatedContracts.size,
+                totalNodes: taskTree.nodes?.length || 0
+              });
+            } catch (contractError) {
+              // Non-blocking: log error but don't block wizard flow
+              console.error('[useWizardCompletion] ❌ FIRST STEP: Error generating contracts (non-blocking)', {
+                error: contractError instanceof Error ? contractError.message : String(contractError)
+              });
+            }
+          }
+
           if (taskTree && onTaskBuilderComplete) {
             console.log('[useWizardCompletion] ✅ FIRST STEP: TaskTree built, calling onTaskBuilderComplete', {
               taskTreeNodesCount: taskTree.nodes?.length || 0,
@@ -588,6 +608,26 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
 
         try {
           const taskTree = await buildTaskTree(taskInstance, projectId);
+
+          // ✅ ARCHITECTURAL RULE: Generate contracts for all nodes (idempotent, deterministic)
+          // Point of integration: AFTER buildTaskTree, BEFORE onTaskBuilderComplete
+          // This ensures TaskTree is complete and stable before contract generation
+          if (taskTree) {
+            try {
+              const { generateContractsForAllNodes } = await import('@utils/wizard/generateContract');
+              const generatedContracts = await generateContractsForAllNodes(taskTree);
+              console.log('[useWizardCompletion] ✅ Contracts generated', {
+                generatedCount: generatedContracts.size,
+                totalNodes: taskTree.nodes?.length || 0
+              });
+            } catch (contractError) {
+              // Non-blocking: log error but don't block wizard flow
+              console.error('[useWizardCompletion] ❌ Error generating contracts (non-blocking)', {
+                error: contractError instanceof Error ? contractError.message : String(contractError)
+              });
+            }
+          }
+
           if (taskTree && onTaskBuilderComplete) {
             console.log('[useWizardCompletion] ✅ TaskTree built successfully, calling onTaskBuilderComplete', {
               taskTreeNodesCount: taskTree.nodes?.length || 0,

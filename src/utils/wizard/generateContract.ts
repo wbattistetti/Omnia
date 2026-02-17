@@ -1,7 +1,7 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import type { TaskTreeNode } from '../../types/taskTypes';
+import type { TaskTreeNode, TaskTree } from '../../types/taskTypes';
 import type { SemanticContract } from '../../types/semanticContract';
 import { buildSemanticContract } from '../contract/buildEntity';
 import { SemanticContractService } from '../../services/SemanticContractService';
@@ -51,4 +51,147 @@ export async function generateContractForNode(
   }
 
   return contract;
+}
+
+/**
+ * Collect all nodes recursively from TaskTree (main + subNodes)
+ * Helper function for generateContractsForAllNodes
+ */
+function collectAllNodes(nodes: TaskTreeNode[]): TaskTreeNode[] {
+  const allNodes: TaskTreeNode[] = [];
+
+  const traverse = (nodeList: TaskTreeNode[]) => {
+    for (const node of nodeList) {
+      allNodes.push(node);
+      if (node.subNodes && Array.isArray(node.subNodes) && node.subNodes.length > 0) {
+        traverse(node.subNodes);
+      }
+    }
+  };
+
+  traverse(nodes);
+  return allNodes;
+}
+
+/**
+ * Generate contracts for all nodes in TaskTree (idempotent)
+ *
+ * ARCHITECTURAL RULES:
+ * - Contract is deterministic (derives only from node structure)
+ * - Contract is generated ONCE and saved in SemanticContractService
+ * - This function is IDEMPOTENT: skips nodes that already have contracts
+ * - Executes in parallel for all nodes (non-blocking)
+ * - Does NOT modify existing contracts
+ *
+ * @param taskTree - TaskTree with nodes to generate contracts for
+ * @returns Map of nodeId -> contract (only newly generated contracts)
+ */
+export async function generateContractsForAllNodes(
+  taskTree: TaskTree
+): Promise<Map<string, SemanticContract>> {
+  if (!taskTree || !taskTree.nodes || taskTree.nodes.length === 0) {
+    console.log('[generateContractsForAllNodes] TaskTree is empty, skipping contract generation');
+    return new Map();
+  }
+
+  // Collect all nodes recursively (main + subNodes)
+  const allNodes = collectAllNodes(taskTree.nodes);
+  console.log('[generateContractsForAllNodes] Collected nodes', {
+    totalNodes: allNodes.length,
+    mainNodes: taskTree.nodes.length,
+    nodeIds: allNodes.map(n => n.id || n.templateId)
+  });
+
+  // Check which nodes already have contracts (idempotency check)
+  const contractChecks = await Promise.all(
+    allNodes.map(async (node) => {
+      const nodeId = node.id || node.templateId;
+      const exists = await SemanticContractService.exists(nodeId);
+      return { node, nodeId, exists };
+    })
+  );
+
+  // Filter nodes that need contracts (idempotent: skip existing)
+  const nodesToGenerate = contractChecks
+    .filter(({ exists }) => !exists)
+    .map(({ node, nodeId }) => ({ node, nodeId }));
+
+  console.log('[generateContractsForAllNodes] Contract generation plan', {
+    totalNodes: allNodes.length,
+    nodesWithContracts: contractChecks.filter(c => c.exists).length,
+    nodesToGenerate: nodesToGenerate.length,
+    nodeIdsToGenerate: nodesToGenerate.map(n => n.nodeId)
+  });
+
+  if (nodesToGenerate.length === 0) {
+    console.log('[generateContractsForAllNodes] All nodes already have contracts, skipping generation');
+    return new Map();
+  }
+
+  // Generate contracts in parallel (non-blocking, deterministic)
+  const generationResults = await Promise.allSettled(
+    nodesToGenerate.map(async ({ node, nodeId }) => {
+      try {
+        const contract = buildSemanticContract(node);
+        if (!contract) {
+          console.error(`[generateContractsForAllNodes] Failed to build contract for node ${nodeId}`);
+          return { nodeId, contract: null, error: 'buildSemanticContract returned null' };
+        }
+
+        // Save contract (idempotent: only saves if not exists)
+        await SemanticContractService.save(nodeId, contract);
+        console.log(`[generateContractsForAllNodes] ✅ Contract generated and saved for node ${nodeId}`, {
+          nodeLabel: node.label,
+          entityLabel: contract.entity?.label,
+          subentitiesCount: contract.subentities?.length || 0
+        });
+
+        return { nodeId, contract, error: null };
+      } catch (error) {
+        console.error(`[generateContractsForAllNodes] ❌ Error generating contract for node ${nodeId}:`, error);
+        return {
+          nodeId,
+          contract: null,
+          error: error instanceof Error ? error.message : String(error)
+        };
+      }
+    })
+  );
+
+  // Collect successful results
+  const generatedContracts = new Map<string, SemanticContract>();
+  const errors: Array<{ nodeId: string; error: string }> = [];
+
+  for (const result of generationResults) {
+    if (result.status === 'fulfilled') {
+      const { nodeId, contract, error } = result.value;
+      if (contract) {
+        generatedContracts.set(nodeId, contract);
+      } else if (error) {
+        errors.push({ nodeId, error });
+      }
+    } else {
+      errors.push({
+        nodeId: 'unknown',
+        error: result.reason instanceof Error ? result.reason.message : String(result.reason)
+      });
+    }
+  }
+
+  if (errors.length > 0) {
+    console.warn('[generateContractsForAllNodes] ⚠️ Some contracts failed to generate', {
+      errorsCount: errors.length,
+      errors
+    });
+    // Non-blocking: log errors but don't throw
+  }
+
+  console.log('[generateContractsForAllNodes] ✅ Contract generation complete', {
+    totalNodes: allNodes.length,
+    generated: generatedContracts.size,
+    skipped: allNodes.length - nodesToGenerate.length,
+    failed: errors.length
+  });
+
+  return generatedContracts;
 }

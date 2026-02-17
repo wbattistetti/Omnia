@@ -394,7 +394,7 @@ export class DialogueTaskService {
       const tId = t.id || t._id || '';
       const tIdStr = String(tId).trim();
       return tIdStr === templateIdStr ||
-             (t.id && String(t.id).trim().toLowerCase() === templateIdStr.toLowerCase());
+        (t.id && String(t.id).trim().toLowerCase() === templateIdStr.toLowerCase());
     });
 
     if (existing) {
@@ -409,7 +409,7 @@ export class DialogueTaskService {
         const tId = t.id || t._id || '';
         const tIdStr = String(tId).trim();
         return tIdStr === templateIdStr ||
-               (t.id && String(t.id).trim().toLowerCase() === templateIdStr.toLowerCase());
+          (t.id && String(t.id).trim().toLowerCase() === templateIdStr.toLowerCase());
       });
       if (index >= 0) {
         this.cache[index] = template;
@@ -457,13 +457,15 @@ export class DialogueTaskService {
       const { embedding } = await computeResponse.json();
 
       // 2. Salva in MongoDB
+      // ✅ Note: text will be normalized by backend, but we pass originalText for reference
       const saveResponse = await fetch('/api/embeddings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: templateId,
           type: 'task',
-          text: template.label.trim(),
+          text: template.label.trim(), // Backend will normalize this
+          originalText: template.label.trim(), // Save original for reference
           embedding
         })
       });

@@ -25,9 +25,16 @@ export class EmbeddingService {
   /**
    * Carica embedding per un tipo specifico dal backend
    * @param type - Tipo di embedding da caricare (es. 'task', 'condition', ecc.)
+   * @param forceReload - Se true, forza il ricaricamento anche se già in cache
    */
-  static async loadEmbeddings(type: string = 'task'): Promise<void> {
-    if (this.cacheLoaded.has(type)) return;
+  static async loadEmbeddings(type: string = 'task', forceReload: boolean = false): Promise<void> {
+    if (!forceReload && this.cacheLoaded.has(type)) return;
+
+    // Se forceReload, invalida la cache
+    if (forceReload) {
+      this.cacheLoaded.delete(type);
+      this.cache.delete(type);
+    }
 
     const existingPromise = this.loadingPromises.get(type);
     if (existingPromise) return existingPromise;
@@ -36,6 +43,17 @@ export class EmbeddingService {
     this.loadingPromises.set(type, promise);
     await promise;
     this.loadingPromises.delete(type);
+  }
+
+  /**
+   * Invalida la cache per un tipo specifico (forza il ricaricamento al prossimo loadEmbeddings)
+   * @param type - Tipo di embedding da invalidare (es. 'task', 'condition', ecc.)
+   */
+  static invalidateCache(type: string = 'task'): void {
+    this.cacheLoaded.delete(type);
+    this.cache.delete(type);
+    this.loadingPromises.delete(type);
+    console.log(`[EmbeddingService] 🔄 Cache invalidated for type: ${type}`);
   }
 
   private static async _loadFromAPI(type: string): Promise<void> {

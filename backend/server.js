@@ -3066,19 +3066,27 @@ app.post('/api/embeddings/compute', async (req, res) => {
       return res.status(400).json({ error: 'Text is required' });
     }
 
+    // ✅ ARCHITECTURAL RULE: Normalize text BEFORE generating embedding
+    // This ensures consistent embedding generation for both templates and queries
+    const { normalizeTextForEmbedding } = require('./utils/embeddingTextNormalization');
+    const normalizedText = normalizeTextForEmbedding(text);
+
     // Delega a Python FastAPI service
     const targetUrl = `${pythonServiceUrl}/api/embeddings/compute`;
 
     console.log('[Embeddings][COMPUTE] Calling Python service', {
       url: targetUrl,
-      textLength: text.trim().length,
-      textPreview: text.trim().substring(0, 50)
+      originalTextLength: text.trim().length,
+      normalizedTextLength: normalizedText.length,
+      originalPreview: text.trim().substring(0, 50),
+      normalizedPreview: normalizedText.substring(0, 50)
     });
 
     let response;
     try {
-      const requestBody = { text: text.trim() };
-      console.log('[Embeddings][COMPUTE] Request body:', {
+      // ✅ Use normalized text for embedding generation
+      const requestBody = { text: normalizedText };
+      console.log('[Embeddings][COMPUTE] Request body (normalized):', {
         textLength: requestBody.text.length,
         textPreview: requestBody.text.substring(0, 50)
       });
@@ -3139,10 +3147,16 @@ app.post('/api/embeddings', async (req, res) => {
       const db = client.db(dbFactory);
       const coll = db.collection('embeddings');
 
-      const { id, type, text, embedding } = req.body;
+      const { id, type, text, embedding, originalText } = req.body;
       if (!id || !type || !text || !embedding || !Array.isArray(embedding)) {
         return res.status(400).json({ error: 'id, type, text, and embedding (array) are required' });
       }
+
+      // ✅ ARCHITECTURAL RULE: Normalize text before saving (if not already normalized)
+      // If originalText is provided, use it; otherwise normalize the provided text
+      const { normalizeTextForEmbedding } = require('./utils/embeddingTextNormalization');
+      const normalizedText = normalizeTextForEmbedding(text);
+      const originalTextToSave = originalText || text.trim();
 
       const now = new Date();
       const result = await coll.updateOne(
@@ -3151,7 +3165,8 @@ app.post('/api/embeddings', async (req, res) => {
           $set: {
             id: id,
             type: type,
-            text: text.trim(),
+            text: normalizedText, // ✅ Save normalized text (used for matching)
+            originalText: originalTextToSave, // ✅ Save original for reference
             embedding: embedding,
             model: 'paraphrase-multilingual-MiniLM-L12-v2',
             updatedAt: now
@@ -3166,7 +3181,8 @@ app.post('/api/embeddings', async (req, res) => {
       console.log('[Embeddings] Saved embedding', {
         id,
         type,
-        text: text.substring(0, 50),
+        originalText: originalTextToSave.substring(0, 50),
+        normalizedText: normalizedText.substring(0, 50),
         upserted: result.upsertedCount > 0,
         modified: result.modifiedCount > 0
       });
@@ -3727,12 +3743,17 @@ app.post('/api/factory/dialogue-templates', async (req, res) => {
       Promise.all(
         templatesNeedingEmbedding.map(async (template) => {
           try {
-            // 1. Calcola embedding usando Python FastAPI
+            // ✅ ARCHITECTURAL RULE: Normalize text BEFORE generating embedding
+            // This ensures consistent embedding generation for both templates and queries
+            const { normalizeTextForEmbedding } = require('./utils/embeddingTextNormalization');
+            const normalizedLabel = normalizeTextForEmbedding(template.label);
+
+            // 1. Calcola embedding usando Python FastAPI (con testo normalizzato)
             const pythonServiceUrl = process.env.EMBEDDING_SERVICE_URL || 'http://localhost:8000';
             const computeResponse = await fetch(`${pythonServiceUrl}/api/embeddings/compute`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ text: template.label.trim() }),
+              body: JSON.stringify({ text: normalizedLabel }),
               signal: AbortSignal.timeout(10000) // 10 second timeout
             });
 
@@ -3748,13 +3769,15 @@ app.post('/api/factory/dialogue-templates', async (req, res) => {
             }
 
             // 2. Salva embedding in MongoDB
+            // ✅ Save both original and normalized text for reference
             await embeddingsColl.updateOne(
               { id: template.id, type: 'task' },
               {
                 $set: {
                   id: template.id,
                   type: 'task',
-                  text: template.label.trim(),
+                  text: normalizedLabel, // ✅ Save normalized text (used for matching)
+                  originalText: template.label.trim(), // ✅ Save original for reference
                   embedding: embedding,
                   model: 'paraphrase-multilingual-MiniLM-L12-v2',
                   updatedAt: now
@@ -3768,7 +3791,8 @@ app.post('/api/factory/dialogue-templates', async (req, res) => {
 
             console.log('[POST /api/factory/dialogue-templates] ✅ Embedding generated', {
               templateId: template.id,
-              label: template.label.substring(0, 50),
+              originalLabel: template.label.substring(0, 50),
+              normalizedLabel: normalizedLabel.substring(0, 50),
               isNew: template.isNew,
               embeddingDimensions: embedding.length
             });
