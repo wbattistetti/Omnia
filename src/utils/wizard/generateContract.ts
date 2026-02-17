@@ -5,6 +5,7 @@ import type { TaskTreeNode, TaskTree } from '../../types/taskTypes';
 import type { SemanticContract } from '../../types/semanticContract';
 import { buildSemanticContract } from '../contract/buildEntity';
 import { SemanticContractService } from '../../services/SemanticContractService';
+import { DialogueTaskService } from '../../services/DialogueTaskService';
 import type { GenerationProgress } from './types';
 
 /**
@@ -102,9 +103,30 @@ export async function generateContractsForAllNodes(
     nodeIds: allNodes.map(n => n.id || n.templateId)
   });
 
+  // ✅ FASE 2: Filter nodes that have templates in cache BEFORE checking contracts
+  // This prevents errors when trying to save contracts for nodes without templates
+  const nodesWithTemplates = allNodes.filter(node => {
+    const nodeId = node.id || node.templateId;
+    const template = DialogueTaskService.getTemplate(nodeId);
+    if (!template) {
+      console.warn(`[generateContractsForAllNodes] ⚠️ Skipping node ${nodeId} - template not in cache`, {
+        nodeLabel: node.label,
+        nodeId
+      });
+      return false;
+    }
+    return true;
+  });
+
+  console.log('[generateContractsForAllNodes] Template availability check', {
+    totalNodes: allNodes.length,
+    nodesWithTemplates: nodesWithTemplates.length,
+    nodesWithoutTemplates: allNodes.length - nodesWithTemplates.length
+  });
+
   // Check which nodes already have contracts (idempotency check)
   const contractChecks = await Promise.all(
-    allNodes.map(async (node) => {
+    nodesWithTemplates.map(async (node) => {
       const nodeId = node.id || node.templateId;
       const exists = await SemanticContractService.exists(nodeId);
       return { node, nodeId, exists };
@@ -118,6 +140,7 @@ export async function generateContractsForAllNodes(
 
   console.log('[generateContractsForAllNodes] Contract generation plan', {
     totalNodes: allNodes.length,
+    nodesWithTemplates: nodesWithTemplates.length,
     nodesWithContracts: contractChecks.filter(c => c.exists).length,
     nodesToGenerate: nodesToGenerate.length,
     nodeIdsToGenerate: nodesToGenerate.map(n => n.nodeId)
@@ -188,8 +211,10 @@ export async function generateContractsForAllNodes(
 
   console.log('[generateContractsForAllNodes] ✅ Contract generation complete', {
     totalNodes: allNodes.length,
+    nodesWithTemplates: nodesWithTemplates.length,
     generated: generatedContracts.size,
-    skipped: allNodes.length - nodesToGenerate.length,
+    skipped: contractChecks.filter(c => c.exists).length,
+    skippedNoTemplate: allNodes.length - nodesWithTemplates.length,
     failed: errors.length
   });
 

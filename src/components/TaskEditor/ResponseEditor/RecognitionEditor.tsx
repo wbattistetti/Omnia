@@ -176,6 +176,20 @@ export default function RecognitionEditor({
       const loadedContract = loadContractFromNode(node);
       const regexPattern = loadedContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
 
+      // ✅ DEBUG: Log dettagliato del contract caricato
+      console.log('[RecognitionEditor] 🔍 Contract loaded from node', {
+        nodeId: node.id,
+        templateId: node.templateId,
+        hasContract: !!loadedContract,
+        contractType: loadedContract ? typeof loadedContract : 'null',
+        contractsArray: loadedContract?.contracts,
+        contractsCount: loadedContract?.contracts?.length || 0,
+        contractsTypes: loadedContract?.contracts?.map((c: any) => c.type) || [],
+        contractKeys: loadedContract ? Object.keys(loadedContract) : [],
+        templateName: loadedContract?.templateName,
+        templateId: loadedContract?.templateId
+      });
+
       // ✅ SALVA ORIGINALE (deep copy) per poterlo ripristinare se l'utente sceglie "Scarta"
       originalContractRef.current = loadedContract
         ? JSON.parse(JSON.stringify(loadedContract))
@@ -337,6 +351,22 @@ export default function RecognitionEditor({
 
   // ✅ Usa direttamente localContract come contract (non serve creare nuovo oggetto)
   const contract = localContract;
+
+  // ✅ DEBUG: Log contract quando cambia (per vedere cosa viene passato a TesterGrid)
+  React.useEffect(() => {
+    console.log('[RecognitionEditor] 🔍 Contract state changed', {
+      hasContract: !!contract,
+      contractType: contract ? typeof contract : 'null',
+      contractsArray: contract?.contracts,
+      contractsCount: contract?.contracts?.length || 0,
+      contractsTypes: contract?.contracts?.map((c: any) => c?.type) || [],
+      contractKeys: contract ? Object.keys(contract) : [],
+      templateName: contract?.templateName,
+      templateId: contract?.templateId,
+      nodeId: editorProps?.node?.id,
+      nodeTemplateId: editorProps?.node?.templateId
+    });
+  }, [contract, editorProps?.node?.id, editorProps?.node?.templateId]);
 
   // ✅ Stato locale per regex (non salvato durante digitazione)
   const contractItem = activeEditor && contract ? contract.contracts?.find((c: any) => {

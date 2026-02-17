@@ -34,7 +34,7 @@ export class SemanticContractService {
 
       console.log('[SemanticContractService] Saved contract for task', taskId, {
         version: updatedContract.version,
-        subgroupsCount: updatedContract.subgroups.length
+        subgroupsCount: (updatedContract.subentities || updatedContract.subgroups || []).length
       });
     } catch (error) {
       console.error('[SemanticContractService] Error saving contract:', error);

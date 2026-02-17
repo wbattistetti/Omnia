@@ -50,51 +50,38 @@ function updateProgress(
 
 /**
  * STEP 1: Contract Refinement
+ *
+ * ⚠️ ARCHITECTURAL RULE: SemanticContract is deterministic and never modified
+ * This step is now a no-op - contract is returned unchanged
  */
 export async function executeStep1_ContractRefinement(
   context: StepContext
 ): Promise<{ contract: any }> {
   const { contract, nodeLabel, progress, onProgress } = context;
 
+  // ⚠️ DEPRECATED: refineContract violates architectural rules
+  // SemanticContract must be deterministic and never modified by AI
+  console.warn('[executeStep1_ContractRefinement] ⚠️ Contract refinement skipped - SemanticContract is deterministic and immutable');
+
   let updatedProgress = updateProgress(
     progress,
     'contract-refinement',
-    'processing',
-    'Refining contract...',
-    undefined,
-    undefined,
-    onProgress
-  );
-
-  const { refineContract } = await import('../../../../utils/wizard/refineContract');
-
-  const refinedContract = await refineContract(contract, nodeLabel, (p) => {
-    updatedProgress = updateProgress(
-      updatedProgress,
-      'contract-refinement',
-      'processing',
-      'Refining contract...',
-      p.percentage || 0,
-      undefined,
-      onProgress
-    );
-  });
-
-  updateProgress(
-    updatedProgress,
-    'contract-refinement',
     'completed',
-    'Contract refined',
+    'Contract unchanged (deterministic)',
     undefined,
     undefined,
     onProgress
   );
 
-  return { contract: refinedContract };
+  // Return original contract unchanged
+  return { contract };
 }
 
 /**
  * STEP 2: Canonical Values
+ *
+ * ⚠️ ARCHITECTURAL RULE: SemanticContract is deterministic and never modified
+ * This step is now a no-op - contract is returned unchanged
  */
 export async function executeStep2_CanonicalValues(
   context: StepContext,
@@ -102,45 +89,29 @@ export async function executeStep2_CanonicalValues(
 ): Promise<{ contract: any }> {
   const { nodeLabel, progress, onProgress } = context;
 
-  let updatedProgress = updateProgress(
+  // ⚠️ DEPRECATED: generateCanonicalValuesForNode violates architectural rules
+  // SemanticContract must be deterministic and never modified by AI
+  console.warn('[executeStep2_CanonicalValues] ⚠️ Canonical values generation skipped - SemanticContract is deterministic and immutable');
+
+  const updatedProgress = updateProgress(
     progress,
     'canonical-values',
-    'processing',
-    'Generating canonical values...',
-    undefined,
-    undefined,
-    onProgress
-  );
-
-  const { generateCanonicalValuesForNode } = await import('../../../../utils/wizard/generateCanonicalValues');
-
-  const refinedContract = await generateCanonicalValuesForNode(contract, nodeLabel, (p) => {
-    updatedProgress = updateProgress(
-      updatedProgress,
-      'canonical-values',
-      'processing',
-      'Generating canonical values...',
-      p.percentage || 0,
-      undefined,
-      onProgress
-    );
-  });
-
-  updateProgress(
-    updatedProgress,
-    'canonical-values',
     'completed',
-    'Canonical values generated',
+    'Canonical values skipped (deterministic contract)',
     undefined,
     undefined,
     onProgress
   );
 
-  return { contract: refinedContract };
+  // Return original contract unchanged
+  return { contract };
 }
 
 /**
  * STEP 3: Constraints
+ *
+ * ⚠️ ARCHITECTURAL RULE: SemanticContract is deterministic and never modified
+ * This step is now a no-op - contract is returned unchanged
  */
 export async function executeStep3_Constraints(
   context: StepContext,
@@ -148,41 +119,22 @@ export async function executeStep3_Constraints(
 ): Promise<{ contract: any }> {
   const { nodeLabel, progress, onProgress } = context;
 
-  let updatedProgress = updateProgress(
+  // ⚠️ DEPRECATED: generateConstraintsForNode violates architectural rules
+  // SemanticContract must be deterministic and never modified by AI
+  console.warn('[executeStep3_Constraints] ⚠️ Constraints generation skipped - SemanticContract is deterministic and immutable');
+
+  const updatedProgress = updateProgress(
     progress,
     'constraints',
-    'processing',
-    'Generating constraints...',
-    undefined,
-    undefined,
-    onProgress
-  );
-
-  const { generateConstraintsForNode } = await import('../../../../utils/wizard/generateConstraints');
-
-  const refinedContract = await generateConstraintsForNode(contract, nodeLabel, (p) => {
-    updatedProgress = updateProgress(
-      updatedProgress,
-      'constraints',
-      'processing',
-      'Generating constraints...',
-      p.percentage || 0,
-      undefined,
-      onProgress
-    );
-  });
-
-  updateProgress(
-    updatedProgress,
-    'constraints',
     'completed',
-    'Constraints generated',
+    'Constraints skipped (deterministic contract)',
     undefined,
     undefined,
     onProgress
   );
 
-  return { contract: refinedContract };
+  // Return original contract unchanged
+  return { contract };
 }
 
 /**

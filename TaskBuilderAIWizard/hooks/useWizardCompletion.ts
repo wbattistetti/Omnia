@@ -270,6 +270,22 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
                 generatedCount: generatedContracts.size,
                 totalNodes: taskTree.nodes?.length || 0
               });
+
+              // ✅ ARCHITECTURAL RULE: Generate engines and parsers for all nodes (SEZIONE 2 + SEZIONE 3)
+              // Point of integration: AFTER contract generation, BEFORE onTaskBuilderComplete
+              // This ensures SemanticContract exists before generating parsers
+              if (generatedContracts.size > 0 || taskTree.nodes) {
+                try {
+                  const { generateEnginesAndParsersForAllNodes } = await import('@utils/wizard/generateEnginesAndParsers');
+                  await generateEnginesAndParsersForAllNodes(taskTree, generatedContracts);
+                  console.log('[useWizardCompletion] ✅ FIRST STEP: Engines and parsers generated');
+                } catch (engineError) {
+                  // Non-blocking: log error but don't block wizard flow
+                  console.error('[useWizardCompletion] ❌ FIRST STEP: Error generating engines and parsers (non-blocking)', {
+                    error: engineError instanceof Error ? engineError.message : String(engineError)
+                  });
+                }
+              }
             } catch (contractError) {
               // Non-blocking: log error but don't block wizard flow
               console.error('[useWizardCompletion] ❌ FIRST STEP: Error generating contracts (non-blocking)', {
@@ -620,6 +636,22 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
                 generatedCount: generatedContracts.size,
                 totalNodes: taskTree.nodes?.length || 0
               });
+
+              // ✅ ARCHITECTURAL RULE: Generate engines and parsers for all nodes (SEZIONE 2 + SEZIONE 3)
+              // Point of integration: AFTER contract generation, BEFORE onTaskBuilderComplete
+              // This ensures SemanticContract exists before generating parsers
+              if (generatedContracts.size > 0 || taskTree.nodes) {
+                try {
+                  const { generateEnginesAndParsersForAllNodes } = await import('@utils/wizard/generateEnginesAndParsers');
+                  await generateEnginesAndParsersForAllNodes(taskTree, generatedContracts);
+                  console.log('[useWizardCompletion] ✅ Engines and parsers generated');
+                } catch (engineError) {
+                  // Non-blocking: log error but don't block wizard flow
+                  console.error('[useWizardCompletion] ❌ Error generating engines and parsers (non-blocking)', {
+                    error: engineError instanceof Error ? engineError.message : String(engineError)
+                  });
+                }
+              }
             } catch (contractError) {
               // Non-blocking: log error but don't block wizard flow
               console.error('[useWizardCompletion] ❌ Error generating contracts (non-blocking)', {

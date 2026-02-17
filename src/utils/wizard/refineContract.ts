@@ -305,84 +305,51 @@ function mergeRefinementIntoContract(
 /**
  * Refine contract using AI
  *
- * This function:
- * 1. Calls backend API to get AI refinement
- * 2. Validates AI response
- * 3. Merges refinement into contract (non-destructively)
- * 4. Returns refined contract or original if refinement fails
+ * ⚠️ DEPRECATED: This function violates architectural rules.
+ * SemanticContract must be deterministic and never modified by AI.
  *
+ * This function is kept for backward compatibility but:
+ * - Does NOT save modifications to SemanticContract
+ * - Returns original contract unchanged
+ * - Only logs warnings
+ *
+ * @deprecated Use parser refinement instead (refineParser, not refineContract)
  * @param contract - Original semantic contract to refine
  * @param nodeLabel - Optional node label for context
  * @param onProgress - Optional progress callback
- * @returns Refined contract or original if refinement fails
+ * @returns Original contract (unchanged) - modifications are NOT saved
  */
 export async function refineContract(
   contract: SemanticContract,
   nodeLabel?: string,
   onProgress?: (progress: GenerationProgress) => void
 ): Promise<SemanticContract> {
+  // ⚠️ ARCHITECTURAL VIOLATION: SemanticContract must NOT be modified by AI
+  console.warn('[refineContract] ⚠️ DEPRECATED: refineContract violates architectural rules. SemanticContract must be deterministic and never modified. Returning original contract unchanged.');
   if (onProgress) {
     onProgress({
       currentStep: 0,
       totalSteps: 1,
       currentNodeId: '',
       currentNodeLabel: nodeLabel || contract.entity.label,
-      currentAction: 'Refining contract with AI...',
+      currentAction: 'Contract refinement skipped (deprecated)',
       percentage: 0
     });
   }
 
-  try {
-    // Call backend API
-    const response = await fetch('/api/nlp/refine-contract', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contract,
-        nodeLabel,
-        provider: localStorage.getItem('omnia.aiProvider') || 'openai',
-        model: localStorage.getItem('omnia.aiModel') || undefined
-      })
+  // ✅ ARCHITECTURAL RULE: SemanticContract is deterministic and never modified
+  // Return original contract unchanged - do NOT call AI or modify contract
+  if (onProgress) {
+    onProgress({
+      currentStep: 1,
+      totalSteps: 1,
+      currentNodeId: '',
+      currentNodeLabel: nodeLabel || contract.entity.label,
+      currentAction: 'Contract unchanged (deterministic)',
+      percentage: 100
     });
-
-    if (!response.ok) {
-      console.warn('[refineContract] API call failed:', response.statusText);
-      return contract; // Fallback to original
-    }
-
-    const data = await response.json();
-
-    if (!data.success || !data.refinement) {
-      console.warn('[refineContract] AI refinement failed or returned no refinement');
-      return contract; // Fallback to original
-    }
-
-    // Validate refinement structure
-    const refinement = validateRefinement(data.refinement);
-
-    if (!refinement) {
-      console.warn('[refineContract] Invalid refinement structure, returning original contract');
-      return contract; // Fallback to original
-    }
-
-    // Merge refinement into contract (pure function)
-    const refined = mergeRefinementIntoContract(contract, refinement);
-
-    if (onProgress) {
-      onProgress({
-        currentStep: 1,
-        totalSteps: 1,
-        currentNodeId: '',
-        currentNodeLabel: nodeLabel || contract.entity.label,
-        currentAction: 'Contract refined successfully',
-        percentage: 100
-      });
-    }
-
-    return refined;
-
-  } catch (error) {
-    console.warn('[refineContract] Error during refinement:', error);
-    return contract; // Fallback to original
   }
+
+  // Return original contract - no modifications
+  return contract;
 }

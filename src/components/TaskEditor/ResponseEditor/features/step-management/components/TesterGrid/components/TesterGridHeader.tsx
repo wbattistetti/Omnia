@@ -95,11 +95,30 @@ export default function TesterGridHeader({
 
   // Leggi contracts dal dataContract - ordine implicito (ordine array = ordine escalation)
   const contracts = useMemo(() => {
+    // ✅ DEBUG: Log dettagliato per capire perché le colonne non vengono mostrate
+    console.log('[TesterGridHeader] 🔍 Reading contracts from DataContract', {
+      hasContract: !!contract,
+      contractType: contract ? typeof contract : 'null',
+      hasContractsArray: !!contract?.contracts,
+      contractsIsArray: Array.isArray(contract?.contracts),
+      contractsRaw: contract?.contracts,
+      contractsCount: contract?.contracts?.length || 0,
+      contractsTypes: contract?.contracts?.map((c: any) => c?.type) || [],
+      contractKeys: contract ? Object.keys(contract) : []
+    });
+
     if (!contract?.contracts || !Array.isArray(contract.contracts)) {
+      console.log('[TesterGridHeader] ⚠️ No contracts array found, returning empty array');
       return [];
     }
     // Filtra solo i contract con enabled: true
-    return contract.contracts.filter(c => c.enabled !== false);
+    const filtered = contract.contracts.filter(c => c.enabled !== false);
+    console.log('[TesterGridHeader] ✅ Contracts filtered', {
+      totalContracts: contract.contracts.length,
+      enabledContracts: filtered.length,
+      filteredTypes: filtered.map(c => c.type)
+    });
+    return filtered;
   }, [contract?.contracts]);
 
   // Map contract type to component type
@@ -221,8 +240,17 @@ export default function TesterGridHeader({
 
   // Render dynamic columns based on contracts array
   const renderDynamicColumns = () => {
+    // ✅ DEBUG: Log per capire perché le colonne non vengono renderizzate
+    console.log('[TesterGridHeader] 🔍 renderDynamicColumns called', {
+      contractsCount: contracts?.length || 0,
+      contractsTypes: contracts?.map(c => c.type) || [],
+      willShowAddContract: !contracts || contracts.length === 0,
+      willShowColumns: contracts && contracts.length > 0
+    });
+
     if (!contracts || contracts.length === 0) {
       // Show "Add contract" dropdown when no contract
+      console.log('[TesterGridHeader] ⚠️ No contracts found, showing "Add contract" dropdown');
       return (
         <th colSpan={1} style={{ padding: 8, background: '#f9fafb', textAlign: 'center', width: '200px' }}>
           <AddContractDropdown
@@ -233,6 +261,11 @@ export default function TesterGridHeader({
         </th>
       );
     }
+
+    console.log('[TesterGridHeader] ✅ Rendering columns for contracts', {
+      contractsCount: contracts.length,
+      contractsTypes: contracts.map(c => c.type)
+    });
 
     const columnWidth = calculateColumnWidth(contracts.length);
 

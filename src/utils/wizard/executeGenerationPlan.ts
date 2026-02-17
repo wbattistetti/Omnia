@@ -202,31 +202,10 @@ export async function executeGenerationPlan(
 
     nodeResult.contract = contract;
 
-    // STEP 1 (continued): Refine contract
-    currentStep++;
-    contract = await refineContract(contract, node.label, (progress) => {
-      if (onProgress) {
-        onProgress({
-          ...progress,
-          currentStep,
-          totalSteps: plan.totalSteps
-        });
-      }
-    });
-    nodeResult.contract = contract; // Update with refined contract
-
-    // STEP 2: Generate canonical values
-    currentStep++;
-    contract = await generateCanonicalValuesForNode(contract, node.label, (progress) => {
-      if (onProgress) {
-        onProgress({
-          ...progress,
-          currentStep,
-          totalSteps: plan.totalSteps
-        });
-      }
-    });
-    nodeResult.contract = contract; // Update with canonical values
+    // ⚠️ ARCHITECTURAL RULE: SemanticContract is deterministic and never modified
+    // Removed: refineContract, generateCanonicalValues, generateConstraints
+    // These functions violate the principle that SemanticContract must be immutable
+    // The contract is built once from node structure and never changed
 
     // STEP 3: Generate constraints
     currentStep++;
