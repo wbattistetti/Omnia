@@ -56,7 +56,7 @@ export function TaskContextualizationPanel({
     // ✅ REAL: Chiama AdaptTaskTreePromptToContext per adattare i prompt
     const contextualizeMessages = async () => {
       try {
-        setCurrentStep('Caricamento template e traduzioni...');
+        setCurrentStep('Sto adattando il template per questo contesto...');
         setProgress(10);
 
         // ✅ STEP 1: Ricarica il task dal repository per assicurarsi che abbia gli steps clonati
@@ -125,10 +125,9 @@ export function TaskContextualizationPanel({
         setStatus('completed');
         setCurrentStep('Contestualizzazione completata!');
 
-        // Call onComplete after a brief delay to show success
-        setTimeout(() => {
-          onComplete(contextualizedTaskTree);
-        }, 500);
+        // ✅ Call onComplete immediately - the parent will switch to normal editor mode
+        // No delay needed - the card will disappear when taskWizardMode changes to 'none'
+        onComplete(contextualizedTaskTree);
       } catch (error: any) {
         if (error.name === 'AbortError') {
           // User cancelled, notify parent
@@ -190,7 +189,7 @@ export function TaskContextualizationPanel({
           {status === 'completed' && <CheckCircle2 size={24} color="#10b981" />}
           {status === 'error' && <AlertCircle size={24} color="#ef4444" />}
           <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 600, color: '#e2e8f0' }}>
-            {status === 'processing' && 'Contestualizzazione in corso...'}
+            {status === 'processing' && 'Sto adattando il template per questo contesto...'}
             {status === 'completed' && 'Contestualizzazione completata'}
             {status === 'error' && 'Errore'}
           </h3>

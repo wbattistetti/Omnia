@@ -306,11 +306,38 @@ export function useResponseEditor(params: UseResponseEditorParams): UseResponseE
   } = state;
 
   // ✅ ARCHITECTURE: Stable wizard callbacks wrapped in useCallback
-  const handleTaskContextualizationComplete = React.useCallback((contextualizedTaskTree: TaskTree) => {
-    // TODO: Implement in Phase 13 - save contextualized task tree
+  const handleTaskContextualizationComplete = React.useCallback(async (contextualizedTaskTree: TaskTree) => {
     console.log('[useResponseEditor] Task contextualization complete', contextualizedTaskTree);
-    // Future: Save contextualized task tree to store/repository
-  }, []);
+
+    // ✅ STEP 1: Salva TaskTree contestualizzato nello store
+    const { useTaskTreeStore } = await import('@responseEditor/core/state');
+    const setTaskTree = useTaskTreeStore.getState().setTaskTree;
+    setTaskTree(contextualizedTaskTree);
+
+    // ✅ STEP 2: Cambia taskWizardMode da 'adaptation' a 'none' per mostrare l'editor normale
+    // Questo farà sì che ResponseEditorContent mostri il normale editor invece del wizard
+    setTaskWizardMode('none');
+
+    // ✅ STEP 3: Aggiorna il task nel repository con gli steps contestualizzati
+    if (task?.id) {
+      const { taskRepository } = await import('@services/TaskRepository');
+      const taskInstance = taskRepository.getTask(task.id);
+      if (taskInstance && contextualizedTaskTree.steps) {
+        // ✅ Aggiorna solo gli steps (override) nel repository
+        taskRepository.updateTask(task.id, {
+          steps: contextualizedTaskTree.steps
+        }, currentProjectId || undefined);
+      }
+    }
+
+    console.log('[useResponseEditor] ✅ Contextualization complete - switched to normal editor mode', {
+      taskId: task?.id,
+      hasSteps: !!contextualizedTaskTree.steps,
+      stepsKeys: contextualizedTaskTree.steps && typeof contextualizedTaskTree.steps === 'object' && !Array.isArray(contextualizedTaskTree.steps)
+        ? Object.keys(contextualizedTaskTree.steps)
+        : []
+    });
+  }, [setTaskWizardMode, task?.id, currentProjectId]);
 
   const handleTaskBuilderComplete = React.useCallback(async (taskTree: TaskTree, messages?: any) => {
     // ✅ Create task when wizard completes (Scenario 2B)
