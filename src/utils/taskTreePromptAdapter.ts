@@ -108,7 +108,10 @@ export async function AdaptTaskTreePromptToContext(
 
       console.log('[🔍 AdaptTaskTreePromptToContext] 🔍 Cercando traduzioni in memoria', {
         guidsCount: allGuids.size,
-        contextTranslationsCount: Object.keys(contextTranslations).length
+        contextTranslationsCount: Object.keys(contextTranslations).length,
+        requestedGuids: Array.from(allGuids).slice(0, 10),
+        availableGuids: Object.keys(contextTranslations).slice(0, 20),
+        projectLocale
       });
 
       for (const guid of allGuids) {
@@ -123,10 +126,35 @@ export async function AdaptTaskTreePromptToContext(
         }
       }
 
+      const matchingGuids = Array.from(allGuids).filter(g => g in contextTranslations);
+      const missingGuids = Array.from(allGuids).filter(g => !(g in contextTranslations));
+
       console.log('[🔍 AdaptTaskTreePromptToContext] ✅ Traduzioni trovate in memoria', {
         foundInMemory: Object.keys(projectTranslations).length,
         requested: allGuids.size,
-        missing: allGuids.size - Object.keys(projectTranslations).length
+        missing: allGuids.size - Object.keys(projectTranslations).length,
+        matchingGuids: matchingGuids.slice(0, 10),
+        missingGuids: missingGuids.slice(0, 10),
+        sampleRequestedGuid: Array.from(allGuids)[0],
+        hasSampleInContext: Array.from(allGuids)[0] ? (Array.from(allGuids)[0] in contextTranslations) : false,
+        sampleTranslation: Array.from(allGuids)[0] ? contextTranslations[Array.from(allGuids)[0]] : undefined
+      });
+
+      // ✅ DEBUG: Verifica dettagliata quali GUID sta cercando (nuovi GUID generati durante clonazione)
+      console.log('[🔍 AdaptTaskTreePromptToContext] 🔍 VERIFICA GUID RICHIESTI', {
+        allGuidsRequested: Array.from(allGuids),
+        // ✅ DEBUG: Questi sono i NUOVI GUID (generati durante clonazione)
+        // Ma le traduzioni potrebbero essere ancora con i VECCHI GUID del template
+        contextHasTranslations: Object.keys(contextTranslations).length,
+        sampleRequestedGuid: Array.from(allGuids)[0],
+        hasSampleInContext: Array.from(allGuids)[0] ? (Array.from(allGuids)[0] in contextTranslations) : false,
+        // ✅ DEBUG: Verifica se ci sono traduzioni per i nuovi GUID
+        newGuidsWithTranslations: Array.from(allGuids).filter(g => g in contextTranslations).length,
+        newGuidsWithoutTranslations: Array.from(allGuids).filter(g => !(g in contextTranslations)).length,
+        // ✅ DEBUG: Mostra alcuni nuovi GUID che non hanno traduzioni
+        missingNewGuidsSample: Array.from(allGuids).filter(g => !(g in contextTranslations)).slice(0, 5),
+        // ✅ DEBUG: Verifica se copyTranslationsForClonedSteps ha già copiato le traduzioni
+        contextTranslationsSample: Object.keys(contextTranslations).slice(0, 10)
       });
     } else {
       console.warn('[🔍 AdaptTaskTreePromptToContext] ⚠️ ProjectTranslationsContext non disponibile', {

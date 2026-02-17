@@ -25,7 +25,7 @@ import { cloneTemplateSteps } from './taskUtils';
  * @param task - Task a cui aggiungere gli steps clonati
  * @throws Error se dataTree è vuoto o se un nodo non ha templateId
  */
-export function CloneSteps(dataTree: any[], task: Task): void {
+export async function CloneSteps(dataTree: any[], task: Task): Promise<void> {
   console.log('[🔍 CloneSteps] START', {
     taskId: task.id,
     taskLabel: task.label,
@@ -80,6 +80,22 @@ export function CloneSteps(dataTree: any[], task: Task): void {
     clonedStepsIsArray: Array.isArray(clonedSteps),
     guidMappingSize: guidMapping.size
   });
+
+  // ✅ CRITICAL: Copia traduzioni template → nuovi GUID
+  if (guidMapping && guidMapping.size > 0) {
+    try {
+      const { copyTranslationsForClonedSteps } = await import('./taskTreeMergeUtils');
+      await copyTranslationsForClonedSteps(task, task.templateId, guidMapping);
+      console.log('[🔍 CloneSteps] ✅ Traduzioni copiate per istanza', {
+        taskId: task.id,
+        guidMappingSize: guidMapping.size,
+        templateId: task.templateId
+      });
+    } catch (err) {
+      console.error('[🔍 CloneSteps] ❌ Errore copiando traduzioni:', err);
+      // Non bloccare il flusso - l'istanza viene comunque creata
+    }
+  }
 
   // ✅ Aggiungi gli steps clonati a task.steps (modifica in-place)
   // ✅ NUOVO: clonedSteps è un array MaterializedStep[], non un dictionary

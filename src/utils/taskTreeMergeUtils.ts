@@ -1,5 +1,6 @@
-import type { Task, MaterializedStep } from '../types/taskTypes';
+import type { Task, MaterializedStep, TaskTreeNode } from '../types/taskTypes';
 import { DialogueTaskService } from '../services/DialogueTaskService';
+import { buildTaskTreeNodes, cloneTemplateSteps } from './taskUtils';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -337,19 +338,23 @@ export async function loadTaskTreeFromTemplate(instance: Task | null): Promise<a
     };
   });
 
+  // ✅ ARCHITECTURAL RULE: Usa pipeline unificata per clonazione istanze
   // ✅ Usa steps dall'istanza (già clonati) o clona dal template (prima creazione)
   let finalRootSteps: Record<string, any> | undefined = undefined;
+  let allGuidMappings = new Map<string, string>(templateGuidMapping);
 
   if (instance.steps && typeof instance.steps === 'object' && Object.keys(instance.steps).length > 0) {
     // ✅ Instance ha già steps clonati - usali
     finalRootSteps = instance.steps;
   } else if (template.steps && typeof template.steps === 'object' && Object.keys(template.steps).length > 0) {
-    // ✅ Prima creazione - clona steps dal template
-    finalRootSteps = {};
-    for (const [nodeId, templateSteps] of Object.entries(template.steps)) {
-      if (templateSteps && typeof templateSteps === 'object') {
-        const { cloned } = cloneStepsWithNewTaskIds(templateSteps as any);
-        finalRootSteps[nodeId] = cloned;
+    // ✅ ARCHITECTURAL RULE: Prima creazione - usa cloneTemplateSteps (pipeline unificata)
+    // ✅ NON usare cloneStepsWithNewTaskIds direttamente - bypassa la pipeline
+    const { steps: clonedSteps, guidMapping } = cloneTemplateSteps(template, nodes);
+    finalRootSteps = clonedSteps;
+    // ✅ Unisci guidMapping con templateGuidMapping
+    if (guidMapping && guidMapping.size > 0) {
+      for (const [oldGuid, newGuid] of guidMapping.entries()) {
+        allGuidMappings.set(oldGuid, newGuid);
       }
     }
   }
@@ -363,12 +368,11 @@ export async function loadTaskTreeFromTemplate(instance: Task | null): Promise<a
     nlpContract: template.nlpContract ?? undefined
   };
 
-  // ✅ Copy translations for cloned steps (only on first instance creation)
+  // ✅ ARCHITECTURAL RULE: Copy translations for cloned steps (only on first instance creation)
   const isFirstTimeCreation = !instance.steps || Object.keys(instance.steps).length === 0;
-  if (isFirstTimeCreation) {
+  if (isFirstTimeCreation && allGuidMappings.size > 0) {
     const templateId = template.id || template._id;
     if (templateId) {
-      const allGuidMappings = new Map<string, string>(templateGuidMapping);
       await copyTranslationsForClonedSteps(result, templateId, allGuidMappings);
     }
   }
@@ -439,10 +443,53 @@ function cloneEscalationWithNewTaskIds(escalation: any, guidMapping: Map<string,
       if (oldGuid) {
         guidMapping.set(oldGuid, newGuid);
       }
+
+      // ✅ VALIDAZIONE: type obbligatorio (non può essere undefined o null)
+      if (task.type === undefined || task.type === null) {
+        throw new Error(`[cloneEscalationWithNewTaskIds] Template task ${task.id || 'unknown'} is missing required field 'type'. The template is corrupted and must be fixed in the database. Task structure: ${JSON.stringify(task, null, 2)}`);
+      }
+
+      // ✅ VALIDAZIONE: templateId deve essere presente come chiave (può essere null per task standalone)
+      if (task.templateId === undefined) {
+        throw new Error(`[cloneEscalationWithNewTaskIds] Template task ${task.id || 'unknown'} is missing required field 'templateId' (must be explicitly null for standalone tasks, or a GUID if derived from another template). The template is corrupted and must be fixed in the database. Task structure: ${JSON.stringify(task, null, 2)}`);
+      }
+
+      // ✅ STEP 1: Clona i parametri e genera nuovi GUID per i parametri "text"
+      // ✅ CRITICAL: Estrai i GUID delle traduzioni da parameters[].value (non solo task.id)
+      const clonedParameters = (task.parameters || []).map((param: any) => {
+        // ✅ Se è il parametro "text" e contiene un GUID, genera un nuovo GUID
+        if (param.parameterId === 'text' && param.value) {
+          const textValue = String(param.value);
+          // ✅ Verifica se è un GUID (formato UUID v4)
+          const GUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          if (GUID_REGEX.test(textValue)) {
+            // ✅ È un GUID del template, genera un nuovo GUID per l'istanza
+            const newTextGuid = uuidv4();
+            guidMapping.set(textValue, newTextGuid); // ✅ Aggiungi mapping per copiare traduzioni
+            return {
+              ...param,
+              value: newTextGuid // ✅ Sostituisci con nuovo GUID
+            };
+          }
+          // ❌ Se non è un GUID, è testo letterale (errore nel template)
+          // Mantieni il valore originale ma logga un warning
+          console.warn('[cloneEscalationWithNewTaskIds] ⚠️ Template parameter "text" contains literal text instead of GUID', {
+            taskId: task.id,
+            parameterValue: textValue.substring(0, 50) + (textValue.length > 50 ? '...' : '')
+          });
+        }
+        // ✅ Per tutti gli altri parametri, mantieni il valore originale
+        return param;
+      });
+
       return {
         ...task,
         id: newGuid,  // ✅ New ID for task instance
-        // Keep templateId, params, etc. from original
+        type: task.type,  // ✅ NO FALLBACK - must be present in template
+        templateId: task.templateId,  // ✅ NO FALLBACK - must be present in template (can be null)
+        templateTaskId: oldGuid || null,  // ✅ Save original template task ID
+        edited: false,  // ✅ Mark as not edited (inherited from template)
+        parameters: clonedParameters, // ✅ Parametri clonati con nuovi GUID per "text"
       };
     })
     // ❌ RIMOSSO: actions - legacy field, non più necessario
@@ -686,7 +733,10 @@ export async function copyTranslationsForClonedSteps(_ddt: any, _templateId: str
 
       console.log('[copyTranslationsForClonedSteps] 🔍 Cercando traduzioni template in memoria', {
         oldGuidsCount: oldGuids.length,
-        contextTranslationsCount: Object.keys(contextTranslations).length
+        contextTranslationsCount: Object.keys(contextTranslations).length,
+        oldGuids: Array.from(oldGuids).slice(0, 10),
+        availableGuids: Object.keys(contextTranslations).slice(0, 20),
+        projectLocale
       });
 
       for (const oldGuid of oldGuids) {
@@ -701,9 +751,35 @@ export async function copyTranslationsForClonedSteps(_ddt: any, _templateId: str
         }
       }
 
+      const matchingGuids = Array.from(oldGuids).filter(g => g in contextTranslations);
+      const missingGuids = Array.from(oldGuids).filter(g => !(g in contextTranslations));
+
       console.log('[copyTranslationsForClonedSteps] ✅ Traduzioni template trovate in memoria', {
         foundInMemory: Object.keys(templateTranslations).length,
-        requested: oldGuids.length
+        requested: oldGuids.length,
+        matchingGuids: matchingGuids.slice(0, 10),
+        missingGuids: missingGuids.slice(0, 10),
+        sampleOldGuid: Array.from(oldGuids)[0],
+        hasSampleInContext: Array.from(oldGuids)[0] ? (Array.from(oldGuids)[0] in contextTranslations) : false,
+        sampleTranslation: Array.from(oldGuids)[0] ? contextTranslations[Array.from(oldGuids)[0]] : undefined
+      });
+
+      // ✅ DEBUG: Verifica dettagliata se le traduzioni Factory sono caricate
+      console.log('[copyTranslationsForClonedSteps] 🔍 VERIFICA TRADUZIONI TEMPLATE', {
+        templateId: _templateId,
+        oldGuidsRequested: oldGuids.length,
+        translationsFound: Object.keys(templateTranslations).length,
+        contextTranslationsTotal: Object.keys(contextTranslations).length,
+        // ✅ DEBUG: Verifica se i vecchi GUID del template sono presenti nelle traduzioni Factory
+        sampleOldGuid: oldGuids[0],
+        hasSampleInContext: oldGuids[0] ? (oldGuids[0] in contextTranslations) : false,
+        // ✅ DEBUG: Verifica se ci sono traduzioni Factory caricate
+        factoryTranslationsSample: Object.keys(contextTranslations).slice(0, 10),
+        // ✅ DEBUG: Verifica se i vecchi GUID corrispondono a quelli nelle traduzioni Factory
+        oldGuidsInContext: oldGuids.filter(g => g in contextTranslations).length,
+        oldGuidsNotInContext: oldGuids.filter(g => !(g in contextTranslations)).length,
+        // ✅ DEBUG: Mostra alcuni vecchi GUID che non sono stati trovati
+        missingOldGuidsSample: oldGuids.filter(g => !(g in contextTranslations)).slice(0, 5)
       });
     }
 
@@ -733,7 +809,13 @@ export async function copyTranslationsForClonedSteps(_ddt: any, _templateId: str
 
         console.log('[copyTranslationsForClonedSteps] ✅ Traduzioni template trovate nel database', {
           foundInDb: Object.keys(templateTranslations).length - (oldGuids.length - missingGuids.length),
-          missingBefore: missingGuids.length
+          missingBefore: missingGuids.length,
+          dbTranslationsKeys: Object.keys(dbTranslations).slice(0, 10),
+          dbTranslationsCount: Object.keys(dbTranslations).length,
+          sampleDbTranslation: Object.keys(dbTranslations).length > 0 ? {
+            guid: Object.keys(dbTranslations)[0],
+            value: dbTranslations[Object.keys(dbTranslations)[0]]
+          } : undefined
         });
       } catch (err) {
         console.warn('[copyTranslationsForClonedSteps] ⚠️ Errore cercando traduzioni nel database (continua con quelle in memoria)', {
@@ -830,6 +912,17 @@ export async function copyTranslationsForClonedSteps(_ddt: any, _templateId: str
             guid,
             inContext: guid in (translationsContext.translations || {})
           }))
+        });
+
+        // ✅ DEBUG: Verifica dettagliata che le traduzioni siano state aggiunte correttamente
+        console.log('[copyTranslationsForClonedSteps] 🔍 VERIFICA POST-COPIA', {
+          translationsAdded: Object.keys(instanceTranslations).length,
+          newGuidsAdded: Object.keys(instanceTranslations).slice(0, 5),
+          contextTotalAfterAdd: Object.keys(translationsContext.translations || {}).length,
+          // ✅ Verifica che i nuovi GUID siano effettivamente nel context
+          sampleNewGuid: Object.keys(instanceTranslations)[0],
+          sampleNewGuidInContext: Object.keys(instanceTranslations)[0] ? (Object.keys(instanceTranslations)[0] in (translationsContext.translations || {})) : false,
+          sampleNewGuidTranslation: Object.keys(instanceTranslations)[0] ? (translationsContext.translations || {})[Object.keys(instanceTranslations)[0]] : undefined
         });
       } else {
         console.warn('[copyTranslationsForClonedSteps] ⚠️ ProjectTranslationsContext not available, will save to DB only', {

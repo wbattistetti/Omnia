@@ -1213,9 +1213,32 @@ export async function buildTaskTree(
 
   if (!finalSteps || Object.keys(finalSteps).length === 0) {
     // ✅ Prima creazione: clona steps dal template
-    const { steps: clonedSteps } = cloneTemplateSteps(template, nodes);
+    // ✅ ARCHITECTURAL RULE: Estrai guidMapping per copiare traduzioni
+    const { steps: clonedSteps, guidMapping } = cloneTemplateSteps(template, nodes);
     finalSteps = clonedSteps;
     stepsWereCloned = true;
+
+    // ✅ ARCHITECTURAL RULE: Copia traduzioni template → nuovi GUID
+    if (guidMapping && guidMapping.size > 0) {
+      try {
+        const { copyTranslationsForClonedSteps } = await import('./taskTreeMergeUtils');
+        await copyTranslationsForClonedSteps(instance, instance.templateId, guidMapping);
+        console.log('[buildTaskTree] ✅ Traduzioni copiate per istanza', {
+          taskId: instance.id,
+          guidMappingSize: guidMapping.size,
+          templateId: instance.templateId
+        });
+      } catch (err) {
+        console.error('[buildTaskTree] ❌ Errore copiando traduzioni:', err);
+        // Non bloccare il flusso - l'istanza viene comunque creata
+      }
+    } else {
+      console.warn('[buildTaskTree] ⚠️ Nessun GUID mapping disponibile per copiare traduzioni', {
+        taskId: instance.id,
+        hasGuidMapping: !!guidMapping,
+        guidMappingSize: guidMapping?.size || 0
+      });
+    }
   } else {
     // ✅ Verifica che sia dictionary (non array legacy)
     if (Array.isArray(finalSteps)) {

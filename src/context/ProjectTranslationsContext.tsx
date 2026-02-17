@@ -117,6 +117,20 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
       // Save original values for comparison (deep copy)
       setOriginalTranslations(JSON.parse(JSON.stringify(allTranslations)));
       setIsDirty(false);
+
+      // ✅ DEBUG: Verifica che le traduzioni Factory siano state caricate
+      console.log('[ProjectTranslations] 🔍 VERIFICA TRADUZIONI CARICATE', {
+        projectId: currentProjectId,
+        locale: projectLocale,
+        totalTranslations: Object.keys(allTranslations).length,
+        sampleGuids: Object.keys(allTranslations).slice(0, 10),
+        // ✅ Verifica se ci sono traduzioni Factory (quelle senza projectId specifico)
+        // Nota: Le traduzioni Factory vengono caricate dal backend insieme alle traduzioni del progetto
+        translationsSample: Object.entries(allTranslations).slice(0, 3).map(([guid, text]) => ({
+          guid,
+          textPreview: typeof text === 'string' ? text.substring(0, 50) : String(text).substring(0, 50)
+        }))
+      });
     } catch (err) {
       console.error('[ProjectTranslations] ❌ ERROR loadAllTranslations:', err);
     }

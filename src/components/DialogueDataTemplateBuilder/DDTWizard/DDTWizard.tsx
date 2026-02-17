@@ -19,7 +19,7 @@ import { useProjectDataUpdate } from '../../../context/ProjectDataContext';
 import { useProjectTranslations } from '../../../context/ProjectTranslationsContext';
 import { getTemplateTranslations } from '../../../services/ProjectDataService';
 import { DialogueTaskService } from '../../../services/DialogueTaskService';
-import { cloneTemplateSteps } from '../../../utils/taskTreeMergeUtils';
+import { cloneTemplateSteps } from '../../../utils/taskUtils';
 // ResponseEditor will be opened by sidebar after onComplete
 
 // 🚀 NEW: Interface for field processing state
@@ -2267,8 +2267,26 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
                                     const template = DialogueTaskService.getTemplate(mainTemplateId);
                                     if (template) {
                                       // ✅ CRITICAL: Usa mountedDataTree (albero montato con templateId corretti), NON dataWithMessages
-                                      const { steps } = cloneTemplateSteps(template, mountedDataTree);
+                                      // ✅ CRITICAL: Estrai guidMapping per copiare traduzioni
+                                      const { steps, guidMapping } = cloneTemplateSteps(template, mountedDataTree);
                                       clonedSteps = steps;
+
+                                      // ✅ CRITICAL: Copia traduzioni
+                                      if (guidMapping && guidMapping.size > 0) {
+                                        try {
+                                          const { copyTranslationsForClonedSteps } = await import('../../../utils/taskTreeMergeUtils');
+                                          // ✅ Usa un task temporaneo per copiare traduzioni
+                                          const tempTask = { id: 'temp', templateId: mainTemplateId, steps: clonedSteps };
+                                          await copyTranslationsForClonedSteps(tempTask, mainTemplateId, guidMapping);
+                                          console.log('✅ [TaskTree][Wizard][parallel] Traduzioni copiate', {
+                                            templateId: mainTemplateId,
+                                            guidMappingSize: guidMapping.size
+                                          });
+                                        } catch (err) {
+                                          console.warn('[TaskTree][Wizard][parallel] Failed to copy translations:', err);
+                                        }
+                                      }
+
                                       console.log('✅ [TaskTree][Wizard][parallel] Steps clonati dal template', {
                                         templateId: mainTemplateId,
                                         stepsCount: Object.keys(clonedSteps).length

@@ -3269,11 +3269,23 @@ app.post('/api/factory/template-translations', async (req, res) => {
 
     // Query for GUIDs (new format): guid field (type rimosso - GUID identifica già l'oggetto)
     if (guidKeys.length > 0) {
-      const guidDocs = await coll.find({
+      const guidQuery = {
         guid: { $in: guidKeys }
-      }).toArray();
+      };
+      const guidDocs = await coll.find(guidQuery).toArray();
 
-      console.log('[TEMPLATE_TRANSLATIONS] Found', guidDocs.length, 'translations for GUIDs');
+      console.log('[TEMPLATE_TRANSLATIONS] 🔍 Query for GUIDs:', {
+        query: guidQuery,
+        requestedGuids: guidKeys.slice(0, 10),
+        foundDocs: guidDocs.length,
+        sampleDocs: guidDocs.slice(0, 3).map(doc => ({
+          guid: doc.guid,
+          language: doc.language,
+          textPreview: doc.text ? doc.text.substring(0, 50) : undefined,
+          projectId: doc.projectId,
+          type: doc.type
+        }))
+      });
 
       // Group by guid and language, then merge into { guid: { en, it, pt } }
       for (const doc of guidDocs) {
@@ -3286,6 +3298,16 @@ app.post('/api/factory/template-translations', async (req, res) => {
           }
         }
       }
+
+      console.log('[TEMPLATE_TRANSLATIONS] ✅ Merged translations:', {
+        mergedKeys: Object.keys(merged).slice(0, 10),
+        mergedCount: Object.keys(merged).length,
+        missingGuids: guidKeys.filter(k => !merged[k]).slice(0, 10),
+        sampleMerged: Object.keys(merged).length > 0 ? {
+          guid: Object.keys(merged)[0],
+          translations: merged[Object.keys(merged)[0]]
+        } : undefined
+      });
     }
 
     // Query for old-style keys (backward compatibility): _id field

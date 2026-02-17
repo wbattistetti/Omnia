@@ -49,14 +49,39 @@ export async function createTaskFromTemplate(
   });
 
   // 3. Clona steps dal template
-  const { steps: clonedSteps } = cloneTemplateSteps(template, nodes);
+  // ✅ CRITICAL: Estrai guidMapping per copiare traduzioni
+  const { steps: clonedSteps, guidMapping } = cloneTemplateSteps(template, nodes);
   task.steps = clonedSteps;
   console.log('[🔍 taskOrchestrator] Steps clonati', {
     stepsCount: Object.keys(task.steps || {}).length,
-    stepsKeys: Object.keys(task.steps || {})
+    stepsKeys: Object.keys(task.steps || {}),
+    guidMappingSize: guidMapping.size
   });
 
-  // 4. Adatta prompt al contesto
+  // ✅ CRITICAL: Copia traduzioni template → nuovi GUID (PRIMA di adaptation)
+  // Questo è CRITICO: senza questa chiamata, i nuovi GUID non hanno traduzioni
+  if (guidMapping && guidMapping.size > 0) {
+    try {
+      const { copyTranslationsForClonedSteps } = await import('./taskTreeMergeUtils');
+      await copyTranslationsForClonedSteps(task, templateId, guidMapping);
+      console.log('[🔍 taskOrchestrator] ✅ Traduzioni copiate per istanza', {
+        taskId: task.id,
+        guidMappingSize: guidMapping.size,
+        templateId
+      });
+    } catch (err) {
+      console.error('[🔍 taskOrchestrator] ❌ Errore copiando traduzioni:', err);
+      // Non bloccare il flusso - l'istanza viene comunque creata
+    }
+  } else {
+    console.warn('[🔍 taskOrchestrator] ⚠️ Nessun GUID mapping disponibile per copiare traduzioni', {
+      taskId: task.id,
+      hasGuidMapping: !!guidMapping,
+      guidMappingSize: guidMapping?.size || 0
+    });
+  }
+
+  // 4. Adatta prompt al contesto (DOPO copia traduzioni)
   await AdaptTaskTreePromptToContext(task, contextLabel, adaptAllNormalSteps);
   console.log('[🔍 taskOrchestrator] Prompt adattati');
 
