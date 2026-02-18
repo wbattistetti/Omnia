@@ -48,6 +48,8 @@ export interface UseResponseEditorCoreParams {
   onOpenSaveDialog?: () => void;
   // ✅ NEW: Ref per il pulsante save-to-library
   saveToLibraryButtonRef?: React.RefObject<HTMLButtonElement>;
+  // ✅ NEW: Deployment handler
+  onDeploymentClick?: () => void;
 }
 
 export interface UseResponseEditorCoreResult {
@@ -112,6 +114,8 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     saveDecisionMade,
     onOpenSaveDialog,
     saveToLibraryButtonRef,
+    // ✅ NEW: Deployment handler
+    onDeploymentClick,
   } = params;
 
   // Context hooks
@@ -423,6 +427,8 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     // ✅ NEW: Pass setDockTree for dockable chat panel
     setDockTree,
     setWizardMode,
+    // ✅ NEW: Deployment handler (optional - can be passed from ResponseEditorLayout)
+    onDeploymentClick: onDeploymentClick || undefined,
     // ✅ NEW: Generalization params (passed from useResponseEditor)
     shouldBeGeneral: shouldBeGeneral,
     saveDecisionMade: saveDecisionMade,

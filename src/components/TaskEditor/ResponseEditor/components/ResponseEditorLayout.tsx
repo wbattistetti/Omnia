@@ -32,6 +32,7 @@ import { ResponseEditorContext, useResponseEditorContext } from '@responseEditor
 import { generalizeLabel } from '../../../../../TaskBuilderAIWizard/services/TemplateCreationService';
 import { TranslationType } from '@types/translationTypes';
 import { TaskType } from '@types/taskTypes';
+import { useDeploymentDialog } from '@responseEditor/ResponseEditorToolbar';
 
 // ✅ ARCHITECTURE: Props interface with only necessary values (no monolithic editor object)
 export interface ResponseEditorLayoutProps {
@@ -277,6 +278,10 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   const shouldBeGeneral = wizardIntegrationProp?.shouldBeGeneral ?? false;
   const generalizedLabel = wizardIntegrationProp?.generalizedLabel ?? null;
   const generalizedMessages = wizardIntegrationProp?.generalizedMessages ?? null;
+
+  // ✅ Deployment dialog
+  const projectLocale = 'it-IT'; // TODO: Get from project context
+  const { openDialog: openDeploymentDialog, dialogElement: deploymentDialogElement } = useDeploymentDialog(currentProjectId, projectLocale);
   const generalizationReasonEffective = wizardIntegrationProp?.generalizationReason ?? null;
 
   // ✅ DEBUG: Log per verificare perché contextualizationTemplateId potrebbe essere undefined
@@ -312,7 +317,9 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     taskWizardMode: taskWizardMode, // ✅ Use prop directly (comes from state in useResponseEditorCore)
     setTaskWizardMode, // ✅ ARCHITECTURE: Setter for updating wizard mode (updates state in useResponseEditorCore)
     contextualizationTemplateId: contextualizationTemplateIdFromMeta || contextualizationTemplateId || undefined,
-  }), [taskTree, taskMeta, taskLabel, currentProjectId, headerTitle, taskType, taskWizardMode, setTaskWizardMode, contextualizationTemplateIdFromMeta, contextualizationTemplateId]);
+    // ✅ NEW: Deployment handler
+    onDeploymentClick: openDeploymentDialog,
+  }), [taskTree, taskMeta, taskLabel, currentProjectId, headerTitle, taskType, taskWizardMode, setTaskWizardMode, contextualizationTemplateIdFromMeta, contextualizationTemplateId, openDeploymentDialog]);
 
   // ✅ B1: WizardContext.Provider moved to ResponseEditorInner to avoid race condition
 
@@ -1308,6 +1315,8 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   return (
     <ResponseEditorContext.Provider value={responseEditorContextValue}>
       {content}
+      {/* ✅ Deployment Dialog */}
+      {deploymentDialogElement}
     </ResponseEditorContext.Provider>
   );
 }

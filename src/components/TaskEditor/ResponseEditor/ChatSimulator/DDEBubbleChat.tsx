@@ -9,6 +9,7 @@ import { useMessageEditing } from '@responseEditor/ChatSimulator/hooks/useMessag
 import DialogueTaskService from '@services/DialogueTaskService';
 import { v4 as uuidv4 } from 'uuid';
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
+import { taskRepository } from '@services/TaskRepository';
 
 export default function DDEBubbleChat({
   task,
@@ -252,54 +253,101 @@ export default function DDEBubbleChat({
         }
 
         // ✅ STEP 2.1: Compila il TaskTree in RuntimeTask
-        console.log('[DDEBubbleChat] 📋 STEP 2.1: Compiling TaskTree to RuntimeTask...');
+        // ✅ CRITICAL: Il compilatore VB.NET deve ricostruire tutto da zero
+        // ✅ NON usare TaskTree della UI - è solo un artefatto grafico, non affidabile
+        console.log('[DDEBubbleChat] 📋 STEP 2.1: Compiling task instance from repository (ignoring TaskTree)...');
 
-        // Converti TaskTree in formato Task per la compilazione
+        // ✅ CRITICAL: Carica l'istanza REALE dal repository (ignora TaskTree della UI)
+        const taskInstance = taskRepository.getTask(task.id);
+        if (!taskInstance) {
+          throw new Error(`[DDEBubbleChat] Task instance not found in repository: ${task.id}. Cannot compile without instance.`);
+        }
+
+        // ✅ CRITICAL: Verifica che l'istanza abbia il campo type (obbligatorio per VB.NET)
+        if (taskInstance.type === undefined || taskInstance.type === null) {
+          throw new Error(`[DDEBubbleChat] Task instance ${task.id} has no type field. Task is invalid and cannot be compiled.`);
+        }
+
+        console.log('[DDEBubbleChat] 📋 Loaded task instance from repository:', {
+          id: taskInstance.id,
+          templateId: taskInstance.templateId,
+          type: taskInstance.type,
+          typeType: typeof taskInstance.type,
+          hasSteps: !!(taskInstance.steps && Object.keys(taskInstance.steps).length > 0),
+          hasSubTasksIds: !!(taskInstance.subTasksIds && taskInstance.subTasksIds.length > 0),
+          hasDataContract: !!taskInstance.dataContract,
+          ignoredTaskTree: true
+        });
+
+        // ✅ CORRETTO: Costruisci taskForCompilation SOLO dall'istanza (NON dal TaskTree)
+        // Il compilatore VB.NET materializzerà steps/nodes da zero usando template referenziati
         const taskForCompilation = {
-          id: task.id,
-          templateId: task.templateId || task.id,
-          type: task.type || 1, // TaskTypes.UtteranceInterpretation
-          label: task.label || taskTree.label || '',
-          steps: taskTree.steps || {},
-          nodes: taskTree.nodes || [],
-          ...task
+          id: taskInstance.id,
+          templateId: taskInstance.templateId || taskInstance.id,
+          type: taskInstance.type, // ✅ Deve essere presente (verificato sopra)
+          label: taskInstance.label || '',
+          // ✅ Includi solo campi dell'istanza (il compilatore materializzerà steps/nodes)
+          value: taskInstance.value || {},
+          parameters: taskInstance.parameters || [],
+          subTasksIds: taskInstance.subTasksIds || [],
+          constraints: taskInstance.constraints || [],
+          dataContract: taskInstance.dataContract || null,
+          // ❌ NON includere: steps, nodes (il compilatore VB.NET li materializza da zero)
         };
 
-        // ✅ Raccogli template referenziati (come fa useDialogueEngine.ts)
+        // ✅ CORRETTO: Raccogli template referenziati SOLO dall'istanza e dai template (NON da TaskTree)
         const referencedTemplateIds = new Set<string>();
 
-        // Aggiungi templateId del task
+        // 1. Aggiungi templateId del task instance
         if (taskForCompilation.templateId) {
           referencedTemplateIds.add(taskForCompilation.templateId);
         }
 
-        // Raccogli templateId ricorsivamente da subTasksIds e data nodes
-        const collectTemplateIds = (nodes: any[]) => {
-          if (!nodes || !Array.isArray(nodes)) return;
-          nodes.forEach((node: any) => {
-            if (node.templateId) {
-              referencedTemplateIds.add(node.templateId);
-            }
-            if (node.subNodes && Array.isArray(node.subNodes)) {
-              collectTemplateIds(node.subNodes);
-            }
-            if (node.subTasksIds && Array.isArray(node.subTasksIds)) {
-              node.subTasksIds.forEach((id: string) => {
-                if (id) referencedTemplateIds.add(id);
-              });
-            }
+        // 2. Raccogli templateId da subTasksIds dell'istanza
+        if (taskInstance.subTasksIds && Array.isArray(taskInstance.subTasksIds)) {
+          taskInstance.subTasksIds.forEach((id: string) => {
+            if (id) referencedTemplateIds.add(id);
           });
-        };
-
-        if (taskTree.nodes) {
-          collectTemplateIds(taskTree.nodes);
         }
 
-        // Carica template referenziati da DialogueTaskService
+        // 3. Raccogli templateId ricorsivamente dai template referenziati
+        // ✅ CRITICAL: Carica template e raccogli i loro subTasksIds ricorsivamente
+        const collectTemplateIdsRecursively = (templateId: string, visited: Set<string>) => {
+          if (visited.has(templateId)) {
+            return; // Evita cicli infiniti
+          }
+          visited.add(templateId);
+
+          try {
+            const template = DialogueTaskService.getTemplate(templateId);
+            if (template) {
+              // Raccogli subTasksIds dal template
+              if (template.subTasksIds && Array.isArray(template.subTasksIds)) {
+                template.subTasksIds.forEach((id: string) => {
+                  if (id && !referencedTemplateIds.has(id)) {
+                    referencedTemplateIds.add(id);
+                    // Ricorsione: raccogli anche i subTasksIds dei template referenziati
+                    collectTemplateIdsRecursively(id, visited);
+                  }
+                });
+              }
+            }
+          } catch (error) {
+            console.warn(`[DDEBubbleChat] ⚠️ Error loading template ${templateId} for recursive collection:`, error);
+          }
+        };
+
+        const visitedTemplates = new Set<string>();
+        // Raccogli ricorsivamente da tutti i template già trovati
+        Array.from(referencedTemplateIds).forEach(templateId => {
+          collectTemplateIdsRecursively(templateId, visitedTemplates);
+        });
+
+        // ✅ Carica template referenziati da DialogueTaskService
         const referencedTemplates: any[] = [];
         referencedTemplateIds.forEach(templateId => {
           // Skip se il template è già il task stesso
-          if (templateId === task.id) {
+          if (templateId === taskInstance.id) {
             return;
           }
           try {
@@ -315,15 +363,18 @@ export default function DDEBubbleChat({
           }
         });
 
-        // Combina task e template (come fa useDialogueEngine.ts)
+        // ✅ Combina task instance e template referenziati
         const allTasksWithTemplates = [taskForCompilation, ...referencedTemplates];
 
-        console.log('[DDEBubbleChat] 📋 Compiling task:', {
+        console.log('[DDEBubbleChat] 📋 Compiling task instance (from repository, ignoring TaskTree):', {
           taskId: taskForCompilation.id,
           templateId: taskForCompilation.templateId,
           type: taskForCompilation.type,
+          typeType: typeof taskForCompilation.type, // ✅ Should be "number"
           referencedTemplatesCount: referencedTemplates.length,
-          totalTasksCount: allTasksWithTemplates.length
+          totalTasksCount: allTasksWithTemplates.length,
+          isFromRepository: true, // ✅ Flag per indicare che viene dal repository
+          ignoredTaskTree: true // ✅ Flag per indicare che TaskTree è ignorato
         });
 
         console.log('[DDEBubbleChat] 📋 Sending compilation request:', {
@@ -334,34 +385,77 @@ export default function DDEBubbleChat({
         });
 
         // ✅ Crea un nodo dummy per il FlowCompiler (richiede almeno un nodo entry)
-        // Il FlowCompiler si aspetta nodi con rows, dove ogni row.id corrisponde a task.id
+        // Il FlowCompiler si aspetta nodi con rows, dove ogni row.taskId corrisponde a task.id
         const dummyNode = {
-          id: `dummy-node-${task.id}`,
+          id: `dummy-node-${taskInstance.id}`,
           type: 'task',
           position: { x: 0, y: 0 },
           data: {
-            label: task.label || taskTree.label || 'Chat Simulator Task',
+            label: taskInstance.label || 'Chat Simulator Task',
             rows: [
               {
-                id: task.id,  // ✅ row.id deve corrispondere a task.id
-                taskId: task.id,
-                label: task.label || taskTree.label || ''
+                id: taskInstance.id,  // ✅ row.id
+                taskId: taskInstance.id,  // ✅ row.taskId MUST match task.id exactly
+                label: taskInstance.label || ''
               }
             ]
           }
         };
 
-        // ✅ Usa /api/runtime/compile (stessa soluzione robusta di useDialogueEngine.ts)
+        // ✅ Usa /api/runtime/compile - SOLO istanza + template referenziati (NON TaskTree)
+        const compileRequestBody = {
+          nodes: [dummyNode],  // ✅ Nodo dummy con row che contiene il task
+          edges: [],  // Vuoto per singolo task
+          tasks: allTasksWithTemplates,  // ✅ SOLO istanza + template referenziati (NON TaskTree)
+          ddts: [],
+          translations: translations || {}
+        };
+
+        // ✅ 1. LOG PRIMA DELLA COMPILAZIONE (frontend → backend)
+        console.log('[DDEBubbleChat] 🧪 COMPILATION INPUT CHECK', {
+          instance: {
+            id: taskForCompilation.id,
+            templateId: taskForCompilation.templateId,
+            type: taskForCompilation.type,
+            typeType: typeof taskForCompilation.type,
+            hasSteps: !!taskForCompilation.steps,
+            hasNodes: !!taskForCompilation.nodes,
+            subTasksIds: taskForCompilation.subTasksIds || [],
+            constraints: taskForCompilation.constraints || [],
+            dataContract: !!taskForCompilation.dataContract,
+            isFromRepository: true
+          },
+          referencedTemplates: Array.from(referencedTemplateIds),
+          referencedTemplatesCount: referencedTemplateIds.size,
+          tasksSent: allTasksWithTemplates.map(t => ({
+            id: t.id,
+            templateId: t.templateId,
+            type: t.type,
+            typeType: typeof t.type,
+            isInstance: t.id === taskInstance.id,
+            isTemplate: t.id !== taskInstance.id
+          })),
+          dummyNode: {
+            id: dummyNode.id,
+            rowId: dummyNode.data.rows[0]?.id,
+            rowTaskId: dummyNode.data.rows[0]?.taskId,
+            taskIdMatches: dummyNode.data.rows[0]?.taskId === taskInstance.id,
+            label: dummyNode.data.rows[0]?.label
+          },
+          ignoredTaskTree: true,
+          compilationRequest: {
+            nodesCount: compileRequestBody.nodes.length,
+            edgesCount: compileRequestBody.edges.length,
+            tasksCount: compileRequestBody.tasks.length,
+            ddtsCount: compileRequestBody.ddts.length,
+            translationsCount: Object.keys(compileRequestBody.translations || {}).length
+          }
+        });
+
         const compileResponse = await fetch(`${baseUrl}/api/runtime/compile`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            nodes: [dummyNode],  // ✅ Nodo dummy con row che contiene il task
-            edges: [],  // Vuoto per singolo task
-            tasks: allTasksWithTemplates,  // ✅ Task + template referenziati
-            ddts: [],
-            translations: translations || {}
-          })
+          body: JSON.stringify(compileRequestBody)
         });
 
         console.log('[DDEBubbleChat] 📋 Compilation response:', {
@@ -371,23 +465,54 @@ export default function DDEBubbleChat({
           contentType: compileResponse.headers.get('content-type')
         });
 
+        // ✅ Leggi la risposta
+        const responseText = await compileResponse.text();
+
+        // ✅ 3. LOG DIAGNOSTICI IN CASO DI ERRORE
         if (!compileResponse.ok) {
-          const errorText = await compileResponse.text();
-          console.error('[DDEBubbleChat] ❌ Compilation failed:', {
+          let errorData: any = null;
+          try {
+            errorData = JSON.parse(responseText);
+          } catch {
+            errorData = { rawError: responseText };
+          }
+
+          console.error('[DDEBubbleChat] ❌ COMPILATION ERROR', {
             status: compileResponse.status,
             statusText: compileResponse.statusText,
-            error: errorText
+            error: errorData.error || errorData.message || errorData.rawError || 'Unknown error',
+            errorData: errorData,
+            inputSummary: {
+              instanceId: taskForCompilation.id,
+              instanceTemplateId: taskForCompilation.templateId,
+              instanceType: taskForCompilation.type,
+              referencedTemplates: Array.from(referencedTemplateIds),
+              referencedTemplatesCount: referencedTemplateIds.size,
+              tasksSent: allTasksWithTemplates.map(t => ({
+                id: t.id,
+                templateId: t.templateId,
+                type: t.type
+              })),
+              tasksSentCount: allTasksWithTemplates.length,
+              missingTemplates: Array.from(referencedTemplateIds).filter(tid =>
+                !allTasksWithTemplates.some(t => t.id === tid)
+              ),
+              rowTaskIdMatch: dummyNode.data.rows[0]?.taskId === taskInstance.id
+            },
+            diagnostic: {
+              hasInstance: !!taskInstance,
+              instanceHasType: taskInstance?.type !== undefined && taskInstance?.type !== null,
+              instanceHasTemplateId: !!taskInstance?.templateId,
+              allTemplatesLoaded: referencedTemplateIds.size === referencedTemplates.length,
+              possibleCycles: visitedTemplates.size < referencedTemplateIds.size,
+              unresolvedSubTasksIds: taskInstance?.subTasksIds?.filter(id =>
+                !referencedTemplateIds.has(id)
+              ) || []
+            }
           });
-          throw new Error(`Failed to compile task: ${compileResponse.statusText} - ${errorText}`);
-        }
 
-        // ✅ Leggi la risposta (non la usiamo per costruire RuntimeTask, ma validiamo che la compilazione sia andata a buon fine)
-        const responseText = await compileResponse.text();
-        console.log('[DDEBubbleChat] 📋 Compilation response text:', {
-          length: responseText.length,
-          preview: responseText.substring(0, 500),
-          isEmpty: responseText.trim().length === 0
-        });
+          throw new Error(`Failed to compile task: ${compileResponse.statusText} - ${errorData.error || errorData.message || errorData.rawError || 'Unknown error'}`);
+        }
 
         if (!responseText || responseText.trim().length === 0) {
           throw new Error('[DDEBubbleChat] Compilation response is empty');
@@ -396,11 +521,6 @@ export default function DDEBubbleChat({
         let compileResult: any;
         try {
           compileResult = JSON.parse(responseText);
-          console.log('[DDEBubbleChat] 📋 Compilation result:', {
-            taskGroups: compileResult.taskGroups?.length || 0,
-            tasks: compileResult.tasks?.length || 0,
-            compiledBy: compileResult.compiledBy
-          });
         } catch (parseError) {
           console.error('[DDEBubbleChat] ❌ Failed to parse compilation result as JSON:', parseError);
           console.error('[DDEBubbleChat] ❌ Response text:', responseText);
@@ -409,7 +529,95 @@ export default function DDEBubbleChat({
 
         // ✅ Validazione: se c'è un errore nella risposta, fallisci
         if (compileResult.status === 'error' || compileResult.error) {
+          console.error('[DDEBubbleChat] ❌ COMPILATION ERROR (in response)', {
+            status: compileResult.status,
+            error: compileResult.error,
+            message: compileResult.message,
+            inputSummary: {
+              instanceId: taskForCompilation.id,
+              instanceTemplateId: taskForCompilation.templateId,
+              referencedTemplates: Array.from(referencedTemplateIds)
+            }
+          });
           throw new Error(`Compilation failed: ${compileResult.error || compileResult.message || 'Unknown error'}`);
+        }
+
+        // ✅ 2. LOG DOPO LA COMPILAZIONE (backend → frontend)
+        console.log('[DDEBubbleChat] 🧪 COMPILATION OUTPUT CHECK', {
+          ok: compileResponse.ok,
+          status: compileResponse.status,
+          compiledBy: compileResult.compiledBy,
+          hasTaskGroups: !!compileResult.taskGroups,
+          hasTasks: !!compileResult.tasks,
+          taskGroupsCount: compileResult.taskGroups?.length || 0,
+          tasksCount: compileResult.tasks?.length || 0,
+          entryTaskGroupId: compileResult.entryTaskGroupId,
+          runtimeTaskSummary: compileResult.tasks?.[0] ? {
+            id: compileResult.tasks[0].id,
+            taskType: compileResult.tasks[0].taskType,
+            hasSteps: !!compileResult.tasks[0].steps,
+            stepsCount: compileResult.tasks[0].steps ? Object.keys(compileResult.tasks[0].steps).length : 0,
+            hasCondition: !!compileResult.tasks[0].condition,
+            hasState: !!compileResult.tasks[0].state
+          } : null,
+          taskGroupSummary: compileResult.taskGroups?.[0] ? {
+            nodeId: compileResult.taskGroups[0].nodeId,
+            tasksCount: compileResult.taskGroups[0].tasks?.length || 0,
+            hasExecCondition: !!compileResult.taskGroups[0].execCondition,
+            startTaskIndex: compileResult.taskGroups[0].startTaskIndex
+          } : null,
+          materializationCheck: {
+            instanceId: taskForCompilation.id,
+            instanceTemplateId: taskForCompilation.templateId,
+            compiledTaskFound: compileResult.tasks?.some((t: any) => t.id === taskForCompilation.id || t.debug?.originalTaskId === taskForCompilation.id),
+            taskGroupsGenerated: compileResult.taskGroups?.length > 0,
+            tasksGenerated: compileResult.tasks?.length > 0,
+            materializedFromScratch: true // ✅ Il compilatore ha materializzato tutto da zero
+          },
+          timestamp: compileResult.timestamp
+        });
+
+        // ✅ STEP 2.5: DEPLOY ON-THE-FLY - Sincronizza traduzioni MEMORIA → Redis
+        // Ambiente "on-the-fly" per test automatico (effimero, nessuna persistenza)
+        console.log('[DDEBubbleChat] 📋 STEP 2.5: Deploying translations from memory to Redis (on-the-fly)...');
+        try {
+          // ✅ Estrai tutte le traduzioni da window.__projectTranslationsContext
+          const projectTranslationsContext = (window as any).__projectTranslationsContext;
+          const translationsFromMemory = projectTranslationsContext?.translations || {};
+
+          console.log(`[DDEBubbleChat] 📋 Found ${Object.keys(translationsFromMemory).length} translations in memory`);
+
+          if (Object.keys(translationsFromMemory).length === 0) {
+            console.warn('[DDEBubbleChat] ⚠️ No translations found in memory - Redis may be incomplete');
+          }
+
+          const deployResponse = await fetch(`http://localhost:3100/api/deploy/sync-translations`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              projectId: projectId,
+              locale: projectLanguage,
+              environment: 'on-the-fly', // ✅ Ambiente automatico per test
+              type: 'full', // ✅ Full sync per garantire completezza
+              translations: translationsFromMemory // ✅ Passa le traduzioni dalla memoria
+            })
+          });
+
+          if (!deployResponse.ok) {
+            const errorText = await deployResponse.text();
+            throw new Error(`Deployment failed: ${deployResponse.statusText} - ${errorText}`);
+          }
+
+          const deployResult = await deployResponse.json();
+          console.log('[DDEBubbleChat] ✅ Translations deployed (on-the-fly):', {
+            syncedCount: deployResult.syncedCount,
+            source: deployResult.source,
+            environment: deployResult.environment,
+            duration: deployResult.duration
+          });
+        } catch (deployError) {
+          console.error('[DDEBubbleChat] ❌ Deployment failed:', deployError);
+          throw new Error(`Failed to deploy translations: ${deployError instanceof Error ? deployError.message : 'Unknown error'}. The runtime requires Redis to be complete before starting.`);
         }
 
         // ✅ STEP 2.2: Il backend ha compilato il task, ma dobbiamo ottenere il RuntimeTask
@@ -575,15 +783,33 @@ export default function DDEBubbleChat({
 
         // ✅ STEP 2.4: Salva il RuntimeTask nel repository
         console.log('[DDEBubbleChat] 📋 STEP 2.4: Saving dialog to repository...');
+        console.log('[DDEBubbleChat] 📋 SAVING DIALOG:', {
+          projectId,
+          dialogVersion,
+          locale: projectLanguage,
+          runtimeTaskId: runtimeTask.id,
+          runtimeTaskStepsCount: runtimeTask.steps?.length || 0,
+          runtimeTaskHasSubTasks: !!runtimeTask.subTasks && runtimeTask.subTasks.length > 0,
+          runtimeTaskKeys: Object.keys(runtimeTask)
+        });
+
+        const saveRequestBody = {
+          projectId: projectId,
+          dialogVersion: dialogVersion,
+          runtimeTask: runtimeTask
+        };
+
+        console.log('[DDEBubbleChat] 📋 SAVE REQUEST BODY:', {
+          projectId: saveRequestBody.projectId,
+          dialogVersion: saveRequestBody.dialogVersion,
+          runtimeTaskId: saveRequestBody.runtimeTask.id,
+          runtimeTaskStepsCount: saveRequestBody.runtimeTask.steps?.length || 0
+        });
 
         const saveResponse = await fetch(`${baseUrl}/api/runtime/dialog/save`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            projectId: projectId,
-            dialogVersion: dialogVersion,
-            runtimeTask: runtimeTask
-          })
+          body: JSON.stringify(saveRequestBody)
         });
 
         if (!saveResponse.ok) {
@@ -627,6 +853,15 @@ export default function DDEBubbleChat({
           // ❌ RIMOSSO: taskId, taskInstanceId, translations, taskTree (configurazione immutabile - carica da repository)
         };
 
+        // ✅ LOG: Verifica cosa viene inviato al backend
+        console.log('[DDEBubbleChat] 📋 STEP 3 REQUEST:', {
+          url: `${baseUrl}/api/runtime/task/session/start`,
+          requestBody,
+          projectId,
+          dialogVersion,
+          locale: projectLanguage
+        });
+
         const startResponse = await fetch(`${baseUrl}/api/runtime/task/session/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -636,12 +871,17 @@ export default function DDEBubbleChat({
         console.log('[DDEBubbleChat] 📋 STEP 3 RESPONSE:', {
           status: startResponse.status,
           statusText: startResponse.statusText,
-          ok: startResponse.ok
+          ok: startResponse.ok,
+          headers: Object.fromEntries(startResponse.headers.entries())
         });
 
         if (!startResponse.ok) {
           const errorText = await startResponse.text();
-          console.error('[DDEBubbleChat] ❌ Backend error:', startResponse.status, errorText);
+          console.error('[DDEBubbleChat] ❌ Backend error:', {
+            status: startResponse.status,
+            statusText: startResponse.statusText,
+            errorText
+          });
           setMessages([]);
           throw new Error(`Backend server not available: ${startResponse.statusText} - ${errorText}`);
         }
@@ -654,9 +894,21 @@ export default function DDEBubbleChat({
           throw new Error('Backend returned empty response');
         }
 
+        console.log('[DDEBubbleChat] 📋 STEP 3 RESPONSE TEXT:', {
+          length: startResponseText.length,
+          preview: startResponseText.substring(0, 200),
+          fullText: startResponseText
+        });
+
         let responseData: any;
         try {
           responseData = JSON.parse(startResponseText);
+          console.log('[DDEBubbleChat] 📋 STEP 3 PARSED RESPONSE:', {
+            responseData,
+            hasSessionId: !!responseData.sessionId,
+            sessionId: responseData.sessionId,
+            otherKeys: Object.keys(responseData)
+          });
         } catch (parseError) {
           console.error('[DDEBubbleChat] Failed to parse JSON response:', parseError);
           console.error('[DDEBubbleChat] Response text:', startResponseText);
@@ -664,6 +916,19 @@ export default function DDEBubbleChat({
         }
 
         const { sessionId: newSessionId } = responseData;
+
+        // ✅ LOG: Verifica che sessionId sia valido
+        if (!newSessionId) {
+          console.error('[DDEBubbleChat] ❌ Backend returned empty sessionId');
+          throw new Error('Backend returned empty sessionId');
+        }
+
+        console.log('[DDEBubbleChat] ✅ Session started successfully:', {
+          sessionId: newSessionId,
+          sessionIdType: typeof newSessionId,
+          sessionIdLength: String(newSessionId).length
+        });
+
         setSessionId(newSessionId);
 
         // ✅ NUOVO: SSE stream diretto da VB.NET backend
@@ -727,6 +992,73 @@ export default function DDEBubbleChat({
         eventSource.addEventListener('stateUpdate', (e: MessageEvent) => {
           try {
             const data = JSON.parse(e.data);
+
+            // ✅ LOG: Verifica se stateUpdate contiene dati estratti
+            console.log('[DDEBubbleChat] 📊 stateUpdate received:', {
+              hasExtractedData: !!data.extractedData,
+              hasExtractedValues: !!data.extractedValues,
+              hasData: !!data.data
+            });
+
+            // ✅ Se stateUpdate contiene dati estratti, aggiorna il messaggio utente più recente
+            if (data.extractedData || data.extractedValues || data.data) {
+              const extractedData = data.extractedData || data.extractedValues || data.data;
+
+              // Converti i dati estratti nel formato ExtractedValue[]
+              const convertToExtractedValues = (value: any): any[] => {
+                if (!value || typeof value !== 'object') return [];
+                const result: any[] = [];
+                Object.entries(value).forEach(([key, val]) => {
+                  result.push({
+                    variable: key,
+                    semanticValue: val,
+                    linguisticValue: typeof val === 'string' ? val : undefined
+                  });
+                });
+                return result;
+              };
+
+              const extractedValues = convertToExtractedValues(extractedData);
+
+              // ✅ CRITICAL: Aggiorna SOLO se ci sono dati estratti E sono diversi da quelli esistenti
+              if (extractedValues.length > 0) {
+                setMessages((prev) => {
+                  // Trova l'ultimo messaggio utente
+                  const lastUserIndex = prev.findLastIndex(m =>
+                    m.type === 'user' && m.text === sentTextRef.current
+                  );
+
+                  if (lastUserIndex === -1) {
+                    console.log('[DDEBubbleChat] ⚠️ No matching user message found');
+                    return prev; // ✅ Non cambiare lo stato se non c'è match
+                  }
+
+                  const existingMessage = prev[lastUserIndex];
+                  const oldValues = JSON.stringify(existingMessage.extractedValues || []);
+                  const newValues = JSON.stringify(extractedValues);
+
+                  // ✅ CRITICAL: Aggiorna SOLO se i valori sono realmente cambiati
+                  if (oldValues === newValues) {
+                    console.log('[DDEBubbleChat] ⏭️ Extracted values unchanged, skipping update');
+                    return prev; // ✅ Non cambiare lo stato → evita re-render
+                  }
+
+                  console.log('[DDEBubbleChat] ✅ Updating user message with extracted values:', {
+                    messageId: existingMessage.id,
+                    extractedValuesCount: extractedValues.length,
+                    oldValuesCount: existingMessage.extractedValues?.length || 0
+                  });
+
+                  // ✅ Aggiorna solo se i valori sono cambiati
+                  const updated = [...prev];
+                  updated[lastUserIndex] = {
+                    ...existingMessage,
+                    extractedValues
+                  };
+                  return updated;
+                });
+              }
+            }
 
             // ✅ STATELESS: Log aggiornamento stato
             // State updates are handled by backend
@@ -852,7 +1184,26 @@ export default function DDEBubbleChat({
   // Handle sending user input to backend
   const handleSend = async (text: string) => {
     const trimmed = String(text || '').trim();
-    if (!trimmed || !sessionId) return;
+
+    // ✅ LOG: Verifica sessionId prima di inviare
+    console.log('[DDEBubbleChat] 🔍 handleSend check:', {
+      trimmed,
+      sessionId,
+      hasSessionId: !!sessionId,
+      sessionIdType: typeof sessionId,
+      isWaitingForInput
+    });
+
+    if (!trimmed) {
+      console.warn('[DDEBubbleChat] ⚠️ Empty input, ignoring');
+      return;
+    }
+
+    if (!sessionId) {
+      console.error('[DDEBubbleChat] ❌ No sessionId available - session may not be initialized');
+      setBackendError('Session not initialized. Please wait for the session to start or click Reset.');
+      return;
+    }
 
     try {
       console.log('[MOTORE] 📤 Sending input:', trimmed);
@@ -875,7 +1226,15 @@ export default function DDEBubbleChat({
 
       // ✅ NUOVO: Send input to backend VB.NET direttamente
       const baseUrl = 'http://localhost:5000';
-      const response = await fetch(`${baseUrl}/api/runtime/task/session/${sessionId}/input`, {
+      const inputUrl = `${baseUrl}/api/runtime/task/session/${sessionId}/input`;
+
+      console.log('[DDEBubbleChat] 📤 Sending input to backend:', {
+        url: inputUrl,
+        sessionId,
+        input: trimmed
+      });
+
+      const response = await fetch(inputUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

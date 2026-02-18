@@ -429,7 +429,8 @@ export class DialogueTaskService {
   }
 
   /**
-   * Genera e salva embedding per un template in background
+   * Genera embedding per un template e lo aggiunge alla cache in memoria
+   * L'embedding viene salvato nel database SOLO quando l'utente clicca "Salva in libreria"
    */
   private static async generateEmbeddingForTemplate(template: DialogueTask): Promise<void> {
     const templateId = template.id || template._id;
@@ -456,27 +457,29 @@ export class DialogueTaskService {
 
       const { embedding } = await computeResponse.json();
 
-      // 2. Salva in MongoDB
-      // ✅ Note: text will be normalized by backend, but we pass originalText for reference
-      const saveResponse = await fetch('/api/embeddings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: templateId,
-          type: 'task',
-          text: template.label.trim(), // Backend will normalize this
-          originalText: template.label.trim(), // Save original for reference
-          embedding
-        })
-      });
-
-      if (!saveResponse.ok) {
-        throw new Error(`Failed to save embedding: ${saveResponse.status}`);
+      // ✅ CRITICAL: Add embedding to EmbeddingService cache IMMEDIATELY (in memory only)
+      // This ensures the template can be found by embedding matching before it's saved to database
+      // The embedding will be saved to database ONLY when user clicks "Salva in libreria"
+      try {
+        const { EmbeddingService } = await import('./EmbeddingService');
+        EmbeddingService.addEmbeddingToCache(templateId, template.label.trim(), embedding, 'task');
+        console.log('[DialogueTaskService] ✅ Embedding added to EmbeddingService cache (in memory)', {
+          templateId,
+          label: template.label.substring(0, 50)
+        });
+      } catch (cacheError) {
+        console.warn('[DialogueTaskService] ⚠️ Failed to add embedding to cache (non-blocking):', cacheError);
+        // Non blocca - embedding sarà disponibile dopo il salvataggio in libreria
       }
 
-      console.log('[DialogueTaskService] ✅ Embedding generated for template', {
+      // ✅ REMOVED: Do NOT save embedding to database automatically
+      // Embedding will be saved to database ONLY when user clicks "Salva in libreria"
+      // The backend (/api/factory/dialogue-templates) will generate and save the embedding
+
+      console.log('[DialogueTaskService] ✅ Embedding computed and cached (not saved to DB yet)', {
         templateId,
-        label: template.label.substring(0, 50)
+        label: template.label.substring(0, 50),
+        note: 'Embedding will be saved to database when user clicks "Salva in libreria"'
       });
     } catch (error) {
       console.error('[DialogueTaskService] ❌ Failed to generate embedding:', error);

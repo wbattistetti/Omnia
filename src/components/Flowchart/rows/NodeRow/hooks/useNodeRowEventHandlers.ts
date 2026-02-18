@@ -239,7 +239,18 @@ export function useNodeRowEventHandlers(
         setIsEditing(false);
         return;
       } else {
-        console.warn('[NodeRow] Heuristics failed, fallback to picker', heuristicsResult.error);
+        // ✅ Show error clearly to user when embedding service fails
+        const errorMessage = heuristicsResult.error?.message || 'Unknown error during template matching';
+        console.error('[NodeRow] ❌ Heuristics failed - Embedding service error:', {
+          error: heuristicsResult.error,
+          errorMessage,
+          label: q
+        });
+
+        // Show alert to user with clear error message
+        alert(`❌ Embedding Service Error\n\n${errorMessage}\n\nPlease ensure the Python FastAPI service is running (npm run be:apiNew).`);
+
+        // Fallback to picker so user can still create task manually
         setIntellisenseQuery(q);
         setShowIntellisense(false);
         setAllowCreatePicker(true);

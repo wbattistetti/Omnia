@@ -89,21 +89,37 @@ export class RowHeuristicsService {
               templateType: templateType !== null ? TaskType[templateType] : null,
             });
           } else {
-            console.warn('[RowHeuristicsService] ⚠️ Embedding match found but template not in cache', {
+            // ✅ NO FALLBACK: Template not in cache - throw error
+            // This should never happen: if embedding exists, template must be in memory
+            const errorMessage = `Embedding match found (ID: ${matchedTaskId}) but template is not in memory cache. This indicates a data inconsistency: the embedding exists but the corresponding template was not loaded into memory.`;
+            console.error('[RowHeuristicsService] ❌ Embedding match found but template not in cache - DATA INCONSISTENCY:', {
               label: trimmedLabel,
               matchedTaskId,
+              cacheSize: DialogueTaskService.getTemplateCount(),
+              hint: 'This should never happen. If embedding exists, template must be in memory. This may indicate an orphan embedding (embedding without corresponding template) or a template loading issue.'
             });
+            throw new Error(errorMessage);
           }
         } else {
-          console.log('[RowHeuristicsService] ℹ️ No embedding match found (threshold: 0.70)', {
+          // ✅ NO EMBEDDING MATCH: Go directly to wizard full (no database fallback)
+          console.log('[RowHeuristicsService] ℹ️ No embedding match found (threshold: 0.70) - going to wizard full', {
             label: trimmedLabel,
-            willUseWizard: true,
+            threshold: 0.70,
           });
+          // matchedTemplate remains null → wizard full (correct behavior)
         }
         // Se embedding non trova match → matchedTemplate rimane null → wizard full
       } catch (error) {
-        console.error('[RowHeuristicsService] ❌ Embedding matching failed:', error);
-        // Se embedding fallisce → matchedTemplate rimane null → wizard full
+        // ✅ NO SILENT FALLBACK: Propagate error clearly so user knows embedding service is broken
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error('[RowHeuristicsService] ❌ Embedding matching failed - SERVICE ERROR:', {
+          error: errorMessage,
+          label: trimmedLabel,
+          hint: 'The embedding service is required for template matching. Please ensure the Python FastAPI service is running.'
+        });
+
+        // Re-throw the error so it's visible to the user
+        throw new Error(`Embedding service error: ${errorMessage}. Please check if the Python FastAPI service is running (npm run be:apiNew).`);
       }
     }
 

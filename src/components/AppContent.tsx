@@ -566,6 +566,7 @@ export const AppContent: React.FC<AppContentProps> = ({
             onHome={() => setAppState('landing')}
             isSaving={isCreatingProject}
             currentProject={currentProject}
+            currentProjectId={currentPid || null}
             onCloseProject={() => {
               // Chiudi progetto e torna alla home
               setCurrentProject(null);

@@ -56,6 +56,58 @@ export class EmbeddingService {
     console.log(`[EmbeddingService] 🔄 Cache invalidated for type: ${type}`);
   }
 
+  /**
+   * Add embedding to cache immediately (for newly created templates)
+   * This ensures the embedding is available for matching before it's saved to database
+   *
+   * @param id - Template ID
+   * @param text - Original label text (will be normalized)
+   * @param embedding - Embedding vector (array of numbers)
+   * @param type - Embedding type (default: 'task')
+   */
+  static addEmbeddingToCache(
+    id: string,
+    text: string,
+    embedding: number[],
+    type: string = 'task'
+  ): void {
+    // Normalize text (same logic as findBestMatch uses)
+    const normalizedText = this.normalizeText(text);
+
+    const entry: EmbeddingEntry = {
+      id,
+      text: normalizedText,
+      embedding: new Float32Array(embedding)
+    };
+
+    // Get or create cache for this type
+    const entries = this.cache.get(type) || [];
+
+    // Check if entry already exists (update if exists)
+    const existingIndex = entries.findIndex(e => e.id === id);
+    if (existingIndex >= 0) {
+      entries[existingIndex] = entry;
+      console.log(`[EmbeddingService] ✅ Updated embedding in cache`, {
+        id,
+        type,
+        text: normalizedText.substring(0, 50),
+        cacheSize: entries.length
+      });
+    } else {
+      entries.push(entry);
+      console.log(`[EmbeddingService] ✅ Added embedding to cache`, {
+        id,
+        type,
+        text: normalizedText.substring(0, 50),
+        cacheSize: entries.length
+      });
+    }
+
+    this.cache.set(type, entries);
+    // Mark as loaded so it won't be overwritten by _loadFromAPI
+    this.cacheLoaded.add(type);
+  }
+
   private static async _loadFromAPI(type: string): Promise<void> {
     try {
       const response = await fetch(`/api/embeddings?type=${encodeURIComponent(type)}`);
@@ -128,38 +180,76 @@ export class EmbeddingService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`[EmbeddingService] ❌ Failed to compute embedding: ${response.status} ${response.statusText}`, {
-          errorText,
-          type,
-          inputText: inputText.substring(0, 50)
-        });
-        throw new Error(`Failed to compute embedding: ${response.status} ${errorText}`);
+        let errorMessage: string;
+
+        // ✅ Distinguish between different error types and provide clear error messages
+        const isServiceUnavailable = response.status === 500 && (
+          errorText.includes('Cannot reach') ||
+          errorText.includes('ECONNREFUSED') ||
+          errorText.includes('fetch failed') ||
+          errorText.includes('Python embedding service')
+        );
+
+        if (isServiceUnavailable) {
+          errorMessage = `Embedding service unavailable: The Python FastAPI service is not running or not reachable. Please start it with 'npm run be:apiNew' or check if it's running on port 8000.`;
+          console.error(`[EmbeddingService] ❌ ${errorMessage}`, {
+            status: response.status,
+            inputText: inputText.substring(0, 50),
+            normalizedText: normalizedText.substring(0, 50),
+            errorText: errorText.substring(0, 200),
+            hint: 'Start Python FastAPI service with: npm run be:apiNew'
+          });
+        } else {
+          errorMessage = `Failed to compute embedding: ${response.status} ${response.statusText}. ${errorText.substring(0, 200)}`;
+          console.error(`[EmbeddingService] ❌ Failed to compute embedding (status: ${response.status}):`, {
+            errorText: errorText.substring(0, 200),
+            type,
+            inputText: inputText.substring(0, 50),
+            normalizedText: normalizedText.substring(0, 50)
+          });
+        }
+
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
       if (!data.embedding || !Array.isArray(data.embedding)) {
-        throw new Error('Invalid embedding response format');
+        const errorMessage = 'Invalid embedding response format: The service returned an invalid response.';
+        console.error(`[EmbeddingService] ❌ ${errorMessage}`, {
+          hasEmbedding: !!data.embedding,
+          embeddingIsArray: Array.isArray(data.embedding),
+          dataKeys: Object.keys(data)
+        });
+        throw new Error(errorMessage);
       }
       inputEmbedding = new Float32Array(data.embedding);
     } catch (error) {
-      // ✅ Silently fallback when service is unavailable (expected in dev without Python service)
+      // ✅ NO SILENT FALLBACK: Throw error clearly so user knows embedding service is broken
       const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // Determine if it's a service availability issue
       const isServiceUnavailable = errorMessage.includes('Cannot reach') ||
         errorMessage.includes('ECONNREFUSED') ||
-        errorMessage.includes('fetch failed');
+        errorMessage.includes('fetch failed') ||
+        errorMessage.includes('Python embedding service') ||
+        errorMessage.includes('Embedding service unavailable');
 
       if (isServiceUnavailable) {
-        console.warn(`[EmbeddingService] ⚠️ Embedding service unavailable, falling back to full wizard:`, {
+        const detailedError = `Embedding service is not available. ${errorMessage}`;
+        console.error(`[EmbeddingService] ❌ ${detailedError}`, {
           inputText: inputText.substring(0, 50),
-          hint: 'Start Python FastAPI service with: npm run be:apiNew'
+          normalizedText: normalizedText.substring(0, 50),
+          hint: 'Start Python FastAPI service with: npm run be:apiNew or check backend logs for details'
         });
+        throw new Error(detailedError);
       } else {
         console.error(`[EmbeddingService] ❌ Failed to compute input embedding (type: ${type}):`, {
           error: errorMessage,
-          inputText: inputText.substring(0, 50)
+          inputText: inputText.substring(0, 50),
+          normalizedText: normalizedText.substring(0, 50)
         });
+        throw new Error(`Failed to compute embedding: ${errorMessage}`);
       }
-      return null; // Fallback a wizard full
     }
 
     // 4. Calcola cosine similarity con tutte le entità di questo type

@@ -35,9 +35,6 @@ import { EngineEscalationService } from '../../services/EngineEscalationService'
 import type { GenerationPlan } from './buildGenerationPlan';
 import type { GenerationProgress } from './types';
 import { generateContractForNode } from './generateContract';
-import { refineContract } from './refineContract';
-import { generateCanonicalValuesForNode } from './generateCanonicalValues';
-import { generateConstraintsForNode } from './generateConstraints';
 import { generateEnginesForNode } from './generateEnginesUnified';
 import { generateEscalationForNode } from './generateEscalation';
 import { generateTestExamplesForNode } from './generateTestExamples';
@@ -46,23 +43,24 @@ import { generateAIMessagesForNode, AIMessages } from './generateAIMessages';
 /**
  * Generation result for a node
  *
- * Contains all artifacts generated for a single node (STEP 1-7):
- * - Contract: Semantic contract definition (STEP 1: refined)
- * - CanonicalValues: Canonical value sets (STEP 2)
- * - Constraints: Enhanced constraints (STEP 3)
- * - Engines: All extraction engines (STEP 4)
- * - Escalation: Engine escalation strategy (STEP 5)
- * - TestExamples: Validation test cases (STEP 6)
- * - AIMessages: Dialogue messages (STEP 7)
+ * Contains all artifacts generated for a single node:
+ * - Contract: Semantic contract definition (deterministic, from node structure)
+ * - Engines: All extraction engines (STEP 2)
+ * - Escalation: Engine escalation strategy (STEP 3)
+ * - TestExamples: Validation test cases (STEP 4)
+ * - AIMessages: Dialogue messages (STEP 5)
+ *
+ * Note: Contract refinement, canonical values, and constraints generation are FORBIDDEN.
+ * The SemanticContract is deterministic and never modified by AI.
  */
 export interface NodeGenerationResult {
   nodeId: string;
   success: boolean;
-  contract?: SemanticContract; // STEP 1: Refined contract
-  engines?: EngineConfig[]; // STEP 4: All engines (unified)
-  escalation?: EngineEscalation; // STEP 5: Escalation strategy
-  testExamples?: string[]; // STEP 6: Test examples
-  aiMessages?: AIMessages; // STEP 7: AI dialogue messages
+  contract?: SemanticContract; // STEP 1: Deterministic contract (from node structure)
+  engines?: EngineConfig[]; // STEP 2: All engines (unified)
+  escalation?: EngineEscalation; // STEP 3: Escalation strategy
+  testExamples?: string[]; // STEP 4: Test examples
+  aiMessages?: AIMessages; // STEP 5: AI dialogue messages
   errors?: string[];
 }
 
@@ -93,27 +91,26 @@ function findNode(nodeId: string, nodes: TaskTreeNode[]): TaskTreeNode | null {
  * Execute generation plan
  *
  * ORCHESTRATOR FUNCTION - This is the main entry point for generation.
- * Coordinates all 7 steps of the internal pipeline in the correct order:
+ * Coordinates the generation pipeline in the correct order:
  *
- * STEP 1: Contract Refinement - Refine semantic contract
- * STEP 2: Canonical Values - Generate canonical value sets
- * STEP 3: Constraints - Generate enhanced constraints
- * STEP 4: Engines Unificati - Generate all extraction engines
- * STEP 5: Escalation - Generate engine escalation strategy
- * STEP 6: Test Examples - Generate test examples
- * STEP 7: Messaggi AI - Generate AI dialogue messages
+ * STEP 1: Generate or load Semantic Contract (deterministic, from node structure)
+ * STEP 2: Generate all extraction engines (unified)
+ * STEP 3: Generate engine escalation strategy
+ * STEP 4: Generate test examples
+ * STEP 5: Generate AI dialogue messages
  *
  * Execution Flow:
  * - For each node in plan:
- *   - STEP 1: Refine contract (if needed)
- *   - STEP 2: Generate canonical values
- *   - STEP 3: Generate constraints
- *   - STEP 4: Generate all engines (unified)
- *   - STEP 5: Generate escalation
- *   - STEP 6: Generate test examples
- *   - STEP 7: Generate AI messages
+ *   - STEP 1: Generate or load contract (deterministic, never modified by AI)
+ *   - STEP 2: Generate all engines (unified)
+ *   - STEP 3: Generate escalation
+ *   - STEP 4: Generate test examples
+ *   - STEP 5: Generate AI messages
  *   - Save to database (Persistence)
  *   - Report progress (UI callback)
+ *
+ * Note: Contract refinement, canonical values, and constraints generation are FORBIDDEN.
+ * The SemanticContract is deterministic and never modified by AI.
  *
  * Error Handling:
  * - Continues on individual step failures
@@ -203,24 +200,11 @@ export async function executeGenerationPlan(
     nodeResult.contract = contract;
 
     // ⚠️ ARCHITECTURAL RULE: SemanticContract is deterministic and never modified
-    // Removed: refineContract, generateCanonicalValues, generateConstraints
-    // These functions violate the principle that SemanticContract must be immutable
     // The contract is built once from node structure and never changed
+    // Removed: refineContract, generateCanonicalValues, generateConstraints
+    // These functions violated the principle that SemanticContract must be immutable
 
-    // STEP 3: Generate constraints
-    currentStep++;
-    contract = await generateConstraintsForNode(contract, node.label, (progress) => {
-      if (onProgress) {
-        onProgress({
-          ...progress,
-          currentStep,
-          totalSteps: plan.totalSteps
-        });
-      }
-    });
-    nodeResult.contract = contract; // Update with constraints
-
-    // STEP 4: Generate all engines (unified)
+    // STEP 2: Generate all engines (unified)
     currentStep++;
     const enginesResult = await generateEnginesForNode(contract, node.label, (progress) => {
       if (onProgress) {
@@ -243,7 +227,7 @@ export async function executeGenerationPlan(
       // }
     }
 
-    // STEP 5: Generate escalation
+    // STEP 3: Generate escalation
     if (enginesResult.engines.length > 0) {
       currentStep++;
       // Load existing escalation if any
@@ -273,7 +257,7 @@ export async function executeGenerationPlan(
       }
     }
 
-    // STEP 6: Generate test examples
+    // STEP 4: Generate test examples
     currentStep++;
     // Load existing test examples if any
     const existingExamples: string[] = []; // TODO: Load from node or service if needed
@@ -293,7 +277,7 @@ export async function executeGenerationPlan(
     );
     nodeResult.testExamples = examples;
 
-    // STEP 7: Generate AI messages
+    // STEP 5: Generate AI messages
     currentStep++;
     // Load existing AI messages if any
     const existingMessages: AIMessages | null = null; // TODO: Load from node or service if needed

@@ -53,18 +53,23 @@ const UserMessage: React.FC<UserMessageProps> = ({
   const [isExpanded, setIsExpanded] = React.useState(false);
   const hasExtractedValues = message.extractedValues && message.extractedValues.length > 0;
 
-  // Debug: log extracted values
+  // ✅ LOG DETTAGLIATO per debug - SOLO quando cambia qualcosa
+  const prevExtractedValuesRef = React.useRef<string>('');
   React.useEffect(() => {
     if (message.type === 'user') {
-      console.log('[UserMessage] Message check:', {
-        messageId: message.id,
-        text: message.text,
-        hasExtractedValues,
-        extractedValues: message.extractedValues,
-        extractedValuesLength: message.extractedValues?.length || 0
-      });
+      const currentExtractedValuesStr = JSON.stringify(message.extractedValues || []);
+
+      // ✅ Log solo se i dati estratti sono cambiati
+      if (currentExtractedValuesStr !== prevExtractedValuesRef.current) {
+        console.log('[UserMessage] 🔍 Extracted values changed:', {
+          messageId: message.id,
+          hasExtractedValues,
+          extractedValuesCount: message.extractedValues?.length || 0
+        });
+        prevExtractedValuesRef.current = currentExtractedValuesStr;
+      }
     }
-  }, [message.extractedValues, hasExtractedValues, message.id, message.type, message.text]);
+  }, [message.id, message.type, hasExtractedValues]); // ✅ Rimosso message.extractedValues e isExpanded per evitare loop
 
   // Map fontSize to actual pixel values
   const fontSizeMap: Record<string, string> = {
@@ -101,18 +106,72 @@ const UserMessage: React.FC<UserMessageProps> = ({
   // Helper per formattare i nomi delle variabili
   const formatVariableName = (key: string): string => {
     const mapping: Record<string, string> = {
-      'day': 'Day',
-      'month': 'Month',
-      'year': 'Year',
-      'firstname': 'First Name',
-      'lastname': 'Last Name',
-      'street': 'Street',
-      'city': 'City',
-      'postal_code': 'Postal Code',
-      'zip': 'ZIP',
-      'country': 'Country'
+      'day': 'giorno',
+      'month': 'mese',
+      'year': 'anno',
+      'firstname': 'nome',
+      'lastname': 'cognome',
+      'street': 'via',
+      'city': 'città',
+      'postal_code': 'CAP',
+      'zip': 'CAP',
+      'country': 'paese'
     };
     return mapping[key.toLowerCase()] || key.charAt(0).toUpperCase() + key.slice(1);
+  };
+
+  // Helper per determinare il tipo di dato principale
+  const getMainDataType = (extractedValues: ExtractedValue[]): string | null => {
+    if (!extractedValues || extractedValues.length === 0) return null;
+
+    const hasDate = extractedValues.some(ev =>
+      ['day', 'month', 'year'].includes(ev.variable.toLowerCase())
+    );
+    if (hasDate) return 'DATA';
+
+    const hasName = extractedValues.some(ev =>
+      ['firstname', 'lastname', 'name'].includes(ev.variable.toLowerCase())
+    );
+    if (hasName) return 'NOME';
+
+    const hasAddress = extractedValues.some(ev =>
+      ['street', 'city', 'postal_code', 'zip', 'country'].includes(ev.variable.toLowerCase())
+    );
+    if (hasAddress) return 'INDIRIZZO';
+
+    return extractedValues[0]?.variable.toUpperCase() || null;
+  };
+
+  // Helper per costruire il valore normalizzato completo dai sub-dati
+  const buildNormalizedValue = (extractedValues: ExtractedValue[]): string | null => {
+    if (!extractedValues || extractedValues.length === 0) return null;
+
+    // Se è una data (day, month, year), costruisci formato normalizzato
+    const day = extractedValues.find(ev => ev.variable.toLowerCase() === 'day');
+    const month = extractedValues.find(ev => ev.variable.toLowerCase() === 'month');
+    const year = extractedValues.find(ev => ev.variable.toLowerCase() === 'year');
+
+    if (day && month && year) {
+      const dayVal = String(day.semanticValue).padStart(2, '0');
+      const monthVal = String(month.semanticValue).padStart(2, '0');
+      const yearVal = String(year.semanticValue);
+      return `${dayVal}-${monthVal}-${yearVal}`;
+    }
+
+    // Se è un nome (firstname, lastname), costruisci nome completo
+    const firstName = extractedValues.find(ev => ev.variable.toLowerCase() === 'firstname');
+    const lastName = extractedValues.find(ev => ev.variable.toLowerCase() === 'lastname');
+    if (firstName && lastName) {
+      return `${firstName.semanticValue} ${lastName.semanticValue}`;
+    }
+
+    // Se c'è un solo valore, usalo direttamente
+    if (extractedValues.length === 1) {
+      return String(extractedValues[0].semanticValue);
+    }
+
+    // Altrimenti, costruisci una stringa con tutti i valori
+    return extractedValues.map(ev => String(ev.semanticValue)).join(', ');
   };
 
   return (
@@ -166,7 +225,18 @@ const UserMessage: React.FC<UserMessageProps> = ({
                   <User size={18} className="text-gray-600" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-start gap-2 flex-wrap">
+                  {/* Header cliccabile dell'accordion */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (hasExtractedValues) {
+                        setIsExpanded(!isExpanded);
+                      }
+                    }}
+                    className={`w-full flex items-start gap-2 flex-wrap ${hasExtractedValues ? 'cursor-pointer hover:bg-gray-100/30 rounded px-1 py-0.5 transition-colors' : ''}`}
+                    disabled={!hasExtractedValues}
+                    title={hasExtractedValues ? (isExpanded ? 'Clicca per nascondere i dati estratti' : 'Clicca per vedere cosa ha riconosciuto il parser') : undefined}
+                  >
                     {message.matchStatus && (
                       <div className="flex-shrink-0 mt-0.5">
                         {message.matchStatus === 'match' && (
@@ -186,44 +256,62 @@ const UserMessage: React.FC<UserMessageProps> = ({
                     >
                       {message.text}
                     </div>
-                    {/* Chevron per espandere i valori estratti - dentro la bubble, a destra, piccola e allineata in alto */}
+                    {/* Indicatore dati estratti + Chevron */}
                     {hasExtractedValues && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setIsExpanded(!isExpanded);
-                        }}
-                        className="flex-shrink-0 mt-0.5 p-1 hover:bg-gray-200/50 rounded transition-colors"
-                        title={isExpanded ? "Nascondi valori estratti" : "Mostra valori estratti"}
-                      >
+                      <div className="flex-shrink-0 mt-0.5 flex items-center gap-1">
+                        <span className="text-xs text-purple-600 font-semibold">
+                          {(() => {
+                            const mainType = getMainDataType(message.extractedValues!);
+                            console.log('[UserMessage] 📊 Main type:', mainType);
+                            return mainType || 'DAT';
+                          })()}
+                        </span>
                         {isExpanded ? (
-                          <ChevronUp size={14} className="text-gray-600" />
+                          <ChevronUp size={20} className="text-purple-600" />
                         ) : (
-                          <ChevronDown size={14} className="text-gray-600" />
+                          <ChevronDown size={20} className="text-purple-600" />
                         )}
-                      </button>
-                    )}
-                  </div>
-                  {/* Valori estratti dentro la bubble */}
-                  {isExpanded && hasExtractedValues && (
-                    <div className="mt-2 pt-2 border-t border-gray-300/50">
-                      <div className="text-xs font-semibold text-gray-700 mb-1.5">Valori estratti:</div>
-                      <div className="space-y-1">
-                        {message.extractedValues!.map((ev, idx) => (
-                          <div key={idx} className="flex items-center gap-2 text-xs text-gray-600">
-                            <span className="font-medium text-gray-700">{formatVariableName(ev.variable)}:</span>
-                            {ev.linguisticValue ? (
-                              <>
-                                <span className="italic">&quot;{ev.linguisticValue}&quot;</span>
-                                <span className="text-gray-400">→</span>
-                              </>
-                            ) : null}
-                            <span className="font-mono text-gray-800">{String(ev.semanticValue)}</span>
-                          </div>
-                        ))}
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </button>
+                  {/* Valori estratti dentro la bubble - struttura gerarchica */}
+                  {isExpanded && hasExtractedValues && (() => {
+                    const mainType = getMainDataType(message.extractedValues!);
+                    const normalizedValue = buildNormalizedValue(message.extractedValues!);
+
+                    return (
+                      <div className="mt-2 pt-2 border-t border-gray-300/50">
+                        {/* Tipo riconosciuto */}
+                        <div className="text-xs font-semibold text-gray-700 mb-1.5">
+                          {mainType ? `DAT: ${mainType}` : 'Valori estratti:'}
+                        </div>
+
+                        {/* Valore normalizzato completo */}
+                        {normalizedValue && (
+                          <div className="text-xs text-gray-600 mb-2 ml-2">
+                            <span className="font-medium text-gray-700">Valore normalizzato:</span>{' '}
+                            <span className="font-mono text-gray-800">{normalizedValue}</span>
+                          </div>
+                        )}
+
+                        {/* Sub-dati */}
+                        <div className="space-y-1 ml-2">
+                          {message.extractedValues!.map((ev, idx) => (
+                            <div key={idx} className="flex items-center gap-2 text-xs text-gray-600">
+                              <span className="font-medium text-gray-700">{formatVariableName(ev.variable)}:</span>
+                              {ev.linguisticValue ? (
+                                <>
+                                  <span className="italic">&quot;{ev.linguisticValue}&quot;</span>
+                                  <span className="text-gray-400">→</span>
+                                </>
+                              ) : null}
+                              <span className="font-mono text-gray-800">{String(ev.semanticValue)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </>

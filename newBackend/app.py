@@ -57,10 +57,16 @@ except ImportError as e:
 try:
     from backend.ai_endpoints.intent_embeddings import router as intent_embeddings_router
     print("[INFO] Intent embeddings router loaded successfully")
+    # ✅ DEBUG: Verifica che l'endpoint sia registrato
+    routes = [r.path for r in intent_embeddings_router.routes if hasattr(r, 'path')]
+    print(f"[INFO] Intent embeddings router has {len(routes)} routes: {routes}")
 except ImportError as e:
-    print(f"Warning: Could not import intent embeddings router: {e}")
+    print(f"[ERROR] Could not import intent embeddings router: {e}")
+    import traceback
+    print(f"[ERROR] Traceback: {traceback.format_exc()}")
     from fastapi import APIRouter
     intent_embeddings_router = APIRouter()
+    print("[WARNING] Using empty router - /api/embeddings/compute will not be available!")
 
 # Create empty routers for NER and LLM extract (will be implemented in api_nlp)
 from fastapi import APIRouter
@@ -72,88 +78,17 @@ all_agent_acts_cache: Dict[str, dict] = {}
 is_cache_loaded = False
 
 async def load_all_agent_acts():
-    """Carica tutti gli agent acts disponibili in memoria con retry e backoff esponenziale"""
+    """
+    ⚠️ DEPRECATED: Endpoint /api/factory/agent-acts no longer exists.
+    This function is kept for backward compatibility but does nothing.
+    Cache will remain empty.
+    """
     global all_agent_acts_cache, is_cache_loaded
 
-    max_retries = 3
-    base_delay = 2  # secondi per il primo retry
-
-    for attempt in range(max_retries):
-        try:
-            # Calcola delay esponenziale: 2s, 4s, 8s
-            retry_delay = base_delay * (2 ** attempt)
-
-            # Chiamata al backend Express per ottenere tutti gli agent acts
-            express_url = "http://localhost:3100/api/factory/agent-acts"
-            print(f"[DEBUG] Attempt {attempt + 1}/{max_retries} - Loading from: {express_url}")
-
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                try:
-                    response = await client.get(express_url)
-                    print(f"[DEBUG] Response status: {response.status_code}")
-
-                    if response.status_code == 200:
-                        all_agent_acts_cache.clear()
-
-                        # DEBUG: stampa cosa restituisce realmente l'endpoint
-                        response_text = response.text
-                        print(f"[DEBUG] Response text (first 500 chars): {response_text[:500]}...")
-
-                        # Prova a parsare come JSON
-                        try:
-                            response_data = response.json()
-                            print(f"[DEBUG] Parsed JSON type: {type(response_data)}")
-
-                            # Estrai gli agent acts dalla proprietà 'items'
-                            if isinstance(response_data, dict) and 'items' in response_data:
-                                agent_acts = response_data['items']
-                                print(f"[DEBUG] Found {len(agent_acts)} items in response")
-
-                                for i, act in enumerate(agent_acts[:3]):  # Log primi 3
-                                    print(f"[DEBUG] Item {i}: {type(act)} - {str(act)[:100]}...")
-
-                                for act in agent_acts:
-                                    if isinstance(act, dict):
-                                        # Usa 'label' come ID se non c'è 'id'
-                                        act_id = act.get('id') or act.get('label', 'unknown')
-                                        all_agent_acts_cache[act_id] = act
-                                    else:
-                                        print(f"[WARN] Skipping invalid act: {act}")
-
-                                is_cache_loaded = True
-                                print(f"[SUCCESS] Loaded {len(all_agent_acts_cache)} agent acts after {attempt + 1} attempts")
-                                return  # Successo, esci dalla funzione
-                            else:
-                                print(f"[ERROR] Expected dict with 'items' property but got: {type(response_data)}")
-                                print(f"[DEBUG] Response data: {response_data}")
-
-                        except Exception as json_error:
-                            print(f"[ERROR] Error parsing JSON: {json_error}")
-                            print(f"[DEBUG] Raw response: {response_text}")
-                    else:
-                        print(f"[WARN] Status code not 200: {response.status_code}")
-
-                except httpx.ConnectError:
-                    print(f"[WARN] Backend Express not reachable (attempt {attempt + 1}/{max_retries})")
-                    if attempt < max_retries - 1:
-                        print(f"[INFO] Retrying in {retry_delay} seconds with exponential backoff...")
-                        await asyncio.sleep(retry_delay)
-                    continue
-                except httpx.TimeoutException:
-                    print(f"[WARN] Connection timeout to Express (attempt {attempt + 1}/{max_retries})")
-                    if attempt < max_retries - 1:
-                        print(f"[INFO] Retrying in {retry_delay} seconds with exponential backoff...")
-                        await asyncio.sleep(retry_delay)
-                    continue
-
-        except Exception as e:
-            print(f"[ERROR] Unexpected error during attempt {attempt + 1}: {e}")
-            if attempt < max_retries - 1:
-                print(f"[INFO] Retrying in {retry_delay} seconds...")
-                await asyncio.sleep(retry_delay)
-
-    print("[ERROR] Failed to load agent acts after all retries - proceeding without cache")
-    print("[INFO] Cache will remain empty until manual reload via /api/debug/reload-cache")
+    # ⚠️ REMOVED: Endpoint /api/factory/agent-acts no longer exists in Express backend
+    # Cache will remain empty - this is expected behavior
+    print("[INFO] Agent acts loading skipped - endpoint /api/factory/agent-acts no longer exists")
+    print("[INFO] Cache will remain empty (this is expected)")
 
 # Funzioni per Intellisense in memoria
 def find_intents_from_memory(instance_id: str) -> List[dict]:
@@ -291,8 +226,10 @@ async def reload_cache():
 
 @app.on_event("startup")
 async def startup_event():
-    """Carica tutti gli agent acts all'avvio dell'app"""
-    await load_all_agent_acts()
+    """Startup event - agent acts loading removed (endpoint /api/factory/agent-acts no longer exists)"""
+    # ⚠️ REMOVED: load_all_agent_acts() - endpoint /api/factory/agent-acts no longer exists
+    # Cache will remain empty unless manually reloaded via /api/debug/reload-cache
+    print("[INFO] Agent acts cache loading skipped - endpoint /api/factory/agent-acts no longer exists")
 
 @app.get("/api/agent-acts-from-cache")
 async def get_all_agent_acts_from_cache():

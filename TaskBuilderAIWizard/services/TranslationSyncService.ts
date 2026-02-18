@@ -25,13 +25,13 @@ interface TranslationEntry {
  *
  * @param structure Array of WizardTaskTreeNode with readableName and dottedName populated
  * @param projectId Project ID (null for factory/templates)
- * @param locale Project locale (default: 'it')
+ * @param locale Project locale in BCP 47 format (default: 'it-IT')
  * @returns Array of TranslationEntry to save
  */
 export function generateTranslationEntries(
   structure: WizardTaskTreeNode[],
   projectId: string | null,
-  locale: string = 'it'
+  locale: string = 'it-IT'
 ): TranslationEntry[] {
   const entries: TranslationEntry[] = [];
 
@@ -132,13 +132,13 @@ export async function saveTranslations(
  *
  * @param structure Array of WizardTaskTreeNode with readableName and dottedName populated
  * @param projectId Project ID
- * @param locale Project locale (default: 'it')
+ * @param locale Project locale in BCP 47 format (default: 'it-IT')
  * @returns Promise<boolean> Success status
  */
 export async function syncTranslationsWithStructure(
   structure: WizardTaskTreeNode[],
   projectId: string,
-  locale: string = 'it'
+  locale: string = 'it-IT'
 ): Promise<boolean> {
   const entries = generateTranslationEntries(structure, projectId, locale);
   return await saveTranslations(entries, projectId);

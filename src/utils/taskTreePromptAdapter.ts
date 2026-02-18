@@ -97,7 +97,7 @@ export async function AdaptTaskTreePromptToContext(
     }
   });
 
-  const projectLocale = getCurrentProjectLocale() || 'it';
+  const projectLocale = getCurrentProjectLocale() || 'it-IT';
   const projectTranslations: Record<string, string> = {};
 
   if (allGuids.size > 0) {

@@ -145,23 +145,38 @@ export function getDefaultValuesForCategory(
 }
 
 /**
- * Ottiene il locale del progetto corrente
+ * Ottiene il locale del progetto corrente in formato BCP 47 (es. 'it-IT', 'en-US', 'pt-BR')
  */
-export function getCurrentProjectLocale(): 'it' | 'en' | 'pt' {
+export function getCurrentProjectLocale(): 'it-IT' | 'en-US' | 'pt-BR' {
   try {
-    return (localStorage.getItem('project.lang') || 'it') as 'it' | 'en' | 'pt';
+    const stored = localStorage.getItem('project.lang') || 'it';
+    // ✅ Converti formato breve a BCP 47 se necessario
+    const localeMap: Record<string, 'it-IT' | 'en-US' | 'pt-BR'> = {
+      'it': 'it-IT',
+      'en': 'en-US',
+      'pt': 'pt-BR',
+      'it-IT': 'it-IT',
+      'en-US': 'en-US',
+      'pt-BR': 'pt-BR'
+    };
+    return localeMap[stored] || 'it-IT';
   } catch {
-    return 'it';
+    return 'it-IT';
   }
 }
 
 /**
  * Ottiene la label di una categoria nella lingua corrente
+ * Accetta sia formato breve ('it') che BCP 47 ('it-IT')
  */
-export function getCategoryLabel(category: string, locale?: 'it' | 'en' | 'pt'): string | null {
+export function getCategoryLabel(category: string, locale?: 'it' | 'en' | 'pt' | 'it-IT' | 'en-US' | 'pt-BR'): string | null {
   const preset = PRESET_CATEGORIES[category];
   if (!preset) return null;
-  const currentLocale = locale || getCurrentProjectLocale();
+  let currentLocale = locale || getCurrentProjectLocale();
+  // ✅ Converti BCP 47 a formato breve per lookup (es. 'it-IT' → 'it')
+  if (currentLocale.includes('-')) {
+    currentLocale = currentLocale.split('-')[0] as 'it' | 'en' | 'pt';
+  }
   const localeUpper = currentLocale.toUpperCase() as 'IT' | 'EN' | 'PT';
   return preset.labels[localeUpper] || null;
 }

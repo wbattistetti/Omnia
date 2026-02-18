@@ -627,6 +627,52 @@ app.get('/api/mongodb/ping', async (req, res) => {
   }
 });
 
+// ✅ Health check endpoint per Redis
+app.get('/api/health/redis', async (req, res) => {
+  try {
+    const redis = await getRedisClient();
+
+    if (!redis) {
+      return res.status(503).json({
+        ok: false,
+        redis: 'unavailable',
+        status: redisConnectionState.status,
+        error: redisConnectionState.lastError || 'Redis client not available',
+        circuitBreaker: redisConnectionState.circuitBreakerOpen ? 'open' : 'closed',
+        consecutiveFailures: redisConnectionState.consecutiveFailures
+      });
+    }
+
+    // ✅ Test ping con timeout
+    const pingStart = Date.now();
+    const pingPromise = redis.ping();
+    const pingTimeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Ping timeout')), 2000)
+    );
+
+    await Promise.race([pingPromise, pingTimeout]);
+    const latency = Date.now() - pingStart;
+
+    res.json({
+      ok: true,
+      redis: 'connected',
+      latency: `${latency}ms`,
+      status: redisConnectionState.status,
+      circuitBreaker: redisConnectionState.circuitBreakerOpen ? 'open' : 'closed',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(503).json({
+      ok: false,
+      redis: 'error',
+      status: redisConnectionState.status,
+      error: error.message,
+      circuitBreaker: redisConnectionState.circuitBreakerOpen ? 'open' : 'closed',
+      consecutiveFailures: redisConnectionState.consecutiveFailures
+    });
+  }
+});
+
 // ✅ DIAGNOSTIC ENDPOINTS - Test colli di bottiglia
 app.get('/api/test/catalog-structure', async (req, res) => {
   const startTime = Date.now();
@@ -6557,6 +6603,440 @@ app.get('/api/factory/template-label-translations', async (req, res) => {
   // ✅ NON chiudere la connessione se usi il pool
   }
 });
+
+// ✅ REDIS CLIENT - Production-grade con retry, timeout, circuit breaker
+let redisClient = null;
+let redisClientPromise = null;
+let redisConnectionState = {
+  status: 'disconnected', // 'disconnected' | 'connecting' | 'connected' | 'error'
+  lastError: null,
+  lastConnectAttempt: null,
+  consecutiveFailures: 0,
+  circuitBreakerOpen: false
+};
+
+const REDIS_CONFIG = {
+  url: process.env.REDIS_URL || 'redis://localhost:6379',
+  connectTimeout: 3000, // 3 secondi per la connessione iniziale
+  maxRetries: 3,
+  retryDelay: 1000, // Base delay per retry
+  circuitBreakerThreshold: 5, // Dopo 5 fallimenti consecutivi, apri circuit breaker
+  circuitBreakerResetTime: 30000 // Reset circuit breaker dopo 30 secondi
+};
+
+async function getRedisClient() {
+  // ✅ Se il client è già connesso e funzionante, restituiscilo
+  if (redisClient && redisClient.isOpen) {
+    try {
+      await redisClient.ping();
+      return redisClient;
+    } catch (error) {
+      // Client non più valido, reset
+      console.warn('[Redis] Client ping failed, resetting...');
+      redisClient = null;
+      redisConnectionState.status = 'disconnected';
+    }
+  }
+
+  // ✅ Circuit breaker: se è aperto, non tentare la connessione
+  if (redisConnectionState.circuitBreakerOpen) {
+    const timeSinceLastAttempt = Date.now() - redisConnectionState.lastConnectAttempt;
+    if (timeSinceLastAttempt < REDIS_CONFIG.circuitBreakerResetTime) {
+      console.warn('[Redis] ⚠️ Circuit breaker is OPEN - skipping connection attempt');
+      return null;
+    } else {
+      // Reset circuit breaker dopo il timeout
+      console.log('[Redis] 🔄 Circuit breaker timeout expired, resetting...');
+      redisConnectionState.circuitBreakerOpen = false;
+      redisConnectionState.consecutiveFailures = 0;
+    }
+  }
+
+  // ✅ Se c'è già una connessione in corso, aspetta quella
+  if (redisClientPromise) {
+    return redisClientPromise;
+  }
+
+  // ✅ Try to require redis
+  let redis;
+  try {
+    redis = require('redis');
+  } catch (error) {
+    console.warn('[Redis] ⚠️ Redis package not installed. Install with: npm install redis');
+    return null;
+  }
+
+  // ✅ Retry con exponential backoff
+  redisClientPromise = (async () => {
+    redisConnectionState.status = 'connecting';
+    redisConnectionState.lastConnectAttempt = Date.now();
+
+    for (let attempt = 1; attempt <= REDIS_CONFIG.maxRetries; attempt++) {
+      try {
+        console.log(`[Redis] 🔌 Attempt ${attempt}/${REDIS_CONFIG.maxRetries} to connect to Redis at ${REDIS_CONFIG.url}...`);
+
+        const client = redis.createClient({
+          url: REDIS_CONFIG.url,
+          socket: {
+            connectTimeout: REDIS_CONFIG.connectTimeout,
+            reconnectStrategy: false // Disabilita auto-reconnect, gestiamo noi i retry
+          }
+        });
+
+        // ✅ Event handlers
+        client.on('error', (err) => {
+          console.error('[Redis] ❌ Client error:', err.message);
+          redisConnectionState.status = 'error';
+          redisConnectionState.lastError = err.message;
+        });
+        client.on('connect', () => {
+          console.log('[Redis] ✅ Connected to Redis');
+          redisConnectionState.status = 'connected';
+        });
+        client.on('ready', () => {
+          console.log('[Redis] ✅ Redis client ready');
+          redisConnectionState.status = 'connected';
+          redisConnectionState.consecutiveFailures = 0;
+          redisConnectionState.circuitBreakerOpen = false;
+        });
+
+        // ✅ Timeout esplicito sulla connessione
+        const connectPromise = client.connect();
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Redis connection timeout after ${REDIS_CONFIG.connectTimeout}ms`)), REDIS_CONFIG.connectTimeout)
+        );
+
+        await Promise.race([connectPromise, timeoutPromise]);
+
+        // ✅ Verifica connessione con ping
+        const pingPromise = client.ping();
+        const pingTimeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Redis ping timeout')), 2000)
+        );
+        await Promise.race([pingPromise, pingTimeout]);
+
+        console.log('[Redis] ✅ Redis connection and ping successful');
+
+        // ✅ Successo: reset stato
+        redisConnectionState.status = 'connected';
+        redisConnectionState.consecutiveFailures = 0;
+        redisConnectionState.circuitBreakerOpen = false;
+        redisConnectionState.lastError = null;
+
+        redisClient = client;
+        redisClientPromise = null;
+        return client;
+
+      } catch (error) {
+        console.error(`[Redis] ❌ Connection attempt ${attempt} failed:`, error.message);
+
+        redisConnectionState.consecutiveFailures++;
+        redisConnectionState.lastError = error.message;
+
+        // ✅ Se non è l'ultimo tentativo, aspetta prima di riprovare (exponential backoff)
+        if (attempt < REDIS_CONFIG.maxRetries) {
+          const delay = REDIS_CONFIG.retryDelay * Math.pow(2, attempt - 1); // Exponential backoff
+          console.log(`[Redis] 🔄 Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+
+    // ✅ Tutti i tentativi sono falliti
+    redisConnectionState.status = 'error';
+    redisConnectionState.lastConnectAttempt = Date.now();
+
+    // ✅ Apri circuit breaker se troppi fallimenti consecutivi
+    if (redisConnectionState.consecutiveFailures >= REDIS_CONFIG.circuitBreakerThreshold) {
+      redisConnectionState.circuitBreakerOpen = true;
+      console.error(`[Redis] ⚠️ Circuit breaker OPEN after ${redisConnectionState.consecutiveFailures} consecutive failures`);
+    }
+
+    redisClientPromise = null;
+    return null;
+  })();
+
+  return redisClientPromise;
+}
+
+// ✅ DEPLOY ENDPOINTS
+/**
+ * POST /api/deploy/sync-translations
+ *
+ * ✅ DEPLOY ENDPOINT: Sincronizza traduzioni da MongoDB a Redis
+ *
+ * @param {string} projectId - Project ID (opzionale, se omesso sincronizza tutti)
+ * @param {string} locale - Locale (opzionale, default: 'it-IT')
+ * @param {string} environment - Environment: 'on-the-fly' | 'development' | 'staging' | 'production'
+ * @param {string} type - Type: 'full' | 'incremental' | 'verify-only'
+ * @returns {object} { success: boolean, syncedCount: number, environment: string }
+ */
+app.post('/api/deploy/sync-translations', async (req, res) => {
+  const { projectId, locale = 'it-IT', environment = 'on-the-fly', type = 'full', translations } = req.body || {};
+  const startTime = Date.now();
+
+  try {
+    console.log('[DEPLOY][SYNC_TRANSLATIONS] 🚀 Starting translation synchronization...', {
+      projectId: projectId || 'ALL_PROJECTS',
+      locale,
+      environment,
+      type,
+      translationsFromMemory: translations ? Object.keys(translations).length : 0
+    });
+
+    const redis = await getRedisClient();
+    if (!redis) {
+      console.error('[DEPLOY][SYNC_TRANSLATIONS] ❌ Redis client not available');
+      return res.status(500).json({
+        success: false,
+        error: 'Redis client not available. Please ensure Redis is running (redis-server or docker run -d -p 6379:6379 redis:latest) and the redis npm package is installed (npm install redis)'
+      });
+    }
+
+    const keyPrefix = process.env.REDIS_KEY_PREFIX || 'omnia:';
+
+    // ✅ Verify-only mode: just check, don't sync
+    if (type === 'verify-only') {
+      const client = await getMongoClient();
+      console.log('[DEPLOY][SYNC_TRANSLATIONS] 🔍 Verify-only mode - checking consistency...');
+      const verifyResult = await verifyRedisConsistency(client, redis, projectId, locale, keyPrefix);
+      return res.json({
+        success: verifyResult.consistent,
+        syncedCount: 0,
+        environment,
+        type: 'verify-only',
+        verification: verifyResult
+      });
+    }
+
+    // ✅ ON-THE-FLY MODE: Memoria → Redis (effimero, nessuna persistenza)
+    if (environment === 'on-the-fly' && translations && typeof translations === 'object' && projectId) {
+      console.log(`[DEPLOY][SYNC_TRANSLATIONS] 📋 ON-THE-FLY: Syncing ${Object.keys(translations).length} translations from memory to Redis...`);
+
+      let totalSynced = 0;
+      for (const [guid, text] of Object.entries(translations)) {
+        if (guid && text !== undefined && text !== null) {
+          const redisKey = `${keyPrefix}translations:${projectId}:${locale}:${guid}`;
+          await redis.set(redisKey, String(text));
+          totalSynced++;
+        }
+      }
+
+      console.log(`[DEPLOY][SYNC_TRANSLATIONS] ✅ ON-THE-FLY: Synced ${totalSynced} translations from memory to Redis (no MongoDB persistence)`);
+
+      const duration = Date.now() - startTime;
+      return res.json({
+        success: true,
+        syncedCount: totalSynced,
+        source: 'memory',
+        environment: 'on-the-fly',
+        duration: `${duration}ms`,
+        locale,
+        type
+      });
+    }
+
+    // ✅ STABLE DEPLOYMENT MODE: MongoDB → Redis (persistente)
+    const client = await getMongoClient();
+    let totalSynced = 0;
+    const syncedProjects = [];
+
+    // Sync project translations
+    if (projectId) {
+      const projDb = await getProjectDb(client, projectId);
+      const projColl = projDb.collection('Translations');
+
+      const projectTranslations = await projColl.find({ language: locale }).toArray();
+
+      for (const trans of projectTranslations) {
+        if (trans.guid && trans.text !== undefined) {
+          const redisKey = `${keyPrefix}translations:${projectId}:${locale}:${trans.guid}`;
+          await redis.set(redisKey, trans.text);
+          totalSynced++;
+        }
+      }
+
+      syncedProjects.push(projectId);
+      console.log(`[DEPLOY][SYNC_TRANSLATIONS] ✅ Synced ${projectTranslations.length} translations from MongoDB for project ${projectId}`);
+    } else {
+      const projectsDb = client.db(dbProjects);
+      const projectsList = await projectsDb.listCollections().toArray();
+
+      for (const collInfo of projectsList) {
+        const projectIdFromDb = collInfo.name;
+        if (projectIdFromDb === 'system.indexes') continue;
+
+        try {
+          const projDb = client.db(projectIdFromDb);
+          const projColl = projDb.collection('Translations');
+          const projectTranslations = await projColl.find({ language: locale }).toArray();
+
+          for (const trans of projectTranslations) {
+            if (trans.guid && trans.text !== undefined) {
+              const redisKey = `${keyPrefix}translations:${projectIdFromDb}:${locale}:${trans.guid}`;
+              await redis.set(redisKey, trans.text);
+              totalSynced++;
+            }
+          }
+
+          syncedProjects.push(projectIdFromDb);
+          console.log(`[DEPLOY][SYNC_TRANSLATIONS] ✅ Synced ${projectTranslations.length} translations for project ${projectIdFromDb}`);
+        } catch (err) {
+          console.warn(`[DEPLOY][SYNC_TRANSLATIONS] ⚠️ Error syncing project ${projectIdFromDb}:`, err.message);
+        }
+      }
+    }
+
+    // Sync factory translations
+    const factoryDb = client.db(dbFactory);
+    const factoryColl = factoryDb.collection('Translations');
+    const factoryTranslations = await factoryColl.find({
+      language: locale,
+      $or: [
+        { projectId: null },
+        { projectId: { $exists: false } }
+      ]
+    }).toArray();
+
+    for (const trans of factoryTranslations) {
+      if (trans.guid && trans.text !== undefined) {
+        const redisKey = `${keyPrefix}translations:factory:${locale}:${trans.guid}`;
+        await redis.set(redisKey, trans.text);
+        totalSynced++;
+      }
+    }
+
+    console.log(`[DEPLOY][SYNC_TRANSLATIONS] ✅ Synced ${factoryTranslations.length} factory translations`);
+
+    const duration = Date.now() - startTime;
+    console.log(`[DEPLOY][SYNC_TRANSLATIONS] ✅✅ Synchronization completed in ${duration}ms`, {
+      totalSynced,
+      projectsCount: syncedProjects.length,
+      locale,
+      environment,
+      type
+    });
+
+    res.json({
+      success: true,
+      syncedCount: totalSynced,
+      projects: syncedProjects,
+      factoryTranslations: factoryTranslations.length,
+      duration: `${duration}ms`,
+      locale,
+      environment,
+      type
+    });
+  } catch (err) {
+    console.error('[DEPLOY][SYNC_TRANSLATIONS] ❌ Error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+  }
+});
+
+/**
+ * GET /api/deploy/verify-redis
+ *
+ * ✅ DEPLOY ENDPOINT: Verifica consistenza Redis
+ */
+app.get('/api/deploy/verify-redis', async (req, res) => {
+  const { projectId, locale = 'it-IT' } = req.query || {};
+
+  try {
+    console.log('[DEPLOY][VERIFY_REDIS] 🔍 Verifying Redis consistency...', {
+      projectId: projectId || 'ALL_PROJECTS',
+      locale
+    });
+
+    const redis = await getRedisClient();
+    if (!redis) {
+      return res.status(500).json({
+        consistent: false,
+        error: 'Redis client not available'
+      });
+    }
+
+    const client = await getMongoClient();
+    const keyPrefix = process.env.REDIS_KEY_PREFIX || 'omnia:';
+
+    const verifyResult = await verifyRedisConsistency(client, redis, projectId, locale, keyPrefix);
+
+    console.log(`[DEPLOY][VERIFY_REDIS] ${verifyResult.consistent ? '✅' : '❌'} Verification result:`, {
+      consistent: verifyResult.consistent,
+      totalChecked: verifyResult.totalChecked,
+      missingCount: verifyResult.missingKeys.length
+    });
+
+    res.json(verifyResult);
+  } catch (err) {
+    console.error('[DEPLOY][VERIFY_REDIS] ❌ Error:', err);
+    res.status(500).json({
+      consistent: false,
+      error: err.message
+    });
+  }
+});
+
+// ✅ Helper function to verify Redis consistency
+async function verifyRedisConsistency(client, redis, projectId, locale, keyPrefix) {
+  const missingKeys = [];
+  let totalChecked = 0;
+
+  if (projectId) {
+    const projDb = await getProjectDb(client, projectId);
+    const projColl = projDb.collection('Translations');
+    const projectTranslations = await projColl.find({ language: locale }).toArray();
+
+    for (const trans of projectTranslations) {
+      if (trans.guid && trans.text !== undefined) {
+        const redisKey = `${keyPrefix}translations:${projectId}:${locale}:${trans.guid}`;
+        const exists = await redis.exists(redisKey);
+        totalChecked++;
+        if (!exists) {
+          missingKeys.push(trans.guid);
+        }
+      }
+    }
+  } else {
+    const projectsDb = client.db(dbProjects);
+    const projectsList = await projectsDb.listCollections().toArray();
+
+    for (const collInfo of projectsList.slice(0, 10)) {
+      const projectIdFromDb = collInfo.name;
+      if (projectIdFromDb === 'system.indexes') continue;
+
+      try {
+        const projDb = client.db(projectIdFromDb);
+        const projColl = projDb.collection('Translations');
+        const projectTranslations = await projColl.find({ language: locale }).limit(100).toArray();
+
+        for (const trans of projectTranslations) {
+          if (trans.guid && trans.text !== undefined) {
+            const redisKey = `${keyPrefix}translations:${projectIdFromDb}:${locale}:${trans.guid}`;
+            const exists = await redis.exists(redisKey);
+            totalChecked++;
+            if (!exists) {
+              missingKeys.push(`${projectIdFromDb}:${trans.guid}`);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`[DEPLOY][VERIFY_REDIS] ⚠️ Error verifying project ${projectIdFromDb}:`, err.message);
+      }
+    }
+  }
+
+  return {
+    consistent: missingKeys.length === 0,
+    totalChecked,
+    missingCount: missingKeys.length,
+    missingKeys: missingKeys.slice(0, 20),
+    locale
+  };
+}
 
 // ✅ Pre-inizializza il MongoDB connection pool all'avvio del server
 async function initializeMongoPool() {

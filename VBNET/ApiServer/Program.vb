@@ -212,8 +212,8 @@ Module Program
 
         ' POST /api/runtime/compile/task - Compile a single task (for chat simulator)
         app.MapPost("/api/runtime/compile/task", Function(context As HttpContext) As System.Threading.Tasks.Task
-                                                    Return ApiServer.Handlers.CompilationHandlers.HandleCompileTask(context)
-                                                End Function)
+                                                     Return ApiServer.Handlers.CompilationHandlers.HandleCompileTask(context)
+                                                 End Function)
 
         ' ✅ STATELESS: POST /api/runtime/dialog/save - Salva dialogo compilato nel repository
         app.MapPost("/api/runtime/dialog/save", Function(context As HttpContext) As System.Threading.Tasks.Task(Of IResult)

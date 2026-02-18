@@ -303,53 +303,24 @@ function mergeRefinementIntoContract(
 }
 
 /**
- * Refine contract using AI
+ * ⚠️ FORBIDDEN: This function violates architectural rules.
+ * SemanticContract must be deterministic and NEVER modified by AI.
  *
- * ⚠️ DEPRECATED: This function violates architectural rules.
- * SemanticContract must be deterministic and never modified by AI.
+ * The SemanticContract defines WHAT data to extract and HOW to return it in the data format.
+ * Parsers define HOW to extract that data (regex, LLM, NER, etc.).
  *
- * This function is kept for backward compatibility but:
- * - Does NOT save modifications to SemanticContract
- * - Returns original contract unchanged
- * - Only logs warnings
+ * This function is FORBIDDEN and will always throw an error.
  *
- * @deprecated Use parser refinement instead (refineParser, not refineContract)
- * @param contract - Original semantic contract to refine
- * @param nodeLabel - Optional node label for context
- * @param onProgress - Optional progress callback
- * @returns Original contract (unchanged) - modifications are NOT saved
+ * @throws {Error} Always throws - this function is forbidden
  */
 export async function refineContract(
   contract: SemanticContract,
   nodeLabel?: string,
   onProgress?: (progress: GenerationProgress) => void
 ): Promise<SemanticContract> {
-  // ⚠️ ARCHITECTURAL VIOLATION: SemanticContract must NOT be modified by AI
-  console.warn('[refineContract] ⚠️ DEPRECATED: refineContract violates architectural rules. SemanticContract must be deterministic and never modified. Returning original contract unchanged.');
-  if (onProgress) {
-    onProgress({
-      currentStep: 0,
-      totalSteps: 1,
-      currentNodeId: '',
-      currentNodeLabel: nodeLabel || contract.entity.label,
-      currentAction: 'Contract refinement skipped (deprecated)',
-      percentage: 0
-    });
-  }
-
-  // ✅ ARCHITECTURAL RULE: SemanticContract is deterministic and never modified
-  // Return original contract unchanged - do NOT call AI or modify contract
-  if (onProgress) {
-    onProgress({
-      currentStep: 1,
-      totalSteps: 1,
-      currentNodeId: '',
-      currentNodeLabel: nodeLabel || contract.entity.label,
-      currentAction: 'Contract unchanged (deterministic)',
-      percentage: 100
-    });
-  }
-
-  // Return original contract - no modifications
-  return contract;
+  const errorMessage = `refineContract is FORBIDDEN. SemanticContract must be deterministic and never modified by AI. ` +
+    `The contract defines WHAT data to extract and HOW to return it. ` +
+    `Use refineParser instead to refine parsers (HOW to extract), not the contract (WHAT to extract).`;
+  console.error('[refineContract] ❌ FORBIDDEN:', errorMessage);
+  throw new Error(errorMessage);
 }

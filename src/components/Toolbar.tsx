@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Home, Save, Settings, Play, Loader2, CheckCircle, AlertCircle, X } from 'lucide-react';
+import { Home, Save, Settings, Play, Loader2, CheckCircle, AlertCircle, X, Upload } from 'lucide-react';
 import { ProjectData } from '../types/project';
 import { useAIProvider, AI_PROVIDERS } from '../context/AIProviderContext';
 import { useFontStore } from '../state/fontStore';
 import { useBackendType } from '../context/BackendTypeContext';
 import { useEngineType } from '../context/EngineTypeContext';
+import DeploymentDialog, { type DeploymentConfig } from './TaskEditor/ResponseEditor/Deployment/DeploymentDialog';
 
 export interface ToolbarProps {
   onHome: () => void;
@@ -16,6 +17,7 @@ export interface ToolbarProps {
   saveSuccess?: boolean;
   saveError?: string | null;
   onCloseProject?: () => void;
+  currentProjectId?: string | null;
 }
 
 export function Toolbar({
@@ -27,7 +29,8 @@ export function Toolbar({
   onRun,
   onSettings,
   currentProject,
-  onCloseProject
+  onCloseProject,
+  currentProjectId
 }: ToolbarProps) {
   const { provider, model, setProvider, setModel, providerConfig, availableModels } = useAIProvider();
   const { fontType, fontSize, setFontType, setFontSize } = useFontStore();
@@ -36,6 +39,10 @@ export function Toolbar({
   const [showSettingsDropdown, setShowSettingsDropdown] = useState(false);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // ✅ Deployment dialog state
+  const [isDeploymentDialogOpen, setIsDeploymentDialogOpen] = useState(false);
+  const projectLocale = 'it-IT'; // TODO: Get from project context if available
 
   // Verifica se il progetto è vuoto (non ha contenuti)
   // Controlla sia i dati del progetto che i nodes/edges del flowchart
@@ -174,8 +181,8 @@ export function Toolbar({
         )}
       </div>
 
-      {/* Center - Save button */}
-      <div className="flex items-center mr-8">
+      {/* Center - Save and Deployment buttons */}
+      <div className="flex items-center gap-3 mr-8">
         <button
           onClick={onSave}
           className={`relative flex items-center gap-2 px-4 py-2 rounded bg-purple-600 text-white font-semibold hover:bg-purple-700 transition-colors disabled:opacity-60`}
@@ -192,6 +199,18 @@ export function Toolbar({
             </span>
           )}
         </button>
+
+        {/* ✅ Deployment button */}
+        {currentProjectId && (
+          <button
+            onClick={() => setIsDeploymentDialogOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors"
+            title="Deploy translations to Redis for runtime execution"
+          >
+            <Upload className="w-5 h-5" />
+            <span>Deployment</span>
+          </button>
+        )}
       </div>
 
       {/* Right side - Settings and Run */}
@@ -344,6 +363,41 @@ export function Toolbar({
           </button>
         )}
       </div>
+
+      {/* ✅ Deployment Dialog */}
+      {isDeploymentDialogOpen && (
+        <DeploymentDialog
+          isOpen={isDeploymentDialogOpen}
+          onClose={() => setIsDeploymentDialogOpen(false)}
+          projectId={currentProjectId || null}
+          locale={projectLocale}
+          onDeploy={async (config: DeploymentConfig) => {
+            const response = await fetch(`http://localhost:3100/api/deploy/sync-translations`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(config)
+            });
+
+            if (!response.ok) {
+              const errorText = await response.text();
+              throw new Error(`Deployment failed: ${response.statusText} - ${errorText}`);
+            }
+
+            const result = await response.json();
+            console.log('[Deployment] ✅ Completed:', result);
+
+            if (config.verifyAfterDeploy) {
+              const verifyResponse = await fetch(`http://localhost:3100/api/deploy/verify-redis?projectId=${config.projectId}&locale=${config.locale}`);
+              if (verifyResponse.ok) {
+                const verifyResult = await verifyResponse.json();
+                if (!verifyResult.consistent) {
+                  throw new Error(`Verification failed: ${verifyResult.missingCount} translations missing`);
+                }
+              }
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

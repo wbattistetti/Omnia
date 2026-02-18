@@ -723,7 +723,7 @@ export async function copyTranslationsForClonedSteps(_ddt: any, _templateId: str
     // ✅ FASE 2: Carica traduzioni template SOLO da memoria (ProjectTranslationsContext)
     // Durante la creazione del wizard, tutto è in memoria - NON cercare nel database
     const { getCurrentProjectLocale } = await import('./categoryPresets');
-    const projectLocale = getCurrentProjectLocale() || 'it';
+    const projectLocale = getCurrentProjectLocale() || 'it-IT';
     const templateTranslations: Record<string, string> = {};
 
     // ✅ PRIORITÀ 1: Cerca PRIMA in memoria (ProjectTranslationsContext)

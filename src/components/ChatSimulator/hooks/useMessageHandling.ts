@@ -403,6 +403,15 @@ export function useMessageHandling({
             const partialValue = extractionResult.value ? extractionResult.value : undefined;
             const extractedValues = convertToExtractedValues(partialValue, trimmed);
 
+            // ✅ LOG DETTAGLIATO per partial match
+            console.log('[useMessageHandling] 📝 CREATING PARTIAL MATCH MESSAGE:', {
+              text: trimmed,
+              partialValue,
+              extractedValues,
+              extractedValuesLength: extractedValues.length,
+              extractedValuesArray: JSON.stringify(extractedValues)
+            });
+
             setMessages((prev) => [...prev, {
               id: generateMessageId('user'),
               type: 'user',
@@ -421,6 +430,16 @@ export function useMessageHandling({
             ? extractionResult.value
             : undefined;
           const extractedValues = convertToExtractedValues(extractedValue, trimmed);
+
+          // ✅ LOG DETTAGLIATO
+          console.log('[useMessageHandling] 📝 CREATING MESSAGE WITH EXTRACTED VALUES:', {
+            text: trimmed,
+            extractedValue,
+            extractedValues,
+            extractedValuesLength: extractedValues.length,
+            extractedValuesArray: JSON.stringify(extractedValues),
+            extractionResultStatus: extractionResult.status
+          });
 
           setMessages((prev) => [...prev, {
             id: generateMessageId('user'),

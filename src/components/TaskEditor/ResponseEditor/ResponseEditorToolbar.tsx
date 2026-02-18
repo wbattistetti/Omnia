@@ -1,5 +1,5 @@
 import React from 'react';
-import { Undo2, Redo2, MessageSquare, Rocket, BookOpen, List, CheckSquare, Wand2, Star } from 'lucide-react';
+import { Undo2, Redo2, MessageSquare, Rocket, BookOpen, List, CheckSquare, Wand2, Star, Upload } from 'lucide-react';
 import { RightPanelMode } from './RightPanel';
 import { useWizardContext } from '@responseEditor/context/WizardContext';
 import { useGlobalTestPanel } from '@context/GlobalTestPanelContext';
@@ -7,6 +7,7 @@ import { useResponseEditorContextSafe } from '@hooks/useResponseEditorContextSaf
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import { openLateralChatPanel } from '@components/AppContent/infrastructure/docking/DockingHelpers';
 import type { DockTabChat } from '@dock/types';
+import DeploymentDialog, { type DeploymentConfig } from './Deployment/DeploymentDialog';
 
 interface ResponseEditorToolbarProps {
   rightMode: RightPanelMode; // Per compatibilità
@@ -92,6 +93,14 @@ export function useResponseEditorToolbar({
   const taskTree = taskTreeProp || editorContext?.taskTree;
   const taskMeta = taskMetaProp || editorContext?.taskMeta;
   const currentProjectId = currentProjectIdProp || editorContext?.currentProjectId;
+
+  // ✅ Deployment dialog state
+  const [isDeploymentDialogOpen, setIsDeploymentDialogOpen] = React.useState(false);
+  const projectLocale = React.useMemo(() => {
+    // Extract locale from project or default to 'it-IT'
+    // TODO: Get from project context if available
+    return 'it-IT';
+  }, []);
 
   // ✅ Guard to prevent double-opening of chat panel (React StrictMode in dev)
   const openingChatRef = React.useRef(false);
@@ -313,6 +322,36 @@ export function useResponseEditorToolbar({
     }
   };
 
+  const handleDeploymentClick = () => {
+    setIsDeploymentDialogOpen(true);
+  };
+
+  const handleDeploy = async (config: DeploymentConfig) => {
+    const response = await fetch(`http://localhost:3100/api/deploy/sync-translations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Deployment failed: ${response.statusText} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('[Deployment] ✅ Completed:', result);
+
+    if (config.verifyAfterDeploy) {
+      const verifyResponse = await fetch(`http://localhost:3100/api/deploy/verify-redis?projectId=${config.projectId}&locale=${config.locale}`);
+      if (verifyResponse.ok) {
+        const verifyResult = await verifyResponse.json();
+        if (!verifyResult.consistent) {
+          throw new Error(`Verification failed: ${verifyResult.missingCount} translations missing`);
+        }
+      }
+    }
+  };
+
   return [
     { icon: <Undo2 size={16} />, onClick: () => { }, title: "Undo" },
     { icon: <Redo2 size={16} />, onClick: () => { }, title: "Redo" },
@@ -351,6 +390,13 @@ export function useResponseEditorToolbar({
       onClick: handleTestClick,
       title: "Simulate and validate the dialogue flow to ensure correct behavior and data recognition.",
       active: testPanelMode === 'chat'
+    },
+    {
+      icon: <Upload size={16} />,
+      label: "Deployment",
+      onClick: handleDeploymentClick,
+      title: "Deploy translations to Redis for runtime execution",
+      active: false
     },
     // ✅ FIX: Pulsante statico sempre presente (come gli altri)
     {
@@ -395,3 +441,48 @@ export function useResponseEditorToolbar({
   ];
 }
 
+// ✅ Export DeploymentDialog state and handlers separately
+export function useDeploymentDialog(currentProjectId: string | null, locale: string) {
+  const [isOpen, setIsOpen] = React.useState(false);
+
+  const handleDeploy = async (config: DeploymentConfig) => {
+    const response = await fetch(`http://localhost:3100/api/deploy/sync-translations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Deployment failed: ${response.statusText} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('[Deployment] ✅ Completed:', result);
+
+    if (config.verifyAfterDeploy) {
+      const verifyResponse = await fetch(`http://localhost:3100/api/deploy/verify-redis?projectId=${config.projectId}&locale=${config.locale}`);
+      if (verifyResponse.ok) {
+        const verifyResult = await verifyResponse.json();
+        if (!verifyResult.consistent) {
+          throw new Error(`Verification failed: ${verifyResult.missingCount} translations missing`);
+        }
+      }
+    }
+  };
+
+  const dialogElement = (
+    <DeploymentDialog
+      isOpen={isOpen}
+      onClose={() => setIsOpen(false)}
+      projectId={currentProjectId}
+      locale={locale}
+      onDeploy={handleDeploy}
+    />
+  );
+
+  return {
+    openDialog: () => setIsOpen(true),
+    dialogElement
+  };
+}

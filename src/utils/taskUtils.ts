@@ -329,15 +329,12 @@ export async function ensureTemplateExists(
 ): Promise<any> {
   // Se ha già templateId, restituisci il template esistente
   if (instance.templateId && instance.templateId !== 'UNDEFINED') {
-    // ✅ Prima prova dalla cache (Factory)
+    // ✅ NO FALLBACK: Template must be in memory cache
     const existing = DialogueTaskService.getTemplate(instance.templateId);
     if (existing) return existing;
 
-    // ✅ Se non è in cache, prova a caricarlo dal progetto
-    const projectTemplate = await loadTemplateFromProject(instance.templateId, projectId);
-    if (projectTemplate) {
-      return projectTemplate;
-    }
+    // ✅ NO FALLBACK: If not in cache, template doesn't exist
+    throw new Error(`Template ${instance.templateId} not found in memory cache. Templates must be in memory - no fallback to database.`);
   }
 
   // ✅ Crea nuovo template nel progetto
@@ -1057,17 +1054,10 @@ export async function buildTemplateExpanded(
 ): Promise<TaskTree | null> {
   if (!templateId) return null;
 
-  // ✅ Carica template
-  let template = DialogueTaskService.getTemplate(templateId);
-  if (!template && projectId) {
-    const projectTemplate = await loadTemplateFromProject(templateId, projectId);
-    if (projectTemplate) {
-      template = projectTemplate;
-    }
-  }
-
+  // ✅ Carica template - NO FALLBACK to database
+  const template = DialogueTaskService.getTemplate(templateId);
   if (!template) {
-    throw new Error(`Template ${templateId} not found`);
+    throw new Error(`Template ${templateId} not found in memory cache. Templates must be in memory - no fallback to database.`);
   }
 
   // ✅ Costruisci nodes dal template
@@ -1152,29 +1142,8 @@ export async function buildTaskTree(
     });
   }
 
-  // ✅ If not in cache, try loading from project database
-  if (!template && projectId) {
-    console.log('[buildTaskTree] 🔍 Trying to load template from project database', {
-      templateId: instance.templateId,
-      projectId
-    });
-    const projectTemplate = await loadTemplateFromProject(instance.templateId, projectId);
-    if (projectTemplate) {
-      template = projectTemplate;
-      console.log('[buildTaskTree] ✅ Template loaded from project database', {
-        templateId: template.id || template._id,
-        templateLabel: template.label
-      });
-    } else {
-      console.warn('[buildTaskTree] ⚠️ Template not found in project database', {
-        templateId: instance.templateId,
-        projectId
-      });
-    }
-  }
-
-  // ✅ TOLERANT: Template should exist by construction, but don't block flow if not found
-  // Log warning but allow wizard to continue (template might be created later)
+  // ✅ NO FALLBACK: Template must be in memory cache
+  // If not in cache, it doesn't exist (or was deleted) - throw error
   if (!template) {
     const cacheSize = DialogueTaskService.getTemplateCount();
     const cacheLoaded = (DialogueTaskService as any).cacheLoaded;
@@ -1185,7 +1154,9 @@ export async function buildTaskTree(
       label: t.label,
       name: t.name
     }));
-    console.warn('[buildTaskTree] ⚠️ Template not found (non-blocking)', {
+
+    const errorMessage = `Template ${instance.templateId} not found in memory cache. The template does not exist or was deleted. Templates must be in memory - no fallback to database.`;
+    console.error('[buildTaskTree] ❌ Template not found in cache - NO FALLBACK:', {
       templateId: instance.templateId,
       templateIdType: typeof instance.templateId,
       taskId: instance.id,
@@ -1193,10 +1164,10 @@ export async function buildTaskTree(
       cacheSize,
       cacheLoaded,
       allTemplateIds,
-      hint: 'Template should exist by construction, but wizard will continue. Template might be created later or needs to be loaded from database.'
+      hint: 'The template was deleted or never existed. Check if the template was properly created and added to DialogueTaskService cache.'
     });
-    // ✅ Return null instead of throwing - allows wizard to continue
-    return null;
+    // ✅ NO FALLBACK: Throw error - template must exist in memory
+    throw new Error(errorMessage);
   }
 
   // ✅ Usa buildTaskTreeNodes() per costruire direttamente TaskTreeNode[] con subNodes[]
@@ -1605,12 +1576,12 @@ export async function extractTaskOverrides(
   }
 
   // ✅ Carica templateVersion dal template corrente (per drift detection)
+  // ✅ NO FALLBACK: Template must be in memory cache
   let template: any = null;
   if (instance.templateId) {
     template = DialogueTaskService.getTemplate(instance.templateId);
-    if (!template && projectId) {
-      // ✅ loadTemplateFromProject è nello stesso file, non serve importarla
-      template = await loadTemplateFromProject(instance.templateId, projectId);
+    if (!template) {
+      throw new Error(`Template ${instance.templateId} not found in memory cache. Templates must be in memory - no fallback to database.`);
     }
   }
   const templateVersion = template?.version || instance.templateVersion || 1;

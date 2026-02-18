@@ -379,7 +379,7 @@ export async function loadAndAdaptTaskTreeForExistingTask(
           guids: guidArray
         });
         const translations = await getTemplateTranslations(guidArray);
-        const projectLocale = getCurrentProjectLocale() || 'it';
+        const projectLocale = getCurrentProjectLocale() || 'it-IT';
         for (const guid of allGuids) {
           const trans = translations[guid];
           if (trans) {
