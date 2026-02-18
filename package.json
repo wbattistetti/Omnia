@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "redis:up": "docker-compose up -d redis || echo Redis startup failed (Docker may not be running)",
+    "redis:up": "docker-compose up -d redis",
     "redis:up:ignore": "docker-compose up -d redis 2>&1 || exit 0",
     "redis:down": "docker-compose down redis",
     "redis:check": "docker ps --filter name=redis --format \"{{.Status}}\"",
@@ -16,7 +16,7 @@
     "be:ruby": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Set-Location 'backend/ruby'; ./start-ruby.bat\"",
     "be:vbnet": "cd VBNET/ApiServer && dotnet run",
     "dev:beOld": "npm run redis:up:ignore && concurrently -n express,api,ruby -c yellow,cyan,magenta \"npm:be:express\" \"npm:be:api\" \"npm:be:ruby\"",
-    "dev:beNew": "npm run redis:up:ignore && concurrently -n express,apiNew,ruby -c yellow,cyan,magenta \"npm:be:express\" \"npm:be:apiNew\" \"npm:be:ruby\"",
+    "dev:beNew": "npm run redis:up && node backend/scripts/waitForRedis.js && concurrently -n express,apiNew,ruby,startup -c yellow,cyan,magenta,green \"npm:be:express\" \"npm:be:apiNew\" \"npm:be:ruby\" \"node backend/scripts/waitForServers.js\"",
     "dev:all": "npm run redis:up && concurrently -n web,express,api,ruby -c green,yellow,cyan,magenta \"vite\" \"npm:be:express\" \"npm:be:api\" \"npm:be:ruby\"",
     "dev:allNew": "npm run redis:up && concurrently -n web,express,apiNew,ruby -c green,yellow,cyan,magenta \"vite\" \"npm:be:express\" \"npm:be:apiNew\" \"npm:be:ruby\"",
     "build": "vite build",
