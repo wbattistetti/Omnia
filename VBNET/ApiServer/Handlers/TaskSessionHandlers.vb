@@ -421,18 +421,18 @@ Namespace ApiServer.Handlers
                     ' Non bloccare il flusso se Pub/Sub fallisce - il flag è già salvato su Redis
                 End Try
 
-                ' ✅ STATELESS: Se il task non è ancora stato eseguito, avvialo ora (SSE è connesso)
-                Console.WriteLine($"[API] ✅ STATELESS: Checking TaskInstance for session: {sessionId}, IsNothing: {session.TaskInstance Is Nothing}")
+                ' ✅ DISABLED: Se il task non è ancora stato eseguito, avvialo ora (SSE è connesso)
+                Console.WriteLine($"[API] ⚠️  EXECUTION DISABLED: Checking TaskInstance for session: {sessionId}, IsNothing: {session.TaskInstance Is Nothing}")
                 If session.TaskInstance Is Nothing Then
-                    Console.WriteLine($"[API] ✅ STATELESS: TaskInstance is Nothing, SSE is connected, starting execution now for session: {sessionId}")
-                    SessionManager.StartTaskExecutionIfNeeded(sessionId)
+                    Console.WriteLine($"[API] ⚠️  EXECUTION DISABLED: TaskInstance is Nothing, but StartTaskExecutionIfNeeded is commented out for debugging")
+                    ' SessionManager.StartTaskExecutionIfNeeded(sessionId)
                     ' Ricarica la sessione dopo aver avviato l'esecuzione
                     session = SessionManager.GetTaskSession(sessionId)
-                    Console.WriteLine($"[API] ✅ STATELESS: Session reloaded after starting execution, TaskInstance IsNothing: {session.TaskInstance Is Nothing}")
+                    Console.WriteLine($"[API] ✅ STATELESS: Session reloaded, TaskInstance IsNothing: {session.TaskInstance Is Nothing}")
                 Else
-                    Console.WriteLine($"[API] ✅ STATELESS: TaskInstance already exists, ensuring handlers are attached for session: {sessionId}")
+                    Console.WriteLine($"[API] ⚠️  EXECUTION DISABLED: TaskInstance already exists, but StartTaskExecutionIfNeeded is commented out for debugging")
                     ' ✅ STATELESS: Assicurati che gli handler siano collegati anche se il task è già stato eseguito
-                    SessionManager.StartTaskExecutionIfNeeded(sessionId)
+                    ' SessionManager.StartTaskExecutionIfNeeded(sessionId)
                 End If
 
                 ' ✅ Usa SseStreamManager per aprire connessione SSE
@@ -612,10 +612,10 @@ Namespace ApiServer.Handlers
                 ' ✅ STEP 6: Assicurati che gli handler siano collegati prima di eseguire il task
                 SessionManager.AttachTaskEngineHandlers(session)
 
-                ' ✅ STEP 7: Continua l'esecuzione del motore
-                Console.WriteLine($"[MOTORE] ▶️ Executing task after input...")
-                session.TaskEngine.ExecuteTask(session.TaskInstance)
-                Console.WriteLine($"[MOTORE] ✅ ExecuteTask completed")
+                ' ✅ DISABLED: STEP 7: Continua l'esecuzione del motore
+                Console.WriteLine($"[MOTORE] ⚠️  EXECUTION DISABLED: ExecuteTask is commented out for debugging")
+                ' session.TaskEngine.ExecuteTask(session.TaskInstance)
+                ' Console.WriteLine($"[MOTORE] ✅ ExecuteTask completed")
 
                 ' ✅ STATELESS: Salva la sessione su Redis dopo l'esecuzione (include eventuali messaggi del SuccessResponse)
                 ' Nota: I messaggi del SuccessResponse vengono emessi durante ExecuteTask tramite MessageToShow event,

@@ -347,20 +347,30 @@ Public Class TaskAssembler
     ''' Compila Escalation (IDE) in Escalation (Runtime)
     ''' </summary>
     Private Function CompileEscalation(ideEscalation As Compiler.Escalation) As TaskEngine.Escalation
+        Console.WriteLine($"[TaskAssembler.CompileEscalation] 🔍 START: Compiling escalation: EscalationId={ideEscalation.EscalationId}")
+        Console.WriteLine($"   ideEscalation.Tasks IsNothing: {ideEscalation.Tasks Is Nothing}")
+        Console.WriteLine($"   ideEscalation.Tasks.Count: {If(ideEscalation.Tasks IsNot Nothing, ideEscalation.Tasks.Count, 0)}")
+
         Dim runtimeEscalation As New TaskEngine.Escalation() With {
             .EscalationId = ideEscalation.EscalationId,
             .Tasks = New List(Of ITask)()
         }
 
         If ideEscalation.Tasks IsNot Nothing Then
-            For Each ideTask As Compiler.Task In ideEscalation.Tasks
+            For i = 0 To ideEscalation.Tasks.Count - 1
+                Dim ideTask = ideEscalation.Tasks(i)
+                Console.WriteLine($"[TaskAssembler.CompileEscalation] 🔍 Processing task[{i}] in escalation: TaskId={ideTask.Id}")
                 Dim runtimeTask = CompileTask(ideTask)
                 If runtimeTask IsNot Nothing Then
+                    Console.WriteLine($"[TaskAssembler.CompileEscalation] ✅ Task[{i}] compiled successfully: {runtimeTask.GetType().Name}")
                     runtimeEscalation.Tasks.Add(runtimeTask)
+                Else
+                    Console.WriteLine($"[TaskAssembler.CompileEscalation] ⚠️ Task[{i}] compiled to Nothing, skipping")
                 End If
             Next
         End If
 
+        Console.WriteLine($"[TaskAssembler.CompileEscalation] ✅ END: Escalation compiled with {runtimeEscalation.Tasks.Count} tasks")
         Return runtimeEscalation
     End Function
 
@@ -368,39 +378,74 @@ Public Class TaskAssembler
     ''' Compila Task (IDE) in ITask (Runtime)
     ''' </summary>
     Private Function CompileTask(ideTask As Compiler.Task) As ITask
+        Console.WriteLine("=================================================================================")
+        Console.WriteLine($"[TaskAssembler.CompileTask] 🔍 START: Compiling task from IDE to Runtime")
+        Console.WriteLine($"   Task.Id: {ideTask.Id}")
+        Console.WriteLine($"   Task.Type.HasValue: {ideTask.Type.HasValue}")
+        Console.WriteLine($"   Task.Type.Value: {If(ideTask.Type.HasValue, ideTask.Type.Value.ToString(), "NULL")}")
+        Console.WriteLine($"   Task.Text IsNothing: {String.IsNullOrEmpty(ideTask.Text)}")
+        Console.WriteLine($"   Task.Text: {If(String.IsNullOrEmpty(ideTask.Text), "NULL/EMPTY", ideTask.Text)}")
+        Console.WriteLine($"   Task.Parameters IsNothing: {ideTask.Parameters Is Nothing}")
+        Console.WriteLine($"   Task.Parameters.Count: {If(ideTask.Parameters IsNot Nothing, ideTask.Parameters.Count, 0)}")
+        If ideTask.Parameters IsNot Nothing AndAlso ideTask.Parameters.Count > 0 Then
+            For i = 0 To ideTask.Parameters.Count - 1
+                Dim param = ideTask.Parameters(i)
+                Console.WriteLine($"     Parameter[{i}]: ParameterId={param.ParameterId}, Value={If(String.IsNullOrEmpty(param.Value), "NULL/EMPTY", param.Value)}")
+            Next
+        End If
+        Console.WriteLine($"   Task.Value IsNothing: {ideTask.Value Is Nothing}")
+        If ideTask.Value IsNot Nothing Then
+            Console.WriteLine($"   Task.Value.Keys: {String.Join(", ", ideTask.Value.Keys)}")
+            If ideTask.Value.ContainsKey("parameters") Then
+                Console.WriteLine($"   Task.Value['parameters'] exists: True")
+            End If
+        End If
+        Console.WriteLine("=================================================================================")
+
         If Not ideTask.Type.HasValue Then
-            Console.WriteLine($"[COMPILER] ERROR: Task {ideTask.Id} has no Type")
+            Console.WriteLine($"[TaskAssembler.CompileTask] ❌ ERROR: Task {ideTask.Id} has no Type")
             Return Nothing
         End If
 
         Dim typeValue = ideTask.Type.Value
         If Not [Enum].IsDefined(GetType(TaskTypes), typeValue) Then
-            Console.WriteLine($"[COMPILER] ERROR: Task {ideTask.Id} has invalid Type: {typeValue}")
+            Console.WriteLine($"[TaskAssembler.CompileTask] ❌ ERROR: Task {ideTask.Id} has invalid Type: {typeValue}")
             Return Nothing
         End If
 
         Dim taskType = CType(typeValue, TaskTypes)
+        Console.WriteLine($"[TaskAssembler.CompileTask] ✅ TaskType determined: {taskType} (value={typeValue})")
 
         Select Case taskType
             Case TaskTypes.SayMessage
+                Console.WriteLine($"[TaskAssembler.CompileTask] 🔍 Processing SayMessage task: {ideTask.Id}")
                 ' ✅ Estrai SOLO la chiave, NON risolvere
                 Dim textKey As String = ""
 
                 If Not String.IsNullOrWhiteSpace(ideTask.Text) Then
                     textKey = ideTask.Text.Trim()
+                    Console.WriteLine($"[TaskAssembler.CompileTask] ✅ Found textKey in Task.Text: {textKey}")
                 ElseIf ideTask.Parameters IsNot Nothing Then
+                    Console.WriteLine($"[TaskAssembler.CompileTask] 🔍 Searching for text parameter in Task.Parameters...")
                     Dim textParams = ideTask.Parameters.Where(Function(p) p.ParameterId = "text").ToList()
+                    Console.WriteLine($"[TaskAssembler.CompileTask] 🔍 Found {textParams.Count} parameters with ParameterId='text'")
                     If textParams.Count = 0 Then
+                        Console.WriteLine($"[TaskAssembler.CompileTask] ❌ ERROR: SayMessage task '{ideTask.Id}' has no parameter with ParameterId='text'")
                         Throw New InvalidOperationException($"SayMessage task '{ideTask.Id}' has no parameter with ParameterId='text'. The 'text' parameter is mandatory for MessageTask.")
                     ElseIf textParams.Count > 1 Then
+                        Console.WriteLine($"[TaskAssembler.CompileTask] ❌ ERROR: SayMessage task '{ideTask.Id}' has {textParams.Count} parameters with ParameterId='text'")
                         Throw New InvalidOperationException($"SayMessage task '{ideTask.Id}' has {textParams.Count} parameters with ParameterId='text'. Each parameter ID must be unique.")
                     End If
                     Dim textParam = textParams.Single()
+                    Console.WriteLine($"[TaskAssembler.CompileTask] 🔍 Found text parameter: Value={If(String.IsNullOrWhiteSpace(textParam.Value), "NULL/EMPTY", textParam.Value)}")
                     If String.IsNullOrWhiteSpace(textParam.Value) Then
+                        Console.WriteLine($"[TaskAssembler.CompileTask] ❌ ERROR: SayMessage task '{ideTask.Id}' has parameter 'text' with empty value")
                         Throw New InvalidOperationException($"SayMessage task '{ideTask.Id}' has parameter 'text' with empty value. TextKey cannot be empty.")
                     End If
                     textKey = textParam.Value.Trim()
+                    Console.WriteLine($"[TaskAssembler.CompileTask] ✅ Found textKey in Task.Parameters: {textKey}")
                 ElseIf ideTask.Value IsNot Nothing AndAlso ideTask.Value.ContainsKey("parameters") Then
+                    Console.WriteLine($"[TaskAssembler.CompileTask] 🔍 Searching for text parameter in Task.Value['parameters']...")
                     Dim parameters = ideTask.Value("parameters")
                     If TypeOf parameters Is List(Of Object) Then
                         Dim paramsList = CType(parameters, List(Of Object))
@@ -421,37 +466,48 @@ Public Class TaskAssembler
 
                 ' ❌ ERRORE DI COMPILAZIONE: TextKey obbligatorio
                 If String.IsNullOrWhiteSpace(textKey) Then
+                    Console.WriteLine($"[TaskAssembler.CompileTask] ❌ ERROR: SayMessage task '{ideTask.Id}' has no TextKey after searching all sources")
                     Throw New InvalidOperationException($"SayMessage task '{ideTask.Id}' has no TextKey. The IDE must provide a translation key (GUID or symbolic name), not literal text. TextKey is mandatory.")
                 End If
 
                 ' ✅ Verifica che non sia testo letterale (euristica: se contiene spazi e non è un GUID, probabilmente è testo)
                 If Not IsGuid(textKey) AndAlso textKey.Contains(" ") Then
+                    Console.WriteLine($"[TaskAssembler.CompileTask] ❌ ERROR: SayMessage task '{ideTask.Id}' has TextKey '{textKey}' which appears to be literal text")
                     Throw New InvalidOperationException($"SayMessage task '{ideTask.Id}' has TextKey '{textKey}' which appears to be literal text. The IDE must provide only translation keys (GUID or symbolic names), not literal text.")
                 End If
 
                 ' ✅ Crea MessageTask con SOLO la chiave
+                Console.WriteLine($"[TaskAssembler.CompileTask] ✅ SUCCESS: Created MessageTask with textKey: {textKey}")
+                Console.WriteLine("=================================================================================")
                 Return New MessageTask(textKey)
             Case TaskTypes.CloseSession
+                Console.WriteLine($"[TaskAssembler.CompileTask] ✅ Creating CloseSessionTask")
+                Console.WriteLine("=================================================================================")
                 Return New CloseSessionTask()
             Case TaskTypes.Transfer
-                Console.WriteLine($"✅ [COMPILER][TaskAssembler] CompileTask: Creating TransferTask")
+                Console.WriteLine($"[TaskAssembler.CompileTask] ✅ Creating TransferTask")
                 System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][TaskAssembler] CompileTask: Creating TransferTask")
+                Console.WriteLine("=================================================================================")
                 Return New TransferTask()
             Case TaskTypes.UtteranceInterpretation
-                Console.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: UtteranceInterpretation tasks are not supported in escalations, returning Nothing")
+                Console.WriteLine($"[TaskAssembler.CompileTask] ❌ ERROR: UtteranceInterpretation tasks are not supported in escalations, returning Nothing")
                 System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: UtteranceInterpretation tasks are not supported in escalations, returning Nothing")
+                Console.WriteLine("=================================================================================")
                 Return Nothing
             Case TaskTypes.BackendCall
-                Console.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: BackendCall tasks are not supported in escalations, returning Nothing")
+                Console.WriteLine($"[TaskAssembler.CompileTask] ❌ ERROR: BackendCall tasks are not supported in escalations, returning Nothing")
                 System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: BackendCall tasks are not supported in escalations, returning Nothing")
+                Console.WriteLine("=================================================================================")
                 Return Nothing
             Case TaskTypes.ClassifyProblem
-                Console.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: ClassifyProblem tasks are not supported in escalations, returning Nothing")
+                Console.WriteLine($"[TaskAssembler.CompileTask] ❌ ERROR: ClassifyProblem tasks are not supported in escalations, returning Nothing")
                 System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: ClassifyProblem tasks are not supported in escalations, returning Nothing")
+                Console.WriteLine("=================================================================================")
                 Return Nothing
             Case Else
-                Console.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: Unknown TaskType '{taskType}', returning Nothing")
+                Console.WriteLine($"[TaskAssembler.CompileTask] ❌ ERROR: Unknown TaskType '{taskType}', returning Nothing")
                 System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: Unknown TaskType '{taskType}', returning Nothing")
+                Console.WriteLine("=================================================================================")
                 Return Nothing
         End Select
     End Function

@@ -52,8 +52,8 @@ Public Class UtteranceTaskCompiler
         If taskTreeExpanded IsNot Nothing Then
             Try
                 ' ✅ DIAG: Verifica steps PRIMA di compilare
-                Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-                Console.WriteLine($"[DIAG] UtteranceTaskCompiler: Verifying steps before compilation...")
+                Console.WriteLine("=================================================================================")
+                Console.WriteLine("[DIAG] UtteranceTaskCompiler: Verifying steps before compilation...")
                 Console.WriteLine($"   TaskInstance.Id: {taskId}")
                 Console.WriteLine($"   TaskInstance.Steps IsNothing: {task.Steps Is Nothing}")
                 If task.Steps IsNot Nothing Then
@@ -67,8 +67,10 @@ Public Class UtteranceTaskCompiler
                     Console.WriteLine($"   FirstNode.Steps IsNothing: {firstNode.Steps Is Nothing}")
                     If firstNode.Steps IsNot Nothing Then
                         Console.WriteLine($"   FirstNode.Steps.Count: {firstNode.Steps.Count}")
-                        For Each step In firstNode.Steps
-                            Console.WriteLine($"     - Step Type: {step.Type}, Escalations: {If(step.Escalations IsNot Nothing, step.Escalations.Count, 0)}")
+                        For Each dstep As Compiler.DialogueStep In firstNode.Steps
+                            Dim escalationsCount As Integer = If(dstep.Escalations IsNot Nothing, dstep.Escalations.Count, 0)
+                            Dim stepInfo As String = "     Step Type: " & dstep.Type & ", Escalations: " & escalationsCount.ToString()
+                            Console.WriteLine(stepInfo)
                         Next
                     End If
                     Console.WriteLine($"   FirstNode.SubTasks IsNothing: {firstNode.SubTasks Is Nothing}")
@@ -76,7 +78,7 @@ Public Class UtteranceTaskCompiler
                         Console.WriteLine($"   FirstNode.SubTasks.Count: {firstNode.SubTasks.Count}")
                     End If
                 End If
-                Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                Console.WriteLine("=================================================================================")
 
                 Dim taskCompiler As New TaskCompiler()
                 Dim taskJson = JsonConvert.SerializeObject(taskTreeExpanded)
@@ -96,20 +98,22 @@ Public Class UtteranceTaskCompiler
                     Dim runtimeTask = compileResult.Task
 
                     ' ✅ DIAG: Verifica steps dopo compilazione
-                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-                    Console.WriteLine($"[DIAG] UtteranceTaskCompiler: Steps after compilation...")
+                    Console.WriteLine("=================================================================================")
+                    Console.WriteLine("[DIAG] UtteranceTaskCompiler: Steps after compilation...")
                     Console.WriteLine($"   RuntimeTask.Steps IsNothing: {runtimeTask.Steps Is Nothing}")
                     If runtimeTask.Steps IsNot Nothing Then
                         Console.WriteLine($"   RuntimeTask.Steps.Count: {runtimeTask.Steps.Count}")
-                        For Each step In runtimeTask.Steps
-                            Console.WriteLine($"     - Step Type: {step.Type}, Escalations: {If(step.Escalations IsNot Nothing, step.Escalations.Count, 0)}")
+                        For Each dstep As TaskEngine.DialogueStep In runtimeTask.Steps
+                            Dim escalationsCount As Integer = If(dstep.Escalations IsNot Nothing, dstep.Escalations.Count, 0)
+                            Dim stepInfo As String = "     Step Type: " & dstep.Type & ", Escalations: " & escalationsCount.ToString()
+                            Console.WriteLine(stepInfo)
                         Next
                     End If
                     Console.WriteLine($"   RuntimeTask.HasSubTasks: {runtimeTask.HasSubTasks()}")
                     If runtimeTask.HasSubTasks() Then
                         Console.WriteLine($"   RuntimeTask.SubTasks.Count: {runtimeTask.SubTasks.Count}")
                     End If
-                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                    Console.WriteLine("=================================================================================")
 
                     compiledTask.Steps = runtimeTask.Steps
                     compiledTask.Constraints = runtimeTask.Constraints
@@ -126,8 +130,8 @@ Public Class UtteranceTaskCompiler
                     End If
 
                     ' ✅ DIAG: Verifica CompiledTask finale
-                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
-                    Console.WriteLine($"[DIAG] UtteranceTaskCompiler: Final CompiledTask...")
+                    Console.WriteLine("=================================================================================")
+                    Console.WriteLine("[DIAG] UtteranceTaskCompiler: Final CompiledTask...")
                     Console.WriteLine($"   CompiledTask.Id: {compiledTask.Id}")
                     Console.WriteLine($"   CompiledTask.Steps IsNothing: {compiledTask.Steps Is Nothing}")
                     If compiledTask.Steps IsNot Nothing Then
@@ -137,7 +141,7 @@ Public Class UtteranceTaskCompiler
                     If compiledTask.SubTasks IsNot Nothing Then
                         Console.WriteLine($"   CompiledTask.SubTasks.Count: {compiledTask.SubTasks.Count}")
                     End If
-                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                    Console.WriteLine("=================================================================================")
                 End If
             Catch ex As Exception
                 Console.WriteLine($"[COMPILER] ERROR: Exception during compilation for task {taskId}: {ex.GetType().Name} - {ex.Message}")

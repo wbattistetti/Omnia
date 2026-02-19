@@ -41,7 +41,7 @@ Public Class EventEmitter
                 Try
                     handler(data)
                 Catch ex As Exception
-                    Console.WriteLine($"[API] ERROR: EventEmitter handler error for {eventName}: {ex.Message}")
+                    ' Log removed
                 End Try
             Next
         End If
@@ -159,9 +159,7 @@ Public Class SessionManager
             If Not String.IsNullOrEmpty(_redisConnectionString) AndAlso Not String.IsNullOrEmpty(_redisKeyPrefix) Then
                 Try
                     _executionStateStorage = New ApiServer.SessionStorage.RedisExecutionStateStorage(_redisConnectionString, _redisKeyPrefix, _sessionTTL)
-                    Console.WriteLine($"[SessionManager] ✅ RedisExecutionStateStorage initialized")
                 Catch ex As Exception
-                    Console.WriteLine($"[SessionManager] ⚠️ Failed to initialize RedisExecutionStateStorage: {ex.Message}")
                     ' Non solleviamo eccezione perché ExecutionState storage è opzionale per retrocompatibilità
                 End Try
             End If
@@ -171,9 +169,7 @@ Public Class SessionManager
                 Try
                     _dialogRepository = New ApiServer.Repositories.RedisDialogRepository(_redisConnectionString, _redisKeyPrefix)
                     _translationRepository = New ApiServer.Repositories.RedisTranslationRepository(_redisConnectionString, _redisKeyPrefix)
-                    Console.WriteLine($"[SessionManager] ✅ DialogRepository and TranslationRepository initialized")
                 Catch ex As Exception
-                    Console.WriteLine($"[SessionManager] ⚠️ Failed to initialize repositories: {ex.Message}")
                     Throw ' I repository sono obbligatori per il runtime stateless
                 End Try
             End If
@@ -260,7 +256,6 @@ Public Class SessionManager
                                                                              Await session.Orchestrator.ExecuteDialogueAsync()
                                                                          End If
                                                                      Catch ex As Exception
-                                                                         Console.WriteLine($"[API] ERROR: Execution error for session {sessionId}: {ex.GetType().Name} - {ex.Message}")
                                                                          Dim errorData = New With {
                                                                              .error = ex.Message,
                                                                              .timestamp = DateTime.UtcNow.ToString("O")
@@ -404,7 +399,6 @@ Public Class SessionManager
                            .timestamp = DateTime.UtcNow.ToString("O")
                        }
                                                      session.Messages.Add(msg)
-                                                     Console.WriteLine($"[MOTORE] 💬 Message emitted: '{e.Message}'")
                                                      Dim emitter = GetOrCreateEventEmitter(sessionId)
                                                      emitter.Emit("message", msg)
 
@@ -412,13 +406,12 @@ Public Class SessionManager
                                                      ' ✅ STATELESS: CurrentNodeId è già impostato quando il dialogo viene caricato
                                                      Dim firstNodeId As String = If(String.IsNullOrEmpty(session.CurrentNodeId), "", session.CurrentNodeId)
                                                      session.WaitingForInputData = New With {.nodeId = firstNodeId}
-                                                     Console.WriteLine($"[MOTORE] ⏳ Waiting for input: nodeId={firstNodeId}")
                                                      emitter.Emit("waitingForInput", session.WaitingForInputData)
 
                                                      Try
                                                          _storage.SaveTaskSession(session)
                                                      Catch saveEx As Exception
-                                                         Console.WriteLine($"[ERROR] Failed to save session: {saveEx.Message}")
+                                                         ' Log removed
                                                      End Try
                                                  End Sub
 
@@ -439,18 +432,17 @@ Public Class SessionManager
                                                                                                                        If sessionToUse Is Nothing OrElse Not sessionToUse.SseConnected Then
                                                                                                                            Return
                                                                                                                        End If
-                                                                                                                       Console.WriteLine($"[MOTORE] 🔌 SSE connected, starting task execution")
                                                                                                                        System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
                                                                                                                                                            Await StartTaskExecutionAsync(sessionId)
                                                                                                                                                            subscriber.Unsubscribe(channelName)
                                                                                                                                                        End Function)
                                                                                                                    Catch ex As Exception
-                                                                                                                       Console.WriteLine($"[ERROR] Pub/Sub notification error: {ex.Message}")
+                                                                                                                       ' Log removed
                                                                                                                    End Try
                                                                                                                End Sub
                                                                              subscriber.Subscribe(channelName, handler)
                                                                          Catch ex As Exception
-                                                                             Console.WriteLine($"[ERROR] Failed to subscribe to Redis Pub/Sub: {ex.Message}")
+                                                                             ' Log removed
                                                                          End Try
                                                                      End Function)
             End If
@@ -486,7 +478,6 @@ Public Class SessionManager
                                                         session.Messages.Add(msg)
                                                         ' ✅ STATELESS: Usa EventEmitter condiviso
                                                         sharedEmitter.Emit("message", msg)
-                                                        Console.WriteLine($"[MOTORE] 💬 Message emitted: '{e.Message}'")
 
                                                         ' ✅ STATELESS: Imposta waitingForInput solo se non tutti i task sono completati
                                                         Dim allCompleted = session.TaskInstance IsNot Nothing AndAlso session.TaskInstance.TaskList.All(Function(t) t.State = DialogueState.Success OrElse t.State = DialogueState.AcquisitionFailed)
@@ -497,7 +488,6 @@ Public Class SessionManager
                                                             session.WaitingForInputData = New With {.nodeId = firstNodeId}
                                                             ' ✅ STATELESS: Usa EventEmitter condiviso
                                                             sharedEmitter.Emit("waitingForInput", session.WaitingForInputData)
-                                                            Console.WriteLine($"[MOTORE] ⏳ Waiting for input")
                                                         Else
                                                             ' Tutti i task sono completati, non impostare waitingForInput
                                                             session.IsWaitingForInput = False
@@ -509,7 +499,7 @@ Public Class SessionManager
                                                             _storage.SaveTaskSession(session)
                                                             ' Log rimosso: salvataggio non essenziale per flusso motore
                                                         Catch saveEx As Exception
-                                                            Console.WriteLine($"[ERROR] Failed to save session: {saveEx.Message}")
+                                                            ' Log removed
                                                         End Try
                                                     End Sub
         ' Log rimosso: non essenziale per flusso motore
@@ -524,23 +514,17 @@ Public Class SessionManager
         End If
 
         If String.IsNullOrWhiteSpace(session.ProjectId) OrElse String.IsNullOrWhiteSpace(session.DialogVersion) Then
-            Console.WriteLine($"[SessionManager] ⚠️ Cannot load dialog: ProjectId or DialogVersion is empty")
             Return Nothing
         End If
 
         If _dialogRepository Is Nothing Then
-            Console.WriteLine($"[SessionManager] ⚠️ DialogRepository is not initialized")
             Return Nothing
         End If
 
         Try
             Dim runtimeTask = _dialogRepository.GetDialog(session.ProjectId, session.DialogVersion)
-            If runtimeTask Is Nothing Then
-                Console.WriteLine($"[SessionManager] ❌ Dialog not found: {session.ProjectId}:{session.DialogVersion}")
-            End If
             Return runtimeTask
         Catch ex As Exception
-            Console.WriteLine($"[SessionManager] ❌ Error loading dialog: {ex.Message}")
             Return Nothing
         End Try
     End Function
@@ -565,7 +549,6 @@ Public Class SessionManager
             ' ✅ STATELESS: Carica dialogo dal repository se necessario
             Dim runtimeTask = LoadDialogForSession(session)
             If runtimeTask Is Nothing Then
-                Console.WriteLine($"[SessionManager] ⚠️ Cannot start execution: Dialog not found for session {sessionId}")
                 Return
             End If
 
@@ -573,15 +556,13 @@ Public Class SessionManager
             AttachTaskEngineHandlers(session)
 
             ' Avvia l'esecuzione del task
-            Console.WriteLine($"[MOTORE] ▶️ Starting task execution (recovered session)")
             Try
                 Dim taskInstance = ConvertRuntimeTaskToTaskInstance(runtimeTask, session.ProjectId, session.Locale)
                 session.TaskInstance = taskInstance
                 _storage.SaveTaskSession(session) ' Salva su Redis
 
-                ' ✅ STATELESS: Esegui il task senza delay artificiale
-                session.TaskEngine.ExecuteTask(taskInstance)
-                Console.WriteLine($"[MOTORE] ✅ Task execution completed")
+                ' ✅ DISABLED: Esegui il task senza delay artificiale
+                ' session.TaskEngine.ExecuteTask(taskInstance)
 
                 ' ✅ STATELESS: Verifica completamento
                 Dim sharedEmitterRecovered = GetOrCreateEventEmitter(sessionId)
@@ -592,7 +573,6 @@ Public Class SessionManager
                         .timestamp = DateTime.UtcNow.ToString("O")
                     }
                     sharedEmitterRecovered.Emit("complete", completeData)
-                    Console.WriteLine($"[MOTORE] 🎉 All tasks completed, complete event emitted")
                 End If
             Catch ex As Exception
                 _logger.LogError("Failed to start task execution for recovered session", ex, New With {.sessionId = sessionId})
@@ -633,41 +613,35 @@ Public Class SessionManager
         SyncLock _lock
             Dim session = _storage.GetTaskSession(sessionId)
             If session Is Nothing Then
-                Console.WriteLine($"[MOTORE] ❌ ERROR: Session not found for task execution")
                 Return
             End If
 
             ' Se il task è già stato eseguito, non fare nulla
             If session.TaskInstance IsNot Nothing Then
-                Console.WriteLine($"[MOTORE] ⚠️ Task already executed, skipping")
                 Return
             End If
 
             ' ✅ STATELESS: Carica dialogo dal repository se necessario
             Dim runtimeTask = LoadDialogForSession(session)
             If runtimeTask Is Nothing Then
-                Console.WriteLine($"[SessionManager] ⚠️ Cannot start execution: Dialog not found for session {sessionId}")
                 Return
             End If
 
             ' ✅ STATELESS: Collega gli handler PRIMA di eseguire il task
             AttachTaskEngineHandlers(session)
 
-            Console.WriteLine($"[MOTORE] ▶️ Starting task execution (triggered by SSE connection)")
             Try
                 ' ✅ STATELESS: Carica dialogo dal repository se necessario
                 Dim loadedRuntimeTask = LoadDialogForSession(session)
                 If loadedRuntimeTask Is Nothing Then
-                    Console.WriteLine($"[SessionManager] ⚠️ Cannot start execution: Dialog not found for session {sessionId}")
                     Return
                 End If
                 Dim taskInstance = ConvertRuntimeTaskToTaskInstance(loadedRuntimeTask, session.ProjectId, session.Locale)
                 session.TaskInstance = taskInstance
                 _storage.SaveTaskSession(session) ' Salva su Redis
 
-                ' ✅ STATELESS: Esegui il task (senza delay artificiale)
-                session.TaskEngine.ExecuteTask(taskInstance)
-                Console.WriteLine($"[MOTORE] ✅ Task execution completed")
+                ' ✅ DISABLED: Esegui il task (senza delay artificiale)
+                ' session.TaskEngine.ExecuteTask(taskInstance)
 
                 ' ✅ STATELESS: Verifica completamento
                 Dim sharedEmitter = GetOrCreateEventEmitter(sessionId)
@@ -678,7 +652,6 @@ Public Class SessionManager
                         .timestamp = DateTime.UtcNow.ToString("O")
                     }
                     sharedEmitter.Emit("complete", completeData)
-                    Console.WriteLine($"[MOTORE] 🎉 All tasks completed, complete event emitted")
                 End If
             Catch ex As Exception
                 _logger.LogError("Runtime execution error", ex, New With {.sessionId = sessionId})
@@ -688,7 +661,6 @@ Public Class SessionManager
                     .timestamp = DateTime.UtcNow.ToString("O")
                 }
                 sharedEmitter.Emit("error", errorData)
-                Console.WriteLine($"[SessionManager] ✅ STATELESS: Error event emitted on shared EventEmitter for session: {sessionId}")
             End Try
         End SyncLock
     End Function
@@ -733,7 +705,6 @@ Public Class SessionManager
     ''' <returns>Testo tradotto o Nothing se non trovato</returns>
     Public Shared Function ResolveTranslation(projectId As String, locale As String, textKey As String) As String
         If _translationRepository Is Nothing Then
-            Console.WriteLine($"[SessionManager] ⚠️ TranslationRepository is not initialized")
             Return Nothing
         End If
 
@@ -744,7 +715,6 @@ Public Class SessionManager
         Try
             Return _translationRepository.GetTranslation(projectId, locale, textKey)
         Catch ex As Exception
-            Console.WriteLine($"[SessionManager] ❌ Error resolving translation: {ex.Message}")
             Return Nothing
         End Try
     End Function
@@ -876,8 +846,6 @@ Public Class SessionManager
                 .projectId = projectId,
                 .locale = locale
             })
-        Else
-            Console.WriteLine($"[SESSION] ConvertRuntimeTaskToTaskInstance: runtimeTaskId={runtimeTask.Id}, HasSubTasks={runtimeTask.HasSubTasks()}, ProjectId={projectId}, Locale={locale}")
         End If
 
         ' ✅ STATELESS: Crea TranslationResolverAdapter per TaskInstance
@@ -907,8 +875,6 @@ Public Class SessionManager
                 .stepsCount = rootNode.Steps.Count,
                 .subTasksCount = rootNode.SubTasks.Count
             })
-        Else
-            Console.WriteLine($"[SESSION] ConvertRuntimeTaskToTaskInstance: rootNodeId={rootNode.Id}, Steps.Count={rootNode.Steps.Count}, SubTasks.Count={rootNode.SubTasks.Count}")
         End If
 
         Return taskInstance

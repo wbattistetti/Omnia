@@ -52,6 +52,8 @@ Public Class Motore
         End If
 
         Dim iterationCount As Integer = 0
+        Dim consecutiveTerminationCount As Integer = 0
+        Const MAX_CONSECUTIVE_TERMINATIONS As Integer = 3
         While True
             iterationCount += 1
             Dim currTaskNode As TaskNode = GetNextTask(taskInstance)
@@ -71,9 +73,21 @@ Public Class Motore
             Dim isAterminationResponse As Boolean = ExecuteResponse(tasks, currTaskNode, taskInstance)
 
             If isAterminationResponse Then
-                Console.WriteLine($"[MOTORE] ⚠️ Termination response detected, marking as failed")
+                consecutiveTerminationCount += 1
+                Console.WriteLine($"[MOTORE] ⚠️ Termination response detected, marking as failed (consecutive count: {consecutiveTerminationCount})")
                 MarkAsAcquisitionFailed(currTaskNode)
+
+                ' ✅ GUARD-RAIL: Ferma il loop dopo MAX_CONSECUTIVE_TERMINATIONS termination consecutive
+                If consecutiveTerminationCount >= MAX_CONSECUTIVE_TERMINATIONS Then
+                    Console.WriteLine($"[MOTORE] 🛑 STOP: {MAX_CONSECUTIVE_TERMINATIONS} consecutive termination responses detected. Breaking loop to avoid infinite cycle.")
+                    Console.WriteLine($"[MOTORE] 🔍 DIAGNOSTIC: This indicates a problem with the Start step escalation (likely CloseSessionTask instead of MessageTask)")
+                    Exit While
+                End If
+
                 Continue While
+            Else
+                ' Reset counter se non c'è termination response
+                consecutiveTerminationCount = 0
             End If
 
             ' ✅ STATELESS: Se lo stato è Success, verifica se tutti i task sono completati
