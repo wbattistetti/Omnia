@@ -21,7 +21,10 @@ Public Class FlowCompiler
         System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][FlowCompiler] Calling compiler.Compile for task {taskId}...")
 
         ' Compila il task (senza metadata flowchart)
-        Dim result = compiler.Compile(task, taskId, flow)
+        ' ✅ Passa flow.Tasks come allTemplates (il compiler non ha bisogno di Nodes/Edges)
+        ' ✅ Null-safe: flow.Tasks è sempre inizializzato nel costruttore, ma per sicurezza
+        Dim allTemplates = If(flow.Tasks IsNot Nothing, flow.Tasks, New List(Of Task)())
+        Dim result = compiler.Compile(task, taskId, allTemplates)
 
         ' Aggiungi metadata del flowchart dopo la compilazione
         result.Id = row.Id

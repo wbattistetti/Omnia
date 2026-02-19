@@ -13,8 +13,8 @@ Public MustInherit Class TaskCompilerBase
     ''' </summary>
     ''' <param name="task">Il task da compilare</param>
     ''' <param name="taskId">L'ID del task da compilare</param>
-    ''' <param name="flow">Il flow completo con tutti i template necessari</param>
-    Public MustOverride Function Compile(task As Task, taskId As String, flow As Flow) As CompiledTask
+    ''' <param name="allTemplates">Lista di tutti i template necessari per la compilazione (incluso il template referenziato e tutti i sub-template)</param>
+    Public MustOverride Function Compile(task As Task, taskId As String, allTemplates As List(Of Task)) As CompiledTask
 
     ''' <summary>
     ''' Popola i campi comuni di un CompiledTask (solo logica base, senza metadata flowchart)

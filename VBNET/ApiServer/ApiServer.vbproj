@@ -58,6 +58,8 @@
     <Compile Include="Converters\RuntimeTaskConverter.vb" />
     <Compile Include="Services\TaskDataService.vb" />
     <Compile Include="Services\TaskCompilationService.vb" />
+    <Compile Include="Streaming\ISseStreamManager.vb" />
+    <Compile Include="Streaming\SseStreamManager.vb" />
     <Compile Include="Handlers\CompilationHandlers.vb" />
     <Compile Include="Handlers\TaskSessionHandlers.vb" />
     <Compile Include="Middleware\ExceptionLoggingMiddleware.vb" />

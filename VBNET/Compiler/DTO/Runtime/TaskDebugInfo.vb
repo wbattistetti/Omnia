@@ -1,5 +1,6 @@
 Option Strict On
 Option Explicit On
+Imports Newtonsoft.Json
 
 ''' <summary>
 ''' Debug information per un CompiledTask
@@ -19,7 +20,9 @@ Public Class TaskDebugInfo
 
     ''' <summary>
     ''' Flowchart row ID (se da flowchart)
+    ''' ✅ Per TaskInstance: escluso dal JSON quando è Nothing
     ''' </summary>
+    <JsonProperty("rowId", NullValueHandling:=NullValueHandling.Ignore)>
     Public Property RowId As String
 
     ''' <summary>

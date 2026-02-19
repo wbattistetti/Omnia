@@ -5,6 +5,7 @@ Imports ApiServer.Models
 Imports Compiler
 Imports Microsoft.AspNetCore.Http
 Imports Newtonsoft.Json
+Imports Newtonsoft.Json.Serialization
 Imports TaskEngine
 
 Namespace ApiServer.Handlers
@@ -275,23 +276,25 @@ Namespace ApiServer.Handlers
                 System.Diagnostics.Debug.WriteLine($"   EntryTaskGroupId: {compilationResult.EntryTaskGroupId}")
                 System.Diagnostics.Debug.WriteLine($"   Tasks count: {If(compilationResult.Tasks IsNot Nothing, compilationResult.Tasks.Count, 0)}")
 
-                ' Serialize response manually and write directly to response stream
-                Dim responseObj = New With {
-                    .taskGroups = compilationResult.TaskGroups,
-                    .entryTaskGroupId = compilationResult.EntryTaskGroupId,
-                    .tasks = compilationResult.Tasks,
-                    .compiledBy = "VB.NET_RUNTIME",
-                    .timestamp = DateTime.UtcNow.ToString("O")
-                }
-
-                Console.WriteLine($"✅ [HandleCompileFlow] Building response object...")
+                ' ✅ CRITICAL: Serializza direttamente compilationResult per preservare JsonConverter attributes
+                ' Gli oggetti anonimi non preservano gli attributi JsonConverter delle proprietà
+                Console.WriteLine("📤 [HandleCompileFlow] Serializing compilationResult directly (preserves JsonConverter attributes)...")
                 Console.WriteLine($"   - TaskGroups: {If(compilationResult.TaskGroups IsNot Nothing, compilationResult.TaskGroups.Count, 0)}")
                 Console.WriteLine($"   - Tasks: {If(compilationResult.Tasks IsNot Nothing, compilationResult.Tasks.Count, 0)}")
 
-                Console.WriteLine("📤 [HandleCompileFlow] Serializing response manually...")
+                ' Serialize compilationResult first (preserves JsonConverter on Tasks property)
+                ' ✅ Usa stesso ContractResolver globale per coerenza camelCase
+                Dim compilationJson = Newtonsoft.Json.JsonConvert.SerializeObject(compilationResult, New JsonSerializerSettings() With {
+                    .ContractResolver = New CamelCasePropertyNamesContractResolver(),
+                    .NullValueHandling = NullValueHandling.Ignore
+                })
+                Dim compilationObj = Newtonsoft.Json.Linq.JObject.Parse(compilationJson)
 
-                ' Serialize manually using Newtonsoft.Json to avoid Results.Json() issues
-                Dim jsonResponse = Newtonsoft.Json.JsonConvert.SerializeObject(responseObj)
+                ' Add extra fields
+                compilationObj("compiledBy") = "VB.NET_RUNTIME"
+                compilationObj("timestamp") = DateTime.UtcNow.ToString("O")
+
+                Dim jsonResponse = compilationObj.ToString()
 
                 Console.WriteLine($"   JSON length: {jsonResponse.Length} characters")
                 Console.WriteLine($"   JSON preview: {If(jsonResponse.Length > 200, jsonResponse.Substring(0, 200) & "...", jsonResponse)}")
@@ -376,56 +379,100 @@ Namespace ApiServer.Handlers
                     Return
                 End Try
 
-                If requestObj Is Nothing OrElse requestObj("task") Is Nothing Then
-                    Console.WriteLine("❌ [HandleCompileTask] Request or task is Nothing")
-                    Dim errorJson = JsonConvert.SerializeObject(New With {.error = "Missing task in request"})
+                ' ✅ NUOVO: Riconosci input.TaskInstance
+                Dim taskInstance As Compiler.Task = Nothing
+                Dim allTemplates As List(Of Compiler.Task) = Nothing
+
+                If requestObj("taskInstance") IsNot Nothing Then
+                    ' ✅ NUOVO FORMATO: { taskInstance: {...}, allTemplates: [...] }
+                    Console.WriteLine("✅ [HandleCompileTask] Detected TaskInstance input format")
+
+                    ' Deserialize taskInstance
+                    Try
+                        Dim taskInstanceJson = requestObj("taskInstance").ToString()
+                        taskInstance = JsonConvert.DeserializeObject(Of Compiler.Task)(taskInstanceJson, New JsonSerializerSettings() With {
+                            .NullValueHandling = NullValueHandling.Ignore,
+                            .MissingMemberHandling = MissingMemberHandling.Ignore
+                        })
+                    Catch ex As Exception
+                        Console.WriteLine($"❌ [HandleCompileTask] Error deserializing taskInstance: {ex.Message}")
+                        Dim errorJson = JsonConvert.SerializeObject(New With {.error = "Failed to deserialize taskInstance", .message = ex.Message})
+                        context.Response.ContentType = "application/json"
+                        context.Response.StatusCode = 400
+                        context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
+                        Return
+                    End Try
+
+                    ' Deserialize allTemplates
+                    If requestObj("allTemplates") IsNot Nothing Then
+                        Try
+                            Dim allTemplatesJson = requestObj("allTemplates").ToString()
+                            allTemplates = JsonConvert.DeserializeObject(Of List(Of Compiler.Task))(allTemplatesJson, New JsonSerializerSettings() With {
+                                .NullValueHandling = NullValueHandling.Ignore,
+                                .MissingMemberHandling = MissingMemberHandling.Ignore
+                            })
+                        Catch ex As Exception
+                            Console.WriteLine($"❌ [HandleCompileTask] Error deserializing allTemplates: {ex.Message}")
+                            Dim errorJson = JsonConvert.SerializeObject(New With {.error = "Failed to deserialize allTemplates", .message = ex.Message})
+                            context.Response.ContentType = "application/json"
+                            context.Response.StatusCode = 400
+                            context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
+                            Return
+                        End Try
+                    Else
+                        ' ✅ Se allTemplates non è presente, usa solo taskInstance
+                        allTemplates = New List(Of Compiler.Task) From {taskInstance}
+                    End If
+
+                ElseIf requestObj("task") IsNot Nothing Then
+                    ' ⚠️ LEGACY FORMATO: { task: {...} } - mantenuto per retrocompatibilità
+                    Console.WriteLine("⚠️ [HandleCompileTask] Detected legacy task input format")
+                    Try
+                        Dim taskJson = requestObj("task").ToString()
+                        taskInstance = JsonConvert.DeserializeObject(Of Compiler.Task)(taskJson, New JsonSerializerSettings() With {
+                            .NullValueHandling = NullValueHandling.Ignore,
+                            .MissingMemberHandling = MissingMemberHandling.Ignore
+                        })
+                        allTemplates = New List(Of Compiler.Task) From {taskInstance}
+                    Catch ex As Exception
+                        Console.WriteLine($"❌ [HandleCompileTask] Error deserializing task: {ex.Message}")
+                        Dim errorJson = JsonConvert.SerializeObject(New With {.error = "Failed to deserialize task", .message = ex.Message})
+                        context.Response.ContentType = "application/json"
+                        context.Response.StatusCode = 400
+                        context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
+                        Return
+                    End Try
+                Else
+                    Console.WriteLine("❌ [HandleCompileTask] Missing taskInstance or task in request")
+                    Dim errorJson = JsonConvert.SerializeObject(New With {.error = "Missing taskInstance or task in request"})
                     context.Response.ContentType = "application/json"
                     context.Response.StatusCode = 400
                     context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
                     Return
                 End If
 
-                ' Deserialize task
-                Dim task As Compiler.Task = Nothing
-                Try
-                    Dim taskJson = requestObj("task").ToString()
-                    task = JsonConvert.DeserializeObject(Of Compiler.Task)(taskJson, New JsonSerializerSettings() With {
-                        .NullValueHandling = NullValueHandling.Ignore,
-                        .MissingMemberHandling = MissingMemberHandling.Ignore
-                    })
-                Catch ex As Exception
-                    Console.WriteLine($"❌ [HandleCompileTask] Error deserializing task: {ex.Message}")
-                    Dim errorJson = JsonConvert.SerializeObject(New With {.error = "Failed to deserialize task", .message = ex.Message})
-                    context.Response.ContentType = "application/json"
-                    context.Response.StatusCode = 400
-                    context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
-                    Return
-                End Try
-
-                If task Is Nothing Then
-                    Console.WriteLine("❌ [HandleCompileTask] Task is Nothing after deserialization")
-                    Dim errorJson = JsonConvert.SerializeObject(New With {.error = "Task is null"})
+                If taskInstance Is Nothing Then
+                    Console.WriteLine("❌ [HandleCompileTask] TaskInstance is Nothing after deserialization")
+                    Dim errorJson = JsonConvert.SerializeObject(New With {.error = "TaskInstance is null"})
                     context.Response.ContentType = "application/json"
                     context.Response.StatusCode = 400
                     context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
                     Return
                 End If
 
-                ' ❌ RIMOSSO: Deserializzazione ddts legacy
-                ' Il nuovo modello usa TaskTree costruito da template, non più ddts array
-                Console.WriteLine($"🔍 [HandleCompileTask] Task received: Id={task.Id}, Type={If(task.Type.HasValue, task.Type.Value.ToString(), "NULL")}")
+                Console.WriteLine($"🔍 [HandleCompileTask] TaskInstance received: Id={taskInstance.Id}, Type={If(taskInstance.Type.HasValue, taskInstance.Type.Value.ToString(), "NULL")}, AllTemplates count={If(allTemplates IsNot Nothing, allTemplates.Count, 0)}")
 
                 ' Validate task type
-                If Not task.Type.HasValue Then
-                    Console.WriteLine("❌ [HandleCompileTask] Task has no Type")
-                    Dim errorJson = JsonConvert.SerializeObject(New With {.error = "Task has no Type. Type is required."})
+                If Not taskInstance.Type.HasValue Then
+                    Console.WriteLine("❌ [HandleCompileTask] TaskInstance has no Type")
+                    Dim errorJson = JsonConvert.SerializeObject(New With {.error = "TaskInstance has no Type. Type is required."})
                     context.Response.ContentType = "application/json"
                     context.Response.StatusCode = 400
                     context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
                     Return
                 End If
 
-                Dim typeValue = task.Type.Value
+                Dim typeValue = taskInstance.Type.Value
                 If Not [Enum].IsDefined(GetType(TaskEngine.TaskTypes), typeValue) Then
                     Console.WriteLine($"❌ [HandleCompileTask] Invalid TaskType: {typeValue}")
                     Dim errorJson = JsonConvert.SerializeObject(New With {.error = $"Invalid TaskType: {typeValue}"})
@@ -442,37 +489,104 @@ Namespace ApiServer.Handlers
                 Dim compiler = TaskCompilerFactory.GetCompiler(taskType)
                 Console.WriteLine($"✅ [HandleCompileTask] Using compiler: {compiler.GetType().Name}")
 
-                ' Create flow with task (no dummy row/node needed - compiler doesn't need them)
-                Dim dummyFlow As New Compiler.Flow() With {
-                    .Tasks = New List(Of Compiler.Task) From {task},
-                    .Nodes = New List(Of Compiler.FlowNode)(),
-                    .Edges = New List(Of Compiler.FlowEdge)()
+                ' ✅ Pipeline pulita: compila TaskInstance direttamente con allTemplates
+                ' NON usa Flow, NON usa rowId
+                Console.WriteLine($"🔄 [HandleCompileTask] Calling compiler.Compile for TaskInstance {taskInstance.Id}...")
+                Console.WriteLine($"   AllTemplates count: {If(allTemplates IsNot Nothing, allTemplates.Count, 0)}")
+
+                Dim compiledTask = compiler.Compile(taskInstance, taskInstance.Id, allTemplates)
+                Console.WriteLine($"✅ [HandleCompileTask] TaskInstance compiled successfully: {compiledTask.GetType().Name}")
+
+                ' ✅ DIAG: Verifica steps nel CompiledTask prima di validare ID
+                Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                Console.WriteLine($"[DIAG] HandleCompileTask: CompiledTask steps verification...")
+                Console.WriteLine($"   TaskInstance.Id: {taskInstance.Id}")
+                Console.WriteLine($"   TaskInstance.Steps IsNothing: {taskInstance.Steps Is Nothing}")
+                If taskInstance.Steps IsNot Nothing Then
+                    Console.WriteLine($"   TaskInstance.Steps.Count: {taskInstance.Steps.Count}")
+                    Console.WriteLine($"   TaskInstance.Steps.Keys: {String.Join(", ", taskInstance.Steps.Keys)}")
+                End If
+                Dim compiledUtteranceTask = TryCast(compiledTask, CompiledUtteranceTask)
+                If compiledUtteranceTask IsNot Nothing Then
+                    Console.WriteLine($"   CompiledUtteranceTask.Steps IsNothing: {compiledUtteranceTask.Steps Is Nothing}")
+                    If compiledUtteranceTask.Steps IsNot Nothing Then
+                        Console.WriteLine($"   CompiledUtteranceTask.Steps.Count: {compiledUtteranceTask.Steps.Count}")
+                        For Each step In compiledUtteranceTask.Steps
+                            Console.WriteLine($"     - Step Type: {step.Type}, Escalations: {If(step.Escalations IsNot Nothing, step.Escalations.Count, 0)}")
+                        Next
+                    End If
+                    Console.WriteLine($"   CompiledUtteranceTask.SubTasks IsNothing: {compiledUtteranceTask.SubTasks Is Nothing}")
+                    If compiledUtteranceTask.SubTasks IsNot Nothing Then
+                        Console.WriteLine($"   CompiledUtteranceTask.SubTasks.Count: {compiledUtteranceTask.SubTasks.Count}")
+                    End If
+                End If
+                Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+
+                ' ✅ CRITICAL: Verifica che compiledTask.Id = taskInstance.Id
+                If compiledTask.Id <> taskInstance.Id Then
+                    Console.WriteLine($"❌ [HandleCompileTask] ID MISMATCH: compiledTask.Id={compiledTask.Id}, taskInstance.Id={taskInstance.Id}")
+                    Throw New InvalidOperationException($"CompiledTask.Id mismatch: expected {taskInstance.Id}, got {compiledTask.Id}. The compiler MUST set compiledTask.Id = taskInstance.Id for TaskInstance compilation.")
+                End If
+
+                ' ✅ Imposta debug info per TaskInstance (NON Flowchart)
+                compiledTask.Debug = New TaskDebugInfo() With {
+                    .SourceType = TaskSourceType.TaskInstance,
+                    .NodeId = Nothing,
+                    .RowId = Nothing,
+                    .OriginalTaskId = taskInstance.Id
                 }
 
-                ' Compile the task (Chat Simulator: no flowchart metadata)
-                Console.WriteLine($"🔄 [HandleCompileTask] Calling compiler.Compile for task {task.Id}...")
-                Dim compiledTask = compiler.Compile(task, task.Id, dummyFlow)
-                Console.WriteLine($"✅ [HandleCompileTask] Task compiled successfully: {compiledTask.GetType().Name}")
+                Console.WriteLine($"✅ [HandleCompileTask] CompiledTask.Id verified: {compiledTask.Id} = {taskInstance.Id}")
 
                 ' Build response
                 Dim responseObj = New With {
                     .success = True,
-                    .taskId = task.Id,
+                    .taskId = taskInstance.Id,
                     .taskType = taskType.ToString(),
                     .compiler = compiler.GetType().Name,
                     .compiledTaskType = compiledTask.GetType().Name,
+                    .compiledTask = compiledTask, ' ✅ Includi CompiledTask completo nella risposta
                     .timestamp = DateTime.UtcNow.ToString("O")
                 }
 
                 Console.WriteLine($"✅ [HandleCompileTask] Compilation completed successfully")
-                Console.WriteLine($"   Response object: success={responseObj.success}, taskId={responseObj.taskId}, taskType={responseObj.taskType}")
+                Console.WriteLine($"   Response: success={responseObj.success}, taskId={responseObj.taskId}, compiledTask.Id={compiledTask.Id}")
                 Console.WriteLine("═══════════════════════════════════════════════════════════════════════════")
 
                 ' ✅ Serializza manualmente usando Newtonsoft.Json (come in HandleCompileFlow)
+                ' ✅ Usa stesso ContractResolver globale per coerenza camelCase
                 Console.WriteLine("📤 [HandleCompileTask] Serializing response manually...")
-                Dim jsonResponse = JsonConvert.SerializeObject(responseObj)
+                Dim jsonResponse = JsonConvert.SerializeObject(responseObj, New JsonSerializerSettings() With {
+                    .ContractResolver = New CamelCasePropertyNamesContractResolver(),
+                    .NullValueHandling = NullValueHandling.Ignore
+                })
                 Console.WriteLine($"📤 [HandleCompileTask] Serialized response JSON length: {jsonResponse.Length}")
                 Console.WriteLine($"📤 [HandleCompileTask] Serialized response preview: {If(jsonResponse.Length > 200, jsonResponse.Substring(0, 200) & "...", jsonResponse)}")
+
+                ' ✅ VERIFICA: Verifica che compiledTask.id sia in camelCase e che rowId non sia presente
+                Try
+                    Dim responseObjParsed = Newtonsoft.Json.Linq.JObject.Parse(jsonResponse)
+                    Dim compiledTaskObj = responseObjParsed("compiledTask")
+                    If compiledTaskObj IsNot Nothing Then
+                        Dim compiledTaskId = compiledTaskObj("id")
+                        Dim debugObj = compiledTaskObj("debug")
+                        Dim rowId = If(debugObj IsNot Nothing, debugObj("rowId"), Nothing)
+
+                        Console.WriteLine($"✅ [HandleCompileTask] JSON VERIFICATION:")
+                        Console.WriteLine($"   - compiledTask.id present: {compiledTaskId IsNot Nothing}")
+                        If compiledTaskId IsNot Nothing Then
+                            Console.WriteLine($"   - compiledTask.id value: {compiledTaskId.ToString()}")
+                        End If
+                        Console.WriteLine($"   - debug.rowId present: {rowId IsNot Nothing}")
+                        If rowId IsNot Nothing Then
+                            Console.WriteLine($"   ⚠️  WARNING: rowId should NOT be present for TaskInstance compilation!")
+                        Else
+                            Console.WriteLine($"   ✅ OK: rowId correctly excluded from JSON (NullValueHandling.Ignore working)")
+                        End If
+                    End If
+                Catch ex As Exception
+                    Console.WriteLine($"⚠️  [HandleCompileTask] Error verifying JSON structure: {ex.Message}")
+                End Try
 
                 ' ✅ Scrivi direttamente nella risposta (come in HandleCompileFlow)
                 context.Response.ContentType = "application/json"

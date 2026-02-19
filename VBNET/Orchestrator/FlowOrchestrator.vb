@@ -15,6 +15,7 @@ Public Class FlowOrchestrator
     Private ReadOnly _compilationResult As FlowCompilationResult
     Private ReadOnly _taskEngine As Motore
     Private ReadOnly _taskExecutor As TaskExecutor
+    Private ReadOnly _taskGroupExecutor As TaskGroupExecutor
     Private ReadOnly _state As ExecutionState
     Private _isRunning As Boolean = False
     Private _entryTaskGroupId As String
@@ -51,6 +52,7 @@ Public Class FlowOrchestrator
         _compilationResult = Nothing
         _taskEngine = taskEngine
         _taskExecutor = New TaskExecutor(taskEngine)
+        _taskGroupExecutor = New TaskGroupExecutor(_taskExecutor)
         _executionStateStorage = Nothing
         _sessionId = Nothing
         _state = New ExecutionState()
@@ -73,6 +75,7 @@ Public Class FlowOrchestrator
         End If
         _taskEngine = taskEngine
         _taskExecutor = New TaskExecutor(taskEngine)
+        _taskGroupExecutor = New TaskGroupExecutor(_taskExecutor)
         _executionStateStorage = executionStateStorage
         _sessionId = sessionId
 
@@ -101,36 +104,57 @@ Public Class FlowOrchestrator
 
     ''' <summary>
     ''' Executes the entire dialogue flow
-    ''' Finds and executes tasks sequentially until completion or error
+    ''' Trova TaskGroup eseguibili e delega esecuzione a TaskGroupExecutor
+    ''' NON naviga Edges a runtime - usa solo ExecCondition
     ''' </summary>
-    Public Async Function ExecuteDialogueAsync() As System.Threading.Tasks.Task
-        If _isRunning Then Return
+    Public Function ExecuteDialogueAsync() As System.Threading.Tasks.Task
+        If _isRunning Then
+            Return System.Threading.Tasks.Task.CompletedTask
+        End If
 
         _isRunning = True
 
         Try
-            Console.WriteLine($"🚀 [FlowOrchestrator] Starting dialogue with {If(_compiledTasks IsNot Nothing, _compiledTasks.Count, 0)} tasks")
+            Console.WriteLine($"🚀 [FlowOrchestrator] Starting dialogue with {If(_compilationResult IsNot Nothing AndAlso _compilationResult.TaskGroups IsNot Nothing, _compilationResult.TaskGroups.Count, 0)} task groups")
             RaiseEvent StateUpdated(Me, _state)
 
             Dim iterationCount As Integer = 0
             While _isRunning
                 iterationCount += 1
-                Dim nextTask As CompiledTask = FindNextExecutableTask()
 
-                If nextTask Is Nothing Then Exit While
+                ' ✅ Trova prossimo TaskGroup eseguibile (usa solo ExecCondition, NON naviga Edges)
+                Dim taskGroup = GetNextTaskGroup()
 
+                If taskGroup Is Nothing Then
+                    Console.WriteLine($"[FlowOrchestrator] No more executable TaskGroups")
+                    Exit While
+                End If
+
+                Console.WriteLine($"[FlowOrchestrator] Executing TaskGroup {taskGroup.NodeId} (iteration {iterationCount})")
+
+                ' ✅ Imposta callback per messaggi
                 _taskExecutor.SetMessageCallback(Sub(text, stepType, escalationNumber)
                                                      RaiseEvent MessageToShow(Me, text)
                                                  End Sub)
 
-                Dim result = _taskExecutor.ExecuteTask(nextTask, _state)
+                ' ✅ Delega esecuzione a TaskGroupExecutor
+                Dim result = _taskGroupExecutor.ExecuteTaskGroup(taskGroup, _state)
 
                 If Not result.Success Then
-                    Throw New Exception($"Task execution failed: {result.Err}")
+                    Throw New Exception($"TaskGroup execution failed: {result.Err}")
                 End If
 
-                _state.ExecutedTaskIds.Add(nextTask.Id)
-                _state.CurrentNodeId = nextTask.Id
+                ' ✅ Se task richiede input asincrono, sospendi esecuzione
+                If result.RequiresInput Then
+                    Console.WriteLine($"[FlowOrchestrator] ⏸️ TaskGroup {taskGroup.NodeId} suspended (task {result.WaitingTaskId} requires input)")
+                    SaveState()
+                    Exit While  ' Sospendi, attendi input
+                End If
+
+                ' ✅ Marca TaskGroup come eseguito
+                taskGroup.Executed = True
+                _state.ExecutedTaskGroupIds.Add(taskGroup.NodeId)
+                Console.WriteLine($"[FlowOrchestrator] ✅ TaskGroup {taskGroup.NodeId} completed")
 
                 ' ✅ STATELESS: Salva ExecutionState su Redis dopo ogni modifica
                 SaveState()
@@ -150,85 +174,26 @@ Public Class FlowOrchestrator
         Finally
             _isRunning = False
         End Try
+
+        Return System.Threading.Tasks.Task.CompletedTask
     End Function
 
     ''' <summary>
-    ''' ✅ FASE 3: Trova il prossimo task eseguibile usando navigazione HFSM
-    ''' Step 1: Trova TaskGroup attivo (usando ExecCondition e CurrentNodeId)
-    ''' Step 2: Esegue task interni in sequenza usando CurrentRowIndex
-    ''' Step 3: Quando finiti i task, passa al nodo successivo usando topologia
+    ''' ✅ Trova il prossimo TaskGroup eseguibile usando solo ExecCondition
+    ''' NON naviga Edges a runtime - la navigazione è già "baked" in ExecCondition
     ''' </summary>
-    Private Function FindNextExecutableTask() As CompiledTask
-        If _compilationResult IsNot Nothing Then
-            ' ✅ STEP 1: Trova TaskGroup attivo
-            Dim currentTaskGroup = GetCurrentTaskGroup()
-            If currentTaskGroup Is Nothing Then
-                Return Nothing
-            End If
-
-            ' ✅ STEP 2: Esegui task interni in sequenza usando CurrentRowIndex
-            Dim taskIndex = _state.CurrentRowIndex
-            If taskIndex < currentTaskGroup.Tasks.Count Then
-                Dim task = currentTaskGroup.Tasks(taskIndex)
-
-                ' Valuta executionCondition del task (default = True se Nothing)
-                If EvaluateTaskCondition(task) Then
-                    Return task
-                Else
-                    ' Task saltato (condizione non soddisfatta), passa al successivo
-                    _state.CurrentRowIndex += 1
-                    SaveState()
-                    Return FindNextExecutableTask() ' Ricorsione
-                End If
-            End If
-
-            ' ✅ STEP 3: Finiti i task, passa al nodo successivo usando topologia
-            currentTaskGroup.Executed = True
-            SaveState()
-
-            Dim nextNodeId = FindNextNodeId(currentTaskGroup.NodeId)
-            If nextNodeId IsNot Nothing Then
-                _state.CurrentNodeId = nextNodeId
-                Dim nextTaskGroup = _compilationResult.TaskGroups.FirstOrDefault(Function(tg) tg.NodeId = nextNodeId)
-                If nextTaskGroup IsNot Nothing Then
-                    _state.CurrentRowIndex = nextTaskGroup.StartTaskIndex
-                    SaveState()
-                    Return FindNextExecutableTask() ' Ricorsione
-                End If
-            End If
-
-            Return Nothing ' Fine esecuzione
-        Else
+    Private Function GetNextTaskGroup() As TaskGroup
+        If _compilationResult Is Nothing OrElse _compilationResult.TaskGroups Is Nothing Then
             ' Fallback: flat list search (retrocompatibilità)
-            For Each task In _compiledTasks
-                If Not _state.ExecutedTaskIds.Contains(task.Id) Then
-                    Dim canExecute As Boolean = True
-                    If task.Condition IsNot Nothing Then
-                        canExecute = ConditionEvaluator.EvaluateCondition(task.Condition, _state)
-                    End If
-
-                    If canExecute Then
-                        Return task
-                    End If
-                End If
-            Next
+            Return Nothing
         End If
 
-        Return Nothing
-    End Function
-
-    ''' <summary>
-    ''' ✅ FASE 3: Ottiene il TaskGroup corrente (inizializza se necessario)
-    ''' </summary>
-    Private Function GetCurrentTaskGroup() As TaskGroup
-        Dim nodeId = _state.CurrentNodeId
-        If String.IsNullOrEmpty(nodeId) Then
-            ' Inizializza con entry TaskGroup
+        ' ✅ Inizializza con entry TaskGroup se necessario
+        If String.IsNullOrEmpty(_state.CurrentNodeId) Then
             If Not String.IsNullOrEmpty(_entryTaskGroupId) Then
-                nodeId = _entryTaskGroupId
-                _state.CurrentNodeId = nodeId
-                Dim entryTaskGroup = _compilationResult.TaskGroups.FirstOrDefault(Function(tg) tg.NodeId = nodeId)
+                Dim entryTaskGroup = _compilationResult.TaskGroups.FirstOrDefault(Function(tg) tg.NodeId = _entryTaskGroupId)
                 If entryTaskGroup IsNot Nothing Then
+                    _state.CurrentNodeId = _entryTaskGroupId
                     _state.CurrentRowIndex = entryTaskGroup.StartTaskIndex
                     SaveState()
                     Return entryTaskGroup
@@ -237,65 +202,29 @@ Public Class FlowOrchestrator
             Return Nothing
         End If
 
-        Dim taskGroup = _compilationResult.TaskGroups.FirstOrDefault(Function(tg) tg.NodeId = nodeId)
-        If taskGroup Is Nothing Then
-            Return Nothing
-        End If
-
-        ' Valuta ExecCondition del TaskGroup
-        If taskGroup.Executed Then
-            Return Nothing ' TaskGroup già eseguito
-        End If
-
-        Dim canExecute As Boolean = True
-        If taskGroup.ExecCondition IsNot Nothing Then
-            canExecute = ConditionEvaluator.EvaluateCondition(taskGroup.ExecCondition, _state)
-        End If
-
-        If Not canExecute Then
-            Return Nothing ' Condizione non soddisfatta
-        End If
-
-        Return taskGroup
-    End Function
-
-    ''' <summary>
-    ''' ✅ FASE 3: Valuta executionCondition del task (default = True)
-    ''' </summary>
-    Private Function EvaluateTaskCondition(task As CompiledTask) As Boolean
-        If task.Condition Is Nothing Then
-            Return True ' ✅ Default = True
-        End If
-
-        Return ConditionEvaluator.EvaluateCondition(task.Condition, _state)
-    End Function
-
-    ''' <summary>
-    ''' ✅ FASE 3: Trova il prossimo nodo usando topologia (Edges)
-    ''' </summary>
-    Private Function FindNextNodeId(currentNodeId As String) As String
-        If _compilationResult.Edges Is Nothing Then
-            Return Nothing
-        End If
-
-        ' Trova link uscenti dal nodo corrente
-        Dim outgoingLinks = _compilationResult.Edges.Where(Function(e) e.Source = currentNodeId).ToList()
-
-        ' Trova primo link con condizione soddisfatta
-        For Each link In outgoingLinks
-            Dim canFollow As Boolean = True
-            If link.Data IsNot Nothing AndAlso Not String.IsNullOrEmpty(link.Data.Condition) Then
-                ' TODO: Valuta condizione del link (per ora sempre True)
-                canFollow = True
+        ' ✅ Itera su tutti i TaskGroups e trova il primo con ExecCondition = TRUE
+        For Each taskGroup In _compilationResult.TaskGroups
+            ' Salta TaskGroup già eseguiti
+            If taskGroup.Executed Then
+                Continue For
             End If
 
-            If canFollow Then
-                Return link.Target
+            ' ✅ Valuta ExecCondition (include già "padre eseguito AND link condizione")
+            Dim canExecute As Boolean = True
+            If taskGroup.ExecCondition IsNot Nothing Then
+                canExecute = ConditionEvaluator.EvaluateCondition(taskGroup.ExecCondition, _state)
+            End If
+
+            If canExecute Then
+                ' ✅ TaskGroup eseguibile trovato
+                Return taskGroup
             End If
         Next
 
+        ' ✅ Nessun TaskGroup eseguibile
         Return Nothing
     End Function
+
 
     ''' <summary>
     ''' Handler per messaggi dal Task Engine

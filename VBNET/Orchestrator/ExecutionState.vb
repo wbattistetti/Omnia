@@ -11,6 +11,11 @@ Public Class ExecutionState
     Public Property ExecutedTaskIds As HashSet(Of String)
 
     ''' <summary>
+    ''' Set di TaskGroup ID già eseguiti (per valutazione TaskGroupExecuted condition)
+    ''' </summary>
+    Public Property ExecutedTaskGroupIds As HashSet(Of String)
+
+    ''' <summary>
     ''' Store delle variabili globali (valori estratti dai DDT)
     ''' </summary>
     Public Property VariableStore As Dictionary(Of String, Object)
@@ -32,6 +37,7 @@ Public Class ExecutionState
 
     Public Sub New()
         ExecutedTaskIds = New HashSet(Of String)()
+        ExecutedTaskGroupIds = New HashSet(Of String)()
         VariableStore = New Dictionary(Of String, Object)()
         RetrievalState = "empty"
         CurrentNodeId = Nothing

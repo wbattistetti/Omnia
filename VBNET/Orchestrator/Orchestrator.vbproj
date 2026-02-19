@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <Compile Include="FlowOrchestrator.vb" />
+    <Compile Include="TaskGroupExecutor.vb" />
     <Compile Include="TaskExecutor.vb" />
     <Compile Include="ConditionEvaluator.vb" />
     <Compile Include="ExecutionState.vb" />

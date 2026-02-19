@@ -25,6 +25,11 @@ Public Enum TaskSourceType
     ''' Task compilato direttamente (Chat Simulator, senza flowchart)
     ''' </summary>
     Direct = 4
+
+    ''' <summary>
+    ''' Task compilato da TaskInstance (Response Editor test, senza Flow)
+    ''' </summary>
+    TaskInstance = 5
 End Enum
 
 

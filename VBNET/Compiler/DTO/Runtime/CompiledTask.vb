@@ -1,6 +1,7 @@
 Option Strict On
 Option Explicit On
 Imports TaskEngine
+Imports Newtonsoft.Json
 
 ''' <summary>
 ''' CompiledTask: Base class astratta per tutti i task compilati
@@ -10,6 +11,7 @@ Public MustInherit Class CompiledTask
     ''' <summary>
     ''' Task ID (GUID) - same as row.id for flowchart tasks
     ''' </summary>
+    <JsonProperty("id")>
     Public Property Id As String
 
     ''' <summary>

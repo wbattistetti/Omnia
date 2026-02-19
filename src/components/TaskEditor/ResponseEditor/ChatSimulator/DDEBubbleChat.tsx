@@ -11,6 +11,163 @@ import { v4 as uuidv4 } from 'uuid';
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import { taskRepository } from '@services/TaskRepository';
 
+/**
+ * Estrae tutti i GUID dai step (utterance, invalid, nomatch, noinput, escalation, constraint)
+ * Formato steps: { "templateId": { "start": { escalations: [...] }, "noMatch": { escalations: [...] }, ... } }
+ * GUID pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
+ */
+function extractGuidsFromSteps(
+  steps: Record<string, any>,
+  guids: Set<string>
+): void {
+  const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  let extractedCount = 0;
+
+  // ✅ Formato: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
+  for (const [templateId, stepDict] of Object.entries(steps)) {
+    if (!stepDict || typeof stepDict !== 'object') continue;
+
+    // ✅ Gestisci anche il caso legacy: stepDict potrebbe essere un array
+    if (Array.isArray(stepDict)) {
+      for (const step of stepDict) {
+        if (step?.escalations && Array.isArray(step.escalations)) {
+          for (const escalation of step.escalations) {
+            if (escalation.tasks && Array.isArray(escalation.tasks)) {
+              for (const taskItem of escalation.tasks) {
+                if (taskItem.parameters && Array.isArray(taskItem.parameters)) {
+                  const textParam = taskItem.parameters.find((p: any) =>
+                    p?.parameterId === 'text' || p?.key === 'text'
+                  );
+                  if (textParam?.value && guidPattern.test(textParam.value)) {
+                    guids.add(textParam.value);
+                    extractedCount++;
+                  }
+                }
+                if (taskItem.id && guidPattern.test(taskItem.id)) {
+                  guids.add(taskItem.id);
+                  extractedCount++;
+                }
+              }
+            }
+          }
+        }
+      }
+      continue;
+    }
+
+    // ✅ Itera su ogni tipo di step (start, noMatch, noInput, ecc.)
+    for (const [stepType, step] of Object.entries(stepDict)) {
+      if (!step || typeof step !== 'object') continue;
+
+      // ✅ Estrai GUID dalle escalation
+      if (step.escalations && Array.isArray(step.escalations)) {
+        for (const escalation of step.escalations) {
+          if (escalation.tasks && Array.isArray(escalation.tasks)) {
+            for (const taskItem of escalation.tasks) {
+              // ✅ GUID da taskItem.parameters (parametro con parameterId='text')
+              if (taskItem.parameters && Array.isArray(taskItem.parameters)) {
+                const textParam = taskItem.parameters.find((p: any) =>
+                  p?.parameterId === 'text' || p?.key === 'text'
+                );
+                if (textParam?.value && guidPattern.test(textParam.value)) {
+                  guids.add(textParam.value);
+                  extractedCount++;
+                }
+              }
+              // ✅ GUID da taskItem.id (se è un GUID)
+              if (taskItem.id && guidPattern.test(taskItem.id)) {
+                guids.add(taskItem.id);
+                extractedCount++;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (extractedCount > 0) {
+    console.log(`[extractGuidsFromSteps] ✅ Extracted ${extractedCount} GUIDs from steps`);
+  }
+}
+
+/**
+ * Filtra le traduzioni per includere solo quelle runtime
+ * Runtime translations sono:
+ * 1. Chiavi che iniziano con "runtime." (pattern: runtime.DDT_<ID>.<step>#<n>.<action>.text)
+ * 2. GUID che sono referenziati nei step dei task/DDT (utterance, invalid, nomatch, noinput, escalation, constraint)
+ *
+ * Traduzioni IDE (escluse):
+ * - Label, description, help text, metadata UI
+ * - Stringhe di configurazione, pannelli, wizard, menu, debug
+ * - VariableReadableName, VariableDottedName, Synonyms
+ */
+function filterRuntimeTranslations(
+  allTranslations: Record<string, string>,
+  taskInstance: any,
+  referencedTemplates: any[]
+): Record<string, string> {
+  const runtimeTranslations: Record<string, string> = {};
+
+  // 1. Estrai tutti i GUID referenziati nei step dei task
+  const runtimeGuids = new Set<string>();
+
+  // Processa task instance
+  if (taskInstance.steps && typeof taskInstance.steps === 'object') {
+    console.log('[filterRuntimeTranslations] 📋 Processing task instance steps:', {
+      taskId: taskInstance.id,
+      stepsKeys: Object.keys(taskInstance.steps),
+      stepsType: Array.isArray(taskInstance.steps) ? 'array' : 'object'
+    });
+    extractGuidsFromSteps(taskInstance.steps, runtimeGuids);
+  }
+
+  // Processa template referenziati
+  for (const template of referencedTemplates) {
+    if (template.steps && typeof template.steps === 'object') {
+      console.log('[filterRuntimeTranslations] 📋 Processing template steps:', {
+        templateId: template.id,
+        stepsKeys: Object.keys(template.steps),
+        stepsType: Array.isArray(template.steps) ? 'array' : 'object'
+      });
+      extractGuidsFromSteps(template.steps, runtimeGuids);
+    }
+  }
+
+  console.log('[filterRuntimeTranslations] 📋 Extracted GUIDs:', {
+    totalGuids: runtimeGuids.size,
+    guids: Array.from(runtimeGuids).slice(0, 10) // First 10 for logging
+  });
+
+  // 2. Filtra traduzioni: solo quelle che sono GUID referenziati O chiavi runtime.*
+  let runtimeKeyCount = 0;
+  let guidMatchCount = 0;
+
+  for (const [guid, text] of Object.entries(allTranslations)) {
+    // Pattern runtime.* (es: runtime.DDT_xxx.start#1.SayMessage_1.text)
+    if (guid.startsWith('runtime.')) {
+      runtimeTranslations[guid] = text;
+      runtimeKeyCount++;
+    }
+    // GUID referenziati nei step
+    else if (runtimeGuids.has(guid)) {
+      runtimeTranslations[guid] = text;
+      guidMatchCount++;
+    }
+    // ❌ Tutte le altre (IDE) vengono escluse
+  }
+
+  console.log('[filterRuntimeTranslations] 📋 Filter result:', {
+    totalTranslations: Object.keys(allTranslations).length,
+    runtimeTranslations: Object.keys(runtimeTranslations).length,
+    runtimeKeyCount,
+    guidMatchCount,
+    excludedIde: Object.keys(allTranslations).length - Object.keys(runtimeTranslations).length
+  });
+
+  return runtimeTranslations;
+}
+
 export default function DDEBubbleChat({
   task,
   projectId,
@@ -280,19 +437,26 @@ export default function DDEBubbleChat({
         });
 
         // ✅ CORRETTO: Costruisci taskForCompilation SOLO dall'istanza (NON dal TaskTree)
-        // Il compilatore VB.NET materializzerà steps/nodes da zero usando template referenziati
+        // Il compilatore VB.NET materializzerà nodes da zero usando template referenziati
+        // ✅ CRITICAL INVARIANT: Steps vengono SOLO dall'istanza come override, NON dal template
+        // Se l'istanza non ha steps, il nodo avrà Steps.Count = 0
+        // Se ci sono constraints e Steps.Count = 0, la validazione fallisce
         const taskForCompilation = {
           id: taskInstance.id,
           templateId: taskInstance.templateId || taskInstance.id,
           type: taskInstance.type, // ✅ Deve essere presente (verificato sopra)
           label: taskInstance.label || '',
-          // ✅ Includi solo campi dell'istanza (il compilatore materializzerà steps/nodes)
+          // ✅ Includi solo campi dell'istanza
           value: taskInstance.value || {},
           parameters: taskInstance.parameters || [],
           subTasksIds: taskInstance.subTasksIds || [],
           constraints: taskInstance.constraints || [],
           dataContract: taskInstance.dataContract || null,
-          // ❌ NON includere: steps, nodes (il compilatore VB.NET li materializza da zero)
+          // ✅ CRITICAL: Steps vengono SOLO dall'istanza come override
+          // Formato: { "templateId": [{ type: "start", ... }, { type: "invalid", ... }] }
+          // Se manca, il nodo avrà Steps.Count = 0 e la validazione fallirà se ci sono constraints
+          steps: taskInstance.steps || {},
+          // ❌ NON includere: nodes (il compilatore VB.NET li materializza da zero)
         };
 
         // ✅ CORRETTO: Raccogli template referenziati SOLO dall'istanza e dai template (NON da TaskTree)
@@ -377,57 +541,45 @@ export default function DDEBubbleChat({
           ignoredTaskTree: true // ✅ Flag per indicare che TaskTree è ignorato
         });
 
-        console.log('[DDEBubbleChat] 📋 Sending compilation request:', {
-          url: `${baseUrl}/api/runtime/compile`,
-          taskId: taskForCompilation.id,
+        // ✅ NUOVO: Usa endpoint dedicato per TaskInstance (NON FlowCompiler)
+        console.log('[DDEBubbleChat] 📋 Sending compilation request to /api/runtime/compile/task:', {
+          url: `${baseUrl}/api/runtime/compile/task`, // ✅ CORRETTO: /compile/task (con slash, non trattino)
+          taskInstanceId: taskForCompilation.id,
           templateId: taskForCompilation.templateId,
-          tasksCount: allTasksWithTemplates.length
+          allTemplatesCount: allTasksWithTemplates.length
         });
 
-        // ✅ Crea un nodo dummy per il FlowCompiler (richiede almeno un nodo entry)
-        // Il FlowCompiler si aspetta nodi con rows, dove ogni row.taskId corrisponde a task.id
-        const dummyNode = {
-          id: `dummy-node-${taskInstance.id}`,
-          type: 'task',
-          position: { x: 0, y: 0 },
-          data: {
-            label: taskInstance.label || 'Chat Simulator Task',
-            rows: [
-              {
-                id: taskInstance.id,  // ✅ row.id
-                taskId: taskInstance.id,  // ✅ row.taskId MUST match task.id exactly
-                label: taskInstance.label || ''
-              }
-            ]
-          }
-        };
-
-        // ✅ Usa /api/runtime/compile - SOLO istanza + template referenziati (NON TaskTree)
+        // ✅ NUOVO PAYLOAD: taskInstance + allTemplates (NON dummyNode, NON Flow)
         const compileRequestBody = {
-          nodes: [dummyNode],  // ✅ Nodo dummy con row che contiene il task
-          edges: [],  // Vuoto per singolo task
-          tasks: allTasksWithTemplates,  // ✅ SOLO istanza + template referenziati (NON TaskTree)
-          ddts: [],
-          translations: translations || {}
+          taskInstance: taskForCompilation, // ✅ TaskInstance da compilare
+          allTemplates: allTasksWithTemplates // ✅ Tutti i template necessari (istanza + template referenziati)
         };
 
         // ✅ 1. LOG PRIMA DELLA COMPILAZIONE (frontend → backend)
-        console.log('[DDEBubbleChat] 🧪 COMPILATION INPUT CHECK', {
-          instance: {
+        console.log('[DDEBubbleChat] 🧪 COMPILATION INPUT CHECK (TaskInstance mode):', {
+          taskInstance: {
             id: taskForCompilation.id,
             templateId: taskForCompilation.templateId,
             type: taskForCompilation.type,
             typeType: typeof taskForCompilation.type,
-            hasSteps: !!taskForCompilation.steps,
-            hasNodes: !!taskForCompilation.nodes,
+            hasSteps: !!(taskForCompilation.steps && Object.keys(taskForCompilation.steps).length > 0),
+            stepsKeys: taskForCompilation.steps ? Object.keys(taskForCompilation.steps) : [],
+            stepsCount: taskForCompilation.steps ? Object.keys(taskForCompilation.steps).length : 0,
+            // ✅ DEBUG: Mostra struttura steps per ogni templateId
+            stepsStructure: taskForCompilation.steps ? Object.entries(taskForCompilation.steps).map(([templateId, steps]) => ({
+              templateId,
+              stepsType: Array.isArray(steps) ? 'array' : typeof steps,
+              stepsKeys: typeof steps === 'object' && steps !== null ? Object.keys(steps) : [],
+              stepsCount: Array.isArray(steps) ? steps.length : (typeof steps === 'object' && steps !== null ? Object.keys(steps).length : 0)
+            })) : [],
             subTasksIds: taskForCompilation.subTasksIds || [],
             constraints: taskForCompilation.constraints || [],
+            constraintsCount: taskForCompilation.constraints?.length || 0,
             dataContract: !!taskForCompilation.dataContract,
-            isFromRepository: true
+            isFromRepository: true,
+            invariant: 'steps_from_instance_only'
           },
-          referencedTemplates: Array.from(referencedTemplateIds),
-          referencedTemplatesCount: referencedTemplateIds.size,
-          tasksSent: allTasksWithTemplates.map(t => ({
+          allTemplates: allTasksWithTemplates.map(t => ({
             id: t.id,
             templateId: t.templateId,
             type: t.type,
@@ -435,24 +587,11 @@ export default function DDEBubbleChat({
             isInstance: t.id === taskInstance.id,
             isTemplate: t.id !== taskInstance.id
           })),
-          dummyNode: {
-            id: dummyNode.id,
-            rowId: dummyNode.data.rows[0]?.id,
-            rowTaskId: dummyNode.data.rows[0]?.taskId,
-            taskIdMatches: dummyNode.data.rows[0]?.taskId === taskInstance.id,
-            label: dummyNode.data.rows[0]?.label
-          },
-          ignoredTaskTree: true,
-          compilationRequest: {
-            nodesCount: compileRequestBody.nodes.length,
-            edgesCount: compileRequestBody.edges.length,
-            tasksCount: compileRequestBody.tasks.length,
-            ddtsCount: compileRequestBody.ddts.length,
-            translationsCount: Object.keys(compileRequestBody.translations || {}).length
-          }
+          allTemplatesCount: allTasksWithTemplates.length,
+          compilationMode: 'TaskInstance' // ✅ Conferma: NON Flow mode
         });
 
-        const compileResponse = await fetch(`${baseUrl}/api/runtime/compile`, {
+        const compileResponse = await fetch(`${baseUrl}/api/runtime/compile/task`, { // ✅ CORRETTO: /compile/task (con slash)
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(compileRequestBody)
@@ -496,8 +635,8 @@ export default function DDEBubbleChat({
               tasksSentCount: allTasksWithTemplates.length,
               missingTemplates: Array.from(referencedTemplateIds).filter(tid =>
                 !allTasksWithTemplates.some(t => t.id === tid)
-              ),
-              rowTaskIdMatch: dummyNode.data.rows[0]?.taskId === taskInstance.id
+              )
+              // ❌ RIMOSSO: rowTaskIdMatch (non più necessario, non usiamo più dummyNode)
             },
             diagnostic: {
               hasInstance: !!taskInstance,
@@ -542,40 +681,31 @@ export default function DDEBubbleChat({
           throw new Error(`Compilation failed: ${compileResult.error || compileResult.message || 'Unknown error'}`);
         }
 
-        // ✅ 2. LOG DOPO LA COMPILAZIONE (backend → frontend)
-        console.log('[DDEBubbleChat] 🧪 COMPILATION OUTPUT CHECK', {
-          ok: compileResponse.ok,
-          status: compileResponse.status,
-          compiledBy: compileResult.compiledBy,
-          hasTaskGroups: !!compileResult.taskGroups,
-          hasTasks: !!compileResult.tasks,
-          taskGroupsCount: compileResult.taskGroups?.length || 0,
-          tasksCount: compileResult.tasks?.length || 0,
-          entryTaskGroupId: compileResult.entryTaskGroupId,
-          runtimeTaskSummary: compileResult.tasks?.[0] ? {
-            id: compileResult.tasks[0].id,
-            taskType: compileResult.tasks[0].taskType,
-            hasSteps: !!compileResult.tasks[0].steps,
-            stepsCount: compileResult.tasks[0].steps ? Object.keys(compileResult.tasks[0].steps).length : 0,
-            hasCondition: !!compileResult.tasks[0].condition,
-            hasState: !!compileResult.tasks[0].state
-          } : null,
-          taskGroupSummary: compileResult.taskGroups?.[0] ? {
-            nodeId: compileResult.taskGroups[0].nodeId,
-            tasksCount: compileResult.taskGroups[0].tasks?.length || 0,
-            hasExecCondition: !!compileResult.taskGroups[0].execCondition,
-            startTaskIndex: compileResult.taskGroups[0].startTaskIndex
-          } : null,
-          materializationCheck: {
-            instanceId: taskForCompilation.id,
-            instanceTemplateId: taskForCompilation.templateId,
-            compiledTaskFound: compileResult.tasks?.some((t: any) => t.id === taskForCompilation.id || t.debug?.originalTaskId === taskForCompilation.id),
-            taskGroupsGenerated: compileResult.taskGroups?.length > 0,
-            tasksGenerated: compileResult.tasks?.length > 0,
-            materializedFromScratch: true // ✅ Il compilatore ha materializzato tutto da zero
-          },
+        // ✅ NUOVO: La risposta da /api/runtime/compile/task è diversa
+        // Non è FlowCompilationResult, ma un oggetto con compiledTask singolo
+        console.log('[DDEBubbleChat] 📋 Compilation result (TaskInstance mode):', {
+          success: compileResult.success,
+          taskId: compileResult.taskId,
+          compiledTaskId: compileResult.compiledTask?.id,
+          compiledTaskType: compileResult.compiledTaskType,
+          idMatch: compileResult.compiledTask?.id === taskForCompilation.id, // ✅ DEVE essere true
+          debug: compileResult.compiledTask?.debug,
+          originalTaskId: compileResult.compiledTask?.debug?.OriginalTaskId || compileResult.compiledTask?.debug?.originalTaskId,
           timestamp: compileResult.timestamp
         });
+
+        // ✅ VERIFICA CRITICA: compiledTask.Id DEVE essere = taskInstance.id
+        if (compileResult.compiledTask?.id !== taskForCompilation.id) {
+          console.error('[DDEBubbleChat] ❌ ID MISMATCH:', {
+            expectedId: taskForCompilation.id,
+            actualId: compileResult.compiledTask?.id,
+            compiledTask: compileResult.compiledTask
+          });
+          throw new Error(
+            `[DDEBubbleChat] CompiledTask.Id mismatch: expected ${taskForCompilation.id}, got ${compileResult.compiledTask?.id}. ` +
+            `The compiler MUST set compiledTask.Id = taskInstance.id for TaskInstance compilation.`
+          );
+        }
 
         // ✅ STEP 2.5: DEPLOY ON-THE-FLY - Sincronizza traduzioni MEMORIA → Redis
         // Ambiente "on-the-fly" per test automatico (effimero, nessuna persistenza)
@@ -583,12 +713,21 @@ export default function DDEBubbleChat({
         try {
           // ✅ Estrai tutte le traduzioni da window.__projectTranslationsContext
           const projectTranslationsContext = (window as any).__projectTranslationsContext;
-          const translationsFromMemory = projectTranslationsContext?.translations || {};
+          const allTranslations = projectTranslationsContext?.translations || {};
 
-          console.log(`[DDEBubbleChat] 📋 Found ${Object.keys(translationsFromMemory).length} translations in memory`);
+          console.log(`[DDEBubbleChat] 📋 Found ${Object.keys(allTranslations).length} total translations in memory`);
 
-          if (Object.keys(translationsFromMemory).length === 0) {
-            console.warn('[DDEBubbleChat] ⚠️ No translations found in memory - Redis may be incomplete');
+          // ✅ CRITICAL: Filtra SOLO traduzioni runtime (esclude IDE: label, description, help, metadata, UI, wizard, menu, debug)
+          const runtimeTranslations = filterRuntimeTranslations(
+            allTranslations,
+            taskInstance,
+            referencedTemplates
+          );
+
+          console.log(`[DDEBubbleChat] 📋 Filtered translations: ${Object.keys(allTranslations).length} total → ${Object.keys(runtimeTranslations).length} runtime (IDE excluded)`);
+
+          if (Object.keys(runtimeTranslations).length === 0) {
+            console.warn('[DDEBubbleChat] ⚠️ No runtime translations found - Redis may be incomplete');
           }
 
           const deployResponse = await fetch(`http://localhost:3100/api/deploy/sync-translations`, {
@@ -599,7 +738,7 @@ export default function DDEBubbleChat({
               locale: projectLanguage,
               environment: 'on-the-fly', // ✅ Ambiente automatico per test
               type: 'full', // ✅ Full sync per garantire completezza
-              translations: translationsFromMemory // ✅ Passa le traduzioni dalla memoria
+              translations: runtimeTranslations // ✅ SOLO runtime, IDE escluso
             })
           });
 
@@ -620,168 +759,88 @@ export default function DDEBubbleChat({
           throw new Error(`Failed to deploy translations: ${deployError instanceof Error ? deployError.message : 'Unknown error'}. The runtime requires Redis to be complete before starting.`);
         }
 
-        // ✅ STEP 2.2: Il backend ha compilato il task, ma dobbiamo ottenere il RuntimeTask
-        // Per ora, dobbiamo costruire il RuntimeTask dal TaskTree compilato
-        // TODO: Il backend dovrebbe restituire il RuntimeTask compilato direttamente
+        // ✅ STEP 2.3: Estrai CompiledTask dalla compilazione e convertilo in RuntimeTask
+        // Il backend ha compilato il task e restituito CompiledTask
+        // Convertiamo CompiledTask → RuntimeTask (ricorsivo con subTasks)
+        console.log('[DDEBubbleChat] 📋 STEP 2.3: Extracting CompiledTask and converting to RuntimeTask...');
 
-        // ✅ STEP 2.3: Costruisci RuntimeTask dal TaskTree
-        // Il backend compila Task → CompiledUtteranceTask, ma dobbiamo RuntimeTask per il repository
-        // Costruiamo RuntimeTask dal TaskTree (workaround temporaneo)
-        console.log('[DDEBubbleChat] 📋 STEP 2.3: Building RuntimeTask from TaskTree...');
-
-        // ✅ FASE 2: Funzione per sanitizzare testi letterali → GUID
-        const GUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        const sanitizeSteps = (steps: any): any => {
-          if (!steps) return steps;
-
-          const sanitized = Array.isArray(steps) ? [...steps] : { ...steps };
-
-          // Itera attraverso steps (può essere dictionary o array)
-          const stepsEntries = Array.isArray(sanitized)
-            ? sanitized.map((s, idx) => [idx.toString(), s])
-            : Object.entries(sanitized);
-
-          stepsEntries.forEach(([stepKey, step]: [string, any]) => {
-            if (!step || !step.escalations) return;
-
-            const escalations = Array.isArray(step.escalations) ? step.escalations : [step.escalations];
-
-            escalations.forEach((esc: any) => {
-              if (!esc || !esc.tasks) return;
-
-              const taskItems = Array.isArray(esc.tasks) ? esc.tasks : [esc.tasks];
-
-              taskItems.forEach((taskItem: any) => {
-                if (!taskItem || !taskItem.parameters) return;
-
-                const textParam = taskItem.parameters.find((p: any) =>
-                  (p.parameterId === 'text' || p.key === 'text')
-                );
-
-                if (!textParam || !textParam.value) return;
-
-                const value = String(textParam.value);
-                const isGUID = GUID_REGEX.test(value);
-
-                // ✅ Se non è un GUID, convertilo
-                if (!isGUID && value.trim().length > 0) {
-                  const newGuid = uuidv4();
-                  textParam.value = newGuid;
-
-                  // ✅ Salva traduzione
-                  const addTranslationFn = addTranslation || (() => {
-                    if (typeof window !== 'undefined' && (window as any).__projectTranslationsContext) {
-                      const ctx = (window as any).__projectTranslationsContext;
-                      if (ctx.addTranslation) {
-                        return ctx.addTranslation;
-                      } else if (ctx.addTranslations) {
-                        return (guid: string, text: string) => ctx.addTranslations({ [guid]: text });
-                      }
-                    }
-                    return (guid: string, text: string) => {
-                      console.warn('[DDEBubbleChat] ⚠️ No translation context, literal text converted but not saved:', { guid, text: text.substring(0, 50) });
-                    };
-                  })();
-
-                  if (addTranslationFn && typeof addTranslationFn === 'function') {
-                    addTranslationFn(newGuid, value);
-                    console.log('[DDEBubbleChat] ✅ Converted literal text to GUID:', {
-                      oldText: value.substring(0, 50) + (value.length > 50 ? '...' : ''),
-                      newGuid
-                    });
-                  }
-                }
-              });
-            });
+        // ✅ VERIFICA: Il backend DEVE restituire compiledTask
+        if (!compileResult.compiledTask) {
+          console.error('[DDEBubbleChat] ❌ COMPILATION BUG: compiledTask is missing!', {
+            success: compileResult.success,
+            taskId: compileResult.taskId,
+            compiledTaskType: compileResult.compiledTaskType,
+            fullResponse: compileResult
           });
+          throw new Error(
+            `[DDEBubbleChat] COMPILATION BUG: The VB.NET compiler did not return compiledTask. ` +
+            `The compiler MUST return compiledTask in the response. ` +
+            `This is a backend bug, not a frontend issue.`
+          );
+        }
 
-          return sanitized;
-        };
+        // ✅ Estrai CompiledTask dalla risposta (già verificato sopra che esiste)
+        const compiledTask = compileResult.compiledTask;
 
-        // Funzione ricorsiva per convertire TaskTreeNode in RuntimeTask
-        const buildRuntimeTaskFromNode = (node: any, stepsDict: Record<string, any>): any => {
-          // Estrai steps per questo nodo dal dictionary steps
-          // steps è: { "templateId": { "start": {...}, "noMatch": {...} } }
-          const nodeSteps = stepsDict[node.templateId] || stepsDict[node.id] || {};
+        // ✅ LOGGING DETTAGLIATO: Mostra struttura completa del CompiledTask
+        console.log('[DDEBubbleChat] 📋 Available tasks in compileResult (TaskInstance mode):', {
+          count: 1, // ✅ TaskInstance mode restituisce un solo CompiledTask
+          compiledTask: {
+            id: compiledTask.id,
+            debug: compiledTask.debug, // ✅ AGGIUNGI: mostra tutto debug
+            originalTaskId: compiledTask.debug?.originalTaskId,
+            OriginalTaskId: compiledTask.debug?.OriginalTaskId, // ✅ AGGIUNGI: prova anche PascalCase
+            taskType: compiledTask.taskType,
+            fullTask: compiledTask // ✅ AGGIUNGI: mostra task completo per debug
+          }
+        });
 
-          // ✅ NORMALIZZAZIONE: Funzione helper per normalizzare step type (violation → invalid)
-          const normalizeStepType = (stepType: string): string => {
-            return stepType === 'violation' ? 'invalid' : stepType;
-          };
+        console.log('[DDEBubbleChat] 📋 Found CompiledTask:', {
+          id: compiledTask.id,
+          taskType: compiledTask.taskType,
+          hasSteps: !!compiledTask.steps,
+          stepsCount: compiledTask.steps?.length || 0,
+          hasSubTasks: !!compiledTask.subTasks,
+          subTasksCount: compiledTask.subTasks?.length || 0,
+          debug: compiledTask.debug,
+          idMatchesInstance: compiledTask.id === taskForCompilation.id // ✅ DEVE essere true
+        });
 
-          // Converti steps dictionary in array di DialogueStep
-          // Ogni step ha: { id, textKey, type, ... }
-          const stepsArray: any[] = [];
-
-          // Helper per aggiungere step normalizzato
-          const addStep = (stepKey: string, step: any) => {
-            if (step) {
-              const normalizedKey = normalizeStepType(stepKey);
-              const normalizedStep = {
-                ...step,
-                type: step.type ? normalizeStepType(step.type) : normalizedKey
-              };
-              // Evita duplicati
-              if (!stepsArray.some(s => s.type === normalizedStep.type)) {
-                stepsArray.push(normalizedStep);
-              }
-            }
-          };
-
-          // Aggiungi step standard
-          addStep('start', nodeSteps.start);
-          addStep('noMatch', nodeSteps.noMatch);
-          addStep('success', nodeSteps.success);
-          addStep('failure', nodeSteps.failure);
-
-          // Aggiungi altri step se presenti (incluso violation che verrà normalizzato)
-          Object.keys(nodeSteps).forEach(key => {
-            if (!['start', 'noMatch', 'success', 'failure'].includes(key)) {
-              addStep(key, nodeSteps[key]);
-            }
-          });
-
+        // ✅ Converti CompiledTask → RuntimeTask (ricorsivo)
+        // Funzione helper per convertire CompiledUtteranceTask in RuntimeTask
+        const convertCompiledToRuntimeTask = (compiled: any): any => {
           const runtimeTask: any = {
-            id: node.id,
-            condition: null,
-            steps: stepsArray,
-            constraints: node.constraints || [],
-            nlpContract: node.dataContract || null,
+            id: compiled.id,
+            condition: compiled.condition || null,
+            steps: compiled.steps || [],
+            constraints: compiled.constraints || [],
+            nlpContract: compiled.nlpContract || null,
             subTasks: null
           };
 
-          // Costruisci subTasks ricorsivamente
-          if (node.subNodes && node.subNodes.length > 0) {
-            runtimeTask.subTasks = node.subNodes.map((subNode: any) =>
-              buildRuntimeTaskFromNode(subNode, stepsDict)
+          // ✅ Copia SubTasks ricorsivamente (solo se presenti)
+          if (compiled.subTasks && Array.isArray(compiled.subTasks) && compiled.subTasks.length > 0) {
+            runtimeTask.subTasks = compiled.subTasks.map((subCompiled: any) =>
+              convertCompiledToRuntimeTask(subCompiled)
             );
           }
 
           return runtimeTask;
         };
 
-        // ✅ FASE 2: Sanitizza steps prima di costruire RuntimeTask (converte testi letterali → GUID)
-        const sanitizedSteps = sanitizeSteps(taskTree.steps);
+        const runtimeTask = convertCompiledToRuntimeTask(compiledTask);
 
-        // Costruisci RuntimeTask dal root node del TaskTree
-        const rootNode = taskTree.nodes?.[0];
-        if (!rootNode) {
-          throw new Error('[DDEBubbleChat] TaskTree must have at least one node');
-        }
-
-        const runtimeTask = buildRuntimeTaskFromNode(rootNode, sanitizedSteps || {});
-        // Imposta l'ID del root task
-        runtimeTask.id = task.id;
-
-        console.log('[DDEBubbleChat] 📋 RuntimeTask built:', {
+        console.log('[DDEBubbleChat] 📋 RuntimeTask converted from CompiledTask:', {
           id: runtimeTask.id,
           stepsCount: runtimeTask.steps?.length || 0,
           constraintsCount: runtimeTask.constraints?.length || 0,
           hasSubTasks: !!runtimeTask.subTasks && runtimeTask.subTasks.length > 0,
-          subTasksCount: runtimeTask.subTasks?.length || 0
+          subTasksCount: runtimeTask.subTasks?.length || 0,
+          source: 'compiled_by_backend'
         });
 
-        // ✅ STEP 2.4: Salva il RuntimeTask nel repository
+        // ✅ STEP 2.4: Salva il RuntimeTask nel repository (necessario per avviare sessione)
+        // NOTA: Per test singolo task, potremmo non salvare, ma il backend si aspetta che il dialog esista
         console.log('[DDEBubbleChat] 📋 STEP 2.4: Saving dialog to repository...');
         console.log('[DDEBubbleChat] 📋 SAVING DIALOG:', {
           projectId,

@@ -21,7 +21,7 @@ Imports Newtonsoft.Json
 Public Class UtteranceTaskCompiler
     Inherits TaskCompilerBase
 
-    Public Overrides Function Compile(task As Task, taskId As String, flow As Flow) As CompiledTask
+    Public Overrides Function Compile(task As Task, taskId As String, allTemplates As List(Of Task)) As CompiledTask
         Dim compiledTask As New CompiledUtteranceTask()
 
         ' ✅ NUOVO MODELLO: Costruisci TaskTreeExpanded dal template usando task.templateId e subTasksIds
@@ -31,15 +31,15 @@ Public Class UtteranceTaskCompiler
         Dim taskTreeExpanded As Compiler.TaskTreeExpanded = Nothing
 
         If Not String.IsNullOrEmpty(task.TemplateId) Then
-            Dim matchingTemplates = flow.Tasks.Where(Function(t As Compiler.Task) t.Id = task.TemplateId).ToList()
+            Dim matchingTemplates = allTemplates.Where(Function(t As Compiler.Task) t.Id = task.TemplateId).ToList()
             If matchingTemplates.Count = 0 Then
-                Throw New InvalidOperationException($"Template with ID '{task.TemplateId}' not found in flow.Tasks for task '{taskId}'. Every task must reference a valid template.")
+                Throw New InvalidOperationException($"Template with ID '{task.TemplateId}' not found in allTemplates for task '{taskId}'. Every task must reference a valid template.")
             ElseIf matchingTemplates.Count > 1 Then
-                Throw New InvalidOperationException($"Template with ID '{task.TemplateId}' appears {matchingTemplates.Count} times in flow.Tasks. Each template ID must be unique.")
+                Throw New InvalidOperationException($"Template with ID '{task.TemplateId}' appears {matchingTemplates.Count} times in allTemplates. Each template ID must be unique.")
             End If
             Dim template = matchingTemplates.Single()
             Try
-                taskTreeExpanded = BuildTaskTreeExpanded(template, task, flow)
+                taskTreeExpanded = BuildTaskTreeExpanded(template, task, allTemplates)
             Catch ex As Exception
                 Console.WriteLine($"[COMPILER] ERROR: Failed to build TaskTreeExpanded from template {task.TemplateId}: {ex.Message}")
                 Throw New InvalidOperationException($"Failed to build TaskTreeExpanded from template {task.TemplateId}: {ex.Message}", ex)
@@ -51,14 +51,32 @@ Public Class UtteranceTaskCompiler
 
         If taskTreeExpanded IsNot Nothing Then
             Try
-                ' ✅ DIAG: Verifica dataContract prima di serializzare
+                ' ✅ DIAG: Verifica steps PRIMA di compilare
+                Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                Console.WriteLine($"[DIAG] UtteranceTaskCompiler: Verifying steps before compilation...")
+                Console.WriteLine($"   TaskInstance.Id: {taskId}")
+                Console.WriteLine($"   TaskInstance.Steps IsNothing: {task.Steps Is Nothing}")
+                If task.Steps IsNot Nothing Then
+                    Console.WriteLine($"   TaskInstance.Steps.Count: {task.Steps.Count}")
+                    Console.WriteLine($"   TaskInstance.Steps.Keys: {String.Join(", ", task.Steps.Keys)}")
+                End If
                 If taskTreeExpanded.Nodes IsNot Nothing AndAlso taskTreeExpanded.Nodes.Count > 0 Then
                     Dim firstNode = taskTreeExpanded.Nodes(0)
-                    Console.WriteLine($"[DIAG] UtteranceTaskCompiler: First node DataContract before serialization: IsNothing={firstNode.DataContract Is Nothing}")
-                    If firstNode.DataContract IsNot Nothing Then
-                        Console.WriteLine($"[DIAG] UtteranceTaskCompiler: First node DataContract type: {firstNode.DataContract.GetType().Name}")
+                    Console.WriteLine($"   FirstNode.Id: {firstNode.Id}")
+                    Console.WriteLine($"   FirstNode.TemplateId: {firstNode.TemplateId}")
+                    Console.WriteLine($"   FirstNode.Steps IsNothing: {firstNode.Steps Is Nothing}")
+                    If firstNode.Steps IsNot Nothing Then
+                        Console.WriteLine($"   FirstNode.Steps.Count: {firstNode.Steps.Count}")
+                        For Each step In firstNode.Steps
+                            Console.WriteLine($"     - Step Type: {step.Type}, Escalations: {If(step.Escalations IsNot Nothing, step.Escalations.Count, 0)}")
+                        Next
+                    End If
+                    Console.WriteLine($"   FirstNode.SubTasks IsNothing: {firstNode.SubTasks Is Nothing}")
+                    If firstNode.SubTasks IsNot Nothing Then
+                        Console.WriteLine($"   FirstNode.SubTasks.Count: {firstNode.SubTasks.Count}")
                     End If
                 End If
+                Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
 
                 Dim taskCompiler As New TaskCompiler()
                 Dim taskJson = JsonConvert.SerializeObject(taskTreeExpanded)
@@ -76,6 +94,23 @@ Public Class UtteranceTaskCompiler
                 Dim compileResult = taskCompiler.Compile(taskJson)
                 If compileResult IsNot Nothing AndAlso compileResult.Task IsNot Nothing Then
                     Dim runtimeTask = compileResult.Task
+
+                    ' ✅ DIAG: Verifica steps dopo compilazione
+                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                    Console.WriteLine($"[DIAG] UtteranceTaskCompiler: Steps after compilation...")
+                    Console.WriteLine($"   RuntimeTask.Steps IsNothing: {runtimeTask.Steps Is Nothing}")
+                    If runtimeTask.Steps IsNot Nothing Then
+                        Console.WriteLine($"   RuntimeTask.Steps.Count: {runtimeTask.Steps.Count}")
+                        For Each step In runtimeTask.Steps
+                            Console.WriteLine($"     - Step Type: {step.Type}, Escalations: {If(step.Escalations IsNot Nothing, step.Escalations.Count, 0)}")
+                        Next
+                    End If
+                    Console.WriteLine($"   RuntimeTask.HasSubTasks: {runtimeTask.HasSubTasks()}")
+                    If runtimeTask.HasSubTasks() Then
+                        Console.WriteLine($"   RuntimeTask.SubTasks.Count: {runtimeTask.SubTasks.Count}")
+                    End If
+                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+
                     compiledTask.Steps = runtimeTask.Steps
                     compiledTask.Constraints = runtimeTask.Constraints
                     compiledTask.NlpContract = runtimeTask.NlpContract
@@ -89,6 +124,20 @@ Public Class UtteranceTaskCompiler
                     Else
                         compiledTask.SubTasks = Nothing
                     End If
+
+                    ' ✅ DIAG: Verifica CompiledTask finale
+                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
+                    Console.WriteLine($"[DIAG] UtteranceTaskCompiler: Final CompiledTask...")
+                    Console.WriteLine($"   CompiledTask.Id: {compiledTask.Id}")
+                    Console.WriteLine($"   CompiledTask.Steps IsNothing: {compiledTask.Steps Is Nothing}")
+                    If compiledTask.Steps IsNot Nothing Then
+                        Console.WriteLine($"   CompiledTask.Steps.Count: {compiledTask.Steps.Count}")
+                    End If
+                    Console.WriteLine($"   CompiledTask.SubTasks IsNothing: {compiledTask.SubTasks Is Nothing}")
+                    If compiledTask.SubTasks IsNot Nothing Then
+                        Console.WriteLine($"   CompiledTask.SubTasks.Count: {compiledTask.SubTasks.Count}")
+                    End If
+                    Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
                 End If
             Catch ex As Exception
                 Console.WriteLine($"[COMPILER] ERROR: Exception during compilation for task {taskId}: {ex.GetType().Name} - {ex.Message}")
@@ -187,7 +236,7 @@ Public Class UtteranceTaskCompiler
     Private Function BuildTaskTreeExpanded(
         template As Task,
         instance As Task,
-        flow As Flow
+        allTemplates As List(Of Task)
     ) As TaskTreeExpanded
         Dim taskTreeExpanded As New TaskTreeExpanded() With {
             .TaskInstanceId = instance.Id, ' ✅ Usa TaskInstanceId invece di Id
@@ -198,7 +247,7 @@ Public Class UtteranceTaskCompiler
         ' ✅ NUOVO MODELLO: Costruisci struttura da subTasksIds (grafo di template)
         If template.SubTasksIds IsNot Nothing AndAlso template.SubTasksIds.Count > 0 Then
             ' ✅ FIX: Costruisci sub-nodi
-            Dim subNodes = BuildTaskTreeFromSubTasksIds(template.SubTasksIds, flow.Tasks, New HashSet(Of String)())
+            Dim subNodes = BuildTaskTreeFromSubTasksIds(template.SubTasksIds, allTemplates, New HashSet(Of String)())
 
             ' ✅ OBBLIGATORIO: dataContract (singolare) dal template - nessun fallback
             If template.DataContract Is Nothing Then

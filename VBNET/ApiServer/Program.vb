@@ -14,6 +14,7 @@ Imports Microsoft.Extensions.DependencyInjection
 Imports Microsoft.Extensions.Hosting
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
+Imports Newtonsoft.Json.Serialization
 
 Module Program
     ' ✅ STATELESS: Configurazione Redis (condivisa)
@@ -115,7 +116,11 @@ Module Program
             })
 
             ' Add services
+            ' ✅ SOLUZIONE DEFINITIVA: CamelCasePropertyNamesContractResolver globale
+            ' Converte automaticamente TUTTE le proprietà PascalCase → camelCase
+            ' Elimina la necessità di JsonProperty manuali e fallback nel frontend
             builder.Services.AddControllers().AddNewtonsoftJson(Sub(options)
+                                                                    options.SerializerSettings.ContractResolver = New CamelCasePropertyNamesContractResolver()
                                                                     options.SerializerSettings.NullValueHandling = NullValueHandling.Ignore
                                                                     options.SerializerSettings.ReferenceLoopHandling = ReferenceLoopHandling.Ignore
                                                                     options.SerializerSettings.Formatting = Formatting.None

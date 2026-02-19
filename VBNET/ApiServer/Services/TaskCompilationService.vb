@@ -23,13 +23,10 @@ Namespace Services
 
         Public Function CompileTaskToRuntime(task As Compiler.Task, allTemplates As List(Of Compiler.Task)) As CompileTaskResult
             Try
-                Dim flow As New Compiler.Flow() With {
-                    .Tasks = allTemplates
-                }
-
-                ' Compile task (Chat Simulator: no flowchart metadata needed)
+                ' ✅ Pipeline pulita: compila TaskInstance direttamente con allTemplates
+                ' Non serve creare Flow finto - il compiler accetta List(Of Task)
                 Dim compiler As New UtteranceTaskCompiler()
-                Dim compiledTask = compiler.Compile(task, task.Id, flow)
+                Dim compiledTask = compiler.Compile(task, task.Id, allTemplates)
 
                 If compiledTask Is Nothing Then
                     Return New CompileTaskResult(False, Nothing, $"Task compiler returned null for task '{task.Id}'. The task may be malformed or missing required fields.")

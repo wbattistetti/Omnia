@@ -24,6 +24,9 @@ Namespace ApiServer.Handlers
         ' ✅ FASE 2: Logger statico (default: StdoutLogger per backward compatibility)
         Private _logger As ApiServer.Interfaces.ILogger = New ApiServer.Logging.StdoutLogger()
 
+        ' ✅ Streaming: Manager SSE (singleton)
+        Private ReadOnly _sseStreamManager As ApiServer.Streaming.ISseStreamManager = New ApiServer.Streaming.SseStreamManager()
+
         ''' <summary>
         ''' ✅ FASE 2: Configura il logger da usare
         ''' </summary>
@@ -432,26 +435,21 @@ Namespace ApiServer.Handlers
                     SessionManager.StartTaskExecutionIfNeeded(sessionId)
                 End If
 
-                ' Setup SSE headers
-                context.Response.ContentType = "text/event-stream"
-                context.Response.Headers.Add("Cache-Control", "no-cache")
-                context.Response.Headers.Add("Connection", "keep-alive")
-                context.Response.Headers.Add("X-Accel-Buffering", "no")
-                Await context.Response.Body.FlushAsync()
+                ' ✅ Usa SseStreamManager per aprire connessione SSE
+                _sseStreamManager.OpenStream(sessionId, context.Response)
 
-                Dim writer As New StreamWriter(context.Response.Body)
+                ' ✅ Invia messaggi bufferizzati se presenti
+                Dim streamManager = DirectCast(_sseStreamManager, ApiServer.Streaming.SseStreamManager)
+                streamManager.SendBufferedMessages(sessionId)
 
-                ' ✅ STATELESS: Send existing messages first (from Redis)
+                ' ✅ STATELESS: Send existing messages first (from Redis) usando SseStreamManager
                 Console.WriteLine($"[API] ✅ STATELESS: Checking for existing messages in Redis session: {sessionId}")
                 Console.WriteLine($"[API] ✅ STATELESS: session.Messages IsNothing: {session.Messages Is Nothing}, Count: {If(session.Messages IsNot Nothing, session.Messages.Count, 0)}")
                 If session.Messages IsNot Nothing AndAlso session.Messages.Count > 0 Then
                     Console.WriteLine($"[API] ✅ STATELESS: Sending {session.Messages.Count} existing messages from Redis for session: {sessionId}")
                     For Each msg In session.Messages
                         Console.WriteLine($"[API] ✅ STATELESS: Sending existing message: {JsonConvert.SerializeObject(msg)}")
-                        Await writer.WriteLineAsync($"event: message")
-                        Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(msg)}")
-                        Await writer.WriteLineAsync()
-                        Await writer.FlushAsync()
+                        _sseStreamManager.EmitEvent(sessionId, "message", msg)
                     Next
                 Else
                     Console.WriteLine($"[API] ⚠️ STATELESS: No existing messages in Redis session: {sessionId} (task may not have executed yet)")
@@ -460,86 +458,48 @@ Namespace ApiServer.Handlers
                 ' Send waitingForInput event if already waiting
                 If session.IsWaitingForInput Then
                     Console.WriteLine($"[API] ✅ STATELESS: Session is already waiting for input, sending waitingForInput event")
-                    Dim jsonData = JsonConvert.SerializeObject(session.WaitingForInputData)
-                    Console.WriteLine($"[API] Sending initial waitingForInput event (session already waiting)")
-                    Console.WriteLine($"[API] JSON data: {jsonData}")
-                    Console.WriteLine($"[API] JSON length: {jsonData.Length}")
-
-                    Await writer.WriteLineAsync($"event: waitingForInput")
-                    Await writer.WriteLineAsync($"data: {jsonData}")
-                    Await writer.WriteLineAsync()
-                    Await writer.FlushAsync()
-
+                    _sseStreamManager.EmitEvent(sessionId, "waitingForInput", session.WaitingForInputData)
                     Console.WriteLine($"[API] Initial waitingForInput event sent successfully")
                 End If
 
-                ' Register event handlers
+                ' ✅ Register event handlers usando SseStreamManager
                 Dim onMessage As Action(Of Object) = Sub(data)
-                                                         Console.WriteLine($"[API] ✅ STATELESS: onMessage handler called for session: {sessionId}, data: {JsonConvert.SerializeObject(data)}")
-                                                         System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
-                                                                                             Try
-                                                                                                 Console.WriteLine($"[API] ✅ STATELESS: Writing message to SSE stream for session: {sessionId}")
-                                                                                                 Await writer.WriteLineAsync($"event: message")
-                                                                                                 Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
-                                                                                                 Await writer.WriteLineAsync()
-                                                                                                 Await writer.FlushAsync()
-                                                                                                 Console.WriteLine($"[API] ✅ STATELESS: Message sent to SSE stream for session: {sessionId}")
-                                                                                             Catch ex As Exception
-                                                                                                 Console.WriteLine($"[API] ❌ ERROR: SSE error sending message: {ex.Message}")
-                                                                                             End Try
-                                                                                         End Function)
+                                                         Console.WriteLine($"[API] ✅ STATELESS: onMessage handler called for session: {sessionId}")
+                                                         Try
+                                                             _sseStreamManager.EmitEvent(sessionId, "message", data)
+                                                             Console.WriteLine($"[API] ✅ STATELESS: Message sent to SSE stream for session: {sessionId}")
+                                                         Catch ex As Exception
+                                                             Console.WriteLine($"[API] ❌ ERROR: SSE error sending message: {ex.Message}")
+                                                         End Try
                                                      End Sub
 
                 Dim onWaitingForInput As Action(Of Object) = Sub(data)
-                                                                 System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
-                                                                                                     Try
-                                                                                                         session.IsWaitingForInput = True
-                                                                                                         session.WaitingForInputData = data
-
-                                                                                                         Dim jsonData = JsonConvert.SerializeObject(data)
-                                                                                                         Console.WriteLine($"[API] Sending waitingForInput event")
-                                                                                                         Console.WriteLine($"[API] JSON data: {jsonData}")
-                                                                                                         Console.WriteLine($"[API] JSON length: {jsonData.Length}")
-
-                                                                                                         Await writer.WriteLineAsync($"event: waitingForInput")
-                                                                                                         Await writer.WriteLineAsync($"data: {jsonData}")
-                                                                                                         Await writer.WriteLineAsync()
-                                                                                                         Await writer.FlushAsync()
-
-                                                                                                         Console.WriteLine($"[API] waitingForInput event sent successfully")
-                                                                                                     Catch ex As Exception
-                                                                                                         Console.WriteLine($"[API] ERROR: SSE error sending waitingForInput: {ex.GetType().Name} - {ex.Message}")
-                                                                                                         Console.WriteLine($"[API] ERROR: Stack trace: {ex.StackTrace}")
-                                                                                                     End Try
-                                                                                                 End Function)
+                                                                 Try
+                                                                     session.IsWaitingForInput = True
+                                                                     session.WaitingForInputData = data
+                                                                     _sseStreamManager.EmitEvent(sessionId, "waitingForInput", data)
+                                                                     Console.WriteLine($"[API] waitingForInput event sent successfully")
+                                                                 Catch ex As Exception
+                                                                     Console.WriteLine($"[API] ERROR: SSE error sending waitingForInput: {ex.GetType().Name} - {ex.Message}")
+                                                                 End Try
                                                              End Sub
 
                 Dim onComplete As Action(Of Object) = Sub(data)
-                                                          System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
-                                                                                              Try
-                                                                                                  Await writer.WriteLineAsync($"event: complete")
-                                                                                                  Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
-                                                                                                  Await writer.WriteLineAsync()
-                                                                                                  Await writer.FlushAsync()
-                                                                                                  writer.Close()
-                                                                                              Catch ex As Exception
-                                                                                                  Console.WriteLine($"[API] ERROR: SSE error sending complete: {ex.Message}")
-                                                                                              End Try
-                                                                                          End Function)
+                                                          Try
+                                                              _sseStreamManager.EmitEvent(sessionId, "complete", data)
+                                                              _sseStreamManager.CloseStream(sessionId)
+                                                          Catch ex As Exception
+                                                              Console.WriteLine($"[API] ERROR: SSE error sending complete: {ex.Message}")
+                                                          End Try
                                                       End Sub
 
                 Dim onError As Action(Of Object) = Sub(data)
-                                                       System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
-                                                                                           Try
-                                                                                               Await writer.WriteLineAsync($"event: error")
-                                                                                               Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(data)}")
-                                                                                               Await writer.WriteLineAsync()
-                                                                                               Await writer.FlushAsync()
-                                                                                               writer.Close()
-                                                                                           Catch ex As Exception
-                                                                                               Console.WriteLine($"[API] ERROR: SSE error sending error: {ex.Message}")
-                                                                                           End Try
-                                                                                       End Function)
+                                                       Try
+                                                           _sseStreamManager.EmitEvent(sessionId, "error", data)
+                                                           _sseStreamManager.CloseStream(sessionId)
+                                                       Catch ex As Exception
+                                                           Console.WriteLine($"[API] ERROR: SSE error sending error: {ex.Message}")
+                                                       End Try
                                                    End Sub
 
                 ' ✅ STATELESS: Registra gli handler sull'EventEmitter condiviso
@@ -572,12 +532,9 @@ Namespace ApiServer.Handlers
 
                 ' ✅ STATELESS: Mantieni connessione aperta con heartbeat integrato
                 ' Il task in background verrà avviato quando SseConnected diventa True (via Redis Pub/Sub)
-                Dim heartbeatTimer As New System.Threading.Timer(Async Sub(state)
+                Dim heartbeatTimer As New System.Threading.Timer(Sub(state)
                                                                      Try
-                                                                         Await writer.WriteLineAsync($"event: heartbeat")
-                                                                         Await writer.WriteLineAsync($"data: {JsonConvert.SerializeObject(New With {.timestamp = DateTime.UtcNow.ToString("O")})}")
-                                                                         Await writer.WriteLineAsync()
-                                                                         Await writer.FlushAsync()
+                                                                         _sseStreamManager.EmitEvent(sessionId, "heartbeat", New With {.timestamp = DateTime.UtcNow.ToString("O")})
                                                                      Catch ex As Exception
                                                                          ' Connection closed
                                                                      End Try
@@ -590,6 +547,7 @@ Namespace ApiServer.Handlers
                     ' Connection closed normally
                 Finally
                     heartbeatTimer.Dispose()
+                    _sseStreamManager.CloseStream(sessionId)
                     Console.WriteLine($"[API] ✅ STATELESS: SSE connection closed, heartbeat timer disposed for session: {sessionId}")
                 End Try
             Catch ex As Exception

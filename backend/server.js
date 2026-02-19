@@ -6813,16 +6813,23 @@ app.post('/api/deploy/sync-translations', async (req, res) => {
     if (environment === 'on-the-fly' && translations && typeof translations === 'object' && projectId) {
       console.log(`[DEPLOY][SYNC_TRANSLATIONS] 📋 ON-THE-FLY: Syncing ${Object.keys(translations).length} translations from memory to Redis...`);
 
-      let totalSynced = 0;
+      // ✅ Build key-value pairs for mSet (atomic, much faster than sequential set calls)
+      const keyValuePairs = [];
       for (const [guid, text] of Object.entries(translations)) {
         if (guid && text !== undefined && text !== null) {
           const redisKey = `${keyPrefix}translations:${projectId}:${locale}:${guid}`;
-          await redis.set(redisKey, String(text));
-          totalSynced++;
+          keyValuePairs.push(redisKey, String(text));
         }
       }
 
-      console.log(`[DEPLOY][SYNC_TRANSLATIONS] ✅ ON-THE-FLY: Synced ${totalSynced} translations from memory to Redis (no MongoDB persistence)`);
+      // ✅ Single atomic operation instead of N sequential calls (prevents event loop blocking, timeout, crash)
+      let totalSynced = 0;
+      if (keyValuePairs.length > 0) {
+        await redis.mSet(keyValuePairs);
+        totalSynced = keyValuePairs.length / 2; // Each translation = 2 array elements (key, value)
+      }
+
+      console.log(`[DEPLOY][SYNC_TRANSLATIONS] ✅ ON-THE-FLY: Synced ${totalSynced} translations from memory to Redis (no MongoDB persistence, atomic mSet)`);
 
       const duration = Date.now() - startTime;
       return res.json({
@@ -6848,16 +6855,23 @@ app.post('/api/deploy/sync-translations', async (req, res) => {
 
       const projectTranslations = await projColl.find({ language: locale }).toArray();
 
+      // ✅ Build key-value pairs for mSet (atomic, much faster than sequential set calls)
+      const projectKeyValuePairs = [];
       for (const trans of projectTranslations) {
         if (trans.guid && trans.text !== undefined) {
           const redisKey = `${keyPrefix}translations:${projectId}:${locale}:${trans.guid}`;
-          await redis.set(redisKey, trans.text);
-          totalSynced++;
+          projectKeyValuePairs.push(redisKey, trans.text);
         }
       }
 
+      // ✅ Single atomic operation instead of N sequential calls
+      if (projectKeyValuePairs.length > 0) {
+        await redis.mSet(projectKeyValuePairs);
+        totalSynced += projectKeyValuePairs.length / 2;
+      }
+
       syncedProjects.push(projectId);
-      console.log(`[DEPLOY][SYNC_TRANSLATIONS] ✅ Synced ${projectTranslations.length} translations from MongoDB for project ${projectId}`);
+      console.log(`[DEPLOY][SYNC_TRANSLATIONS] ✅ Synced ${projectKeyValuePairs.length / 2} translations from MongoDB for project ${projectId} (atomic mSet)`);
     } else {
       const projectsDb = client.db(dbProjects);
       const projectsList = await projectsDb.listCollections().toArray();
@@ -6871,16 +6885,23 @@ app.post('/api/deploy/sync-translations', async (req, res) => {
           const projColl = projDb.collection('Translations');
           const projectTranslations = await projColl.find({ language: locale }).toArray();
 
+          // ✅ Build key-value pairs for mSet (atomic, much faster than sequential set calls)
+          const projectKeyValuePairs = [];
           for (const trans of projectTranslations) {
             if (trans.guid && trans.text !== undefined) {
               const redisKey = `${keyPrefix}translations:${projectIdFromDb}:${locale}:${trans.guid}`;
-              await redis.set(redisKey, trans.text);
-              totalSynced++;
+              projectKeyValuePairs.push(redisKey, trans.text);
             }
           }
 
+          // ✅ Single atomic operation instead of N sequential calls
+          if (projectKeyValuePairs.length > 0) {
+            await redis.mSet(projectKeyValuePairs);
+            totalSynced += projectKeyValuePairs.length / 2;
+          }
+
           syncedProjects.push(projectIdFromDb);
-          console.log(`[DEPLOY][SYNC_TRANSLATIONS] ✅ Synced ${projectTranslations.length} translations for project ${projectIdFromDb}`);
+          console.log(`[DEPLOY][SYNC_TRANSLATIONS] ✅ Synced ${projectKeyValuePairs.length / 2} translations for project ${projectIdFromDb} (atomic mSet)`);
         } catch (err) {
           console.warn(`[DEPLOY][SYNC_TRANSLATIONS] ⚠️ Error syncing project ${projectIdFromDb}:`, err.message);
         }
@@ -6898,15 +6919,22 @@ app.post('/api/deploy/sync-translations', async (req, res) => {
       ]
     }).toArray();
 
+    // ✅ Build key-value pairs for mSet (atomic, much faster than sequential set calls)
+    const factoryKeyValuePairs = [];
     for (const trans of factoryTranslations) {
       if (trans.guid && trans.text !== undefined) {
         const redisKey = `${keyPrefix}translations:factory:${locale}:${trans.guid}`;
-        await redis.set(redisKey, trans.text);
-        totalSynced++;
+        factoryKeyValuePairs.push(redisKey, trans.text);
       }
     }
 
-    console.log(`[DEPLOY][SYNC_TRANSLATIONS] ✅ Synced ${factoryTranslations.length} factory translations`);
+    // ✅ Single atomic operation instead of N sequential calls
+    if (factoryKeyValuePairs.length > 0) {
+      await redis.mSet(factoryKeyValuePairs);
+      totalSynced += factoryKeyValuePairs.length / 2;
+    }
+
+    console.log(`[DEPLOY][SYNC_TRANSLATIONS] ✅ Synced ${factoryKeyValuePairs.length / 2} factory translations (atomic mSet)`);
 
     const duration = Date.now() - startTime;
     console.log(`[DEPLOY][SYNC_TRANSLATIONS] ✅✅ Synchronization completed in ${duration}ms`, {
