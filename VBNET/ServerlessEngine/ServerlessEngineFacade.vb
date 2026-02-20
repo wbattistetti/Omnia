@@ -1,52 +1,38 @@
 ' ServerlessEngineFacade.vb
-' Facciata compatibile con l'API del motore attuale
-' Usa internamente ServerlessEngine.ExecuteTaskStep in un loop esterno
+' Facade that exposes a simplified API compatible with the previous Motore interface.
+' Wraps ServerlessEngine and provides ExecuteTask / GetNextTask / SetState / Reset.
 
 Option Strict On
 Option Explicit On
 Imports TaskEngine
 Imports System.Linq
-Imports System.Runtime.CompilerServices
 
 ''' <summary>
-''' Facciata compatibile con l'API del motore attuale (Motore.ExecuteTask)
+''' Facade over ServerlessEngine providing a high-level API compatible with the
+''' previous Motore.ExecuteTask pattern.
 '''
-''' CORRISPONDENZA:
-''' Questa classe simula il comportamento di Motore.ExecuteTask (riga 47-110)
-''' usando internamente ServerlessEngine.ExecuteTaskStep in un loop esterno
-'''
-''' UTILITÀ:
-''' - Mantiene compatibilità con codice esistente
-''' - Permette confronto diretto con Motore.ExecuteTask per golden test
-''' - Serve come ponte per evitare regressioni durante la migrazione
+''' Use this class when you need to run a full task loop without managing
+''' individual steps manually.
 ''' </summary>
 Public Class ServerlessEngineFacade
     Private ReadOnly _engine As ServerlessEngine
     Private _messageToShowHandlers As EventHandler(Of MessageEventArgs)
 
-    ''' <summary>
-    ''' Costruttore
-    ''' </summary>
     Public Sub New()
         _engine = New ServerlessEngine()
-        ' Collega l'evento del motore interno per inoltrarlo
         AddHandler _engine.MessageToShow, Sub(sender, e)
-                                               RaiseEvent MessageToShow(sender, e)
-                                           End Sub
+                                              RaiseEvent MessageToShow(sender, e)
+                                          End Sub
     End Sub
 
-    ''' <summary>
-    ''' Parser per interpretare l'input utente
-    ''' </summary>
+    ''' <summary>Parser for user utterances.</summary>
     Public ReadOnly Property Parser As Parser
         Get
             Return _engine.Parser
         End Get
     End Property
 
-    ''' <summary>
-    ''' Evento che viene sollevato quando un messaggio deve essere mostrato
-    ''' </summary>
+    ''' <summary>Raised whenever a message should be shown to the user.</summary>
     Public Custom Event MessageToShow As EventHandler(Of MessageEventArgs)
         AddHandler(value As EventHandler(Of MessageEventArgs))
             _messageToShowHandlers = CType([Delegate].Combine(_messageToShowHandlers, value), EventHandler(Of MessageEventArgs))
@@ -55,150 +41,99 @@ Public Class ServerlessEngineFacade
             _messageToShowHandlers = CType([Delegate].Remove(_messageToShowHandlers, value), EventHandler(Of MessageEventArgs))
         End RemoveHandler
         RaiseEvent(sender As Object, e As MessageEventArgs)
-            If _messageToShowHandlers IsNot Nothing Then
-                _messageToShowHandlers.Invoke(sender, e)
-            End If
+            If _messageToShowHandlers IsNot Nothing Then _messageToShowHandlers.Invoke(sender, e)
         End RaiseEvent
     End Event
 
+    ' -------------------------------------------------------------------------
+    ' High-level API (loop-based)
+    ' -------------------------------------------------------------------------
+
     ''' <summary>
-    ''' Esegue il task completo (compatibile con Motore.ExecuteTask)
-    '''
-    ''' CORRISPONDENZA:
-    ''' Questo metodo simula il loop While True in Motore.ExecuteTask (riga 55-99)
-    ''' chiamando ripetutamente ServerlessEngine.ExecuteTaskStep finché ContinueExecution = False
-    '''
-    ''' LOGICA:
-    ''' 1. Crea ExecutionState iniziale
-    ''' 2. Loop: chiama ExecuteTaskStep finché ContinueExecution = True
-    ''' 3. Raccoglie tutti i messaggi emessi
-    ''' 4. Ritorna quando l'esecuzione è completata o in attesa di input
+    ''' Runs the full execution loop until the engine waits for input or completes.
+    ''' Equivalent to the old Motore.ExecuteTask.
     ''' </summary>
-    ''' <param name="taskInstance">Istanza del task da eseguire</param>
-    Public Sub ExecuteTask(taskInstance As TaskInstance)
-        Console.WriteLine($"[ServerlessEngineFacade] ▶️ ExecuteTask START: {taskInstance.TaskList.Count} tasks")
+    Public Sub ExecuteTask(taskUtterance As TaskUtterance)
+        If taskUtterance Is Nothing Then Throw New ArgumentNullException(NameOf(taskUtterance))
 
-        ' Crea stato iniziale
+        Console.WriteLine($"[ServerlessEngineFacade] ExecuteTask START: SubTasks={taskUtterance.SubTasks?.Count}")
+
         Dim state As New ExecutionState()
+        Dim maxIterations As Integer = 1000 ' Safety guard against infinite loops.
+        Dim iterations As Integer = 0
 
-        ' Loop principale: esegui step finché ContinueExecution = True
-        ' CORRISPONDENZA: Motore.vb, riga 55-99 (While True loop)
-        While True
-            Dim stepResult = _engine.ExecuteTaskStep(state, taskInstance)
+        Do While iterations < maxIterations
+            iterations += 1
+            Dim stepResult = _engine.ExecuteTaskStep(state, taskUtterance)
 
-            ' Aggiungi messaggi allo stato
-            If stepResult.Messages IsNot Nothing Then
-                state.Messages.AddRange(stepResult.Messages)
-            End If
+            If stepResult.Messages IsNot Nothing Then state.Messages.AddRange(stepResult.Messages)
 
-            ' Se l'esecuzione deve fermarsi, esci dal loop
-            ' CORRISPONDENZA: Motore.vb, riga 59-62, 73-77, 89, 98
             If Not stepResult.ContinueExecution Then
-                Console.WriteLine($"[ServerlessEngineFacade] ⏸️ Execution stopped: StepType={stepResult.StepType}, IsCompleted={stepResult.IsCompleted}")
-                Exit While
+                Console.WriteLine($"[ServerlessEngineFacade] ExecuteTask STOP: StepType={stepResult.StepType}, Completed={stepResult.IsCompleted}")
+                Exit Do
             End If
 
-            ' Se c'è un errore, ferma l'esecuzione
             If Not String.IsNullOrEmpty(stepResult.ErrorMessage) Then
-                Console.WriteLine($"[ServerlessEngineFacade] ❌ ERROR: {stepResult.ErrorMessage}")
-                Exit While
+                Console.WriteLine($"[ServerlessEngineFacade] ERROR: {stepResult.ErrorMessage}")
+                Exit Do
             End If
-        End While
+        Loop
 
-        Console.WriteLine($"[ServerlessEngineFacade] ✅ ExecuteTask COMPLETE: Messages.Count={state.Messages.Count}, IsCompleted={state.IsCompleted}")
+        Console.WriteLine($"[ServerlessEngineFacade] ExecuteTask COMPLETE: Messages={state.Messages.Count}, Completed={state.IsCompleted}")
     End Sub
 
     ''' <summary>
-    ''' Trova il prossimo task da eseguire (compatibile con Motore.GetNextTask)
+    ''' Returns the first incomplete TaskUtterance in the tree.
     ''' </summary>
-    Public Function GetNextTask(taskInstance As TaskInstance) As TaskNode
-        ' Crea uno stato temporaneo per trovare il prossimo task
-        ' Nota: Questo è un workaround, idealmente GetNextTask dovrebbe essere stateless
-        ' Per ora manteniamo compatibilità con l'API esistente
-        Dim state As New ExecutionState()
-        Dim tempEngine As New ServerlessEngine()
-
-        ' Usa la logica interna di GetNextTaskInternal
-        ' Nota: Questo richiede esporre GetNextTaskInternal come Public o creare un metodo helper
-        ' Per ora, usiamo un approccio semplificato: chiamiamo ExecuteTaskStep fino a trovare un task
-        ' TODO: Refactor per esporre GetNextTaskInternal come Public Shared method
-
-        ' Workaround: usa reflection o esponi il metodo come Public
-        ' Per ora, implementiamo la logica direttamente (copiata da Motore.GetNextTask)
-        For Each mainTask As TaskNode In taskInstance.TaskList.Where(Function(dt) dt.State <> DialogueState.AcquisitionFailed)
-            If IsTaskNodeEmpty(mainTask) Then
-                Console.WriteLine($"[ServerlessEngineFacade] 📍 Selected empty node: {mainTask.Id}")
-                Return mainTask
-            End If
-
-            If {DialogueState.Confirmation, DialogueState.Invalid, DialogueState.NoMatch, DialogueState.NoInput}.Contains(mainTask.State) Then
-                Console.WriteLine($"[ServerlessEngineFacade] 📍 Selected node: {mainTask.Id}, State={mainTask.State}")
-                Return mainTask
-            End If
-
-            If mainTask.State = DialogueState.Success Then
-                Console.WriteLine($"[ServerlessEngineFacade] 📍 Selected node with Success state: {mainTask.Id} (will execute Success step)")
-                Return mainTask
-            End If
-
-            For Each subTask As TaskNode In mainTask.SubTasks.Where(Function(st) st.State <> DialogueState.AcquisitionFailed)
-                If IsTaskNodeEmpty(subTask) Then
-                    Console.WriteLine($"[ServerlessEngineFacade] 📍 Selected empty subTask: {subTask.Id}")
-                    Return subTask
-                End If
-                If {DialogueState.Confirmation, DialogueState.Invalid, DialogueState.NoMatch, DialogueState.NoInput}.Contains(subTask.State) Then
-                    Console.WriteLine($"[ServerlessEngineFacade] 📍 Selected subTask: {subTask.Id}, State={subTask.State}")
-                    Return subTask
-                End If
-                If subTask.State = DialogueState.Success Then
-                    Console.WriteLine($"[ServerlessEngineFacade] 📍 Selected subTask with Success state: {subTask.Id} (will execute Success step)")
-                    Return subTask
-                End If
-            Next
-        Next
-
-        Console.WriteLine($"[ServerlessEngineFacade] ✅ No more tasks to execute")
-        Return Nothing
+    Public Function GetNextTask(taskUtterance As TaskUtterance) As TaskUtterance
+        If taskUtterance Is Nothing Then Return Nothing
+        Return GetNextTaskRecursive(taskUtterance.SubTasks)
     End Function
 
     ''' <summary>
-    ''' Aggiorna lo stato del task in base al risultato del parsing (compatibile con Motore.SetState)
+    ''' Applies the parse result to the active TaskUtterance's state machine.
     ''' </summary>
-    Public Sub SetState(parseResult As ParseResult, currentState As DialogueState, currTaskNode As TaskNode)
-        _engine.SetState(parseResult, currentState, currTaskNode)
+    Public Sub SetState(parseResult As ParseResult, currentState As DialogueState, currTask As TaskUtterance)
+        _engine.SetState(parseResult, currentState, currTask)
     End Sub
 
     ''' <summary>
-    ''' Marca il task come acquisitionFailed (compatibile con Motore.MarkAsAcquisitionFailed)
+    ''' Marks a task as failed (placeholder — actual logic is in TaskUtterance).
     ''' </summary>
-    Public Sub MarkAsAcquisitionFailed(currTaskNode As TaskNode)
-        ' Nota: Nel motore attuale questa funzione è vuota, manteniamo lo stesso comportamento
+    Public Sub MarkAsAcquisitionFailed(currTask As TaskUtterance)
+        ' No-op: failure marking is handled internally by the state machine.
     End Sub
 
     ''' <summary>
-    ''' Resetta lo stato interno del motore (compatibile con Motore.Reset)
+    ''' Resets the task tree to its initial state.
     ''' </summary>
-    Public Sub Reset(Optional taskInstance As TaskInstance = Nothing)
-        ' Nota: In ServerlessEngine non c'è stato interno da resettare
-        ' Se fornita, resetta solo l'istanza Task
-        If taskInstance IsNot Nothing Then
-            taskInstance.Reset()
-        End If
+    Public Sub Reset(Optional taskUtterance As TaskUtterance = Nothing)
+        taskUtterance?.Reset()
     End Sub
+
+    ' -------------------------------------------------------------------------
+    ' Private helpers
+    ' -------------------------------------------------------------------------
+
+    Private Function GetNextTaskRecursive(tasks As List(Of TaskUtterance)) As TaskUtterance
+        If tasks Is Nothing Then Return Nothing
+        For Each t In tasks
+            If Not t.IsComplete() Then Return t
+            Dim found = GetNextTaskRecursive(t.SubTasks)
+            If found IsNot Nothing Then Return found
+        Next
+        Return Nothing
+    End Function
 End Class
 
 ''' <summary>
-''' Funzioni helper per TaskNode (duplicati da Utils.vb perché Utils è Friend)
+''' Helper functions for TaskUtterance (public for cross-assembly use).
 ''' </summary>
 Module ServerlessEngineFacadeHelpers
-    ''' <summary>
-    ''' Verifica se un TaskNode è vuoto
-    ''' </summary>
-    Public Function IsTaskNodeEmpty(taskNode As TaskNode) As Boolean
-        If taskNode.SubTasks IsNot Nothing AndAlso taskNode.SubTasks.Any() Then
-            Return Not taskNode.SubTasks.Any(Function(st) st.Value IsNot Nothing)
-        Else
-            Return taskNode.Value Is Nothing
+    Public Function IsTaskNodeEmpty(task As TaskUtterance) As Boolean
+        If task.SubTasks IsNot Nothing AndAlso task.SubTasks.Any() Then
+            Return Not task.SubTasks.Any(Function(st) st.Value IsNot Nothing)
         End If
+        Return task.Value Is Nothing
     End Function
 End Module

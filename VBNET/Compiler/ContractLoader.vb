@@ -15,7 +15,7 @@ Public Class ContractLoader
     ''' Carica nlpContract per un nodo
     ''' Ritorna NLPContract base (verrà compilato da TaskCompiler)
     ''' </summary>
-    Public Function LoadContract(node As TaskEngine.TaskNode) As NLPContract
+    Public Function LoadContract(node As TaskEngine.TaskUtterance) As NLPContract
         ' PRIORITÀ 1: Contract già presente nel nodo (caricato da JSON)
         ' Se è già CompiledNlpContract, ritorna la base
         If node.NlpContract IsNot Nothing Then

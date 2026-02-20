@@ -54,8 +54,6 @@ Namespace ApiServer.Streaming
 
             ' Inizializza buffer messaggi se non esiste
             _messageBuffers.TryAdd(sessionId, New Queue(Of BufferedEvent)())
-
-            Console.WriteLine($"[SseStreamManager] ✅ SSE stream opened for session: {sessionId}")
         End Sub
 
         ''' <summary>
@@ -75,7 +73,6 @@ Namespace ApiServer.Streaming
             Try
                 jsonData = JsonConvert.SerializeObject(data)
             Catch ex As Exception
-                Console.WriteLine($"[SseStreamManager] ⚠️ Failed to serialize event data: {ex.Message}")
                 Return
             End Try
 
@@ -91,9 +88,7 @@ Namespace ApiServer.Streaming
                                                           Await writer.WriteLineAsync()
                                                           Await writer.FlushAsync()
                                                       End Function).Wait()
-                        Console.WriteLine($"[SseStreamManager] ✅ Event '{eventType}' emitted for session: {sessionId}")
                     Catch ex As Exception
-                        Console.WriteLine($"[SseStreamManager] ⚠️ Failed to emit event: {ex.Message}")
                         ' Rimuovi stream se errore (connessione chiusa)
                         _activeStreams.TryRemove(sessionId, Nothing)
                     End Try
@@ -105,7 +100,6 @@ Namespace ApiServer.Streaming
                         .EventType = eventType,
                         .Data = data
                     })
-                    Console.WriteLine($"[SseStreamManager] 📦 Event '{eventType}' buffered for session: {sessionId} (stream not open)")
                 End If
             End If
         End Sub
@@ -118,9 +112,7 @@ Namespace ApiServer.Streaming
                 Return
             End If
 
-            If _activeStreams.TryRemove(sessionId, Nothing) Then
-                Console.WriteLine($"[SseStreamManager] ✅ SSE stream closed for session: {sessionId}")
-            End If
+            _activeStreams.TryRemove(sessionId, Nothing)
 
             ' Pulisci buffer messaggi
             _messageBuffers.TryRemove(sessionId, Nothing)
@@ -163,8 +155,6 @@ Namespace ApiServer.Streaming
                 Return
             End If
 
-            Console.WriteLine($"[SseStreamManager] 📤 Sending {buffer.Count} buffered messages for session: {sessionId}")
-
             While buffer.Count > 0
                 Dim bufferedEvent = buffer.Dequeue()
                 Try
@@ -177,7 +167,6 @@ Namespace ApiServer.Streaming
                                                       Await writer.FlushAsync()
                                                   End Function).Wait()
                 Catch ex As Exception
-                    Console.WriteLine($"[SseStreamManager] ⚠️ Failed to send buffered message: {ex.Message}")
                     Exit While
                 End Try
             End While

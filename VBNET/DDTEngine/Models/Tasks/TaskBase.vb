@@ -1,11 +1,11 @@
 ' TaskBase.vb
-' Classe base astratta per tutti i task
+' Abstract base class for all runtime micro-tasks.
 
 Option Strict On
 Option Explicit On
 
 ''' <summary>
-''' Classe base astratta per tutti i task
+''' Abstract base for all ITask implementations.
 ''' </summary>
 Public MustInherit Class TaskBase
     Implements ITask
@@ -13,8 +13,7 @@ Public MustInherit Class TaskBase
     Public MustOverride ReadOnly Property Label As String Implements ITask.Label
 
     ''' <summary>
-    ''' Esegue il task (implementazione di default: solleva eccezione)
+    ''' Executes the task.
     ''' </summary>
-    Public MustOverride Sub Execute(taskNode As TaskNode, taskInstance As TaskInstance, onMessage As Action(Of String)) Implements ITask.Execute
+    Public MustOverride Sub Execute(context As TaskUtterance, onMessage As Action(Of String)) Implements ITask.Execute
 End Class
-

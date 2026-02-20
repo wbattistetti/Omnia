@@ -3,6 +3,7 @@
 
 Option Strict On
 Option Explicit On
+Imports System.Collections.Generic
 
     ''' <summary>
     ''' Rappresenta un'istanza di un Task - Struttura Runtime
@@ -38,14 +39,14 @@ Option Explicit On
         Public Property IsAggregate As Boolean
 
         ''' <summary>
-        ''' Response di introduzione (opzionale, mostrato all'inizio)
+        ''' Tasks di introduzione (opzionale, mostrato all'inizio)
         ''' </summary>
-        Public Property Introduction As Response
+        Public Property Introduction As IEnumerable(Of ITask)
 
         ''' <summary>
-        ''' Response di success (opzionale, mostrato alla fine)
+        ''' Tasks di success (opzionale, mostrato alla fine)
         ''' </summary>
-        Public Property SuccessResponse As Response
+        Public Property SuccessResponse As IEnumerable(Of ITask)
 
         ''' <summary>
         ''' Lista dei task da eseguire

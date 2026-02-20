@@ -1,89 +1,75 @@
+' Utils.vb
+' Shared utility functions for the dialogue engine.
+
+Option Strict On
+Option Explicit On
 Imports System.Runtime.CompilerServices
 Imports System.Text.RegularExpressions
 
 Module Utils
-    ' Regex compilata per i placeholder (es. [Nome] o [Parent.Child])
-    ' Pattern: trova tutto tra quadre, escludendo quadre annidate
+    ' Pre-compiled regex for placeholder substitution (e.g. [FullLabel.Path]).
     Private ReadOnly PlaceholderRegex As New Regex("\[([^\[\]]+)\]", RegexOptions.Compiled)
+
+    ''' <summary>Returns True when the task has no value (leaf) or no sub-task has a value (composite).</summary>
     <Extension>
-    Public Function IsEmpty(taskNode As TaskNode) As Boolean
-        If taskNode.SubTasks.Any Then
-            Return Not taskNode.SubTasks.Any(Function(st) st.Value IsNot Nothing)
-        Else
-            Return taskNode.Value Is Nothing
-        End If
+    Public Function IsEmpty(task As TaskUtterance) As Boolean
+        If task.SubTasks.Any() Then Return Not task.SubTasks.Any(Function(st) st.Value IsNot Nothing)
+        Return task.Value Is Nothing
     End Function
 
+    ''' <summary>Returns True when all sub-tasks have values (composite) or this leaf has a value.</summary>
     <Extension>
-    Public Function IsFilled(taskNode As TaskNode) As Boolean
-        If taskNode.SubTasks.Any Then
-            Return Not taskNode.SubTasks.Any(Function(st) st.Value Is Nothing)
-        Else
-            Return taskNode.Value IsNot Nothing
-        End If
+    Public Function IsFilled(task As TaskUtterance) As Boolean
+        If task.SubTasks.Any() Then Return Not task.SubTasks.Any(Function(st) st.Value Is Nothing)
+        Return task.Value IsNot Nothing
     End Function
 
+    ''' <summary>Returns True when this task is a sub-task (has a parent).</summary>
+    <Extension>
+    Public Function IsSubData(task As TaskUtterance) As Boolean
+        Return task.ParentData IsNot Nothing
+    End Function
+
+    ''' <summary>Returns True when any task in the list is a session-terminating task.</summary>
     <Extension>
     Public Function HasExitCondition(tasks As IEnumerable(Of ITask)) As Boolean
-        Return tasks.Any(Function(a) TypeOf (a) Is CloseSessionTask OrElse TypeOf (a) Is TransferTask)
-    End Function
-
-    <Extension>
-    Public Function ExitType(response As Response) As String
-        ' TODO: Implementare logica per determinare il tipo di exit condition
-        ' Per ora ritorna stringa vuota
-        Return ""
-    End Function
-
-    <Extension>
-    Public Function IsSubData(taskNode As TaskNode) As Boolean
-        Return taskNode.ParentData IsNot Nothing
+        Return tasks.Any(Function(t) TypeOf t Is CloseSessionTask OrElse TypeOf t Is TransferTask)
     End Function
 
     ''' <summary>
-    ''' Processa i placeholder nel testo (sostituisce [FullLabel] con valori dal contesto globale)
-    ''' Usa FullLabel calcolato a compile-time per lookup diretto nel contesto globale
-    ''' Gestisce placeholder annidati iterando finché non ci sono più match
+    ''' Substitutes [FullLabel] placeholders in text with runtime values from the task tree.
+    ''' Iterates until no more placeholders remain (supports chained substitutions).
+    ''' Throws if a placeholder cannot be resolved.
     ''' </summary>
-    Public Function ProcessPlaceholders(text As String, taskInstance As TaskInstance, Optional globalContext As IVariableContext = Nothing) As String
-        If String.IsNullOrEmpty(text) Then
-            Return text
-        End If
+    Public Function ProcessPlaceholders(text As String, context As TaskUtterance,
+                                        Optional globalContext As IVariableContext = Nothing) As String
+        If String.IsNullOrEmpty(text) Then Return text
 
-        ' Crea contesto globale se non fornito (usa solo TaskInstance)
         If globalContext Is Nothing Then
-            globalContext = New GlobalVariableContext(taskInstance)
+            globalContext = New GlobalVariableContext(context)
         End If
 
-        Dim processedText As String = text
-        Dim maxIterations As Integer = 10  ' Previene loop infiniti
-        Dim iteration As Integer = 0
+        Dim result As String = text
+        Dim iterations As Integer = 0
+        Const MaxIterations As Integer = 10
 
-        ' Ciclo While: ripeti finché ci sono placeholder da sostituire
-        ' Necessario perché una sostituzione potrebbe creare nuovi placeholder
-        While processedText.Contains("[") AndAlso iteration < maxIterations
-            iteration += 1
-            Dim matches As MatchCollection = PlaceholderRegex.Matches(processedText)
+        While result.Contains("[") AndAlso iterations < MaxIterations
+            iterations += 1
+            Dim matches As MatchCollection = PlaceholderRegex.Matches(result)
+            If matches.Count = 0 Then Exit While
 
-            If matches.Count = 0 Then
-                Exit While
-            End If
+            For Each m As Match In matches
+                Dim fullLabel = m.Groups(1).Value.Trim()
+                Dim value = globalContext.GetValue(fullLabel)
 
-            ' Per ogni match, cerca il valore nel contesto globale usando FullLabel
-            For Each match As Match In matches
-                Dim fullLabel As String = match.Groups(1).Value.Trim()  ' Es. "Nominativo.Nome"
-                Dim value As String = globalContext.GetValue(fullLabel)
-
-                ' ❌ ERRORE BLOCCANTE: placeholder deve essere risolto, nessun fallback
                 If String.IsNullOrEmpty(value) Then
-                    Throw New InvalidOperationException($"Placeholder '[{fullLabel}]' could not be resolved in task '{taskInstance.Id}'. The placeholder must exist in the global context. This indicates a missing variable or incorrect placeholder name.")
+                    Throw New InvalidOperationException($"Placeholder '[{fullLabel}]' could not be resolved in task '{context.Id}'. Check that the variable name matches a known FullLabel.")
                 End If
 
-                processedText = processedText.Replace(match.Value, value)
+                result = result.Replace(m.Value, value)
             Next
         End While
 
-        Return processedText
+        Return result
     End Function
-
 End Module

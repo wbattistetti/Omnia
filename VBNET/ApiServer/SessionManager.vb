@@ -87,7 +87,7 @@ Public Class TaskSession
 
     ' ✅ STATELESS: Oggetti runtime (non serializzati, ricreati ad ogni accesso)
     Public Property TaskEngine As Motore
-    Public Property TaskInstance As TaskEngine.TaskInstance
+    Public Property TaskInstance As TaskEngine.TaskUtterance
     Public Property EventEmitter As EventEmitter
 
     ' ✅ STATELESS: Stato comunicazione
@@ -95,6 +95,10 @@ Public Class TaskSession
     Public Property IsWaitingForInput As Boolean
     Public Property WaitingForInputData As Object
     Public Property SseConnected As Boolean = False
+
+    ' ✅ STATELESS: Snapshot dello stato del TaskUtterance (serializzato su Redis).
+    ' La configurazione (Steps, NlpContract) viene sempre ricostruita dal dialogo compilato.
+    Public Property TaskUtteranceState As TaskEngine.TaskUtteranceStateSnapshot
 
     ' ❌ RIMOSSO: RuntimeTask (configurazione immutabile - carica da DialogRepository)
     ' ❌ RIMOSSO: Translations (configurazione immutabile - carica da TranslationRepository)
@@ -480,7 +484,7 @@ Public Class SessionManager
                                                         sharedEmitter.Emit("message", msg)
 
                                                         ' ✅ STATELESS: Imposta waitingForInput solo se non tutti i task sono completati
-                                                        Dim allCompleted = session.TaskInstance IsNot Nothing AndAlso session.TaskInstance.TaskList.All(Function(t) t.State = DialogueState.Success OrElse t.State = DialogueState.AcquisitionFailed)
+                                                        Dim allCompleted = session.TaskInstance IsNot Nothing AndAlso session.TaskInstance.SubTasks.All(Function(t) t.IsComplete())
                                                         If Not allCompleted Then
                                                             session.IsWaitingForInput = True
                                                             ' ✅ STATELESS: Usa CurrentNodeId dalla sessione (già impostato quando il dialogo viene caricato)
@@ -530,6 +534,43 @@ Public Class SessionManager
     End Function
 
     ''' <summary>
+    ''' ✅ STATELESS: Ensures TaskInstance is loaded on the session, rebuilding it from the
+    ''' DialogRepository if it is Nothing (e.g. after a Redis round-trip that strips runtime objects).
+    ''' Does NOT run ExecuteTurn — use this before processing user input.
+    ''' Returns True if TaskInstance is ready; False if the dialog cannot be loaded.
+    ''' </summary>
+    Public Shared Function EnsureTaskInstanceLoaded(session As TaskSession) As Boolean
+        If session Is Nothing Then Return False
+        If session.TaskInstance IsNot Nothing Then Return True
+
+        Dim runtimeTask = LoadDialogForSession(session)
+        If runtimeTask Is Nothing Then Return False
+
+        Try
+            Dim taskInstance = ConvertRuntimeTaskToTaskInstance(runtimeTask, session.ProjectId, session.Locale)
+
+            ' Re-apply the persisted state snapshot so that EscalationCounters, State
+            ' and Value are restored exactly as they were before the Redis round-trip.
+            If session.TaskUtteranceState IsNot Nothing Then
+                taskInstance.ApplyState(session.TaskUtteranceState)
+                ' Also try to apply to each sub-task that maps to the root snapshot.
+                For Each child As TaskEngine.TaskUtterance In taskInstance.SubTasks
+                    Dim childSnap = session.TaskUtteranceState.SubStates?.FirstOrDefault(Function(s) s.Id = child.Id)
+                    If childSnap IsNot Nothing Then child.ApplyState(childSnap)
+                Next
+            End If
+
+            session.TaskInstance = taskInstance
+            Return True
+        Catch ex As Exception
+            If _logger IsNot Nothing Then
+                _logger.LogError("EnsureTaskInstanceLoaded failed to rebuild TaskInstance", ex, New With {.sessionId = session.SessionId})
+            End If
+            Return False
+        End Try
+    End Function
+
+    ''' <summary>
     ''' ✅ STATELESS: Avvia l'esecuzione del task se necessario (per sessioni recuperate da Redis)
     ''' </summary>
     Public Shared Sub StartTaskExecutionIfNeeded(sessionId As String)
@@ -559,20 +600,20 @@ Public Class SessionManager
             Try
                 Dim taskInstance = ConvertRuntimeTaskToTaskInstance(runtimeTask, session.ProjectId, session.Locale)
                 session.TaskInstance = taskInstance
-                _storage.SaveTaskSession(session) ' Salva su Redis
+                AttachTaskEngineHandlers(session)
+                _storage.SaveTaskSession(session)
 
-                ' ✅ DISABLED: Esegui il task senza delay artificiale
-                ' session.TaskEngine.ExecuteTask(taskInstance)
+                ' Esegui il primo turno — invia il messaggio di apertura all'utente.
+                session.TaskEngine.ExecuteTurn(taskInstance)
 
-                ' ✅ STATELESS: Verifica completamento
+                ' Controlla se tutti i sub-task sono già completati (es. dialogo vuoto).
                 Dim sharedEmitterRecovered = GetOrCreateEventEmitter(sessionId)
-                Dim allCompleted = taskInstance.TaskList.All(Function(t) t.State = DialogueState.Success OrElse t.State = DialogueState.AcquisitionFailed)
+                Dim allCompleted = taskInstance.SubTasks IsNot Nothing AndAlso taskInstance.SubTasks.All(Function(t) t.IsComplete())
                 If allCompleted Then
-                    Dim completeData = New With {
+                    sharedEmitterRecovered.Emit("complete", New With {
                         .success = True,
                         .timestamp = DateTime.UtcNow.ToString("O")
-                    }
-                    sharedEmitterRecovered.Emit("complete", completeData)
+                    })
                 End If
             Catch ex As Exception
                 _logger.LogError("Failed to start task execution for recovered session", ex, New With {.sessionId = sessionId})
@@ -638,20 +679,20 @@ Public Class SessionManager
                 End If
                 Dim taskInstance = ConvertRuntimeTaskToTaskInstance(loadedRuntimeTask, session.ProjectId, session.Locale)
                 session.TaskInstance = taskInstance
-                _storage.SaveTaskSession(session) ' Salva su Redis
+                AttachTaskEngineHandlers(session)
+                _storage.SaveTaskSession(session)
 
-                ' ✅ DISABLED: Esegui il task (senza delay artificiale)
-                ' session.TaskEngine.ExecuteTask(taskInstance)
+                ' Esegui il primo turno — invia il messaggio di apertura all'utente.
+                session.TaskEngine.ExecuteTurn(taskInstance)
 
-                ' ✅ STATELESS: Verifica completamento
+                ' Controlla se tutti i sub-task sono già completati (es. dialogo vuoto).
                 Dim sharedEmitter = GetOrCreateEventEmitter(sessionId)
-                Dim allCompleted = taskInstance.TaskList.All(Function(t) t.State = DialogueState.Success OrElse t.State = DialogueState.AcquisitionFailed)
+                Dim allCompleted = taskInstance.SubTasks IsNot Nothing AndAlso taskInstance.SubTasks.All(Function(t) t.IsComplete())
                 If allCompleted Then
-                    Dim completeData = New With {
+                    sharedEmitter.Emit("complete", New With {
                         .success = True,
                         .timestamp = DateTime.UtcNow.ToString("O")
-                    }
-                    sharedEmitter.Emit("complete", completeData)
+                    })
                 End If
             Catch ex As Exception
                 _logger.LogError("Runtime execution error", ex, New With {.sessionId = sessionId})
@@ -821,88 +862,85 @@ Public Class SessionManager
     End Function
 
     ''' <summary>
-    ''' ✅ Helper: Converte RuntimeTask in TaskInstance per compatibilità con ExecuteTask
+    ''' Converts a compiled RuntimeTask into a TaskUtterance tree ready for engine execution.
+    ''' ProjectId, Locale and TranslationResolver are propagated to EVERY node in the tree
+    ''' so that MessageTask.Execute can resolve translations at any level.
     ''' </summary>
-    ''' <summary>
-    ''' ✅ STATELESS: Converte RuntimeTask in TaskInstance (senza traduzioni - risolte da TranslationRepository)
-    ''' </summary>
-    Private Shared Function ConvertRuntimeTaskToTaskInstance(runtimeTask As Compiler.RuntimeTask, projectId As String, locale As String) As TaskEngine.TaskInstance
-        ' ❌ ERRORE BLOCCANTE: parametri OBBLIGATORI
+    Private Shared Function ConvertRuntimeTaskToTaskInstance(runtimeTask As Compiler.RuntimeTask, projectId As String, locale As String) As TaskEngine.TaskUtterance
         If runtimeTask Is Nothing Then
-            Throw New ArgumentNullException(NameOf(runtimeTask), "RuntimeTask cannot be Nothing")
+            Throw New ArgumentNullException(NameOf(runtimeTask), "RuntimeTask cannot be Nothing.")
         End If
         If String.IsNullOrWhiteSpace(projectId) Then
-            Throw New ArgumentException("ProjectId cannot be null or empty. TaskInstance requires ProjectId for translation lookup.", NameOf(projectId))
+            Throw New ArgumentException("ProjectId is required for translation lookup.", NameOf(projectId))
         End If
         If String.IsNullOrWhiteSpace(locale) Then
-            Throw New ArgumentException("Locale cannot be null or empty. TaskInstance requires Locale for translation lookup.", NameOf(locale))
+            Throw New ArgumentException("Locale is required for translation lookup.", NameOf(locale))
         End If
 
-        ' ✅ FASE 2: Usa ILogger invece di Console.WriteLine (se disponibile, altrimenti fallback)
-        If _logger IsNot Nothing Then
-            _logger.LogDebug("Converting RuntimeTask to TaskInstance", New With {
-                .runtimeTaskId = runtimeTask.Id,
-                .hasSubTasks = runtimeTask.HasSubTasks(),
-                .projectId = projectId,
-                .locale = locale
-            })
-        End If
-
-        ' ✅ STATELESS: Crea TranslationResolverAdapter per TaskInstance
         Dim translationResolver As TaskEngine.Interfaces.ITranslationResolver = Nothing
         If _translationRepository IsNot Nothing Then
             translationResolver = New ApiServer.Repositories.TranslationResolverAdapter(_translationRepository)
         End If
 
-        Dim taskInstance As New TaskEngine.TaskInstance() With {
+        ' Build root TaskUtterance that wraps the compiled task tree.
+        Dim root As New TaskEngine.TaskUtterance() With {
             .Id = runtimeTask.Id,
             .Label = "",
-            .ProjectId = projectId,  ' ✅ STATELESS: Per lookup traduzioni
-            .Locale = locale,  ' ✅ STATELESS: Per lookup traduzioni
-            .TranslationResolver = translationResolver,  ' ✅ STATELESS: Per risolvere traduzioni
+            .ProjectId = projectId,
+            .Locale = locale,
+            .TranslationResolver = translationResolver,
             .IsAggregate = False,
             .Introduction = Nothing,
-            .SuccessResponse = Nothing,
-            .TaskList = New List(Of TaskEngine.TaskNode)()
+            .SuccessResponse = Nothing
         }
 
-        Dim rootNode = ConvertRuntimeTaskToTaskNode(runtimeTask)
-        taskInstance.TaskList.Add(rootNode)
-        ' ✅ FASE 2: Usa ILogger invece di Console.WriteLine
+        ' Compile the RuntimeTask tree recursively — pass projectId/locale/resolver to every node.
+        Dim mainNode = ConvertRuntimeTaskNode(runtimeTask, Nothing, projectId, locale, translationResolver)
+        root.SubTasks.Add(mainNode)
+
         If _logger IsNot Nothing Then
-            _logger.LogDebug("TaskInstance conversion completed", New With {
-                .rootNodeId = rootNode.Id,
-                .stepsCount = rootNode.Steps.Count,
-                .subTasksCount = rootNode.SubTasks.Count
+            _logger.LogDebug("RuntimeTask converted to TaskUtterance", New With {
+                .rootId = root.Id,
+                .subTasksCount = root.SubTasks.Count
             })
         End If
 
-        Return taskInstance
+        Return root
     End Function
 
     ''' <summary>
-    ''' ✅ Helper: Converte RuntimeTask in TaskNode (ricorsivo)
+    ''' Recursively converts a RuntimeTask node into a TaskUtterance.
+    ''' ProjectId, Locale and TranslationResolver are set on every node so that
+    ''' MessageTask.Execute can resolve translations regardless of tree depth.
     ''' </summary>
-    Private Shared Function ConvertRuntimeTaskToTaskNode(runtimeTask As Compiler.RuntimeTask) As TaskEngine.TaskNode
-        Dim taskNode As New TaskEngine.TaskNode() With {
+    Private Shared Function ConvertRuntimeTaskNode(
+            runtimeTask As Compiler.RuntimeTask,
+            parent As TaskEngine.TaskUtterance,
+            projectId As String,
+            locale As String,
+            translationResolver As TaskEngine.Interfaces.ITranslationResolver) As TaskEngine.TaskUtterance
+
+        Dim node As New TaskEngine.TaskUtterance() With {
             .Id = runtimeTask.Id,
+            .ProjectId = projectId,
+            .Locale = locale,
+            .TranslationResolver = translationResolver,
             .Steps = If(runtimeTask.Steps, New List(Of TaskEngine.DialogueStep)()),
             .ValidationConditions = If(runtimeTask.Constraints, New List(Of TaskEngine.ValidationCondition)()),
             .NlpContract = runtimeTask.NlpContract,
             .State = TaskEngine.DialogueState.Start,
             .Value = Nothing,
-            .SubTasks = New List(Of TaskEngine.TaskNode)()
+            .ParentData = parent
         }
 
         If runtimeTask.HasSubTasks() Then
-            For Each subTask As Compiler.RuntimeTask In runtimeTask.SubTasks
-                Dim subNode = ConvertRuntimeTaskToTaskNode(subTask)
-                subNode.ParentData = taskNode
-                taskNode.SubTasks.Add(subNode)
+            For Each child As Compiler.RuntimeTask In runtimeTask.SubTasks
+                Dim childNode = ConvertRuntimeTaskNode(child, node, projectId, locale, translationResolver)
+                node.SubTasks.Add(childNode)
             Next
         End If
 
-        Return taskNode
+        Return node
     End Function
 End Class
 

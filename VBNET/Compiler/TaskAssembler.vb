@@ -19,7 +19,7 @@ Public Class TaskAssembler
     ''' <summary>
     ''' Verifica se una stringa è un GUID valido
     ''' </summary>
-    Private Function IsGuid(value As String) As Boolean
+    Private Shared Function IsGuid(value As String) As Boolean
         If String.IsNullOrEmpty(value) Then
             Return False
         End If
@@ -111,35 +111,12 @@ Public Class TaskAssembler
         }
 
         If ideNode.Steps IsNot Nothing Then
-            ' ✅ Log dettagliato: mostra tutti gli step prima della validazione
-            Console.WriteLine($"[DEBUG] TaskAssembler.CompileNode: Node.Id={ideNode.Id}, ideNode.Steps.Count={ideNode.Steps.Count}")
-            System.Diagnostics.Debug.WriteLine($"[DEBUG] TaskAssembler.CompileNode: Node.Id={ideNode.Id}, ideNode.Steps.Count={ideNode.Steps.Count}")
-
-            For i = 0 To ideNode.Steps.Count - 1
-                Dim ideStep = ideNode.Steps(i)
-                Console.WriteLine($"[DEBUG]   Step[{i}]: ideStep.Type='{ideStep.Type}', ideStep.Escalations.Count={If(ideStep.Escalations IsNot Nothing, ideStep.Escalations.Count, 0)}")
-                System.Diagnostics.Debug.WriteLine($"[DEBUG]   Step[{i}]: ideStep.Type='{ideStep.Type}'")
-            Next
-
             ' ✅ Validazione: verifica che non ci siano step duplicati con lo stesso Type
             Dim seenTypes As New HashSet(Of DialogueState)()
             For Each ideStep As Compiler.DialogueStep In ideNode.Steps
                 Dim runtimeStep = CompileDialogueStep(ideStep)
-                Console.WriteLine($"[DEBUG] Compiling step: ideStep.Type='{ideStep.Type}' -> runtimeStep.Type={runtimeStep.Type}")
-                System.Diagnostics.Debug.WriteLine($"[DEBUG] Compiling step: ideStep.Type='{ideStep.Type}' -> runtimeStep.Type={runtimeStep.Type}")
 
                 If seenTypes.Contains(runtimeStep.Type) Then
-                    Console.WriteLine($"═══════════════════════════════════════════════════════════════")
-                    Console.WriteLine($"❌ [TaskAssembler.CompileNode] DUPLICATE STEP DETECTED")
-                    Console.WriteLine($"   Node.Id: {ideNode.Id}")
-                    Console.WriteLine($"   Duplicate Type: {runtimeStep.Type}")
-                    Console.WriteLine($"   ideStep.Type (original): {ideStep.Type}")
-                    Dim allStepTypes = ideNode.Steps.Select(Function(s) $"{s.Type}->{CompileStepType(s.Type)}").ToList()
-                    Console.WriteLine($"   All step types (ide->runtime): {String.Join(", ", allStepTypes)}")
-                    Console.WriteLine($"   Already seen types: {String.Join(", ", seenTypes.Select(Function(t) t.ToString()))}")
-                    Console.WriteLine($"═══════════════════════════════════════════════════════════════")
-                    Console.Out.Flush()
-                    System.Diagnostics.Debug.WriteLine($"❌ [TaskAssembler.CompileNode] DUPLICATE STEP: Node.Id={ideNode.Id}, Type={runtimeStep.Type}")
                     Throw New InvalidOperationException($"Invalid task model: Node {ideNode.Id} has duplicate steps with Type={runtimeStep.Type}. Each Type must appear exactly once.")
                 End If
                 seenTypes.Add(runtimeStep.Type)
@@ -170,43 +147,19 @@ Public Class TaskAssembler
             Throw New InvalidOperationException($"Invalid task model: Node {ideNode.Id} has a step of type 'invalid' but no constraints. The 'invalid' step is only needed when constraints are present. Remove the 'invalid' step or add constraints.")
         End If
 
-        ' ✅ DIAG: Verifica dataContract quando arriva a CompileNode
-        Console.WriteLine($"[DIAG] TaskAssembler.CompileNode: ideNode.Id={ideNode.Id}, ideNode.DataContract IsNothing={ideNode.DataContract Is Nothing}")
-        If ideNode.DataContract IsNot Nothing Then
-            Console.WriteLine($"[DIAG] TaskAssembler.CompileNode: ideNode.DataContract type: {ideNode.DataContract.GetType().Name}")
-            Try
-                Dim dataContractJson = JsonConvert.SerializeObject(ideNode.DataContract)
-                Console.WriteLine($"[DIAG] TaskAssembler.CompileNode: ideNode.DataContract JSON (first 200 chars): {dataContractJson.Substring(0, Math.Min(200, dataContractJson.Length))}")
-            Catch ex As Exception
-                Console.WriteLine($"[DIAG] TaskAssembler.CompileNode: ideNode.DataContract JSON serialization failed: {ex.Message}")
-            End Try
-        Else
-            Console.WriteLine($"[DIAG] TaskAssembler.CompileNode: ideNode.DataContract is Nothing - checking if it should be present")
-        End If
-
         ' ✅ Converti dataContract in CompiledNlpContract se presente
         If ideNode.DataContract IsNot Nothing Then
             Try
-                Console.WriteLine($"[TaskAssembler] Compiling dataContract for node {ideNode.Id}")
                 Dim baseContract = ConvertDataContractToNlpContract(ideNode.DataContract)
                 If baseContract IsNot Nothing Then
                     task.NlpContract = CompiledNlpContract.Compile(baseContract)
-                    If task.NlpContract.IsValid Then
-                        Console.WriteLine($"[TaskAssembler] Successfully compiled NlpContract for node {ideNode.Id}, main regex compiled: {task.NlpContract.CompiledMainRegex IsNot Nothing}")
-                    Else
-                        Console.WriteLine($"[TaskAssembler] WARNING: NlpContract compiled with errors for node {ideNode.Id}: {String.Join(", ", task.NlpContract.ValidationErrors)}")
+                    If Not task.NlpContract.IsValid Then
                         Throw New InvalidOperationException($"NlpContract compilation failed for node {ideNode.Id}: {String.Join(", ", task.NlpContract.ValidationErrors)}")
                     End If
-                Else
-                    Console.WriteLine($"[TaskAssembler] WARNING: Failed to convert dataContract to NLPContract for node {ideNode.Id}")
                 End If
             Catch ex As Exception
-                Console.WriteLine($"[TaskAssembler] ERROR: Failed to compile dataContract for node {ideNode.Id}: {ex.GetType().Name} - {ex.Message}")
-                Console.WriteLine($"[TaskAssembler] ERROR: Stack trace: {ex.StackTrace}")
                 Throw New InvalidOperationException($"Failed to compile dataContract for node {ideNode.Id}: {ex.Message}", ex)
             End Try
-        Else
-            Console.WriteLine($"[TaskAssembler] No dataContract found for node {ideNode.Id}, NlpContract will remain Nothing")
         End If
 
         ' Compila SubTasks (ricorsivo) - inizializza solo se ci sono subTasks
@@ -272,10 +225,19 @@ Public Class TaskAssembler
                 End If
             End If
 
+            If validationCondition Is Nothing Then
+                Throw New InvalidOperationException(
+                    $"ConvertConstraintToValidationCondition: deserialization returned Nothing for constraint. " &
+                    $"JSON: {constraintJson}")
+            End If
+
             Return validationCondition
+        Catch ex As InvalidOperationException
+            Throw
         Catch ex As Exception
-            Console.WriteLine($"[COMPILER] ERROR: Failed to convert constraint to ValidationCondition: {ex.Message}")
-            Return Nothing
+            Throw New InvalidOperationException(
+                $"ConvertConstraintToValidationCondition: failed to convert constraint object of type '{constraintObj.GetType().Name}'. " &
+                $"Error: {ex.Message}", ex)
         End Try
     End Function
 
@@ -347,10 +309,6 @@ Public Class TaskAssembler
     ''' Compila Escalation (IDE) in Escalation (Runtime)
     ''' </summary>
     Private Function CompileEscalation(ideEscalation As Compiler.Escalation) As TaskEngine.Escalation
-        Console.WriteLine($"[TaskAssembler.CompileEscalation] 🔍 START: Compiling escalation: EscalationId={ideEscalation.EscalationId}")
-        Console.WriteLine($"   ideEscalation.Tasks IsNothing: {ideEscalation.Tasks Is Nothing}")
-        Console.WriteLine($"   ideEscalation.Tasks.Count: {If(ideEscalation.Tasks IsNot Nothing, ideEscalation.Tasks.Count, 0)}")
-
         Dim runtimeEscalation As New TaskEngine.Escalation() With {
             .EscalationId = ideEscalation.EscalationId,
             .Tasks = New List(Of ITask)()
@@ -359,164 +317,141 @@ Public Class TaskAssembler
         If ideEscalation.Tasks IsNot Nothing Then
             For i = 0 To ideEscalation.Tasks.Count - 1
                 Dim ideTask = ideEscalation.Tasks(i)
-                Console.WriteLine($"[TaskAssembler.CompileEscalation] 🔍 Processing task[{i}] in escalation: TaskId={ideTask.Id}")
                 Dim runtimeTask = CompileTask(ideTask)
                 If runtimeTask IsNot Nothing Then
-                    Console.WriteLine($"[TaskAssembler.CompileEscalation] ✅ Task[{i}] compiled successfully: {runtimeTask.GetType().Name}")
                     runtimeEscalation.Tasks.Add(runtimeTask)
-                Else
-                    Console.WriteLine($"[TaskAssembler.CompileEscalation] ⚠️ Task[{i}] compiled to Nothing, skipping")
                 End If
             Next
         End If
 
-        Console.WriteLine($"[TaskAssembler.CompileEscalation] ✅ END: Escalation compiled with {runtimeEscalation.Tasks.Count} tasks")
         Return runtimeEscalation
     End Function
 
     ''' <summary>
     ''' Compila Task (IDE) in ITask (Runtime)
     ''' </summary>
+    ''' <summary>
+    ''' Compiles a single IDE task into a runtime ITask.
+    ''' Throws immediately for any unknown or malformed task — no silent skips.
+    ''' UtteranceInterpretation, BackendCall and ClassifyProblem are semantic task types
+    ''' and do not produce an ITask; they are handled at the TaskUtterance level.
+    ''' </summary>
     Private Function CompileTask(ideTask As Compiler.Task) As ITask
-        Console.WriteLine("=================================================================================")
-        Console.WriteLine($"[TaskAssembler.CompileTask] 🔍 START: Compiling task from IDE to Runtime")
-        Console.WriteLine($"   Task.Id: {ideTask.Id}")
-        Console.WriteLine($"   Task.Type.HasValue: {ideTask.Type.HasValue}")
-        Console.WriteLine($"   Task.Type.Value: {If(ideTask.Type.HasValue, ideTask.Type.Value.ToString(), "NULL")}")
-        Console.WriteLine($"   Task.Text IsNothing: {String.IsNullOrEmpty(ideTask.Text)}")
-        Console.WriteLine($"   Task.Text: {If(String.IsNullOrEmpty(ideTask.Text), "NULL/EMPTY", ideTask.Text)}")
-        Console.WriteLine($"   Task.Parameters IsNothing: {ideTask.Parameters Is Nothing}")
-        Console.WriteLine($"   Task.Parameters.Count: {If(ideTask.Parameters IsNot Nothing, ideTask.Parameters.Count, 0)}")
-        If ideTask.Parameters IsNot Nothing AndAlso ideTask.Parameters.Count > 0 Then
-            For i = 0 To ideTask.Parameters.Count - 1
-                Dim param = ideTask.Parameters(i)
-                Console.WriteLine($"     Parameter[{i}]: ParameterId={param.ParameterId}, Value={If(String.IsNullOrEmpty(param.Value), "NULL/EMPTY", param.Value)}")
-            Next
-        End If
-        Console.WriteLine($"   Task.Value IsNothing: {ideTask.Value Is Nothing}")
-        If ideTask.Value IsNot Nothing Then
-            Console.WriteLine($"   Task.Value.Keys: {String.Join(", ", ideTask.Value.Keys)}")
-            If ideTask.Value.ContainsKey("parameters") Then
-                Console.WriteLine($"   Task.Value['parameters'] exists: True")
-            End If
-        End If
-        Console.WriteLine("=================================================================================")
-
         If Not ideTask.Type.HasValue Then
-            Console.WriteLine($"[TaskAssembler.CompileTask] ❌ ERROR: Task {ideTask.Id} has no Type")
-            Return Nothing
+            Throw New InvalidOperationException(
+                $"Task '{ideTask.Id}' has no Type. Every task inside an escalation must have a valid type.")
         End If
 
         Dim typeValue = ideTask.Type.Value
         If Not [Enum].IsDefined(GetType(TaskTypes), typeValue) Then
-            Console.WriteLine($"[TaskAssembler.CompileTask] ❌ ERROR: Task {ideTask.Id} has invalid Type: {typeValue}")
-            Return Nothing
+            Throw New InvalidOperationException(
+                $"Task '{ideTask.Id}' has unknown type value {typeValue}. " &
+                $"Valid values are: {String.Join(", ", [Enum].GetValues(GetType(TaskTypes)))}")
         End If
 
         Dim taskType = CType(typeValue, TaskTypes)
-        Console.WriteLine($"[TaskAssembler.CompileTask] ✅ TaskType determined: {taskType} (value={typeValue})")
 
         Select Case taskType
             Case TaskTypes.SayMessage
-                Console.WriteLine($"[TaskAssembler.CompileTask] 🔍 Processing SayMessage task: {ideTask.Id}")
-                ' ✅ Estrai SOLO la chiave, NON risolvere
-                Dim textKey As String = ""
+                Return New MessageTask(ExtractTextKeyFromIdeTask(ideTask))
 
-                If Not String.IsNullOrWhiteSpace(ideTask.Text) Then
-                    textKey = ideTask.Text.Trim()
-                    Console.WriteLine($"[TaskAssembler.CompileTask] ✅ Found textKey in Task.Text: {textKey}")
-                ElseIf ideTask.Parameters IsNot Nothing Then
-                    Console.WriteLine($"[TaskAssembler.CompileTask] 🔍 Searching for text parameter in Task.Parameters...")
-                    Dim textParams = ideTask.Parameters.Where(Function(p) p.ParameterId = "text").ToList()
-                    Console.WriteLine($"[TaskAssembler.CompileTask] 🔍 Found {textParams.Count} parameters with ParameterId='text'")
-                    If textParams.Count = 0 Then
-                        Console.WriteLine($"[TaskAssembler.CompileTask] ❌ ERROR: SayMessage task '{ideTask.Id}' has no parameter with ParameterId='text'")
-                        Throw New InvalidOperationException($"SayMessage task '{ideTask.Id}' has no parameter with ParameterId='text'. The 'text' parameter is mandatory for MessageTask.")
-                    ElseIf textParams.Count > 1 Then
-                        Console.WriteLine($"[TaskAssembler.CompileTask] ❌ ERROR: SayMessage task '{ideTask.Id}' has {textParams.Count} parameters with ParameterId='text'")
-                        Throw New InvalidOperationException($"SayMessage task '{ideTask.Id}' has {textParams.Count} parameters with ParameterId='text'. Each parameter ID must be unique.")
-                    End If
-                    Dim textParam = textParams.Single()
-                    Console.WriteLine($"[TaskAssembler.CompileTask] 🔍 Found text parameter: Value={If(String.IsNullOrWhiteSpace(textParam.Value), "NULL/EMPTY", textParam.Value)}")
-                    If String.IsNullOrWhiteSpace(textParam.Value) Then
-                        Console.WriteLine($"[TaskAssembler.CompileTask] ❌ ERROR: SayMessage task '{ideTask.Id}' has parameter 'text' with empty value")
-                        Throw New InvalidOperationException($"SayMessage task '{ideTask.Id}' has parameter 'text' with empty value. TextKey cannot be empty.")
-                    End If
-                    textKey = textParam.Value.Trim()
-                    Console.WriteLine($"[TaskAssembler.CompileTask] ✅ Found textKey in Task.Parameters: {textKey}")
-                ElseIf ideTask.Value IsNot Nothing AndAlso ideTask.Value.ContainsKey("parameters") Then
-                    Console.WriteLine($"[TaskAssembler.CompileTask] 🔍 Searching for text parameter in Task.Value['parameters']...")
-                    Dim parameters = ideTask.Value("parameters")
-                    If TypeOf parameters Is List(Of Object) Then
-                        Dim paramsList = CType(parameters, List(Of Object))
-                        Dim textParams = paramsList.Where(Function(p) TypeOf p Is Dictionary(Of String, Object) AndAlso CType(p, Dictionary(Of String, Object)).ContainsKey("parameterId") AndAlso CType(p, Dictionary(Of String, Object))("parameterId")?.ToString() = "text").ToList()
-                        If textParams.Count = 0 Then
-                            Throw New InvalidOperationException($"SayMessage task '{ideTask.Id}' has no parameter with ParameterId='text' in Value.parameters. The 'text' parameter is mandatory for MessageTask.")
-                        ElseIf textParams.Count > 1 Then
-                            Throw New InvalidOperationException($"SayMessage task '{ideTask.Id}' has {textParams.Count} parameters with ParameterId='text' in Value.parameters. Each parameter ID must be unique.")
-                        End If
-                        Dim textParam = CType(textParams.Single(), Dictionary(Of String, Object))
-                        Dim textValue = textParam("value")?.ToString()
-                        If String.IsNullOrWhiteSpace(textValue) Then
-                            Throw New InvalidOperationException($"SayMessage task '{ideTask.Id}' has parameter 'text' with empty value in Value.parameters. TextKey cannot be empty.")
-                        End If
-                        textKey = textValue.Trim()
-                    End If
-                End If
-
-                ' ❌ ERRORE DI COMPILAZIONE: TextKey obbligatorio
-                If String.IsNullOrWhiteSpace(textKey) Then
-                    Console.WriteLine($"[TaskAssembler.CompileTask] ❌ ERROR: SayMessage task '{ideTask.Id}' has no TextKey after searching all sources")
-                    Throw New InvalidOperationException($"SayMessage task '{ideTask.Id}' has no TextKey. The IDE must provide a translation key (GUID or symbolic name), not literal text. TextKey is mandatory.")
-                End If
-
-                ' ✅ Verifica che non sia testo letterale (euristica: se contiene spazi e non è un GUID, probabilmente è testo)
-                If Not IsGuid(textKey) AndAlso textKey.Contains(" ") Then
-                    Console.WriteLine($"[TaskAssembler.CompileTask] ❌ ERROR: SayMessage task '{ideTask.Id}' has TextKey '{textKey}' which appears to be literal text")
-                    Throw New InvalidOperationException($"SayMessage task '{ideTask.Id}' has TextKey '{textKey}' which appears to be literal text. The IDE must provide only translation keys (GUID or symbolic names), not literal text.")
-                End If
-
-                ' ✅ Crea MessageTask con SOLO la chiave
-                Console.WriteLine($"[TaskAssembler.CompileTask] ✅ SUCCESS: Created MessageTask with textKey: {textKey}")
-                Console.WriteLine("=================================================================================")
-                Return New MessageTask(textKey)
             Case TaskTypes.CloseSession
-                Console.WriteLine($"[TaskAssembler.CompileTask] ✅ Creating CloseSessionTask")
-                Console.WriteLine("=================================================================================")
                 Return New CloseSessionTask()
+
             Case TaskTypes.Transfer
-                Console.WriteLine($"[TaskAssembler.CompileTask] ✅ Creating TransferTask")
-                System.Diagnostics.Debug.WriteLine($"✅ [COMPILER][TaskAssembler] CompileTask: Creating TransferTask")
-                Console.WriteLine("=================================================================================")
                 Return New TransferTask()
-            Case TaskTypes.UtteranceInterpretation
-                Console.WriteLine($"[TaskAssembler.CompileTask] ❌ ERROR: UtteranceInterpretation tasks are not supported in escalations, returning Nothing")
-                System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: UtteranceInterpretation tasks are not supported in escalations, returning Nothing")
-                Console.WriteLine("=================================================================================")
+
+            Case TaskTypes.UtteranceInterpretation, TaskTypes.BackendCall, TaskTypes.ClassifyProblem
+                ' These are semantic task types — they compile to TaskUtterance, not ITask.
+                ' Returning Nothing here is intentional and expected: the caller skips Nothing.
                 Return Nothing
-            Case TaskTypes.BackendCall
-                Console.WriteLine($"[TaskAssembler.CompileTask] ❌ ERROR: BackendCall tasks are not supported in escalations, returning Nothing")
-                System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: BackendCall tasks are not supported in escalations, returning Nothing")
-                Console.WriteLine("=================================================================================")
-                Return Nothing
-            Case TaskTypes.ClassifyProblem
-                Console.WriteLine($"[TaskAssembler.CompileTask] ❌ ERROR: ClassifyProblem tasks are not supported in escalations, returning Nothing")
-                System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: ClassifyProblem tasks are not supported in escalations, returning Nothing")
-                Console.WriteLine("=================================================================================")
-                Return Nothing
+
             Case Else
-                Console.WriteLine($"[TaskAssembler.CompileTask] ❌ ERROR: Unknown TaskType '{taskType}', returning Nothing")
-                System.Diagnostics.Debug.WriteLine($"❌ [COMPILER][TaskAssembler] CompileTask: Unknown TaskType '{taskType}', returning Nothing")
-                Console.WriteLine("=================================================================================")
-                Return Nothing
+                Throw New InvalidOperationException(
+                    $"Task '{ideTask.Id}' has type '{taskType}' which is not supported inside an escalation. " &
+                    $"Only SayMessage, CloseSession and Transfer are valid escalation task types.")
         End Select
     End Function
 
     ''' <summary>
-    ''' Compila DialogueStep in Response (per Introduction)
+    ''' Extracts the TextKey (translation GUID) from a SayMessage IDE task.
+    ''' Tries ideTask.Text, then Parameters[parameterId='text'], then Value["parameters"].
+    ''' Throws immediately if the key is missing or appears to be literal text.
     ''' </summary>
-    Private Function CompileDialogueStepToResponse(ideStep As Compiler.DialogueStep) As Response
-        Dim response As New Response()
+    Private Shared Function ExtractTextKeyFromIdeTask(ideTask As Compiler.Task) As String
+        Dim textKey As String = ""
+
+        If Not String.IsNullOrWhiteSpace(ideTask.Text) Then
+            textKey = ideTask.Text.Trim()
+
+        ElseIf ideTask.Parameters IsNot Nothing Then
+            Dim textParams = ideTask.Parameters.Where(Function(p) p.ParameterId = "text").ToList()
+            If textParams.Count = 0 Then
+                Throw New InvalidOperationException(
+                    $"SayMessage task '{ideTask.Id}': no parameter with ParameterId='text'. " &
+                    $"The 'text' parameter is mandatory.")
+            End If
+            If textParams.Count > 1 Then
+                Throw New InvalidOperationException(
+                    $"SayMessage task '{ideTask.Id}': {textParams.Count} parameters with ParameterId='text'. " &
+                    $"ParameterId must be unique.")
+            End If
+            If String.IsNullOrWhiteSpace(textParams.Single().Value) Then
+                Throw New InvalidOperationException(
+                    $"SayMessage task '{ideTask.Id}': parameter 'text' has an empty value. TextKey cannot be empty.")
+            End If
+            textKey = textParams.Single().Value.Trim()
+
+        ElseIf ideTask.Value IsNot Nothing AndAlso ideTask.Value.ContainsKey("parameters") Then
+            Dim parameters = ideTask.Value("parameters")
+            If TypeOf parameters Is List(Of Object) Then
+                Dim paramsList = CType(parameters, List(Of Object))
+                Dim textParams = paramsList _
+                    .Where(Function(p)
+                               If Not TypeOf p Is Dictionary(Of String, Object) Then Return False
+                               Dim d = CType(p, Dictionary(Of String, Object))
+                               Return d.ContainsKey("parameterId") AndAlso d("parameterId")?.ToString() = "text"
+                           End Function) _
+                    .ToList()
+                If textParams.Count = 0 Then
+                    Throw New InvalidOperationException(
+                        $"SayMessage task '{ideTask.Id}': no parameter with ParameterId='text' in Value.parameters.")
+                End If
+                If textParams.Count > 1 Then
+                    Throw New InvalidOperationException(
+                        $"SayMessage task '{ideTask.Id}': {textParams.Count} parameters with ParameterId='text' in Value.parameters.")
+                End If
+                Dim textParam = CType(textParams.Single(), Dictionary(Of String, Object))
+                Dim textValue = textParam("value")?.ToString()
+                If String.IsNullOrWhiteSpace(textValue) Then
+                    Throw New InvalidOperationException(
+                        $"SayMessage task '{ideTask.Id}': parameter 'text' has an empty value in Value.parameters.")
+                End If
+                textKey = textValue.Trim()
+            End If
+        End If
+
+        If String.IsNullOrWhiteSpace(textKey) Then
+            Throw New InvalidOperationException(
+                $"SayMessage task '{ideTask.Id}': no TextKey found. " &
+                $"The IDE must provide a translation key (GUID), not literal text. " &
+                $"Checked: ideTask.Text, Parameters[parameterId='text'], Value.parameters.")
+        End If
+
+        If Not IsGuid(textKey) AndAlso textKey.Contains(" ") Then
+            Throw New InvalidOperationException(
+                $"SayMessage task '{ideTask.Id}': TextKey '{textKey}' looks like literal text. " &
+                $"Only translation keys (GUIDs) are accepted — not raw text strings.")
+        End If
+
+        Return textKey
+    End Function
+
+    ''' <summary>
+    ''' Compila DialogueStep in List(Of ITask) (per Introduction/SuccessResponse)
+    ''' </summary>
+    Private Function CompileDialogueStepToTasks(ideStep As Compiler.DialogueStep) As List(Of ITask)
+        Dim tasks As New List(Of ITask)()
 
         ' Prendi la prima escalation del primo step
         If ideStep.Escalations IsNot Nothing AndAlso ideStep.Escalations.Count > 0 Then
@@ -525,46 +460,14 @@ Public Class TaskAssembler
                 For Each ideTask As Compiler.Task In firstEscalation.Tasks
                     Dim runtimeTask = CompileTask(ideTask)
                     If runtimeTask IsNot Nothing Then
-                        response.Tasks.Add(runtimeTask)
+                        tasks.Add(runtimeTask)
                     End If
                 Next
             End If
         End If
 
-        Return response
+        Return tasks
     End Function
-
-    ''' <summary>
-    ''' Calcola FullLabel per tutti i nodi (compile-time)
-    ''' </summary>
-    Private Sub CalculateFullLabels(instance As TaskInstance)
-        If instance.TaskList IsNot Nothing Then
-            For Each mainTask As TaskEngine.TaskNode In instance.TaskList
-                CalculateFullLabelForNode(mainTask, "")
-            Next
-        End If
-    End Sub
-
-    ''' <summary>
-    ''' Calcola FullLabel ricorsivamente per un nodo
-    ''' </summary>
-    Private Sub CalculateFullLabelForNode(node As TaskEngine.TaskNode, parentPath As String)
-        Dim currentPath As String
-        If String.IsNullOrEmpty(parentPath) Then
-            currentPath = node.Id
-        Else
-            currentPath = $"{parentPath}.{node.Id}"
-        End If
-
-        node.FullLabel = currentPath
-
-        ' Ricorsivo per subTasks
-        If node.SubTasks IsNot Nothing Then
-            For Each subNode As TaskEngine.TaskNode In node.SubTasks
-                CalculateFullLabelForNode(subNode, currentPath)
-            Next
-        End If
-    End Sub
 
     ''' <summary>
     ''' Converte dataContract (JObject o Object) in NLPContract
@@ -594,7 +497,6 @@ Public Class TaskAssembler
             End If
 
             If contractObj Is Nothing Then
-                Console.WriteLine($"[TaskAssembler] ERROR: Failed to convert dataContract to JObject")
                 Return Nothing
             End If
 
@@ -621,7 +523,7 @@ Public Class TaskAssembler
                         nlpContract.SubDataMapping = subDataMappingDict
                     End If
                 Catch ex As Exception
-                    Console.WriteLine($"[TaskAssembler] WARNING: Failed to deserialize subDataMapping: {ex.Message}")
+                    ' Log removed
                 End Try
             End If
 
@@ -678,7 +580,7 @@ Public Class TaskAssembler
                                         nlpContract.Regex.Ambiguity = ambiguity
                                     End If
                                 Catch ex As Exception
-                                    Console.WriteLine($"[TaskAssembler] WARNING: Failed to deserialize ambiguity config: {ex.Message}")
+                                    ' Log removed
                                 End Try
                             End If
 
@@ -787,8 +689,6 @@ Public Class TaskAssembler
             Return nlpContract
 
         Catch ex As Exception
-            Console.WriteLine($"[TaskAssembler] ERROR: Exception converting dataContract to NLPContract: {ex.GetType().Name} - {ex.Message}")
-            Console.WriteLine($"[TaskAssembler] ERROR: Stack trace: {ex.StackTrace}")
             Throw New InvalidOperationException($"Failed to convert dataContract to NLPContract: {ex.Message}", ex)
         End Try
     End Function

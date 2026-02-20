@@ -35,9 +35,11 @@ Namespace ApiServer.SessionStorage
             Public Property WaitingForInputData As Object
             Public Property SseConnected As Boolean = False
 
-            ' ❌ RIMOSSO: RuntimeTask (configurazione immutabile - carica da DialogRepository)
-            ' ❌ RIMOSSO: Translations (configurazione immutabile - carica da TranslationRepository)
-            ' ❌ RIMOSSO: TaskInstanceData (ricreato quando necessario dal dialogo)
+            ' ✅ Snapshot dello stato del TaskUtterance — persiste State, Value,
+            ' EscalationCounters tra una request HTTP e l'altra.
+            ' La configurazione (Steps, NlpContract) NON è inclusa: viene sempre
+            ' ricostruita dal dialogo compilato nel DialogRepository.
+            Public Property TaskUtteranceState As TaskEngine.TaskUtteranceStateSnapshot
         End Class
 
         ''' <summary>
@@ -58,6 +60,15 @@ Namespace ApiServer.SessionStorage
         ''' </summary>
         Public Shared Function SerializeTaskSession(session As TaskSession) As String
             Try
+                ' Extract the mutable state snapshot before serialization so that
+                ' EscalationCounters, State and Value survive the Redis round-trip.
+                Dim stateSnapshot As TaskEngine.TaskUtteranceStateSnapshot = Nothing
+                If session.TaskInstance IsNot Nothing Then
+                    stateSnapshot = session.TaskInstance.ExtractState()
+                ElseIf session.TaskUtteranceState IsNot Nothing Then
+                    stateSnapshot = session.TaskUtteranceState
+                End If
+
                 Dim data As New TaskSessionData() With {
                     .SessionId = session.SessionId,
                     .ProjectId = session.ProjectId,
@@ -68,10 +79,9 @@ Namespace ApiServer.SessionStorage
                     .Messages = session.Messages,
                     .IsWaitingForInput = session.IsWaitingForInput,
                     .WaitingForInputData = session.WaitingForInputData,
-                    .SseConnected = session.SseConnected
+                    .SseConnected = session.SseConnected,
+                    .TaskUtteranceState = stateSnapshot
                 }
-
-                ' ❌ RIMOSSO: TaskInstance non viene serializzato (ricreato quando necessario dal dialogo)
 
                 Return JsonConvert.SerializeObject(data, New JsonSerializerSettings With {
                     .ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
@@ -98,7 +108,6 @@ Namespace ApiServer.SessionStorage
 
                 ' ✅ STATELESS: Ricrea TaskSession con solo stato runtime
                 Dim messagesList = If(data.Messages, New List(Of Object)())
-                Console.WriteLine($"[SessionSerializer] ✅ STATELESS: Deserializing TaskSession: SessionId={data.SessionId}, ProjectId={data.ProjectId}, DialogVersion={data.DialogVersion}, Locale={data.Locale}, Messages.Count={messagesList.Count}, SseConnected={data.SseConnected}")
 
                 ' ✅ STATELESS: Usa EventEmitter condiviso (non creare nuovo EventEmitter)
                 Dim sharedEmitter = SessionManager.GetOrCreateEventEmitter(data.SessionId)
@@ -114,11 +123,12 @@ Namespace ApiServer.SessionStorage
                     .WaitingForInputData = data.WaitingForInputData,
                     .SseConnected = data.SseConnected,
                     .EventEmitter = sharedEmitter,
-                    .TaskEngine = New Motore()
+                    .TaskEngine = New Motore(),
+                    .TaskUtteranceState = data.TaskUtteranceState
                 }
-                Console.WriteLine($"[SessionSerializer] ✅ STATELESS: TaskSession deserialized: SessionId={session.SessionId}, Messages.Count={session.Messages.Count}, IsWaitingForInput={session.IsWaitingForInput}, SseConnected={session.SseConnected}")
 
-                ' ✅ STATELESS: RuntimeTask e TaskInstance verranno ricostruiti quando necessario dal DialogRepository
+                ' ✅ STATELESS: RuntimeTask e TaskInstance verranno ricostruiti quando necessario dal DialogRepository.
+                ' Il TaskUtteranceState viene riapplicato in EnsureTaskInstanceLoaded.
 
                 Return session
             Catch ex As Exception
@@ -187,7 +197,6 @@ Namespace ApiServer.SessionStorage
                     Try
                         session.Orchestrator = New TaskEngine.Orchestrator.FlowOrchestrator(data.CompilationResult, taskEngine, sessionId, executionStateStorage)
                     Catch ex As Exception
-                        Console.WriteLine($"[SessionSerializer] ⚠️ Warning: Could not recreate FlowOrchestrator: {ex.Message}")
                         ' Orchestrator sarà Nothing, verrà ricreato quando necessario
                     End Try
                 End If

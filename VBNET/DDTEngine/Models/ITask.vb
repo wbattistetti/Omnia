@@ -1,21 +1,23 @@
 ' ITask.vb
-' Interfaccia comune per tutti i task (runtime)
+' Common interface for all runtime micro-tasks.
 
 Option Strict On
 Option Explicit On
 
 ''' <summary>
-''' Interfaccia comune per tutti i task nel runtime engine
+''' Defines a single executable micro-task within a dialogue escalation
+''' (e.g. send a message, close the session, transfer to an operator).
 ''' </summary>
 Public Interface ITask
     ReadOnly Property Label As String
 
     ''' <summary>
-    ''' Esegue il task
+    ''' Executes the task.
     ''' </summary>
-    ''' <param name="taskNode">Il nodo task corrente</param>
-    ''' <param name="taskInstance">L'istanza Task completa</param>
-    ''' <param name="onMessage">Handler per mostrare messaggi (per MessageTask) comunica all'UI se va mostrato qualcosa (serve non a runtime ma design time nel debugger </param>
-    Sub Execute(taskNode As TaskNode, taskInstance As TaskInstance, onMessage As Action(Of String))
+    ''' <param name="context">
+    ''' The TaskUtterance currently being processed.
+    ''' Provides ProjectId, Locale and TranslationResolver for message resolution.
+    ''' </param>
+    ''' <param name="onMessage">Callback to surface text messages to the UI.</param>
+    Sub Execute(context As TaskUtterance, onMessage As Action(Of String))
 End Interface
-

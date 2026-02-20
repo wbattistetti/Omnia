@@ -1,28 +1,24 @@
 ' MessageTask.vb
-' Task per inviare un messaggio
+' Micro-task that sends a translated message to the user.
 
 Option Strict On
 Option Explicit On
 
 ''' <summary>
-''' Task per inviare un messaggio all'utente
-''' MODELLO RIGOROSO: Usa SOLO chiavi di traduzione, nessun fallback
+''' Sends a localised message to the user.
+''' Uses only translation keys; never stores literal text.
 ''' </summary>
 Public Class MessageTask
     Inherits TaskBase
 
     ''' <summary>
-    ''' Chiave di traduzione (GUID o nome simbolico) - OBBLIGATORIA
-    ''' NON può essere vuota, nulla o whitespace
+    ''' Translation key (GUID or symbolic name) — mandatory.
     ''' </summary>
     Public Property TextKey As String
 
-    ''' <summary>
-    ''' Costruttore con chiave OBBLIGATORIA
-    ''' </summary>
     Public Sub New(textKey As String)
         If String.IsNullOrWhiteSpace(textKey) Then
-            Throw New ArgumentException("TextKey cannot be null, empty, or whitespace. MessageTask requires a valid translation key.", NameOf(textKey))
+            Throw New ArgumentException("TextKey cannot be null, empty, or whitespace.", NameOf(textKey))
         End If
         Me.TextKey = textKey
     End Sub
@@ -34,60 +30,42 @@ Public Class MessageTask
     End Property
 
     ''' <summary>
-    ''' Esegue il task: risolve chiave → testo, poi processa placeholder
-    ''' ERRORE BLOCCANTE se chiave non risolvibile
+    ''' Resolves the translation key and sends the resulting text via onMessage.
     ''' </summary>
-    Public Overrides Sub Execute(taskNode As TaskNode, taskInstance As TaskInstance, onMessage As Action(Of String))
+    Public Overrides Sub Execute(context As TaskUtterance, onMessage As Action(Of String))
         If onMessage Is Nothing Then
-            Throw New ArgumentNullException(NameOf(onMessage), "onMessage callback cannot be Nothing")
+            Throw New ArgumentNullException(NameOf(onMessage), "onMessage callback cannot be Nothing.")
         End If
 
-        ' ✅ STEP 1: Risolvi chiave → testo usando dizionario traduzioni
-        Dim text As String = ResolveTranslationKey(Me.TextKey, taskInstance)
+        Dim text As String = ResolveTranslation(context)
+        Dim processed As String = Utils.ProcessPlaceholders(text, context)
 
-        ' ❌ ERRORE BLOCCANTE: nessun fallback
-        If String.IsNullOrEmpty(text) Then
-            Throw New InvalidOperationException($"Translation key '{Me.TextKey}' not found in translations dictionary for task '{taskInstance.Id}'. The session cannot continue without this translation.")
+        If String.IsNullOrEmpty(processed) Then
+            Throw New InvalidOperationException($"Processed text for key '{TextKey}' is empty after placeholder resolution in task '{context.Id}'.")
         End If
 
-        ' ✅ STEP 2: Processa placeholder nel testo tradotto
-        Dim processedText As String = ProcessPlaceholders(text, taskInstance, Nothing)
-
-        ' ❌ ERRORE BLOCCANTE: testo processato non può essere vuoto
-        If String.IsNullOrEmpty(processedText) Then
-            Throw New InvalidOperationException($"Processed text for translation key '{Me.TextKey}' is empty after placeholder resolution for task '{taskInstance.Id}'.")
-        End If
-
-        onMessage(processedText)
+        onMessage(processed)
     End Sub
 
-    ''' <summary>
-    ''' ✅ STATELESS: Risolve una chiave di traduzione dal TranslationRepository
-    ''' </summary>
-    Private Function ResolveTranslationKey(key As String, taskInstance As TaskInstance) As String
-        If String.IsNullOrWhiteSpace(key) Then
-            Throw New ArgumentException("Translation key cannot be null, empty, or whitespace.", NameOf(key))
+    ' --- Private helpers ---
+
+    Private Function ResolveTranslation(context As TaskUtterance) As String
+        If String.IsNullOrWhiteSpace(context.ProjectId) Then
+            Throw New InvalidOperationException($"Context '{context.Id}' has no ProjectId. Cannot resolve key '{TextKey}'.")
+        End If
+        If String.IsNullOrWhiteSpace(context.Locale) Then
+            Throw New InvalidOperationException($"Context '{context.Id}' has no Locale. Cannot resolve key '{TextKey}'.")
+        End If
+        If context.TranslationResolver Is Nothing Then
+            Throw New InvalidOperationException($"Context '{context.Id}' has no TranslationResolver. Cannot resolve key '{TextKey}'.")
         End If
 
-        ' ❌ ERRORE BLOCCANTE: ProjectId, Locale e TranslationResolver obbligatori
-        If String.IsNullOrWhiteSpace(taskInstance.ProjectId) Then
-            Throw New InvalidOperationException($"TaskInstance '{taskInstance.Id}' has no ProjectId. Cannot resolve translation key '{key}'.")
-        End If
-        If String.IsNullOrWhiteSpace(taskInstance.Locale) Then
-            Throw New InvalidOperationException($"TaskInstance '{taskInstance.Id}' has no Locale. Cannot resolve translation key '{key}'.")
-        End If
-        If taskInstance.TranslationResolver Is Nothing Then
-            Throw New InvalidOperationException($"TaskInstance '{taskInstance.Id}' has no TranslationResolver. Cannot resolve translation key '{key}'.")
+        Dim text = context.TranslationResolver.ResolveTranslation(context.ProjectId, context.Locale, TextKey)
+
+        If String.IsNullOrEmpty(text) Then
+            Throw New InvalidOperationException($"Translation key '{TextKey}' not found for project '{context.ProjectId}', locale '{context.Locale}'.")
         End If
 
-        ' ✅ STATELESS: Lookup tramite TranslationResolver (evita dipendenza circolare)
-        Dim translatedText = taskInstance.TranslationResolver.ResolveTranslation(taskInstance.ProjectId, taskInstance.Locale, key)
-
-        If String.IsNullOrEmpty(translatedText) Then
-            Throw New InvalidOperationException($"Translation key '{key}' not found in TranslationRepository for project '{taskInstance.ProjectId}' and locale '{taskInstance.Locale}'. The session cannot continue without this translation.")
-        End If
-
-        Return translatedText
+        Return text
     End Function
 End Class
-

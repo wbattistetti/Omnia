@@ -1,33 +1,19 @@
 ' TransferTask.vb
-' Task per trasferire all'operatore
+' Micro-task that transfers the conversation to a human operator.
 
 Option Strict On
 Option Explicit On
 
 ''' <summary>
-''' Task per trasferire la conversazione a un operatore umano
+''' Transfers the conversation to a human operator.
 ''' </summary>
 Public Class TransferTask
     Inherits TaskBase
 
-    ''' <summary>
-    ''' ID dell'operatore (opzionale)
-    ''' </summary>
     Public Property OperatorId As String
-
-    ''' <summary>
-    ''' Dipartimento (opzionale)
-    ''' </summary>
     Public Property Department As String
-
-    ''' <summary>
-    ''' Priorità (opzionale)
-    ''' </summary>
     Public Property Priority As String
 
-    ''' <summary>
-    ''' Costruttore
-    ''' </summary>
     Public Sub New()
         OperatorId = ""
         Department = ""
@@ -41,22 +27,15 @@ Public Class TransferTask
     End Property
 
     ''' <summary>
-    ''' Esegue il task: trasferisce all'operatore
+    ''' Signals the transfer via the onMessage callback.
     ''' </summary>
-    Public Overrides Sub Execute(taskNode As TaskNode, taskInstance As TaskInstance, onMessage As Action(Of String))
-        ' TODO: Implementare logica per trasferire all'operatore
-        Dim transferInfo As String = "Trasferimento all'operatore"
-        If Not String.IsNullOrEmpty(Me.OperatorId) Then
-            transferInfo &= " (ID: " & Me.OperatorId & ")"
-        End If
-        If Not String.IsNullOrEmpty(Me.Department) Then
-            transferInfo &= " - Dipartimento: " & Me.Department
-        End If
+    Public Overrides Sub Execute(context As TaskUtterance, onMessage As Action(Of String))
+        Dim info As String = "Transfer to operator"
+        If Not String.IsNullOrEmpty(OperatorId) Then info &= $" (ID: {OperatorId})"
+        If Not String.IsNullOrEmpty(Department) Then info &= $" — Dept: {Department}"
 
         If onMessage IsNot Nothing Then
-            onMessage(transferInfo)
+            onMessage(info)
         End If
-        ' TODO: Implementare logica di trasferimento effettivo (API call, ecc.)
     End Sub
 End Class
-

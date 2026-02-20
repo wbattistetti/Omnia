@@ -22,10 +22,10 @@ Public Class StepResult
     Public Property StepType As String
 
     ''' <summary>
-    ''' Prossimo task node da eseguire (se StepType = "FindNextTask")
+    ''' Prossimo TaskUtterance da eseguire (se StepType = "FindNextTask")
     ''' Nothing se non ci sono più task
     ''' </summary>
-    Public Property NextTaskNode As TaskNode
+    Public Property NextTaskNode As TaskUtterance
 
     ''' <summary>
     ''' Tasks da eseguire (se StepType = "GetResponse" o "ExecuteResponse")

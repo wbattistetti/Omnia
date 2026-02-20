@@ -1,11 +1,11 @@
 ' CloseSessionTask.vb
-' Task per chiudere la conversazione
+' Micro-task that terminates the dialogue session.
 
 Option Strict On
 Option Explicit On
 
 ''' <summary>
-''' Task per chiudere la conversazione/sessione
+''' Terminates the current dialogue session.
 ''' </summary>
 Public Class CloseSessionTask
     Inherits TaskBase
@@ -17,15 +17,11 @@ Public Class CloseSessionTask
     End Property
 
     ''' <summary>
-    ''' Esegue il task: chiude la sessione
+    ''' Signals session closure via the onMessage callback.
     ''' </summary>
-    Public Overrides Sub Execute(taskNode As TaskNode, taskInstance As TaskInstance, onMessage As Action(Of String))
-        ' TODO: Implementare logica per chiudere sessione
-        ' Esempio: onMessage("Sessione chiusa")
-        ' Oppure: sollevare evento specifico per chiusura sessione
+    Public Overrides Sub Execute(context As TaskUtterance, onMessage As Action(Of String))
         If onMessage IsNot Nothing Then
-            onMessage("Sessione chiusa")
+            onMessage("Session closed.")
         End If
     End Sub
 End Class
-

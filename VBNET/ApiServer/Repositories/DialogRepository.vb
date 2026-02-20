@@ -65,7 +65,6 @@ Namespace ApiServer.Repositories
             If _cache.TryGetValue(cacheKey, Nothing) Then
                 Dim cachedDialog = _cache(cacheKey)
                 If cachedDialog IsNot Nothing Then
-                    Console.WriteLine($"[DialogRepository] ✅ Cache hit: {projectId}:{version}")
                     Return cachedDialog
                 End If
             End If
@@ -73,18 +72,11 @@ Namespace ApiServer.Repositories
             ' ✅ STEP 2: Carica da Redis
             Try
                 Dim redisKey = GetDialogKey(projectId, version)
-                Console.WriteLine($"[DialogRepository] 🔍 Checking Redis for dialog: {redisKey}")
                 Dim json = _database.StringGet(redisKey)
 
                 If Not json.HasValue Then
-                    Console.WriteLine($"[DialogRepository] ❌ Dialog not found in Redis: {redisKey}")
-                    Console.WriteLine($"[DialogRepository]    ProjectId: {projectId}")
-                    Console.WriteLine($"[DialogRepository]    Version: {version}")
-                    Console.WriteLine($"[DialogRepository]    Redis Key: {redisKey}")
                     Return Nothing
                 End If
-
-                Console.WriteLine($"[DialogRepository] ✅ Dialog found in Redis: {redisKey} (JSON length: {json.ToString().Length} chars)")
 
                 ' ✅ STEP 3: Normalizza JSON (violation → invalid) prima della deserializzazione
                 Dim jsonString = json.ToString()
@@ -107,7 +99,6 @@ Namespace ApiServer.Repositories
                 Dim runtimeTask = JsonConvert.DeserializeObject(Of RuntimeTask)(jsonString, settings)
 
                 If runtimeTask Is Nothing Then
-                    Console.WriteLine($"[DialogRepository] ❌ Failed to deserialize dialog: {projectId}:{version}")
                     Return Nothing
                 End If
 
@@ -116,11 +107,9 @@ Namespace ApiServer.Repositories
                     _cache(cacheKey) = runtimeTask
                 End SyncLock
 
-                Console.WriteLine($"[DialogRepository] ✅ Dialog loaded from Redis and cached: {projectId}:{version}")
                 Return runtimeTask
 
             Catch ex As Exception
-                Console.WriteLine($"[DialogRepository] ❌ Error loading dialog: {ex.Message}")
                 Throw New Exception($"Failed to load dialog {projectId}:{version}: {ex.Message}", ex)
             End Try
         End Function
@@ -150,23 +139,14 @@ Namespace ApiServer.Repositories
 
                 ' ✅ STEP 2: Salva in Redis (senza TTL - immutabile)
                 Dim redisKey = GetDialogKey(projectId, version)
-                Console.WriteLine($"[DialogRepository] 💾 Saving dialog to Redis: {redisKey}")
-                Console.WriteLine($"[DialogRepository]    JSON length: {json.Length} characters")
                 _database.StringSet(redisKey, json)
-                Console.WriteLine($"[DialogRepository] ✅ Dialog saved to Redis: {redisKey}")
 
                 ' ✅ STEP 3: Salva in cache in memoria
                 Dim cacheKey = GetCacheKey(projectId, version)
                 SyncLock _cacheLock
                     _cache(cacheKey) = runtimeTask
                 End SyncLock
-                Console.WriteLine($"[DialogRepository] ✅ Dialog cached in memory: {cacheKey}")
-
-                Console.WriteLine($"[DialogRepository] ✅✅ Dialog saved successfully: {projectId}:{version}")
-                Console.WriteLine($"[DialogRepository]    Redis Key: {redisKey}")
-                Console.WriteLine($"[DialogRepository]    Cache Key: {cacheKey}")
             Catch ex As Exception
-                Console.WriteLine($"[DialogRepository] ❌ Error saving dialog: {ex.Message}")
                 Throw New Exception($"Failed to save dialog {projectId}:{version}: {ex.Message}", ex)
             End Try
         End Sub
@@ -190,7 +170,6 @@ Namespace ApiServer.Repositories
                 Dim redisKey = GetDialogKey(projectId, version)
                 Return _database.KeyExists(redisKey)
             Catch ex As Exception
-                Console.WriteLine($"[DialogRepository] ❌ Error checking dialog existence: {ex.Message}")
                 Return False
             End Try
         End Function

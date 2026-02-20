@@ -24,10 +24,10 @@ Public Class ExecutionState
     Public Property MaxRecovery As New Dictionary(Of DialogueState, Integer)()
 
     ''' <summary>
-    ''' Nodo task corrente in esecuzione
-    ''' Corrisponde a currTaskNode nel loop ExecuteTask (Motore.vb, riga 57)
+    ''' TaskUtterance corrente in esecuzione
+    ''' Corrisponde a currTaskNode nel loop ExecuteTask
     ''' </summary>
-    Public Property CurrentTaskNode As TaskNode
+    Public Property CurrentTaskNode As TaskUtterance
 
     ''' <summary>
     ''' Indice del task corrente in ExecuteResponse
@@ -86,7 +86,7 @@ Public Class ExecutionState
     Public Sub Reset()
         Counters.Clear()
         MaxRecovery.Clear()
-        CurrentTaskNode = Nothing
+        CurrentTaskNode = Nothing ' TaskUtterance
         TaskIndex = 0
         IterationCount = 0
         HasTerminationResponse = False
