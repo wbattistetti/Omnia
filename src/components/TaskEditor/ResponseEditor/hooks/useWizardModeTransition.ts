@@ -4,7 +4,7 @@
 import { WizardMode } from '../../../../../TaskBuilderAIWizard/types/WizardMode';
 import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
 import type { TaskTree } from '@types/taskTypes';
-import type { PipelineStep } from '../../../../../TaskBuilderAIWizard/hooks/useWizardState';
+import type { PipelineStep } from '../../../../../TaskBuilderAIWizard/store/wizardStore';
 
 /**
  * Hook di supporto per determinare quando resettare taskWizardMode a 'none'.

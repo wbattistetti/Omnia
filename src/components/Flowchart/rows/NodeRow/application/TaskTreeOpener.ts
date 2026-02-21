@@ -365,11 +365,14 @@ export class TaskTreeOpener {
 
     // ✅ CRITICAL: Use row.id as task ID (task.id === row.id ALWAYS)
     // The wizard will create the task with this ID when completed
+    // ✅ NOTE: taskWizardMode is just a flag - orchestrator controls when wizard actually starts
+    // TaskTreeOpener does NOT start the wizard directly - it only sets the flag
+    // The orchestrator (via useWizardIntegrationOrchestrated) will start the wizard when it sees taskWizardMode === 'full'
     taskEditorCtx.open({
       id: row.id,  // ALWAYS equals task.id (wizard will create task with this ID)
       type: TaskType.UtteranceInterpretation,
       label: row.text || '',
-      taskWizardMode: 'full',
+      taskWizardMode: 'full', // ✅ Flag only - orchestrator controls actual wizard start
       taskLabel: row.text || '',
     });
 

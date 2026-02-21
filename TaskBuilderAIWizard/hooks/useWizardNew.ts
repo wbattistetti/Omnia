@@ -49,26 +49,29 @@ export function useWizardNew(props: UseWizardNewProps) {
       hasStartedRef.current = true;
 
       runStructureGeneration(store, taskLabel.trim(), rowId, locale)
-        .then(async () => {
-          // Create template + instance for proposed structure
-          if (createTemplateAndInstanceForProposed) {
-            await createTemplateAndInstanceForProposed();
-          }
-        })
         .catch((error) => {
           console.error('[useWizardNew] Error in structure generation:', error);
           hasStartedRef.current = false;
         });
+      // ✅ NON chiamare createTemplateAndInstanceForProposed qui
+      // Deve essere chiamato solo quando l'utente conferma la struttura (in handleStructureConfirm)
     }
   }, [taskLabel, rowId, locale, store.wizardMode, createTemplateAndInstanceForProposed]);
 
   // Handle structure confirmation
   const handleStructureConfirm = useCallback(async () => {
-    store.updatePipelineStep('structure', 'completed', 'Confermata!');
-    store.setWizardMode(WizardMode.GENERATING);
+    // ✅ STEP 1: Create template + instance for proposed structure
+    // NOTE: pipelineSteps is already updated to 'completed' in useWizardIntegrationNew.handleStructureConfirm
+    // This ensures UI shows "Confermata!" immediately, not "sto pensando..."
+    if (createTemplateAndInstanceForProposed) {
+      await createTemplateAndInstanceForProposed();
+    }
+
+    // ✅ STEP 2: Pipeline step is already marked as completed (done in useWizardIntegrationNew)
+    // store.updatePipelineStep('structure', 'completed', 'Confermata!'); // ← RIMOSSO, già fatto
 
     try {
-      // Run parallel generation - completion check happens inside updatePhaseProgress
+      // ✅ STEP 3: Run parallel generation - completion check happens inside updatePhaseProgress
       await runParallelGeneration(store, locale, async (phase, taskId) => {
         // When taskId is 'all-complete', all phases are done
         if (taskId === 'all-complete' && createTemplateAndInstanceForCompleted && transitionToCompleted) {
@@ -76,20 +79,41 @@ export function useWizardNew(props: UseWizardNewProps) {
           if (!checkCompletionIntervalRef.current) {
             checkCompletionIntervalRef.current = setTimeout(async () => {
               try {
+                // Wait a bit more to ensure all state updates are applied
+                await new Promise(resolve => setTimeout(resolve, 100));
+
                 // Double-check completion before proceeding
-                const completion = checkCompletion(store);
+                const completion = checkCompletion();
+                console.log('[useWizardNew] 🔍 Completion check:', completion);
+
                 if (completion.isComplete) {
+                  console.log('[useWizardNew] ✅ All conditions met - creating template + instance');
                   await createTemplateAndInstanceForCompleted();
                   transitionToCompleted();
                 } else {
-                  console.warn('[useWizardNew] Completion check failed:', completion);
+                  console.warn('[useWizardNew] ⏳ Completion check failed, waiting...', completion);
+                  // Retry after a short delay
+                  checkCompletionIntervalRef.current = setTimeout(async () => {
+                    const retryCompletion = checkCompletion();
+                    if (retryCompletion.isComplete) {
+                      console.log('[useWizardNew] ✅ Retry successful - creating template + instance');
+                      await createTemplateAndInstanceForCompleted();
+                      transitionToCompleted();
+                    } else {
+                      console.warn('[useWizardNew] ⏳ Retry also failed:', retryCompletion);
+                    }
+                    checkCompletionIntervalRef.current = null;
+                  }, 500);
+                  return; // Don't clear the ref yet
                 }
               } catch (error) {
                 console.error('[useWizardNew] Error in completion:', error);
               } finally {
-                checkCompletionIntervalRef.current = null;
+                if (checkCompletionIntervalRef.current) {
+                  checkCompletionIntervalRef.current = null;
+                }
               }
-            }, 0); // Use setTimeout to ensure all state updates are applied first
+            }, 200); // Use setTimeout to ensure all state updates are applied first
           }
         }
       });
@@ -100,7 +124,9 @@ export function useWizardNew(props: UseWizardNewProps) {
 
   // Handle structure rejection
   const handleStructureReject = useCallback(() => {
-    store.setWizardMode(WizardMode.DATA_STRUCTURE_CORRECTION);
+    // ❌ REMOVED: store.setWizardMode() - orchestrator controls this
+    // ✅ This hook should not be used - use useWizardIntegrationOrchestrated instead
+    console.warn('[useWizardNew] ⚠️ handleStructureReject called - this hook is deprecated. Use orchestrator instead.');
   }, [store]);
 
   // Reset wizard
@@ -128,7 +154,8 @@ export function useWizardNew(props: UseWizardNewProps) {
     messagesGeneralized: store.messagesGeneralized,
     shouldBeGeneral: store.shouldBeGeneral,
     showStructureConfirmation: store.showStructureConfirmation(),
-    structureConfirmed: store.structureConfirmed(),
+    // ✅ Access the boolean field directly (not the selector function)
+    structureConfirmed: (store as any as { structureConfirmed: boolean }).structureConfirmed,
     showCorrectionMode: store.showCorrectionMode(),
     correctionInput: store.correctionInput,
     setCorrectionInput: store.setCorrectionInput,
@@ -140,10 +167,10 @@ export function useWizardNew(props: UseWizardNewProps) {
     handleStructureReject,
     resetWizard,
 
-    // Actions
-    runStructureGeneration: (taskLabel: string, rowId?: string) =>
-      runStructureGeneration(store, taskLabel, rowId, locale),
-    runParallelGeneration: () => runParallelGeneration(store, locale),
-    checkCompletion: () => checkCompletion(store)
+    // Actions (wrapped for convenience)
+    runStructureGeneration: useCallback((taskLabel: string, rowId?: string) =>
+      runStructureGeneration(store, taskLabel, rowId, locale), [store, locale]),
+    runParallelGeneration: useCallback(() => runParallelGeneration(store, locale), [store, locale]),
+    checkCompletion: useCallback(() => checkCompletion(), [])
   };
 }

@@ -9,6 +9,8 @@ import { ResponseEditorLayout } from '@responseEditor/components/ResponseEditorL
 import { useResponseEditor } from '@responseEditor/hooks/useResponseEditor';
 import { validateTaskTreeStructure } from '@responseEditor/core/domain/validators';
 import { useWizardIntegration } from '@responseEditor/hooks/useWizardIntegration';
+import { useWizardIntegrationNew } from '@responseEditor/hooks/useWizardIntegrationNew';
+import { useWizardIntegrationOrchestrated } from '@responseEditor/hooks/useWizardIntegrationOrchestrated';
 import { WizardContext } from '@responseEditor/context/WizardContext';
 import { WizardMode } from '../../../../TaskBuilderAIWizard/types/WizardMode';
 import { useWizardModeTransition } from '@responseEditor/hooks/useWizardModeTransition';
@@ -146,13 +148,33 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     });
   }
 
-  const wizardIntegrationRaw = useWizardIntegration(
-    taskLabelForWizard, // ✅ From editor.taskLabel (single source of truth)
-    rowIdForWizard, // ✅ ALWAYS equals row.id (which equals task.id when task exists)
-    projectIdForWizard,
-    localeForWizard,
-    onWizardComplete // ✅ CORRETTO: usa onWizardComplete dalla prop
-  );
+  // ✅ NEW: Use orchestrated wizard (with feature flag for testing)
+  const USE_ORCHESTRATED_WIZARD = true; // Feature flag - set to false to use old system
+  const USE_NEW_WIZARD = false; // Legacy flag - keep for compatibility
+
+  const wizardIntegrationRaw = USE_ORCHESTRATED_WIZARD
+    ? useWizardIntegrationOrchestrated(
+        taskLabelForWizard,
+        rowIdForWizard,
+        projectIdForWizard,
+        localeForWizard,
+        onWizardComplete
+      )
+    : USE_NEW_WIZARD
+    ? useWizardIntegrationNew(
+        taskLabelForWizard,
+        rowIdForWizard,
+        projectIdForWizard,
+        localeForWizard,
+        onWizardComplete
+      )
+    : useWizardIntegration(
+        taskLabelForWizard,
+        rowIdForWizard,
+        projectIdForWizard,
+        localeForWizard,
+        onWizardComplete
+      );
 
   // ✅ FIX: Mantieni riferimento al wizardIntegrationRaw precedente per preservare shouldBeGeneral
   // ✅ IMPORTANTE: Aggiorna il ref SEMPRE quando wizardIntegrationRaw ha shouldBeGeneral === true

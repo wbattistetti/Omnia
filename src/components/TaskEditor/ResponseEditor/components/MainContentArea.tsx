@@ -22,7 +22,7 @@ import { useResponseEditorContext } from '@responseEditor/context/ResponseEditor
 import { useWizardContext } from '@responseEditor/context/WizardContext';
 import type { Task } from '@types/taskTypes';
 import { TabContentContainer } from '@responseEditor/components/TabContentContainer';
-import type { PipelineStep } from '../../../../../TaskBuilderAIWizard/hooks/useWizardState';
+import type { PipelineStep } from '../../../../../TaskBuilderAIWizard/store/wizardStore';
 import type { WizardTaskTreeNode, WizardStep, WizardModuleTemplate } from '../../../../../TaskBuilderAIWizard/types';
 
 // ✅ Container styles estratti in costanti esterne (per pulizia)

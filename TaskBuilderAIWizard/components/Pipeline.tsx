@@ -1,6 +1,7 @@
 import { Loader2, Check } from 'lucide-react';
-import { PipelineStep } from '../hooks/useWizardState';
+import { PipelineStep } from '../store/wizardStore';
 import { WizardStepMessages, WizardTaskTreeNode } from '../types';
+import { flattenTaskTree } from '../utils/wizardHelpers';
 
 type PipelineProps = {
   steps: PipelineStep[];
@@ -33,17 +34,7 @@ export function Pipeline({
     return ids;
   };
 
-  // Funzione per raccogliere tutti i nodi in una lista piatta
-  const flattenTaskTree = (nodes: WizardTaskTreeNode[]): WizardTaskTreeNode[] => {
-    const result: WizardTaskTreeNode[] = [];
-    nodes.forEach(node => {
-      result.push(node);
-      if (node.subNodes && node.subNodes.length > 0) {
-        result.push(...flattenTaskTree(node.subNodes));
-      }
-    });
-    return result;
-  };
+  // Helper function imported from wizardHelpers.ts
 
   // Calcola la percentuale media per una fase specifica
   const getPhaseProgress = (phase: 'constraints' | 'parser' | 'messages'): number => {

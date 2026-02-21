@@ -1,8 +1,9 @@
 import { PhaseCard } from './PhaseCard';
-import { PipelineStep } from '../hooks/useWizardState';
+import type { PipelineStep } from '../store/wizardStore';
 import { WizardStep, WizardTaskTreeNode, WizardModuleTemplate } from '../types';
 import { Boxes, Shield, Brain, MessageSquare, Calendar, Sparkles, Utensils, Info, Truck, ChevronDown, ChevronRight, Check } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { calculatePhaseProgress, getPhaseState, extractDynamicMessage } from '../utils/wizardHelpers';
 
 type CenterPanelProps = {
   currentStep: WizardStep | 'idle'; // DEPRECATED: mantenuto per compatibilità
@@ -68,50 +69,7 @@ export function CenterPanel({
     }
   }, [currentStep, foundModuleId, availableModules]);
 
-  const flattenTaskTree = (nodes: WizardTaskTreeNode[]): WizardTaskTreeNode[] => {
-    const result: WizardTaskTreeNode[] = [];
-    nodes.forEach(node => {
-      result.push(node);
-      if (node.subNodes && node.subNodes.length > 0) {
-        result.push(...flattenTaskTree(node.subNodes));
-      }
-    });
-    return result;
-  };
-
-  const calculatePhaseProgress = (phase: 'constraints' | 'parser' | 'messages'): number => {
-    // ✅ NEW: Legge il progresso da pipelineSteps (sistema di contatori deterministici)
-    const phaseId = phase === 'constraints' ? 'constraints'
-                   : phase === 'parser' ? 'parsers'
-                   : 'messages';
-
-    const step = pipelineSteps.find(s => s.id === phaseId);
-
-    if (!step) {
-      return 0;
-    }
-
-    // Se la fase è completata, ritorna 100%
-    if (step.status === 'completed') {
-      return 100;
-    }
-
-    // Se la fase è in corso, estrai la percentuale dal payload
-    if (step.status === 'running' && step.payload) {
-      // Il payload è una stringa tipo "33%" o un messaggio dinamico
-      const match = step.payload.match(/(\d+)%/);
-      if (match) {
-        return parseInt(match[1], 10);
-      }
-    }
-
-    // Default: 0%
-    return 0;
-  };
-
-  const getPhaseState = (pipelineStep: PipelineStep): 'pending' | 'running' | 'completed' => {
-    return pipelineStep.status === 'error' ? 'pending' : pipelineStep.status;
-  };
+  // Helper functions moved to wizardHelpers.ts
 
   const phases = [
     {
@@ -137,51 +95,21 @@ export function CenterPanel({
       title: 'Regole di validazione',
       step: pipelineSteps.find(s => s.id === 'constraints')!,
       phase: 'constraints' as const,
-      dynamicMessage: (() => {
-        const step = pipelineSteps.find(s => s.id === 'constraints');
-        if (step?.status === 'running' && step.payload) {
-          // Estrai il messaggio dinamico rimuovendo la percentuale finale (es: "Sto generando... 33%" -> "Sto generando...")
-          return step.payload.replace(/\s+\d+%$/, '');
-        }
-        if (step?.status === 'completed') {
-          return step.payload; // "Generati!"
-        }
-        return undefined;
-      })()
+      dynamicMessage: extractDynamicMessage(pipelineSteps.find(s => s.id === 'constraints'))
     },
     {
       icon: Brain,
       title: 'Parser',
       step: pipelineSteps.find(s => s.id === 'parsers')!,
       phase: 'parser' as const,
-      dynamicMessage: (() => {
-        const step = pipelineSteps.find(s => s.id === 'parsers');
-        if (step?.status === 'running' && step.payload) {
-          // Estrai il messaggio dinamico rimuovendo la percentuale finale
-          return step.payload.replace(/\s+\d+%$/, '');
-        }
-        if (step?.status === 'completed') {
-          return step.payload; // "Generati!"
-        }
-        return undefined;
-      })()
+      dynamicMessage: extractDynamicMessage(pipelineSteps.find(s => s.id === 'parsers'))
     },
     {
       icon: MessageSquare,
       title: 'Messaggi',
       step: pipelineSteps.find(s => s.id === 'messages')!,
       phase: 'messages' as const,
-      dynamicMessage: (() => {
-        const step = pipelineSteps.find(s => s.id === 'messages');
-        if (step?.status === 'running' && step.payload) {
-          // Estrai il messaggio dinamico rimuovendo la percentuale finale
-          return step.payload.replace(/\s+\d+%$/, '');
-        }
-        if (step?.status === 'completed') {
-          return step.payload; // "Generati!"
-        }
-        return undefined;
-      })()
+      dynamicMessage: extractDynamicMessage(pipelineSteps.find(s => s.id === 'messages'))
     }
   ];
 
@@ -498,7 +426,7 @@ export function CenterPanel({
                 icon={icon}
                 title={title}
                 state={getPhaseState(step)}
-                progress={phase ? calculatePhaseProgress(phase) : undefined}
+                progress={phase ? calculatePhaseProgress(phase, pipelineSteps) : undefined}
                 isExpanded={isStructurePhase && showCorrectionMode}
                 showCorrectionForm={isStructurePhase && showCorrectionMode}
                 correctionInput={correctionInput}

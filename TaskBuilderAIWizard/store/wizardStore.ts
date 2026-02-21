@@ -18,6 +18,7 @@ export type PipelineStep = {
   label: string;
   status: 'pending' | 'running' | 'completed' | 'error';
   payload?: string;
+  substeps?: PipelineStep[];
 };
 
 interface WizardStore {
@@ -29,6 +30,7 @@ interface WizardStore {
   currentStep: WizardStep;
   dataSchema: WizardTaskTreeNode[];
   constraints: WizardConstraint[];
+  setConstraints: (constraints: WizardConstraint[]) => void;
   nlpContract: WizardNLPContract | null;
   messages: Map<string, WizardStepMessages>;
   messagesGeneralized: Map<string, WizardStepMessages>;
@@ -40,6 +42,8 @@ interface WizardStore {
   currentParserSubstep: string | null;
   currentMessageSubstep: string | null;
   pipelineSteps: PipelineStep[];
+  // ✅ POINT OF NO RETURN: Flag that prevents any modification to structure phase after confirmation
+  structureConfirmed: boolean;
 
   // ============================================
   // ACTIONS - Synchronous state updates
@@ -48,7 +52,7 @@ interface WizardStore {
   setWizardMode: (mode: WizardMode) => void;
   setCurrentStep: (step: WizardStep) => void;
   setDataSchema: (schema: WizardTaskTreeNode[] | ((prev: WizardTaskTreeNode[]) => WizardTaskTreeNode[])) => void;
-  setConstraints: (constraints: WizardConstraint[]) => void;
+  setConstraints: (constraints: WizardConstraint[] | ((prev: WizardConstraint[]) => WizardConstraint[])) => void;
   setNlpContract: (contract: WizardNLPContract | null) => void;
   setMessages: (nodeId: string, messages: WizardStepMessages) => void;
   setMessagesGeneralized: (nodeId: string, messages: WizardStepMessages) => void;
@@ -62,6 +66,7 @@ interface WizardStore {
   updatePipelineStep: (stepId: string, status: PipelineStep['status'], payload?: string) => void;
   updateTaskPipelineStatus: (taskId: string, phase: 'constraints' | 'parser' | 'messages', status: 'pending' | 'running' | 'completed' | 'failed') => void;
   updateTaskProgress: (taskId: string, phase: 'constraints' | 'parser' | 'messages', progress: number) => void;
+  setStructureConfirmed: (confirmed: boolean) => void;
   reset: () => void;
 
   // ============================================
@@ -69,7 +74,8 @@ interface WizardStore {
   // ============================================
 
   showStructureConfirmation: () => boolean;
-  structureConfirmed: () => boolean;
+  // ❌ REMOVED: structureConfirmed selector - CONFLICT with field
+  // ✅ Use field directly: store.structureConfirmed (boolean)
   showCorrectionMode: () => boolean;
   getMessagesToUse: () => Map<string, WizardStepMessages>;
 }
@@ -121,12 +127,25 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
   currentParserSubstep: null,
   currentMessageSubstep: null,
   pipelineSteps: initialPipelineSteps,
+  structureConfirmed: false,
 
   // ============================================
   // ACTIONS
   // ============================================
 
-  setWizardMode: (mode) => set({ wizardMode: mode }),
+  setWizardMode: (mode) => {
+    // ✅ POINT OF NO RETURN: If structure is confirmed, NEVER go back to DATA_STRUCTURE_PROPOSED
+    // Access the boolean field directly (not the selector function)
+    const currentState = get();
+    const isConfirmed = (currentState as any as { structureConfirmed: boolean }).structureConfirmed === true;
+
+    if (mode === WizardMode.DATA_STRUCTURE_PROPOSED && isConfirmed) {
+      console.warn('[wizardStore] ⚠️ Attempted to set wizardMode to DATA_STRUCTURE_PROPOSED after confirmation - blocked');
+      return;
+    }
+
+    set({ wizardMode: mode });
+  },
 
   setCurrentStep: (step) => set({ currentStep: step }),
 
@@ -134,7 +153,9 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
     dataSchema: typeof schema === 'function' ? schema(state.dataSchema) : schema
   })),
 
-  setConstraints: (constraints) => set({ constraints }),
+  setConstraints: (constraints) => set((state) => ({
+    constraints: typeof constraints === 'function' ? constraints(state.constraints) : constraints
+  })),
 
   setNlpContract: (contract) => set({ nlpContract: contract }),
 
@@ -168,22 +189,35 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
 
   setCurrentMessageSubstep: (substep) => set({ currentMessageSubstep: substep }),
 
-  updatePipelineStep: (stepId, status, payload) => set((state) => {
-    const updated = state.pipelineSteps.map(step => {
-      if (step.id === stepId) {
-        // Only update if status or payload actually changed
-        if (step.status === status && step.payload === payload) {
-          return step; // Return same reference if no change
-        }
-        return { ...step, status, ...(payload !== undefined ? { payload } : {}) };
-      }
-      return step;
-    });
+  updatePipelineStep: (stepId, status, payload) => {
+    // ✅ POINT OF NO RETURN: If structure is confirmed, NEVER update structure step
+    // EXCEPT: Allow updating to 'completed' when user clicks "Sì" (this is the confirmation action itself)
+    const currentState = get();
+    // Access the boolean field directly (not the selector function)
+    const isConfirmed = (currentState as any as { structureConfirmed: boolean }).structureConfirmed === true;
+    if (stepId === 'structure' && isConfirmed && status !== 'completed') {
+      // Allow 'completed' status even if confirmed (this is the confirmation action itself)
+      console.warn('[wizardStore] ⚠️ Attempted to update structure step after confirmation - blocked');
+      return;
+    }
 
-    // Check if anything actually changed
-    const hasChanged = updated.some((step, index) => step !== state.pipelineSteps[index]);
-    return hasChanged ? { pipelineSteps: updated } : {};
-  }),
+    set((state) => {
+      const updated = state.pipelineSteps.map(step => {
+        if (step.id === stepId) {
+          // Only update if status or payload actually changed
+          if (step.status === status && step.payload === payload) {
+            return step; // Return same reference if no change
+          }
+          return { ...step, status, ...(payload !== undefined ? { payload } : {}) };
+        }
+        return step;
+      });
+
+      // Check if anything actually changed
+      const hasChanged = updated.some((step, index) => step !== state.pipelineSteps[index]);
+      return hasChanged ? { pipelineSteps: updated } : {};
+    });
+  },
 
   updateTaskPipelineStatus: (taskId, phase, status) => set((state) => {
     const updateNode = (nodes: WizardTaskTreeNode[]): WizardTaskTreeNode[] => {
@@ -238,6 +272,8 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
     return { dataSchema: updateNode(state.dataSchema) };
   }),
 
+  setStructureConfirmed: (confirmed) => set({ structureConfirmed: confirmed }),
+
   reset: () => set({
     wizardMode: WizardMode.START,
     currentStep: 'idle',
@@ -253,21 +289,22 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
     correctionInput: '',
     currentParserSubstep: null,
     currentMessageSubstep: null,
-    pipelineSteps: initialPipelineSteps
+    pipelineSteps: initialPipelineSteps,
+    structureConfirmed: false
   }),
 
   // ============================================
   // SELECTORS
   // ============================================
 
-  showStructureConfirmation: () => get().wizardMode === WizardMode.DATA_STRUCTURE_PROPOSED,
-
-  structureConfirmed: () => {
-    const mode = get().wizardMode;
-    return mode === WizardMode.DATA_STRUCTURE_CONFIRMED ||
-           mode === WizardMode.GENERATING ||
-           mode === WizardMode.COMPLETED;
+  showStructureConfirmation: () => {
+    const state = get();
+    // ✅ Verify: wizardMode is DATA_STRUCTURE_PROPOSED AND structureConfirmed is false
+    return state.wizardMode === WizardMode.DATA_STRUCTURE_PROPOSED && !state.structureConfirmed;
   },
+
+  // ❌ REMOVED: structureConfirmed selector - CONFLICT with field
+  // ✅ Use field directly: store.structureConfirmed (boolean)
 
   showCorrectionMode: () => get().wizardMode === WizardMode.DATA_STRUCTURE_CORRECTION,
 

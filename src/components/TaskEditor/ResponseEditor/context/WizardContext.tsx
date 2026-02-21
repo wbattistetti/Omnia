@@ -4,7 +4,7 @@
 import React, { createContext, useContext } from 'react';
 import { WizardMode } from '../../../../../TaskBuilderAIWizard/types/WizardMode';
 import type { WizardTaskTreeNode } from '../../../../../TaskBuilderAIWizard/types';
-import type { PipelineStep } from '../../../../../TaskBuilderAIWizard/hooks/useWizardState';
+import type { PipelineStep } from '../../../../../TaskBuilderAIWizard/store/wizardStore';
 
 export interface WizardContextValue {
   // Wizard state (always available when wizard is active)

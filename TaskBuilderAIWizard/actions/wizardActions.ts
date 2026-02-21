@@ -9,24 +9,12 @@
  */
 
 import type { WizardStore } from '../store/wizardStore';
+import { useWizardStore } from '../store/wizardStore';
 import type { WizardTaskTreeNode, WizardStepMessages } from '../types';
 import { generateStructure, generateConstraints, generateParsers, generateMessages } from '../api/wizardApi';
 import { buildContractFromNode } from '../api/wizardApi';
 import { WizardMode } from '../types/WizardMode';
-
-/**
- * Flattens task tree to get all nodes (root + subNodes)
- */
-function flattenTaskTree(nodes: WizardTaskTreeNode[]): WizardTaskTreeNode[] {
-  const result: WizardTaskTreeNode[] = [];
-  nodes.forEach(node => {
-    result.push(node);
-    if (node.subNodes && node.subNodes.length > 0) {
-      result.push(...flattenTaskTree(node.subNodes));
-    }
-  });
-  return result;
-}
+import { flattenTaskTree } from '../utils/wizardHelpers';
 
 /**
  * Phase 1: Generate structure
@@ -37,17 +25,28 @@ export async function runStructureGeneration(
   rowId: string | undefined,
   locale: string
 ): Promise<void> {
-  store.updatePipelineStep('structure', 'running', 'sto pensando a qual è la migliore struttura dati per questo task...');
+  // ✅ POINT OF NO RETURN: If structure is already confirmed, don't regenerate
+  const state = useWizardStore.getState();
+  const isConfirmed = (state as any as { structureConfirmed: boolean }).structureConfirmed === true;
+
+  if (isConfirmed) {
+    console.warn('[wizardActions] ⚠️ runStructureGeneration called after structure confirmation - blocked');
+    return;
+  }
+
+  // ❌ REMOVED: store.updatePipelineStep() - orchestrator controls this
+  // ❌ REMOVED: store.setWizardMode() - orchestrator controls this
+  // ✅ ONLY: Generate structure and update dataSchema
+
   store.setCurrentStep('generazione_struttura');
 
   const { schema, shouldBeGeneral, generalizedLabel, generalizationReason, generalizedMessages } =
     await generateStructure(taskLabel, rowId, locale);
 
-  // Update store with structure
+  // ✅ ONLY update dataSchema
   store.setDataSchema(schema);
   store.setShouldBeGeneral(shouldBeGeneral);
 
-  // Update root node with generalization data if needed
   if (shouldBeGeneral && schema.length > 0) {
     store.setDataSchema(prev => {
       const updated = [...prev];
@@ -63,8 +62,9 @@ export async function runStructureGeneration(
     });
   }
 
-  store.updatePipelineStep('structure', 'running', 'Confermami la struttura che vedi sulla sinistra...');
-  store.setWizardMode(WizardMode.DATA_STRUCTURE_PROPOSED);
+  // ❌ REMOVED: store.updatePipelineStep() - orchestrator controls this
+  // ❌ REMOVED: store.setWizardMode() - orchestrator controls this
+  // ✅ Function returns - orchestrator handles all pipeline updates
 }
 
 /**
@@ -73,7 +73,7 @@ export async function runStructureGeneration(
 export async function runParallelGeneration(
   store: WizardStore,
   locale: string,
-  onPhaseComplete?: (phase: 'constraints' | 'parser' | 'messages', taskId: string) => void
+  onPhaseComplete?: (phase: 'constraints' | 'parser' | 'messages', taskId: string, payloads?: { constraints: string; parsers: string; messages: string }) => void
 ): Promise<void> {
   const taskTree = store.dataSchema;
   const allTasks = flattenTaskTree(taskTree);
@@ -150,13 +150,16 @@ export async function runParallelGeneration(
   ];
   const messagesPayload = `Sto generando tutti i messaggi che il bot deve utilizzare in tutte le possibili situazioni: ${MESSAGE_STEP_LABELS.map(s => `"${s}"`).join(', ')}…`;
 
-  // Update pipeline steps to running
-  store.updatePipelineStep('constraints', 'running', constraintsPayload);
-  store.updatePipelineStep('parsers', 'running', parsersPayload);
-  store.updatePipelineStep('messages', 'running', messagesPayload);
-  store.setWizardMode(WizardMode.GENERATING);
+  // ❌ REMOVED: store.updatePipelineStep() - orchestrator controls this
+  // ❌ REMOVED: store.setWizardMode() - orchestrator controls this
+  // ✅ Pass payloads to orchestrator via callback
+  onPhaseComplete?.('constraints', 'init', {
+    constraints: constraintsPayload,
+    parsers: parsersPayload,
+    messages: messagesPayload
+  });
 
-  // Update progress function
+  // Update progress function (NO pipeline updates, only counters)
   const updatePhaseProgress = (phase: 'constraints' | 'parser' | 'messages') => {
     const counter = phase === 'constraints' ? constraintsCounter
                   : phase === 'parser' ? parserCounter
@@ -174,8 +177,10 @@ export async function runParallelGeneration(
                          : messagesPayload;
 
     if (counter.completed === counter.total) {
-      // Phase completed
-      store.updatePipelineStep(phaseId, 'completed', 'Generati!');
+      // Phase completed (all tasks in this phase are done)
+      // ❌ REMOVED: store.updatePipelineStep() - orchestrator controls this
+      // ✅ Notify orchestrator that phase is complete
+      onPhaseComplete?.(phase, `phase-complete-${phaseId}`);
 
       // Check if ALL phases are complete
       const allPhasesComplete =
@@ -189,8 +194,9 @@ export async function runParallelGeneration(
       }
     } else {
       // Phase in progress
-      const baseMessage = initialPayload.replace(/…$/, '');
-      store.updatePipelineStep(phaseId, 'running', `${baseMessage} ${progress}%`);
+      // ❌ REMOVED: store.updatePipelineStep() - orchestrator controls this
+      // ✅ Notify orchestrator of progress via callback
+      onPhaseComplete?.(phase, `${progress}%`);
     }
   };
 
@@ -202,12 +208,19 @@ export async function runParallelGeneration(
     allPromises.push(
       generateConstraints([task], undefined, locale)
         .then(constraints => {
-          // Update task with constraints
+          // Update task with constraints in dataSchema
           store.setDataSchema(prev => {
             const updateNode = (nodes: WizardTaskTreeNode[]): WizardTaskTreeNode[] => {
               return nodes.map(node => {
                 if (node.id === task.id) {
-                  return { ...node, constraints };
+                  const updated = { ...node, constraints };
+                  console.log(`[wizardActions] ✅ Saved constraints for "${task.label}" (${task.id}):`, constraints.length, 'constraints');
+                  console.log(`[wizardActions] 🔍 Verifying update - node after update:`, {
+                    nodeId: updated.id,
+                    hasConstraints: !!updated.constraints,
+                    constraintsLength: updated.constraints?.length || 0
+                  });
+                  return updated;
                 }
                 if (node.subNodes && node.subNodes.length > 0) {
                   return { ...node, subNodes: updateNode(node.subNodes) };
@@ -215,11 +228,25 @@ export async function runParallelGeneration(
                 return node;
               });
             };
-            return updateNode(prev);
+            const result = updateNode(prev);
+
+            // ✅ DEBUG: Verify the updated node is in the result (constraints)
+            const updatedNode = flattenTaskTree(result).find(n => n.id === task.id);
+            console.log(`[wizardActions] 🔍 After setDataSchema (constraints) - node in result:`, {
+              nodeId: updatedNode?.id,
+              hasConstraints: !!updatedNode?.constraints,
+              constraintsLength: updatedNode?.constraints?.length || 0
+            });
+
+            return result;
           });
+
+          // Also update global constraints array in store
+          store.setConstraints(prev => [...prev, ...constraints]);
+
           store.updateTaskPipelineStatus(task.id, 'constraints', 'completed');
+          // ✅ updatePhaseProgress already calls onPhaseComplete
           updatePhaseProgress('constraints');
-          onPhaseComplete?.('constraints', task.id);
         })
         .catch((error) => {
           console.error(`[wizardActions] Error generating constraints for ${task.id}:`, error);
@@ -239,7 +266,14 @@ export async function runParallelGeneration(
             const updateNode = (nodes: WizardTaskTreeNode[]): WizardTaskTreeNode[] => {
               return nodes.map(node => {
                 if (node.id === task.id) {
-                  return { ...node, dataContract: nlpContract };
+                  const updated = { ...node, dataContract: nlpContract };
+                  console.log(`[wizardActions] ✅ Saved parser for "${task.label}" (${task.id}):`, nlpContract ? 'has contract' : 'no contract');
+                  console.log(`[wizardActions] 🔍 Verifying parser update - node after update:`, {
+                    nodeId: updated.id,
+                    hasDataContract: !!updated.dataContract,
+                    dataContractType: typeof updated.dataContract
+                  });
+                  return updated;
                 }
                 if (node.subNodes && node.subNodes.length > 0) {
                   return { ...node, subNodes: updateNode(node.subNodes) };
@@ -247,11 +281,23 @@ export async function runParallelGeneration(
                 return node;
               });
             };
-            return updateNode(prev);
+            const result = updateNode(prev);
+
+            // ✅ DEBUG: Verify the updated node is in the result
+            const updatedNode = flattenTaskTree(result).find(n => n.id === task.id);
+            if (!updatedNode) {
+              console.warn(`[wizardActions] ⚠️ Node not found after parser update:`, {
+                taskId: task.id,
+                taskLabel: task.label,
+                allNodeIds: flattenTaskTree(result).map(n => n.id)
+              });
+            }
+
+            return result;
           });
           store.updateTaskPipelineStatus(task.id, 'parser', 'completed');
+          // ✅ updatePhaseProgress already calls onPhaseComplete
           updatePhaseProgress('parser');
-          onPhaseComplete?.('parser', task.id);
         })
         .catch((error) => {
           console.error(`[wizardActions] Error generating parsers for ${task.id}:`, error);
@@ -279,8 +325,8 @@ export async function runParallelGeneration(
           }
 
           store.updateTaskPipelineStatus(task.id, 'messages', 'completed');
+          // ✅ updatePhaseProgress already calls onPhaseComplete
           updatePhaseProgress('messages');
-          onPhaseComplete?.('messages', task.id);
         })
         .catch((error) => {
           console.error(`[wizardActions] Error generating messages for ${task.id}:`, error);
@@ -296,8 +342,10 @@ export async function runParallelGeneration(
 
 /**
  * Check if all phases are complete and ready for completion
+ * ✅ FIX: Read from useWizardStore.getState() to ensure we always read the latest state
+ * This makes checkCompletion deterministic and independent of closure variables
  */
-export function checkCompletion(store: WizardStore): {
+export function checkCompletion(): {
   isComplete: boolean;
   allNodesHaveMessages: boolean;
   allNodesHaveConstraints: boolean;
@@ -305,19 +353,43 @@ export function checkCompletion(store: WizardStore): {
   allTasksCompletedAllPhases: boolean;
   hasFailedNodes: boolean;
 } {
-  const allNodes = flattenTaskTree(store.dataSchema);
-  const messagesToUse = store.getMessagesToUse();
+  // ✅ FIX: Get fresh state from store using getState() static method
+  const currentState = useWizardStore.getState();
+  const allNodes = flattenTaskTree(currentState.dataSchema);
+  const messagesToUse = currentState.getMessagesToUse();
 
   const nodesWithMessages = allNodes.filter(node => messagesToUse.has(node.id));
   const allNodesHaveMessages = nodesWithMessages.length === allNodes.length;
 
-  const allNodesHaveConstraints = allNodes.every(node =>
-    node.constraints && node.constraints.length > 0
-  );
+  const allNodesHaveConstraints = allNodes.every(node => {
+    const hasConstraints = node.constraints && node.constraints.length > 0;
+    if (!hasConstraints) {
+      console.log(`[checkCompletion] Node "${node.label}" (${node.id}) missing constraints`, {
+        nodeId: node.id,
+        nodeLabel: node.label,
+        hasConstraints: !!node.constraints,
+        constraintsLength: node.constraints?.length || 0,
+        allNodesCount: allNodes.length,
+        nodeIndex: allNodes.findIndex(n => n.id === node.id)
+      });
+    }
+    return hasConstraints;
+  });
 
-  const allNodesHaveParser = allNodes.every(node =>
-    node.dataContract !== undefined
-  );
+  const allNodesHaveParser = allNodes.every(node => {
+    const hasParser = node.dataContract !== undefined;
+    if (!hasParser) {
+      console.log(`[checkCompletion] Node "${node.label}" (${node.id}) missing parser (dataContract)`, {
+        nodeId: node.id,
+        nodeLabel: node.label,
+        hasDataContract: !!node.dataContract,
+        dataContractType: typeof node.dataContract,
+        allNodesCount: allNodes.length,
+        nodeIndex: allNodes.findIndex(n => n.id === node.id)
+      });
+    }
+    return hasParser;
+  });
 
   const hasFailedNodes = allNodes.some(node =>
     node.pipelineStatus?.constraints === 'failed' ||
@@ -339,7 +411,7 @@ export function checkCompletion(store: WizardStore): {
                     allNodesHaveParser &&
                     allTasksCompletedAllPhases &&
                     !hasFailedNodes &&
-                    store.wizardMode === WizardMode.GENERATING;
+                    currentState.wizardMode === WizardMode.GENERATING;
 
   return {
     isComplete,

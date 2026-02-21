@@ -14,7 +14,7 @@ import { PanelContainer } from '@responseEditor/components/PanelContainer';
 import { MainViewMode } from '@responseEditor/types/mainViewMode';
 import { useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
 import type { Task, TaskTree } from '@types/taskTypes';
-import type { PipelineStep } from '../../../../../TaskBuilderAIWizard/hooks/useWizardState';
+import type { PipelineStep } from '../../../../../TaskBuilderAIWizard/store/wizardStore';
 import type { WizardTaskTreeNode, WizardStep, WizardModuleTemplate } from '../../../../../TaskBuilderAIWizard/types';
 
 export interface ResponseEditorNormalLayoutProps {

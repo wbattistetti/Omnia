@@ -5,7 +5,7 @@ import { useCallback } from 'react';
 import { generateStructure, generateConstraints, generateParsers, generateMessages, calculateTotalParsers } from '../api/wizardApi';
 import { buildContractFromNode } from '../api/wizardApi';
 import type { WizardTaskTreeNode, WizardStepMessages } from '../types';
-import type { PipelineStep } from './useWizardState';
+import type { PipelineStep } from '../store/wizardStore';
 import { WizardMode } from '../types/WizardMode';
 import { useWizardRetry } from './useWizardRetry';
 
@@ -89,19 +89,10 @@ export function useWizardGeneration(props: UseWizardGenerationProps) {
 
     updatePipelineStep('structure', 'running', 'Confermami la struttura che vedi sulla sinistra...');
 
-    // ✅ CRITICAL: Create template + instance BEFORE emitting DATA_STRUCTURE_PROPOSED
-    // This ensures that when DATA_STRUCTURE_PROPOSED is emitted, template + instance are already in memory
-    if (createTemplateAndInstanceForProposed) {
-      console.log('[useWizardGeneration] 🚀 Creating template + instance for proposed structure (before DATA_STRUCTURE_PROPOSED)');
-      await createTemplateAndInstanceForProposed();
-      console.log('[useWizardGeneration] ✅ Template + instance created - onFirstStepComplete() should call transitionToProposed()');
-      // ✅ onFirstStepComplete() DEVE chiamare transitionToProposed()
-      // Se non viene chiamato, c'è un bug in createTemplateAndInstanceForProposed che deve essere fixato
-    } else {
-      console.warn('[useWizardGeneration] ⚠️ createTemplateAndInstanceForProposed not provided - emitting DATA_STRUCTURE_PROPOSED without template+instance');
-      // ✅ Backward compatibility: emetti DATA_STRUCTURE_PROPOSED direttamente
-      transitionToProposed();
-    }
+    // ❌ RIMOSSO: createTemplateAndInstanceForProposed NON deve essere chiamato qui
+    // Deve essere chiamato SOLO dopo il click su "Sì" in handleStructureConfirm
+    // ✅ La transizione a DATA_STRUCTURE_PROPOSED viene gestita da runStructureGeneration in wizardActions.ts
+    transitionToProposed();
   }, [locale, updatePipelineStep, setDataSchema, setShouldBeGeneral, transitionToProposed, createTemplateAndInstanceForProposed]);
 
   /**
