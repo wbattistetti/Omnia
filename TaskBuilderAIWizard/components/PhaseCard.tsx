@@ -13,80 +13,101 @@ type PhaseCardProps = {
   showCorrectionForm?: boolean;
   correctionInput?: string;
   onCorrectionInputChange?: (value: string) => void;
-  // ✅ NEW: Messaggio dinamico con parte variabile in grassetto
-  dynamicMessage?: string; // Es: "sto generando i parser NLP per l'estrazione dei dati da una frase: **regex**..."
+  dynamicMessage?: string;
 };
 
 export function PhaseCard({
   icon: Icon,
   title,
-  payoff,
   state,
   progress,
-  description,
   isExpanded = false,
   showCorrectionForm = false,
   correctionInput = '',
   onCorrectionInputChange,
-  dynamicMessage
+  dynamicMessage,
 }: PhaseCardProps) {
   const isCompleted = state === 'completed';
-  const isRunning = state === 'running';
-  const isEditing = showCorrectionForm && isExpanded;
+  const isRunning   = state === 'running';
+  const isEditing   = showCorrectionForm && isExpanded;
+
+  const showProgressBar =
+    (isRunning || isCompleted) && progress !== undefined;
+
+  const pct = Math.min(100, Math.max(0, progress ?? 0));
+  const barColor = isCompleted ? 'bg-green-500' : 'bg-blue-500';
 
   return (
     <div
       className={`
-        bg-white rounded-2xl shadow-md transition-all
-        ${isRunning ? 'ring-2 ring-blue-500' : ''}
-        ${isEditing ? 'border-2 border-orange-500' : 'border border-gray-200'}
+        bg-white rounded-2xl shadow-md transition-all w-full
+        ${isRunning  ? 'ring-2 ring-blue-500' : ''}
+        ${isEditing  ? 'border-2 border-orange-500' : 'border border-gray-200'}
       `}
     >
-      {/* ✅ SINGOLA RIGA: Etichetta a sinistra | Payload/Spinner/Spunta a destra */}
-      <div className="flex items-center justify-between px-4 py-3" style={{ minHeight: '48px' }}>
-        {/* Left: Icona + Titolo */}
-        <div className="flex items-center gap-3">
-          <div className={`
-            ${isEditing ? 'text-orange-500' : isCompleted ? 'text-green-500' : isRunning ? 'text-blue-500' : 'text-gray-400'}
-          `}>
-            <Icon className="w-6 h-6" />
-          </div>
-          <div className="text-sm font-semibold text-gray-900">
-            {title}:
-          </div>
+      {/* Header row: icon + title + status IMMEDIATELY to the right of title */}
+      <div
+        className="flex items-center gap-3 px-4 py-3"
+        style={{ minHeight: '48px' }}
+      >
+        {/* Icon */}
+        <div className={
+          isEditing   ? 'text-orange-500' :
+          isCompleted ? 'text-green-500'  :
+          isRunning   ? 'text-blue-500'   : 'text-gray-400'
+        }>
+          <Icon className="w-6 h-6 flex-shrink-0" />
         </div>
 
-        {/* Right: Payload dinamico (spinner + testo) oppure spunta finale */}
-        <div className="flex items-center gap-2 flex-1 justify-end ml-4">
-          {isRunning && !isEditing && dynamicMessage && (
-            <div className="flex items-center gap-2">
-              <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div>
-              <span className="text-sm text-gray-700">
-                {dynamicMessage.split('**').map((part, index) =>
-                  index % 2 === 1 ? (
-                    <strong key={index} className="font-bold text-gray-900">{part}</strong>
-                  ) : (
-                    <span key={index}>{part}</span>
-                  )
-                )}
-              </span>
-            </div>
-          )}
+        {/* Title */}
+        <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">
+          {title}:
+        </span>
 
-          {isCompleted && !isEditing && dynamicMessage && (
-            <div className="flex items-center gap-1.5 text-sm font-medium text-green-600">
-              <span className="text-base">✔</span>
-              <span>{dynamicMessage}</span>
-            </div>
-          )}
+        {/* Status — sits immediately after the title colon */}
+        {isRunning && !isEditing && dynamicMessage && (
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent flex-shrink-0" />
+            <span className="text-sm text-gray-700 truncate">
+              {dynamicMessage.split('**').map((part, i) =>
+                i % 2 === 1
+                  ? <strong key={i} className="font-bold text-gray-900">{part}</strong>
+                  : <span key={i}>{part}</span>
+              )}
+            </span>
+          </div>
+        )}
 
-          {!isRunning && !isCompleted && !isEditing && (
-            <span className="text-sm text-gray-400">In attesa...</span>
-          )}
-        </div>
+        {isCompleted && !isEditing && dynamicMessage && (
+          <div className="flex items-center gap-1.5 text-sm font-medium text-green-600">
+            <span className="text-base leading-none">✔</span>
+            <span>{dynamicMessage}</span>
+          </div>
+        )}
+
+        {!isRunning && !isCompleted && !isEditing && (
+          <span className="text-sm text-gray-400">In attesa...</span>
+        )}
       </div>
 
-      {/* Form di correzione (se necessario) */}
+      {/* Progress bar — percentage first, then bar fills full card width */}
+      {showProgressBar && (
+        <div className="px-4 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono text-blue-600 w-9 text-right flex-shrink-0">
+              {pct}%
+            </span>
+            <div className="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+              <div
+                className={`h-1.5 rounded-full transition-all duration-300 ${barColor}`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Correction form */}
       {isExpanded && showCorrectionForm && (
         <div className="px-4 pb-4 pt-2 border-t border-gray-100">
           <p className="text-sm text-orange-800 leading-relaxed mb-3">

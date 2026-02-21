@@ -115,12 +115,30 @@ Public Class ServerlessEngineFacade
     ' Private helpers
     ' -------------------------------------------------------------------------
 
-    Private Function GetNextTaskRecursive(tasks As List(Of TaskUtterance)) As TaskUtterance
+    ''' <summary>
+    ''' Recursively finds the first incomplete TaskUtterance in the tree.
+    ''' Completeness rule is context-driven, not structural:
+    '''   isSubTaskContext = False (default) → task is a main task → done when State = Success
+    '''   isSubTaskContext = True            → task acts as sub-task → done when Value is present
+    ''' Recursion into sub-tasks occurs only when the composite is in Start state
+    ''' with partial data. Invalid / Confirmation / NoMatch states cause the
+    ''' composite itself to be returned so its own step/escalation executes.
+    ''' </summary>
+    Private Function GetNextTaskRecursive(tasks As List(Of TaskUtterance),
+                                          Optional isSubTaskContext As Boolean = False) As TaskUtterance
         If tasks Is Nothing Then Return Nothing
         For Each t In tasks
-            If Not t.IsComplete() Then Return t
-            Dim found = GetNextTaskRecursive(t.SubTasks)
-            If found IsNot Nothing Then Return found
+            Dim isDone As Boolean = If(isSubTaskContext, t.Value IsNot Nothing, t.IsComplete())
+            If isDone Then Continue For
+
+            ' Composite in Start state with partial data → recurse into sub-tasks.
+            If t.HasSubTasks() AndAlso Not t.IsEmpty() AndAlso t.State = DialogueState.Start Then
+                Dim found = GetNextTaskRecursive(t.SubTasks, isSubTaskContext:=True)
+                If found IsNot Nothing Then Return found
+                Continue For
+            End If
+
+            Return t
         Next
         Return Nothing
     End Function

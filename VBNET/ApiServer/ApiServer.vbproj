@@ -63,6 +63,8 @@
     <Compile Include="Interfaces\Handlers\CompilationHandlers.vb" />
     <Compile Include="Interfaces\Handlers\TaskSessionHandlers.vb" />
     <Compile Include="Middleware\ExceptionLoggingMiddleware.vb" />
+    <!-- Phase 2: contract migration tool — never invoked automatically -->
+    <Compile Include="Migration\ContractMigrationRunner.vb" />
   </ItemGroup>
 
 </Project>

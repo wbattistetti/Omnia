@@ -287,16 +287,7 @@ export async function generateEnginesAndParsersForAllNodes(
       };
     }
 
-    // Check if parsers already exist (idempotency)
-    const existingContracts = template.dataContract.contracts || [];
-    if (existingContracts.length > 0) {
-      console.log(`[generateEnginesAndParsersForAllNodes] ⚠️ Node ${nodeId} already has parsers, skipping`, {
-        existingCount: existingContracts.length
-      });
-      continue;
-    }
-
-    // SEZIONE 2: Decide which engines to use
+    // SEZIONE 2: Decide which engines to use (must run before idempotency check)
     const engines = decideEnginesForNode(node, contract);
 
     if (engines.length === 0) {
@@ -304,16 +295,35 @@ export async function generateEnginesAndParsersForAllNodes(
       continue;
     }
 
-    // SEZIONE 3: Generate parser for each engine
+    // Idempotency check: skip only if ALL required engines are already present.
+    // 'rule_based' engine maps to contract type 'rules'.
+    const engineTypeToContractType = (e: string): string => e === 'rule_based' ? 'rules' : e;
+    const existingTypes = new Set((template.dataContract.contracts || []).map(c => c.type));
+    const missingEngines = engines.filter(e => !existingTypes.has(engineTypeToContractType(e)));
+
+    if (missingEngines.length === 0) {
+      console.log(`[generateEnginesAndParsersForAllNodes] ⚠️ Node ${nodeId} already has all required parsers, skipping`, {
+        existingTypes: [...existingTypes],
+        requiredEngines: engines
+      });
+      continue;
+    }
+
+    console.log(`[generateEnginesAndParsersForAllNodes] 🔧 Node ${nodeId} — generating missing engines`, {
+      missing: missingEngines,
+      alreadyPresent: [...existingTypes]
+    });
+
+    // SEZIONE 3: Generate parser for each MISSING engine
     const parserResults = await Promise.allSettled(
-      engines.map(async (engineType) => {
+      missingEngines.map(async (engineType) => {
         const parser = await generateParserForEngine(node, engineType, contract, (progress) => {
           if (onProgress) {
             onProgress({
               ...progress,
-              currentStep: processedCount * engines.length + engines.indexOf(engineType) + 1,
-              totalSteps: nodesToProcess.length * engines.length,
-              percentage: Math.round(((processedCount * engines.length + engines.indexOf(engineType) + 1) / (nodesToProcess.length * engines.length)) * 100)
+              currentStep: processedCount * missingEngines.length + missingEngines.indexOf(engineType) + 1,
+              totalSteps: nodesToProcess.length * missingEngines.length,
+              percentage: Math.round(((processedCount * missingEngines.length + missingEngines.indexOf(engineType) + 1) / (nodesToProcess.length * missingEngines.length)) * 100)
             });
           }
         });
@@ -331,9 +341,13 @@ export async function generateEnginesAndParsersForAllNodes(
       }
     }
 
-    // Save parsers to DataContract
+    // Save parsers to DataContract — append to any contracts already present (e.g. LLM from wizard)
     if (generatedParsers.length > 0) {
-      template.dataContract.contracts = generatedParsers;
+      const existingContracts = template.dataContract.contracts || [];
+      // Merge: keep existing contracts, add newly generated ones (avoid duplicates by type)
+      const generatedTypes = new Set(generatedParsers.map(p => p.type));
+      const kept = existingContracts.filter(c => !generatedTypes.has(c.type));
+      template.dataContract.contracts = [...kept, ...generatedParsers];
       DialogueTaskService.markTemplateAsModified(nodeId);
 
       console.log(`[generateEnginesAndParsersForAllNodes] ✅ Saved ${generatedParsers.length} parsers for node ${nodeId}`, {

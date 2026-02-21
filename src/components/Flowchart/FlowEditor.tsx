@@ -265,6 +265,11 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
             try {
               await taskRepository.deleteTask(taskId, projectId);
               console.log(`✅ [deleteNodeWithLog] Task ${taskId} cancellato per riga ${row.id}`);
+
+              // ✅ Emit event to close Response Editor if open for this task
+              document.dispatchEvent(new CustomEvent('taskEditor:closeIfOpen', {
+                detail: { taskId }
+              }));
             } catch (e) {
               console.warn(`⚠️ [deleteNodeWithLog] Errore cancellando task ${taskId}:`, e);
             }

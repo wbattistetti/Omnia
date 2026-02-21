@@ -82,6 +82,9 @@ export function useWizardIntegration(
     transitionToGenerating: wizardFlow.transitionToGenerating,
     // ✅ NEW: Pass createTemplateAndInstanceForProposed from wizardCompletion
     createTemplateAndInstanceForProposed: wizardCompletion.createTemplateAndInstanceForProposed,
+    // ✅ MODELLO DETERMINISTICO: Pass checkAndCompleteRef
+    // checkAndComplete legge direttamente da messages/messagesGeneralized (props), non serve getMessages
+    checkAndCompleteRef: wizardCompletion.checkAndCompleteRef,
   });
 
   // ============================================
@@ -113,26 +116,10 @@ export function useWizardIntegration(
     }
   }, [taskLabel, rowId, wizardState.wizardMode, wizardState.setCurrentStep, wizardGeneration, wizardSync]);
 
-  // Monitora completamento step per auto-chiusura
-  // ✅ D1: Pass messages and dataSchema to checkAndComplete for verification
-  // ✅ CRITICAL: checkAndComplete now calls createTemplateAndInstance BEFORE transitionToCompleted
-  // This ensures taskTree is in store before wizardMode becomes COMPLETED
-  useEffect(() => {
-    if (wizardState.wizardMode === WizardMode.GENERATING) {
-      const messagesToCheck = wizardState.messagesGeneralized.size > 0
-        ? wizardState.messagesGeneralized
-        : wizardState.messages;
-      wizardCompletion.checkAndComplete(
-        wizardState.pipelineSteps,
-        wizardState.wizardMode,
-        messagesToCheck,
-        wizardState.dataSchema
-      );
-    }
-  }, [wizardState.pipelineSteps, wizardState.wizardMode, wizardState.messages, wizardState.messagesGeneralized, wizardState.dataSchema, wizardCompletion]);
-
-  // ❌ REMOVED: createTemplateAndInstance is now called in checkAndComplete BEFORE transitionToCompleted
-  // This ensures the correct causal order: createTemplateAndInstance → onTaskBuilderComplete → taskTree in store → transitionToCompleted
+  // ❌ RIMOSSO COMPLETAMENTE: useEffect reattivo per checkAndComplete
+  // ✅ MODELLO DETERMINISTICO: checkAndComplete viene chiamato direttamente da updatePhaseProgress
+  // quando tutti i contatori sono completi. I contatori sono l'unica fonte di verità.
+  // PipelineSteps è solo UI, non logica.
 
   // ============================================
   // HANDLERS - Orchestrazione

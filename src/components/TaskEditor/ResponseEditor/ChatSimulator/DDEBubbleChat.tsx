@@ -451,7 +451,16 @@ export default function DDEBubbleChat({
           parameters: taskInstance.parameters || [],
           subTasksIds: taskInstance.subTasksIds || [],
           constraints: taskInstance.constraints || [],
-          dataContract: taskInstance.dataContract || null,
+          // ✅ CRITICAL: dataContract must come from the TEMPLATE in DialogueTaskService,
+          // not from the task instance in taskRepository.  The instance's dataContract
+          // never contains subDataMapping (that is written by the wizard/editor into the
+          // template).  The compiler looks up allTemplates[taskForCompilation.id] and reads
+          // its DataContract — so we must supply the template's version here.
+          dataContract: (() => {
+            const tplId = taskInstance.templateId || taskInstance.id;
+            const tplSource = DialogueTaskService.getTemplate(tplId);
+            return tplSource?.dataContract ?? taskInstance.dataContract ?? null;
+          })(),
           // ✅ CRITICAL: Steps vengono SOLO dall'istanza come override
           // Formato: { "templateId": [{ type: "start", ... }, { type: "invalid", ... }] }
           // Se manca, il nodo avrà Steps.Count = 0 e la validazione fallirà se ci sono constraints

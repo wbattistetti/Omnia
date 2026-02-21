@@ -14,6 +14,7 @@ import { WizardMode } from '../../../../TaskBuilderAIWizard/types/WizardMode';
 import { useWizardModeTransition } from '@responseEditor/hooks/useWizardModeTransition';
 import { useTaskTreeFromStore, useTaskTreeVersion } from '@responseEditor/core/state';
 import type { TaskWizardMode } from '@taskEditor/EditorHost/types';
+import { closeTab } from '@dock/ops';
 
 import type { TaskMeta } from '@taskEditor/EditorHost/types';
 import type { Task, TaskTree } from '@types/taskTypes';
@@ -50,6 +51,26 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       }
     }
   }, [taskTree]);
+
+  // ✅ Close Response Editor if the task/row it's open on is deleted
+  useEffect(() => {
+    if (!task?.id || !tabId || !setDockTree) {
+      return;
+    }
+
+    const handleTaskDeleted = (e: CustomEvent<{ taskId: string }>) => {
+      const deletedTaskId = e.detail?.taskId;
+      if (deletedTaskId === task.id) {
+        console.log('[ResponseEditor] Task deleted, closing editor', { taskId: task.id, tabId });
+        setDockTree(prev => closeTab(prev, tabId!));
+      }
+    };
+
+    document.addEventListener('taskEditor:closeIfOpen', handleTaskDeleted as EventListener);
+    return () => {
+      document.removeEventListener('taskEditor:closeIfOpen', handleTaskDeleted as EventListener);
+    };
+  }, [task?.id, tabId, setDockTree]);
 
   // ✅ FASE 3.1: Use main composite hook FIRST
   // This hook calls useResponseEditorCore which is the SINGLE SOURCE OF TRUTH for taskLabel
@@ -235,7 +256,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       return null;
     }
 
-    // ✅ Leggi valori direttamente da wizardIntegration (non usarli come dipendenze)
+    // ✅ Leggi valori direttamente da wizardIntegration
     return {
       wizardMode: wizardIntegration.wizardMode || WizardMode.START,
       currentStep: wizardIntegration.currentStep || 'idle',
@@ -266,9 +287,10 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       currentMessageSubstep: wizardIntegration.currentMessageSubstep || null,
     };
   }, [
-    // ✅ FIX: SOLO dipendenze che determinano se il context deve esistere
-    // wizardIntegration è già stabilizzato dal useMemo precedente
     wizardIntegration,
+    // ✅ FIX: Dipendenze esplicite per forzare re-render quando dataSchema o pipelineSteps cambiano
+    wizardIntegration?.dataSchema,
+    wizardIntegration?.pipelineSteps,
     taskWizardMode,
   ]);
 

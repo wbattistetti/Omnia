@@ -3,6 +3,7 @@
 
 import type { WizardTaskTreeNode, WizardStepMessages, WizardConstraint, WizardNLPContract } from '../types';
 import type { DialogueTask } from '@services/DialogueTaskService';
+import type { DataContract, DataContractItem } from '@components/DialogueDataEngine/contracts/contractLoader';
 import { TaskType, templateIdToTaskType } from '@types/taskTypes';
 import { v4 as uuidv4 } from 'uuid';
 import { cloneTemplateSteps } from '@utils/taskUtils';
@@ -191,6 +192,67 @@ function convertMessagesToStepsDictionary(
 }
 
 /**
+ * Converts a WizardNLPContract (wizard-internal format) to the standard DataContract
+ * consumed by the VB.NET compiler.
+ *
+ * WizardNLPContract stores each engine in top-level named keys (regex, rules, ner, llm).
+ * DataContract stores them as a typed array: contracts[].
+ *
+ * The critical invariant: subDataMapping — which contains the GUID groupNames generated
+ * by convertApiEnginesToWizardContract — is preserved verbatim.  Without this, the
+ * compiler cannot map extracted GUID groups back to their canonical sub-task keys.
+ */
+function convertWizardNLPToDataContract(nlp: WizardNLPContract): DataContract {
+  const contracts: DataContractItem[] = [];
+
+  if (nlp.regex?.patterns && nlp.regex.patterns.length > 0) {
+    contracts.push({
+      type: 'regex',
+      enabled: true,
+      patterns: nlp.regex.patterns,
+      examples: [],
+      testCases: nlp.regex.testCases ?? [],
+    } as DataContractItem);
+  }
+
+  if (nlp.rules?.extractorCode) {
+    contracts.push({
+      type: 'rules',
+      enabled: true,
+      extractorCode: nlp.rules.extractorCode,
+      validators: nlp.rules.validators ?? [],
+      testCases: nlp.rules.testCases ?? [],
+    } as DataContractItem);
+  }
+
+  if (nlp.ner?.enabled && (nlp.ner.entityTypes?.length ?? 0) > 0) {
+    contracts.push({
+      type: 'ner',
+      enabled: true,
+      entityTypes: nlp.ner.entityTypes,
+      confidence: nlp.ner.confidence ?? 0.8,
+    } as DataContractItem);
+  }
+
+  if (nlp.llm?.enabled) {
+    contracts.push({
+      type: 'llm',
+      enabled: true,
+      systemPrompt: nlp.llm.systemPrompt ?? '',
+      userPromptTemplate: nlp.llm.userPromptTemplate ?? '',
+      responseSchema: nlp.llm.responseSchema ?? {},
+    } as DataContractItem);
+  }
+
+  return {
+    templateName: nlp.templateName,
+    templateId: nlp.templateId,
+    subDataMapping: nlp.subDataMapping ?? {},
+    contracts,
+  };
+}
+
+/**
  * Creates a template for each node in the wizard-generated structure
  *
  * Each node gets its own template with:
@@ -295,6 +357,11 @@ export function createTemplatesFromWizardData(
       dataContracts: constraints.length > 0 ? constraints : undefined,
       constraints: constraints.length > 0 ? constraints : undefined,  // Alias
       nlpContract: nlpContract,
+      // ✅ CRITICAL: Convert WizardNLPContract → DataContract so that DDEBubbleChat
+      // can read tplSource.dataContract with the GUID-based subDataMapping.
+      // Without this, dataContract is undefined and the compiler receives an empty mapping,
+      // causing "SubDataMapping is empty" at extraction time.
+      dataContract: nlpContract ? convertWizardNLPToDataContract(nlpContract) : undefined,
       shouldBeGeneral: shouldBeGeneral,  // Flag for UI decision
     };
 

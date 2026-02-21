@@ -51,19 +51,30 @@ Partial Public Class Parser
     ' -------------------------------------------------------------------------
 
     ''' <summary>
-    ''' Extracts multiple sub-values from an utterance using the main node's composite regex.
-    ''' Returns Nothing when no match; throws on structural errors.
+    ''' Extracts multiple sub-field values from a composite utterance.
+    ''' Iterates SubDataMapping and uses EffectiveGroupName() as the sole group-name source.
+    ''' Returns Nothing when the pattern does not match; throws on structural errors.
     ''' </summary>
-    Private Shared Function ExtractComposite(input As String, node As TaskUtterance) As System.Collections.Generic.Dictionary(Of String, Object)
+    Private Shared Function ExtractComposite(
+            input As String,
+            node As TaskUtterance) As System.Collections.Generic.Dictionary(Of String, Object)
+
         If node Is Nothing OrElse Not node.HasSubTasks() Then Return Nothing
 
         Dim contract = node.NlpContract
-        If contract Is Nothing OrElse
-           contract.Regex Is Nothing OrElse
+        If contract Is Nothing Then
+            Throw New InvalidOperationException(
+                $"Task '{node.Id}' has no NlpContract. Cannot perform composite extraction.")
+        End If
+        If contract.Regex Is Nothing OrElse
            contract.Regex.Patterns Is Nothing OrElse
-           contract.Regex.Patterns.Count = 0 OrElse
-           contract.SubDataMapping Is Nothing Then
-            Throw New InvalidOperationException($"Task '{node.Id}' has no valid NlpContract for composite extraction.")
+           contract.Regex.Patterns.Count = 0 Then
+            Throw New InvalidOperationException(
+                $"Task '{node.Id}': NlpContract.Regex has no patterns.")
+        End If
+        If contract.SubDataMapping Is Nothing OrElse contract.SubDataMapping.Count = 0 Then
+            Throw New InvalidOperationException(
+                $"Task '{node.Id}': SubDataMapping is empty. Cannot map extracted groups to sub-tasks.")
         End If
 
         Try
@@ -73,33 +84,35 @@ Partial Public Class Parser
             If Not m.Success Then Return Nothing
 
             Dim result As New System.Collections.Generic.Dictionary(Of String, Object)()
-            For Each groupName As String In rx.GetGroupNames()
-                If groupName = "0" OrElse String.IsNullOrEmpty(groupName) Then Continue For
-                Dim groupValue = m.Groups(groupName).Value
-                If String.IsNullOrEmpty(groupValue) Then Continue For
 
-                Dim subId = FindSubIdByCanonicalKey(contract, groupName)
-                If Not String.IsNullOrEmpty(subId) Then
-                    result(subId) = groupValue
+            For Each kvp As System.Collections.Generic.KeyValuePair(Of String, SubDataMappingInfo) In contract.SubDataMapping
+                Dim subId As String = kvp.Key
+                Dim info As SubDataMappingInfo = kvp.Value
+                Dim groupName As String = info.GroupName
+
+                If String.IsNullOrWhiteSpace(groupName) Then
+                    Throw New InvalidOperationException(
+                        $"Task '{node.Id}': SubDataMapping entry '{subId}' is missing a GroupName. " &
+                        $"GroupName is required (format: g_[a-f0-9]{{12}}).")
                 End If
+
+                Dim group = m.Groups(groupName)
+
+                ' Group not captured in this match (optional group) → skip.
+                If group Is Nothing OrElse Not group.Success Then Continue For
+
+                Dim value = group.Value.Trim()
+
+                ' Whitespace-only → treat as not captured.
+                If String.IsNullOrEmpty(value) Then Continue For
+
+                result(subId) = value
             Next
 
             Return If(result.Count > 0, result, Nothing)
         Catch ex As Exception
-            Throw New InvalidOperationException($"Composite extraction failed for task '{node.Id}': {ex.Message}", ex)
+            Throw New InvalidOperationException(
+                $"Composite extraction failed for task '{node.Id}': {ex.Message}", ex)
         End Try
-    End Function
-
-    ''' <summary>
-    ''' Looks up the sub-task ID corresponding to a canonical key in the NLP contract.
-    ''' </summary>
-    Private Shared Function FindSubIdByCanonicalKey(contract As NLPContract, canonicalKey As String) As String
-        If contract.SubDataMapping Is Nothing Then Return ""
-        For Each kvp As System.Collections.Generic.KeyValuePair(Of String, SubDataMappingInfo) In contract.SubDataMapping
-            If String.Equals(kvp.Value.CanonicalKey, canonicalKey, StringComparison.OrdinalIgnoreCase) Then
-                Return kvp.Key
-            End If
-        Next
-        Return ""
     End Function
 End Class

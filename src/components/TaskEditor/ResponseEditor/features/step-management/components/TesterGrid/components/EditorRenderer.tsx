@@ -60,11 +60,10 @@ export function EditorRenderer({
       return (
         <RegexInlineEditor
           regex={editorProps.regex || ''}
-          setRegex={editorProps.setRegex || (() => { })}
+          onRegexSave={editorProps.setRegex}
           kind={editorProps.kind}
           examplesList={editorProps.examplesList}
           rowResults={editorProps.rowResults}
-          getNote={editorProps.getNote}
           {...commonProps}
           onErrorRender={setEditorErrorMessage}
         />

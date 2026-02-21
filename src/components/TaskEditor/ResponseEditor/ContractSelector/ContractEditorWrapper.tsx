@@ -64,7 +64,7 @@ export default function ContractEditorWrapper({
       return (
         <RegexInlineEditor
           regex={(methodData as any).patterns?.[0] || ''}
-          setRegex={(value: string) => {
+          onRegexSave={(value: string) => {
             if (!contract) return;
             const updatedContracts = contract.contracts.map(c =>
               c.type === 'regex' ? { ...c, patterns: [value] } : c

@@ -108,14 +108,33 @@ function tryRegexExtraction(text: string, contract: NLPContract, activeSubId?: s
             groupsCount: Object.keys(match.groups).length
         });
 
-        // Estrai TUTTI i gruppi matchati (senza validazione per ora)
+        // ✅ Phase 3: Map GUID group names back to canonicalKeys via subDataMapping.groupName.
+        // If subDataMapping has groupName entries, use them as the sole lookup keys.
+        // Otherwise fall back to using group names directly (legacy path).
+        const hasGroupNameMapping = Object.values(contract.subDataMapping).some(m => !!(m as any).groupName);
+
         const allMatchedGroups: Record<string, string> = {};
-        Object.entries(match.groups).forEach(([groupKey, value]) => {
-            if (value !== undefined && value !== null && value !== '') {
-                allMatchedGroups[groupKey] = value;
-                console.log(`  📝 [NLP Regex] Gruppo matchato: ${groupKey} = ${value}`);
-            }
-        });
+
+        if (hasGroupNameMapping) {
+            // New path: iterate subDataMapping, use groupName to extract, key by canonicalKey
+            Object.entries(contract.subDataMapping).forEach(([, info]) => {
+                const groupName = (info as any).groupName as string | undefined;
+                if (!groupName) return;
+                const value = match!.groups![groupName];
+                if (value !== undefined && value !== null && value !== '') {
+                    allMatchedGroups[info.canonicalKey] = value.trim();
+                    console.log(`  📝 [NLP Regex] Gruppo (GUID→canonical): ${groupName} → ${info.canonicalKey} = ${value}`);
+                }
+            });
+        } else {
+            // Legacy path: use group names directly as keys
+            Object.entries(match.groups).forEach(([groupKey, value]) => {
+                if (value !== undefined && value !== null && value !== '') {
+                    allMatchedGroups[groupKey] = value;
+                    console.log(`  📝 [NLP Regex] Gruppo matchato (legacy): ${groupKey} = ${value}`);
+                }
+            });
+        }
 
         if (Object.keys(allMatchedGroups).length === 0) {
             console.log('❌ [NLP Regex] Nessun gruppo matchato');
@@ -162,7 +181,7 @@ function tryRegexExtraction(text: string, contract: NLPContract, activeSubId?: s
                 console.log('  ℹ️ [NLP Regex] Valore non ambiguo, usa valore originale');
             }
         } else {
-            // Match multi-gruppo → usa tutti i valori direttamente
+            // Match multi-gruppo → usa tutti i valori (già keyed by canonicalKey)
             Object.assign(values, allMatchedGroups);
             console.log('  ℹ️ [NLP Regex] Match multi-gruppo, usa tutti i valori');
         }

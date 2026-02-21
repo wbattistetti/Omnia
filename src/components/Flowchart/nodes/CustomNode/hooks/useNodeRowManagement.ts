@@ -234,6 +234,11 @@ export function useNodeRowManagement({ nodeId, normalizedData, displayRows }: Us
                 if (projectId) {
                     await taskRepository.deleteTask(taskId, projectId);
                     console.log(`[useNodeRowManagement] Deleted task ${taskId} for row ${rowId}`);
+
+                    // ✅ Emit event to close Response Editor if open for this task
+                    document.dispatchEvent(new CustomEvent('taskEditor:closeIfOpen', {
+                        detail: { taskId }
+                    }));
                 }
             } catch (e) {
                 console.warn('[useNodeRowManagement] Failed to delete task', e);

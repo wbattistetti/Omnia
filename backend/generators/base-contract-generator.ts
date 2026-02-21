@@ -5,10 +5,22 @@
  */
 
 import { MongoClient } from 'mongodb';
+import { randomBytes } from 'crypto';
+
+/**
+ * Generates a technical GUID-based regex group name.
+ * Format: g_[a-f0-9]{12}
+ * Must match the VB.NET constraint: ^g_[a-f0-9]{12}$
+ */
+function generateGroupName(): string {
+  return 'g_' + randomBytes(6).toString('hex');
+}
 
 export interface SubDataMapping {
   [subId: string]: {
     canonicalKey: string;
+    /** Technical regex group name (format: g_[a-f0-9]{12}). Sole source of truth for extraction. */
+    groupName: string;
     label: string;
     type: string;
     patternIndex?: number;  // ✅ Context-aware: quale pattern usare per questo sub
@@ -108,7 +120,15 @@ export abstract class BaseContractGenerator {
   }
 
   /**
-   * Costruisce il mapping subData → canonicalKey
+   * Builds SubDataMapping with GUID groupNames.
+   *
+   * Each entry receives:
+   *  - canonicalKey: semantic key (e.g. "day", "month") — UI/domain use only.
+   *  - groupName:    GUID technical name (g_[a-f0-9]{12}) — sole regex group identifier.
+   *  - label:        human-readable label.
+   *  - type:         data type.
+   *
+   * Neither canonicalKey nor label must ever appear as a regex group name.
    */
   protected buildSubDataMapping(template: any): SubDataMapping {
     const mapping: SubDataMapping = {};
@@ -118,11 +138,11 @@ export abstract class BaseContractGenerator {
       const subId = sub.id || sub._id || `sub-${index}`;
       const label = String(sub.label || sub.name || '').toLowerCase();
 
-      // Mappa label a canonicalKey usando logica standard
       const canonicalKey = this.mapLabelToCanonicalKey(label, sub.type);
 
       mapping[subId] = {
         canonicalKey,
+        groupName: generateGroupName(),
         label: sub.label || sub.name || '',
         type: sub.type || 'generic'
       };

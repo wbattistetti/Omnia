@@ -126,7 +126,7 @@ export async function generateStructure(
 /**
  * Convert WizardTaskTreeNode to SemanticContract format
  */
-function buildContractFromNode(node: WizardTaskTreeNode): any {
+export function buildContractFromNode(node: WizardTaskTreeNode): any {
   return {
     entity: {
       label: node.label,

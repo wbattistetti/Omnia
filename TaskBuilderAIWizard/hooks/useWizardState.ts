@@ -95,16 +95,37 @@ export function useWizardState() {
   // ============================================
 
   const updatePipelineStep = (stepId: string, status: PipelineStep['status'], payload?: string) => {
-    setPipelineSteps(prev => prev.map(step => {
-      if (step.id === stepId) {
-        return {
-          ...step,
-          status,
-          ...(payload !== undefined ? { payload } : {})
-        };
+    setPipelineSteps(prev => {
+      const updated = prev.map(step => {
+        if (step.id === stepId) {
+          // ✅ FIX: Confronta se status e payload sono realmente cambiati
+          if (step.status === status && step.payload === payload) {
+            // Nessun cambiamento, restituisci lo stesso step (stesso riferimento)
+            return step;
+          }
+          return {
+            ...step,
+            status,
+            ...(payload !== undefined ? { payload } : {})
+          };
+        }
+        return step;
+      });
+
+      // ✅ FIX: Confronta prev e updated per evitare cambiamenti di riferimento inutili
+      const hasChanged = prev.length !== updated.length ||
+        prev.some((prevStep, index) => {
+          const nextStep = updated[index];
+          return prevStep !== nextStep; // Confronto per riferimento (se step non è cambiato, è lo stesso riferimento)
+        });
+
+      if (!hasChanged) {
+        // Nessun cambiamento reale, restituisci prev per mantenere lo stesso riferimento
+        return prev;
       }
-      return step;
-    }));
+
+      return updated;
+    });
   };
 
   const setMessagesForNode = (nodeId: string, nodeMessages: WizardStepMessages) => {

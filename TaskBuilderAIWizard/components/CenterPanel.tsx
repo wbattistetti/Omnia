@@ -80,21 +80,33 @@ export function CenterPanel({
   };
 
   const calculatePhaseProgress = (phase: 'constraints' | 'parser' | 'messages'): number => {
-    const allTasks = flattenTaskTree(dataSchema);
-    if (allTasks.length === 0) return 0;
+    // ✅ NEW: Legge il progresso da pipelineSteps (sistema di contatori deterministici)
+    const phaseId = phase === 'constraints' ? 'constraints'
+                   : phase === 'parser' ? 'parsers'
+                   : 'messages';
 
-    const progressField = phase === 'constraints' ? 'constraintsProgress' : phase === 'parser' ? 'parserProgress' : 'messagesProgress';
-    const stateField = phase === 'constraints' ? 'constraints' : phase === 'parser' ? 'parser' : 'messages';
+    const step = pipelineSteps.find(s => s.id === phaseId);
 
-    const progresses = allTasks.map(task => {
-      const state = task.pipelineStatus?.[stateField] || 'pending';
-      if (state === 'pending') return 0;
-      if (state === 'completed') return 100;
-      return task.pipelineStatus?.[progressField] || 0;
-    });
+    if (!step) {
+      return 0;
+    }
 
-    const total = progresses.reduce((sum, p) => sum + p, 0);
-    return Math.round(total / allTasks.length);
+    // Se la fase è completata, ritorna 100%
+    if (step.status === 'completed') {
+      return 100;
+    }
+
+    // Se la fase è in corso, estrai la percentuale dal payload
+    if (step.status === 'running' && step.payload) {
+      // Il payload è una stringa tipo "33%" o un messaggio dinamico
+      const match = step.payload.match(/(\d+)%/);
+      if (match) {
+        return parseInt(match[1], 10);
+      }
+    }
+
+    // Default: 0%
+    return 0;
   };
 
   const getPhaseState = (pipelineStep: PipelineStep): 'pending' | 'running' | 'completed' => {
@@ -127,11 +139,12 @@ export function CenterPanel({
       phase: 'constraints' as const,
       dynamicMessage: (() => {
         const step = pipelineSteps.find(s => s.id === 'constraints');
-        if (step?.status === 'running') {
-          return step.payload;
+        if (step?.status === 'running' && step.payload) {
+          // Estrai il messaggio dinamico rimuovendo la percentuale finale (es: "Sto generando... 33%" -> "Sto generando...")
+          return step.payload.replace(/\s+\d+%$/, '');
         }
         if (step?.status === 'completed') {
-          return step.payload; // "Generate!"
+          return step.payload; // "Generati!"
         }
         return undefined;
       })()
@@ -144,7 +157,8 @@ export function CenterPanel({
       dynamicMessage: (() => {
         const step = pipelineSteps.find(s => s.id === 'parsers');
         if (step?.status === 'running' && step.payload) {
-          return step.payload; // Contiene già la parte variabile in grassetto
+          // Estrai il messaggio dinamico rimuovendo la percentuale finale
+          return step.payload.replace(/\s+\d+%$/, '');
         }
         if (step?.status === 'completed') {
           return step.payload; // "Generati!"
@@ -160,7 +174,8 @@ export function CenterPanel({
       dynamicMessage: (() => {
         const step = pipelineSteps.find(s => s.id === 'messages');
         if (step?.status === 'running' && step.payload) {
-          return step.payload; // Contiene già la parte variabile in grassetto
+          // Estrai il messaggio dinamico rimuovendo la percentuale finale
+          return step.payload.replace(/\s+\d+%$/, '');
         }
         if (step?.status === 'completed') {
           return step.payload; // "Generati!"
@@ -185,7 +200,7 @@ export function CenterPanel({
 
   return (
     <main className="flex-1 px-8 py-6 bg-gray-50 overflow-y-auto">
-      <div className="space-y-4 max-w-2xl">
+      <div className="space-y-4 w-full">
 
         {/* Euristica trovata */}
         {currentStep === 'euristica_trovata' && (

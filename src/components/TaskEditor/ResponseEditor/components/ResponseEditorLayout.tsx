@@ -379,20 +379,33 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     setIsSaving(true);
     await new Promise(resolve => setTimeout(resolve, 0));
 
-    // ✅ NO FALLBACK: wizardIntegrationProp.dataSchema is the single source of truth
-    if (!wizardIntegrationProp?.dataSchema || !Array.isArray(wizardIntegrationProp.dataSchema)) {
-      console.error('[handleSaveToFactory] ❌ FLOW TRACE - Guard check failed', {
-        hasWizardIntegrationProp: !!wizardIntegrationProp,
-        hasDataSchema: !!wizardIntegrationProp?.dataSchema,
-        dataSchemaType: typeof wizardIntegrationProp?.dataSchema,
-        dataSchemaIsArray: Array.isArray(wizardIntegrationProp?.dataSchema),
-        wizardMode: wizardIntegrationProp?.wizardMode,
+    // ✅ TWO VALID SOURCES:
+    //   1. wizardIntegrationProp.dataSchema — when arriving from the wizard flow
+    //   2. taskTree.nodes                   — when editing an existing template directly
+    // Both are valid.  Neither is a "fallback"; they represent two distinct entry paths.
+    const effectiveDataSchema: any[] | null =
+      (wizardIntegrationProp?.dataSchema && Array.isArray(wizardIntegrationProp.dataSchema))
+        ? wizardIntegrationProp.dataSchema
+        : (taskTree?.nodes && Array.isArray(taskTree.nodes) && taskTree.nodes.length > 0)
+          ? taskTree.nodes
+          : null;
+
+    if (!effectiveDataSchema) {
+      console.error('[handleSaveToFactory] ❌ No data source available', {
+        hasWizardDataSchema: !!wizardIntegrationProp?.dataSchema,
+        hasTaskTreeNodes: !!taskTree?.nodes,
+        taskTreeNodesLength: taskTree?.nodes?.length ?? 0,
         taskWizardMode,
       });
-      alert('Cannot save to Factory: wizard data is missing. Please ensure the wizard is completed.');
+      alert('Cannot save to Factory: no template data found. Open the template from the sidebar and try again.');
       setIsSaving(false);
       return;
     }
+
+    console.log('[handleSaveToFactory] 📊 Using data source', {
+      source: wizardIntegrationProp?.dataSchema ? 'wizardIntegration.dataSchema' : 'taskTree.nodes',
+      nodeCount: effectiveDataSchema.length,
+    });
 
     // ✅ Count ALL nodes recursively (root + sub-nodes) - this is the TRUTH
     const collectAllNodeIds = (nodes: any[]): string[] => {
@@ -407,7 +420,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
       return ids;
     };
 
-    const expectedNodeIds = new Set(collectAllNodeIds(wizardIntegrationProp.dataSchema));
+    const expectedNodeIds = new Set(collectAllNodeIds(effectiveDataSchema));
     const expectedCount = expectedNodeIds.size;
 
     console.log('[handleSaveToFactory] 📊 Expected templates from dataSchema', {
@@ -451,7 +464,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         const { _id, nodes, subNodes, data, createdAt, name, ...template } = t;
 
         // Root template: use generalized label if available
-        const isRoot = wizardIntegrationProp.dataSchema[0]?.id === template.id;
+        const isRoot = effectiveDataSchema[0]?.id === template.id;
         if (isRoot && generalizedLabel) {
           template.label = generalizedLabel;
         } else if (typeof template.type === 'number' && template.type === TaskType.UtteranceInterpretation) {
@@ -785,7 +798,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
       alert(`Error saving to Factory: ${error instanceof Error ? error.message : String(error)}`);
       setIsSaving(false);
     }
-  }, [wizardIntegrationProp, generalizedLabel, setSaveDecision, setSaveDecisionMade, setIsSaving, setShowSaveDialog]);
+  }, [wizardIntegrationProp, taskTree, generalizedLabel, setSaveDecision, setSaveDecisionMade, setIsSaving, setShowSaveDialog]);
 
   // ✅ NEW: Handler to save only to project
   const handleSaveToProject = React.useCallback(() => {

@@ -74,6 +74,8 @@ export interface DataContract {
     subDataMapping: {
         [subId: string]: {
             canonicalKey: string;
+            /** Technical regex group name (format: g_[a-f0-9]{12}). Sole source of truth for extraction. */
+            groupName: string;
             label: string;
             type: string;
             patternIndex?: number;  // Context-aware: quale pattern usare per questo sub

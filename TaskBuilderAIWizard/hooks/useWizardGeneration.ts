@@ -2,7 +2,8 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useCallback } from 'react';
-import { generateStructure, generateConstraints, generateParsers, generateMessages, calculateTotalParsers } from '../api/simulateEndpoints';
+import { generateStructure, generateConstraints, generateParsers, generateMessages, calculateTotalParsers } from '../api/wizardApi';
+import { buildContractFromNode } from '../api/wizardApi';
 import type { WizardTaskTreeNode, WizardStepMessages } from '../types';
 import type { PipelineStep } from './useWizardState';
 import { WizardMode } from '../types/WizardMode';
@@ -20,12 +21,12 @@ type UseWizardGenerationProps = {
   setPipelineSteps: (steps: PipelineStep[] | ((prev: PipelineStep[]) => PipelineStep[])) => void;
   updateTaskPipelineStatus: (taskId: string, phase: 'constraints' | 'parser' | 'messages', status: 'pending' | 'running' | 'completed') => void;
   updateTaskProgress: (taskId: string, phase: 'constraints' | 'parser' | 'messages', progress: number) => void;
-  updateParserSubstep?: (substep: string | null) => void;
-  updateMessageSubstep?: (substep: string | null) => void;
   transitionToProposed: () => void;
   transitionToGenerating: () => void;
   // ✅ NEW: Function to create template + instance for first step (before DATA_STRUCTURE_PROPOSED)
   createTemplateAndInstanceForProposed?: () => Promise<void>;
+  // ✅ MODELLO DETERMINISTICO: Ref stabile per checkAndComplete
+  checkAndCompleteRef?: { current: ((dataSchema: WizardTaskTreeNode[]) => Promise<void>) | null };
 };
 
 /**
@@ -47,11 +48,10 @@ export function useWizardGeneration(props: UseWizardGenerationProps) {
     setPipelineSteps,
     updateTaskPipelineStatus,
     updateTaskProgress,
-    updateParserSubstep,
-    updateMessageSubstep,
     transitionToProposed,
     transitionToGenerating,
     createTemplateAndInstanceForProposed, // ✅ NEW: Function to create template + instance for first step
+    checkAndCompleteRef, // ✅ MODELLO DETERMINISTICO: Ref stabile per checkAndComplete
   } = props;
 
   // ✅ C2: Use retry hook
@@ -71,50 +71,7 @@ export function useWizardGeneration(props: UseWizardGenerationProps) {
     return result;
   }, []);
 
-  /**
-   * Calcola lo stato aggregato della pipeline:
-   * - pending: se almeno un task è pending
-   * - running: se almeno un task è running
-   * - completed: solo quando TUTTI i task sono completed
-   */
-  const calculateAggregatedPipelineStatus = useCallback((currentSchema: WizardTaskTreeNode[], setPipelineSteps: (steps: PipelineStep[] | ((prev: PipelineStep[]) => PipelineStep[])) => void) => {
-    const allTasks = flattenTaskTree(currentSchema);
-
-    if (allTasks.length === 0) return;
-
-    const phaseToStepId: Record<string, string> = {
-      constraints: 'constraints',
-      parser: 'parsers',
-      messages: 'messages'
-    };
-
-    const phases: Array<'constraints' | 'parser' | 'messages'> = ['constraints', 'parser', 'messages'];
-
-    setPipelineSteps(prev => prev.map(step => {
-      const phase = Object.entries(phaseToStepId).find(([_, id]) => id === step.id)?.[0] as 'constraints' | 'parser' | 'messages' | undefined;
-
-      if (!phase) return step;
-
-      const statuses = allTasks.map(task => task.pipelineStatus?.[phase] || 'pending');
-
-      let aggregatedStatus: PipelineStep['status'] = 'pending';
-
-      if (statuses.every(s => s === 'completed')) {
-        aggregatedStatus = 'completed';
-        if (step.id === 'constraints') {
-          return { ...step, status: aggregatedStatus, payload: 'Generate!' };
-        } else if (step.id === 'parsers') {
-          return { ...step, status: aggregatedStatus, payload: 'Generati!' };
-        } else if (step.id === 'messages') {
-          return { ...step, status: aggregatedStatus, payload: 'Generati!' };
-        }
-      } else if (statuses.some(s => s === 'running')) {
-        aggregatedStatus = 'running';
-      }
-
-      return { ...step, status: aggregatedStatus };
-    }));
-  }, [flattenTaskTree]);
+  // ❌ RIMOSSO: calculateAggregatedPipelineStatus - sostituito da sistema di contatori deterministici
 
   /**
    * FASE 1: Generazione struttura dati (PREGIUDIZIALE)
@@ -154,7 +111,6 @@ export function useWizardGeneration(props: UseWizardGenerationProps) {
   const generateConstraintsForTask = useCallback(async (task: WizardTaskTreeNode) => {
     updateTaskPipelineStatus(task.id, 'constraints', 'running');
     updateTaskProgress(task.id, 'constraints', 0);
-    updatePipelineStep('constraints', 'running', 'sto generando le regole di validazione per assicurare la correttezza dei dati...');
 
     try {
       // ✅ C2: DELEGA a useWizardRetry - nessuna logica di retry qui
@@ -164,14 +120,21 @@ export function useWizardGeneration(props: UseWizardGenerationProps) {
         async () => {
           return await generateConstraints([task], (progress) => {
             updateTaskProgress(task.id, 'constraints', progress);
-            if (progress >= 100) {
-              updateTaskPipelineStatus(task.id, 'constraints', 'completed');
-              updatePipelineStep('constraints', 'completed', 'Generate!');
-            }
           }, locale);
         },
         (progress) => updateTaskProgress(task.id, 'constraints', progress)
       );
+
+      // ✅ FIX: Mark task as completed AFTER generation
+      console.log('[NODE COMPLETED]', {
+        id: task.id,
+        label: task.label,
+        phase: 'constraints',
+        newStatus: 'completed'
+      });
+      updateTaskPipelineStatus(task.id, 'constraints', 'completed');
+
+      // ❌ RIMOSSO: setDataSchema con updatePipelineStep - calculateAggregatedPipelineStatus lo farà dopo Promise.all
 
     // Assegna constraints al nodo nel dataSchema
     setDataSchema(prev => {
@@ -216,20 +179,23 @@ export function useWizardGeneration(props: UseWizardGenerationProps) {
             [task],
             (progress) => {
               updateTaskProgress(task.id, 'parser', progress);
-              if (progress >= 100) {
-                updateTaskPipelineStatus(task.id, 'parser', 'completed');
-                updateParserSubstep?.(null);
-                updatePipelineStep('parsers', 'completed', 'Generati!');
-              }
-            },
-            (substep) => {
-              updateParserSubstep?.(substep);
             },
             locale
           );
         },
         (progress) => updateTaskProgress(task.id, 'parser', progress)
       );
+
+      // ✅ FIX: Mark task as completed AFTER generation
+      console.log('[NODE COMPLETED]', {
+        id: task.id,
+        label: task.label,
+        phase: 'parser',
+        newStatus: 'completed'
+      });
+      updateTaskPipelineStatus(task.id, 'parser', 'completed');
+
+      // ❌ RIMOSSO: setDataSchema con updatePipelineStep - calculateAggregatedPipelineStatus lo farà dopo Promise.all
 
     // Assegna dataContract al nodo nel dataSchema
     setDataSchema(prev => {
@@ -254,12 +220,13 @@ export function useWizardGeneration(props: UseWizardGenerationProps) {
       updateTaskPipelineStatus(task.id, 'parser', 'failed');
       throw error; // Re-throw per logging
     }
-  }, [locale, updatePipelineStep, updateTaskPipelineStatus, updateTaskProgress, updateParserSubstep, setDataSchema, setNlpContract, wizardRetry]);
+  }, [locale, updatePipelineStep, updateTaskPipelineStatus, updateTaskProgress, setDataSchema, setNlpContract, wizardRetry, flattenTaskTree]);
 
   /**
    * Simula la generazione di messaggi per UN singolo task
+   * @param onPhaseComplete - Callback chiamato quando la fase completa (opzionale)
    */
-  const generateMessagesForTask = useCallback(async (task: WizardTaskTreeNode) => {
+  const generateMessagesForTask = useCallback(async (task: WizardTaskTreeNode, onPhaseComplete?: () => void) => {
     // ✅ INVARIANT CHECK: task.id MUST equal task.templateId (single source of truth)
     if (task.id !== task.templateId) {
       throw new Error(
@@ -285,38 +252,47 @@ export function useWizardGeneration(props: UseWizardGenerationProps) {
             locale,
             (progress) => {
               updateTaskProgress(task.id, 'messages', progress);
-              if (progress >= 100) {
-                updateTaskPipelineStatus(task.id, 'messages', 'completed');
-                updateMessageSubstep?.(null);
-                updatePipelineStep('messages', 'completed', 'Generati!');
-              }
-            },
-            (substep) => {
-              updateMessageSubstep?.(substep);
             }
           );
         },
         (progress) => updateTaskProgress(task.id, 'messages', progress)
       );
+
+      // ✅ FIX: Mark task as completed AFTER generation
+      console.log('[NODE COMPLETED]', {
+        id: task.id,
+        label: task.label,
+        phase: 'messages',
+        newStatus: 'completed'
+      });
+      updateTaskPipelineStatus(task.id, 'messages', 'completed');
+
+      // ✅ FIX: Salva messages PRIMA di chiamare onPhaseComplete
+      // Questo garantisce che quando checkAndComplete viene chiamato, i messages sono già salvati
+      setMessages(task.id, generatedMessages);
+
+      // ✅ Chiama callback DOPO aver salvato messages
+      if (onPhaseComplete) {
+        onPhaseComplete();
+      }
     } catch (error) {
       generationError = error instanceof Error ? error : new Error(String(error));
       // ✅ C3: Dopo tutti i retry falliti, imposta stato 'failed'
       updateTaskPipelineStatus(task.id, 'messages', 'failed');
+      // ❌ NON incrementare il contatore in caso di errore
+      // Il contatore conta solo i success, non i failed
       // Re-throw to let caller handle
       throw error;
     }
-
-    setMessages(task.id, generatedMessages);
-  }, [locale, updatePipelineStep, updateTaskPipelineStatus, updateTaskProgress, updateMessageSubstep, setMessages, wizardRetry]);
+  }, [locale, updatePipelineStep, updateTaskPipelineStatus, updateTaskProgress, setMessages, wizardRetry, flattenTaskTree]);
 
   /**
-   * FASE 2: Parallelizzazione massiva
+   * FASE 2: Parallelizzazione massiva con tracking deterministico
    * Dopo la conferma della struttura, lancia TUTTE le operazioni in parallelo
+   * Sistema di contatori per tracking in tempo reale
    */
   const continueAfterStructureConfirmation = useCallback(async (taskTree: WizardTaskTreeNode[]) => {
-    const totalParsers = calculateTotalParsers(taskTree);
     const allTasks = flattenTaskTree(taskTree);
-
 
     // ✅ INVARIANT CHECK: Verify all nodes have id === templateId
     const nodesWithMismatch = allTasks.filter(t => t.id !== t.templateId);
@@ -346,53 +322,196 @@ export function useWizardGeneration(props: UseWizardGenerationProps) {
       updateTaskPipelineStatus(task.id, 'messages', 'pending');
     });
 
-    // Aggiorna step a 'running' quando inizia la generazione parallela
-    updatePipelineStep('constraints', 'running', 'sto generando le regole di validazione per assicurare la correttezza dei dati...');
-    updatePipelineStep('parsers', 'running', 'sto generando i parser NLP per l\'estrazione dei dati da una frase...');
-    updatePipelineStep('messages', 'running', 'sto generando i messaggi per gestire il dialogo con l\'utente...');
+    // ============================================
+    // SISTEMA DI CONTATORI DETERMINISTICI
+    // ============================================
+    const numeroNodi = allTasks.length;
+
+    // Contatori per ogni fase
+    const constraintsCounter = { completed: 0, total: numeroNodi };
+    const parserCounter = { completed: 0, total: numeroNodi }; // Per ora: 1 contract per nodo
+    const messagesCounter = { completed: 0, total: numeroNodi }; // 1 chiamata per nodo (generateMessages fa 8 chiamate AI sequenziali internamente)
+
+    // Build payload for constraints card
+    const constraintsPayload = `Sto generando i constraints per: ${allTasks
+      .map(n => n.label)
+      .join(', ')}…`;
+
+    // Get parsers plan from backend for parser card payload
+    let parsersPayload = 'Sto generando tutti i parser necessari per estrarre i dati, nell\'ordine di escalation appropriato: …';
+    try {
+      const rootNode = taskTree[0];
+      if (rootNode) {
+        const contract = buildContractFromNode(rootNode);
+        const provider = localStorage.getItem('omnia.aiProvider') || 'openai';
+        const model = localStorage.getItem('omnia.aiModel') || undefined;
+
+        const planResponse = await fetch('/api/nlp/plan-engines', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contract,
+            nodeLabel: rootNode.label,
+            locale,
+            provider,
+            model
+          })
+        });
+
+        if (planResponse.ok) {
+          const planData = await planResponse.json();
+          if (planData.success && planData.parsersPlan) {
+            const enabledParsers = planData.parsersPlan
+              .filter((p: any) => p.enabled)
+              .map((p: any) => p.type)
+              .join(', ');
+            parsersPayload = `Sto generando tutti i parser necessari per estrarre i dati, nell'ordine di escalation appropriato: ${enabledParsers}…`;
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[useWizardGeneration] Failed to get parsers plan, using default payload:', error);
+    }
+
+    // Build payload for messages card using step labels from Response Editor
+    const MESSAGE_STEP_LABELS = [
+      'Chiedo il dato',
+      'Non sento',
+      'Non capisco',
+      'Devo confermare',
+      'Non Confermato',
+      'Ho capito!'
+    ];
+    const messagesPayload = `Sto generando tutti i messaggi che il bot deve utilizzare in tutte le possibili situazioni: ${MESSAGE_STEP_LABELS
+      .map(s => `"${s}"`)
+      .join(', ')}…`;
+
+    // Memorizza i payload iniziali per combinare con la percentuale (dopo che sono stati definiti)
+    const initialPayloads = {
+      constraints: constraintsPayload,
+      parsers: parsersPayload,
+      messages: messagesPayload
+    };
+
+    // Funzione per aggiornare progresso di una fase
+    const updatePhaseProgress = (phase: 'constraints' | 'parser' | 'messages') => {
+      const counter = phase === 'constraints' ? constraintsCounter
+                    : phase === 'parser' ? parserCounter
+                    : messagesCounter;
+
+      counter.completed++;
+      const progress = Math.round((counter.completed / counter.total) * 100);
+
+      const phaseId = phase === 'constraints' ? 'constraints'
+                    : phase === 'parser' ? 'parsers'
+                    : 'messages';
+
+      const initialPayload = phase === 'constraints' ? initialPayloads.constraints
+                           : phase === 'parser' ? initialPayloads.parsers
+                           : initialPayloads.messages;
+
+      if (counter.completed === counter.total) {
+        // Fase completata
+        const payload = phase === 'constraints' ? 'Generati!'
+                      : phase === 'parser' ? 'Generati!'
+                      : 'Generati!';
+        updatePipelineStep(phaseId, 'completed', payload);
+
+        // ✅ MODELLO DETERMINISTICO: Verifica se TUTTE le fasi sono complete
+        const allPhasesComplete =
+          constraintsCounter.completed === constraintsCounter.total &&
+          parserCounter.completed === parserCounter.total &&
+          messagesCounter.completed === messagesCounter.total;
+
+        if (allPhasesComplete && checkAndCompleteRef?.current) {
+          // ✅ MODELLO DETERMINISTICO: Chiama checkAndComplete SOLO quando tutti i contatori sono completi
+          // checkAndComplete legge direttamente da messages/messagesGeneralized (props), non da parametro
+          // Usa taskTree dalla closure di continueAfterStructureConfirmation
+          checkAndCompleteRef.current(taskTree).catch(error => {
+            console.error('[useWizardGeneration] Error in checkAndComplete:', error);
+          });
+        }
+      } else {
+        // Fase in corso - combina messaggio dinamico con percentuale
+        // Il payload contiene sia il messaggio dinamico che la percentuale
+        // Es: "Sto generando i constraints per: ... 33%"
+        // calculatePhaseProgress estrae la percentuale dal payload
+        // dynamicMessage viene letto da CenterPanel dal payload (prima parte, senza percentuale)
+        const baseMessage = initialPayload.replace(/…$/, ''); // Rimuovi "…" finale
+        updatePipelineStep(phaseId, 'running', `${baseMessage} ${progress}%`);
+      }
+    };
+
+    // Aggiorna step a 'running' quando inizia la generazione parallela con payload dinamici
+    // Il payload iniziale contiene il messaggio dinamico, poi viene aggiornato con la percentuale
+    updatePipelineStep('constraints', 'running', constraintsPayload);
+    updatePipelineStep('parsers', 'running', parsersPayload);
+    updatePipelineStep('messages', 'running', messagesPayload);
 
     // Transizione di stato delegata a useWizardFlow
     transitionToGenerating();
 
-    // Array di tutte le promise da eseguire in parallelo
+    // ============================================
+    // LANCIO PARALLELO DI TUTTE LE FASI
+    // ============================================
     const allPromises: Promise<void>[] = [];
 
-    // Per ogni task, creo 3 promise (una per fase) - esecuzione reale in parallelo
+    // FASE 1: Constraints - lancia per ogni nodo
     allTasks.forEach(task => {
-      allPromises.push(generateConstraintsForTask(task));
-      allPromises.push(generateParsersForTask(task));
-      allPromises.push(generateMessagesForTask(task));
+      allPromises.push(
+        generateConstraintsForTask(task)
+          .then(() => updatePhaseProgress('constraints'))
+          .catch((error) => {
+            console.error(`[useWizardGeneration] Error generating constraints for ${task.id}:`, error);
+            // Incrementa comunque per non bloccare
+            updatePhaseProgress('constraints');
+          })
+      );
+    });
+
+    // FASE 2: Parser - lancia per ogni nodo (per ora: 1 contract per nodo)
+    allTasks.forEach(task => {
+      allPromises.push(
+        generateParsersForTask(task)
+          .then(() => updatePhaseProgress('parser'))
+          .catch((error) => {
+            console.error(`[useWizardGeneration] Error generating parsers for ${task.id}:`, error);
+            // Incrementa comunque per non bloccare
+            updatePhaseProgress('parser');
+          })
+      );
+    });
+
+    // FASE 3: Messages - lancia per ogni nodo (8 chiamate AI sequenziali dentro generateMessagesForTask)
+    allTasks.forEach(task => {
+      allPromises.push(
+        generateMessagesForTask(task, () => updatePhaseProgress('messages'))
+          .catch((error) => {
+            console.error(`[useWizardGeneration] Error generating messages for ${task.id}:`, error);
+            // Il callback onPhaseComplete viene chiamato anche in caso di errore
+          })
+      );
     });
 
     try {
       await Promise.all(allPromises);
-
-      // Calcola stato aggregato dopo completamento
-      // Legge lo stato aggiornato da dataSchema tramite setDataSchema
-      setDataSchema(currentSchema => {
-        calculateAggregatedPipelineStatus(currentSchema, setPipelineSteps);
-        return currentSchema; // Non modifica, solo legge per calcolare aggregato
-      });
+      // Tutte le fasi sono complete, i contatori sono già aggiornati
     } catch (error) {
       throw error;
     }
   }, [
     flattenTaskTree,
     updatePipelineStep,
-    setPipelineSteps,
     updateTaskPipelineStatus,
     generateConstraintsForTask,
     generateParsersForTask,
     generateMessagesForTask,
     transitionToGenerating,
-    calculateAggregatedPipelineStatus,
-    setDataSchema,
   ]);
 
   return {
     runGenerationPipeline,
     continueAfterStructureConfirmation,
     flattenTaskTree,
-    calculateAggregatedPipelineStatus,
   };
 }

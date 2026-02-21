@@ -515,16 +515,46 @@ Public Class TaskAssembler
             End If
 
             ' Estrai subDataMapping
+            ' ❌ RIMOSSO: Catch silente che nascondeva errori di deserializzazione.
+            ' ✅ NUOVO: Fail-fast con messaggio esplicito su ogni percorso di errore.
             If contractObj("subDataMapping") IsNot Nothing Then
-                Try
-                    Dim subDataMappingJson = contractObj("subDataMapping").ToString()
-                    Dim subDataMappingDict = JsonConvert.DeserializeObject(Of Dictionary(Of String, SubDataMappingInfo))(subDataMappingJson)
-                    If subDataMappingDict IsNot Nothing Then
-                        nlpContract.SubDataMapping = subDataMappingDict
-                    End If
-                Catch ex As Exception
-                    ' Log removed
-                End Try
+                Dim subDataMappingToken As JToken = contractObj("subDataMapping")
+                Dim subDataMappingDict As Dictionary(Of String, SubDataMappingInfo) = Nothing
+
+                Select Case subDataMappingToken.Type
+                    Case JTokenType.Object
+                        ' ✅ Standard path: frontend sends subDataMapping as a JSON object.
+                        Try
+                            subDataMappingDict = subDataMappingToken.ToObject(Of Dictionary(Of String, SubDataMappingInfo))()
+                        Catch ex As Exception
+                            Throw New InvalidOperationException(
+                                $"Failed to deserialize dataContract.subDataMapping (JObject path). " &
+                                $"Template: '{If(nlpContract.TemplateName, "unknown")}'. Error: {ex.Message}", ex)
+                        End Try
+
+                    Case JTokenType.String
+                        ' Legacy path: subDataMapping sent as a serialized JSON string.
+                        Try
+                            subDataMappingDict = JsonConvert.DeserializeObject(
+                                Of Dictionary(Of String, SubDataMappingInfo))(subDataMappingToken.ToString())
+                        Catch ex As Exception
+                            Throw New InvalidOperationException(
+                                $"Failed to deserialize dataContract.subDataMapping (String path). " &
+                                $"Template: '{If(nlpContract.TemplateName, "unknown")}'. Error: {ex.Message}", ex)
+                        End Try
+
+                    Case JTokenType.Null
+                        ' null token → treat as absent; leaf tasks may omit the mapping.
+
+                    Case Else
+                        Throw New InvalidOperationException(
+                            $"dataContract.subDataMapping has unsupported JSON type: {subDataMappingToken.Type}. " &
+                            $"Expected Object or String. Template: '{If(nlpContract.TemplateName, "unknown")}'.")
+                End Select
+
+                If subDataMappingDict IsNot Nothing Then
+                    nlpContract.SubDataMapping = subDataMappingDict
+                End If
             End If
 
             ' ✅ CONVERSIONE CHIAVE: Converti array "contracts" in oggetti "regex", "rules", ecc.
@@ -686,12 +716,118 @@ Public Class TaskAssembler
                 Next
             End If
 
+            ' ✅ Validate group-name coherence: mapping ↔ regex bidirectional check.
+            ' Only runs when a composite mapping exists (leaf contracts are skipped).
+            If nlpContract.SubDataMapping IsNot Nothing AndAlso nlpContract.SubDataMapping.Count > 0 Then
+                ValidateGroupNameCoherence(nlpContract)
+            End If
+
             Return nlpContract
 
         Catch ex As Exception
             Throw New InvalidOperationException($"Failed to convert dataContract to NLPContract: {ex.Message}", ex)
         End Try
     End Function
+
+    ' ── Group-name validation helpers ────────────────────────────────────────
+
+    ''' <summary>
+    ''' Pattern for the GUID-style technical group name introduced in Phase 2.
+    ''' Format: g_ followed by exactly 12 hex characters (e.g. g_12ab34cd56ef).
+    ''' </summary>
+    Private Shared ReadOnly _guidGroupPattern As New System.Text.RegularExpressions.Regex(
+        "^g_[a-f0-9]{12}$",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase Or
+        System.Text.RegularExpressions.RegexOptions.Compiled)
+
+    ''' <summary>
+    ''' Validates that every GroupName in SubDataMapping exists as a named group
+    ''' in the main regex pattern, and that every named group in the pattern has
+    ''' a corresponding entry in SubDataMapping.
+    ''' GroupName is mandatory and must match the format g_[a-f0-9]{12}.
+    ''' Throws InvalidOperationException with a complete error list on any mismatch.
+    ''' </summary>
+    Private Shared Sub ValidateGroupNameCoherence(contract As NLPContract)
+        If contract Is Nothing Then Return
+        If contract.SubDataMapping Is Nothing OrElse contract.SubDataMapping.Count = 0 Then Return
+        If contract.Regex Is Nothing OrElse
+           contract.Regex.Patterns Is Nothing OrElse
+           contract.Regex.Patterns.Count = 0 Then Return
+
+        ' --- Step 1: extract named groups from the compiled main pattern ---
+        Dim mainPattern = contract.Regex.Patterns(0)
+        Dim rx As System.Text.RegularExpressions.Regex
+        Try
+            rx = New System.Text.RegularExpressions.Regex(
+                mainPattern,
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+        Catch ex As Exception
+            Throw New InvalidOperationException(
+                $"NlpContract main regex pattern is invalid for template '{contract.TemplateName}': {ex.Message}" &
+                $"  Pattern: {mainPattern}")
+        End Try
+
+        Dim regexGroups As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        For Each name As String In rx.GetGroupNames()
+            ' Skip the full-match group ("0") and any unnamed numbered groups ("1", "2", …).
+            ' .NET's GetGroupNames() returns both named groups AND implicit numbered groups
+            ' for every capturing parenthesis; we only care about explicitly named groups.
+            Dim parsedIndex As Integer
+            If Not String.IsNullOrEmpty(name) AndAlso
+               Not Integer.TryParse(name, parsedIndex) Then
+                regexGroups.Add(name)
+            End If
+        Next
+
+        ' --- Step 2: collect group names from the mapping (GroupName is required) ---
+        Dim mappingGroups As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        For Each kvp As KeyValuePair(Of String, SubDataMappingInfo) In contract.SubDataMapping
+            Dim groupName = kvp.Value.GroupName
+            If String.IsNullOrWhiteSpace(groupName) Then
+                Throw New InvalidOperationException(
+                    $"NlpContract (template '{contract.TemplateName}'): SubDataMapping entry for subtask " &
+                    $"'{kvp.Key}' is missing GroupName. GroupName is required " &
+                    $"(format: g_[a-f0-9]{{12}}, e.g. g_12ab34cd56ef).")
+            End If
+
+            If Not _guidGroupPattern.IsMatch(groupName) Then
+                Throw New InvalidOperationException(
+                    $"NlpContract (template '{contract.TemplateName}'): GroupName '{groupName}' " &
+                    $"for subtask '{kvp.Key}' is not a valid technical group name. " &
+                    $"Expected format: g_[a-f0-9]{{12}} (e.g. g_12ab34cd56ef).")
+            End If
+
+            mappingGroups.Add(groupName)
+        Next
+
+        ' --- Step 3: bidirectional check ---
+        Dim errors As New List(Of String)()
+
+        ' Groups in regex that have no mapping entry
+        For Each name As String In regexGroups
+            If Not mappingGroups.Contains(name) Then
+                errors.Add($"  - Regex group '{name}' exists in pattern but has no entry in SubDataMapping.")
+            End If
+        Next
+
+        ' Groups in mapping that are absent from the regex
+        For Each kvp As KeyValuePair(Of String, SubDataMappingInfo) In contract.SubDataMapping
+            Dim groupName = kvp.Value.GroupName
+            If Not regexGroups.Contains(groupName) Then
+                errors.Add(
+                    $"  - SubDataMapping references group '{groupName}' (subtask '{kvp.Key}') " &
+                    $"but that group is absent from the regex pattern.")
+            End If
+        Next
+
+        If errors.Count > 0 Then
+            Throw New InvalidOperationException(
+                $"NlpContract validation failed for template '{contract.TemplateName}':" &
+                Environment.NewLine &
+                String.Join(Environment.NewLine, errors))
+        End If
+    End Sub
+
 End Class
 
 

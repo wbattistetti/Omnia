@@ -1,7 +1,7 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useMemo } from 'react';
 import type { WizardTaskTreeNode } from '../types';
 import type { WizardConstraint, WizardNLPContract } from '../types';
 import { createTemplatesFromWizardData, createContextualizedInstance } from '../services/TemplateCreationService';
@@ -89,6 +89,9 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
   // - hasCreatedTemplateForCompletedRef: for completion (when all steps are done)
   const hasCreatedTemplateForProposedRef = useRef(false);
   const hasCreatedTemplateForCompletedRef = useRef(false);
+
+  // ✅ MODELLO DETERMINISTICO: Ref per esporre checkAndComplete a useWizardGeneration
+  const checkAndCompleteRef = useRef<((dataSchema: WizardTaskTreeNode[]) => Promise<void>) | null>(null);
 
   /**
    * ✅ NEW: Crea template e istanza per il PRIMO STEP (quando dataSchema è pronto)
@@ -719,17 +722,21 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
    * ✅ CRITICAL: createTemplateAndInstanceForCompleted must be called BEFORE transitionToCompleted
    * This ensures taskTree is in store before wizardMode becomes COMPLETED
    */
+  /**
+   * ✅ MODELLO DETERMINISTICO: checkAndComplete chiamato SOLO quando i contatori sono completi
+   * Non dipende più da pipelineSteps o wizardMode (i contatori sono la fonte di verità)
+   * Chiamato direttamente da updatePhaseProgress in useWizardGeneration
+   * Legge direttamente da messages/messagesGeneralized (props), non da parametro
+   */
   const checkAndComplete = useCallback(async (
-    pipelineSteps: Array<{ status: string }>,
-    currentWizardMode: WizardMode,
-    messagesToCheck: Map<string, any>,
     dataSchemaToCheck: WizardTaskTreeNode[]
   ) => {
-    const allStepsCompleted = pipelineSteps.every(step => step.status === 'completed');
+    // ✅ Legge direttamente dalle props (sempre aggiornate, non da closure)
+    const messagesToUse = messagesGeneralized.size > 0 ? messagesGeneralized : messages;
 
-    // ✅ D1: Verifica che tutti i nodi abbiano messaggi
+    // ✅ Verifica integrità dati (non più pipelineSteps o wizardMode)
     const allNodes = flattenTaskTree(dataSchemaToCheck);
-    const nodesWithMessages = allNodes.filter(node => messagesToCheck.has(node.id));
+    const nodesWithMessages = allNodes.filter(node => messagesToUse.has(node.id));
     const allNodesHaveMessages = nodesWithMessages.length === allNodes.length;
 
     // ✅ Verifica che tutti i nodi abbiano constraints
@@ -742,40 +749,61 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
       node.dataContract !== undefined
     );
 
-    // ✅ D1: Verifica che non ci siano nodi falliti (stato 'failed' sarà aggiunto in Fase C)
+    // ✅ Verifica che non ci siano nodi falliti
     const hasFailedNodes = allNodes.some(node =>
       node.pipelineStatus?.constraints === 'failed' ||
       node.pipelineStatus?.parser === 'failed' ||
       node.pipelineStatus?.messages === 'failed'
     );
 
-    // ✅ D1: Transiziona solo se TUTTE le condizioni sono soddisfatte
+    // ✅ CRITICAL: Verifica che TUTTI i task abbiano completato TUTTE le fasi
+    const allTasksCompletedAllPhases = allNodes.every(node => {
+      const constraintsState = node.pipelineStatus?.constraints || 'pending';
+      const parserState = node.pipelineStatus?.parser || 'pending';
+      const messagesState = node.pipelineStatus?.messages || 'pending';
+      return constraintsState === 'completed' &&
+             parserState === 'completed' &&
+             messagesState === 'completed';
+    });
+
+    // ✅ Transiziona solo se TUTTE le condizioni sono soddisfatte
+    // Nota: wizardMode è già GENERATING quando siamo qui (chiamato da continueAfterStructureConfirmation)
     if (
-      allStepsCompleted &&
       allNodesHaveMessages &&
       allNodesHaveConstraints &&
       allNodesHaveParser &&
+      allTasksCompletedAllPhases &&
       !hasFailedNodes &&
-      currentWizardMode === WizardMode.GENERATING
+      wizardMode === WizardMode.GENERATING
     ) {
-      // ✅ CRITICAL: Create template + instance BEFORE transitioning to COMPLETED
-      // This ensures taskTree is in store before wizardMode becomes COMPLETED
-      // ✅ Use createTemplateAndInstanceForCompleted (separate from first step)
       console.log('[useWizardCompletion] 🚀 All conditions met - creating template + instance BEFORE transition to COMPLETED');
       await createTemplateAndInstanceForCompleted();
       console.log('[useWizardCompletion] ✅ Template + instance created - now transitioning to COMPLETED');
-      // ✅ Only after createTemplateAndInstanceForCompleted has finished (and called onTaskBuilderComplete)
       transitionToCompleted();
     } else if (hasFailedNodes) {
-      // ✅ D1: Log ma NON bloccare - l'utente può fare retry manuale
+      console.log('[useWizardCompletion] ⚠️ Some nodes failed - user can retry manually');
     } else if (!allNodesHaveMessages) {
-      // ✅ D1: Log se mancano messaggi
+      console.log('[useWizardCompletion] ⏳ Waiting for all nodes to have messages', {
+        totalNodes: allNodes.length,
+        nodesWithMessages: nodesWithMessages.length
+      });
+    } else if (!allTasksCompletedAllPhases) {
+      console.log('[useWizardCompletion] ⏳ Waiting for all tasks to complete all phases', {
+        totalNodes: allNodes.length,
+        nodesWithCompletedConstraints: allNodes.filter(n => n.pipelineStatus?.constraints === 'completed').length,
+        nodesWithCompletedParser: allNodes.filter(n => n.pipelineStatus?.parser === 'completed').length,
+        nodesWithCompletedMessages: allNodes.filter(n => n.pipelineStatus?.messages === 'completed').length,
+      });
     }
-  }, [transitionToCompleted, createTemplateAndInstanceForCompleted]);
+  }, [wizardMode, transitionToCompleted, createTemplateAndInstanceForCompleted, messages, messagesGeneralized]);
+
+  // ✅ Esponi checkAndComplete tramite ref per useWizardGeneration (modello deterministico)
+  checkAndCompleteRef.current = checkAndComplete;
 
   return {
     createTemplateAndInstanceForCompleted, // ✅ Function for completion (when all steps are done)
     createTemplateAndInstanceForProposed, // ✅ Function for first step (DATA_STRUCTURE_PROPOSED)
-    checkAndComplete,
+    checkAndComplete, // ✅ Mantenuto per backward compatibility (non più usato)
+    checkAndCompleteRef, // ✅ NUOVO: Ref stabile per useWizardGeneration
   };
 }

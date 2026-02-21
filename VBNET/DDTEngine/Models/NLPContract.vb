@@ -55,22 +55,27 @@ Public Class NLPContract
 End Class
 
 ''' <summary>
-''' Informazioni di mapping per un subData
+''' Mapping info for a composite sub-field.
+''' GroupName is the REQUIRED technical regex group name (format: g_[a-f0-9]{12}).
+''' CanonicalKey carries semantic meaning only; Label is UI-only.
+''' Neither CanonicalKey nor Label must ever appear as a regex group name.
 ''' </summary>
 Public Class SubDataMappingInfo
     ''' <summary>
-    ''' Chiave canonica (es. "day", "month", "year")
+    ''' Semantic key (e.g. "day", "month", "year"). UI and domain use only.
     ''' </summary>
     Public Property CanonicalKey As String
 
     ''' <summary>
-    ''' Etichetta del dato
+    ''' Required. Technical regex group name (format: g_[a-f0-9]{12}).
+    ''' Sole source of truth for extraction. Must match the named group in the pattern.
     ''' </summary>
+    Public Property GroupName As String
+
+    ''' <summary>UI label only — never enters the regex.</summary>
     Public Property Label As String
 
-    ''' <summary>
-    ''' Tipo del dato
-    ''' </summary>
+    ''' <summary>Data type (e.g. "number", "text", "date").</summary>
     Public Property Type As String
 
     ''' <summary>

@@ -692,10 +692,13 @@ Namespace ApiServer.Handlers
                 Console.WriteLine("═══════════════════════════════════════════════════════════════════════════")
 
                 ' ✅ Scrivi errore direttamente nella risposta (senza Await nel Catch)
+                Dim innerMsg = If(ex.InnerException IsNot Nothing, " → " & ex.InnerException.Message, "")
                 Dim errorJson = JsonConvert.SerializeObject(New With {
                     .status = "error",
-                    .title = "Compilation failed",
-                    .detail = ex.Message,
+                    .error = ex.Message & innerMsg,
+                    .message = ex.Message & innerMsg,
+                    .detail = ex.Message & innerMsg,
+                    .exceptionType = ex.GetType().Name,
                     .timestamp = DateTime.UtcNow.ToString("O")
                 })
                 context.Response.ContentType = "application/json"
