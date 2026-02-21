@@ -23,6 +23,7 @@ import {
   createTemplateAndInstanceForCompleted,
   buildTaskTreeWithContractsAndEngines
 } from '../services/WizardCompletionService';
+import { flattenTaskTree } from '../utils/wizardHelpers';
 import type { WizardTaskTreeNode } from '../types';
 
 export interface WizardOrchestratorConfig {
@@ -109,54 +110,126 @@ export class WizardOrchestrator {
     store.updatePipelineStep('structure', 'completed', 'Confermata!');
     store.setWizardMode(WizardMode.GENERATING);
 
-    // ✅ Create template + instance for proposed structure - access fields directly
-    if (this.config.rowId && this.config.projectId) {
-      try {
-        const { taskInstance, taskTree } = await createTemplateAndInstanceForProposed(
-          store.dataSchema, // ✅ Direct field access, NO "state = store"
-          store.messages,
-          store.messagesGeneralized,
-          store.messagesContextualized,
-          store.shouldBeGeneral,
-          this.config.taskLabel || 'Task',
-          this.config.rowId,
-          this.config.projectId,
-          this.config.addTranslation,
-          false // adaptAllNormalSteps
-        );
+    // ✅ CRITICAL: Calculate payloads IMMEDIATELY (before any async operations)
+    // This ensures UI shows payloads right away, not after createTemplateAndInstanceForProposed
+    const allTasks = store.dataSchema ? flattenTaskTree(store.dataSchema) : [];
+    const constraintsPayload = `Sto generando i constraints per: ${allTasks.map(n => n.label).join(', ')}…`;
 
-        if (taskTree && this.config.onTaskBuilderComplete) {
-          this.config.onTaskBuilderComplete(taskTree);
+    // Get parsers payload (async, but we start it immediately)
+    let parsersPayload = 'Sto generando tutti i parser necessari per estrarre i dati, nell\'ordine di escalation appropriato: …';
+    const parsersPayloadPromise = (async () => {
+      try {
+        const rootNode = store.dataSchema[0];
+        if (rootNode) {
+          const { buildContractFromNode } = await import('../api/wizardApi');
+          const contract = buildContractFromNode(rootNode);
+          const provider = localStorage.getItem('omnia.aiProvider') || 'openai';
+          const model = localStorage.getItem('omnia.aiModel') || undefined;
+
+          const planResponse = await fetch('/api/nlp/plan-engines', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contract, nodeLabel: rootNode.label, locale: this.config.locale || 'it', provider, model })
+          });
+
+          if (planResponse.ok) {
+            const planData = await planResponse.json();
+            if (planData.success && planData.parsersPlan) {
+              const enabledParsers = planData.parsersPlan
+                .filter((p: any) => p.enabled)
+                .map((p: any) => p.type)
+                .join(', ');
+              return `Sto generando tutti i parser necessari per estrarre i dati, nell'ordine di escalation appropriato: ${enabledParsers}…`;
+            }
+          }
         }
       } catch (error) {
-        console.error('[WizardOrchestrator] ❌ Error creating template+instance (non-blocking):', error);
+        console.warn('[WizardOrchestrator] Failed to get parsers plan, using default payload:', error);
       }
-    }
+      return parsersPayload;
+    })();
 
-    // ✅ ORCHESTRATOR controls pipeline updates BEFORE parallel generation
-    // Get payloads from runParallelGeneration (it will return them via callback)
-    let constraintsPayload = '';
-    let parsersPayload = '';
-    let messagesPayload = '';
+    const MESSAGE_STEP_LABELS = [
+      'Chiedo il dato',
+      'Non sento',
+      'Non capisco',
+      'Devo confermare',
+      'Non Confermato',
+      'Ho capito!'
+    ];
+    const messagesPayload = `Sto generando tutti i messaggi che il bot deve utilizzare in tutte le possibili situazioni: ${MESSAGE_STEP_LABELS.map(s => `"${s}"`).join(', ')}…`;
 
-    // ✅ Start parallel generation (PURE - no pipeline updates)
-    try {
-      await runParallelGeneration(store, this.config.locale || 'it', async (phase, taskId, payloads?) => {
+    // ✅ ORCHESTRATOR updates pipeline IMMEDIATELY with initial payloads
+    store.updatePipelineStep('constraints', 'running', constraintsPayload);
+    store.updatePipelineStep('parsers', 'running', parsersPayload); // Will be updated when promise resolves
+    store.updatePipelineStep('messages', 'running', messagesPayload);
+
+    // ✅ Update parsers payload when promise resolves (non-blocking)
+    parsersPayloadPromise.then(updatedParsersPayload => {
+      store.updatePipelineStep('parsers', 'running', updatedParsersPayload);
+    }).catch(() => {
+      // Keep default payload on error
+    });
+
+    // ✅ Update parsers payload in store when promise resolves (non-blocking)
+    parsersPayloadPromise.then(updatedParsersPayload => {
+      store.updatePipelineStep('parsers', 'running', updatedParsersPayload);
+    }).catch(() => {
+      // Keep default payload on error
+    });
+
+    // ✅ Start createTemplateAndInstanceForProposed in parallel (non-blocking)
+    const createTemplatePromise = this.config.rowId && this.config.projectId
+      ? (async () => {
+          try {
+            const { taskInstance, taskTree } = await createTemplateAndInstanceForProposed(
+              store.dataSchema,
+              store.messages,
+              store.messagesGeneralized,
+              store.messagesContextualized,
+              store.shouldBeGeneral,
+              this.config.taskLabel || 'Task',
+              this.config.rowId,
+              this.config.projectId,
+              this.config.addTranslation,
+              false
+            );
+
+            if (taskTree && this.config.onTaskBuilderComplete) {
+              this.config.onTaskBuilderComplete(taskTree);
+            }
+          } catch (error) {
+            console.error('[WizardOrchestrator] ❌ Error creating template+instance (non-blocking):', error);
+          }
+        })()
+      : Promise.resolve();
+
+    // ✅ Start parallel generation IMMEDIATELY (don't wait for createTemplateAndInstanceForProposed)
+    // Store payloads for progress updates
+    let finalConstraintsPayload = constraintsPayload;
+    let finalParsersPayload = parsersPayload;
+    let finalMessagesPayload = messagesPayload;
+
+    // ✅ Start both operations in parallel
+    const parallelGenerationPromise = runParallelGeneration(store, this.config.locale || 'it', async (phase, taskId, payloads?) => {
         // ✅ Orchestrator receives payloads from runParallelGeneration (taskId === 'init')
         if (taskId === 'init' && payloads) {
-          constraintsPayload = payloads.constraints || '';
-          parsersPayload = payloads.parsers || '';
-          messagesPayload = payloads.messages || '';
+          finalConstraintsPayload = payloads.constraints || finalConstraintsPayload;
+          finalParsersPayload = payloads.parsers || finalParsersPayload;
+          finalMessagesPayload = payloads.messages || finalMessagesPayload;
 
-          // ✅ ORCHESTRATOR updates pipeline with payloads
-          if (constraintsPayload) {
-            store.updatePipelineStep('constraints', 'running', constraintsPayload);
+          // ✅ ORCHESTRATOR updates pipeline with payloads (already set above, but update if different)
+          if (payloads.constraints && payloads.constraints !== finalConstraintsPayload) {
+            store.updatePipelineStep('constraints', 'running', payloads.constraints);
+            finalConstraintsPayload = payloads.constraints;
           }
-          if (parsersPayload) {
-            store.updatePipelineStep('parsers', 'running', parsersPayload);
+          if (payloads.parsers && payloads.parsers !== finalParsersPayload) {
+            store.updatePipelineStep('parsers', 'running', payloads.parsers);
+            finalParsersPayload = payloads.parsers;
           }
-          if (messagesPayload) {
-            store.updatePipelineStep('messages', 'running', messagesPayload);
+          if (payloads.messages && payloads.messages !== finalMessagesPayload) {
+            store.updatePipelineStep('messages', 'running', payloads.messages);
+            finalMessagesPayload = payloads.messages;
           }
           return; // Early return for init
         }
@@ -208,9 +281,9 @@ export class WizardOrchestrator {
           const phaseId = phase === 'constraints' ? 'constraints'
                        : phase === 'parser' ? 'parsers'
                        : 'messages';
-          const basePayload = phase === 'constraints' ? constraintsPayload
-                           : phase === 'parser' ? parsersPayload
-                           : messagesPayload;
+          const basePayload = phase === 'constraints' ? finalConstraintsPayload
+                           : phase === 'parser' ? finalParsersPayload
+                           : finalMessagesPayload;
           const baseMessage = basePayload.replace(/…$/, '');
           store.updatePipelineStep(phaseId, 'running', `${baseMessage} ${progress}%`);
         } else if (typeof taskId === 'string' && taskId.startsWith('phase-complete-')) {
@@ -219,8 +292,12 @@ export class WizardOrchestrator {
           store.updatePipelineStep(phaseId, 'completed', 'Generati!');
         }
       });
+
+    // ✅ Wait for both parallel generation AND template creation (both run in parallel)
+    try {
+      await Promise.all([parallelGenerationPromise, createTemplatePromise]);
     } catch (error) {
-      console.error('[WizardOrchestrator] ❌ Error in parallel generation:', error);
+      console.error('[WizardOrchestrator] ❌ Error in parallel operations:', error);
       throw error;
     }
   }
