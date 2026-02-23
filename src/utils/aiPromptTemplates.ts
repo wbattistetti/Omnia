@@ -126,17 +126,22 @@ function getEngineInstructions(engine: string, contract: SemanticContract): stri
     case 'regex':
       return `Requirements:
 1. Generate a JavaScript-compatible regular expression
-2. Use EXACTLY these named groups (all optional):
-${subentities.map(sg => `   - (?<${sg.subTaskKey}>...) for "${sg.label}"`).join('\n')}
-3. Do NOT invent group names
-4. Keep the same order of groups
-5. Make every group optional (use (?<name>pattern)? syntax)
-6. Escape special characters properly for JavaScript (use \\\\ for backslashes)
-7. Respect ALL instructions found in the user text
-8. Consider constraints: ${subentities.map(sg =>
-  sg.constraints ? `${sg.subTaskKey}(${JSON.stringify(sg.constraints)})` : ''
+2. ✅ CRITICAL: Use EXACTLY these deterministic group names (based on index order):
+${subentities.map((sg, index) => `   - (?<s${index + 1}>...) for "${sg.label}" (${sg.subTaskKey})`).join('\n')}
+3. DO NOT use semantic names like "day", "month", "year", "giorno", "mese", "anno"
+4. Use ONLY s1, s2, s3... in order (s1 for first subentity, s2 for second, etc.)
+5. Keep the same order of groups
+6. Make every group optional (use (?<name>pattern)? syntax)
+7. Escape special characters properly for JavaScript (use \\\\ for backslashes)
+8. Respect ALL instructions found in the user text
+9. Consider constraints: ${subentities.map((sg, index) =>
+  sg.constraints ? `s${index + 1}(${JSON.stringify(sg.constraints)})` : ''
 ).filter(Boolean).join(', ')}
-9. Be robust, precise, readable and correct
+10. Be robust, precise, readable and correct
+
+Example for date (3 subentities):
+- ✅ CORRECT: (?<s1>\\d{{1,2}})[-/](?<s2>\\d{{1,2}})[-/](?<s3>\\d{{4}})
+- ❌ WRONG: (?<giorno>\\d{{1,2}})[-/](?<mese>\\d{{1,2}})[-/](?<anno>\\d{{4}})
 
 Interpretation Rules:
 - The regex in user text is only a starting point
@@ -225,7 +230,7 @@ function getOutputFormatForEngine(engine: string): string {
   switch (engine) {
     case 'regex':
       return `{
-  "regex": "<final regex with named groups matching subTaskKeys>",
+  "regex": "<final regex with named groups using deterministic names s1, s2, s3...>",
   "explanation": ["point 1", "point 2", "..."],
   "examples_match": ["...", "..."],
   "examples_no_match": [

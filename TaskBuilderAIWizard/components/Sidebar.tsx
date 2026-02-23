@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ChevronRight, ChevronDown, Calendar, Hash, Type, MapPin, Clock, User, Phone, FileText, Package, CreditCard, Home, Utensils, Stethoscope } from 'lucide-react';
+import { ChevronRight, ChevronDown, Hash, Type, FileText } from 'lucide-react';
 import { WizardTaskTreeNode } from '../types';
 
 type SidebarProps = {
@@ -55,34 +55,23 @@ export function Sidebar({
     });
   };
 
+  /**
+   * Get emoji or fallback icon for a node
+   * ✅ Uses node.emoji directly (from AI) - much simpler!
+   */
   const getNodeIcon = (node: WizardTaskTreeNode) => {
-    const label = node.label.toLowerCase();
     const iconClass = "w-4 h-4";
 
-    if (label.includes('data') || label.includes('date')) return <Calendar className={iconClass} />;
-    if (label.includes('giorno') || label.includes('day')) return <Calendar className={iconClass} />;
-    if (label.includes('mese') || label.includes('month')) return <Calendar className={iconClass} />;
-    if (label.includes('anno') || label.includes('year')) return <Hash className={iconClass} />;
-    if (label.includes('orario') || label.includes('time')) return <Clock className={iconClass} />;
-    if (label.includes('numero') || node.type === 'number') return <Hash className={iconClass} />;
-    if (label.includes('nome') || label.includes('name')) return <User className={iconClass} />;
-    if (label.includes('cognome') || label.includes('surname')) return <User className={iconClass} />;
-    if (label.includes('telefono') || label.includes('phone')) return <Phone className={iconClass} />;
-    if (label.includes('indirizzo') || label.includes('address')) return <MapPin className={iconClass} />;
-    if (label.includes('via') || label.includes('street')) return <Home className={iconClass} />;
-    if (label.includes('città') || label.includes('city')) return <MapPin className={iconClass} />;
-    if (label.includes('cap') || label.includes('postal')) return <Hash className={iconClass} />;
-    if (label.includes('paese') || label.includes('country')) return <MapPin className={iconClass} />;
-    if (label.includes('prenotazione') || label.includes('booking')) return <Utensils className={iconClass} />;
-    if (label.includes('ristorante') || label.includes('restaurant')) return <Utensils className={iconClass} />;
-    if (label.includes('ordine') || label.includes('order')) return <Package className={iconClass} />;
-    if (label.includes('prodott') || label.includes('item')) return <Package className={iconClass} />;
-    if (label.includes('pagamento') || label.includes('payment')) return <CreditCard className={iconClass} />;
-    if (label.includes('paziente') || label.includes('patient')) return <User className={iconClass} />;
-    if (label.includes('appuntamento') || label.includes('appointment')) return <Stethoscope className={iconClass} />;
-    if (label.includes('medico') || label.includes('doctor')) return <Stethoscope className={iconClass} />;
+    // ✅ PRIMARY: Use node.emoji if available (directly from AI)
+    if (node.emoji) {
+      return <span className={iconClass}>{node.emoji}</span>;
+    }
+
+    // ✅ FALLBACK: Type-based inference (for backward compatibility)
+    if (node.type === 'number') return <Hash className={iconClass} />;
     if (node.type === 'string') return <Type className={iconClass} />;
 
+    // ✅ DEFAULT: FileText
     return <FileText className={iconClass} />;
   };
 

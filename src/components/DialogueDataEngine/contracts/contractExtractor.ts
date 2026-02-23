@@ -4,10 +4,9 @@
  */
 
 import type { NLPContract } from './contractLoader';
-import { getSubIdForCanonicalKey } from './contractLoader';
 
 export interface ExtractionResult {
-    values: Record<string, any>; // canonicalKey → value
+    values: Record<string, any>; // subId → value (direct mapping, no canonicalKey)
     hasMatch: boolean;
     source: 'regex' | 'rules' | 'ner' | 'llm' | null;
     confidence?: number;
@@ -108,83 +107,32 @@ function tryRegexExtraction(text: string, contract: NLPContract, activeSubId?: s
             groupsCount: Object.keys(match.groups).length
         });
 
-        // ✅ Phase 3: Map GUID group names back to canonicalKeys via subDataMapping.groupName.
-        // If subDataMapping has groupName entries, use them as the sole lookup keys.
-        // Otherwise fall back to using group names directly (legacy path).
-        const hasGroupNameMapping = Object.values(contract.subDataMapping).some(m => !!(m as any).groupName);
-
+        // ✅ SIMPLIFIED: Map groupName directly to subId (no canonicalKey layer)
+        // Iterate subDataMapping, use groupName to extract, key by subId
         const allMatchedGroups: Record<string, string> = {};
 
-        if (hasGroupNameMapping) {
-            // New path: iterate subDataMapping, use groupName to extract, key by canonicalKey
-            Object.entries(contract.subDataMapping).forEach(([, info]) => {
-                const groupName = (info as any).groupName as string | undefined;
-                if (!groupName) return;
-                const value = match!.groups![groupName];
-                if (value !== undefined && value !== null && value !== '') {
-                    allMatchedGroups[info.canonicalKey] = value.trim();
-                    console.log(`  📝 [NLP Regex] Gruppo (GUID→canonical): ${groupName} → ${info.canonicalKey} = ${value}`);
-                }
-            });
-        } else {
-            // Legacy path: use group names directly as keys
-            Object.entries(match.groups).forEach(([groupKey, value]) => {
-                if (value !== undefined && value !== null && value !== '') {
-                    allMatchedGroups[groupKey] = value;
-                    console.log(`  📝 [NLP Regex] Gruppo matchato (legacy): ${groupKey} = ${value}`);
-                }
-            });
-        }
+        Object.entries(contract.subDataMapping).forEach(([subId, info]) => {
+            const groupName = (info as any).groupName as string | undefined;
+            if (!groupName) return;
+            const value = match!.groups![groupName];
+            if (value !== undefined && value !== null && value !== '') {
+                allMatchedGroups[subId] = value.trim();
+                console.log(`  📝 [NLP Regex] Gruppo: ${groupName} → subId ${subId} = ${value}`);
+            }
+        });
 
         if (Object.keys(allMatchedGroups).length === 0) {
             console.log('❌ [NLP Regex] Nessun gruppo matchato');
             return { values: {}, hasMatch: false, source: null };
         }
 
-        // ✅ Logica ambiguità: se match singolo, verifica ambiguità PRIMA di associare
-        const groupCount = Object.keys(allMatchedGroups).length;
-        if (groupCount === 1) {
-            const matchedCanonicalKey = Object.keys(allMatchedGroups)[0];
-            const matchedValue = allMatchedGroups[matchedCanonicalKey];
-
-            console.log('🔍 [NLP Regex] Match singolo gruppo, verifica ambiguità', {
-                canonicalKey: matchedCanonicalKey,
-                value: matchedValue
-            });
-
-            // Verifica se il valore è ambiguo
-            if (checkAmbiguity(text, contract)) {
-                console.log('  ⚠️ [NLP Regex] Valore ambiguo rilevato, risoluzione con contesto');
-
-                // Risolvi ambiguità usando il contesto
-                const resolved = resolveWithContext(matchedValue, matchedCanonicalKey, activeSubId, contract);
-
-                if (!resolved.isRelevant) {
-                    // Match irrilevante → ritorna no match
-                    console.log('  ❌ [NLP Regex] Match irrilevante: sub attivo non è ambiguo', {
-                        activeSubCanonicalKey: activeSubId ? contract.subDataMapping[activeSubId]?.canonicalKey : undefined,
-                        ambiguousCanonicalKeys: contract.regex.ambiguity?.ambiguousCanonicalKeys || []
-                    });
-                    return { values: {}, hasMatch: false, source: null };
-                }
-
-                // Match rilevante → assegna valore risolto al canonicalKey corretto
-                values[resolved.canonicalKey!] = resolved.value;
-                console.log('  ✅ [NLP Regex] Ambiguità risolta', {
-                    originalMatchedKey: matchedCanonicalKey,
-                    resolvedCanonicalKey: resolved.canonicalKey,
-                    value: resolved.value
-                });
-            } else {
-                // Non ambiguo → usa valore originale
-                values[matchedCanonicalKey] = matchedValue;
-                console.log('  ℹ️ [NLP Regex] Valore non ambiguo, usa valore originale');
-            }
-        } else {
-            // Match multi-gruppo → usa tutti i valori (già keyed by canonicalKey)
-            Object.assign(values, allMatchedGroups);
-            console.log('  ℹ️ [NLP Regex] Match multi-gruppo, usa tutti i valori');
-        }
+        // ✅ Simplified: Direct mapping groupName → subId (no ambiguity logic needed)
+        // If multiple groups matched, use all values (already keyed by subId)
+        Object.assign(values, allMatchedGroups);
+        console.log('  ℹ️ [NLP Regex] Estrazione completata', {
+            matchedSubIds: Object.keys(allMatchedGroups),
+            values
+        });
 
         if (Object.keys(values).length > 0) {
             console.log('✅ [NLP Regex] Estrazione completata con successo', {
@@ -239,59 +187,8 @@ function checkAmbiguity(text: string, contract: NLPContract): boolean {
     }
 }
 
-/**
- * Risolve ambiguità assegnando il valore al sub attivo se è tra quelli ambigui
- * @param value - Valore ambiguo estratto
- * @param matchedCanonicalKey - CanonicalKey del gruppo matchato dalla regex principale
- * @param activeSubId - ID del sub attivo (contesto)
- * @param contract - Contract NLP
- * @returns Oggetto con canonicalKey risolto, valore e flag isRelevant
- */
-function resolveWithContext(
-    value: any,
-    matchedCanonicalKey: string,
-    activeSubId: string | undefined,
-    contract: NLPContract
-): { canonicalKey?: string; value?: any; isRelevant: boolean } {
-    // Se non c'è sub attivo, mantieni assegnazione originale
-    if (!activeSubId) {
-        console.log('  ℹ️ [NLP Regex] Nessun activeSubId, mantiene assegnazione originale', {
-            canonicalKey: matchedCanonicalKey,
-            value
-        });
-        return { canonicalKey: matchedCanonicalKey, value, isRelevant: true };
-    }
-
-    // Ottieni canonicalKey del sub attivo
-    const subMapping = contract.subDataMapping[activeSubId];
-    if (!subMapping) {
-        console.warn('  ⚠️ [NLP Regex] activeSubId non trovato nel subDataMapping', {
-            activeSubId: activeSubId.substring(0, 20) + '...'
-        });
-        return { isRelevant: false };
-    }
-
-    const targetCanonicalKey = subMapping.canonicalKey;
-
-    // Verifica se targetCanonicalKey è tra quelli ambigui
-    const ambiguousCanonicalKeys = contract.regex.ambiguity?.ambiguousCanonicalKeys || [];
-
-    if (!ambiguousCanonicalKeys.includes(targetCanonicalKey)) {
-        // Sub attivo non è ambiguo → match irrilevante
-        console.log('  ❌ [NLP Regex] Match irrilevante: sub attivo non è ambiguo', {
-            targetCanonicalKey,
-            ambiguousCanonicalKeys
-        });
-        return { isRelevant: false };
-    }
-
-    // Sub attivo è ambiguo → assegna valore
-    console.log('  ✅ [NLP Regex] Match rilevante: sub attivo è ambiguo', {
-        targetCanonicalKey,
-        value
-    });
-    return { canonicalKey: targetCanonicalKey, value, isRelevant: true };
-}
+// ✅ REMOVED: resolveWithContext - no longer needed with direct subId mapping
+// Ambiguity resolution is now handled at a higher level if needed.
 
 /**
  * Prova estrazione con NER
@@ -308,8 +205,8 @@ async function tryNERExtraction(_text: string, _contract: NLPContract): Promise<
 async function tryLLMExtraction(text: string, contract: NLPContract): Promise<ExtractionResult> {
     try {
         // Costruisci prompt
-        const subDataList = Object.values(contract.subDataMapping)
-            .map(m => `- ${m.canonicalKey}: ${m.label} (${m.type})`)
+        const subDataList = Object.entries(contract.subDataMapping)
+            .map(([subId, m]) => `- ${subId}: ${m.label} (${m.type})`)
             .join('\n');
 
         const userPrompt = contract.llm.userPromptTemplate
@@ -333,11 +230,19 @@ async function tryLLMExtraction(text: string, contract: NLPContract): Promise<Ex
             if (data.candidates && data.candidates.length > 0) {
                 const candidate = data.candidates[0];
                 if (candidate.value && typeof candidate.value === 'object') {
-                    // Mappa i valori usando canonicalKey
+                    // ✅ SIMPLIFIED: Map values directly using subId (LLM should return subId keys)
+                    // If LLM returns groupName keys (s1, s2, s3), map them to subId
                     const values: Record<string, any> = {};
-                    Object.keys(candidate.value).forEach(key => {
-                        if (getSubIdForCanonicalKey(contract, key)) {
-                            values[key] = candidate.value[key];
+                    Object.entries(candidate.value).forEach(([key, value]) => {
+                        // Check if key is a groupName (s1, s2, s3) and find corresponding subId
+                        const subId = Object.entries(contract.subDataMapping).find(
+                            ([_, info]) => (info as any).groupName === key
+                        )?.[0];
+                        if (subId) {
+                            values[subId] = value;
+                        } else if (contract.subDataMapping[key]) {
+                            // Key is already a subId
+                            values[key] = value;
                         }
                     });
 

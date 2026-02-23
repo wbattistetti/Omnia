@@ -7,7 +7,7 @@ import { buildPlan, isSaturated, nextMissingSub, setMemory, Memory, Plan } from 
 import { isYes, isNo, extractImplicitCorrection } from './utils';
 import { getKind } from './parsers/registry';
 import { getLogger } from './logger';
-import { loadContract, getSubIdForCanonicalKey } from './contracts/contractLoader';
+import { loadContract } from './contracts/contractLoader';
 import { extractWithContractSync } from './contracts/contractExtractor';
 import { taskTemplateService } from '../../services/TaskTemplateService';
 
@@ -379,16 +379,15 @@ function extractOrdered(
             source: result.source
           });
 
-          // Map canonicalKey → subId and write to memory
+          // ✅ SIMPLIFIED: result.values is already keyed by subId (no canonicalKey mapping needed)
           let matchedSpan: [number, number] | undefined = undefined;
 
-          for (const [canonicalKey, value] of Object.entries(result.values)) {
-            const subId = getSubIdForCanonicalKey(contract, canonicalKey);
-            if (subId && memory[subId]?.value === undefined) {
+          for (const [subId, value] of Object.entries(result.values)) {
+            if (memory[subId]?.value === undefined) {
               memory = setMemory(memory, subId, value, false);
-              console.log(`💾 [ENGINE] Saved: ${canonicalKey} = ${value} → ${subId}`);
-            } else if (subId && memory[subId]?.value !== undefined) {
-              console.log(`⏭️ [ENGINE] Skipped (exists): ${canonicalKey} → ${subId}`);
+              console.log(`💾 [ENGINE] Saved: subId ${subId} = ${value}`);
+            } else {
+              console.log(`⏭️ [ENGINE] Skipped (exists): subId ${subId}`);
             }
           }
 

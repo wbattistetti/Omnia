@@ -1,6 +1,7 @@
 Option Strict On
 Option Explicit On
 Imports System.Linq
+Imports System.Text.RegularExpressions
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 Imports TaskEngine
@@ -557,9 +558,12 @@ Public Class TaskAssembler
                 End If
             End If
 
-            ' ✅ CONVERSIONE CHIAVE: Converti array "contracts" in oggetti "regex", "rules", ecc.
+            ' ✅ NEW: Popola Contracts direttamente (fonte di verità unica)
+            ' ❌ RIMOSSO: La conversione contracts[] → nlpContract.Regex/Rules/Ner/Llm
+            ' Ora usiamo direttamente nlpContract.Contracts
             If contractObj("contracts") IsNot Nothing AndAlso contractObj("contracts").Type = JTokenType.Array Then
                 Dim contractsArray = CType(contractObj("contracts"), JArray)
+                nlpContract.Contracts = New List(Of NLPContractEngine)()
 
                 For Each contractItem As JObject In contractsArray
                     Dim contractType = If(contractItem("type")?.ToString(), "")
@@ -569,18 +573,19 @@ Public Class TaskAssembler
                         Continue For ' Salta contract disabilitati
                     End If
 
+                    Dim engine As New NLPContractEngine()
+                    engine.Type = contractType
+                    engine.Enabled = contractEnabled
+
                     Select Case contractType.ToLower()
                         Case "regex"
-                            ' Crea RegexConfig
-                            nlpContract.Regex = New RegexConfig()
-
                             ' Estrai patterns
                             If contractItem("patterns") IsNot Nothing AndAlso contractItem("patterns").Type = JTokenType.Array Then
                                 Dim patternsArray = CType(contractItem("patterns"), JArray)
-                                nlpContract.Regex.Patterns = New List(Of String)()
+                                engine.Patterns = New List(Of String)()
                                 For Each patternToken In patternsArray
                                     If patternToken.Type = JTokenType.String Then
-                                        nlpContract.Regex.Patterns.Add(patternToken.ToString())
+                                        engine.Patterns.Add(patternToken.ToString())
                                     End If
                                 Next
                             End If
@@ -588,83 +593,74 @@ Public Class TaskAssembler
                             ' Estrai patternModes (opzionale)
                             If contractItem("patternModes") IsNot Nothing AndAlso contractItem("patternModes").Type = JTokenType.Array Then
                                 Dim patternModesArray = CType(contractItem("patternModes"), JArray)
-                                nlpContract.Regex.PatternModes = New List(Of String)()
+                                engine.PatternModes = New List(Of String)()
                                 For Each modeToken In patternModesArray
                                     If modeToken.Type = JTokenType.String Then
-                                        nlpContract.Regex.PatternModes.Add(modeToken.ToString())
+                                        engine.PatternModes.Add(modeToken.ToString())
                                     End If
                                 Next
                             End If
 
                             ' Estrai ambiguityPattern (opzionale)
                             If contractItem("ambiguityPattern") IsNot Nothing Then
-                                nlpContract.Regex.AmbiguityPattern = contractItem("ambiguityPattern").ToString()
+                                engine.AmbiguityPattern = contractItem("ambiguityPattern").ToString()
                             End If
 
                             ' Estrai ambiguity config (opzionale)
                             If contractItem("ambiguity") IsNot Nothing Then
                                 Try
                                     Dim ambiguityJson = contractItem("ambiguity").ToString()
-                                    Dim ambiguity = JsonConvert.DeserializeObject(Of AmbiguityConfig)(ambiguityJson)
-                                    If ambiguity IsNot Nothing Then
-                                        nlpContract.Regex.Ambiguity = ambiguity
-                                    End If
+                                    engine.Ambiguity = JsonConvert.DeserializeObject(Of AmbiguityConfig)(ambiguityJson)
                                 Catch ex As Exception
-                                    ' Log removed
+                                    ' Ignore
                                 End Try
                             End If
 
                             ' Estrai testCases (opzionale)
                             If contractItem("testCases") IsNot Nothing AndAlso contractItem("testCases").Type = JTokenType.Array Then
                                 Dim testCasesArray = CType(contractItem("testCases"), JArray)
-                                nlpContract.Regex.TestCases = New List(Of String)()
+                                engine.TestCases = New List(Of String)()
                                 For Each testCaseToken In testCasesArray
                                     If testCaseToken.Type = JTokenType.String Then
-                                        nlpContract.Regex.TestCases.Add(testCaseToken.ToString())
+                                        engine.TestCases.Add(testCaseToken.ToString())
                                     End If
                                 Next
                             End If
 
                         Case "rules"
-                            ' Crea RulesConfig
-                            nlpContract.Rules = New RulesConfig()
-
                             ' Estrai extractorCode (opzionale)
                             If contractItem("extractorCode") IsNot Nothing Then
-                                nlpContract.Rules.ExtractorCode = contractItem("extractorCode").ToString()
+                                engine.ExtractorCode = contractItem("extractorCode").ToString()
                             End If
 
                             ' Estrai validators (opzionale)
                             If contractItem("validators") IsNot Nothing AndAlso contractItem("validators").Type = JTokenType.Array Then
                                 Dim validatorsArray = CType(contractItem("validators"), JArray)
-                                nlpContract.Rules.Validators = New List(Of Object)()
+                                engine.Validators = New List(Of Object)()
                                 For Each validatorToken In validatorsArray
-                                    nlpContract.Rules.Validators.Add(validatorToken.ToObject(Of Object)())
+                                    engine.Validators.Add(validatorToken.ToObject(Of Object)())
                                 Next
                             End If
 
                             ' Estrai testCases (opzionale)
                             If contractItem("testCases") IsNot Nothing AndAlso contractItem("testCases").Type = JTokenType.Array Then
                                 Dim testCasesArray = CType(contractItem("testCases"), JArray)
-                                nlpContract.Rules.TestCases = New List(Of String)()
+                                engine.TestCases = New List(Of String)()
                                 For Each testCaseToken In testCasesArray
                                     If testCaseToken.Type = JTokenType.String Then
-                                        nlpContract.Rules.TestCases.Add(testCaseToken.ToString())
+                                        engine.TestCases.Add(testCaseToken.ToString())
                                     End If
                                 Next
                             End If
 
                         Case "ner"
-                            ' Crea NERConfig
-                            nlpContract.Ner = New NERConfig()
-
                             ' Estrai entityTypes (opzionale)
                             If contractItem("entityTypes") IsNot Nothing AndAlso contractItem("entityTypes").Type = JTokenType.Array Then
                                 Dim entityTypesArray = CType(contractItem("entityTypes"), JArray)
-                                nlpContract.Ner.EntityTypes = New List(Of String)()
+                                engine.EntityTypes = New List(Of String)()
                                 For Each entityTypeToken In entityTypesArray
                                     If entityTypeToken.Type = JTokenType.String Then
-                                        nlpContract.Ner.EntityTypes.Add(entityTypeToken.ToString())
+                                        engine.EntityTypes.Add(entityTypeToken.ToString())
                                     End If
                                 Next
                             End If
@@ -673,46 +669,28 @@ Public Class TaskAssembler
                             If contractItem("confidence") IsNot Nothing Then
                                 Dim confidenceValue = contractItem("confidence").ToObject(Of Double?)()
                                 If confidenceValue.HasValue Then
-                                    nlpContract.Ner.Confidence = confidenceValue.Value
-                                End If
-                            End If
-
-                            ' Estrai enabled (opzionale)
-                            If contractItem("enabled") IsNot Nothing Then
-                                Dim enabledValue = contractItem("enabled").ToObject(Of Boolean?)()
-                                If enabledValue.HasValue Then
-                                    nlpContract.Ner.Enabled = enabledValue.Value
+                                    engine.Confidence = confidenceValue.Value
                                 End If
                             End If
 
                         Case "llm"
-                            ' Crea LLMConfig
-                            nlpContract.Llm = New LLMConfig()
-
                             ' Estrai systemPrompt (opzionale)
                             If contractItem("systemPrompt") IsNot Nothing Then
-                                nlpContract.Llm.SystemPrompt = contractItem("systemPrompt").ToString()
+                                engine.SystemPrompt = contractItem("systemPrompt").ToString()
                             End If
 
                             ' Estrai userPromptTemplate (opzionale)
                             If contractItem("userPromptTemplate") IsNot Nothing Then
-                                nlpContract.Llm.UserPromptTemplate = contractItem("userPromptTemplate").ToString()
+                                engine.UserPromptTemplate = contractItem("userPromptTemplate").ToString()
                             End If
 
                             ' Estrai responseSchema (opzionale)
                             If contractItem("responseSchema") IsNot Nothing Then
-                                nlpContract.Llm.ResponseSchema = contractItem("responseSchema").ToObject(Of Object)()
+                                engine.ResponseSchema = contractItem("responseSchema").ToObject(Of Object)()
                             End If
-
-                            ' Estrai enabled (opzionale)
-                            If contractItem("enabled") IsNot Nothing Then
-                                Dim enabledValue = contractItem("enabled").ToObject(Of Boolean?)()
-                                If enabledValue.HasValue Then
-                                    nlpContract.Llm.Enabled = enabledValue.Value
-                                End If
-                            End If
-
                     End Select
+
+                    nlpContract.Contracts.Add(engine)
                 Next
             End If
 
@@ -732,13 +710,14 @@ Public Class TaskAssembler
     ' ── Group-name validation helpers ────────────────────────────────────────
 
     ''' <summary>
-    ''' Pattern for the GUID-style technical group name introduced in Phase 2.
-    ''' Format: g_ followed by exactly 12 hex characters (e.g. g_12ab34cd56ef).
+    ''' ✅ REMOVED: _guidGroupPattern - no longer needed, using inline pattern for s[0-9]+
+    ''' Pattern for deterministic group names based on index.
+    ''' Format: s followed by one or more digits (e.g. s1, s2, s3).
     ''' </summary>
-    Private Shared ReadOnly _guidGroupPattern As New System.Text.RegularExpressions.Regex(
-        "^g_[a-f0-9]{12}$",
-        System.Text.RegularExpressions.RegexOptions.IgnoreCase Or
-        System.Text.RegularExpressions.RegexOptions.Compiled)
+    ' Private Shared ReadOnly _guidGroupPattern As New System.Text.RegularExpressions.Regex(
+    '     "^g_[a-f0-9]{12}$",
+    '     System.Text.RegularExpressions.RegexOptions.IgnoreCase Or
+    '     System.Text.RegularExpressions.RegexOptions.Compiled)
 
     ''' <summary>
     ''' Validates that every GroupName in SubDataMapping exists as a named group
@@ -750,12 +729,17 @@ Public Class TaskAssembler
     Private Shared Sub ValidateGroupNameCoherence(contract As NLPContract)
         If contract Is Nothing Then Return
         If contract.SubDataMapping Is Nothing OrElse contract.SubDataMapping.Count = 0 Then Return
-        If contract.Regex Is Nothing OrElse
-           contract.Regex.Patterns Is Nothing OrElse
-           contract.Regex.Patterns.Count = 0 Then Return
+
+        ' ✅ NEW: Leggi regex contract da Contracts invece di contract.Regex
+        Dim regexContract = contract.Contracts?.FirstOrDefault(Function(c) c.Type = "regex" AndAlso c.Enabled)
+        If regexContract Is Nothing OrElse
+           regexContract.Patterns Is Nothing OrElse
+           regexContract.Patterns.Count = 0 Then
+            Return ' No regex contract, skip validation
+        End If
 
         ' --- Step 1: extract named groups from the compiled main pattern ---
-        Dim mainPattern = contract.Regex.Patterns(0)
+        Dim mainPattern = regexContract.Patterns(0)
         Dim rx As System.Text.RegularExpressions.Regex
         Try
             rx = New System.Text.RegularExpressions.Regex(
@@ -787,14 +771,16 @@ Public Class TaskAssembler
                 Throw New InvalidOperationException(
                     $"NlpContract (template '{contract.TemplateName}'): SubDataMapping entry for subtask " &
                     $"'{kvp.Key}' is missing GroupName. GroupName is required " &
-                    $"(format: g_[a-f0-9]{{12}}, e.g. g_12ab34cd56ef).")
+                    $"(format: s[0-9]+, e.g. s1, s2, s3).")
             End If
 
-            If Not _guidGroupPattern.IsMatch(groupName) Then
+            ' ✅ UPDATED: Accept s[0-9]+ format (deterministic based on index)
+            Dim indexPattern As New Regex("^s[0-9]+$", RegexOptions.IgnoreCase)
+            If Not indexPattern.IsMatch(groupName) Then
                 Throw New InvalidOperationException(
                     $"NlpContract (template '{contract.TemplateName}'): GroupName '{groupName}' " &
                     $"for subtask '{kvp.Key}' is not a valid technical group name. " &
-                    $"Expected format: g_[a-f0-9]{{12}} (e.g. g_12ab34cd56ef).")
+                    $"Expected format: s[0-9]+ (e.g. s1, s2, s3).")
             End If
 
             mappingGroups.Add(groupName)

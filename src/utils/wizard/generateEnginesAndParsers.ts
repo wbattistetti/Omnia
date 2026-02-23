@@ -301,6 +301,37 @@ export async function generateEnginesAndParsersForAllNodes(
     const existingTypes = new Set((template.dataContract.contracts || []).map(c => c.type));
     const missingEngines = engines.filter(e => !existingTypes.has(engineTypeToContractType(e)));
 
+    // ✅ DEBUG: Check if existing regex pattern uses semantic names instead of s1/s2/s3
+    const existingRegexContract = template.dataContract.contracts?.find((c: any) => c.type === 'regex');
+    if (existingRegexContract?.patterns?.length > 0) {
+      const pattern = existingRegexContract.patterns[0];
+      const semanticGroups = ['giorno', 'mese', 'anno', 'day', 'month', 'year'];
+      const hasSemantic = semanticGroups.some(g => pattern.includes(`<${g}>`));
+      const deterministicGroups = pattern.match(/<s\d+>/g) || [];
+      const subDataMapping = template.dataContract.subDataMapping || {};
+      const expectedGroups = Object.values(subDataMapping).map((info: any) => info.groupName).filter(Boolean);
+
+      console.log(`[generateEnginesAndParsersForAllNodes] 🔍 Existing regex pattern check for node ${nodeId}`, {
+        pattern: pattern.substring(0, 200),
+        hasSemanticNames: hasSemantic,
+        hasDeterministicNames: deterministicGroups.length > 0,
+        deterministicGroupsFound: deterministicGroups,
+        expectedGroups: expectedGroups,
+        subDataMappingKeys: Object.keys(subDataMapping)
+      });
+
+      // ✅ FORCE REGENERATION if pattern has semantic names but SubDataMapping has s1/s2/s3
+      if (hasSemantic && expectedGroups.some((g: string) => /^s\d+$/.test(g))) {
+        console.warn(`[generateEnginesAndParsersForAllNodes] ⚠️ Pattern mismatch detected: pattern has semantic names but SubDataMapping has s1/s2/s3. Forcing regeneration.`);
+        // Remove old regex contract to force regeneration
+        template.dataContract.contracts = template.dataContract.contracts.filter((c: any) => c.type !== 'regex');
+        existingTypes.delete('regex');
+        if (!missingEngines.includes('regex')) {
+          missingEngines.push('regex');
+        }
+      }
+    }
+
     if (missingEngines.length === 0) {
       console.log(`[generateEnginesAndParsersForAllNodes] ⚠️ Node ${nodeId} already has all required parsers, skipping`, {
         existingTypes: [...existingTypes],

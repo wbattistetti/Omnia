@@ -443,16 +443,68 @@ export class DialogueTaskService {
       return;
     }
 
+    // ✅ DEBUG: Verifica se template.label contiene emoji
+    const hasEmoji = /[\u{1F000}-\u{1F9FF}]/u.test(template.label);
+    const emojiMatches = template.label.match(/[\u{1F000}-\u{1F9FF}]/gu) || [];
+
+    if (hasEmoji) {
+      console.error('[DialogueTaskService] ❌ EMOJI DETECTED IN template.label!', {
+        templateId,
+        label: template.label,
+        labelLength: template.label.length,
+        emojiCount: emojiMatches.length,
+        emojis: emojiMatches,
+        labelPreview: template.label.substring(0, 100)
+      });
+    }
+
+    const textToSend = template.label.trim();
+    console.log('[DialogueTaskService] 📤 Sending embedding request', {
+      templateId,
+      textLength: textToSend.length,
+      textPreview: textToSend.substring(0, 50),
+      hasEmoji,
+      emojiCount: emojiMatches.length
+    });
+
     try {
       // 1. Calcola embedding
       const computeResponse = await fetch('/api/embeddings/compute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: template.label.trim() })
+        body: JSON.stringify({ text: textToSend })
+      });
+
+      // ✅ DEBUG: Log risposta dettagliata
+      console.log('[DialogueTaskService] 📥 Embedding response received', {
+        templateId,
+        status: computeResponse.status,
+        statusText: computeResponse.statusText,
+        ok: computeResponse.ok,
+        headers: Object.fromEntries(computeResponse.headers.entries())
       });
 
       if (!computeResponse.ok) {
-        throw new Error(`Failed to compute embedding: ${computeResponse.status}`);
+        // ✅ DEBUG: Leggi il body dell'errore per vedere il messaggio dettagliato
+        const errorText = await computeResponse.text();
+        let errorJson;
+        try {
+          errorJson = JSON.parse(errorText);
+        } catch {
+          errorJson = { raw: errorText };
+        }
+
+        console.error('[DialogueTaskService] ❌ Embedding computation failed', {
+          templateId,
+          status: computeResponse.status,
+          statusText: computeResponse.statusText,
+          errorText: errorText.substring(0, 500),
+          errorJson,
+          textSent: textToSend.substring(0, 50),
+          textLength: textToSend.length
+        });
+
+        throw new Error(`Failed to compute embedding: ${computeResponse.status} - ${errorJson.error || errorJson.raw || errorText}`);
       }
 
       const { embedding } = await computeResponse.json();
@@ -482,7 +534,14 @@ export class DialogueTaskService {
         note: 'Embedding will be saved to database when user clicks "Salva in libreria"'
       });
     } catch (error) {
-      console.error('[DialogueTaskService] ❌ Failed to generate embedding:', error);
+      console.error('[DialogueTaskService] ❌ Failed to generate embedding:', {
+        templateId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+        textSent: textToSend.substring(0, 50),
+        textLength: textToSend.length,
+        hasEmoji
+      });
       // Non blocca - embedding può essere generato dopo
     }
   }

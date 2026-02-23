@@ -58,7 +58,8 @@ function convertToMainListFormat(node: WizardTaskTreeNode): any {
   const mainNode: any = {
     id: node.id,
     label: node.label,
-    icon: node.icon,
+    // ✅ Use emoji if available, otherwise fallback to icon (backward compatibility)
+    icon: node.emoji || node.icon,
     kind: node.type,
     templateId: node.templateId,
   };
@@ -68,7 +69,8 @@ function convertToMainListFormat(node: WizardTaskTreeNode): any {
     mainNode.subNodes = node.subNodes.map((subNode) => ({
       id: subNode.id,
       label: subNode.label,
-      icon: subNode.icon,
+      // ✅ Use emoji if available, otherwise fallback to icon (backward compatibility)
+      icon: subNode.emoji || subNode.icon,
       kind: subNode.type,
       templateId: subNode.templateId,
       required: true, // Default: all sub-nodes are required

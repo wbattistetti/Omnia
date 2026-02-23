@@ -1,5 +1,5 @@
 import { WizardConstraint } from './WizardConstraint';
-import { WizardNLPContract } from './WizardNLPContract';
+import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
 
 /**
  * Stato di esecuzione della pipeline per un singolo task
@@ -21,9 +21,9 @@ export type TaskPipelineStatus = {
 export type WizardTaskTreeNode = {
   id: string;
   templateId: string;
-  label: string;
+  label: string; // ✅ Pure text (no emoji) - used in contracts sent to backend
   type?: string;
-  icon?: string;
+  emoji?: string; // ✅ Emoji as separate field (UI-only) - e.g. "📅", "👤", "📍"
 
   // ✅ NUOVO: Variabili (generati da VariableNameGeneratorService)
   readableName?: string;      // Nome completo variabile (es: "Data di nascita del paziente")
@@ -38,7 +38,7 @@ export type WizardTaskTreeNode = {
 
   // Dati generati dalla pipeline
   constraints?: WizardConstraint[];
-  dataContract?: WizardNLPContract;
+  dataContract?: DataContract;
 
   // Stato di esecuzione della pipeline per questo task
   pipelineStatus?: TaskPipelineStatus;

@@ -132,7 +132,10 @@ def generate_regex(body: dict = Body(...)):
 def get_system_message_for_engine(engine: str) -> str:
     """Get system message based on engine type"""
     if engine == 'regex':
-        return 'You are a regex expert. Always return valid JSON.'
+        return '''You are a regex expert. Always return valid JSON.
+Generate JavaScript-compatible regex patterns with named groups.
+CRITICAL: Use deterministic group names s1, s2, s3... in order (based on subentity index).
+DO NOT use semantic names like "day", "month", "year", "giorno", "mese", "anno".'''
     elif engine == 'llm':
         return 'You are an information extraction expert. Always return valid JSON.'
     elif engine == 'rule_based':
@@ -493,101 +496,9 @@ def generate_constraints(body: dict = Body(...)):
             "error": str(e)
         }
 
-@router.post("/api/nlp/generate-engines")
-def generate_engines(body: dict = Body(...)):
-    """
-    Generate all extraction engines for a semantic contract.
-    Returns all five engine types: regex, rule_based, ner, llm, embedding.
-    This is an additive operation that preserves the original contract structure.
-    """
-    from newBackend.services.svc_ai_client import chat_json
-    from newBackend.core.core_settings import OPENAI_KEY
-    import sys
-    import os
-    import re
-
-    # Add backend/ai_prompts to path
-    backend_path = os.path.join(os.path.dirname(__file__), '..', '..', 'backend')
-    if backend_path not in sys.path:
-        sys.path.insert(0, backend_path)
-
-    from ai_prompts.generate_engines_prompt import get_engines_prompt
-
-    contract = (body or {}).get("contract")
-    node_label = (body or {}).get("nodeLabel")
-    provider = (body or {}).get("provider", "openai")
-    model = (body or {}).get("model")
-
-    if not contract:
-        return {"error": "Contract is required"}
-
-    if not OPENAI_KEY:
-        return {"error": "OPENAI_KEY not configured"}
-
-    try:
-        # Generate prompt
-        prompt = get_engines_prompt(contract, node_label)
-
-        # System message for engines generation
-        system_message = (
-            "You are an Engines Generator. "
-            "Your task is to generate all five extraction engines for semantic contracts. "
-            "You must generate: regex, rule_based, ner, llm, and embedding engines. "
-            "All engines must be coherent with the contract, canonical values, and constraints. "
-            "Return ONLY valid JSON, no markdown, no code fences, no comments."
-        )
-
-        # Call AI
-        ai_response = chat_json([
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": prompt}
-        ], provider=provider if provider else "openai")
-
-        # Parse response
-        if isinstance(ai_response, str):
-            import json
-            result = json.loads(ai_response)
-        else:
-            result = ai_response
-
-        # Validate response structure
-        if not isinstance(result, dict):
-            raise ValueError("AI response is not a dictionary")
-
-        # Ensure all required engines exist
-        engines = {
-            "regex": result.get("regex", {}),
-            "rule_based": result.get("rule_based", {}),
-            "ner": result.get("ner", {}),
-            "llm": result.get("llm", {}),
-            "embedding": result.get("embedding", {})
-        }
-
-        # Validate regex can be compiled (if provided)
-        if engines["regex"].get("regex"):
-            try:
-                re.compile(engines["regex"]["regex"])
-            except Exception as regex_error:
-                print(f"[generate-engines] Warning: Generated regex may be invalid: {str(regex_error)}", flush=True)
-                engines["regex"]["warning"] = f"Regex may be invalid: {str(regex_error)}"
-
-        # Validate engines structure
-        if not engines["regex"] and not engines["rule_based"] and not engines["ner"] and not engines["llm"] and not engines["embedding"]:
-            print("[generate-engines] Warning: No engines generated", flush=True)
-
-        return {
-            "success": True,
-            "engines": engines
-        }
-
-    except Exception as e:
-        print(f"[generate-engines] Error: {str(e)}", flush=True)
-        import traceback
-        traceback.print_exc()
-        return {
-            "success": False,
-            "error": str(e)
-        }
+# ❌ REMOVED: /api/nlp/generate-engines endpoint - legacy endpoint completely removed
+# The new wizard flow uses /api/nlp/plan-engines + /api/nlp/generate-regex instead
+# Any call to this endpoint will result in 404 Not Found
 
 @router.post("/api/nlp/generate-escalation")
 def generate_escalation(body: dict = Body(...)):
@@ -726,6 +637,190 @@ def generate_escalation(body: dict = Body(...)):
 
     except Exception as e:
         print(f"[generate-escalation] Error: {str(e)}", flush=True)
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@router.post("/api/nlp/plan-engines")
+def plan_engines(body: dict = Body(...)):
+    """
+    Plan engines for all nodes in a task tree.
+    Returns a plan specifying which engines to generate for each node.
+
+    Input:
+    {
+        "contract": {
+            "nodes": [
+                {
+                    "nodeId": "A",
+                    "nodeLabel": "Data di nascita",
+                    "contract": { "entity": {...}, "subEntities": [...] }
+                },
+                ...
+            ]
+        },
+        "locale": "it",
+        "provider": "openai",
+        "model": "gpt-4-turbo-preview"
+    }
+
+    Output:
+    {
+        "success": true,
+        "parsersPlan": [
+            { "nodeId": "A", "engines": ["regex", "llm"] },
+            { "nodeId": "B", "engines": ["regex"] },
+            ...
+        ]
+    }
+    """
+    from newBackend.services.svc_ai_client import chat_json
+    from newBackend.core.core_settings import OPENAI_KEY
+    import sys
+    import os
+    import json
+
+    # Add backend/ai_prompts to path
+    backend_path = os.path.join(os.path.dirname(__file__), '..', '..', 'backend')
+    if backend_path not in sys.path:
+        sys.path.insert(0, backend_path)
+
+    contract_tree = (body or {}).get("contract", {})
+    locale = (body or {}).get("locale", "it")
+    provider = (body or {}).get("provider", "openai")
+    model = (body or {}).get("model")
+
+    if not contract_tree or "nodes" not in contract_tree:
+        return {
+            "success": False,
+            "error": "Contract tree with nodes is required"
+        }
+
+    if not OPENAI_KEY:
+        return {
+            "success": False,
+            "error": "OPENAI_KEY not configured"
+        }
+
+    try:
+        nodes = contract_tree.get("nodes", [])
+
+        if not nodes or len(nodes) == 0:
+            return {
+                "success": False,
+                "error": "At least one node is required in contract tree"
+            }
+
+        # Build prompt for AI to plan engines for all nodes
+        nodes_summary = []
+        for n in nodes:
+            node_id = n.get("nodeId", "unknown")
+            node_label = n.get("nodeLabel", "unknown")
+            contract = n.get("contract", {})
+            entity_label = contract.get("entity", {}).get("label", "unknown")
+            sub_entities = contract.get("subEntities", [])
+            nodes_summary.append({
+                "nodeId": node_id,
+                "nodeLabel": node_label,
+                "entityLabel": entity_label,
+                "subEntitiesCount": len(sub_entities),
+                "subEntities": [se.get("label", "unknown") for se in sub_entities[:5]]  # Limit to first 5
+            })
+
+        prompt = f"""You are an Engine Planner. Your task is to determine which extraction engines should be generated for each node in a task tree.
+
+TASK TREE ({len(nodes)} nodes):
+{json.dumps(nodes_summary, indent=2)}
+
+AVAILABLE ENGINES:
+- regex: Pattern-based extraction (fast, deterministic, good for structured data)
+- rule_based: Rule-based extraction (flexible, deterministic, good for complex logic)
+- ner: Named Entity Recognition (context-aware, good for ambiguous data)
+- llm: LLM-based extraction (most flexible, slower, good for complex cases)
+- embedding: Embedding-based similarity (good for matching against examples)
+
+RULES:
+1. Each node may need 1-4 engines depending on complexity
+2. Simple nodes (single value, no sub-entities) → regex + llm
+3. Complex nodes (composite, multiple sub-entities) → regex + rule_based + llm
+4. Nodes with examples or canonical values → include embedding
+5. Nodes requiring context disambiguation → include ner
+6. Always include at least regex and llm for fallback
+7. Prioritize faster engines (regex, rule_based) over slower ones (llm, embedding)
+
+RESPONSE FORMAT (strict JSON, no markdown, no code fences, no comments):
+{{
+  "parsersPlan": [
+    {{"nodeId": "A", "engines": ["regex", "llm"]}},
+    {{"nodeId": "B", "engines": ["regex", "rule_based", "llm"]}},
+    ...
+  ]
+}}
+
+Return ONLY the JSON object, nothing else."""
+
+        system_message = (
+            "You are an Engine Planner. "
+            "Your task is to determine which extraction engines should be generated for each node in a task tree. "
+            "Return ONLY valid JSON with parsersPlan array, no markdown, no code fences, no comments."
+        )
+
+        # Call AI
+        ai_response = chat_json([
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": prompt}
+        ], provider=provider if provider else "openai")
+
+        # Parse response
+        if isinstance(ai_response, str):
+            result = json.loads(ai_response)
+        else:
+            result = ai_response
+
+        # Validate response structure
+        if not isinstance(result, dict) or "parsersPlan" not in result:
+            raise ValueError("AI response must contain parsersPlan array")
+
+        parsers_plan = result.get("parsersPlan", [])
+        if not isinstance(parsers_plan, list):
+            raise ValueError("parsersPlan must be an array")
+
+        # Validate each plan entry
+        validated_plan = []
+        valid_engine_types = ["regex", "rule_based", "ner", "llm", "embedding"]
+        for entry in parsers_plan:
+            if not isinstance(entry, dict):
+                continue
+            node_id = entry.get("nodeId")
+            engines = entry.get("engines", [])
+            if node_id and isinstance(engines, list):
+                # Filter valid engine types
+                valid_engines = [e for e in engines if e in valid_engine_types]
+                if valid_engines:
+                    validated_plan.append({
+                        "nodeId": node_id,
+                        "engines": valid_engines
+                    })
+
+        if len(validated_plan) == 0:
+            raise ValueError("No valid engine plans found in AI response")
+
+        print(f"[plan-engines] Engine plan generated", flush=True)
+        print(f"  - total nodes: {len(nodes)}", flush=True)
+        print(f"  - planned nodes: {len(validated_plan)}", flush=True)
+        for plan in validated_plan:
+            print(f"    - {plan['nodeId']}: {', '.join(plan['engines'])}", flush=True)
+
+        return {
+            "success": True,
+            "parsersPlan": validated_plan
+        }
+
+    except Exception as e:
+        print(f"[plan-engines] Error: {str(e)}", flush=True)
         import traceback
         traceback.print_exc()
         return {

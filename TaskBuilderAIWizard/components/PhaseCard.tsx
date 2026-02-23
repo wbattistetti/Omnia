@@ -1,3 +1,4 @@
+import React from 'react';
 import { LucideIcon } from 'lucide-react';
 
 type PhaseState = 'pending' | 'running' | 'completed';
@@ -16,7 +17,12 @@ type PhaseCardProps = {
   dynamicMessage?: string;
 };
 
-export function PhaseCard({
+/**
+ * PhaseCard - Memoized component with custom comparison
+ *
+ * Only re-renders when relevant props actually change.
+ */
+export const PhaseCard = React.memo(function PhaseCard({
   icon: Icon,
   title,
   state,
@@ -36,6 +42,8 @@ export function PhaseCard({
 
   const pct = Math.min(100, Math.max(0, progress ?? 0));
   const barColor = isCompleted ? 'bg-green-500' : 'bg-blue-500';
+
+  // ❌ REMOVED: Debug log (was causing spam)
 
   return (
     <div
@@ -125,4 +133,16 @@ export function PhaseCard({
       )}
     </div>
   );
-}
+}, (prevProps, nextProps) => {
+  // ✅ Custom comparison: only re-render if relevant props actually change
+  return (
+    prevProps.title === nextProps.title &&
+    prevProps.state === nextProps.state &&
+    prevProps.progress === nextProps.progress &&
+    prevProps.isExpanded === nextProps.isExpanded &&
+    prevProps.showCorrectionForm === nextProps.showCorrectionForm &&
+    prevProps.correctionInput === nextProps.correctionInput &&
+    prevProps.dynamicMessage === nextProps.dynamicMessage &&
+    prevProps.icon === nextProps.icon // Icon component reference should be stable
+  );
+});

@@ -42,6 +42,13 @@ export interface WizardContextValue {
   // Sotto-stati per parte variabile dinamica
   currentParserSubstep: string | null;
   currentMessageSubstep: string | null;
+
+  // ✅ NEW: Phase counters (source of truth for progress)
+  phaseCounters?: {
+    constraints: { completed: number; total: number };
+    parsers: { completed: number; total: number };
+    messages: { completed: number; total: number };
+  };
 }
 
 export const WizardContext = createContext<WizardContextValue | null>(null);

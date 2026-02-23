@@ -1,10 +1,10 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import type { WizardNLPContract } from '../types/WizardNLPContract';
+import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
 
 /** Regex that every valid GroupName must satisfy. */
-const GROUP_NAME_PATTERN = /^g_[a-f0-9]{12}$/i;
+const GROUP_NAME_PATTERN = /^s[0-9]+$/i;
 
 export interface WizardContractValidationResult {
   valid: boolean;
@@ -13,18 +13,17 @@ export interface WizardContractValidationResult {
 }
 
 /**
- * Validates a WizardNLPContract before it is submitted to the backend compiler.
+ * Validates a DataContract before it is submitted to the backend compiler.
  *
  * Enforced invariants:
  *  1. Every SubDataMapping entry has a non-empty groupName.
- *  2. Every groupName matches g_[a-f0-9]{12}.
+ *  2. Every groupName matches s[0-9]+ (deterministic based on index).
  *  3. No groupName is duplicated.
- *  4. No canonicalKey appears as a named group in any regex pattern.
- *  5. Every groupName that exists in SubDataMapping appears in at least one pattern
+ *  4. Every groupName that exists in SubDataMapping appears in at least one regex pattern
  *     (when patterns are present).
  */
 export function validateWizardContract(
-  contract: WizardNLPContract
+  contract: DataContract
 ): WizardContractValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -36,7 +35,9 @@ export function validateWizardContract(
     return { valid: true, errors, warnings };
   }
 
-  const patterns: string[] = contract.regex?.patterns ?? [];
+  // ✅ Extract patterns from contracts[] (not from contract.regex)
+  const regexContracts = contract.contracts?.filter(c => c.type === 'regex') ?? [];
+  const patterns: string[] = regexContracts.flatMap(c => (c as any).patterns ?? []);
   const combinedPattern = patterns.join('\n');
 
   // --- Extract named groups from all patterns ---
@@ -59,11 +60,11 @@ export function validateWizardContract(
       continue;
     }
 
-    // 2. groupName must match GUID format
+    // 2. groupName must match s[0-9]+ format
     if (!GROUP_NAME_PATTERN.test(info.groupName)) {
       errors.push(
         `SubDataMapping entry '${subId}' has invalid groupName '${info.groupName}'. ` +
-        `Expected format: g_[a-f0-9]{12}.`
+        `Expected format: s[0-9]+ (e.g. s1, s2, s3).`
       );
     }
 
@@ -74,15 +75,7 @@ export function validateWizardContract(
       seenGroupNames.add(info.groupName);
     }
 
-    // 4. canonicalKey must NOT appear as a named group in any pattern
-    if (info.canonicalKey && regexGroups.has(info.canonicalKey)) {
-      errors.push(
-        `canonicalKey '${info.canonicalKey}' for subtask '${subId}' appears as a named group ` +
-        `in the regex pattern. Only GUID groupNames (g_[a-f0-9]{12}) are allowed as group names.`
-      );
-    }
-
-    // 5. groupName should appear in at least one pattern (when patterns are present)
+    // 4. groupName should appear in at least one pattern (when patterns are present)
     if (patterns.length > 0 && GROUP_NAME_PATTERN.test(info.groupName)) {
       if (!regexGroups.has(info.groupName)) {
         errors.push(

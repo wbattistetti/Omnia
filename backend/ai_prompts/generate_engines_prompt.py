@@ -70,16 +70,18 @@ CONSTRAINTS (engines must respect these):
     subentities_context = ""
     if subentities:
         subentities_list = []
-        for s in subentities:
+        for index, s in enumerate(subentities, 1):
             sub_key = s.get("subTaskKey", "")
             sub_meaning = s.get("meaning", "")
             sub_type = s.get("type", "")
             sub_constraints = s.get("constraints", {})
-            subentities_list.append(f"  - {sub_key} ({sub_type}): {sub_meaning}")
+            # ✅ CRITICAL: Use deterministic group name s1, s2, s3... instead of semantic subTaskKey
+            deterministic_name = f"s{index}"
+            subentities_list.append(f"  - {deterministic_name} (was {sub_key}) ({sub_type}): {sub_meaning}")
             if sub_constraints:
                 subentities_list.append(f"    Constraints: {json.dumps(sub_constraints, ensure_ascii=False)}")
         subentities_context = f"""
-SUBENTITIES TO EXTRACT:
+SUBENTITIES TO EXTRACT (use deterministic group names s1, s2, s3...):
 {chr(10).join(subentities_list)}
 """
 
@@ -88,7 +90,7 @@ SUBENTITIES TO EXTRACT:
         format_context = f"""
 OUTPUT FORMAT: Object with keys {output_keys}
 Each engine must extract and return an object with these exact keys.
-Example: {{"day": "15", "month": "04", "year": "2020"}}
+Example: {{"s1": "15", "s2": "04", "s3": "2020"}}  (using deterministic group names s1, s2, s3)
 """
     else:
         format_context = """
@@ -128,8 +130,9 @@ Generate ALL five types of extraction engines that:
    - Must match canonical examples
    - Must respect constraints (minLength, maxLength, pattern)
    - For composite entities: extract all subentities
-   - Use named groups matching output keys
-   - Example for date: `(?P<day>\\d{{1,2}})[-/](?P<month>\\d{{1,2}})[-/](?P<year>\\d{{4}})`
+   - ✅ CRITICAL: Use deterministic group names s1, s2, s3... in order (based on subentity index)
+   - DO NOT use semantic names like "day", "month", "year" - use s1, s2, s3 instead
+   - Example for date (3 subentities): `(?P<s1>\\d{{1,2}})[-/](?P<s2>\\d{{1,2}})[-/](?P<s3>\\d{{4}})`
 
 2. **rule_based** (Rule-Based Engine):
    - Generate explicit if-then rules

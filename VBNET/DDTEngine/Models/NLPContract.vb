@@ -26,31 +26,130 @@ Public Class NLPContract
     Public Property SubDataMapping As Dictionary(Of String, SubDataMappingInfo)
 
     ''' <summary>
-    ''' Configurazione regex per l'estrazione
+    ''' ✅ NEW: Array di engine contracts (fonte di verità unica)
     ''' </summary>
+    Public Property Contracts As List(Of NLPContractEngine)
+
+    ''' <summary>
+    ''' ❌ DEPRECATED: Usa Contracts.FirstOrDefault(Function(c) c.Type = "regex") invece
+    ''' Mantenuto solo per retrocompatibilità temporanea
+    ''' </summary>
+    <Obsolete("Use Contracts.FirstOrDefault(Function(c) c.Type = ""regex"") instead")>
     Public Property Regex As RegexConfig
 
     ''' <summary>
-    ''' Regole di estrazione e validazione
+    ''' ❌ DEPRECATED: Usa Contracts.FirstOrDefault(Function(c) c.Type = "rules") invece
     ''' </summary>
+    <Obsolete("Use Contracts.FirstOrDefault(Function(c) c.Type = ""rules"") instead")>
     Public Property Rules As RulesConfig
 
     ''' <summary>
-    ''' Configurazione NER (opzionale)
+    ''' ❌ DEPRECATED: Usa Contracts.FirstOrDefault(Function(c) c.Type = "ner") invece
     ''' </summary>
+    <Obsolete("Use Contracts.FirstOrDefault(Function(c) c.Type = ""ner"") instead")>
     Public Property Ner As NERConfig
 
     ''' <summary>
-    ''' Configurazione LLM (opzionale)
+    ''' ❌ DEPRECATED: Usa Contracts.FirstOrDefault(Function(c) c.Type = "llm") invece
     ''' </summary>
+    <Obsolete("Use Contracts.FirstOrDefault(Function(c) c.Type = ""llm"") instead")>
     Public Property Llm As LLMConfig
 
     Public Sub New()
         SubDataMapping = New Dictionary(Of String, SubDataMappingInfo)()
+        Contracts = New List(Of NLPContractEngine)()
+        ' Mantenuto per retrocompatibilità temporanea
         Regex = New RegexConfig()
         Rules = New RulesConfig()
         Ner = New NERConfig()
         Llm = New LLMConfig()
+    End Sub
+End Class
+
+''' <summary>
+''' ✅ NEW: Rappresenta un singolo engine contract nell'array contracts[]
+''' Questo è il nuovo modello unificato
+''' </summary>
+Public Class NLPContractEngine
+    ''' <summary>
+    ''' Tipo di engine: "regex", "rules", "ner", "llm", "embedding"
+    ''' </summary>
+    Public Property Type As String
+
+    ''' <summary>
+    ''' Se l'engine è abilitato
+    ''' </summary>
+    Public Property Enabled As Boolean
+
+    ''' <summary>
+    ''' Patterns regex (solo per type="regex")
+    ''' </summary>
+    Public Property Patterns As List(Of String)
+
+    ''' <summary>
+    ''' Pattern modes (solo per type="regex")
+    ''' </summary>
+    Public Property PatternModes As List(Of String)
+
+    ''' <summary>
+    ''' Ambiguity pattern (solo per type="regex")
+    ''' </summary>
+    Public Property AmbiguityPattern As String
+
+    ''' <summary>
+    ''' Ambiguity config (solo per type="regex")
+    ''' </summary>
+    Public Property Ambiguity As AmbiguityConfig
+
+    ''' <summary>
+    ''' Test cases
+    ''' </summary>
+    Public Property TestCases As List(Of String)
+
+    ''' <summary>
+    ''' Extractor code (solo per type="rules")
+    ''' </summary>
+    Public Property ExtractorCode As String
+
+    ''' <summary>
+    ''' Validators (solo per type="rules")
+    ''' </summary>
+    Public Property Validators As List(Of Object)
+
+    ''' <summary>
+    ''' Entity types (solo per type="ner")
+    ''' </summary>
+    Public Property EntityTypes As List(Of String)
+
+    ''' <summary>
+    ''' Confidence (solo per type="ner")
+    ''' </summary>
+    Public Property Confidence As Double
+
+    ''' <summary>
+    ''' System prompt (solo per type="llm")
+    ''' </summary>
+    Public Property SystemPrompt As String
+
+    ''' <summary>
+    ''' User prompt template (solo per type="llm")
+    ''' </summary>
+    Public Property UserPromptTemplate As String
+
+    ''' <summary>
+    ''' Response schema (solo per type="llm")
+    ''' </summary>
+    Public Property ResponseSchema As Object
+
+    Public Sub New()
+        Enabled = True
+        Patterns = New List(Of String)()
+        PatternModes = New List(Of String)()
+        TestCases = New List(Of String)()
+        Validators = New List(Of Object)()
+        EntityTypes = New List(Of String)()
+        Confidence = 0.7
+        Ambiguity = New AmbiguityConfig()
     End Sub
 End Class
 

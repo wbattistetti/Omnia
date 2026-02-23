@@ -160,22 +160,26 @@ export class WizardOrchestrator {
     const messagesPayload = `Sto generando tutti i messaggi che il bot deve utilizzare in tutte le possibili situazioni: ${MESSAGE_STEP_LABELS.map(s => `"${s}"`).join(', ')}…`;
 
     // ✅ ORCHESTRATOR updates pipeline IMMEDIATELY with initial payloads
-    store.updatePipelineStep('constraints', 'running', constraintsPayload);
-    store.updatePipelineStep('parsers', 'running', parsersPayload); // Will be updated when promise resolves
-    store.updatePipelineStep('messages', 'running', messagesPayload);
+    // ✅ FIX: Add 0% to initial payloads so progress bar shows immediately
+    store.updatePipelineStep('constraints', 'running', `${constraintsPayload.replace(/…$/, '')} 0%`);
+    store.updatePipelineStep('parsers', 'running', `${parsersPayload.replace(/…$/, '')} 0%`); // Will be updated when promise resolves
+    store.updatePipelineStep('messages', 'running', `${messagesPayload.replace(/…$/, '')} 0%`);
 
-    // ✅ Update parsers payload when promise resolves (non-blocking)
+    // ✅ FIX 1: Update parsers payload when promise resolves (preserve percentage)
     parsersPayloadPromise.then(updatedParsersPayload => {
-      store.updatePipelineStep('parsers', 'running', updatedParsersPayload);
-    }).catch(() => {
-      // Keep default payload on error
-    });
+      // ✅ FIX 1: Preserve existing percentage if new payload doesn't have one
+      const currentStep = store.pipelineSteps.find(s => s.id === 'parsers');
+      const existingPercentage = currentStep?.payload?.match(/(\d+)%/)?.[0];
 
-    // ✅ Update parsers payload in store when promise resolves (non-blocking)
-    parsersPayloadPromise.then(updatedParsersPayload => {
-      store.updatePipelineStep('parsers', 'running', updatedParsersPayload);
+      const payloadWithProgress = updatedParsersPayload.includes('%')
+        ? updatedParsersPayload
+        : existingPercentage
+        ? `${updatedParsersPayload.replace(/…$/, '')} ${existingPercentage}`
+        : `${updatedParsersPayload.replace(/…$/, '')} 0%`;
+
+      store.updatePipelineStep('parsers', 'running', payloadWithProgress);
     }).catch(() => {
-      // Keep default payload on error
+      // Keep default payload on error (already has 0%)
     });
 
     // ✅ Start createTemplateAndInstanceForProposed in parallel (non-blocking)
@@ -285,7 +289,18 @@ export class WizardOrchestrator {
                            : phase === 'parser' ? finalParsersPayload
                            : finalMessagesPayload;
           const baseMessage = basePayload.replace(/…$/, '');
-          store.updatePipelineStep(phaseId, 'running', `${baseMessage} ${progress}%`);
+          const newPayload = `${baseMessage} ${progress}%`;
+
+          console.log(`[WizardOrchestrator] 📊 Updating pipeline step progress`, {
+            phase,
+            phaseId,
+            progress,
+            baseMessage,
+            newPayload,
+            taskId
+          });
+
+          store.updatePipelineStep(phaseId, 'running', newPayload);
         } else if (typeof taskId === 'string' && taskId.startsWith('phase-complete-')) {
           // Phase completed (all tasks in this phase are done)
           const phaseId = taskId.replace('phase-complete-', '');
@@ -418,6 +433,8 @@ export function useWizardOrchestrator(config: WizardOrchestratorConfig) {
     selectedModuleId: store.selectedModuleId,
     availableModules: [], // TODO: implement
     foundModuleId: store.selectedModuleId,
+    // ✅ NEW: Phase counters (source of truth for progress)
+    phaseCounters: store.phaseCounters,
 
     // Actions (only through orchestrator)
     start: orchestrator.start.bind(orchestrator),

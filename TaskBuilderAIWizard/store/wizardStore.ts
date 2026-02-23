@@ -9,7 +9,7 @@
  */
 
 import { create } from 'zustand';
-import type { WizardTaskTreeNode, WizardStepMessages, WizardConstraint, WizardNLPContract } from '../types';
+import type { WizardTaskTreeNode, WizardStepMessages, WizardConstraint } from '../types';
 import { WizardMode } from '../types/WizardMode';
 import type { WizardStep } from '../types/WizardStep';
 
@@ -31,7 +31,7 @@ interface WizardStore {
   dataSchema: WizardTaskTreeNode[];
   constraints: WizardConstraint[];
   setConstraints: (constraints: WizardConstraint[]) => void;
-  nlpContract: WizardNLPContract | null;
+  // ❌ REMOVED: nlpContract - dataContract is now in node.dataContract
   messages: Map<string, WizardStepMessages>;
   messagesGeneralized: Map<string, WizardStepMessages>;
   messagesContextualized: Map<string, WizardStepMessages>;
@@ -44,6 +44,12 @@ interface WizardStore {
   pipelineSteps: PipelineStep[];
   // ✅ POINT OF NO RETURN: Flag that prevents any modification to structure phase after confirmation
   structureConfirmed: boolean;
+  // ✅ NEW: Real counters (source of truth for progress)
+  phaseCounters: {
+    constraints: { completed: number; total: number };
+    parsers: { completed: number; total: number };
+    messages: { completed: number; total: number };
+  };
 
   // ============================================
   // ACTIONS - Synchronous state updates
@@ -53,7 +59,7 @@ interface WizardStore {
   setCurrentStep: (step: WizardStep) => void;
   setDataSchema: (schema: WizardTaskTreeNode[] | ((prev: WizardTaskTreeNode[]) => WizardTaskTreeNode[])) => void;
   setConstraints: (constraints: WizardConstraint[] | ((prev: WizardConstraint[]) => WizardConstraint[])) => void;
-  setNlpContract: (contract: WizardNLPContract | null) => void;
+  // ❌ REMOVED: setNlpContract - dataContract is now in node.dataContract
   setMessages: (nodeId: string, messages: WizardStepMessages) => void;
   setMessagesGeneralized: (nodeId: string, messages: WizardStepMessages) => void;
   setMessagesContextualized: (nodeId: string, messages: WizardStepMessages) => void;
@@ -67,6 +73,8 @@ interface WizardStore {
   updateTaskPipelineStatus: (taskId: string, phase: 'constraints' | 'parser' | 'messages', status: 'pending' | 'running' | 'completed' | 'failed') => void;
   updateTaskProgress: (taskId: string, phase: 'constraints' | 'parser' | 'messages', progress: number) => void;
   setStructureConfirmed: (confirmed: boolean) => void;
+  // ✅ NEW: Update phase counter (source of truth for progress)
+  updatePhaseCounter: (phase: 'constraints' | 'parsers' | 'messages', completed: number, total: number) => void;
   reset: () => void;
 
   // ============================================
@@ -116,7 +124,7 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
   currentStep: 'idle',
   dataSchema: [],
   constraints: [],
-  nlpContract: null,
+  // ❌ REMOVED: nlpContract - dataContract is now in node.dataContract
   messages: new Map(),
   messagesGeneralized: new Map(),
   messagesContextualized: new Map(),
@@ -128,6 +136,12 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
   currentMessageSubstep: null,
   pipelineSteps: initialPipelineSteps,
   structureConfirmed: false,
+  // ✅ NEW: Initialize phase counters
+  phaseCounters: {
+    constraints: { completed: 0, total: 0 },
+    parsers: { completed: 0, total: 0 },
+    messages: { completed: 0, total: 0 }
+  },
 
   // ============================================
   // ACTIONS
@@ -157,7 +171,7 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
     constraints: typeof constraints === 'function' ? constraints(state.constraints) : constraints
   })),
 
-  setNlpContract: (contract) => set({ nlpContract: contract }),
+  // ❌ REMOVED: setNlpContract - dataContract is now in node.dataContract
 
   setMessages: (nodeId, messages) => set((state) => {
     const newMap = new Map(state.messages);
@@ -201,22 +215,60 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
       return;
     }
 
+    // ✅ DEBUG: Log pipeline step updates
+    const currentStep = currentState.pipelineSteps.find(s => s.id === stepId);
+    console.log(`[wizardStore] 📊 updatePipelineStep called`, {
+      stepId,
+      status,
+      payload,
+      currentStatus: currentStep?.status,
+      currentPayload: currentStep?.payload,
+      payloadChanged: currentStep?.payload !== payload,
+      statusChanged: currentStep?.status !== status
+    });
+
     set((state) => {
+      // ✅ FIX 3: ALWAYS create new objects (even if unchanged) for React re-render
       const updated = state.pipelineSteps.map(step => {
         if (step.id === stepId) {
-          // Only update if status or payload actually changed
-          if (step.status === status && step.payload === payload) {
-            return step; // Return same reference if no change
-          }
-          return { ...step, status, ...(payload !== undefined ? { payload } : {}) };
+          // ✅ FIX: ALWAYS create new step object (no optimization - React needs new reference)
+          const newStep = { ...step, status, ...(payload !== undefined ? { payload } : {}) };
+          console.log(`[wizardStore] ✅ updatePipelineStep: Creating new step object`, {
+            stepId,
+            oldStatus: step.status,
+            newStatus: status,
+            oldPayload: step.payload,
+            newPayload: payload,
+            isSame: step.status === status && step.payload === payload
+          });
+          return newStep;
         }
         return step;
       });
 
-      // Check if anything actually changed
-      const hasChanged = updated.some((step, index) => step !== state.pipelineSteps[index]);
-      return hasChanged ? { pipelineSteps: updated } : {};
+      // ✅ FIX: ALWAYS return new array (even if unchanged) for React re-render
+      console.log(`[wizardStore] 📊 updatePipelineStep: Returning new pipelineSteps array`, {
+        stepId,
+        updatedSteps: updated.map(s => ({ id: s.id, status: s.status, payload: s.payload }))
+      });
+      return { pipelineSteps: updated };
     });
+  },
+
+  // ✅ FIX 2: Update phase counter (source of truth for progress)
+  updatePhaseCounter: (phase, completed, total) => {
+    console.log(`[wizardStore] 📊 updatePhaseCounter called`, {
+      phase,
+      completed,
+      total,
+      progress: total > 0 ? Math.round((completed / total) * 100) : 0
+    });
+    set((state) => ({
+      phaseCounters: {
+        ...state.phaseCounters,
+        [phase]: { completed, total }
+      }
+    }));
   },
 
   updateTaskPipelineStatus: (taskId, phase, status) => set((state) => {
@@ -279,7 +331,7 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
     currentStep: 'idle',
     dataSchema: [],
     constraints: [],
-    nlpContract: null,
+    // ❌ REMOVED: nlpContract - dataContract is now in node.dataContract
     messages: new Map(),
     messagesGeneralized: new Map(),
     messagesContextualized: new Map(),
@@ -290,7 +342,12 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
     currentParserSubstep: null,
     currentMessageSubstep: null,
     pipelineSteps: initialPipelineSteps,
-    structureConfirmed: false
+    structureConfirmed: false,
+    phaseCounters: {
+      constraints: { completed: 0, total: 0 },
+      parsers: { completed: 0, total: 0 },
+      messages: { completed: 0, total: 0 }
+    }
   }),
 
   // ============================================

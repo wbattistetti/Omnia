@@ -4,7 +4,9 @@
 import React, { useEffect, useCallback, useRef, useMemo } from 'react';
 import { useWizardState } from '../../../../../TaskBuilderAIWizard/hooks/useWizardState';
 import { useWizardFlow } from '../../../../../TaskBuilderAIWizard/hooks/useWizardFlow';
-import { useWizardGeneration } from '../../../../../TaskBuilderAIWizard/hooks/useWizardGeneration';
+// ❌ REMOVED: import { useWizardGeneration } from '../../../../../TaskBuilderAIWizard/hooks/useWizardGeneration';
+// ✅ NEW: Use WizardOrchestrator hook
+import { useWizardOrchestrator } from '../../../../../TaskBuilderAIWizard/hooks/useWizardOrchestrator';
 import { useWizardSync } from '../../../../../TaskBuilderAIWizard/hooks/useWizardSync';
 import { useWizardCompletion } from '../../../../../TaskBuilderAIWizard/hooks/useWizardCompletion';
 import { WizardMode } from '../../../../../TaskBuilderAIWizard/types/WizardMode';
@@ -63,28 +65,14 @@ export function useWizardIntegration(
     locale,
   });
 
-  // ✅ Create wizardGeneration AFTER wizardCompletion so we can pass createTemplateAndInstanceForProposed
-  const wizardGeneration = useWizardGeneration({
+  // ✅ NEW: Use WizardOrchestrator instead of useWizardGeneration
+  const wizardOrchestrator = useWizardOrchestrator({
+    taskLabel: taskLabel || '',
+    rowId,
+    projectId,
     locale,
-    dataSchema: wizardState.dataSchema,
-    setDataSchema: wizardState.setDataSchema,
-    setConstraints: wizardState.setConstraints,
-    setNlpContract: wizardState.setNlpContract,
-    setMessages: wizardState.setMessages,
-    setShouldBeGeneral: wizardState.setShouldBeGeneral,
-    updatePipelineStep: wizardState.updatePipelineStep,
-    setPipelineSteps: wizardState.setPipelineSteps,
-    updateTaskPipelineStatus: wizardState.updateTaskPipelineStatus,
-    updateTaskProgress: wizardState.updateTaskProgress,
-    updateParserSubstep: wizardState.setCurrentParserSubstep,
-    updateMessageSubstep: wizardState.setCurrentMessageSubstep,
-    transitionToProposed: wizardFlow.transitionToProposed,
-    transitionToGenerating: wizardFlow.transitionToGenerating,
-    // ✅ NEW: Pass createTemplateAndInstanceForProposed from wizardCompletion
-    createTemplateAndInstanceForProposed: wizardCompletion.createTemplateAndInstanceForProposed,
-    // ✅ MODELLO DETERMINISTICO: Pass checkAndCompleteRef
-    // checkAndComplete legge direttamente da messages/messagesGeneralized (props), non serve getMessages
-    checkAndCompleteRef: wizardCompletion.checkAndCompleteRef,
+    onTaskBuilderComplete,
+    // addTranslation can be added if needed
   });
 
   // ============================================
@@ -101,7 +89,7 @@ export function useWizardIntegration(
       hasStartedRef.current = true;
       wizardState.setCurrentStep('generazione_struttura');
 
-      wizardGeneration.runGenerationPipeline(taskLabel.trim(), rowId)
+      wizardOrchestrator.runGenerationPipeline(taskLabel.trim(), rowId)
         .then(async () => {
           // Wait a bit for state to update
           await new Promise(resolve => setTimeout(resolve, 100));
@@ -133,7 +121,7 @@ export function useWizardIntegration(
     wizardFlow.transitionToGenerating();
 
     try {
-      await wizardGeneration.continueAfterStructureConfirmation(wizardState.dataSchema);
+      await wizardOrchestrator.continueAfterStructureConfirmation(wizardState.dataSchema);
     } catch (error) {
       console.error('[useWizardIntegration][handleStructureConfirm] ❌ Error:', error);
       throw error;
@@ -143,7 +131,7 @@ export function useWizardIntegration(
     wizardState.dataSchema,
     wizardState.setPipelineSteps,
     wizardFlow,
-    wizardGeneration,
+    wizardOrchestrator,
   ]);
 
   const handleStructureReject = useCallback(() => {
@@ -199,7 +187,7 @@ export function useWizardIntegration(
     // Handlers
     handleStructureConfirm,
     handleStructureReject,
-    runGenerationPipeline: wizardGeneration.runGenerationPipeline,
+    runGenerationPipeline: wizardOrchestrator.runGenerationPipeline,
 
     // Altri dati wizard
     messages: wizardState.messages,
@@ -247,7 +235,7 @@ export function useWizardIntegration(
     // Handlers
     handleStructureConfirm,
     handleStructureReject,
-    wizardGeneration.runGenerationPipeline,
+    wizardOrchestrator.runGenerationPipeline,
     // Callbacks
     onProceedFromEuristica,
     onShowModuleList,

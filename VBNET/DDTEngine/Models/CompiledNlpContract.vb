@@ -1,5 +1,6 @@
 Option Strict On
 Option Explicit On
+Imports System.Linq
 Imports System.Text.RegularExpressions
 
 ''' <summary>
@@ -53,27 +54,30 @@ Public Class CompiledNlpContract
         compiled.TemplateId = baseContract.TemplateId
         compiled.SourceTemplateId = baseContract.SourceTemplateId
         compiled.SubDataMapping = baseContract.SubDataMapping
+        compiled.Contracts = baseContract.Contracts ' ✅ NEW: Copy Contracts directly
+        ' Mantenuto per retrocompatibilità
         compiled.Regex = baseContract.Regex
         compiled.Rules = baseContract.Rules
         compiled.Ner = baseContract.Ner
         compiled.Llm = baseContract.Llm
 
-        ' Pre-compila regex patterns
-        If baseContract.Regex IsNot Nothing AndAlso baseContract.Regex.Patterns IsNot Nothing Then
+        ' ✅ NEW: Pre-compila regex patterns da Contracts invece di baseContract.Regex
+        Dim regexContract = baseContract.Contracts?.FirstOrDefault(Function(c) c.Type = "regex" AndAlso c.Enabled)
+        If regexContract IsNot Nothing AndAlso regexContract.Patterns IsNot Nothing Then
             ' Compila main pattern (primo pattern)
-            If baseContract.Regex.Patterns.Count > 0 Then
+            If regexContract.Patterns.Count > 0 Then
                 Try
-                    compiled.CompiledMainRegex = New Regex(baseContract.Regex.Patterns(0), RegexOptions.IgnoreCase Or RegexOptions.Compiled)
+                    compiled.CompiledMainRegex = New Regex(regexContract.Patterns(0), RegexOptions.IgnoreCase Or RegexOptions.Compiled)
                 Catch ex As Exception
-                    compiled.ValidationErrors.Add($"Main regex pattern invalid: {baseContract.Regex.Patterns(0)}. Error: {ex.Message}")
+                    compiled.ValidationErrors.Add($"Main regex pattern invalid: {regexContract.Patterns(0)}. Error: {ex.Message}")
                     compiled.IsValid = False
                 End Try
             End If
 
             ' Compila sub patterns (se presenti)
-            For i As Integer = 1 To baseContract.Regex.Patterns.Count - 1
-                Dim pattern = baseContract.Regex.Patterns(i)
-                Dim key As String = If(i <= baseContract.Regex.PatternModes.Count - 1, baseContract.Regex.PatternModes(i), $"pattern_{i}")
+            For i As Integer = 1 To regexContract.Patterns.Count - 1
+                Dim pattern = regexContract.Patterns(i)
+                Dim key As String = If(i <= regexContract.PatternModes.Count - 1, regexContract.PatternModes(i), $"pattern_{i}")
                 Try
                     compiled.CompiledSubRegexes(key) = New Regex(pattern, RegexOptions.IgnoreCase Or RegexOptions.Compiled)
                 Catch ex As Exception
@@ -84,14 +88,14 @@ Public Class CompiledNlpContract
         End If
 
         ' Compila ambiguity pattern (se presente)
-        If baseContract.Regex IsNot Nothing AndAlso
-           baseContract.Regex.Ambiguity IsNot Nothing AndAlso
-           baseContract.Regex.Ambiguity.AmbiguousValues IsNot Nothing AndAlso
-           Not String.IsNullOrEmpty(baseContract.Regex.Ambiguity.AmbiguousValues.Pattern) Then
+        If regexContract IsNot Nothing AndAlso
+           regexContract.Ambiguity IsNot Nothing AndAlso
+           regexContract.Ambiguity.AmbiguousValues IsNot Nothing AndAlso
+           Not String.IsNullOrEmpty(regexContract.Ambiguity.AmbiguousValues.Pattern) Then
             Try
-                compiled.CompiledAmbiguityRegex = New Regex(baseContract.Regex.Ambiguity.AmbiguousValues.Pattern, RegexOptions.IgnoreCase Or RegexOptions.Compiled)
+                compiled.CompiledAmbiguityRegex = New Regex(regexContract.Ambiguity.AmbiguousValues.Pattern, RegexOptions.IgnoreCase Or RegexOptions.Compiled)
             Catch ex As Exception
-                compiled.ValidationErrors.Add($"Ambiguity regex pattern invalid: {baseContract.Regex.Ambiguity.AmbiguousValues.Pattern}. Error: {ex.Message}")
+                compiled.ValidationErrors.Add($"Ambiguity regex pattern invalid: {regexContract.Ambiguity.AmbiguousValues.Pattern}. Error: {ex.Message}")
                 compiled.IsValid = False
             End Try
         End If

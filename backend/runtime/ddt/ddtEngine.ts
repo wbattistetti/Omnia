@@ -7,7 +7,7 @@
 
 import type { AssembledDDT, MainDataNode, DDTNavigatorCallbacks } from './types';
 import { getStep, getEscalationRecovery, executeStep } from './ddtSteps';
-import { loadContract, findOriginalNode, getSubIdForCanonicalKey } from './utils';
+import { loadContract, findOriginalNode } from './utils';
 
 // ✅ Import taskSemantics helper (shared between frontend and backend)
 // Note: This assumes the backend can import from src/utils. If not, create a copy in backend/runtime/utils/
@@ -793,11 +793,10 @@ async function processUserInput(
             // ✅ Use backend utility instead of dynamic import
 
             if (contract && contract.subDataMapping) {
-              // Mappa canonicalKey → subId usando contract (come fa DialogueDataEngine/engine.ts riga 386)
+              // ✅ SIMPLIFIED: recognitionResult.value is already keyed by subId (no canonicalKey mapping needed)
               const tMap = performance.now();
-              for (const [canonicalKey, value] of Object.entries(recognitionResult.value)) {
-                const subId = getSubIdForCanonicalKey(contract, canonicalKey);
-                if (subId) {
+              for (const [subId, value] of Object.entries(recognitionResult.value)) {
+                if (contract.subDataMapping[subId]) {
                   updateMemory(state, subId, value);
                   mappedCount++;
                 }

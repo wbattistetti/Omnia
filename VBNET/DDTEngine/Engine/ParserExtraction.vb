@@ -3,6 +3,7 @@
 
 Option Strict On
 Option Explicit On
+Imports System.Linq
 Imports System.Text.RegularExpressions
 
 ''' <summary>
@@ -66,11 +67,15 @@ Partial Public Class Parser
             Throw New InvalidOperationException(
                 $"Task '{node.Id}' has no NlpContract. Cannot perform composite extraction.")
         End If
-        If contract.Regex Is Nothing OrElse
-           contract.Regex.Patterns Is Nothing OrElse
-           contract.Regex.Patterns.Count = 0 Then
+
+        ' ✅ NEW: Leggi regex contract da Contracts invece di contract.Regex
+        Dim regexContract = contract.Contracts?.FirstOrDefault(Function(c) c.Type = "regex" AndAlso c.Enabled)
+        If regexContract Is Nothing OrElse
+           regexContract.Patterns Is Nothing OrElse
+           regexContract.Patterns.Count = 0 Then
             Throw New InvalidOperationException(
-                $"Task '{node.Id}': NlpContract.Regex has no patterns.")
+                $"Task '{node.Id}': NlpContract has no enabled regex contract. " &
+                $"The contract must contain a 'regex' contract in the 'contracts' array with at least one pattern.")
         End If
         If contract.SubDataMapping Is Nothing OrElse contract.SubDataMapping.Count = 0 Then
             Throw New InvalidOperationException(
@@ -78,7 +83,7 @@ Partial Public Class Parser
         End If
 
         Try
-            Dim pattern = contract.Regex.Patterns(0)
+            Dim pattern = regexContract.Patterns(0)
             Dim rx As New Regex(pattern, RegexOptions.IgnoreCase)
             Dim m = rx.Match(input.Trim())
             If Not m.Success Then Return Nothing

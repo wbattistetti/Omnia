@@ -1838,9 +1838,9 @@ def generate_regex(body: dict = Body(...)):
                     sub_task_key = sub.get("subTaskKey", "")  # ✅ NEW: Get subTaskKey if available
 
                     if uses_named_groups and sub_task_key:
-                        # ✅ NEW: Use subTaskKey for named groups
+                        # ✅ Store sub for later processing (will assign deterministic name s1, s2, s3 based on final index)
                         valid_sub_data.append(sub)
-                        groups_info.append(f"  - Named group '{sub_task_key}': maps to sub-data ID '{sub_id}' (label: '{sub_label}')")
+                        # groups_info will be built later when we know the final order
                     else:
                         # ✅ OLD: Backward compatibility - numeric groups
                         group_index = sub.get("index")
@@ -1860,25 +1860,30 @@ def generate_regex(body: dict = Body(...)):
             if len(valid_sub_data) > 0 and len(groups_info) > 0:
                 try:
                     if uses_named_groups:
-                        # ✅ NEW: Generate named groups using subTaskKey
+                        # ✅ Generate deterministic group names (s1, s2, s3...) based on index
                         named_groups_list = []
-                        for sub_item in valid_sub_data:
-                            sub_task_key = sub_item.get("subTaskKey", "")
-                            label = sub_item.get("label", "")
-                            if sub_task_key:
-                                named_groups_list.append(f"- (?<{sub_task_key}>...) for \"{label}\"")
+                        deterministic_group_names = []
+                        # Rebuild groups_info with deterministic names
+                        groups_info = []
 
-                        required_group_names = [item.get("subTaskKey", "") for item in valid_sub_data if item.get("subTaskKey")]
+                        for index, sub_item in enumerate(valid_sub_data):
+                            deterministic_name = f"s{index + 1}"  # s1, s2, s3...
+                            label = sub_item.get("label", "")
+                            sub_id = sub_item.get("id", "")
+                            deterministic_group_names.append(deterministic_name)
+                            named_groups_list.append(f"- (?<{deterministic_name}>...) for \"{label}\"")
+                            groups_info.append(f"  - Named group '{deterministic_name}': maps to sub-data ID '{sub_id}' (label: '{label}')")
 
                         capture_groups_instructions = f"""
 
-CRITICAL REQUIREMENT: This field contains sub-data components. You MUST create NAMED GROUPS using these EXACT group names.
+CRITICAL REQUIREMENT: This field contains sub-data components. You MUST create NAMED GROUPS using these EXACT deterministic group names.
 
 The regex MUST contain these exact named groups (all optional):
 {chr(10).join(named_groups_list)}
 
-Use ONLY these exact group names: {', '.join(required_group_names)}.
-Do NOT invent group names.
+✅ CRITICAL: Use ONLY these exact deterministic group names: {', '.join(deterministic_group_names)}.
+❌ DO NOT use semantic names like "day", "month", "year", "giorno", "mese", "anno".
+✅ Use ONLY: {', '.join(deterministic_group_names)}
 
 Named Group Requirements:
 1. Use named groups ONLY: (?<name>pattern) - NOT numeric groups like (pattern)
@@ -1892,13 +1897,14 @@ Named Group Requirements:
 OPTIONAL GROUPS STRATEGY:
 - All groups must be optional: (?<name>pattern)? syntax
 - This allows the regex to match partial inputs and extract available components, while missing components will be requested later
-- Example for date with optional year: (?<day>\\d{{1,2}})[/-](?<month>\\d{{1,2}})(?:[/-](?<year>\\d{{2,4}}))?  ← Year group is optional, can match "16/12" or "16/12/61" or "16/12/1961"
-- Example for date with all optional: (?<day>\\d{{1,2}})?[/-]?(?<month>\\d{{1,2}})?[/-]?(?<year>\\d{{2,4}})?  ← All groups optional, allows flexible input
+- Example for date (3 sub-data fields): (?<s1>\\d{{1,2}})[/-](?<s2>\\d{{1,2}})(?:[/-](?<s3>\\d{{2,4}}))?  ← s3 group is optional
+- Example for date with all optional: (?<s1>\\d{{1,2}})?[/-]?(?<s2>\\d{{1,2}})?[/-]?(?<s3>\\d{{2,4}})?  ← All groups optional
 
-CRITICAL: Each sub-data component needs its own named group with the EXACT name specified above.
-- WRONG: (?<date>\\d{{1,2}}[/-]\\d{{1,2}}[/-]\\d{{4}})  ← This captures the entire date as ONE group
-- CORRECT: (?<day>\\d{{1,2}})[/-](?<month>\\d{{1,2}})[/-](?<year>\\d{{4}})  ← This creates 3 separate named groups
-- CORRECT WITH OPTIONAL: (?<day>\\d{{1,2}})?[/-]?(?<month>\\d{{1,2}})?[/-]?(?<year>\\d{{2,4}})?  ← All groups optional, allows partial matches
+CRITICAL: Each sub-data component needs its own named group with the EXACT deterministic name specified above.
+- ❌ WRONG: (?<date>\\d{{1,2}}[/-]\\d{{1,2}}[/-]\\d{{4}})  ← This captures the entire date as ONE group
+- ❌ WRONG: (?<day>\\d{{1,2}})[/-](?<month>\\d{{1,2}})[/-](?<year>\\d{{4}})  ← Uses semantic names instead of s1, s2, s3
+- ✅ CORRECT: (?<s1>\\d{{1,2}})[/-](?<s2>\\d{{1,2}})[/-](?<s3>\\d{{4}})  ← Uses deterministic names s1, s2, s3
+- ✅ CORRECT WITH OPTIONAL: (?<s1>\\d{{1,2}})?[/-]?(?<s2>\\d{{1,2}})?[/-]?(?<s3>\\d{{2,4}})?  ← All groups optional
 """
                     else:
                         # ✅ OLD: Backward compatibility - numeric groups

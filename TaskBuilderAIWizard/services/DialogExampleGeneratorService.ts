@@ -3,8 +3,8 @@
 
 import type { WizardTaskTreeNode } from '../types';
 import type { WizardConstraint } from '../types';
-import type { WizardNLPContract } from '../types';
 import type { WizardStepMessages } from '../types';
+import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
 
 /**
  * Dialog turn (bot or user message)
@@ -110,7 +110,7 @@ function generateCompleteUtterance(
 function simulateParser(
   utterance: string,
   node: WizardTaskTreeNode,
-  parser: WizardNLPContract | undefined
+  parser: DataContract | undefined
 ): Record<string, any> | null {
   // Simple simulation: extract based on node structure
   const extracted: Record<string, any> = {};
@@ -215,7 +215,7 @@ function validateConstraints(
 function generateCompleteExample(
   structure: WizardTaskTreeNode[],
   messages: WizardStepMessages,
-  parser: WizardNLPContract | undefined,
+  parser: DataContract | undefined,
   constraints: WizardConstraint[],
   locale: string = 'it'
 ): DialogExample {
@@ -274,7 +274,7 @@ function generateCompleteExample(
 function generatePartialExample(
   structure: WizardTaskTreeNode[],
   messages: WizardStepMessages,
-  parser: WizardNLPContract | undefined,
+  parser: DataContract | undefined,
   locale: string = 'it'
 ): DialogExample {
   const rootNode = structure[0];
@@ -400,7 +400,7 @@ function generateUnintelligibleExample(
 function generateErrorExample(
   structure: WizardTaskTreeNode[],
   messages: WizardStepMessages,
-  parser: WizardNLPContract | undefined,
+  parser: DataContract | undefined,
   constraints: WizardConstraint[],
   locale: string = 'it'
 ): DialogExample {
@@ -454,7 +454,7 @@ function generateErrorExample(
 function generateAmbiguousExample(
   structure: WizardTaskTreeNode[],
   messages: WizardStepMessages,
-  parser: WizardNLPContract | undefined,
+  parser: DataContract | undefined,
   locale: string = 'it'
 ): DialogExample {
   const rootNode = structure[0];
@@ -511,7 +511,7 @@ function generateAmbiguousExample(
  *
  * @param structure Array of WizardTaskTreeNode (with constraints, parser, messages populated)
  * @param constraints Array of WizardConstraint
- * @param parser WizardNLPContract (optional)
+ * @param parser DataContract (optional)
  * @param messages WizardStepMessages
  * @param locale Locale (default: 'it')
  * @returns Array of DialogExample covering all scenarios
@@ -519,7 +519,7 @@ function generateAmbiguousExample(
 export function generateDialogExamples(
   structure: WizardTaskTreeNode[],
   constraints: WizardConstraint[],
-  parser: WizardNLPContract | undefined,
+  parser: DataContract | undefined,
   messages: WizardStepMessages,
   locale: string = 'it'
 ): DialogExample[] {

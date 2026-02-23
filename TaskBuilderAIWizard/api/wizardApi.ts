@@ -1,45 +1,93 @@
-import { WizardTaskTreeNode, WizardConstraint, WizardNLPContract, WizardStepMessages } from '../types';
+import { WizardTaskTreeNode, WizardConstraint, WizardStepMessages } from '../types';
+import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
 import { convertApiStructureToWizardTaskTree } from '../utils/convertApiStructureToWizardTaskTree';
 import { validateWizardContract } from '../utils/validateWizardContract';
 
-/**
- * Generates a technical GUID-based regex group name.
- * Format: g_[a-f0-9]{12}
- * Must match the VB.NET constraint: ^g_[a-f0-9]{12}$
- */
-function generateGroupName(): string {
-  const hex = Array.from(crypto.getRandomValues(new Uint8Array(6)))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-  return `g_${hex}`;
-}
+// ✅ REMOVED: generateGroupName, rewritePatternGroupNames, escapeRegex
+// Group names are now deterministic (s1, s2, s3) based on subNode index.
+// AI generates patterns directly with these names - no rewriting needed.
 
 /**
- * Rewrites an AI-generated regex pattern by replacing every named group
- * that matches a canonicalKey with the corresponding GUID groupName.
+ * ⚠️ DEPRECATED: This function is no longer needed.
+ * Labels are now cleaned at the source (during convertApiStructureToWizardTaskTree).
+ * Icons are extracted from emoji and stored separately.
  *
- * E.g. (?<day>...) → (?<g_1a2b3c4d5e6f>...)
+ * Kept for reference only - should be removed in future cleanup.
  *
- * @param pattern      - Raw AI-generated regex string.
- * @param canonicalToGroup - Map from canonicalKey to its GUID groupName.
+ * @deprecated Use extractEmojiAndIcon from emojiIconExtractor.ts instead
  */
-function rewritePatternGroupNames(
-  pattern: string,
-  canonicalToGroup: Record<string, string>
-): string {
-  let result = pattern;
-  for (const [canonicalKey, groupName] of Object.entries(canonicalToGroup)) {
-    // Replace (?<canonicalKey> with (?<groupName> (global, to catch duplicates)
-    result = result.replace(
-      new RegExp(`\\(\\?<${escapeRegex(canonicalKey)}>`, 'g'),
-      `(?<${groupName}>`
-    );
+function sanitizeForBackend(data: any): any {
+  if (typeof data === 'string') {
+    // Remove ALL emoji using Unicode property escapes (most comprehensive)
+    // \p{Emoji_Presentation} matches emoji that are always displayed as emoji
+    // \p{Extended_Pictographic} matches emoji that can be displayed as emoji or text
+    let sanitized = data
+      .replace(/\p{Emoji_Presentation}/gu, '') // Emoji always displayed as emoji
+      .replace(/\p{Extended_Pictographic}/gu, '') // Emoji that can be displayed as emoji or text
+      .replace(/[\u{1F000}-\u{1F9FF}]/gu, '') // Fallback: All emoji range (including 🔍 U+1F50D)
+      .replace(/[\u{2600}-\u{26FF}]/gu, '') // Misc symbols
+      .replace(/[\u{2700}-\u{27BF}]/gu, '') // Dingbats
+      .replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '') // Flags
+      .replace(/[\u{D800}-\u{DFFF}]/gu, '') // Surrogate pairs
+      .replace(/[\u{200B}-\u{200D}]/gu, '') // Zero-width characters
+      .replace(/[\u{FEFF}]/gu, '') // Zero-width no-break space
+      .replace(/[\x00-\x1F\x7F-\x9F]/g, '') // Control characters
+      .trim();
+
+    // If Unicode property escapes are not supported, fall back to range-based removal
+    if (sanitized === data && /[\u{1F000}-\u{1F9FF}]/u.test(data)) {
+      // Fallback: remove emoji using range-based regex
+      sanitized = data
+        .replace(/[\u{1F000}-\u{1F9FF}]/gu, '')
+        .replace(/[\u{2600}-\u{26FF}]/gu, '')
+        .replace(/[\u{2700}-\u{27BF}]/gu, '')
+        .replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '')
+        .trim();
+    }
+
+    return sanitized;
   }
-  return result;
+
+  if (Array.isArray(data)) {
+    // Recursively sanitize all array elements
+    return data.map(item => sanitizeForBackend(item));
+  }
+
+  if (data && typeof data === 'object') {
+    // Recursively sanitize all object properties
+    const sanitized: any = {};
+    for (const key in data) {
+      if (Object.prototype.hasOwnProperty.call(data, key)) {
+        // Sanitize both key and value
+        const sanitizedKey = typeof key === 'string' ? sanitizeForBackend(key) : key;
+        sanitized[sanitizedKey] = sanitizeForBackend(data[key]);
+      }
+    }
+    return sanitized;
+  }
+
+  // Return primitive values as-is (numbers, booleans, null, undefined)
+  return data;
 }
 
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/**
+ * Extract named group names from a regex pattern
+ */
+function extractGroupNames(pattern: string): string[] {
+  const groups: string[] = [];
+  // Match both Python (?P<name>...) and JavaScript (?<name>...) syntax
+  const pythonPattern = /\(\?P<([^>]+)>/g;
+  const jsPattern = /\(\?<([^>]+)>/g;
+
+  let match;
+  while ((match = pythonPattern.exec(pattern)) !== null) {
+    groups.push(match[1]);
+  }
+  while ((match = jsPattern.exec(pattern)) !== null) {
+    groups.push(match[1]);
+  }
+
+  return groups;
 }
 
 /**
@@ -173,89 +221,6 @@ function convertApiConstraintsToWizardConstraints(
   return constraints;
 }
 
-/**
- * Convert API engines response to WizardNLPContract.
- *
- * Key invariants (Phase 3):
- *  - Every SubDataMapping entry receives a GUID groupName (g_[a-f0-9]{12}).
- *  - The regex pattern uses ONLY GUID group names — never canonicalKey or label.
- *  - canonicalKey and label are preserved as semantic/UI metadata only.
- */
-function convertApiEnginesToWizardContract(
-  apiResponse: any,
-  node: WizardTaskTreeNode
-): WizardNLPContract {
-  const engines = apiResponse.engines || {};
-
-  // Build subDataMapping with GUID groupNames.
-  // Also build canonicalKey → groupName map for regex rewriting.
-  const subDataMapping: WizardNLPContract['subDataMapping'] = {};
-  const canonicalToGroup: Record<string, string> = {};
-
-  if (node.subNodes) {
-    node.subNodes.forEach(subNode => {
-      const groupName = generateGroupName();
-      // canonicalKey: use a normalised semantic key derived from the label, NOT the node ID.
-      const canonicalKey = (subNode.label || subNode.id)
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '_')
-        .replace(/^_|_$/g, '');
-
-      subDataMapping[subNode.id] = {
-        canonicalKey,
-        groupName,
-        label: subNode.label,
-        type: subNode.type || 'string'
-      };
-
-      // Map both the canonical key and the original node ID to the GUID
-      // (AI may have used either as a group name in its output).
-      canonicalToGroup[canonicalKey] = groupName;
-      if (subNode.id !== canonicalKey) {
-        canonicalToGroup[subNode.id] = groupName;
-      }
-    });
-  }
-
-  // Collect raw AI-generated regex patterns and rewrite their group names.
-  const rawPatterns: string[] =
-    engines.regex?.patterns
-      ? engines.regex.patterns
-      : engines.regex?.regex
-        ? [engines.regex.regex]
-        : [];
-
-  const rewrittenPatterns = rawPatterns.map(p => rewritePatternGroupNames(p, canonicalToGroup));
-
-  // For composite tasks without subNodes, fall back to empty pattern array.
-  const patterns = rewrittenPatterns;
-
-  return {
-    templateName: node.label,
-    templateId: node.id,
-    subDataMapping,
-    regex: {
-      patterns,
-      testCases: engines.regex?.testCases || []
-    },
-    rules: {
-      extractorCode: engines.rule_based?.extractorCode || '',
-      validators: engines.rule_based?.validators || [],
-      testCases: engines.rule_based?.testCases || []
-    },
-    ner: engines.ner ? {
-      entityTypes: engines.ner.entityTypes || [],
-      confidence: engines.ner.confidence || 0.8,
-      enabled: engines.ner.enabled !== false
-    } : undefined,
-    llm: {
-      systemPrompt: engines.llm?.systemPrompt || '',
-      userPromptTemplate: engines.llm?.userPromptTemplate || '',
-      responseSchema: engines.llm?.responseSchema || {},
-      enabled: engines.llm?.enabled !== false
-    }
-  };
-}
 
 /**
  * Convert API messages response to WizardStepMessages
@@ -304,6 +269,9 @@ export async function generateConstraints(
       const node = schema[i];
       const contract = buildContractFromNode(node);
 
+      // ✅ Labels are already clean (no emoji) - extracted during convertApiStructureToWizardTaskTree
+      // No sanitization needed
+
       if (onProgress) {
         const progress = ((i + 1) / schema.length) * 100;
         onProgress(progress);
@@ -314,8 +282,8 @@ export async function generateConstraints(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contract,
-          nodeLabel: node.label,
-          locale,  // ✅ NEW: Pass locale
+          nodeLabel: node.label, // ✅ Clean label (no emoji)
+          locale,
           provider,
           model
         })
@@ -342,73 +310,6 @@ export async function generateConstraints(
   }
 }
 
-export async function generateParsers(
-  schema: WizardTaskTreeNode[],
-  onProgress?: (progress: number) => void,
-  locale: string = 'it'
-): Promise<WizardNLPContract> {
-  try {
-
-    const provider = localStorage.getItem('omnia.aiProvider') || 'openai';
-    const model = localStorage.getItem('omnia.aiModel') || undefined;
-
-    // For now, generate engines for the first node (root)
-    // TODO: Support multiple nodes if needed
-    const rootNode = schema[0];
-    if (!rootNode) {
-      throw new Error('No root node found in schema');
-    }
-
-    const contract = buildContractFromNode(rootNode);
-
-    const response = await fetch('/api/nlp/generate-engines', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contract,
-        nodeLabel: rootNode.label,
-        locale,
-        provider,
-        model
-      })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Engines generation failed: ${response.status} ${response.statusText} - ${errorText}`);
-    }
-
-    const data = await response.json();
-
-    if (!data.success || !data.engines) {
-      throw new Error(data.error || 'Invalid engines generation response');
-    }
-
-    const nlpContract = convertApiEnginesToWizardContract(data.engines, rootNode);
-
-    // ✅ Validate contract invariants: GUID groupNames, no duplicates, no canonicalKey in regex.
-    const validation = validateWizardContract(nlpContract);
-    if (!validation.valid) {
-      throw new Error(
-        `[generateParsers] Contract validation failed:\n` +
-        validation.errors.map(e => `  - ${e}`).join('\n')
-      );
-    }
-    if (validation.warnings.length > 0) {
-      console.warn('[generateParsers] Contract warnings:', validation.warnings);
-    }
-
-    // ✅ Update progress to 100% only after API responds successfully
-    if (onProgress) {
-      onProgress(100);
-    }
-
-    return nlpContract;
-
-  } catch (error) {
-    throw error;
-  }
-}
 
 /**
  * ✅ NEW: Step types in order (8 total)

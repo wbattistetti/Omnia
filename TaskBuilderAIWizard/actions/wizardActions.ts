@@ -11,7 +11,7 @@
 import type { WizardStore } from '../store/wizardStore';
 import { useWizardStore } from '../store/wizardStore';
 import type { WizardTaskTreeNode, WizardStepMessages } from '../types';
-import { generateStructure, generateConstraints, generateParsers, generateMessages } from '../api/wizardApi';
+import { generateStructure, generateConstraints, generateMessages } from '../api/wizardApi';
 import { buildContractFromNode } from '../api/wizardApi';
 import { WizardMode } from '../types/WizardMode';
 import { flattenTaskTree } from '../utils/wizardHelpers';
@@ -105,40 +105,111 @@ export async function runParallelGeneration(
   // Initialize counters
   const numeroNodi = allTasks.length;
   const constraintsCounter = { completed: 0, total: numeroNodi };
-  const parserCounter = { completed: 0, total: numeroNodi };
+  const parserCounter = { completed: 0, total: numeroNodi }; // Will be updated after plan-engines
   const messagesCounter = { completed: 0, total: numeroNodi };
+
+  // ✅ FIX 2: Initialize counters in store (source of truth)
+  store.updatePhaseCounter('constraints', 0, numeroNodi);
+  store.updatePhaseCounter('parsers', 0, numeroNodi); // Will be updated after plan-engines
+  store.updatePhaseCounter('messages', 0, numeroNodi);
+
+  // ✅ STEP 1: Call plan-engines FIRST to get engine plan and build correct payload
+  const fullContract = {
+    nodes: allTasks.map(task => ({
+      nodeId: task.id,
+      nodeLabel: task.label,
+      contract: buildContractFromNode(task)
+    }))
+  };
+
+  const provider = localStorage.getItem('omnia.aiProvider') || 'openai';
+  const model = localStorage.getItem('omnia.aiModel') || undefined;
+
+  let enginePlans: Array<{ nodeId: string; nodeLabel: string; engines: string[] }> = [];
+  let parsersPayload = 'Sto generando tutti i parser necessari per estrarre i dati, nell\'ordine di escalation appropriato: …';
+
+  try {
+    const planResponse = await fetch('/api/nlp/plan-engines', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contract: fullContract,
+        locale,
+        provider,
+        model
+      })
+    });
+
+    if (!planResponse.ok) {
+      const errorText = await planResponse.text();
+      throw new Error(`plan-engines API failed: ${planResponse.status} ${planResponse.statusText} - ${errorText}`);
+    }
+
+    const planData = await planResponse.json();
+
+    if (!planData.success || !planData.parsersPlan) {
+      throw new Error(`plan-engines API returned invalid response: ${planData.error || 'missing parsersPlan'}`);
+    }
+
+    // ✅ Expected format: [{ nodeId: "A", engines: ["regex", "llm"] }, ...]
+    enginePlans = planData.parsersPlan.map((plan: any) => ({
+      nodeId: plan.nodeId,
+      nodeLabel: allTasks.find(t => t.id === plan.nodeId)?.label || plan.nodeId,
+      engines: plan.engines || []
+    }));
+
+    if (enginePlans.length === 0) {
+      throw new Error('plan-engines API returned empty plan');
+    }
+
+    // Build flat list to calculate totalEngines
+    const flatEngineList: Array<{ nodeId: string; engineType: string }> = [];
+    enginePlans.forEach(plan => {
+      plan.engines.forEach((engineType: string) => {
+        flatEngineList.push({ nodeId: plan.nodeId, engineType });
+      });
+    });
+
+    const totalEngines = flatEngineList.length;
+
+    // ✅ Update parser counter with correct denominator
+    parserCounter.total = totalEngines;
+    store.updatePhaseCounter('parsers', 0, totalEngines);
+
+    // Build parsers payload from engine plan
+    const allEngineTypes = enginePlans.flatMap(p => p.engines);
+    parsersPayload = `Sto generando tutti i parser necessari per estrarre i dati, nell'ordine di escalation appropriato: ${[...new Set(allEngineTypes)].join(', ')}…`;
+
+    console.log('[wizardActions] Engine plan received', {
+      totalNodes: allTasks.length,
+      totalEngines,
+      enginePlans: enginePlans.map(p => ({
+        nodeId: p.nodeId,
+        nodeLabel: p.nodeLabel,
+        enginesCount: p.engines.length,
+        engines: p.engines
+      }))
+    });
+
+  } catch (error) {
+    // ✅ NO FALLBACK: Fail clearly if plan-engines fails
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('[wizardActions] ❌ plan-engines API failed (NO FALLBACK):', {
+      errorMessage,
+      errorStack: error instanceof Error ? error.stack : undefined
+    });
+
+    // Mark all tasks as failed
+    allTasks.forEach(task => {
+      store.updateTaskPipelineStatus(task.id, 'parser', 'failed');
+    });
+
+    // Throw to stop wizard execution
+    throw new Error(`Failed to get engine plan from /api/nlp/plan-engines: ${errorMessage}. The wizard cannot continue without a valid engine plan.`);
+  }
 
   // Build dynamic payloads
   const constraintsPayload = `Sto generando i constraints per: ${allTasks.map(n => n.label).join(', ')}…`;
-
-  let parsersPayload = 'Sto generando tutti i parser necessari per estrarre i dati, nell\'ordine di escalation appropriato: …';
-  try {
-    const rootNode = taskTree[0];
-    if (rootNode) {
-      const contract = buildContractFromNode(rootNode);
-      const provider = localStorage.getItem('omnia.aiProvider') || 'openai';
-      const model = localStorage.getItem('omnia.aiModel') || undefined;
-
-      const planResponse = await fetch('/api/nlp/plan-engines', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contract, nodeLabel: rootNode.label, locale, provider, model })
-      });
-
-      if (planResponse.ok) {
-        const planData = await planResponse.json();
-        if (planData.success && planData.parsersPlan) {
-          const enabledParsers = planData.parsersPlan
-            .filter((p: any) => p.enabled)
-            .map((p: any) => p.type)
-            .join(', ');
-          parsersPayload = `Sto generando tutti i parser necessari per estrarre i dati, nell'ordine di escalation appropriato: ${enabledParsers}…`;
-        }
-      }
-    }
-  } catch (error) {
-    console.warn('[wizardActions] Failed to get parsers plan, using default payload:', error);
-  }
 
   const MESSAGE_STEP_LABELS = [
     'Chiedo il dato',
@@ -160,26 +231,30 @@ export async function runParallelGeneration(
   });
 
   // Update progress function (NO pipeline updates, only counters)
+  // ✅ FIX 3: Parser phase handles its own progress (atomic, engine-based)
+  // Don't call this for 'parser' phase - it's handled in enginePromises
   const updatePhaseProgress = (phase: 'constraints' | 'parser' | 'messages') => {
+    // ✅ FIX 3: Parser phase is handled separately in enginePromises
+    if (phase === 'parser') {
+      console.warn('[wizardActions] updatePhaseProgress called for parser phase - this should not happen');
+      return;
+    }
+
     const counter = phase === 'constraints' ? constraintsCounter
-                  : phase === 'parser' ? parserCounter
                   : messagesCounter;
 
     counter.completed++;
     const progress = Math.round((counter.completed / counter.total) * 100);
 
-    const phaseId = phase === 'constraints' ? 'constraints'
-                  : phase === 'parser' ? 'parsers'
-                  : 'messages';
+    const phaseId = phase === 'constraints' ? 'constraints' : 'messages';
 
-    const initialPayload = phase === 'constraints' ? constraintsPayload
-                         : phase === 'parser' ? parsersPayload
-                         : messagesPayload;
+    // ✅ FIX 2: Update store counters (source of truth for UI)
+    store.updatePhaseCounter(phaseId, counter.completed, counter.total);
+
+    const initialPayload = phase === 'constraints' ? constraintsPayload : messagesPayload;
 
     if (counter.completed === counter.total) {
-      // Phase completed (all tasks in this phase are done)
-      // ❌ REMOVED: store.updatePipelineStep() - orchestrator controls this
-      // ✅ Notify orchestrator that phase is complete
+      // Phase completed
       onPhaseComplete?.(phase, `phase-complete-${phaseId}`);
 
       // Check if ALL phases are complete
@@ -189,13 +264,10 @@ export async function runParallelGeneration(
         messagesCounter.completed === messagesCounter.total;
 
       if (allPhasesComplete) {
-        // Call onPhaseComplete with special flag to indicate all phases are done
         onPhaseComplete?.('messages', 'all-complete');
       }
     } else {
       // Phase in progress
-      // ❌ REMOVED: store.updatePipelineStep() - orchestrator controls this
-      // ✅ Notify orchestrator of progress via callback
       onPhaseComplete?.(phase, `${progress}%`);
     }
   };
@@ -214,8 +286,8 @@ export async function runParallelGeneration(
               return nodes.map(node => {
                 if (node.id === task.id) {
                   const updated = { ...node, constraints };
-                  console.log(`[wizardActions] ✅ Saved constraints for "${task.label}" (${task.id}):`, constraints.length, 'constraints');
-                  console.log(`[wizardActions] 🔍 Verifying update - node after update:`, {
+                  console.log(`[wizardActions] Saved constraints for "${task.label}" (${task.id}):`, constraints.length, 'constraints');
+                  console.log(`[wizardActions] Verifying update - node after update:`, {
                     nodeId: updated.id,
                     hasConstraints: !!updated.constraints,
                     constraintsLength: updated.constraints?.length || 0
@@ -232,7 +304,7 @@ export async function runParallelGeneration(
 
             // ✅ DEBUG: Verify the updated node is in the result (constraints)
             const updatedNode = flattenTaskTree(result).find(n => n.id === task.id);
-            console.log(`[wizardActions] 🔍 After setDataSchema (constraints) - node in result:`, {
+            console.log(`[wizardActions] After setDataSchema (constraints) - node in result:`, {
               nodeId: updatedNode?.id,
               hasConstraints: !!updatedNode?.constraints,
               constraintsLength: updatedNode?.constraints?.length || 0
@@ -249,7 +321,23 @@ export async function runParallelGeneration(
           updatePhaseProgress('constraints');
         })
         .catch((error) => {
-          console.error(`[wizardActions] Error generating constraints for ${task.id}:`, error);
+          // ✅ IMPROVED: Better error logging with full details
+          const errorMessage = error instanceof Error
+            ? error.message
+            : typeof error === 'string'
+              ? error
+              : JSON.stringify(error, null, 2);
+
+          console.error(`[wizardActions] Error generating constraints for "${task.label}" (${task.id}):`, {
+            errorMessage,
+            errorStack: error instanceof Error ? error.stack : undefined,
+            errorType: error?.constructor?.name || typeof error,
+            taskId: task.id,
+            taskLabel: task.label
+          });
+
+          console.error(`[wizardActions] Error details: ${errorMessage}`);
+
           store.updateTaskPipelineStatus(task.id, 'constraints', 'failed');
           // Don't increment counter on error
         })
@@ -257,55 +345,155 @@ export async function runParallelGeneration(
   });
 
   // Parsers
-  allTasks.forEach(task => {
-    allPromises.push(
-      generateParsers([task], undefined, locale)
-        .then(nlpContract => {
-          // Update task with parser
-          store.setDataSchema(prev => {
-            const updateNode = (nodes: WizardTaskTreeNode[]): WizardTaskTreeNode[] => {
-              return nodes.map(node => {
-                if (node.id === task.id) {
-                  const updated = { ...node, dataContract: nlpContract };
-                  console.log(`[wizardActions] ✅ Saved parser for "${task.label}" (${task.id}):`, nlpContract ? 'has contract' : 'no contract');
-                  console.log(`[wizardActions] 🔍 Verifying parser update - node after update:`, {
-                    nodeId: updated.id,
-                    hasDataContract: !!updated.dataContract,
-                    dataContractType: typeof updated.dataContract
-                  });
-                  return updated;
-                }
-                if (node.subNodes && node.subNodes.length > 0) {
-                  return { ...node, subNodes: updateNode(node.subNodes) };
-                }
-                return node;
-              });
-            };
-            const result = updateNode(prev);
+  // ✅ REFACTORED: Engine-based generation (not node-based)
+  // ✅ plan-engines already called above, enginePlans and totalEngines already calculated
 
-            // ✅ DEBUG: Verify the updated node is in the result
-            const updatedNode = flattenTaskTree(result).find(n => n.id === task.id);
-            if (!updatedNode) {
-              console.warn(`[wizardActions] ⚠️ Node not found after parser update:`, {
-                taskId: task.id,
-                taskLabel: task.label,
-                allNodeIds: flattenTaskTree(result).map(n => n.id)
-              });
-            }
-
-            return result;
-          });
-          store.updateTaskPipelineStatus(task.id, 'parser', 'completed');
-          // ✅ updatePhaseProgress already calls onPhaseComplete
-          updatePhaseProgress('parser');
-        })
-        .catch((error) => {
-          console.error(`[wizardActions] Error generating parsers for ${task.id}:`, error);
-          store.updateTaskPipelineStatus(task.id, 'parser', 'failed');
-          // Don't increment counter on error
-        })
-    );
+  // Build flat list of engines (for generation)
+  const flatEngineList: Array<{ nodeId: string; nodeLabel: string; engineType: string }> = [];
+  enginePlans.forEach(plan => {
+    plan.engines.forEach((engineType: string) => {
+      flatEngineList.push({
+        nodeId: plan.nodeId,
+        nodeLabel: plan.nodeLabel,
+        engineType
+      });
+    });
   });
+
+  const totalEngines = flatEngineList.length;
+
+  // ✅ FIX 3: Atomic flag to prevent double closure
+  let parserPhaseCompleted = false;
+
+  // 5. Generate parser for each engine in parallel
+  const { generateParserForEngine } = await import('@utils/wizard/generateEnginesAndParsers');
+  const { SemanticContractService } = await import('@services/SemanticContractService');
+
+  const enginePromises = flatEngineList.map(async ({ nodeId, nodeLabel, engineType }) => {
+    try {
+      const task = allTasks.find(t => t.id === nodeId);
+      if (!task) {
+        console.warn(`[wizardActions] Task not found for nodeId: ${nodeId}`);
+        return { nodeId, engineType, success: false, error: 'Task not found' };
+      }
+
+      // Load or build contract for this node
+      let contract = await SemanticContractService.load(nodeId);
+      if (!contract) {
+        contract = buildContractFromNode(task);
+      }
+
+      // ✅ VERIFIED: generateParserForEngine calls /api/nlp/generate-regex (correct endpoint)
+      const parser = await generateParserForEngine(
+        task,
+        engineType as any,
+        contract,
+        undefined
+      );
+
+      if (!parser) {
+        throw new Error(`Failed to generate ${engineType} parser for node ${nodeId}`);
+      }
+
+      // Save parser to node's dataContract
+      store.setDataSchema(prev => {
+        const updateNode = (nodes: WizardTaskTreeNode[]): WizardTaskTreeNode[] => {
+          return nodes.map(node => {
+            if (node.id === nodeId) {
+              if (!node.dataContract) {
+                // ✅ CRITICAL: Build subDataMapping from subNodes (structural mapping only)
+                const subDataMapping: Record<string, { groupName: string }> = {};
+                if (node.subNodes && node.subNodes.length > 0) {
+                  node.subNodes.forEach((subNode, index) => {
+                    const groupName = `s${index + 1}`; // Deterministic: s1, s2, s3...
+                    subDataMapping[subNode.id] = {
+                      groupName // ✅ Only groupName needed (structural mapping)
+                    };
+                  });
+                }
+
+                node.dataContract = {
+                  templateName: node.label || nodeId,
+                  templateId: nodeId,
+                  subDataMapping, // ✅ Populated from subNodes
+                  contracts: []
+                };
+              }
+
+              const existingContracts = node.dataContract.contracts || [];
+              const existingTypes = new Set(existingContracts.map((c: any) => c.type));
+              const contractType = engineType === 'rule_based' ? 'rules' : engineType;
+
+              if (!existingTypes.has(contractType)) {
+                node.dataContract.contracts = [...existingContracts, parser];
+              }
+
+              return { ...node };
+            }
+            if (node.subNodes && node.subNodes.length > 0) {
+              return { ...node, subNodes: updateNode(node.subNodes) };
+            }
+            return node;
+          });
+        };
+        return updateNode(prev);
+      });
+
+      // ✅ FIX 3: Update counter for each ENGINE completed (atomic increment)
+      parserCounter.completed++;
+      const currentCompleted = parserCounter.completed;
+      const currentTotal = parserCounter.total;
+
+      store.updatePhaseCounter('parsers', currentCompleted, currentTotal);
+
+      console.log(`[wizardActions] ✅ Engine completed: ${engineType} for node "${nodeLabel}" (${nodeId})`, {
+        completed: currentCompleted,
+        total: currentTotal,
+        progress: Math.round((currentCompleted / currentTotal) * 100)
+      });
+
+      // ✅ FIX 3: Atomic check for phase completion (prevent double closure)
+      if (currentCompleted === currentTotal && !parserPhaseCompleted) {
+        parserPhaseCompleted = true; // Set flag atomically
+
+        // Mark all tasks as completed
+        allTasks.forEach(task => {
+          store.updateTaskPipelineStatus(task.id, 'parser', 'completed');
+        });
+
+        // Notify orchestrator that phase is complete (only once)
+        onPhaseComplete?.('parser', 'phase-complete-parsers');
+
+        // Check if ALL phases are complete
+        const allPhasesComplete =
+          constraintsCounter.completed === constraintsCounter.total &&
+          parserCounter.completed === parserCounter.total &&
+          messagesCounter.completed === messagesCounter.total;
+
+        if (allPhasesComplete) {
+          onPhaseComplete?.('messages', 'all-complete');
+        }
+      } else {
+        // Phase in progress - notify orchestrator of progress
+        const progress = Math.round((currentCompleted / currentTotal) * 100);
+        onPhaseComplete?.('parser', `${progress}%`);
+      }
+
+      return { nodeId, engineType, success: true };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[wizardActions] ❌ Error generating ${engineType} parser for node "${nodeLabel}" (${nodeId}):`, {
+        errorMessage,
+        errorStack: error instanceof Error ? error.stack : undefined
+      });
+
+      // Don't increment counter on error
+      return { nodeId, engineType, success: false, error: errorMessage };
+    }
+  });
+
+  // Add all engine promises to allPromises
+  allPromises.push(...enginePromises);
 
   // Messages
   allTasks.forEach(task => {
@@ -329,7 +517,23 @@ export async function runParallelGeneration(
           updatePhaseProgress('messages');
         })
         .catch((error) => {
-          console.error(`[wizardActions] Error generating messages for ${task.id}:`, error);
+          // ✅ IMPROVED: Better error logging with full details
+          const errorMessage = error instanceof Error
+            ? error.message
+            : typeof error === 'string'
+              ? error
+              : JSON.stringify(error, null, 2);
+
+          console.error(`[wizardActions] Error generating messages for "${task.label}" (${task.id}):`, {
+            errorMessage,
+            errorStack: error instanceof Error ? error.stack : undefined,
+            errorType: error?.constructor?.name || typeof error,
+            taskId: task.id,
+            taskLabel: task.label
+          });
+
+          console.error(`[wizardActions] Error details: ${errorMessage}`);
+
           store.updateTaskPipelineStatus(task.id, 'messages', 'failed');
           // Don't increment counter on error
         })

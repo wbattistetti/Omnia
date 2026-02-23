@@ -1,9 +1,8 @@
-import { PhaseCard } from './PhaseCard';
+import { PhaseCardContainer } from './PhaseCardContainer';
 import type { PipelineStep } from '../store/wizardStore';
 import { WizardStep, WizardTaskTreeNode, WizardModuleTemplate } from '../types';
 import { Boxes, Shield, Brain, MessageSquare, Calendar, Sparkles, Utensils, Info, Truck, ChevronDown, ChevronRight, Check } from 'lucide-react';
-import { useState, useEffect } from 'react';
-import { calculatePhaseProgress, getPhaseState, extractDynamicMessage } from '../utils/wizardHelpers';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 
 type CenterPanelProps = {
   currentStep: WizardStep | 'idle'; // DEPRECATED: mantenuto per compatibilità
@@ -24,6 +23,12 @@ type CenterPanelProps = {
   // ✅ NEW: Sotto-stati per parte variabile dinamica
   currentParserSubstep?: string | null;
   currentMessageSubstep?: string | null;
+  // ✅ NEW: Phase counters (source of truth for progress)
+  phaseCounters?: {
+    constraints: { completed: number; total: number };
+    parsers: { completed: number; total: number };
+    messages: { completed: number; total: number };
+  };
 };
 
 export function CenterPanel({
@@ -43,7 +48,8 @@ export function CenterPanel({
   correctionInput = '',
   onCorrectionInputChange,
   currentParserSubstep = null,
-  currentMessageSubstep = null
+  currentMessageSubstep = null,
+  phaseCounters // ✅ DEPRECATED: Phase counters now read directly from store via PhaseCardContainer
 }: CenterPanelProps) {
   const [isAccordionOpen, setIsAccordionOpen] = useState(false);
   const [selectedModule, setSelectedModule] = useState<WizardModuleTemplate | null>(() => {
@@ -69,49 +75,47 @@ export function CenterPanel({
     }
   }, [currentStep, foundModuleId, availableModules]);
 
-  // Helper functions moved to wizardHelpers.ts
+  // ✅ OPTIMIZATION: Extract helper functions outside useMemo to prevent recreation
+  // These are stable and don't depend on render-time values
+  const getStructureStep = useCallback(() => {
+    return pipelineSteps.find(s => s.id === 'structure');
+  }, [pipelineSteps]);
 
-  const phases = [
-    {
-      icon: Boxes,
-      title: 'Struttura dati',
-      step: pipelineSteps.find(s => s.id === 'structure')!,
-      dynamicMessage: (() => {
-        const step = pipelineSteps.find(s => s.id === 'structure');
-        if (step?.status === 'running') {
-          if (showStructureConfirmation) {
-            return 'Confermami la struttura che vedi sulla sinistra...';
-          }
-          return 'sto pensando a qual è la migliore struttura dati per questo task...';
-        }
-        if (step?.status === 'completed') {
-          return step.payload; // "Confermata!"
-        }
-        return undefined;
-      })()
-    },
-    {
-      icon: Shield,
-      title: 'Regole di validazione',
-      step: pipelineSteps.find(s => s.id === 'constraints')!,
-      phase: 'constraints' as const,
-      dynamicMessage: extractDynamicMessage(pipelineSteps.find(s => s.id === 'constraints'))
-    },
-    {
-      icon: Brain,
-      title: 'Parser',
-      step: pipelineSteps.find(s => s.id === 'parsers')!,
-      phase: 'parser' as const,
-      dynamicMessage: extractDynamicMessage(pipelineSteps.find(s => s.id === 'parsers'))
-    },
-    {
-      icon: MessageSquare,
-      title: 'Messaggi',
-      step: pipelineSteps.find(s => s.id === 'messages')!,
-      phase: 'messages' as const,
-      dynamicMessage: extractDynamicMessage(pipelineSteps.find(s => s.id === 'messages'))
+  // ✅ OPTIMIZATION: Memoize phases array - only recreate when pipelineSteps or showStructureConfirmation change
+  const phases = useMemo(() => {
+    const structureStep = getStructureStep();
+    const constraintsStep = pipelineSteps.find(s => s.id === 'constraints');
+    const parsersStep = pipelineSteps.find(s => s.id === 'parsers');
+    const messagesStep = pipelineSteps.find(s => s.id === 'messages');
+
+    // Early return if steps are not ready
+    if (!structureStep || !constraintsStep || !parsersStep || !messagesStep) {
+      return [];
     }
-  ];
+
+    return [
+      {
+        stepId: 'structure' as const,
+        icon: Boxes,
+        title: 'Struttura dati',
+      },
+      {
+        stepId: 'constraints' as const,
+        icon: Shield,
+        title: 'Regole di validazione',
+      },
+      {
+        stepId: 'parsers' as const,
+        icon: Brain,
+        title: 'Parser',
+      },
+      {
+        stepId: 'messages' as const,
+        icon: MessageSquare,
+        title: 'Messaggi',
+      }
+    ];
+  }, [pipelineSteps, getStructureStep]);
 
   const isGenerating = currentStep === 'generazione_struttura' ||
                        currentStep === 'generazione_constraints' ||
@@ -418,23 +422,17 @@ export function CenterPanel({
         {/* Fasi di generazione */}
         {shouldShowCards && (
           <>
-          {phases.map(({ icon, title, step, phase, dynamicMessage }) => {
-            const isStructurePhase = step.id === 'structure';
-            return (
-              <PhaseCard
-                key={step.id}
-                icon={icon}
-                title={title}
-                state={getPhaseState(step)}
-                progress={phase ? calculatePhaseProgress(phase, pipelineSteps) : undefined}
-                isExpanded={isStructurePhase && showCorrectionMode}
-                showCorrectionForm={isStructurePhase && showCorrectionMode}
-                correctionInput={correctionInput}
-                onCorrectionInputChange={onCorrectionInputChange}
-                dynamicMessage={dynamicMessage}
-              />
-            );
-          })}
+          {phases.map(({ stepId, icon, title }) => (
+            <PhaseCardContainer
+              key={stepId}
+              stepId={stepId}
+              icon={icon}
+              title={title}
+              showCorrectionMode={showCorrectionMode}
+              correctionInput={correctionInput}
+              onCorrectionInputChange={onCorrectionInputChange}
+            />
+          ))}
 
           {showStructureConfirmation && !showCorrectionMode && (
             <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 shadow-sm">

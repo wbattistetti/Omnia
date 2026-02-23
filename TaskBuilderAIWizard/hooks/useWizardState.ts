@@ -2,7 +2,7 @@
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
 import { useState, useMemo } from 'react';
-import { WizardStep, WizardConstraint, WizardNLPContract, WizardStepMessages, WizardTaskTreeNode } from '../types';
+import { WizardStep, WizardConstraint, WizardStepMessages, WizardTaskTreeNode } from '../types';
 import { WizardMode } from '../types/WizardMode';
 import { SimulationSpeed } from '../utils/delays';
 
@@ -28,7 +28,7 @@ export function useWizardState() {
   const [currentStep, setCurrentStep] = useState<WizardStep>('idle');
   const [dataSchema, setDataSchema] = useState<WizardTaskTreeNode[]>([]);
   const [constraints, setConstraints] = useState<WizardConstraint[]>([]);
-  const [nlpContract, setNlpContract] = useState<WizardNLPContract | null>(null);
+  // ❌ REMOVED: nlpContract - dataContract is now in node.dataContract
   const [messages, setMessages] = useState<Map<string, WizardStepMessages>>(new Map());
   const [messagesGeneralized, setMessagesGeneralized] = useState<Map<string, WizardStepMessages>>(new Map());
   const [messagesContextualized, setMessagesContextualized] = useState<Map<string, WizardStepMessages>>(new Map());
@@ -255,8 +255,7 @@ export function useWizardState() {
     setDataSchema,
     constraints,
     setConstraints,
-    nlpContract,
-    setNlpContract,
+    // ❌ REMOVED: nlpContract, setNlpContract - dataContract is now in node.dataContract
     messages,
     setMessages: setMessagesForNode,
     messagesGeneralized,

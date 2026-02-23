@@ -8,7 +8,8 @@
  * Extracted from useWizardCompletion hook to improve testability and separation of concerns.
  */
 
-import type { WizardTaskTreeNode, WizardConstraint, WizardNLPContract, WizardStepMessages } from '../types';
+import type { WizardTaskTreeNode, WizardConstraint, WizardStepMessages } from '../types';
+import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
 import { createTemplatesFromWizardData, createContextualizedInstance } from './TemplateCreationService';
 import { DialogueTaskService } from '@services/DialogueTaskService';
 import { taskRepository } from '@services/TaskRepository';
@@ -17,22 +18,23 @@ import { buildTaskTree } from '@utils/taskUtils';
 import { flattenTaskTree } from '../utils/wizardHelpers';
 
 /**
- * Collects constraints and NLP contracts from dataSchema into maps
+ * Collects constraints and data contracts from dataSchema into maps
  */
 function collectNodeData(dataSchema: WizardTaskTreeNode[]): {
   constraintsMap: Map<string, WizardConstraint[]>;
-  nlpContractsMap: Map<string, WizardNLPContract>;
+  dataContractsMap: Map<string, DataContract>;
 } {
   const constraintsMap = new Map<string, WizardConstraint[]>();
-  const nlpContractsMap = new Map<string, WizardNLPContract>();
+  const dataContractsMap = new Map<string, DataContract>();
 
   const collect = (nodes: WizardTaskTreeNode[]) => {
     nodes.forEach(node => {
       if (node.constraints && node.constraints.length > 0) {
         constraintsMap.set(node.id, node.constraints);
       }
+      // ✅ node.dataContract is already DataContract (no conversion needed)
       if (node.dataContract) {
-        nlpContractsMap.set(node.id, node.dataContract);
+        dataContractsMap.set(node.id, node.dataContract);
       }
       if (node.subNodes && node.subNodes.length > 0) {
         collect(node.subNodes);
@@ -41,7 +43,7 @@ function collectNodeData(dataSchema: WizardTaskTreeNode[]): {
   };
 
   collect(dataSchema);
-  return { constraintsMap, nlpContractsMap };
+  return { constraintsMap, dataContractsMap };
 }
 
 /**
@@ -73,7 +75,7 @@ function createAndRegisterTemplates(
   dataSchema: WizardTaskTreeNode[],
   messagesToUse: Map<string, WizardStepMessages>,
   constraintsMap: Map<string, WizardConstraint[]>,
-  nlpContractsMap: Map<string, WizardNLPContract>,
+  dataContractsMap: Map<string, DataContract>,
   shouldBeGeneral: boolean,
   addTranslation?: (guid: string, text: string) => void
 ): Map<string, any> {
@@ -81,7 +83,7 @@ function createAndRegisterTemplates(
     dataSchema,
     messagesToUse,
     constraintsMap,
-    nlpContractsMap,
+    dataContractsMap,
     shouldBeGeneral,
     addTranslation
   );
@@ -213,8 +215,8 @@ export async function createTemplateAndInstanceForProposed(
     throw new Error('[WizardCompletionService] rowId is required');
   }
 
-  // 1. Collect constraints and NLP contracts
-  const { constraintsMap, nlpContractsMap } = collectNodeData(dataSchema);
+  // 1. Collect constraints and data contracts
+  const { constraintsMap, dataContractsMap } = collectNodeData(dataSchema);
 
   // 2. Use generalized messages if available, otherwise use normal messages
   const messagesToUse = messagesGeneralized.size > 0 ? messagesGeneralized : messages;
@@ -230,7 +232,7 @@ export async function createTemplateAndInstanceForProposed(
     dataSchema,
     messagesToUse,
     constraintsMap,
-    nlpContractsMap,
+    dataContractsMap,
     shouldBeGeneral,
     addTranslation
   );
@@ -294,8 +296,8 @@ export async function createTemplateAndInstanceForCompleted(
     throw new Error('[WizardCompletionService] rowId is required');
   }
 
-  // 1. Collect constraints and NLP contracts
-  const { constraintsMap, nlpContractsMap } = collectNodeData(dataSchema);
+  // 1. Collect constraints and data contracts
+  const { constraintsMap, dataContractsMap } = collectNodeData(dataSchema);
 
   // 2. Use generalized messages if available, otherwise use normal messages
   const messagesToUse = messagesGeneralized.size > 0 ? messagesGeneralized : messages;
@@ -319,7 +321,7 @@ export async function createTemplateAndInstanceForCompleted(
     dataSchema,
     messagesToUse,
     constraintsMap,
-    nlpContractsMap,
+    dataContractsMap,
     shouldBeGeneral,
     addTranslation
   );

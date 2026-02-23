@@ -25,16 +25,37 @@ export function flattenTaskTree(nodes: WizardTaskTreeNode[]): WizardTaskTreeNode
 }
 
 /**
- * Calculates progress percentage for a phase based on pipelineSteps
+ * Calculates progress percentage for a phase based on REAL COUNTERS (source of truth)
+ * Falls back to payload extraction if counters not available (backward compatibility)
  *
  * @param phase - The phase to calculate progress for
- * @param pipelineSteps - Array of pipeline steps
+ * @param pipelineSteps - Array of pipeline steps (for fallback)
+ * @param phaseCounters - Real counters from store (source of truth)
  * @returns Progress percentage (0-100)
  */
 export function calculatePhaseProgress(
   phase: 'constraints' | 'parser' | 'messages',
-  pipelineSteps: PipelineStep[]
+  pipelineSteps: PipelineStep[],
+  phaseCounters?: {
+    constraints: { completed: number; total: number };
+    parsers: { completed: number; total: number };
+    messages: { completed: number; total: number };
+  }
 ): number {
+  // ✅ FIX: Use real counters if available (source of truth)
+  if (phaseCounters) {
+    const counter = phase === 'constraints' ? phaseCounters.constraints
+                  : phase === 'parser' ? phaseCounters.parsers
+                  : phaseCounters.messages;
+
+    if (counter.total > 0) {
+      const progress = Math.round((counter.completed / counter.total) * 100);
+      // ❌ REMOVED: Debug log (was causing spam)
+      return progress;
+    }
+  }
+
+  // Fallback: extract from payload (for backward compatibility)
   const phaseId = phase === 'constraints' ? 'constraints'
                : phase === 'parser' ? 'parsers'
                : 'messages';
@@ -42,24 +63,35 @@ export function calculatePhaseProgress(
   const step = pipelineSteps.find(s => s.id === phaseId);
 
   if (!step) {
+    // ❌ REMOVED: Debug log
     return 0;
   }
 
   // If phase is completed, return 100%
   if (step.status === 'completed') {
+    // ❌ REMOVED: Debug log
     return 100;
   }
 
   // If phase is running, extract percentage from payload
   if (step.status === 'running' && step.payload) {
     // Payload is a string like "33%" or a dynamic message with percentage
+    // ✅ FIX: Handle unicode characters (…, etc.) and match percentage at end or anywhere
+    // Try to match percentage anywhere in the string (not just at end)
     const match = step.payload.match(/(\d+)%/);
     if (match) {
-      return parseInt(match[1], 10);
+      const progress = parseInt(match[1], 10);
+      // ❌ REMOVED: Debug log
+      return progress;
+    } else {
+      // ✅ FIX: If no percentage found, return 0% (not undefined) so progress bar shows at 0%
+      // ❌ REMOVED: Debug log
+      return 0; // ✅ Return 0% instead of undefined so progress bar shows
     }
   }
 
   // Default: 0%
+  // ❌ REMOVED: Debug log
   return 0;
 }
 

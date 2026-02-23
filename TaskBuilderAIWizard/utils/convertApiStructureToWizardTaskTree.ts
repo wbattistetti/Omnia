@@ -3,6 +3,7 @@
 
 import type { WizardTaskTreeNode } from '../types';
 import { v4 as uuidv4 } from 'uuid';
+import { stripEmojiFromLabel } from './emojiIconExtractor';
 
 /**
  * API Structure Node (from backend)
@@ -14,7 +15,8 @@ interface ApiStructureNode {
   id?: string;  // Ignored - frontend generates GUIDs
   label: string;
   type?: string;
-  icon?: string;
+  emoji?: string; // ✅ Emoji as separate field (UI-only)
+  icon?: string; // ⚠️ DEPRECATED: Use emoji instead (kept for backward compatibility)
   subNodes?: ApiStructureNode[];  // Preferred format
   subData?: ApiStructureNode[];    // Backward compatibility (will be normalized)
 }
@@ -83,6 +85,36 @@ function convertNode(
     ? children.map((child) => convertNode(child, rowId, [...parentPath, apiNode.label]))
     : undefined;
 
+  // ✅ CRITICAL: Clean label (remove any emoji that might be in label)
+  // Label must be pure text (semantic) - used in contracts sent to backend
+  // Emoji is stored separately (UI-only)
+  const cleanLabel = stripEmojiFromLabel(apiNode.label || 'Unnamed');
+
+  // ✅ DEBUG: Log per vedere esattamente cosa restituisce l'AI
+  console.log('[convertApiStructureToWizardTaskTree] AI Response Analysis', {
+    nodeId: nodeId,
+    originalLabel: apiNode.label,
+    hasEmojiInLabel: apiNode.label !== cleanLabel,
+    cleanedLabel: cleanLabel,
+    emojiFromAI: apiNode.emoji,
+    type: apiNode.type,
+    hasSubNodes: children.length > 0
+  });
+
+  // Se l'AI ha messo emoji nella label, loggare anche i dettagli
+  if (apiNode.label !== cleanLabel) {
+    console.warn('[convertApiStructureToWizardTaskTree] AI ha messo emoji nella label!', {
+      original: apiNode.label,
+      cleaned: cleanLabel,
+      removedChars: apiNode.label.length - cleanLabel.length,
+      emojiField: apiNode.emoji
+    });
+  }
+
+  // ✅ Use emoji from API if provided, otherwise undefined
+  // No extraction/mapping needed - AI returns emoji directly
+  const emoji = apiNode.emoji || undefined;
+
   // Initialize pipeline status
   const pipelineStatus = {
     constraints: 'pending' as const,
@@ -96,9 +128,9 @@ function convertNode(
   const result: WizardTaskTreeNode = {
     id: nodeId,
     templateId, // ✅ Always equals nodeId
-    label: apiNode.label || 'Unnamed',
+    label: cleanLabel, // ✅ Clean label (no emoji) - used in contracts sent to backend
     type: apiNode.type,
-    icon: apiNode.icon,
+    emoji: emoji, // ✅ Emoji directly from API (UI-only) - e.g. "📅", "👤", "📍"
     subNodes,
     pipelineStatus,
     // Note: readableName, dottedName will be added later by VariableNameGeneratorService

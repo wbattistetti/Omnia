@@ -3112,6 +3112,18 @@ app.post('/api/embeddings/compute', async (req, res) => {
       return res.status(400).json({ error: 'Text is required' });
     }
 
+    // ✅ DEBUG: Verifica se il testo contiene emoji
+    const hasEmoji = /[\u{1F000}-\u{1F9FF}]/u.test(text);
+    const emojiMatches = text.match(/[\u{1F000}-\u{1F9FF}]/gu) || [];
+
+    console.log('[Embeddings][COMPUTE] Request received', {
+      textLength: text.length,
+      textPreview: text.substring(0, 50),
+      hasEmoji,
+      emojiCount: emojiMatches.length,
+      emojis: hasEmoji ? emojiMatches : []
+    });
+
     // ✅ ARCHITECTURAL RULE: Normalize text BEFORE generating embedding
     // This ensures consistent embedding generation for both templates and queries
     const { normalizeTextForEmbedding } = require('./utils/embeddingTextNormalization');
@@ -3125,7 +3137,8 @@ app.post('/api/embeddings/compute', async (req, res) => {
       originalTextLength: text.trim().length,
       normalizedTextLength: normalizedText.length,
       originalPreview: text.trim().substring(0, 50),
-      normalizedPreview: normalizedText.substring(0, 50)
+      normalizedPreview: normalizedText.substring(0, 50),
+      hadEmoji: hasEmoji
     });
 
     let response;
@@ -3150,21 +3163,41 @@ app.post('/api/embeddings/compute', async (req, res) => {
       console.error('[Embeddings][COMPUTE] Fetch error (service not reachable):', {
         error: fetchError.message,
         errorName: fetchError.name,
+        errorStack: fetchError.stack,
         url: targetUrl,
         hint: 'Make sure Python FastAPI service (be:apiNew) is running on port 8000. Check if uvicorn is listening on port 8000.'
       });
       throw new Error(`Cannot reach Python embedding service at ${targetUrl}: ${fetchError.message}`);
     }
 
+    // ✅ DEBUG: Log risposta Python dettagliata
+    console.log('[Embeddings][COMPUTE] Python service response', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+      headers: Object.fromEntries(response.headers.entries())
+    });
+
     if (!response.ok) {
       const errorText = await response.text();
+      let errorJson;
+      try {
+        errorJson = JSON.parse(errorText);
+      } catch {
+        errorJson = { raw: errorText };
+      }
+
       console.error('[Embeddings][COMPUTE] Python service error response', {
         status: response.status,
         statusText: response.statusText,
-        errorText: errorText.substring(0, 200),
-        url: targetUrl
+        errorText: errorText.substring(0, 500),
+        errorJson,
+        url: targetUrl,
+        textSent: normalizedText.substring(0, 50),
+        textLength: normalizedText.length
       });
-      throw new Error(`Python embedding service error: ${response.status} ${errorText}`);
+
+      throw new Error(`Python embedding service error: ${response.status} - ${errorJson.error || errorJson.detail || errorJson.raw || errorText}`);
     }
 
     const data = await response.json();
@@ -3176,12 +3209,18 @@ app.post('/api/embeddings/compute', async (req, res) => {
   } catch (error) {
     console.error('[Embeddings][COMPUTE] Error:', {
       error: error.message,
-      stack: error.stack,
-      url: pythonServiceUrl
+      errorName: error.name,
+      errorStack: error.stack,
+      url: pythonServiceUrl,
+      requestBody: req.body ? {
+        textLength: req.body.text?.length,
+        textPreview: req.body.text?.substring(0, 50)
+      } : 'no body'
     });
     res.status(500).json({
       error: error.message || 'Failed to compute embedding',
-      details: 'Make sure Python FastAPI service is running on port 8000. Check logs for: [apiNew] or uvicorn'
+      details: 'Make sure Python FastAPI service is running on port 8000. Check logs for: [apiNew] or uvicorn',
+      errorName: error.name
     });
   }
 });

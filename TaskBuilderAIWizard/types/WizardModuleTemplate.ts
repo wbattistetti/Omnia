@@ -1,5 +1,5 @@
 import { WizardConstraint } from './WizardConstraint';
-import { WizardNLPContract } from './WizardNLPContract';
+import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
 
 export type WizardModuleTemplate = {
   id: string;
@@ -9,6 +9,6 @@ export type WizardModuleTemplate = {
   icon: string;
   subTasks?: Array<{ templateId: string; label: string; type: string }>;
   constraints?: WizardConstraint[];
-  dataContract?: WizardNLPContract;
+  dataContract?: DataContract;
   examples?: string[];
 };

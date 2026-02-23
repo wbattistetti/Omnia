@@ -636,16 +636,13 @@ async function processUserInput(
           if (data.subData && Array.isArray(data.subData)) {
             // Log essenziale
 
-            // ✅ USA LO STESSO METODO DEL VECCHIO ENGINE: getSubIdForCanonicalKey
+            // ✅ SIMPLIFIED: recognitionResult.value is already keyed by subId (no canonicalKey mapping needed)
             let mappedCount = 0;
-            const { getSubIdForCanonicalKey } = await import('../../DialogueDataEngine/contracts/contractLoader');
 
             if (contract && contract.subDataMapping) {
-              // Mappa canonicalKey → subId usando contract (come fa DialogueDataEngine/engine.ts riga 386)
               const tMap = performance.now();
-              for (const [canonicalKey, value] of Object.entries(recognitionResult.value)) {
-                const subId = getSubIdForCanonicalKey(contract, canonicalKey);
-                if (subId) {
+              for (const [subId, value] of Object.entries(recognitionResult.value)) {
+                if (contract.subDataMapping[subId]) {
                   updateMemory(state, subId, value);
                   mappedCount++;
                 }

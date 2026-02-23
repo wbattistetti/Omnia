@@ -266,6 +266,64 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     }
   }, [shouldTransitionToNone, taskWizardMode, editor]);
 
+  // ✅ OPTIMIZATION: Stabilize callbacks OUTSIDE useMemo to prevent recreation
+  // These are stable and only change when wizardIntegration handlers change
+  const setCorrectionInputStable = React.useCallback(
+    (value: string) => {
+      wizardIntegration?.setCorrectionInput?.(value);
+    },
+    [wizardIntegration?.setCorrectionInput]
+  );
+
+  const handleStructureConfirmStable = React.useCallback(
+    async () => {
+      await wizardIntegration?.handleStructureConfirm?.();
+    },
+    [wizardIntegration?.handleStructureConfirm]
+  );
+
+  const handleStructureRejectStable = React.useCallback(
+    () => {
+      wizardIntegration?.handleStructureReject?.();
+    },
+    [wizardIntegration?.handleStructureReject]
+  );
+
+  const runGenerationPipelineStable = React.useCallback(
+    async () => {
+      await wizardIntegration?.runGenerationPipeline?.();
+    },
+    [wizardIntegration?.runGenerationPipeline]
+  );
+
+  const onProceedFromEuristicaStable = React.useCallback(
+    async () => {
+      await wizardIntegration?.onProceedFromEuristica?.();
+    },
+    [wizardIntegration?.onProceedFromEuristica]
+  );
+
+  const onShowModuleListStable = React.useCallback(
+    () => {
+      wizardIntegration?.onShowModuleList?.();
+    },
+    [wizardIntegration?.onShowModuleList]
+  );
+
+  const onSelectModuleStable = React.useCallback(
+    async (moduleId: string) => {
+      await wizardIntegration?.onSelectModule?.(moduleId);
+    },
+    [wizardIntegration?.onSelectModule]
+  );
+
+  const onPreviewModuleStable = React.useCallback(
+    (moduleId: string | null) => {
+      wizardIntegration?.onPreviewModule?.(moduleId);
+    },
+    [wizardIntegration?.onPreviewModule]
+  );
+
   // ✅ B1: WizardContext value (only when wizard is active OR shouldBeGeneral is true) - calculated here to avoid race condition
   // ✅ FIX: Usa useMemo con dipendenze MINIME - solo quelle che determinano se il context deve esistere
   // I valori interni vengono letti direttamente da wizardIntegration (che è stabile grazie al useMemo precedente)
@@ -288,32 +346,44 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       structureConfirmed: wizardIntegration.structureConfirmed || false,
       showCorrectionMode: wizardIntegration.showCorrectionMode || false,
       correctionInput: wizardIntegration.correctionInput || '',
-      setCorrectionInput: wizardIntegration.setCorrectionInput || (() => { }),
+      setCorrectionInput: setCorrectionInputStable, // ✅ Stable callback
       shouldBeGeneral: wizardIntegration.shouldBeGeneral || false,
       generalizedLabel: wizardIntegration.generalizedLabel || null,
       generalizedMessages: wizardIntegration.generalizedMessages || null,
       generalizationReason: wizardIntegration.generalizationReason || null,
-      // ✅ Wizard handlers
-      handleStructureConfirm: wizardIntegration.handleStructureConfirm || (async () => { }),
-      handleStructureReject: wizardIntegration.handleStructureReject || (() => { }),
-      runGenerationPipeline: wizardIntegration.runGenerationPipeline || (async () => { }),
-      // ✅ Wizard module handlers
-      onProceedFromEuristica: wizardIntegration.onProceedFromEuristica || (async () => { }),
-      onShowModuleList: wizardIntegration.onShowModuleList || (() => { }),
-      onSelectModule: wizardIntegration.onSelectModule || (async () => { }),
-      onPreviewModule: wizardIntegration.onPreviewModule || (() => { }),
+      // ✅ Wizard handlers (stable callbacks)
+      handleStructureConfirm: handleStructureConfirmStable,
+      handleStructureReject: handleStructureRejectStable,
+      runGenerationPipeline: runGenerationPipelineStable,
+      // ✅ Wizard module handlers (stable callbacks)
+      onProceedFromEuristica: onProceedFromEuristicaStable,
+      onShowModuleList: onShowModuleListStable,
+      onSelectModule: onSelectModuleStable,
+      onPreviewModule: onPreviewModuleStable,
       availableModules: wizardIntegration.availableModules || [],
       foundModuleId: wizardIntegration.foundModuleId ?? undefined,
       // ✅ Sotto-stati
       currentParserSubstep: wizardIntegration.currentParserSubstep || null,
       currentMessageSubstep: wizardIntegration.currentMessageSubstep || null,
+      // ✅ DEPRECATED: Phase counters now read directly from store via PhaseCardContainer
+      phaseCounters: wizardIntegration.phaseCounters,
     };
   }, [
     wizardIntegration,
     // ✅ FIX: Dipendenze esplicite per forzare re-render quando dataSchema o pipelineSteps cambiano
     wizardIntegration?.dataSchema,
     wizardIntegration?.pipelineSteps,
+    wizardIntegration?.phaseCounters, // ✅ DEPRECATED: Phase counters now read directly from store
     taskWizardMode,
+    // ✅ OPTIMIZATION: Include stable callbacks in dependencies (they only change when handlers change)
+    setCorrectionInputStable,
+    handleStructureConfirmStable,
+    handleStructureRejectStable,
+    runGenerationPipelineStable,
+    onProceedFromEuristicaStable,
+    onShowModuleListStable,
+    onSelectModuleStable,
+    onPreviewModuleStable,
   ]);
 
   // ✅ ARCHITECTURE: Pass only necessary props (no monolithic editor object)

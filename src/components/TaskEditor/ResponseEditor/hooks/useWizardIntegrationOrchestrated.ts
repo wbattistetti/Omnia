@@ -81,6 +81,8 @@ export function useWizardIntegrationOrchestrated(
     currentStep: orchestrator.currentStep,
     pipelineSteps: orchestrator.pipelineSteps,
     dataSchema: orchestrator.dataSchema,
+    // ✅ NEW: Phase counters (source of truth for progress)
+    phaseCounters: orchestrator.phaseCounters,
 
     // UI state
     showStructureConfirmation: orchestrator.showStructureConfirmation,
