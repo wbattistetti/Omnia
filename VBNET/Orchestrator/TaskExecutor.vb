@@ -8,11 +8,11 @@ Imports Compiler
 ''' - Gestisce callback per messaggi
 ''' </summary>
 Public Class TaskExecutor
-    Private ReadOnly _taskEngine As Motore
+    ' ✅ REMOVED: _taskEngine (Motore) - use StatelessDialogueEngine when needed
     Private _messageCallback As Action(Of String, String, Integer)
 
-    Public Sub New(taskEngine As Motore)
-        _taskEngine = taskEngine
+    Public Sub New()
+        ' ✅ REMOVED: taskEngine parameter - use StatelessDialogueEngine when needed
     End Sub
 
     ''' <summary>
@@ -25,7 +25,7 @@ Public Class TaskExecutor
     ''' <summary>
     ''' Esegue un task compilato
     ''' </summary>
-    Public Function ExecuteTask(task As CompiledTask, state As ExecutionState) As TaskExecutionResult
+    Public Async Function ExecuteTask(task As CompiledTask, state As ExecutionState) As System.Threading.Tasks.Task(Of TaskExecutionResult)
         If task Is Nothing Then
             Return New TaskExecutionResult() With {
                 .Success = False,
@@ -35,7 +35,7 @@ Public Class TaskExecutor
 
         Try
             ' Ottieni l'executor appropriato per il tipo di task
-            Dim executor = TaskExecutorFactory.GetExecutor(task.TaskType, _taskEngine)
+            Dim executor = TaskExecutorFactory.GetExecutor(task.TaskType)
 
             If executor Is Nothing Then
                 Return New TaskExecutionResult() With {
@@ -48,7 +48,7 @@ Public Class TaskExecutor
             executor.SetMessageCallback(_messageCallback)
 
             ' Esegui il task usando l'executor specifico
-            Return executor.Execute(task, state)
+            Return Await executor.Execute(task, state)
 
         Catch ex As Exception
             Return New TaskExecutionResult() With {

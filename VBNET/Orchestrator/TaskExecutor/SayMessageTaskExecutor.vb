@@ -8,11 +8,11 @@ Imports Compiler
 Public Class SayMessageTaskExecutor
     Inherits TaskExecutorBase
 
-    Public Sub New(taskEngine As Motore)
-        MyBase.New(taskEngine)
+    Public Sub New()
+        MyBase.New()
     End Sub
 
-    Public Overrides Function Execute(task As CompiledTask, state As ExecutionState) As TaskExecutionResult
+    Public Overrides Async Function Execute(task As CompiledTask, state As ExecutionState) As System.Threading.Tasks.Task(Of TaskExecutionResult)
         Dim sayMessageTask = DirectCast(task, CompiledSayMessageTask)
 
         ' ✅ FASE 1.1: Usa TextKey invece di Text

@@ -1,66 +1,57 @@
 Option Strict On
 Option Explicit On
 Imports Compiler
+Imports TaskEngine
+Imports Newtonsoft.Json
+Imports System.Linq
 
 ''' <summary>
 ''' Executor per task di tipo UtteranceInterpretation
-''' Gestisce l'esecuzione completa del Task Engine
+''' ✅ NEW: Usa TaskEngine.ExecuteTask() con microtask e crash resilience
 ''' </summary>
 Public Class UtteranceTaskExecutor
     Inherits TaskExecutorBase
 
-    Public Sub New(taskEngine As Motore)
-        MyBase.New(taskEngine)
+    Public Sub New()
+        MyBase.New()
     End Sub
 
-    Public Overrides Function Execute(task As CompiledTask, state As ExecutionState) As TaskExecutionResult
-        Dim utteranceTask = DirectCast(task, CompiledUtteranceTask)
-
-        ' ✅ Verifica che abbia almeno Steps o SubTasks
-        If (utteranceTask.Steps Is Nothing OrElse utteranceTask.Steps.Count = 0) AndAlso
-           Not utteranceTask.HasSubTasks() Then
+    Public Overrides Async Function Execute(task As CompiledTask, state As ExecutionState) As System.Threading.Tasks.Task(Of TaskExecutionResult)
+        Dim utteranceTask = TryCast(task, CompiledUtteranceTask)
+        If utteranceTask Is Nothing Then
             Return New TaskExecutionResult() With {
                 .Success = False,
-                .Err = "CompiledUtteranceTask has no Steps or SubTasks"
+                .Err = "Task is not UtteranceInterpretation"
+            }
+        End If
+
+        ' ✅ Verifica che abbia almeno Steps
+        If utteranceTask.Steps Is Nothing OrElse utteranceTask.Steps.Count = 0 Then
+            Return New TaskExecutionResult() With {
+                .Success = False,
+                .Err = "CompiledUtteranceTask has no Steps"
             }
         End If
 
         Try
             Console.WriteLine($"🚀 [UtteranceTaskExecutor] Starting Task execution for task {task.Id}")
 
-            ' Collega l'evento MessageToShow del Motore al callback per i messaggi
-            Dim messageHandler As EventHandler(Of MessageEventArgs) = Nothing
-            messageHandler = Sub(sender As Object, e As MessageEventArgs)
-                                 If _messageCallback IsNot Nothing Then
-                                     _messageCallback(e.Message, "DDT", 0)
-                                 End If
-                             End Sub
+            ' ✅ Create state storage and callbacks
+            Dim stateStorage As New TaskEngineStateStorage(state)
+            Dim callbacks As New TaskEngineCallbacks(_messageCallback)
 
-            ' Registra l'handler per l'evento
-            AddHandler _taskEngine.MessageToShow, messageHandler
+            ' ✅ Create TaskEngine and execute
+            Dim engine As New TaskEngine(stateStorage, callbacks)
+            Dim resultObj = Await engine.ExecuteTask(task, state)
 
-            Try
-                ' Esegue il Task: questa chiamata è sincrona e blocca finché il Task non completa
-                ' Il Motore gestisce internamente:
-                ' - Navigazione attraverso i nodi (GetNextTask)
-                ' - Esecuzione dei response (ExecuteResponse)
-                ' - Parsing dell'input utente (Parser.InterpretUtterance)
-                ' - Transizioni di stato (SetState)
-                ' L'input utente deve essere fornito dall'esterno tramite Parser.SetUserInput()
-                ' TODO: Modificare ExecuteRuntimeTask per accettare RuntimeTask invece di DDTInstance
-                ' Per ora commentato - il runtime deve essere aggiornato
-                ' _taskEngine.ExecuteRuntimeTask(dataRequestTask.Task)
-                Throw New NotImplementedException("ExecuteRuntimeTask must be updated to accept RuntimeTask instead of DDTInstance")
+            ' Access result properties via reflection (result is Object to avoid circular dependency)
+            Dim requiresInputProp = resultObj.GetType().GetProperty("RequiresInput")
+            Dim requiresInput = If(requiresInputProp IsNot Nothing, DirectCast(requiresInputProp.GetValue(resultObj), Boolean), False)
 
-                Console.WriteLine($"✅ [UtteranceTaskExecutor] Task execution completed for task {task.Id}")
+            Console.WriteLine($"✅ [UtteranceTaskExecutor] Task {task.Id} completed. RequiresInput: {requiresInput}")
 
-                Return New TaskExecutionResult() With {
-                    .Success = True
-                }
-            Finally
-                ' Rimuovi l'handler per evitare memory leak
-                RemoveHandler _taskEngine.MessageToShow, messageHandler
-            End Try
+            ' Cast result back to TaskExecutionResult (it's the same object, just typed as Object in TaskEngine)
+            Return DirectCast(resultObj, TaskExecutionResult)
 
         Catch ex As Exception
             Console.WriteLine($"❌ [UtteranceTaskExecutor] Task execution failed for task {task.Id}: {ex.Message}")

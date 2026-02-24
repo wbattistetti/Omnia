@@ -45,7 +45,7 @@
     <Compile Include="Models\Converters\ITaskConverter.vb" />
     <!-- Core domain model -->
     <Compile Include="Models\TaskUtterance.vb" />
-    <Compile Include="Models\TaskUtteranceStateMachine.vb" />
+    <!-- TaskUtteranceStateMachine.vb REMOVED: replaced by StatelessDialogueEngine -->
     <Compile Include="Models\TurnResult.vb" />
     <!-- Deprecated compatibility stub -->
     <Compile Include="Models\TaskInstance.vb" />
@@ -62,7 +62,20 @@
     <Compile Include="Engine\MessageEventArgs.vb" />
     <Compile Include="Engine\Parser.vb" />
     <Compile Include="Engine\ParserExtraction.vb" />
-    <Compile Include="Engine\Motore.vb" />
+    <!-- Motore.vb REMOVED: Use TaskEngine instead -->
+    <!-- TaskEngine (new) - Crash-resilient engine with microtasks -->
+    <Compile Include="TaskEngine\Microtask.vb" />
+    <Compile Include="TaskEngine\DialogueStep.vb" />
+    <!-- Note: DialogueStep.vb contains TaskStep class to avoid conflict with Models\DialogueStep.vb -->
+    <Compile Include="TaskEngine\StepExecutionState.vb" />
+    <Compile Include="TaskEngine\DialogueContext.vb" />
+    <Compile Include="TaskEngine\ITaskEngineCallbacks.vb" />
+    <Compile Include="TaskEngine\ITaskEngineStateStorage.vb" />
+    <Compile Include="TaskEngine\TaskEngineStateStorage.vb" />
+    <Compile Include="TaskEngine\TaskEngineCallbacks.vb" />
+    <!-- CompiledTaskAdapter moved to Orchestrator to avoid circular dependency -->
+    <Compile Include="TaskEngine\TaskEngineHelpers.vb" />
+    <Compile Include="TaskEngine\TaskEngine.vb" />
   </ItemGroup>
 
 </Project>

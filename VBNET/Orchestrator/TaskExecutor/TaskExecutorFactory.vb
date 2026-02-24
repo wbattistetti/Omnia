@@ -8,20 +8,20 @@ Public Class TaskExecutorFactory
     ''' <summary>
     ''' Ottiene l'executor appropriato per il tipo di task specificato
     ''' </summary>
-    Public Shared Function GetExecutor(taskType As TaskTypes, taskEngine As Motore) As TaskExecutorBase
+    Public Shared Function GetExecutor(taskType As TaskTypes) As TaskExecutorBase
         Select Case taskType
             Case TaskTypes.ClassifyProblem
-                Return New ClassifyProblemTaskExecutor(taskEngine)
+                Return New ClassifyProblemTaskExecutor()
             Case TaskTypes.BackendCall
-                Return New BackendCallTaskExecutor(taskEngine)
+                Return New BackendCallTaskExecutor()
             Case TaskTypes.UtteranceInterpretation
-                Return New UtteranceTaskExecutor(taskEngine)
+                Return New UtteranceTaskExecutor()
             Case TaskTypes.SayMessage
-                Return New SayMessageTaskExecutor(taskEngine)
+                Return New SayMessageTaskExecutor()
             Case TaskTypes.CloseSession
-                Return New CloseSessionTaskExecutor(taskEngine)
+                Return New CloseSessionTaskExecutor()
             Case TaskTypes.Transfer
-                Return New TransferTaskExecutor(taskEngine)
+                Return New TransferTaskExecutor()
             Case Else
                 Console.WriteLine($"⚠️ [TaskExecutorFactory] Unknown TaskType {taskType}")
                 Return Nothing

@@ -34,6 +34,7 @@
     <Compile Include="TaskExecutor\CloseSessionTaskExecutor.vb" />
     <Compile Include="TaskExecutor\TransferTaskExecutor.vb" />
     <Compile Include="TaskExecutor\TaskExecutorFactory.vb" />
+    <Compile Include="TaskExecutor\CompiledTaskAdapter.vb" />
   </ItemGroup>
 
 </Project>

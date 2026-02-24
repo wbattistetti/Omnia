@@ -1,6 +1,9 @@
 Option Strict On
 Option Explicit On
 Imports Compiler
+Imports TaskEngine
+Imports Newtonsoft.Json
+Imports System.Linq
 
 ''' <summary>
 ''' Orchestrator che esegue un flow compilato
@@ -13,7 +16,7 @@ Imports Compiler
 Public Class FlowOrchestrator
     Private ReadOnly _compiledTasks As List(Of CompiledTask)
     Private ReadOnly _compilationResult As FlowCompilationResult
-    Private ReadOnly _taskEngine As Motore
+    ' ✅ REMOVED: _taskEngine (Motore) - use StatelessDialogueEngine instead when needed
     Private ReadOnly _taskExecutor As TaskExecutor
     Private ReadOnly _taskGroupExecutor As TaskGroupExecutor
     Private ReadOnly _state As ExecutionState
@@ -47,24 +50,21 @@ Public Class FlowOrchestrator
     ''' <summary>
     ''' Costruttore per retrocompatibilità (senza storage - stato solo in memoria)
     ''' </summary>
-    Public Sub New(compiledTasks As List(Of CompiledTask), taskEngine As Motore)
+    Public Sub New(compiledTasks As List(Of CompiledTask))
         _compiledTasks = compiledTasks
         _compilationResult = Nothing
-        _taskEngine = taskEngine
-        _taskExecutor = New TaskExecutor(taskEngine)
+        ' ✅ REMOVED: taskEngine parameter - use StatelessDialogueEngine when needed
+        _taskExecutor = New TaskExecutor()
         _taskGroupExecutor = New TaskGroupExecutor(_taskExecutor)
         _executionStateStorage = Nothing
         _sessionId = Nothing
         _state = New ExecutionState()
-
-        ' Collega eventi Task Engine
-        AddHandler _taskEngine.MessageToShow, AddressOf OnTaskEngineMessage
     End Sub
 
     ''' <summary>
     ''' ✅ STATELESS: Costruttore con storage per salvare/caricare ExecutionState da Redis
     ''' </summary>
-    Public Sub New(compilationResult As FlowCompilationResult, taskEngine As Motore, Optional sessionId As String = Nothing, Optional executionStateStorage As Object = Nothing)
+    Public Sub New(compilationResult As FlowCompilationResult, Optional sessionId As String = Nothing, Optional executionStateStorage As Object = Nothing)
         _compilationResult = compilationResult
         If compilationResult IsNot Nothing AndAlso compilationResult.Tasks IsNot Nothing Then
             _compiledTasks = compilationResult.Tasks
@@ -73,8 +73,8 @@ Public Class FlowOrchestrator
             _compiledTasks = New List(Of CompiledTask)()
             _entryTaskGroupId = Nothing
         End If
-        _taskEngine = taskEngine
-        _taskExecutor = New TaskExecutor(taskEngine)
+        ' ✅ REMOVED: taskEngine parameter - use StatelessDialogueEngine when needed
+        _taskExecutor = New TaskExecutor()
         _taskGroupExecutor = New TaskGroupExecutor(_taskExecutor)
         _executionStateStorage = executionStateStorage
         _sessionId = sessionId
@@ -97,9 +97,6 @@ Public Class FlowOrchestrator
         Else
             _state = New ExecutionState()
         End If
-
-        ' Collega eventi Task Engine
-        AddHandler _taskEngine.MessageToShow, AddressOf OnTaskEngineMessage
     End Sub
 
     ''' <summary>
@@ -107,9 +104,9 @@ Public Class FlowOrchestrator
     ''' Trova TaskGroup eseguibili e delega esecuzione a TaskGroupExecutor
     ''' NON naviga Edges a runtime - usa solo ExecCondition
     ''' </summary>
-    Public Function ExecuteDialogueAsync() As System.Threading.Tasks.Task
+    Public Async Function ExecuteDialogueAsync() As System.Threading.Tasks.Task
         If _isRunning Then
-            Return System.Threading.Tasks.Task.CompletedTask
+            Return
         End If
 
         _isRunning = True
@@ -138,7 +135,7 @@ Public Class FlowOrchestrator
                                                  End Sub)
 
                 ' ✅ Delega esecuzione a TaskGroupExecutor
-                Dim result = _taskGroupExecutor.ExecuteTaskGroup(taskGroup, _state)
+                Dim result = Await _taskGroupExecutor.ExecuteTaskGroup(taskGroup, _state)
 
                 If Not result.Success Then
                     Throw New Exception($"TaskGroup execution failed: {result.Err}")
@@ -174,8 +171,6 @@ Public Class FlowOrchestrator
         Finally
             _isRunning = False
         End Try
-
-        Return System.Threading.Tasks.Task.CompletedTask
     End Function
 
     ''' <summary>
@@ -226,12 +221,7 @@ Public Class FlowOrchestrator
     End Function
 
 
-    ''' <summary>
-    ''' Handler per messaggi dal Task Engine
-    ''' </summary>
-    Private Sub OnTaskEngineMessage(sender As Object, e As MessageEventArgs)
-        RaiseEvent MessageToShow(Me, e.Message)
-    End Sub
+    ' ✅ REMOVED: OnTaskEngineMessage handler - no longer needed without Motore
 
     ''' <summary>
     ''' Ferma l'esecuzione
@@ -239,6 +229,62 @@ Public Class FlowOrchestrator
     Public Sub [Stop]()
         _isRunning = False
     End Sub
+
+    ''' <summary>
+    ''' ✅ NEW: Fornisce input utente a un task utterance in attesa usando TaskEngine
+    ''' </summary>
+    Public Async Function ProvideUserInput(taskId As String, userInput As String) As System.Threading.Tasks.Task(Of Boolean)
+        If Not _state.DialogueContexts.ContainsKey(taskId) Then
+            Console.WriteLine($"⚠️ [FlowOrchestrator] No DialogueContext found for task {taskId}")
+            Return False
+        End If
+
+        Try
+            ' Find the task
+            Dim task = _compiledTasks.FirstOrDefault(Function(t) t.Id = taskId)
+            If task Is Nothing Then
+                Console.WriteLine($"⚠️ [FlowOrchestrator] Task {taskId} not found")
+                Return False
+            End If
+
+            ' Create TaskEngine with state storage and callbacks
+            Dim stateStorage As New TaskEngineStateStorage(_state)
+            Dim callbacks As New TaskEngineCallbacks(
+                Sub(text, stepType, escalationNumber)
+                    RaiseEvent MessageToShow(Me, text)
+                End Sub)
+
+            Dim engine As New TaskEngine(stateStorage, callbacks)
+
+            ' Execute task (TaskEngine will load DialogueContext from state and continue)
+            Dim resultObj = Await engine.ExecuteTask(task, _state)
+
+            ' Access result properties via reflection (result is Object to avoid circular dependency)
+            Dim requiresInputProp = resultObj.GetType().GetProperty("RequiresInput")
+            Dim requiresInput = If(requiresInputProp IsNot Nothing, DirectCast(requiresInputProp.GetValue(resultObj), Boolean), False)
+
+            ' Save state
+            SaveState()
+
+            ' If task completed, remove DialogueContext and resume execution
+            If Not requiresInput Then
+                _state.DialogueContexts.Remove(taskId)
+                SaveState()
+
+                ' Resume execution
+                If Not _isRunning Then
+                    Await ExecuteDialogueAsync()
+                End If
+            End If
+
+            Console.WriteLine($"✅ [FlowOrchestrator] Processed user input for task {taskId}. RequiresInput: {requiresInput}")
+            Return True
+
+        Catch ex As Exception
+            Console.WriteLine($"❌ [FlowOrchestrator] Error processing user input for task {taskId}: {ex.Message}")
+            Return False
+        End Try
+    End Function
 
     ''' <summary>
     ''' ✅ STATELESS: Salva ExecutionState su Redis

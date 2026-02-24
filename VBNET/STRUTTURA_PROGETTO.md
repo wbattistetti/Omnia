@@ -14,28 +14,41 @@ VBNET/
 ├── VBNET.sln                          # Solution file per Visual Studio
 │
 ├── DDTEngine/                          # Core del motore
-│   ├── DDTEngine.vbproj                # File di progetto
+│   ├── TaskEngine.vbproj               # File di progetto
 │   ├── Models/                        # Classi di modello
-│   │   ├── DDTInstance.vb             # Istanza di DDT
-│   │   ├── DDTNode.vb                 # Nodo del DDT (mainData o subData)
-│   │   ├── Response.vb                # Response del dialogo
+│   │   ├── TaskUtterance.vb           # Task utterance
+│   │   ├── DialogueStep.vb            # Step del dialogo
 │   │   ├── ParseResult.vb             # Risultato del parsing
 │   │   └── ValidationCondition.vb    # Condizione di validazione
-│   ├── Engine/                        # Logica del motore
-│   │   ├── DDTEngine.vb               # Classe principale (Execute)
-│   │   ├── DataRetriever.vb           # GetNextData
-│   │   ├── ResponseManager.vb         # GetResponse, ExecuteResponse
-│   │   ├── Parser.vb                  # InterpretUtterance
-│   │   └── StateManager.vb            # SetState
+│   ├── StatelessEngine/                # Motore stateless
+│   │   ├── StatelessDialogueEngine.vb # Entry point (ProcessTurn)
+│   │   ├── DialogueStepApplier.vb     # Applica step
+│   │   ├── TaskNavigator.vb           # Navigazione task
+│   │   ├── DataStateComputer.vb       # Calcola DataState
+│   │   └── UtteranceInterpreter.vb    # Interpreta utterance
+│   ├── Engine/                        # Parser e utilità
+│   │   ├── Parser.vb                  # Parser utterance
+│   │   └── Utils.vb                   # Utilità
 │   └── Helpers/                       # Funzioni helper
-│       └── MemoryManager.vb           # Gestione memory centralizzata
+│       └── TaskLoader.vb              # Caricamento task
 │
-├── DDTEngine.TestUI/                  # Interfaccia Windows Forms per test
-│   ├── DDTEngine.TestUI.vbproj        # File di progetto
-│   ├── MainForm.vb                    # Form principale con chat
-│   └── Program.vb                     # Entry point
+├── Orchestrator/                      # Orchestratore flow
+│   ├── Orchestrator.vbproj            # File di progetto
+│   ├── FlowOrchestrator.vb            # Orchestratore principale
+│   ├── TaskGroupExecutor.vb           # Esegue TaskGroups
+│   └── TaskExecutor/                  # Executor per tipo di task
 │
-└── TestData/                          # DDT di esempio
+├── Compiler/                          # Compilatore
+│   ├── Compiler.vbproj                # File di progetto
+│   ├── FlowCompiler.vb                # Compila flow
+│   └── TaskCompiler/                  # Compila task
+│
+├── ApiServer/                         # API server
+│   ├── ApiServer.vbproj                # File di progetto
+│   ├── SessionManager.vb              # Gestione sessioni
+│   └── Interfaces/                   # Endpoint API
+│
+└── TestData/                          # Dati di esempio
     └── DatiPersonali.json             # DDT completo: Nome, Cognome, Indirizzo, Telefono
 ```
 
@@ -70,57 +83,26 @@ VBNET/
 
 ## Stato Attuale
 
-### ✅ Completato
+### ✅ Componenti Attivi
 
-- Struttura base del progetto
-- Classi Models complete
-- Classi Engine con struttura base
-- MemoryManager base
-- Interfaccia TestUI base
-- DDT di esempio (DatiPersonali.json)
-- Documentazione (README, ISTRUZIONI_COPILOT)
+- **StatelessDialogueEngine** - Motore stateless completo
+- **FlowOrchestrator** - Orchestratore flow funzionante
+- **TaskEngine** (TypeScript) - Nuovo motore resiliente ai crash
+- **Compiler** - Compilazione flow e task
+- **ApiServer** - API server con gestione sessioni
 
-### 🚧 Da Implementare
+### ❌ Componenti Eliminati
 
-1. **Parser.InterpretUtterance**: Logica completa di parsing
-   - Caricamento contract
-   - Gestione confirmation con correzione implicita
-   - Gestione validazione
-   - Match su contract in primo piano e background
+- **DDTEngine.TestUI** - Progetto obsoleto, rimosso
+- **ServerlessEngine** - Progetto deprecato, rimosso
+- **Motore.vb** - Vecchio motore, rimosso
 
-2. **StateManager.SetState**: Logica completa di transizione stati
-   - Gestione Match → confirmation/validation
-   - Gestione Confirmed → validation
-   - Gestione Validated → completed
-   - Gestione Invalid → conditionId
+## Architettura
 
-3. **ResponseManager.ExecuteResponse**: Logica completa
-   - Sostituzione placeholder [path] usando riferimenti pre-risoluti (compile-time)
-   - Mostra messaggio (interfaccia)
-   - Esecuzione azioni
-
-4. **MainForm**: Interfaccia completa
-   - Caricamento DDT da JSON
-   - Integrazione con DDTEngine
-   - Visualizzazione stati dati
-   - Gestione input/output
-
-5. **ValidationHelper**: Validazione dati
-   - Esecuzione validationConditions
-   - Gestione regex, range, custom
-
-6. **Contract System**: Sistema di estrazione
-   - Caricamento contract per nodo
-   - Caricamento contract di background
-   - Estrazione dati (regex/rules/NER/LLM)
-
-## Prossimi Passi
-
-1. Aprire il progetto in Visual Studio
-2. Implementare le funzioni TODO
-3. Testare con DatiPersonali.json
-4. Debug e raffinamento
-5. Aggiungere test unitari
+Per dettagli completi sull'architettura, vedere:
+- `ARCHITETTURA_DIALOGO.md` - Documentazione completa architettura
+- `DDTEngine/StatelessEngine/README.md` - StatelessDialogueEngine
+- `backend/runtime/taskEngine/README.md` - TaskEngine TypeScript
 
 ## Riferimenti
 
@@ -132,9 +114,9 @@ VBNET/
 ## Note
 
 - Tutti i file VB.NET usano `Option Strict On` e `Option Explicit On`
-- Il progetto usa .NET 6.0
-- La solution include due progetti: Core e TestUI
-- Il TestUI ha riferimento al Core
+- Il progetto usa .NET 8.0
+- La solution include: TaskEngine, Compiler, Orchestrator, ApiServer
+- TaskEngine TypeScript è in `backend/runtime/taskEngine/`
 
 
 

@@ -35,6 +35,12 @@ Public Class ExecutionState
     ''' </summary>
     Public Property CurrentRowIndex As Integer
 
+    ''' <summary>
+    ''' ✅ STATELESS: DialogueContext per task utterance (salvato per gestire input asincroni)
+    ''' Chiave: taskId, Valore: DialogueContext serializzato (JSON)
+    ''' </summary>
+    Public Property DialogueContexts As Dictionary(Of String, String)
+
     Public Sub New()
         ExecutedTaskIds = New HashSet(Of String)()
         ExecutedTaskGroupIds = New HashSet(Of String)()
@@ -42,6 +48,7 @@ Public Class ExecutionState
         RetrievalState = "empty"
         CurrentNodeId = Nothing
         CurrentRowIndex = 0
+        DialogueContexts = New Dictionary(Of String, String)()
     End Sub
 End Class
 

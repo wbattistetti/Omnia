@@ -28,10 +28,10 @@ Public Class TaskGroupExecutor
     ''' <param name="taskGroup">TaskGroup da eseguire</param>
     ''' <param name="executionState">Stato esecuzione (modificato durante esecuzione)</param>
     ''' <returns>Risultato esecuzione (Success, RequiresInput, Error)</returns>
-    Public Function ExecuteTaskGroup(
+    Public Async Function ExecuteTaskGroup(
         taskGroup As TaskGroup,
         executionState As ExecutionState
-    ) As TaskExecutionResult
+    ) As System.Threading.Tasks.Task(Of TaskExecutionResult)
         If taskGroup Is Nothing Then
             Return New TaskExecutionResult() With {
                 .Success = False,
@@ -72,7 +72,7 @@ Public Class TaskGroupExecutor
             End If
 
             ' ✅ Esegui task tramite TaskExecutor
-            Dim result = _taskExecutor.ExecuteTask(task, executionState)
+            Dim result = Await _taskExecutor.ExecuteTask(task, executionState)
 
             If Not result.Success Then
                 Console.WriteLine($"[TaskGroupExecutor] ❌ Task {task.Id} execution failed: {result.Err}")

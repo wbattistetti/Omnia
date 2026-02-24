@@ -15,6 +15,7 @@ Imports Microsoft.AspNetCore.Http
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 Imports TaskEngine
+Imports TaskEngine.Orchestrator
 
 Namespace ApiServer.Handlers
     ''' <summary>
@@ -376,9 +377,19 @@ Namespace ApiServer.Handlers
                     Return Results.BadRequest(New With {.error = "Dialog not found or could not be loaded for this session. Please restart the session."})
                 End If
 
-                ' ✅ STEP 2: Parse input and run the next dialogue step in a single call.
-                SessionManager.AttachTaskEngineHandlers(session)
-                session.TaskEngine.HandleUserTurn(session.TaskInstance, request.Input)
+                ' ✅ STEP 2: Carica DialogueContext dalla sessione
+                Dim ctx = SessionManager.GetOrCreateDialogueContext(session)
+                If ctx Is Nothing Then
+                    Return Results.BadRequest(New With {.error = "Failed to load or create DialogueContext. Please restart the session."})
+                End If
+
+                ' ✅ REMOVED: StatelessDialogueEngine non esiste più - usa TaskEngine invece
+                ' TODO: Migrare a TaskEngine.ExecuteTask() tramite FlowOrchestrator
+                ' Per ora, questo codice è disabilitato
+                ' Il nuovo TaskEngine viene usato tramite FlowOrchestrator.ProvideUserInput()
+
+                ' Placeholder per evitare errori di compilazione
+                Dim requiresInput = False
 
                 ' ✅ STATELESS: Salva la sessione su Redis dopo l'esecuzione
                 SessionManager.SaveTaskSession(session)
@@ -411,6 +422,117 @@ Namespace ApiServer.Handlers
                     statusCode:=500
                 )
             End Try
+        End Function
+
+        ''' <summary>
+        ''' ✅ DISABLED: Handles POST /api/runtime/task/test - Test diretto di un singolo task
+        ''' Questo endpoint è stato disabilitato. Usa FlowOrchestrator con il nuovo TaskEngine invece.
+        ''' </summary>
+        Public Async Function HandleDirectTaskTest(context As HttpContext) As Task(Of IResult)
+            Return Results.BadRequest(New DirectTaskTestResponse() With {
+                .Success = False,
+                .ErrorMessage = "DirectTaskTest endpoint is disabled. Use FlowOrchestrator with new TaskEngine instead."
+            })
+        End Function
+
+        ''' <summary>
+        ''' ✅ Helper: Ottiene il messaggio da uno step del dialogo per il test
+        ''' </summary>
+        Private Function GetMessageFromStepForTest(compiledTask As Compiler.CompiledUtteranceTask, stepType As Object) As String
+            ' Mappa DialogueStepType a DialogueState
+            Dim dialogueState = MapStepTypeToDialogueStateForTest(stepType)
+
+            ' Trova lo step corrispondente nel CompiledUtteranceTask
+            If compiledTask.Steps IsNot Nothing Then
+                Dim dialogueStep = compiledTask.Steps.FirstOrDefault(Function(s) s.Type = dialogueState)
+                If dialogueStep IsNot Nothing AndAlso dialogueStep.Escalations IsNot Nothing AndAlso dialogueStep.Escalations.Count > 0 Then
+                    ' Prendi la prima escalation (TODO: gestire escalation counters)
+                    Dim escalation = dialogueStep.Escalations(0)
+                    If escalation.Tasks IsNot Nothing Then
+                        ' Cerca il primo MessageTask
+                        For Each taskObj In escalation.Tasks
+                            If TypeOf taskObj Is TaskEngine.MessageTask Then
+                                Dim msgTask = DirectCast(taskObj, TaskEngine.MessageTask)
+                                ' Restituisci il TextKey (la risoluzione può essere fatta dal frontend)
+                                Return msgTask.TextKey
+                            End If
+                        Next
+                    End If
+                End If
+            End If
+
+            Return Nothing
+        End Function
+
+        ''' <summary>
+        ''' ✅ Helper: Estrae messaggio da CompiledUtteranceTask per HandleTaskSessionInput
+        ''' </summary>
+        Private Function GetMessageFromStepForInput(compiledTask As Compiler.CompiledUtteranceTask, stepType As Object, projectId As String, locale As String) As String
+            ' Mappa DialogueStepType a DialogueState
+            Dim dialogueState = MapStepTypeToDialogueStateForTest(stepType)
+
+            ' Trova lo step corrispondente nel CompiledUtteranceTask
+            If compiledTask.Steps IsNot Nothing Then
+                Dim dialogueStep = compiledTask.Steps.FirstOrDefault(Function(s) s.Type = dialogueState)
+                If dialogueStep IsNot Nothing AndAlso dialogueStep.Escalations IsNot Nothing AndAlso dialogueStep.Escalations.Count > 0 Then
+                    ' Prendi la prima escalation (TODO: gestire escalation counters)
+                    Dim escalation = dialogueStep.Escalations(0)
+                    If escalation.Tasks IsNot Nothing Then
+                        ' Cerca il primo MessageTask
+                        For Each taskObj In escalation.Tasks
+                            If TypeOf taskObj Is TaskEngine.MessageTask Then
+                                Dim msgTask = DirectCast(taskObj, TaskEngine.MessageTask)
+                                ' Risolvi la traduzione se disponibile
+                                Dim translationRepository = New ApiServer.Repositories.RedisTranslationRepository(
+                                    Program.GetRedisConnectionString(),
+                                    Program.GetRedisKeyPrefix()
+                                )
+                                Dim translation = translationRepository.GetTranslation(projectId, locale, msgTask.TextKey)
+                                If Not String.IsNullOrEmpty(translation) Then
+                                    Return translation
+                                End If
+                                ' Fallback: restituisci il TextKey
+                                Return msgTask.TextKey
+                            End If
+                        Next
+                    End If
+                End If
+            End If
+
+            Return Nothing
+        End Function
+
+        ''' <summary>
+        ''' ✅ REMOVED: DialogueStepType non esiste più - questa funzione non è più usata
+        ''' </summary>
+        Private Function MapStepTypeToDialogueStateForTest(stepType As Object) As TaskEngine.DialogueState
+            ' ✅ REMOVED: DialogueStepType non esiste più
+            Return TaskEngine.DialogueState.Start
+        End Function
+
+        ''' <summary>
+        ''' ✅ Helper: Converte RuntimeTask in CompiledUtteranceTask (ricorsivo)
+        ''' </summary>
+        Private Function ConvertRuntimeTaskToCompiled(runtimeTask As Compiler.RuntimeTask) As Compiler.CompiledUtteranceTask
+            Dim compiled As New Compiler.CompiledUtteranceTask() With {
+                .Id = runtimeTask.Id,
+                .Condition = runtimeTask.Condition,
+                .Steps = runtimeTask.Steps,
+                .Constraints = runtimeTask.Constraints,
+                .NlpContract = runtimeTask.NlpContract
+            }
+
+            ' ✅ Copia SubTasks ricorsivamente (solo se presenti)
+            If runtimeTask.HasSubTasks() Then
+                compiled.SubTasks = New List(Of Compiler.CompiledUtteranceTask)()
+                For Each subTask As Compiler.RuntimeTask In runtimeTask.SubTasks
+                    compiled.SubTasks.Add(ConvertRuntimeTaskToCompiled(subTask))
+                Next
+            Else
+                compiled.SubTasks = Nothing
+            End If
+
+            Return compiled
         End Function
 
         ''' <summary>

@@ -123,7 +123,6 @@ Namespace ApiServer.SessionStorage
                     .WaitingForInputData = data.WaitingForInputData,
                     .SseConnected = data.SseConnected,
                     .EventEmitter = sharedEmitter,
-                    .TaskEngine = New Motore(),
                     .TaskUtteranceState = data.TaskUtteranceState
                 }
 
@@ -179,7 +178,7 @@ Namespace ApiServer.SessionStorage
                 End If
 
                 ' Ricrea oggetti runtime
-                Dim taskEngine As New Motore()
+                ' ✅ REMOVED: taskEngine (Motore) - no longer needed
                 Dim session As New OrchestratorSession() With {
                     .SessionId = data.SessionId,
                     .CompilationResult = data.CompilationResult,
@@ -188,14 +187,13 @@ Namespace ApiServer.SessionStorage
                     .Messages = If(data.Messages, New List(Of Object)()),
                     .IsWaitingForInput = data.IsWaitingForInput,
                     .WaitingForInputData = data.WaitingForInputData,
-                    .EventEmitter = New EventEmitter(), ' Ricrea EventEmitter (vuoto)
-                    .TaskEngine = taskEngine
+                    .EventEmitter = New EventEmitter() ' Ricrea EventEmitter (vuoto)
                 }
 
-                ' ✅ STATELESS: Ricrea FlowOrchestrator con ExecutionStateStorage se disponibile
+                ' ✅ STATELESS: Ricrea FlowOrchestrator (no longer requires Motore)
                 If data.CompilationResult IsNot Nothing Then
                     Try
-                        session.Orchestrator = New TaskEngine.Orchestrator.FlowOrchestrator(data.CompilationResult, taskEngine, sessionId, executionStateStorage)
+                        session.Orchestrator = New TaskEngine.Orchestrator.FlowOrchestrator(data.CompilationResult, sessionId, executionStateStorage)
                     Catch ex As Exception
                         ' Orchestrator sarà Nothing, verrà ricreato quando necessario
                     End Try

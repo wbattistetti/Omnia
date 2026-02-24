@@ -282,6 +282,11 @@ Module Program
                                                             Return ApiServer.Handlers.TaskSessionHandlers.HandleTaskSessionDelete(context, id)
                                                         End Function)
 
+        ' ✅ TEST DIRETTO: POST /api/runtime/task/test - Test diretto di un singolo task (bypassa FlowOrchestrator)
+        app.MapPost("/api/runtime/task/test", Async Function(context As HttpContext) As Task(Of IResult)
+                                                  Return Await ApiServer.Handlers.TaskSessionHandlers.HandleDirectTaskTest(context)
+                                              End Function)
+
         ' POST /api/runtime/orchestrator/session/start
         app.MapPost("/api/runtime/orchestrator/session/start", Async Function(context As HttpContext) As Task(Of IResult)
                                                                    Console.WriteLine("═══════════════════════════════════════════════════════════════════════════")

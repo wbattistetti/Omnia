@@ -16,17 +16,29 @@ Il DDT Engine gestisce dialoghi deterministici per l'acquisizione di dati strutt
 
 ```
 VBNET/
-├── DDTEngine/                # Core del motore
-│   ├── Models/              # Classi di modello (DDTInstance, DDTNode, Response, ecc.)
-│   ├── Engine/              # Logica del motore (Execute, GetNextData, SetState, ecc.)
-│   └── Helpers/             # Funzioni helper  (ValidationHelper)
-├── DDTEngine.TestUI/        # Interfaccia Windows Forms per test
-│   ├── MainForm.vb          # Form principale con chat
-│   └── Controls/             # Controlli personalizzati
-├── DDTEngine.Tests/         # Test unitari
-└── TestData/                # DDT di esempio per test
-    └── DatiPersonali.json    # Esempio: Nome, Cognome, Indirizzo, Telefono
+├── DDTEngine/                    # Core del motore
+│   ├── Models/                  # Classi di modello (TaskUtterance, DialogueStep, ecc.)
+│   ├── StatelessEngine/         # Motore stateless (ProcessTurn, ApplyDialogueStep)
+│   ├── Engine/                  # Parser e utilità
+│   └── Helpers/                 # Funzioni helper
+├── Orchestrator/                 # Orchestratore flow
+│   ├── FlowOrchestrator.vb      # Orchestratore principale
+│   ├── TaskGroupExecutor.vb     # Esegue TaskGroups
+│   └── TaskExecutor/            # Executor per tipo di task
+├── Compiler/                     # Compilatore flow e task
+│   ├── FlowCompiler.vb          # Compila flow
+│   └── TaskCompiler/            # Compila task
+├── ApiServer/                    # API server
+│   ├── SessionManager.vb        # Gestione sessioni
+│   └── Interfaces/              # Endpoint API
+└── TestData/                     # Dati di esempio
+    └── *.json                    # DDT e flow di esempio
 ```
+
+**Componenti Eliminati**:
+- ❌ `DDTEngine.TestUI/` - Progetto obsoleto, rimosso
+- ❌ `ServerlessEngine/` - Progetto deprecato, rimosso
+- ❌ `Motore.vb` - Vecchio motore, rimosso
 
 ## Documentazione di Riferimento
 
@@ -116,20 +128,15 @@ Prima di implementare qualsiasi funzione, consultare `Motori.MD` per:
 
 ## Come Testare
 
-1. **Interfaccia TestUI**:
-   - Aprire `DDTEngine.TestUI` in Visual Studio
-   - Eseguire il progetto
-   - Usare la chat per testare il motore
-   - Visualizzare gli stati dei dati in tempo reale
+1. **API Server**:
+   - Eseguire `ApiServer` in Visual Studio
+   - Usare endpoint API per testare il motore
+   - Monitorare sessioni tramite SessionManager
 
-2. **Test Unitari**:
-   - Eseguire i test in `DDTEngine.Tests`
-   - Verificare ogni funzione individualmente
-
-3. **Debug**:
+2. **Debug**:
    - Usare breakpoint in Visual Studio
-   - Verificare il flusso del ciclo principale
-   - Controllare gli stati dei dati nella memory
+   - Verificare il flusso FlowOrchestrator → TaskEngine
+   - Controllare ExecutionState e DialogueContext
 
 ## Istruzioni per il Copilot
 
@@ -162,13 +169,19 @@ Usare questo DDT per testare il motore.
 - **Bubbling**: se mainData è parziale, lavora sui subData
 - **Validazione prima di conferma**: i dati devono essere validati prima di essere confermati (ma la conferma viene prima della validazione nel flusso)
 
-## Prossimi Passi
+## Documentazione
 
-1. Implementare le classi Models
-2. Implementare le funzioni Engine
-3. Creare l'interfaccia TestUI
-4. Scrivere test unitari
-5. Testare con DatiPersonali.json
+- `ARCHITETTURA_DIALOGO.md` - Architettura completa del sistema di dialogo
+- `DDTEngine/StatelessEngine/README.md` - Documentazione StatelessDialogueEngine
+- `backend/runtime/taskEngine/README.md` - Documentazione TaskEngine TypeScript
+
+## Componenti Attivi
+
+- ✅ **TaskEngine** (TypeScript) - Nuovo motore resiliente
+- ✅ **StatelessDialogueEngine** (VB.NET) - Logica pura
+- ✅ **FlowOrchestrator** (VB.NET) - Orchestrazione topologica
+- ✅ **Compiler** (VB.NET) - Compilazione flow e task
+- ✅ **ApiServer** (VB.NET) - API server e gestione sessioni
 
 
 

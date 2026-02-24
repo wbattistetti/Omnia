@@ -16,7 +16,7 @@ Imports System.Reflection
 <Assembly: System.Reflection.AssemblyCompanyAttribute("Orchestrator"),  _
  Assembly: System.Reflection.AssemblyConfigurationAttribute("Debug"),  _
  Assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0"),  _
- Assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3bbad1b985ac9515d060d53877acb861def46bc8"),  _
+ Assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+924b76cbd8430dcb08247b32fb2d64cf76c26b31"),  _
  Assembly: System.Reflection.AssemblyProductAttribute("Orchestrator"),  _
  Assembly: System.Reflection.AssemblyTitleAttribute("Orchestrator"),  _
  Assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")> 

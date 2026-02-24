@@ -52,6 +52,7 @@
     <Compile Include="SessionManager.vb" />
     <Compile Include="Program.vb" />
     <Compile Include="Models\ApiModels.vb" />
+    <Compile Include="Models\DirectTaskTestModels.vb" />
     <Compile Include="Helpers\ResponseHelpers.vb" />
     <Compile Include="Validators\RequestValidators.vb" />
     <Compile Include="Converters\TaskTreeConverter.vb" />

@@ -14,26 +14,30 @@ Questo documento fornisce istruzioni dettagliate per il Copilot quando assiste n
 ### Struttura
 ```
 VBNET/
-├── DDTEngine/                # Core del motore
-│   ├── Models/              # Classi di modello
-│   ├── Engine/              # Logica del motore
-│   └── Helpers/             # Funzioni helper
-├── DDTEngine.TestUI/        # Interfaccia Windows Forms per test
-└── TestData/                # DDT di esempio
+├── DDTEngine/                    # Core del motore
+│   ├── Models/                  # Classi di modello
+│   ├── StatelessEngine/         # Motore stateless
+│   ├── Engine/                  # Parser e utilità
+│   └── Helpers/                 # Funzioni helper
+├── Orchestrator/                 # Orchestratore flow
+├── Compiler/                     # Compilatore
+├── ApiServer/                    # API server
+└── TestData/                     # Dati di esempio
 ```
 
-### Classi Principali
+### Componenti Principali
 
-1. **DDTInstance**: Rappresenta un'istanza di DDT
-2. **DDTNode**: Rappresenta un nodo (mainData o subData)
-3. **Response**: Rappresenta un response del dialogo
-4. **ParseResult**: Risultato del parsing dell'input utente
-5. **DDTEngine**: Classe principale che coordina il processo
-6. **DataRetriever**: Gestisce GetNextData
-7. **ResponseManager**: Gestisce GetResponse e ExecuteResponse
-8. **Parser**: Gestisce InterpretUtterance
-9. **StateManager**: Gestisce SetState
-10. **MemoryManager**: Gestisce la memory centralizzata
+1. **StatelessDialogueEngine**: Motore stateless (ProcessTurn)
+2. **FlowOrchestrator**: Orchestratore flow topologico
+3. **TaskEngine** (TypeScript): Nuovo motore resiliente ai crash
+4. **TaskCompiler**: Compila task in CompiledTask
+5. **FlowCompiler**: Compila flow in CompiledFlow
+6. **SessionManager**: Gestisce sessioni e stato
+
+**Documentazione**:
+- `ARCHITETTURA_DIALOGO.md` - Architettura completa
+- `DDTEngine/StatelessEngine/README.md` - StatelessDialogueEngine
+- `backend/runtime/taskEngine/README.md` - TaskEngine TypeScript
 
 ## Convenzioni di Codice
 

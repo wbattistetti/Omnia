@@ -4,7 +4,9 @@
 
 Option Strict On
 Option Explicit On
+Imports System
 Imports System.Collections.Generic
+Imports System.Linq
 
 ''' <summary>
 ''' Represents a semantic dialogue unit that acquires data from the user.
@@ -44,7 +46,7 @@ Partial Public Class TaskUtterance
     Public Property SuccessResponse As IEnumerable(Of ITask)
     Public Property ProjectId As String
     Public Property Locale As String
-    Public Property TranslationResolver As TaskEngine.Interfaces.ITranslationResolver
+    Public Property TranslationResolver As Interfaces.ITranslationResolver
 
     Public Sub New()
         SubTasks = New List(Of TaskUtterance)()
@@ -184,4 +186,5 @@ Public Class TaskUtteranceStateSnapshot
         EscalationCounters = New Dictionary(Of DialogueState, Integer)()
         SubStates = New List(Of TaskUtteranceStateSnapshot)()
     End Sub
+
 End Class

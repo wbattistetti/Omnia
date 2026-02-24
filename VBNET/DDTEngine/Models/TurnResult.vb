@@ -19,7 +19,8 @@ Public Enum TurnStatus
 End Enum
 
 ''' <summary>
-''' Result returned by Motore.ExecuteTurn or Motore.ProcessInput.
+''' Result returned by dialogue engine operations.
+''' Note: This class is kept for backward compatibility but should be replaced with DialogueOutput from StatelessDialogueEngine.
 ''' </summary>
 Public Class TurnResult
     Public Property Status As TurnStatus

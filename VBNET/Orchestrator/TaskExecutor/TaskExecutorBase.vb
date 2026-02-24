@@ -7,11 +7,11 @@ Imports Compiler
 ''' Ogni tipo di task può avere il suo executor specifico
 ''' </summary>
 Public MustInherit Class TaskExecutorBase
-    Protected ReadOnly _taskEngine As Motore
+    ' ✅ REMOVED: _taskEngine (Motore) - use StatelessDialogueEngine when needed
     Protected _messageCallback As Action(Of String, String, Integer)
 
-    Public Sub New(taskEngine As Motore)
-        _taskEngine = taskEngine
+    Public Sub New()
+        ' ✅ REMOVED: taskEngine parameter - use StatelessDialogueEngine when needed
     End Sub
 
     ''' <summary>
@@ -24,7 +24,7 @@ Public MustInherit Class TaskExecutorBase
     ''' <summary>
     ''' Esegue un task compilato
     ''' </summary>
-    Public MustOverride Function Execute(task As CompiledTask, state As ExecutionState) As TaskExecutionResult
+    Public MustOverride Function Execute(task As CompiledTask, state As ExecutionState) As System.Threading.Tasks.Task(Of TaskExecutionResult)
 End Class
 
 

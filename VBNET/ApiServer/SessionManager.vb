@@ -2,8 +2,11 @@ Option Strict On
 Option Explicit On
 Imports Compiler
 Imports TaskEngine
+Imports TaskEngine.Orchestrator
 Imports ApiServer.Interfaces
 Imports ApiServer.SessionStorage
+Imports System.Linq
+Imports Newtonsoft.Json
 
 ''' <summary>
 ''' Orchestrator Session: contiene tutto lo stato di una sessione di esecuzione
@@ -15,7 +18,7 @@ Public Class OrchestratorSession
     ' ❌ RIMOSSO: DDTs property - non più usato, struttura costruita da template
     Public Property Translations As Dictionary(Of String, String)
     Public Property Orchestrator As TaskEngine.Orchestrator.FlowOrchestrator
-    Public Property TaskEngine As Motore
+    ' ✅ REMOVED: TaskEngine (Motore) - no longer needed, use StatelessDialogueEngine when required
     Public Property Messages As New List(Of Object)
     Public Property EventEmitter As EventEmitter
     Public Property IsWaitingForInput As Boolean
@@ -86,7 +89,7 @@ Public Class TaskSession
     Public Property RuntimeData As Dictionary(Of String, Object)  ' Dati raccolti durante la chiamata
 
     ' ✅ STATELESS: Oggetti runtime (non serializzati, ricreati ad ogni accesso)
-    Public Property TaskEngine As Motore
+    ' ✅ REMOVED: TaskEngine (Motore) - no longer needed, use StatelessDialogueEngine when required
     Public Property TaskInstance As TaskEngine.TaskUtterance
     Public Property EventEmitter As EventEmitter
 
@@ -99,6 +102,9 @@ Public Class TaskSession
     ' ✅ STATELESS: Snapshot dello stato del TaskUtterance (serializzato su Redis).
     ' La configurazione (Steps, NlpContract) viene sempre ricostruita dal dialogo compilato.
     Public Property TaskUtteranceState As TaskEngine.TaskUtteranceStateSnapshot
+
+    ' ✅ STATELESS: DialogueContext serializzato (per il nuovo motore stateless)
+    Public Property DialogueContextJson As String
 
     ' ❌ RIMOSSO: RuntimeTask (configurazione immutabile - carica da DialogRepository)
     ' ❌ RIMOSSO: Translations (configurazione immutabile - carica da TranslationRepository)
@@ -199,18 +205,17 @@ Public Class SessionManager
         translations As Dictionary(Of String, String)
     ) As OrchestratorSession
         SyncLock _lock
-            Dim taskEngine As New Motore()
+            ' ✅ REMOVED: taskEngine (Motore) - FlowOrchestrator no longer requires it
             Dim session As New OrchestratorSession() With {
                 .SessionId = sessionId,
                 .CompilationResult = compilationResult,
                 .Tasks = tasks,
                 .Translations = translations,
                 .EventEmitter = New EventEmitter(),
-                .TaskEngine = taskEngine,
                 .IsWaitingForInput = False
             }
-            ' ✅ STATELESS: Crea FlowOrchestrator con ExecutionStateStorage se disponibile
-            session.Orchestrator = New TaskEngine.Orchestrator.FlowOrchestrator(compilationResult, taskEngine, sessionId, _executionStateStorage)
+            ' ✅ STATELESS: Crea FlowOrchestrator (no longer requires Motore)
+            session.Orchestrator = New TaskEngine.Orchestrator.FlowOrchestrator(compilationResult, sessionId, _executionStateStorage)
 
             AddHandler session.Orchestrator.MessageToShow, Sub(sender, text)
                                                                Dim msgId = $"{sessionId}-{DateTime.UtcNow.Ticks}-{Guid.NewGuid().ToString().Substring(0, 8)}"
@@ -282,10 +287,8 @@ Public Class SessionManager
         SyncLock _lock
             Dim session = _storage.GetOrchestratorSession(sessionId)
             If session IsNot Nothing AndAlso session.CompilationResult IsNot Nothing AndAlso session.Orchestrator Is Nothing Then
-                ' ✅ STATELESS: Ricrea FlowOrchestrator con ExecutionStateStorage se non presente
-                Dim taskEngine = If(session.TaskEngine, New Motore())
-                session.TaskEngine = taskEngine
-                session.Orchestrator = New TaskEngine.Orchestrator.FlowOrchestrator(session.CompilationResult, taskEngine, sessionId, _executionStateStorage)
+                ' ✅ STATELESS: Ricrea FlowOrchestrator (no longer requires Motore)
+                session.Orchestrator = New TaskEngine.Orchestrator.FlowOrchestrator(session.CompilationResult, sessionId, _executionStateStorage)
 
                 ' Ricollega eventi
                 AddHandler session.Orchestrator.MessageToShow, Sub(sender, text)
@@ -374,7 +377,7 @@ Public Class SessionManager
                 .dialogVersion = dialogVersion,
                 .locale = locale
             })
-            Dim taskEngine As New Motore()
+            ' ✅ REMOVED: taskEngine (Motore) - no longer needed
             ' ✅ STATELESS: Usa EventEmitter condiviso (non serializzato, rimane in memoria)
             Dim sharedEmitter = GetOrCreateEventEmitter(sessionId)
             Dim session As New TaskSession() With {
@@ -385,39 +388,12 @@ Public Class SessionManager
                 .CurrentNodeId = Nothing,  ' Inizializzato quando il dialogo viene caricato
                 .RuntimeData = New Dictionary(Of String, Object)(),
                 .EventEmitter = sharedEmitter,
-                .TaskEngine = taskEngine,
                 .IsWaitingForInput = False
             }
 
-            AddHandler taskEngine.MessageToShow, Sub(sender, e)
-                                                     ' ✅ FASE 2: Usa ILogger invece di Console.WriteLine
-                                                     _logger.LogDebug("MessageToShow event raised", New With {
-                                                         .sessionId = sessionId,
-                                                         .message = e.Message
-                                                     })
-                                                     Dim msgId = $"{sessionId}-{DateTime.UtcNow.Ticks}-{Guid.NewGuid().ToString().Substring(0, 8)}"
-                                                     Dim msg = New With {
-                           .id = msgId,
-                           .text = e.Message,
-                           .stepType = "ask",
-                           .timestamp = DateTime.UtcNow.ToString("O")
-                       }
-                                                     session.Messages.Add(msg)
-                                                     Dim emitter = GetOrCreateEventEmitter(sessionId)
-                                                     emitter.Emit("message", msg)
-
-                                                     session.IsWaitingForInput = True
-                                                     ' ✅ STATELESS: CurrentNodeId è già impostato quando il dialogo viene caricato
-                                                     Dim firstNodeId As String = If(String.IsNullOrEmpty(session.CurrentNodeId), "", session.CurrentNodeId)
-                                                     session.WaitingForInputData = New With {.nodeId = firstNodeId}
-                                                     emitter.Emit("waitingForInput", session.WaitingForInputData)
-
-                                                     Try
-                                                         _storage.SaveTaskSession(session)
-                                                     Catch saveEx As Exception
-                                                         ' Log removed
-                                                     End Try
-                                                 End Sub
+            ' ✅ REMOVED: TaskEngine.MessageToShow handler - use StatelessDialogueEngine output instead
+            ' I messaggi verranno gestiti direttamente dall'output di ProcessTurn()
+            ' TODO: Implementare gestione messaggi con StatelessDialogueEngine.ProcessTurn()
 
             ' ✅ STATELESS: Salva solo su Redis (SseConnected=False inizialmente)
             _storage.SaveTaskSession(session)
@@ -431,19 +407,19 @@ Public Class SessionManager
                                                                              Dim subscriber = redis.GetSubscriber()
                                                                              Dim channelName = $"omnia:events:sse-connected:{sessionId}"
                                                                              Dim handler As Action(Of StackExchange.Redis.RedisChannel, StackExchange.Redis.RedisValue) = Sub(redisChannel, message)
-                                                                                                                   Try
-                                                                                                                       Dim sessionToUse = _storage.GetTaskSession(sessionId)
-                                                                                                                       If sessionToUse Is Nothing OrElse Not sessionToUse.SseConnected Then
-                                                                                                                           Return
-                                                                                                                       End If
-                                                                                                                       System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
-                                                                                                                                                           Await StartTaskExecutionAsync(sessionId)
-                                                                                                                                                           subscriber.Unsubscribe(channelName)
-                                                                                                                                                       End Function)
-                                                                                                                   Catch ex As Exception
-                                                                                                                       ' Log removed
-                                                                                                                   End Try
-                                                                                                               End Sub
+                                                                                                                                                                              Try
+                                                                                                                                                                                  Dim sessionToUse = _storage.GetTaskSession(sessionId)
+                                                                                                                                                                                  If sessionToUse Is Nothing OrElse Not sessionToUse.SseConnected Then
+                                                                                                                                                                                      Return
+                                                                                                                                                                                  End If
+                                                                                                                                                                                  System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
+                                                                                                                                                                                                                      Await StartTaskExecutionAsync(sessionId)
+                                                                                                                                                                                                                      subscriber.Unsubscribe(channelName)
+                                                                                                                                                                                                                  End Function)
+                                                                                                                                                                              Catch ex As Exception
+                                                                                                                                                                                  ' Log removed
+                                                                                                                                                                              End Try
+                                                                                                                                                                          End Sub
                                                                              subscriber.Subscribe(channelName, handler)
                                                                          Catch ex As Exception
                                                                              ' Log removed
@@ -456,63 +432,24 @@ Public Class SessionManager
     End Function
 
     ''' <summary>
-    ''' ✅ STATELESS: Collega gli event handler del Motore all'EventEmitter (per sessioni recuperate da Redis)
+    ''' ⚠️ DEPRECATED: Collega gli event handler del Motore all'EventEmitter
+    ''' ✅ TODO: Migrare a StatelessDialogueEngine.ProcessTurn() con DialogueContext
     ''' </summary>
     Public Shared Sub AttachTaskEngineHandlers(session As TaskSession)
-        ' Rimuovi eventuali handler esistenti
-        RemoveHandler session.TaskEngine.MessageToShow, Nothing
-
-        ' ✅ STATELESS: Usa EventEmitter condiviso, non session.EventEmitter
+        ' ✅ REMOVED: TaskEngine (Motore) - use StatelessDialogueEngine instead
+        ' TODO: Implementare gestione messaggi con StatelessDialogueEngine.ProcessTurn()
+        ' I messaggi verranno gestiti direttamente dall'output di ProcessTurn()
         Dim sharedEmitter = GetOrCreateEventEmitter(session.SessionId)
-        ' Log rimosso: non essenziale per flusso motore
-
-        ' Collega l'handler MessageToShow del Motore all'EventEmitter condiviso
-        AddHandler session.TaskEngine.MessageToShow, Sub(sender, e)
-                                                        _logger.LogDebug("MessageToShow event raised (recovered session)", New With {
-                                                            .sessionId = session.SessionId,
-                                                            .message = e.Message
-                                                        })
-                                                        Dim msgId = $"{session.SessionId}-{DateTime.UtcNow.Ticks}-{Guid.NewGuid().ToString().Substring(0, 8)}"
-                                                        Dim msg = New With {
-                                .id = msgId,
-                                .text = e.Message,
-                                .stepType = "ask",
-                                .timestamp = DateTime.UtcNow.ToString("O")
-                            }
-                                                        session.Messages.Add(msg)
-                                                        ' ✅ STATELESS: Usa EventEmitter condiviso
-                                                        sharedEmitter.Emit("message", msg)
-
-                                                        ' ✅ STATELESS: Imposta waitingForInput solo se non tutti i task sono completati
-                                                        Dim allCompleted = session.TaskInstance IsNot Nothing AndAlso session.TaskInstance.SubTasks.All(Function(t) t.IsComplete())
-                                                        If Not allCompleted Then
-                                                            session.IsWaitingForInput = True
-                                                            ' ✅ STATELESS: Usa CurrentNodeId dalla sessione (già impostato quando il dialogo viene caricato)
-                                                            Dim firstNodeId As String = If(String.IsNullOrEmpty(session.CurrentNodeId), "", session.CurrentNodeId)
-                                                            session.WaitingForInputData = New With {.nodeId = firstNodeId}
-                                                            ' ✅ STATELESS: Usa EventEmitter condiviso
-                                                            sharedEmitter.Emit("waitingForInput", session.WaitingForInputData)
-                                                        Else
-                                                            ' Tutti i task sono completati, non impostare waitingForInput
-                                                            session.IsWaitingForInput = False
-                                                            session.WaitingForInputData = Nothing
-                                                        End If
-
-                                                        ' ✅ STATELESS: Salva su Redis dopo ogni messaggio
-                                                        Try
-                                                            _storage.SaveTaskSession(session)
-                                                            ' Log rimosso: salvataggio non essenziale per flusso motore
-                                                        Catch saveEx As Exception
-                                                            ' Log removed
-                                                        End Try
-                                                    End Sub
-        ' Log rimosso: non essenziale per flusso motore
+        ' Per ora, non facciamo nulla - i messaggi verranno gestiti dal nuovo motore
     End Sub
 
     ''' <summary>
     ''' ✅ STATELESS: Carica il dialogo dal DialogRepository quando necessario
     ''' </summary>
-    Private Shared Function LoadDialogForSession(session As TaskSession) As Compiler.RuntimeTask
+    ''' <summary>
+    ''' ✅ STATELESS: Carica dialogo dal repository per una sessione
+    ''' </summary>
+    Public Shared Function LoadDialogForSession(session As TaskSession) As Compiler.RuntimeTask
         If session Is Nothing Then
             Return Nothing
         End If
@@ -598,23 +535,21 @@ Public Class SessionManager
 
             ' Avvia l'esecuzione del task
             Try
+                ' ✅ STATELESS: Crea DialogueContext dal RuntimeTask
+                Dim ctx = CreateDialogueContextFromRuntimeTask(runtimeTask)
+                SaveDialogueContext(session, ctx)
+
+                ' ✅ REMOVED: StatelessDialogueEngine non esiste più - usa TaskEngine invece
+                ' TODO: Migrare a TaskEngine.ExecuteTask() tramite FlowOrchestrator
+                ' Per ora, questo codice è disabilitato
+                ' Il nuovo TaskEngine viene usato tramite FlowOrchestrator.ProvideUserInput()
+
+                ' Mantieni TaskInstance per backward compatibility (se necessario)
                 Dim taskInstance = ConvertRuntimeTaskToTaskInstance(runtimeTask, session.ProjectId, session.Locale)
                 session.TaskInstance = taskInstance
                 AttachTaskEngineHandlers(session)
                 _storage.SaveTaskSession(session)
 
-                ' Esegui il primo turno — invia il messaggio di apertura all'utente.
-                session.TaskEngine.ExecuteTurn(taskInstance)
-
-                ' Controlla se tutti i sub-task sono già completati (es. dialogo vuoto).
-                Dim sharedEmitterRecovered = GetOrCreateEventEmitter(sessionId)
-                Dim allCompleted = taskInstance.SubTasks IsNot Nothing AndAlso taskInstance.SubTasks.All(Function(t) t.IsComplete())
-                If allCompleted Then
-                    sharedEmitterRecovered.Emit("complete", New With {
-                        .success = True,
-                        .timestamp = DateTime.UtcNow.ToString("O")
-                    })
-                End If
             Catch ex As Exception
                 _logger.LogError("Failed to start task execution for recovered session", ex, New With {.sessionId = sessionId})
             End Try
@@ -682,8 +617,10 @@ Public Class SessionManager
                 AttachTaskEngineHandlers(session)
                 _storage.SaveTaskSession(session)
 
-                ' Esegui il primo turno — invia il messaggio di apertura all'utente.
-                session.TaskEngine.ExecuteTurn(taskInstance)
+                ' ✅ REMOVED: TaskEngine.ExecuteTurn - use StatelessDialogueEngine.ProcessTurn() instead
+                ' TODO: Implementare primo turno con StatelessDialogueEngine.ProcessTurn()
+                ' Per ora, commentato - richiede migrazione completa a DialogueContext
+                ' StatelessDialogueEngine.ProcessTurn("", ctx) ' Primo turno senza input
 
                 ' Controlla se tutti i sub-task sono già completati (es. dialogo vuoto).
                 Dim sharedEmitter = GetOrCreateEventEmitter(sessionId)
@@ -941,6 +878,97 @@ Public Class SessionManager
         End If
 
         Return node
+    End Function
+
+    ''' <summary>
+    ''' ✅ STATELESS: Converte RuntimeTask in CompiledUtteranceTask (ricorsivo)
+    ''' </summary>
+    Private Shared Function ConvertRuntimeTaskToCompiled(runtimeTask As Compiler.RuntimeTask) As Compiler.CompiledUtteranceTask
+        Dim compiled As New Compiler.CompiledUtteranceTask() With {
+            .Id = runtimeTask.Id,
+            .Condition = runtimeTask.Condition,
+            .Steps = runtimeTask.Steps,
+            .Constraints = runtimeTask.Constraints,
+            .NlpContract = runtimeTask.NlpContract
+        }
+
+        ' ✅ Copia SubTasks ricorsivamente (solo se presenti)
+        If runtimeTask.HasSubTasks() Then
+            compiled.SubTasks = New List(Of Compiler.CompiledUtteranceTask)()
+            For Each subTask As Compiler.RuntimeTask In runtimeTask.SubTasks
+                compiled.SubTasks.Add(ConvertRuntimeTaskToCompiled(subTask))
+            Next
+        Else
+            compiled.SubTasks = Nothing
+        End If
+
+        Return compiled
+    End Function
+
+    ''' <summary>
+    ''' ✅ STATELESS: Crea DialogueContext da RuntimeTask
+    ''' </summary>
+    Private Shared Function CreateDialogueContextFromRuntimeTask(runtimeTask As Compiler.RuntimeTask) As TaskEngine.DialogueContext
+        Dim compiledTask = ConvertRuntimeTaskToCompiled(runtimeTask)
+        Dim utteranceTask = TryCast(compiledTask, Compiler.CompiledUtteranceTask)
+        If utteranceTask IsNot Nothing Then
+            Return CompiledTaskAdapter.CreateDialogueContextFromTask(utteranceTask)
+        End If
+        Return Nothing
+    End Function
+
+    ''' <summary>
+    ''' ✅ STATELESS: Carica DialogueContext dalla sessione (o lo crea se non esiste)
+    ''' </summary>
+    Public Shared Function GetOrCreateDialogueContext(session As TaskSession) As TaskEngine.DialogueContext
+        If session Is Nothing Then
+            Return Nothing
+        End If
+
+        ' Se esiste già un DialogueContext salvato, deserializzalo
+        If Not String.IsNullOrEmpty(session.DialogueContextJson) Then
+            Try
+                Return Newtonsoft.Json.JsonConvert.DeserializeObject(Of TaskEngine.DialogueContext)(session.DialogueContextJson)
+            Catch ex As Exception
+                If _logger IsNot Nothing Then
+                    _logger.LogError("Failed to deserialize DialogueContext from session", ex, New With {.sessionId = session.SessionId})
+                End If
+                ' Se la deserializzazione fallisce, ricrea il context
+            End Try
+        End If
+
+        ' Crea nuovo DialogueContext dal dialogo
+        Dim runtimeTask = LoadDialogForSession(session)
+        If runtimeTask Is Nothing Then
+            Return Nothing
+        End If
+
+        Dim ctx = CreateDialogueContextFromRuntimeTask(runtimeTask)
+
+        ' Salva nella sessione
+        session.DialogueContextJson = Newtonsoft.Json.JsonConvert.SerializeObject(ctx)
+
+        Return ctx
+    End Function
+
+    ''' <summary>
+    ''' ✅ STATELESS: Salva DialogueContext nella sessione
+    ''' </summary>
+    Public Shared Sub SaveDialogueContext(session As TaskSession, ctx As TaskEngine.DialogueContext)
+        If session Is Nothing OrElse ctx Is Nothing Then
+            Return
+        End If
+
+        session.DialogueContextJson = Newtonsoft.Json.JsonConvert.SerializeObject(ctx)
+    End Sub
+
+    ''' <summary>
+    ''' ✅ REMOVED: DialogueStepType non esiste più - questa funzione non è più usata
+    ''' </summary>
+    Private Shared Function GetMessageFromStep(compiledTask As Compiler.CompiledUtteranceTask, stepType As Object, projectId As String, locale As String) As String
+        ' ✅ REMOVED: DialogueStepType non esiste più
+        ' TODO: Usa il nuovo TaskEngine per estrarre messaggi
+        Return Nothing
     End Function
 End Class
 
