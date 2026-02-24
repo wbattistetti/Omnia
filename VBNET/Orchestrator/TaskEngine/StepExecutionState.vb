@@ -1,5 +1,6 @@
 Option Strict On
 Option Explicit On
+Namespace TaskEngine
 
 ''' <summary>
 ''' Step execution state (fine granularity for crash resilience)
@@ -15,3 +16,4 @@ Public Class StepExecutionState
     ''' </summary>
     Public Property MicrotaskIndex As Integer
 End Class
+End Namespace

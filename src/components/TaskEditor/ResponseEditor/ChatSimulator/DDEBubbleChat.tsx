@@ -10,6 +10,9 @@ import DialogueTaskService from '@services/DialogueTaskService';
 import { v4 as uuidv4 } from 'uuid';
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import { taskRepository } from '@services/TaskRepository';
+import { runDDT } from '@components/DialogueEngine/ddt/ddtEngine';
+import type { AssembledTaskTree } from '@components/TaskTreeBuilder/DDTAssembler/currentDDT.types';
+import type { DDTNavigatorCallbacks } from '@components/DialogueEngine/ddt/ddtTypes';
 
 /**
  * Estrae tutti i GUID dai step (utterance, invalid, nomatch, noinput, escalation, constraint)
@@ -179,6 +182,7 @@ export default function DDEBubbleChat({
   previewMessages,
   activeScenario,
   onScenarioChange,
+  engineType = 'vbnet', // ✅ NEW: Engine type selector (default to VB.NET for backward compatibility)
 }: {
   task: Task | null;
   projectId: string | null;
@@ -190,6 +194,7 @@ export default function DDEBubbleChat({
   previewMessages?: Message[];
   activeScenario?: 'happy' | 'partial' | 'error';
   onScenarioChange?: (scenario: 'happy' | 'partial' | 'error') => void;
+  engineType?: 'typescript' | 'vbnet'; // ✅ NEW: Engine type selector
 }) {
   const { combinedClass, fontSize } = useFontContext();
   const [messages, setMessages] = React.useState<Message[]>([]);
@@ -289,6 +294,100 @@ export default function DDEBubbleChat({
     setIsWaitingForInput(false);
     sessionStartingRef.current = true;
 
+    // ✅ NEW: TypeScript engine (frontend-only, no backend required)
+    if (engineType === 'typescript') {
+      const startTypeScriptEngine = async () => {
+        try {
+          if (!taskTree) {
+            throw new Error('[DDEBubbleChat] TaskTree is required for TypeScript engine');
+          }
+
+          if (!task || !task.id) {
+            throw new Error('[DDEBubbleChat] Task is required for TypeScript engine');
+          }
+
+          console.log('[DDEBubbleChat] 🚀 Starting TypeScript engine', {
+            taskId: task.id,
+            hasTaskTree: !!taskTree,
+            hasTranslations: !!translations
+          });
+
+          // Convert TaskTree to AssembledTaskTree format
+          const ddtInstance: AssembledTaskTree = {
+            id: task.id,
+            label: task.label || taskTree.labelKey || 'Task',
+            nodes: taskTree.nodes || [],
+            dialogueSteps: taskTree.steps ? Object.values(taskTree.steps).flatMap((stepDict: any) => {
+              // Convert steps dictionary to flat array
+              if (typeof stepDict === 'object' && !Array.isArray(stepDict)) {
+                return Object.values(stepDict);
+              }
+              return Array.isArray(stepDict) ? stepDict : [];
+            }) : [],
+            translations: translations || {},
+            introduction: taskTree.introduction
+          };
+
+          // Create callbacks for runDDT
+          const callbacks: DDTNavigatorCallbacks = {
+            onMessage: (text: string, stepType?: string, escalationNumber?: number) => {
+              console.log('[DDEBubbleChat] 📨 TypeScript engine message:', { text, stepType, escalationNumber });
+              const botMessage: Message = {
+                id: generateMessageId('bot'),
+                text,
+                role: 'bot',
+                timestamp: new Date(),
+                stepType,
+                escalationNumber
+              };
+              setMessages(prev => [...prev, botMessage]);
+              setIsWaitingForInput(true);
+            },
+            onGetRetrieveEvent: async (nodeId: string) => {
+              // Wait for user input
+              return new Promise((resolve) => {
+                // Store the resolve function to call when user submits input
+                (window as any).__pendingRetrieveEvent = { nodeId, resolve };
+              });
+            },
+            onProcessInput: async (input: string, node: any) => {
+              // Simple processing - can be enhanced with NLP later
+              if (!input || input.trim().length === 0) {
+                return { status: 'noInput' as const };
+              }
+              // For now, always return match (can be enhanced with actual NLP)
+              return { status: 'match' as const, value: input };
+            },
+            translations: translations || {}
+          };
+
+          // Start the TypeScript engine
+          const result = await runDDT(ddtInstance, callbacks);
+
+          if (result.exit) {
+            console.log('[DDEBubbleChat] ✅ TypeScript engine completed', result);
+            setIsWaitingForInput(false);
+          } else if (result.error) {
+            console.error('[DDEBubbleChat] ❌ TypeScript engine error:', result.error);
+            setBackendError(result.error.message);
+            setIsWaitingForInput(false);
+          }
+        } catch (error) {
+          console.error('[DDEBubbleChat] ❌ TypeScript engine error:', error);
+          setBackendError(error instanceof Error ? error.message : String(error));
+          setIsWaitingForInput(false);
+          sessionStartingRef.current = false;
+        }
+      };
+
+      startTypeScriptEngine();
+      return () => {
+        // Cleanup: clear pending events on unmount
+        delete (window as any).__pendingRetrieveEvent;
+      };
+    }
+
+    // ✅ EXISTING: VB.NET backend engine
     const baseUrl = 'http://localhost:5000'; // ✅ VB.NET backend diretto
 
     const startSession = async () => {
@@ -1221,7 +1320,7 @@ export default function DDEBubbleChat({
         }).catch(() => { });
       }
     };
-  }, [task?.id, projectId, mode, resetCounter]); // ✅ Added resetCounter to trigger restart on reset
+  }, [task?.id, projectId, mode, resetCounter, engineType, taskTree, translations]); // ✅ Added engineType, taskTree, translations to trigger restart when engine changes
 
   // Clear input when sent text appears as a user message
   React.useEffect(() => {
@@ -1249,7 +1348,7 @@ export default function DDEBubbleChat({
     return () => cancelAnimationFrame(rafId);
   }, [messages.length, ensureInlineFocus]);
 
-  // Handle sending user input to backend
+  // Handle sending user input to backend or TypeScript engine
   const handleSend = async (text: string) => {
     const trimmed = String(text || '').trim();
 
@@ -1259,7 +1358,8 @@ export default function DDEBubbleChat({
       sessionId,
       hasSessionId: !!sessionId,
       sessionIdType: typeof sessionId,
-      isWaitingForInput
+      isWaitingForInput,
+      engineType
     });
 
     if (!trimmed) {
@@ -1267,6 +1367,42 @@ export default function DDEBubbleChat({
       return;
     }
 
+    // Add user message immediately
+    setMessages((prev) => [...prev, {
+      id: generateMessageId('user'),
+      type: 'user',
+      text: trimmed,
+      matchStatus: 'match'
+    }]);
+
+    // Freeze text for input clearing
+    sentTextRef.current = trimmed;
+
+    // ✅ NEW: TypeScript engine - resolve pending retrieve event
+    if (engineType === 'typescript') {
+      try {
+        console.log('[DDEBubbleChat] 📤 TypeScript engine: processing input:', trimmed);
+
+        // Check if there's a pending retrieve event
+        const pendingEvent = (window as any).__pendingRetrieveEvent;
+        if (pendingEvent && pendingEvent.resolve) {
+          // Resolve the pending event with user input
+          pendingEvent.resolve({ type: 'match', value: trimmed });
+          delete (window as any).__pendingRetrieveEvent;
+          setIsWaitingForInput(false);
+        } else {
+          console.warn('[DDEBubbleChat] ⚠️ No pending retrieve event, engine may not be running');
+          setIsWaitingForInput(true);
+        }
+      } catch (error) {
+        console.error('[DDEBubbleChat] ❌ TypeScript engine error processing input:', error);
+        setBackendError(error instanceof Error ? error.message : 'Failed to process input');
+        setIsWaitingForInput(true);
+      }
+      return;
+    }
+
+    // ✅ EXISTING: VB.NET backend engine
     if (!sessionId) {
       console.error('[DDEBubbleChat] ❌ No sessionId available - session may not be initialized');
       setBackendError('Session not initialized. Please wait for the session to start or click Reset.');
@@ -1281,18 +1417,7 @@ export default function DDEBubbleChat({
         text: trimmed.substring(0, 100) + (trimmed.length > 100 ? '...' : '')
       });
 
-      // Add user message immediately
-      setMessages((prev) => [...prev, {
-        id: generateMessageId('user'),
-        type: 'user',
-        text: trimmed,
-        matchStatus: 'match'
-      }]);
-
-      // Freeze text for input clearing
-      sentTextRef.current = trimmed;
-
-      // ✅ NUOVO: Send input to backend VB.NET direttamente
+      // ✅ EXISTING: Send input to backend VB.NET
       const baseUrl = 'http://localhost:5000';
       const inputUrl = `${baseUrl}/api/runtime/task/session/${sessionId}/input`;
 
@@ -1330,14 +1455,19 @@ export default function DDEBubbleChat({
 
   // Reset function - restart session with same task
   const handleReset = () => {
+    // ✅ NEW: Clear TypeScript engine pending events
+    if (engineType === 'typescript') {
+      delete (window as any).__pendingRetrieveEvent;
+    }
+
     // Close existing SSE connection
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
 
-    // Delete session on backend
-    if (sessionId) {
+    // Delete session on backend (only for VB.NET engine)
+    if (engineType === 'vbnet' && sessionId) {
       const baseUrl = 'http://localhost:5000';
       fetch(`${baseUrl}/api/runtime/task/session/${sessionId}`, {
         method: 'DELETE'

@@ -1,5 +1,6 @@
 Option Strict On
 Option Explicit On
+Namespace TaskEngine
 
 ''' <summary>
 ''' Microtask: elementary executable action
@@ -27,7 +28,7 @@ End Class
 Public Enum MicrotaskType
     SendMessage
     Log
-    ' UpdateUI - REMOVED: UI project no longer exists
     CallBackend
     ' Add other types if needed
 End Enum
+End Namespace

@@ -242,30 +242,30 @@ export function Toolbar({
           </button>
         </div>
 
-        {/* Engine Type Toggle (V1/Serverless) */}
+        {/* Engine Type Toggle (TypeScript/VB.NET) */}
         <div className="flex items-center gap-1 px-2 py-1 rounded border bg-slate-700 border-slate-600">
           <span className="text-xs text-slate-400">Engine:</span>
           <button
-            onClick={() => setEngineType('v1')}
+            onClick={() => setEngineType('typescript')}
             className={`px-2 py-0.5 text-xs rounded transition-colors ${
-              engineType === 'v1'
+              engineType === 'typescript'
                 ? 'bg-green-600 text-white'
                 : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
             }`}
-            title="Use Engine V1 (original Motore.vb)"
+            title="Use TypeScript engine (fast prototyping, frontend-only)"
           >
-            V1
+            TypeScript
           </button>
           <button
-            onClick={() => setEngineType('serverless')}
+            onClick={() => setEngineType('vbnet')}
             className={`px-2 py-0.5 text-xs rounded transition-colors ${
-              engineType === 'serverless'
+              engineType === 'vbnet'
                 ? 'bg-green-600 text-white'
                 : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
             }`}
-            title="Use Serverless Engine (step-based, stateless)"
+            title="Use VB.NET engine (production stateless, requires backend)"
           >
-            Serverless
+            VB.NET
           </button>
         </div>
 

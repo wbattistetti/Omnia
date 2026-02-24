@@ -499,6 +499,7 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
               taskTree={chatTab.taskTree}
               onUpdateTaskTree={() => {}}
               mode={chatTab.mode || 'interactive'}
+              engineType={chatTab.engineType || 'vbnet'} // ✅ Pass engine type to chat component
             />
           </FontProvider>
         </div>

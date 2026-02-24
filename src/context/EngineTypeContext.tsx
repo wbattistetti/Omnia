@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 
-export type EngineType = 'v1' | 'serverless';
+export type EngineType = 'typescript' | 'vbnet';
 
 interface EngineTypeContextType {
   engineType: EngineType;
@@ -10,7 +10,21 @@ interface EngineTypeContextType {
 const EngineTypeContext = createContext<EngineTypeContextType | undefined>(undefined);
 
 export function EngineTypeProvider({ children }: { children: ReactNode }) {
-  const [engineType, setEngineType] = useState<EngineType>('v1');
+  const [engineType, setEngineType] = useState<EngineType>(() => {
+    try {
+      const saved = localStorage.getItem('engineType');
+      return (saved === 'typescript' || saved === 'vbnet') ? saved : 'typescript';
+    } catch {
+      return 'typescript';
+    }
+  });
+
+  // Save to localStorage when it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('engineType', engineType);
+    } catch {}
+  }, [engineType]);
 
   return (
     <EngineTypeContext.Provider value={{ engineType, setEngineType }}>

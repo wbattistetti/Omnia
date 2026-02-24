@@ -5,14 +5,14 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 import type { Task, TaskTree } from '@types/taskTypes';
 
 export type TestPanelContext =
-  | { type: 'task'; task: Task; taskTree: TaskTree; projectId: string; translations?: Record<string, string> }
+  | { type: 'task'; task: Task; taskTree: TaskTree; projectId: string; translations?: Record<string, string>; engineType?: 'typescript' | 'vbnet' }
   | { type: 'flowchart'; nodeId: string; nodeRows: any[] }
   | null;
 
 interface GlobalTestPanelContextValue {
   isOpen: boolean;
   context: TestPanelContext;
-  openWithTask: (task: Task, taskTree: TaskTree, projectId: string, translations?: Record<string, string>) => void;
+  openWithTask: (task: Task, taskTree: TaskTree, projectId: string, translations?: Record<string, string>, engineType?: 'typescript' | 'vbnet') => void;
   openWithFlowchart: (nodeId: string, nodeRows: any[]) => void;
   close: () => void;
 }
@@ -27,9 +27,10 @@ export function GlobalTestPanelProvider({ children }: { children: React.ReactNod
     task: Task,
     taskTree: TaskTree,
     projectId: string,
-    translations?: Record<string, string>
+    translations?: Record<string, string>,
+    engineType?: 'typescript' | 'vbnet'
   ) => {
-    setContext({ type: 'task', task, taskTree, projectId, translations });
+    setContext({ type: 'task', task, taskTree, projectId, translations, engineType });
     setIsOpen(true);
   }, []);
 

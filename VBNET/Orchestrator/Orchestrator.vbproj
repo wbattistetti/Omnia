@@ -35,6 +35,17 @@
     <Compile Include="TaskExecutor\TransferTaskExecutor.vb" />
     <Compile Include="TaskExecutor\TaskExecutorFactory.vb" />
     <Compile Include="TaskExecutor\CompiledTaskAdapter.vb" />
+    <!-- TaskEngine (new, simplified, no reflection) -->
+    <Compile Include="TaskEngine\Types.vb" />
+    <Compile Include="TaskEngine\Microtask.vb" />
+    <Compile Include="TaskEngine\TaskStep.vb" />
+    <Compile Include="TaskEngine\StepExecutionState.vb" />
+    <Compile Include="TaskEngine\DialogueContext.vb" />
+    <Compile Include="TaskEngine\ITaskEngineCallbacks.vb" />
+    <Compile Include="TaskEngine\ITaskEngineStateStorage.vb" />
+    <Compile Include="TaskEngine\TaskEngineCallbacks.vb" />
+    <Compile Include="TaskEngine\TaskEngineStateStorage.vb" />
+    <Compile Include="TaskEngine\TaskEngine.vb" />
   </ItemGroup>
 
 </Project>

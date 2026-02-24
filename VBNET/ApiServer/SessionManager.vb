@@ -89,8 +89,7 @@ Public Class TaskSession
     Public Property RuntimeData As Dictionary(Of String, Object)  ' Dati raccolti durante la chiamata
 
     ' ✅ STATELESS: Oggetti runtime (non serializzati, ricreati ad ogni accesso)
-    ' ✅ REMOVED: TaskEngine (Motore) - no longer needed, use StatelessDialogueEngine when required
-    Public Property TaskInstance As TaskEngine.TaskUtterance
+    ' ✅ REMOVED: TaskInstance - legacy code from old engine, no longer needed
     Public Property EventEmitter As EventEmitter
 
     ' ✅ STATELESS: Stato comunicazione
@@ -431,17 +430,6 @@ Public Class SessionManager
         End SyncLock
     End Function
 
-    ''' <summary>
-    ''' ⚠️ DEPRECATED: Collega gli event handler del Motore all'EventEmitter
-    ''' ✅ TODO: Migrare a StatelessDialogueEngine.ProcessTurn() con DialogueContext
-    ''' </summary>
-    Public Shared Sub AttachTaskEngineHandlers(session As TaskSession)
-        ' ✅ REMOVED: TaskEngine (Motore) - use StatelessDialogueEngine instead
-        ' TODO: Implementare gestione messaggi con StatelessDialogueEngine.ProcessTurn()
-        ' I messaggi verranno gestiti direttamente dall'output di ProcessTurn()
-        Dim sharedEmitter = GetOrCreateEventEmitter(session.SessionId)
-        ' Per ora, non facciamo nulla - i messaggi verranno gestiti dal nuovo motore
-    End Sub
 
     ''' <summary>
     ''' ✅ STATELESS: Carica il dialogo dal DialogRepository quando necessario
@@ -470,42 +458,6 @@ Public Class SessionManager
         End Try
     End Function
 
-    ''' <summary>
-    ''' ✅ STATELESS: Ensures TaskInstance is loaded on the session, rebuilding it from the
-    ''' DialogRepository if it is Nothing (e.g. after a Redis round-trip that strips runtime objects).
-    ''' Does NOT run ExecuteTurn — use this before processing user input.
-    ''' Returns True if TaskInstance is ready; False if the dialog cannot be loaded.
-    ''' </summary>
-    Public Shared Function EnsureTaskInstanceLoaded(session As TaskSession) As Boolean
-        If session Is Nothing Then Return False
-        If session.TaskInstance IsNot Nothing Then Return True
-
-        Dim runtimeTask = LoadDialogForSession(session)
-        If runtimeTask Is Nothing Then Return False
-
-        Try
-            Dim taskInstance = ConvertRuntimeTaskToTaskInstance(runtimeTask, session.ProjectId, session.Locale)
-
-            ' Re-apply the persisted state snapshot so that EscalationCounters, State
-            ' and Value are restored exactly as they were before the Redis round-trip.
-            If session.TaskUtteranceState IsNot Nothing Then
-                taskInstance.ApplyState(session.TaskUtteranceState)
-                ' Also try to apply to each sub-task that maps to the root snapshot.
-                For Each child As TaskEngine.TaskUtterance In taskInstance.SubTasks
-                    Dim childSnap = session.TaskUtteranceState.SubStates?.FirstOrDefault(Function(s) s.Id = child.Id)
-                    If childSnap IsNot Nothing Then child.ApplyState(childSnap)
-                Next
-            End If
-
-            session.TaskInstance = taskInstance
-            Return True
-        Catch ex As Exception
-            If _logger IsNot Nothing Then
-                _logger.LogError("EnsureTaskInstanceLoaded failed to rebuild TaskInstance", ex, New With {.sessionId = session.SessionId})
-            End If
-            Return False
-        End Try
-    End Function
 
     ''' <summary>
     ''' ✅ STATELESS: Avvia l'esecuzione del task se necessario (per sessioni recuperate da Redis)
@@ -517,42 +469,9 @@ Public Class SessionManager
                 Return
             End If
 
-            ' Se il task è già stato eseguito o è in esecuzione, assicurati solo che gli handler siano collegati
-            If session.TaskInstance IsNot Nothing Then
-                ' ✅ STATELESS: Collega gli handler anche se il task è già stato eseguito
-                AttachTaskEngineHandlers(session)
-                Return
-            End If
-
-            ' ✅ STATELESS: Carica dialogo dal repository se necessario
-            Dim runtimeTask = LoadDialogForSession(session)
-            If runtimeTask Is Nothing Then
-                Return
-            End If
-
-            ' ✅ STATELESS: Collega gli handler PRIMA di eseguire il task
-            AttachTaskEngineHandlers(session)
-
-            ' Avvia l'esecuzione del task
-            Try
-                ' ✅ STATELESS: Crea DialogueContext dal RuntimeTask
-                Dim ctx = CreateDialogueContextFromRuntimeTask(runtimeTask)
-                SaveDialogueContext(session, ctx)
-
-                ' ✅ REMOVED: StatelessDialogueEngine non esiste più - usa TaskEngine invece
-                ' TODO: Migrare a TaskEngine.ExecuteTask() tramite FlowOrchestrator
-                ' Per ora, questo codice è disabilitato
-                ' Il nuovo TaskEngine viene usato tramite FlowOrchestrator.ProvideUserInput()
-
-                ' Mantieni TaskInstance per backward compatibility (se necessario)
-                Dim taskInstance = ConvertRuntimeTaskToTaskInstance(runtimeTask, session.ProjectId, session.Locale)
-                session.TaskInstance = taskInstance
-                AttachTaskEngineHandlers(session)
-                _storage.SaveTaskSession(session)
-
-            Catch ex As Exception
-                _logger.LogError("Failed to start task execution for recovered session", ex, New With {.sessionId = sessionId})
-            End Try
+            ' ✅ REMOVED: TaskInstance legacy code - new TaskEngine handles execution via FlowOrchestrator
+            ' Task execution is now handled by FlowOrchestrator.ExecuteDialogueAsync()
+            ' No need to create TaskInstance or DialogueContext here
         End SyncLock
     End Sub
 
@@ -592,54 +511,9 @@ Public Class SessionManager
                 Return
             End If
 
-            ' Se il task è già stato eseguito, non fare nulla
-            If session.TaskInstance IsNot Nothing Then
-                Return
-            End If
-
-            ' ✅ STATELESS: Carica dialogo dal repository se necessario
-            Dim runtimeTask = LoadDialogForSession(session)
-            If runtimeTask Is Nothing Then
-                Return
-            End If
-
-            ' ✅ STATELESS: Collega gli handler PRIMA di eseguire il task
-            AttachTaskEngineHandlers(session)
-
-            Try
-                ' ✅ STATELESS: Carica dialogo dal repository se necessario
-                Dim loadedRuntimeTask = LoadDialogForSession(session)
-                If loadedRuntimeTask Is Nothing Then
-                    Return
-                End If
-                Dim taskInstance = ConvertRuntimeTaskToTaskInstance(loadedRuntimeTask, session.ProjectId, session.Locale)
-                session.TaskInstance = taskInstance
-                AttachTaskEngineHandlers(session)
-                _storage.SaveTaskSession(session)
-
-                ' ✅ REMOVED: TaskEngine.ExecuteTurn - use StatelessDialogueEngine.ProcessTurn() instead
-                ' TODO: Implementare primo turno con StatelessDialogueEngine.ProcessTurn()
-                ' Per ora, commentato - richiede migrazione completa a DialogueContext
-                ' StatelessDialogueEngine.ProcessTurn("", ctx) ' Primo turno senza input
-
-                ' Controlla se tutti i sub-task sono già completati (es. dialogo vuoto).
-                Dim sharedEmitter = GetOrCreateEventEmitter(sessionId)
-                Dim allCompleted = taskInstance.SubTasks IsNot Nothing AndAlso taskInstance.SubTasks.All(Function(t) t.IsComplete())
-                If allCompleted Then
-                    sharedEmitter.Emit("complete", New With {
-                        .success = True,
-                        .timestamp = DateTime.UtcNow.ToString("O")
-                    })
-                End If
-            Catch ex As Exception
-                _logger.LogError("Runtime execution error", ex, New With {.sessionId = sessionId})
-                Dim sharedEmitter = GetOrCreateEventEmitter(sessionId)
-                Dim errorData = New With {
-                    .error = ex.Message,
-                    .timestamp = DateTime.UtcNow.ToString("O")
-                }
-                sharedEmitter.Emit("error", errorData)
-            End Try
+            ' ✅ REMOVED: TaskInstance legacy code - new TaskEngine handles execution via FlowOrchestrator
+            ' Task execution is now handled by FlowOrchestrator.ExecuteDialogueAsync()
+            ' No need to create TaskInstance here
         End SyncLock
     End Function
 
@@ -798,87 +672,6 @@ Public Class SessionManager
         Return New TranslationValidationResult(True, New List(Of String)(), Nothing)
     End Function
 
-    ''' <summary>
-    ''' Converts a compiled RuntimeTask into a TaskUtterance tree ready for engine execution.
-    ''' ProjectId, Locale and TranslationResolver are propagated to EVERY node in the tree
-    ''' so that MessageTask.Execute can resolve translations at any level.
-    ''' </summary>
-    Private Shared Function ConvertRuntimeTaskToTaskInstance(runtimeTask As Compiler.RuntimeTask, projectId As String, locale As String) As TaskEngine.TaskUtterance
-        If runtimeTask Is Nothing Then
-            Throw New ArgumentNullException(NameOf(runtimeTask), "RuntimeTask cannot be Nothing.")
-        End If
-        If String.IsNullOrWhiteSpace(projectId) Then
-            Throw New ArgumentException("ProjectId is required for translation lookup.", NameOf(projectId))
-        End If
-        If String.IsNullOrWhiteSpace(locale) Then
-            Throw New ArgumentException("Locale is required for translation lookup.", NameOf(locale))
-        End If
-
-        Dim translationResolver As TaskEngine.Interfaces.ITranslationResolver = Nothing
-        If _translationRepository IsNot Nothing Then
-            translationResolver = New ApiServer.Repositories.TranslationResolverAdapter(_translationRepository)
-        End If
-
-        ' Build root TaskUtterance that wraps the compiled task tree.
-        Dim root As New TaskEngine.TaskUtterance() With {
-            .Id = runtimeTask.Id,
-            .Label = "",
-            .ProjectId = projectId,
-            .Locale = locale,
-            .TranslationResolver = translationResolver,
-            .IsAggregate = False,
-            .Introduction = Nothing,
-            .SuccessResponse = Nothing
-        }
-
-        ' Compile the RuntimeTask tree recursively — pass projectId/locale/resolver to every node.
-        Dim mainNode = ConvertRuntimeTaskNode(runtimeTask, Nothing, projectId, locale, translationResolver)
-        root.SubTasks.Add(mainNode)
-
-        If _logger IsNot Nothing Then
-            _logger.LogDebug("RuntimeTask converted to TaskUtterance", New With {
-                .rootId = root.Id,
-                .subTasksCount = root.SubTasks.Count
-            })
-        End If
-
-        Return root
-    End Function
-
-    ''' <summary>
-    ''' Recursively converts a RuntimeTask node into a TaskUtterance.
-    ''' ProjectId, Locale and TranslationResolver are set on every node so that
-    ''' MessageTask.Execute can resolve translations regardless of tree depth.
-    ''' </summary>
-    Private Shared Function ConvertRuntimeTaskNode(
-            runtimeTask As Compiler.RuntimeTask,
-            parent As TaskEngine.TaskUtterance,
-            projectId As String,
-            locale As String,
-            translationResolver As TaskEngine.Interfaces.ITranslationResolver) As TaskEngine.TaskUtterance
-
-        Dim node As New TaskEngine.TaskUtterance() With {
-            .Id = runtimeTask.Id,
-            .ProjectId = projectId,
-            .Locale = locale,
-            .TranslationResolver = translationResolver,
-            .Steps = If(runtimeTask.Steps, New List(Of TaskEngine.DialogueStep)()),
-            .ValidationConditions = If(runtimeTask.Constraints, New List(Of TaskEngine.ValidationCondition)()),
-            .NlpContract = runtimeTask.NlpContract,
-            .State = TaskEngine.DialogueState.Start,
-            .Value = Nothing,
-            .ParentData = parent
-        }
-
-        If runtimeTask.HasSubTasks() Then
-            For Each child As Compiler.RuntimeTask In runtimeTask.SubTasks
-                Dim childNode = ConvertRuntimeTaskNode(child, node, projectId, locale, translationResolver)
-                node.SubTasks.Add(childNode)
-            Next
-        End If
-
-        Return node
-    End Function
 
     ''' <summary>
     ''' ✅ STATELESS: Converte RuntimeTask in CompiledUtteranceTask (ricorsivo)
@@ -905,22 +698,11 @@ Public Class SessionManager
         Return compiled
     End Function
 
-    ''' <summary>
-    ''' ✅ STATELESS: Crea DialogueContext da RuntimeTask
-    ''' </summary>
-    Private Shared Function CreateDialogueContextFromRuntimeTask(runtimeTask As Compiler.RuntimeTask) As TaskEngine.DialogueContext
-        Dim compiledTask = ConvertRuntimeTaskToCompiled(runtimeTask)
-        Dim utteranceTask = TryCast(compiledTask, Compiler.CompiledUtteranceTask)
-        If utteranceTask IsNot Nothing Then
-            Return CompiledTaskAdapter.CreateDialogueContextFromTask(utteranceTask)
-        End If
-        Return Nothing
-    End Function
 
     ''' <summary>
     ''' ✅ STATELESS: Carica DialogueContext dalla sessione (o lo crea se non esiste)
     ''' </summary>
-    Public Shared Function GetOrCreateDialogueContext(session As TaskSession) As TaskEngine.DialogueContext
+    Public Shared Function GetOrCreateDialogueContext(session As TaskSession) As TaskEngine.Orchestrator.TaskEngine.DialogueContext
         If session Is Nothing Then
             Return Nothing
         End If
@@ -928,7 +710,7 @@ Public Class SessionManager
         ' Se esiste già un DialogueContext salvato, deserializzalo
         If Not String.IsNullOrEmpty(session.DialogueContextJson) Then
             Try
-                Return Newtonsoft.Json.JsonConvert.DeserializeObject(Of TaskEngine.DialogueContext)(session.DialogueContextJson)
+                Return Newtonsoft.Json.JsonConvert.DeserializeObject(Of TaskEngine.Orchestrator.TaskEngine.DialogueContext)(session.DialogueContextJson)
             Catch ex As Exception
                 If _logger IsNot Nothing Then
                     _logger.LogError("Failed to deserialize DialogueContext from session", ex, New With {.sessionId = session.SessionId})
@@ -937,24 +719,17 @@ Public Class SessionManager
             End Try
         End If
 
-        ' Crea nuovo DialogueContext dal dialogo
-        Dim runtimeTask = LoadDialogForSession(session)
-        If runtimeTask Is Nothing Then
-            Return Nothing
-        End If
-
-        Dim ctx = CreateDialogueContextFromRuntimeTask(runtimeTask)
-
-        ' Salva nella sessione
-        session.DialogueContextJson = Newtonsoft.Json.JsonConvert.SerializeObject(ctx)
-
-        Return ctx
+        ' ✅ REMOVED: CreateDialogueContextFromRuntimeTask - legacy code
+        ' DialogueContext is now created by CompiledTaskAdapter.CreateDialogueContextFromTask()
+        ' which is called by FlowOrchestrator when needed
+        ' This function should not be used anymore - DialogueContext is managed by TaskEngine
+        Return Nothing
     End Function
 
     ''' <summary>
     ''' ✅ STATELESS: Salva DialogueContext nella sessione
     ''' </summary>
-    Public Shared Sub SaveDialogueContext(session As TaskSession, ctx As TaskEngine.DialogueContext)
+    Public Shared Sub SaveDialogueContext(session As TaskSession, ctx As TaskEngine.Orchestrator.TaskEngine.DialogueContext)
         If session Is Nothing OrElse ctx Is Nothing Then
             Return
         End If

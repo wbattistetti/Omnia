@@ -19,7 +19,17 @@ Public Class DialogueStep
     ''' Lista di escalation (recovery) per questo step
     ''' Il counter seleziona quale escalation usare: Escalations(counter)
     ''' </summary>
-    Public Property Escalations As List(Of Escalation)  'da trasformarte in ienumerable perch� a runtime non cambia la collezione 
+    Public Property Escalations As List(Of Escalation)
+
+    ''' <summary>
+    ''' Step ID (optional, for linking to data nodes)
+    ''' </summary>
+    Public Property Id As String
+
+    ''' <summary>
+    ''' Data ID this step is linked to (optional)
+    ''' </summary>
+    Public Property DataId As String
 
     ''' <summary>
     ''' Costruttore
@@ -28,6 +38,3 @@ Public Class DialogueStep
         Escalations = New List(Of Escalation)()
     End Sub
 End Class
-
-
-

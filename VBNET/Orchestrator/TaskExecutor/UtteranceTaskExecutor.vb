@@ -2,8 +2,6 @@ Option Strict On
 Option Explicit On
 Imports Compiler
 Imports TaskEngine
-Imports Newtonsoft.Json
-Imports System.Linq
 
 ''' <summary>
 ''' Executor per task di tipo UtteranceInterpretation
@@ -37,21 +35,16 @@ Public Class UtteranceTaskExecutor
             Console.WriteLine($"🚀 [UtteranceTaskExecutor] Starting Task execution for task {task.Id}")
 
             ' ✅ Create state storage and callbacks
-            Dim stateStorage As New TaskEngineStateStorage(state)
-            Dim callbacks As New TaskEngineCallbacks(_messageCallback)
+            Dim stateStorage As New TaskEngine.TaskEngineStateStorage(state)
+            Dim callbacks As New TaskEngine.TaskEngineCallbacks(_messageCallback)
 
             ' ✅ Create TaskEngine and execute
-            Dim engine As New TaskEngine(stateStorage, callbacks)
-            Dim resultObj = Await engine.ExecuteTask(task, state)
+            Dim engine As New TaskEngine.TaskEngine(stateStorage, callbacks)
+            Dim result = Await engine.ExecuteTask(task, state)
 
-            ' Access result properties via reflection (result is Object to avoid circular dependency)
-            Dim requiresInputProp = resultObj.GetType().GetProperty("RequiresInput")
-            Dim requiresInput = If(requiresInputProp IsNot Nothing, DirectCast(requiresInputProp.GetValue(resultObj), Boolean), False)
+            Console.WriteLine($"✅ [UtteranceTaskExecutor] Task {task.Id} completed. RequiresInput: {result.RequiresInput}")
 
-            Console.WriteLine($"✅ [UtteranceTaskExecutor] Task {task.Id} completed. RequiresInput: {requiresInput}")
-
-            ' Cast result back to TaskExecutionResult (it's the same object, just typed as Object in TaskEngine)
-            Return DirectCast(resultObj, TaskExecutionResult)
+            Return result
 
         Catch ex As Exception
             Console.WriteLine($"❌ [UtteranceTaskExecutor] Task execution failed for task {task.Id}: {ex.Message}")

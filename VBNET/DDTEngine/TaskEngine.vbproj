@@ -63,19 +63,7 @@
     <Compile Include="Engine\Parser.vb" />
     <Compile Include="Engine\ParserExtraction.vb" />
     <!-- Motore.vb REMOVED: Use TaskEngine instead -->
-    <!-- TaskEngine (new) - Crash-resilient engine with microtasks -->
-    <Compile Include="TaskEngine\Microtask.vb" />
-    <Compile Include="TaskEngine\DialogueStep.vb" />
-    <!-- Note: DialogueStep.vb contains TaskStep class to avoid conflict with Models\DialogueStep.vb -->
-    <Compile Include="TaskEngine\StepExecutionState.vb" />
-    <Compile Include="TaskEngine\DialogueContext.vb" />
-    <Compile Include="TaskEngine\ITaskEngineCallbacks.vb" />
-    <Compile Include="TaskEngine\ITaskEngineStateStorage.vb" />
-    <Compile Include="TaskEngine\TaskEngineStateStorage.vb" />
-    <Compile Include="TaskEngine\TaskEngineCallbacks.vb" />
-    <!-- CompiledTaskAdapter moved to Orchestrator to avoid circular dependency -->
-    <Compile Include="TaskEngine\TaskEngineHelpers.vb" />
-    <Compile Include="TaskEngine\TaskEngine.vb" />
+    <!-- TaskEngine REMOVED: Moved to Orchestrator/TaskEngine/ (simplified, no reflection) -->
   </ItemGroup>
 
 </Project>

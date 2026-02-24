@@ -268,6 +268,37 @@ export function EditorHeader({ icon, title, subtitle, titleActions, toolbarButto
                 ? btn.buttonRef as React.RefObject<HTMLButtonElement>
                 : null;
 
+              // ✅ NEW: Support for select dropdown
+              if (btn.type === 'select' && btn.options) {
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {btn.label && <span style={{ fontSize: 12, color: theme.fg, marginRight: 4 }}>{btn.label}:</span>}
+                    <select
+                      value={btn.value || ''}
+                      onChange={(e) => btn.onChange?.(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        background: 'rgba(255,255,255,0.1)',
+                        color: theme.fg,
+                        border: '1px solid rgba(255,255,255,0.3)',
+                        borderRadius: 6,
+                        padding: '6px 10px',
+                        fontSize: 12,
+                        cursor: 'pointer',
+                        outline: 'none',
+                      }}
+                      title={btn.title}
+                    >
+                      {btn.options.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              }
+
               // ✅ NEW: Support for dropdown buttons
               if (btn.dropdownItems && btn.dropdownItems.length > 0) {
                 return <ToolbarDropdownButton key={i} btn={btn} buttonRef={buttonRef} theme={theme} />;

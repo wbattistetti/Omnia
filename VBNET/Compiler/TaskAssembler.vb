@@ -5,6 +5,7 @@ Imports System.Text.RegularExpressions
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 Imports TaskEngine
+Imports DDTEngine.Models
 
 ''' <summary>
 ''' TaskAssembler: compila strutture IDE (TaskTreeExpanded - AST montato) in strutture Runtime (Task ricorsivo)

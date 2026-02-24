@@ -15,13 +15,24 @@ export type DockTabFlow = DockTabBase & {
 
 // Toolbar button type
 export type ToolbarButton = {
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
   label?: string;
-  onClick: () => void;
+  onClick?: () => void;
   title?: string;
   active?: boolean;
   primary?: boolean;
   disabled?: boolean;
+  // ✅ NEW: Support for select dropdown
+  type?: 'button' | 'select';
+  value?: string;
+  options?: Array<{ value: string; label: string }>;
+  onChange?: (value: string) => void;
+  // ✅ NEW: Support for dropdown items (existing)
+  dropdownItems?: Array<{ label: string; onClick: () => void; icon?: React.ReactNode }>;
+  // ✅ NEW: Support for button ref and ID
+  buttonRef?: React.RefObject<HTMLButtonElement>;
+  buttonId?: string;
+  visible?: boolean;
 };
 
 // Response Editor tab - for DDT editing
@@ -68,6 +79,7 @@ export type DockTabChat = DockTabBase & {
   translations?: Record<string, string>;
   taskTree?: any;
   mode?: 'interactive' | 'preview';
+  engineType?: 'typescript' | 'vbnet'; // ✅ Engine type selector: TypeScript (fast prototyping) or VB.NET (production)
 };
 
 // Union type for all tab types

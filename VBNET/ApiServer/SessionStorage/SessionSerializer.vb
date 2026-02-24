@@ -60,12 +60,10 @@ Namespace ApiServer.SessionStorage
         ''' </summary>
         Public Shared Function SerializeTaskSession(session As TaskSession) As String
             Try
-                ' Extract the mutable state snapshot before serialization so that
-                ' EscalationCounters, State and Value survive the Redis round-trip.
+                ' ✅ REMOVED: TaskInstance legacy code - state is now managed by TaskEngine via DialogueContext
+                ' Extract the mutable state snapshot before serialization (if still using TaskUtteranceState)
                 Dim stateSnapshot As TaskEngine.TaskUtteranceStateSnapshot = Nothing
-                If session.TaskInstance IsNot Nothing Then
-                    stateSnapshot = session.TaskInstance.ExtractState()
-                ElseIf session.TaskUtteranceState IsNot Nothing Then
+                If session.TaskUtteranceState IsNot Nothing Then
                     stateSnapshot = session.TaskUtteranceState
                 End If
 
@@ -126,8 +124,8 @@ Namespace ApiServer.SessionStorage
                     .TaskUtteranceState = data.TaskUtteranceState
                 }
 
-                ' ✅ STATELESS: RuntimeTask e TaskInstance verranno ricostruiti quando necessario dal DialogRepository.
-                ' Il TaskUtteranceState viene riapplicato in EnsureTaskInstanceLoaded.
+                ' ✅ REMOVED: TaskInstance legacy code - state is now managed by TaskEngine via DialogueContext
+                ' RuntimeTask viene caricato dal DialogRepository quando necessario
 
                 Return session
             Catch ex As Exception

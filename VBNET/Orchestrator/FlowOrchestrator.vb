@@ -248,20 +248,19 @@ Public Class FlowOrchestrator
             End If
 
             ' Create TaskEngine with state storage and callbacks
-            Dim stateStorage As New TaskEngineStateStorage(_state)
-            Dim callbacks As New TaskEngineCallbacks(
+            Dim stateStorage As New TaskEngine.TaskEngineStateStorage(_state)
+            Dim callbacks As New TaskEngine.TaskEngineCallbacks(
                 Sub(text, stepType, escalationNumber)
                     RaiseEvent MessageToShow(Me, text)
                 End Sub)
 
-            Dim engine As New TaskEngine(stateStorage, callbacks)
+            Dim engine As New TaskEngine.TaskEngine(stateStorage, callbacks)
 
             ' Execute task (TaskEngine will load DialogueContext from state and continue)
-            Dim resultObj = Await engine.ExecuteTask(task, _state)
+            Dim result = Await engine.ExecuteTask(task, _state)
 
-            ' Access result properties via reflection (result is Object to avoid circular dependency)
-            Dim requiresInputProp = resultObj.GetType().GetProperty("RequiresInput")
-            Dim requiresInput = If(requiresInputProp IsNot Nothing, DirectCast(requiresInputProp.GetValue(resultObj), Boolean), False)
+            ' Access result properties directly
+            Dim requiresInput = result.RequiresInput
 
             ' Save state
             SaveState()

@@ -196,6 +196,77 @@ Namespace ApiServer.Handlers
                     .locale = locale
                 })
 
+                ' ✅ STEP 6: Compila RuntimeTask in CompiledUtteranceTask
+                Dim compiledTask = ConvertRuntimeTaskToCompiled(runtimeTask)
+
+                ' ✅ STEP 7: Crea ExecutionState e TaskEngine per esecuzione diretta
+                Dim executionState As New Orchestrator.ExecutionState()
+
+                ' ✅ Crea EventEmitter per SSE
+                Dim sharedEmitter = SessionManager.GetOrCreateEventEmitter(newSessionId)
+
+                ' ✅ Crea callback per salvare DialogueContext nella sessione
+                Dim saveToSessionCallback As Action(Of TaskEngine.Orchestrator.TaskEngine.DialogueContext) = Sub(ctx As TaskEngine.Orchestrator.TaskEngine.DialogueContext)
+                                                                                                                 Dim session = SessionManager.GetTaskSession(newSessionId)
+                                                                                                                 If session IsNot Nothing Then
+                                                                                                                     SessionManager.SaveDialogueContext(session, ctx)
+                                                                                                                     SessionManager.SaveTaskSession(session)
+                                                                                                                 End If
+                                                                                                             End Sub
+
+                ' ✅ Crea TaskEngineStateStorage che salva in ExecutionState e nella sessione
+                Dim stateStorage As New TaskEngine.Orchestrator.TaskEngine.TaskEngineStateStorage(executionState, saveToSessionCallback)
+
+                ' ✅ Crea funzione per risolvere traduzioni
+                Dim resolveTranslation As Func(Of String, String, String, String) = Function(projId As String, loc As String, key As String) As String
+                                                                                        Return translationRepository.GetTranslation(projId, loc, key)
+                                                                                    End Function
+
+                ' ✅ Crea TaskEngineCallbacks che risolve traduzioni e emette SSE
+                Dim callbacks As New TaskEngine.Orchestrator.TaskEngine.TaskEngineCallbacks(
+                    resolveTranslation,
+                    projectId,
+                    locale,
+                    Sub(eventType As String, data As Object)
+                        ' Emetti evento SSE
+                        sharedEmitter.Emit(eventType, data)
+                    End Sub
+                )
+
+                ' ✅ Crea TaskEngine e avvia esecuzione in background
+                Dim engine As New TaskEngine.Orchestrator.TaskEngine.TaskEngine(stateStorage, callbacks)
+
+                ' ✅ Avvia esecuzione in background (non bloccare la risposta HTTP)
+                Dim taskExecution = System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
+                                                                        Try
+                                                                            LogInfo("Starting TaskEngine execution", New With {.sessionId = newSessionId, .taskId = compiledTask.Id})
+                                                                            Dim result = Await engine.ExecuteTask(compiledTask, executionState)
+
+                                                                            ' ✅ Salva ExecutionState nella sessione
+                                                                            Dim executionStateJson = JsonConvert.SerializeObject(executionState)
+                                                                            Dim currentSession = SessionManager.GetTaskSession(newSessionId)
+                                                                            If currentSession IsNot Nothing Then
+                                                                                ' Salva ExecutionStateJson nella sessione (se il campo esiste)
+                                                                                ' Per ora, lo stato è già salvato da TaskEngineStateStorage
+                                                                            End If
+
+                                                                            ' ✅ Se richiede input, emetti evento "waitingForInput"
+                                                                            If result.RequiresInput Then
+                                                                                Dim waitingData = New With {
+                                .taskId = compiledTask.Id,
+                                .timestamp = DateTime.UtcNow.ToString("O")
+                            }
+                                                                                sharedEmitter.Emit("waitingForInput", waitingData)
+                                                                                LogInfo("TaskEngine waiting for input", New With {.sessionId = newSessionId, .taskId = compiledTask.Id})
+                                                                            Else
+                                                                                LogInfo("TaskEngine completed", New With {.sessionId = newSessionId, .taskId = compiledTask.Id})
+                                                                            End If
+                                                                        Catch ex As Exception
+                                                                            LogError("TaskEngine execution error", ex, New With {.sessionId = newSessionId})
+                                                                            sharedEmitter.Emit("error", New With {.error = ex.Message, .timestamp = DateTime.UtcNow.ToString("O")})
+                                                                        End Try
+                                                                    End Function)
+
                 Dim sessionCreated = New With {
                     .sessionId = newSessionId,
                     .projectId = projectId,
@@ -203,6 +274,7 @@ Namespace ApiServer.Handlers
                     .locale = locale
                 }
 
+                ' ✅ Ritorna risposta immediata (l'esecuzione continua in background)
                 Return ResponseHelpers.CreateSuccessResponse(sessionCreated)
 
             Catch ex As Exception
@@ -239,11 +311,7 @@ Namespace ApiServer.Handlers
                     ' Non bloccare il flusso se Pub/Sub fallisce - il flag è già salvato su Redis
                 End Try
 
-                ' Avvia il primo turno del motore se il TaskInstance non è ancora stato inizializzato.
-                If session.TaskInstance Is Nothing Then
-                    SessionManager.StartTaskExecutionIfNeeded(sessionId)
-                    session = SessionManager.GetTaskSession(sessionId)
-                End If
+                ' ✅ REMOVED: TaskInstance legacy code - task execution is now handled by FlowOrchestrator
 
                 ' ✅ Usa SseStreamManager per aprire connessione SSE
                 _sseStreamManager.OpenStream(sessionId, context.Response)
@@ -371,31 +439,18 @@ Namespace ApiServer.Handlers
                     Return Results.NotFound(New With {.error = "Session not found"})
                 End If
 
-                ' ✅ STEP 1: Ensure TaskInstance is loaded — rebuild from DialogRepository if needed
-                ' (TaskInstance is never persisted to Redis; it must be reconstructed on every request.)
-                If Not SessionManager.EnsureTaskInstanceLoaded(session) Then
-                    Return Results.BadRequest(New With {.error = "Dialog not found or could not be loaded for this session. Please restart the session."})
-                End If
+                ' ✅ REMOVED: TaskInstance legacy code - use FlowOrchestrator.ProvideUserInput() instead
+                ' The new TaskEngine handles all execution via FlowOrchestrator
+                ' TODO: Integrate FlowOrchestrator.ProvideUserInput() here
 
-                ' ✅ STEP 2: Carica DialogueContext dalla sessione
-                Dim ctx = SessionManager.GetOrCreateDialogueContext(session)
-                If ctx Is Nothing Then
-                    Return Results.BadRequest(New With {.error = "Failed to load or create DialogueContext. Please restart the session."})
-                End If
-
-                ' ✅ REMOVED: StatelessDialogueEngine non esiste più - usa TaskEngine invece
-                ' TODO: Migrare a TaskEngine.ExecuteTask() tramite FlowOrchestrator
-                ' Per ora, questo codice è disabilitato
-                ' Il nuovo TaskEngine viene usato tramite FlowOrchestrator.ProvideUserInput()
-
-                ' Placeholder per evitare errori di compilazione
+                ' Placeholder - task execution is now handled by FlowOrchestrator
                 Dim requiresInput = False
 
                 ' ✅ STATELESS: Salva la sessione su Redis dopo l'esecuzione
                 SessionManager.SaveTaskSession(session)
 
-                ' ✅ STATELESS: Verifica se tutti i task sono completati e emetti evento "complete"
-                Dim allCompleted = session.TaskInstance IsNot Nothing AndAlso session.TaskInstance.SubTasks.All(Function(t) t.IsComplete())
+                ' ✅ REMOVED: TaskInstance legacy code - completion is now tracked by FlowOrchestrator
+                Dim allCompleted = False
                 If allCompleted Then
                     Dim sharedEmitter = SessionManager.GetOrCreateEventEmitter(sessionId)
                     Dim completeData = New With {

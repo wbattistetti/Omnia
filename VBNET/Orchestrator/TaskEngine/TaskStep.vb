@@ -1,5 +1,6 @@
 Option Strict On
 Option Explicit On
+Namespace TaskEngine
 
 ''' <summary>
 ''' Step of the dialogue (for TaskEngine execution)
@@ -20,3 +21,4 @@ Public Class TaskStep
     ''' </summary>
     Public Property Microtasks As List(Of Microtask)
 End Class
+End Namespace
