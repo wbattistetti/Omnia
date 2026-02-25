@@ -306,41 +306,152 @@ export default function DDEBubbleChat({
             throw new Error('[DDEBubbleChat] Task is required for TypeScript engine');
           }
 
-          console.log('[DDEBubbleChat] 🚀 Starting TypeScript engine', {
+          // ✅ CRITICAL: Get translations from prop OR window (fallback for async loading)
+          let allTranslations = translations || {};
+
+          // ✅ FALLBACK: If translations prop is empty, try window.__projectTranslationsContext
+          if (!allTranslations || Object.keys(allTranslations).length === 0) {
+            const windowTranslations = (window as any).__projectTranslationsContext?.translations;
+            if (windowTranslations && Object.keys(windowTranslations).length > 0) {
+              console.log('[DDEBubbleChat] 🔄 Using translations from window (fallback)', {
+                translationsCount: Object.keys(windowTranslations).length
+              });
+              allTranslations = windowTranslations;
+            }
+          }
+
+          // ✅ CRITICAL: If still empty, throw error (must work by design)
+          if (!allTranslations || Object.keys(allTranslations).length === 0) {
+            throw new Error('[DDEBubbleChat] Translations are required for TypeScript engine. Translations must be loaded and filtered before opening the test panel.');
+          }
+
+          // ✅ CRITICAL: Filter translations to include only runtime GUIDs (same as VB.NET engine)
+          const runtimeGuids = new Set<string>();
+
+          // Extract GUIDs from TaskTree.steps
+          if (taskTree.steps && typeof taskTree.steps === 'object') {
+            extractGuidsFromSteps(taskTree.steps, runtimeGuids);
+          }
+
+          // Filter translations: only GUIDs referenced in steps
+          const runtimeTranslations: Record<string, string> = {};
+          for (const [guid, text] of Object.entries(allTranslations)) {
+            // Include runtime.* keys
+            if (guid.startsWith('runtime.')) {
+              runtimeTranslations[guid] = text;
+            }
+            // Include GUIDs referenced in steps
+            else if (runtimeGuids.has(guid)) {
+              runtimeTranslations[guid] = text;
+            }
+          }
+
+          console.log('[DDEBubbleChat] 🚀 Starting TypeScript engine (MVP - PASSO 1)', {
             taskId: task.id,
             hasTaskTree: !!taskTree,
-            hasTranslations: !!translations
+            allTranslationsCount: Object.keys(allTranslations).length,
+            runtimeGuidsCount: runtimeGuids.size,
+            runtimeTranslationsCount: Object.keys(runtimeTranslations).length,
+            sampleGuids: Array.from(runtimeGuids).slice(0, 5),
+            hasRuntimeTranslations: Object.keys(runtimeTranslations).length > 0
           });
 
+          if (Object.keys(runtimeTranslations).length === 0) {
+            throw new Error('[DDEBubbleChat] No runtime translations found after filtering. Ensure translations are loaded and contain the GUIDs referenced in task steps.');
+          }
+
           // Convert TaskTree to AssembledTaskTree format
+          // ✅ CRITICAL: Each node needs its steps assigned from TaskTree.steps[templateId]
+          const assignStepsToNode = (node: any): any => {
+            const nodeSteps = taskTree.steps?.[node.templateId];
+            const nodeWithSteps = nodeSteps ? {
+              ...node,
+              steps: nodeSteps // ✅ Assign steps to node
+            } : node;
+
+            // ✅ Recursively assign steps to subNodes
+            if (nodeWithSteps.subNodes && Array.isArray(nodeWithSteps.subNodes)) {
+              nodeWithSteps.subNodes = nodeWithSteps.subNodes.map((subNode: any) => assignStepsToNode(subNode));
+            }
+
+            return nodeWithSteps;
+          };
+
+          const nodesWithSteps = (taskTree.nodes || []).map(assignStepsToNode);
+
+          console.log('[DDEBubbleChat] 🔍 TaskTree conversion:', {
+            taskTreeStepsKeys: taskTree.steps ? Object.keys(taskTree.steps) : [],
+            nodesCount: nodesWithSteps.length,
+            nodesInfo: nodesWithSteps.map((n: any) => ({
+              id: n.id,
+              templateId: n.templateId,
+              label: n.label,
+              hasSteps: !!n.steps,
+              stepsKeys: n.steps ? Object.keys(n.steps) : [],
+              hasSubNodes: !!(n.subNodes && n.subNodes.length > 0),
+              firstStepDetails: n.steps?.start ? {
+                hasEscalations: !!n.steps.start.escalations,
+                escalationsCount: Array.isArray(n.steps.start.escalations) ? n.steps.start.escalations.length : (n.steps.start.escalations ? 1 : 0),
+                firstEscalationTasks: n.steps.start.escalations?.[0]?.tasks ? (Array.isArray(n.steps.start.escalations[0].tasks) ? n.steps.start.escalations[0].tasks.length : 1) : 0
+              } : null
+            }))
+          });
+
           const ddtInstance: AssembledTaskTree = {
             id: task.id,
             label: task.label || taskTree.labelKey || 'Task',
-            nodes: taskTree.nodes || [],
-            dialogueSteps: taskTree.steps ? Object.values(taskTree.steps).flatMap((stepDict: any) => {
-              // Convert steps dictionary to flat array
-              if (typeof stepDict === 'object' && !Array.isArray(stepDict)) {
-                return Object.values(stepDict);
-              }
-              return Array.isArray(stepDict) ? stepDict : [];
-            }) : [],
-            translations: translations || {},
+            nodes: nodesWithSteps, // ✅ Use nodes with steps assigned
+            dialogueSteps: [], // Not used by runDDT, but keep for compatibility
+            translations: runtimeTranslations, // ✅ Use filtered runtime translations (GUIDs only)
             introduction: taskTree.introduction
           };
+
+          console.log('[DDEBubbleChat] 🔍 Converted TaskTree to AssembledTaskTree:', {
+            id: ddtInstance.id,
+            label: ddtInstance.label,
+            nodesCount: ddtInstance.nodes.length,
+            nodesWithSteps: ddtInstance.nodes.map((n: any) => ({
+              id: n.id,
+              templateId: n.templateId,
+              hasSteps: !!n.steps,
+              stepsKeys: n.steps ? Object.keys(n.steps) : []
+            }))
+          });
 
           // Create callbacks for runDDT
           const callbacks: DDTNavigatorCallbacks = {
             onMessage: (text: string, stepType?: string, escalationNumber?: number) => {
-              console.log('[DDEBubbleChat] 📨 TypeScript engine message:', { text, stepType, escalationNumber });
+              console.log('[DDEBubbleChat] 📨 TypeScript engine message callback called:', {
+                text: text?.substring(0, 100),
+                textLength: text?.length,
+                stepType,
+                escalationNumber
+              });
+
+              if (!text || text.trim().length === 0) {
+                console.warn('[DDEBubbleChat] ⚠️ onMessage called with empty text!', { stepType, escalationNumber });
+                return;
+              }
+
               const botMessage: Message = {
                 id: generateMessageId('bot'),
                 text,
-                role: 'bot',
-                timestamp: new Date(),
+                type: 'bot',
                 stepType,
                 escalationNumber
               };
-              setMessages(prev => [...prev, botMessage]);
+
+              console.log('[DDEBubbleChat] ✅ Adding bot message to chat:', {
+                id: botMessage.id,
+                text: botMessage.text.substring(0, 50) + '...',
+                stepType: botMessage.stepType
+              });
+
+              setMessages(prev => {
+                const newMessages = [...prev, botMessage];
+                console.log('[DDEBubbleChat] 📊 Messages count after add:', newMessages.length);
+                return newMessages;
+              });
               setIsWaitingForInput(true);
             },
             onGetRetrieveEvent: async (nodeId: string) => {
@@ -358,11 +469,31 @@ export default function DDEBubbleChat({
               // For now, always return match (can be enhanced with actual NLP)
               return { status: 'match' as const, value: input };
             },
-            translations: translations || {}
+            translations: runtimeTranslations // ✅ Use filtered runtime translations
           };
 
-          // Start the TypeScript engine
-          const result = await runDDT(ddtInstance, callbacks);
+          // ✅ PASSO 1: Use MVP engine (simplified)
+          console.log('[DDEBubbleChat] 🚀 Starting runDDTMVP (PASSO 1) with:', {
+            ddtId: ddtInstance.id,
+            nodesCount: ddtInstance.nodes.length,
+            firstNode: ddtInstance.nodes[0] ? {
+              id: ddtInstance.nodes[0].id,
+              templateId: ddtInstance.nodes[0].templateId,
+              hasSteps: !!ddtInstance.nodes[0].steps,
+              stepsKeys: ddtInstance.nodes[0].steps ? Object.keys(ddtInstance.nodes[0].steps) : []
+            } : null
+          });
+
+          // ✅ Import and use MVP engine
+          const { runDDTMVP } = await import('@components/DialogueEngine/ddt/ddtEngineMVP');
+          const result = await runDDTMVP(ddtInstance, callbacks);
+
+          console.log('[DDEBubbleChat] 🏁 runDDTMVP completed:', {
+            success: result.success,
+            exit: result.exit,
+            error: result.error?.message,
+            hasValue: !!result.value
+          });
 
           if (result.exit) {
             console.log('[DDEBubbleChat] ✅ TypeScript engine completed', result);
@@ -370,6 +501,9 @@ export default function DDEBubbleChat({
           } else if (result.error) {
             console.error('[DDEBubbleChat] ❌ TypeScript engine error:', result.error);
             setBackendError(result.error.message);
+            setIsWaitingForInput(false);
+          } else if (result.success) {
+            console.log('[DDEBubbleChat] ✅ TypeScript engine success - all data collected');
             setIsWaitingForInput(false);
           }
         } catch (error) {

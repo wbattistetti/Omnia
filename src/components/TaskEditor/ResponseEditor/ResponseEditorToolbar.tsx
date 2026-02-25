@@ -88,7 +88,7 @@ export function useResponseEditorToolbar({
   // ✅ NEW: Get global test panel and context data (MUST be at the top - hooks rule)
   const { isOpen: isGlobalTestPanelOpen, openWithTask, close: closeGlobalTestPanel } = useGlobalTestPanel();
   const editorContext = useResponseEditorContextSafe(); // ✅ Safe hook that returns null if not available
-  const { translations: globalTranslations } = useProjectTranslations();
+  const { translations: globalTranslations, isReady: translationsReady, isLoading: translationsLoading, loadAllTranslations } = useProjectTranslations();
   const { engineType } = useEngineType(); // ✅ Get engine type from global context
 
   // ✅ Get task data from props (preferred) or context (fallback)
@@ -218,11 +218,133 @@ export function useResponseEditorToolbar({
         return;
       }
 
+      // ✅ CRITICAL: Ensure translations are loaded before opening chat panel
+      // If translations are not ready, wait for them or trigger loading
+      if (!translationsReady && !translationsLoading && loadAllTranslations) {
+        console.log('[Toolbar] ⏳ Translations not ready, loading...', {
+          translationsCount: Object.keys(globalTranslations || {}).length,
+          isReady: translationsReady,
+          isLoading: translationsLoading
+        });
+        // Trigger loading and wait for it to complete
+        loadAllTranslations().then(() => {
+          // Retry opening chat panel after translations are loaded
+          console.log('[Toolbar] ✅ Translations loaded, retrying chat panel open');
+          // Reset guard to allow retry
+          openingChatRef.current = false;
+          // Recursively call handleTestClick to retry
+          handleTestClick();
+        }).catch((err) => {
+          console.error('[Toolbar] ❌ Failed to load translations', err);
+          openingChatRef.current = false;
+        });
+        return;
+      }
+
+      // If translations are still loading, wait a bit and retry
+      if (translationsLoading) {
+        console.log('[Toolbar] ⏳ Translations are loading, waiting...');
+        setTimeout(() => {
+          openingChatRef.current = false;
+          handleTestClick();
+        }, 500);
+        return;
+      }
+
       // Set guard
       openingChatRef.current = true;
 
-      // Get translations for the current project (from global context)
-      const translations = globalTranslations || {};
+      // ✅ CRITICAL: Get translations from context (must be ready by now)
+      let allTranslations = globalTranslations || {};
+
+      // ✅ NO FALLBACK: Translations must be loaded by design
+      // If translations are still empty after loading, this is a structural error
+      if (!allTranslations || Object.keys(allTranslations).length === 0) {
+        console.error('[Toolbar] ❌ ERROR: Translations are empty after loading - this is a structural error', {
+          translationsReady,
+          translationsLoading,
+          translationsCount: Object.keys(globalTranslations || {}).length
+        });
+        openingChatRef.current = false;
+        alert('Translations are not available. Please ensure the project has translations loaded.');
+        return;
+      }
+
+      // ✅ CRITICAL: Filter runtime translations BEFORE passing to chat tab (must work by design)
+      // Extract GUIDs from TaskTree.steps
+      const runtimeGuids = new Set<string>();
+      if (taskTree?.steps && typeof taskTree.steps === 'object') {
+        // Import extractGuidsFromSteps function (same logic as DDEBubbleChat)
+        const extractGuidsFromSteps = (steps: Record<string, any>, guids: Set<string>) => {
+          const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          for (const [templateId, stepDict] of Object.entries(steps)) {
+            if (!stepDict || typeof stepDict !== 'object') continue;
+            if (Array.isArray(stepDict)) {
+              for (const step of stepDict) {
+                if (step?.escalations && Array.isArray(step.escalations)) {
+                  for (const escalation of step.escalations) {
+                    if (escalation.tasks && Array.isArray(escalation.tasks)) {
+                      for (const taskItem of escalation.tasks) {
+                        if (taskItem.parameters && Array.isArray(taskItem.parameters)) {
+                          const textParam = taskItem.parameters.find((p: any) =>
+                            p?.parameterId === 'text' || p?.key === 'text'
+                          );
+                          if (textParam?.value && guidPattern.test(textParam.value)) {
+                            guids.add(textParam.value);
+                          }
+                        }
+                        if (taskItem.id && guidPattern.test(taskItem.id)) {
+                          guids.add(taskItem.id);
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              continue;
+            }
+            for (const [stepType, step] of Object.entries(stepDict)) {
+              if (!step || typeof step !== 'object') continue;
+              if (step.escalations && Array.isArray(step.escalations)) {
+                for (const escalation of step.escalations) {
+                  if (escalation.tasks && Array.isArray(escalation.tasks)) {
+                    for (const taskItem of escalation.tasks) {
+                      if (taskItem.parameters && Array.isArray(taskItem.parameters)) {
+                        const textParam = taskItem.parameters.find((p: any) =>
+                          p?.parameterId === 'text' || p?.key === 'text'
+                        );
+                        if (textParam?.value && guidPattern.test(textParam.value)) {
+                          guids.add(textParam.value);
+                        }
+                      }
+                      if (taskItem.id && guidPattern.test(taskItem.id)) {
+                        guids.add(taskItem.id);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        };
+        extractGuidsFromSteps(taskTree.steps, runtimeGuids);
+      }
+
+      // Filter translations: only GUIDs referenced in steps + runtime.* keys
+      const runtimeTranslations: Record<string, string> = {};
+      for (const [guid, text] of Object.entries(allTranslations)) {
+        if (guid.startsWith('runtime.')) {
+          runtimeTranslations[guid] = text;
+        } else if (runtimeGuids.has(guid)) {
+          runtimeTranslations[guid] = text;
+        }
+      }
+
+      console.log('[Toolbar] 🔍 Filtered runtime translations:', {
+        allTranslationsCount: Object.keys(allTranslations).length,
+        runtimeGuidsCount: runtimeGuids.size,
+        runtimeTranslationsCount: Object.keys(runtimeTranslations).length
+      });
 
       // Convert taskMeta to Task format
       const task = {
@@ -241,7 +363,7 @@ export function useResponseEditorToolbar({
         type: 'chat',
         task: task as any,
         projectId: currentProjectId,
-        translations,
+        translations: runtimeTranslations, // ✅ Pass filtered runtime translations (must work by design)
         taskTree,
         mode: 'interactive',
         engineType: engineType, // ✅ Pass engine type from global context
@@ -284,8 +406,48 @@ export function useResponseEditorToolbar({
           return;
         }
 
-        // Get translations for the current project (from global context)
+        // ✅ CRITICAL: Ensure translations are loaded before opening test panel
+        // If translations are not ready, wait for them or trigger loading
+        if (!translationsReady && !translationsLoading && loadAllTranslations) {
+          console.log('[Toolbar] ⏳ Translations not ready, loading...', {
+            translationsCount: Object.keys(globalTranslations || {}).length,
+            isReady: translationsReady,
+            isLoading: translationsLoading
+          });
+          // Trigger loading and wait for it to complete
+          loadAllTranslations().then(() => {
+            // Retry opening test panel after translations are loaded
+            console.log('[Toolbar] ✅ Translations loaded, retrying test panel open');
+            handleTestClick();
+          }).catch((err) => {
+            console.error('[Toolbar] ❌ Failed to load translations', err);
+          });
+          return;
+        }
+
+        // If translations are still loading, wait a bit and retry
+        if (translationsLoading) {
+          console.log('[Toolbar] ⏳ Translations are loading, waiting...');
+          setTimeout(() => {
+            handleTestClick();
+          }, 500);
+          return;
+        }
+
+        // ✅ CRITICAL: Get translations from context (must be ready by now)
         const translations = globalTranslations || {};
+
+        // ✅ NO FALLBACK: Translations must be loaded by design
+        // If translations are still empty after loading, this is a structural error
+        if (!translations || Object.keys(translations).length === 0) {
+          console.error('[Toolbar] ❌ ERROR: Translations are empty after loading - this is a structural error', {
+            translationsReady,
+            translationsLoading,
+            translationsCount: Object.keys(globalTranslations || {}).length
+          });
+          alert('Translations are not available. Please ensure the project has translations loaded.');
+          return;
+        }
 
         // Convert taskMeta to Task format
         const task = {

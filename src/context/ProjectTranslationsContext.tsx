@@ -17,6 +17,10 @@ export interface ProjectTranslationsContextType {
   saveAllTranslations: () => Promise<void>;
   // Check if translations are dirty (have unsaved changes)
   isDirty: boolean;
+  // ✅ NEW: Loading state - indicates if translations are currently being loaded
+  isLoading: boolean;
+  // ✅ NEW: Ready state - indicates if translations have been loaded and are ready to use
+  isReady: boolean;
 }
 
 const ProjectTranslationsContext = createContext<ProjectTranslationsContextType | undefined>(undefined);
@@ -52,6 +56,9 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
   const [originalTranslations, setOriginalTranslations] = useState<Record<string, string>>({});
   const [isDirty, setIsDirty] = useState(false);
   const [allGuids, setAllGuids] = useState<Set<string>>(new Set());
+  // ✅ NEW: Loading and ready states for translations
+  const [isLoading, setIsLoading] = useState(false);
+  const [isReady, setIsReady] = useState(false);
 
   // Add translation to global table (in memory only)
   const addTranslation = useCallback((guid: string, text: string) => {
@@ -99,11 +106,38 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     return translations[guid];
   }, [translations]);
 
+  // ✅ Track loading completion to set isReady after translations state is updated
+  const [loadingCompleted, setLoadingCompleted] = useState(false);
+  const [loadedTranslations, setLoadedTranslations] = useState<Record<string, string> | null>(null);
+
+  // ✅ Set isReady only after translations state is updated (via useEffect)
+  useEffect(() => {
+    if (loadingCompleted && !isLoading) {
+      // Loading completed and translations state has been updated
+      setIsReady(true);
+      setLoadingCompleted(false);
+      setLoadedTranslations(null);
+
+      // ✅ DEBUG: Verifica che le traduzioni siano state caricate
+      console.log('[ProjectTranslations] ✅ Translations ready', {
+        projectId: currentProjectId,
+        locale: projectLocale,
+        totalTranslations: Object.keys(translations).length,
+        sampleGuids: Object.keys(translations).slice(0, 10)
+      });
+    }
+  }, [loadingCompleted, isLoading, translations, currentProjectId, projectLocale]);
+
   // Load all project translations from database
   const loadAllTranslations = useCallback(async () => {
     if (!currentProjectId) {
+      setIsReady(false);
       return;
     }
+
+    setIsLoading(true);
+    setIsReady(false);
+    setLoadingCompleted(false);
 
     try {
       const allTranslations = await loadAllProjectTranslations(currentProjectId, projectLocale);
@@ -117,6 +151,10 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
       // Save original values for comparison (deep copy)
       setOriginalTranslations(JSON.parse(JSON.stringify(allTranslations)));
       setIsDirty(false);
+
+      // ✅ Mark loading as completed - isReady will be set by useEffect after translations state updates
+      setLoadedTranslations(allTranslations);
+      setLoadingCompleted(true);
 
       // ✅ DEBUG: Verifica che le traduzioni Factory siano state caricate
       console.log('[ProjectTranslations] 🔍 VERIFICA TRADUZIONI CARICATE', {
@@ -133,6 +171,11 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
       });
     } catch (err) {
       console.error('[ProjectTranslations] ❌ ERROR loadAllTranslations:', err);
+      setIsReady(false);
+      setLoadingCompleted(false);
+      setLoadedTranslations(null);
+    } finally {
+      setIsLoading(false);
     }
   }, [currentProjectId, projectLocale]);
 
@@ -198,14 +241,28 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
         setOriginalTranslations({});
         setAllGuids(new Set());
         setIsDirty(false);
+        setIsReady(false); // ✅ Reset ready state when project changes
         // Load all translations for the project
+        console.log('[ProjectTranslations] 🔄 Project changed, loading translations', {
+          projectId: currentProjectId,
+          locale: projectLocale
+        });
         loadAllTranslations();
       }
       // ✅ DO NOT reset if project hasn't changed - preserve in-memory translations
+      // ✅ BUT: If translations are empty and not loading, try to load them
+      else if (Object.keys(translations).length === 0 && !isLoading && !isReady) {
+        console.log('[ProjectTranslations] 🔄 Translations empty but project unchanged, loading translations', {
+          projectId: currentProjectId,
+          locale: projectLocale
+        });
+        loadAllTranslations();
+      }
     } else {
       prevProjectIdRef.current = null;
+      setIsReady(false);
     }
-  }, [currentProjectId]); // ✅ Removed loadAllTranslations from dependencies to prevent unnecessary resets
+  }, [currentProjectId, translations, isLoading, isReady, projectLocale, loadAllTranslations]); // ✅ Added dependencies to check if translations need to be loaded
 
   // Memoize context value to prevent unnecessary re-renders
   const value: ProjectTranslationsContextType = useMemo(() => ({
@@ -215,8 +272,10 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     getTranslation,
     loadAllTranslations,
     saveAllTranslations,
-    isDirty
-  }), [translations, addTranslation, addTranslations, getTranslation, loadAllTranslations, saveAllTranslations, isDirty]);
+    isDirty,
+    isLoading, // ✅ NEW
+    isReady // ✅ NEW
+  }), [translations, addTranslation, addTranslations, getTranslation, loadAllTranslations, saveAllTranslations, isDirty, isLoading, isReady]);
 
   // Expose saveAllTranslations, addTranslations, and loadAllTranslations on window for explicit save from AppContent and taskUtils
   useEffect(() => {

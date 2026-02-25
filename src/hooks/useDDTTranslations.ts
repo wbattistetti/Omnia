@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useEffect } from 'react';
 import { useProjectTranslations } from '../context/ProjectTranslationsContext';
 import { extractGUIDsFromDDT } from '../utils/ddtUtils';
 
@@ -112,7 +112,33 @@ export function useDDTTranslations(
   // When you change node, the context changes, so translations must be recalculated
   const stableSelectedNodeId = selectedNodeId ?? null;
 
+  // ✅ CRITICAL FIX: Add translationsCount as dependency to force recalculation when translations are loaded
+  // This ensures the useMemo recalculates even if translationsHash remains empty (when GUIDs aren't yet in globalTranslations)
+  const translationsCount = Object.keys(globalTranslations).length;
+
+  // ✅ DEBUG: Log when translationsCount changes
+  const prevTranslationsCountRef = useRef<number>(0);
+  useEffect(() => {
+    if (translationsCount !== prevTranslationsCountRef.current) {
+      console.log('[useDDTTranslations] 🔄 translationsCount changed', {
+        previous: prevTranslationsCountRef.current,
+        current: translationsCount,
+        ddtId: ddt?.id || ddt?._id
+      });
+      prevTranslationsCountRef.current = translationsCount;
+    }
+  }, [translationsCount, ddt?.id, ddt?._id]);
+
   return useMemo(() => {
+    // ✅ DEBUG: Log when useMemo recalculates
+    console.log('[useDDTTranslations] 🔄 useMemo recalculating', {
+      ddtId: ddt?.id || ddt?._id,
+      translationsCount,
+      translationsHashLength: translationsHash.length,
+      hasGlobalTranslations: !!globalTranslations,
+      globalTranslationsCount: Object.keys(globalTranslations).length
+    });
+
     if (!ddt) {
       return {};
     }
@@ -186,6 +212,16 @@ export function useDDTTranslations(
       return {};
     }
 
+    // ✅ DEBUG: Log extraction details
+    const globalTranslationsCount = Object.keys(globalTranslations).length;
+    if (globalTranslationsCount === 0) {
+      console.warn('[useDDTTranslations] ⚠️ globalTranslations is empty', {
+        ddtId: ddt?.id || ddt?._id,
+        guidsCount: guids.length,
+        sampleGuids: guids.slice(0, 5)
+      });
+    }
+
     // Extract translations from global table (already filtered by project locale)
     const translationsFromGlobal: Record<string, string> = {};
     const foundGuids: string[] = [];
@@ -200,6 +236,20 @@ export function useDDTTranslations(
         missingGuids.push(guid);
       }
     });
+
+    // ✅ DEBUG: Log if translations are missing
+    if (missingGuids.length > 0 && globalTranslationsCount > 0) {
+      console.warn('[useDDTTranslations] ⚠️ Some GUIDs not found in globalTranslations', {
+        ddtId: ddt?.id || ddt?._id,
+        totalGuids: guids.length,
+        foundCount: foundGuids.length,
+        missingCount: missingGuids.length,
+        globalTranslationsCount,
+        sampleMissingGuids: missingGuids.slice(0, 5),
+        sampleFoundGuids: foundGuids.slice(0, 5),
+        sampleGlobalGuids: Object.keys(globalTranslations).slice(0, 5)
+      });
+    }
 
 
     // 🔍 DEBUG: Log sempre (non solo se mancano traduzioni)
@@ -234,14 +284,31 @@ export function useDDTTranslations(
       };
     }
 
+    // ✅ DEBUG: Log final result
+    const finalCount = Object.keys(translationsFromGlobal).length;
+    if (finalCount === 0 && guids.length > 0 && translationsCount > 0) {
+      console.error('[useDDTTranslations] ❌ ERROR: GUIDs extracted but no translations found', {
+        ddtId: ddt?.id || ddt?._id,
+        extractedGuidsCount: guids.length,
+        globalTranslationsCount: translationsCount,
+        sampleExtractedGuids: guids.slice(0, 5),
+        sampleGlobalGuids: Object.keys(globalTranslations).slice(0, 5),
+        missingGuidsCount: missingGuids.length,
+        sampleMissingGuids: missingGuids.slice(0, 5)
+      });
+    }
+
     return translationsFromGlobal;
     // ✅ CRITICAL: Don't include ddt/task in deps - they change reference on every render
-    // Use only stable keys: ddtId, taskStepsKeys, translationsHash, version, selectedNodeId
+    // Use only stable keys: ddtId, taskStepsKeys, translationsHash, version, selectedNodeId, translationsCount
     // ✅ FASE 2 FIX: Use translationsHash (includes values) instead of translationsKeys (only keys)
     // This allows detection of translation overwrites during adaptation (same GUID, different text)
     // ✅ FASE 2.3: Added version to force recalculation when store is populated
     // ✅ CRITICAL FIX: Added selectedNodeId to force recalculation when node selection changes
+    // ✅ CRITICAL FIX: Added translationsCount to force recalculation when translations are loaded/updated
+    // ✅ CRITICAL FIX: Added globalTranslations to dependencies to ensure recalculation when translations are loaded
+    // This ensures recalculation when globalTranslations is populated, even if translationsCount hasn't updated yet
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ddtId, taskStepsKeys, translationsHash, stableVersion, stableSelectedNodeId]);
+  }, [ddtId, taskStepsKeys, translationsHash, stableVersion, stableSelectedNodeId, translationsCount, globalTranslations]);
 }
 

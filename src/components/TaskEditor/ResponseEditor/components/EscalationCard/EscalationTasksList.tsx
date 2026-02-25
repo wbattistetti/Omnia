@@ -39,12 +39,33 @@ export function EscalationTasksList({
   const { handleEditingChange, isEditing: isEditingRow } = useTaskEditing();
   // ✅ FASE 2: Get addTranslation from context for updating translations
   let addTranslation: ((guid: string, text: string) => void) | undefined;
+  let isReady = true; // Default to true if context not available
   try {
-    const { addTranslation: addTranslationFromContext } = useProjectTranslations();
+    const { addTranslation: addTranslationFromContext, isReady: translationsReady } = useProjectTranslations();
     addTranslation = addTranslationFromContext;
+    isReady = translationsReady;
   } catch {
     // Context not available, will log warning in handleEdit
     addTranslation = undefined;
+  }
+
+  // ✅ CRITICAL: If translations are not ready, show loading instead of GUIDs
+  if (!isReady) {
+    return (
+      <div className="flex items-center justify-center p-4">
+        <span className="text-sm text-gray-500">Loading translations...</span>
+      </div>
+    );
+  }
+
+  // ✅ NO FALLBACK: Translations must be provided correctly by the caller
+  // If translations are empty but ready, this is a structural error that must be fixed
+  if (isReady && (!translations || Object.keys(translations).length === 0)) {
+    console.error('[EscalationTasksList] ❌ ERROR: Translations ready but empty - this is a structural error', {
+      escalationIdx,
+      stepKey,
+      translationsCount: translations ? Object.keys(translations).length : 0
+    });
   }
   // ✅ NO FALLBACKS: escalation.tasks can be undefined (legitimate default)
   const tasks = escalation.tasks ?? [];
