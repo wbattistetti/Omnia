@@ -379,12 +379,34 @@ export async function cloneAndContextualizeTranslations(
   // 6. Add all adapted translations to context
   adaptedTranslations.forEach(({ guid, text }) => {
     addTranslationToContext(guid, text);
+    // ✅ DEBUG: Log per verificare che le traduzioni vengano aggiunte
+    console.log('[cloneAndContextualizeTranslations] ✅ Added contextualized translation', {
+      guid: guid.substring(0, 8) + '...',
+      textPreview: text.substring(0, 50) + '...',
+      contextLabel
+    });
   });
+
+  // ✅ DEBUG: Verifica che le traduzioni siano nel context dopo l'aggiunta
+  const globalContext = typeof window !== 'undefined' ? (window as any).__projectTranslationsContext : null;
+  const sampleGuids = adaptedTranslations.slice(0, 3).map(t => t.guid);
+  const foundInContext = sampleGuids.map(guid => ({
+    guid: guid.substring(0, 8) + '...',
+    found: globalContext?.translations?.[guid] ? true : false,
+    textPreview: globalContext?.translations?.[guid]?.substring(0, 30) + '...' || 'NOT FOUND'
+  }));
 
   console.log('[cloneAndContextualizeTranslations] ✅ Flow complete', {
     totalParams: textParams.length,
     adaptedCount: adaptedTranslations.length,
-    guidMappingSize: guidMapping.size
+    guidMappingSize: guidMapping.size,
+    // ✅ DEBUG: Verifica che le traduzioni siano nel context
+    sampleAdaptedGuids: adaptedTranslations.slice(0, 3).map(t => ({
+      guid: t.guid.substring(0, 8) + '...',
+      textPreview: t.text.substring(0, 30) + '...'
+    })),
+    verifiedInContext: foundInContext,
+    globalContextTranslationsCount: globalContext?.translations ? Object.keys(globalContext.translations).length : 0
   });
 
   return guidMapping;

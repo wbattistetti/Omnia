@@ -38,6 +38,12 @@ export function getTaskText(
       if (!translation) {
         // ✅ Verifica se il GUID è nei sub-nodi (non adattati) - questi dovrebbero avere traduzioni copiate dal template
         const isSubNode = task.templateId === 'sayMessage' && task.id !== textKey;
+
+        // ✅ DEBUG: Verifica se il GUID è nel context globale
+        const globalContext = typeof window !== 'undefined' ? (window as any).__projectTranslationsContext : null;
+        const isInGlobalContext = globalContext?.translations?.[textKey] ? true : false;
+        const globalContextText = globalContext?.translations?.[textKey] || null;
+
         console.warn('[getTaskText] ⚠️ GUID found but translation missing', {
           textKey,
           translationsCount: Object.keys(translations).length,
@@ -47,8 +53,23 @@ export function getTaskText(
           availableGuids: Object.keys(translations).slice(0, 10), // Mostra primi 10 GUID disponibili
           isGUIDInTranslations: textKey in translations,
           // ✅ DEBUG: Verifica se il GUID è stato generato durante clonazione
-          guidFormat: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textKey) ? 'valid-uuid' : 'invalid'
+          guidFormat: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textKey) ? 'valid-uuid' : 'invalid',
+          // ✅ DEBUG: Verifica se il GUID è nel context globale
+          isInGlobalContext,
+          globalContextTextPreview: globalContextText ? globalContextText.substring(0, 50) + '...' : null,
+          globalContextCount: globalContext?.translations ? Object.keys(globalContext.translations).length : 0
         });
+      } else {
+        // ✅ DEBUG: Log quando la traduzione viene trovata (solo per i primi messaggi per non intasare i log)
+        const debugEnabled = typeof localStorage !== 'undefined' && localStorage.getItem('debug.getTaskText') === '1';
+        if (debugEnabled) {
+          console.log('[getTaskText] ✅ Translation found', {
+            textKey: textKey.substring(0, 8) + '...',
+            textPreview: translation.substring(0, 50) + '...',
+            taskId: task.id,
+            templateId: task.templateId
+          });
+        }
       }
 
       // ✅ Se la traduzione esiste, usala; altrimenti usa il label del template come fallback
