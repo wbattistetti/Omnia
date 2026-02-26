@@ -1,14 +1,15 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { useProjectDataUpdate } from './ProjectDataContext';
 import { loadProjectTranslations, saveProjectTranslations, loadAllProjectTranslations } from '../services/ProjectDataService';
+import { notifyTranslationAdded, notifyTranslationsAdded } from '../utils/translationTracker';
 
 export interface ProjectTranslationsContextType {
   // Global translations table: { guid: text } where text is for project locale only
   translations: Record<string, string>;
   // Add translation to global table (in memory only)
-  addTranslation: (guid: string, text: string) => void;
+  addTranslation: (guid: string, text: string, templateId?: string) => void;
   // Add multiple translations to global table (in memory only)
-  addTranslations: (translations: Record<string, string>) => void;
+  addTranslations: (translations: Record<string, string>, templateId?: string) => void;
   // Get translation by GUID
   getTranslation: (guid: string) => string | undefined;
   // Load all project translations from database
@@ -21,6 +22,8 @@ export interface ProjectTranslationsContextType {
   isLoading: boolean;
   // ✅ NEW: Ready state - indicates if translations have been loaded and are ready to use
   isReady: boolean;
+  // ✅ NEW: Set current template ID for translation tracking
+  setCurrentTemplateId: (templateId: string | null) => void;
 }
 
 const ProjectTranslationsContext = createContext<ProjectTranslationsContextType | undefined>(undefined);
@@ -59,10 +62,22 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
   // ✅ NEW: Loading and ready states for translations
   const [isLoading, setIsLoading] = useState(false);
   const [isReady, setIsReady] = useState(false);
+  // ✅ NEW: Track current template ID for translation tracking
+  const [currentTemplateId, setCurrentTemplateIdState] = useState<string | null>(null);
+
+  // ✅ NEW: Set current template ID for translation tracking
+  const setCurrentTemplateId = useCallback((templateId: string | null) => {
+    setCurrentTemplateIdState(templateId);
+    console.log('[ProjectTranslations] 📌 Current template ID set', { templateId });
+  }, []);
 
   // Add translation to global table (in memory only)
-  const addTranslation = useCallback((guid: string, text: string) => {
+  const addTranslation = useCallback((guid: string, text: string, templateId?: string) => {
     if (!guid || !text) return;
+
+    // Use provided templateId or current templateId
+    const activeTemplateId = templateId || currentTemplateId;
+
     setTranslations((prev) => {
       if (prev[guid] === text) return prev; // No change
       setIsDirty(true);
@@ -75,10 +90,18 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
       return updated;
     });
     setAllGuids((prev) => new Set([...prev, guid]));
-  }, []);
+
+    // ✅ EVENT-DRIVEN: Notify translation tracker if we have a templateId
+    if (activeTemplateId) {
+      notifyTranslationAdded(activeTemplateId, guid);
+    }
+  }, [currentTemplateId]);
 
   // Add multiple translations to global table (in memory only)
-  const addTranslations = useCallback((newTranslations: Record<string, string>) => {
+  const addTranslations = useCallback((newTranslations: Record<string, string>, templateId?: string) => {
+    // Use provided templateId or current templateId
+    const activeTemplateId = templateId || currentTemplateId;
+
     setTranslations((prev) => {
       let hasChanges = false;
       const updated = { ...prev };
@@ -99,7 +122,12 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
       }
       return updated;
     });
-  }, []);
+
+    // ✅ EVENT-DRIVEN: Notify translation tracker if we have a templateId
+    if (activeTemplateId) {
+      notifyTranslationsAdded(activeTemplateId, Object.keys(newTranslations));
+    }
+  }, [currentTemplateId]);
 
   // Get translation by GUID
   const getTranslation = useCallback((guid: string): string | undefined => {
@@ -274,8 +302,9 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
     saveAllTranslations,
     isDirty,
     isLoading, // ✅ NEW
-    isReady // ✅ NEW
-  }), [translations, addTranslation, addTranslations, getTranslation, loadAllTranslations, saveAllTranslations, isDirty, isLoading, isReady]);
+    isReady, // ✅ NEW
+    setCurrentTemplateId // ✅ NEW
+  }), [translations, addTranslation, addTranslations, getTranslation, loadAllTranslations, saveAllTranslations, isDirty, isLoading, isReady, setCurrentTemplateId]);
 
   // Expose saveAllTranslations, addTranslations, and loadAllTranslations on window for explicit save from AppContent and taskUtils
   useEffect(() => {
@@ -286,8 +315,14 @@ export const ProjectTranslationsProvider: React.FC<ProjectTranslationsProviderPr
             await saveAllTranslations();
           }
         },
-        addTranslations: (newTranslations: Record<string, string>) => {
-          addTranslations(newTranslations);
+        addTranslations: (newTranslations: Record<string, string>, templateId?: string) => {
+          addTranslations(newTranslations, templateId);
+        },
+        addTranslation: (guid: string, text: string, templateId?: string) => {
+          addTranslation(guid, text, templateId);
+        },
+        setCurrentTemplateId: (templateId: string | null) => {
+          setCurrentTemplateId(templateId);
         },
         loadAllTranslations: async () => {
           await loadAllTranslations();

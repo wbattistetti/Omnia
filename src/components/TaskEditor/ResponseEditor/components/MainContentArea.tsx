@@ -103,7 +103,7 @@ export function MainContentArea({
   // ✅ REMOVED: wizardProps - now from Context
 }: MainContentAreaProps) {
   // ✅ NEW: Get data from Context
-  const { taskMeta: task, taskType } = useResponseEditorContext();
+  const { taskMeta: task, taskType, taskTree } = useResponseEditorContext();
 
   // ✅ NEW: Get wizard context (may be null if wizard not active)
   let wizardContext: ReturnType<typeof useWizardContext> | null = null;
@@ -204,6 +204,30 @@ export function MainContentArea({
     case MainViewMode.BEHAVIOUR:
     default:
       // ✅ Default: BehaviourEditor (StepsStrip + StepEditor)
+      // ✅ FIX: Don't render if DDT is not ready (during wizard or loading)
+      // Check if taskTree exists and has structure
+      const isDDTReady = taskTree && (
+        (taskTree.steps && Object.keys(taskTree.steps).length > 0) ||
+        (taskTree.nodes && taskTree.nodes.length > 0)
+      );
+
+      if (!selectedNode || !isDDTReady) {
+        return (
+          <div style={DEFAULT_CONTAINER_STYLE}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '100%',
+              color: '#64748b',
+              fontSize: '14px'
+            }}>
+              <span>Loading task structure...</span>
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div style={DEFAULT_CONTAINER_STYLE}>
           <BehaviourEditor

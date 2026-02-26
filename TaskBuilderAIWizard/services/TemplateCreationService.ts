@@ -35,6 +35,24 @@ function mapEmojiToIconName(emoji: string): string {
 }
 
 /**
+ * Count expected translations from WizardStepMessages
+ * Each message in each escalation generates one translation
+ */
+function countExpectedTranslations(messages: WizardStepMessages): number {
+  let count = 0;
+
+  if (messages.ask?.base) count += messages.ask.base.length;
+  if (messages.ask?.reask) count += messages.ask.reask.length;
+  if (messages.noInput?.base) count += messages.noInput.base.length;
+  if (messages.confirm?.base) count += messages.confirm.base.length;
+  if (messages.notConfirmed?.base) count += messages.notConfirmed.base.length;
+  if (messages.violation?.base) count += messages.violation.base.length;
+  if (messages.success?.base) count += messages.success.base.length;
+
+  return count;
+}
+
+/**
  * Generalizes a label by removing context-specific references
  *
  * Example:
@@ -55,9 +73,45 @@ export function generalizeLabel(label: string): string {
 }
 
 /**
+ * ✅ FASE 1: Crea escalation con GUID senza testo (deterministico)
+ * Genera solo la struttura logica, senza chiamare AI o salvare traduzioni
+ */
+function createEscalationWithGuid(): { escalation: any; guid: string } {
+  const textKey = uuidv4();
+  const taskId = uuidv4();
+  const escalationId = uuidv4();
+  const templateId = 'sayMessage';
+
+  const taskType = templateIdToTaskType(templateId);
+  if (taskType === TaskType.UNDEFINED) {
+    throw new Error(`[TemplateCreationService] Cannot determine task type from templateId '${templateId}'.`);
+  }
+
+  const escalation = {
+    escalationId,
+    tasks: [
+      {
+        id: taskId,
+        type: taskType,
+        templateId: templateId,
+        parameters: [
+          {
+            parameterId: 'text',
+            value: textKey, // GUID senza testo ancora
+          },
+        ],
+      },
+    ],
+  };
+
+  return { escalation, guid: textKey };
+}
+
+/**
  * Helper per creare una escalation con un messaggio
  * Allineato con saveIntentMessages.ts per coerenza del modello dati
  * ✅ FASE 1.2: Genera GUID e salva traduzioni invece di usare testo letterale
+ * ⚠️ DEPRECATED: Usa createEscalationWithGuid() per FASE 1, poi associa testi
  *
  * LOG TRACING:
  * - Input: text (messaggio), addTranslation callback
@@ -133,9 +187,161 @@ function createEscalationFromMessage(
 }
 
 /**
+ * ✅ FASE 1: Crea step structure con escalation e GUID (senza testi)
+ * Deterministico, non chiama AI, non salva traduzioni
+ */
+function createStepStructure(
+  stepType: string,
+  escalationCount: number
+): { step: any; guids: string[] } {
+  const guids: string[] = [];
+  const escalations: any[] = [];
+
+  for (let i = 0; i < escalationCount; i++) {
+    const { escalation, guid } = createEscalationWithGuid();
+    escalations.push(escalation);
+    guids.push(guid);
+  }
+
+  return {
+    step: {
+      type: stepType,
+      escalations,
+    },
+    guids,
+  };
+}
+
+/**
+ * ✅ FASE 1: Crea struttura completa per un nodo (step/escalation/GUID senza testi)
+ */
+export interface NodeStructure {
+  nodeId: string;
+  steps: Record<string, { step: any; guids: string[] }>;
+  messageMatrix: Array<{ guid: string; stepType: string; escalationIndex: number }>;
+}
+
+/**
+ * ✅ FASE 2: Associa testi generati dall'AI ai GUID esistenti nella struttura
+ */
+export function associateTextsToStructure(
+  structure: NodeStructure,
+  messages: WizardStepMessages,
+  nodeId: string,
+  addTranslation?: (guid: string, text: string) => void
+): void {
+  const addTranslationFn = addTranslation || (() => {
+    if (typeof window !== 'undefined' && (window as any).__projectTranslationsContext) {
+      const ctx = (window as any).__projectTranslationsContext;
+      if (ctx.addTranslation) {
+        return ctx.addTranslation;
+      } else if (ctx.addTranslations) {
+        return (guid: string, text: string) => ctx.addTranslations({ [guid]: text });
+      }
+    }
+    return (guid: string, text: string) => {
+      console.warn('[associateTextsToStructure] ⚠️ No translation context available', { guid, text: text.substring(0, 50) });
+    };
+  })();
+
+  // Mappa stepType a array di testi
+  const textsByStepType: Record<string, string[]> = {};
+  if (messages.ask?.base) textsByStepType.start = messages.ask.base;
+  if (messages.ask?.reask) textsByStepType.noMatch = messages.ask.reask;
+  if (messages.noInput?.base) textsByStepType.noInput = messages.noInput.base;
+  if (messages.confirm?.base) textsByStepType.confirmation = messages.confirm.base;
+  if (messages.notConfirmed?.base) textsByStepType.notConfirmed = messages.notConfirmed.base;
+  if (messages.violation?.base) textsByStepType.violation = messages.violation.base;
+  if (messages.disambiguation?.base) textsByStepType.disambiguation = messages.disambiguation.base;
+  if (messages.success?.base) textsByStepType.success = messages.success.base;
+
+  // Associa testi ai GUID
+  Object.entries(structure.steps).forEach(([stepType, { guids }]) => {
+    const texts = textsByStepType[stepType] || [];
+
+    if (texts.length !== guids.length) {
+      console.warn(`[associateTextsToStructure] Mismatch for ${stepType}: ${texts.length} texts but ${guids.length} GUIDs`, {
+        nodeId,
+        stepType,
+        textsCount: texts.length,
+        guidsCount: guids.length
+      });
+    }
+
+    // Associa ogni testo al suo GUID
+    guids.forEach((guid, index) => {
+      const text = texts[index];
+      if (text) {
+        addTranslationFn(guid, text);
+      } else {
+        console.warn(`[associateTextsToStructure] Missing text for GUID ${guid} at index ${index}`, {
+          nodeId,
+          stepType,
+          index
+        });
+      }
+    });
+  });
+}
+
+/**
+ * ✅ FASE 1: Crea struttura deterministica completa per un nodo
+ * Crea step/escalation/GUID senza testi (deterministico)
+ *
+ * @deprecated Usa createTemplateStructure() - questo è un alias per compatibilità
+ */
+export function createNodeStructure(node: WizardTaskTreeNode): NodeStructure {
+  return createTemplateStructure(node);
+}
+
+/**
+ * ✅ FASE 1: Crea struttura deterministica completa per un nodo
+ * Crea step/escalation/GUID senza testi (deterministico)
+ * Questa è la funzione principale - crea TUTTO: escalation, messageMatrix, GUID
+ */
+export function createTemplateStructure(node: WizardTaskTreeNode): NodeStructure {
+  // Configurazione deterministica: quanti messaggi per ogni stepType
+  const stepConfig: Record<string, number> = {
+    start: 1,           // 1 messaggio iniziale
+    noMatch: 3,         // 3 escalation
+    noInput: 3,         // 3 escalation
+    confirmation: 1,    // 1 messaggio di conferma
+    notConfirmed: 1,    // 1 messaggio
+    violation: 2,       // 2 messaggi
+    disambiguation: 1,  // 1 messaggio
+    success: 1,         // 1 messaggio
+  };
+
+  const steps: Record<string, { step: any; guids: string[] }> = {};
+  const messageMatrix: Array<{ guid: string; stepType: string; escalationIndex: number }> = [];
+
+  // Crea struttura per ogni stepType
+  Object.entries(stepConfig).forEach(([stepType, count]) => {
+    const { step, guids } = createStepStructure(stepType, count);
+    steps[stepType] = { step, guids };
+
+    // Aggiungi alla messageMatrix
+    guids.forEach((guid, index) => {
+      messageMatrix.push({
+        guid,
+        stepType,
+        escalationIndex: index,
+      });
+    });
+  });
+
+  return {
+    nodeId: node.id,
+    steps,
+    messageMatrix,
+  };
+}
+
+/**
  * Helper per creare uno step con escalations
  * Allineato con saveIntentMessages.ts per coerenza del modello dati
  * ✅ FASE 1.2: Passa addTranslation attraverso la catena
+ * ⚠️ DEPRECATED: Usa createStepStructure() per FASE 1
  *
  * LOG TRACING:
  * - Input: stepType, messages[], addTranslation callback
@@ -159,11 +365,31 @@ function createStepWithEscalations(
 }
 
 /**
+ * ✅ FASE 2: Converte struttura con testi associati in steps dictionary
+ * Usa la struttura già creata invece di creare nuove escalation
+ * Questa funzione usa i GUID già esistenti nella struttura (deterministici)
+ */
+export function convertStructureToStepsDictionary(
+  structure: NodeStructure,
+  templateId: string
+): Record<string, Record<string, any>> {
+  const stepRecord: Record<string, any> = {};
+
+  // Usa gli step dalla struttura (già hanno i GUID corretti)
+  Object.entries(structure.steps).forEach(([stepType, { step }]) => {
+    stepRecord[stepType] = step;
+  });
+
+  return { [templateId]: stepRecord };
+}
+
+/**
  * Converts WizardStepMessages to steps dictionary format with escalations
  * Dictionary: { "templateId": { "start": { type: "start", escalations: [...] }, ... } }
  *
  * ALLINEATO con saveIntentMessages.ts per coerenza del modello dati
  * ✅ FASE 1.2: Passa addTranslation attraverso la catena
+ * ⚠️ DEPRECATED: Usa convertStructureToStepsDictionary() per nuova implementazione
  *
  * LOG TRACING:
  * - Input: messages (WizardStepMessages), templateId, addTranslation callback
@@ -174,6 +400,15 @@ function convertMessagesToStepsDictionary(
   templateId: string,
   addTranslation?: (guid: string, text: string) => void
 ): Record<string, Record<string, any>> {
+  // ✅ EVENT-DRIVEN: Set current template ID for translation tracking
+  if (typeof window !== 'undefined' && (window as any).__projectTranslationsContext) {
+    const ctx = (window as any).__projectTranslationsContext;
+    if (ctx.setCurrentTemplateId) {
+      ctx.setCurrentTemplateId(templateId);
+      console.log('[convertMessagesToStepsDictionary] 📌 Set current template ID for tracking', { templateId });
+    }
+  }
+
   const stepRecord: Record<string, any> = {};
 
   // Ask messages -> start step
@@ -213,6 +448,15 @@ function convertMessagesToStepsDictionary(
 
   const result = { [templateId]: stepRecord };
 
+  // ✅ EVENT-DRIVEN: Clear current template ID after template creation
+  if (typeof window !== 'undefined' && (window as any).__projectTranslationsContext) {
+    const ctx = (window as any).__projectTranslationsContext;
+    if (ctx.setCurrentTemplateId) {
+      ctx.setCurrentTemplateId(null);
+      console.log('[convertMessagesToStepsDictionary] 📌 Cleared current template ID', { templateId });
+    }
+  }
+
   return result;
 }
 
@@ -220,7 +464,89 @@ function convertMessagesToStepsDictionary(
 // No longer needed - node.dataContract is already DataContract (no conversion needed)
 
 /**
+ * ✅ FASE 2: Crea template da strutture già create (deterministico)
+ * Crea lo scheletro dei template con step/GUID (senza constraints/contracts/messaggi)
+ * Constraints e contracts verranno aggiunti dopo in-place
+ * Messaggi vanno solo in translations (usando GUID già esistenti)
+ *
+ * @param fakeTree - Structure generated by wizard (WizardTaskTreeNode[])
+ * @param nodeStructures - Map di nodeId -> NodeStructure (già creata in FASE 1)
+ * @param shouldBeGeneral - Flag indicating if template is generalizable
+ * @returns Map<nodeId, DialogueTask> - One template per node (solo struttura, senza constraints/contracts)
+ */
+export async function createTemplatesFromStructures(
+  fakeTree: WizardTaskTreeNode[],
+  nodeStructures: Map<string, NodeStructure>,
+  shouldBeGeneral: boolean = false
+): Promise<Map<string, DialogueTask>> {
+  const templates = new Map<string, DialogueTask>();
+
+  /**
+   * Recursive helper to create template for a node
+   */
+  const createTemplateForNode = async (node: WizardTaskTreeNode): Promise<DialogueTask> => {
+    const templateId = node.id;
+
+    // Get structure for this node
+    const structure = nodeStructures.get(node.id);
+    if (!structure) {
+      throw new Error(
+        `[createTemplatesFromStructures] CRITICAL: No structure found for node "${node.label}" (id: ${node.id})`
+      );
+    }
+
+    // Collect subTasksIds from children
+    const subTasksIds: string[] = [];
+    if (node.subNodes && node.subNodes.length > 0) {
+      for (const subNode of node.subNodes) {
+        const subTemplateId = subNode.id;
+        subTasksIds.push(subTemplateId);
+
+        // Create template for child (recursive)
+        if (!templates.has(subTemplateId)) {
+          const subTemplate = await createTemplateForNode(subNode);
+          templates.set(subTemplateId, subTemplate);
+        }
+      }
+    }
+
+    // ✅ Usa convertStructureToStepsDictionary (usa GUID già esistenti)
+    const steps = convertStructureToStepsDictionary(structure, templateId);
+
+    // Create template (SENZA constraints/contracts - verranno aggiunti dopo)
+    const template: DialogueTask = {
+      id: templateId,
+      _id: templateId,
+      templateId: null,
+      name: generalizeLabel(node.label).toLowerCase().replace(/\s+/g, '_'),
+      label: generalizeLabel(node.label),
+      type: TaskType.UtteranceInterpretation,
+      icon: node.emoji ? mapEmojiToIconName(node.emoji) : (node.icon || 'FileText'),
+      subTasksIds: subTasksIds.length > 0 ? subTasksIds : undefined,
+      steps: steps, // ✅ Usa struttura già creata (GUID deterministici)
+      // ❌ NO constraints/contracts qui - verranno aggiunti dopo in-place
+      shouldBeGeneral: shouldBeGeneral,
+    };
+
+    templates.set(templateId, template);
+    return template;
+  };
+
+  // Create template for each root node
+  for (const rootNode of fakeTree) {
+    if (!templates.has(rootNode.id)) {
+      await createTemplateForNode(rootNode);
+    }
+  }
+
+  return templates;
+}
+
+/**
  * Creates a template for each node in the wizard-generated structure
+ *
+ * ⚠️ DEPRECATED: Usa createTemplatesFromStructures() per nuova implementazione
+ * Questa funzione è mantenuta per compatibilità con codice legacy
  *
  * Each node gets its own template with:
  * - Generalized label
@@ -235,20 +561,20 @@ function convertMessagesToStepsDictionary(
  * @param shouldBeGeneral - Flag indicating if template is generalizable
  * @returns Map<nodeId, DialogueTask> - One template per node
  */
-export function createTemplatesFromWizardData(
+export async function createTemplatesFromWizardData(
   fakeTree: WizardTaskTreeNode[],
   messagesGeneralized: Map<string, WizardStepMessages>,
   constraintsMap: Map<string, WizardConstraint[]>,
   dataContractsMap: Map<string, DataContract>,
   shouldBeGeneral: boolean = false,
   addTranslation?: (guid: string, text: string) => void
-): Map<string, DialogueTask> {
+): Promise<Map<string, DialogueTask>> {
   const templates = new Map<string, DialogueTask>();
 
   /**
    * Recursive helper to create template for a node
    */
-  const createTemplateForNode = (node: WizardTaskTreeNode): DialogueTask => {
+  const createTemplateForNode = async (node: WizardTaskTreeNode): Promise<DialogueTask> => {
     // ✅ INVARIANT CHECK: node.id MUST equal node.templateId (single source of truth)
     if (node.id !== node.templateId) {
       throw new Error(
@@ -263,7 +589,8 @@ export function createTemplatesFromWizardData(
     // Collect subTasksIds from children
     const subTasksIds: string[] = [];
     if (node.subNodes && node.subNodes.length > 0) {
-      node.subNodes.forEach(subNode => {
+      // ✅ Use for...of instead of forEach to support await
+      for (const subNode of node.subNodes) {
         // ✅ INVARIANT CHECK: subNode.id MUST equal subNode.templateId
         if (subNode.id !== subNode.templateId) {
           throw new Error(
@@ -278,10 +605,10 @@ export function createTemplatesFromWizardData(
 
         // Create template for child (recursive)
         if (!templates.has(subTemplateId)) {
-          const subTemplate = createTemplateForNode(subNode);
+          const subTemplate = await createTemplateForNode(subNode);
           templates.set(subTemplateId, subTemplate);
         }
-      });
+      }
     }
 
     // ✅ Get messages for this specific node from the map
@@ -296,6 +623,9 @@ export function createTemplatesFromWizardData(
 
     // ✅ D2: Se arriviamo qui, nodeMessages esiste (garantito da verifiche upstream)
     const messagesToUse = nodeMessages;
+
+    // ✅ REMOVED: Translation tracking non più necessario
+    // Le traduzioni vengono già salvate in associateTextsToStructure durante la generazione
 
     // Convert generalized messages to steps dictionary (per-node messages)
     console.log('[createTemplatesFromWizardData] 🔍 Creating template', {
@@ -337,7 +667,7 @@ export function createTemplatesFromWizardData(
   };
 
   // Create template for each root node
-  fakeTree.forEach(rootNode => {
+  for (const rootNode of fakeTree) {
     // ✅ INVARIANT CHECK: rootNode.id MUST equal rootNode.templateId
     if (rootNode.id !== rootNode.templateId) {
       throw new Error(
@@ -350,9 +680,9 @@ export function createTemplatesFromWizardData(
     const rootTemplateId = rootNode.id;
 
     if (!templates.has(rootTemplateId)) {
-      createTemplateForNode(rootNode);
+      await createTemplateForNode(rootNode);
     }
-  });
+  }
 
   return templates;
 }
@@ -409,7 +739,7 @@ function convertContextualizedMessagesToSteps(
 /**
  * Builds TaskTreeNode[] from templates (for cloneTemplateSteps)
  */
-function buildNodesFromTemplates(
+export function buildNodesFromTemplates(
   rootTemplate: DialogueTask,
   allTemplates: Map<string, DialogueTask>
 ): TaskTreeNode[] {

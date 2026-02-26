@@ -25,10 +25,32 @@ function extractGuidsFromSteps(
 ): void {
   const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   let extractedCount = 0;
+  let debugInfo: any[] = [];
+
+  // ✅ DEBUG: Log structure of steps
+  console.log('[DDEBubbleChat] 🔍 DEBUG: steps structure:', {
+    hasSteps: !!steps,
+    stepsType: Array.isArray(steps) ? 'array' : 'object',
+    stepsKeys: Object.keys(steps),
+    stepsSample: Object.keys(steps).slice(0, 3).reduce((acc, key) => {
+      const stepValue = steps[key];
+      acc[key] = {
+        type: Array.isArray(stepValue) ? 'array' : 'object',
+        keys: Array.isArray(stepValue)
+          ? `array[${stepValue.length}]`
+          : Object.keys(stepValue || {}),
+        sample: JSON.stringify(stepValue).substring(0, 200)
+      };
+      return acc;
+    }, {} as any)
+  });
 
   // ✅ Formato: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
   for (const [templateId, stepDict] of Object.entries(steps)) {
-    if (!stepDict || typeof stepDict !== 'object') continue;
+    if (!stepDict || typeof stepDict !== 'object') {
+      debugInfo.push({ templateId, reason: 'stepDict is null or not object', stepDict });
+      continue;
+    }
 
     // ✅ Gestisci anche il caso legacy: stepDict potrebbe essere un array
     if (Array.isArray(stepDict)) {
@@ -44,11 +66,15 @@ function extractGuidsFromSteps(
                   if (textParam?.value && guidPattern.test(textParam.value)) {
                     guids.add(textParam.value);
                     extractedCount++;
+                    debugInfo.push({ templateId, source: 'array-step-parameter', guid: textParam.value });
+                  } else if (textParam?.value) {
+                    debugInfo.push({ templateId, source: 'array-step-parameter', value: textParam.value, isGuid: false });
                   }
                 }
                 if (taskItem.id && guidPattern.test(taskItem.id)) {
                   guids.add(taskItem.id);
                   extractedCount++;
+                  debugInfo.push({ templateId, source: 'array-step-taskId', guid: taskItem.id });
                 }
               }
             }
@@ -60,7 +86,10 @@ function extractGuidsFromSteps(
 
     // ✅ Itera su ogni tipo di step (start, noMatch, noInput, ecc.)
     for (const [stepType, step] of Object.entries(stepDict)) {
-      if (!step || typeof step !== 'object') continue;
+      if (!step || typeof step !== 'object') {
+        debugInfo.push({ templateId, stepType, reason: 'step is null or not object' });
+        continue;
+      }
 
       // ✅ Estrai GUID dalle escalation
       if (step.escalations && Array.isArray(step.escalations)) {
@@ -75,22 +104,46 @@ function extractGuidsFromSteps(
                 if (textParam?.value && guidPattern.test(textParam.value)) {
                   guids.add(textParam.value);
                   extractedCount++;
+                  debugInfo.push({ templateId, stepType, source: 'step-parameter', guid: textParam.value });
+                } else if (textParam?.value) {
+                  debugInfo.push({ templateId, stepType, source: 'step-parameter', value: textParam.value, isGuid: false });
+                } else if (textParam) {
+                  debugInfo.push({ templateId, stepType, source: 'step-parameter', textParam, hasValue: !!textParam.value });
                 }
+              } else {
+                debugInfo.push({ templateId, stepType, source: 'taskItem', hasParameters: !!taskItem.parameters, parametersType: Array.isArray(taskItem.parameters) ? 'array' : typeof taskItem.parameters });
               }
               // ✅ GUID da taskItem.id (se è un GUID)
               if (taskItem.id && guidPattern.test(taskItem.id)) {
                 guids.add(taskItem.id);
                 extractedCount++;
+                debugInfo.push({ templateId, stepType, source: 'taskId', guid: taskItem.id });
               }
             }
+          } else {
+            debugInfo.push({ templateId, stepType, source: 'escalation', hasTasks: !!escalation.tasks, tasksType: Array.isArray(escalation.tasks) ? 'array' : typeof escalation.tasks });
           }
         }
+      } else {
+        debugInfo.push({ templateId, stepType, source: 'step', hasEscalations: !!step.escalations, escalationsType: Array.isArray(step.escalations) ? 'array' : typeof step.escalations });
       }
     }
   }
 
+  console.log('[DDEBubbleChat] 🔍 DEBUG: extractGuidsFromSteps result:', {
+    extractedCount,
+    totalGuids: guids.size,
+    sampleGuids: Array.from(guids).slice(0, 10),
+    debugInfo: debugInfo.slice(0, 30) // First 30 debug entries
+  });
+
   if (extractedCount > 0) {
     console.log(`[extractGuidsFromSteps] ✅ Extracted ${extractedCount} GUIDs from steps`);
+  } else {
+    console.warn(`[extractGuidsFromSteps] ⚠️ No GUIDs extracted from steps`, {
+      stepsKeys: Object.keys(steps),
+      debugInfo: debugInfo.slice(0, 20)
+    });
   }
 }
 
@@ -331,6 +384,12 @@ export default function DDEBubbleChat({
           // Extract GUIDs from TaskTree.steps
           if (taskTree.steps && typeof taskTree.steps === 'object') {
             extractGuidsFromSteps(taskTree.steps, runtimeGuids);
+          } else {
+            console.warn('[DDEBubbleChat] ⚠️ taskTree.steps is missing or invalid:', {
+              hasTaskTree: !!taskTree,
+              hasSteps: !!(taskTree?.steps),
+              stepsType: taskTree?.steps ? (Array.isArray(taskTree.steps) ? 'array' : typeof taskTree.steps) : 'undefined'
+            });
           }
 
           // Filter translations: only GUIDs referenced in steps
@@ -346,6 +405,13 @@ export default function DDEBubbleChat({
             }
           }
 
+          // ✅ DEBUG: Also check if GUIDs from translations match extracted GUIDs
+          const allTranslationGuids = Object.keys(allTranslations).filter(guid =>
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)
+          );
+          const matchingGuids = allTranslationGuids.filter(guid => runtimeGuids.has(guid));
+          const missingGuids = allTranslationGuids.filter(guid => !runtimeGuids.has(guid));
+
           console.log('[DDEBubbleChat] 🚀 Starting TypeScript engine (MVP - PASSO 1)', {
             taskId: task.id,
             hasTaskTree: !!taskTree,
@@ -354,6 +420,16 @@ export default function DDEBubbleChat({
             runtimeTranslationsCount: Object.keys(runtimeTranslations).length,
             sampleGuids: Array.from(runtimeGuids).slice(0, 5),
             hasRuntimeTranslations: Object.keys(runtimeTranslations).length > 0
+          });
+
+          console.log('[DDEBubbleChat] 🔍 DEBUG: GUID matching analysis:', {
+            extractedRuntimeGuids: runtimeGuids.size,
+            allTranslationGuids: allTranslationGuids.length,
+            matchingGuids: matchingGuids.length,
+            missingGuids: missingGuids.length,
+            sampleMissingGuids: missingGuids.slice(0, 10),
+            sampleMatchingGuids: matchingGuids.slice(0, 10),
+            sampleExtractedGuids: Array.from(runtimeGuids).slice(0, 10)
           });
 
           if (Object.keys(runtimeTranslations).length === 0) {
@@ -1515,17 +1591,44 @@ export default function DDEBubbleChat({
     // ✅ NEW: TypeScript engine - resolve pending retrieve event
     if (engineType === 'typescript') {
       try {
-        console.log('[DDEBubbleChat] 📤 TypeScript engine: processing input:', trimmed);
+        console.log('[DDEBubbleChat] 📤 TypeScript engine: processing input:', {
+          trimmed,
+          trimmedLength: trimmed.length,
+          isEmpty: !trimmed,
+          hasPendingEvent: !!(window as any).__pendingRetrieveEvent
+        });
 
         // Check if there's a pending retrieve event
         const pendingEvent = (window as any).__pendingRetrieveEvent;
         if (pendingEvent && pendingEvent.resolve) {
+          console.log('[DDEBubbleChat] ✅ Found pending retrieve event, resolving with match:', {
+            nodeId: pendingEvent.nodeId,
+            value: trimmed,
+            valueType: typeof trimmed,
+            valueLength: trimmed.length,
+            valueTruthy: !!trimmed
+          });
+
           // Resolve the pending event with user input
-          pendingEvent.resolve({ type: 'match', value: trimmed });
+          const eventToResolve = { type: 'match' as const, value: trimmed };
+          console.log('[DDEBubbleChat] 🔍 Resolving event:', {
+            type: eventToResolve.type,
+            hasValue: 'value' in eventToResolve,
+            value: eventToResolve.value,
+            valueType: typeof eventToResolve.value
+          });
+
+          pendingEvent.resolve(eventToResolve);
+
+          console.log('[DDEBubbleChat] ✅ Retrieve event resolved, cleaning up');
           delete (window as any).__pendingRetrieveEvent;
           setIsWaitingForInput(false);
         } else {
-          console.warn('[DDEBubbleChat] ⚠️ No pending retrieve event, engine may not be running');
+          console.warn('[DDEBubbleChat] ⚠️ No pending retrieve event, engine may not be running', {
+            hasPendingEvent: !!pendingEvent,
+            hasResolve: !!(pendingEvent?.resolve),
+            pendingEventKeys: pendingEvent ? Object.keys(pendingEvent) : []
+          });
           setIsWaitingForInput(true);
         }
       } catch (error) {

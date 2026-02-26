@@ -274,11 +274,36 @@ export function useResponseEditorToolbar({
       // Extract GUIDs from TaskTree.steps
       const runtimeGuids = new Set<string>();
       if (taskTree?.steps && typeof taskTree.steps === 'object') {
+        // ✅ DEBUG: Log structure of taskTree.steps
+        console.log('[Toolbar] 🔍 DEBUG: taskTree.steps structure:', {
+          hasSteps: !!taskTree.steps,
+          stepsType: Array.isArray(taskTree.steps) ? 'array' : 'object',
+          stepsKeys: Object.keys(taskTree.steps),
+          stepsSample: Object.keys(taskTree.steps).slice(0, 3).reduce((acc, key) => {
+            const stepValue = taskTree.steps[key];
+            acc[key] = {
+              type: Array.isArray(stepValue) ? 'array' : 'object',
+              keys: Array.isArray(stepValue)
+                ? `array[${stepValue.length}]`
+                : Object.keys(stepValue || {}),
+              sample: JSON.stringify(stepValue).substring(0, 200)
+            };
+            return acc;
+          }, {} as any)
+        });
+
         // Import extractGuidsFromSteps function (same logic as DDEBubbleChat)
         const extractGuidsFromSteps = (steps: Record<string, any>, guids: Set<string>) => {
           const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          let extractedCount = 0;
+          let debugInfo: any[] = [];
+
           for (const [templateId, stepDict] of Object.entries(steps)) {
-            if (!stepDict || typeof stepDict !== 'object') continue;
+            if (!stepDict || typeof stepDict !== 'object') {
+              debugInfo.push({ templateId, reason: 'stepDict is null or not object', stepDict });
+              continue;
+            }
+
             if (Array.isArray(stepDict)) {
               for (const step of stepDict) {
                 if (step?.escalations && Array.isArray(step.escalations)) {
@@ -291,10 +316,16 @@ export function useResponseEditorToolbar({
                           );
                           if (textParam?.value && guidPattern.test(textParam.value)) {
                             guids.add(textParam.value);
+                            extractedCount++;
+                            debugInfo.push({ templateId, source: 'array-step-parameter', guid: textParam.value });
+                          } else if (textParam?.value) {
+                            debugInfo.push({ templateId, source: 'array-step-parameter', value: textParam.value, isGuid: false });
                           }
                         }
                         if (taskItem.id && guidPattern.test(taskItem.id)) {
                           guids.add(taskItem.id);
+                          extractedCount++;
+                          debugInfo.push({ templateId, source: 'array-step-taskId', guid: taskItem.id });
                         }
                       }
                     }
@@ -303,8 +334,13 @@ export function useResponseEditorToolbar({
               }
               continue;
             }
+
             for (const [stepType, step] of Object.entries(stepDict)) {
-              if (!step || typeof step !== 'object') continue;
+              if (!step || typeof step !== 'object') {
+                debugInfo.push({ templateId, stepType, reason: 'step is null or not object' });
+                continue;
+              }
+
               if (step.escalations && Array.isArray(step.escalations)) {
                 for (const escalation of step.escalations) {
                   if (escalation.tasks && Array.isArray(escalation.tasks)) {
@@ -315,20 +351,64 @@ export function useResponseEditorToolbar({
                         );
                         if (textParam?.value && guidPattern.test(textParam.value)) {
                           guids.add(textParam.value);
+                          extractedCount++;
+                          debugInfo.push({ templateId, stepType, source: 'step-parameter', guid: textParam.value });
+                        } else if (textParam?.value) {
+                          debugInfo.push({ templateId, stepType, source: 'step-parameter', value: textParam.value, isGuid: false });
+                        } else if (textParam) {
+                          debugInfo.push({ templateId, stepType, source: 'step-parameter', textParam, hasValue: !!textParam.value });
                         }
+                      } else {
+                        debugInfo.push({ templateId, stepType, source: 'taskItem', hasParameters: !!taskItem.parameters, parametersType: Array.isArray(taskItem.parameters) ? 'array' : typeof taskItem.parameters });
                       }
                       if (taskItem.id && guidPattern.test(taskItem.id)) {
                         guids.add(taskItem.id);
+                        extractedCount++;
+                        debugInfo.push({ templateId, stepType, source: 'taskId', guid: taskItem.id });
                       }
                     }
+                  } else {
+                    debugInfo.push({ templateId, stepType, source: 'escalation', hasTasks: !!escalation.tasks, tasksType: Array.isArray(escalation.tasks) ? 'array' : typeof escalation.tasks });
                   }
                 }
+              } else {
+                debugInfo.push({ templateId, stepType, source: 'step', hasEscalations: !!step.escalations, escalationsType: Array.isArray(step.escalations) ? 'array' : typeof step.escalations });
               }
             }
           }
+
+          console.log('[Toolbar] 🔍 DEBUG: extractGuidsFromSteps result:', {
+            extractedCount,
+            totalGuids: guids.size,
+            sampleGuids: Array.from(guids).slice(0, 10),
+            debugInfo: debugInfo.slice(0, 20) // First 20 debug entries
+          });
         };
+
         extractGuidsFromSteps(taskTree.steps, runtimeGuids);
+      } else {
+        console.warn('[Toolbar] ⚠️ taskTree.steps is missing or invalid:', {
+          hasTaskTree: !!taskTree,
+          hasSteps: !!(taskTree?.steps),
+          stepsType: taskTree?.steps ? (Array.isArray(taskTree.steps) ? 'array' : typeof taskTree.steps) : 'undefined'
+        });
       }
+
+      // ✅ DEBUG: Also check if GUIDs from translations match extracted GUIDs
+      const allTranslationGuids = Object.keys(allTranslations).filter(guid =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)
+      );
+      const matchingGuids = allTranslationGuids.filter(guid => runtimeGuids.has(guid));
+      const missingGuids = allTranslationGuids.filter(guid => !runtimeGuids.has(guid));
+
+      console.log('[Toolbar] 🔍 DEBUG: GUID matching analysis:', {
+        extractedRuntimeGuids: runtimeGuids.size,
+        allTranslationGuids: allTranslationGuids.length,
+        matchingGuids: matchingGuids.length,
+        missingGuids: missingGuids.length,
+        sampleMissingGuids: missingGuids.slice(0, 10),
+        sampleMatchingGuids: matchingGuids.slice(0, 10)
+      });
 
       // Filter translations: only GUIDs referenced in steps + runtime.* keys
       const runtimeTranslations: Record<string, string> = {};

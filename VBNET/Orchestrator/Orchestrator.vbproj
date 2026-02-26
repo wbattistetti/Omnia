@@ -46,6 +46,7 @@
     <Compile Include="TaskEngine\TaskEngineCallbacks.vb" />
     <Compile Include="TaskEngine\TaskEngineStateStorage.vb" />
     <Compile Include="TaskEngine\TaskEngine.vb" />
+    <Compile Include="TaskEngine\ProcessTurnEngine.vb" />
   </ItemGroup>
 
 </Project>

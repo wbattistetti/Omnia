@@ -178,13 +178,14 @@ async function startPythonService() {
 
   // Attendi che il processo sia avviato (uvicorn con --reload avvia prima un reloader)
   // Serve più tempo per permettere al reloader di avviare il processo principale
-  // Uvicorn con --reload: reloader process → main process (può richiedere 5-8 secondi)
+  // Uvicorn con --reload: reloader process → main process (può richiedere 8-12 secondi)
   console.log('[Python Service] ⏳ Waiting for uvicorn reloader to start main process...');
   console.log('[Python Service] ℹ️  Note: With --reload, uvicorn starts a reloader process first, then the main process');
-  console.log('[Python Service] ℹ️  This can take 5-8 seconds. Please wait...');
+  console.log('[Python Service] ℹ️  This can take 8-12 seconds. Please wait...');
 
-  // Attendi 6 secondi per permettere al reloader di avviare completamente il processo principale
-  await new Promise((resolve) => setTimeout(resolve, 6000));
+  // Attendi 10 secondi per permettere al reloader di avviare completamente il processo principale
+  // Aumentato da 6 a 10 secondi per gestire meglio i casi con dipendenze pesanti
+  await new Promise((resolve) => setTimeout(resolve, 10000));
 
   // Verifica che il processo sia ancora in esecuzione
   if (pythonProcess.killed) {

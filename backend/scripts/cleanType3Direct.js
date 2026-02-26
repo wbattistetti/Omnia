@@ -19,6 +19,7 @@ async function cleanAllType3TasksAndEmbeddings() {
     const factoryDb = client.db(dbFactory);
     const tasksCollection = factoryDb.collection('tasks');
     const embeddingsCollection = factoryDb.collection('embeddings');
+    const translationsCollection = factoryDb.collection('Translations');
 
     // 1. Trova tutti i task con type === 3
     console.log('🔍 Ricerca task di tipo 3...');
@@ -51,7 +52,17 @@ async function cleanAllType3TasksAndEmbeddings() {
       id: { $in: taskIds },
       type: 'task'
     }).toArray();
-    console.log(`📋 Trovati ${correspondingEmbeddings.length} embedding corrispondenti\n`);
+    console.log(`📋 Trovati ${correspondingEmbeddings.length} embedding corrispondenti`);
+
+    // 4. Trova traduzioni corrispondenti (GUID che corrispondono agli ID dei task)
+    const correspondingTranslations = await translationsCollection.find({
+      guid: { $in: taskIds },
+      $or: [
+        { projectId: null },
+        { projectId: { $exists: false } }
+      ]
+    }).toArray();
+    console.log(`📋 Trovate ${correspondingTranslations.length} traduzioni corrispondenti\n`);
 
     // 4. Cancella i task
     console.log('🗑️  Cancellazione task di tipo 3...');
@@ -68,15 +79,36 @@ async function cleanAllType3TasksAndEmbeddings() {
       console.log(`✅ Cancellati ${deleteEmbeddingsResult.deletedCount} embedding`);
     }
 
-    // 6. Verifica finale
+    // 6. Cancella le traduzioni
+    if (correspondingTranslations.length > 0) {
+      console.log('🗑️  Cancellazione traduzioni...');
+      const deleteTranslationsResult = await translationsCollection.deleteMany({
+        guid: { $in: taskIds },
+        $or: [
+          { projectId: null },
+          { projectId: { $exists: false } }
+        ]
+      });
+      console.log(`✅ Cancellate ${deleteTranslationsResult.deletedCount} traduzioni`);
+    }
+
+    // 7. Verifica finale
     const remainingTasks = await tasksCollection.countDocuments({ type: 3 });
     const remainingEmbeddings = await embeddingsCollection.countDocuments({ type: 'task' });
+    const remainingTranslations = await translationsCollection.countDocuments({
+      guid: { $in: taskIds },
+      $or: [
+        { projectId: null },
+        { projectId: { $exists: false } }
+      ]
+    });
 
     console.log(`\n📊 Verifica finale:`);
     console.log(`   Task di tipo 3 rimasti: ${remainingTasks}`);
     console.log(`   Embedding di tipo 'task' rimasti: ${remainingEmbeddings}`);
+    console.log(`   Traduzioni rimaste: ${remainingTranslations}`);
 
-    if (remainingTasks === 0 && remainingEmbeddings === 0) {
+    if (remainingTasks === 0 && remainingEmbeddings === 0 && remainingTranslations === 0) {
       console.log('\n✅ Pulizia completata con successo!');
     }
 

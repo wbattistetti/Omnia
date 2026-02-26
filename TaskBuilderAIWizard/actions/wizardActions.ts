@@ -495,11 +495,27 @@ export async function runParallelGeneration(
   // Add all engine promises to allPromises
   allPromises.push(...enginePromises);
 
-  // Messages
+  // ✅ FASE 1: Crea strutture deterministiche per tutti i nodi (senza testi)
+  const { createNodeStructure, associateTextsToStructure } = await import('../services/TemplateCreationService');
+  const nodeStructures = new Map<string, any>();
   allTasks.forEach(task => {
+    const structure = createNodeStructure(task);
+    nodeStructures.set(task.id, structure);
+  });
+
+  // ✅ FASE 2: Genera messaggi (1 chiamata AI per nodo)
+  const { generateAllMessagesForNode } = await import('../api/wizardApi');
+
+  allTasks.forEach(task => {
+    const structure = nodeStructures.get(task.id);
+    if (!structure) {
+      console.error(`[wizardActions] No structure found for task ${task.id}`);
+      return;
+    }
+
     allPromises.push(
-      generateMessages([task], locale)
-        .then(messages => {
+      generateAllMessagesForNode(task, structure, locale)
+        .then(async (messages) => {
           // Save messages BEFORE incrementing counter
           const messagesToUse = store.shouldBeGeneral && store.messagesGeneralized.size > 0
             ? store.messagesGeneralized
@@ -511,6 +527,13 @@ export async function runParallelGeneration(
           } else {
             store.setMessages(task.id, messages);
           }
+
+          // ✅ Associa testi ai GUID esistenti nella struttura
+          // Recupera addTranslation dal window context se disponibile
+          const addTranslation = typeof window !== 'undefined' && (window as any).__projectTranslationsContext
+            ? (window as any).__projectTranslationsContext.addTranslation
+            : undefined;
+          associateTextsToStructure(structure, messages, task.id, addTranslation);
 
           store.updateTaskPipelineStatus(task.id, 'messages', 'completed');
           // ✅ updatePhaseProgress already calls onPhaseComplete

@@ -548,6 +548,24 @@ Public Class SessionManager
     End Sub
 
     ''' <summary>
+    ''' ✅ STATELESS: Restituisce DialogRepository (per ProcessTurn)
+    ''' </summary>
+    Public Shared Function GetDialogRepository() As ApiServer.Repositories.IDialogRepository
+        SyncLock _lock
+            Return _dialogRepository
+        End SyncLock
+    End Function
+
+    ''' <summary>
+    ''' ✅ STATELESS: Restituisce TranslationRepository (per ProcessTurn)
+    ''' </summary>
+    Public Shared Function GetTranslationRepository() As ApiServer.Repositories.ITranslationRepository
+        SyncLock _lock
+            Return _translationRepository
+        End SyncLock
+    End Function
+
+    ''' <summary>
     ''' ✅ STATELESS: Risolve una traduzione dal TranslationRepository
     ''' Usato da MessageTask per risolvere textKey → testo
     ''' </summary>

@@ -173,8 +173,12 @@ export async function generateStructure(
 
 /**
  * Convert WizardTaskTreeNode to SemanticContract format
+ * This is a fallback function used when contracts are not yet available in SemanticContractService
+ * NOTE: With the architectural fix, contracts should always be generated before this is needed
  */
 export function buildContractFromNode(node: WizardTaskTreeNode): any {
+  const hasSubNodes = node.subNodes && node.subNodes.length > 0;
+
   return {
     entity: {
       label: node.label,
@@ -185,6 +189,22 @@ export function buildContractFromNode(node: WizardTaskTreeNode): any {
       label: subNode.label,
       kind: subNode.type || 'string',
       id: subNode.id
+    })) || [],
+    // ✅ FIX: Add outputCanonical to match SemanticContract structure (fallback safety)
+    outputCanonical: {
+      format: hasSubNodes ? 'object' as const : 'value' as const,
+      keys: hasSubNodes ? node.subNodes!.map(subNode => subNode.id) : undefined
+    },
+    // ✅ FIX: Add subentities/subgroups for compatibility with getEngineInstructions
+    subentities: node.subNodes?.map(subNode => ({
+      label: subNode.label,
+      subTaskKey: subNode.id,
+      kind: subNode.type || 'string'
+    })) || [],
+    subgroups: node.subNodes?.map(subNode => ({
+      label: subNode.label,
+      subTaskKey: subNode.id,
+      kind: subNode.type || 'string'
     })) || []
   };
 }
@@ -326,7 +346,119 @@ const STEP_TYPES = [
 ] as const;
 
 /**
+ * ✅ FASE 2: Genera TUTTI i messaggi per un nodo in una sola chiamata AI
+ * Sostituisce generateMessages che faceva 8 chiamate separate
+ *
+ * @param node Nodo per cui generare i messaggi
+ * @param structure Struttura del nodo con GUID già generati
+ * @param locale Locale code (default: 'it')
+ * @returns Promise<WizardStepMessages> con messaggi per tutti gli step
+ */
+export async function generateAllMessagesForNode(
+  node: WizardTaskTreeNode,
+  structure: { messageMatrix: Array<{ guid: string; stepType: string; escalationIndex: number }> },
+  locale: string = 'it'
+): Promise<WizardStepMessages> {
+  try {
+    const provider = localStorage.getItem('omnia.aiProvider') || 'openai';
+    const model = localStorage.getItem('omnia.aiModel') || undefined;
+    const contract = buildContractFromNode(node);
+
+    // ✅ UNA chiamata per questo nodo (tutti gli stepType insieme)
+    const response = await fetch('/api/nlp/generate-node-messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nodeId: node.id,
+        nodeLabel: node.label,
+        contract,
+        messageMatrix: structure.messageMatrix,
+        locale,
+        provider,
+        model
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to generate messages for node ${node.id}: ${response.status} ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.success || !data.messages) {
+      throw new Error(`AI generation failed for node ${node.id}: ${data.error || 'No messages returned'}`);
+    }
+
+    // ✅ Converti mappa GUID->testo in WizardStepMessages
+    return convertGuidMapToWizardStepMessages(data.messages, structure.messageMatrix);
+
+  } catch (error) {
+    console.error(`[generateAllMessagesForNode] Error for node "${node.label}" (${node.id}):`, error);
+    throw error;
+  }
+}
+
+/**
+ * ✅ Converte mappa GUID->testo in WizardStepMessages
+ */
+function convertGuidMapToWizardStepMessages(
+  guidMap: Record<string, string>,
+  messageMatrix: Array<{ guid: string; stepType: string; escalationIndex: number }>
+): WizardStepMessages {
+  const result: WizardStepMessages = {
+    ask: { base: [] },
+    confirm: { base: [] },
+    notConfirmed: { base: [] },
+    violation: { base: [] },
+    disambiguation: { base: [], options: [] },
+    success: { base: [] }
+  };
+
+  // Raggruppa per stepType
+  const messagesByStepType: Record<string, string[]> = {};
+  messageMatrix.forEach(({ guid, stepType }) => {
+    if (!messagesByStepType[stepType]) {
+      messagesByStepType[stepType] = [];
+    }
+    const text = guidMap[guid];
+    if (text) {
+      messagesByStepType[stepType].push(text);
+    }
+  });
+
+  // Mappa stepType a WizardStepMessages
+  if (messagesByStepType.start) {
+    result.ask.base = messagesByStepType.start;
+  }
+  if (messagesByStepType.noMatch) {
+    result.ask.reask = messagesByStepType.noMatch;
+  }
+  if (messagesByStepType.noInput) {
+    result.noInput = { base: messagesByStepType.noInput };
+  }
+  if (messagesByStepType.confirmation) {
+    result.confirm = { base: messagesByStepType.confirmation };
+  }
+  if (messagesByStepType.notConfirmed) {
+    result.notConfirmed = { base: messagesByStepType.notConfirmed };
+  }
+  if (messagesByStepType.violation) {
+    result.violation = { base: messagesByStepType.violation };
+  }
+  if (messagesByStepType.disambiguation) {
+    result.disambiguation = { base: messagesByStepType.disambiguation };
+  }
+  if (messagesByStepType.success) {
+    result.success = { base: messagesByStepType.success };
+  }
+
+  return result;
+}
+
+/**
  * ✅ RINOMINATO: generateMessages (era fakeGenerateMessages)
+ * ⚠️ DEPRECATED: Usa generateAllMessagesForNode() per nuova implementazione
  * ✅ NUOVO: Fa 8 chiamate API separate, una per ogni step type
  *
  * @param schema Array di WizardTaskTreeNode

@@ -103,6 +103,12 @@ Namespace ApiServer.Handlers
         ''' </summary>
         Public Async Function HandleTaskSessionStart(context As HttpContext) As Task(Of IResult)
             Try
+                Console.WriteLine("")
+                Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                Console.WriteLine("🚀 AVVIO TEST - ProcessTurn Implementation")
+                Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                Console.WriteLine("")
+
                 Dim parseResult As (Success As Boolean, Request As TaskSessionStartRequest, ErrorMessage As String) = Nothing
 
                 Try
@@ -145,29 +151,74 @@ Namespace ApiServer.Handlers
                     Return ResponseHelpers.CreateErrorResponse("Locale is required and cannot be empty.", 400)
                 End If
 
-                ' ✅ STATELESS: STEP 2: Carica dialogo da DialogRepository
-                Dim dialogRepository = New ApiServer.Repositories.RedisDialogRepository(
-                    Program.GetRedisConnectionString(),
-                    Program.GetRedisKeyPrefix()
-                )
+                ' ✅ PASSO 1: Carica DialogRepository
+                Console.WriteLine("📋 PASSO 1: Carica DialogRepository...")
+                Dim dialogRepository = SessionManager.GetDialogRepository()
+                If dialogRepository Is Nothing Then
+                    Console.WriteLine("   ❌ ERRORE: DialogRepository non disponibile")
+                    Console.WriteLine("   📝 DA FARE: Verificare che SessionManager.GetDialogRepository() restituisca il repository")
+                    Console.WriteLine("")
+                    Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                    Console.WriteLine("❌ ERRORE: DialogRepository non disponibile")
+                    Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                    Console.WriteLine("")
+                    Return ResponseHelpers.CreateErrorResponse("DialogRepository not available", 500)
+                End If
+                Console.WriteLine("   ✅ DialogRepository caricato")
+                Console.WriteLine("")
 
+                ' ✅ PASSO 2: Carica dialogo da DialogRepository
+                Console.WriteLine("📋 PASSO 2: Carica dialogo da DialogRepository...")
                 Dim runtimeTask = dialogRepository.GetDialog(projectId, dialogVersion)
 
                 If runtimeTask Is Nothing Then
+                    Console.WriteLine($"   ❌ ERRORE: Dialog non trovato: ProjectId={projectId}, Version={dialogVersion}")
+                    Console.WriteLine("")
+                    Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                    Console.WriteLine("❌ ERRORE: Dialog non trovato")
+                    Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                    Console.WriteLine("")
                     Return ResponseHelpers.CreateErrorResponse(
                         $"Dialog not found for projectId '{projectId}' and version '{dialogVersion}'. Please ensure the dialog is compiled and saved to the repository using POST /api/runtime/dialog/save.",
                         404
                     )
                 End If
+                Console.WriteLine($"   ✅ Dialog caricato: Id={runtimeTask.Id}")
+                Console.WriteLine("")
+
+                ' ✅ PASSO 3: Verifica che sia CompiledUtteranceTask
+                Console.WriteLine("📋 PASSO 3: Verifica che sia CompiledUtteranceTask...")
+                Dim compiledTask = TryCast(runtimeTask, Compiler.CompiledUtteranceTask)
+                If compiledTask Is Nothing Then
+                    Console.WriteLine($"   ❌ ERRORE: Task non è CompiledUtteranceTask")
+                    Console.WriteLine("")
+                    Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                    Console.WriteLine("❌ ERRORE: Task non è CompiledUtteranceTask")
+                    Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                    Console.WriteLine("")
+                    Return ResponseHelpers.CreateErrorResponse("Task is not CompiledUtteranceTask", 400)
+                End If
+                Console.WriteLine($"   ✅ Task è CompiledUtteranceTask: Steps={If(compiledTask.Steps IsNot Nothing, compiledTask.Steps.Count, 0)}")
+                Console.WriteLine("")
+
+                ' ✅ PASSO 4: Carica TranslationRepository
+                Console.WriteLine("📋 PASSO 4: Carica TranslationRepository...")
+                Dim translationRepository = SessionManager.GetTranslationRepository()
+                If translationRepository Is Nothing Then
+                    Console.WriteLine("   ❌ ERRORE: TranslationRepository non disponibile")
+                    Console.WriteLine("   📝 DA FARE: Verificare che SessionManager.GetTranslationRepository() restituisca il repository")
+                    Console.WriteLine("")
+                    Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                    Console.WriteLine("❌ ERRORE: TranslationRepository non disponibile")
+                    Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                    Console.WriteLine("")
+                    Return ResponseHelpers.CreateErrorResponse("TranslationRepository not available", 500)
+                End If
+                Console.WriteLine("   ✅ TranslationRepository caricato")
+                Console.WriteLine("")
 
                 ' ✅ STATELESS: STEP 3: Estrai textKeys dal dialogo
                 Dim textKeys = SessionManager.ExtractTextKeysFromRuntimeTask(runtimeTask)
-
-                ' ✅ STATELESS: STEP 4: Valida che tutte le traduzioni esistano in TranslationRepository
-                Dim translationRepository = New ApiServer.Repositories.RedisTranslationRepository(
-                    Program.GetRedisConnectionString(),
-                    Program.GetRedisKeyPrefix()
-                )
 
                 If textKeys IsNot Nothing AndAlso textKeys.Count > 0 Then
                     Dim missingKeys As New List(Of String)()
@@ -186,8 +237,27 @@ Namespace ApiServer.Handlers
                     End If
                 End If
 
-                ' ✅ STATELESS: STEP 5: Crea sessione con solo stato runtime
+                ' ✅ PASSO 5: Crea sessione
+                Console.WriteLine("📋 PASSO 5: Creazione sessione...")
                 Dim newSessionId = CreateTaskSession(projectId, dialogVersion, locale)
+                Console.WriteLine($"   ✅ Sessione creata: {newSessionId}")
+                Console.WriteLine("")
+
+                ' ✅ PASSO 6: Verifica salvataggio sessione su Redis
+                Console.WriteLine("📋 PASSO 6: Verifica salvataggio sessione su Redis...")
+                Try
+                    Dim testSession = SessionManager.GetTaskSession(newSessionId)
+                    If testSession IsNot Nothing Then
+                        Console.WriteLine($"   ✅ Sessione caricata da Redis: {testSession.SessionId}")
+                    Else
+                        Console.WriteLine($"   ❌ ERRORE: Sessione non trovata in Redis dopo creazione")
+                        Return ResponseHelpers.CreateErrorResponse("Session not found in Redis after creation", 500)
+                    End If
+                Catch ex As Exception
+                    Console.WriteLine($"   ❌ ERRORE caricamento sessione: {ex.Message}")
+                    Return ResponseHelpers.CreateErrorResponse($"Failed to load session: {ex.Message}", 500)
+                End Try
+                Console.WriteLine("")
 
                 LogInfo("Task session created", New With {
                     .sessionId = newSessionId,
@@ -196,10 +266,105 @@ Namespace ApiServer.Handlers
                     .locale = locale
                 })
 
-                ' ✅ STEP 6: Compila RuntimeTask in CompiledUtteranceTask
-                Dim compiledTask = ConvertRuntimeTaskToCompiled(runtimeTask)
+                ' ✅ PASSO 7: Carica/Crea DialogueState
+                Console.WriteLine("📋 PASSO 7: Carica/Crea DialogueState...")
+                Dim session = SessionManager.GetTaskSession(newSessionId)
+                Dim dialogueState As TaskEngine.DialogueState = Nothing
+                Try
+                    Dim dialogueContext = SessionManager.GetOrCreateDialogueContext(session)
+                    If dialogueContext IsNot Nothing AndAlso dialogueContext.DialogueState IsNot Nothing Then
+                        dialogueState = dialogueContext.DialogueState
+                        Console.WriteLine($"   ✅ DialogueState caricato da sessione: TurnState={dialogueState.TurnState}")
+                    Else
+                        dialogueState = New TaskEngine.DialogueState()
+                        Console.WriteLine($"   ✅ DialogueState creato nuovo: TurnState={dialogueState.TurnState}")
+                    End If
+                Catch ex As Exception
+                    Console.WriteLine($"   ✅ DialogueState creato nuovo (eccezione normale: {ex.Message})")
+                    dialogueState = New TaskEngine.DialogueState()
+                End Try
+                Console.WriteLine("")
 
-                ' ✅ STEP 7: Crea ExecutionState e TaskEngine per esecuzione diretta
+                ' ✅ PASSO 8: Verifica caricamento traduzioni (esempio)
+                Console.WriteLine("📋 PASSO 8: Verifica caricamento traduzioni...")
+                Try
+                    If compiledTask.Steps IsNot Nothing AndAlso compiledTask.Steps.Count > 0 Then
+                        Dim firstStep = compiledTask.Steps(0)
+                        If firstStep.Escalations IsNot Nothing AndAlso firstStep.Escalations.Count > 0 Then
+                            Dim firstEscalation = firstStep.Escalations(0)
+                            If firstEscalation.Tasks IsNot Nothing Then
+                                For Each taskObj In firstEscalation.Tasks
+                                    If TypeOf taskObj Is DDTEngine.Models.Tasks.MessageTask Then
+                                        Dim msgTask = DirectCast(taskObj, DDTEngine.Models.Tasks.MessageTask)
+                                        Dim translation = translationRepository.GetTranslation(projectId, locale, msgTask.TextKey)
+                                        If Not String.IsNullOrEmpty(translation) Then
+                                            Console.WriteLine($"   ✅ Traduzione caricata: TextKey={msgTask.TextKey}, Text={translation.Substring(0, Math.Min(50, translation.Length))}...")
+                                            Exit For
+                                        End If
+                                    End If
+                                Next
+                            End If
+                        End If
+                    End If
+                Catch ex As Exception
+                    Console.WriteLine($"   ⚠️  WARNING caricamento traduzioni: {ex.Message}")
+                End Try
+                Console.WriteLine("")
+
+                ' ❌ PASSO 9: Chiama ProcessTurn (MANCA)
+                Console.WriteLine("📋 PASSO 9: Chiama ProcessTurn...")
+                Try
+                    ' Prova a chiamare ProcessTurn
+                    Dim allTranslations As New Dictionary(Of String, String)()
+                    ' TODO: Caricare tutte le traduzioni necessarie
+
+                    Dim result = ProcessTurnEngine.ProcessTurn(dialogueState, "", compiledTask, allTranslations)
+                    Console.WriteLine($"   ✅ ProcessTurn chiamato: Messages={If(result.Messages IsNot Nothing, result.Messages.Count, 0)}, Status={result.Status}")
+                Catch ex As Exception
+                    If TypeOf ex Is NotImplementedException OrElse ex.Message.Contains("non è ancora implementato") OrElse ex.Message.Contains("not yet implemented") Then
+                        Console.WriteLine($"   ❌ ProcessTurn NON DISPONIBILE (stub)")
+                        Console.WriteLine($"   📝 DA FARE: Implementare ProcessTurnEngine.ProcessTurn()")
+                        Console.WriteLine("")
+                        Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                        Console.WriteLine("✅ TUTTI I PASSI PRECEDENTI SONO A POSTO")
+                        Console.WriteLine("📋 PROSSIMO PASSO: Implementare ProcessTurnEngine.ProcessTurn()")
+                        Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                        Console.WriteLine("")
+                        Return ResponseHelpers.CreateErrorResponse(New With {
+                            .error = "ProcessTurn not implemented",
+                            .message = "All previous steps are OK. Next: Implement ProcessTurnEngine.ProcessTurn()",
+                            .sessionId = newSessionId
+                        })
+                    ElseIf ex.Message.Contains("ProcessTurnEngine") OrElse ex.Message.Contains("non è definito") OrElse ex.Message.Contains("not defined") OrElse TypeOf ex Is MissingMemberException Then
+                        Console.WriteLine($"   ❌ ProcessTurn NON DISPONIBILE")
+                        Console.WriteLine($"   📝 DA FARE: Creare ProcessTurnEngine.vb con funzione ProcessTurn()")
+                        Console.WriteLine("")
+                        Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                        Console.WriteLine("✅ TUTTI I PASSI PRECEDENTI SONO A POSTO")
+                        Console.WriteLine("📋 PROSSIMO PASSO: Implementare ProcessTurnEngine.vb")
+                        Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                        Console.WriteLine("")
+                        Return ResponseHelpers.CreateErrorResponse(New With {
+                            .error = "ProcessTurn not implemented",
+                            .message = "All previous steps are OK. Next: Implement ProcessTurnEngine.vb",
+                            .sessionId = newSessionId
+                        })
+                    Else
+                        Console.WriteLine($"   ❌ ERRORE ProcessTurn: {ex.Message}")
+                        Console.WriteLine($"   Stack: {ex.StackTrace}")
+                        Return ResponseHelpers.CreateErrorResponse($"ProcessTurn error: {ex.Message}", 500)
+                    End If
+                End Try
+                Console.WriteLine("")
+
+                ' Se arriviamo qui, ProcessTurn esiste e funziona
+                Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                Console.WriteLine("✅ TUTTI I PASSI COMPLETATI CON SUCCESSO")
+                Console.WriteLine("═══════════════════════════════════════════════════════════════")
+                Console.WriteLine("")
+
+                ' ✅ STEP 7: Crea ExecutionState e TaskEngine per esecuzione diretta (legacy - per ora)
+                ' NOTA: Quando ProcessTurn sarà implementato, questo codice verrà sostituito
                 Dim executionState As New Orchestrator.ExecutionState()
 
                 ' ✅ Crea EventEmitter per SSE

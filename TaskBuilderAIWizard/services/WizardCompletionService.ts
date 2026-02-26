@@ -71,15 +71,15 @@ function ensureAllNodesHaveMessages(
 /**
  * Creates templates from wizard data and registers them in memory
  */
-function createAndRegisterTemplates(
+async function createAndRegisterTemplates(
   dataSchema: WizardTaskTreeNode[],
   messagesToUse: Map<string, WizardStepMessages>,
   constraintsMap: Map<string, WizardConstraint[]>,
   dataContractsMap: Map<string, DataContract>,
   shouldBeGeneral: boolean,
   addTranslation?: (guid: string, text: string) => void
-): Map<string, any> {
-  const templates = createTemplatesFromWizardData(
+): Promise<Map<string, any>> {
+  const templates = await createTemplatesFromWizardData(
     dataSchema,
     messagesToUse,
     constraintsMap,
@@ -150,6 +150,32 @@ async function createAndSaveInstance(
 }
 
 /**
+ * Generates contracts for all nodes in a TaskTree
+ * This is extracted to allow contracts to be generated before parser generation
+ */
+export async function generateContractsForTaskTree(
+  taskTree: any
+): Promise<Map<string, any>> {
+  if (!taskTree) {
+    return new Map();
+  }
+
+  try {
+    const { generateContractsForAllNodes } = await import('@utils/wizard/generateContract');
+    const generatedContracts = await generateContractsForAllNodes(taskTree);
+    console.log('[WizardCompletionService] ✅ Contracts generated for TaskTree', {
+      contractsCount: generatedContracts.size
+    });
+    return generatedContracts;
+  } catch (contractError) {
+    console.error('[WizardCompletionService] ❌ Error generating contracts', {
+      error: contractError instanceof Error ? contractError.message : String(contractError)
+    });
+    return new Map();
+  }
+}
+
+/**
  * Builds TaskTree and generates contracts/engines for all nodes
  */
 export async function buildTaskTreeWithContractsAndEngines(
@@ -165,27 +191,19 @@ export async function buildTaskTreeWithContractsAndEngines(
   }
 
   // Generate contracts for all nodes
-  try {
-    const { generateContractsForAllNodes } = await import('@utils/wizard/generateContract');
-    const generatedContracts = await generateContractsForAllNodes(taskTree);
+  const generatedContracts = await generateContractsForTaskTree(taskTree);
 
-    // Generate engines and parsers for all nodes
-    if (generatedContracts.size > 0 || taskTree.nodes) {
-      try {
-        const { generateEnginesAndParsersForAllNodes } = await import('@utils/wizard/generateEnginesAndParsers');
-        await generateEnginesAndParsersForAllNodes(taskTree, generatedContracts);
-      } catch (engineError) {
-        // Non-blocking: log error but don't block wizard flow
-        console.error('[WizardCompletionService] ❌ Error generating engines and parsers (non-blocking)', {
-          error: engineError instanceof Error ? engineError.message : String(engineError)
-        });
-      }
+  // Generate engines and parsers for all nodes
+  if (generatedContracts.size > 0 || taskTree.nodes) {
+    try {
+      const { generateEnginesAndParsersForAllNodes } = await import('@utils/wizard/generateEnginesAndParsers');
+      await generateEnginesAndParsersForAllNodes(taskTree, generatedContracts);
+    } catch (engineError) {
+      // Non-blocking: log error but don't block wizard flow
+      console.error('[WizardCompletionService] ❌ Error generating engines and parsers (non-blocking)', {
+        error: engineError instanceof Error ? engineError.message : String(engineError)
+      });
     }
-  } catch (contractError) {
-    // Non-blocking: log error but don't block wizard flow
-    console.error('[WizardCompletionService] ❌ Error generating contracts (non-blocking)', {
-      error: contractError instanceof Error ? contractError.message : String(contractError)
-    });
   }
 
   return taskTree;
@@ -228,7 +246,7 @@ export async function createTemplateAndInstanceForProposed(
   const messagesContextualizedToUse = messagesContextualized.size > 0 ? messagesContextualized : messages;
 
   // 5. Create and register templates
-  const templates = createAndRegisterTemplates(
+  const templates = await createAndRegisterTemplates(
     dataSchema,
     messagesToUse,
     constraintsMap,
@@ -258,13 +276,18 @@ export async function createTemplateAndInstanceForProposed(
     adaptAllNormalSteps
   );
 
-  // 8. Build TaskTree and generate contracts/engines
+  // 8. Build TaskTree (without contracts/engines - they will be generated separately)
   let taskTree: any | null = null;
   try {
-    taskTree = await buildTaskTreeWithContractsAndEngines(taskInstance, projectId, dataSchema);
+    taskTree = await buildTaskTree(taskInstance, projectId);
+
+    // 9. Generate contracts for all nodes (CRITICAL: must be done before parser generation)
+    if (taskTree) {
+      await generateContractsForTaskTree(taskTree);
+    }
   } catch (error) {
     // Non-blocking: log error but don't block wizard flow
-    console.error('[WizardCompletionService] ❌ Error building TaskTree (non-blocking)', {
+    console.error('[WizardCompletionService] ❌ Error building TaskTree or generating contracts (non-blocking)', {
       error: error instanceof Error ? error.message : String(error)
     });
   }
@@ -317,7 +340,7 @@ export async function createTemplateAndInstanceForCompleted(
   const messagesContextualizedToUse = messagesContextualized.size > 0 ? messagesContextualized : messages;
 
   // 5. Create and register templates
-  const templates = createAndRegisterTemplates(
+  const templates = await createAndRegisterTemplates(
     dataSchema,
     messagesToUse,
     constraintsMap,

@@ -1153,6 +1153,223 @@ def generate_ai_messages(body: dict = Body(...)):
             "error": str(e)
         }
 
+@router.post("/api/nlp/generate-node-messages")
+def generate_node_messages(body: dict = Body(...)):
+    """
+    Generate ALL messages for a single node in one AI call.
+
+    Args:
+        body: Request body containing:
+            - nodeId: Node ID (required)
+            - nodeLabel: Node label (required)
+            - contract: SemanticContract object (required)
+            - messageMatrix: Array of { guid, stepType, escalationIndex } (required)
+            - locale: Locale code (default: "it")
+            - provider: AI provider (default: "openai")
+            - model: AI model (optional)
+
+    Returns:
+        {
+            "success": True,
+            "messages": {
+                "GUID1": "testo1",
+                "GUID2": "testo2",
+                ...
+            }
+        }
+    """
+    from newBackend.services.svc_ai_client import chat_json
+    from newBackend.core.core_settings import OPENAI_KEY
+    import sys
+    import os
+    import json
+
+    # Add backend/ai_prompts to path
+    backend_path = os.path.join(os.path.dirname(__file__), '..', '..', 'backend')
+    if backend_path not in sys.path:
+        sys.path.insert(0, backend_path)
+
+    from ai_prompts.generate_ai_messages_prompt import get_ai_messages_prompt_for_step
+
+    node_id = (body or {}).get("nodeId")
+    node_label = (body or {}).get("nodeLabel")
+    contract = (body or {}).get("contract")
+    message_matrix = (body or {}).get("messageMatrix", [])
+    locale = (body or {}).get("locale", "it")
+    provider = (body or {}).get("provider", "openai")
+    model = (body or {}).get("model")
+
+    if not contract:
+        return {"success": False, "error": "Contract is required"}
+
+    if not message_matrix:
+        return {"success": False, "error": "messageMatrix is required"}
+
+    if not OPENAI_KEY:
+        return {"success": False, "error": "OPENAI_KEY not configured"}
+
+    try:
+        # Raggruppa messageMatrix per stepType
+        messages_by_step_type = {}
+        for item in message_matrix:
+            step_type = item.get("stepType")
+            guid = item.get("guid")
+            escalation_index = item.get("escalationIndex", 0)
+
+            if step_type not in messages_by_step_type:
+                messages_by_step_type[step_type] = []
+            messages_by_step_type[step_type].append({
+                "guid": guid,
+                "escalationIndex": escalation_index
+            })
+
+        # Costruisci prompt che include TUTTI gli stepType per questo nodo
+        prompt_parts = [
+            f"Generate ALL dialogue messages for the field '{node_label}'.",
+            f"",
+            f"Context:",
+            f"- Field: {node_label}",
+            f"- Type: {contract.get('entity', {}).get('kind', 'string')}",
+            f"- Locale: {locale}",
+            f"",
+            f"Generate the following messages:",
+            f""
+        ]
+
+        # Aggiungi istruzioni per ogni stepType
+        step_descriptions = {
+            "start": "Initial message to ask for the data",
+            "noMatch": "Escalation messages when user input doesn't match (progressively more polite)",
+            "noInput": "Escalation messages when user doesn't respond (progressively more polite)",
+            "confirmation": "Message to confirm the input with {{input}} placeholder",
+            "notConfirmed": "Message when user doesn't confirm",
+            "violation": "Messages when input violates constraints",
+            "disambiguation": "Message to disambiguate between options",
+            "success": "Success message when data is collected"
+        }
+
+        guid_list = []
+        for step_type, items in messages_by_step_type.items():
+            description = step_descriptions.get(step_type, f"Messages for {step_type}")
+            count = len(items)
+
+            if count == 1:
+                guid = items[0]["guid"]
+                prompt_parts.append(f"1. {step_type.upper()} ({description}):")
+                prompt_parts.append(f"   - GUID: {guid}")
+                guid_list.append(guid)
+            else:
+                prompt_parts.append(f"{count}. {step_type.upper()} ({description}):")
+                for idx, item in enumerate(items, 1):
+                    guid = item["guid"]
+                    prompt_parts.append(f"   - GUID: {guid} (escalation {idx})")
+                    guid_list.append(guid)
+            prompt_parts.append("")
+
+        prompt_parts.extend([
+            f"Return a JSON object mapping each GUID to its message text:",
+            f"{{",
+            f'  "{guid_list[0]}": "message text 1",',
+            f'  "{guid_list[1]}": "message text 2",',
+            f"  ...",
+            f"}}",
+            f"",
+            f"Requirements:",
+            f"- Messages must be natural, spoken Italian (locale: {locale})",
+            f"- Messages must be appropriate for voice-based customer care",
+            f"- Escalation messages must be progressively more polite",
+            f"- Use {{input}} placeholder in confirmation messages",
+            f"- Keep messages concise and clear"
+        ])
+
+        prompt = "\n".join(prompt_parts)
+
+        # System message
+        system_message = (
+            "You are a Dialogue Messages Generator. "
+            "Your task is to generate natural, spoken messages for a voice-based customer care system. "
+            "Return ONLY valid JSON, no markdown, no code fences, no comments."
+        )
+
+        # Call AI
+        ai_response = chat_json([
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": prompt}
+        ], provider=provider if provider else "openai")
+
+        # Parse response
+        if isinstance(ai_response, str):
+            result = json.loads(ai_response)
+        else:
+            result = ai_response
+
+        # Validate response structure
+        if not isinstance(result, dict):
+            raise ValueError("AI response is not a dictionary")
+
+        # Extract messages map
+        messages_map = result.get("messages", {})
+        if not isinstance(messages_map, dict):
+            # Fallback: try to extract from root level
+            messages_map = {k: v for k, v in result.items() if k != "success" and k != "error"}
+
+        # Validate all GUIDs are present
+        missing_guids = [guid for guid in guid_list if guid not in messages_map]
+        if missing_guids:
+            print(f"[generate-node-messages] Warning: Missing GUIDs in response: {missing_guids}", flush=True)
+            # Add fallback messages for missing GUIDs
+            entity_label = contract.get("entity", {}).get("label", "value")
+            fallbacks = {
+                "start": f"Mi dica la sua {entity_label.lower()}",
+                "noMatch": "Può ripetere?",
+                "noInput": "Non ho sentito, può ripetere?",
+                "confirmation": f"Confermi: {{input}}?",
+                "notConfirmed": f"Qual è la {entity_label.lower()} corretta?",
+                "violation": f"Il valore non è valido",
+                "disambiguation": "Quale intendi?",
+                "success": "Perfetto, grazie."
+            }
+
+            for guid in missing_guids:
+                # Find stepType for this GUID
+                step_type = None
+                for item in message_matrix:
+                    if item.get("guid") == guid:
+                        step_type = item.get("stepType")
+                        break
+
+                if step_type and step_type in fallbacks:
+                    messages_map[guid] = fallbacks[step_type]
+                else:
+                    messages_map[guid] = f"Messaggio per {entity_label}"
+
+        # Filter to ensure all values are strings
+        validated_messages = {
+            guid: str(text).strip()
+            for guid, text in messages_map.items()
+            if guid in guid_list and isinstance(text, (str, int, float)) and str(text).strip()
+        }
+
+        # Ensure all GUIDs have messages
+        for guid in guid_list:
+            if guid not in validated_messages:
+                entity_label = contract.get("entity", {}).get("label", "value")
+                validated_messages[guid] = f"Messaggio per {entity_label}"
+
+        return {
+            "success": True,
+            "messages": validated_messages
+        }
+
+    except Exception as e:
+        print(f"[generate-node-messages] Error: {str(e)}", flush=True)
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
 # Add extract endpoint
 @router.post("/extract")
 async def extract_value(body: dict = Body(...)):

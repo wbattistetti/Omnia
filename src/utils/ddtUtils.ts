@@ -6,9 +6,11 @@
  * Extracts all GUIDs (translation keys) from a DDT/TaskTree structure.
  * GUIDs are found in:
  * - node.messages[stepKey].textKey
- * - task.id (GUID of the task instance)
- * - task.params.text (translation key)
+ * - task.parameters[].value where parameterId === 'text' (translation key)
  * - ddt.steps[templateId][stepKey].escalations[].tasks[] (for multi-data tasks)
+ *
+ * ⚠️ NOTE: task.id is NOT a translation GUID - it's just a task identifier.
+ * Only text parameter values are translation GUIDs.
  *
  * ✅ UPDATED: Supports both old format (ddt.data) and new format (ddt.nodes)
  * ✅ UPDATED: Also processes ddt.steps dictionary for multi-data tasks (sub-data nodes)
@@ -20,7 +22,6 @@ export function extractGUIDsFromDDT(ddt: any): string[] {
   const guids = new Set<string>();
   const debugInfo: any = {
     fromMessages: [] as string[],
-    fromTaskIds: [] as string[],
     fromTextParams: [] as string[],
     nodesProcessed: 0,
     escalationsProcessed: 0,
@@ -57,13 +58,8 @@ export function extractGUIDsFromDDT(ddt: any): string[] {
             const taskRefs = esc.tasks || [];
             taskRefs.forEach((task: any, taskIdx: number) => {
               debugInfo.tasksProcessed++;
-              // ✅ id is the GUID of the task instance
-              const taskId = task.id;
-              if (taskId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(taskId)) {
-                guids.add(taskId);
-                debugInfo.fromTaskIds.push({ nodePath: currentNodePath, stepKey, escIdx, taskIdx, guid: taskId, templateId: task.templateId });
-              }
-              // Extract from text parameter
+              // ❌ RIMOSSO: task.id NON è una traduzione, è solo un identificatore del task
+              // ✅ SOLO parametri text sono traduzioni
               const textParam = task.parameters?.find((p: any) => p.parameterId === 'text');
               if (textParam?.value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textParam.value)) {
                 guids.add(textParam.value);
@@ -98,12 +94,8 @@ export function extractGUIDsFromDDT(ddt: any): string[] {
               if (esc?.tasks && Array.isArray(esc.tasks)) {
                 esc.tasks.forEach((task: any, taskIdx: number) => {
                   debugInfo.tasksProcessed++;
-                  // Extract task.id (GUID)
-                  if (task.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(task.id)) {
-                    guids.add(task.id);
-                    debugInfo.fromTaskIds.push({ nodePath: `steps[${templateId}]`, stepKey, escIdx, taskIdx, guid: task.id, templateId });
-                  }
-                  // Extract text parameter GUID
+                  // ❌ RIMOSSO: task.id NON è una traduzione, è solo un identificatore del task
+                  // ✅ SOLO parametri text sono traduzioni
                   const textParam = task.parameters?.find((p: any) => p.parameterId === 'text');
                   if (textParam?.value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(textParam.value)) {
                     guids.add(textParam.value);

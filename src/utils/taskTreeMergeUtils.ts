@@ -699,15 +699,60 @@ function convertPatternsToNlpContract(template: any): any | undefined {
  * Loads translations for old GUIDs and saves them for new GUIDs
  */
 export async function copyTranslationsForClonedSteps(_ddt: any, _templateId: string, guidMapping: Map<string, string>): Promise<void> {
+  // ✅ DEBUG: Log all'inizio per verificare che la funzione venga chiamata
+  console.log('[copyTranslationsForClonedSteps] 🚀 FUNZIONE CHIAMATA', {
+    templateId: _templateId,
+    guidMappingSize: guidMapping?.size || 0,
+    hasGuidMapping: !!guidMapping,
+    ddtId: _ddt?.id || _ddt?._id,
+    ddtType: typeof _ddt,
+    timestamp: new Date().toISOString()
+  });
+
   try {
     if (!guidMapping || guidMapping.size === 0) {
-      console.log('[copyTranslationsForClonedSteps] ⚠️ No GUID mapping provided, skipping translation copy');
+      console.error('[copyTranslationsForClonedSteps] ❌ ERRORE CRITICO: No GUID mapping provided', {
+        hasGuidMapping: !!guidMapping,
+        guidMappingSize: guidMapping?.size || 0,
+        templateId: _templateId
+      });
       return; // No mappings to process
+    }
+
+    // ✅ EVENT-DRIVEN: Wait for all template translations to be ready before copying
+    // Count expected translations based on old GUIDs in the mapping
+    const expectedTranslationCount = guidMapping.size;
+    try {
+      const { startTrackingTemplateTranslations, ensureAllTemplateTranslationsReady } = await import('./translationTracker');
+
+      // Start tracking if not already started (idempotent)
+      await startTrackingTemplateTranslations(_templateId, expectedTranslationCount);
+
+      console.log('[copyTranslationsForClonedSteps] ⏳ Waiting for all template translations to be ready', {
+        templateId: _templateId,
+        expectedCount: expectedTranslationCount
+      });
+
+      await ensureAllTemplateTranslationsReady(_templateId);
+
+      console.log('[copyTranslationsForClonedSteps] ✅ All template translations are ready', {
+        templateId: _templateId
+      });
+    } catch (trackingErr) {
+      // If tracking fails, log warning but continue (backward compatibility)
+      console.warn('[copyTranslationsForClonedSteps] ⚠️ Translation tracking not available, continuing without wait', {
+        templateId: _templateId,
+        error: trackingErr instanceof Error ? trackingErr.message : String(trackingErr)
+      });
     }
 
     console.log('[copyTranslationsForClonedSteps] 🔍 START - Analizzando mapping GUID', {
       guidMappingSize: guidMapping.size,
-      templateId: _templateId
+      templateId: _templateId,
+      sampleMappings: Array.from(guidMapping.entries()).slice(0, 10).map(([oldGuid, newGuid]) => ({
+        oldGuid: oldGuid.substring(0, 8) + '...',
+        newGuid: newGuid.substring(0, 8) + '...'
+      }))
     });
 
     // Get old GUIDs (from template) - these have translations in the database
@@ -726,10 +771,23 @@ export async function copyTranslationsForClonedSteps(_ddt: any, _templateId: str
     const projectLocale = getCurrentProjectLocale() || 'it-IT';
     const templateTranslations: Record<string, string> = {};
 
+    // ✅ DEBUG: Verifica se il context esiste
+    const hasWindow = typeof window !== 'undefined';
+    const hasContext = hasWindow && !!(window as any).__projectTranslationsContext;
+    const context = hasContext ? (window as any).__projectTranslationsContext : null;
+    const contextTranslations = context?.translations || {};
+
+    console.log('[copyTranslationsForClonedSteps] 🔍 VERIFICA CONTEXT', {
+      hasWindow,
+      hasContext,
+      hasTranslations: !!contextTranslations,
+      contextTranslationsCount: Object.keys(contextTranslations).length,
+      projectLocale,
+      contextKeys: Object.keys(context || {}).slice(0, 10)
+    });
+
     // ✅ PRIORITÀ 1: Cerca PRIMA in memoria (ProjectTranslationsContext)
-    if (typeof window !== 'undefined' && (window as any).__projectTranslationsContext) {
-      const context = (window as any).__projectTranslationsContext;
-      const contextTranslations = context.translations || {};
+    if (hasContext) {
 
       console.log('[copyTranslationsForClonedSteps] 🔍 Cercando traduzioni template in memoria', {
         oldGuidsCount: oldGuids.length,
@@ -780,6 +838,12 @@ export async function copyTranslationsForClonedSteps(_ddt: any, _templateId: str
         oldGuidsNotInContext: oldGuids.filter(g => !(g in contextTranslations)).length,
         // ✅ DEBUG: Mostra alcuni vecchi GUID che non sono stati trovati
         missingOldGuidsSample: oldGuids.filter(g => !(g in contextTranslations)).slice(0, 5)
+      });
+    } else {
+      console.error('[copyTranslationsForClonedSteps] ❌ ERRORE CRITICO: ProjectTranslationsContext non disponibile', {
+        hasWindow,
+        hasContext,
+        templateId: _templateId
       });
     }
 
@@ -883,19 +947,19 @@ export async function copyTranslationsForClonedSteps(_ddt: any, _templateId: str
 
     // Add translations to global table via window context (in memory) AND save to database
     if (Object.keys(instanceTranslations).length > 0) {
-      console.log('[copyTranslationsForClonedSteps] ✅ Copiando traduzioni per istanza', {
-        translationsCount: Object.keys(instanceTranslations).length,
-        guidMappingSize: guidMapping.size,
-        oldGuidsCount: oldGuids.length,
-        templateTranslationsFound: Object.keys(templateTranslations).length,
-        sampleGuids: Object.keys(instanceTranslations).slice(0, 5),
-        sampleTexts: Object.entries(instanceTranslations).slice(0, 3).map(([guid, text]) => ({
-          guid,
-          textPreview: text.substring(0, 50) + '...'
-        })),
-        // ✅ DEBUG: Verifica se ci sono GUID nel mapping senza traduzioni
-        missingTranslations: oldGuids.filter(oldGuid => !templateTranslations[oldGuid]).slice(0, 5)
-      });
+    console.log('[copyTranslationsForClonedSteps] ✅ Copiando traduzioni per istanza', {
+      translationsCount: Object.keys(instanceTranslations).length,
+      guidMappingSize: guidMapping.size,
+      oldGuidsCount: oldGuids.length,
+      templateTranslationsFound: Object.keys(templateTranslations).length,
+      sampleGuids: Object.keys(instanceTranslations).slice(0, 5),
+      sampleTexts: Object.entries(instanceTranslations).slice(0, 3).map(([guid, text]) => ({
+        guid,
+        textPreview: String(text).substring(0, 50) + '...'
+      })),
+      // ✅ DEBUG: Verifica se ci sono GUID nel mapping senza traduzioni
+      missingTranslations: oldGuids.filter(oldGuid => !templateTranslations[oldGuid]).slice(0, 5)
+    });
 
       // Try to add to in-memory context first
       const translationsContext = (window as any).__projectTranslationsContext;
