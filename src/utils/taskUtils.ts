@@ -1104,14 +1104,7 @@ export async function buildTaskTree(
 
   // ✅ ARCHITECTURE: Template must exist by construction
   // First check in-memory cache (DialogueTaskService)
-  console.log('[buildTaskTree] 🔍 Searching for template', {
-    templateId: instance.templateId,
-    templateIdType: typeof instance.templateId,
-    taskId: instance.id,
-    taskLabel: instance.label,
-    cacheSize: DialogueTaskService.getTemplateCount(),
-    cacheLoaded: (DialogueTaskService as any).cacheLoaded
-  });
+  // ✅ Log rimosso: troppo verboso
 
   let template = DialogueTaskService.getTemplate(instance.templateId);
 
@@ -1124,6 +1117,7 @@ export async function buildTaskTree(
       label: t.label,
       name: t.name
     }));
+    // ✅ Mantenuto solo per errori critici
     console.warn('[buildTaskTree] ⚠️ Template not found in cache - showing all templates', {
       searchedTemplateId: instance.templateId,
       searchedTemplateIdType: typeof instance.templateId,
@@ -1134,13 +1128,8 @@ export async function buildTaskTree(
         t.id && String(t.id).toLowerCase() === String(instance.templateId).toLowerCase()
       )
     });
-  } else {
-    console.log('[buildTaskTree] ✅ Template found in cache', {
-      templateId: template.id || template._id,
-      templateLabel: template.label,
-      templateName: template.name
-    });
   }
+  // ✅ Log rimosso: troppo verboso (template found)
 
   // ✅ NO FALLBACK: Template must be in memory cache
   // If not in cache, it doesn't exist (or was deleted) - throw error

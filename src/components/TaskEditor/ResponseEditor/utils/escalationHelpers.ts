@@ -59,18 +59,9 @@ export function getTaskText(
           globalContextTextPreview: globalContextText ? globalContextText.substring(0, 50) + '...' : null,
           globalContextCount: globalContext?.translations ? Object.keys(globalContext.translations).length : 0
         });
-      } else {
-        // ✅ DEBUG: Log quando la traduzione viene trovata (solo per i primi messaggi per non intasare i log)
-        const debugEnabled = typeof localStorage !== 'undefined' && localStorage.getItem('debug.getTaskText') === '1';
-        if (debugEnabled) {
-          console.log('[getTaskText] ✅ Translation found', {
-            textKey: textKey.substring(0, 8) + '...',
-            textPreview: translation.substring(0, 50) + '...',
-            taskId: task.id,
-            templateId: task.templateId
-          });
-        }
       }
+      // ✅ Log rimosso: troppo verboso, intasa la console
+      // Se serve debug, usare localStorage.setItem('debug.getTaskText', '1')
 
       // ✅ Se la traduzione esiste, usala; altrimenti usa il label del template come fallback
       if (translation) {

@@ -120,25 +120,12 @@ export function useDDTTranslations(
   const prevTranslationsCountRef = useRef<number>(0);
   useEffect(() => {
     if (translationsCount !== prevTranslationsCountRef.current) {
-      console.log('[useDDTTranslations] 🔄 translationsCount changed', {
-        previous: prevTranslationsCountRef.current,
-        current: translationsCount,
-        ddtId: ddt?.id || ddt?._id
-      });
+      // ✅ Log rimosso: troppo verboso
       prevTranslationsCountRef.current = translationsCount;
     }
   }, [translationsCount, ddt?.id, ddt?._id]);
 
   return useMemo(() => {
-    // ✅ DEBUG: Log when useMemo recalculates
-    console.log('[useDDTTranslations] 🔄 useMemo recalculating', {
-      ddtId: ddt?.id || ddt?._id,
-      translationsCount,
-      translationsHashLength: translationsHash.length,
-      hasGlobalTranslations: !!globalTranslations,
-      globalTranslationsCount: Object.keys(globalTranslations).length
-    });
-
     if (!ddt) {
       return {};
     }

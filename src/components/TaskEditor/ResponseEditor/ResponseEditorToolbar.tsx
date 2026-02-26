@@ -106,7 +106,7 @@ export function useResponseEditorToolbar({
 
 
   // ✅ Guard to prevent double-opening of chat panel (React StrictMode in dev)
-  const openingChatRef = React.useRef(false);
+  // ✅ REMOVED: openingChatRef - no longer needed, openLateralChatPanel is idempotent
 
   // ✅ Test è un toggle indipendente per mostrare/nascondere il pannello debugger
   // Salva la larghezza precedente per ripristinarla quando riapri
@@ -182,29 +182,12 @@ export function useResponseEditorToolbar({
   };
 
   const handleTestClick = () => {
-    console.log('[Toolbar] 🧪 handleTestClick', {
-      isGlobalTestPanelOpen,
-      hasEditorContext: !!editorContext,
-      editorContextKeys: editorContext ? Object.keys(editorContext) : [],
-      hasSetDockTree: !!setDockTree,
-      setDockTreeType: typeof setDockTree,
-      hasTaskTree: !!taskTree,
-      hasTaskMeta: !!taskMeta,
-      hasCurrentProjectId: !!currentProjectId,
-      isOpening: openingChatRef.current,
-    });
+    // ✅ Log rimosso: troppo verboso
 
     // ✅ NEW: Use dockable chat panel if setDockTree is available, otherwise fallback to global test panel
     if (setDockTree) {
-      // Guard against double-opening (React StrictMode in dev)
-      if (openingChatRef.current) {
-        console.log('[Toolbar] 🧪 Already opening chat panel, skipping...');
-        return;
-      }
-
       // Close global test panel if open (to avoid confusion)
       if (isGlobalTestPanelOpen) {
-        console.log('[Toolbar] 🧪 Closing global test panel before opening dockable tab');
         closeGlobalTestPanel();
       }
 
@@ -230,13 +213,10 @@ export function useResponseEditorToolbar({
         loadAllTranslations().then(() => {
           // Retry opening chat panel after translations are loaded
           console.log('[Toolbar] ✅ Translations loaded, retrying chat panel open');
-          // Reset guard to allow retry
-          openingChatRef.current = false;
           // Recursively call handleTestClick to retry
           handleTestClick();
         }).catch((err) => {
           console.error('[Toolbar] ❌ Failed to load translations', err);
-          openingChatRef.current = false;
         });
         return;
       }
@@ -245,14 +225,10 @@ export function useResponseEditorToolbar({
       if (translationsLoading) {
         console.log('[Toolbar] ⏳ Translations are loading, waiting...');
         setTimeout(() => {
-          openingChatRef.current = false;
           handleTestClick();
         }, 500);
         return;
       }
-
-      // Set guard
-      openingChatRef.current = true;
 
       // ✅ CRITICAL: Get translations from context (must be ready by now)
       let allTranslations = globalTranslations || {};
@@ -265,7 +241,6 @@ export function useResponseEditorToolbar({
           translationsLoading,
           translationsCount: Object.keys(globalTranslations || {}).length
         });
-        openingChatRef.current = false;
         alert('Translations are not available. Please ensure the project has translations loaded.');
         return;
       }
@@ -274,23 +249,7 @@ export function useResponseEditorToolbar({
       // Extract GUIDs from TaskTree.steps
       const runtimeGuids = new Set<string>();
       if (taskTree?.steps && typeof taskTree.steps === 'object') {
-        // ✅ DEBUG: Log structure of taskTree.steps
-        console.log('[Toolbar] 🔍 DEBUG: taskTree.steps structure:', {
-          hasSteps: !!taskTree.steps,
-          stepsType: Array.isArray(taskTree.steps) ? 'array' : 'object',
-          stepsKeys: Object.keys(taskTree.steps),
-          stepsSample: Object.keys(taskTree.steps).slice(0, 3).reduce((acc, key) => {
-            const stepValue = taskTree.steps[key];
-            acc[key] = {
-              type: Array.isArray(stepValue) ? 'array' : 'object',
-              keys: Array.isArray(stepValue)
-                ? `array[${stepValue.length}]`
-                : Object.keys(stepValue || {}),
-              sample: JSON.stringify(stepValue).substring(0, 200)
-            };
-            return acc;
-          }, {} as any)
-        });
+        // ✅ Log rimosso: troppo verboso
 
         // Import extractGuidsFromSteps function (same logic as DDEBubbleChat)
         const extractGuidsFromSteps = (steps: Record<string, any>, guids: Set<string>) => {
@@ -377,12 +336,7 @@ export function useResponseEditorToolbar({
             }
           }
 
-          console.log('[Toolbar] 🔍 DEBUG: extractGuidsFromSteps result:', {
-            extractedCount,
-            totalGuids: guids.size,
-            sampleGuids: Array.from(guids).slice(0, 10),
-            debugInfo: debugInfo.slice(0, 20) // First 20 debug entries
-          });
+          // ✅ Log rimosso: troppo verboso
         };
 
         extractGuidsFromSteps(taskTree.steps, runtimeGuids);
@@ -401,14 +355,7 @@ export function useResponseEditorToolbar({
       const matchingGuids = allTranslationGuids.filter(guid => runtimeGuids.has(guid));
       const missingGuids = allTranslationGuids.filter(guid => !runtimeGuids.has(guid));
 
-      console.log('[Toolbar] 🔍 DEBUG: GUID matching analysis:', {
-        extractedRuntimeGuids: runtimeGuids.size,
-        allTranslationGuids: allTranslationGuids.length,
-        matchingGuids: matchingGuids.length,
-        missingGuids: missingGuids.length,
-        sampleMissingGuids: missingGuids.slice(0, 10),
-        sampleMatchingGuids: matchingGuids.slice(0, 10)
-      });
+      // ✅ Log rimosso: troppo verboso
 
       // Filter translations: only GUIDs referenced in steps + runtime.* keys
       const runtimeTranslations: Record<string, string> = {};
@@ -420,11 +367,7 @@ export function useResponseEditorToolbar({
         }
       }
 
-      console.log('[Toolbar] 🔍 Filtered runtime translations:', {
-        allTranslationsCount: Object.keys(allTranslations).length,
-        runtimeGuidsCount: runtimeGuids.size,
-        runtimeTranslationsCount: Object.keys(runtimeTranslations).length
-      });
+      // ✅ Log rimosso: troppo verboso
 
       // Convert taskMeta to Task format
       const task = {
@@ -449,24 +392,15 @@ export function useResponseEditorToolbar({
         engineType: engineType, // ✅ Pass engine type from global context
       };
 
-      console.log('[Toolbar] 🧪 Opening chat panel as dockable tab', {
-        tabId: chatTabId,
-        taskId: task.id,
-        projectId: currentProjectId,
-      });
+      // ✅ Log rimosso: troppo verboso
 
-      setDockTree(prev => {
-        const result = openLateralChatPanel(prev, {
-          tabId: chatTabId,
-          newTab: chatTab,
-          position: 'right',
-        });
-        // Reset guard after state update
-        setTimeout(() => {
-          openingChatRef.current = false;
-        }, 100);
-        return result;
-      });
+      // ✅ IDEMPOTENT: openLateralChatPanel is idempotent, so multiple calls are safe
+      // No guard needed - the function itself handles duplicate calls gracefully
+      setDockTree(prev => openLateralChatPanel(prev, {
+        tabId: chatTabId,
+        newTab: chatTab,
+        position: 'right',
+      }));
     } else {
       // Fallback to global test panel (for backward compatibility)
       if (isGlobalTestPanelOpen) {
@@ -497,7 +431,7 @@ export function useResponseEditorToolbar({
           // Trigger loading and wait for it to complete
           loadAllTranslations().then(() => {
             // Retry opening test panel after translations are loaded
-            console.log('[Toolbar] ✅ Translations loaded, retrying test panel open');
+            // ✅ Log rimosso: troppo verboso
             handleTestClick();
           }).catch((err) => {
             console.error('[Toolbar] ❌ Failed to load translations', err);
