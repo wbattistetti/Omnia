@@ -259,6 +259,17 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
     const pathBucket = store.byPath[path];
     const isSub = nodePath.length > 1;
 
+    // ✅ LOG: Inizio assemblaggio nodo
+    console.log('[assembleFinal] 🔍 Assembling node', {
+      nodeLabel: node.label,
+      nodeId: (node as any).id,
+      path,
+      isSub,
+      hasConstraints: !!(node.constraints),
+      constraintsCount: Array.isArray(node.constraints) ? node.constraints.length : 0,
+      constraints: Array.isArray(node.constraints) ? node.constraints.map((c: any) => ({ kind: c.kind })) : []
+    });
+
     // Load source template and contract for cloning (BEFORE resolving nodeId/label)
     let sourceTemplate = null;
     let sourceContract = (node as any).nlpContract;
@@ -312,6 +323,14 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
 
     // ✅ RESOLVE NODE ID: preserve template node ID if deriving from template
     const nodeId = resolveNodeId(node, sourceTemplate, nodePath);
+
+    // ✅ LOG: NodeId risolto
+    console.log('[assembleFinal] 📌 NodeId resolved', {
+      nodeId,
+      nodeLabel: node.label,
+      path,
+      isSub
+    });
 
     // ✅ Initialize steps for this nodeId in rootSteps (not in assembled)
     rootSteps[nodeId] = {};
@@ -508,7 +527,29 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
     // ✅ Create invalid step if constraints exist (excluding 'required')
     // ✅ REMOVED: !isSub condition - invalid step must be created for sub-data too if they have constraints
     const hasConstraints = (node.constraints || []).some((c: any) => c.kind !== 'required');
+
+    // ✅ LOG: Verifica constraints
+    console.log('[assembleFinal] 🔍 Checking constraints for invalid step', {
+      nodeId,
+      nodeLabel: node.label,
+      path,
+      isSub,
+      constraintsArray: node.constraints || [],
+      constraintsCount: Array.isArray(node.constraints) ? node.constraints.length : 0,
+      hasConstraints,
+      nonRequiredConstraints: Array.isArray(node.constraints)
+        ? node.constraints.filter((c: any) => c.kind !== 'required').map((c: any) => ({ kind: c.kind }))
+        : []
+    });
+
     if (hasConstraints) {
+      // ✅ LOG: Creazione invalid step
+      console.log('[assembleFinal] ✅ Creating invalid step', {
+        nodeId,
+        nodeLabel: node.label,
+        path,
+        isSub
+      });
       // Check if invalid step already exists from AI-generated messages
       const invalidKey = `runtime.${taskTreeId}.${path}.invalid`;
       const bucket = store.byPath[path]?.steps?.invalid;
@@ -539,6 +580,14 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
               }
             ]
           };
+          // ✅ LOG: Invalid step creato con AI messages
+          console.log('[assembleFinal] ✅ Invalid step created (AI messages)', {
+            nodeId,
+            nodeLabel: node.label,
+            path,
+            invalidKey,
+            hasInvalidStep: !!rootSteps[nodeId].invalid
+          });
         }
       } else {
         // Create placeholder step (messages will be generated together with constraints later)
@@ -563,7 +612,24 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
             }
           ]
         };
+        // ✅ LOG: Invalid step creato con placeholder
+        console.log('[assembleFinal] ✅ Invalid step created (placeholder)', {
+          nodeId,
+          nodeLabel: node.label,
+          path,
+          invalidKey,
+          hasInvalidStep: !!rootSteps[nodeId].invalid
+        });
       }
+    } else {
+      // ✅ LOG: Nessun constraint, invalid step non necessario
+      console.log('[assembleFinal] ⏭️ Skipping invalid step (no constraints or only required)', {
+        nodeId,
+        nodeLabel: node.label,
+        path,
+        isSub,
+        constraintsCount: Array.isArray(node.constraints) ? node.constraints.length : 0
+      });
     }
 
     // ✅ CRITICAL: Check sub-data steps before processing
@@ -571,6 +637,17 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
     const subInstances: any[] = [];
     for (const s of node.subTasks || []) {
       const subNodeId = (s as any).templateId || s.id;
+
+      // ✅ LOG: Assemblaggio sub-data
+      console.log('[assembleFinal] 🔍 Assembling sub-data', {
+        parentNodeId: nodeId,
+        parentLabel: node.label,
+        subNodeId,
+        subLabel: s.label,
+        hasSubConstraints: !!(s as any).constraints,
+        subConstraintsCount: Array.isArray((s as any).constraints) ? (s as any).constraints.length : 0
+      });
+
       const subHasSteps = !!(s as any).steps && typeof (s as any).steps === 'object' && subNodeId && (s as any).steps[subNodeId];
 
       if (!subHasSteps) {
@@ -581,11 +658,21 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
         });
       }
 
-      // ✅ Preserve steps when assembling subTasks
+      // ✅ Preserve steps AND constraints when assembling subTasks
       const subNodeWithSteps = {
         ...s,
-        steps: (s as any).steps || undefined
+        steps: (s as any).steps || undefined,
+        constraints: (s as any).constraints || undefined  // ✅ AGGIUNTO: preserva constraints per creare invalid step se necessario
       };
+
+      // ✅ LOG: Sub-data con constraints preservati
+      console.log('[assembleFinal] ✅ Sub-data with preserved constraints', {
+        subNodeId,
+        subLabel: s.label,
+        hasPreservedConstraints: !!(subNodeWithSteps.constraints),
+        preservedConstraintsCount: Array.isArray(subNodeWithSteps.constraints) ? subNodeWithSteps.constraints.length : 0
+      });
+
       const subInstance = await assembleNode(subNodeWithSteps, [...nodePath, s.label]);
       subInstances.push(subInstance);
       assembled.subTasks.push(subInstance);

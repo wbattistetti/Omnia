@@ -26,41 +26,80 @@ Public Class OrchestratorSession
 End Class
 
 ''' <summary>
-''' EventEmitter: gestisce eventi per SSE
+''' EventEmitter: gestisce eventi per SSE con replay buffer.
+''' Events emitted before any listener is registered are buffered and
+''' replayed immediately when the first listener registers via .On().
+''' This resolves the race condition between ProcessTurn (fires at session/start)
+''' and the SSE handler (registers listeners at session/stream connection).
 ''' </summary>
 Public Class EventEmitter
     Private ReadOnly _listeners As New Dictionary(Of String, List(Of Action(Of Object)))
+    Private ReadOnly _replayBuffer As New Dictionary(Of String, Queue(Of Object))
+    Private ReadOnly _lock As New Object()
 
+    ''' <summary>
+    ''' Register a listener. Buffered events of this type are replayed immediately.
+    ''' </summary>
     Public Sub [On](eventName As String, handler As Action(Of Object))
-        If Not _listeners.ContainsKey(eventName) Then
-            _listeners(eventName) = New List(Of Action(Of Object))
-        End If
-        _listeners(eventName).Add(handler)
+        SyncLock _lock
+            If Not _listeners.ContainsKey(eventName) Then
+                _listeners(eventName) = New List(Of Action(Of Object))()
+            End If
+            _listeners(eventName).Add(handler)
+
+            ' Replay buffered events emitted before this listener was registered
+            If _replayBuffer.ContainsKey(eventName) Then
+                Dim q = _replayBuffer(eventName)
+                While q.Count > 0
+                    Dim bufferedData = q.Dequeue()
+                    Try
+                        handler(bufferedData)
+                    Catch
+                        ' Ignore replay errors
+                    End Try
+                End While
+                _replayBuffer.Remove(eventName)
+            End If
+        End SyncLock
     End Sub
 
+    ''' <summary>
+    ''' Emit an event. If no listener is registered yet, buffer it for later replay.
+    ''' </summary>
     Public Sub Emit(eventName As String, data As Object)
-        If _listeners.ContainsKey(eventName) Then
-            For Each handler In _listeners(eventName)
-                Try
-                    handler(data)
-                Catch ex As Exception
-                    ' Log removed
-                End Try
-            Next
-        End If
+        SyncLock _lock
+            If _listeners.ContainsKey(eventName) AndAlso _listeners(eventName).Count > 0 Then
+                For Each handler In _listeners(eventName)
+                    Try
+                        handler(data)
+                    Catch
+                    End Try
+                Next
+            Else
+                ' No listener yet: queue for replay when .On() is called
+                If Not _replayBuffer.ContainsKey(eventName) Then
+                    _replayBuffer(eventName) = New Queue(Of Object)()
+                End If
+                _replayBuffer(eventName).Enqueue(data)
+            End If
+        End SyncLock
     End Sub
 
     Public Sub RemoveListener(eventName As String, handler As Action(Of Object))
-        If _listeners.ContainsKey(eventName) Then
-            _listeners(eventName).Remove(handler)
-        End If
+        SyncLock _lock
+            If _listeners.ContainsKey(eventName) Then
+                _listeners(eventName).Remove(handler)
+            End If
+        End SyncLock
     End Sub
 
     Public Function ListenerCount(eventName As String) As Integer
-        If _listeners.ContainsKey(eventName) Then
-            Return _listeners(eventName).Count
-        End If
-        Return 0
+        SyncLock _lock
+            If _listeners.ContainsKey(eventName) Then
+                Return _listeners(eventName).Count
+            End If
+            Return 0
+        End SyncLock
     End Function
 End Class
 

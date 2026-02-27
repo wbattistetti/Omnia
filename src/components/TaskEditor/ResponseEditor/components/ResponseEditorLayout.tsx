@@ -460,21 +460,24 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
       }
 
       // ✅ Dematerialize templates (remove nodes, subNodes, data, _id, name, createdAt)
-      const dematerializedTemplates = templatesToSave.map(t => {
-        const { _id, nodes, subNodes, data, createdAt, name, ...template } = t;
+      // Note: generalizeLabel is async, so we need to use Promise.all() instead of .map()
+      const dematerializedTemplates = await Promise.all(
+        templatesToSave.map(async t => {
+          const { _id, nodes, subNodes, data, createdAt, name, ...template } = t;
 
-        // Root template: use generalized label if available
-        const isRoot = effectiveDataSchema[0]?.id === template.id;
-        if (isRoot && generalizedLabel) {
-          template.label = generalizedLabel;
-        } else if (typeof template.type === 'number' && template.type === TaskType.UtteranceInterpretation) {
-          // ✅ CRITICAL: For UtteranceInterpretation tasks (type: 3), always generalize the label
-          // The task type already implies "asking", so remove verbs like "Chiedi"
-          template.label = generalizeLabel(template.label);
-        }
+          // Root template: use generalized label if available
+          const isRoot = effectiveDataSchema[0]?.id === template.id;
+          if (isRoot && generalizedLabel) {
+            template.label = generalizedLabel;
+          } else if (typeof template.type === 'number' && template.type === TaskType.UtteranceInterpretation) {
+            // ✅ CRITICAL: For UtteranceInterpretation tasks (type: 3), always generalize the label
+            // The task type already implies "asking", so remove verbs like "Chiedi"
+            template.label = await generalizeLabel(template.label);
+          }
 
-        return template;
-      });
+          return template;
+        })
+      );
 
       // ✅ CRITICAL: Validate translations BEFORE saving template
       // Extract GUIDs and verify all translations exist in context

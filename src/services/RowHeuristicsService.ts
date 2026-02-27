@@ -8,7 +8,7 @@ import { type TaskTemplateMatch } from './TaskTemplateMatcherService';
 import { getRuleSet, getLanguageOrder } from '../nlp/taskType/registry';
 import type { CompiledCategoryPattern } from '../nlp/taskType/types';
 import { waitForCache } from '../nlp/taskType/patternLoader';
-import { separateText, type Language } from '../utils/linguisticSeparation';
+import { separateText, segmentLabelVXY, type Language, type VXYSegmentation } from '../utils/linguisticSeparation';
 
 export interface RowHeuristicsResult {
   taskType: TaskType;
@@ -100,11 +100,29 @@ export class RowHeuristicsService {
     // ✅ NUOVO: Usa SOLO embedding matching (no fallback a matching tradizionale)
     if (taskType === TaskType.UtteranceInterpretation) {
       try {
-        // ✅ Usa partB per template matching (se vuota, usa full text)
-        const textForTemplate = separation.partB || trimmedLabel;
+        // ✅ V-X-Y ARCHITECTURE: Segment label into V, X, Y
+        const vxySegmentation = segmentLabelVXY(trimmedLabel, language);
+
+        console.log('[RowHeuristicsService] 🔍 V-X-Y Segmentation', {
+          label: trimmedLabel,
+          V: vxySegmentation.V,
+          X: vxySegmentation.X,
+          Y: vxySegmentation.Y,
+          YSource: vxySegmentation.YSource,
+        });
+
+        // ✅ Normalize X for template matching (remove V and Y, capitalize)
+        let textForTemplate = vxySegmentation.X || separation.partB || trimmedLabel;
+
+        // ✅ Additional normalization: use generalizeLabel for consistency
+        if (vxySegmentation.X) {
+          const { generalizeLabel } = await import('@TaskBuilderAIWizard/services/TemplateCreationService');
+          textForTemplate = await generalizeLabel(textForTemplate, language);
+        }
 
         console.log('[RowHeuristicsService] 🔍 Starting template embedding matching', {
           label: trimmedLabel,
+          vxySegmentation,
           partB: separation.partB,
           textForTemplate,
           taskType: TaskType[taskType],

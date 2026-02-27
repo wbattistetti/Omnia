@@ -54,20 +54,57 @@ function countExpectedTranslations(messages: WizardStepMessages): number {
 
 /**
  * Generalizes a label by removing context-specific references
+ * Uses V-X-Y segmentation architecture for robust normalization
  *
  * Example:
  * - "Chiedi la data di nascita del paziente" → "Data di nascita"
  * - "Chiedi il nome del cliente" → "Nome"
+ * - "quando è nato il paziente" → "Data di nascita" (X implicit)
  */
-export function generalizeLabel(label: string): string {
-  // Remove common prefixes
+export async function generalizeLabel(label: string, language: 'IT' | 'EN' | 'PT' | 'ES' | 'FR' | 'DE' = 'IT'): Promise<string> {
+  if (!label) return label;
+
+  try {
+    // Import V-X-Y segmentation dynamically
+    const { segmentLabelVXY } = await import('../../src/utils/linguisticSeparation');
+
+    // Use V-X-Y segmentation to extract X (data type)
+    const segmentation = segmentLabelVXY(label, language);
+
+    // X is already normalized (V and Y removed, capitalized)
+    if (segmentation.X && segmentation.X.length > 0) {
+      return segmentation.X;
+    }
+  } catch (error) {
+    // Fallback to deterministic normalization if segmentation fails
+    console.warn('[generalizeLabel] V-X-Y segmentation failed, using deterministic fallback', error);
+  }
+
+  // Fallback: Deterministic normalization (original logic)
   let generalized = label
-    .replace(/^(chiedi|chiedere|richiedi|richiedere)\s+(la|il|lo|gli|le|un|una|uno)\s+/i, '')
-    .replace(/^(chiedi|chiedere|richiedi|richiedere)\s+/i, '')
+    .replace(/^(chiedi|chiedere|richiedi|richiedere|domanda|domandare)\s+(la|il|lo|gli|le|un|una|uno)\s+/i, '')
+    .replace(/^(chiedi|chiedere|richiedi|richiedere|domanda|domandare)\s+/i, '')
     .trim();
 
   // Remove context-specific references (del paziente, del cliente, ecc.)
-  generalized = generalized.replace(/\s+(del|della|dello|dei|degli|delle)\s+\w+$/i, '');
+  generalized = generalized.replace(/\s+(del|della|dello|dei|degli|delle|al|allo|alla|ai|agli|alle)\s+\w+.*$/i, '');
+
+  // Handle temporal verbs (quando è nato, quando è, ecc.)
+  const temporalVerbs = ['quando è nato', 'quando è', 'when was born', 'when is'];
+  for (const verb of temporalVerbs) {
+    if (generalized.toLowerCase().startsWith(verb)) {
+      // Remove article + noun at the end (es. "il paziente")
+      generalized = generalized.replace(/\s+(il|la|lo|gli|le|un|una|uno)\s+\w+.*$/i, '');
+      // Map to canonical "Data di nascita"
+      generalized = 'Data di nascita';
+      break;
+    }
+  }
+
+  // Capitalize first letter
+  if (generalized.length > 0) {
+    generalized = generalized.charAt(0).toUpperCase() + generalized.slice(1);
+  }
 
   return generalized || label;  // Fallback if generalization fails
 }
@@ -190,7 +227,7 @@ function createEscalationFromMessage(
  * ✅ FASE 1: Crea step structure con escalation e GUID (senza testi)
  * Deterministico, non chiama AI, non salva traduzioni
  */
-function createStepStructure(
+export function createStepStructure(
   stepType: string,
   escalationCount: number
 ): { step: any; guids: string[] } {
@@ -514,12 +551,14 @@ export async function createTemplatesFromStructures(
     const steps = convertStructureToStepsDictionary(structure, templateId);
 
     // Create template (SENZA constraints/contracts - verranno aggiunti dopo)
+    // ✅ generalizeLabel is now async, so we need to await it
+    const generalizedLabel = await generalizeLabel(node.label);
     const template: DialogueTask = {
       id: templateId,
       _id: templateId,
       templateId: null,
-      name: generalizeLabel(node.label).toLowerCase().replace(/\s+/g, '_'),
-      label: generalizeLabel(node.label),
+      name: generalizedLabel.toLowerCase().replace(/\s+/g, '_'),
+      label: generalizedLabel,
       type: TaskType.UtteranceInterpretation,
       icon: node.emoji ? mapEmojiToIconName(node.emoji) : (node.icon || 'FileText'),
       subTasksIds: subTasksIds.length > 0 ? subTasksIds : undefined,
@@ -642,12 +681,14 @@ export async function createTemplatesFromWizardData(
     const dataContract = dataContractsMap.get(node.id);
 
     // Create template
+    // ✅ generalizeLabel is now async, so we need to await it
+    const generalizedLabel = await generalizeLabel(node.label);
     const template: DialogueTask = {
       id: templateId,
       _id: templateId,  // For MongoDB compatibility
       templateId: null,  // Template has always templateId === null
-      name: generalizeLabel(node.label).toLowerCase().replace(/\s+/g, '_'),  // Canonical name
-      label: generalizeLabel(node.label),  // Generalized label
+      name: generalizedLabel.toLowerCase().replace(/\s+/g, '_'),  // Canonical name
+      label: generalizedLabel,  // Generalized label
       type: TaskType.UtteranceInterpretation,  // Default to UtteranceInterpretation
       // ✅ Map emoji to icon name for DialogueTask (backward compatibility)
       // DialogueTask.icon expects icon name (e.g. "FileText"), not emoji

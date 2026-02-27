@@ -34,7 +34,8 @@
       "@features/*": ["../features/*"],
       "@config/*": ["../config/*"],
       "@taskEditor/*": ["components/TaskEditor/*"],
-      "@responseEditor/*": ["components/TaskEditor/ResponseEditor/*"]
+      "@responseEditor/*": ["components/TaskEditor/ResponseEditor/*"],
+      "@TaskBuilderAIWizard/*": ["../TaskBuilderAIWizard/*"]
     }
   },
   "include": ["src"]

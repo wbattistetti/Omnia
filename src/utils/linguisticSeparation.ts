@@ -46,6 +46,19 @@ export interface SeparationResult {
 }
 
 /**
+ * V-X-Y Segmentation Result
+ * V = Intention/verb (chiedi, verifica, ecc.)
+ * X = Data type (data di nascita, indirizzo, ecc.)
+ * Y = Owner/titolare (paziente, cliente, null = utente)
+ */
+export interface VXYSegmentation {
+  V: string;  // Intention (chiedi, verifica, quando è nato, ecc.)
+  X: string;  // Data type (data di nascita, indirizzo, ecc.)
+  Y: string | null;  // Owner (paziente, cliente, null = utente)
+  YSource: 'explicit' | 'implicit_user' | 'implicit_context' | 'pronoun';
+}
+
+/**
  * Find first article in text (language-aware)
  * @param text - Text to search
  * @param language - Language code
@@ -305,5 +318,146 @@ export function separateText(
     partA: '',
     partB,
     method: 'fallback'
+  };
+}
+
+/**
+ * Segment label into V (intention), X (data type), Y (owner)
+ * Architecture: V-X-Y segmentation with Y implicit = user (default)
+ *
+ * @param label - Full label (e.g., "chiedi la data di nascita del paziente")
+ * @param language - Language code
+ * @param contextOwner - Optional context owner (e.g., "paziente" from dialog context)
+ * @returns V-X-Y segmentation result
+ */
+export function segmentLabelVXY(
+  label: string,
+  language: Language = 'IT',
+  contextOwner?: string | null
+): VXYSegmentation {
+  const trimmed = label.trim();
+  if (!trimmed) {
+    return {
+      V: '',
+      X: '',
+      Y: null,
+      YSource: 'implicit_user'
+    };
+  }
+
+  const lowerText = trimmed.toLowerCase();
+
+  // Step 1: Extract V (intention) - verbs at the start
+  const verbResult = findVerbAtStart(trimmed, language);
+  const V = verbResult ? verbResult.verb : '';
+
+  // Step 2: Extract remaining text after V
+  const afterV = verbResult ? trimmed.slice(verbResult.end).trim() : trimmed;
+
+  // Step 3: Extract Y (owner) - explicit or implicit
+  let Y: string | null = null;
+  let YSource: 'explicit' | 'implicit_user' | 'implicit_context' | 'pronoun' = 'implicit_user';
+
+  // 3a. Check for explicit Y (del paziente, della cliente, ecc.)
+  const contextPrepositionsMap: Record<Language, string[]> = {
+    IT: ['del', 'della', 'dello', 'dei', 'degli', 'delle', 'al', 'allo', 'alla', 'ai', 'agli', 'alle'],
+    EN: ['of', 'from', 'for', 'about'],
+    PT: ['do', 'da', 'de', 'dos', 'das'],
+    ES: ['del', 'de la', 'de los', 'de las'],
+    FR: ['du', 'de la', 'des'],
+    DE: ['des', 'der', 'dem', 'den']
+  };
+
+  const contextPrepositions = contextPrepositionsMap[language] || [];
+  for (const prep of contextPrepositions) {
+    const regex = new RegExp(`\\s+${prep}\\s+(\\w+(?:\\s+\\w+)*)`, 'i');
+    const match = afterV.match(regex);
+    if (match && match[1]) {
+      Y = match[1].trim();
+      YSource = 'explicit';
+      break;
+    }
+  }
+
+  // 3b. Check for possessive pronouns (il suo, la sua, ecc.)
+  if (!Y) {
+    const possessivePatterns: Record<Language, RegExp[]> = {
+      IT: [/\b(il|la|lo|gli|le)\s+(suo|sua|suoi|sue|loro)\b/i],
+      EN: [/\b(his|her|their|your|my)\b/i],
+      PT: [/\b(seu|sua|seus|suas|deles|delas)\b/i],
+      ES: [/\b(su|sus)\b/i],
+      FR: [/\b(son|sa|ses|leur|leurs)\b/i],
+      DE: [/\b(sein|seine|ihr|ihre|ihr|ihre)\b/i]
+    };
+
+    const patterns = possessivePatterns[language] || [];
+    for (const pattern of patterns) {
+      if (pattern.test(afterV)) {
+        Y = 'third_person'; // Generic third person
+        YSource = 'pronoun';
+        break;
+      }
+    }
+  }
+
+  // 3c. Check context owner (from dialog/project context)
+  if (!Y && contextOwner) {
+    Y = contextOwner;
+    YSource = 'implicit_context';
+  }
+
+  // 3d. Default: Y = null (implicit user - lei/tu)
+  if (!Y) {
+    Y = null;
+    YSource = 'implicit_user';
+  }
+
+  // Step 4: Extract X (data type) - remove V and Y from label
+  let X = afterV;
+
+  // Remove Y if explicit
+  if (Y && YSource === 'explicit') {
+    // Remove prepositions + Y (match the exact Y we found)
+    for (const prep of contextPrepositions) {
+      // Escape special regex characters in Y
+      const escapedY = Y.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`\\s+${prep}\\s+${escapedY.replace(/\s+/g, '\\s+')}(?:\\s|$)`, 'i');
+      X = X.replace(regex, '').trim();
+    }
+  }
+
+  // Remove possessive pronouns if found
+  if (YSource === 'pronoun') {
+    const possessivePatterns: Record<Language, RegExp[]> = {
+      IT: [/\b(il|la|lo|gli|le)\s+(suo|sua|suoi|sue|loro)\s+/i],
+      EN: [/\b(his|her|their|your|my)\s+/i],
+      PT: [/\b(seu|sua|seus|suas|deles|delas)\s+/i],
+      ES: [/\b(su|sus)\s+/i],
+      FR: [/\b(son|sa|ses|leur|leurs)\s+/i],
+      DE: [/\b(sein|seine|ihr|ihre|ihr|ihre)\s+/i]
+    };
+
+    const patterns = possessivePatterns[language] || [];
+    for (const pattern of patterns) {
+      X = X.replace(pattern, '').trim();
+    }
+  }
+
+  // Remove leading articles from X
+  X = removeLeadingArticle(X, language);
+
+  // Remove any remaining context prepositions
+  X = removeContextPrepositions(X, language);
+
+  // Capitalize first letter of X
+  if (X.length > 0) {
+    X = X.charAt(0).toUpperCase() + X.slice(1);
+  }
+
+  return {
+    V: V.trim(),
+    X: X.trim(),
+    Y,
+    YSource
   };
 }

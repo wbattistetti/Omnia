@@ -28,8 +28,10 @@ try:
     from backend.ai_steps.parse_address import router as parse_address_router
     from backend.ai_steps.intentMessages import router as intentMessages_router
     from backend.ai_steps.adapt_prompts import router as adapt_prompts_router
+    from backend.ai_steps.constraint_messages import router as constraint_messages_router
     print("[INFO] Intent messages router loaded successfully")
     print("[INFO] Adapt prompts router loaded successfully")
+    print("[INFO] Constraint messages router loaded successfully")
 except ImportError as e:
     print(f"Warning: Could not import DDT wizard routers: {e}")
     # Fallback to empty routers
@@ -43,6 +45,7 @@ except ImportError as e:
     parse_address_router = APIRouter()
     intentMessages_router = APIRouter()
     adapt_prompts_router = APIRouter()
+    constraint_messages_router = APIRouter()
 
 # Import intent generation router from old backend
 try:
@@ -153,6 +156,7 @@ app.include_router(stepSuccess_router)
 app.include_router(stepNotConfirmed_router)
 app.include_router(parse_address_router)
 app.include_router(intentMessages_router)
+app.include_router(constraint_messages_router)  # ✅ POST /api/constraintMessages — invalid step messages
 
 # Include adapt_prompts_router with error handling
 try:

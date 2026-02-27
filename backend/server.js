@@ -3839,18 +3839,21 @@ app.post('/api/factory/dialogue-templates', async (req, res) => {
       Promise.all(
         templatesNeedingEmbedding.map(async (template) => {
           try {
-            // ✅ ARCHITECTURAL RULE: Normalize text BEFORE generating embedding
-            // This ensures consistent embedding generation for both templates and queries
-            const { normalizeTextForEmbedding, removeVerbsFromTemplateLabel } = require('./utils/embeddingTextNormalization');
+            // ✅ ARCHITECTURAL RULE: Use V-X-Y segmentation to extract X (data type) for embedding
+            // This ensures consistent embedding generation: template embedding = X, query matching = X
+            const { removeVerbsFromTemplateLabel } = require('./utils/embeddingTextNormalization');
 
-            // ✅ For type=3 templates, remove verbs to keep only the data part
-            // This allows matching both "chiedi la data di nascita" and "la data di nascita"
+            // ✅ For type=3 templates, use V-X-Y segmentation to extract only X (data type)
+            // removeVerbsFromTemplateLabel now uses V-X-Y and returns X normalized and capitalized
             let normalizedLabel;
             if (template.type === 3) {
-              // Remove verbs first, then normalize
-              const withoutVerbs = removeVerbsFromTemplateLabel(template.label, 'IT'); // TODO: Detect language from project
-              normalizedLabel = normalizeTextForEmbedding(withoutVerbs);
+              // Use V-X-Y segmentation to extract X (already normalized and capitalized)
+              normalizedLabel = removeVerbsFromTemplateLabel(template.label, 'IT'); // TODO: Detect language from project
+              // Convert to lowercase for embedding (embeddings are case-insensitive)
+              normalizedLabel = normalizedLabel.toLowerCase();
             } else {
+              // For non-type-3 templates, use basic normalization
+              const { normalizeTextForEmbedding } = require('./utils/embeddingTextNormalization');
               normalizedLabel = normalizeTextForEmbedding(template.label);
             }
 

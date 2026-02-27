@@ -140,58 +140,280 @@ function normalizeTextForEmbedding(text) {
 }
 
 /**
+ * Find verb at start of text (for V-X-Y segmentation)
+ * @param {string} text - Text to search
+ * @param {string} language - Language code
+ * @returns {Object|null} Object with verb and end index, or null
+ */
+function findVerbAtStart(text, language = 'IT') {
+  const REQUEST_VERBS = {
+    IT: ['chiedi', 'richiedi', 'domanda', 'chiedere', 'richiedere', 'domandare', 'mi dici', 'vorrei sapere', 'serve sapere', 'quando è', 'dimmi', 'quale è', 'qual è'],
+    EN: ['ask', 'request', 'tell me', 'i want to know', 'i need to know', 'when is', 'what is', 'which is', 'give me'],
+    PT: ['pergunte', 'solicite', 'me diga', 'quero saber', 'preciso saber', 'quando é', 'qual é', 'o que é'],
+    ES: ['pide', 'solicita', 'dime', 'quiero saber', 'necesito saber', 'cuándo es', 'cuál es', 'qué es'],
+    FR: ['demande', 'solicite', 'dis-moi', 'je veux savoir', 'j\'ai besoin de savoir', 'quand est', 'quel est', 'qu\'est-ce que'],
+    DE: ['frage', 'bitte', 'sag mir', 'ich möchte wissen', 'ich brauche zu wissen', 'wann ist', 'was ist', 'welches ist']
+  };
+
+  const verbs = REQUEST_VERBS[language] || REQUEST_VERBS['IT'];
+  if (!verbs || verbs.length === 0) {
+    return null;
+  }
+
+  const lowerText = text.toLowerCase();
+  const sortedVerbs = [...verbs].sort((a, b) => b.length - a.length);
+
+  for (const verb of sortedVerbs) {
+    if (lowerText.startsWith(verb.toLowerCase())) {
+      const afterVerb = lowerText.slice(verb.length);
+      if (afterVerb.length === 0 || afterVerb[0] === ' ') {
+        return {
+          verb: text.slice(0, verb.length),
+          end: verb.length
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Remove leading article from text
+ * @param {string} text - Text to clean
+ * @param {string} language - Language code
+ * @returns {string} Text without leading article
+ */
+function removeLeadingArticle(text, language = 'IT') {
+  const ARTICLES = {
+    IT: ['la ', 'il ', 'lo ', 'l\'', 'i ', 'gli ', 'le '],
+    EN: ['the ', 'a ', 'an ', 'your ', 'my ', 'his ', 'her ', 'their ', 'our ', 'its '],
+    PT: ['a ', 'o ', 'as ', 'os '],
+    ES: ['la ', 'el ', 'los ', 'las '],
+    FR: ['la ', 'le ', 'les ', 'l\''],
+    DE: ['der ', 'die ', 'das ', 'den ', 'dem ', 'des ']
+  };
+
+  const articles = ARTICLES[language] || ARTICLES['IT'];
+  if (!articles || articles.length === 0) {
+    return text;
+  }
+
+  const lowerText = text.toLowerCase();
+  const sortedArticles = [...articles].sort((a, b) => b.length - a.length);
+
+  for (const article of sortedArticles) {
+    if (lowerText.startsWith(article.toLowerCase())) {
+      return text.slice(article.length).trim();
+    }
+  }
+
+  return text;
+}
+
+/**
+ * Remove context prepositions and everything after them
+ * @param {string} text - Text to clean
+ * @param {string} language - Language code
+ * @returns {string} Text without context prepositions
+ */
+function removeContextPrepositions(text, language = 'IT') {
+  const contextPrepositions = {
+    IT: ['del', 'della', 'dello', 'dei', 'degli', 'delle', 'al', 'allo', 'alla', 'ai', 'agli', 'alle', 'per', 'sul', 'sulla', 'sui', 'sugli', 'sulle'],
+    EN: ['of', 'from', 'for', 'about', 'regarding', 'concerning'],
+    PT: ['do', 'da', 'de', 'dos', 'das', 'para', 'sobre'],
+    ES: ['del', 'de la', 'de los', 'de las', 'al', 'a la', 'para', 'sobre'],
+    FR: ['du', 'de la', 'des', 'au', 'à la', 'aux', 'pour', 'sur'],
+    DE: ['des', 'der', 'dem', 'den', 'vom', 'zur', 'zum', 'für', 'über']
+  };
+
+  const prepositions = contextPrepositions[language] || contextPrepositions['IT'];
+  if (prepositions.length === 0) {
+    return text;
+  }
+
+  const lowerText = text.toLowerCase();
+  let earliestIndex = Infinity;
+
+  for (const prep of prepositions) {
+    const regex = new RegExp(`\\s+${prep}\\s+`, 'i');
+    const match = lowerText.match(regex);
+    if (match && match.index !== undefined && match.index < earliestIndex) {
+      earliestIndex = match.index;
+    }
+  }
+
+  if (earliestIndex !== Infinity) {
+    return text.slice(0, earliestIndex).trim();
+  }
+
+  return text;
+}
+
+/**
+ * Segment label into V (intention), X (data type), Y (owner)
+ * Architecture: V-X-Y segmentation with Y implicit = user (default)
+ *
+ * @param {string} label - Full label (e.g., "chiedi la data di nascita del paziente")
+ * @param {string} language - Language code
+ * @param {string|null} contextOwner - Optional context owner (e.g., "paziente" from dialog context)
+ * @returns {Object} V-X-Y segmentation result { V, X, Y, YSource }
+ */
+function segmentLabelVXY(label, language = 'IT', contextOwner = null) {
+  const trimmed = label.trim();
+  if (!trimmed) {
+    return {
+      V: '',
+      X: '',
+      Y: null,
+      YSource: 'implicit_user'
+    };
+  }
+
+  const lowerText = trimmed.toLowerCase();
+
+  // Step 1: Extract V (intention) - verbs at the start
+  const verbResult = findVerbAtStart(trimmed, language);
+  const V = verbResult ? verbResult.verb : '';
+
+  // Step 2: Extract remaining text after V
+  const afterV = verbResult ? trimmed.slice(verbResult.end).trim() : trimmed;
+
+  // Step 3: Extract Y (owner) - explicit or implicit
+  let Y = null;
+  let YSource = 'implicit_user';
+
+  // 3a. Check for explicit Y (del paziente, della cliente, ecc.)
+  const contextPrepositionsMap = {
+    IT: ['del', 'della', 'dello', 'dei', 'degli', 'delle', 'al', 'allo', 'alla', 'ai', 'agli', 'alle'],
+    EN: ['of', 'from', 'for', 'about'],
+    PT: ['do', 'da', 'de', 'dos', 'das'],
+    ES: ['del', 'de la', 'de los', 'de las'],
+    FR: ['du', 'de la', 'des'],
+    DE: ['des', 'der', 'dem', 'den']
+  };
+
+  const contextPrepositions = contextPrepositionsMap[language] || contextPrepositionsMap['IT'];
+  for (const prep of contextPrepositions) {
+    const regex = new RegExp(`\\s+${prep}\\s+(\\w+(?:\\s+\\w+)*)`, 'i');
+    const match = afterV.match(regex);
+    if (match && match[1]) {
+      Y = match[1].trim();
+      YSource = 'explicit';
+      break;
+    }
+  }
+
+  // 3b. Check for possessive pronouns (il suo, la sua, ecc.)
+  if (!Y) {
+    const possessivePatterns = {
+      IT: [/\b(il|la|lo|gli|le)\s+(suo|sua|suoi|sue|loro)\b/i],
+      EN: [/\b(his|her|their|your|my)\b/i],
+      PT: [/\b(seu|sua|seus|suas|deles|delas)\b/i],
+      ES: [/\b(su|sus)\b/i],
+      FR: [/\b(son|sa|ses|leur|leurs)\b/i],
+      DE: [/\b(sein|seine|ihr|ihre|ihr|ihre)\b/i]
+    };
+
+    const patterns = possessivePatterns[language] || possessivePatterns['IT'];
+    for (const pattern of patterns) {
+      if (pattern.test(afterV)) {
+        Y = 'third_person';
+        YSource = 'pronoun';
+        break;
+      }
+    }
+  }
+
+  // 3c. Check context owner (from dialog/project context)
+  if (!Y && contextOwner) {
+    Y = contextOwner;
+    YSource = 'implicit_context';
+  }
+
+  // 3d. Default: Y = null (implicit user - lei/tu)
+  if (!Y) {
+    Y = null;
+    YSource = 'implicit_user';
+  }
+
+  // Step 4: Extract X (data type) - remove V and Y from label
+  let X = afterV;
+
+  // Remove Y if explicit
+  if (Y && YSource === 'explicit') {
+    for (const prep of contextPrepositions) {
+      const escapedY = Y.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`\\s+${prep}\\s+${escapedY.replace(/\s+/g, '\\s+')}(?:\\s|$)`, 'i');
+      X = X.replace(regex, '').trim();
+    }
+  }
+
+  // Remove possessive pronouns if found
+  if (YSource === 'pronoun') {
+    const possessivePatterns = {
+      IT: [/\b(il|la|lo|gli|le)\s+(suo|sua|suoi|sue|loro)\s+/i],
+      EN: [/\b(his|her|their|your|my)\s+/i],
+      PT: [/\b(seu|sua|seus|suas|deles|delas)\s+/i],
+      ES: [/\b(su|sus)\s+/i],
+      FR: [/\b(son|sa|ses|leur|leurs)\s+/i],
+      DE: [/\b(sein|seine|ihr|ihre|ihr|ihre)\s+/i]
+    };
+
+    const patterns = possessivePatterns[language] || possessivePatterns['IT'];
+    for (const pattern of patterns) {
+      X = X.replace(pattern, '').trim();
+    }
+  }
+
+  // Remove leading articles from X
+  X = removeLeadingArticle(X, language);
+
+  // Remove any remaining context prepositions
+  X = removeContextPrepositions(X, language);
+
+  // Capitalize first letter of X
+  if (X.length > 0) {
+    X = X.charAt(0).toUpperCase() + X.slice(1);
+  }
+
+  return {
+    V: V.trim(),
+    X: X.trim(),
+    Y,
+    YSource
+  };
+}
+
+/**
  * Remove verbs from template label (for type=3 templates)
+ * Uses V-X-Y segmentation architecture to extract only X (data type)
  * This ensures template embeddings only contain the data part, not the action part
  *
  * Examples:
- * - "Chiedi la data di nascita" → "data di nascita"
- * - "Richiedi l'email" → "email"
- * - "Qual è il nome" → "nome"
+ * - "Chiedi la data di nascita del paziente" → "Data di nascita"
+ * - "Richiedi l'email" → "Email"
+ * - "quando è nato il paziente" → "Data di nascita" (X implicit)
  *
  * @param {string} text - Template label
  * @param {string} language - Language code (IT, EN, PT, etc.)
- * @returns {string} Label without verbs
+ * @returns {string} X (data type) normalized and capitalized
  */
 function removeVerbsFromTemplateLabel(text, language = 'IT') {
   if (!text || typeof text !== 'string' || text.trim().length === 0) {
     return text || '';
   }
 
-  const verbsByLanguage = {
-    IT: ['chiedi', 'richiedi', 'domanda', 'chiedere', 'richiedere', 'domandare', 'raccogli', 'acquisisci', 'quale è', 'qual è', 'quando è', 'mi dici', 'vorrei sapere', 'serve sapere', 'dimmi'],
-    EN: ['ask', 'request', 'tell me', 'i want to know', 'i need to know', 'when is', 'what is', 'which is', 'give me', 'collect', 'acquire'],
-    PT: ['pergunte', 'solicite', 'me diga', 'quero saber', 'preciso saber', 'quando é', 'qual é', 'o que é', 'colete', 'adquira'],
-    ES: ['pide', 'solicita', 'dime', 'quiero saber', 'necesito saber', 'cuándo es', 'cuál es', 'qué es'],
-    FR: ['demande', 'solicite', 'dis-moi', 'je veux savoir', 'j\'ai besoin de savoir', 'quand est', 'quel est', 'qu\'est-ce que'],
-    DE: ['frage', 'bitte', 'sag mir', 'ich möchte wissen', 'ich brauche zu wissen', 'wann ist', 'was ist', 'welches ist']
-  };
+  // ✅ Use V-X-Y segmentation to extract X (data type)
+  const segmentation = segmentLabelVXY(text, language);
 
-  const verbs = verbsByLanguage[language] || verbsByLanguage['IT'];
-  let normalized = text.toLowerCase().trim();
-
-  // Sort by length (longest first) to match "mi dici" before "mi"
-  const sortedVerbs = [...verbs].sort((a, b) => b.length - a.length);
-
-  for (const verb of sortedVerbs) {
-    // Match verb at start of text
-    if (normalized.startsWith(verb.toLowerCase())) {
-      const afterVerb = normalized.slice(verb.length).trim();
-      // Check if followed by space or article
-      if (afterVerb.length === 0 || afterVerb[0] === ' ' || afterVerb.match(/^(la|il|lo|l'|i|gli|le|the|a|an|o|a|as|os)/i)) {
-        // Remove verb and return the rest
-        normalized = afterVerb;
-        break;
-      }
-    }
+  // Return X (already normalized and capitalized)
+  if (segmentation.X && segmentation.X.length > 0) {
+    return segmentation.X;
   }
 
-  // Remove leading articles
-  normalized = normalized.replace(/^(il|lo|la|l'|un|uno|una|un'|the|a|an|o|a|as|os)\s+/i, '');
-
-  // Remove context prepositions and everything after
-  normalized = normalized.replace(/\s+(del|della|dello|dei|degli|delle|al|allo|alla|ai|agli|alle|per|sul|sulla|sui|sugli|sulle|of|from|for|about|regarding|do|da|de|dos|das|para|sobre).*$/i, '');
-
-  return normalized.trim() || text; // Fallback to original if empty
+  // Fallback to original if segmentation fails
+  return text.trim();
 }
 
 module.exports = {

@@ -15,6 +15,7 @@ import { generateContractsForAllNodes } from '@utils/wizard/generateContract';
 import { generateAllMessagesForNode } from '../api/wizardApi';
 import { associateTextsToStructure } from './TemplateCreationService';
 import type { NodeStructure } from './TemplateCreationService';
+import { TaskType } from '@types/taskTypes';
 
 /**
  * ✅ FASE 3: Genera constraints per tutti i nodi e li aggiunge ai template in-place
@@ -40,6 +41,125 @@ export async function AIGenerateConstraints(
       if (template) {
         template.constraints = constraints;
         template.dataContracts = constraints; // Alias
+
+        // ✅ CRITICAL: Genera messaggi r1/r2 per ogni constraint e crea invalid step
+        const hasNonRequiredConstraints = constraints.some((c: any) => c.kind && c.kind !== 'required');
+        if (hasNonRequiredConstraints) {
+          const templateId = template.id || template._id;
+          if (templateId) {
+            try {
+              // ✅ 1. Genera messaggi r1/r2 per tutti i constraints (una chiamata AI per nodo)
+              const response = await fetch('/api/constraintMessages', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  label: task.label,
+                  type: task.type,
+                  constraints: constraints.filter((c: any) => c.kind && c.kind !== 'required')
+                })
+              });
+
+              if (response.ok) {
+                const data = await response.json();
+                const constraintMessages = data.ai?.messages || [];
+
+                if (Array.isArray(constraintMessages) && constraintMessages.length > 0) {
+                  // ✅ 2. Conta quanti messaggi r1/r2 abbiamo (per creare la struttura)
+                  const invalidMessages: Array<{ text: string }> = [];
+
+                  constraintMessages.forEach((msg: any) => {
+                    if (msg?.r1?.payoff) {
+                      invalidMessages.push({ text: String(msg.r1.payoff) });
+                    }
+                    if (msg?.r2?.payoff) {
+                      invalidMessages.push({ text: String(msg.r2.payoff) });
+                    }
+                  });
+
+                  if (invalidMessages.length > 0) {
+                    // ✅ 3. Crea struttura invalid step con GUID (come createStepStructure)
+                    const { createStepStructure } = await import('./TemplateCreationService');
+                    const { step: invalidStepStructure, guids: invalidGuids } = createStepStructure('invalid', invalidMessages.length);
+
+                    // ✅ 4. Associa GUID ai messaggi e salva traduzioni (meccanismo identico agli altri step)
+                    const { v4: uuidv4 } = await import('uuid');
+                    const addTranslation = typeof window !== 'undefined' && (window as any).__projectTranslationsContext
+                      ? (window as any).__projectTranslationsContext.addTranslation
+                      : undefined;
+
+                    const invalidTasks: any[] = [];
+                    let messageIndex = 0;
+
+                    constraintMessages.forEach((msg: any) => {
+                      if (msg?.r1?.payoff && invalidGuids[messageIndex]) {
+                        const guid = invalidGuids[messageIndex++];
+                        if (addTranslation) {
+                          addTranslation(guid, String(msg.r1.payoff));
+                        }
+                        invalidTasks.push({
+                          id: uuidv4(),
+                          type: TaskType.SayMessage, // ✅ Required by cloneEscalationWithNewTaskIds
+                          templateId: 'sayMessage',
+                          parameters: [{ parameterId: 'text', value: guid }]
+                        });
+                      }
+                      if (msg?.r2?.payoff && invalidGuids[messageIndex]) {
+                        const guid = invalidGuids[messageIndex++];
+                        if (addTranslation) {
+                          addTranslation(guid, String(msg.r2.payoff));
+                        }
+                        invalidTasks.push({
+                          id: uuidv4(),
+                          type: TaskType.SayMessage, // ✅ Required by cloneEscalationWithNewTaskIds
+                          templateId: 'sayMessage',
+                          parameters: [{ parameterId: 'text', value: guid }]
+                        });
+                      }
+                    });
+
+                    // ✅ 5. Crea invalid step usando la struttura (come gli altri step)
+                    const invalidStep = {
+                      type: 'invalid',
+                      escalations: [{
+                        escalationId: invalidStepStructure.escalations[0].escalationId,
+                        tasks: invalidTasks,
+                        actions: invalidTasks.map(t => ({
+                          actionId: 'sayMessage',
+                          actionInstanceId: uuidv4(),
+                          parameters: t.parameters
+                        }))
+                      }]
+                    };
+
+                    // ✅ 6. Aggiungi invalid step agli steps del template
+                    if (template.steps[templateId]) {
+                      template.steps[templateId].invalid = invalidStep;
+                    } else {
+                      template.steps.invalid = invalidStep;
+                    }
+
+                    console.log(`[AIGenerateConstraints] ✅ Added invalid step with constraint messages to template "${task.label}" (${task.id})`, {
+                      templateId,
+                      constraintsCount: constraints.length,
+                      invalidMessagesCount: invalidMessages.length,
+                      invalidTasksCount: invalidTasks.length,
+                      invalidGuidsCount: invalidGuids.length
+                    });
+                  }
+                }
+              } else {
+                console.warn(`[AIGenerateConstraints] ⚠️ Failed to generate constraint messages for "${task.label}" (${task.id})`, {
+                  status: response.status,
+                  statusText: response.statusText
+                });
+              }
+            } catch (error) {
+              console.error(`[AIGenerateConstraints] ⚠️ Error generating constraint messages for "${task.label}" (${task.id}):`, error);
+              // Non bloccare il flusso - i constraints sono stati salvati, solo i messaggi sono mancanti
+            }
+          }
+        }
+
         console.log(`[AIGenerateConstraints] ✅ Constraints added to template "${task.label}" (${task.id})`, {
           constraintsCount: constraints.length
         });

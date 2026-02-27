@@ -141,6 +141,24 @@ Public Class TaskAssembler
         Dim hasConstraints = task.Constraints IsNot Nothing AndAlso task.Constraints.Count > 0
         Dim hasInvalidStep = task.Steps IsNot Nothing AndAlso task.Steps.Any(Function(s) s.Type = DialogueStepType.Invalid)
 
+        ' ✅ LOG: Diagnostica per debug
+        Console.WriteLine($"[TaskAssembler] 🔍 Validating node {ideNode.Id}")
+        Console.WriteLine($"  - Label: {If(ideNode.Label, "N/A")}")
+        Console.WriteLine($"  - HasConstraints: {hasConstraints}")
+        Console.WriteLine($"  - ConstraintsCount: {If(task.Constraints IsNot Nothing, task.Constraints.Count, 0)}")
+        Console.WriteLine($"  - HasInvalidStep: {hasInvalidStep}")
+        Console.WriteLine($"  - StepsCount: {If(task.Steps IsNot Nothing, task.Steps.Count, 0)}")
+        If task.Steps IsNot Nothing Then
+            For Each dstep In task.Steps
+                Console.WriteLine($"    - Step Type: {dstep.Type}")
+            Next
+        End If
+        If task.Constraints IsNot Nothing Then
+            For Each constraint In task.Constraints
+                Console.WriteLine($"    - Constraint: {constraint.GetType().Name}")
+            Next
+        End If
+
         If hasConstraints AndAlso Not hasInvalidStep Then
             Throw New InvalidOperationException($"Invalid task model: Node {ideNode.Id} has {task.Constraints.Count} constraint(s) but no step of type 'invalid'. When constraints are present, an 'invalid' step is mandatory to handle validation failures.")
         End If
