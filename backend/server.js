@@ -854,8 +854,11 @@ app.get('/api/test/performance', async (req, res) => {
 
 app.get('/api/projects/catalog/clients', async (req, res) => {
   const startTime = Date.now();
-  const client = await getMongoClient(); // ✅ Usa pool invece di nuova connessione
+  console.log('[Catalog.clients] 📥 Request received');
   try {
+    console.log('[Catalog.clients] 🔌 Getting MongoDB client...');
+    const client = await getMongoClient(); // ✅ Usa pool invece di nuova connessione
+    console.log('[Catalog.clients] ✅ MongoDB client obtained');
     const db = client.db(dbProjects);
     const coll = db.collection('projects_catalog');
 
@@ -875,10 +878,16 @@ app.get('/api/projects/catalog/clients', async (req, res) => {
       .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 
     const duration = Date.now() - startTime;
+    console.log('[Catalog.clients] ✅ Success', { count: clientNames.length, duration: `${duration}ms` });
     logInfo('Catalog.clients', { count: clientNames.length, duration: `${duration}ms` });
     res.json(clientNames);
   } catch (e) {
     const duration = Date.now() - startTime;
+    console.error('[Catalog.clients] ❌ Error', {
+      error: e?.message || String(e),
+      stack: e?.stack,
+      duration: `${duration}ms`
+    });
     logError('Catalog.clients', e, { duration: `${duration}ms` });
     res.status(500).json({ error: String(e?.message || e) });
   }
@@ -2615,8 +2624,11 @@ function deriveIsInteractiveFromMode(mode) {
 // Endpoint per caricare Tasks con scope filtering
 // -----------------------------
 app.get('/api/factory/tasks', async (req, res) => {
-  const client = await getMongoClient();
+  console.log('[Factory.tasks] 📥 Request received', { query: req.query });
   try {
+    console.log('[Factory.tasks] 🔌 Getting MongoDB client...');
+    const client = await getMongoClient();
+    console.log('[Factory.tasks] ✅ MongoDB client obtained');
     const db = client.db(dbFactory);
 
     // Parametri query per scope filtering e taskType
@@ -2730,6 +2742,11 @@ app.get('/api/factory/tasks', async (req, res) => {
     res.json(formatted);
 
   } catch (error) {
+    console.error('[Factory.tasks] ❌ Error', {
+      error: error?.message || String(error),
+      stack: error?.stack,
+      query: req.query
+    });
     console.error('[TaskTemplatesV2] Error:', error);
     res.status(500).json({ error: 'Failed to fetch task templates', details: error.message });
   // ✅ NON chiudere la connessione se usi il pool
@@ -3067,8 +3084,11 @@ app.get('/api/factory/actions', async (req, res) => {
 });
 
 app.get('/api/factory/dialogue-templates', async (req, res) => {
+  console.log('[Factory.dialogue-templates] 📥 Request received');
   try {
+    console.log('[Factory.dialogue-templates] 🔌 Getting MongoDB client...');
     await withMongoClient(async (client) => {
+      console.log('[Factory.dialogue-templates] ✅ MongoDB client obtained');
       const db = client.db(dbFactory);
 
       // ✅ Carica TUTTI i task dalla collection tasks
@@ -3088,10 +3108,15 @@ app.get('/api/factory/dialogue-templates', async (req, res) => {
       });
 
       const ddt = Array.from(templateMap.values());
+      console.log('[Factory.dialogue-templates] ✅ Success', { count: ddt.length });
       console.log('>>> LOAD /api/factory/dialogue-templates count =', ddt.length);
       res.json(ddt);
     });
   } catch (err) {
+    console.error('[Factory.dialogue-templates] ❌ Error', {
+      error: err?.message || String(err),
+      stack: err?.stack
+    });
     console.error('[dialogue-templates] Error:', err);
     res.status(500).json({ error: err.message, stack: err.stack });
   }
@@ -7134,7 +7159,10 @@ async function initializeMongoPool() {
   try {
     console.log('[MongoDB] Pre-initializing connection pool...');
     logInfo('MongoDB.Startup', { message: 'Pre-initializing connection pool...' });
-    await getMongoClient();
+
+    console.log('[MongoDB] Calling getMongoClient()...');
+    const client = await getMongoClient();
+    console.log('[MongoDB] ✅ getMongoClient() completed');
     console.log('[MongoDB] ✅ Connection pool pre-initialized successfully');
     logInfo('MongoDB.Startup', { message: 'Connection pool pre-initialized successfully' });
 
@@ -7152,20 +7180,33 @@ async function initializeMongoPool() {
 
 // Inizializza il pool prima di avviare il server
 console.log('[Server] Starting initialization...');
-initializeMongoPool().then(() => {
-  console.log('[Server] MongoDB pool initialized, starting Express server...');
-  app.listen(3100, () => {
-    console.log('[Server] ✅ Express server ready on port 3100');
-    logInfo('Express', { message: 'Server ready on port 3100' });
-  });
-}).catch((error) => {
-  console.error('[Server] ❌ Error during initialization:', error);
-  logError('Express', error, { message: 'Failed to start server' });
-  // Avvia comunque il server, il pool verrà inizializzato alla prima richiesta
-  console.log('[Server] Starting Express server anyway (MongoDB will initialize on first request)...');
-  app.listen(3100, () => {
-    console.log('[Server] ✅ Express server ready on port 3100 (MongoDB pool will initialize on first request)');
-    logInfo('Express', { message: 'Server ready on port 3100 (MongoDB pool will initialize on first request)' });
-  });
+
+// ✅ Add timeout to prevent blocking forever
+const INIT_TIMEOUT_MS = 10000; // 10 seconds max
+
+const initPromise = initializeMongoPool();
+const timeoutPromise = new Promise((_, reject) => {
+  setTimeout(() => {
+    reject(new Error('MongoDB initialization timeout after 10s'));
+  }, INIT_TIMEOUT_MS);
 });
+
+Promise.race([initPromise, timeoutPromise])
+  .then(() => {
+    console.log('[Server] MongoDB pool initialized, starting Express server...');
+    app.listen(3100, () => {
+      console.log('[Server] ✅ Express server ready on port 3100');
+      logInfo('Express', { message: 'Server ready on port 3100' });
+    });
+  })
+  .catch((error) => {
+    console.error('[Server] ❌ Error during initialization:', error);
+    console.error('[Server] ⚠️ Starting Express server anyway (MongoDB will initialize on first request)...');
+    logError('Express', error, { message: 'Failed to start server' });
+    // Avvia comunque il server, il pool verrà inizializzato alla prima richiesta
+    app.listen(3100, () => {
+      console.log('[Server] ✅ Express server ready on port 3100 (MongoDB pool will initialize on first request)');
+      logInfo('Express', { message: 'Server ready on port 3100 (MongoDB pool will initialize on first request)' });
+    });
+  });
 

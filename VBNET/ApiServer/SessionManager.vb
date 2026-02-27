@@ -36,6 +36,7 @@ Public Class EventEmitter
     Private ReadOnly _listeners As New Dictionary(Of String, List(Of Action(Of Object)))
     Private ReadOnly _replayBuffer As New Dictionary(Of String, Queue(Of Object))
     Private ReadOnly _lock As New Object()
+    Private Shared ReadOnly _logger As ApiServer.Logging.StdoutLogger = New ApiServer.Logging.StdoutLogger()
 
     ''' <summary>
     ''' Register a listener. Buffered events of this type are replayed immediately.
@@ -48,17 +49,58 @@ Public Class EventEmitter
             _listeners(eventName).Add(handler)
 
             ' Replay buffered events emitted before this listener was registered
+            Dim bufferedCount = 0
             If _replayBuffer.ContainsKey(eventName) Then
                 Dim q = _replayBuffer(eventName)
+                bufferedCount = q.Count
+                _logger.LogInfo($"[EventEmitter] 🔄 Starting replay of {bufferedCount} buffered events", New With {
+                    .eventName = eventName,
+                    .bufferedCount = bufferedCount
+                })
+                Dim replayIndex = 0
                 While q.Count > 0
                     Dim bufferedData = q.Dequeue()
+                    replayIndex += 1
                     Try
+                        Dim dataPreview As String = "null"
+                        If bufferedData IsNot Nothing Then
+                            Try
+                                dataPreview = JsonConvert.SerializeObject(bufferedData)
+                                If dataPreview.Length > 200 Then
+                                    dataPreview = dataPreview.Substring(0, 200) + "..."
+                                End If
+                            Catch
+                                dataPreview = bufferedData.ToString()
+                            End Try
+                        End If
+                        _logger.LogInfo($"[EventEmitter] 🔄 Replaying buffered event {replayIndex}/{bufferedCount}", New With {
+                            .eventName = eventName,
+                            .eventIndex = replayIndex,
+                            .totalBuffered = bufferedCount,
+                            .dataType = If(bufferedData IsNot Nothing, bufferedData.GetType().Name, "null"),
+                            .dataPreview = dataPreview
+                        })
                         handler(bufferedData)
-                    Catch
-                        ' Ignore replay errors
+                        _logger.LogInfo($"[EventEmitter] ✅ Buffered event {replayIndex}/{bufferedCount} replayed successfully", New With {
+                            .eventName = eventName,
+                            .eventIndex = replayIndex
+                        })
+                    Catch ex As Exception
+                        _logger.LogError($"[EventEmitter] ❌ Error replaying buffered event {replayIndex}/{bufferedCount}", ex, New With {
+                            .eventName = eventName,
+                            .eventIndex = replayIndex,
+                            .errorMessage = ex.Message
+                        })
                     End Try
                 End While
                 _replayBuffer.Remove(eventName)
+            End If
+
+            If bufferedCount > 0 Then
+                _logger.LogInfo($"[EventEmitter] ✅ Completed replay of {bufferedCount} buffered events", New With {
+                    .eventName = eventName,
+                    .totalListeners = _listeners(eventName).Count
+                })
             End If
         End SyncLock
     End Sub
@@ -68,11 +110,21 @@ Public Class EventEmitter
     ''' </summary>
     Public Sub Emit(eventName As String, data As Object)
         SyncLock _lock
-            If _listeners.ContainsKey(eventName) AndAlso _listeners(eventName).Count > 0 Then
+            Dim hasListeners = _listeners.ContainsKey(eventName) AndAlso _listeners(eventName).Count > 0
+            If hasListeners Then
+                Dim listenerCount = _listeners(eventName).Count
+                _logger.LogInfo($"[EventEmitter] 📤 Emitting event (has listeners)", New With {
+                    .eventName = eventName,
+                    .listenerCount = listenerCount,
+                    .dataType = If(data IsNot Nothing, data.GetType().Name, "null")
+                })
                 For Each handler In _listeners(eventName)
                     Try
                         handler(data)
-                    Catch
+                    Catch ex As Exception
+                        _logger.LogError($"[EventEmitter] ❌ Error in handler", ex, New With {
+                            .eventName = eventName
+                        })
                     End Try
                 Next
             Else
@@ -81,6 +133,12 @@ Public Class EventEmitter
                     _replayBuffer(eventName) = New Queue(Of Object)()
                 End If
                 _replayBuffer(eventName).Enqueue(data)
+                Dim bufferSize = _replayBuffer(eventName).Count
+                _logger.LogInfo($"[EventEmitter] 💾 Buffering event (no listeners)", New With {
+                    .eventName = eventName,
+                    .bufferSize = bufferSize,
+                    .dataType = If(data IsNot Nothing, data.GetType().Name, "null")
+                })
             End If
         End SyncLock
     End Sub

@@ -40,6 +40,11 @@ Namespace TaskEngine
 
             Dim result As New DialogueTurnResult()
 
+            ' ✅ Validazione parametri
+            If task Is Nothing Then
+                Throw New ArgumentNullException(NameOf(task), "CompiledUtteranceTask cannot be null")
+            End If
+
             ' ✅ FASE 1: Se state è vuoto o TurnState = Start, invia messaggio iniziale
             If state Is Nothing OrElse state.TurnState = TurnState.Start Then
                 ' ✅ Inizializza nuovo state se vuoto
@@ -51,6 +56,10 @@ Namespace TaskEngine
                 ' ✅ task.Steps è List(Of TaskEngine.DialogueStep) dove TaskEngine.DialogueStep è da DDTEngine
                 ' ✅ DialogueStepType enum è nel namespace TaskEngine (da DDTEngine) - usiamo Global per evitare ambiguità
                 If task.Steps IsNot Nothing AndAlso task.Steps.Count > 0 Then
+                    ' ✅ Validazione: translations può essere Nothing
+                    If translations Is Nothing Then
+                        translations = New Dictionary(Of String, String)()
+                    End If
                     ' ✅ Estrai il valore enum prima del lambda per evitare problemi di risoluzione namespace
                     ' ✅ Usa Global.TaskEngine per riferirsi al namespace root (da DDTEngine), non al namespace corrente
                     Dim startStateValue As Global.TaskEngine.DialogueStepType = Global.TaskEngine.DialogueStepType.Start

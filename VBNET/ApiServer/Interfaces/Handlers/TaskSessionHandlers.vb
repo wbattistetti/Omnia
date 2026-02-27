@@ -222,19 +222,33 @@ Namespace ApiServer.Handlers
                 })
 
                 ' ✅ PASSO 7: Carica/Crea DialogueState
-                ' ✅ Log rimosso: troppo verboso
+                ' ✅ Per costruzione, DialogueContext viene creato qui se non esiste
                 Dim session = SessionManager.GetTaskSession(newSessionId)
                 Dim dialogueState As TaskEngine.Orchestrator.TaskEngine.DialogueState = Nothing
+                Dim dialogueContext As TaskEngine.Orchestrator.TaskEngine.DialogueContext = Nothing
+
                 Try
-                    Dim dialogueContext = SessionManager.GetOrCreateDialogueContext(session)
-                    If dialogueContext IsNot Nothing AndAlso dialogueContext.DialogueState IsNot Nothing Then
-                        ' ✅ FIX: DialogueContext.DialogueState è già di tipo TaskEngine.Orchestrator.TaskEngine.DialogueState
+                    dialogueContext = SessionManager.GetOrCreateDialogueContext(session)
+                    If dialogueContext Is Nothing Then
+                        ' ✅ Crea DialogueContext dal compiledTask (prima volta - per costruzione)
+                        dialogueContext = CompiledTaskAdapter.CreateDialogueContextFromTask(compiledTask)
+                        ' ✅ Salva il DialogueContext creato
+                        SessionManager.SaveDialogueContext(session, dialogueContext)
+                    End If
+
+                    If dialogueContext.DialogueState IsNot Nothing Then
                         dialogueState = dialogueContext.DialogueState
                     Else
                         dialogueState = New TaskEngine.Orchestrator.TaskEngine.DialogueState()
+                        dialogueContext.DialogueState = dialogueState
+                        SessionManager.SaveDialogueContext(session, dialogueContext)
                     End If
                 Catch ex As Exception
+                    ' ✅ Fallback: crea DialogueContext e DialogueState da zero
+                    dialogueContext = CompiledTaskAdapter.CreateDialogueContextFromTask(compiledTask)
                     dialogueState = New TaskEngine.Orchestrator.TaskEngine.DialogueState()
+                    dialogueContext.DialogueState = dialogueState
+                    SessionManager.SaveDialogueContext(session, dialogueContext)
                 End Try
 
                 ' ✅ PASSO 8: Verifica caricamento traduzioni (esempio)
@@ -290,10 +304,29 @@ Namespace ApiServer.Handlers
                     End If
 
                     ' ✅ Chiama ProcessTurn (FASE 1: solo messaggio iniziale)
+                    LogInfo("🔄 [ProcessTurn] Calling ProcessTurn", New With {
+                        .sessionId = newSessionId,
+                        .taskId = compiledTask.Id,
+                        .hasDialogueState = dialogueState IsNot Nothing,
+                        .turnState = If(dialogueState IsNot Nothing, dialogueState.TurnState.ToString(), "null")
+                    })
                     Dim result = TaskEngine.Orchestrator.TaskEngine.ProcessTurnEngine.ProcessTurn(dialogueState, "", compiledTask, allTranslations)
+
+                    LogInfo("✅ [ProcessTurn] ProcessTurn completed", New With {
+                        .sessionId = newSessionId,
+                        .messagesCount = If(result.Messages IsNot Nothing, result.Messages.Count, 0),
+                        .status = result.Status
+                    })
 
                     ' ✅ Emetti messaggi via SSE
                     Dim processTurnEmitter As EventEmitter = SessionManager.GetOrCreateEventEmitter(newSessionId)
+                    Dim listenerCountBefore = processTurnEmitter.ListenerCount("message")
+                    LogInfo("📡 [ProcessTurn] EventEmitter status", New With {
+                        .sessionId = newSessionId,
+                        .listenerCount = listenerCountBefore,
+                        .willBuffer = listenerCountBefore = 0
+                    })
+
                     If result.Messages IsNot Nothing AndAlso result.Messages.Count > 0 Then
                         For Each messageText As String In result.Messages
                             Dim messageData As Object = New With {
@@ -301,13 +334,24 @@ Namespace ApiServer.Handlers
                                 .stepType = "start",
                                 .timestamp = DateTime.UtcNow.ToString("O")
                             }
+                            LogInfo("📤 [ProcessTurn] Emitting message", New With {
+                                .sessionId = newSessionId,
+                                .messageText = If(messageText.Length > 50, messageText.Substring(0, 50) + "...", messageText),
+                                .stepType = "start",
+                                .listenerCount = listenerCountBefore
+                            })
                             processTurnEmitter.Emit("message", messageData)
                         Next
+                    Else
+                        LogInfo("⚠️ [ProcessTurn] No messages to emit", New With {
+                            .sessionId = newSessionId
+                        })
                     End If
 
                     ' ✅ Salva nuovo DialogueState nella sessione
+                    ' ✅ Per costruzione, dialogueContext esiste sempre (creato al PASSO 7)
                     If result.NewState IsNot Nothing Then
-                        Dim dialogueContext = SessionManager.GetOrCreateDialogueContext(session)
+                        dialogueContext = SessionManager.GetOrCreateDialogueContext(session)
                         dialogueContext.DialogueState = result.NewState
                         SessionManager.SaveDialogueContext(session, dialogueContext)
                     End If
@@ -318,6 +362,10 @@ Namespace ApiServer.Handlers
                             .taskId = compiledTask.Id,
                             .timestamp = DateTime.UtcNow.ToString("O")
                         }
+                        LogInfo("⏳ [ProcessTurn] Emitting waitingForInput", New With {
+                            .sessionId = newSessionId,
+                            .taskId = compiledTask.Id
+                        })
                         processTurnEmitter.Emit("waitingForInput", waitingData)
                     End If
 
@@ -462,14 +510,28 @@ Namespace ApiServer.Handlers
                 ' ✅ REMOVED: TaskInstance legacy code - task execution is now handled by FlowOrchestrator
 
                 ' ✅ Usa SseStreamManager per aprire connessione SSE
+                LogInfo("🔌 [SSE Stream] Opening SSE stream", New With {
+                    .sessionId = sessionId
+                })
                 _sseStreamManager.OpenStream(sessionId, context.Response)
+                LogInfo("✅ [SSE Stream] SSE stream opened", New With {
+                    .sessionId = sessionId,
+                    .isStreamOpen = _sseStreamManager.IsStreamOpen(sessionId)
+                })
 
                 ' ✅ Invia messaggi bufferizzati se presenti
                 Dim streamManager = DirectCast(_sseStreamManager, ApiServer.Streaming.SseStreamManager)
+                LogInfo("📦 [SSE Stream] Sending buffered messages", New With {
+                    .sessionId = sessionId
+                })
                 streamManager.SendBufferedMessages(sessionId)
 
                 ' ✅ STATELESS: Send existing messages first (from Redis) usando SseStreamManager
                 If session.Messages IsNot Nothing AndAlso session.Messages.Count > 0 Then
+                    LogInfo("📨 [SSE Stream] Sending existing session messages", New With {
+                        .sessionId = sessionId,
+                        .messagesCount = session.Messages.Count
+                    })
                     For Each msg In session.Messages
                         _sseStreamManager.EmitEvent(sessionId, "message", msg)
                     Next
@@ -477,15 +539,41 @@ Namespace ApiServer.Handlers
 
                 ' Send waitingForInput event if already waiting
                 If session.IsWaitingForInput Then
+                    LogInfo("⏳ [SSE Stream] Sending waitingForInput event", New With {
+                        .sessionId = sessionId
+                    })
                     _sseStreamManager.EmitEvent(sessionId, "waitingForInput", session.WaitingForInputData)
                 End If
 
                 ' ✅ Register event handlers usando SseStreamManager
                 Dim onMessage As Action(Of Object) = Sub(data)
                                                          Try
+                                                             ' ✅ Log dettagliato del messaggio ricevuto
+                                                             Dim dataJson As String = "null"
+                                                             If data IsNot Nothing Then
+                                                                 Try
+                                                                     dataJson = JsonConvert.SerializeObject(data)
+                                                                 Catch
+                                                                     dataJson = data.ToString()
+                                                                 End Try
+                                                             End If
+                                                             LogInfo("📨 [SSE Stream] onMessage handler called", New With {
+                                                                 .sessionId = sessionId,
+                                                                 .dataType = If(data IsNot Nothing, data.GetType().Name, "null"),
+                                                                 .dataPreview = If(dataJson.Length > 200, dataJson.Substring(0, 200) + "...", dataJson),
+                                                                 .dataLength = dataJson.Length,
+                                                                 .isStreamOpen = _sseStreamManager.IsStreamOpen(sessionId)
+                                                             })
                                                              _sseStreamManager.EmitEvent(sessionId, "message", data)
+                                                             LogInfo("✅ [SSE Stream] onMessage handler completed", New With {
+                                                                 .sessionId = sessionId
+                                                             })
                                                          Catch ex As Exception
-                                                             ' Log removed
+                                                             LogError("❌ [SSE Stream] Error in onMessage handler", ex, New With {
+                                                                 .sessionId = sessionId,
+                                                                 .errorMessage = ex.Message,
+                                                                 .stackTrace = ex.StackTrace
+                                                             })
                                                          End Try
                                                      End Sub
 
@@ -519,10 +607,21 @@ Namespace ApiServer.Handlers
 
                 ' ✅ STATELESS: Registra gli handler sull'EventEmitter condiviso
                 Dim sharedEmitter = SessionManager.GetOrCreateEventEmitter(sessionId)
+                Dim listenerCountBefore = sharedEmitter.ListenerCount("message")
+                LogInfo("📝 [SSE Stream] Registering EventEmitter listeners", New With {
+                    .sessionId = sessionId,
+                    .listenerCountBefore = listenerCountBefore
+                })
                 sharedEmitter.[On]("message", onMessage)
                 sharedEmitter.[On]("waitingForInput", onWaitingForInput)
                 sharedEmitter.[On]("complete", onComplete)
                 sharedEmitter.[On]("error", onError)
+                Dim listenerCountAfter = sharedEmitter.ListenerCount("message")
+                LogInfo("✅ [SSE Stream] EventEmitter listeners registered", New With {
+                    .sessionId = sessionId,
+                    .listenerCountAfter = listenerCountAfter,
+                    .bufferedMessagesReplayed = listenerCountAfter > listenerCountBefore
+                })
 
                 ' ✅ STATELESS: Quando la connessione SSE si chiude, imposta SseConnected=False
                 context.RequestAborted.Register(Sub()

@@ -29,6 +29,7 @@ Public Class UtteranceTaskCompiler
         ' 1. Se task.templateId esiste → carica template e costruisci struttura da subTasksIds
         ' 2. Applica task.steps come override
         Dim taskTreeExpanded As Compiler.TaskTreeExpanded = Nothing
+        Dim template As Compiler.Task = Nothing
 
         If Not String.IsNullOrEmpty(task.TemplateId) Then
             Dim matchingTemplates = allTemplates.Where(Function(t As Compiler.Task) t.Id = task.TemplateId).ToList()
@@ -37,7 +38,7 @@ Public Class UtteranceTaskCompiler
             ElseIf matchingTemplates.Count > 1 Then
                 Throw New InvalidOperationException($"Template with ID '{task.TemplateId}' appears {matchingTemplates.Count} times in allTemplates. Each template ID must be unique.")
             End If
-            Dim template = matchingTemplates.Single()
+            template = matchingTemplates.Single()
             Try
                 taskTreeExpanded = BuildTaskTreeExpanded(template, task, allTemplates)
             Catch ex As Exception
@@ -51,19 +52,66 @@ Public Class UtteranceTaskCompiler
 
         If taskTreeExpanded IsNot Nothing Then
             Try
-                ' ✅ DIAG: Verifica steps PRIMA di compilare
+                ' ✅ DIAG: Verifica steps PRIMA di compilare - LOGGING DETTAGLIATO
                 Console.WriteLine("=================================================================================")
                 Console.WriteLine("[DIAG] UtteranceTaskCompiler: Verifying steps before compilation...")
                 Console.WriteLine($"   TaskInstance.Id: {taskId}")
+                If template IsNot Nothing Then
+                    Console.WriteLine($"   Template.Id: {template.Id}")
+                    Console.WriteLine($"   Template.TemplateId: {If(String.IsNullOrEmpty(template.TemplateId), "null", template.TemplateId)}")
+                Else
+                    Console.WriteLine($"   Template.Id: (template is Nothing)")
+                End If
                 Console.WriteLine($"   TaskInstance.Steps IsNothing: {task.Steps Is Nothing}")
+
                 If task.Steps IsNot Nothing Then
                     Console.WriteLine($"   TaskInstance.Steps.Count: {task.Steps.Count}")
                     Console.WriteLine($"   TaskInstance.Steps.Keys: {String.Join(", ", task.Steps.Keys)}")
+
+                    ' ✅ LOGGING DETTAGLIATO: Per ogni chiave, mostra il tipo e le chiavi interne
+                    For Each key In task.Steps.Keys
+                        Dim stepValue = task.Steps(key)
+                        If stepValue IsNot Nothing Then
+                            Dim stepValueType = stepValue.GetType().Name
+                            Console.WriteLine($"     Steps[{key}]: Type={stepValueType}")
+
+                            ' Se è un dictionary, mostra le chiavi interne
+                            If TypeOf stepValue Is Dictionary(Of String, Object) Then
+                                Dim stepDict = DirectCast(stepValue, Dictionary(Of String, Object))
+                                Console.WriteLine($"       Internal keys: {String.Join(", ", stepDict.Keys)}")
+                            End If
+                        Else
+                            Console.WriteLine($"     Steps[{key}]: NULL")
+                        End If
+                    Next
+
+                    ' ✅ VERIFICA: Controlla se template.Id è presente nelle chiavi
+                    If template IsNot Nothing Then
+                        Dim templateIdInSteps = task.Steps.ContainsKey(template.Id)
+                        Console.WriteLine($"   Template.Id '{template.Id}' found in Steps.Keys: {templateIdInSteps}")
+                        If Not templateIdInSteps Then
+                            Console.WriteLine($"   ⚠️ WARNING: Template.Id '{template.Id}' NOT FOUND in instance.Steps!")
+                            Console.WriteLine($"   Available keys: {String.Join(", ", task.Steps.Keys)}")
+                        End If
+                    End If
+                Else
+                    Console.WriteLine($"   ⚠️ WARNING: TaskInstance.Steps is Nothing!")
                 End If
+
                 If taskTreeExpanded.Nodes IsNot Nothing AndAlso taskTreeExpanded.Nodes.Count > 0 Then
                     Dim firstNode = taskTreeExpanded.Nodes(0)
                     Console.WriteLine($"   FirstNode.Id: {firstNode.Id}")
                     Console.WriteLine($"   FirstNode.TemplateId: {firstNode.TemplateId}")
+
+                    ' ✅ VERIFICA: Controlla se firstNode.TemplateId è presente nelle chiavi
+                    If task.Steps IsNot Nothing Then
+                        Dim nodeTemplateIdInSteps = task.Steps.ContainsKey(firstNode.TemplateId)
+                        Console.WriteLine($"   FirstNode.TemplateId '{firstNode.TemplateId}' found in Steps.Keys: {nodeTemplateIdInSteps}")
+                        If Not nodeTemplateIdInSteps Then
+                            Console.WriteLine($"   ⚠️ WARNING: FirstNode.TemplateId '{firstNode.TemplateId}' NOT FOUND in instance.Steps!")
+                        End If
+                    End If
+
                     Console.WriteLine($"   FirstNode.Steps IsNothing: {firstNode.Steps Is Nothing}")
                     If firstNode.Steps IsNot Nothing Then
                         Console.WriteLine($"   FirstNode.Steps.Count: {firstNode.Steps.Count}")
@@ -72,10 +120,28 @@ Public Class UtteranceTaskCompiler
                             Dim stepInfo As String = "     Step Type: " & dstep.Type & ", Escalations: " & escalationsCount.ToString()
                             Console.WriteLine(stepInfo)
                         Next
+                    Else
+                        Console.WriteLine($"   ⚠️ WARNING: FirstNode.Steps is Nothing (steps not applied from instance)")
                     End If
+
                     Console.WriteLine($"   FirstNode.SubTasks IsNothing: {firstNode.SubTasks Is Nothing}")
                     If firstNode.SubTasks IsNot Nothing Then
                         Console.WriteLine($"   FirstNode.SubTasks.Count: {firstNode.SubTasks.Count}")
+                        ' ✅ LOGGING DETTAGLIATO: Per ogni subTask, verifica se ha steps
+                        For Each subNode In firstNode.SubTasks
+                            Console.WriteLine($"     SubNode.Id: {subNode.Id}, SubNode.TemplateId: {subNode.TemplateId}")
+                            If task.Steps IsNot Nothing Then
+                                Dim subNodeTemplateIdInSteps = task.Steps.ContainsKey(subNode.TemplateId)
+                                Console.WriteLine($"       SubNode.TemplateId '{subNode.TemplateId}' found in Steps.Keys: {subNodeTemplateIdInSteps}")
+                                If Not subNodeTemplateIdInSteps Then
+                                    Console.WriteLine($"       ⚠️ WARNING: SubNode.TemplateId '{subNode.TemplateId}' NOT FOUND in instance.Steps!")
+                                End If
+                            End If
+                            Console.WriteLine($"       SubNode.Steps IsNothing: {subNode.Steps Is Nothing}")
+                            If subNode.Steps IsNot Nothing Then
+                                Console.WriteLine($"       SubNode.Steps.Count: {subNode.Steps.Count}")
+                            End If
+                        Next
                     End If
                 End If
                 Console.WriteLine("=================================================================================")
@@ -278,12 +344,27 @@ Public Class UtteranceTaskCompiler
 
             ' ✅ Applica steps override al nodo radice se presente
             If instance.Steps IsNot Nothing AndAlso instance.Steps.Count > 0 Then
+                Console.WriteLine($"[BuildTaskTreeExpanded] 🔍 Looking for steps in instance.Steps...")
+                Console.WriteLine($"   Template.Id: {template.Id}")
+                Console.WriteLine($"   Instance.Steps.Keys: {String.Join(", ", instance.Steps.Keys)}")
+                Console.WriteLine($"   ContainsKey(template.Id): {instance.Steps.ContainsKey(template.Id)}")
+
                 If instance.Steps.ContainsKey(template.Id) Then
+                    Console.WriteLine($"   ✅ FOUND: Applying steps to root node from instance.Steps[{template.Id}]")
                     ' Applica steps al nodo radice
                     ApplyStepsToNode(rootNode, instance.Steps(template.Id))
+                    Console.WriteLine($"   ✅ Applied: RootNode.Steps.Count = {If(rootNode.Steps IsNot Nothing, rootNode.Steps.Count, 0)}")
+                Else
+                    Console.WriteLine($"   ⚠️ NOT FOUND: Template.Id '{template.Id}' not in instance.Steps.Keys")
+                    Console.WriteLine($"   Available keys: {String.Join(", ", instance.Steps.Keys)}")
                 End If
+
                 ' Applica steps ai sub-nodi
+                Console.WriteLine($"[BuildTaskTreeExpanded] 🔍 Applying steps to sub-nodes...")
+                Console.WriteLine($"   RootNode.SubTasks.Count: {If(rootNode.SubTasks IsNot Nothing, rootNode.SubTasks.Count, 0)}")
                 ApplyStepsOverrides(rootNode.SubTasks, instance.Steps)
+            Else
+                Console.WriteLine($"[BuildTaskTreeExpanded] ⚠️ WARNING: instance.Steps is Nothing or empty!")
             End If
 
             ' ✅ TaskTreeExpanded.Nodes contiene il nodo radice
@@ -316,9 +397,21 @@ Public Class UtteranceTaskCompiler
 
             ' ✅ Applica steps dall'istanza al nodo root (OBBLIGATORIO per task atomico)
             If instance.Steps IsNot Nothing AndAlso instance.Steps.Count > 0 Then
+                Console.WriteLine($"[BuildTaskTreeExpanded] 🔍 Looking for steps in instance.Steps (atomic template)...")
+                Console.WriteLine($"   Template.Id: {template.Id}")
+                Console.WriteLine($"   Instance.Steps.Keys: {String.Join(", ", instance.Steps.Keys)}")
+                Console.WriteLine($"   ContainsKey(template.Id): {instance.Steps.ContainsKey(template.Id)}")
+
                 If instance.Steps.ContainsKey(template.Id) Then
+                    Console.WriteLine($"   ✅ FOUND: Applying steps to root node from instance.Steps[{template.Id}]")
                     ApplyStepsToNode(rootNode, instance.Steps(template.Id))
+                    Console.WriteLine($"   ✅ Applied: RootNode.Steps.Count = {If(rootNode.Steps IsNot Nothing, rootNode.Steps.Count, 0)}")
+                Else
+                    Console.WriteLine($"   ⚠️ NOT FOUND: Template.Id '{template.Id}' not in instance.Steps.Keys")
+                    Console.WriteLine($"   Available keys: {String.Join(", ", instance.Steps.Keys)}")
                 End If
+            Else
+                Console.WriteLine($"[BuildTaskTreeExpanded] ⚠️ WARNING: instance.Steps is Nothing or empty (atomic template)!")
             End If
 
             taskTreeExpanded.Nodes = New List(Of Compiler.TaskNode) From {rootNode}
@@ -413,55 +506,86 @@ Public Class UtteranceTaskCompiler
         nodes As List(Of Compiler.TaskNode),
         stepsOverrides As Dictionary(Of String, Object)
     )
+        Console.WriteLine($"[ApplyStepsOverrides] 🔍 Processing {nodes.Count} nodes...")
+        Console.WriteLine($"   StepsOverrides.Keys: {String.Join(", ", stepsOverrides.Keys)}")
+
         For Each node In nodes
+            Console.WriteLine($"[ApplyStepsOverrides] 🔍 Processing node: Id={node.Id}, TemplateId={node.TemplateId}")
+
             ' ✅ Applica steps se presente override per questo templateId
-            If Not String.IsNullOrEmpty(node.TemplateId) AndAlso stepsOverrides.ContainsKey(node.TemplateId) Then
-                Try
-                    ' ✅ Option Strict On: cast esplicito da Object
-                    Dim overrideValue As Object = stepsOverrides(node.TemplateId)
-                    If overrideValue IsNot Nothing Then
-                        ' ✅ Usa DialogueStepListConverter per convertire oggetto → List(Of DialogueStep)
-                        ' overrideValue è un oggetto: { "start": { escalations: [...] }, "noMatch": {...} }
-                        Dim overrideJson = JsonConvert.SerializeObject(overrideValue)
-                        Dim settings As New JsonSerializerSettings()
-                        settings.Converters.Add(New DialogueStepListConverter())
-                        Dim overrideSteps = JsonConvert.DeserializeObject(Of List(Of Compiler.DialogueStep))(overrideJson, settings)
+            If Not String.IsNullOrEmpty(node.TemplateId) Then
+                Dim hasKey = stepsOverrides.ContainsKey(node.TemplateId)
+                Console.WriteLine($"   ContainsKey(node.TemplateId): {hasKey}")
 
-                        If overrideSteps IsNot Nothing AndAlso overrideSteps.Count > 0 Then
-                            ' ✅ Validazione: verifica che non ci siano step duplicati con lo stesso Type
-                            Dim seenTypes As New HashSet(Of String)()
-                            For Each stepItem As Compiler.DialogueStep In overrideSteps
-                                If stepItem IsNot Nothing AndAlso Not String.IsNullOrEmpty(stepItem.Type) Then
-                                    If seenTypes.Contains(stepItem.Type) Then
-                                        Console.WriteLine($"═══════════════════════════════════════════════════════════════")
-                                        Console.WriteLine($"❌ [UtteranceTaskCompiler.ApplyStepsOverrides] DUPLICATE STEP DETECTED")
-                                        Console.WriteLine($"   Node.Id: {node.Id}")
-                                        Console.WriteLine($"   Node.TemplateId: {node.TemplateId}")
-                                        Console.WriteLine($"   Duplicate Type: {stepItem.Type}")
-                                        Dim allStepTypes = overrideSteps.Where(Function(s) s IsNot Nothing AndAlso Not String.IsNullOrEmpty(s.Type)).Select(Function(s) s.Type).ToList()
-                                        Console.WriteLine($"   All step types: {String.Join(", ", allStepTypes)}")
-                                        Console.WriteLine($"═══════════════════════════════════════════════════════════════")
-                                        Console.Out.Flush()
-                                        System.Diagnostics.Debug.WriteLine($"❌ [UtteranceTaskCompiler] DUPLICATE STEP: Node.Id={node.Id}, Type={stepItem.Type}")
-                                        Throw New InvalidOperationException($"Invalid task model: Node {node.Id} has duplicate steps with Type={stepItem.Type}. Each Type must appear exactly once.")
+                If hasKey Then
+                    Console.WriteLine($"   ✅ FOUND: Applying steps from instance.Steps[{node.TemplateId}]")
+                    Try
+                        ' ✅ Option Strict On: cast esplicito da Object
+                        Dim overrideValue As Object = stepsOverrides(node.TemplateId)
+                        Console.WriteLine($"   OverrideValue Type: {If(overrideValue IsNot Nothing, overrideValue.GetType().Name, "NULL")}")
+
+                        If overrideValue IsNot Nothing Then
+                            ' ✅ Usa DialogueStepListConverter per convertire oggetto → List(Of DialogueStep)
+                            ' overrideValue è un oggetto: { "start": { escalations: [...] }, "noMatch": {...} }
+                            Dim overrideJson = JsonConvert.SerializeObject(overrideValue)
+                            Console.WriteLine($"   OverrideValue JSON length: {overrideJson.Length}")
+
+                            Dim settings As New JsonSerializerSettings()
+                            settings.Converters.Add(New DialogueStepListConverter())
+                            Dim overrideSteps = JsonConvert.DeserializeObject(Of List(Of Compiler.DialogueStep))(overrideJson, settings)
+
+                            If overrideSteps IsNot Nothing AndAlso overrideSteps.Count > 0 Then
+                                Console.WriteLine($"   ✅ Deserialized {overrideSteps.Count} steps")
+
+                                ' ✅ Validazione: verifica che non ci siano step duplicati con lo stesso Type
+                                Dim seenTypes As New HashSet(Of String)()
+                                For Each stepItem As Compiler.DialogueStep In overrideSteps
+                                    If stepItem IsNot Nothing AndAlso Not String.IsNullOrEmpty(stepItem.Type) Then
+                                        If seenTypes.Contains(stepItem.Type) Then
+                                            Console.WriteLine($"═══════════════════════════════════════════════════════════════")
+                                            Console.WriteLine($"❌ [UtteranceTaskCompiler.ApplyStepsOverrides] DUPLICATE STEP DETECTED")
+                                            Console.WriteLine($"   Node.Id: {node.Id}")
+                                            Console.WriteLine($"   Node.TemplateId: {node.TemplateId}")
+                                            Console.WriteLine($"   Duplicate Type: {stepItem.Type}")
+                                            Dim allStepTypes = overrideSteps.Where(Function(s) s IsNot Nothing AndAlso Not String.IsNullOrEmpty(s.Type)).Select(Function(s) s.Type).ToList()
+                                            Console.WriteLine($"   All step types: {String.Join(", ", allStepTypes)}")
+                                            Console.WriteLine($"═══════════════════════════════════════════════════════════════")
+                                            Console.Out.Flush()
+                                            System.Diagnostics.Debug.WriteLine($"❌ [UtteranceTaskCompiler] DUPLICATE STEP: Node.Id={node.Id}, Type={stepItem.Type}")
+                                            Throw New InvalidOperationException($"Invalid task model: Node {node.Id} has duplicate steps with Type={stepItem.Type}. Each Type must appear exactly once.")
+                                        End If
+                                        seenTypes.Add(stepItem.Type)
                                     End If
-                                    seenTypes.Add(stepItem.Type)
-                                End If
-                            Next
+                                Next
 
-                            node.Steps = overrideSteps
+                                node.Steps = overrideSteps
+                                Console.WriteLine($"   ✅ Applied: Node.Steps.Count = {node.Steps.Count}")
+                            Else
+                                Console.WriteLine($"   ⚠️ WARNING: Deserialized steps is Nothing or empty")
+                            End If
+                        Else
+                            Console.WriteLine($"   ⚠️ WARNING: OverrideValue is Nothing")
                         End If
-                    End If
-                Catch ex As Exception
-                    Console.WriteLine($"[COMPILER] ERROR: Failed to apply steps override for templateId={node.TemplateId}: {ex.Message}")
-                End Try
+                    Catch ex As Exception
+                        Console.WriteLine($"[COMPILER] ❌ ERROR: Failed to apply steps override for templateId={node.TemplateId}: {ex.Message}")
+                        Console.WriteLine($"   Stack trace: {ex.StackTrace}")
+                    End Try
+                Else
+                    Console.WriteLine($"   ⚠️ NOT FOUND: node.TemplateId '{node.TemplateId}' not in stepsOverrides.Keys")
+                    Console.WriteLine($"   Available keys: {String.Join(", ", stepsOverrides.Keys)}")
+                End If
+            Else
+                Console.WriteLine($"   ⚠️ SKIPPED: node.TemplateId is null or empty")
             End If
 
             ' ✅ Ricorsione per subTasks
             If node.SubTasks IsNot Nothing AndAlso node.SubTasks.Count > 0 Then
+                Console.WriteLine($"   Recursing into {node.SubTasks.Count} subTasks...")
                 ApplyStepsOverrides(node.SubTasks, stepsOverrides)
             End If
         Next
+
+        Console.WriteLine($"[ApplyStepsOverrides] ✅ Completed processing all nodes")
     End Sub
 
     ''' <summary>
