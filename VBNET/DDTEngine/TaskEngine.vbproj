@@ -24,7 +24,7 @@
     <!-- Interfaces -->
     <Compile Include="Interfaces\ITranslationResolver.vb" />
     <!-- Enums and primitive models (no dependencies) -->
-    <Compile Include="Models\DialogueState.vb" />
+    <Compile Include="Models\DialogueStepType.vb" />
     <Compile Include="Models\TaskTypes.vb" />
     <Compile Include="Models\IVariableContext.vb" />
     <Compile Include="Models\ParseResultType.vb" />

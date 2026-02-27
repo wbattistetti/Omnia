@@ -25,7 +25,7 @@ Partial Public Class Parser
         End If
 
         ' Handle confirmation state separately.
-        If current.State = DialogueState.Confirmation Then
+        If current.State = DialogueStepType.Confirmation Then
             Return ParseConfirmation(utterance, current)
         End If
 

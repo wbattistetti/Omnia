@@ -44,6 +44,7 @@ export function generateStepsSkipDetectType(data: DataNode, skipDetectType: bool
       { key: 'noMatchPrompts', type: 'noMatchPrompts', endpoint: '/api/stepNoMatch', label: 'No match prompts...', payoff: 'Prompts for unmatched input.' },
       { key: 'noInputPrompts', type: 'noInputPrompts', endpoint: '/api/stepNoInput', label: 'No input prompts...', payoff: 'Prompts for missing input.' },
       { key: 'confirmationPrompts', type: 'confirmationPrompts', endpoint: '/api/stepConfirmation', label: 'Confirmation prompts...', payoff: 'Prompts for user confirmation.' },
+      { key: 'notConfirmedPrompts', type: 'notConfirmedPrompts', endpoint: '/api/stepNotConfirmed', label: 'Not confirmed prompts...', payoff: 'Prompts for when user does not confirm.' },
       { key: 'successPrompts', type: 'successPrompts', endpoint: '/api/stepSuccess', label: 'Success prompts...', payoff: 'Prompts for successful completion.' },
     ];
 

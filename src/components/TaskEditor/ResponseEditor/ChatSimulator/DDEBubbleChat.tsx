@@ -707,8 +707,9 @@ export default function DDEBubbleChat({
               if (nodeSteps && typeof nodeSteps === 'object') {
                 const filteredNodeSteps: Record<string, any> = {};
                 for (const [stepType, stepData] of Object.entries(nodeSteps)) {
-                  // ✅ Ignora completamente 'introduction' e 'disambiguation' per ora
-                  if (stepType === 'introduction' || stepType === 'disambiguation') {
+                  // ✅ Rimuovi step types non validi: disambiguation, violation
+                  // ✅ TEMPORARY: Rimuovi anche 'introduction' per ora (da gestire in separata sede)
+                  if (stepType === 'disambiguation' || stepType === 'violation' || stepType === 'introduction') {
                     continue;
                   }
                   filteredNodeSteps[stepType] = stepData;
@@ -771,7 +772,7 @@ export default function DDEBubbleChat({
           collectTemplateIdsRecursively(templateId, visitedTemplates);
         });
 
-        // ✅ Helper function per filtrare step problematici (introduction, disambiguation)
+        // ✅ Helper function per filtrare step types non validi (disambiguation, violation)
         const filterSteps = (steps: any): any => {
           if (!steps || typeof steps !== 'object') {
             return steps;
@@ -781,9 +782,8 @@ export default function DDEBubbleChat({
             if (nodeSteps && typeof nodeSteps === 'object') {
               const filteredNodeSteps: Record<string, any> = {};
               for (const [stepType, stepData] of Object.entries(nodeSteps)) {
-                // ✅ Ignora completamente 'introduction' e 'disambiguation' per ora
-                // Entrambi vengono mappati a DialogueState.Start nel backend, causando duplicati
-                if (stepType === 'introduction' || stepType === 'disambiguation') {
+                // ✅ Rimuovi step types non validi: disambiguation, violation
+                if (stepType === 'disambiguation' || stepType === 'violation') {
                   continue;
                 }
                 filteredNodeSteps[stepType] = stepData;

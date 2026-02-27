@@ -526,7 +526,7 @@ Namespace ApiServer.Handlers
                     Console.WriteLine("")
 
                     ' Cerca step Start
-                    Dim startStep = compiledUtteranceTask.Steps.FirstOrDefault(Function(s) s.Type = DialogueState.Start)
+                    Dim startStep = compiledUtteranceTask.Steps.FirstOrDefault(Function(s) s.Type = DialogueStepType.Start)
                     If startStep IsNot Nothing Then
                         Console.WriteLine($"✅ START STEP FOUND:")
                         Console.WriteLine($"   Type: {startStep.Type}")

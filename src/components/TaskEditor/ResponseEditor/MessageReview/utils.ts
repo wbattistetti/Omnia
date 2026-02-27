@@ -1,7 +1,7 @@
 import { ReviewItem, StepGroup, RecoveryGroup } from '@responseEditor/MessageReview/types';
 import { getTaskText } from '@responseEditor/utils/escalationHelpers';
 
-const STEP_ORDER = ['start', 'confirmation', 'noInput', 'noMatch', 'notConfirmed', 'notAcquired', 'success'];
+const STEP_ORDER = ['start', 'introduction', 'noInput', 'noMatch', 'confirmation', 'notConfirmed', 'invalid', 'success'];
 
 export function orderOf(k: string): number {
     const i = STEP_ORDER.indexOf(k);
@@ -21,12 +21,13 @@ export function groupMessagesByStep(items: ReviewItem[]): StepGroup[] {
     // Map numeric stepKeys to actual step names
     const stepKeyMapping: Record<string, string> = {
         '0': 'start',
-        '1': 'noMatch',
-        '2': 'noInput',
-        '3': 'confirmation',
-        '4': 'success',
-        '5': 'notAcquired',
-        '6': 'notConfirmed'
+        '1': 'introduction',
+        '2': 'noMatch',
+        '3': 'noInput',
+        '4': 'confirmation',
+        '5': 'notConfirmed',
+        '6': 'invalid',
+        '7': 'success'
     };
 
     // Convert numeric keys to string keys and group by actual step type

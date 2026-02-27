@@ -23,12 +23,13 @@ export default function StepsStrip({ stepKeys, selectedStepKey, onSelectStep, no
 
   const baseLabels: Record<string, string> = {
     start: 'Chiedo il dato',
+    introduction: 'Introduzione',
     noMatch: 'Non capisco',
     noInput: 'Non sento',
     confirmation: 'Devo confermare',
-    success: 'Ho capito!',
     notConfirmed: 'Non Confermato',
-    introduction: 'Introduzione'
+    invalid: 'Non valido',
+    success: 'Ho capito!'
   };
 
   const colorForStep = (key: string): string => {

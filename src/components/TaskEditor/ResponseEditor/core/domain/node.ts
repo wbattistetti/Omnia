@@ -23,18 +23,21 @@ export function getNodeStepKeys(node: TaskTreeNode | null | undefined): string[]
   }
 
   const stepKeys = Object.keys(node.steps);
+  const INVALID_STEP_TYPES = ['disambiguation', 'violation', 'notAcquired'];
+  const filteredKeys = stepKeys.filter(key => !INVALID_STEP_TYPES.includes(key));
+
   const DEFAULT_STEP_ORDER = [
     'start',
+    'introduction',
     'noInput',
     'noMatch',
-    'explicitConfirmation',
     'confirmation',
     'notConfirmed',
+    'invalid',
     'success',
-    'error',
   ];
 
-  const present = stepKeys.filter(key => key && key.trim());
+  const present = filteredKeys.filter(key => key && key.trim());
   const orderedKnown = DEFAULT_STEP_ORDER.filter((k) => present.includes(k));
   const custom = present.filter((k) => !DEFAULT_STEP_ORDER.includes(k)).sort();
   return [...orderedKnown, ...custom];

@@ -8,6 +8,7 @@ import { type TaskTemplateMatch } from './TaskTemplateMatcherService';
 import { getRuleSet, getLanguageOrder } from '../nlp/taskType/registry';
 import type { CompiledCategoryPattern } from '../nlp/taskType/types';
 import { waitForCache } from '../nlp/taskType/patternLoader';
+import { separateText, type Language } from '../utils/linguisticSeparation';
 
 export interface RowHeuristicsResult {
   taskType: TaskType;
@@ -43,24 +44,77 @@ export class RowHeuristicsService {
       };
     }
 
-    // 1️⃣ EURISTICA 1: interpreta la label e decide il TaskType
-    const heuristic1Result = await inferTaskType(trimmedLabel, { languageOrder: ['IT', 'EN', 'PT'] as any });
-    let taskType = heuristic1Result.type;
+    // ✅ NUOVO: Separazione linguistica (Part A = TaskType, Part B = Template)
+    const language: Language = 'IT'; // TODO: Detect from project settings
+    const separation = separateText(trimmedLabel, language);
 
-    // 2️⃣ EURISTICA 2: cerca template task usando embedding matching
+    console.log('[RowHeuristicsService] 🔍 Linguistic separation', {
+      original: trimmedLabel,
+      partA: separation.partA,
+      partB: separation.partB,
+      method: separation.method
+    });
+
+    // 1️⃣ EURISTICA 1: interpreta la Part A e decide il TaskType usando embeddings
+    let taskType = TaskType.UNDEFINED;
+    try {
+      const { EmbeddingService } = await import('./EmbeddingService');
+
+      // ✅ Usa partA per TaskType classification (se vuota, usa full text)
+      const textForTaskType = separation.partA || trimmedLabel;
+      const taskTypeMatch = await EmbeddingService.findBestMatch(
+        textForTaskType,
+        'taskType',  // ✅ Usa embeddings TaskType invece di pattern
+        0.65         // ✅ Threshold più basso per classificazione (vs 0.70 per template matching)
+      );
+
+      if (taskTypeMatch && typeof taskTypeMatch === 'object' && 'taskType' in taskTypeMatch) {
+        // ✅ Match trovato con taskType
+        taskType = taskTypeMatch.taskType as TaskType;
+        console.log('[RowHeuristicsService] ✅ TaskType classified via embeddings', {
+          label: trimmedLabel,
+          partA: separation.partA,
+          taskType: TaskType[taskType],
+          matchedId: taskTypeMatch.id
+        });
+      } else {
+        // ✅ Nessun match sopra soglia
+        console.log('[RowHeuristicsService] ℹ️ No TaskType match found via embeddings (threshold: 0.65)', {
+          label: trimmedLabel,
+          partA: separation.partA
+        });
+      }
+    } catch (error) {
+      // ✅ Se embedding service non disponibile, fallback a pattern (temporaneo)
+      console.warn('[RowHeuristicsService] ⚠️ Embedding service unavailable, falling back to pattern matching', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+      const heuristic1Result = await inferTaskType(trimmedLabel, { languageOrder: ['IT', 'EN', 'PT'] as any });
+      taskType = heuristic1Result.type;
+    }
+
+    // 2️⃣ EURISTICA 2: cerca template task usando embedding matching (solo Part B)
     let matchedTemplate: TaskTemplateMatch | null = null;
     let templateType: TaskType | null = null;
 
     // ✅ NUOVO: Usa SOLO embedding matching (no fallback a matching tradizionale)
     if (taskType === TaskType.UtteranceInterpretation) {
       try {
-        console.log('[RowHeuristicsService] 🔍 Starting embedding matching', {
+        // ✅ Usa partB per template matching (se vuota, usa full text)
+        const textForTemplate = separation.partB || trimmedLabel;
+
+        console.log('[RowHeuristicsService] 🔍 Starting template embedding matching', {
           label: trimmedLabel,
+          partB: separation.partB,
+          textForTemplate,
           taskType: TaskType[taskType],
         });
 
         const { EmbeddingService } = await import('./EmbeddingService');
-        const matchedTaskId = await EmbeddingService.findBestMatch(trimmedLabel, 'task', 0.70);
+        const matchedTaskIdResult = await EmbeddingService.findBestMatch(textForTemplate, 'task', 0.70);
+
+        // ✅ Type guard: quando type='task', restituisce string | null
+        const matchedTaskId = typeof matchedTaskIdResult === 'string' ? matchedTaskIdResult : null;
 
         if (matchedTaskId) {
           console.log('[RowHeuristicsService] ✅ Embedding match found', {
@@ -77,7 +131,7 @@ export class RowHeuristicsService {
               template,
               templateId: matchedTaskId,
               labelUsed: template.label,
-              language: heuristic1Result.lang || 'it',
+              language: 'it', // ✅ Default language (could be enhanced to detect from label)
               matchType: 'embedding'
             };
             templateType = this.getTemplateType(template);
@@ -144,7 +198,9 @@ export class RowHeuristicsService {
     // ✅ EURISTICA 3 - Inferenza categoria semantica (solo per DataRequest)
     let inferredCategory: string | null = null;
     if (taskType === TaskType.UtteranceInterpretation) {
-      inferredCategory = await this.inferCategory(trimmedLabel, taskType, heuristic1Result.lang);
+      // ✅ Usa la lingua dalla separazione linguistica (default 'it')
+      const detectedLang = language.toLowerCase(); // 'IT' -> 'it'
+      inferredCategory = await this.inferCategory(trimmedLabel, taskType, detectedLang);
     }
 
     return {

@@ -26,7 +26,7 @@ Partial Public Class TaskUtterance
     Public Property ParentData As TaskUtterance
 
     ' --- Runtime state ---
-    Public Property State As DialogueState = DialogueState.Start
+    Public Property State As DialogueStepType = DialogueStepType.Start
     Public Property Value As Object
     Public Property InvalidConditionId As String
 
@@ -38,7 +38,7 @@ Partial Public Class TaskUtterance
     Public Property NlpContract As CompiledNlpContract
 
     ' --- Escalation tracking (local, enables stateless deployment) ---
-    Public Property EscalationCounters As Dictionary(Of DialogueState, Integer)
+    Public Property EscalationCounters As Dictionary(Of DialogueStepType, Integer)
 
     ' --- Root-level config (used on the top-level task only) ---
     Public Property IsAggregate As Boolean
@@ -52,14 +52,14 @@ Partial Public Class TaskUtterance
         SubTasks = New List(Of TaskUtterance)()
         Steps = New List(Of DialogueStep)()
         ValidationConditions = New List(Of ValidationCondition)()
-        EscalationCounters = New Dictionary(Of DialogueState, Integer)()
-        State = DialogueState.Start
+        EscalationCounters = New Dictionary(Of DialogueStepType, Integer)()
+        State = DialogueStepType.Start
     End Sub
 
     ' --- State helpers ---
 
     Public Function IsComplete() As Boolean
-        Return State = DialogueState.Success
+        Return State = DialogueStepType.Success
     End Function
 
     Public Function IsEmpty() As Boolean
@@ -82,12 +82,12 @@ Partial Public Class TaskUtterance
 
     ' --- Escalation helpers ---
 
-    Public Function GetEscalationLevel(s As DialogueState) As Integer
+    Public Function GetEscalationLevel(s As DialogueStepType) As Integer
         If Not EscalationCounters.ContainsKey(s) Then Return 0
         Return EscalationCounters(s)
     End Function
 
-    Public Sub IncrementEscalationLevel(s As DialogueState, max As Integer)
+    Public Sub IncrementEscalationLevel(s As DialogueStepType, max As Integer)
         If Not EscalationCounters.ContainsKey(s) Then EscalationCounters(s) = 0
         EscalationCounters(s) = Math.Min(EscalationCounters(s) + 1, max - 1)
     End Sub
@@ -114,7 +114,7 @@ Partial Public Class TaskUtterance
     ' --- Reset ---
 
     Public Sub Reset()
-        State = DialogueState.Start
+        State = DialogueStepType.Start
         Value = Nothing
         InvalidConditionId = Nothing
         EscalationCounters.Clear()
@@ -136,7 +136,7 @@ Partial Public Class TaskUtterance
             .State = State,
             .Value = If(Value, Nothing),
             .InvalidConditionId = InvalidConditionId,
-            .EscalationCounters = New Dictionary(Of DialogueState, Integer)(EscalationCounters),
+            .EscalationCounters = New Dictionary(Of DialogueStepType, Integer)(EscalationCounters),
             .SubStates = SubTasks.Select(Function(s) s.ExtractState()).ToList()
         }
         Return snap
@@ -152,7 +152,7 @@ Partial Public Class TaskUtterance
         Value = snapshot.Value
         InvalidConditionId = snapshot.InvalidConditionId
         If snapshot.EscalationCounters IsNot Nothing Then
-            EscalationCounters = New Dictionary(Of DialogueState, Integer)(snapshot.EscalationCounters)
+            EscalationCounters = New Dictionary(Of DialogueStepType, Integer)(snapshot.EscalationCounters)
         End If
         If snapshot.SubStates IsNot Nothing Then
             For Each child As TaskUtterance In SubTasks
@@ -176,14 +176,14 @@ End Class
 ''' </summary>
 Public Class TaskUtteranceStateSnapshot
     Public Property Id As String
-    Public Property State As DialogueState
+    Public Property State As DialogueStepType
     Public Property Value As Object
     Public Property InvalidConditionId As String
-    Public Property EscalationCounters As Dictionary(Of DialogueState, Integer)
+    Public Property EscalationCounters As Dictionary(Of DialogueStepType, Integer)
     Public Property SubStates As List(Of TaskUtteranceStateSnapshot)
 
     Public Sub New()
-        EscalationCounters = New Dictionary(Of DialogueState, Integer)()
+        EscalationCounters = New Dictionary(Of DialogueStepType, Integer)()
         SubStates = New List(Of TaskUtteranceStateSnapshot)()
     End Sub
 

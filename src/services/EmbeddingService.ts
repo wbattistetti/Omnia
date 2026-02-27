@@ -15,6 +15,8 @@ type EmbeddingEntry = {
   id: string;           // GUID dell'entità
   text: string;         // Label dell'entità
   embedding: Float32Array;  // Vettore embedding (384 dimensioni per MiniLM-L12-v2)
+  taskType?: number;     // ✅ Campo opzionale per TaskType enum (solo per type='taskType')
+  language?: string;     // ✅ Campo opzionale per lingua (IT, EN, PT)
 };
 
 export class EmbeddingService {
@@ -120,7 +122,9 @@ export class EmbeddingService {
       const entries = data.map((item: any) => ({
         id: item.id,
         text: item.text,
-        embedding: new Float32Array(item.embedding)
+        embedding: new Float32Array(item.embedding),
+        taskType: item.taskType, // ✅ Include taskType se presente
+        language: item.language  // ✅ Include language se presente
       }));
 
       this.cache.set(type, entries);
@@ -144,15 +148,15 @@ export class EmbeddingService {
   /**
    * Find best matching entity using embedding similarity
    * @param label - Label to search for
-   * @param type - Type of embedding to search ('task', 'condition', etc.)
+   * @param type - Type of embedding to search ('task', 'taskType', 'condition', etc.)
    * @param threshold - Minimum similarity threshold (0-1)
-   * @returns ID of best matching entity, or null if no match above threshold
+   * @returns ID of best matching entity (or { id, taskType } for type='taskType'), or null if no match above threshold
    */
   static async findBestMatch(
     inputText: string,
     type: string = 'task',
     threshold: number = 0.70
-  ): Promise<string | null> {
+  ): Promise<string | { id: string; taskType: number } | null> {
     // 1. Assicura che la cache sia caricata per questo type
     await this.loadEmbeddings(type);
 
@@ -260,10 +264,11 @@ export class EmbeddingService {
       entriesCount: entries.length,
     });
 
-    let bestMatch: { id: string; similarity: number; text: string } | null = null;
+    let bestMatch: { id: string; similarity: number; text: string; taskType?: number } | null = null;
     let topSimilarity = 0;
     let topMatchText = '';
     let topMatchId = '';
+    let topMatchTaskType: number | undefined = undefined;
 
     // ✅ NUOVO: Array per tracciare tutti i punteggi (per debugging dettagliato)
     const allScores: Array<{ id: string; text: string; similarity: number }> = [];
@@ -283,10 +288,16 @@ export class EmbeddingService {
         topSimilarity = similarity;
         topMatchText = entry.text;
         topMatchId = entry.id;
+        topMatchTaskType = entry.taskType;
       }
 
       if (similarity >= threshold && (!bestMatch || similarity > bestMatch.similarity)) {
-        bestMatch = { id: entry.id, similarity, text: entry.text };
+        bestMatch = {
+          id: entry.id,
+          similarity,
+          text: entry.text,
+          taskType: entry.taskType // ✅ Include taskType se presente
+        };
       }
     }
 
@@ -320,7 +331,18 @@ export class EmbeddingService {
       console.log(`%c   Punteggi: ${scoresText}`, 'color: #94a3b8; font-size: 12px;');
     }
 
-    return bestMatch?.id || null;
+    // ✅ Restituisci ID o { id, taskType } a seconda del tipo
+    if (!bestMatch) {
+      return null;
+    }
+
+    // Se type è 'taskType' e abbiamo taskType, restituisci oggetto con taskType
+    if (type === 'taskType' && bestMatch.taskType !== undefined) {
+      return { id: bestMatch.id, taskType: bestMatch.taskType };
+    }
+
+    // Altrimenti restituisci solo ID (backward compatibility)
+    return bestMatch.id;
   }
 
   /**

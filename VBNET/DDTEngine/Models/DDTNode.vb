@@ -53,7 +53,7 @@ Public Class TaskNode
 
     Public Property RequiresValidation As Boolean
 
-    Public Property State As DialogueState
+    Public Property State As DialogueStepType
 
     Public Property Value As Object
 
@@ -72,7 +72,7 @@ Public Class TaskNode
         Steps = New List(Of DialogueStep)()
         ValidationConditions = New List(Of ValidationCondition)()
         SubTasks = New List(Of TaskNode)()
-        State = DialogueState.Start
+        State = DialogueStepType.Start
         Value = Nothing
     End Sub
 
@@ -80,7 +80,7 @@ Public Class TaskNode
     ''' Resetta lo stato del nodo e dei suoi subTasks
     ''' </summary>
     Public Sub Reset()
-        State = DialogueState.Start
+        State = DialogueStepType.Start
         Value = Nothing
         InvalidConditionId = Nothing
 

@@ -20,9 +20,9 @@ Public Module CompiledTaskAdapter
             For Each compiledStep In task.Steps
                 Dim dialogueStep As New TaskEngine.TaskStep() With {
                     .Name = compiledStep.Type.ToString(),
-                    .RequiresUserInput = (compiledStep.Type = DialogueState.Start OrElse
-                                         compiledStep.Type = DialogueState.Confirmation OrElse
-                                         compiledStep.Type = DialogueState.Invalid),
+                    .RequiresUserInput = (compiledStep.Type = DialogueStepType.Start OrElse
+                                         compiledStep.Type = DialogueStepType.Confirmation OrElse
+                                         compiledStep.Type = DialogueStepType.Invalid),
                     .Microtasks = New List(Of TaskEngine.Microtask)()
                 }
 

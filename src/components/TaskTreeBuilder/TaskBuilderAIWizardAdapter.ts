@@ -97,13 +97,6 @@ function convertMessagesToSteps(
     };
   }
 
-  // Violation messages
-  if (messages.violation?.base && messages.violation.base.length > 0) {
-    stepRecord.violation = {
-      messages: messages.violation.base.map((text) => ({ text, role: 'bot' })),
-    };
-  }
-
   // Success messages
   if (messages.success?.base && messages.success.base.length > 0) {
     stepRecord.success = {

@@ -7,13 +7,13 @@ Option Explicit On
 ''' <summary>
 ''' Rappresenta uno step di dialogo
 ''' Corrisponde a StepGroup nel frontend TypeScript
-''' Ogni DialogueStep corrisponde a un DialogueState e contiene multiple escalation (recovery)
+''' Ogni DialogueStep corrisponde a un DialogueStepType e contiene multiple escalation (recovery)
 ''' </summary>
 Public Class DialogueStep
     ''' <summary>
-    ''' Tipo di step (corrisponde a DialogueState)
+    ''' Tipo di step (corrisponde a DialogueStepType)
     ''' </summary>
-    Public Property Type As DialogueState
+    Public Property Type As DialogueStepType
 
     ''' <summary>
     ''' Lista di escalation (recovery) per questo step

@@ -3293,12 +3293,23 @@ app.get('/api/embeddings', async (req, res) => {
       const embeddings = await coll.find(filter).toArray();
 
       // Rimuovi _id e ritorna solo i campi necessari
-      const result = embeddings.map(item => ({
-        id: item.id,
-        type: item.type,
-        text: item.text,
-        embedding: item.embedding
-      }));
+      const result = embeddings.map(item => {
+        const base = {
+          id: item.id,
+          type: item.type,
+          text: item.text,
+          embedding: item.embedding
+        };
+        // ✅ Include taskType se presente (per type='taskType')
+        if (item.taskType !== undefined) {
+          base.taskType = item.taskType;
+        }
+        // ✅ Include language se presente
+        if (item.language) {
+          base.language = item.language;
+        }
+        return base;
+      });
 
       console.log('[Embeddings] Loaded', result.length, 'embeddings', type ? `(type: ${type})` : '(all types)');
       res.json(result);
@@ -3830,8 +3841,18 @@ app.post('/api/factory/dialogue-templates', async (req, res) => {
           try {
             // ✅ ARCHITECTURAL RULE: Normalize text BEFORE generating embedding
             // This ensures consistent embedding generation for both templates and queries
-            const { normalizeTextForEmbedding } = require('./utils/embeddingTextNormalization');
-            const normalizedLabel = normalizeTextForEmbedding(template.label);
+            const { normalizeTextForEmbedding, removeVerbsFromTemplateLabel } = require('./utils/embeddingTextNormalization');
+
+            // ✅ For type=3 templates, remove verbs to keep only the data part
+            // This allows matching both "chiedi la data di nascita" and "la data di nascita"
+            let normalizedLabel;
+            if (template.type === 3) {
+              // Remove verbs first, then normalize
+              const withoutVerbs = removeVerbsFromTemplateLabel(template.label, 'IT'); // TODO: Detect language from project
+              normalizedLabel = normalizeTextForEmbedding(withoutVerbs);
+            } else {
+              normalizedLabel = normalizeTextForEmbedding(template.label);
+            }
 
             // 1. Calcola embedding usando Python FastAPI (con testo normalizzato)
             const pythonServiceUrl = process.env.EMBEDDING_SERVICE_URL || 'http://localhost:8000';

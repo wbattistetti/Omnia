@@ -114,7 +114,7 @@ Public Class TaskAssembler
 
         If ideNode.Steps IsNot Nothing Then
             ' ✅ Validazione: verifica che non ci siano step duplicati con lo stesso Type
-            Dim seenTypes As New HashSet(Of DialogueState)()
+            Dim seenTypes As New HashSet(Of DialogueStepType)()
             For Each ideStep As Compiler.DialogueStep In ideNode.Steps
                 Dim runtimeStep = CompileDialogueStep(ideStep)
 
@@ -139,7 +139,7 @@ Public Class TaskAssembler
         ' Se ci sono Constraints, deve esistere uno step di tipo Invalid
         ' Se non ci sono Constraints, non deve esistere uno step di tipo Invalid
         Dim hasConstraints = task.Constraints IsNot Nothing AndAlso task.Constraints.Count > 0
-        Dim hasInvalidStep = task.Steps IsNot Nothing AndAlso task.Steps.Any(Function(s) s.Type = DialogueState.Invalid)
+        Dim hasInvalidStep = task.Steps IsNot Nothing AndAlso task.Steps.Any(Function(s) s.Type = DialogueStepType.Invalid)
 
         If hasConstraints AndAlso Not hasInvalidStep Then
             Throw New InvalidOperationException($"Invalid task model: Node {ideNode.Id} has {task.Constraints.Count} constraint(s) but no step of type 'invalid'. When constraints are present, an 'invalid' step is mandatory to handle validation failures.")
@@ -265,14 +265,14 @@ Public Class TaskAssembler
     End Function
 
     ''' <summary>
-    ''' Compila stringa step type in DialogueState enum
+    ''' Compila stringa step type in DialogueStepType enum
     ''' Il compilatore NON fa fallback: se il tipo è invalido, fallisce immediatamente.
     ''' Fallback comportamentali sono gestiti dal motore runtime, non dal compilatore.
     ''' ✅ NORMALIZZAZIONE: "violation" viene normalizzato a "invalid" per compatibilità con frontend
     ''' ✅ "violation" non esiste come step, solo "invalid" per constraints non superati
     ''' ✅ "disambiguation" viene mappato a "start" (non implementato nel runtime)
     ''' </summary>
-    Private Function CompileStepType(typeStr As String) As DialogueState
+    Private Function CompileStepType(typeStr As String) As DialogueStepType
         If String.IsNullOrEmpty(typeStr) Then
             Throw New InvalidOperationException($"Step type cannot be null or empty. This indicates a structural error in the task model. Every DialogueStep must have a valid type.")
         End If
@@ -286,29 +286,29 @@ Public Class TaskAssembler
 
         Select Case normalizedType
             Case "start"
-                Return DialogueState.Start
+                Return DialogueStepType.Start
             Case "nomatch"
-                Return DialogueState.NoMatch
+                Return DialogueStepType.NoMatch
             Case "noinput"
-                Return DialogueState.NoInput
+                Return DialogueStepType.NoInput
             Case "confirmation"
-                Return DialogueState.Confirmation
+                Return DialogueStepType.Confirmation
             Case "notconfirmed"
-                Return DialogueState.NotConfirmed
+                Return DialogueStepType.NotConfirmed
             Case "invalid"
                 ' ✅ "invalid" è l'unico step per quando i constraints non vengono superati
-                Return DialogueState.Invalid
+                Return DialogueStepType.Invalid
             Case "success"
-                Return DialogueState.Success
+                Return DialogueStepType.Success
             Case "introduction"
                 ' ✅ "introduction" è un alias valido per "start" nel modello IDE
                 ' Usato per step introduttivi che si comportano come Start
-                Return DialogueState.Start
+                Return DialogueStepType.Start
             Case "disambiguation"
                 ' ❌ "disambiguation" non è implementato nel runtime VB.NET
                 ' Viene ignorato e mappato a "start" (o potrebbe essere rimosso completamente)
                 ' TODO: Se necessario in futuro, implementare supporto completo per disambiguation
-                Return DialogueState.Start
+                Return DialogueStepType.Start
             Case Else
                 ' ❌ RIMOSSO FALLBACK: Il compilatore NON deve indovinare o correggere errori strutturali
                 ' Se il tipo è sconosciuto, il modello è invalido e deve essere corretto a monte

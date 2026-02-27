@@ -263,18 +263,66 @@ Namespace ApiServer.Handlers
                     ' ✅ Log rimosso: troppo verboso
                 End Try
 
-                ' ❌ PASSO 9: Chiama ProcessTurn (MANCA)
-                ' ✅ Log rimosso: troppo verboso
+                ' ✅ PASSO 9: Chiama ProcessTurn (FASE 1: Invio messaggio iniziale)
                 Try
-                    ' Prova a chiamare ProcessTurn
+                    ' ✅ Carica tutte le traduzioni necessarie
                     Dim allTranslations As New Dictionary(Of String, String)()
-                    ' TODO: Caricare tutte le traduzioni necessarie
+                    If compiledTask.Steps IsNot Nothing Then
+                        For Each dstep In compiledTask.Steps
+                            If dstep.Escalations IsNot Nothing Then
+                                For Each escalation In dstep.Escalations
+                                    If escalation.Tasks IsNot Nothing Then
+                                        For Each taskObj In escalation.Tasks
+                                            If TypeOf taskObj Is TaskEngine.MessageTask Then
+                                                Dim msgTask = DirectCast(taskObj, TaskEngine.MessageTask)
+                                                If Not String.IsNullOrEmpty(msgTask.TextKey) AndAlso Not allTranslations.ContainsKey(msgTask.TextKey) Then
+                                                    Dim translation = translationRepository.GetTranslation(projectId, locale, msgTask.TextKey)
+                                                    If Not String.IsNullOrEmpty(translation) Then
+                                                        allTranslations(msgTask.TextKey) = translation
+                                                    End If
+                                                End If
+                                            End If
+                                        Next
+                                    End If
+                                Next
+                            End If
+                        Next
+                    End If
 
+                    ' ✅ Chiama ProcessTurn (FASE 1: solo messaggio iniziale)
                     Dim result = TaskEngine.Orchestrator.TaskEngine.ProcessTurnEngine.ProcessTurn(dialogueState, "", compiledTask, allTranslations)
-                    ' ✅ Log rimosso: troppo verboso
+
+                    ' ✅ Emetti messaggi via SSE
+                    Dim processTurnEmitter As EventEmitter = SessionManager.GetOrCreateEventEmitter(newSessionId)
+                    If result.Messages IsNot Nothing AndAlso result.Messages.Count > 0 Then
+                        For Each messageText As String In result.Messages
+                            Dim messageData As Object = New With {
+                                .text = messageText,
+                                .stepType = "start",
+                                .timestamp = DateTime.UtcNow.ToString("O")
+                            }
+                            processTurnEmitter.Emit("message", messageData)
+                        Next
+                    End If
+
+                    ' ✅ Salva nuovo DialogueState nella sessione
+                    If result.NewState IsNot Nothing Then
+                        Dim dialogueContext = SessionManager.GetOrCreateDialogueContext(session)
+                        dialogueContext.DialogueState = result.NewState
+                        SessionManager.SaveDialogueContext(session, dialogueContext)
+                    End If
+
+                    ' ✅ Emetti evento waitingForInput se necessario
+                    If result.Status = "waiting_for_input" Then
+                        Dim waitingData As Object = New With {
+                            .taskId = compiledTask.Id,
+                            .timestamp = DateTime.UtcNow.ToString("O")
+                        }
+                        processTurnEmitter.Emit("waitingForInput", waitingData)
+                    End If
+
                 Catch ex As Exception
                     If TypeOf ex Is NotImplementedException OrElse ex.Message.Contains("non è ancora implementato") OrElse ex.Message.Contains("not yet implemented") Then
-                        ' ✅ Mantenuto solo LogInfo essenziale
                         LogInfo("STUB: ProcessTurn non ancora implementato", New With {
                             .sessionId = newSessionId,
                             .projectId = projectId,
@@ -282,7 +330,6 @@ Namespace ApiServer.Handlers
                         })
                         Return ResponseHelpers.CreateErrorResponse("ProcessTurn not implemented. All previous steps are OK. Next: Implement ProcessTurnEngine.ProcessTurn()", 501)
                     ElseIf ex.Message.Contains("ProcessTurnEngine") OrElse ex.Message.Contains("non è definito") OrElse ex.Message.Contains("not defined") OrElse TypeOf ex Is MissingMemberException Then
-                        ' ✅ Mantenuto solo LogInfo essenziale
                         LogInfo("STUB: ProcessTurn non ancora implementato", New With {
                             .sessionId = newSessionId,
                             .projectId = projectId,
@@ -299,15 +346,12 @@ Namespace ApiServer.Handlers
                     End If
                 End Try
 
-                ' Se arriviamo qui, ProcessTurn esiste e funziona
-                ' ✅ Log rimosso: troppo verboso
-
                 ' ✅ STEP 7: Crea ExecutionState e TaskEngine per esecuzione diretta (legacy - per ora)
                 ' NOTA: Quando ProcessTurn sarà implementato, questo codice verrà sostituito
                 Dim executionState As New Orchestrator.ExecutionState()
 
-                ' ✅ Crea EventEmitter per SSE
-                Dim sharedEmitter = SessionManager.GetOrCreateEventEmitter(newSessionId)
+                ' ✅ Crea EventEmitter per SSE (riusa quello già creato per ProcessTurn se disponibile)
+                Dim legacyEmitter As EventEmitter = SessionManager.GetOrCreateEventEmitter(newSessionId)
 
                 ' ✅ Crea callback per salvare DialogueContext nella sessione
                 Dim saveToSessionCallback As Action(Of TaskEngine.Orchestrator.TaskEngine.DialogueContext) = Sub(ctx As TaskEngine.Orchestrator.TaskEngine.DialogueContext)
@@ -333,7 +377,7 @@ Namespace ApiServer.Handlers
                     locale,
                     Sub(eventType As String, data As Object)
                         ' Emetti evento SSE
-                        sharedEmitter.Emit(eventType, data)
+                        legacyEmitter.Emit(eventType, data)
                     End Sub
                 )
 
@@ -341,35 +385,35 @@ Namespace ApiServer.Handlers
                 Dim engine As New TaskEngine.Orchestrator.TaskEngine.TaskEngine(stateStorage, callbacks)
 
                 ' ✅ Avvia esecuzione in background (non bloccare la risposta HTTP)
-                Dim taskExecution = System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
-                                                                        Try
-                                                                            LogInfo("Starting TaskEngine execution", New With {.sessionId = newSessionId, .taskId = compiledTask.Id})
-                                                                            Dim result = Await engine.ExecuteTask(compiledTask, executionState)
+                Dim taskExecution As System.Threading.Tasks.Task = System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
+                                                                                                       Try
+                                                                                                           LogInfo("Starting TaskEngine execution", New With {.sessionId = newSessionId, .taskId = compiledTask.Id})
+                                                                                                           Dim result = Await engine.ExecuteTask(compiledTask, executionState)
 
-                                                                            ' ✅ Salva ExecutionState nella sessione
-                                                                            Dim executionStateJson = JsonConvert.SerializeObject(executionState)
-                                                                            Dim currentSession = SessionManager.GetTaskSession(newSessionId)
-                                                                            If currentSession IsNot Nothing Then
-                                                                                ' Salva ExecutionStateJson nella sessione (se il campo esiste)
-                                                                                ' Per ora, lo stato è già salvato da TaskEngineStateStorage
-                                                                            End If
+                                                                                                           ' ✅ Salva ExecutionState nella sessione
+                                                                                                           Dim executionStateJson = JsonConvert.SerializeObject(executionState)
+                                                                                                           Dim currentSession = SessionManager.GetTaskSession(newSessionId)
+                                                                                                           If currentSession IsNot Nothing Then
+                                                                                                               ' Salva ExecutionStateJson nella sessione (se il campo esiste)
+                                                                                                               ' Per ora, lo stato è già salvato da TaskEngineStateStorage
+                                                                                                           End If
 
-                                                                            ' ✅ Se richiede input, emetti evento "waitingForInput"
-                                                                            If result.RequiresInput Then
-                                                                                Dim waitingData = New With {
+                                                                                                           ' ✅ Se richiede input, emetti evento "waitingForInput"
+                                                                                                           If result.RequiresInput Then
+                                                                                                               Dim waitingData = New With {
                                 .taskId = compiledTask.Id,
                                 .timestamp = DateTime.UtcNow.ToString("O")
                             }
-                                                                                sharedEmitter.Emit("waitingForInput", waitingData)
-                                                                                LogInfo("TaskEngine waiting for input", New With {.sessionId = newSessionId, .taskId = compiledTask.Id})
-                                                                            Else
-                                                                                LogInfo("TaskEngine completed", New With {.sessionId = newSessionId, .taskId = compiledTask.Id})
-                                                                            End If
-                                                                        Catch ex As Exception
-                                                                            LogError("TaskEngine execution error", ex, New With {.sessionId = newSessionId})
-                                                                            sharedEmitter.Emit("error", New With {.error = ex.Message, .timestamp = DateTime.UtcNow.ToString("O")})
-                                                                        End Try
-                                                                    End Function)
+                                                                                                               legacyEmitter.Emit("waitingForInput", waitingData)
+                                                                                                               LogInfo("TaskEngine waiting for input", New With {.sessionId = newSessionId, .taskId = compiledTask.Id})
+                                                                                                           Else
+                                                                                                               LogInfo("TaskEngine completed", New With {.sessionId = newSessionId, .taskId = compiledTask.Id})
+                                                                                                           End If
+                                                                                                       Catch ex As Exception
+                                                                                                           LogError("TaskEngine execution error", ex, New With {.sessionId = newSessionId})
+                                                                                                           legacyEmitter.Emit("error", New With {.error = ex.Message, .timestamp = DateTime.UtcNow.ToString("O")})
+                                                                                                       End Try
+                                                                                                   End Function)
 
                 Dim sessionCreated = New With {
                     .sessionId = newSessionId,
@@ -670,12 +714,12 @@ Namespace ApiServer.Handlers
         ''' ✅ Helper: Ottiene il messaggio da uno step del dialogo per il test
         ''' </summary>
         Private Function GetMessageFromStepForTest(compiledTask As Compiler.CompiledUtteranceTask, stepType As Object) As String
-            ' Mappa DialogueStepType a DialogueState
-            Dim dialogueState = MapStepTypeToDialogueStateForTest(stepType)
+            ' Mappa stepType a DialogueStepType
+            Dim dialogueStepType = MapStepTypeToDialogueStepTypeForTest(stepType)
 
-            ' Trova lo step corrispondente nel CompiledUtteranceTask
+            ' Trova lo step corrispondente nel CompiledUtteranceTask usando SingleOrDefault per rilevare duplicati
             If compiledTask.Steps IsNot Nothing Then
-                Dim dialogueStep = compiledTask.Steps.FirstOrDefault(Function(s) s.Type = dialogueState)
+                Dim dialogueStep = compiledTask.Steps.SingleOrDefault(Function(s) s.Type = dialogueStepType)
                 If dialogueStep IsNot Nothing AndAlso dialogueStep.Escalations IsNot Nothing AndAlso dialogueStep.Escalations.Count > 0 Then
                     ' Prendi la prima escalation (TODO: gestire escalation counters)
                     Dim escalation = dialogueStep.Escalations(0)
@@ -699,12 +743,12 @@ Namespace ApiServer.Handlers
         ''' ✅ Helper: Estrae messaggio da CompiledUtteranceTask per HandleTaskSessionInput
         ''' </summary>
         Private Function GetMessageFromStepForInput(compiledTask As Compiler.CompiledUtteranceTask, stepType As Object, projectId As String, locale As String) As String
-            ' Mappa DialogueStepType a DialogueState
-            Dim dialogueState = MapStepTypeToDialogueStateForTest(stepType)
+            ' Mappa stepType a DialogueStepType
+            Dim dialogueStepType = MapStepTypeToDialogueStepTypeForTest(stepType)
 
-            ' Trova lo step corrispondente nel CompiledUtteranceTask
+            ' Trova lo step corrispondente nel CompiledUtteranceTask usando SingleOrDefault per rilevare duplicati
             If compiledTask.Steps IsNot Nothing Then
-                Dim dialogueStep = compiledTask.Steps.FirstOrDefault(Function(s) s.Type = dialogueState)
+                Dim dialogueStep = compiledTask.Steps.SingleOrDefault(Function(s) s.Type = dialogueStepType)
                 If dialogueStep IsNot Nothing AndAlso dialogueStep.Escalations IsNot Nothing AndAlso dialogueStep.Escalations.Count > 0 Then
                     ' Prendi la prima escalation (TODO: gestire escalation counters)
                     Dim escalation = dialogueStep.Escalations(0)
@@ -734,11 +778,11 @@ Namespace ApiServer.Handlers
         End Function
 
         ''' <summary>
-        ''' ✅ REMOVED: DialogueStepType non esiste più - questa funzione non è più usata
+        ''' ✅ Helper: Mappa stepType a DialogueStepType enum
         ''' </summary>
-        Private Function MapStepTypeToDialogueStateForTest(stepType As Object) As TaskEngine.DialogueState
-            ' ✅ REMOVED: DialogueStepType non esiste più
-            Return TaskEngine.DialogueState.Start
+        Private Function MapStepTypeToDialogueStepTypeForTest(stepType As Object) As TaskEngine.DialogueStepType
+            ' ✅ Per ora restituisce sempre Start (da implementare mapping completo in Fase 2)
+            Return TaskEngine.DialogueStepType.Start
         End Function
 
         ''' <summary>

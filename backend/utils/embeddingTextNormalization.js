@@ -139,7 +139,63 @@ function normalizeTextForEmbedding(text) {
   return normalized;
 }
 
+/**
+ * Remove verbs from template label (for type=3 templates)
+ * This ensures template embeddings only contain the data part, not the action part
+ *
+ * Examples:
+ * - "Chiedi la data di nascita" → "data di nascita"
+ * - "Richiedi l'email" → "email"
+ * - "Qual è il nome" → "nome"
+ *
+ * @param {string} text - Template label
+ * @param {string} language - Language code (IT, EN, PT, etc.)
+ * @returns {string} Label without verbs
+ */
+function removeVerbsFromTemplateLabel(text, language = 'IT') {
+  if (!text || typeof text !== 'string' || text.trim().length === 0) {
+    return text || '';
+  }
+
+  const verbsByLanguage = {
+    IT: ['chiedi', 'richiedi', 'domanda', 'chiedere', 'richiedere', 'domandare', 'raccogli', 'acquisisci', 'quale è', 'qual è', 'quando è', 'mi dici', 'vorrei sapere', 'serve sapere', 'dimmi'],
+    EN: ['ask', 'request', 'tell me', 'i want to know', 'i need to know', 'when is', 'what is', 'which is', 'give me', 'collect', 'acquire'],
+    PT: ['pergunte', 'solicite', 'me diga', 'quero saber', 'preciso saber', 'quando é', 'qual é', 'o que é', 'colete', 'adquira'],
+    ES: ['pide', 'solicita', 'dime', 'quiero saber', 'necesito saber', 'cuándo es', 'cuál es', 'qué es'],
+    FR: ['demande', 'solicite', 'dis-moi', 'je veux savoir', 'j\'ai besoin de savoir', 'quand est', 'quel est', 'qu\'est-ce que'],
+    DE: ['frage', 'bitte', 'sag mir', 'ich möchte wissen', 'ich brauche zu wissen', 'wann ist', 'was ist', 'welches ist']
+  };
+
+  const verbs = verbsByLanguage[language] || verbsByLanguage['IT'];
+  let normalized = text.toLowerCase().trim();
+
+  // Sort by length (longest first) to match "mi dici" before "mi"
+  const sortedVerbs = [...verbs].sort((a, b) => b.length - a.length);
+
+  for (const verb of sortedVerbs) {
+    // Match verb at start of text
+    if (normalized.startsWith(verb.toLowerCase())) {
+      const afterVerb = normalized.slice(verb.length).trim();
+      // Check if followed by space or article
+      if (afterVerb.length === 0 || afterVerb[0] === ' ' || afterVerb.match(/^(la|il|lo|l'|i|gli|le|the|a|an|o|a|as|os)/i)) {
+        // Remove verb and return the rest
+        normalized = afterVerb;
+        break;
+      }
+    }
+  }
+
+  // Remove leading articles
+  normalized = normalized.replace(/^(il|lo|la|l'|un|uno|una|un'|the|a|an|o|a|as|os)\s+/i, '');
+
+  // Remove context prepositions and everything after
+  normalized = normalized.replace(/\s+(del|della|dello|dei|degli|delle|al|allo|alla|ai|agli|alle|per|sul|sulla|sui|sugli|sulle|of|from|for|about|regarding|do|da|de|dos|das|para|sobre).*$/i, '');
+
+  return normalized.trim() || text; // Fallback to original if empty
+}
+
 module.exports = {
   normalizeTextForEmbedding,
-  normalizationPatterns
+  normalizationPatterns,
+  removeVerbsFromTemplateLabel
 };

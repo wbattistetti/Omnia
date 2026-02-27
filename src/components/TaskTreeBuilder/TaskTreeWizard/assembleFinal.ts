@@ -505,6 +505,67 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
       assembled.constraints.push(constraintObj);
     }
 
+    // ✅ Create invalid step if constraints exist (excluding 'required')
+    // ✅ REMOVED: !isSub condition - invalid step must be created for sub-data too if they have constraints
+    const hasConstraints = (node.constraints || []).some((c: any) => c.kind !== 'required');
+    if (hasConstraints) {
+      // Check if invalid step already exists from AI-generated messages
+      const invalidKey = `runtime.${taskTreeId}.${path}.invalid`;
+      const bucket = store.byPath[path]?.steps?.invalid;
+
+      if (bucket?.messages?.messages && Array.isArray(bucket.messages.messages) && bucket.messages.messages.length > 0) {
+        // Use AI-generated messages if available
+        const messages = bucket.messages.messages;
+        const firstMessage = messages[0];
+        if (firstMessage?.payoff) {
+          pushTranslation(translations, invalidKey, String(firstMessage.payoff));
+          rootSteps[nodeId].invalid = {
+            type: 'invalid',
+            escalations: [
+              {
+                escalationId: `e_${uuidv4()}`,
+                tasks: [
+                  {
+                    id: uuidv4(),
+                    templateId: 'sayMessage',
+                    parameters: [{ parameterId: 'text', value: invalidKey }]
+                  }
+                ],
+                actions: [{
+                  actionId: 'sayMessage',
+                  actionInstanceId: uuidv4(),
+                  parameters: [{ parameterId: 'text', value: invalidKey }]
+                }]
+              }
+            ]
+          };
+        }
+      } else {
+        // Create placeholder step (messages will be generated together with constraints later)
+        pushTranslation(translations, invalidKey, `${node.label} · Il valore inserito non è valido. Puoi ripeterlo?`);
+        rootSteps[nodeId].invalid = {
+          type: 'invalid',
+          escalations: [
+            {
+              escalationId: `e_${uuidv4()}`,
+              tasks: [
+                {
+                  id: uuidv4(),
+                  templateId: 'sayMessage',
+                  parameters: [{ parameterId: 'text', value: invalidKey }]
+                }
+              ],
+              actions: [{
+                actionId: 'sayMessage',
+                actionInstanceId: uuidv4(),
+                parameters: [{ parameterId: 'text', value: invalidKey }]
+              }]
+            }
+          ]
+        };
+      }
+    }
+
     // ✅ CRITICAL: Check sub-data steps before processing
     // Create sub-instances first (needed for contract mapping)
     const subInstances: any[] = [];

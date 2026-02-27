@@ -7,7 +7,10 @@
     "step2": "node step2_copy_data.js",
     "step3": "node step3_seed_builtins.js",
     "all": "npm run step1 && npm run step2 && npm run step3",
-    "verify": "node verify_migration.js"
+    "verify": "node verify_migration.js",
+    "cleanup-invalid-steps": "node cleanup_invalid_step_types.js",
+    "cleanup-type3": "node cleanup_type3_templates.js",
+    "cleanup-factory": "node cleanup_factory_database.js"
   },
   "dependencies": {
     "mongodb": "^6.0.0"
