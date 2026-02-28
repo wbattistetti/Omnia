@@ -318,6 +318,39 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
     ) {
       console.log('[useWizardCompletion] 🚀 All conditions met - creating template + instance BEFORE transition to COMPLETED');
       await createTemplateAndInstanceForCompleted();
+
+      // ✅ DEBUG: Log finale - verifica stato contratti per tutti i nodi
+      const allNodesFinal = flattenTaskTree(dataSchema);
+      console.log(`[useWizardCompletion] 📊 FINAL STATE - Wizard completed, checking contracts for all nodes`, {
+        totalNodes: allNodesFinal.length,
+        nodesWithDataContract: allNodesFinal.filter(n => !!n.dataContract).length,
+        nodesWithContracts: allNodesFinal.filter(n => n.dataContract?.contracts && n.dataContract.contracts.length > 0).length,
+        nodesDetails: allNodesFinal.map(n => ({
+          nodeId: n.id,
+          nodeLabel: n.label,
+          hasDataContract: !!n.dataContract,
+          contractsCount: n.dataContract?.contracts?.length || 0,
+          contractTypes: n.dataContract?.contracts?.map((c: any) => c.type) || []
+        }))
+      });
+
+      // ✅ DEBUG: Verifica anche nei template registrati in memoria
+      const { default: DialogueTaskService } = await import('@services/DialogueTaskService');
+      allNodesFinal.forEach(node => {
+        const template = DialogueTaskService.getTemplate(node.id);
+        if (template) {
+          console.log(`[useWizardCompletion] 📋 Template in memory for node "${node.label}" (${node.id})`, {
+            templateId: template.id,
+            templateLabel: template.label,
+            hasDataContract: !!template.dataContract,
+            contractsCount: template.dataContract?.contracts?.length || 0,
+            contractTypes: template.dataContract?.contracts?.map((c: any) => c.type) || []
+          });
+        } else {
+          console.log(`[useWizardCompletion] ⚠️ Template NOT FOUND in memory for node "${node.label}" (${node.id})`);
+        }
+      });
+
       console.log('[useWizardCompletion] ✅ Template + instance created - now transitioning to COMPLETED');
       transitionToCompleted();
     } else if (hasFailedNodes) {

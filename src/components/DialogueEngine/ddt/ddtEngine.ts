@@ -101,7 +101,7 @@ export async function runDDT(
   // Inizializzazione
   let state = initializeState(ddtInstance);
 
-  // Store DDT instance for contract loading (needed for canonicalKey → subId mapping)
+  // Store DDT instance for contract loading
   (state as any).__ddtInstance = ddtInstance;
 
   // Se DDT è di tipo Aggregate, mostra Preamble
@@ -629,8 +629,7 @@ async function processUserInput(
       } else {
         // Salva valore in memory
         // Se data ha subData e il valore è un oggetto, decomponi e salva ogni subData
-        // Il contract estrae valori con chiavi canonicalKey ("day", "month", "year")
-        // Devo mappare canonicalKey → subData.id usando getSubIdForCanonicalKey (come fa il vecchio engine)
+        // Il contract estrae valori keyed by subId (no mapping needed)
         if (currData.isMain && recognitionResult.value && typeof recognitionResult.value === 'object') {
           const data = currData.data;
           if (data.subData && Array.isArray(data.subData)) {

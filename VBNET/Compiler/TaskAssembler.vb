@@ -31,18 +31,18 @@ Public Class TaskAssembler
     End Function
 
     ''' <summary>
-    ''' Compila TaskTreeExpanded (IDE - AST montato) in RuntimeTask ricorsivo (Runtime)
-    ''' Restituisce il RuntimeTask root dell'albero ricorsivo
+    ''' Compila TaskTreeExpanded (IDE - AST montato) in CompiledUtteranceTask ricorsivo (Runtime)
+    ''' Restituisce il CompiledUtteranceTask root dell'albero ricorsivo
     ''' </summary>
-    Public Function Compile(assembled As Compiler.TaskTreeExpanded) As RuntimeTask
+    Public Function Compile(assembled As Compiler.TaskTreeExpanded) As CompiledUtteranceTask
         If assembled Is Nothing Then
             Throw New ArgumentNullException(NameOf(assembled), "TaskTreeExpanded cannot be Nothing")
         End If
 
         ' ❌ RIMOSSO: translations - il compilatore NON deve più gestire traduzioni
-        ' ✅ NUOVO MODELLO: Costruisci RuntimeTask root ricorsivo
+        ' ✅ NUOVO MODELLO: Costruisci CompiledUtteranceTask root ricorsivo
         ' Se c'è un solo nodo, è il root; se ce ne sono più, creiamo un nodo aggregato
-        Dim rootTask As RuntimeTask = Nothing
+        Dim rootTask As CompiledUtteranceTask = Nothing
 
         If assembled.Nodes IsNot Nothing AndAlso assembled.Nodes.Count > 0 Then
             If assembled.Nodes.Count = 1 Then
@@ -52,13 +52,13 @@ Public Class TaskAssembler
                 rootTask.Id = assembled.TaskInstanceId ' ✅ Usa TaskInstanceId del TaskTreeExpanded come ID del root
             Else
                 ' Più nodi: crea un nodo aggregato root con subTasks
-                rootTask = New RuntimeTask() With {
+                rootTask = New CompiledUtteranceTask() With {
                     .Id = assembled.TaskInstanceId, ' ✅ Usa TaskInstanceId invece di Id
                     .Condition = Nothing,
                     .Steps = New List(Of TaskEngine.DialogueStep)(),
                     .Constraints = New List(Of ValidationCondition)(),
                     .NlpContract = Nothing,
-                    .SubTasks = New List(Of RuntimeTask)() ' ✅ Necessario perché ci sono più nodi
+                    .SubTasks = New List(Of CompiledUtteranceTask)() ' ✅ Necessario perché ci sono più nodi
                 }
                 ' Compila ogni nodo come subTask
                 For Each taskNode As Compiler.TaskNode In assembled.Nodes
@@ -70,7 +70,7 @@ Public Class TaskAssembler
             End If
         Else
             ' Nessun nodo: crea un task vuoto
-            rootTask = New RuntimeTask() With {
+            rootTask = New CompiledUtteranceTask() With {
                 .Id = assembled.TaskInstanceId, ' ✅ Usa TaskInstanceId invece di Id
                 .Condition = Nothing,
                 .Steps = New List(Of TaskEngine.DialogueStep)(),
@@ -84,10 +84,10 @@ Public Class TaskAssembler
     End Function
 
     ''' <summary>
-    ''' Compila TaskNode (IDE) in RuntimeTask (Runtime)
-    ''' Costruisce struttura ricorsiva RuntimeTask → RuntimeTask → RuntimeTask
+    ''' Compila TaskNode (IDE) in CompiledUtteranceTask (Runtime)
+    ''' Costruisce struttura ricorsiva CompiledUtteranceTask → CompiledUtteranceTask → CompiledUtteranceTask
     ''' </summary>
-    Private Function CompileNode(ideNode As Compiler.TaskNode, parentTask As RuntimeTask) As RuntimeTask
+    Private Function CompileNode(ideNode As Compiler.TaskNode, parentTask As CompiledUtteranceTask) As CompiledUtteranceTask
         ' ✅ Copia solo proprietà runtime essenziali:
         ' - Id: necessario per identificare il nodo
         ' - Name: usato per fallback regex hardcoded in Parser.vb
@@ -102,8 +102,8 @@ Public Class TaskAssembler
         ' - Synonyms: legacy, non serve
         ' - TemplateId: riferimento esterno, non serve a runtime
         ' ✅ Constraints: devono essere convertiti in ValidationConditions (TODO: implementare)
-        ' ✅ Crea RuntimeTask ricorsivo
-        Dim task As New RuntimeTask() With {
+        ' ✅ Crea CompiledUtteranceTask ricorsivo
+        Dim task As New CompiledUtteranceTask() With {
             .Id = ideNode.Id,
             .Condition = Nothing, ' Condition viene dall'istanza, non dal template
             .Steps = New List(Of TaskEngine.DialogueStep)(),
@@ -170,22 +170,61 @@ Public Class TaskAssembler
         ' ✅ Converti dataContract in CompiledNlpContract se presente
         If ideNode.DataContract IsNot Nothing Then
             Try
+                ' ✅ LOG: Verifica presenza subDataMapping nel JSON
+                Dim dataContractJson = JsonConvert.SerializeObject(ideNode.DataContract)
+                Console.WriteLine($"[TaskAssembler.CompileNode] 🔍 Node {ideNode.Id}: Checking dataContract for subDataMapping")
+                Console.WriteLine($"[TaskAssembler.CompileNode]   - DataContract type: {ideNode.DataContract.GetType().Name}")
+                Console.WriteLine($"[TaskAssembler.CompileNode]   - DataContract JSON preview: {If(dataContractJson.Length > 500, dataContractJson.Substring(0, 500) & "...", dataContractJson)}")
+
                 Dim baseContract = ConvertDataContractToNlpContract(ideNode.DataContract)
                 If baseContract IsNot Nothing Then
+                    ' ✅ LOG: Verifica subDataMapping dopo conversione
+                    Console.WriteLine($"[TaskAssembler.CompileNode] ✅ Node {ideNode.Id}: Converted to NLPContract")
+                    Console.WriteLine($"[TaskAssembler.CompileNode]   - SubDataMapping IsNothing: {baseContract.SubDataMapping Is Nothing}")
+                    If baseContract.SubDataMapping IsNot Nothing Then
+                        Console.WriteLine($"[TaskAssembler.CompileNode]   - SubDataMapping.Count: {baseContract.SubDataMapping.Count}")
+                        For Each kvp In baseContract.SubDataMapping
+                            Console.WriteLine($"[TaskAssembler.CompileNode]     - [{kvp.Key}] → groupName: '{kvp.Value.GroupName}', label: '{If(kvp.Value.Label, "N/A")}'")
+                        Next
+                    Else
+                        Console.WriteLine($"[TaskAssembler.CompileNode] ⚠️ Node {ideNode.Id}: SubDataMapping is Nothing after conversion!")
+                        If ideNode.SubTasks IsNot Nothing AndAlso ideNode.SubTasks.Count > 0 Then
+                            Console.WriteLine($"[TaskAssembler.CompileNode]   - ⚠️ WARNING: Node has {ideNode.SubTasks.Count} subTasks but SubDataMapping is empty!")
+                        End If
+                    End If
+
                     task.NlpContract = CompiledNlpContract.Compile(baseContract)
+
+                    ' ✅ LOG: Verifica subDataMapping dopo compilazione
+                    If task.NlpContract IsNot Nothing Then
+                        Console.WriteLine($"[TaskAssembler.CompileNode] ✅ Node {ideNode.Id}: Compiled to CompiledNlpContract")
+                        Console.WriteLine($"[TaskAssembler.CompileNode]   - Compiled.SubDataMapping IsNothing: {task.NlpContract.SubDataMapping Is Nothing}")
+                        If task.NlpContract.SubDataMapping IsNot Nothing Then
+                            Console.WriteLine($"[TaskAssembler.CompileNode]   - Compiled.SubDataMapping.Count: {task.NlpContract.SubDataMapping.Count}")
+                        Else
+                            Console.WriteLine($"[TaskAssembler.CompileNode] ⚠️ Node {ideNode.Id}: Compiled.SubDataMapping is Nothing!")
+                        End If
+                    End If
+
                     If Not task.NlpContract.IsValid Then
                         Throw New InvalidOperationException($"NlpContract compilation failed for node {ideNode.Id}: {String.Join(", ", task.NlpContract.ValidationErrors)}")
                     End If
+                Else
+                    Console.WriteLine($"[TaskAssembler.CompileNode] ⚠️ Node {ideNode.Id}: ConvertDataContractToNlpContract returned Nothing")
                 End If
             Catch ex As Exception
+                Console.WriteLine($"[TaskAssembler.CompileNode] ❌ Node {ideNode.Id}: Exception during compilation: {ex.Message}")
+                Console.WriteLine($"[TaskAssembler.CompileNode]   - StackTrace: {ex.StackTrace}")
                 Throw New InvalidOperationException($"Failed to compile dataContract for node {ideNode.Id}: {ex.Message}", ex)
             End Try
+        Else
+            Console.WriteLine($"[TaskAssembler.CompileNode] ⚠️ Node {ideNode.Id}: ideNode.DataContract is Nothing")
         End If
 
         ' Compila SubTasks (ricorsivo) - inizializza solo se ci sono subTasks
         If ideNode.SubTasks IsNot Nothing AndAlso ideNode.SubTasks.Count > 0 Then
             If task.SubTasks Is Nothing Then
-                task.SubTasks = New List(Of RuntimeTask)()
+                task.SubTasks = New List(Of CompiledUtteranceTask)()
             End If
             For Each subNode As Compiler.TaskNode In ideNode.SubTasks
                 Dim subTask = CompileNode(subNode, task)
@@ -546,8 +585,15 @@ Public Class TaskAssembler
             ' Estrai subDataMapping
             ' ❌ RIMOSSO: Catch silente che nascondeva errori di deserializzazione.
             ' ✅ NUOVO: Fail-fast con messaggio esplicito su ogni percorso di errore.
+            ' ✅ LOG: Inizio estrazione
+            Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] 🔍 Template '{If(nlpContract.TemplateName, "unknown")}': Extracting subDataMapping")
+            Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]   - contractObj('subDataMapping') IsNothing: {contractObj("subDataMapping") Is Nothing}")
+
             If contractObj("subDataMapping") IsNot Nothing Then
                 Dim subDataMappingToken As JToken = contractObj("subDataMapping")
+                Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]   - subDataMappingToken.Type: {subDataMappingToken.Type}")
+                Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]   - subDataMappingToken.ToString preview: {If(subDataMappingToken.ToString().Length > 200, subDataMappingToken.ToString().Substring(0, 200) & "...", subDataMappingToken.ToString())}")
+
                 Dim subDataMappingDict As Dictionary(Of String, SubDataMappingInfo) = Nothing
 
                 Select Case subDataMappingToken.Type
@@ -555,7 +601,9 @@ Public Class TaskAssembler
                         ' ✅ Standard path: frontend sends subDataMapping as a JSON object.
                         Try
                             subDataMappingDict = subDataMappingToken.ToObject(Of Dictionary(Of String, SubDataMappingInfo))()
+                            Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ✅ Deserialized as Object: Count = {If(subDataMappingDict IsNot Nothing, subDataMappingDict.Count, 0)}")
                         Catch ex As Exception
+                            Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ❌ Deserialization failed: {ex.Message}")
                             Throw New InvalidOperationException(
                                 $"Failed to deserialize dataContract.subDataMapping (JObject path). " &
                                 $"Template: '{If(nlpContract.TemplateName, "unknown")}'. Error: {ex.Message}", ex)
@@ -566,16 +614,20 @@ Public Class TaskAssembler
                         Try
                             subDataMappingDict = JsonConvert.DeserializeObject(
                                 Of Dictionary(Of String, SubDataMappingInfo))(subDataMappingToken.ToString())
+                            Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ✅ Deserialized as String: Count = {If(subDataMappingDict IsNot Nothing, subDataMappingDict.Count, 0)}")
                         Catch ex As Exception
+                            Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ❌ Deserialization failed: {ex.Message}")
                             Throw New InvalidOperationException(
                                 $"Failed to deserialize dataContract.subDataMapping (String path). " &
                                 $"Template: '{If(nlpContract.TemplateName, "unknown")}'. Error: {ex.Message}", ex)
                         End Try
 
                     Case JTokenType.Null
+                        Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ⚠️ subDataMappingToken is Null")
                         ' null token → treat as absent; leaf tasks may omit the mapping.
 
                     Case Else
+                        Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ❌ Unsupported type: {subDataMappingToken.Type}")
                         Throw New InvalidOperationException(
                             $"dataContract.subDataMapping has unsupported JSON type: {subDataMappingToken.Type}. " &
                             $"Expected Object or String. Template: '{If(nlpContract.TemplateName, "unknown")}'.")
@@ -583,7 +635,15 @@ Public Class TaskAssembler
 
                 If subDataMappingDict IsNot Nothing Then
                     nlpContract.SubDataMapping = subDataMappingDict
+                    Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ✅ Assigned SubDataMapping: Count = {nlpContract.SubDataMapping.Count}")
+                    For Each kvp In nlpContract.SubDataMapping
+                        Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]     - [{kvp.Key}] → groupName: '{kvp.Value.GroupName}'")
+                    Next
+                Else
+                    Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ⚠️ subDataMappingDict is Nothing after deserialization")
                 End If
+            Else
+                Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ⚠️ contractObj('subDataMapping') is Nothing - subDataMapping missing from JSON")
             End If
 
             ' ✅ NEW: Popola Contracts direttamente (fonte di verità unica)

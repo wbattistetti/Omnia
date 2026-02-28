@@ -856,8 +856,8 @@ Namespace ApiServer.Handlers
                     )
                 End If
 
-                ' Deserialize RuntimeTask
-                Dim runtimeTask As Compiler.RuntimeTask = Nothing
+                ' Deserialize CompiledUtteranceTask
+                Dim compiledTask As Compiler.CompiledUtteranceTask = Nothing
                 Try
                     Dim settings As New JsonSerializerSettings With {
                         .TypeNameHandling = TypeNameHandling.Auto,
@@ -865,15 +865,15 @@ Namespace ApiServer.Handlers
                         .NullValueHandling = NullValueHandling.Ignore,
                         .Converters = New List(Of JsonConverter) From {New ITaskConverter()}
                     }
-                    runtimeTask = JsonConvert.DeserializeObject(Of Compiler.RuntimeTask)(runtimeTaskJson, settings)
+                    compiledTask = JsonConvert.DeserializeObject(Of Compiler.CompiledUtteranceTask)(runtimeTaskJson, settings)
                 Catch ex As Exception
-                    Console.WriteLine($"❌ [HandleSaveDialog] Error deserializing RuntimeTask: {ex.Message}")
-                    Return Results.BadRequest(New With {.error = "Failed to deserialize runtimeTask", .message = ex.Message})
+                    Console.WriteLine($"❌ [HandleSaveDialog] Error deserializing CompiledUtteranceTask: {ex.Message}")
+                    Return Results.BadRequest(New With {.error = "Failed to deserialize CompiledUtteranceTask", .message = ex.Message})
                 End Try
 
-                If runtimeTask Is Nothing Then
-                    Console.WriteLine("❌ [HandleSaveDialog] RuntimeTask is Nothing after deserialization")
-                    Return Results.BadRequest(New With {.error = "RuntimeTask is null"})
+                If compiledTask Is Nothing Then
+                    Console.WriteLine("❌ [HandleSaveDialog] CompiledUtteranceTask is Nothing after deserialization")
+                    Return Results.BadRequest(New With {.error = "CompiledUtteranceTask is null"})
                 End If
 
                 ' Save to DialogRepository
@@ -882,10 +882,10 @@ Namespace ApiServer.Handlers
                     Console.WriteLine($"🔵 [HandleSaveDialog] ✅ Saving dialog to repository...")
                     Console.WriteLine($"   ProjectId: {projectId}")
                     Console.WriteLine($"   DialogVersion: {dialogVersion}")
-                    Console.WriteLine($"   RuntimeTask.Id: {runtimeTask.Id}")
-                    Console.WriteLine($"   RuntimeTask.HasSubTasks: {runtimeTask.HasSubTasks()}")
-                    If runtimeTask.HasSubTasks() Then
-                        Console.WriteLine($"   RuntimeTask.SubTasks.Count: {runtimeTask.SubTasks.Count}")
+                    Console.WriteLine($"   CompiledUtteranceTask.Id: {compiledTask.Id}")
+                    Console.WriteLine($"   CompiledUtteranceTask.HasSubTasks: {compiledTask.HasSubTasks()}")
+                    If compiledTask.HasSubTasks() Then
+                        Console.WriteLine($"   CompiledUtteranceTask.SubTasks.Count: {compiledTask.SubTasks.Count}")
                     End If
                     Console.Out.Flush()
 
@@ -896,7 +896,7 @@ Namespace ApiServer.Handlers
                     Console.WriteLine($"🔵 [HandleSaveDialog] ✅ DialogRepository created, calling SaveDialog...")
                     Console.Out.Flush()
 
-                    dialogRepository.SaveDialog(projectId, dialogVersion, runtimeTask)
+                    dialogRepository.SaveDialog(projectId, dialogVersion, compiledTask)
 
                     Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
                     Console.WriteLine($"🔵 [HandleSaveDialog] ✅ Dialog saved successfully to repository!")

@@ -308,8 +308,8 @@ async function removeEmbeddings(client, templateIds) {
 async function removeTranslations(client, translationKeys) {
   const db = client.db(dbFactory);
 
-  // Try common translation collection names
-  const translationCollections = ['translations', 'project_translations', 'global_translations'];
+  // ✅ CORRECTED: Use 'Translations' (capital T) as per server.js
+  const translationCollections = ['Translations', 'IDETranslations', 'translations', 'project_translations', 'global_translations'];
   let totalRemoved = 0;
 
   console.log('\n📋 Removing related translations...');
@@ -327,12 +327,14 @@ async function removeTranslations(client, translationKeys) {
       const exists = await db.listCollections({ name: collName }).hasNext();
 
       if (exists) {
-        // Try to find translations by key
+        // ✅ CORRECTED: Use 'guid' as primary field (as per server.js structure)
+        // Also check legacy fields for backward compatibility
         const query = {
           $or: [
-            { key: { $in: translationKeys } },
-            { textKey: { $in: translationKeys } },
-            { _id: { $in: translationKeys } }
+            { guid: { $in: translationKeys } },  // ✅ Primary field (new format)
+            { key: { $in: translationKeys } },  // Legacy field
+            { textKey: { $in: translationKeys } },  // Legacy field
+            { _id: { $in: translationKeys } }  // Direct ID match
           ]
         };
 
@@ -363,15 +365,18 @@ async function removeTranslations(client, translationKeys) {
 
     try {
       const projectDb = client.db(dbName);
-      const coll = projectDb.collection('translations');
-      const exists = await projectDb.listCollections({ name: 'translations' }).hasNext();
+      // ✅ CORRECTED: Use 'Translations' (capital T) as per server.js
+      const coll = projectDb.collection('Translations');
+      const exists = await projectDb.listCollections({ name: 'Translations' }).hasNext();
 
       if (exists) {
+        // ✅ CORRECTED: Use 'guid' as primary field
         const query = {
           $or: [
-            { key: { $in: translationKeys } },
-            { textKey: { $in: translationKeys } },
-            { _id: { $in: translationKeys } }
+            { guid: { $in: translationKeys } },  // ✅ Primary field (new format)
+            { key: { $in: translationKeys } },  // Legacy field
+            { textKey: { $in: translationKeys } },  // Legacy field
+            { _id: { $in: translationKeys } }  // Direct ID match
           ]
         };
 
@@ -379,7 +384,7 @@ async function removeTranslations(client, translationKeys) {
         if (count > 0) {
           const result = await coll.deleteMany(query);
           totalRemoved += result.deletedCount;
-          console.log(`  ✅ Removed ${result.deletedCount} translation(s) from ${dbName}.translations`);
+          console.log(`  ✅ Removed ${result.deletedCount} translation(s) from ${dbName}.Translations`);
         }
       }
     } catch (error) {

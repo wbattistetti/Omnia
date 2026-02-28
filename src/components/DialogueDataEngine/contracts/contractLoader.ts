@@ -19,7 +19,7 @@ export interface RegexContract {
             pattern: string;
             description: string;
         };
-        ambiguousCanonicalKeys: string[];
+        ambiguousSubIds: string[];  // Lista di subId che possono essere ambigui
     };
     examples: string[];
     testCases: string[];
@@ -73,8 +73,7 @@ export interface DataContract {
     sourceTemplateId?: string;  // GUID of the original template (for instances)
     subDataMapping: {
         [subId: string]: {
-            canonicalKey: string;
-            /** Technical regex group name (format: g_[a-f0-9]{12}). Sole source of truth for extraction. */
+            /** Technical regex group name (format: s[0-9]+ or g_[a-f0-9]{12}). Sole source of truth for extraction. */
             groupName: string;
             label: string;
             type: string;
@@ -124,26 +123,4 @@ export function loadContract(node: DDTNode): DataContract | null {
 }
 
 
-/**
- * Ottiene il mapping canonicalKey → subId per un contract
- */
-export function getCanonicalKeyToSubId(contract: DataContract): Record<string, string> {
-    const mapping: Record<string, string> = {};
-
-    Object.entries(contract.subDataMapping).forEach(([subId, data]) => {
-        mapping[data.canonicalKey] = subId;
-    });
-
-    return mapping;
-}
-
-/**
- * Ottiene il subId per un canonicalKey
- */
-export function getSubIdForCanonicalKey(contract: DataContract, canonicalKey: string): string | undefined {
-    const entry = Object.entries(contract.subDataMapping).find(
-        ([_, data]) => data.canonicalKey === canonicalKey
-    );
-    return entry ? entry[0] : undefined;
-}
 

@@ -32,9 +32,15 @@ Public Class DialogueStep
     Public Property DataId As String
 
     ''' <summary>
+    ''' Indica se questo step richiede un utterance dall'utente
+    ''' </summary>
+    Public Property RequiresUtterance As Boolean
+
+    ''' <summary>
     ''' Costruttore
     ''' </summary>
     Public Sub New()
         Escalations = New List(Of Escalation)()
+        RequiresUtterance = False
     End Sub
 End Class

@@ -156,31 +156,24 @@ Namespace ApiServer.Handlers
 
                 ' ✅ PASSO 2: Carica dialogo da DialogRepository
                 ' ✅ Log rimosso: troppo verboso
-                Dim runtimeTask = dialogRepository.GetDialog(projectId, dialogVersion)
+                Dim compiledTask = dialogRepository.GetDialog(projectId, dialogVersion)
 
-                If runtimeTask Is Nothing Then
+                If compiledTask Is Nothing Then
                     Return ResponseHelpers.CreateErrorResponse(
                         $"Dialog not found for projectId '{projectId}' and version '{dialogVersion}'. Please ensure the dialog is compiled and saved to the repository using POST /api/runtime/dialog/save.",
                         404
                     )
                 End If
 
-                ' ✅ PASSO 3: Converti RuntimeTask in CompiledUtteranceTask
-                ' ✅ Log rimosso: troppo verboso
-                Dim compiledTask = RuntimeTaskConverter.ConvertRuntimeTaskToCompiledUtteranceTask(runtimeTask)
-                If compiledTask Is Nothing Then
-                    Return ResponseHelpers.CreateErrorResponse("Failed to convert RuntimeTask to CompiledUtteranceTask", 400)
-                End If
-
-                ' ✅ PASSO 4: Carica TranslationRepository
+                ' ✅ PASSO 3: Carica TranslationRepository
                 ' ✅ Log rimosso: troppo verboso
                 Dim translationRepository = SessionManager.GetTranslationRepository()
                 If translationRepository Is Nothing Then
                     Return ResponseHelpers.CreateErrorResponse("TranslationRepository not available", 500)
                 End If
 
-                ' ✅ STATELESS: STEP 3: Estrai textKeys dal dialogo
-                Dim textKeys = SessionManager.ExtractTextKeysFromRuntimeTask(runtimeTask)
+                ' ✅ STATELESS: STEP 3: Estrai textKeys dal dialogo (nuovo formato)
+                Dim textKeys = SessionManager.ExtractTextKeysFromCompiledTask(compiledTask)
 
                 If textKeys IsNot Nothing AndAlso textKeys.Count > 0 Then
                     Dim missingKeys As New List(Of String)()
@@ -279,28 +272,19 @@ Namespace ApiServer.Handlers
 
                 ' ✅ PASSO 9: Chiama ProcessTurn (FASE 1: Invio messaggio iniziale)
                 Try
-                    ' ✅ Carica tutte le traduzioni necessarie
-                    Dim allTranslations As New Dictionary(Of String, String)()
-                    If compiledTask.Steps IsNot Nothing Then
-                        For Each dstep In compiledTask.Steps
-                            If dstep.Escalations IsNot Nothing Then
-                                For Each escalation In dstep.Escalations
-                                    If escalation.Tasks IsNot Nothing Then
-                                        For Each taskObj In escalation.Tasks
-                                            If TypeOf taskObj Is TaskEngine.MessageTask Then
-                                                Dim msgTask = DirectCast(taskObj, TaskEngine.MessageTask)
-                                                If Not String.IsNullOrEmpty(msgTask.TextKey) AndAlso Not allTranslations.ContainsKey(msgTask.TextKey) Then
-                                                    Dim translation = translationRepository.GetTranslation(projectId, locale, msgTask.TextKey)
-                                                    If Not String.IsNullOrEmpty(translation) Then
-                                                        allTranslations(msgTask.TextKey) = translation
-                                                    End If
-                                                End If
-                                            End If
-                                        Next
-                                    End If
-                                Next
-                            End If
-                        Next
+                    ' ✅ Crea funzione per risolvere traduzioni on-demand (più efficiente)
+                    Dim resolveTranslation As Func(Of String, String) = Function(textKey As String) As String
+                                                                            If String.IsNullOrEmpty(textKey) Then
+                                                                                Return Nothing
+                                                                            End If
+                                                                            Dim translation = translationRepository.GetTranslation(projectId, locale, textKey)
+                                                                            Return If(String.IsNullOrEmpty(translation), textKey, translation)
+                                                                        End Function
+
+                    ' ✅ Inizializza CurrentTask se non esiste
+                    If dialogueState.CurrentTask Is Nothing Then
+                        dialogueState.CurrentTask = TaskEngine.Orchestrator.TaskEngine.ProcessTurnHelpers.CreateTaskInstance(compiledTask)
+                        dialogueState.CurrentStepType = Global.TaskEngine.DialogueStepType.Start
                     End If
 
                     ' ✅ Chiama ProcessTurn (FASE 1: solo messaggio iniziale)
@@ -310,7 +294,7 @@ Namespace ApiServer.Handlers
                         .hasDialogueState = dialogueState IsNot Nothing,
                         .turnState = If(dialogueState IsNot Nothing, dialogueState.TurnState.ToString(), "null")
                     })
-                    Dim result = TaskEngine.Orchestrator.TaskEngine.ProcessTurnEngine.ProcessTurn(dialogueState, "", compiledTask, allTranslations)
+                    Dim result = TaskEngine.Orchestrator.TaskEngine.ProcessTurnEngine.ProcessTurn(dialogueState, "", resolveTranslation)
 
                     LogInfo("✅ [ProcessTurn] ProcessTurn completed", New With {
                         .sessionId = newSessionId,
@@ -350,10 +334,35 @@ Namespace ApiServer.Handlers
 
                     ' ✅ Salva nuovo DialogueState nella sessione
                     ' ✅ Per costruzione, dialogueContext esiste sempre (creato al PASSO 7)
+                    Console.WriteLine("═══════════════════════════════════════════════════════════")
+                    Console.WriteLine("🔥 HandleTaskSessionStart: About to save DialogueState")
+                    Console.WriteLine($"   SessionId: {newSessionId}")
+                    Console.WriteLine($"   Result.NewState: {If(result.NewState IsNot Nothing, "NOT NULL", "NULL")}")
                     If result.NewState IsNot Nothing Then
+                        Console.WriteLine($"   Result.Mode: {result.NewState.Mode}")
+                        Console.WriteLine($"   Result.TurnState: {result.NewState.TurnState}")
+                        Console.WriteLine($"   Result.IsCompleted: {result.NewState.IsCompleted}")
+                    End If
+                    Console.Out.Flush()
+
+                    If result.NewState IsNot Nothing Then
+                        LogInfo("💾 [HandleTaskSessionStart] BEFORE SaveDialogueContext", New With {
+                            .sessionId = newSessionId,
+                            .resultMode = result.NewState.Mode.ToString(),
+                            .resultTurnState = result.NewState.TurnState.ToString(),
+                            .resultIsCompleted = result.NewState.IsCompleted
+                        })
+
                         dialogueContext = SessionManager.GetOrCreateDialogueContext(session)
                         dialogueContext.DialogueState = result.NewState
                         SessionManager.SaveDialogueContext(session, dialogueContext)
+
+                        LogInfo("✅ [HandleTaskSessionStart] AFTER SaveDialogueContext", New With {
+                            .sessionId = newSessionId,
+                            .savedMode = result.NewState.Mode.ToString(),
+                            .hasDialogueContext = dialogueContext IsNot Nothing,
+                            .hasDialogueState = dialogueContext IsNot Nothing AndAlso dialogueContext.DialogueState IsNot Nothing
+                        })
                     End If
 
                     ' ✅ Emetti evento waitingForInput se necessario
@@ -401,26 +410,23 @@ Namespace ApiServer.Handlers
                 ' ✅ Crea EventEmitter per SSE (riusa quello già creato per ProcessTurn se disponibile)
                 Dim legacyEmitter As EventEmitter = SessionManager.GetOrCreateEventEmitter(newSessionId)
 
-                ' ✅ Crea callback per salvare DialogueContext nella sessione
-                Dim saveToSessionCallback As Action(Of TaskEngine.Orchestrator.TaskEngine.DialogueContext) = Sub(ctx As TaskEngine.Orchestrator.TaskEngine.DialogueContext)
-                                                                                                                 Dim sessionToSave = SessionManager.GetTaskSession(newSessionId)
-                                                                                                                 If sessionToSave IsNot Nothing Then
-                                                                                                                     SessionManager.SaveDialogueContext(sessionToSave, ctx)
-                                                                                                                     SessionManager.SaveTaskSession(sessionToSave)
-                                                                                                                 End If
-                                                                                                             End Sub
+                ' ❌ RIMOSSO: Callback per salvare DialogueContext nella sessione
+                ' ProcessTurn è ora l'unico responsabile del salvataggio dello stato
+                ' TaskEngine non deve più salvare nulla - il callback appartiene al vecchio modello stateful
+                ' In un motore stateless, ogni salvataggio extra è un bug
+                ' Redis deve contenere solo lo stato prodotto da ProcessTurn
 
-                ' ✅ Crea TaskEngineStateStorage che salva in ExecutionState e nella sessione
-                Dim stateStorage As New TaskEngine.Orchestrator.TaskEngine.TaskEngineStateStorage(executionState, saveToSessionCallback)
+                ' ✅ Usa solo ExecutionState, senza callback
+                Dim stateStorage As New TaskEngine.Orchestrator.TaskEngine.TaskEngineStateStorage(executionState)
 
-                ' ✅ Crea funzione per risolvere traduzioni
-                Dim resolveTranslation As Func(Of String, String, String, String) = Function(projId As String, loc As String, key As String) As String
-                                                                                        Return translationRepository.GetTranslation(projId, loc, key)
-                                                                                    End Function
+                ' ✅ Crea funzione per risolvere traduzioni (per TaskEngineCallbacks - firma diversa)
+                Dim resolveTranslationForCallbacks As Func(Of String, String, String, String) = Function(projId As String, loc As String, key As String) As String
+                                                                                                    Return translationRepository.GetTranslation(projId, loc, key)
+                                                                                                End Function
 
                 ' ✅ Crea TaskEngineCallbacks che risolve traduzioni e emette SSE
                 Dim callbacks As New TaskEngine.Orchestrator.TaskEngine.TaskEngineCallbacks(
-                    resolveTranslation,
+                    resolveTranslationForCallbacks,
                     projectId,
                     locale,
                     Sub(eventType As String, data As Object)
@@ -686,17 +692,18 @@ Namespace ApiServer.Handlers
                     Return Results.NotFound(New With {.error = "Session not found"})
                 End If
 
-                ' ✅ REMOVED: TaskInstance legacy code - use FlowOrchestrator.ProvideUserInput() instead
-                ' The new TaskEngine handles all execution via FlowOrchestrator
+                ' ✅ Runtime: Carica task già compilato dal repository
+                ' La compilazione avviene in startSession (frontend chiama /api/runtime/compile/task e /api/runtime/dialog/save)
+                ' Questo handler processa solo input utente, non compila
                 ' ============================================
-                ' STEP 1 — Compilazione TaskInstance
+                ' STEP 1 — Carica Task compilato dal repository
                 ' ============================================
-                LogInfo("Compilazione TaskInstance avviata", New With {.sessionId = sessionId})
+                LogInfo("Loading compiled task from repository", New With {.sessionId = sessionId})
 
                 Dim compiledTask As CompiledUtteranceTask = Nothing
 
                 Try
-                    ' ✅ STATELESS: Carica DialogRepository e ottieni RuntimeTask dalla sessione
+                    ' ✅ STATELESS: Carica DialogRepository e ottieni CompiledUtteranceTask dalla sessione
                     Dim dialogRepo = SessionManager.GetDialogRepository()
                     If dialogRepo Is Nothing Then
                         Return Results.Problem(
@@ -706,39 +713,31 @@ Namespace ApiServer.Handlers
                         )
                     End If
 
-                    ' ✅ STATELESS: Carica RuntimeTask usando projectId e dialogVersion dalla sessione
-                    Dim runtimeTask = dialogRepo.GetDialog(session.ProjectId, session.DialogVersion)
-                    If runtimeTask Is Nothing Then
+                    ' ✅ STATELESS: Carica CompiledUtteranceTask usando projectId e dialogVersion dalla sessione
+                    compiledTask = dialogRepo.GetDialog(session.ProjectId, session.DialogVersion)
+                    If compiledTask Is Nothing Then
                         Return Results.Problem(
                             title:="Dialog not found",
-                            detail:=$"Dialog not found for projectId '{session.ProjectId}' and version '{session.DialogVersion}'.",
+                            detail:=$"Dialog not found for projectId '{session.ProjectId}' and version '{session.DialogVersion}'. " &
+                                    $"Please ensure the dialog is compiled and saved before starting the session.",
                             statusCode:=404
                         )
                     End If
 
-                    ' ✅ Converti RuntimeTask in CompiledUtteranceTask
-                    compiledTask = RuntimeTaskConverter.ConvertRuntimeTaskToCompiledUtteranceTask(runtimeTask)
-                    If compiledTask Is Nothing Then
-                        Return Results.Problem(
-                            title:="Failed to convert RuntimeTask",
-                            detail:="Failed to convert RuntimeTask to CompiledUtteranceTask.",
-                            statusCode:=500
-                        )
-                    End If
-
-                    LogInfo("Compilazione TaskInstance completata con successo", New With {
+                    LogInfo("Task loaded from repository successfully", New With {
                         .sessionId = sessionId,
                         .projectId = session.ProjectId,
-                        .dialogVersion = session.DialogVersion
+                        .dialogVersion = session.DialogVersion,
+                        .taskId = compiledTask.Id
                     })
                 Catch ex As Exception
-                    LogError("Errore durante la compilazione della TaskInstance", ex, New With {
+                    LogError("Error loading task from repository", ex, New With {
                         .sessionId = sessionId,
                         .projectId = session.ProjectId,
                         .dialogVersion = session.DialogVersion
                     })
                     Return Results.Problem(
-                        title:="Errore compilazione TaskInstance",
+                        title:="Error loading task",
                         detail:=ex.Message,
                         statusCode:=500
                     )
@@ -754,24 +753,145 @@ Namespace ApiServer.Handlers
                 })
 
                 ' ============================================
-                ' STEP 3 — Stub ProcessTurn
+                ' STEP 3 — Chiama ProcessTurn con l'input dell'utente
                 ' ============================================
-                LogInfo("STUB: qui dovrebbe partire ProcessTurn()", New With {
+                LogInfo("🔄 [ProcessTurn] Calling ProcessTurn with user input", New With {
                     .sessionId = sessionId,
-                    .projectId = session.ProjectId,
-                    .dialogVersion = session.DialogVersion
+                    .input = request.Input,
+                    .taskId = compiledTask.Id
                 })
 
-                ' Placeholder - task execution is now handled by FlowOrchestrator
-                Dim requiresInput = False
+                ' ✅ Carica DialogueState dalla sessione
+                Console.WriteLine("═══════════════════════════════════════════════════════════")
+                Console.WriteLine("🔥 HandleTaskSessionInput: About to load DialogueState")
+                Console.WriteLine($"   SessionId: {sessionId}")
+                Console.Out.Flush()
 
-                ' ✅ STATELESS: Salva la sessione su Redis dopo l'esecuzione
-                SessionManager.SaveTaskSession(session)
+                LogInfo("📥 [HandleTaskSessionInput] BEFORE loading DialogueState from session", New With {
+                    .sessionId = sessionId
+                })
 
-                ' ✅ REMOVED: TaskInstance legacy code - completion is now tracked by FlowOrchestrator
-                Dim allCompleted = False
-                If allCompleted Then
-                    Dim sharedEmitter = SessionManager.GetOrCreateEventEmitter(sessionId)
+                Dim dialogueContext = SessionManager.GetOrCreateDialogueContext(session)
+
+                Console.WriteLine($"🔥 HandleTaskSessionInput: AFTER GetOrCreateDialogueContext")
+                Console.WriteLine($"   HasContext: {dialogueContext IsNot Nothing}")
+                Console.WriteLine($"   HasState: {If(dialogueContext IsNot Nothing, dialogueContext.DialogueState IsNot Nothing, False)}")
+                If dialogueContext IsNot Nothing AndAlso dialogueContext.DialogueState IsNot Nothing Then
+                    Console.WriteLine($"   State.Mode: {dialogueContext.DialogueState.Mode}")
+                    Console.WriteLine($"   State.TurnState: {dialogueContext.DialogueState.TurnState}")
+                End If
+                Console.Out.Flush()
+                Dim dialogueState As TaskEngine.Orchestrator.TaskEngine.DialogueState = Nothing
+                If dialogueContext IsNot Nothing AndAlso dialogueContext.DialogueState IsNot Nothing Then
+                    dialogueState = dialogueContext.DialogueState
+                    LogInfo("✅ [HandleTaskSessionInput] DialogueState loaded from session", New With {
+                        .sessionId = sessionId,
+                        .loadedMode = dialogueState.Mode.ToString(),
+                        .loadedTurnState = dialogueState.TurnState.ToString(),
+                        .loadedIsCompleted = dialogueState.IsCompleted,
+                        .hasCurrentTask = dialogueState.CurrentTask IsNot Nothing
+                    })
+                Else
+                    ' ⚠️ PROBLEMA: Lo stato non è stato trovato!
+                    LogInfo("⚠️ [HandleTaskSessionInput] WARNING: DialogueState not found, creating new one", New With {
+                        .sessionId = sessionId,
+                        .hasDialogueContext = dialogueContext IsNot Nothing,
+                        .hasDialogueState = If(dialogueContext IsNot Nothing, dialogueContext.DialogueState IsNot Nothing, False)
+                    })
+                    ' ✅ Se non esiste, crea un nuovo DialogueState
+                    dialogueState = New TaskEngine.Orchestrator.TaskEngine.DialogueState()
+                    If dialogueContext Is Nothing Then
+                        dialogueContext = CompiledTaskAdapter.CreateDialogueContextFromTask(compiledTask)
+                    End If
+                    dialogueContext.DialogueState = dialogueState
+                    SessionManager.SaveDialogueContext(session, dialogueContext)
+                    LogInfo("🆕 [HandleTaskSessionInput] Created new DialogueState with default Mode", New With {
+                        .sessionId = sessionId,
+                        .newMode = dialogueState.Mode.ToString()
+                    })
+                End If
+
+                ' ✅ Carica TranslationRepository
+                Dim translationRepository = SessionManager.GetTranslationRepository()
+                If translationRepository Is Nothing Then
+                    Return Results.Problem(
+                        title:="TranslationRepository not available",
+                        detail:="TranslationRepository is not available. Please ensure it is properly initialized.",
+                        statusCode:=500
+                    )
+                End If
+
+                ' ✅ Crea funzione per risolvere traduzioni on-demand (più efficiente)
+                Dim resolveTranslation As Func(Of String, String) = Function(textKey As String) As String
+                                                                        If String.IsNullOrEmpty(textKey) Then
+                                                                            Return Nothing
+                                                                        End If
+                                                                        Dim translation = translationRepository.GetTranslation(session.ProjectId, session.Locale, textKey)
+                                                                        Return If(String.IsNullOrEmpty(translation), textKey, translation)
+                                                                    End Function
+
+                ' ✅ Inizializza CurrentTask se non esiste
+                If dialogueState.CurrentTask Is Nothing Then
+                    dialogueState.CurrentTask = TaskEngine.Orchestrator.TaskEngine.ProcessTurnHelpers.CreateTaskInstance(compiledTask)
+                    dialogueState.CurrentStepType = Global.TaskEngine.DialogueStepType.Start
+                End If
+
+                ' ✅ Chiama ProcessTurn con l'input dell'utente e la funzione di risoluzione
+                Dim processTurnResult = TaskEngine.Orchestrator.TaskEngine.ProcessTurnEngine.ProcessTurn(
+                    dialogueState,
+                    request.Input,
+                    resolveTranslation
+                )
+
+                LogInfo("✅ [ProcessTurn] ProcessTurn completed", New With {
+                    .sessionId = sessionId,
+                    .messagesCount = If(processTurnResult.Messages IsNot Nothing, processTurnResult.Messages.Count, 0),
+                    .status = processTurnResult.Status,
+                    .turnState = If(processTurnResult.NewState IsNot Nothing, processTurnResult.NewState.TurnState.ToString(), "null")
+                })
+
+                ' ✅ Salva il nuovo DialogueState (SaveDialogueContext salva automaticamente su Redis)
+                If processTurnResult.NewState IsNot Nothing Then
+                    LogInfo("💾 [HandleTaskSessionInput] BEFORE SaveDialogueContext", New With {
+                        .sessionId = sessionId,
+                        .resultMode = processTurnResult.NewState.Mode.ToString(),
+                        .resultTurnState = processTurnResult.NewState.TurnState.ToString(),
+                        .resultIsCompleted = processTurnResult.NewState.IsCompleted
+                    })
+
+                    dialogueContext.DialogueState = processTurnResult.NewState
+                    SessionManager.SaveDialogueContext(session, dialogueContext)
+
+                    LogInfo("✅ [HandleTaskSessionInput] AFTER SaveDialogueContext", New With {
+                        .sessionId = sessionId,
+                        .savedMode = processTurnResult.NewState.Mode.ToString()
+                    })
+                End If
+
+                ' ✅ Emetti messaggi via SSE
+                Dim sharedEmitter = SessionManager.GetOrCreateEventEmitter(sessionId)
+                If processTurnResult.Messages IsNot Nothing AndAlso processTurnResult.Messages.Count > 0 Then
+                    For Each messageText As String In processTurnResult.Messages
+                        Dim messageData As Object = New With {
+                            .text = messageText,
+                            .stepType = If(processTurnResult.NewState IsNot Nothing, processTurnResult.NewState.TurnState.ToString(), "unknown"),
+                            .timestamp = DateTime.UtcNow.ToString("O")
+                        }
+                        sharedEmitter.Emit("message", messageData)
+                    Next
+                End If
+
+                ' ✅ Aggiorna stato waiting
+                If processTurnResult.Status = "waiting_for_input" Then
+                    session.IsWaitingForInput = True
+                    session.WaitingForInputData = New With {
+                        .taskId = compiledTask.Id,
+                        .timestamp = DateTime.UtcNow.ToString("O")
+                    }
+                ElseIf processTurnResult.Status = "completed" Then
+                    session.IsWaitingForInput = False
+                    session.WaitingForInputData = Nothing
+                    ' ✅ Emetti evento complete
                     Dim completeData = New With {
                         .success = True,
                         .timestamp = DateTime.UtcNow.ToString("O")
@@ -779,9 +899,8 @@ Namespace ApiServer.Handlers
                     sharedEmitter.Emit("complete", completeData)
                 End If
 
-                ' Clear waiting state
-                session.IsWaitingForInput = False
-                session.WaitingForInputData = Nothing
+                ' ✅ Salva sessione
+                SessionManager.SaveTaskSession(session)
 
                 Return Results.Ok(New With {
                     .success = True,
@@ -884,30 +1003,7 @@ Namespace ApiServer.Handlers
             Return TaskEngine.DialogueStepType.Start
         End Function
 
-        ''' <summary>
-        ''' ✅ Helper: Converte RuntimeTask in CompiledUtteranceTask (ricorsivo)
-        ''' </summary>
-        Private Function ConvertRuntimeTaskToCompiled(runtimeTask As Compiler.RuntimeTask) As Compiler.CompiledUtteranceTask
-            Dim compiled As New Compiler.CompiledUtteranceTask() With {
-                .Id = runtimeTask.Id,
-                .Condition = runtimeTask.Condition,
-                .Steps = runtimeTask.Steps,
-                .Constraints = runtimeTask.Constraints,
-                .NlpContract = runtimeTask.NlpContract
-            }
-
-            ' ✅ Copia SubTasks ricorsivamente (solo se presenti)
-            If runtimeTask.HasSubTasks() Then
-                compiled.SubTasks = New List(Of Compiler.CompiledUtteranceTask)()
-                For Each subTask As Compiler.RuntimeTask In runtimeTask.SubTasks
-                    compiled.SubTasks.Add(ConvertRuntimeTaskToCompiled(subTask))
-                Next
-            Else
-                compiled.SubTasks = Nothing
-            End If
-
-            Return compiled
-        End Function
+        ' ✅ REMOVED: ConvertRuntimeTaskToCompiled - RuntimeTask eliminato, non serve più conversione
 
         ''' <summary>
         ''' Handles DELETE /api/runtime/task/session/{id} - Chat Simulator diretto

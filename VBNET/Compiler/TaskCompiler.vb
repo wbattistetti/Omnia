@@ -40,7 +40,7 @@ Public Class TaskCompiler
             Throw New InvalidOperationException("Impossibile deserializzare TaskTreeExpanded dal JSON")
         End If
 
-        Dim rootTask As RuntimeTask = _assembler.Compile(assembled)
+        Dim rootTask As CompiledUtteranceTask = _assembler.Compile(assembled)
 
         ' 3. Carica nlpContract per tutti i nodi (ricorsivo)
         LoadContractsForTask(rootTask)
@@ -58,14 +58,14 @@ Public Class TaskCompiler
     ''' <summary>
     ''' Carica nlpContract per tutti i nodi del Task (ricorsivo)
     ''' </summary>
-    Private Sub LoadContractsForTask(task As RuntimeTask)
+    Private Sub LoadContractsForTask(task As CompiledUtteranceTask)
         LoadContractForTask(task)
     End Sub
 
     ''' <summary>
-    ''' Carica e compila nlpContract per un RuntimeTask e ricorsivamente per i suoi subTasks
+    ''' Carica e compila nlpContract per un CompiledUtteranceTask e ricorsivamente per i suoi subTasks
     ''' </summary>
-    Private Sub LoadContractForTask(task As RuntimeTask)
+    Private Sub LoadContractForTask(task As CompiledUtteranceTask)
         ' Se il contract non è già presente, prova a caricarlo e compilarlo
         ' TODO: ContractLoader deve essere modificato per accettare Task invece di TaskNode
         ' Per ora, se NlpContract è Nothing, non facciamo nulla (verrà caricato a runtime se necessario)
@@ -73,7 +73,7 @@ Public Class TaskCompiler
 
         ' Ricorsivo per subTasks
         If task.SubTasks IsNot Nothing Then
-            For Each subTask As RuntimeTask In task.SubTasks
+            For Each subTask As CompiledUtteranceTask In task.SubTasks
                 LoadContractForTask(subTask)
             Next
         End If
@@ -82,19 +82,19 @@ Public Class TaskCompiler
     ''' <summary>
     ''' Valida la struttura del Task (ricorsivo)
     ''' </summary>
-    Private Function ValidateTask(task As RuntimeTask) As List(Of String)
+    Private Function ValidateTask(task As CompiledUtteranceTask) As List(Of String)
         Dim errors As New List(Of String)()
         ValidateTaskRecursive(task, errors)
         Return errors
     End Function
 
     ''' <summary>
-    ''' Valida un RuntimeTask e ricorsivamente i suoi subTasks
+    ''' Valida un CompiledUtteranceTask e ricorsivamente i suoi subTasks
     ''' </summary>
-    Private Sub ValidateTaskRecursive(runtimeTask As RuntimeTask, errors As List(Of String))
+    Private Sub ValidateTaskRecursive(compiledTask As CompiledUtteranceTask, errors As List(Of String))
         ' Valida placeholder nei messaggi
-        If runtimeTask.Steps IsNot Nothing Then
-            For Each dstep As TaskEngine.DialogueStep In runtimeTask.Steps
+        If compiledTask.Steps IsNot Nothing Then
+            For Each dstep As TaskEngine.DialogueStep In compiledTask.Steps
                 If dstep.Escalations IsNot Nothing Then
                     For Each escalation As TaskEngine.Escalation In dstep.Escalations
                         If escalation.Tasks IsNot Nothing Then
@@ -104,7 +104,7 @@ Public Class TaskCompiler
 
                                     ' ❌ ERRORE: TextKey obbligatorio
                                     If String.IsNullOrWhiteSpace(msgTask.TextKey) Then
-                                        errors.Add($"Task '{runtimeTask.Id}': MessageTask has empty or missing TextKey. TextKey is mandatory and cannot be empty.")
+                                        errors.Add($"Task '{compiledTask.Id}': MessageTask has empty or missing TextKey. TextKey is mandatory and cannot be empty.")
                                     End If
 
                                     ' ✅ Valida placeholder nel testo (dopo risoluzione a runtime)
@@ -118,13 +118,13 @@ Public Class TaskCompiler
         End If
 
         ' Valida regex nel contract (se presente)
-        If runtimeTask.NlpContract IsNot Nothing AndAlso runtimeTask.NlpContract.Regex IsNot Nothing Then
-            ValidateRegexPatterns(runtimeTask.NlpContract.Regex, runtimeTask, errors)
+        If compiledTask.NlpContract IsNot Nothing AndAlso compiledTask.NlpContract.Regex IsNot Nothing Then
+            ValidateRegexPatterns(compiledTask.NlpContract.Regex, compiledTask, errors)
         End If
 
         ' Ricorsivo per subTasks
-        If runtimeTask.SubTasks IsNot Nothing Then
-            For Each subTask As RuntimeTask In runtimeTask.SubTasks
+        If compiledTask.SubTasks IsNot Nothing Then
+            For Each subTask As CompiledUtteranceTask In compiledTask.SubTasks
                 ValidateTaskRecursive(subTask, errors)
             Next
         End If
@@ -133,7 +133,7 @@ Public Class TaskCompiler
     ''' <summary>
     ''' Valida placeholder nel testo
     ''' </summary>
-    Private Sub ValidatePlaceholders(text As String, runtimeTask As RuntimeTask, errors As List(Of String))
+    Private Sub ValidatePlaceholders(text As String, compiledTask As CompiledUtteranceTask, errors As List(Of String))
         If String.IsNullOrEmpty(text) Then Return
 
         ' Pattern: [FullLabel]
@@ -150,7 +150,7 @@ Public Class TaskCompiler
     ''' <summary>
     ''' Valida pattern regex nel contract
     ''' </summary>
-    Private Sub ValidateRegexPatterns(regexConfig As RegexConfig, task As RuntimeTask, errors As List(Of String))
+    Private Sub ValidateRegexPatterns(regexConfig As RegexConfig, task As CompiledUtteranceTask, errors As List(Of String))
         If regexConfig.Patterns IsNot Nothing Then
             For Each pattern As String In regexConfig.Patterns
                 Try
@@ -170,7 +170,7 @@ Public Class TaskCompilationResult
     ''' <summary>
     ''' Task root compilato (struttura ricorsiva)
     ''' </summary>
-    Public Property Task As RuntimeTask
+    Public Property Task As CompiledUtteranceTask
 
     ''' <summary>
     ''' Lista di errori di validazione

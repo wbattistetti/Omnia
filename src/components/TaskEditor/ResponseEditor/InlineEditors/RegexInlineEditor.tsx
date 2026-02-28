@@ -72,8 +72,11 @@ function ensureSubDataMapping(
     const nodeKey = (sub as any).id || (sub as any).templateId || '';
     if (!nodeKey) return;
     const label = sub.label || nodeKey;
+    if (!label) {
+      console.warn('[RegexEditor] Missing label for subNode:', nodeKey);
+      return;
+    }
     newMapping[nodeKey] = {
-      canonicalKey: label.toLowerCase().replace(/\s+/g, '_'),
       label,
       groupName: generateGroupName(),
       type: 'string',
@@ -93,29 +96,6 @@ function ensureSubDataMapping(
       };
     }
     template.dataContract.subDataMapping = newMapping;
-
-    // ✅ CRITICAL: Also rewrite the stored regex so it uses GUIDs instead of
-    // semantic names.  When the AI generates the composite regex it uses
-    // canonicalKey as the group name (e.g. (?<giorno>...)).  We must replace
-    // each (?<canonicalKey>...) with (?<groupNameGuid>...) so that the stored
-    // contract is already in GUID form before the editor even opens.
-    const regexContract = template.dataContract.contracts?.find(
-      (c: any) => c.type === 'regex'
-    );
-    if (regexContract?.patterns?.length > 0) {
-      let rewritten: string = regexContract.patterns[0];
-      Object.values(newMapping).forEach((entry) => {
-        const semantic = entry.canonicalKey; // e.g. "giorno"
-        const guid = entry.groupName;        // e.g. "g_1a2b3c4d5e6f"
-        rewritten = rewritten.replace(
-          new RegExp(`\\(\\?<${semantic}>`, 'gi'),
-          `(?<${guid}>`
-        );
-      });
-      regexContract.patterns[0] = rewritten;
-      console.log('[RegexEditor] ✅ Regex rewritten to GUID groups:', rewritten);
-    }
-
     DialogueTaskService.markTemplateAsModified(templateId);
     console.log('[RegexEditor] ✅ subDataMapping initialised from subNodes:', newMapping);
   }

@@ -68,23 +68,6 @@ export function loadContract(nodeOrNodeId: any, ddtInstance?: any): any | null {
   return null;
 }
 
-/**
- * Gets sub ID for canonical key from contract
- */
-export function getSubIdForCanonicalKey(contract: any, canonicalKey: string): string | null {
-  if (!contract || !contract.subDataMapping) {
-    return null;
-  }
-
-  for (const [subId, mapping] of Object.entries(contract.subDataMapping)) {
-    const m = mapping as any;
-    if (m.canonicalKey === canonicalKey) {
-      return subId;
-    }
-  }
-
-  return null;
-}
 
 /**
  * Finds original node in DDT by label and nodeId
@@ -131,7 +114,7 @@ export function findOriginalNode(ddtInstance: any, label?: string, nodeId?: stri
  * Extraction result interface
  */
 export interface ExtractionResult {
-  values: Record<string, any>; // canonicalKey → value
+  values: Record<string, any>; // subId → value
   hasMatch: boolean;
   source: 'regex' | 'rules' | 'ner' | 'llm' | null;
   confidence?: number;

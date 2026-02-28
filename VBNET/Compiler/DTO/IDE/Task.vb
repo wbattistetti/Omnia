@@ -73,14 +73,6 @@ Public Class Task
     Public Property Steps As Dictionary(Of String, Object)
 
     ''' <summary>
-    ''' ✅ Constraints del template (priorità 1: dataContracts)
-    ''' Solo per template: constraints per validazione dati
-    ''' Per istanze: sempre null (constraints vengono dal template)
-    ''' </summary>
-    <JsonProperty("dataContracts")>
-    Public Property DataContracts As List(Of Object)
-
-    ''' <summary>
     ''' ✅ OBBLIGATORIO: dataContract (singolare) - Contratto NLP per estrazione dati
     ''' Solo per template: contiene la struttura NLP completa (regex, rules, ner, llm)
     ''' Formato: { templateName, templateId, contracts: [{ type: "regex", patterns: [...] }] }
@@ -110,7 +102,6 @@ Public Class Task
         Value = New Dictionary(Of String, Object)()
         SubTasksIds = New List(Of String)()
         Steps = New Dictionary(Of String, Object)()
-        DataContracts = New List(Of Object)()
         Constraints = New List(Of Object)()
     End Sub
 End Class

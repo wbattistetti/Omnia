@@ -107,6 +107,26 @@ Public Class Response
 End Class
 
 ''' <summary>
+''' ParseStatus: Status del parsing (diverso da ParseResultType per chiarezza)
+''' </summary>
+Public Enum ParseStatus
+    Match
+    NoMatch
+    NoInput
+    PartialMatch
+    MatchedButInvalid
+End Enum
+
+''' <summary>
+''' DialogueMode: Modalità corrente del dialogo (separazione chiara delle fasi)
+''' </summary>
+Public Enum DialogueMode
+    ExecutingStep
+    WaitingForUtterance
+    Completed
+End Enum
+
+''' <summary>
 ''' DialogueState: Complete DDT dialogue state
 ''' </summary>
 Public Class DialogueState
@@ -135,12 +155,36 @@ Public Class DialogueState
     ''' </summary>
     Public Property CurrentDataId As String
 
+    ''' <summary>
+    ''' ✅ NEW: Current task instance being processed
+    ''' </summary>
+    Public Property CurrentTask As UtteranceTaskInstance
+
+    ''' <summary>
+    ''' ✅ NEW: Current step type
+    ''' </summary>
+    Public Property CurrentStepType As Global.TaskEngine.DialogueStepType
+
+    ''' <summary>
+    ''' ✅ NEW: Indicates if the dialogue is completed
+    ''' </summary>
+    Public Property IsCompleted As Boolean
+
+    ''' <summary>
+    ''' ✅ NEW: Current dialogue mode (separazione chiara delle fasi)
+    ''' </summary>
+    Public Property Mode As DialogueMode
+
     Public Sub New()
         Memory = New Dictionary(Of String, Object)()
         Counters = New Dictionary(Of String, Counters)()
         TurnState = TurnState.Start
         Context = "CollectingMain"
         CurrentDataId = Nothing
+        CurrentTask = Nothing
+        CurrentStepType = Global.TaskEngine.DialogueStepType.Start
+        IsCompleted = False
+        Mode = DialogueMode.ExecutingStep
     End Sub
 End Class
 

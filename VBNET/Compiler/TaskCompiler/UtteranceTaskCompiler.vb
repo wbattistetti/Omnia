@@ -161,39 +161,31 @@ Public Class UtteranceTaskCompiler
 
                 Dim compileResult = taskCompiler.Compile(taskJson)
                 If compileResult IsNot Nothing AndAlso compileResult.Task IsNot Nothing Then
-                    Dim runtimeTask = compileResult.Task
+                    Dim compiledRootTask = compileResult.Task
 
                     ' ✅ DIAG: Verifica steps dopo compilazione
                     Console.WriteLine("=================================================================================")
                     Console.WriteLine("[DIAG] UtteranceTaskCompiler: Steps after compilation...")
-                    Console.WriteLine($"   RuntimeTask.Steps IsNothing: {runtimeTask.Steps Is Nothing}")
-                    If runtimeTask.Steps IsNot Nothing Then
-                        Console.WriteLine($"   RuntimeTask.Steps.Count: {runtimeTask.Steps.Count}")
-                        For Each dstep As TaskEngine.DialogueStep In runtimeTask.Steps
+                    Console.WriteLine($"   CompiledUtteranceTask.Steps IsNothing: {compiledRootTask.Steps Is Nothing}")
+                    If compiledRootTask.Steps IsNot Nothing Then
+                        Console.WriteLine($"   CompiledUtteranceTask.Steps.Count: {compiledRootTask.Steps.Count}")
+                        For Each dstep As TaskEngine.DialogueStep In compiledRootTask.Steps
                             Dim escalationsCount As Integer = If(dstep.Escalations IsNot Nothing, dstep.Escalations.Count, 0)
                             Dim stepInfo As String = "     Step Type: " & dstep.Type & ", Escalations: " & escalationsCount.ToString()
                             Console.WriteLine(stepInfo)
                         Next
                     End If
-                    Console.WriteLine($"   RuntimeTask.HasSubTasks: {runtimeTask.HasSubTasks()}")
-                    If runtimeTask.HasSubTasks() Then
-                        Console.WriteLine($"   RuntimeTask.SubTasks.Count: {runtimeTask.SubTasks.Count}")
+                    Console.WriteLine($"   CompiledUtteranceTask.HasSubTasks: {compiledRootTask.HasSubTasks()}")
+                    If compiledRootTask.HasSubTasks() Then
+                        Console.WriteLine($"   CompiledUtteranceTask.SubTasks.Count: {compiledRootTask.SubTasks.Count}")
                     End If
                     Console.WriteLine("=================================================================================")
 
-                    compiledTask.Steps = runtimeTask.Steps
-                    compiledTask.Constraints = runtimeTask.Constraints
-                    compiledTask.NlpContract = runtimeTask.NlpContract
-
-                    If runtimeTask.HasSubTasks() Then
-                        compiledTask.SubTasks = New List(Of CompiledUtteranceTask)()
-                        For Each subTask As RuntimeTask In runtimeTask.SubTasks
-                            Dim subCompiled = ConvertRuntimeTaskToCompiled(subTask)
-                            compiledTask.SubTasks.Add(subCompiled)
-                        Next
-                    Else
-                        compiledTask.SubTasks = Nothing
-                    End If
+                    ' ✅ Usa direttamente il risultato compilato (non serve più conversione)
+                    compiledTask.Steps = compiledRootTask.Steps
+                    compiledTask.Constraints = compiledRootTask.Constraints
+                    compiledTask.NlpContract = compiledRootTask.NlpContract
+                    compiledTask.SubTasks = compiledRootTask.SubTasks
 
                     ' ✅ DIAG: Verifica CompiledTask finale
                     Console.WriteLine("=================================================================================")
@@ -588,31 +580,8 @@ Public Class UtteranceTaskCompiler
         Console.WriteLine($"[ApplyStepsOverrides] ✅ Completed processing all nodes")
     End Sub
 
-    ''' <summary>
-    ''' Converte RuntimeTask in CompiledUtteranceTask (ricorsivo)
-    ''' </summary>
-    Private Function ConvertRuntimeTaskToCompiled(runtimeTask As RuntimeTask) As CompiledUtteranceTask
-        Dim compiled As New CompiledUtteranceTask() With {
-            .Id = runtimeTask.Id,
-            .Condition = runtimeTask.Condition,
-            .Steps = runtimeTask.Steps,
-            .Constraints = runtimeTask.Constraints,
-            .NlpContract = runtimeTask.NlpContract
-        }
-
-        ' ✅ Copia SubTasks ricorsivamente (solo se presenti E non vuoti)
-        If runtimeTask.HasSubTasks() Then
-            compiled.SubTasks = New List(Of CompiledUtteranceTask)()
-            For Each subTask As RuntimeTask In runtimeTask.SubTasks
-                compiled.SubTasks.Add(ConvertRuntimeTaskToCompiled(subTask))
-            Next
-        Else
-            ' ✅ Assicura che SubTasks sia Nothing per task atomici
-            compiled.SubTasks = Nothing
-        End If
-
-        Return compiled
-    End Function
+    ' ✅ REMOVED: ConvertRuntimeTaskToCompiled - non più necessario
+    ' TaskAssembler ora produce direttamente CompiledUtteranceTask
 
     ''' <summary>
     ''' Applica steps override a un singolo nodo

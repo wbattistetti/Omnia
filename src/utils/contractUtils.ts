@@ -55,12 +55,12 @@ export async function cloneAndAdaptContract(
         if (subInstanceId) {
             // Use the mapped sub-instance ID
             newMapping[subInstanceId] = { ...mapping };
-            console.log(`  ✅ [contractUtils] Mapped sub: ${mapping.canonicalKey} | ${subTemplateId} → ${subInstanceId}`);
+            console.log(`  ✅ [contractUtils] Mapped sub: ${mapping.label} | ${subTemplateId} → ${subInstanceId}`);
         } else {
             // If no mapping found, keep original (for backward compatibility or if sub doesn't exist)
             console.warn('  ⚠️ [contractUtils] Sub-template ID NOT found in mapping, keeping original', {
                 subTemplateId,
-                canonicalKey: mapping.canonicalKey,
+                label: mapping.label,
                 availableMappings: Object.keys(subIdMapping),
                 contractTemplateName: cloned.templateName
             });
@@ -109,7 +109,7 @@ export async function cloneAndAdaptContract(
         instanceId,
         newMappingCount: Object.keys(newMapping).length,
         newMappingKeys: Object.keys(newMapping).slice(0, 5),
-        canonicalKeys: Object.values(newMapping).map((m: any) => m.canonicalKey),
+        labels: Object.values(newMapping).map((m: any) => m.label),
         regexCompiled: cloned.regex?.patterns?.[0]?.includes('\\${MONTHS_PLACEHOLDER}') === false
     });
 

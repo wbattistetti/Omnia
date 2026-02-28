@@ -197,11 +197,14 @@ export async function generateEnginesAndParsersForAllNodes(
   taskTree: { nodes: TaskTreeNode[] },
   contracts: Map<string, SemanticContract>,
   onProgress?: (progress: GenerationProgress) => void
-): Promise<void> {
+): Promise<Map<string, DataContractItem[]>> {
   if (!taskTree || !taskTree.nodes || taskTree.nodes.length === 0) {
     console.log('[generateEnginesAndParsersForAllNodes] TaskTree is empty, skipping engine generation');
-    return;
+    return new Map();
   }
+
+  // ✅ NEW: Collect engine configs to return instead of modifying template.dataContract
+  const engineConfigsMap = new Map<string, DataContractItem[]>();
 
   // Collect all nodes recursively
   const collectAllNodes = (nodes: TaskTreeNode[]): TaskTreeNode[] => {
@@ -277,15 +280,8 @@ export async function generateEnginesAndParsersForAllNodes(
       continue;
     }
 
-    // Ensure DataContract exists
-    if (!template.dataContract) {
-      template.dataContract = {
-        templateName: template.label || nodeId,
-        templateId: nodeId,
-        subDataMapping: {},
-        contracts: []
-      };
-    }
+    // ✅ REMOVED: No longer create/modify template.dataContract here
+    // The Assembler will handle dataContract creation/update
 
     // SEZIONE 2: Decide which engines to use (must run before idempotency check)
     const engines = decideEnginesForNode(node, contract);
@@ -298,17 +294,18 @@ export async function generateEnginesAndParsersForAllNodes(
     // Idempotency check: skip only if ALL required engines are already present.
     // 'rule_based' engine maps to contract type 'rules'.
     const engineTypeToContractType = (e: string): string => e === 'rule_based' ? 'rules' : e;
-    const existingTypes = new Set((template.dataContract.contracts || []).map(c => c.type));
+    // ✅ Check existing contracts from template.dataContract if it exists, otherwise assume empty
+    const existingTypes = new Set((template.dataContract?.contracts || []).map(c => c.type));
     const missingEngines = engines.filter(e => !existingTypes.has(engineTypeToContractType(e)));
 
     // ✅ DEBUG: Check if existing regex pattern uses semantic names instead of s1/s2/s3
-    const existingRegexContract = template.dataContract.contracts?.find((c: any) => c.type === 'regex');
+    const existingRegexContract = template.dataContract?.contracts?.find((c: any) => c.type === 'regex');
     if (existingRegexContract?.patterns?.length > 0) {
       const pattern = existingRegexContract.patterns[0];
       const semanticGroups = ['giorno', 'mese', 'anno', 'day', 'month', 'year'];
       const hasSemantic = semanticGroups.some(g => pattern.includes(`<${g}>`));
       const deterministicGroups = pattern.match(/<s\d+>/g) || [];
-      const subDataMapping = template.dataContract.subDataMapping || {};
+      const subDataMapping = template.dataContract?.subDataMapping || {};
       const expectedGroups = Object.values(subDataMapping).map((info: any) => info.groupName).filter(Boolean);
 
       console.log(`[generateEnginesAndParsersForAllNodes] 🔍 Existing regex pattern check for node ${nodeId}`, {
@@ -323,8 +320,7 @@ export async function generateEnginesAndParsersForAllNodes(
       // ✅ FORCE REGENERATION if pattern has semantic names but SubDataMapping has s1/s2/s3
       if (hasSemantic && expectedGroups.some((g: string) => /^s\d+$/.test(g))) {
         console.warn(`[generateEnginesAndParsersForAllNodes] ⚠️ Pattern mismatch detected: pattern has semantic names but SubDataMapping has s1/s2/s3. Forcing regeneration.`);
-        // Remove old regex contract to force regeneration
-        template.dataContract.contracts = template.dataContract.contracts.filter((c: any) => c.type !== 'regex');
+        // ✅ Note: We don't modify template.dataContract here anymore, just force regeneration
         existingTypes.delete('regex');
         if (!missingEngines.includes('regex')) {
           missingEngines.push('regex');
@@ -372,21 +368,17 @@ export async function generateEnginesAndParsersForAllNodes(
       }
     }
 
-    // Save parsers to DataContract — append to any contracts already present (e.g. LLM from wizard)
+    // ✅ NEW: Return engine configs instead of modifying template.dataContract
     if (generatedParsers.length > 0) {
-      const existingContracts = template.dataContract.contracts || [];
-      // Merge: keep existing contracts, add newly generated ones (avoid duplicates by type)
-      const generatedTypes = new Set(generatedParsers.map(p => p.type));
-      const kept = existingContracts.filter(c => !generatedTypes.has(c.type));
-      template.dataContract.contracts = [...kept, ...generatedParsers];
-      DialogueTaskService.markTemplateAsModified(nodeId);
+      engineConfigsMap.set(nodeId, generatedParsers);
 
-      console.log(`[generateEnginesAndParsersForAllNodes] ✅ Saved ${generatedParsers.length} parsers for node ${nodeId}`, {
+      console.log(`[generateEnginesAndParsersForAllNodes] ✅ Generated ${generatedParsers.length} parsers for node ${nodeId}`, {
         nodeLabel: node.label,
-        engines: generatedParsers.map(p => p.type),
-        contractsCount: template.dataContract.contracts.length
+        engines: generatedParsers.map(p => p.type)
       });
     } else {
+      // ✅ Return empty array if no parsers generated (for consistency)
+      engineConfigsMap.set(nodeId, []);
       console.warn(`[generateEnginesAndParsersForAllNodes] ⚠️ No parsers generated for node ${nodeId}`);
     }
 
@@ -396,6 +388,10 @@ export async function generateEnginesAndParsersForAllNodes(
   console.log('[generateEnginesAndParsersForAllNodes] ✅ Engine and parser generation complete', {
     totalNodes: allNodes.length,
     nodesProcessed: processedCount,
-    nodesSkipped: nodesToProcess.length - processedCount
+    nodesSkipped: nodesToProcess.length - processedCount,
+    engineConfigsCount: engineConfigsMap.size
   });
+
+  // ✅ NEW: Return engine configs instead of void
+  return engineConfigsMap;
 }

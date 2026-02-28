@@ -43,7 +43,8 @@ export async function runStructureGeneration(
   const { schema, shouldBeGeneral, generalizedLabel, generalizationReason, generalizedMessages } =
     await generateStructure(taskLabel, rowId, locale);
 
-  // ✅ ONLY update dataSchema
+  // ✅ CRITICAL: dataSchema MUST be in store (UI state, not database)
+  // This is needed for UI display and wizard logic
   store.setDataSchema(schema);
   store.setShouldBeGeneral(shouldBeGeneral);
 
@@ -61,6 +62,9 @@ export async function runStructureGeneration(
       return updated;
     });
   }
+
+  console.log(`[wizardActions] ✅ Structure generated: ${schema.length} nodes`);
+  console.log(`[wizardActions] ℹ️ Structure saved to store (UI state) and will be saved to templates in memory`);
 
   // ❌ REMOVED: store.updatePipelineStep() - orchestrator controls this
   // ❌ REMOVED: store.setWizardMode() - orchestrator controls this
@@ -280,42 +284,12 @@ export async function runParallelGeneration(
     allPromises.push(
       generateConstraints([task], undefined, locale)
         .then(constraints => {
-          // Update task with constraints in dataSchema
-          store.setDataSchema(prev => {
-            const updateNode = (nodes: WizardTaskTreeNode[]): WizardTaskTreeNode[] => {
-              return nodes.map(node => {
-                if (node.id === task.id) {
-                  const updated = { ...node, constraints };
-                  console.log(`[wizardActions] Saved constraints for "${task.label}" (${task.id}):`, constraints.length, 'constraints');
-                  console.log(`[wizardActions] Verifying update - node after update:`, {
-                    nodeId: updated.id,
-                    hasConstraints: !!updated.constraints,
-                    constraintsLength: updated.constraints?.length || 0
-                  });
-                  return updated;
-                }
-                if (node.subNodes && node.subNodes.length > 0) {
-                  return { ...node, subNodes: updateNode(node.subNodes) };
-                }
-                return node;
-              });
-            };
-            const result = updateNode(prev);
+          // ✅ CRITICAL: Constraints are already saved to templates in memory by AIGenerateConstraints
+          // We don't save to store during editing - store is only updated on final save
+          console.log(`[wizardActions] ✅ Constraints generated for "${task.label}" (${task.id}):`, constraints.length, 'constraints');
+          console.log(`[wizardActions] ℹ️ Constraints are saved to template in memory (not to store)`);
 
-            // ✅ DEBUG: Verify the updated node is in the result (constraints)
-            const updatedNode = flattenTaskTree(result).find(n => n.id === task.id);
-            console.log(`[wizardActions] After setDataSchema (constraints) - node in result:`, {
-              nodeId: updatedNode?.id,
-              hasConstraints: !!updatedNode?.constraints,
-              constraintsLength: updatedNode?.constraints?.length || 0
-            });
-
-            return result;
-          });
-
-          // Also update global constraints array in store
-          store.setConstraints(prev => [...prev, ...constraints]);
-
+          // ✅ Only update UI status, not data
           store.updateTaskPipelineStatus(task.id, 'constraints', 'completed');
           // ✅ updatePhaseProgress already calls onPhaseComplete
           updatePhaseProgress('constraints');
@@ -395,49 +369,66 @@ export async function runParallelGeneration(
         throw new Error(`Failed to generate ${engineType} parser for node ${nodeId}`);
       }
 
-      // Save parser to node's dataContract
-      store.setDataSchema(prev => {
-        const updateNode = (nodes: WizardTaskTreeNode[]): WizardTaskTreeNode[] => {
-          return nodes.map(node => {
-            if (node.id === nodeId) {
-              if (!node.dataContract) {
-                // ✅ CRITICAL: Build subDataMapping from subNodes (structural mapping only)
-                const subDataMapping: Record<string, { groupName: string }> = {};
-                if (node.subNodes && node.subNodes.length > 0) {
-                  node.subNodes.forEach((subNode, index) => {
-                    const groupName = `s${index + 1}`; // Deterministic: s1, s2, s3...
-                    subDataMapping[subNode.id] = {
-                      groupName // ✅ Only groupName needed (structural mapping)
-                    };
-                  });
-                }
+      // ✅ CRITICAL: Save parser ONLY to template in memory, NOT to store
+      // The wizard is an in-memory editor; store is only updated on final save
+      const { DialogueTaskService } = await import('@services/DialogueTaskService');
+      const template = DialogueTaskService.getTemplate(nodeId);
 
-                node.dataContract = {
-                  templateName: node.label || nodeId,
-                  templateId: nodeId,
-                  subDataMapping, // ✅ Populated from subNodes
-                  contracts: []
-                };
-              }
+      if (!template) {
+        console.warn(`[wizardActions] ⚠️ Template not found in memory for node "${nodeLabel}" (${nodeId})`);
+        return;
+      }
 
-              const existingContracts = node.dataContract.contracts || [];
-              const existingTypes = new Set(existingContracts.map((c: any) => c.type));
-              const contractType = engineType === 'rule_based' ? 'rules' : engineType;
+      // Initialize dataContract if it doesn't exist
+      if (!template.dataContract) {
+        // ✅ CRITICAL: Build subDataMapping from subNodes (structural mapping only)
+        // Get subNodes from store.dataSchema (read-only, for structure only)
+        const nodeFromStore = store.dataSchema.find(n => n.id === nodeId);
+        const subDataMapping: Record<string, { groupName: string }> = {};
 
-              if (!existingTypes.has(contractType)) {
-                node.dataContract.contracts = [...existingContracts, parser];
-              }
-
-              return { ...node };
-            }
-            if (node.subNodes && node.subNodes.length > 0) {
-              return { ...node, subNodes: updateNode(node.subNodes) };
-            }
-            return node;
+        if (nodeFromStore?.subNodes && nodeFromStore.subNodes.length > 0) {
+          nodeFromStore.subNodes.forEach((subNode, index) => {
+            const groupName = `s${index + 1}`; // Deterministic: s1, s2, s3...
+            subDataMapping[subNode.id] = {
+              groupName // ✅ Only groupName needed (structural mapping)
+            };
           });
+        }
+
+        template.dataContract = {
+          templateName: nodeLabel || nodeId,
+          templateId: nodeId,
+          subDataMapping, // ✅ Populated from subNodes
+          contracts: []
         };
-        return updateNode(prev);
-      });
+      }
+
+      const existingContracts = template.dataContract.contracts || [];
+      const existingTypes = new Set(existingContracts.map((c: any) => c.type));
+      const contractType = engineType === 'rule_based' ? 'rules' : engineType;
+
+      if (!existingTypes.has(contractType)) {
+        template.dataContract.contracts = [...existingContracts, parser];
+
+        // ✅ DEBUG: Log quando il parser viene salvato nel template in memoria
+        console.log(`[wizardActions] ✅ Parser saved to template.dataContract.contracts (in memory)`, {
+          nodeId,
+          nodeLabel,
+          engineType,
+          parserType: parser.type,
+          contractsCount: template.dataContract.contracts.length,
+          allContractTypes: template.dataContract.contracts.map((c: any) => c.type),
+          fullDataContract: {
+            templateName: template.dataContract.templateName,
+            templateId: template.dataContract.templateId,
+            contractsCount: template.dataContract.contracts.length,
+            contracts: template.dataContract.contracts.map((c: any) => ({
+              type: c.type,
+              enabled: c.enabled
+            }))
+          }
+        });
+      }
 
       // ✅ FIX 3: Update counter for each ENGINE completed (atomic increment)
       parserCounter.completed++;
@@ -516,24 +507,28 @@ export async function runParallelGeneration(
     allPromises.push(
       generateAllMessagesForNode(task, structure, locale)
         .then(async (messages) => {
-          // Save messages BEFORE incrementing counter
-          const messagesToUse = store.shouldBeGeneral && store.messagesGeneralized.size > 0
-            ? store.messagesGeneralized
-            : store.messages;
+          // ✅ CRITICAL: Messages must be saved to template.steps in memory when generated
+          // Get template from DialogueTaskService (already created in FASE 2)
+          const { DialogueTaskService } = await import('@services/DialogueTaskService');
+          const template = DialogueTaskService.getTemplate(task.id);
 
-          // Use appropriate setter based on shouldBeGeneral
-          if (store.shouldBeGeneral) {
-            store.setMessagesGeneralized(task.id, messages);
-          } else {
-            store.setMessages(task.id, messages);
+          if (!template) {
+            console.warn(`[wizardActions] ⚠️ Template not found in memory for node "${task.label}" (${task.id})`);
           }
 
-          // ✅ Associa testi ai GUID esistenti nella struttura
+          // ✅ Associa testi ai GUID esistenti nella struttura (saves translations)
           // Recupera addTranslation dal window context se disponibile
           const addTranslation = typeof window !== 'undefined' && (window as any).__projectTranslationsContext
             ? (window as any).__projectTranslationsContext.addTranslation
             : undefined;
           associateTextsToStructure(structure, messages, task.id, addTranslation);
+
+          // ✅ CRITICAL: Messages are saved to template.steps in memory (GUID already in structure)
+          // Template.steps already contains the GUID structure from createTemplatesFromStructures
+          // associateTextsToStructure saves the translations (GUID → text)
+          // So messages are effectively saved in template.steps via GUID references
+          console.log(`[wizardActions] ✅ Messages generated for "${task.label}" (${task.id})`);
+          console.log(`[wizardActions] ℹ️ Messages saved to template.steps in memory (via GUID structure)`);
 
           store.updateTaskPipelineStatus(task.id, 'messages', 'completed');
           // ✅ updatePhaseProgress already calls onPhaseComplete

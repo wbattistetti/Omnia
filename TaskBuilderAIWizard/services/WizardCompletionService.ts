@@ -10,6 +10,8 @@
 
 import type { WizardTaskTreeNode, WizardConstraint, WizardStepMessages } from '../types';
 import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
+import type { SemanticContract } from '@types/semanticContract';
+import type { DataContractItem } from '@components/DialogueDataEngine/contracts/contractLoader';
 import { createTemplatesFromWizardData, createContextualizedInstance } from './TemplateCreationService';
 import { DialogueTaskService } from '@services/DialogueTaskService';
 import { taskRepository } from '@services/TaskRepository';
@@ -19,8 +21,9 @@ import { flattenTaskTree } from '../utils/wizardHelpers';
 
 /**
  * Collects constraints and data contracts from dataSchema into maps
+ * Builds subDataMapping deterministically (s1, s2, s3...) for parent nodes
  */
-function collectNodeData(dataSchema: WizardTaskTreeNode[]): {
+export function collectNodeData(dataSchema: WizardTaskTreeNode[]): {
   constraintsMap: Map<string, WizardConstraint[]>;
   dataContractsMap: Map<string, DataContract>;
 } {
@@ -32,10 +35,69 @@ function collectNodeData(dataSchema: WizardTaskTreeNode[]): {
       if (node.constraints && node.constraints.length > 0) {
         constraintsMap.set(node.id, node.constraints);
       }
-      // ✅ node.dataContract is already DataContract (no conversion needed)
-      if (node.dataContract) {
-        dataContractsMap.set(node.id, node.dataContract);
+
+      // ✅ CRITICAL: Build subDataMapping for parent nodes (deterministic: s1, s2, s3...)
+      // This is needed by ALL engines (regex, llm, rules, ner) to map sub-node results
+      let dataContract = node.dataContract;
+
+      if (node.subNodes && node.subNodes.length > 0) {
+        // Build subDataMapping from subNodes (deterministic based on position)
+        const subDataMapping: Record<string, { groupName: string }> = {};
+        node.subNodes.forEach((subNode, index) => {
+          const groupName = `s${index + 1}`; // Deterministic: s1, s2, s3...
+          subDataMapping[subNode.id] = {
+            groupName
+          };
+        });
+
+        // Initialize or update dataContract with subDataMapping
+        if (!dataContract) {
+          dataContract = {
+            templateName: node.label || node.id,
+            templateId: node.id,
+            subDataMapping, // ✅ Always present for parent nodes
+            contracts: []
+          };
+        } else {
+          // ✅ ALWAYS ensure subDataMapping is present and up-to-date
+          // This is structural data needed by all engines
+          dataContract.subDataMapping = subDataMapping;
+        }
+      } else {
+        // Leaf nodes don't need subDataMapping (no sub-nodes)
+        // But ensure dataContract exists if needed
+        if (!dataContract) {
+          dataContract = {
+            templateName: node.label || node.id,
+            templateId: node.id,
+            subDataMapping: {}, // Empty for leaf nodes
+            contracts: []
+          };
+        }
       }
+
+      if (dataContract) {
+        // ✅ DEBUG: Log quando collectNodeData raccoglie/crea il dataContract
+        console.log(`[collectNodeData] ✅ ${node.dataContract ? 'Found' : 'Created'} dataContract for node "${node.label}" (${node.id})`, {
+          nodeId: node.id,
+          nodeLabel: node.label,
+          wasCreated: !node.dataContract,
+          hasContracts: !!dataContract.contracts,
+          contractsIsArray: Array.isArray(dataContract.contracts),
+          contractsCount: dataContract.contracts?.length || 0,
+          contractTypes: dataContract.contracts?.map((c: any) => c.type) || [],
+          fullDataContract: {
+            templateName: dataContract.templateName,
+            templateId: dataContract.templateId,
+            subDataMappingKeys: Object.keys(dataContract.subDataMapping || {}),
+            subDataMappingCount: Object.keys(dataContract.subDataMapping || {}).length,
+            contractsCount: dataContract.contracts?.length || 0
+          }
+        });
+        dataContractsMap.set(node.id, dataContract);
+      }
+
+      // Recursively collect from sub-nodes
       if (node.subNodes && node.subNodes.length > 0) {
         collect(node.subNodes);
       }
@@ -91,6 +153,25 @@ async function createAndRegisterTemplates(
   // Register templates in memory
   templates.forEach(template => {
     DialogueTaskService.addTemplate(template);
+
+    // ✅ DEBUG: Log quando il template viene registrato in memoria
+    console.log(`[createAndRegisterTemplates] ✅ Template registered in memory`, {
+      templateId: template.id,
+      templateLabel: template.label,
+      hasDataContract: !!template.dataContract,
+      contractsCount: template.dataContract?.contracts?.length || 0,
+      contractTypes: template.dataContract?.contracts?.map((c: any) => c.type) || [],
+      fullDataContract: template.dataContract ? {
+        templateName: template.dataContract.templateName,
+        templateId: template.dataContract.templateId,
+        subDataMappingKeys: Object.keys(template.dataContract.subDataMapping || {}),
+        contractsCount: template.dataContract.contracts?.length || 0,
+        contracts: template.dataContract.contracts?.map((c: any) => ({
+          type: c.type,
+          enabled: c.enabled
+        })) || []
+      } : null
+    });
   });
 
   return templates;
@@ -194,10 +275,14 @@ export async function buildTaskTreeWithContractsAndEngines(
   const generatedContracts = await generateContractsForTaskTree(taskTree);
 
   // Generate engines and parsers for all nodes
+  let engineConfigs = new Map<string, DataContractItem[]>();
   if (generatedContracts.size > 0 || taskTree.nodes) {
     try {
       const { generateEnginesAndParsersForAllNodes } = await import('@utils/wizard/generateEnginesAndParsers');
-      await generateEnginesAndParsersForAllNodes(taskTree, generatedContracts);
+      engineConfigs = await generateEnginesAndParsersForAllNodes(taskTree, generatedContracts);
+      console.log('[WizardCompletionService] ✅ Engine configs generated', {
+        engineConfigsCount: engineConfigs.size
+      });
     } catch (engineError) {
       // Non-blocking: log error but don't block wizard flow
       console.error('[WizardCompletionService] ❌ Error generating engines and parsers (non-blocking)', {
@@ -206,7 +291,103 @@ export async function buildTaskTreeWithContractsAndEngines(
     }
   }
 
+  // ✅ FASE 4: Assemble dataContract using Assembler (base + semantic + engines)
+  // Collect base dataContracts from templates (already created by collectNodeData)
+  const allNodeIds = new Set<string>();
+  const collectNodeIds = (nodes: any[]) => {
+    nodes.forEach(node => {
+      const nodeId = node.id || node.templateId;
+      if (nodeId) {
+        allNodeIds.add(nodeId);
+      }
+      if (node.subNodes && Array.isArray(node.subNodes)) {
+        collectNodeIds(node.subNodes);
+      }
+    });
+  };
+  if (taskTree?.nodes) {
+    collectNodeIds(taskTree.nodes);
+  }
+
+  // Assemble dataContract for each node
+  for (const nodeId of allNodeIds) {
+    const template = DialogueTaskService.getTemplate(nodeId);
+    if (!template) {
+      continue;
+    }
+
+    // Get base (from template.dataContract created by collectNodeData)
+    const base = template.dataContract;
+    if (!base) {
+      // ✅ Should not happen: base is created by collectNodeData in createTemplateAndInstanceForCompleted
+      console.error(`[buildTaskTreeWithContractsAndEngines] ❌ Node ${nodeId} has no base dataContract - this should not happen`);
+      continue;
+    }
+
+    // Get semantic (from generatedContracts)
+    const semantic = generatedContracts.get(nodeId) || null;
+
+    // Get engines (from engineConfigs)
+    const engines = engineConfigs.get(nodeId) || [];
+
+    // ✅ Assemble using Assembler (UNICO punto di merge)
+    const assembled = assembleDataContract(base, semantic, engines);
+
+    // ✅ Update template.dataContract with assembled result (UNICO punto di modifica)
+    template.dataContract = assembled;
+    DialogueTaskService.markTemplateAsModified(nodeId);
+
+    console.log(`[buildTaskTreeWithContractsAndEngines] ✅ Assembled dataContract for node ${nodeId}`, {
+      hasSubDataMapping: Object.keys(assembled.subDataMapping || {}).length > 0,
+      subDataMappingKeys: Object.keys(assembled.subDataMapping || {}),
+      contractsCount: assembled.contracts.length,
+      contractTypes: assembled.contracts.map(c => c.type),
+      hasSemantic: !!semantic
+    });
+  }
+
   return taskTree;
+}
+
+/**
+ * Assembler: Unico punto di merge per dataContract
+ *
+ * ARCHITETTURA:
+ * - Wizard costruisce base (templateName, templateId, subDataMapping, contracts: [])
+ * - Semantic Builder produce semantic (entity, subentities, outputCanonical, ecc.)
+ * - AI Engines produce engines (regex, llm, rules, ecc.)
+ * - Assembler unisce tutto in dataContract finale
+ *
+ * VINCOLI:
+ * - subDataMapping viene SEMPRE preservato da base (mai sovrascritto)
+ * - contracts viene mergeato (base.contracts + engines)
+ * - semantic fields vengono aggiunti senza toccare base fields
+ */
+function assembleDataContract(
+  base: DataContract,
+  semantic: SemanticContract | null,
+  engines: DataContractItem[]
+): DataContract {
+  // ✅ CRITICAL: subDataMapping viene SEMPRE da base (deterministico, mai sovrascritto)
+  const subDataMapping = base.subDataMapping || {};
+
+  // ✅ Merge contracts: base.contracts (vuoto inizialmente) + engines (da AI)
+  const contracts = [...(base.contracts || []), ...engines];
+
+  // ✅ Assemble final dataContract
+  const assembled: DataContract = {
+    ...base,              // ✅ Preserva templateName, templateId, subDataMapping, contracts base
+    ...(semantic || {}),  // ✅ Aggiunge entity, subentities, outputCanonical, constraints, ecc.
+    subDataMapping,       // ✅ CRITICAL: Sempre da base, mai da semantic
+    contracts             // ✅ Merge: base + engines
+  };
+
+  // ✅ Validation: Log warning se subDataMapping è vuoto per nodi con subNodes
+  if (Object.keys(subDataMapping).length === 0 && contracts.length > 0) {
+    console.warn(`[assembleDataContract] ⚠️ Node ${base.templateId} has empty subDataMapping but has contracts`);
+  }
+
+  return assembled;
 }
 
 /**
@@ -319,8 +500,38 @@ export async function createTemplateAndInstanceForCompleted(
     throw new Error('[WizardCompletionService] rowId is required');
   }
 
+  // ✅ DEBUG: Verifica stato dataSchema PRIMA di collectNodeData
+  const allNodesBefore = flattenTaskTree(dataSchema);
+  console.log(`[createTemplateAndInstanceForCompleted] 🔍 DATA SCHEMA STATE BEFORE collectNodeData`, {
+    totalNodes: allNodesBefore.length,
+    nodesWithDataContract: allNodesBefore.filter(n => !!n.dataContract).length,
+    nodesWithContracts: allNodesBefore.filter(n => n.dataContract?.contracts && n.dataContract.contracts.length > 0).length,
+    nodesDetails: allNodesBefore.map(n => ({
+      nodeId: n.id,
+      nodeLabel: n.label,
+      hasDataContract: !!n.dataContract,
+      contractsCount: n.dataContract?.contracts?.length || 0,
+      contractTypes: n.dataContract?.contracts?.map((c: any) => c.type) || [],
+      dataContractKeys: n.dataContract ? Object.keys(n.dataContract) : []
+    }))
+  });
+
   // 1. Collect constraints and data contracts
   const { constraintsMap, dataContractsMap } = collectNodeData(dataSchema);
+
+  // ✅ DEBUG: Verifica cosa è stato raccolto
+  console.log(`[createTemplateAndInstanceForCompleted] 🔍 COLLECTED DATA`, {
+    constraintsMapSize: constraintsMap.size,
+    dataContractsMapSize: dataContractsMap.size,
+    dataContractsMapKeys: Array.from(dataContractsMap.keys()),
+    dataContractsDetails: Array.from(dataContractsMap.entries()).map(([nodeId, contract]) => ({
+      nodeId,
+      hasContract: !!contract,
+      contractsCount: contract?.contracts?.length || 0,
+      contractTypes: contract?.contracts?.map((c: any) => c.type) || [],
+      contractKeys: contract ? Object.keys(contract) : []
+    }))
+  });
 
   // 2. Use generalized messages if available, otherwise use normal messages
   const messagesToUse = messagesGeneralized.size > 0 ? messagesGeneralized : messages;

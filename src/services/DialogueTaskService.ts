@@ -14,8 +14,7 @@ export interface DialogueTask {
   steps?: Record<string, any>; // ✅ Steps a root level: { "nodeId": { start: {...}, noMatch: {...} } }
   // ❌ DEPRECATED: steps - use steps instead
   steps?: any; // @deprecated Use steps instead
-  dataContracts?: any[]; // Constraints
-  constraints?: any[]; // Constraints (alias)
+  constraints?: any[]; // Constraints for data validation (required, min, max, pattern, etc.)
   examples?: any[];
   patterns?: {
     IT?: string[];

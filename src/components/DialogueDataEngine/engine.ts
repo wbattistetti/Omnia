@@ -984,59 +984,11 @@ function handleCollecting(
     // Find next missing required sub
     const requiredIds = (main.subs || []).filter((s) => !!state.plan.byId[s] && state.plan.byId[s].required !== false);
 
-    // ✅ SMART LOGIC: For date fields, prioritize year if we have month or day
-    let nextRequiredMissing: string | undefined = undefined;
-
-    // Check if this is a date main node with contract
-    const originalNode = state.template?.nodes.find(n => n.id === main.id);
-    const contract = originalNode ? loadContract(originalNode) : null;
-
-    if (contract && contract.templateName === 'date' && contract.subDataMapping) {
-      // Map subId → canonicalKey
-      const subIdToCanonical: Record<string, string> = {};
-      Object.entries(contract.subDataMapping).forEach(([subId, mapping]: [string, any]) => {
-        subIdToCanonical[subId] = mapping.canonicalKey;
-      });
-
-      // Check what we have
-      const hasDay = requiredIds.some(sid => {
-        const canonical = subIdToCanonical[sid];
-        return canonical === 'day' && mem[sid]?.value !== undefined && mem[sid]?.value !== null && String(mem[sid]?.value).length > 0;
-      });
-      const hasMonth = requiredIds.some(sid => {
-        const canonical = subIdToCanonical[sid];
-        return canonical === 'month' && mem[sid]?.value !== undefined && mem[sid]?.value !== null && String(mem[sid]?.value).length > 0;
-      });
-      const hasYear = requiredIds.some(sid => {
-        const canonical = subIdToCanonical[sid];
-        return canonical === 'year' && mem[sid]?.value !== undefined && mem[sid]?.value !== null && String(mem[sid]?.value).length > 0;
-      });
-
-      // If we have month or day but not year, prioritize year
-      if ((hasMonth || hasDay) && !hasYear) {
-        const yearSubId = requiredIds.find(sid => subIdToCanonical[sid] === 'year');
-        if (yearSubId) {
-          const yearMem = mem[yearSubId];
-          if (!yearMem || yearMem.value === undefined || yearMem.value === null || String(yearMem.value).length === 0) {
-            nextRequiredMissing = yearSubId;
-            console.log('🎯 [ENGINE] Smart date logic: prioritizing year (have month/day, missing year)', {
-              hasDay,
-              hasMonth,
-              hasYear,
-              yearSubId
-            });
-          }
-        }
-      }
-    }
-
-    // If smart logic didn't find anything, use linear order
-    if (!nextRequiredMissing) {
-      nextRequiredMissing = requiredIds.find((s) => {
-        const m = mem[s];  // Usa memoria aggiornata (mem) invece di state.memory
-        return !m || m.value === undefined || m.value === null || String(m.value).length === 0;
-      });
-    }
+    // Find next missing required sub (follow structural order)
+    const nextRequiredMissing = requiredIds.find((s) => {
+      const m = mem[s];  // Usa memoria aggiornata (mem) invece di state.memory
+      return !m || m.value === undefined || m.value === null || String(m.value).length === 0;
+    });
 
     if (nextRequiredMissing) {
       // More subs to collect

@@ -535,7 +535,7 @@ export default function DDEBubbleChat({
     }
 
     // ✅ EXISTING: VB.NET backend engine
-    const baseUrl = 'http://localhost:5000'; // ✅ VB.NET backend diretto
+    const baseUrl = 'http://localhost:5000';   // ✅ VB.NET backend diretto
 
     const startSession = async () => {
       // ✅ CRITICAL: Set flag here, not before calling startSession()
@@ -1039,63 +1039,28 @@ export default function DDEBubbleChat({
           idMatchesInstance: compiledTask.id === taskForCompilation.id // ✅ DEVE essere true
         });
 
-        // ✅ Converti CompiledTask → RuntimeTask (ricorsivo)
-        // Funzione helper per convertire CompiledUtteranceTask in RuntimeTask
-        const convertCompiledToRuntimeTask = (compiled: any): any => {
-          const runtimeTask: any = {
-            id: compiled.id,
-            condition: compiled.condition || null,
-            steps: compiled.steps || [],
-            constraints: compiled.constraints || [],
-            nlpContract: compiled.nlpContract || null,
-            subTasks: null
-          };
-
-          // ✅ Copia SubTasks ricorsivamente (solo se presenti)
-          if (compiled.subTasks && Array.isArray(compiled.subTasks) && compiled.subTasks.length > 0) {
-            runtimeTask.subTasks = compiled.subTasks.map((subCompiled: any) =>
-              convertCompiledToRuntimeTask(subCompiled)
-            );
-          }
-
-          return runtimeTask;
-        };
-
-        const runtimeTask = convertCompiledToRuntimeTask(compiledTask);
-
-        console.log('[DDEBubbleChat] 📋 RuntimeTask converted from CompiledTask:', {
-          id: runtimeTask.id,
-          stepsCount: runtimeTask.steps?.length || 0,
-          constraintsCount: runtimeTask.constraints?.length || 0,
-          hasSubTasks: !!runtimeTask.subTasks && runtimeTask.subTasks.length > 0,
-          subTasksCount: runtimeTask.subTasks?.length || 0,
-          source: 'compiled_by_backend'
-        });
-
-        // ✅ STEP 2.4: Salva il RuntimeTask nel repository (necessario per avviare sessione)
-        // NOTA: Per test singolo task, potremmo non salvare, ma il backend si aspetta che il dialog esista
-        // ✅ Log rimosso: troppo verboso
-        console.log('[DDEBubbleChat] 📋 SAVING DIALOG:', {
+        // ✅ NEW: Invia direttamente CompiledUtteranceTask (non serve più conversione)
+        console.log('[DDEBubbleChat] 📋 SAVING DIALOG (CompiledUtteranceTask):', {
           projectId,
           dialogVersion,
           locale: projectLanguage,
-          runtimeTaskId: runtimeTask.id,
-          runtimeTaskStepsCount: runtimeTask.steps?.length || 0,
-          runtimeTaskHasSubTasks: !!runtimeTask.subTasks && runtimeTask.subTasks.length > 0,
-          runtimeTaskKeys: Object.keys(runtimeTask)
+          compiledTaskId: compiledTask.id,
+          compiledTaskStepsCount: compiledTask.steps?.length || 0,
+          compiledTaskHasSubTasks: !!compiledTask.subTasks && compiledTask.subTasks.length > 0,
+          compiledTaskKeys: Object.keys(compiledTask)
         });
 
         const saveRequestBody = {
           projectId: projectId,
           dialogVersion: dialogVersion,
-          runtimeTask: runtimeTask
+          runtimeTask: compiledTask // ✅ Backend accetta sia CompiledUtteranceTask che RuntimeTask (retrocompatibilità)
         };
 
         console.log('[DDEBubbleChat] 📋 SAVE REQUEST BODY:', {
           projectId: saveRequestBody.projectId,
           dialogVersion: saveRequestBody.dialogVersion,
-          runtimeTaskId: saveRequestBody.runtimeTask.id,
-          runtimeTaskStepsCount: saveRequestBody.runtimeTask.steps?.length || 0
+          compiledTaskId: saveRequestBody.runtimeTask.id,
+          compiledTaskStepsCount: saveRequestBody.runtimeTask.steps?.length || 0
         });
 
         const saveResponse = await fetch(`${baseUrl}/api/runtime/dialog/save`, {
@@ -1561,6 +1526,7 @@ export default function DDEBubbleChat({
       });
 
       // ✅ EXISTING: Send input to backend VB.NET
+      // ✅ Runtime: Use compiled task from repository (no recompilation on every input)
       const baseUrl = 'http://localhost:5000';
       const inputUrl = `${baseUrl}/api/runtime/task/session/${sessionId}/input`;
 
@@ -1570,12 +1536,13 @@ export default function DDEBubbleChat({
         input: trimmed
       });
 
+      // ✅ Runtime: Send only input - backend will load compiled task from repository
+      const requestBody = { input: trimmed };
+
       const response = await fetch(inputUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          input: trimmed
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {

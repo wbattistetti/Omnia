@@ -9,6 +9,7 @@
  */
 
 import type { WizardTaskTreeNode } from '../types';
+import type { SemanticContract } from '@types/semanticContract';
 import { DialogueTaskService } from '@services/DialogueTaskService';
 import { generateConstraints } from '../api/wizardApi';
 import { generateContractsForAllNodes } from '@utils/wizard/generateContract';
@@ -40,7 +41,6 @@ export async function AIGenerateConstraints(
       const template = DialogueTaskService.getTemplate(task.id);
       if (template) {
         template.constraints = constraints;
-        template.dataContracts = constraints; // Alias
 
         // ✅ CRITICAL: Genera messaggi r1/r2 per ogni constraint e crea invalid step
         const hasNonRequiredConstraints = constraints.some((c: any) => c.kind && c.kind !== 'required');
@@ -176,12 +176,17 @@ export async function AIGenerateConstraints(
 }
 
 /**
- * ✅ FASE 4: Genera contracts per tutti i nodi e li aggiunge ai template in-place
+ * ✅ FASE 4: Genera semantic contracts per tutti i nodi
+ *
+ * ARCHITETTURA CORRETTA:
+ * - Restituisce SOLO SemanticContract (entity, subentities, outputCanonical, ecc.)
+ * - NON tocca template.dataContract (l'Assembler lo farà)
+ * - Salva semantic contracts in SemanticContractService per persistenza
  */
 export async function AIGenerateContracts(
   templates: Map<string, any>,
   dataSchema: any[]
-): Promise<void> {
+): Promise<Map<string, SemanticContract>> {
   try {
     // Crea taskTree temporaneo dai template (necessario per generateContractsForAllNodes)
     const { buildNodesFromTemplates } = await import('./TemplateCreationService');
@@ -196,19 +201,13 @@ export async function AIGenerateContracts(
     const tempTaskTree = { nodes }; // TaskTree minimale per generateContractsForAllNodes
 
     // generateContractsForAllNodes salva già i contracts nel SemanticContractService
-    // Dobbiamo anche aggiornare i template in-place
+    // ✅ NEW: Restituisce Map<string, SemanticContract> invece di modificare template.dataContract
     const generatedContracts = await generateContractsForAllNodes(tempTaskTree);
 
-    // ✅ Aggiorna template in-place nella cache
-    generatedContracts.forEach((contract, nodeId) => {
-      const template = DialogueTaskService.getTemplate(nodeId);
-      if (template) {
-        template.dataContract = contract;
-        console.log(`[AIGenerateContracts] ✅ Contract added to template "${nodeId}"`);
-      } else {
-        console.warn(`[AIGenerateContracts] ⚠️ Template not found for node "${nodeId}"`);
-      }
-    });
+    console.log(`[AIGenerateContracts] ✅ Semantic contracts generated for ${generatedContracts.size} nodes`);
+
+    // ✅ NEW: Restituisce semantic contracts invece di void
+    return generatedContracts;
   } catch (error) {
     console.error('[AIGenerateContracts] ❌ Error generating contracts:', error);
     throw error;

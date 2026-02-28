@@ -364,7 +364,7 @@ export async function loadTaskTreeFromTemplate(instance: Task | null): Promise<a
     data: enrichedData, // ✅ Struttura ricostruita dal template (con templateId!)
     steps: finalRootSteps, // ✅ Steps dall'istanza o clonati
     // ✅ Constraints/nlpContract SEMPRE dal template (NO override dall'istanza)
-    constraints: template.dataContracts ?? template.constraints ?? undefined,
+    constraints: template.constraints ?? undefined,
     nlpContract: template.nlpContract ?? undefined
   };
 
@@ -1313,7 +1313,7 @@ export async function extractModifiedTaskTreeFields(instance: Task | null, local
       const mainNode = localNodes[i];
       const templateNode = templateNodesForOverride[i] || templateNodesForOverride[0]; // Fallback to first
 
-      const templateNodeConstraints = templateNode?.dataContracts || templateNode?.constraints || [];
+      const templateNodeConstraints = templateNode?.constraints || [];
       const templateNodeNlpContract = templateNode?.nlpContract;
 
       // ✅ CRITICAL: Leggi steps usando templateId come chiave (non id)
@@ -1389,7 +1389,7 @@ export async function extractModifiedTaskTreeFields(instance: Task | null, local
             );
 
             if (templateSubNode) {
-              const templateSubConstraints = templateSubNode.dataContracts || templateSubNode.constraints || [];
+              const templateSubConstraints = templateSubNode.constraints || [];
               const templateSubExamples = templateSubNode.examples || [];
               const templateSubNlpContract = templateSubNode.nlpContract;
 
@@ -1456,7 +1456,7 @@ export async function extractModifiedTaskTreeFields(instance: Task | null, local
 
   // ✅ Confronta root-level constraints/nlpContract/introduction
   // Salva solo se diversi dal template (override)
-  const templateConstraints = template.dataContracts || template.constraints || [];
+  const templateConstraints = template.constraints || [];
   const templateNlpContract = template.nlpContract;
   const templateIntroduction = template.introduction;
 

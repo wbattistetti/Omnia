@@ -18,8 +18,7 @@ function generateGroupName(): string {
 
 export interface SubDataMapping {
   [subId: string]: {
-    canonicalKey: string;
-    /** Technical regex group name (format: g_[a-f0-9]{12}). Sole source of truth for extraction. */
+    /** Technical regex group name (format: s[0-9]+ or g_[a-f0-9]{12}). Sole source of truth for extraction. */
     groupName: string;
     label: string;
     type: string;
@@ -40,7 +39,7 @@ export interface NLPContract {
         pattern: string;  // Regex che matcha i valori ambigui
         description: string;  // Descrizione umana (es: "Numbers 1-12 can be interpreted as day or month")
       };
-      ambiguousCanonicalKeys: string[];  // Lista di canonicalKey che possono essere ambigui (es: ['day', 'month'])
+      ambiguousSubIds: string[];  // Lista di subId che possono essere ambigui
     };
     testCases: string[];
   };
@@ -120,15 +119,14 @@ export abstract class BaseContractGenerator {
   }
 
   /**
-   * Builds SubDataMapping with GUID groupNames.
+   * Builds SubDataMapping with deterministic groupNames (s1, s2, s3...).
    *
    * Each entry receives:
-   *  - canonicalKey: semantic key (e.g. "day", "month") — UI/domain use only.
-   *  - groupName:    GUID technical name (g_[a-f0-9]{12}) — sole regex group identifier.
-   *  - label:        human-readable label.
+   *  - groupName:    Deterministic technical name (s[0-9]+) — sole regex group identifier.
+   *  - label:        human-readable label (required).
    *  - type:         data type.
    *
-   * Neither canonicalKey nor label must ever appear as a regex group name.
+   * Label must always exist (required in DDT structure).
    */
   protected buildSubDataMapping(template: any): SubDataMapping {
     const mapping: SubDataMapping = {};
@@ -136,14 +134,16 @@ export abstract class BaseContractGenerator {
 
     subData.forEach((sub: any, index: number) => {
       const subId = sub.id || sub._id || `sub-${index}`;
-      const label = String(sub.label || sub.name || '').toLowerCase();
+      const label = sub.label || sub.name || '';
 
-      const canonicalKey = this.mapLabelToCanonicalKey(label, sub.type);
+      if (!label) {
+        console.warn('[BaseContractGenerator] Missing label for subData:', subId);
+        return;
+      }
 
       mapping[subId] = {
-        canonicalKey,
-        groupName: generateGroupName(),
-        label: sub.label || sub.name || '',
+        groupName: `s${index + 1}`,  // Deterministic: s1, s2, s3...
+        label,
         type: sub.type || 'generic'
       };
     });
@@ -152,42 +152,21 @@ export abstract class BaseContractGenerator {
   }
 
   /**
-   * Mappa label a canonicalKey (logica standard)
-   */
-  protected mapLabelToCanonicalKey(label: string, type?: string): string {
-    const normalized = label.toLowerCase().replace(/[^a-z0-9]+/g, '');
-
-    // Mapping esplicito per date
-    if (normalized.includes('day') || normalized.includes('giorno') || normalized.includes('dia')) return 'day';
-    if (normalized.includes('month') || normalized.includes('mese') || normalized.includes('mes')) return 'month';
-    if (normalized.includes('year') || normalized.includes('anno') || normalized.includes('ano')) return 'year';
-
-    // Mapping esplicito per name
-    if (normalized.includes('first') || normalized.includes('nome') || normalized.includes('prenome')) return 'firstname';
-    if (normalized.includes('last') || normalized.includes('cognome') || normalized.includes('sobrenome')) return 'lastname';
-
-    // Fallback: usa il tipo o la label normalizzata
-    return type === 'number' ? normalized : normalized;
-  }
-
-  /**
    * Genera prompt LLM parametrico
    */
   protected generateLLMPrompt(contract: NLPContract, text: string): string {
     const subDataList = Object.entries(contract.subDataMapping)
-      .map(([subId, mapping]) => `- ${mapping.canonicalKey}: ${mapping.label} (${mapping.type})`)
+      .map(([subId, mapping]) => `- ${subId} (${mapping.groupName}): ${mapping.label} (${mapping.type})`)
       .join('\n');
 
-    const canonicalKeys = Object.values(contract.subDataMapping)
-      .map(m => m.canonicalKey)
-      .join(', ');
+    const subIds = Object.keys(contract.subDataMapping).join(', ');
 
     return `Extract ${contract.templateName} from: "${text}"
 
 Sub-data structure:
 ${subDataList}
 
-Return JSON with optional keys: ${canonicalKeys}
+Return JSON with optional keys (use subId): ${subIds}
 Schema: ${JSON.stringify(contract.llm.responseSchema, null, 2)}`;
   }
 

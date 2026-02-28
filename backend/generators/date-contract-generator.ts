@@ -111,7 +111,7 @@ export class DateContractGenerator extends BaseContractGenerator {
    * Genera SINGOLA regex TEMPLATE per date (con placeholder per mesi)
    * ✅ Il placeholder ${MONTHS_PLACEHOLDER} verrà sostituito quando si crea l'istanza
    * ✅ Permette: giorno+mese, mese+anno, solo mese, giorno+mese+anno
-   * ✅ Mapping automatico tramite canonicalKey (day, month, year)
+   * ✅ Mapping automatico tramite groupName (s1, s2, s3...)
    */
   private generateUniversalRegex(monthsPattern: string): string {
     // ✅ NOTA: monthsPattern viene IGNORATO qui - usiamo placeholder

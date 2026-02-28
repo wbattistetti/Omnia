@@ -680,6 +680,26 @@ export async function createTemplatesFromWizardData(
     // ✅ dataContract is already DataContract (no conversion needed)
     const dataContract = dataContractsMap.get(node.id);
 
+    // ✅ DEBUG: Log quando createTemplatesFromWizardData crea il template con dataContract
+    console.log(`[createTemplatesFromWizardData] 🔍 Creating template with dataContract`, {
+      nodeId: node.id,
+      nodeLabel: node.label,
+      hasDataContract: !!dataContract,
+      dataContractType: typeof dataContract,
+      contractsCount: dataContract?.contracts?.length || 0,
+      contractTypes: dataContract?.contracts?.map((c: any) => c.type) || [],
+      fullDataContract: dataContract ? {
+        templateName: dataContract.templateName,
+        templateId: dataContract.templateId,
+        subDataMappingKeys: Object.keys(dataContract.subDataMapping || {}),
+        contractsCount: dataContract.contracts?.length || 0,
+        contracts: dataContract.contracts?.map((c: any) => ({
+          type: c.type,
+          enabled: c.enabled
+        })) || []
+      } : null
+    });
+
     // Create template
     // ✅ generalizeLabel is now async, so we need to await it
     const generalizedLabel = await generalizeLabel(node.label);
@@ -695,8 +715,7 @@ export async function createTemplatesFromWizardData(
       icon: node.emoji ? mapEmojiToIconName(node.emoji) : (node.icon || 'FileText'),
       subTasksIds: subTasksIds.length > 0 ? subTasksIds : undefined,
       steps: steps,  // Dictionary: { "templateId": { "start": {...}, ... } }
-      dataContracts: constraints.length > 0 ? constraints : undefined,
-      constraints: constraints.length > 0 ? constraints : undefined,  // Alias
+      constraints: constraints.length > 0 ? constraints : undefined,  // Constraints for data validation
       // ❌ REMOVED: nlpContract (legacy field)
       // ✅ dataContract is already DataContract (no conversion needed)
       dataContract: dataContract,

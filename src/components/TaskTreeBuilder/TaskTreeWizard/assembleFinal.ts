@@ -697,12 +697,12 @@ export async function assembleFinalTaskTree(rootLabel: string, mains: SchemaNode
         contractIsInstance: !!sourceContract.sourceTemplateId,
         sourceContractMapping: Object.entries(sourceContract.subDataMapping || {}).map(([id, m]: [string, any]) => ({
           templateId: id.substring(0, 20) + '...',
-          canonicalKey: m.canonicalKey,
+          groupName: m.groupName,
           label: m.label
         }))
       });
 
-      // Create mapping (assumes same order - if not, we'll need to match by label/canonicalKey)
+      // Create mapping (assumes same order - if not, we'll need to match by label)
       const subIdMapping = createSubIdMapping(subTemplateIds, subInstanceIds);
 
       // Clone and adapt contract (async - compiles regex if needed)

@@ -56,7 +56,7 @@
     <Compile Include="Helpers\ResponseHelpers.vb" />
     <Compile Include="Validators\RequestValidators.vb" />
     <Compile Include="Converters\TaskTreeConverter.vb" />
-    <Compile Include="Converters\RuntimeTaskConverter.vb" />
+    <!-- ❌ RIMOSSO: Converters\RuntimeTaskConverter.vb - RuntimeTask eliminato, usare CompiledUtteranceTask -->
     <Compile Include="Services\TaskDataService.vb" />
     <Compile Include="Services\TaskCompilationService.vb" />
     <Compile Include="Streaming\ISseStreamManager.vb" />

@@ -91,6 +91,14 @@ Namespace Models
     Public Class TaskSessionInputRequest
         <JsonProperty("input")>
         Public Property Input As String
+
+        ' ✅ NEW: Optional task instance and templates for recompilation
+        ' If provided, task will be recompiled before processing input
+        <JsonProperty("taskInstance")>
+        Public Property TaskInstance As Object
+
+        <JsonProperty("allTemplates")>
+        Public Property AllTemplates As List(Of Object)
     End Class
 
     ''' <summary>

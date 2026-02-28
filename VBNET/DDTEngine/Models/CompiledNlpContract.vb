@@ -16,7 +16,7 @@ Public Class CompiledNlpContract
     Public Property CompiledMainRegex As Regex
 
     ''' <summary>
-    ''' Regex per subData pre-compilati (keyed by canonicalKey o pattern index)
+    ''' Regex per subData pre-compilati (keyed by groupName o pattern index)
     ''' </summary>
     Public Property CompiledSubRegexes As Dictionary(Of String, Regex)
 
@@ -49,11 +49,28 @@ Public Class CompiledNlpContract
     Public Shared Function Compile(baseContract As NLPContract) As CompiledNlpContract
         Dim compiled As New CompiledNlpContract()
 
+        ' ✅ LOG: Inizio compilazione
+        Console.WriteLine($"[CompiledNlpContract.Compile] 🔍 Compiling contract for template '{If(baseContract.TemplateName, "unknown")}'")
+        Console.WriteLine($"[CompiledNlpContract.Compile]   - baseContract.SubDataMapping IsNothing: {baseContract.SubDataMapping Is Nothing}")
+        If baseContract.SubDataMapping IsNot Nothing Then
+            Console.WriteLine($"[CompiledNlpContract.Compile]   - baseContract.SubDataMapping.Count: {baseContract.SubDataMapping.Count}")
+        End If
+
         ' Copia tutte le proprietà base
         compiled.TemplateName = baseContract.TemplateName
         compiled.TemplateId = baseContract.TemplateId
         compiled.SourceTemplateId = baseContract.SourceTemplateId
         compiled.SubDataMapping = baseContract.SubDataMapping
+
+        ' ✅ LOG: Verifica dopo copia
+        Console.WriteLine($"[CompiledNlpContract.Compile] ✅ Copied SubDataMapping")
+        Console.WriteLine($"[CompiledNlpContract.Compile]   - compiled.SubDataMapping IsNothing: {compiled.SubDataMapping Is Nothing}")
+        If compiled.SubDataMapping IsNot Nothing Then
+            Console.WriteLine($"[CompiledNlpContract.Compile]   - compiled.SubDataMapping.Count: {compiled.SubDataMapping.Count}")
+        Else
+            Console.WriteLine($"[CompiledNlpContract.Compile] ⚠️ compiled.SubDataMapping is Nothing after copy!")
+        End If
+
         compiled.Contracts = baseContract.Contracts ' ✅ NEW: Copy Contracts directly
         ' Mantenuto per retrocompatibilità
         compiled.Regex = baseContract.Regex

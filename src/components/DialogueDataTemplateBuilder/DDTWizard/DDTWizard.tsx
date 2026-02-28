@@ -1495,7 +1495,7 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
             type: subTemplate.type || subTemplate.name || 'generic',
             icon: subTemplate.icon || 'FileText',
             steps: filteredSteps, // ✅ Usa steps invece di steps
-            constraints: subTemplate.dataContracts || subTemplate.constraints || [],
+            constraints: subTemplate.constraints || [],
             examples: subTemplate.examples || [],
             subData: [],
             // ✅ CRITICO: Preserva nlpContract, templateId, kind
@@ -1529,7 +1529,7 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
         type: template.type,
         icon: template.icon || 'Calendar',
         steps: mainTemplateId && template.steps ? { [String(mainTemplateId)]: template.steps[String(mainTemplateId)] } : undefined, // ✅ Usa steps invece di steps
-        constraints: template.dataContracts || template.constraints || [],
+        constraints: template.constraints || [],
         examples: template.examples || [],
         subData: subDataInstances, // ✅ Sottodati QUI dentro subData[], non in data[]
         // ✅ CRITICO: Preserva nlpContract, templateId, kind
@@ -1550,7 +1550,7 @@ const TaskTreeWizard: React.FC<{ onCancel: () => void; onComplete?: (newTaskTree
         type: template.type,
         icon: template.icon || 'FileText',
         steps: mainTemplateId && template.steps ? { [String(mainTemplateId)]: template.steps[String(mainTemplateId)] } : undefined, // ✅ Usa steps invece di steps
-        constraints: template.dataContracts || template.constraints || [],
+        constraints: template.constraints || [],
         examples: template.examples || [],
         subData: [],
         // ✅ CRITICO: Preserva nlpContract, templateId, kind

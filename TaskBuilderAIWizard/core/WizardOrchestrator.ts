@@ -21,8 +21,10 @@ import { WizardMode } from '../types/WizardMode';
 import {
   createTemplateAndInstanceForProposed,
   createTemplateAndInstanceForCompleted,
-  buildTaskTreeWithContractsAndEngines
+  buildTaskTreeWithContractsAndEngines,
+  collectNodeData
 } from '../services/WizardCompletionService';
+import type { SemanticContract } from '@types/semanticContract';
 import { flattenTaskTree } from '../utils/wizardHelpers';
 import type { WizardTaskTreeNode } from '../types';
 
@@ -201,6 +203,22 @@ export class WizardOrchestrator {
       store.shouldBeGeneral
     );
 
+    // ✅ FASE 2.5: Build dataContract base with subDataMapping (deterministic)
+    // This must happen BEFORE AI generation to ensure subDataMapping is always present
+    const { constraintsMap, dataContractsMap } = collectNodeData(store.dataSchema);
+
+    // Assign dataContract to templates (with subDataMapping)
+    templates.forEach((template, nodeId) => {
+      const dataContract = dataContractsMap.get(nodeId);
+      if (dataContract) {
+        template.dataContract = dataContract;
+        console.log(`[WizardOrchestrator] ✅ FASE 2.5: Assigned dataContract to template ${nodeId}`, {
+          hasSubDataMapping: Object.keys(dataContract.subDataMapping || {}).length > 0,
+          subDataMappingKeys: Object.keys(dataContract.subDataMapping || {})
+        });
+      }
+    });
+
     // Registra template nella cache
     templates.forEach(template => {
       DialogueTaskService.addTemplate(template);
@@ -215,13 +233,20 @@ export class WizardOrchestrator {
     let finalParsersPayload = parsersPayload;
     let finalMessagesPayload = messagesPayload;
 
+    // ✅ Store semanticContracts for Assembler
+    let semanticContractsMap = new Map<string, SemanticContract>();
+
     // ✅ Start parallel generation (constraints, contracts, messages)
+    // ✅ NEW: AIGenerateContracts now returns Map<string, SemanticContract> instead of void
     const parallelGenerationPromise = Promise.all([
       AIGenerateConstraints(store.dataSchema, this.config.locale || 'it').then(() => {
         console.log('[WizardOrchestrator] ✅ FASE 3: Constraints generated');
       }),
-      AIGenerateContracts(templates, store.dataSchema).then(() => {
-        console.log('[WizardOrchestrator] ✅ FASE 4: Contracts generated');
+      AIGenerateContracts(templates, store.dataSchema).then((semanticContracts) => {
+        semanticContractsMap = semanticContracts; // ✅ Save for Assembler
+        console.log('[WizardOrchestrator] ✅ FASE 4: Semantic contracts generated', {
+          contractsCount: semanticContracts.size
+        });
       }),
       AIGenerateTemplateMessages(nodeStructures, store.dataSchema, this.config.locale || 'it').then(() => {
         console.log('[WizardOrchestrator] ✅ FASE 5: Template messages generated');
@@ -330,9 +355,13 @@ export class WizardOrchestrator {
           // Il salvataggio nel database avviene SOLO quando l'utente clicca su "Salva"
           // Non salviamo qui per mantenere il wizard completamente in memoria
 
-          // Build TaskTree finale
-          const { buildTaskTree } = await import('@utils/taskUtils');
-          const finalTaskTree = await buildTaskTree(taskInstance, this.config.projectId);
+          // ✅ FASE 8: Build TaskTree and assemble dataContract (base + semantic + engines)
+          // This is the ONLY place where dataContract is assembled (Architectural constraint)
+          const finalTaskTree = await buildTaskTreeWithContractsAndEngines(
+            taskInstance,
+            this.config.projectId,
+            store.dataSchema
+          );
 
           if (finalTaskTree && this.config.onTaskBuilderComplete) {
             this.config.onTaskBuilderComplete(finalTaskTree);

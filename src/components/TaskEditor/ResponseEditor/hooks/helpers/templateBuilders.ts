@@ -104,7 +104,7 @@ export function createSubDataInstance(subTemplate: any): any {
     type: subTemplate.type,
     icon: subTemplate.icon ?? 'FileText',
     steps: filteredSteps, // ✅ Usa steps invece di steps
-    constraints: subTemplate.dataContracts ?? subTemplate.constraints ?? [],
+    constraints: subTemplate.constraints ?? [],
     examples: subTemplate.examples ?? [],
     subNodes: [], // ✅ Use subNodes (not subData)
     nlpContract: subTemplate.nlpContract ?? undefined,
@@ -124,7 +124,7 @@ export function createSimpledataInstance(template: any): any {
     type: template.type,
     icon: template.icon ?? 'Calendar',
     steps: templateId && template.steps ? { [String(templateId)]: template.steps[String(templateId)] } : undefined, // ✅ Usa steps invece di steps
-    constraints: template.dataContracts ?? template.constraints ?? [],
+    constraints: template.constraints ?? [],
     examples: template.examples ?? [],
     subNodes: [], // ✅ Use subNodes (not subData)
     nlpContract: template.nlpContract ?? undefined,
@@ -153,7 +153,7 @@ export function createCompositedata(template: any): any[] {
     type: template.type,
     icon: template.icon ?? 'Calendar',
     steps: mainTemplateId && template.steps ? { [String(mainTemplateId)]: template.steps[String(mainTemplateId)] } : undefined, // ✅ Usa steps invece di steps
-    constraints: template.dataContracts ?? template.constraints ?? [],
+    constraints: template.constraints ?? [],
     examples: template.examples ?? [],
     subNodes: subDataInstances, // ✅ Use subNodes (not subData)
     nlpContract: template.nlpContract ?? undefined,

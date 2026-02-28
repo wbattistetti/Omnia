@@ -967,7 +967,7 @@ export function buildTaskTreeNodes(template: any): TaskTreeNode[] {
       label: subTemplate.label,
       type: subTemplate.type,
       icon: subTemplate.icon || 'FileText',
-      constraints: subTemplate.dataContracts || subTemplate.constraints || [],
+      constraints: subTemplate.constraints || [],
       dataContract: subTemplate.dataContract || undefined,
       subNodes  // ✅ Direttamente subNodes[], non subTasks[]
     };
@@ -997,7 +997,7 @@ export function buildTaskTreeNodes(template: any): TaskTreeNode[] {
       label: template.label || template.name || undefined,  // ✅ "Date" dal template
       type: template.type,
       icon: template.icon || 'Calendar',
-      constraints: template.dataContracts || template.constraints || [],
+      constraints: template.constraints || [],
       dataContract: template.dataContract || undefined,
       subNodes  // ✅ Day, Month, Year come subNodes
     };
@@ -1024,7 +1024,7 @@ export function buildTaskTreeNodes(template: any): TaskTreeNode[] {
     label: template.label || template.name || undefined,
     type: template.type,
     icon: template.icon || 'Calendar',
-    constraints: template.dataContracts || template.constraints || [],
+    constraints: template.constraints || [],
     dataContract: template.dataContract || undefined,
     subNodes: []
   };
@@ -1070,7 +1070,7 @@ export async function buildTemplateExpanded(
     labelKey: template.labelKey || template.label,  // ✅ Usa labelKey (o fallback a label per retrocompatibilità)
     nodes,
     steps: clonedSteps,  // ✅ Dictionary: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
-    constraints: template.dataContracts ?? template.constraints ?? undefined,
+    constraints: template.constraints ?? undefined,
     dataContract: template.dataContract ?? undefined,
     introduction: template.introduction
   };
@@ -1227,7 +1227,7 @@ export async function buildTaskTree(
     labelKey: instance.labelKey ?? template.labelKey ?? template.label,  // ✅ Usa labelKey (fallback a label per retrocompatibilità)
     nodes,  // ✅ Già TaskTreeNode[] con subNodes[]
     steps: finalSteps,  // ✅ Dictionary: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
-    constraints: template.dataContracts ?? template.constraints ?? undefined,
+    constraints: template.constraints ?? undefined,
     dataContract: template.dataContract ?? undefined,
     introduction: template.introduction ?? instance.introduction
   };

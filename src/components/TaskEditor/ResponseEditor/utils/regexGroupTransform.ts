@@ -8,9 +8,8 @@ import { GROUP_NAME_PATTERN } from './regexGroupUtils';
 // ---------------------------------------------------------------------------
 
 export type SubDataMappingEntry = {
-  canonicalKey: string;
   groupName: string;
-  label?: string;
+  label: string;  // Required - must always exist in DDT structure
   type?: string;
 };
 
@@ -59,7 +58,7 @@ function escapeForRegex(str: string): string {
  *
  * Rules:
  *   1. Only entries with a valid GroupName (g_[a-f0-9]{12}) are included.
- *   2. Display label = sanitize(entry.label ?? entry.canonicalKey ?? entry.groupName)
+ *   2. Display label = sanitize(entry.label) (label is required)
  *   3. Collisions are resolved by appending _1, _2 … in iteration order.
  */
 export function buildDisplayMap(subDataMapping: SubDataMapping): DisplayMap {
@@ -70,14 +69,20 @@ export function buildDisplayMap(subDataMapping: SubDataMapping): DisplayMap {
   const baseCount = new Map<string, number>();
 
   for (const [, entry] of Object.entries(subDataMapping)) {
-    const { groupName, label, canonicalKey } = entry;
+    const { groupName, label } = entry;
 
     // Skip entries without a valid GUID group name
     if (!groupName || !GROUP_NAME_PATTERN.test(groupName)) {
       continue;
     }
 
-    const base = sanitizeLabel(label || canonicalKey || groupName);
+    // Label must always exist (required in DDT structure)
+    if (!label) {
+      console.warn('[regexGroupTransform] Missing label for groupName:', groupName);
+      continue;
+    }
+
+    const base = sanitizeLabel(label);
     const count = baseCount.get(base) ?? 0;
     const displayName = count === 0 ? base : `${base}_${count}`;
     baseCount.set(base, count + 1);

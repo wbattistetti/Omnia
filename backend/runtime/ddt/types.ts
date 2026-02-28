@@ -129,8 +129,7 @@ export interface NLPContract {
   sourceTemplateId?: string;
   subDataMapping: {
     [subId: string]: {
-      canonicalKey: string;
-      /** Technical regex group name (format: g_[a-f0-9]{12}). Sole source of truth for extraction. */
+      /** Technical regex group name (format: s[0-9]+ or g_[a-f0-9]{12}). Sole source of truth for extraction. */
       groupName: string;
       label: string;
       type: string;

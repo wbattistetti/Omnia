@@ -1,5 +1,7 @@
 const { spawn } = require('child_process');
 const http = require('http');
+const path = require('path');
+const fs = require('fs');
 
 const PYTHON_SERVICE_URL = 'http://localhost:8000';
 const HEALTH_CHECK_ENDPOINT = '/api/ping';
@@ -150,18 +152,41 @@ async function startPythonService() {
 
   // Determina se siamo su Windows o Unix
   const isWindows = process.platform === 'win32';
-  const pythonCommand = 'uvicorn';
-  const pythonArgs = [
-    'newBackend.app:app',
-    '--host', '127.0.0.1',
-    '--port', '8000',
-    '--reload'
-  ];
+
+  // ✅ USA IL VIRTUALENV se esiste, altrimenti usa uvicorn direttamente
+  const venvPython = isWindows
+    ? path.join(process.cwd(), '.venv', 'Scripts', 'python.exe')
+    : path.join(process.cwd(), '.venv', 'bin', 'python');
+
+  let pythonCommand, pythonArgs;
+
+  if (fs.existsSync(venvPython)) {
+    // Usa il virtualenv se esiste (ha numpy e sentence-transformers)
+    console.log('[Python Service] ✅ Using virtualenv:', venvPython);
+    pythonCommand = venvPython;
+    pythonArgs = [
+      '-m', 'uvicorn',
+      'newBackend.app:app',
+      '--host', '127.0.0.1',
+      '--port', '8000',
+      '--reload'
+    ];
+  } else {
+    // Fallback: usa uvicorn direttamente (comportamento originale)
+    console.log('[Python Service] ⚠️  Virtualenv not found, using system Python');
+    pythonCommand = 'uvicorn';
+    pythonArgs = [
+      'newBackend.app:app',
+      '--host', '127.0.0.1',
+      '--port', '8000',
+      '--reload'
+    ];
+  }
 
   // Avvia uvicorn
   const pythonProcess = spawn(pythonCommand, pythonArgs, {
     stdio: 'inherit', // Mostra output direttamente
-    shell: isWindows, // Usa shell su Windows per trovare uvicorn in PATH
+    shell: isWindows && pythonCommand === 'uvicorn', // Usa shell solo se chiamiamo uvicorn direttamente
     cwd: process.cwd()
   });
 

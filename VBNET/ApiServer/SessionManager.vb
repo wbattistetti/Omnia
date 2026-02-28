@@ -6,7 +6,9 @@ Imports TaskEngine.Orchestrator
 Imports ApiServer.Interfaces
 Imports ApiServer.SessionStorage
 Imports System.Linq
+Imports System.Collections.Generic
 Imports Newtonsoft.Json
+Imports Newtonsoft.Json.Converters
 
 ''' <summary>
 ''' Orchestrator Session: contiene tutto lo stato di una sessione di esecuzione
@@ -529,12 +531,9 @@ Public Class SessionManager
 
 
     ''' <summary>
-    ''' ✅ STATELESS: Carica il dialogo dal DialogRepository quando necessario
+    ''' ✅ NEW: Carica dialogo dal repository per una sessione (nuovo formato)
     ''' </summary>
-    ''' <summary>
-    ''' ✅ STATELESS: Carica dialogo dal repository per una sessione
-    ''' </summary>
-    Public Shared Function LoadDialogForSession(session As TaskSession) As Compiler.RuntimeTask
+    Public Shared Function LoadDialogForSession(session As TaskSession) As Compiler.CompiledUtteranceTask
         If session Is Nothing Then
             Return Nothing
         End If
@@ -548,8 +547,8 @@ Public Class SessionManager
         End If
 
         Try
-            Dim runtimeTask = _dialogRepository.GetDialog(session.ProjectId, session.DialogVersion)
-            Return runtimeTask
+            Dim compiledTask = _dialogRepository.GetDialog(session.ProjectId, session.DialogVersion)
+            Return compiledTask
         Catch ex As Exception
             Return Nothing
         End Try
@@ -690,33 +689,33 @@ Public Class SessionManager
     ''' ✅ STATELESS: Estrae tutte le chiavi di traduzione (textKey) dal dialogo compilato
     ''' Usato per validare che tutte le traduzioni esistano nel TranslationRepository
     ''' </summary>
-    ''' <param name="runtimeTask">RuntimeTask compilato</param>
+    ''' <param name="compiledTask">CompiledUtteranceTask compilato</param>
     ''' <returns>Lista di textKey (GUID) usate nel dialogo</returns>
-    Public Shared Function ExtractTextKeysFromRuntimeTask(runtimeTask As Compiler.RuntimeTask) As List(Of String)
-        If runtimeTask Is Nothing Then
+    Public Shared Function ExtractTextKeysFromCompiledTask(compiledTask As Compiler.CompiledUtteranceTask) As List(Of String)
+        If compiledTask Is Nothing Then
             Return New List(Of String)()
         End If
 
-        Dim keys = CollectTranslationKeys(runtimeTask)
+        Dim keys = CollectTranslationKeys(compiledTask)
         Return keys.ToList()
     End Function
 
     ''' <summary>
     ''' Raccoglie tutte le chiavi di traduzione usate nel grafo
     ''' </summary>
-    Private Shared Function CollectTranslationKeys(runtimeTask As Compiler.RuntimeTask) As HashSet(Of String)
+    Private Shared Function CollectTranslationKeys(compiledTask As Compiler.CompiledUtteranceTask) As HashSet(Of String)
         Dim keys As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
-        CollectTranslationKeysRecursive(runtimeTask, keys)
+        CollectTranslationKeysRecursive(compiledTask, keys)
         Return keys
     End Function
 
     ''' <summary>
     ''' Raccoglie ricorsivamente tutte le chiavi di traduzione
     ''' </summary>
-    Private Shared Sub CollectTranslationKeysRecursive(runtimeTask As Compiler.RuntimeTask, keys As HashSet(Of String))
+    Private Shared Sub CollectTranslationKeysRecursive(compiledTask As Compiler.CompiledUtteranceTask, keys As HashSet(Of String))
         ' ✅ Itera tutti gli step e escalation per trovare MessageTask
-        If runtimeTask.Steps IsNot Nothing Then
-            For Each dstep As TaskEngine.DialogueStep In runtimeTask.Steps
+        If compiledTask.Steps IsNot Nothing Then
+            For Each dstep As TaskEngine.DialogueStep In compiledTask.Steps
                 If dstep.Escalations IsNot Nothing Then
                     For Each escalation As TaskEngine.Escalation In dstep.Escalations
                         If escalation.Tasks IsNot Nothing Then
@@ -735,8 +734,8 @@ Public Class SessionManager
         End If
 
         ' ✅ Ricorsivo per subTasks
-        If runtimeTask.SubTasks IsNot Nothing Then
-            For Each subTask As Compiler.RuntimeTask In runtimeTask.SubTasks
+        If compiledTask.SubTasks IsNot Nothing Then
+            For Each subTask As Compiler.CompiledUtteranceTask In compiledTask.SubTasks
                 CollectTranslationKeysRecursive(subTask, keys)
             Next
         End If
@@ -746,11 +745,11 @@ Public Class SessionManager
     ''' Valida che tutte le chiavi usate nel grafo siano presenti nel dizionario traduzioni
     ''' </summary>
     Public Shared Function ValidateTranslations(
-        runtimeTask As Compiler.RuntimeTask,
+        compiledTask As Compiler.CompiledUtteranceTask,
         translations As Dictionary(Of String, String)
     ) As TranslationValidationResult
-        If runtimeTask Is Nothing Then
-            Return New TranslationValidationResult(False, Nothing, "RuntimeTask cannot be Nothing")
+        If compiledTask Is Nothing Then
+            Return New TranslationValidationResult(False, Nothing, "CompiledUtteranceTask cannot be Nothing")
         End If
 
         If translations Is Nothing OrElse translations.Count = 0 Then
@@ -758,7 +757,7 @@ Public Class SessionManager
         End If
 
         ' ✅ Raccogli tutte le chiavi usate nel grafo
-        Dim usedKeys = CollectTranslationKeys(runtimeTask)
+        Dim usedKeys = CollectTranslationKeys(compiledTask)
 
         If usedKeys.Count = 0 Then
             ' Nessuna chiave usata: valido ma potrebbe essere un errore
@@ -788,68 +787,309 @@ Public Class SessionManager
     End Function
 
 
-    ''' <summary>
-    ''' ✅ STATELESS: Converte RuntimeTask in CompiledUtteranceTask (ricorsivo)
-    ''' </summary>
-    Private Shared Function ConvertRuntimeTaskToCompiled(runtimeTask As Compiler.RuntimeTask) As Compiler.CompiledUtteranceTask
-        Dim compiled As New Compiler.CompiledUtteranceTask() With {
-            .Id = runtimeTask.Id,
-            .Condition = runtimeTask.Condition,
-            .Steps = runtimeTask.Steps,
-            .Constraints = runtimeTask.Constraints,
-            .NlpContract = runtimeTask.NlpContract
-        }
-
-        ' ✅ Copia SubTasks ricorsivamente (solo se presenti)
-        If runtimeTask.HasSubTasks() Then
-            compiled.SubTasks = New List(Of Compiler.CompiledUtteranceTask)()
-            For Each subTask As Compiler.RuntimeTask In runtimeTask.SubTasks
-                compiled.SubTasks.Add(ConvertRuntimeTaskToCompiled(subTask))
-            Next
-        Else
-            compiled.SubTasks = Nothing
-        End If
-
-        Return compiled
-    End Function
 
 
     ''' <summary>
     ''' ✅ STATELESS: Carica DialogueContext dalla sessione (o lo crea se non esiste)
     ''' </summary>
     Public Shared Function GetOrCreateDialogueContext(session As TaskSession) As TaskEngine.Orchestrator.TaskEngine.DialogueContext
+        Console.WriteLine("═══════════════════════════════════════════════════════════")
+        Console.WriteLine("🔥🔥🔥 GetOrCreateDialogueContext CALLED")
+        System.Diagnostics.Debug.WriteLine("🔥🔥🔥 GetOrCreateDialogueContext CALLED")
+        Console.WriteLine($"   SessionId: {If(session IsNot Nothing, session.SessionId, "NULL")}")
+        System.Diagnostics.Debug.WriteLine($"   SessionId: {If(session IsNot Nothing, session.SessionId, "NULL")}")
+        If session IsNot Nothing Then
+            Console.WriteLine($"   HasDialogueContextJson: {Not String.IsNullOrEmpty(session.DialogueContextJson)}")
+            System.Diagnostics.Debug.WriteLine($"   HasDialogueContextJson: {Not String.IsNullOrEmpty(session.DialogueContextJson)}")
+            If Not String.IsNullOrEmpty(session.DialogueContextJson) Then
+                Console.WriteLine($"   DialogueContextJsonLength: {session.DialogueContextJson.Length}")
+                System.Diagnostics.Debug.WriteLine($"   DialogueContextJsonLength: {session.DialogueContextJson.Length}")
+            End If
+        End If
+        Console.Out.Flush()
+        System.Diagnostics.Debug.Flush()
+
         If session Is Nothing Then
+            Console.WriteLine("⚠️ GetOrCreateDialogueContext: session is Nothing, RETURNING Nothing")
+            Console.Out.Flush()
             Return Nothing
         End If
 
+        ' ✅ Log: Stato PRIMA del caricamento
+        Dim hasJson As Boolean = Not String.IsNullOrEmpty(session.DialogueContextJson)
+        Dim jsonLength As Integer = If(hasJson, session.DialogueContextJson.Length, 0)
+
+        _logger.LogInfo("📥 [GetOrCreateDialogueContext] Loading DialogueContext from session", New With {
+            .sessionId = session.SessionId,
+            .hasJson = hasJson,
+            .jsonLength = jsonLength,
+            .jsonPreview = If(hasJson AndAlso jsonLength > 200, session.DialogueContextJson.Substring(0, 200) & "...", If(hasJson, session.DialogueContextJson, "null"))
+        })
+
+        ' ✅ Log diretto su Console per visibilità immediata
+        Console.WriteLine($"📥 [GetOrCreateDialogueContext] Loading SessionId={session.SessionId}, HasJson={hasJson}, JsonLength={jsonLength}")
+        Console.Out.Flush()
+
         ' Se esiste già un DialogueContext salvato, deserializzalo
-        If Not String.IsNullOrEmpty(session.DialogueContextJson) Then
+        If hasJson Then
             Try
-                Return Newtonsoft.Json.JsonConvert.DeserializeObject(Of TaskEngine.Orchestrator.TaskEngine.DialogueContext)(session.DialogueContextJson)
-            Catch ex As Exception
-                If _logger IsNot Nothing Then
-                    _logger.LogError("Failed to deserialize DialogueContext from session", ex, New With {.sessionId = session.SessionId})
+                ' ✅ AGGIUNGI LOG PER VEDERE IL VALORE DI Mode NEL JSON PRIMA DELLA DESERIALIZZAZIONE:
+                Console.WriteLine($"🔥🔥🔥 GetOrCreateDialogueContext: BEFORE deserialization - Checking Mode value in JSON")
+                System.Diagnostics.Debug.WriteLine($"🔥🔥🔥 GetOrCreateDialogueContext: BEFORE deserialization - Checking Mode value in JSON")
+
+                ' Cerca il valore di Mode nel JSON
+                If session.DialogueContextJson.Contains("""" & "Mode" & """:") Then
+                    Try
+                        Dim modeIndex = session.DialogueContextJson.IndexOf("""" & "Mode" & """:")
+                        Dim modeValueStart = modeIndex + 8 ' "Mode":
+                        Dim modeValueEnd = session.DialogueContextJson.IndexOf(",", modeValueStart)
+                        If modeValueEnd = -1 Then modeValueEnd = session.DialogueContextJson.IndexOf("}", modeValueStart)
+                        If modeValueEnd > modeValueStart Then
+                            Dim modeValue = session.DialogueContextJson.Substring(modeValueStart, modeValueEnd - modeValueStart).Trim()
+                            Console.WriteLine($"   Mode raw value in JSON BEFORE deserialization: {modeValue}")
+                            System.Diagnostics.Debug.WriteLine($"   Mode raw value in JSON BEFORE deserialization: {modeValue}")
+                        End If
+                    Catch ex As Exception
+                        Console.WriteLine($"   Error extracting Mode value: {ex.Message}")
+                        System.Diagnostics.Debug.WriteLine($"   Error extracting Mode value: {ex.Message}")
+                    End Try
                 End If
+
+                ' Mostra un estratto del JSON intorno a "Mode"
+                Dim modeIndex2 = session.DialogueContextJson.IndexOf("""" & "Mode" & """")
+                If modeIndex2 >= 0 Then
+                    Try
+                        Dim start = Math.Max(0, modeIndex2 - 50)
+                        Dim length = Math.Min(200, session.DialogueContextJson.Length - start)
+                        Dim excerpt = session.DialogueContextJson.Substring(start, length)
+                        Console.WriteLine($"   JSON excerpt around Mode BEFORE deserialization: {excerpt}")
+                        System.Diagnostics.Debug.WriteLine($"   JSON excerpt around Mode BEFORE deserialization: {excerpt}")
+                    Catch ex As Exception
+                        Console.WriteLine($"   Error extracting excerpt: {ex.Message}")
+                        System.Diagnostics.Debug.WriteLine($"   Error extracting excerpt: {ex.Message}")
+                    End Try
+                End If
+
+                Console.Out.Flush()
+                System.Diagnostics.Debug.Flush()
+
+                Console.WriteLine($"🔥🔥🔥 GetOrCreateDialogueContext: About to deserialize DialogueContextJson")
+                System.Diagnostics.Debug.WriteLine($"🔥🔥🔥 GetOrCreateDialogueContext: About to deserialize DialogueContextJson")
+                Console.WriteLine($"   JsonLength: {jsonLength}")
+                System.Diagnostics.Debug.WriteLine($"   JsonLength: {jsonLength}")
+                Console.Out.Flush()
+                System.Diagnostics.Debug.Flush()
+
+                ' ✅ Usa StringEnumConverter per deserializzare gli enum come stringhe invece che numeri
+                ' ✅ Usa ITaskConverter per deserializzare ITask (interfaccia) nelle sue implementazioni concrete
+                Dim deserializeSettings As New JsonSerializerSettings() With {
+                    .Converters = New List(Of JsonConverter) From {
+                        New Newtonsoft.Json.Converters.StringEnumConverter(),
+                        New TaskEngine.ITaskConverter()
+                    }
+                }
+                Dim deserialized = Newtonsoft.Json.JsonConvert.DeserializeObject(Of TaskEngine.Orchestrator.TaskEngine.DialogueContext)(session.DialogueContextJson, deserializeSettings)
+
+                ' ✅ Log: Stato DOPO la deserializzazione
+                Console.WriteLine($"🔥🔥🔥 GetOrCreateDialogueContext: AFTER deserialization")
+                System.Diagnostics.Debug.WriteLine($"🔥🔥🔥 GetOrCreateDialogueContext: AFTER deserialization")
+                If deserialized IsNot Nothing Then
+                    Console.WriteLine($"   Deserialized is NOT NULL")
+                    System.Diagnostics.Debug.WriteLine($"   Deserialized is NOT NULL")
+                    If deserialized.DialogueState IsNot Nothing Then
+                        Console.WriteLine($"   DialogueState is NOT NULL")
+                        System.Diagnostics.Debug.WriteLine($"   DialogueState is NOT NULL")
+                        Console.WriteLine($"   DialogueState.Mode: {deserialized.DialogueState.Mode}")
+                        System.Diagnostics.Debug.WriteLine($"   DialogueState.Mode: {deserialized.DialogueState.Mode}")
+                        Console.WriteLine($"   DialogueState.TurnState: {deserialized.DialogueState.TurnState}")
+                        System.Diagnostics.Debug.WriteLine($"   DialogueState.TurnState: {deserialized.DialogueState.TurnState}")
+                        Console.WriteLine($"   DialogueState.IsCompleted: {deserialized.DialogueState.IsCompleted}")
+                        System.Diagnostics.Debug.WriteLine($"   DialogueState.IsCompleted: {deserialized.DialogueState.IsCompleted}")
+                    Else
+                        Console.WriteLine($"   ⚠️ DialogueState is NULL!")
+                        System.Diagnostics.Debug.WriteLine($"   ⚠️ DialogueState is NULL!")
+                    End If
+                Else
+                    Console.WriteLine($"   ⚠️ Deserialized is NULL!")
+                    System.Diagnostics.Debug.WriteLine($"   ⚠️ Deserialized is NULL!")
+                End If
+                Console.Out.Flush()
+                System.Diagnostics.Debug.Flush()
+
+                Dim modeAfterDeserialize As String = "null"
+                Dim turnStateAfterDeserialize As String = "null"
+                Dim hasDialogueStateAfterDeserialize As Boolean = False
+                If deserialized IsNot Nothing AndAlso deserialized.DialogueState IsNot Nothing Then
+                    hasDialogueStateAfterDeserialize = True
+                    modeAfterDeserialize = deserialized.DialogueState.Mode.ToString()
+                    turnStateAfterDeserialize = deserialized.DialogueState.TurnState.ToString()
+                End If
+
+                _logger.LogInfo("✅ [GetOrCreateDialogueContext] DialogueContext deserialized successfully", New With {
+                    .sessionId = session.SessionId,
+                    .hasDialogueState = hasDialogueStateAfterDeserialize,
+                    .mode = modeAfterDeserialize,
+                    .turnState = turnStateAfterDeserialize,
+                    .isNothing = deserialized Is Nothing
+                })
+
+                ' ✅ Log diretto su Console per visibilità immediata
+                Console.WriteLine($"✅ [GetOrCreateDialogueContext] Deserialized Mode={modeAfterDeserialize}, TurnState={turnStateAfterDeserialize}, SessionId={session.SessionId}")
+                Console.Out.Flush()
+
+                Return deserialized
+            Catch ex As Exception
+                _logger.LogError("❌ [GetOrCreateDialogueContext] Failed to deserialize DialogueContext from session", ex, New With {
+                    .sessionId = session.SessionId,
+                    .jsonLength = jsonLength,
+                    .jsonPreview = If(jsonLength > 200, session.DialogueContextJson.Substring(0, 200) & "...", session.DialogueContextJson)
+                })
                 ' Se la deserializzazione fallisce, ricrea il context
             End Try
+        Else
+            _logger.LogInfo("⚠️ [GetOrCreateDialogueContext] No DialogueContextJson found in session", New With {
+                .sessionId = session.SessionId
+            })
+            ' ✅ Log diretto su Console per visibilità immediata
+            Console.WriteLine($"⚠️ [GetOrCreateDialogueContext] No DialogueContextJson found, SessionId={session.SessionId}")
+            Console.Out.Flush()
         End If
 
         ' ✅ REMOVED: CreateDialogueContextFromRuntimeTask - legacy code
         ' DialogueContext is now created by CompiledTaskAdapter.CreateDialogueContextFromTask()
         ' which is called by FlowOrchestrator when needed
         ' This function should not be used anymore - DialogueContext is managed by TaskEngine
+        _logger.LogInfo("⚠️ [GetOrCreateDialogueContext] Returning Nothing (no context found)", New With {
+            .sessionId = session.SessionId
+        })
+        ' ✅ Log diretto su Console per visibilità immediata
+        Console.WriteLine($"⚠️ [GetOrCreateDialogueContext] Returning Nothing, SessionId={session.SessionId}")
+        Console.Out.Flush()
         Return Nothing
     End Function
 
     ''' <summary>
-    ''' ✅ STATELESS: Salva DialogueContext nella sessione
+    ''' ✅ STATELESS: Salva DialogueContext nella sessione e persiste su Redis
     ''' </summary>
     Public Shared Sub SaveDialogueContext(session As TaskSession, ctx As TaskEngine.Orchestrator.TaskEngine.DialogueContext)
+        Console.WriteLine("═══════════════════════════════════════════════════════════")
+        Console.WriteLine("🔥 SaveDialogueContext CALLED")
+        Console.WriteLine($"   SessionId: {If(session IsNot Nothing, session.SessionId, "NULL")}")
+        Console.WriteLine($"   Context: {If(ctx IsNot Nothing, "NOT NULL", "NULL")}")
+        Console.Out.Flush()
+
         If session Is Nothing OrElse ctx Is Nothing Then
+            Console.WriteLine("⚠️ SaveDialogueContext: session or ctx is Nothing, RETURNING")
+            Console.Out.Flush()
             Return
         End If
 
-        session.DialogueContextJson = Newtonsoft.Json.JsonConvert.SerializeObject(ctx)
+        ' ✅ Log: Stato PRIMA del salvataggio
+        Dim modeBeforeSave As String = "null"
+        Dim turnStateBeforeSave As String = "null"
+        Dim hasDialogueState As Boolean = False
+        If ctx.DialogueState IsNot Nothing Then
+            hasDialogueState = True
+            modeBeforeSave = ctx.DialogueState.Mode.ToString()
+            turnStateBeforeSave = ctx.DialogueState.TurnState.ToString()
+        End If
+
+        ' ✅ Risolve il problema del riferimento circolare (Parent property in UtteranceTaskInstance)
+        ' ✅ Usa StringEnumConverter per serializzare gli enum come stringhe invece che numeri
+        ' ✅ Usa ITaskConverter per deserializzare ITask (anche se CanWrite=False, è comunque necessario per la deserializzazione)
+        Dim settings As New JsonSerializerSettings() With {
+            .ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
+            .NullValueHandling = NullValueHandling.Ignore,
+            .Converters = New List(Of JsonConverter) From {
+                New Newtonsoft.Json.Converters.StringEnumConverter(),
+                New TaskEngine.ITaskConverter()
+            }
+        }
+        session.DialogueContextJson = Newtonsoft.Json.JsonConvert.SerializeObject(ctx, settings)
+
+        ' ✅ Log: Verifica che DialogueContextJson contenga il Mode
+        Dim jsonContainsMode As Boolean = session.DialogueContextJson.Contains("""" & modeBeforeSave & """")
+
+        ' ✅ LOG DETTAGLIATO CON ENTRAMBI I METODI
+        Console.WriteLine($"🔥🔥🔥 SaveDialogueContext: DialogueContextJson SET - Length={session.DialogueContextJson.Length}")
+        System.Diagnostics.Debug.WriteLine($"🔥🔥🔥 SaveDialogueContext: DialogueContextJson SET - Length={session.DialogueContextJson.Length}")
+        Console.WriteLine($"   SessionId: {session.SessionId}")
+        Console.WriteLine($"   Mode: {modeBeforeSave}")
+        Console.WriteLine($"   TurnState: {turnStateBeforeSave}")
+        Console.WriteLine($"   JsonPreview: {If(session.DialogueContextJson.Length > 300, session.DialogueContextJson.Substring(0, 300) & "...", session.DialogueContextJson)}")
+        Console.WriteLine($"   Contains Mode: {session.DialogueContextJson.Contains("Mode")}")
+        Console.WriteLine($"   Contains WaitingForUtterance: {session.DialogueContextJson.Contains("WaitingForUtterance")}")
+        Console.WriteLine($"   Contains ExecutingStep: {session.DialogueContextJson.Contains("ExecutingStep")}")
+
+        ' ✅ Cerca il valore di Mode nel JSON
+        Console.WriteLine($"🔥🔥🔥 SaveDialogueContext: JSON CONTENT CHECK")
+        System.Diagnostics.Debug.WriteLine($"🔥🔥🔥 SaveDialogueContext: JSON CONTENT CHECK")
+        Console.WriteLine($"   Mode value in JSON: {If(session.DialogueContextJson.Contains("""" & "WaitingForUtterance" & """"), "FOUND WaitingForUtterance", If(session.DialogueContextJson.Contains("""" & "ExecutingStep" & """"), "FOUND ExecutingStep", "NOT FOUND"))}")
+        System.Diagnostics.Debug.WriteLine($"   Mode value in JSON: {If(session.DialogueContextJson.Contains("""" & "WaitingForUtterance" & """"), "FOUND WaitingForUtterance", If(session.DialogueContextJson.Contains("""" & "ExecutingStep" & """"), "FOUND ExecutingStep", "NOT FOUND"))}")
+
+        ' Cerca il valore numerico dell'enum (0=ExecutingStep, 1=WaitingForUtterance, 2=Completed)
+        If session.DialogueContextJson.Contains("""" & "Mode" & """:") Then
+            Try
+                Dim modeIndex = session.DialogueContextJson.IndexOf("""" & "Mode" & """:")
+                Dim modeValueStart = modeIndex + 8 ' "Mode":
+                Dim modeValueEnd = session.DialogueContextJson.IndexOf(",", modeValueStart)
+                If modeValueEnd = -1 Then modeValueEnd = session.DialogueContextJson.IndexOf("}", modeValueStart)
+                If modeValueEnd > modeValueStart Then
+                    Dim modeValue = session.DialogueContextJson.Substring(modeValueStart, modeValueEnd - modeValueStart).Trim()
+                    Console.WriteLine($"   Mode raw value in JSON: {modeValue}")
+                    System.Diagnostics.Debug.WriteLine($"   Mode raw value in JSON: {modeValue}")
+                End If
+            Catch ex As Exception
+                Console.WriteLine($"   Error extracting Mode value: {ex.Message}")
+                System.Diagnostics.Debug.WriteLine($"   Error extracting Mode value: {ex.Message}")
+            End Try
+        End If
+
+        ' Mostra un estratto del JSON intorno a "Mode"
+        Dim modeIndex2 = session.DialogueContextJson.IndexOf("""" & "Mode" & """")
+        If modeIndex2 >= 0 Then
+            Try
+                Dim start = Math.Max(0, modeIndex2 - 50)
+                Dim length = Math.Min(200, session.DialogueContextJson.Length - start)
+                Dim excerpt = session.DialogueContextJson.Substring(start, length)
+                Console.WriteLine($"   JSON excerpt around Mode: {excerpt}")
+                System.Diagnostics.Debug.WriteLine($"   JSON excerpt around Mode: {excerpt}")
+            Catch ex As Exception
+                Console.WriteLine($"   Error extracting excerpt: {ex.Message}")
+                System.Diagnostics.Debug.WriteLine($"   Error extracting excerpt: {ex.Message}")
+            End Try
+        End If
+
+        Console.Out.Flush()
+        System.Diagnostics.Debug.Flush()
+
+        _logger.LogInfo("💾 [SaveDialogueContext] Saving DialogueContext to Redis", New With {
+            .sessionId = session.SessionId,
+            .hasDialogueState = hasDialogueState,
+            .mode = modeBeforeSave,
+            .turnState = turnStateBeforeSave,
+            .jsonLength = session.DialogueContextJson.Length,
+            .jsonContainsMode = jsonContainsMode,
+            .jsonPreview = If(session.DialogueContextJson.Length > 200, session.DialogueContextJson.Substring(0, 200) & "...", session.DialogueContextJson)
+        })
+
+        ' ✅ Salva automaticamente su Redis per garantire persistenza dello stato
+        Console.WriteLine($"🔥🔥🔥 SaveDialogueContext: Calling SaveTaskSession")
+        System.Diagnostics.Debug.WriteLine($"🔥🔥🔥 SaveDialogueContext: Calling SaveTaskSession")
+        Console.Out.Flush()
+        System.Diagnostics.Debug.Flush()
+
+        SaveTaskSession(session)
+
+        Console.WriteLine($"🔥🔥🔥 SaveDialogueContext: SaveTaskSession COMPLETED")
+        System.Diagnostics.Debug.WriteLine($"🔥🔥🔥 SaveDialogueContext: SaveTaskSession COMPLETED")
+        Console.Out.Flush()
+        System.Diagnostics.Debug.Flush()
+
+        _logger.LogInfo("✅ [SaveDialogueContext] DialogueContext saved to Redis", New With {
+            .sessionId = session.SessionId,
+            .mode = modeBeforeSave
+        })
     End Sub
 
     ''' <summary>

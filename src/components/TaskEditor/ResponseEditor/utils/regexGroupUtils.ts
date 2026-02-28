@@ -8,7 +8,7 @@ import { getSubNodesStrict } from '@responseEditor/core/domain/nodeStrict';
 /**
  * Generates a technical GUID-based regex group name.
  * Format: g_[a-f0-9]{12}
- * Neither canonicalKey nor label must ever appear as a regex group name.
+ * Neither semantic names (day, month, year, etc.) nor label must ever appear as a regex group name.
  */
 export function generateGroupName(): string {
   const hex = Array.from(crypto.getRandomValues(new Uint8Array(6)))
@@ -39,7 +39,7 @@ export function getSubTasksInfo(node: TaskTreeNode | null | undefined): Array<{ 
 
 /**
  * Generate base regex with named groups for tasks with subTasks.
- * Uses GUID-based group names (g_[a-f0-9]{12}) — never canonicalKey or label.
+ * Uses deterministic group names (s[0-9]+) or GUID (g_[a-f0-9]{12}) — never semantic names or label.
  *
  * Returns both the generated regex string and the mapping of nodeId → groupName
  * so the caller can persist groupNames in SubDataMapping.
@@ -124,7 +124,7 @@ export interface NamedGroupsValidationResult {
 
 /**
  * Validate that every SubDataMapping entry has a valid GUID groupName,
- * that every groupName appears in the regex, and that no canonicalKey
+ * that every groupName appears in the regex, and that no semantic names
  * appears as a named group.
  *
  * @param regex         - The composite regex pattern.
@@ -132,7 +132,7 @@ export interface NamedGroupsValidationResult {
  */
 export function validateGroupNames(
   regex: string | undefined,
-  subDataMapping: Record<string, { canonicalKey: string; groupName: string; label?: string; type?: string }>
+  subDataMapping: Record<string, { groupName: string; label: string; type?: string }>
 ): NamedGroupsValidationResult {
   const entries = Object.entries(subDataMapping);
   const result: NamedGroupsValidationResult = {
@@ -198,13 +198,14 @@ export function validateGroupNames(
     }
   }
 
-  // 4. No canonicalKey must appear as a named group in the regex
-  for (const [subId, info] of entries) {
-    if (info.canonicalKey && regexGroups.includes(info.canonicalKey)) {
+  // 4. No semantic names (day, month, year, etc.) must appear as named groups in the regex
+  const semanticNames = ['day', 'month', 'year', 'giorno', 'mese', 'anno', 'firstname', 'lastname', 'nome', 'cognome'];
+  for (const group of regexGroups) {
+    if (semanticNames.includes(group.toLowerCase())) {
       result.valid = false;
       result.errors.push(
-        `canonicalKey '${info.canonicalKey}' for subtask '${subId}' appears as a named group in the regex. ` +
-        `Only GUID groupNames (g_[a-f0-9]{12}) are allowed as group names.`
+        `Semantic name '${group}' appears as a named group in the regex. ` +
+        `Only technical groupNames (s[0-9]+ or g_[a-f0-9]{12}) are allowed as group names.`
       );
     }
   }
@@ -226,7 +227,7 @@ export function validateGroupNames(
 /**
  * @deprecated Use validateGroupNames with SubDataMapping instead.
  * Validate that regex named groups match subTaskKeys from subNodes.
- * This legacy version validates against canonicalKey-derived names.
+ * This legacy version validates against semantic names.
  */
 export function validateNamedGroups(regex: string | undefined, subNodes: TaskTreeNode[]): NamedGroupsValidationResult {
   const result: NamedGroupsValidationResult = {

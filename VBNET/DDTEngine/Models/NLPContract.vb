@@ -21,7 +21,7 @@ Public Class NLPContract
     Public Property SourceTemplateId As String
 
     ''' <summary>
-    ''' Mapping tra subId e canonicalKey per l'estrazione
+    ''' Mapping tra subId e metadata per l'estrazione
     ''' </summary>
     Public Property SubDataMapping As Dictionary(Of String, SubDataMappingInfo)
 
@@ -155,23 +155,18 @@ End Class
 
 ''' <summary>
 ''' Mapping info for a composite sub-field.
-''' GroupName is the REQUIRED technical regex group name (format: g_[a-f0-9]{12}).
-''' CanonicalKey carries semantic meaning only; Label is UI-only.
-''' Neither CanonicalKey nor Label must ever appear as a regex group name.
+''' GroupName is the REQUIRED technical regex group name (format: s[0-9]+ or g_[a-f0-9]{12}).
+''' Label is required and used for UI display only.
+''' Neither Label nor any semantic name must ever appear as a regex group name.
 ''' </summary>
 Public Class SubDataMappingInfo
     ''' <summary>
-    ''' Semantic key (e.g. "day", "month", "year"). UI and domain use only.
-    ''' </summary>
-    Public Property CanonicalKey As String
-
-    ''' <summary>
-    ''' Required. Technical regex group name (format: g_[a-f0-9]{12}).
+    ''' Required. Technical regex group name (format: s[0-9]+ or g_[a-f0-9]{12}).
     ''' Sole source of truth for extraction. Must match the named group in the pattern.
     ''' </summary>
     Public Property GroupName As String
 
-    ''' <summary>UI label only — never enters the regex.</summary>
+    ''' <summary>Required. UI label — never enters the regex.</summary>
     Public Property Label As String
 
     ''' <summary>Data type (e.g. "number", "text", "date").</summary>
@@ -230,13 +225,13 @@ Public Class AmbiguityConfig
     Public Property AmbiguousValues As AmbiguousValuesConfig
 
     ''' <summary>
-    ''' Lista di canonicalKey che possono essere ambigui
+    ''' Lista di subId che possono essere ambigui
     ''' </summary>
-    Public Property AmbiguousCanonicalKeys As List(Of String)
+    Public Property AmbiguousSubIds As List(Of String)
 
     Public Sub New()
         AmbiguousValues = New AmbiguousValuesConfig()
-        AmbiguousCanonicalKeys = New List(Of String)()
+        AmbiguousSubIds = New List(Of String)()
     End Sub
 End Class
 

@@ -84,7 +84,7 @@ function tryRegexExtraction(text: string, contract: NLPContract, activeSubId?: s
     console.log('🔍 [NLP Regex] Estrazione con mainPattern', {
         mode: activeSubId ? 'collecting_sub' : 'collecting_main',
         activeSubId: activeSubId ? activeSubId.substring(0, 20) + '...' : undefined,
-        activeSubCanonicalKey: activeSubId ? contract.subDataMapping[activeSubId]?.canonicalKey : undefined,
+        activeSubLabel: activeSubId ? contract.subDataMapping[activeSubId]?.label : undefined,
         hasPlaceholder: hasPlaceholder ? '❌ YES (NOT COMPILED!)' : '✅ NO (compiled)',
         patternPreview: mainPattern.substring(0, 150),
         templateName: contract.templateName
