@@ -1,0 +1,89 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <OptionStrict>On</OptionStrict>
+    <OptionExplicit>On</OptionExplicit>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <RootNamespace>TaskEngine</RootNamespace>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DebugType>full</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+    <Optimize>false</Optimize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- No project references needed for Models (they are self-contained) -->
+    <!-- Compiler reference removed to avoid circular dependency -->
+    <!-- DDTEngine reference removed (Models moved here) -->
+  </ItemGroup>
+
+  <!-- Interfaces (moved from DDTEngine) -->
+  <ItemGroup>
+    <Compile Include="Interfaces\ITranslationResolver.vb" />
+  </ItemGroup>
+
+  <!-- Models (moved from DDTEngine) -->
+  <ItemGroup>
+    <!-- Enums and primitive models (no dependencies) -->
+    <Compile Include="Models\DialogueStepType.vb" />
+    <Compile Include="Models\TaskTypes.vb" />
+    <Compile Include="Models\IVariableContext.vb" />
+    <Compile Include="Models\ParseResultType.vb" />
+    <Compile Include="Models\ParseResult.vb" />
+    <Compile Include="Models\ValidationCondition.vb" />
+    <Compile Include="Models\NLPContract.vb" />
+    <Compile Include="Models\CompiledNlpContract.vb" />
+    <Compile Include="Models\Escalation.vb" />
+    <Compile Include="Models\DialogueStep.vb" />
+    <!-- ITask (forward-references TaskUtterance; resolved at compile time) -->
+    <Compile Include="Models\ITask.vb" />
+    <!-- Task implementations -->
+    <Compile Include="Models\Tasks\TaskBase.vb" />
+    <Compile Include="Models\Tasks\MessageTask.vb" />
+    <Compile Include="Models\Tasks\CloseSessionTask.vb" />
+    <Compile Include="Models\Tasks\TransferTask.vb" />
+    <!-- JSON converters -->
+    <Compile Include="Models\Converters\ITaskConverter.vb" />
+    <!-- Core domain model -->
+    <Compile Include="Models\TaskUtterance.vb" />
+    <Compile Include="Models\TurnResult.vb" />
+    <!-- Deprecated compatibility stub - REMOVED: conflicts with DDTInstance.vb -->
+    <!-- <Compile Include="Models\TaskInstance.vb" /> -->
+    <!-- DTOs for JSON deserialization -->
+    <Compile Include="Models\DTO\ResponseDTO.vb" />
+    <Compile Include="Models\DTO\EscalationDTO.vb" />
+    <Compile Include="Models\DTO\DialogueStepDTO.vb" />
+    <!-- Variable context -->
+    <Compile Include="Models\GlobalVariableContext.vb" />
+    <!-- Helpers -->
+    <Compile Include="Models\Utils.vb" />
+    <!-- Legacy/Deprecated (will be removed later) -->
+    <Compile Include="Models\DDTInstance.vb" />
+    <Compile Include="Models\DDTNode.vb" />
+  </ItemGroup>
+
+  <!-- Parsers (moved from DDTEngine) -->
+  <ItemGroup>
+    <Compile Include="Parsers\MessageEventArgs.vb" />
+    <Compile Include="Parsers\IParsableTask.vb" />
+    <Compile Include="Parsers\Parser.vb" />
+    <Compile Include="Parsers\ParserExtraction.vb" />
+  </ItemGroup>
+
+  <!-- Placeholder files for other folders -->
+  <ItemGroup>
+    <Compile Include="FlowOrchestrator\FlowOrchestratorPlaceholder.vb" />
+    <Compile Include="Tasks\TaskUtterance\TaskUtterancePlaceholder.vb" />
+    <Compile Include="Tasks\TaskSayMessage\TaskSayMessagePlaceholder.vb" />
+    <Compile Include="Tasks\TaskBackendCall\TaskBackendCallPlaceholder.vb" />
+  </ItemGroup>
+
+</Project>

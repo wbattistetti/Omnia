@@ -16,7 +16,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DDTEngine\TaskEngine.vbproj" />
+    <!-- Engine for Models and Parsers -->
+    <ProjectReference Include="..\Engine\Engine.vbproj" />
   </ItemGroup>
 
   <ItemGroup>

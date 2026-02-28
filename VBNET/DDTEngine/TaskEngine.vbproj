@@ -19,50 +19,18 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Reference to Engine for Models (TaskLoader uses TaskUtterance) -->
+    <ProjectReference Include="..\Engine\Engine.vbproj" />
+  </ItemGroup>
+
   <!-- Files are listed in dependency order -->
   <ItemGroup>
-    <!-- Interfaces -->
-    <Compile Include="Interfaces\ITranslationResolver.vb" />
-    <!-- Enums and primitive models (no dependencies) -->
-    <Compile Include="Models\DialogueStepType.vb" />
-    <Compile Include="Models\TaskTypes.vb" />
-    <Compile Include="Models\IVariableContext.vb" />
-    <Compile Include="Models\ParseResultType.vb" />
-    <Compile Include="Models\ParseResult.vb" />
-    <Compile Include="Models\ValidationCondition.vb" />
-    <Compile Include="Models\NLPContract.vb" />
-    <Compile Include="Models\CompiledNlpContract.vb" />
-    <Compile Include="Models\Escalation.vb" />
-    <Compile Include="Models\DialogueStep.vb" />
-    <!-- ITask (forward-references TaskUtterance; resolved at compile time) -->
-    <Compile Include="Models\ITask.vb" />
-    <!-- Task implementations -->
-    <Compile Include="Models\Tasks\TaskBase.vb" />
-    <Compile Include="Models\Tasks\MessageTask.vb" />
-    <Compile Include="Models\Tasks\CloseSessionTask.vb" />
-    <Compile Include="Models\Tasks\TransferTask.vb" />
-    <!-- JSON converters -->
-    <Compile Include="Models\Converters\ITaskConverter.vb" />
-    <!-- Core domain model -->
-    <Compile Include="Models\TaskUtterance.vb" />
-    <!-- TaskUtteranceStateMachine.vb REMOVED: replaced by StatelessDialogueEngine -->
-    <Compile Include="Models\TurnResult.vb" />
-    <!-- Deprecated compatibility stub -->
-    <Compile Include="Models\TaskInstance.vb" />
-    <!-- DTOs for JSON deserialization -->
-    <Compile Include="Models\DTO\ResponseDTO.vb" />
-    <Compile Include="Models\DTO\EscalationDTO.vb" />
-    <Compile Include="Models\DTO\DialogueStepDTO.vb" />
-    <!-- Variable context -->
-    <Compile Include="Models\GlobalVariableContext.vb" />
+    <!-- Interfaces moved to Engine project -->
+    <!-- Models moved to Engine project -->
     <!-- Helpers -->
     <Compile Include="Helpers\TaskLoader.vb" />
-    <!-- Engine -->
-    <Compile Include="Engine\Utils.vb" />
-    <Compile Include="Engine\MessageEventArgs.vb" />
-    <Compile Include="Engine\IParsableTask.vb" />
-    <Compile Include="Engine\Parser.vb" />
-    <Compile Include="Engine\ParserExtraction.vb" />
+    <!-- Engine/Parsers moved to Engine project -->
     <!-- Motore.vb REMOVED: Use TaskEngine instead -->
     <!-- TaskEngine REMOVED: Moved to Orchestrator/TaskEngine/ (simplified, no reflection) -->
   </ItemGroup>

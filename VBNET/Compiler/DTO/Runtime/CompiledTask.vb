@@ -1,6 +1,8 @@
 Option Strict On
 Option Explicit On
+Imports TaskEngine.Engine
 Imports TaskEngine
+Imports TaskEngine.Parsers
 Imports Newtonsoft.Json
 Imports System.Linq
 
