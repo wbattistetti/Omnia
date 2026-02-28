@@ -64,18 +64,6 @@ Namespace ApiServer.SessionStorage
         ''' </summary>
         Public Shared Function SerializeTaskSession(session As TaskSession) As String
             Try
-                ' ✅ LOG DETTAGLIATO PRIMA DELLA SERIALIZZAZIONE
-                Console.WriteLine($"🔥🔥🔥 SerializeTaskSession CALLED - SessionId={session.SessionId}")
-                System.Diagnostics.Debug.WriteLine($"🔥🔥🔥 SerializeTaskSession CALLED - SessionId={session.SessionId}")
-                Console.WriteLine($"   HasDialogueContextJson: {Not String.IsNullOrEmpty(session.DialogueContextJson)}")
-                System.Diagnostics.Debug.WriteLine($"   HasDialogueContextJson: {Not String.IsNullOrEmpty(session.DialogueContextJson)}")
-                If Not String.IsNullOrEmpty(session.DialogueContextJson) Then
-                    Console.WriteLine($"   DialogueContextJsonLength: {session.DialogueContextJson.Length}")
-                    System.Diagnostics.Debug.WriteLine($"   DialogueContextJsonLength: {session.DialogueContextJson.Length}")
-                End If
-                Console.Out.Flush()
-                System.Diagnostics.Debug.Flush()
-
                 ' ✅ REMOVED: TaskInstance legacy code - state is now managed by TaskEngine via DialogueContext
                 ' Extract the mutable state snapshot before serialization (if still using TaskUtteranceState)
                 Dim stateSnapshot As TaskEngine.TaskUtteranceStateSnapshot = Nothing
@@ -98,14 +86,6 @@ Namespace ApiServer.SessionStorage
                     .DialogueContextJson = session.DialogueContextJson
                 }
 
-                ' ✅ LOG DETTAGLIATO DOPO LA CREAZIONE DI DATA
-                Console.WriteLine($"🔥🔥🔥 SerializeTaskSession: TaskSessionData created")
-                System.Diagnostics.Debug.WriteLine($"🔥🔥🔥 SerializeTaskSession: TaskSessionData created")
-                Console.WriteLine($"   Data.DialogueContextJson: {If(String.IsNullOrEmpty(data.DialogueContextJson), "NULL/EMPTY", $"LENGTH={data.DialogueContextJson.Length}")}")
-                System.Diagnostics.Debug.WriteLine($"   Data.DialogueContextJson: {If(String.IsNullOrEmpty(data.DialogueContextJson), "NULL/EMPTY", $"LENGTH={data.DialogueContextJson.Length}")}")
-                Console.Out.Flush()
-                System.Diagnostics.Debug.Flush()
-
                 Return JsonConvert.SerializeObject(data, New JsonSerializerSettings With {
                     .ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
                     .NullValueHandling = NullValueHandling.Ignore
@@ -125,19 +105,6 @@ Namespace ApiServer.SessionStorage
                     .NullValueHandling = NullValueHandling.Ignore
                 }
                 Dim data = JsonConvert.DeserializeObject(Of TaskSessionData)(json, settings)
-
-                ' ✅ LOG DETTAGLIATO DOPO LA DESERIALIZZAZIONE
-                Console.WriteLine($"🔥🔥🔥 DeserializeTaskSession: TaskSessionData deserialized")
-                System.Diagnostics.Debug.WriteLine($"🔥🔥🔥 DeserializeTaskSession: TaskSessionData deserialized")
-                If data IsNot Nothing Then
-                    Console.WriteLine($"   Data.DialogueContextJson: {If(String.IsNullOrEmpty(data.DialogueContextJson), "NULL/EMPTY", $"LENGTH={data.DialogueContextJson.Length}")}")
-                    System.Diagnostics.Debug.WriteLine($"   Data.DialogueContextJson: {If(String.IsNullOrEmpty(data.DialogueContextJson), "NULL/EMPTY", $"LENGTH={data.DialogueContextJson.Length}")}")
-                Else
-                    Console.WriteLine($"   Data is NULL!")
-                    System.Diagnostics.Debug.WriteLine($"   Data is NULL!")
-                End If
-                Console.Out.Flush()
-                System.Diagnostics.Debug.Flush()
 
                 If data Is Nothing Then
                     Return Nothing
@@ -163,14 +130,6 @@ Namespace ApiServer.SessionStorage
                     .TaskUtteranceState = data.TaskUtteranceState,
                     .DialogueContextJson = data.DialogueContextJson
                 }
-
-                ' ✅ LOG DETTAGLIATO DOPO LA CREAZIONE DI SESSION
-                Console.WriteLine($"🔥🔥🔥 DeserializeTaskSession: TaskSession created")
-                System.Diagnostics.Debug.WriteLine($"🔥🔥🔥 DeserializeTaskSession: TaskSession created")
-                Console.WriteLine($"   Session.DialogueContextJson: {If(String.IsNullOrEmpty(session.DialogueContextJson), "NULL/EMPTY", $"LENGTH={session.DialogueContextJson.Length}")}")
-                System.Diagnostics.Debug.WriteLine($"   Session.DialogueContextJson: {If(String.IsNullOrEmpty(session.DialogueContextJson), "NULL/EMPTY", $"LENGTH={session.DialogueContextJson.Length}")}")
-                Console.Out.Flush()
-                System.Diagnostics.Debug.Flush()
 
                 ' ✅ REMOVED: TaskInstance legacy code - state is now managed by TaskEngine via DialogueContext
                 ' RuntimeTask viene caricato dal DialogRepository quando necessario

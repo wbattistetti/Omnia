@@ -18,8 +18,9 @@ Partial Public Class Parser
     ''' <summary>
     ''' Extracts a single value from an utterance using the node NLP contract.
     ''' Returns Nothing when no match; throws on structural errors.
+    ''' ✅ STATELESS: Accetta IParsableTask per evitare dipendenza circolare
     ''' </summary>
-    Private Shared Function ExtractSimple(input As String, node As TaskUtterance) As String
+    Private Shared Function ExtractSimple(input As String, node As IParsableTask) As String
         If String.IsNullOrEmpty(input) Then
             Throw New ArgumentException("Input cannot be empty.", NameOf(input))
         End If
@@ -55,37 +56,16 @@ Partial Public Class Parser
     ''' Extracts multiple sub-field values from a composite utterance.
     ''' Iterates SubDataMapping and uses EffectiveGroupName() as the sole group-name source.
     ''' Returns Nothing when the pattern does not match; throws on structural errors.
+    ''' ✅ STATELESS: Accetta IParsableTask per evitare dipendenza circolare
     ''' </summary>
     Private Shared Function ExtractComposite(
             input As String,
-            node As TaskUtterance) As System.Collections.Generic.Dictionary(Of String, Object)
-
-        ' ✅ LOG: Entry point
-        Console.WriteLine($"[ParserExtraction.ExtractComposite] 🔍 ENTRY - Task '{If(node IsNot Nothing, node.Id, "NULL")}'")
-        Console.WriteLine($"[ParserExtraction.ExtractComposite]   - node IsNothing: {node Is Nothing}")
-        If node IsNot Nothing Then
-            Console.WriteLine($"[ParserExtraction.ExtractComposite]   - node.HasSubTasks(): {node.HasSubTasks()}")
-            Console.WriteLine($"[ParserExtraction.ExtractComposite]   - node.NlpContract IsNothing: {node.NlpContract Is Nothing}")
-            If node.NlpContract IsNot Nothing Then
-                Console.WriteLine($"[ParserExtraction.ExtractComposite]   - node.NlpContract.SubDataMapping IsNothing: {node.NlpContract.SubDataMapping Is Nothing}")
-                If node.NlpContract.SubDataMapping IsNot Nothing Then
-                    Console.WriteLine($"[ParserExtraction.ExtractComposite]   - node.NlpContract.SubDataMapping.Count: {node.NlpContract.SubDataMapping.Count}")
-                    For Each kvp In node.NlpContract.SubDataMapping
-                        Console.WriteLine($"[ParserExtraction.ExtractComposite]     - [{kvp.Key}] → groupName: '{kvp.Value.GroupName}'")
-                    Next
-                Else
-                    Console.WriteLine($"[ParserExtraction.ExtractComposite] ⚠️ node.NlpContract.SubDataMapping is Nothing at entry!")
-                End If
-            Else
-                Console.WriteLine($"[ParserExtraction.ExtractComposite] ⚠️ node.NlpContract is Nothing at entry!")
-            End If
-        End If
+            node As IParsableTask) As System.Collections.Generic.Dictionary(Of String, Object)
 
         If node Is Nothing OrElse Not node.HasSubTasks() Then Return Nothing
 
         Dim contract = node.NlpContract
         If contract Is Nothing Then
-            Console.WriteLine($"[ParserExtraction.ExtractComposite] ❌ Task '{If(node IsNot Nothing, node.Id, "NULL")}': NlpContract is Nothing - throwing exception")
             Throw New InvalidOperationException(
                 $"Task '{node.Id}' has no NlpContract. Cannot perform composite extraction.")
         End If
@@ -100,20 +80,7 @@ Partial Public Class Parser
                 $"The contract must contain a 'regex' contract in the 'contracts' array with at least one pattern.")
         End If
 
-        ' ✅ LOG: Verifica prima di usare SubDataMapping
-        Console.WriteLine($"[ParserExtraction.TryExtractComposite] 🔍 Task '{node.Id}': Checking SubDataMapping")
-        Console.WriteLine($"[ParserExtraction.TryExtractComposite]   - contract.SubDataMapping IsNothing: {contract.SubDataMapping Is Nothing}")
-        If contract.SubDataMapping IsNot Nothing Then
-            Console.WriteLine($"[ParserExtraction.TryExtractComposite]   - contract.SubDataMapping.Count: {contract.SubDataMapping.Count}")
-            For Each kvp In contract.SubDataMapping
-                Console.WriteLine($"[ParserExtraction.TryExtractComposite]     - [{kvp.Key}] → groupName: '{kvp.Value.GroupName}'")
-            Next
-        Else
-            Console.WriteLine($"[ParserExtraction.TryExtractComposite] ⚠️ contract.SubDataMapping is Nothing!")
-        End If
-
         If contract.SubDataMapping Is Nothing OrElse contract.SubDataMapping.Count = 0 Then
-            Console.WriteLine($"[ParserExtraction.TryExtractComposite] ❌ Task '{node.Id}': SubDataMapping is empty - throwing exception")
             Throw New InvalidOperationException(
                 $"Task '{node.Id}': SubDataMapping is empty. Cannot map extracted groups to sub-tasks.")
         End If

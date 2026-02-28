@@ -83,17 +83,18 @@ Namespace TaskEngine
                     End If
 
                     ' Input ricevuto → analizza direttamente
-                    Dim parseResult As ParseResultWithStatus = ProcessTurnHelpers.RunContractsInCascade(currentTask, utterance)
+                    Dim parseResult As ParseResultWithStatus = ProcessTurnHelpers.RunContractsInCascade(currentTask, utterance, state.CurrentStepType)
 
                     Select Case parseResult.Status
 
                         Case ParseStatus.Match
 
-                            ProcessTurnHelpers.FillTaskFromParseResult(currentTask, parseResult)
+                            ' ✅ STATELESS: Salva in state.Memory invece di currentTask.Value
+                            ProcessTurnHelpers.FillTaskFromParseResult(parseResult, state)
 
                             ' Task parzialmente riempito → vai al prossimo subtask
-                            If ProcessTurnHelpers.IsPartiallyFilled(currentTask) Then
-                                state.CurrentTask = ProcessTurnHelpers.GetFirstUnfilledSubTask(currentTask)
+                            If ProcessTurnHelpers.IsPartiallyFilled(currentTask, state.Memory) Then
+                                state.CurrentTask = ProcessTurnHelpers.GetFirstUnfilledSubTask(currentTask, state.Memory)
                                 state.CurrentStepType = Global.TaskEngine.DialogueStepType.Start
                                 state.Mode = DialogueMode.ExecutingStep
                                 Return New DialogueTurnResult(output, state)
@@ -116,7 +117,7 @@ Namespace TaskEngine
                                 Dim parent = currentTask.Parent
 
                                 Dim nextSub = parent.SubTasks _
-                                .Where(Function(t) Not t.IsFilled()) _
+                                .Where(Function(t) Not t.IsFilled(state.Memory)) _
                                 .FirstOrDefault()
 
                                 If nextSub IsNot Nothing Then

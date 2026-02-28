@@ -14,21 +14,16 @@ Namespace TaskEngine
 
     ''' <summary>
     ''' Esegue i contratti NLP in cascata e restituisce ParseResult con ParseStatus
+    ''' ✅ STATELESS: Usa CompiledUtteranceTask direttamente, senza conversione
     ''' </summary>
-    Public Function RunContractsInCascade(currentTask As UtteranceTaskInstance, utterance As String) As ParseResultWithStatus
+    Public Function RunContractsInCascade(currentTask As UtteranceTaskInstance, utterance As String, currentStepType As Global.TaskEngine.DialogueStepType) As ParseResultWithStatus
         If currentTask Is Nothing OrElse currentTask.CompiledTask Is Nothing Then
             Return New ParseResultWithStatus() With {.Status = ParseStatus.NoMatch}
         End If
 
-        ' ✅ Converti CompiledUtteranceTask in TaskUtterance per usare il Parser esistente
-        Dim taskUtterance = ConvertToTaskUtterance(currentTask.CompiledTask)
-        If taskUtterance Is Nothing Then
-            Return New ParseResultWithStatus() With {.Status = ParseStatus.NoMatch}
-        End If
-
-        ' ✅ Usa il Parser esistente
+        ' ✅ STATELESS: Usa CompiledUtteranceTask direttamente, senza conversione
         Dim parser As New Parser()
-        Dim parseResult = parser.Parse(utterance, taskUtterance)
+        Dim parseResult = parser.Parse(utterance, currentTask.CompiledTask, currentStepType)
 
         ' ✅ Converti ParseResultType in ParseStatus
         Dim status As ParseStatus
@@ -58,30 +53,26 @@ Namespace TaskEngine
     End Function
 
     ''' <summary>
-    ''' Popola il task con i dati estratti dal ParseResult
+    ''' Salva i dati estratti in state.Memory (persistente)
+    ''' ✅ STATELESS: Salva solo in state.Memory, non in currentTask.Value
     ''' </summary>
-    Public Sub FillTaskFromParseResult(currentTask As UtteranceTaskInstance, parseResult As ParseResultWithStatus)
+    Public Sub FillTaskFromParseResult(
+        parseResult As ParseResultWithStatus,
+        state As DialogueState
+    )
         If parseResult.ExtractedData Is Nothing OrElse parseResult.ExtractedData.Count = 0 Then
             Return
         End If
 
-        ' ✅ Se il task ha sub-task, popola i sub-task
-        If currentTask.SubTasks IsNot Nothing AndAlso currentTask.SubTasks.Count > 0 Then
-            For Each kvp In parseResult.ExtractedData
-                Dim subTask = currentTask.SubTasks.FirstOrDefault(Function(st) st.CompiledTask.Id = kvp.Key)
-                If subTask IsNot Nothing Then
-                    subTask.Value = kvp.Value
-                End If
-            Next
-        Else
-            ' ✅ Task atomico: popola direttamente il valore
-            If parseResult.ExtractedData.ContainsKey(currentTask.CompiledTask.Id) Then
-                currentTask.Value = parseResult.ExtractedData(currentTask.CompiledTask.Id)
-            ElseIf parseResult.ExtractedData.Count = 1 Then
-                ' ✅ Se c'è un solo valore, usalo
-                currentTask.Value = parseResult.ExtractedData.Values.First()
-            End If
+        ' ✅ STATELESS: Inizializza Memory se necessario
+        If state.Memory Is Nothing Then
+            state.Memory = New Dictionary(Of String, Object)()
         End If
+
+        ' ✅ STATELESS: Salva tutti i valori estratti in Memory (persistente)
+        For Each kvp In parseResult.ExtractedData
+            state.Memory(kvp.Key) = kvp.Value
+        Next
     End Sub
 
         ''' <summary>
@@ -135,20 +126,22 @@ Namespace TaskEngine
 
     ''' <summary>
     ''' Ottiene il primo sub-task non riempito
+    ''' ✅ STATELESS: Usa memory per verificare se è riempito
     ''' </summary>
-    Public Function GetFirstUnfilledSubTask(currentTask As UtteranceTaskInstance) As UtteranceTaskInstance
+    Public Function GetFirstUnfilledSubTask(currentTask As UtteranceTaskInstance, memory As Dictionary(Of String, Object)) As UtteranceTaskInstance
         If currentTask.SubTasks Is Nothing OrElse currentTask.SubTasks.Count = 0 Then
             Return Nothing
         End If
 
-        Return currentTask.SubTasks.FirstOrDefault(Function(st) Not st.IsFilled())
+        Return currentTask.SubTasks.FirstOrDefault(Function(st) Not st.IsFilled(memory))
     End Function
 
     ''' <summary>
     ''' Verifica se il task è parzialmente riempito
+    ''' ✅ STATELESS: Usa memory per verificare se è riempito
     ''' </summary>
-    Public Function IsPartiallyFilled(currentTask As UtteranceTaskInstance) As Boolean
-        Return currentTask.IsPartiallyFilled()
+    Public Function IsPartiallyFilled(currentTask As UtteranceTaskInstance, memory As Dictionary(Of String, Object)) As Boolean
+        Return currentTask.IsPartiallyFilled(memory)
     End Function
 
     ''' <summary>
@@ -158,31 +151,6 @@ Namespace TaskEngine
         Return currentTask.IsMainTask()
     End Function
 
-    ''' <summary>
-    ''' Converte CompiledUtteranceTask in TaskUtterance per usare il Parser
-    ''' TODO: Implementare conversione completa
-    ''' </summary>
-    Private Function ConvertToTaskUtterance(compiledTask As CompiledUtteranceTask) As TaskUtterance
-        ' ✅ Per ora crea un TaskUtterance minimale
-        ' TODO: Implementare conversione completa con Steps, NlpContract, SubTasks, ecc.
-        Dim taskUtterance As New TaskUtterance() With {
-            .Id = compiledTask.Id,
-            .Steps = compiledTask.Steps,
-            .NlpContract = compiledTask.NlpContract,
-            .SubTasks = New List(Of TaskUtterance)()
-        }
-
-        ' ✅ Converti SubTasks
-        If compiledTask.SubTasks IsNot Nothing Then
-            For Each subTask In compiledTask.SubTasks
-                Dim subTaskUtterance = ConvertToTaskUtterance(subTask)
-                subTaskUtterance.ParentData = taskUtterance
-                taskUtterance.SubTasks.Add(subTaskUtterance)
-            Next
-        End If
-
-        Return taskUtterance
-    End Function
 
     ''' <summary>
     ''' Crea UtteranceTaskInstance da CompiledUtteranceTask con struttura ricorsiva

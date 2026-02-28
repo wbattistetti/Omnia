@@ -2,23 +2,19 @@ Option Strict On
 Option Explicit On
 Imports Compiler
 Imports System.Linq
+Imports System.Collections.Generic
 
 Namespace TaskEngine
 
     ''' <summary>
     ''' UtteranceTaskInstance: Wrapper runtime per CompiledUtteranceTask
-    ''' Aggiunge stato runtime (counters, value) e metodi helper
+    ''' ✅ STATELESS: Aggiunge solo stato runtime (counters), i valori sono in state.Memory
     ''' </summary>
     Public Class UtteranceTaskInstance
     ''' <summary>
     ''' Task compilato sottostante
     ''' </summary>
     Public Property CompiledTask As CompiledUtteranceTask
-
-    ''' <summary>
-    ''' Valore estratto per questo task
-    ''' </summary>
-    Public Property Value As Object
 
     ''' <summary>
     ''' Counter NoInput per questo task
@@ -42,7 +38,6 @@ Namespace TaskEngine
 
     Public Sub New(compiledTask As CompiledUtteranceTask)
         Me.CompiledTask = compiledTask
-        Me.Value = Nothing
         Me.NoInputCounter = 0
         Me.NoMatchCounter = 0
         Me.Parent = Nothing
@@ -84,21 +79,24 @@ Namespace TaskEngine
     End Function
 
     ''' <summary>
-    ''' Verifica se il task è riempito (ha valore o tutti i sub-task sono riempiti)
+    ''' Verifica se il task è riempito (ha valore in state.Memory o tutti i sub-task sono riempiti)
+    ''' ✅ STATELESS: Legge da memory invece di Value
     ''' </summary>
-    Public Function IsFilled() As Boolean
+    Public Function IsFilled(memory As Dictionary(Of String, Object)) As Boolean
         If SubTasks IsNot Nothing AndAlso SubTasks.Count > 0 Then
-            Return SubTasks.All(Function(st) st.IsFilled())
+            Return SubTasks.All(Function(st) st.IsFilled(memory))
         End If
-        Return Value IsNot Nothing
+        ' ✅ STATELESS: Legge da memory invece di Value
+        Return memory IsNot Nothing AndAlso memory.ContainsKey(CompiledTask.Id)
     End Function
 
     ''' <summary>
     ''' Verifica se il task è parzialmente riempito (alcuni sub-task sono riempiti ma non tutti)
+    ''' ✅ STATELESS: Legge da memory invece di Value
     ''' </summary>
-    Public Function IsPartiallyFilled() As Boolean
+    Public Function IsPartiallyFilled(memory As Dictionary(Of String, Object)) As Boolean
         If SubTasks IsNot Nothing AndAlso SubTasks.Count > 0 Then
-            Dim filledCount = SubTasks.Where(Function(st) st.IsFilled()).Count()
+            Dim filledCount = SubTasks.Where(Function(st) st.IsFilled(memory)).Count()
             Return filledCount > 0 AndAlso filledCount < SubTasks.Count
         End If
         Return False

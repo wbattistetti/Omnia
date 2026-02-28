@@ -1,12 +1,14 @@
 ' Parser.vb
-' Parses user utterances against a TaskUtterance NLP contract.
+' Parses user utterances against a CompiledUtteranceTask NLP contract.
+' ✅ STATELESS: Accetta CompiledUtteranceTask direttamente, senza conversione
 
 Option Strict On
 Option Explicit On
 Imports System.Text.RegularExpressions
 
 ''' <summary>
-''' Interprets user utterances for a given TaskUtterance.
+''' Interprets user utterances for a given CompiledUtteranceTask.
+''' ✅ STATELESS: Accetta CompiledUtteranceTask direttamente, senza conversione
 ''' Stateless: receives the utterance as a parameter (no blocking queue).
 ''' </summary>
 Partial Public Class Parser
@@ -14,8 +16,9 @@ Partial Public Class Parser
     ''' <summary>
     ''' Parses an utterance in the context of the current task.
     ''' Returns NoInput when utterance is empty or null.
+    ''' ✅ STATELESS: Accetta IParsableTask per evitare dipendenza circolare
     ''' </summary>
-    Public Function Parse(utterance As String, current As TaskUtterance) As ParseResult
+    Public Function Parse(utterance As String, current As IParsableTask, Optional currentStepType As DialogueStepType = DialogueStepType.Start) As ParseResult
         If current Is Nothing Then
             Throw New ArgumentNullException(NameOf(current), "Current task cannot be Nothing.")
         End If
@@ -25,7 +28,7 @@ Partial Public Class Parser
         End If
 
         ' Handle confirmation state separately.
-        If current.State = DialogueStepType.Confirmation Then
+        If currentStepType = DialogueStepType.Confirmation Then
             Return ParseConfirmation(utterance, current)
         End If
 
@@ -41,7 +44,7 @@ Partial Public Class Parser
     ' Confirmation parsing
     ' -------------------------------------------------------------------------
 
-    Private Function ParseConfirmation(utterance As String, current As TaskUtterance) As ParseResult
+    Private Function ParseConfirmation(utterance As String, current As IParsableTask) As ParseResult
         Dim trimmed = utterance.Trim().ToLower()
 
         If IsYes(trimmed) Then
@@ -64,8 +67,14 @@ Partial Public Class Parser
         End If
 
         If Not String.IsNullOrEmpty(valueInput) Then
-            Dim corrected = TryExtractAndApply(valueInput, current)
-            If corrected Then Return New ParseResult() With {.Result = ParseResultType.Corrected}
+            ' ✅ STATELESS: Non modifica current.Value, restituisce solo i dati estratti
+            Dim corrected = TryExtract(valueInput, current)
+            If corrected IsNot Nothing AndAlso corrected.Count > 0 Then
+                Return New ParseResult() With {
+                    .Result = ParseResultType.Corrected,
+                    .ExtractedData = corrected
+                }
+            End If
         End If
 
         Return New ParseResult() With {.Result = ParseResultType.NoMatch}
@@ -75,13 +84,13 @@ Partial Public Class Parser
     ' Simple (leaf) extraction
     ' -------------------------------------------------------------------------
 
-    Private Function ParseSimple(utterance As String, current As TaskUtterance) As ParseResult
+    Private Function ParseSimple(utterance As String, current As IParsableTask) As ParseResult
         Dim value = ExtractSimple(utterance, current)
         If String.IsNullOrEmpty(value) Then
             Return New ParseResult() With {.Result = ParseResultType.NoMatch}
         End If
 
-        current.Value = value
+        ' ✅ STATELESS: Non modifica current.Value, restituisce solo i dati estratti
         Dim data As New System.Collections.Generic.Dictionary(Of String, Object)()
         data(current.Id) = value
 
@@ -95,16 +104,13 @@ Partial Public Class Parser
     ' Composite extraction
     ' -------------------------------------------------------------------------
 
-    Private Function ParseComposite(utterance As String, current As TaskUtterance) As ParseResult
+    Private Function ParseComposite(utterance As String, current As IParsableTask) As ParseResult
         Dim data = ExtractComposite(utterance, current)
         If data Is Nothing OrElse data.Count = 0 Then
             Return New ParseResult() With {.Result = ParseResultType.NoMatch}
         End If
 
-        For Each kvp In data
-            Dim subTask = FindSubTaskById(current, kvp.Key)
-            subTask.Value = kvp.Value
-        Next
+        ' ✅ STATELESS: Non modifica subTask.Value, restituisce solo i dati estratti
 
         Return New ParseResult() With {
             .Result = ParseResultType.Match,
@@ -116,31 +122,19 @@ Partial Public Class Parser
     ' Helpers
     ' -------------------------------------------------------------------------
 
-    Private Function TryExtractAndApply(utterance As String, current As TaskUtterance) As Boolean
+    ''' <summary>
+    ''' ✅ STATELESS: Estrae dati senza modificarli, restituisce Dictionary invece di Boolean
+    ''' </summary>
+    Private Function TryExtract(utterance As String, current As IParsableTask) As System.Collections.Generic.Dictionary(Of String, Object)
         If current.HasSubTasks() Then
-            Dim data = ExtractComposite(utterance, current)
-            If data Is Nothing OrElse data.Count = 0 Then Return False
-            For Each kvp In data
-                FindSubTaskById(current, kvp.Key).Value = kvp.Value
-            Next
-            Return True
+            Return ExtractComposite(utterance, current)
         End If
 
         Dim value = ExtractSimple(utterance, current)
-        If String.IsNullOrEmpty(value) Then Return False
-        current.Value = value
-        Return True
-    End Function
-
-    Private Shared Function FindSubTaskById(current As TaskUtterance, subId As String) As TaskUtterance
-        Dim matches = current.SubTasks.Where(Function(s) s.Id = subId).ToList()
-        If matches.Count = 0 Then
-            Throw New InvalidOperationException($"SubTask '{subId}' not found in task '{current.Id}'.")
-        End If
-        If matches.Count > 1 Then
-            Throw New InvalidOperationException($"Duplicate SubTask id '{subId}' in task '{current.Id}'.")
-        End If
-        Return matches.Single()
+        If String.IsNullOrEmpty(value) Then Return Nothing
+        Dim data As New System.Collections.Generic.Dictionary(Of String, Object)()
+        data(current.Id) = value
+        Return data
     End Function
 
     Private Shared Function IsYes(input As String) As Boolean

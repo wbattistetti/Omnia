@@ -65,22 +65,6 @@ Namespace ApiServer.Repositories
             If _cache.TryGetValue(cacheKey, Nothing) Then
                 Dim cachedDialog = _cache(cacheKey)
                 If cachedDialog IsNot Nothing Then
-                    ' ✅ LOG: Verifica SubDataMapping quando caricato dalla cache
-                    Console.WriteLine($"[DialogRepository.GetDialog] 🔍 Loaded task from CACHE")
-                    Console.WriteLine($"[DialogRepository.GetDialog]   - Task.Id: {cachedDialog.Id}")
-                    If cachedDialog.NlpContract IsNot Nothing Then
-                        Console.WriteLine($"[DialogRepository.GetDialog]   - NlpContract.SubDataMapping IsNothing: {cachedDialog.NlpContract.SubDataMapping Is Nothing}")
-                        If cachedDialog.NlpContract.SubDataMapping IsNot Nothing Then
-                            Console.WriteLine($"[DialogRepository.GetDialog]   - NlpContract.SubDataMapping.Count: {cachedDialog.NlpContract.SubDataMapping.Count}")
-                            For Each kvp In cachedDialog.NlpContract.SubDataMapping
-                                Console.WriteLine($"[DialogRepository.GetDialog]     - [{kvp.Key}] → groupName: '{kvp.Value.GroupName}'")
-                            Next
-                        Else
-                            Console.WriteLine($"[DialogRepository.GetDialog] ⚠️ SubDataMapping is Nothing in cached task!")
-                        End If
-                    Else
-                        Console.WriteLine($"[DialogRepository.GetDialog] ⚠️ NlpContract is Nothing in cached task!")
-                    End If
                     Return cachedDialog
                 End If
             End If
@@ -105,19 +89,6 @@ Namespace ApiServer.Repositories
                     )
                 End If
 
-                ' ✅ LOG: Verifica se SubDataMapping è presente nel JSON prima della deserializzazione
-                Dim jsonContainsSubDataMapping = jsonString.Contains("SubDataMapping")
-                Console.WriteLine($"[DialogRepository.GetDialog] 🔍 JSON from Redis")
-                Console.WriteLine($"[DialogRepository.GetDialog]   - JSON length: {jsonString.Length}")
-                Console.WriteLine($"[DialogRepository.GetDialog]   - JSON contains 'SubDataMapping': {jsonContainsSubDataMapping}")
-                If jsonContainsSubDataMapping Then
-                    Dim subDataMappingIndex = jsonString.IndexOf("SubDataMapping")
-                    Dim preview = jsonString.Substring(subDataMappingIndex, Math.Min(500, jsonString.Length - subDataMappingIndex))
-                    Console.WriteLine($"[DialogRepository.GetDialog]   - JSON SubDataMapping preview: {preview}")
-                Else
-                    Console.WriteLine($"[DialogRepository.GetDialog] ⚠️ JSON does NOT contain 'SubDataMapping'!")
-                End If
-
                 ' ✅ STEP 4: Deserializza CompiledUtteranceTask
                 Dim settings As New JsonSerializerSettings With {
                     .TypeNameHandling = TypeNameHandling.Auto,
@@ -126,42 +97,6 @@ Namespace ApiServer.Repositories
                     .Converters = New List(Of JsonConverter) From {New ITaskConverter()}
                 }
                 Dim compiledTask = JsonConvert.DeserializeObject(Of CompiledUtteranceTask)(jsonString, settings)
-
-                ' ✅ LOG: Verifica SubDataMapping dopo la deserializzazione
-                Console.WriteLine($"[DialogRepository.GetDialog] 🔍 Loaded task from Redis")
-                If compiledTask IsNot Nothing Then
-                    Console.WriteLine($"[DialogRepository.GetDialog]   - Task.Id: {compiledTask.Id}")
-                    If compiledTask.NlpContract IsNot Nothing Then
-                        Console.WriteLine($"[DialogRepository.GetDialog]   - NlpContract.SubDataMapping IsNothing: {compiledTask.NlpContract.SubDataMapping Is Nothing}")
-                        If compiledTask.NlpContract.SubDataMapping IsNot Nothing Then
-                            Console.WriteLine($"[DialogRepository.GetDialog]   - NlpContract.SubDataMapping.Count: {compiledTask.NlpContract.SubDataMapping.Count}")
-                            For Each kvp In compiledTask.NlpContract.SubDataMapping
-                                Console.WriteLine($"[DialogRepository.GetDialog]     - [{kvp.Key}] → groupName: '{kvp.Value.GroupName}'")
-                            Next
-                        Else
-                            Console.WriteLine($"[DialogRepository.GetDialog] ⚠️ SubDataMapping is Nothing after deserialization!")
-                        End If
-                    Else
-                        Console.WriteLine($"[DialogRepository.GetDialog] ⚠️ NlpContract is Nothing!")
-                    End If
-
-                    ' ✅ LOG: Verifica SubDataMapping nei SubTasks (ricorsivo)
-                    If compiledTask.SubTasks IsNot Nothing Then
-                        Console.WriteLine($"[DialogRepository.GetDialog]   - SubTasks.Count: {compiledTask.SubTasks.Count}")
-                        For Each subTask In compiledTask.SubTasks
-                            Console.WriteLine($"[DialogRepository.GetDialog]     - SubTask.Id: {subTask.Id}")
-                            If subTask.NlpContract IsNot Nothing Then
-                                Console.WriteLine($"[DialogRepository.GetDialog]       - SubTask.NlpContract.SubDataMapping IsNothing: {subTask.NlpContract.SubDataMapping Is Nothing}")
-                                If subTask.NlpContract.SubDataMapping IsNot Nothing Then
-                                    Console.WriteLine($"[DialogRepository.GetDialog]       - SubTask.NlpContract.SubDataMapping.Count: {subTask.NlpContract.SubDataMapping.Count}")
-                                    For Each kvp In subTask.NlpContract.SubDataMapping
-                                        Console.WriteLine($"[DialogRepository.GetDialog]         - [{kvp.Key}] → groupName: '{kvp.Value.GroupName}'")
-                                    Next
-                                End If
-                            End If
-                        Next
-                    End If
-                End If
 
                 If compiledTask Is Nothing Then
                     Return Nothing
@@ -201,50 +136,6 @@ Namespace ApiServer.Repositories
                     .NullValueHandling = NullValueHandling.Ignore
                 }
                 Dim json = JsonConvert.SerializeObject(compiledTask, settings)
-
-                ' ✅ LOG: Verifica SubDataMapping prima del salvataggio
-                Console.WriteLine($"[DialogRepository.SaveDialog] 🔍 Saving task {compiledTask.Id}")
-                If compiledTask.NlpContract IsNot Nothing Then
-                    Console.WriteLine($"[DialogRepository.SaveDialog]   - NlpContract.SubDataMapping IsNothing: {compiledTask.NlpContract.SubDataMapping Is Nothing}")
-                    If compiledTask.NlpContract.SubDataMapping IsNot Nothing Then
-                        Console.WriteLine($"[DialogRepository.SaveDialog]   - NlpContract.SubDataMapping.Count: {compiledTask.NlpContract.SubDataMapping.Count}")
-                        For Each kvp In compiledTask.NlpContract.SubDataMapping
-                            Console.WriteLine($"[DialogRepository.SaveDialog]     - [{kvp.Key}] → groupName: '{kvp.Value.GroupName}'")
-                        Next
-                    Else
-                        Console.WriteLine($"[DialogRepository.SaveDialog] ⚠️ SubDataMapping is Nothing before serialization!")
-                    End If
-                Else
-                    Console.WriteLine($"[DialogRepository.SaveDialog] ⚠️ NlpContract is Nothing!")
-                End If
-
-                ' ✅ LOG: Verifica se SubDataMapping è presente nel JSON
-                Dim jsonContainsSubDataMapping = json.Contains("SubDataMapping")
-                Console.WriteLine($"[DialogRepository.SaveDialog]   - JSON contains 'SubDataMapping': {jsonContainsSubDataMapping}")
-                If jsonContainsSubDataMapping Then
-                    Dim subDataMappingIndex = json.IndexOf("SubDataMapping")
-                    Dim preview = json.Substring(subDataMappingIndex, Math.Min(500, json.Length - subDataMappingIndex))
-                    Console.WriteLine($"[DialogRepository.SaveDialog]   - JSON SubDataMapping preview: {preview}")
-                Else
-                    Console.WriteLine($"[DialogRepository.SaveDialog] ⚠️ JSON does NOT contain 'SubDataMapping'!")
-                End If
-
-                ' ✅ LOG: Verifica SubDataMapping nei SubTasks (ricorsivo)
-                If compiledTask.SubTasks IsNot Nothing Then
-                    Console.WriteLine($"[DialogRepository.SaveDialog]   - SubTasks.Count: {compiledTask.SubTasks.Count}")
-                    For Each subTask In compiledTask.SubTasks
-                        Console.WriteLine($"[DialogRepository.SaveDialog]     - SubTask.Id: {subTask.Id}")
-                        If subTask.NlpContract IsNot Nothing Then
-                            Console.WriteLine($"[DialogRepository.SaveDialog]       - SubTask.NlpContract.SubDataMapping IsNothing: {subTask.NlpContract.SubDataMapping Is Nothing}")
-                            If subTask.NlpContract.SubDataMapping IsNot Nothing Then
-                                Console.WriteLine($"[DialogRepository.SaveDialog]       - SubTask.NlpContract.SubDataMapping.Count: {subTask.NlpContract.SubDataMapping.Count}")
-                                For Each kvp In subTask.NlpContract.SubDataMapping
-                                    Console.WriteLine($"[DialogRepository.SaveDialog]         - [{kvp.Key}] → groupName: '{kvp.Value.GroupName}'")
-                                Next
-                            End If
-                        End If
-                    Next
-                End If
 
                 ' ✅ STEP 2: Salva in Redis (senza TTL - immutabile)
                 Dim redisKey = GetDialogKey(projectId, version)

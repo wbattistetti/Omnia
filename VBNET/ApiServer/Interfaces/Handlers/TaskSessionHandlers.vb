@@ -288,29 +288,10 @@ Namespace ApiServer.Handlers
                     End If
 
                     ' ✅ Chiama ProcessTurn (FASE 1: solo messaggio iniziale)
-                    LogInfo("🔄 [ProcessTurn] Calling ProcessTurn", New With {
-                        .sessionId = newSessionId,
-                        .taskId = compiledTask.Id,
-                        .hasDialogueState = dialogueState IsNot Nothing,
-                        .turnState = If(dialogueState IsNot Nothing, dialogueState.TurnState.ToString(), "null")
-                    })
                     Dim result = TaskEngine.Orchestrator.TaskEngine.ProcessTurnEngine.ProcessTurn(dialogueState, "", resolveTranslation)
-
-                    LogInfo("✅ [ProcessTurn] ProcessTurn completed", New With {
-                        .sessionId = newSessionId,
-                        .messagesCount = If(result.Messages IsNot Nothing, result.Messages.Count, 0),
-                        .status = result.Status
-                    })
 
                     ' ✅ Emetti messaggi via SSE
                     Dim processTurnEmitter As EventEmitter = SessionManager.GetOrCreateEventEmitter(newSessionId)
-                    Dim listenerCountBefore = processTurnEmitter.ListenerCount("message")
-                    LogInfo("📡 [ProcessTurn] EventEmitter status", New With {
-                        .sessionId = newSessionId,
-                        .listenerCount = listenerCountBefore,
-                        .willBuffer = listenerCountBefore = 0
-                    })
-
                     If result.Messages IsNot Nothing AndAlso result.Messages.Count > 0 Then
                         For Each messageText As String In result.Messages
                             Dim messageData As Object = New With {
@@ -318,51 +299,16 @@ Namespace ApiServer.Handlers
                                 .stepType = "start",
                                 .timestamp = DateTime.UtcNow.ToString("O")
                             }
-                            LogInfo("📤 [ProcessTurn] Emitting message", New With {
-                                .sessionId = newSessionId,
-                                .messageText = If(messageText.Length > 50, messageText.Substring(0, 50) + "...", messageText),
-                                .stepType = "start",
-                                .listenerCount = listenerCountBefore
-                            })
                             processTurnEmitter.Emit("message", messageData)
                         Next
-                    Else
-                        LogInfo("⚠️ [ProcessTurn] No messages to emit", New With {
-                            .sessionId = newSessionId
-                        })
                     End If
 
                     ' ✅ Salva nuovo DialogueState nella sessione
                     ' ✅ Per costruzione, dialogueContext esiste sempre (creato al PASSO 7)
-                    Console.WriteLine("═══════════════════════════════════════════════════════════")
-                    Console.WriteLine("🔥 HandleTaskSessionStart: About to save DialogueState")
-                    Console.WriteLine($"   SessionId: {newSessionId}")
-                    Console.WriteLine($"   Result.NewState: {If(result.NewState IsNot Nothing, "NOT NULL", "NULL")}")
                     If result.NewState IsNot Nothing Then
-                        Console.WriteLine($"   Result.Mode: {result.NewState.Mode}")
-                        Console.WriteLine($"   Result.TurnState: {result.NewState.TurnState}")
-                        Console.WriteLine($"   Result.IsCompleted: {result.NewState.IsCompleted}")
-                    End If
-                    Console.Out.Flush()
-
-                    If result.NewState IsNot Nothing Then
-                        LogInfo("💾 [HandleTaskSessionStart] BEFORE SaveDialogueContext", New With {
-                            .sessionId = newSessionId,
-                            .resultMode = result.NewState.Mode.ToString(),
-                            .resultTurnState = result.NewState.TurnState.ToString(),
-                            .resultIsCompleted = result.NewState.IsCompleted
-                        })
-
                         dialogueContext = SessionManager.GetOrCreateDialogueContext(session)
                         dialogueContext.DialogueState = result.NewState
                         SessionManager.SaveDialogueContext(session, dialogueContext)
-
-                        LogInfo("✅ [HandleTaskSessionStart] AFTER SaveDialogueContext", New With {
-                            .sessionId = newSessionId,
-                            .savedMode = result.NewState.Mode.ToString(),
-                            .hasDialogueContext = dialogueContext IsNot Nothing,
-                            .hasDialogueState = dialogueContext IsNot Nothing AndAlso dialogueContext.DialogueState IsNot Nothing
-                        })
                     End If
 
                     ' ✅ Emetti evento waitingForInput se necessario
@@ -371,10 +317,6 @@ Namespace ApiServer.Handlers
                             .taskId = compiledTask.Id,
                             .timestamp = DateTime.UtcNow.ToString("O")
                         }
-                        LogInfo("⏳ [ProcessTurn] Emitting waitingForInput", New With {
-                            .sessionId = newSessionId,
-                            .taskId = compiledTask.Id
-                        })
                         processTurnEmitter.Emit("waitingForInput", waitingData)
                     End If
 
@@ -520,10 +462,6 @@ Namespace ApiServer.Handlers
                     .sessionId = sessionId
                 })
                 _sseStreamManager.OpenStream(sessionId, context.Response)
-                LogInfo("✅ [SSE Stream] SSE stream opened", New With {
-                    .sessionId = sessionId,
-                    .isStreamOpen = _sseStreamManager.IsStreamOpen(sessionId)
-                })
 
                 ' ✅ Invia messaggi bufferizzati se presenti
                 Dim streamManager = DirectCast(_sseStreamManager, ApiServer.Streaming.SseStreamManager)
@@ -545,9 +483,6 @@ Namespace ApiServer.Handlers
 
                 ' Send waitingForInput event if already waiting
                 If session.IsWaitingForInput Then
-                    LogInfo("⏳ [SSE Stream] Sending waitingForInput event", New With {
-                        .sessionId = sessionId
-                    })
                     _sseStreamManager.EmitEvent(sessionId, "waitingForInput", session.WaitingForInputData)
                 End If
 
@@ -571,9 +506,6 @@ Namespace ApiServer.Handlers
                                                                  .isStreamOpen = _sseStreamManager.IsStreamOpen(sessionId)
                                                              })
                                                              _sseStreamManager.EmitEvent(sessionId, "message", data)
-                                                             LogInfo("✅ [SSE Stream] onMessage handler completed", New With {
-                                                                 .sessionId = sessionId
-                                                             })
                                                          Catch ex As Exception
                                                              LogError("❌ [SSE Stream] Error in onMessage handler", ex, New With {
                                                                  .sessionId = sessionId,
@@ -623,11 +555,6 @@ Namespace ApiServer.Handlers
                 sharedEmitter.[On]("complete", onComplete)
                 sharedEmitter.[On]("error", onError)
                 Dim listenerCountAfter = sharedEmitter.ListenerCount("message")
-                LogInfo("✅ [SSE Stream] EventEmitter listeners registered", New With {
-                    .sessionId = sessionId,
-                    .listenerCountAfter = listenerCountAfter,
-                    .bufferedMessagesReplayed = listenerCountAfter > listenerCountBefore
-                })
 
                 ' ✅ STATELESS: Quando la connessione SSE si chiude, imposta SseConnected=False
                 context.RequestAborted.Register(Sub()
@@ -755,11 +682,6 @@ Namespace ApiServer.Handlers
                 ' ============================================
                 ' STEP 3 — Chiama ProcessTurn con l'input dell'utente
                 ' ============================================
-                LogInfo("🔄 [ProcessTurn] Calling ProcessTurn with user input", New With {
-                    .sessionId = sessionId,
-                    .input = request.Input,
-                    .taskId = compiledTask.Id
-                })
 
                 ' ✅ Carica DialogueState dalla sessione
                 Console.WriteLine("═══════════════════════════════════════════════════════════")
@@ -784,20 +706,8 @@ Namespace ApiServer.Handlers
                 Dim dialogueState As TaskEngine.Orchestrator.TaskEngine.DialogueState = Nothing
                 If dialogueContext IsNot Nothing AndAlso dialogueContext.DialogueState IsNot Nothing Then
                     dialogueState = dialogueContext.DialogueState
-                    LogInfo("✅ [HandleTaskSessionInput] DialogueState loaded from session", New With {
-                        .sessionId = sessionId,
-                        .loadedMode = dialogueState.Mode.ToString(),
-                        .loadedTurnState = dialogueState.TurnState.ToString(),
-                        .loadedIsCompleted = dialogueState.IsCompleted,
-                        .hasCurrentTask = dialogueState.CurrentTask IsNot Nothing
-                    })
                 Else
                     ' ⚠️ PROBLEMA: Lo stato non è stato trovato!
-                    LogInfo("⚠️ [HandleTaskSessionInput] WARNING: DialogueState not found, creating new one", New With {
-                        .sessionId = sessionId,
-                        .hasDialogueContext = dialogueContext IsNot Nothing,
-                        .hasDialogueState = If(dialogueContext IsNot Nothing, dialogueContext.DialogueState IsNot Nothing, False)
-                    })
                     ' ✅ Se non esiste, crea un nuovo DialogueState
                     dialogueState = New TaskEngine.Orchestrator.TaskEngine.DialogueState()
                     If dialogueContext Is Nothing Then
@@ -805,10 +715,6 @@ Namespace ApiServer.Handlers
                     End If
                     dialogueContext.DialogueState = dialogueState
                     SessionManager.SaveDialogueContext(session, dialogueContext)
-                    LogInfo("🆕 [HandleTaskSessionInput] Created new DialogueState with default Mode", New With {
-                        .sessionId = sessionId,
-                        .newMode = dialogueState.Mode.ToString()
-                    })
                 End If
 
                 ' ✅ Carica TranslationRepository
@@ -843,29 +749,11 @@ Namespace ApiServer.Handlers
                     resolveTranslation
                 )
 
-                LogInfo("✅ [ProcessTurn] ProcessTurn completed", New With {
-                    .sessionId = sessionId,
-                    .messagesCount = If(processTurnResult.Messages IsNot Nothing, processTurnResult.Messages.Count, 0),
-                    .status = processTurnResult.Status,
-                    .turnState = If(processTurnResult.NewState IsNot Nothing, processTurnResult.NewState.TurnState.ToString(), "null")
-                })
 
                 ' ✅ Salva il nuovo DialogueState (SaveDialogueContext salva automaticamente su Redis)
                 If processTurnResult.NewState IsNot Nothing Then
-                    LogInfo("💾 [HandleTaskSessionInput] BEFORE SaveDialogueContext", New With {
-                        .sessionId = sessionId,
-                        .resultMode = processTurnResult.NewState.Mode.ToString(),
-                        .resultTurnState = processTurnResult.NewState.TurnState.ToString(),
-                        .resultIsCompleted = processTurnResult.NewState.IsCompleted
-                    })
-
                     dialogueContext.DialogueState = processTurnResult.NewState
                     SessionManager.SaveDialogueContext(session, dialogueContext)
-
-                    LogInfo("✅ [HandleTaskSessionInput] AFTER SaveDialogueContext", New With {
-                        .sessionId = sessionId,
-                        .savedMode = processTurnResult.NewState.Mode.ToString()
-                    })
                 End If
 
                 ' ✅ Emetti messaggi via SSE

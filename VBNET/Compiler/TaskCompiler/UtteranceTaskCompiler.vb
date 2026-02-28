@@ -1,6 +1,8 @@
 Option Strict On
 Option Explicit On
+Imports System.Linq
 Imports Newtonsoft.Json
+Imports Newtonsoft.Json.Linq
 
 ''' <summary>
 ''' Compiler per task di tipo UtteranceInterpretation
@@ -52,154 +54,18 @@ Public Class UtteranceTaskCompiler
 
         If taskTreeExpanded IsNot Nothing Then
             Try
-                ' ✅ DIAG: Verifica steps PRIMA di compilare - LOGGING DETTAGLIATO
-                Console.WriteLine("=================================================================================")
-                Console.WriteLine("[DIAG] UtteranceTaskCompiler: Verifying steps before compilation...")
-                Console.WriteLine($"   TaskInstance.Id: {taskId}")
-                If template IsNot Nothing Then
-                    Console.WriteLine($"   Template.Id: {template.Id}")
-                    Console.WriteLine($"   Template.TemplateId: {If(String.IsNullOrEmpty(template.TemplateId), "null", template.TemplateId)}")
-                Else
-                    Console.WriteLine($"   Template.Id: (template is Nothing)")
-                End If
-                Console.WriteLine($"   TaskInstance.Steps IsNothing: {task.Steps Is Nothing}")
-
-                If task.Steps IsNot Nothing Then
-                    Console.WriteLine($"   TaskInstance.Steps.Count: {task.Steps.Count}")
-                    Console.WriteLine($"   TaskInstance.Steps.Keys: {String.Join(", ", task.Steps.Keys)}")
-
-                    ' ✅ LOGGING DETTAGLIATO: Per ogni chiave, mostra il tipo e le chiavi interne
-                    For Each key In task.Steps.Keys
-                        Dim stepValue = task.Steps(key)
-                        If stepValue IsNot Nothing Then
-                            Dim stepValueType = stepValue.GetType().Name
-                            Console.WriteLine($"     Steps[{key}]: Type={stepValueType}")
-
-                            ' Se è un dictionary, mostra le chiavi interne
-                            If TypeOf stepValue Is Dictionary(Of String, Object) Then
-                                Dim stepDict = DirectCast(stepValue, Dictionary(Of String, Object))
-                                Console.WriteLine($"       Internal keys: {String.Join(", ", stepDict.Keys)}")
-                            End If
-                        Else
-                            Console.WriteLine($"     Steps[{key}]: NULL")
-                        End If
-                    Next
-
-                    ' ✅ VERIFICA: Controlla se template.Id è presente nelle chiavi
-                    If template IsNot Nothing Then
-                        Dim templateIdInSteps = task.Steps.ContainsKey(template.Id)
-                        Console.WriteLine($"   Template.Id '{template.Id}' found in Steps.Keys: {templateIdInSteps}")
-                        If Not templateIdInSteps Then
-                            Console.WriteLine($"   ⚠️ WARNING: Template.Id '{template.Id}' NOT FOUND in instance.Steps!")
-                            Console.WriteLine($"   Available keys: {String.Join(", ", task.Steps.Keys)}")
-                        End If
-                    End If
-                Else
-                    Console.WriteLine($"   ⚠️ WARNING: TaskInstance.Steps is Nothing!")
-                End If
-
-                If taskTreeExpanded.Nodes IsNot Nothing AndAlso taskTreeExpanded.Nodes.Count > 0 Then
-                    Dim firstNode = taskTreeExpanded.Nodes(0)
-                    Console.WriteLine($"   FirstNode.Id: {firstNode.Id}")
-                    Console.WriteLine($"   FirstNode.TemplateId: {firstNode.TemplateId}")
-
-                    ' ✅ VERIFICA: Controlla se firstNode.TemplateId è presente nelle chiavi
-                    If task.Steps IsNot Nothing Then
-                        Dim nodeTemplateIdInSteps = task.Steps.ContainsKey(firstNode.TemplateId)
-                        Console.WriteLine($"   FirstNode.TemplateId '{firstNode.TemplateId}' found in Steps.Keys: {nodeTemplateIdInSteps}")
-                        If Not nodeTemplateIdInSteps Then
-                            Console.WriteLine($"   ⚠️ WARNING: FirstNode.TemplateId '{firstNode.TemplateId}' NOT FOUND in instance.Steps!")
-                        End If
-                    End If
-
-                    Console.WriteLine($"   FirstNode.Steps IsNothing: {firstNode.Steps Is Nothing}")
-                    If firstNode.Steps IsNot Nothing Then
-                        Console.WriteLine($"   FirstNode.Steps.Count: {firstNode.Steps.Count}")
-                        For Each dstep As Compiler.DialogueStep In firstNode.Steps
-                            Dim escalationsCount As Integer = If(dstep.Escalations IsNot Nothing, dstep.Escalations.Count, 0)
-                            Dim stepInfo As String = "     Step Type: " & dstep.Type & ", Escalations: " & escalationsCount.ToString()
-                            Console.WriteLine(stepInfo)
-                        Next
-                    Else
-                        Console.WriteLine($"   ⚠️ WARNING: FirstNode.Steps is Nothing (steps not applied from instance)")
-                    End If
-
-                    Console.WriteLine($"   FirstNode.SubTasks IsNothing: {firstNode.SubTasks Is Nothing}")
-                    If firstNode.SubTasks IsNot Nothing Then
-                        Console.WriteLine($"   FirstNode.SubTasks.Count: {firstNode.SubTasks.Count}")
-                        ' ✅ LOGGING DETTAGLIATO: Per ogni subTask, verifica se ha steps
-                        For Each subNode In firstNode.SubTasks
-                            Console.WriteLine($"     SubNode.Id: {subNode.Id}, SubNode.TemplateId: {subNode.TemplateId}")
-                            If task.Steps IsNot Nothing Then
-                                Dim subNodeTemplateIdInSteps = task.Steps.ContainsKey(subNode.TemplateId)
-                                Console.WriteLine($"       SubNode.TemplateId '{subNode.TemplateId}' found in Steps.Keys: {subNodeTemplateIdInSteps}")
-                                If Not subNodeTemplateIdInSteps Then
-                                    Console.WriteLine($"       ⚠️ WARNING: SubNode.TemplateId '{subNode.TemplateId}' NOT FOUND in instance.Steps!")
-                                End If
-                            End If
-                            Console.WriteLine($"       SubNode.Steps IsNothing: {subNode.Steps Is Nothing}")
-                            If subNode.Steps IsNot Nothing Then
-                                Console.WriteLine($"       SubNode.Steps.Count: {subNode.Steps.Count}")
-                            End If
-                        Next
-                    End If
-                End If
-                Console.WriteLine("=================================================================================")
-
                 Dim taskCompiler As New TaskCompiler()
                 Dim taskJson = JsonConvert.SerializeObject(taskTreeExpanded)
-
-                ' ✅ DIAG: Verifica se dataContract è presente nel JSON serializzato
-                Console.WriteLine($"[DIAG] UtteranceTaskCompiler: Serialized JSON length: {taskJson.Length}")
-                Dim containsDataContract = taskJson.Contains("dataContract")
-                Console.WriteLine($"[DIAG] UtteranceTaskCompiler: Serialized JSON contains 'dataContract': {containsDataContract}")
-                If containsDataContract Then
-                    Dim dataContractIndex = taskJson.IndexOf("dataContract")
-                    Dim preview = taskJson.Substring(dataContractIndex, Math.Min(300, taskJson.Length - dataContractIndex))
-                    Console.WriteLine($"[DIAG] UtteranceTaskCompiler: dataContract preview in JSON: {preview}")
-                End If
 
                 Dim compileResult = taskCompiler.Compile(taskJson)
                 If compileResult IsNot Nothing AndAlso compileResult.Task IsNot Nothing Then
                     Dim compiledRootTask = compileResult.Task
-
-                    ' ✅ DIAG: Verifica steps dopo compilazione
-                    Console.WriteLine("=================================================================================")
-                    Console.WriteLine("[DIAG] UtteranceTaskCompiler: Steps after compilation...")
-                    Console.WriteLine($"   CompiledUtteranceTask.Steps IsNothing: {compiledRootTask.Steps Is Nothing}")
-                    If compiledRootTask.Steps IsNot Nothing Then
-                        Console.WriteLine($"   CompiledUtteranceTask.Steps.Count: {compiledRootTask.Steps.Count}")
-                        For Each dstep As TaskEngine.DialogueStep In compiledRootTask.Steps
-                            Dim escalationsCount As Integer = If(dstep.Escalations IsNot Nothing, dstep.Escalations.Count, 0)
-                            Dim stepInfo As String = "     Step Type: " & dstep.Type & ", Escalations: " & escalationsCount.ToString()
-                            Console.WriteLine(stepInfo)
-                        Next
-                    End If
-                    Console.WriteLine($"   CompiledUtteranceTask.HasSubTasks: {compiledRootTask.HasSubTasks()}")
-                    If compiledRootTask.HasSubTasks() Then
-                        Console.WriteLine($"   CompiledUtteranceTask.SubTasks.Count: {compiledRootTask.SubTasks.Count}")
-                    End If
-                    Console.WriteLine("=================================================================================")
 
                     ' ✅ Usa direttamente il risultato compilato (non serve più conversione)
                     compiledTask.Steps = compiledRootTask.Steps
                     compiledTask.Constraints = compiledRootTask.Constraints
                     compiledTask.NlpContract = compiledRootTask.NlpContract
                     compiledTask.SubTasks = compiledRootTask.SubTasks
-
-                    ' ✅ DIAG: Verifica CompiledTask finale
-                    Console.WriteLine("=================================================================================")
-                    Console.WriteLine("[DIAG] UtteranceTaskCompiler: Final CompiledTask...")
-                    Console.WriteLine($"   CompiledTask.Id: {compiledTask.Id}")
-                    Console.WriteLine($"   CompiledTask.Steps IsNothing: {compiledTask.Steps Is Nothing}")
-                    If compiledTask.Steps IsNot Nothing Then
-                        Console.WriteLine($"   CompiledTask.Steps.Count: {compiledTask.Steps.Count}")
-                    End If
-                    Console.WriteLine($"   CompiledTask.SubTasks IsNothing: {compiledTask.SubTasks Is Nothing}")
-                    If compiledTask.SubTasks IsNot Nothing Then
-                        Console.WriteLine($"   CompiledTask.SubTasks.Count: {compiledTask.SubTasks.Count}")
-                    End If
-                    Console.WriteLine("=================================================================================")
                 End If
             Catch ex As Exception
                 Console.WriteLine($"[COMPILER] ERROR: Exception during compilation for task {taskId}: {ex.GetType().Name} - {ex.Message}")
@@ -452,6 +318,35 @@ Public Class UtteranceTaskCompiler
                 )
             End If
             Console.WriteLine($"[BuildTaskTreeFromSubTasksIds] Using dataContract from subTemplate {subTemplate.Id}, type: {subTemplate.DataContract.GetType().Name}")
+
+            ' ✅ TEMPORARY DEBUG: Log DataContract content per diagnosticare contracts mancanti
+            Console.WriteLine($"[BuildTaskTreeFromSubTasksIds] 🔍 subTemplate {subTemplate.Id} DataContract:")
+            If subTemplate.DataContract IsNot Nothing Then
+                Try
+                    Dim dcJson = JsonConvert.SerializeObject(subTemplate.DataContract)
+                    Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   DataContract JSON length: {dcJson.Length}")
+                    Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   DataContract JSON (first 800 chars): {If(dcJson.Length > 800, dcJson.Substring(0, 800) & "...", dcJson)}")
+
+                    ' Verifica se contracts è presente
+                    If TypeOf subTemplate.DataContract Is JObject Then
+                        Dim dcObj = CType(subTemplate.DataContract, JObject)
+                        If dcObj("contracts") IsNot Nothing Then
+                            Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   ✅ contracts found: type={dcObj("contracts").Type}")
+                            If dcObj("contracts").Type = JTokenType.Array Then
+                                Dim contractsArray = CType(dcObj("contracts"), JArray)
+                                Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   ✅ contracts array count: {contractsArray.Count}")
+                            End If
+                        Else
+                            Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   ⚠️ contracts NOT found in DataContract")
+                            Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   DataContract keys: {String.Join(", ", dcObj.Properties().Select(Function(p) p.Name))}")
+                        End If
+                    End If
+                Catch ex As Exception
+                    Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   ❌ Error serializing DataContract: {ex.Message}")
+                End Try
+            Else
+                Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   DataContract is Nothing")
+            End If
 
             ' ✅ Carica constraints dal template (solo Constraints, non DataContracts)
             Dim templateConstraints As List(Of Object) = Nothing

@@ -60,6 +60,7 @@
     <!-- Engine -->
     <Compile Include="Engine\Utils.vb" />
     <Compile Include="Engine\MessageEventArgs.vb" />
+    <Compile Include="Engine\IParsableTask.vb" />
     <Compile Include="Engine\Parser.vb" />
     <Compile Include="Engine\ParserExtraction.vb" />
     <!-- Motore.vb REMOVED: Use TaskEngine instead -->

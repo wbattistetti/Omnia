@@ -17,34 +17,26 @@ Namespace ApiServer.Handlers
         ''' Handles POST /api/runtime/compile
         ''' </summary>
         Public Async Function HandleCompileFlow(context As HttpContext) As System.Threading.Tasks.Task
-            Console.WriteLine("📥 [HandleCompileFlow] Received compilation request")
-
             Try
                 ' Enable buffering to allow reading the body multiple times if needed
                 Try
                     context.Request.EnableBuffering()
-                Catch ex As Exception
-                    Console.WriteLine($"⚠️ [HandleCompileFlow] EnableBuffering failed (may already be enabled): {ex.Message}")
+                Catch
+                    ' Ignore if already enabled
                 End Try
 
                 ' Reset stream position to beginning
                 Try
                     context.Request.Body.Position = 0
-                Catch ex As Exception
-                    Console.WriteLine($"⚠️ [HandleCompileFlow] Cannot reset stream position: {ex.Message}")
+                Catch
+                    ' Ignore if cannot reset
                 End Try
 
                 Dim body As String = Nothing
                 Try
                     Dim reader As New StreamReader(context.Request.Body)
                     body = Await reader.ReadToEndAsync()
-                    Console.WriteLine($"📦 [HandleCompileFlow] Body read successfully: {If(body IsNot Nothing, body.Length, 0)} characters")
-                    System.Diagnostics.Debug.WriteLine($"📦 [HandleCompileFlow] Body read successfully: {If(body IsNot Nothing, body.Length, 0)} characters")
                 Catch readEx As Exception
-                    Console.WriteLine($"❌ [HandleCompileFlow] Error reading request body: {readEx.Message}")
-                    Console.WriteLine($"Stack trace: {readEx.StackTrace}")
-                    System.Diagnostics.Debug.WriteLine($"❌ [HandleCompileFlow] Error reading request body: {readEx.Message}")
-
                     Dim errorJson = "{""status"":""error"",""message"":""Failed to read request body"",""error"":""" & readEx.Message.Replace("""", "\""") & """}"
                     context.Response.ContentType = "application/json"
                     context.Response.StatusCode = 400
@@ -53,9 +45,6 @@ Namespace ApiServer.Handlers
                 End Try
 
                 If String.IsNullOrEmpty(body) Then
-                    Console.WriteLine("❌ [HandleCompileFlow] Empty request body")
-                    System.Diagnostics.Debug.WriteLine("❌ [HandleCompileFlow] Empty request body")
-
                     Dim errorJson = "{""status"":""error"",""message"":""Empty request body""}"
                     context.Response.ContentType = "application/json"
                     context.Response.StatusCode = 400
@@ -63,93 +52,20 @@ Namespace ApiServer.Handlers
                     Return
                 End If
 
-                Console.WriteLine($"📦 [HandleCompileFlow] Request body preview (first 1000 chars): {body.Substring(0, Math.Min(1000, body.Length))}")
-                System.Diagnostics.Debug.WriteLine($"📦 [HandleCompileFlow] Request body preview (first 1000 chars): {body.Substring(0, Math.Min(1000, body.Length))}")
-
-                ' Try to parse as JObject to inspect structure
-                Try
-                    Dim jObj = Newtonsoft.Json.Linq.JObject.Parse(body)
-                    If jObj("nodes") IsNot Nothing Then
-                        Dim nodesArray = CType(jObj("nodes"), Newtonsoft.Json.Linq.JArray)
-                        Console.WriteLine($"🔍 [HandleCompileFlow] JSON has {nodesArray.Count} nodes")
-                        System.Diagnostics.Debug.WriteLine($"🔍 [HandleCompileFlow] JSON has {nodesArray.Count} nodes")
-
-                        If nodesArray.Count > 0 Then
-                            Dim firstNode = CType(nodesArray(0), Newtonsoft.Json.Linq.JObject)
-                            Console.WriteLine($"🔍 [HandleCompileFlow] First node keys: {String.Join(", ", firstNode.Properties().Select(Function(p) p.Name))}")
-                            System.Diagnostics.Debug.WriteLine($"🔍 [HandleCompileFlow] First node keys: {String.Join(", ", firstNode.Properties().Select(Function(p) p.Name))}")
-
-                            ' Check for rows property
-                            If firstNode("rows") IsNot Nothing Then
-                                Dim rowsArray = CType(firstNode("rows"), Newtonsoft.Json.Linq.JArray)
-                                Console.WriteLine($"✅ [HandleCompileFlow] First node has 'rows' property with {rowsArray.Count} items")
-                                System.Diagnostics.Debug.WriteLine($"✅ [HandleCompileFlow] First node has 'rows' property with {rowsArray.Count} items")
-
-                                If rowsArray.Count > 0 Then
-                                    Dim firstRow = CType(rowsArray(0), Newtonsoft.Json.Linq.JObject)
-                                    Console.WriteLine($"   First row keys: {String.Join(", ", firstRow.Properties().Select(Function(p) p.Name))}")
-                                    System.Diagnostics.Debug.WriteLine($"   First row keys: {String.Join(", ", firstRow.Properties().Select(Function(p) p.Name))}")
-                                End If
-                            Else
-                                Console.WriteLine($"⚠️ [HandleCompileFlow] First node does NOT have 'rows' property!")
-                                System.Diagnostics.Debug.WriteLine($"⚠️ [HandleCompileFlow] First node does NOT have 'rows' property!")
-
-                                ' Check for alternative property names
-                                Dim possibleNames = {"row", "data", "dataRows", "items", "tasks"}
-                                For Each name In possibleNames
-                                    If firstNode(name) IsNot Nothing Then
-                                        Console.WriteLine($"   Found alternative property: '{name}'")
-                                        System.Diagnostics.Debug.WriteLine($"   Found alternative property: '{name}'")
-                                    End If
-                                Next
-                            End If
-                        End If
-                    End If
-                Catch parseEx As Exception
-                    Console.WriteLine($"⚠️ [HandleCompileFlow] Could not parse JSON for inspection: {parseEx.Message}")
-                    System.Diagnostics.Debug.WriteLine($"⚠️ [HandleCompileFlow] Could not parse JSON for inspection: {parseEx.Message}")
-                End Try
-
                 Dim request As CompileFlowRequest = Nothing
                 Try
-                    Console.WriteLine("🔄 [HandleCompileFlow] Starting JSON deserialization...")
                     request = JsonConvert.DeserializeObject(Of CompileFlowRequest)(body, New JsonSerializerSettings() With {
                         .Error = Sub(sender, args)
-                                     Console.WriteLine($"❌ [HandleCompileFlow] JSON Error: {args.ErrorContext.Error.Message}")
-                                     Console.WriteLine($"   Path: {args.ErrorContext.Path}")
                                      args.ErrorContext.Handled = True
                                  End Sub
                     })
-                    Console.WriteLine($"✅ [HandleCompileFlow] JSON deserialization completed")
-
-                    ' ✅ DEBUG: Log deserialized tasks to verify type and templateId
-                    If request.Tasks IsNot Nothing AndAlso request.Tasks.Count > 0 Then
-                        Console.WriteLine($"🔍 [HandleCompileFlow] Deserialized {request.Tasks.Count} tasks:")
-                        For i = 0 To Math.Min(4, request.Tasks.Count - 1)
-                            Dim t = request.Tasks(i)
-                            Console.WriteLine($"   Task[{i}]: Id={t.Id}, Type={If(t.Type.HasValue, t.Type.Value.ToString(), "NULL")}, TemplateId={If(String.IsNullOrEmpty(t.TemplateId), "NULL/EMPTY", t.TemplateId)}, Value keys={If(t.Value IsNot Nothing, String.Join(", ", t.Value.Keys), "NULL")}")
-                            System.Diagnostics.Debug.WriteLine($"   Task[{i}]: Id={t.Id}, Type={If(t.Type.HasValue, t.Type.Value.ToString(), "NULL")}, TemplateId={If(String.IsNullOrEmpty(t.TemplateId), "NULL/EMPTY", t.TemplateId)}")
-                        Next
-                    Else
-                        Console.WriteLine($"⚠️ [HandleCompileFlow] No tasks in request (Tasks is Nothing or empty)")
-                    End If
                 Catch jsonEx As JsonReaderException
-                    Console.WriteLine($"❌ [HandleCompileFlow] JSON deserialization error: {jsonEx.Message}")
-                    Console.WriteLine($"   Line: {jsonEx.LineNumber}, Position: {jsonEx.LinePosition}")
-                    Console.WriteLine($"   Path: {jsonEx.Path}")
-
                     Dim errorJson = "{""status"":""error"",""message"":""Invalid JSON format"",""error"":""" & jsonEx.Message.Replace("""", "\""") & """,""line"":" & jsonEx.LineNumber & ",""position"":" & jsonEx.LinePosition & "}"
                     context.Response.ContentType = "application/json"
                     context.Response.StatusCode = 400
                     context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
                     Return
                 Catch deserializeEx As Exception
-                    Console.WriteLine($"❌ [HandleCompileFlow] Deserialization error: {deserializeEx.Message}")
-                    Console.WriteLine($"Stack trace: {deserializeEx.StackTrace}")
-                    If deserializeEx.InnerException IsNot Nothing Then
-                        Console.WriteLine($"Inner exception: {deserializeEx.InnerException.Message}")
-                    End If
-
                     Dim errorJson = "{""status"":""error"",""message"":""Failed to deserialize request"",""error"":""" & deserializeEx.Message.Replace("""", "\""") & """}"
                     context.Response.ContentType = "application/json"
                     context.Response.StatusCode = 400
@@ -158,7 +74,6 @@ Namespace ApiServer.Handlers
                 End Try
 
                 If request Is Nothing Then
-                    Console.WriteLine("❌ [HandleCompileFlow] Deserialized request is Nothing")
 
                     Dim errorJson = "{""status"":""error"",""message"":""Invalid request format""}"
                     context.Response.ContentType = "application/json"

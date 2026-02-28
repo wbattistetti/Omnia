@@ -52,10 +52,7 @@ Namespace ApiServer.SessionStorage
                 End If
                 _database.KeyDelete("__health_check__")
 
-                Console.WriteLine($"[RedisSessionStorage] ✅ Connected to Redis: {connectionString}, KeyPrefix: {keyPrefix}, TTL: {sessionTTL}s")
             Catch ex As Exception
-                Console.WriteLine($"[RedisSessionStorage] ❌ CRITICAL: Failed to connect to Redis: {ex.Message}")
-                Console.WriteLine($"[RedisSessionStorage] ❌ Service cannot start without Redis. Terminating.")
                 Throw New Exception($"Redis is required but not available: {ex.Message}", ex)
             End Try
         End Sub
@@ -74,41 +71,15 @@ Namespace ApiServer.SessionStorage
         Public Function GetTaskSession(sessionId As String) As TaskSession Implements ApiServer.Interfaces.ISessionStorage.GetTaskSession
             Try
                 Dim key = GetTaskSessionKey(sessionId)
-                Console.WriteLine($"🔥🔥🔥 RedisSessionStorage.GetTaskSession: Starting - Key={key}, SessionId={sessionId}")
-                System.Diagnostics.Debug.WriteLine($"🔥🔥🔥 RedisSessionStorage.GetTaskSession: Starting - Key={key}, SessionId={sessionId}")
-                Console.Out.Flush()
-                System.Diagnostics.Debug.Flush()
-
                 Dim json = _database.StringGet(key)
-
-                Console.WriteLine($"🔥🔥🔥 RedisSessionStorage.GetTaskSession: Retrieved from Redis")
-                System.Diagnostics.Debug.WriteLine($"🔥🔥🔥 RedisSessionStorage.GetTaskSession: Retrieved from Redis")
-                Console.WriteLine($"   HasValue: {json.HasValue}")
-                System.Diagnostics.Debug.WriteLine($"   HasValue: {json.HasValue}")
-                If json.HasValue Then
-                    Console.WriteLine($"   JsonLength: {json.ToString().Length}")
-                    System.Diagnostics.Debug.WriteLine($"   JsonLength: {json.ToString().Length}")
-                    Console.WriteLine($"   JsonContainsDialogueContextJson: {json.ToString().Contains("DialogueContextJson")}")
-                    System.Diagnostics.Debug.WriteLine($"   JsonContainsDialogueContextJson: {json.ToString().Contains("DialogueContextJson")}")
-                End If
-                Console.Out.Flush()
-                System.Diagnostics.Debug.Flush()
 
                 If json.HasValue Then
                     Try
                         Dim session = SessionSerializer.DeserializeTaskSession(json)
-                        Console.WriteLine($"🔥🔥🔥 RedisSessionStorage.GetTaskSession: Deserialization completed")
-                        System.Diagnostics.Debug.WriteLine($"🔥🔥🔥 RedisSessionStorage.GetTaskSession: Deserialization completed")
-                        Console.WriteLine($"   Session.DialogueContextJson: {If(String.IsNullOrEmpty(session.DialogueContextJson), "NULL/EMPTY", $"LENGTH={session.DialogueContextJson.Length}")}")
-                        System.Diagnostics.Debug.WriteLine($"   Session.DialogueContextJson: {If(String.IsNullOrEmpty(session.DialogueContextJson), "NULL/EMPTY", $"LENGTH={session.DialogueContextJson.Length}")}")
-                        Console.Out.Flush()
-                        System.Diagnostics.Debug.Flush()
                         Return session
                     Catch deserializeEx As Exception
                         ' ✅ STATELESS: Se deserializzazione fallisce, potrebbe essere una sessione vecchia senza TypeNameHandling
                         ' Prova a eliminare la sessione corrotta e restituisci Nothing (verrà ricreata)
-                        Console.WriteLine($"[RedisSessionStorage] ⚠️ Warning: Failed to deserialize session {sessionId}: {deserializeEx.Message}")
-                        Console.WriteLine($"[RedisSessionStorage] ⚠️ This might be an old session format. Deleting corrupted session.")
                         Try
                             _database.KeyDelete(key)
                         Catch
@@ -132,34 +103,10 @@ Namespace ApiServer.SessionStorage
         Public Sub SaveTaskSession(session As TaskSession) Implements ApiServer.Interfaces.ISessionStorage.SaveTaskSession
             Try
                 Dim key = GetTaskSessionKey(session.SessionId)
-                Console.WriteLine($"🔥🔥🔥 RedisSessionStorage.SaveTaskSession: Starting - Key={key}, SessionId={session.SessionId}")
-                System.Diagnostics.Debug.WriteLine($"🔥🔥🔥 RedisSessionStorage.SaveTaskSession: Starting - Key={key}, SessionId={session.SessionId}")
-                Console.Out.Flush()
-                System.Diagnostics.Debug.Flush()
-
                 Dim json = SessionSerializer.SerializeTaskSession(session)
-
-                Console.WriteLine($"🔥🔥🔥 RedisSessionStorage.SaveTaskSession: Session serialized")
-                System.Diagnostics.Debug.WriteLine($"🔥🔥🔥 RedisSessionStorage.SaveTaskSession: Session serialized")
-                Console.WriteLine($"   JsonLength: {json.Length}")
-                System.Diagnostics.Debug.WriteLine($"   JsonLength: {json.Length}")
-                Console.WriteLine($"   JsonContainsDialogueContextJson: {json.Contains("DialogueContextJson")}")
-                System.Diagnostics.Debug.WriteLine($"   JsonContainsDialogueContextJson: {json.Contains("DialogueContextJson")}")
-                Console.Out.Flush()
-                System.Diagnostics.Debug.Flush()
-
                 _database.StringSet(key, json, _sessionTTL)
-
-                Console.WriteLine($"🔥🔥🔥 RedisSessionStorage.SaveTaskSession: Saved to Redis - Key={key}")
-                System.Diagnostics.Debug.WriteLine($"🔥🔥🔥 RedisSessionStorage.SaveTaskSession: Saved to Redis - Key={key}")
-                Console.Out.Flush()
-                System.Diagnostics.Debug.Flush()
             Catch ex As Exception
                 ' ✅ STATELESS: Nessun fallback - solleva eccezione
-                Console.WriteLine($"[RedisSessionStorage] ❌ Error saving task session: {ex.Message}")
-                System.Diagnostics.Debug.WriteLine($"[RedisSessionStorage] ❌ Error saving task session: {ex.Message}")
-                Console.Out.Flush()
-                System.Diagnostics.Debug.Flush()
                 Throw New Exception($"Failed to save task session to Redis: {ex.Message}", ex)
             End Try
         End Sub

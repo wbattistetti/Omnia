@@ -2,6 +2,7 @@ Option Strict On
 Option Explicit On
 Imports TaskEngine
 Imports Newtonsoft.Json
+Imports System.Linq
 
 ''' <summary>
 ''' CompiledTask: Base class astratta per tutti i task compilati
@@ -75,9 +76,11 @@ End Class
 ''' <summary>
 ''' Task compilato per interpretazione utterance (richiesta dati ricorsiva)
 ''' Contiene direttamente le proprietà runtime senza wrapper
+''' ✅ Implementa IParsableTask per evitare dipendenza circolare
 ''' </summary>
 Public Class CompiledUtteranceTask
     Inherits CompiledTask
+    Implements IParsableTask
 
     ''' <summary>
     ''' Steps di dialogo (solo se il task è atomico o aggregato)
@@ -134,6 +137,33 @@ Public Class CompiledUtteranceTask
     ''' </summary>
     Public Function IsAtomic() As Boolean
         Return Steps IsNot Nothing AndAlso Steps.Count > 0 AndAlso Not HasSubTasks()
+    End Function
+
+    ' ✅ Implementazione IParsableTask per evitare dipendenza circolare
+    Private ReadOnly Property IParsableTask_Id As String Implements IParsableTask.Id
+        Get
+            Return Id
+        End Get
+    End Property
+
+    Private ReadOnly Property IParsableTask_NlpContract As CompiledNlpContract Implements IParsableTask.NlpContract
+        Get
+            Return NlpContract
+        End Get
+    End Property
+
+    Private ReadOnly Property IParsableTask_SubTasks As List(Of IParsableTask) Implements IParsableTask.SubTasks
+        Get
+            If SubTasks Is Nothing Then
+                Return Nothing
+            End If
+            ' ✅ Cast implicito: CompiledUtteranceTask implementa IParsableTask
+            Return SubTasks.Cast(Of IParsableTask)().ToList()
+        End Get
+    End Property
+
+    Private Function IParsableTask_HasSubTasks() As Boolean Implements IParsableTask.HasSubTasks
+        Return HasSubTasks()
     End Function
 End Class
 

@@ -141,24 +141,6 @@ Public Class TaskAssembler
         Dim hasConstraints = task.Constraints IsNot Nothing AndAlso task.Constraints.Count > 0
         Dim hasInvalidStep = task.Steps IsNot Nothing AndAlso task.Steps.Any(Function(s) s.Type = DialogueStepType.Invalid)
 
-        ' ✅ LOG: Diagnostica per debug
-        Console.WriteLine($"[TaskAssembler] 🔍 Validating node {ideNode.Id}")
-        Console.WriteLine($"  - Label: {If(ideNode.Label, "N/A")}")
-        Console.WriteLine($"  - HasConstraints: {hasConstraints}")
-        Console.WriteLine($"  - ConstraintsCount: {If(task.Constraints IsNot Nothing, task.Constraints.Count, 0)}")
-        Console.WriteLine($"  - HasInvalidStep: {hasInvalidStep}")
-        Console.WriteLine($"  - StepsCount: {If(task.Steps IsNot Nothing, task.Steps.Count, 0)}")
-        If task.Steps IsNot Nothing Then
-            For Each dstep In task.Steps
-                Console.WriteLine($"    - Step Type: {dstep.Type}")
-            Next
-        End If
-        If task.Constraints IsNot Nothing Then
-            For Each constraint In task.Constraints
-                Console.WriteLine($"    - Constraint: {constraint.GetType().Name}")
-            Next
-        End If
-
         If hasConstraints AndAlso Not hasInvalidStep Then
             Throw New InvalidOperationException($"Invalid task model: Node {ideNode.Id} has {task.Constraints.Count} constraint(s) but no step of type 'invalid'. When constraints are present, an 'invalid' step is mandatory to handle validation failures.")
         End If
@@ -170,41 +152,9 @@ Public Class TaskAssembler
         ' ✅ Converti dataContract in CompiledNlpContract se presente
         If ideNode.DataContract IsNot Nothing Then
             Try
-                ' ✅ LOG: Verifica presenza subDataMapping nel JSON
-                Dim dataContractJson = JsonConvert.SerializeObject(ideNode.DataContract)
-                Console.WriteLine($"[TaskAssembler.CompileNode] 🔍 Node {ideNode.Id}: Checking dataContract for subDataMapping")
-                Console.WriteLine($"[TaskAssembler.CompileNode]   - DataContract type: {ideNode.DataContract.GetType().Name}")
-                Console.WriteLine($"[TaskAssembler.CompileNode]   - DataContract JSON preview: {If(dataContractJson.Length > 500, dataContractJson.Substring(0, 500) & "...", dataContractJson)}")
-
                 Dim baseContract = ConvertDataContractToNlpContract(ideNode.DataContract)
                 If baseContract IsNot Nothing Then
-                    ' ✅ LOG: Verifica subDataMapping dopo conversione
-                    Console.WriteLine($"[TaskAssembler.CompileNode] ✅ Node {ideNode.Id}: Converted to NLPContract")
-                    Console.WriteLine($"[TaskAssembler.CompileNode]   - SubDataMapping IsNothing: {baseContract.SubDataMapping Is Nothing}")
-                    If baseContract.SubDataMapping IsNot Nothing Then
-                        Console.WriteLine($"[TaskAssembler.CompileNode]   - SubDataMapping.Count: {baseContract.SubDataMapping.Count}")
-                        For Each kvp In baseContract.SubDataMapping
-                            Console.WriteLine($"[TaskAssembler.CompileNode]     - [{kvp.Key}] → groupName: '{kvp.Value.GroupName}', label: '{If(kvp.Value.Label, "N/A")}'")
-                        Next
-                    Else
-                        Console.WriteLine($"[TaskAssembler.CompileNode] ⚠️ Node {ideNode.Id}: SubDataMapping is Nothing after conversion!")
-                        If ideNode.SubTasks IsNot Nothing AndAlso ideNode.SubTasks.Count > 0 Then
-                            Console.WriteLine($"[TaskAssembler.CompileNode]   - ⚠️ WARNING: Node has {ideNode.SubTasks.Count} subTasks but SubDataMapping is empty!")
-                        End If
-                    End If
-
                     task.NlpContract = CompiledNlpContract.Compile(baseContract)
-
-                    ' ✅ LOG: Verifica subDataMapping dopo compilazione
-                    If task.NlpContract IsNot Nothing Then
-                        Console.WriteLine($"[TaskAssembler.CompileNode] ✅ Node {ideNode.Id}: Compiled to CompiledNlpContract")
-                        Console.WriteLine($"[TaskAssembler.CompileNode]   - Compiled.SubDataMapping IsNothing: {task.NlpContract.SubDataMapping Is Nothing}")
-                        If task.NlpContract.SubDataMapping IsNot Nothing Then
-                            Console.WriteLine($"[TaskAssembler.CompileNode]   - Compiled.SubDataMapping.Count: {task.NlpContract.SubDataMapping.Count}")
-                        Else
-                            Console.WriteLine($"[TaskAssembler.CompileNode] ⚠️ Node {ideNode.Id}: Compiled.SubDataMapping is Nothing!")
-                        End If
-                    End If
 
                     If Not task.NlpContract.IsValid Then
                         Throw New InvalidOperationException($"NlpContract compilation failed for node {ideNode.Id}: {String.Join(", ", task.NlpContract.ValidationErrors)}")
@@ -651,6 +601,27 @@ Public Class TaskAssembler
             ' Ora usiamo direttamente nlpContract.Contracts
             If contractObj("contracts") IsNot Nothing AndAlso contractObj("contracts").Type = JTokenType.Array Then
                 Dim contractsArray = CType(contractObj("contracts"), JArray)
+                Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ✅ Found contracts array: Count = {contractsArray.Count}")
+                For i = 0 To contractsArray.Count - 1
+                    Dim item = contractsArray(i)
+                    If TypeOf item Is JObject Then
+                        Dim itemObj = CType(item, JObject)
+                        Dim type = If(itemObj("type")?.ToString(), "unknown")
+                        Dim hasPatterns = itemObj("patterns") IsNot Nothing
+                        Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]   Contract[{i}]: type={type}, hasPatterns={hasPatterns}")
+                        If hasPatterns Then
+                            Dim patterns = itemObj("patterns")
+                            If patterns.Type = JTokenType.Array Then
+                                Dim patternsArray = CType(patterns, JArray)
+                                Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]     Patterns count: {patternsArray.Count}")
+                                For j = 0 To Math.Min(patternsArray.Count - 1, 2)
+                                    Dim patternStr = If(patternsArray(j)?.ToString(), "")
+                                    Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]       Pattern[{j}]: {If(patternStr.Length > 100, patternStr.Substring(0, 100) & "...", patternStr)}")
+                                Next
+                            End If
+                        End If
+                    End If
+                Next
                 nlpContract.Contracts = New List(Of NLPContractEngine)()
 
                 For Each contractItem As JObject In contractsArray
@@ -780,6 +751,13 @@ Public Class TaskAssembler
 
                     nlpContract.Contracts.Add(engine)
                 Next
+                Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ✅ Final Contracts count: {nlpContract.Contracts.Count}")
+            Else
+                Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ⚠️ contracts is Nothing or not an Array")
+                If contractObj("contracts") IsNot Nothing Then
+                    Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]   contracts type: {contractObj("contracts").Type}")
+                End If
+                Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]   contractObj keys: {String.Join(", ", contractObj.Properties().Select(Function(p) p.Name))}")
             End If
 
             ' ✅ Validate group-name coherence: mapping ↔ regex bidirectional check.
