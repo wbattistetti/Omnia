@@ -79,7 +79,6 @@ export type DockTabChat = DockTabBase & {
   translations?: Record<string, string>;
   taskTree?: any;
   mode?: 'interactive' | 'preview';
-  engineType?: 'typescript' | 'vbnet'; // ✅ Engine type selector: TypeScript (fast prototyping) or VB.NET (production)
 };
 
 // Union type for all tab types

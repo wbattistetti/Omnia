@@ -5,7 +5,6 @@ import { useWizardContext } from '@responseEditor/context/WizardContext';
 import { useGlobalTestPanel } from '@context/GlobalTestPanelContext';
 import { useResponseEditorContextSafe } from '@hooks/useResponseEditorContextSafe';
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
-import { useEngineType } from '@context/EngineTypeContext';
 import { openLateralChatPanel } from '@components/AppContent/infrastructure/docking/DockingHelpers';
 import type { DockTabChat } from '@dock/types';
 import DeploymentDialog, { type DeploymentConfig } from './Deployment/DeploymentDialog';
@@ -89,7 +88,6 @@ export function useResponseEditorToolbar({
   const { isOpen: isGlobalTestPanelOpen, openWithTask, close: closeGlobalTestPanel } = useGlobalTestPanel();
   const editorContext = useResponseEditorContextSafe(); // ✅ Safe hook that returns null if not available
   const { translations: globalTranslations, isReady: translationsReady, isLoading: translationsLoading, loadAllTranslations } = useProjectTranslations();
-  const { engineType } = useEngineType(); // ✅ Get engine type from global context
 
   // ✅ Get task data from props (preferred) or context (fallback)
   const taskTree = taskTreeProp || editorContext?.taskTree;
@@ -389,7 +387,6 @@ export function useResponseEditorToolbar({
         translations: runtimeTranslations, // ✅ Pass filtered runtime translations (must work by design)
         taskTree,
         mode: 'interactive',
-        engineType: engineType, // ✅ Pass engine type from global context
       };
 
       // ✅ Log rimosso: troppo verboso
@@ -473,7 +470,7 @@ export function useResponseEditorToolbar({
         };
 
         console.log('[Toolbar] 🧪 Opening global test panel with task context');
-        openWithTask(task as any, taskTree, currentProjectId, translations, engineType);
+        openWithTask(task as any, taskTree, currentProjectId, translations);
       }
     }
   };

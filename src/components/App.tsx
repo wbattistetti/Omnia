@@ -15,7 +15,6 @@ import { SpeechRecognitionProvider } from '../context/SpeechRecognitionContext';
 import { AIProviderProvider } from '../context/AIProviderContext';
 import { InMemoryConditionsProvider } from '../context/InMemoryConditionsContext';
 import { BackendTypeProvider } from '../context/BackendTypeContext';
-import { EngineTypeProvider } from '../context/EngineTypeContext';
 import { TypeTemplateService } from '../services/TypeTemplateService';
 import { taskTemplateService } from '../services/TaskTemplateService';
 import { DialogueTaskService } from '../services/DialogueTaskService';
@@ -165,9 +164,7 @@ export default function App() {
                     <TaskEditorProvider> {/* ✅ RINOMINATO: ActEditorProvider → TaskEditorProvider */}
                       <InMemoryConditionsProvider>
                         <BackendTypeProvider>
-                          <EngineTypeProvider>
-                            <AppInner />
-                          </EngineTypeProvider>
+                          <AppInner />
                         </BackendTypeProvider>
                       </InMemoryConditionsProvider>
                     </TaskEditorProvider> {/* ✅ RINOMINATO: ActEditorProvider → TaskEditorProvider */}

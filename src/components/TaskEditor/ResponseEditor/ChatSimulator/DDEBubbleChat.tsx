@@ -10,9 +10,6 @@ import DialogueTaskService from '@services/DialogueTaskService';
 import { v4 as uuidv4 } from 'uuid';
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import { taskRepository } from '@services/TaskRepository';
-import { runDDT } from '@components/DialogueEngine/ddt/ddtEngine';
-import type { AssembledTaskTree } from '@components/TaskTreeBuilder/DDTAssembler/currentDDT.types';
-import type { DDTNavigatorCallbacks } from '@components/DialogueEngine/ddt/ddtTypes';
 
 /**
  * Estrae tutti i GUID dai step (utterance, invalid, nomatch, noinput, escalation, constraint)
@@ -197,7 +194,6 @@ export default function DDEBubbleChat({
   previewMessages,
   activeScenario,
   onScenarioChange,
-  engineType = 'vbnet', // ✅ NEW: Engine type selector (default to VB.NET for backward compatibility)
 }: {
   task: Task | null;
   projectId: string | null;
@@ -209,7 +205,6 @@ export default function DDEBubbleChat({
   previewMessages?: Message[];
   activeScenario?: 'happy' | 'partial' | 'error';
   onScenarioChange?: (scenario: 'happy' | 'partial' | 'error') => void;
-  engineType?: 'typescript' | 'vbnet'; // ✅ NEW: Engine type selector
 }) {
   const { combinedClass, fontSize } = useFontContext();
   const [messages, setMessages] = React.useState<Message[]>([]);
@@ -309,232 +304,7 @@ export default function DDEBubbleChat({
     setIsWaitingForInput(false);
     // ✅ RIMOSSO: sessionStartingRef.current = true; viene settato dentro startSession()
 
-    // ✅ NEW: TypeScript engine (frontend-only, no backend required)
-    if (engineType === 'typescript') {
-      const startTypeScriptEngine = async () => {
-        try {
-          if (!taskTree) {
-            throw new Error('[DDEBubbleChat] TaskTree is required for TypeScript engine');
-          }
-
-          if (!task || !task.id) {
-            throw new Error('[DDEBubbleChat] Task is required for TypeScript engine');
-          }
-
-          // ✅ CRITICAL: Get translations from prop OR window (fallback for async loading)
-          let allTranslations = translations || {};
-
-          // ✅ FALLBACK: If translations prop is empty, try window.__projectTranslationsContext
-          if (!allTranslations || Object.keys(allTranslations).length === 0) {
-            const windowTranslations = (window as any).__projectTranslationsContext?.translations;
-            if (windowTranslations && Object.keys(windowTranslations).length > 0) {
-              console.log('[DDEBubbleChat] 🔄 Using translations from window (fallback)', {
-                translationsCount: Object.keys(windowTranslations).length
-              });
-              allTranslations = windowTranslations;
-            }
-          }
-
-          // ✅ CRITICAL: If still empty, throw error (must work by design)
-          if (!allTranslations || Object.keys(allTranslations).length === 0) {
-            throw new Error('[DDEBubbleChat] Translations are required for TypeScript engine. Translations must be loaded and filtered before opening the test panel.');
-          }
-
-          // ✅ CRITICAL: Filter translations to include only runtime GUIDs (same as VB.NET engine)
-          const runtimeGuids = new Set<string>();
-
-          // Extract GUIDs from TaskTree.steps
-          if (taskTree.steps && typeof taskTree.steps === 'object') {
-            extractGuidsFromSteps(taskTree.steps, runtimeGuids);
-          } else {
-            console.warn('[DDEBubbleChat] ⚠️ taskTree.steps is missing or invalid:', {
-              hasTaskTree: !!taskTree,
-              hasSteps: !!(taskTree?.steps),
-              stepsType: taskTree?.steps ? (Array.isArray(taskTree.steps) ? 'array' : typeof taskTree.steps) : 'undefined'
-            });
-          }
-
-          // Filter translations: only GUIDs referenced in steps
-          const runtimeTranslations: Record<string, string> = {};
-          for (const [guid, text] of Object.entries(allTranslations)) {
-            // Include runtime.* keys
-            if (guid.startsWith('runtime.')) {
-              runtimeTranslations[guid] = text;
-            }
-            // Include GUIDs referenced in steps
-            else if (runtimeGuids.has(guid)) {
-              runtimeTranslations[guid] = text;
-            }
-          }
-
-          // ✅ DEBUG: Also check if GUIDs from translations match extracted GUIDs
-          const allTranslationGuids = Object.keys(allTranslations).filter(guid =>
-            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guid)
-          );
-          const matchingGuids = allTranslationGuids.filter(guid => runtimeGuids.has(guid));
-          const missingGuids = allTranslationGuids.filter(guid => !runtimeGuids.has(guid));
-
-          // ✅ Log rimosso: troppo verboso
-
-          // ✅ Log rimosso: troppo verboso
-
-          if (Object.keys(runtimeTranslations).length === 0) {
-            throw new Error('[DDEBubbleChat] No runtime translations found after filtering. Ensure translations are loaded and contain the GUIDs referenced in task steps.');
-          }
-
-          // Convert TaskTree to AssembledTaskTree format
-          // ✅ CRITICAL: Each node needs its steps assigned from TaskTree.steps[templateId]
-          const assignStepsToNode = (node: any): any => {
-            const nodeSteps = taskTree.steps?.[node.templateId];
-            const nodeWithSteps = nodeSteps ? {
-              ...node,
-              steps: nodeSteps // ✅ Assign steps to node
-            } : node;
-
-            // ✅ Recursively assign steps to subNodes
-            if (nodeWithSteps.subNodes && Array.isArray(nodeWithSteps.subNodes)) {
-              nodeWithSteps.subNodes = nodeWithSteps.subNodes.map((subNode: any) => assignStepsToNode(subNode));
-            }
-
-            return nodeWithSteps;
-          };
-
-          const nodesWithSteps = (taskTree.nodes || []).map(assignStepsToNode);
-
-          console.log('[DDEBubbleChat] 🔍 TaskTree conversion:', {
-            taskTreeStepsKeys: taskTree.steps ? Object.keys(taskTree.steps) : [],
-            nodesCount: nodesWithSteps.length,
-            nodesInfo: nodesWithSteps.map((n: any) => ({
-              id: n.id,
-              templateId: n.templateId,
-              label: n.label,
-              hasSteps: !!n.steps,
-              stepsKeys: n.steps ? Object.keys(n.steps) : [],
-              hasSubNodes: !!(n.subNodes && n.subNodes.length > 0),
-              firstStepDetails: n.steps?.start ? {
-                hasEscalations: !!n.steps.start.escalations,
-                escalationsCount: Array.isArray(n.steps.start.escalations) ? n.steps.start.escalations.length : (n.steps.start.escalations ? 1 : 0),
-                firstEscalationTasks: n.steps.start.escalations?.[0]?.tasks ? (Array.isArray(n.steps.start.escalations[0].tasks) ? n.steps.start.escalations[0].tasks.length : 1) : 0
-              } : null
-            }))
-          });
-
-          const ddtInstance: AssembledTaskTree = {
-            id: task.id,
-            label: task.label || taskTree.labelKey || 'Task',
-            nodes: nodesWithSteps, // ✅ Use nodes with steps assigned
-            dialogueSteps: [], // Not used by runDDT, but keep for compatibility
-            translations: runtimeTranslations, // ✅ Use filtered runtime translations (GUIDs only)
-            introduction: taskTree.introduction
-          };
-
-          console.log('[DDEBubbleChat] 🔍 Converted TaskTree to AssembledTaskTree:', {
-            id: ddtInstance.id,
-            label: ddtInstance.label,
-            nodesCount: ddtInstance.nodes.length,
-            nodesWithSteps: ddtInstance.nodes.map((n: any) => ({
-              id: n.id,
-              templateId: n.templateId,
-              hasSteps: !!n.steps,
-              stepsKeys: n.steps ? Object.keys(n.steps) : []
-            }))
-          });
-
-          // Create callbacks for runDDT
-          const callbacks: DDTNavigatorCallbacks = {
-            onMessage: (text: string, stepType?: string, escalationNumber?: number) => {
-              console.log('[DDEBubbleChat] 📨 TypeScript engine message callback called:', {
-                text: text?.substring(0, 100),
-                textLength: text?.length,
-                stepType,
-                escalationNumber
-              });
-
-              if (!text || text.trim().length === 0) {
-                console.warn('[DDEBubbleChat] ⚠️ onMessage called with empty text!', { stepType, escalationNumber });
-                return;
-              }
-
-              const botMessage: Message = {
-                id: generateMessageId('bot'),
-                text,
-                type: 'bot',
-                stepType,
-                escalationNumber
-              };
-
-              console.log('[DDEBubbleChat] ✅ Adding bot message to chat:', {
-                id: botMessage.id,
-                text: botMessage.text.substring(0, 50) + '...',
-                stepType: botMessage.stepType
-              });
-
-              setMessages(prev => {
-                const newMessages = [...prev, botMessage];
-                console.log('[DDEBubbleChat] 📊 Messages count after add:', newMessages.length);
-                return newMessages;
-              });
-              setIsWaitingForInput(true);
-            },
-            onGetRetrieveEvent: async (nodeId: string) => {
-              // Wait for user input
-              return new Promise((resolve) => {
-                // Store the resolve function to call when user submits input
-                (window as any).__pendingRetrieveEvent = { nodeId, resolve };
-              });
-            },
-            onProcessInput: async (input: string, node: any) => {
-              // Simple processing - can be enhanced with NLP later
-              if (!input || input.trim().length === 0) {
-                return { status: 'noInput' as const };
-              }
-              // For now, always return match (can be enhanced with actual NLP)
-              return { status: 'match' as const, value: input };
-            },
-            translations: runtimeTranslations // ✅ Use filtered runtime translations
-          };
-
-          // ✅ PASSO 1: Use MVP engine (simplified)
-          // ✅ Log rimosso: troppo verboso
-
-          // ✅ Import and use MVP engine
-          const { runDDTMVP } = await import('@components/DialogueEngine/ddt/ddtEngineMVP');
-          const result = await runDDTMVP(ddtInstance, callbacks);
-
-          console.log('[DDEBubbleChat] 🏁 runDDTMVP completed:', {
-            success: result.success,
-            exit: result.exit,
-            error: result.error?.message,
-            hasValue: !!result.value
-          });
-
-          if (result.exit) {
-            console.log('[DDEBubbleChat] ✅ TypeScript engine completed', result);
-            setIsWaitingForInput(false);
-          } else if (result.error) {
-            console.error('[DDEBubbleChat] ❌ TypeScript engine error:', result.error);
-            setBackendError(result.error.message);
-            setIsWaitingForInput(false);
-          } else if (result.success) {
-            console.log('[DDEBubbleChat] ✅ TypeScript engine success - all data collected');
-            setIsWaitingForInput(false);
-          }
-        } catch (error) {
-          console.error('[DDEBubbleChat] ❌ TypeScript engine error:', error);
-          setBackendError(error instanceof Error ? error.message : String(error));
-          setIsWaitingForInput(false);
-          sessionStartingRef.current = false;
-        }
-      };
-
-      startTypeScriptEngine();
-      return () => {
-        // Cleanup: clear pending events on unmount
-        delete (window as any).__pendingRetrieveEvent;
-      };
-    }
-
-    // ✅ EXISTING: VB.NET backend engine
+    // ✅ VB.NET backend engine
     const baseUrl = 'http://localhost:5000';   // ✅ VB.NET backend diretto
 
     const startSession = async () => {
@@ -1401,7 +1171,7 @@ export default function DDEBubbleChat({
         }).catch(() => { });
       }
     };
-  }, [task?.id, projectId, mode, resetCounter, engineType, taskTree, translations]); // ✅ Added engineType, taskTree, translations to trigger restart when engine changes
+  }, [task?.id, projectId, mode, resetCounter, taskTree, translations]);
 
   // Clear input when sent text appears as a user message
   React.useEffect(() => {
@@ -1439,8 +1209,7 @@ export default function DDEBubbleChat({
       sessionId,
       hasSessionId: !!sessionId,
       sessionIdType: typeof sessionId,
-      isWaitingForInput,
-      engineType
+      isWaitingForInput
     });
 
     if (!trimmed) {
@@ -1459,58 +1228,7 @@ export default function DDEBubbleChat({
     // Freeze text for input clearing
     sentTextRef.current = trimmed;
 
-    // ✅ NEW: TypeScript engine - resolve pending retrieve event
-    if (engineType === 'typescript') {
-      try {
-        console.log('[DDEBubbleChat] 📤 TypeScript engine: processing input:', {
-          trimmed,
-          trimmedLength: trimmed.length,
-          isEmpty: !trimmed,
-          hasPendingEvent: !!(window as any).__pendingRetrieveEvent
-        });
-
-        // Check if there's a pending retrieve event
-        const pendingEvent = (window as any).__pendingRetrieveEvent;
-        if (pendingEvent && pendingEvent.resolve) {
-          console.log('[DDEBubbleChat] ✅ Found pending retrieve event, resolving with match:', {
-            nodeId: pendingEvent.nodeId,
-            value: trimmed,
-            valueType: typeof trimmed,
-            valueLength: trimmed.length,
-            valueTruthy: !!trimmed
-          });
-
-          // Resolve the pending event with user input
-          const eventToResolve = { type: 'match' as const, value: trimmed };
-          console.log('[DDEBubbleChat] 🔍 Resolving event:', {
-            type: eventToResolve.type,
-            hasValue: 'value' in eventToResolve,
-            value: eventToResolve.value,
-            valueType: typeof eventToResolve.value
-          });
-
-          pendingEvent.resolve(eventToResolve);
-
-          console.log('[DDEBubbleChat] ✅ Retrieve event resolved, cleaning up');
-          delete (window as any).__pendingRetrieveEvent;
-          setIsWaitingForInput(false);
-        } else {
-          console.warn('[DDEBubbleChat] ⚠️ No pending retrieve event, engine may not be running', {
-            hasPendingEvent: !!pendingEvent,
-            hasResolve: !!(pendingEvent?.resolve),
-            pendingEventKeys: pendingEvent ? Object.keys(pendingEvent) : []
-          });
-          setIsWaitingForInput(true);
-        }
-      } catch (error) {
-        console.error('[DDEBubbleChat] ❌ TypeScript engine error processing input:', error);
-        setBackendError(error instanceof Error ? error.message : 'Failed to process input');
-        setIsWaitingForInput(true);
-      }
-      return;
-    }
-
-    // ✅ EXISTING: VB.NET backend engine
+    // ✅ VB.NET backend engine
     if (!sessionId) {
       console.error('[DDEBubbleChat] ❌ No sessionId available - session may not be initialized');
       setBackendError('Session not initialized. Please wait for the session to start or click Reset.');
@@ -1565,19 +1283,14 @@ export default function DDEBubbleChat({
 
   // Reset function - restart session with same task
   const handleReset = () => {
-    // ✅ NEW: Clear TypeScript engine pending events
-    if (engineType === 'typescript') {
-      delete (window as any).__pendingRetrieveEvent;
-    }
-
     // Close existing SSE connection
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
 
-    // Delete session on backend (only for VB.NET engine)
-    if (engineType === 'vbnet' && sessionId) {
+    // Delete session on backend
+    if (sessionId) {
       const baseUrl = 'http://localhost:5000';
       fetch(`${baseUrl}/api/runtime/task/session/${sessionId}`, {
         method: 'DELETE'
