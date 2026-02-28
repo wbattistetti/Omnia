@@ -19,7 +19,7 @@ Public Class OrchestratorSession
     Public Property Tasks As List(Of Object)
     ' ❌ RIMOSSO: DDTs property - non più usato, struttura costruita da template
     Public Property Translations As Dictionary(Of String, String)
-    Public Property Orchestrator As TaskEngine.Orchestrator.FlowOrchestrator
+    Public Property Orchestrator As FlowOrchestrator
     ' ✅ REMOVED: TaskEngine (Motore) - no longer needed, use StatelessDialogueEngine when required
     Public Property Messages As New List(Of Object)
     Public Property EventEmitter As EventEmitter

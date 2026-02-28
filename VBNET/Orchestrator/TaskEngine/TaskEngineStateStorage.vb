@@ -2,6 +2,7 @@ Option Strict On
 Option Explicit On
 Imports Newtonsoft.Json
 Imports TaskEngine
+Imports TaskEngine.Orchestrator
 Namespace TaskEngine
 
 ''' <summary>

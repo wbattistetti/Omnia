@@ -26,15 +26,16 @@
     <Compile Include="TaskExecutor.vb" />
     <Compile Include="ConditionEvaluator.vb" />
     <Compile Include="ExecutionState.vb" />
-    <Compile Include="TaskExecutor\TaskExecutorBase.vb" />
-    <Compile Include="TaskExecutor\UtteranceTaskExecutor.vb" />
-    <Compile Include="TaskExecutor\SayMessageTaskExecutor.vb" />
-    <Compile Include="TaskExecutor\ClassifyProblemTaskExecutor.vb" />
-    <Compile Include="TaskExecutor\BackendCallTaskExecutor.vb" />
-    <Compile Include="TaskExecutor\CloseSessionTaskExecutor.vb" />
-    <Compile Include="TaskExecutor\TransferTaskExecutor.vb" />
-    <Compile Include="TaskExecutor\TaskExecutorFactory.vb" />
-    <Compile Include="TaskExecutor\CompiledTaskAdapter.vb" />
+    <!-- TaskExecutor files are now in root, not in TaskExecutor\ subfolder -->
+    <Compile Include="TaskExecutorBase.vb" />
+    <Compile Include="UtteranceTaskExecutor.vb" />
+    <Compile Include="SayMessageTaskExecutor.vb" />
+    <Compile Include="ClassifyProblemTaskExecutor.vb" />
+    <Compile Include="BackendCallTaskExecutor.vb" />
+    <Compile Include="CloseSessionTaskExecutor.vb" />
+    <Compile Include="TransferTaskExecutor.vb" />
+    <Compile Include="TaskExecutorFactory.vb" />
+    <Compile Include="CompiledTaskAdapter.vb" />
     <!-- TaskEngine (new, simplified, no reflection) -->
     <Compile Include="TaskEngine\ProcessTurnHelpers.vb" />
     <Compile Include="TaskEngine\Types.vb" />

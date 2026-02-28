@@ -20,9 +20,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- No project references needed for Models (they are self-contained) -->
-    <!-- Compiler reference removed to avoid circular dependency -->
-    <!-- DDTEngine reference removed (Models moved here) -->
+    <!-- No Compiler reference to avoid circular dependency -->
+    <!-- FlowOrchestrator will be moved back to Orchestrator or use types via Orchestrator -->
   </ItemGroup>
 
   <!-- Interfaces (moved from DDTEngine) -->
