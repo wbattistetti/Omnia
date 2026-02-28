@@ -41,7 +41,7 @@ interface EnginesResponse {
   };
   llm?: {
     systemPrompt?: string;
-    userPromptTemplate?: string;
+    aiPrompt?: string;  // Renamed from userPromptTemplate
     responseSchema?: object;
   };
   embedding?: {
@@ -113,7 +113,7 @@ function validateEngines(data: any): EnginesResponse | null {
     if (typeof data.llm === 'object' && data.llm !== null) {
       validated.llm = {
         systemPrompt: typeof data.llm.systemPrompt === 'string' ? data.llm.systemPrompt : undefined,
-        userPromptTemplate: typeof data.llm.userPromptTemplate === 'string' ? data.llm.userPromptTemplate : undefined,
+        aiPrompt: typeof data.llm.aiPrompt === 'string' ? data.llm.aiPrompt : undefined,  // Renamed from userPromptTemplate
         responseSchema: typeof data.llm.responseSchema === 'object' && data.llm.responseSchema !== null
           ? data.llm.responseSchema
           : undefined
@@ -197,11 +197,11 @@ function convertToEngineConfigs(engines: EnginesResponse): EngineConfig[] {
   }
 
   // LLM engine
-  if (engines.llm && (engines.llm.systemPrompt || engines.llm.userPromptTemplate)) {
+  if (engines.llm && (engines.llm.systemPrompt || engines.llm.aiPrompt)) {
     configs.push({
       type: 'llm',
       config: {
-        llmPrompt: engines.llm.userPromptTemplate || '',
+        llmPrompt: engines.llm.aiPrompt || '',  // Use aiPrompt instead of userPromptTemplate
         llmModel: undefined // Model is selected at runtime
       },
       version: 1,

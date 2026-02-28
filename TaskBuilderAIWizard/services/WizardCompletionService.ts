@@ -9,9 +9,9 @@
  */
 
 import type { WizardTaskTreeNode, WizardConstraint, WizardStepMessages } from '../types';
-import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
+import type { DataContract } from '@components/DialogueDataEngine/parsers/contractLoader';
 import type { SemanticContract } from '@types/semanticContract';
-import type { DataContractItem } from '@components/DialogueDataEngine/contracts/contractLoader';
+import type { DataContractItem } from '@components/DialogueDataEngine/parsers/contractLoader';
 import { createTemplatesFromWizardData, createContextualizedInstance } from './TemplateCreationService';
 import { DialogueTaskService } from '@services/DialogueTaskService';
 import { taskRepository } from '@services/TaskRepository';
@@ -20,7 +20,7 @@ import { buildTaskTree } from '@utils/taskUtils';
 import { flattenTaskTree } from '../utils/wizardHelpers';
 
 /**
- * Collects constraints and data contracts from dataSchema into maps
+ * Collects constraints and data parsers from dataSchema into maps
  * Builds subDataMapping deterministically (s1, s2, s3...) for parent nodes
  */
 export function collectNodeData(dataSchema: WizardTaskTreeNode[]): {
@@ -56,12 +56,17 @@ export function collectNodeData(dataSchema: WizardTaskTreeNode[]): {
             templateName: node.label || node.id,
             templateId: node.id,
             subDataMapping, // ✅ Always present for parent nodes
-            contracts: []
+            parsers: [],
+            testCases: [] // ✅ NEW: Initialize testCases at contract level
           };
         } else {
           // ✅ ALWAYS ensure subDataMapping is present and up-to-date
           // This is structural data needed by all engines
           dataContract.subDataMapping = subDataMapping;
+          // ✅ Ensure testCases is initialized if not present
+          if (!dataContract.testCases) {
+            dataContract.testCases = [];
+          }
         }
       } else {
         // Leaf nodes don't need subDataMapping (no sub-nodes)
@@ -71,8 +76,14 @@ export function collectNodeData(dataSchema: WizardTaskTreeNode[]): {
             templateName: node.label || node.id,
             templateId: node.id,
             subDataMapping: {}, // Empty for leaf nodes
-            contracts: []
+            parsers: [],
+            testCases: [] // ✅ NEW: Initialize testCases at contract level
           };
+        } else {
+          // ✅ Ensure testCases is initialized if not present
+          if (!dataContract.testCases) {
+            dataContract.testCases = [];
+          }
         }
       }
 
@@ -82,16 +93,16 @@ export function collectNodeData(dataSchema: WizardTaskTreeNode[]): {
           nodeId: node.id,
           nodeLabel: node.label,
           wasCreated: !node.dataContract,
-          hasContracts: !!dataContract.contracts,
-          contractsIsArray: Array.isArray(dataContract.contracts),
-          contractsCount: dataContract.contracts?.length || 0,
-          contractTypes: dataContract.contracts?.map((c: any) => c.type) || [],
+          hasContracts: !!dataContract.parsers,
+          parsersIsArray: Array.isArray(dataContract.parsers),
+          parsersCount: dataContract.parsers?.length || 0,
+          contractTypes: dataContract.parsers?.map((c: any) => c.type) || [],
           fullDataContract: {
             templateName: dataContract.templateName,
             templateId: dataContract.templateId,
             subDataMappingKeys: Object.keys(dataContract.subDataMapping || {}),
             subDataMappingCount: Object.keys(dataContract.subDataMapping || {}).length,
-            contractsCount: dataContract.contracts?.length || 0
+            parsersCount: dataContract.parsers?.length || 0
           }
         });
         dataContractsMap.set(node.id, dataContract);
@@ -159,14 +170,14 @@ async function createAndRegisterTemplates(
       templateId: template.id,
       templateLabel: template.label,
       hasDataContract: !!template.dataContract,
-      contractsCount: template.dataContract?.contracts?.length || 0,
-      contractTypes: template.dataContract?.contracts?.map((c: any) => c.type) || [],
+      parsersCount: template.dataContract?.parsers?.length || 0,
+      contractTypes: template.dataContract?.parsers?.map((c: any) => c.type) || [],
       fullDataContract: template.dataContract ? {
         templateName: template.dataContract.templateName,
         templateId: template.dataContract.templateId,
         subDataMappingKeys: Object.keys(template.dataContract.subDataMapping || {}),
-        contractsCount: template.dataContract.contracts?.length || 0,
-        contracts: template.dataContract.contracts?.map((c: any) => ({
+        parsersCount: template.dataContract.parsers?.length || 0,
+        parsers: template.dataContract.parsers?.map((c: any) => ({
           type: c.type,
           enabled: c.enabled
         })) || []
@@ -231,8 +242,8 @@ async function createAndSaveInstance(
 }
 
 /**
- * Generates contracts for all nodes in a TaskTree
- * This is extracted to allow contracts to be generated before parser generation
+ * Generates parsers for all nodes in a TaskTree
+ * This is extracted to allow parsers to be generated before parser generation
  */
 export async function generateContractsForTaskTree(
   taskTree: any
@@ -245,11 +256,11 @@ export async function generateContractsForTaskTree(
     const { generateContractsForAllNodes } = await import('@utils/wizard/generateContract');
     const generatedContracts = await generateContractsForAllNodes(taskTree);
     console.log('[WizardCompletionService] ✅ Contracts generated for TaskTree', {
-      contractsCount: generatedContracts.size
+      parsersCount: generatedContracts.size
     });
     return generatedContracts;
   } catch (contractError) {
-    console.error('[WizardCompletionService] ❌ Error generating contracts', {
+    console.error('[WizardCompletionService] ❌ Error generating parsers', {
       error: contractError instanceof Error ? contractError.message : String(contractError)
     });
     return new Map();
@@ -257,7 +268,7 @@ export async function generateContractsForTaskTree(
 }
 
 /**
- * Builds TaskTree and generates contracts/engines for all nodes
+ * Builds TaskTree and generates parsers/engines for all nodes
  */
 export async function buildTaskTreeWithContractsAndEngines(
   taskInstance: any,
@@ -271,7 +282,7 @@ export async function buildTaskTreeWithContractsAndEngines(
     return null;
   }
 
-  // Generate contracts for all nodes
+  // Generate parsers for all nodes
   const generatedContracts = await generateContractsForTaskTree(taskTree);
 
   // Generate engines and parsers for all nodes
@@ -340,8 +351,8 @@ export async function buildTaskTreeWithContractsAndEngines(
     console.log(`[buildTaskTreeWithContractsAndEngines] ✅ Assembled dataContract for node ${nodeId}`, {
       hasSubDataMapping: Object.keys(assembled.subDataMapping || {}).length > 0,
       subDataMappingKeys: Object.keys(assembled.subDataMapping || {}),
-      contractsCount: assembled.contracts.length,
-      contractTypes: assembled.contracts.map(c => c.type),
+      parsersCount: assembled.parsers.length,
+      contractTypes: assembled.parsers.map(c => c.type),
       hasSemantic: !!semantic
     });
   }
@@ -353,14 +364,14 @@ export async function buildTaskTreeWithContractsAndEngines(
  * Assembler: Unico punto di merge per dataContract
  *
  * ARCHITETTURA:
- * - Wizard costruisce base (templateName, templateId, subDataMapping, contracts: [])
+ * - Wizard costruisce base (templateName, templateId, subDataMapping, parsers: [])
  * - Semantic Builder produce semantic (entity, subentities, outputCanonical, ecc.)
  * - AI Engines produce engines (regex, llm, rules, ecc.)
  * - Assembler unisce tutto in dataContract finale
  *
  * VINCOLI:
  * - subDataMapping viene SEMPRE preservato da base (mai sovrascritto)
- * - contracts viene mergeato (base.contracts + engines)
+ * - parsers viene mergeato (base.parsers + engines)
  * - semantic fields vengono aggiunti senza toccare base fields
  */
 function assembleDataContract(
@@ -371,20 +382,22 @@ function assembleDataContract(
   // ✅ CRITICAL: subDataMapping viene SEMPRE da base (deterministico, mai sovrascritto)
   const subDataMapping = base.subDataMapping || {};
 
-  // ✅ Merge contracts: base.contracts (vuoto inizialmente) + engines (da AI)
-  const contracts = [...(base.contracts || []), ...engines];
+  // ✅ Merge parsers: base.parsers (vuoto inizialmente) + engines (da AI)
+  const parsers = [...(base.parsers || []), ...engines];
 
   // ✅ Assemble final dataContract
   const assembled: DataContract = {
-    ...base,              // ✅ Preserva templateName, templateId, subDataMapping, contracts base
+    ...base,              // ✅ Preserva templateName, templateId, subDataMapping, parsers base
     ...(semantic || {}),  // ✅ Aggiunge entity, subentities, outputCanonical, constraints, ecc.
     subDataMapping,       // ✅ CRITICAL: Sempre da base, mai da semantic
-    contracts             // ✅ Merge: base + engines
+    parsers,            // ✅ Merge: base + engines
+    // ✅ NEW: testCases at contract level (initialize if not present)
+    testCases: base.testCases || []
   };
 
   // ✅ Validation: Log warning se subDataMapping è vuoto per nodi con subNodes
-  if (Object.keys(subDataMapping).length === 0 && contracts.length > 0) {
-    console.warn(`[assembleDataContract] ⚠️ Node ${base.templateId} has empty subDataMapping but has contracts`);
+  if (Object.keys(subDataMapping).length === 0 && parsers.length > 0) {
+    console.warn(`[assembleDataContract] ⚠️ Node ${base.templateId} has empty subDataMapping but has parsers`);
   }
 
   return assembled;
@@ -414,7 +427,7 @@ export async function createTemplateAndInstanceForProposed(
     throw new Error('[WizardCompletionService] rowId is required');
   }
 
-  // 1. Collect constraints and data contracts
+  // 1. Collect constraints and data parsers
   const { constraintsMap, dataContractsMap } = collectNodeData(dataSchema);
 
   // 2. Use generalized messages if available, otherwise use normal messages
@@ -457,18 +470,18 @@ export async function createTemplateAndInstanceForProposed(
     adaptAllNormalSteps
   );
 
-  // 8. Build TaskTree (without contracts/engines - they will be generated separately)
+  // 8. Build TaskTree (without parsers/engines - they will be generated separately)
   let taskTree: any | null = null;
   try {
     taskTree = await buildTaskTree(taskInstance, projectId);
 
-    // 9. Generate contracts for all nodes (CRITICAL: must be done before parser generation)
+    // 9. Generate parsers for all nodes (CRITICAL: must be done before parser generation)
     if (taskTree) {
       await generateContractsForTaskTree(taskTree);
     }
   } catch (error) {
     // Non-blocking: log error but don't block wizard flow
-    console.error('[WizardCompletionService] ❌ Error building TaskTree or generating contracts (non-blocking)', {
+    console.error('[WizardCompletionService] ❌ Error building TaskTree or generating parsers (non-blocking)', {
       error: error instanceof Error ? error.message : String(error)
     });
   }
@@ -505,18 +518,18 @@ export async function createTemplateAndInstanceForCompleted(
   console.log(`[createTemplateAndInstanceForCompleted] 🔍 DATA SCHEMA STATE BEFORE collectNodeData`, {
     totalNodes: allNodesBefore.length,
     nodesWithDataContract: allNodesBefore.filter(n => !!n.dataContract).length,
-    nodesWithContracts: allNodesBefore.filter(n => n.dataContract?.contracts && n.dataContract.contracts.length > 0).length,
+    nodesWithContracts: allNodesBefore.filter(n => n.dataContract?.parsers && n.dataContract.parsers.length > 0).length,
     nodesDetails: allNodesBefore.map(n => ({
       nodeId: n.id,
       nodeLabel: n.label,
       hasDataContract: !!n.dataContract,
-      contractsCount: n.dataContract?.contracts?.length || 0,
-      contractTypes: n.dataContract?.contracts?.map((c: any) => c.type) || [],
+      parsersCount: n.dataContract?.parsers?.length || 0,
+      contractTypes: n.dataContract?.parsers?.map((c: any) => c.type) || [],
       dataContractKeys: n.dataContract ? Object.keys(n.dataContract) : []
     }))
   });
 
-  // 1. Collect constraints and data contracts
+  // 1. Collect constraints and data parsers
   const { constraintsMap, dataContractsMap } = collectNodeData(dataSchema);
 
   // ✅ DEBUG: Verifica cosa è stato raccolto
@@ -527,8 +540,8 @@ export async function createTemplateAndInstanceForCompleted(
     dataContractsDetails: Array.from(dataContractsMap.entries()).map(([nodeId, contract]) => ({
       nodeId,
       hasContract: !!contract,
-      contractsCount: contract?.contracts?.length || 0,
-      contractTypes: contract?.contracts?.map((c: any) => c.type) || [],
+      parsersCount: contract?.parsers?.length || 0,
+      contractTypes: contract?.parsers?.map((c: any) => c.type) || [],
       contractKeys: contract ? Object.keys(contract) : []
     }))
   });

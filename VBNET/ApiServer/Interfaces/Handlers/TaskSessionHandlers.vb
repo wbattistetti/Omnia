@@ -283,7 +283,8 @@ Namespace ApiServer.Handlers
 
                     ' ✅ Inizializza CurrentTask se non esiste
                     If dialogueState.CurrentTask Is Nothing Then
-                        dialogueState.CurrentTask = TaskEngine.Orchestrator.TaskEngine.ProcessTurnHelpers.CreateTaskInstance(compiledTask)
+                        dialogueState.CurrentTask = compiledTask
+                        dialogueState.RootTask = compiledTask
                         dialogueState.CurrentStepType = Global.TaskEngine.DialogueStepType.Start
                     End If
 
@@ -738,7 +739,8 @@ Namespace ApiServer.Handlers
 
                 ' ✅ Inizializza CurrentTask se non esiste
                 If dialogueState.CurrentTask Is Nothing Then
-                    dialogueState.CurrentTask = TaskEngine.Orchestrator.TaskEngine.ProcessTurnHelpers.CreateTaskInstance(compiledTask)
+                    dialogueState.CurrentTask = compiledTask
+                    dialogueState.RootTask = compiledTask
                     dialogueState.CurrentStepType = Global.TaskEngine.DialogueStepType.Start
                 End If
 

@@ -92,7 +92,7 @@ export function useUpdateSelectedNode(params: UseUpdateSelectedNodeParams) {
       }
 
       // LOG: Always log dataContract comparison (even if unchanged)
-      const updatedRegex = updated.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+      const updatedRegex = updated.dataContract?.parsers?.find((c: any) => c.type === 'regex')?.patterns?.[0];
       if (dataContractChanged && updatedRegex) {
         console.log('[REGEX] UPDATE - updateSelectedNode', {
           nodeId: updated.id,

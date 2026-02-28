@@ -245,7 +245,7 @@ export async function runParallelGeneration(
     }
 
     const counter = phase === 'constraints' ? constraintsCounter
-                  : messagesCounter;
+      : messagesCounter;
 
     counter.completed++;
     const progress = Math.round((counter.completed / counter.total) * 100);
@@ -399,30 +399,31 @@ export async function runParallelGeneration(
           templateName: nodeLabel || nodeId,
           templateId: nodeId,
           subDataMapping, // ✅ Populated from subNodes
-          contracts: []
+          parsers: [],
+          testCases: [] // ✅ NEW: Initialize testCases at contract level
         };
       }
 
-      const existingContracts = template.dataContract.contracts || [];
+      const existingContracts = template.dataContract.parsers || [];
       const existingTypes = new Set(existingContracts.map((c: any) => c.type));
       const contractType = engineType === 'rule_based' ? 'rules' : engineType;
 
       if (!existingTypes.has(contractType)) {
-        template.dataContract.contracts = [...existingContracts, parser];
+        template.dataContract.parsers = [...existingContracts, parser];
 
         // ✅ DEBUG: Log quando il parser viene salvato nel template in memoria
-        console.log(`[wizardActions] ✅ Parser saved to template.dataContract.contracts (in memory)`, {
+        console.log(`[wizardActions] ✅ Parser saved to template.dataContract.parsers (in memory)`, {
           nodeId,
           nodeLabel,
           engineType,
           parserType: parser.type,
-          contractsCount: template.dataContract.contracts.length,
-          allContractTypes: template.dataContract.contracts.map((c: any) => c.type),
+          parsersCount: template.dataContract.parsers.length,
+          allContractTypes: template.dataContract.parsers.map((c: any) => c.type),
           fullDataContract: {
             templateName: template.dataContract.templateName,
             templateId: template.dataContract.templateId,
-            contractsCount: template.dataContract.contracts.length,
-            contracts: template.dataContract.contracts.map((c: any) => ({
+            parsersCount: template.dataContract.parsers.length,
+            parsers: template.dataContract.parsers.map((c: any) => ({
               type: c.type,
               enabled: c.enabled
             }))
@@ -624,16 +625,16 @@ export function checkCompletion(): {
     const parserState = node.pipelineStatus?.parser || 'pending';
     const messagesState = node.pipelineStatus?.messages || 'pending';
     return constraintsState === 'completed' &&
-           parserState === 'completed' &&
-           messagesState === 'completed';
+      parserState === 'completed' &&
+      messagesState === 'completed';
   });
 
   const isComplete = allNodesHaveMessages &&
-                    allNodesHaveConstraints &&
-                    allNodesHaveParser &&
-                    allTasksCompletedAllPhases &&
-                    !hasFailedNodes &&
-                    currentState.wizardMode === WizardMode.GENERATING;
+    allNodesHaveConstraints &&
+    allNodesHaveParser &&
+    allTasksCompletedAllPhases &&
+    !hasFailedNodes &&
+    currentState.wizardMode === WizardMode.GENERATING;
 
   return {
     isComplete,

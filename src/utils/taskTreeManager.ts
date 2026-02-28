@@ -241,7 +241,7 @@ export async function loadAndAdaptTaskTreeForExistingTask(
 
       // ✅ CRITICAL: dataContract è sempre dal template, non più override
       const finalDataContract = templateNode.dataContract;
-      const regexPattern = finalDataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+      const regexPattern = finalDataContract?.parsers?.find((c: any) => c.type === 'regex')?.patterns?.[0];
       console.log('[CONTRACT] LOAD - From template only', {
         nodeId: templateNode.id,
         templateId: templateNode.templateId,

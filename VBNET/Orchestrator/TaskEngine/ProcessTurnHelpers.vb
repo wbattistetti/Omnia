@@ -1,7 +1,8 @@
 Option Strict On
 Option Explicit On
-Imports Compiler
 Imports System.Linq
+Imports System.Runtime.CompilerServices
+Imports Compiler
 Imports DDTEngine.Engine
 Imports TaskEngine
 
@@ -12,73 +13,73 @@ Namespace TaskEngine
     ''' </summary>
     Public Module ProcessTurnHelpers
 
-    ''' <summary>
-    ''' Esegue i contratti NLP in cascata e restituisce ParseResult con ParseStatus
-    ''' ✅ STATELESS: Usa CompiledUtteranceTask direttamente, senza conversione
-    ''' </summary>
-    Public Function RunContractsInCascade(currentTask As UtteranceTaskInstance, utterance As String, currentStepType As Global.TaskEngine.DialogueStepType) As ParseResultWithStatus
-        If currentTask Is Nothing OrElse currentTask.CompiledTask Is Nothing Then
-            Return New ParseResultWithStatus() With {.Status = ParseStatus.NoMatch}
-        End If
+        ''' <summary>
+        ''' Esegue i contratti NLP in cascata e restituisce ParseResult con ParseStatus
+        ''' ✅ STATELESS: Usa CompiledUtteranceTask direttamente
+        ''' </summary>
+        Public Function RunContractsInCascade(currentTask As CompiledUtteranceTask, utterance As String, currentStepType As Global.TaskEngine.DialogueStepType) As ParseResultWithStatus
+            If currentTask Is Nothing Then
+                Return New ParseResultWithStatus() With {.Status = ParseStatus.NoMatch}
+            End If
 
-        ' ✅ STATELESS: Usa CompiledUtteranceTask direttamente, senza conversione
-        Dim parser As New Parser()
-        Dim parseResult = parser.Parse(utterance, currentTask.CompiledTask, currentStepType)
+            ' ✅ STATELESS: Usa CompiledUtteranceTask direttamente
+            Dim parser As New Parser()
+            Dim parseResult = parser.Parse(utterance, currentTask, currentStepType)
 
-        ' ✅ Converti ParseResultType in ParseStatus
-        Dim status As ParseStatus
-        Select Case parseResult.Result
-            Case ParseResultType.Match
-                status = ParseStatus.Match
-            Case ParseResultType.NoMatch
-                status = ParseStatus.NoMatch
-            Case ParseResultType.NoInput
-                status = ParseStatus.NoInput
-            Case ParseResultType.Corrected
-                status = ParseStatus.PartialMatch
-            Case Else
-                status = ParseStatus.NoMatch
-        End Select
+            ' ✅ Converti ParseResultType in ParseStatus
+            Dim status As ParseStatus
+            Select Case parseResult.Result
+                Case ParseResultType.Match
+                    status = ParseStatus.Match
+                Case ParseResultType.NoMatch
+                    status = ParseStatus.NoMatch
+                Case ParseResultType.NoInput
+                    status = ParseStatus.NoInput
+                Case ParseResultType.Corrected
+                    status = ParseStatus.PartialMatch
+                Case Else
+                    status = ParseStatus.NoMatch
+            End Select
 
-        ' ✅ Verifica se è MatchedButInvalid (validazione fallita)
-        If status = ParseStatus.Match AndAlso Not String.IsNullOrEmpty(parseResult.ConditionId) Then
-            status = ParseStatus.MatchedButInvalid
-        End If
+            ' ✅ Verifica se è MatchedButInvalid (validazione fallita)
+            If status = ParseStatus.Match AndAlso Not String.IsNullOrEmpty(parseResult.ConditionId) Then
+                status = ParseStatus.MatchedButInvalid
+            End If
 
-        Return New ParseResultWithStatus() With {
+            Return New ParseResultWithStatus() With {
             .Status = status,
             .ExtractedData = parseResult.ExtractedData,
             .ConditionId = parseResult.ConditionId
         }
-    End Function
+        End Function
 
-    ''' <summary>
-    ''' Salva i dati estratti in state.Memory (persistente)
-    ''' ✅ STATELESS: Salva solo in state.Memory, non in currentTask.Value
-    ''' </summary>
-    Public Sub FillTaskFromParseResult(
+        ''' <summary>
+        ''' Salva i dati estratti in state.Memory (persistente)
+        ''' ✅ STATELESS: Salva solo in state.Memory, non in currentTask.Value
+        ''' </summary>
+        Public Sub FillTaskFromParseResult(
         parseResult As ParseResultWithStatus,
         state As DialogueState
     )
-        If parseResult.ExtractedData Is Nothing OrElse parseResult.ExtractedData.Count = 0 Then
-            Return
-        End If
+            If parseResult.ExtractedData Is Nothing OrElse parseResult.ExtractedData.Count = 0 Then
+                Return
+            End If
 
-        ' ✅ STATELESS: Inizializza Memory se necessario
-        If state.Memory Is Nothing Then
-            state.Memory = New Dictionary(Of String, Object)()
-        End If
+            ' ✅ STATELESS: Inizializza Memory se necessario
+            If state.Memory Is Nothing Then
+                state.Memory = New Dictionary(Of String, Object)()
+            End If
 
-        ' ✅ STATELESS: Salva tutti i valori estratti in Memory (persistente)
-        For Each kvp In parseResult.ExtractedData
-            state.Memory(kvp.Key) = kvp.Value
-        Next
-    End Sub
+            ' ✅ STATELESS: Salva tutti i valori estratti in Memory (persistente)
+            For Each kvp In parseResult.ExtractedData
+                state.Memory(kvp.Key) = kvp.Value
+            Next
+        End Sub
 
         ''' <summary>
         ''' Esegue uno step stateless e restituisce i messaggi
         ''' </summary>
-        Public Function ExecuteStepStateless(currentTask As UtteranceTaskInstance, currentStep As Global.TaskEngine.DialogueStep, resolveTranslation As Func(Of String, String)) As List(Of String)
+        Public Function ExecuteStepStateless(currentTask As CompiledUtteranceTask, currentStep As Global.TaskEngine.DialogueStep, resolveTranslation As Func(Of String, String)) As List(Of String)
             Dim output As New List(Of String)()
 
             If currentStep Is Nothing OrElse currentStep.Escalations Is Nothing OrElse currentStep.Escalations.Count = 0 Then
@@ -95,7 +96,7 @@ Namespace TaskEngine
         ''' <summary>
         ''' Esegue un'escalation stateless e restituisce i messaggi
         ''' </summary>
-        Public Function ExecuteEscalationStateless(currentTask As UtteranceTaskInstance, currentStep As Global.TaskEngine.DialogueStep, escalationIndex As Integer, resolveTranslation As Func(Of String, String)) As List(Of String)
+        Public Function ExecuteEscalationStateless(currentTask As CompiledUtteranceTask, currentStep As Global.TaskEngine.DialogueStep, escalationIndex As Integer, resolveTranslation As Func(Of String, String)) As List(Of String)
             Dim output As New List(Of String)()
 
             If currentStep Is Nothing OrElse currentStep.Escalations Is Nothing OrElse escalationIndex < 0 OrElse escalationIndex >= currentStep.Escalations.Count Then
@@ -112,66 +113,234 @@ Namespace TaskEngine
                             Dim translated = resolveTranslation(msgTask.TextKey)
                             messageText = If(String.IsNullOrEmpty(translated), msgTask.TextKey, translated)
                         Else
+                            messageText = msgTask.TextKey
+                        End If
+                        If Not String.IsNullOrEmpty(messageText) Then
+                            output.Add(messageText)
+                        End If
+                    End If
+                Next
+            End If
+
+            Return output
+        End Function
+
+        ''' <summary>
+        ''' Ottiene uno step per tipo (restituisce Nothing se non trovato)
+        ''' </summary>
+        Public Function GetStepOrNull(task As CompiledUtteranceTask, stepType As Global.TaskEngine.DialogueStepType) As Global.TaskEngine.DialogueStep
+            If task Is Nothing OrElse task.Steps Is Nothing Then
+                Return Nothing
+            End If
+            Return task.Steps.FirstOrDefault(Function(s) s.Type = stepType)
+        End Function
+
+        ''' <summary>
+        ''' Ottiene il prossimo step (per ora restituisce lo stesso step)
+        ''' TODO: Implementare logica di navigazione
+        ''' </summary>
+        Public Function GetNextStep(task As CompiledUtteranceTask, currentStep As Global.TaskEngine.DialogueStep) As Global.TaskEngine.DialogueStep
+            ' Per ora restituisce lo stesso step
+            ' TODO: Implementare logica di navigazione tra step
+            Return currentStep
+        End Function
+
+        ''' <summary>
+        ''' Verifica se il task è riempito (ha valore in state.Memory o tutti i sub-task sono riempiti)
+        ''' ✅ STATELESS: Legge da memory
+        ''' </summary>
+        <Extension>
+        Public Function IsFilled(task As CompiledUtteranceTask, memory As Dictionary(Of String, Object)) As Boolean
+            If task Is Nothing Then
+                Return False
+            End If
+            If task.SubTasks IsNot Nothing AndAlso task.SubTasks.Count > 0 Then
+                Return task.SubTasks.All(Function(st) IsFilled(st, memory))
+            End If
+            ' ✅ STATELESS: Legge da memory
+            Return memory IsNot Nothing AndAlso memory.ContainsKey(task.Id)
+        End Function
+
+        ''' <summary>
+        ''' Verifica se il task è parzialmente riempito (alcuni sub-task sono riempiti ma non tutti)
+        ''' ✅ STATELESS: Legge da memory
+        ''' </summary>
+        <Extension>
+        Public Function IsPartiallyFilled(task As CompiledUtteranceTask, memory As Dictionary(Of String, Object)) As Boolean
+            If task Is Nothing OrElse task.SubTasks Is Nothing OrElse task.SubTasks.Count = 0 Then
+                Return False
+            End If
+            Dim filledCount = task.SubTasks.Where(Function(st) IsFilled(st, memory)).Count()
+            Return filledCount > 0 AndAlso filledCount < task.SubTasks.Count
+        End Function
+
+        ''' <summary>
+        ''' Ottiene il primo sub-task non riempito
+        ''' ✅ STATELESS: Usa memory per verificare se è riempito
+        ''' </summary>
+        <Extension>
+        Public Function GetFirstUnfilledSubTask(currentTask As CompiledUtteranceTask, memory As Dictionary(Of String, Object)) As CompiledUtteranceTask
+            If currentTask Is Nothing OrElse currentTask.SubTasks Is Nothing OrElse currentTask.SubTasks.Count = 0 Then
+                Return Nothing
+            End If
+
+            Return currentTask.SubTasks.FirstOrDefault(Function(st) Not IsFilled(st, memory))
+        End Function
+
+        ''' <summary>
+        ''' Verifica se il task è il task principale (confronta con rootTask)
+        ''' </summary>
+        <Extension>
+        Public Function IsMainTask(task As CompiledUtteranceTask, rootTask As CompiledUtteranceTask) As Boolean
+            If task Is Nothing OrElse rootTask Is Nothing Then
+                Return False
+            End If
+            Return task.Id = rootTask.Id
+        End Function
+
+        ''' <summary>
+        ''' Restituisce il main task (rootTask)
+        ''' </summary>
+        <Extension>
+        Public Function MainTask(task As CompiledUtteranceTask, rootTask As CompiledUtteranceTask) As CompiledUtteranceTask
+            Return rootTask
+        End Function
+
+        ''' <summary>
+        ''' Trova il parent di un subtask nella gerarchia (ricorsivo)
+        ''' </summary>
+        <Extension>
+        Public Function FindParent(subTask As CompiledUtteranceTask, rootTask As CompiledUtteranceTask) As CompiledUtteranceTask
+            If rootTask Is Nothing OrElse subTask Is Nothing Then
+                Return Nothing
+            End If
+
+            ' Se il subtask è il root stesso, non ha parent
+            If subTask.Id = rootTask.Id Then
+                Return Nothing
+            End If
+
+            ' Cerca ricorsivamente nel root e nei suoi subtask
+            Return FindParentRecursive(subTask, rootTask)
+        End Function
+
+        ''' <summary>
+        ''' Helper ricorsivo per trovare il parent
+        ''' </summary>
+        Private Function FindParentRecursive(subTask As CompiledUtteranceTask, parent As CompiledUtteranceTask) As CompiledUtteranceTask
+            If parent Is Nothing OrElse parent.SubTasks Is Nothing Then
+                Return Nothing
+            End If
+
+            ' Verifica se è un subtask diretto
+            If parent.SubTasks.Any(Function(st) st.Id = subTask.Id) Then
+                Return parent
+            End If
+
+            ' Cerca ricorsivamente nei sub-subTasks
+            For Each child In parent.SubTasks
+                Dim found = FindParentRecursive(subTask, child)
+                If found IsNot Nothing Then
+                    Return found
+                End If
+            Next
+
+            Return Nothing
+        End Function
+
+
+        ''' <summary>
+        ''' RenderStepTasks:
+        ''' Seleziona l'escalation corretta (in base a NoMatch/NoInput counters)
+        ''' e converte i task "renderizzabili" in stringhe da mostrare in chat.
+        ''' </summary>
+        Public Function RenderStepTasks(
+        stepObj As Global.TaskEngine.DialogueStep,
+        currentTask As CompiledUtteranceTask,
+        state As DialogueState,
+        resolveTranslation As Func(Of String, String)
+    ) As List(Of String)
+
+            Dim messages As New List(Of String)
+
+            If stepObj Is Nothing OrElse stepObj.Escalations Is Nothing OrElse stepObj.Escalations.Count = 0 Then
+                Return messages
+            End If
+
+            ' Determina l'indice di escalation in base al tipo di step e ai counters
+            Dim escalationIndex As Integer = 0
+
+            ' ✅ Usa counters da state.Counters
+            If state.Counters Is Nothing Then
+                state.Counters = New Dictionary(Of String, Counters)()
+            End If
+            If Not state.Counters.ContainsKey(currentTask.Id) Then
+                state.Counters(currentTask.Id) = New Counters()
+            End If
+            Dim taskCounters = state.Counters(currentTask.Id)
+
+            If stepObj.Type = Global.TaskEngine.DialogueStepType.NoMatch Then
+                Dim maxIndex = stepObj.Escalations.Count - 1
+                escalationIndex = Math.Min(Math.Max(taskCounters.NoMatch - 1, 0), maxIndex)
+
+            ElseIf stepObj.Type = Global.TaskEngine.DialogueStepType.NoInput Then
+                Dim maxIndex = stepObj.Escalations.Count - 1
+                escalationIndex = Math.Min(Math.Max(taskCounters.NoInput - 1, 0), maxIndex)
+            End If
+
+            ' Seleziona l'escalation corretta
+            Dim escalation = stepObj.Escalations(escalationIndex)
+
+            If escalation.Tasks Is Nothing Then
+                Return messages
+            End If
+
+            ' Renderizza solo i task che hanno una rappresentazione testuale in chat
+            For Each taskObj In escalation.Tasks
+                If TypeOf taskObj Is MessageTask Then
+                    Dim msgTask = DirectCast(taskObj, MessageTask)
+                    Dim messageText As String = Nothing
+                    If resolveTranslation IsNot Nothing AndAlso Not String.IsNullOrEmpty(msgTask.TextKey) Then
+                        Dim translated = resolveTranslation(msgTask.TextKey)
+                        messageText = If(String.IsNullOrEmpty(translated), msgTask.TextKey, translated)
+                    Else
                         messageText = msgTask.TextKey
                     End If
                     If Not String.IsNullOrEmpty(messageText) Then
-                        output.Add(messageText)
+                        messages.Add(messageText)
                     End If
+                ElseIf TypeOf taskObj Is CloseSessionTask Then
+                    messages.Add("[Chiusura chiamata]")
+                    ' FUTURO: gestire altri tipi di task se necessario
+                    ' ElseIf TypeOf taskObj Is SendSmsTask Then
+                    '     Dim smsTask = DirectCast(taskObj, SendSmsTask)
+                    '     messages.Add($"[SMS inviato al numero {smsTask.PhoneNumber}]")
                 End If
             Next
-        End If
 
-        Return output
-    End Function
+            Return messages
+        End Function
 
-    ''' <summary>
-    ''' Ottiene il primo sub-task non riempito
-    ''' ✅ STATELESS: Usa memory per verificare se è riempito
-    ''' </summary>
-    Public Function GetFirstUnfilledSubTask(currentTask As UtteranceTaskInstance, memory As Dictionary(Of String, Object)) As UtteranceTaskInstance
-        If currentTask.SubTasks Is Nothing OrElse currentTask.SubTasks.Count = 0 Then
-            Return Nothing
-        End If
-
-        Return currentTask.SubTasks.FirstOrDefault(Function(st) Not st.IsFilled(memory))
-    End Function
-
-    ''' <summary>
-    ''' Verifica se il task è parzialmente riempito
-    ''' ✅ STATELESS: Usa memory per verificare se è riempito
-    ''' </summary>
-    Public Function IsPartiallyFilled(currentTask As UtteranceTaskInstance, memory As Dictionary(Of String, Object)) As Boolean
-        Return currentTask.IsPartiallyFilled(memory)
-    End Function
-
-    ''' <summary>
-    ''' Verifica se il task è il task principale
-    ''' </summary>
-    Public Function IsMainTask(currentTask As UtteranceTaskInstance) As Boolean
-        Return currentTask.IsMainTask()
-    End Function
+        ''' <summary>
+        ''' Ottiene uno step per tipo
+        ''' </summary>
+        ''' <Extension>
+        <Extension>
+        Public Function GetStep(task As CompiledUtteranceTask, stepType As Global.TaskEngine.DialogueStepType) As Global.TaskEngine.DialogueStep
+            If task Is Nothing OrElse task.Steps Is Nothing Then
+                Throw New InvalidOperationException($"Task '{If(task IsNot Nothing, task.Id, "null")}' has no steps")
+            End If
+            Return task.Steps.SingleOrDefault(Function(s) s.Type = stepType)
+        End Function
 
 
-    ''' <summary>
-    ''' Crea UtteranceTaskInstance da CompiledUtteranceTask con struttura ricorsiva
-    ''' </summary>
-    Public Function CreateTaskInstance(compiledTask As CompiledUtteranceTask) As UtteranceTaskInstance
-        Dim instance As New UtteranceTaskInstance(compiledTask)
-
-        ' ✅ Crea sub-task instances
-        If compiledTask.SubTasks IsNot Nothing Then
-            For Each subTask In compiledTask.SubTasks
-                Dim subInstance = CreateTaskInstance(subTask)
-                subInstance.Parent = instance
-                instance.SubTasks.Add(subInstance)
-            Next
-        End If
-
-        Return instance
-    End Function
+        <Extension>
+        Public Function StepExists(task As CompiledUtteranceTask, stepType As DialogueStepType) As Boolean
+            If task.Steps Is Nothing Then Return False
+            Return task.Steps.SingleOrDefault(Function(s) s.Type = stepType) IsNot Nothing
+        End Function
 
     End Module
-
     ''' <summary>
     ''' ParseResult con ParseStatus invece di ParseResultType
     ''' </summary>

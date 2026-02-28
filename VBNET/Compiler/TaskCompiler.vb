@@ -118,8 +118,11 @@ Public Class TaskCompiler
         End If
 
         ' Valida regex nel contract (se presente)
-        If compiledTask.NlpContract IsNot Nothing AndAlso compiledTask.NlpContract.Regex IsNot Nothing Then
-            ValidateRegexPatterns(compiledTask.NlpContract.Regex, compiledTask, errors)
+        If compiledTask.NlpContract IsNot Nothing AndAlso compiledTask.NlpContract.Parsers IsNot Nothing Then
+            Dim regexContract = compiledTask.NlpContract.Parsers.FirstOrDefault(Function(c) c.Type = "regex" AndAlso c.Enabled)
+            If regexContract IsNot Nothing Then
+                ValidateRegexPatterns(regexContract, compiledTask, errors)
+            End If
         End If
 
         ' Ricorsivo per subTasks
@@ -150,9 +153,9 @@ Public Class TaskCompiler
     ''' <summary>
     ''' Valida pattern regex nel contract
     ''' </summary>
-    Private Sub ValidateRegexPatterns(regexConfig As RegexConfig, task As CompiledUtteranceTask, errors As List(Of String))
-        If regexConfig.Patterns IsNot Nothing Then
-            For Each pattern As String In regexConfig.Patterns
+    Private Sub ValidateRegexPatterns(regexContract As TaskEngine.NLPContractEngine, task As CompiledUtteranceTask, errors As List(Of String))
+        If regexContract.Patterns IsNot Nothing Then
+            For Each pattern As String In regexContract.Patterns
                 Try
                     Dim testRegex As New Text.RegularExpressions.Regex(pattern)
                 Catch ex As Exception

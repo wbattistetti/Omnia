@@ -92,7 +92,7 @@ function ensureSubDataMapping(
         templateId,
         templateName: template.label || templateId,
         subDataMapping: {},
-        contracts: [],
+        parsers: [],
       };
     }
     template.dataContract.subDataMapping = newMapping;
@@ -331,18 +331,18 @@ export default function RegexInlineEditor({
       console.log('[RegexEditor] Saving GUID regex to template:', node.templateId);
 
       if (!template.dataContract) {
-        template.dataContract = { contracts: [] };
+        template.dataContract = { parsers: [] };
       }
 
-      const regexContract = template.dataContract.contracts?.find((c: any) => c.type === 'regex');
+      const regexContract = template.dataContract.parsers?.find((c: any) => c.type === 'regex');
       if (regexContract) {
         regexContract.patterns = [techValue];
         console.log('[RegexEditor] Updated existing regex contract.');
       } else {
-        if (!template.dataContract.contracts) {
-          template.dataContract.contracts = [];
+        if (!template.dataContract.parsers) {
+          template.dataContract.parsers = [];
         }
-        template.dataContract.contracts.push({ type: 'regex', patterns: [techValue] });
+        template.dataContract.parsers.push({ type: 'regex', patterns: [techValue] });
         console.log('[RegexEditor] Created new regex contract.');
       }
 

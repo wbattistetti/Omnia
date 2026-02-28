@@ -1,7 +1,7 @@
 // Please write clean, production-grade TypeScript code.
 // Avoid non-ASCII characters, Chinese symbols, or multilingual output.
 
-import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
+import type { DataContract } from '@components/DialogueDataEngine/parsers/contractLoader';
 
 /** Regex that every valid GroupName must satisfy. */
 const GROUP_NAME_PATTERN = /^s[0-9]+$/i;
@@ -30,13 +30,13 @@ export function validateWizardContract(
 
   const entries = Object.entries(contract.subDataMapping || {});
 
-  // Only validate composite contracts (those with subtask mappings).
+  // Only validate composite parsers (those with subtask mappings).
   if (entries.length === 0) {
     return { valid: true, errors, warnings };
   }
 
-  // ✅ Extract patterns from contracts[] (not from contract.regex)
-  const regexContracts = contract.contracts?.filter(c => c.type === 'regex') ?? [];
+  // ✅ Extract patterns from parsers[] (not from contract.regex)
+  const regexContracts = contract.parsers?.filter(c => c.type === 'regex') ?? [];
   const patterns: string[] = regexContracts.flatMap(c => (c as any).patterns ?? []);
   const combinedPattern = patterns.join('\n');
 

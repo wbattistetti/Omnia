@@ -1,12 +1,12 @@
 /**
  * Contract Selector
- * Dynamic contract selection component - designer chooses which contracts to use
+ * Dynamic contract selection component - designer chooses which parsers to use
  * and can reorder them for custom escalation
  */
 
 import React, { useState, useCallback } from 'react';
 import { Plus, ChevronUp, ChevronDown, X, Sparkles } from 'lucide-react';
-import type { DataContract, ContractType } from '@components/DialogueDataEngine/contracts/contractLoader';
+import type { DataContract, ContractType } from '@components/DialogueDataEngine/parsers/contractLoader';
 
 export type ContractMethod = ContractType;
 
@@ -39,11 +39,11 @@ export default function ContractSelector({
   onContractChange,
   kind,
 }: ContractSelectorProps) {
-  // Get enabled contracts from contract.contracts array
+  // Get enabled parsers from contract.parsers array
   const enabledContracts = React.useMemo(() => {
-    if (!contract?.contracts || !Array.isArray(contract.contracts)) return [];
-    return contract.contracts.filter(c => c.enabled !== false);
-  }, [contract?.contracts]);
+    if (!contract?.parsers || !Array.isArray(contract.parsers)) return [];
+    return contract.parsers.filter(c => c.enabled !== false);
+  }, [contract?.parsers]);
 
   // Get enabled method types (for compatibility)
   const enabledMethods = React.useMemo(() => {
@@ -70,7 +70,7 @@ export default function ContractSelector({
       case 'ner':
         return { ...base, entityTypes: [], confidence: 0.8 };
       case 'llm':
-        return { ...base, systemPrompt: '', userPromptTemplate: '', responseSchema: {} };
+        return { ...base, systemPrompt: '', aiPrompt: '', responseSchema: {} };
       case 'embeddings':
         return { ...base, intents: [] };
       default:
@@ -86,7 +86,7 @@ export default function ContractSelector({
         templateName: '',
         templateId: '',
         subDataMapping: {},
-        contracts: [createDefaultContract(method)],
+        parsers: [createDefaultContract(method)],
       };
       onContractChange(newContract);
       setShowAddMenu(false);
@@ -94,15 +94,15 @@ export default function ContractSelector({
     }
 
     // Check if contract already exists
-    const existingContract = contract.contracts.find(c => c.type === method);
+    const existingContract = contract.parsers.find(c => c.type === method);
     if (existingContract) {
       // Re-enable if disabled
-      const updatedContracts = contract.contracts.map(c =>
+      const updatedContracts = contract.parsers.map(c =>
         c.type === method ? { ...c, enabled: true } : c
       );
       const updatedContract: DataContract = {
         ...contract,
-        contracts: updatedContracts,
+        parsers: updatedContracts,
       };
       onContractChange(updatedContract);
     } else {
@@ -110,7 +110,7 @@ export default function ContractSelector({
       const newContractItem = createDefaultContract(method);
       const updatedContract: DataContract = {
         ...contract,
-        contracts: [...contract.contracts, newContractItem],
+        parsers: [...contract.parsers, newContractItem],
       };
       onContractChange(updatedContract);
     }
@@ -121,55 +121,55 @@ export default function ContractSelector({
   const handleRemoveContract = useCallback((method: ContractMethod) => {
     if (!contract) return;
 
-    const updatedContracts = contract.contracts.map(c =>
+    const updatedContracts = contract.parsers.map(c =>
       c.type === method ? { ...c, enabled: false } : c
     );
 
     const updatedContract: DataContract = {
       ...contract,
-      contracts: updatedContracts,
+      parsers: updatedContracts,
     };
 
     onContractChange(updatedContract);
   }, [contract, onContractChange]);
 
-  // Move contract up in escalation order (reorder contracts array)
+  // Move contract up in escalation order (reorder parsers array)
   const handleMoveUp = useCallback((method: ContractMethod) => {
     if (!contract) return;
 
     const currentIndex = enabledContracts.findIndex(c => c.type === method);
     if (currentIndex <= 0) return;
 
-    const newContracts = [...contract.contracts];
-    // Find indices in full contracts array
-    const fullIndex1 = contract.contracts.findIndex(c => c.type === enabledContracts[currentIndex - 1].type);
-    const fullIndex2 = contract.contracts.findIndex(c => c.type === method);
+    const newContracts = [...contract.parsers];
+    // Find indices in full parsers array
+    const fullIndex1 = contract.parsers.findIndex(c => c.type === enabledContracts[currentIndex - 1].type);
+    const fullIndex2 = contract.parsers.findIndex(c => c.type === method);
     [newContracts[fullIndex1], newContracts[fullIndex2]] = [newContracts[fullIndex2], newContracts[fullIndex1]];
 
     const updatedContract: DataContract = {
       ...contract,
-      contracts: newContracts,
+      parsers: newContracts,
     };
 
     onContractChange(updatedContract);
   }, [contract, enabledContracts, onContractChange]);
 
-  // Move contract down in escalation order (reorder contracts array)
+  // Move contract down in escalation order (reorder parsers array)
   const handleMoveDown = useCallback((method: ContractMethod) => {
     if (!contract) return;
 
     const currentIndex = enabledContracts.findIndex(c => c.type === method);
     if (currentIndex < 0 || currentIndex >= enabledContracts.length - 1) return;
 
-    const newContracts = [...contract.contracts];
-    // Find indices in full contracts array
-    const fullIndex1 = contract.contracts.findIndex(c => c.type === method);
-    const fullIndex2 = contract.contracts.findIndex(c => c.type === enabledContracts[currentIndex + 1].type);
+    const newContracts = [...contract.parsers];
+    // Find indices in full parsers array
+    const fullIndex1 = contract.parsers.findIndex(c => c.type === method);
+    const fullIndex2 = contract.parsers.findIndex(c => c.type === enabledContracts[currentIndex + 1].type);
     [newContracts[fullIndex1], newContracts[fullIndex2]] = [newContracts[fullIndex2], newContracts[fullIndex1]];
 
     const updatedContract: DataContract = {
       ...contract,
-      contracts: newContracts,
+      parsers: newContracts,
     };
 
     onContractChange(updatedContract);

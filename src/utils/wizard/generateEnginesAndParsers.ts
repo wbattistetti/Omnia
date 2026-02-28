@@ -3,7 +3,7 @@
 
 import type { TaskTreeNode } from '../../types/taskTypes';
 import type { SemanticContract, EngineType } from '../../types/semanticContract';
-import type { DataContract, DataContractItem } from '../../components/DialogueDataEngine/contracts/contractLoader';
+import type { DataContract, DataContractItem } from '../../components/DialogueDataEngine/parsers/contractLoader';
 import { EngineEscalationService } from '../../services/EngineEscalationService';
 import { DialogueTaskService } from '../../services/DialogueTaskService';
 import { SemanticContractService } from '../../services/SemanticContractService';
@@ -54,8 +54,8 @@ function convertEngineConfigToDataContractItem(
         type: 'regex',
         enabled: true,
         patterns: config.regex ? [config.regex] : [],
-        examples: [],
-        testCases: []
+        examples: []
+        // testCases removed - now at DataContract level
       };
 
     case 'llm':
@@ -63,7 +63,7 @@ function convertEngineConfigToDataContractItem(
         type: 'llm',
         enabled: true,
         systemPrompt: config.llmPrompt || '',
-        userPromptTemplate: config.llmPrompt || '',
+        aiPrompt: config.llmPrompt || '',  // Renamed from userPromptTemplate
         responseSchema: {}
       };
 
@@ -72,8 +72,8 @@ function convertEngineConfigToDataContractItem(
         type: 'rules',
         enabled: true,
         extractorCode: JSON.stringify(config.rules || []),
-        validators: [],
-        testCases: []
+        validators: []
+        // testCases removed - now at DataContract level
       };
 
     case 'ner':
@@ -190,12 +190,12 @@ export async function generateParserForEngine(
  * ARCHITECTURAL RULES:
  * - SEZIONE 2: AI decides which engines to use (deterministic based on entity type)
  * - SEZIONE 3: Wizard generates parser for each engine
- * - Parsers are saved in DataContract.contracts[]
+ * - Parsers are saved in DataContract.parsers[]
  * - This function is IDEMPOTENT: skips nodes that already have parsers
  */
 export async function generateEnginesAndParsersForAllNodes(
   taskTree: { nodes: TaskTreeNode[] },
-  contracts: Map<string, SemanticContract>,
+  parsers: Map<string, SemanticContract>,
   onProgress?: (progress: GenerationProgress) => void
 ): Promise<Map<string, DataContractItem[]>> {
   if (!taskTree || !taskTree.nodes || taskTree.nodes.length === 0) {
@@ -227,15 +227,15 @@ export async function generateEnginesAndParsersForAllNodes(
     mainNodes: taskTree.nodes.length
   });
 
-  // Load all contracts (both newly generated and existing ones)
+  // Load all parsers (both newly generated and existing ones)
   const allContracts = new Map<string, SemanticContract>();
 
-  // Add newly generated contracts
-  for (const [nodeId, contract] of contracts.entries()) {
+  // Add newly generated parsers
+  for (const [nodeId, contract] of parsers.entries()) {
     allContracts.set(nodeId, contract);
   }
 
-  // Load existing contracts for nodes that don't have newly generated ones
+  // Load existing parsers for nodes that don't have newly generated ones
   const existingContractPromises = allNodes
     .filter(node => {
       const nodeId = node.id || node.templateId;
@@ -254,7 +254,7 @@ export async function generateEnginesAndParsersForAllNodes(
     }
   }
 
-  // Filter nodes that have contracts and templates
+  // Filter nodes that have parsers and templates
   const nodesToProcess = allNodes.filter(node => {
     const nodeId = node.id || node.templateId;
     const contract = allContracts.get(nodeId);
@@ -294,12 +294,12 @@ export async function generateEnginesAndParsersForAllNodes(
     // Idempotency check: skip only if ALL required engines are already present.
     // 'rule_based' engine maps to contract type 'rules'.
     const engineTypeToContractType = (e: string): string => e === 'rule_based' ? 'rules' : e;
-    // ✅ Check existing contracts from template.dataContract if it exists, otherwise assume empty
-    const existingTypes = new Set((template.dataContract?.contracts || []).map(c => c.type));
+    // ✅ Check existing parsers from template.dataContract if it exists, otherwise assume empty
+    const existingTypes = new Set((template.dataContract?.parsers || []).map(c => c.type));
     const missingEngines = engines.filter(e => !existingTypes.has(engineTypeToContractType(e)));
 
     // ✅ DEBUG: Check if existing regex pattern uses semantic names instead of s1/s2/s3
-    const existingRegexContract = template.dataContract?.contracts?.find((c: any) => c.type === 'regex');
+    const existingRegexContract = template.dataContract?.parsers?.find((c: any) => c.type === 'regex');
     if (existingRegexContract?.patterns?.length > 0) {
       const pattern = existingRegexContract.patterns[0];
       const semanticGroups = ['giorno', 'mese', 'anno', 'day', 'month', 'year'];

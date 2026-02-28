@@ -1,9 +1,9 @@
 /**
  * Contract Helpers
- * Utilities for loading and saving Data contracts
+ * Utilities for loading and saving Data parsers
  */
 
-import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
+import type { DataContract } from '@components/DialogueDataEngine/parsers/contractLoader';
 import DialogueTaskService from '@services/DialogueTaskService';
 
 /**
@@ -13,7 +13,7 @@ import DialogueTaskService from '@services/DialogueTaskService';
  * 2. template.semanticContract → crea DataContract vuoto coerente
  * 3. template.patterns → convertito in dataContract (legacy)
  *
- * ❌ RIMOSSO: node.dataContract (override) - i contracts sono sempre nel template
+ * ❌ RIMOSSO: node.dataContract (override) - i parsers sono sempre nel template
  *
  * ARCHITECTURAL RULE:
  * - Se semanticContract esiste ma dataContract è vuoto, crea DataContract vuoto
@@ -31,12 +31,12 @@ export function loadContractFromNode(node: any): DataContract | null {
 
     // ✅ PRIORITY 1: Se esiste dataContract, usalo
     if (template?.dataContract) {
-      const regexPattern = template.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+      const regexPattern = template.dataContract?.parsers?.find((c: any) => c.type === 'regex')?.patterns?.[0];
       console.log('[CONTRACT] LOAD - From template.dataContract', {
         nodeId: node.id,
         templateId,
         regexPattern: regexPattern || '(none)',
-        contractsCount: template.dataContract.contracts?.length || 0
+        parsersCount: template.dataContract.parsers?.length || 0
       });
       return template.dataContract as DataContract;
     }
@@ -50,13 +50,13 @@ export function loadContractFromNode(node: any): DataContract | null {
         entityLabel: template.semanticContract.entity?.label
       });
 
-      // Crea DataContract iniziale vuoto con contracts array vuoto
+      // Crea DataContract iniziale vuoto con parsers array vuoto
       // Le colonne verranno mostrate ma vuote, l'utente può aggiungere contratti manualmente
       const emptyDataContract: DataContract = {
         templateName: template.label || templateId,
         templateId: templateId,
         subDataMapping: {},
-        contracts: [] // Array vuoto = nessun engine configurato, ma le colonne possono essere mostrate
+        parsers: [] // Array vuoto = nessun engine configurato, ma le colonne possono essere mostrate
       };
 
       // ✅ DEBUG: Log dettagliato del DataContract creato
@@ -64,8 +64,8 @@ export function loadContractFromNode(node: any): DataContract | null {
         nodeId: node.id,
         templateId,
         templateName: emptyDataContract.templateName,
-        contractsCount: emptyDataContract.contracts.length,
-        contractsArray: emptyDataContract.contracts,
+        parsersCount: emptyDataContract.parsers.length,
+        parsersArray: emptyDataContract.parsers,
         hasSemanticContract: !!template.semanticContract,
         semanticContractEntity: template.semanticContract?.entity?.label,
         dataContractKeys: Object.keys(emptyDataContract)
@@ -79,7 +79,7 @@ export function loadContractFromNode(node: any): DataContract | null {
         nodeId: node.id,
         templateId,
         savedToTemplate: !!template.dataContract,
-        savedContractsCount: template.dataContract?.contracts?.length || 0
+        savedContractsCount: template.dataContract?.parsers?.length || 0
       });
 
       return emptyDataContract;

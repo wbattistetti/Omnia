@@ -22,7 +22,7 @@ export interface RegexContract {
         ambiguousSubIds: string[];  // Lista di subId che possono essere ambigui
     };
     examples: string[];
-    testCases: string[];
+    // testCases removed - now at DataContract level
 }
 
 export interface RulesContract {
@@ -30,7 +30,7 @@ export interface RulesContract {
     enabled: boolean;
     extractorCode: string;
     validators: any[];
-    testCases: string[];
+    // testCases removed - now at DataContract level
 }
 
 export interface NERContract {
@@ -44,7 +44,7 @@ export interface LLMContract {
     type: 'llm';
     enabled: boolean;
     systemPrompt: string;
-    userPromptTemplate: string;
+    aiPrompt: string;  // Renamed from userPromptTemplate
     responseSchema: object;
 }
 
@@ -80,8 +80,10 @@ export interface DataContract {
             patternIndex?: number;  // Context-aware: quale pattern usare per questo sub
         };
     };
-    // Array di contract - ordine implicito (ordine array = ordine escalation)
-    contracts: DataContractItem[];
+    // Array di parsers - ordine implicito (ordine array = ordine escalation)
+    parsers: DataContractItem[];
+    // Test cases common to all engines (moved from individual engines)
+    testCases?: string[];
 }
 
 // Alias per retrocompatibilità durante la migrazione

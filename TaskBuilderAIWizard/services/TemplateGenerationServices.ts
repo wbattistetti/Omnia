@@ -209,7 +209,7 @@ export async function AIGenerateContracts(
     // ✅ NEW: Restituisce semantic contracts invece di void
     return generatedContracts;
   } catch (error) {
-    console.error('[AIGenerateContracts] ❌ Error generating contracts:', error);
+    console.error('[AIGenerateContracts] ❌ Error generating parsers:', error);
     throw error;
   }
 }

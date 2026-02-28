@@ -6,7 +6,7 @@ import WaitingMessagesConfig from '@responseEditor/Config/WaitingMessagesConfig'
 import TesterGrid from '@responseEditor/features/step-management/components/TesterGrid';
 import { RowResult } from '@responseEditor/hooks/useExtractionTesting';
 import { loadContractFromNode } from '@responseEditor/ContractSelector/contractHelpers';
-import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
+import type { DataContract } from '@components/DialogueDataEngine/parsers/contractLoader';
 import DialogueTaskService from '@services/DialogueTaskService';
 import { useProjectData } from '@context/ProjectDataContext';
 import { useNotesStore } from '@responseEditor/features/step-management/stores/notesStore';
@@ -174,7 +174,7 @@ export default function RecognitionEditor({
 
       // ✅ Carica dal template UNA VOLTA quando apri l'editor
       const loadedContract = loadContractFromNode(node);
-      const regexPattern = loadedContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+      const regexPattern = loadedContract?.parsers?.find((c: any) => c.type === 'regex')?.patterns?.[0];
 
       // ✅ DEBUG: Log dettagliato del contract caricato
       console.log('[RecognitionEditor] 🔍 Contract loaded from node', {
@@ -182,9 +182,9 @@ export default function RecognitionEditor({
         templateId: node.templateId,
         hasContract: !!loadedContract,
         contractType: loadedContract ? typeof loadedContract : 'null',
-        contractsArray: loadedContract?.contracts,
-        contractsCount: loadedContract?.contracts?.length || 0,
-        contractsTypes: loadedContract?.contracts?.map((c: any) => c.type) || [],
+        parsersArray: loadedContract?.parsers,
+        parsersCount: loadedContract?.parsers?.length || 0,
+        parsersTypes: loadedContract?.parsers?.map((c: any) => c.type) || [],
         contractKeys: loadedContract ? Object.keys(loadedContract) : [],
         templateName: loadedContract?.templateName,
         templateId: loadedContract?.templateId
@@ -357,9 +357,9 @@ export default function RecognitionEditor({
     console.log('[RecognitionEditor] 🔍 Contract state changed', {
       hasContract: !!contract,
       contractType: contract ? typeof contract : 'null',
-      contractsArray: contract?.contracts,
-      contractsCount: contract?.contracts?.length || 0,
-      contractsTypes: contract?.contracts?.map((c: any) => c?.type) || [],
+      parsersArray: contract?.parsers,
+      parsersCount: contract?.parsers?.length || 0,
+      parsersTypes: contract?.parsers?.map((c: any) => c?.type) || [],
       contractKeys: contract ? Object.keys(contract) : [],
       templateName: contract?.templateName,
       templateId: contract?.templateId,
@@ -369,7 +369,7 @@ export default function RecognitionEditor({
   }, [contract, editorProps?.node?.id, editorProps?.node?.templateId]);
 
   // ✅ Stato locale per regex (non salvato durante digitazione)
-  const contractItem = activeEditor && contract ? contract.contracts?.find((c: any) => {
+  const contractItem = activeEditor && contract ? contract.parsers?.find((c: any) => {
     const getContractTypeFromEditorType = (editorType: string): string => {
       if (editorType === 'extractor') return 'rules';
       return editorType;
@@ -405,7 +405,7 @@ export default function RecognitionEditor({
       hasNode: !!editorProps?.node,
       nodeTemplateId: editorProps?.node?.templateId,
       skipAutoSave,
-      updatedContractRegex: updatedContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0],
+      updatedContractRegex: updatedContract?.parsers?.find((c: any) => c.type === 'regex')?.patterns?.[0],
     });
 
     const node = editorProps?.node;
@@ -415,7 +415,7 @@ export default function RecognitionEditor({
     }
 
     const nodeTemplateId = node.templateId;
-    const regexPattern = updatedContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+    const regexPattern = updatedContract?.parsers?.find((c: any) => c.type === 'regex')?.patterns?.[0];
     console.log('[RecognitionEditor][handleContractChange] 📊 Regex pattern extracted:', regexPattern);
 
     // ✅ Confronta con template
@@ -432,7 +432,7 @@ export default function RecognitionEditor({
           : null;
         console.log('[RecognitionEditor][handleContractChange] ✅ Template dataContract updated:', {
           hasContract: !!template.dataContract,
-          regexInContract: template.dataContract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0],
+          regexInContract: template.dataContract?.parsers?.find((c: any) => c.type === 'regex')?.patterns?.[0],
         });
         // ✅ Marca template come modificato per salvataggio futuro
         DialogueTaskService.markTemplateAsModified(nodeTemplateId);
@@ -516,22 +516,22 @@ export default function RecognitionEditor({
       console.warn('[RecognitionEditor] ⚠️ No contract available, cannot save regex');
       return;
     }
-    const regexContract = contract.contracts?.find((c: any) => c.type === 'regex');
+    const regexContract = contract.parsers?.find((c: any) => c.type === 'regex');
     if (regexContract) {
       console.log('[RecognitionEditor] 📝 Updating existing regex contract');
-      const updatedContracts = contract.contracts.map((c: any) =>
+      const updatedContracts = contract.parsers.map((c: any) =>
         c.type === 'regex' ? { ...c, patterns: [newRegex] } : c
       );
-      const updatedContract = { ...contract, contracts: updatedContracts };
+      const updatedContract = { ...contract, parsers: updatedContracts };
       console.log('[RecognitionEditor] 📝 Updated contract:', updatedContract);
       handleContractChange(updatedContract, false);
     } else {
       console.log('[RecognitionEditor] 📝 Creating new regex contract');
-      const newContracts = [...(contract.contracts || []), {
+      const newContracts = [...(contract.parsers || []), {
         type: 'regex',
         patterns: [newRegex]
       }];
-      const updatedContract = { ...contract, contracts: newContracts };
+      const updatedContract = { ...contract, parsers: newContracts };
       console.log('[RecognitionEditor] 📝 New contract:', updatedContract);
       handleContractChange(updatedContract, false);
     }
@@ -554,7 +554,7 @@ export default function RecognitionEditor({
     };
 
     // ✅ Ricalcola contractItem per altri editor (per regex usa quello calcolato sopra)
-    const contractItemForEditor = activeEditor && contract ? contract.contracts?.find((c: any) => {
+    const contractItemForEditor = activeEditor && contract ? contract.parsers?.find((c: any) => {
       const expectedContractType = getContractTypeFromEditorType(activeEditor);
       return c.type === expectedContractType;
     }) : null;
@@ -590,10 +590,10 @@ export default function RecognitionEditor({
           setExtractorCode: (value: string) => {
             if (contractItemForEditor && contract) {
               const contractType = contractItemForEditor.type; // Should be 'rules'
-              const updatedContracts = contract.contracts.map((c: any) =>
+              const updatedContracts = contract.parsers.map((c: any) =>
                 c.type === contractType ? { ...c, extractorCode: value } : c
               );
-              const updatedContract = { ...contract, contracts: updatedContracts };
+              const updatedContract = { ...contract, parsers: updatedContracts };
               handleContractChange(updatedContract, false); // ✅ Salva esplicitamente
             }
           },
@@ -605,10 +605,10 @@ export default function RecognitionEditor({
           setEntityTypes: (value: string[]) => {
             if (contractItemForEditor && contract) {
               const contractType = contractItemForEditor.type;
-              const updatedContracts = contract.contracts.map((c: any) =>
+              const updatedContracts = contract.parsers.map((c: any) =>
                 c.type === contractType ? { ...c, entityTypes: value } : c
               );
-              const updatedContract = { ...contract, contracts: updatedContracts };
+              const updatedContract = { ...contract, parsers: updatedContracts };
               handleContractChange(updatedContract, false); // ✅ Salva esplicitamente
             }
           },
@@ -620,10 +620,10 @@ export default function RecognitionEditor({
           setSystemPrompt: (value: string) => {
             if (contractItemForEditor && contract) {
               const contractType = contractItemForEditor.type;
-              const updatedContracts = contract.contracts.map((c: any) =>
+              const updatedContracts = contract.parsers.map((c: any) =>
                 c.type === contractType ? { ...c, systemPrompt: value } : c
               );
-              const updatedContract = { ...contract, contracts: updatedContracts };
+              const updatedContract = { ...contract, parsers: updatedContracts };
               handleContractChange(updatedContract, false); // ✅ Salva esplicitamente
             }
           },

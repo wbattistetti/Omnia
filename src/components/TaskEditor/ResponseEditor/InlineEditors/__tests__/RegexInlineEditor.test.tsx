@@ -128,7 +128,7 @@ vi.mock('@services/DialogueTaskService', () => ({
   default: {
     getTemplate: vi.fn(() => ({
       dataContract: {
-        contracts: [{ type: 'regex', patterns: ['(?<g_000000000000>.*)'] }],
+        parsers: [{ type: 'regex', patterns: ['(?<g_000000000000>.*)'] }],
         subDataMapping: {
           'sub-1': {
             canonicalKey: 'giorno',

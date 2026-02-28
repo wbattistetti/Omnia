@@ -46,19 +46,29 @@ export async function extractWithContractAsync(
     text: string,
     contract: NLPContract
 ): Promise<ExtractionResult> {
-    // ESCALATION LEVEL 3: NER
-    if (contract.ner?.enabled) {
-        const nerResult = await tryNERExtraction(text, contract);
-        if (nerResult.hasMatch) {
-            return { ...nerResult, source: 'ner' };
-        }
+    // ✅ NEW: Escalation based on contracts array order
+    if (!contract.parsers || contract.parsers.length === 0) {
+        return { values: {}, hasMatch: false, source: null };
     }
 
-    // ESCALATION LEVEL 4: LLM
-    if (contract.llm.enabled) {
-        const llmResult = await tryLLMExtraction(text, contract);
-        if (llmResult.hasMatch) {
-            return { ...llmResult, source: 'llm' };
+    // Try contracts in order (escalation)
+    for (const contractItem of contract.parsers) {
+        if (!contractItem.enabled) continue;
+
+        switch (contractItem.type) {
+            case 'ner':
+                const nerResult = await tryNERExtraction(text, contract);
+                if (nerResult.hasMatch) {
+                    return { ...nerResult, source: 'ner' };
+                }
+                break;
+
+            case 'llm':
+                const llmResult = await tryLLMExtraction(text, contract, contractItem);
+                if (llmResult.hasMatch) {
+                    return { ...llmResult, source: 'llm' };
+                }
+                break;
         }
     }
 
@@ -72,8 +82,15 @@ export async function extractWithContractAsync(
 function tryRegexExtraction(text: string, contract: NLPContract, activeSubId?: string): ExtractionResult {
     const values: Record<string, any> = {};
 
+    // ✅ NEW: Find regex contract from contracts array
+    const regexContract = contract.parsers?.find(c => c.type === 'regex' && c.enabled);
+    if (!regexContract || regexContract.type !== 'regex' || !regexContract.patterns || regexContract.patterns.length === 0) {
+        console.warn('⚠️ [NLP Regex] Regex contract not found or no patterns');
+        return { values: {}, hasMatch: false, source: null };
+    }
+
     // ✅ SEMPLIFICATO: usa sempre solo mainPattern (pattern[0]) per correzione implicita
-    const mainPattern = contract.regex.patterns[0];
+    const mainPattern = regexContract.patterns[0];
     if (!mainPattern) {
         console.warn('⚠️ [NLP Regex] Main pattern non trovato nel contract');
         return { values: {}, hasMatch: false, source: null };
@@ -159,7 +176,13 @@ function tryRegexExtraction(text: string, contract: NLPContract, activeSubId?: s
  * @returns true se il valore è ambiguo
  */
 function checkAmbiguity(text: string, contract: NLPContract): boolean {
-    const ambiguityPattern = contract.regex.ambiguityPattern;
+    // ✅ NEW: Find regex contract from contracts array
+    const regexContract = contract.parsers?.find(c => c.type === 'regex' && c.enabled);
+    if (!regexContract || regexContract.type !== 'regex') {
+        return false;
+    }
+
+    const ambiguityPattern = (regexContract as any).ambiguityPattern;
 
     if (!ambiguityPattern) {
         // Nessun pattern ambiguità definito → non è ambiguo
@@ -202,14 +225,19 @@ async function tryNERExtraction(_text: string, _contract: NLPContract): Promise<
 /**
  * Prova estrazione con LLM
  */
-async function tryLLMExtraction(text: string, contract: NLPContract): Promise<ExtractionResult> {
+async function tryLLMExtraction(text: string, contract: NLPContract, llmContractItem: any): Promise<ExtractionResult> {
     try {
+        // ✅ NEW: Use aiPrompt from contract item
+        if (llmContractItem.type !== 'llm') {
+            return { values: {}, hasMatch: false, source: null };
+        }
+
         // Costruisci prompt
         const subDataList = Object.entries(contract.subDataMapping)
             .map(([subId, m]) => `- ${subId}: ${m.label} (${m.type})`)
             .join('\n');
 
-        const userPrompt = contract.llm.userPromptTemplate
+        const userPrompt = llmContractItem.aiPrompt
             .replace('{text}', text)
             .replace('{subData}', subDataList);
 
@@ -221,7 +249,7 @@ async function tryLLMExtraction(text: string, contract: NLPContract): Promise<Ex
                 text,
                 subData: Object.values(contract.subDataMapping),
                 prompt: userPrompt,
-                schema: contract.llm.responseSchema
+                schema: llmContractItem.responseSchema
             })
         });
 

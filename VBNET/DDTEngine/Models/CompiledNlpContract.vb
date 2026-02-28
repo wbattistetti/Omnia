@@ -16,16 +16,6 @@ Public Class CompiledNlpContract
     Public Property CompiledMainRegex As Regex
 
     ''' <summary>
-    ''' Regex per subData pre-compilati (keyed by groupName o pattern index)
-    ''' </summary>
-    Public Property CompiledSubRegexes As Dictionary(Of String, Regex)
-
-    ''' <summary>
-    ''' Regex per ambiguità pre-compilato (se presente)
-    ''' </summary>
-    Public Property CompiledAmbiguityRegex As Regex
-
-    ''' <summary>
     ''' Indica se il contract è valido (tutti i pattern sono compilabili)
     ''' </summary>
     Public Property IsValid As Boolean
@@ -37,7 +27,6 @@ Public Class CompiledNlpContract
 
     Public Sub New()
         MyBase.New()
-        CompiledSubRegexes = New Dictionary(Of String, Regex)()
         ValidationErrors = New List(Of String)()
         IsValid = True
     End Sub
@@ -71,15 +60,10 @@ Public Class CompiledNlpContract
             Console.WriteLine($"[CompiledNlpContract.Compile] ⚠️ compiled.SubDataMapping is Nothing after copy!")
         End If
 
-        compiled.Contracts = baseContract.Contracts ' ✅ NEW: Copy Contracts directly
-        ' Mantenuto per retrocompatibilità
-        compiled.Regex = baseContract.Regex
-        compiled.Rules = baseContract.Rules
-        compiled.Ner = baseContract.Ner
-        compiled.Llm = baseContract.Llm
+        compiled.Parsers = baseContract.Parsers ' ✅ NEW: Copy Parsers directly
 
-        ' ✅ NEW: Pre-compila regex patterns da Contracts invece di baseContract.Regex
-        Dim regexContract = baseContract.Contracts?.FirstOrDefault(Function(c) c.Type = "regex" AndAlso c.Enabled)
+        ' ✅ Pre-compila solo il main regex pattern (primo pattern)
+        Dim regexContract = baseContract.Parsers?.FirstOrDefault(Function(c) c.Type = "regex" AndAlso c.Enabled)
         If regexContract IsNot Nothing AndAlso regexContract.Patterns IsNot Nothing Then
             ' Compila main pattern (primo pattern)
             If regexContract.Patterns.Count > 0 Then
@@ -90,31 +74,6 @@ Public Class CompiledNlpContract
                     compiled.IsValid = False
                 End Try
             End If
-
-            ' Compila sub patterns (se presenti)
-            For i As Integer = 1 To regexContract.Patterns.Count - 1
-                Dim pattern = regexContract.Patterns(i)
-                Dim key As String = If(i <= regexContract.PatternModes.Count - 1, regexContract.PatternModes(i), $"pattern_{i}")
-                Try
-                    compiled.CompiledSubRegexes(key) = New Regex(pattern, RegexOptions.IgnoreCase Or RegexOptions.Compiled)
-                Catch ex As Exception
-                    compiled.ValidationErrors.Add($"Sub regex pattern invalid (key: {key}): {pattern}. Error: {ex.Message}")
-                    compiled.IsValid = False
-                End Try
-            Next
-        End If
-
-        ' Compila ambiguity pattern (se presente)
-        If regexContract IsNot Nothing AndAlso
-           regexContract.Ambiguity IsNot Nothing AndAlso
-           regexContract.Ambiguity.AmbiguousValues IsNot Nothing AndAlso
-           Not String.IsNullOrEmpty(regexContract.Ambiguity.AmbiguousValues.Pattern) Then
-            Try
-                compiled.CompiledAmbiguityRegex = New Regex(regexContract.Ambiguity.AmbiguousValues.Pattern, RegexOptions.IgnoreCase Or RegexOptions.Compiled)
-            Catch ex As Exception
-                compiled.ValidationErrors.Add($"Ambiguity regex pattern invalid: {regexContract.Ambiguity.AmbiguousValues.Pattern}. Error: {ex.Message}")
-                compiled.IsValid = False
-            End Try
         End If
 
         Return compiled

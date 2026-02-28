@@ -327,14 +327,14 @@ Public Class UtteranceTaskCompiler
                     Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   DataContract JSON length: {dcJson.Length}")
                     Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   DataContract JSON (first 800 chars): {If(dcJson.Length > 800, dcJson.Substring(0, 800) & "...", dcJson)}")
 
-                    ' Verifica se contracts è presente
+                    ' Verifica se parsers è presente
                     If TypeOf subTemplate.DataContract Is JObject Then
                         Dim dcObj = CType(subTemplate.DataContract, JObject)
-                        If dcObj("contracts") IsNot Nothing Then
-                            Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   ✅ contracts found: type={dcObj("contracts").Type}")
-                            If dcObj("contracts").Type = JTokenType.Array Then
-                                Dim contractsArray = CType(dcObj("contracts"), JArray)
-                                Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   ✅ contracts array count: {contractsArray.Count}")
+                        If dcObj("parsers") IsNot Nothing Then
+                            Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   ✅ parsers found: type={dcObj("parsers").Type}")
+                            If dcObj("parsers").Type = JTokenType.Array Then
+                                Dim parsersArray = CType(dcObj("parsers"), JArray)
+                                Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   ✅ parsers array count: {parsersArray.Count}")
                             End If
                         Else
                             Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   ⚠️ contracts NOT found in DataContract")

@@ -7,7 +7,7 @@ import NoteEditor from '@responseEditor/CellNote/NoteEditor';
 import NoteDisplay from '@responseEditor/CellNote/NoteDisplay';
 import NoteSeparator from '@responseEditor/CellNote/NoteSeparator';
 import { RowResult } from '@responseEditor/hooks/useExtractionTesting';
-import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
+import type { DataContract } from '@components/DialogueDataEngine/parsers/contractLoader';
 import { useNotesStore, getCellKeyFromPhrase } from '@responseEditor/features/step-management/stores/notesStore';
 
 interface TesterGridRowProps {
@@ -124,9 +124,9 @@ function TesterGridRowComponent({
         phraseColumnWidth={phraseColumnWidth}
         rowBackground={selectedRow === rowIndex ? '#fff7ed' : '#fff'} // ✅ FIX: Passa il background della riga
       />
-      {/* Render colonne dinamiche basate su contract.contracts */}
-      {contract?.contracts && contract.contracts.length > 0 ? (
-        contract.contracts
+      {/* Render colonne dinamiche basate su contract.parsers */}
+      {contract?.parsers && contract.parsers.length > 0 ? (
+        contract.parsers
           .filter(c => c.enabled !== false) // Filtra solo contract abilitati
           .map((contractItem) => {
           const componentType = contractItem.type === 'rules' ? 'deterministic' : contractItem.type;

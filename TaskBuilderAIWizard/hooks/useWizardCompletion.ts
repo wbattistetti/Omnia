@@ -210,7 +210,7 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
         templateId: taskInstance?.templateId
       });
 
-      // Build TaskTree and generate contracts/engines
+      // Build TaskTree and generate parsers/engines
       try {
         const taskTree = await buildTaskTreeWithContractsAndEngines(taskInstance, projectId, dataSchema);
 
@@ -321,16 +321,16 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
 
       // ✅ DEBUG: Log finale - verifica stato contratti per tutti i nodi
       const allNodesFinal = flattenTaskTree(dataSchema);
-      console.log(`[useWizardCompletion] 📊 FINAL STATE - Wizard completed, checking contracts for all nodes`, {
+      console.log(`[useWizardCompletion] 📊 FINAL STATE - Wizard completed, checking parsers for all nodes`, {
         totalNodes: allNodesFinal.length,
         nodesWithDataContract: allNodesFinal.filter(n => !!n.dataContract).length,
-        nodesWithContracts: allNodesFinal.filter(n => n.dataContract?.contracts && n.dataContract.contracts.length > 0).length,
+        nodesWithContracts: allNodesFinal.filter(n => n.dataContract?.parsers && n.dataContract.parsers.length > 0).length,
         nodesDetails: allNodesFinal.map(n => ({
           nodeId: n.id,
           nodeLabel: n.label,
           hasDataContract: !!n.dataContract,
-          contractsCount: n.dataContract?.contracts?.length || 0,
-          contractTypes: n.dataContract?.contracts?.map((c: any) => c.type) || []
+          parsersCount: n.dataContract?.parsers?.length || 0,
+          contractTypes: n.dataContract?.parsers?.map((c: any) => c.type) || []
         }))
       });
 
@@ -343,8 +343,8 @@ export function useWizardCompletion(props: UseWizardCompletionProps) {
             templateId: template.id,
             templateLabel: template.label,
             hasDataContract: !!template.dataContract,
-            contractsCount: template.dataContract?.contracts?.length || 0,
-            contractTypes: template.dataContract?.contracts?.map((c: any) => c.type) || []
+            parsersCount: template.dataContract?.parsers?.length || 0,
+            contractTypes: template.dataContract?.parsers?.map((c: any) => c.type) || []
           });
         } else {
           console.log(`[useWizardCompletion] ⚠️ Template NOT FOUND in memory for node "${node.label}" (${node.id})`);

@@ -50,7 +50,7 @@ describe('generateEnginesForNode', () => {
           },
           llm: {
             systemPrompt: 'Extract email from user input',
-            userPromptTemplate: 'Extract email from: {input}',
+            aiPrompt: 'Extract email from: {input}',
             responseSchema: { type: 'string' }
           },
           embedding: {
@@ -159,7 +159,7 @@ describe('generateEnginesForNode', () => {
           },
           llm: {
             systemPrompt: 'Extract date components from user input',
-            userPromptTemplate: 'Extract date from: {input}',
+            aiPrompt: 'Extract date from: {input}',
             responseSchema: {
               type: 'object',
               properties: {
@@ -218,7 +218,7 @@ describe('generateEnginesForNode', () => {
           regex: { regex: 'test' },
           rule_based: { rules: [] },
           ner: { nerEntityTypes: {}, nerContextPatterns: {} },
-          llm: { systemPrompt: 'test', userPromptTemplate: 'test' },
+          llm: { systemPrompt: 'test', aiPrompt: 'test' },
           embedding: { embeddingExamples: { positive: [], negative: [] }, embeddingThreshold: 0.7 }
         }
       };
@@ -353,7 +353,7 @@ describe('generateEnginesForNode', () => {
           regex: { regex: 'test' },
           rule_based: { rules: [] },
           ner: { nerEntityTypes: {}, nerContextPatterns: {} },
-          llm: { systemPrompt: 'test', userPromptTemplate: 'test' },
+          llm: { systemPrompt: 'test', aiPrompt: 'test' },
           embedding: { embeddingExamples: { positive: [], negative: [] }, embeddingThreshold: 0.7 }
         }
       };
@@ -408,7 +408,7 @@ describe('generateEnginesForNode', () => {
           },
           llm: {
             systemPrompt: 'valid',
-            userPromptTemplate: 'valid'
+            aiPrompt: 'valid'
           },
           embedding: {
             embeddingExamples: {
@@ -478,7 +478,7 @@ describe('generateEnginesForNode', () => {
           },
           llm: {
             systemPrompt: 'Extract email from user input',
-            userPromptTemplate: 'Extract email from: {input}',
+            aiPrompt: 'Extract email from: {input}',
             responseSchema: { type: 'string' }
           },
           embedding: {
@@ -590,7 +590,7 @@ describe('generateEnginesForNode', () => {
           },
           llm: {
             systemPrompt: 'Extract date components from user input',
-            userPromptTemplate: 'Extract date from: {input}',
+            aiPrompt: 'Extract date from: {input}',
             responseSchema: {
               type: 'object',
               properties: {

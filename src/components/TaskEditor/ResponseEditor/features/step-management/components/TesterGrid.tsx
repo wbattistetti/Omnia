@@ -6,7 +6,7 @@ import { MemoizedEditorOverlay } from '@responseEditor/features/step-management/
 import { useColumnResize } from '@responseEditor/features/step-management/components/TesterGrid/hooks/useColumnResize';
 import { useEditorOverlay } from '@responseEditor/features/step-management/components/TesterGrid/hooks/useEditorOverlay';
 import { RowResult } from '@responseEditor/features/step-management/hooks/useExtractionTesting';
-import type { DataContract } from '@components/DialogueDataEngine/contracts/contractLoader';
+import type { DataContract } from '@components/DialogueDataEngine/parsers/contractLoader';
 
 // 🎨 Colori centralizzati per extractors (usati solo per editor overlay)
 const EXTRACTOR_COLORS = {
@@ -411,9 +411,9 @@ const TesterGrid = React.memo(TesterGridComponent, (prev, next) => {
   if (prev.contract !== next.contract) {
     return false;
   }
-  // Compare contracts array
-  const prevContractsKey = prev.contract?.contracts?.map(c => `${c.type}:${c.enabled}`).join(',') || '';
-  const nextContractsKey = next.contract?.contracts?.map(c => `${c.type}:${c.enabled}`).join(',') || '';
+  // Compare parsers array
+  const prevContractsKey = prev.contract?.parsers?.map(c => `${c.type}:${c.enabled}`).join(',') || '';
+  const nextContractsKey = next.contract?.parsers?.map(c => `${c.type}:${c.enabled}`).join(',') || '';
   if (prevContractsKey !== nextContractsKey) {
     return false;
   }

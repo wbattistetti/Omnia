@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import type { DataContract, DataContractItem } from '@components/DialogueDataEngine/contracts/contractLoader';
+import type { DataContract, DataContractItem } from '@components/DialogueDataEngine/parsers/contractLoader';
 import type { ContractMethod } from '@responseEditor/ContractSelector/ContractSelector';
 import RegexInlineEditor from '@responseEditor/InlineEditors/RegexInlineEditor';
 import ExtractorInlineEditor from '@responseEditor/InlineEditors/ExtractorInlineEditor';
@@ -38,12 +38,12 @@ export default function ContractEditorWrapper({
   onProfileUpdate,
   onClose,
 }: ContractEditorWrapperProps) {
-  // Get method data from contract.contracts array
+  // Get method data from contract.parsers array
   const methodData = React.useMemo(() => {
-    if (!contract?.contracts || !Array.isArray(contract.contracts)) {
+    if (!contract?.parsers || !Array.isArray(contract.parsers)) {
       return null;
     }
-    return contract.contracts.find(c => c.type === method) || null;
+    return contract.parsers.find(c => c.type === method) || null;
   }, [contract, method]);
 
   if (!methodData || methodData.enabled === false) {
@@ -66,12 +66,12 @@ export default function ContractEditorWrapper({
           regex={(methodData as any).patterns?.[0] || ''}
           onRegexSave={(value: string) => {
             if (!contract) return;
-            const updatedContracts = contract.contracts.map(c =>
+            const updatedContracts = contract.parsers.map(c =>
               c.type === 'regex' ? { ...c, patterns: [value] } : c
             );
             const updatedContract: DataContract = {
               ...contract,
-              contracts: updatedContracts,
+              parsers: updatedContracts,
             };
             onContractChange(updatedContract);
           }}

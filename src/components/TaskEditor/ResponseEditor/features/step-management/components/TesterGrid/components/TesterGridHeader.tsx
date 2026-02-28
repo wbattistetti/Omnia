@@ -3,7 +3,7 @@ import TesterGridInput from './TesterGridInput';
 import TesterGridActionsColumn from './TesterGridActionsColumn';
 import TesterGridHeaderColumn from './TesterGridHeaderColumn';
 import AddContractDropdown from './AddContractDropdown';
-import type { DataContract, ContractType } from '@components/DialogueDataEngine/contracts/contractLoader';
+import type { DataContract, ContractType } from '@components/DialogueDataEngine/parsers/contractLoader';
 
 // 🎨 Colori centralizzati per extractors
 const EXTRACTOR_COLORS = {
@@ -93,33 +93,33 @@ export default function TesterGridHeader({
   // State per gestire quale colonna ha il dropdown "+" aperto
   const [openDropdownAfter, setOpenDropdownAfter] = React.useState<string | null>(null);
 
-  // Leggi contracts dal dataContract - ordine implicito (ordine array = ordine escalation)
-  const contracts = useMemo(() => {
+  // Leggi parsers dal dataContract - ordine implicito (ordine array = ordine escalation)
+  const parsers = useMemo(() => {
     // ✅ DEBUG: Log dettagliato per capire perché le colonne non vengono mostrate
-    console.log('[TesterGridHeader] 🔍 Reading contracts from DataContract', {
+    console.log('[TesterGridHeader] 🔍 Reading parsers from DataContract', {
       hasContract: !!contract,
       contractType: contract ? typeof contract : 'null',
-      hasContractsArray: !!contract?.contracts,
-      contractsIsArray: Array.isArray(contract?.contracts),
-      contractsRaw: contract?.contracts,
-      contractsCount: contract?.contracts?.length || 0,
-      contractsTypes: contract?.contracts?.map((c: any) => c?.type) || [],
+      hasContractsArray: !!contract?.parsers,
+      parsersIsArray: Array.isArray(contract?.parsers),
+      parsersRaw: contract?.parsers,
+      parsersCount: contract?.parsers?.length || 0,
+      parsersTypes: contract?.parsers?.map((c: any) => c?.type) || [],
       contractKeys: contract ? Object.keys(contract) : []
     });
 
-    if (!contract?.contracts || !Array.isArray(contract.contracts)) {
-      console.log('[TesterGridHeader] ⚠️ No contracts array found, returning empty array');
+    if (!contract?.parsers || !Array.isArray(contract.parsers)) {
+      console.log('[TesterGridHeader] ⚠️ No parsers array found, returning empty array');
       return [];
     }
     // Filtra solo i contract con enabled: true
-    const filtered = contract.contracts.filter(c => c.enabled !== false);
+    const filtered = contract.parsers.filter(c => c.enabled !== false);
     console.log('[TesterGridHeader] ✅ Contracts filtered', {
-      totalContracts: contract.contracts.length,
+      totalContracts: contract.parsers.length,
       enabledContracts: filtered.length,
       filteredTypes: filtered.map(c => c.type)
     });
     return filtered;
-  }, [contract?.contracts]);
+  }, [contract?.parsers]);
 
   // Map contract type to component type
   const mapContractTypeToComponentType = (type: ContractType): 'regex' | 'deterministic' | 'ner' | 'llm' | 'embeddings' => {
@@ -130,8 +130,8 @@ export default function TesterGridHeader({
   // Get available methods (excluding already added ones)
   const getAvailableMethods = (): ContractType[] => {
     const allMethods: ContractType[] = ['regex', 'rules', 'ner', 'llm', 'embeddings'];
-    if (!contracts || contracts.length === 0) return allMethods;
-    const usedTypes = contracts.map(c => c.type);
+    if (!parsers || parsers.length === 0) return allMethods;
+    const usedTypes = parsers.map(c => c.type);
     return allMethods.filter(m => !usedTypes.includes(m));
   };
 
@@ -143,7 +143,7 @@ export default function TesterGridHeader({
         return;
       }
 
-      const currentContracts = contracts || [];
+      const currentContracts = parsers || [];
       const insertIndex = currentContracts.findIndex(c => c.type === insertAfterType) + 1;
 
       // Crea nuovo contract item
@@ -158,7 +158,7 @@ export default function TesterGridHeader({
 
       const updatedContract: DataContract = {
         ...contract,
-        contracts: newContracts,
+        parsers: newContracts,
       };
 
       setOpenDropdownAfter(null);
@@ -177,7 +177,7 @@ export default function TesterGridHeader({
       case 'ner':
         return { ...base, entityTypes: [], confidence: 0.8 };
       case 'llm':
-        return { ...base, systemPrompt: '', userPromptTemplate: '', responseSchema: {} };
+        return { ...base, systemPrompt: '', aiPrompt: '', responseSchema: {} };
       case 'embeddings':
         return { ...base, intents: [] };
       default:
@@ -197,7 +197,7 @@ export default function TesterGridHeader({
       templateName: contract?.templateName ?? '',
       templateId: contract?.templateId || '',
       subDataMapping: contract?.subDataMapping || {},
-      contracts: [newContractItem],
+      parsers: [newContractItem],
     };
 
     onContractChange(newContract);
@@ -207,7 +207,7 @@ export default function TesterGridHeader({
   const handleRemoveContract = (typeToRemove: ContractType) => {
     if (!contract || !onContractChange) return;
 
-    const newContracts = contracts.filter(c => c.type !== typeToRemove);
+    const newContracts = parsers.filter(c => c.type !== typeToRemove);
 
     if (newContracts.length === 0) {
       // Se non ci sono più contratti, rimuovi tutto
@@ -217,7 +217,7 @@ export default function TesterGridHeader({
 
     const updatedContract: DataContract = {
       ...contract,
-      contracts: newContracts,
+      parsers: newContracts,
     };
 
     onContractChange(updatedContract);
@@ -238,19 +238,19 @@ export default function TesterGridHeader({
     return calculatedWidth;
   };
 
-  // Render dynamic columns based on contracts array
+  // Render dynamic columns based on parsers array
   const renderDynamicColumns = () => {
     // ✅ DEBUG: Log per capire perché le colonne non vengono renderizzate
     console.log('[TesterGridHeader] 🔍 renderDynamicColumns called', {
-      contractsCount: contracts?.length || 0,
-      contractsTypes: contracts?.map(c => c.type) || [],
-      willShowAddContract: !contracts || contracts.length === 0,
-      willShowColumns: contracts && contracts.length > 0
+      parsersCount: parsers?.length || 0,
+      parsersTypes: parsers?.map(c => c.type) || [],
+      willShowAddContract: !parsers || parsers.length === 0,
+      willShowColumns: parsers && parsers.length > 0
     });
 
-    if (!contracts || contracts.length === 0) {
+    if (!parsers || parsers.length === 0) {
       // Show "Add contract" dropdown when no contract
-      console.log('[TesterGridHeader] ⚠️ No contracts found, showing "Add contract" dropdown');
+      console.log('[TesterGridHeader] ⚠️ No parsers found, showing "Add contract" dropdown');
       return (
         <th colSpan={1} style={{ padding: 8, background: '#f9fafb', textAlign: 'center', width: '200px' }}>
           <AddContractDropdown
@@ -262,14 +262,14 @@ export default function TesterGridHeader({
       );
     }
 
-    console.log('[TesterGridHeader] ✅ Rendering columns for contracts', {
-      contractsCount: contracts.length,
-      contractsTypes: contracts.map(c => c.type)
+    console.log('[TesterGridHeader] ✅ Rendering columns for parsers', {
+      parsersCount: parsers.length,
+      parsersTypes: parsers.map(c => c.type)
     });
 
-    const columnWidth = calculateColumnWidth(contracts.length);
+    const columnWidth = calculateColumnWidth(parsers.length);
 
-    return contracts.map((contractItem, index) => {
+    return parsers.map((contractItem, index) => {
       const componentType = mapContractTypeToComponentType(contractItem.type);
       const labels = COLUMN_LABELS[componentType] || COLUMN_LABELS.regex;
       const color = EXTRACTOR_COLORS[componentType] || EXTRACTOR_COLORS.regex;
@@ -308,7 +308,7 @@ export default function TesterGridHeader({
             setOpenDropdownAfter(null);
           } : undefined}
           columnWidth={columnWidth}
-          onRemoveContract={onContractChange && contracts.length > 1 ? () => handleRemoveContract(contractItem.type) : undefined}
+          onRemoveContract={onContractChange && parsers.length > 1 ? () => handleRemoveContract(contractItem.type) : undefined}
         />
       );
     });
@@ -364,8 +364,8 @@ export default function TesterGridHeader({
           />
         </th>
         <TesterGridActionsColumn rowIndex={-1} newExample={newExample} onAddExample={onAddExample} phraseColumnWidth={phraseColumnWidth} />
-        {/* Render dynamic columns based on contracts array */}
-        {contracts && contracts.length > 0 ? (
+        {/* Render dynamic columns based on parsers array */}
+        {parsers && parsers.length > 0 ? (
           renderDynamicColumns()
         ) : (
           // Show "Add contract" dropdown when no contract

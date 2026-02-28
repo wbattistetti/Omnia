@@ -70,14 +70,14 @@ Partial Public Class Parser
                 $"Task '{node.Id}' has no NlpContract. Cannot perform composite extraction.")
         End If
 
-        ' ✅ NEW: Leggi regex contract da Contracts invece di contract.Regex
-        Dim regexContract = contract.Contracts?.FirstOrDefault(Function(c) c.Type = "regex" AndAlso c.Enabled)
+        ' ✅ NEW: Leggi regex contract da Parsers invece di contract.Regex
+        Dim regexContract = contract.Parsers?.FirstOrDefault(Function(c) c.Type = "regex" AndAlso c.Enabled)
         If regexContract Is Nothing OrElse
            regexContract.Patterns Is Nothing OrElse
            regexContract.Patterns.Count = 0 Then
             Throw New InvalidOperationException(
                 $"Task '{node.Id}': NlpContract has no enabled regex contract. " &
-                $"The contract must contain a 'regex' contract in the 'contracts' array with at least one pattern.")
+                $"The contract must contain a 'regex' parser in the 'parsers' array with at least one pattern.")
         End If
 
         If contract.SubDataMapping Is Nothing OrElse contract.SubDataMapping.Count = 0 Then

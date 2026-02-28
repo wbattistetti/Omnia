@@ -274,7 +274,7 @@ export function useExtractionTesting({
     if (node) {
       try {
         const contract = loadContractFromNode(node);
-        const regexPattern = contract?.contracts?.find((c: any) => c.type === 'regex')?.patterns?.[0];
+        const regexPattern = contract?.parsers?.find((c: any) => c.type === 'regex')?.patterns?.[0];
         if (regexPattern) {
           console.log('[TEST] 🔄 Fallback: Using regex from contract', {
             nodeId: node.id,

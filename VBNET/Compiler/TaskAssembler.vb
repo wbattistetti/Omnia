@@ -63,7 +63,7 @@ Public Class TaskAssembler
                 ' Compila ogni nodo come subTask
                 For Each taskNode As Compiler.TaskNode In assembled.Nodes
                     If taskNode IsNot Nothing Then
-                        Dim subTask = CompileNode(taskNode, Nothing)
+                        Dim subTask = CompileNode(taskNode, rootTask) ' ✅ Passa rootTask come parent
                         rootTask.SubTasks.Add(subTask)
                     End If
                 Next
@@ -86,6 +86,7 @@ Public Class TaskAssembler
     ''' <summary>
     ''' Compila TaskNode (IDE) in CompiledUtteranceTask (Runtime)
     ''' Costruisce struttura ricorsiva CompiledUtteranceTask → CompiledUtteranceTask → CompiledUtteranceTask
+    ''' ✅ Imposta ParentTask durante la compilazione per evitare ricerche ricorsive a runtime
     ''' </summary>
     Private Function CompileNode(ideNode As Compiler.TaskNode, parentTask As CompiledUtteranceTask) As CompiledUtteranceTask
         ' ✅ Copia solo proprietà runtime essenziali:
@@ -489,7 +490,7 @@ Public Class TaskAssembler
 
     ''' <summary>
     ''' Converte dataContract (JObject o Object) in NLPContract
-    ''' Gestisce il formato dataContract con array "contracts" e lo converte in NLPContract con oggetti "regex", "rules", ecc.
+    ''' Gestisce il formato dataContract con array "parsers" e lo converte in NLPContract con oggetti "regex", "rules", ecc.
     ''' </summary>
     Private Function ConvertDataContractToNlpContract(dataContract As Object) As NLPContract
         If dataContract Is Nothing Then
@@ -596,19 +597,20 @@ Public Class TaskAssembler
                 Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ⚠️ contractObj('subDataMapping') is Nothing - subDataMapping missing from JSON")
             End If
 
-            ' ✅ NEW: Popola Contracts direttamente (fonte di verità unica)
-            ' ❌ RIMOSSO: La conversione contracts[] → nlpContract.Regex/Rules/Ner/Llm
-            ' Ora usiamo direttamente nlpContract.Contracts
-            If contractObj("contracts") IsNot Nothing AndAlso contractObj("contracts").Type = JTokenType.Array Then
-                Dim contractsArray = CType(contractObj("contracts"), JArray)
-                Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ✅ Found contracts array: Count = {contractsArray.Count}")
-                For i = 0 To contractsArray.Count - 1
-                    Dim item = contractsArray(i)
+            ' ✅ NEW: Popola Parsers direttamente (fonte di verità unica)
+            ' ❌ RIMOSSO: La conversione parsers[] → nlpContract.Regex/Rules/Ner/Llm
+            ' Ora usiamo direttamente nlpContract.Parsers
+            ' ❌ RIMOSSA retrocompatibilità: accetta solo "parsers" (i template vengono ricreati da zero)
+            If contractObj("parsers") IsNot Nothing AndAlso contractObj("parsers").Type = JTokenType.Array Then
+                Dim parsersArray = CType(contractObj("parsers"), JArray)
+                Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ✅ Found parsers array: Count = {parsersArray.Count}")
+                For i = 0 To parsersArray.Count - 1
+                    Dim item = parsersArray(i)
                     If TypeOf item Is JObject Then
                         Dim itemObj = CType(item, JObject)
                         Dim type = If(itemObj("type")?.ToString(), "unknown")
                         Dim hasPatterns = itemObj("patterns") IsNot Nothing
-                        Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]   Contract[{i}]: type={type}, hasPatterns={hasPatterns}")
+                        Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]   Parser[{i}]: type={type}, hasPatterns={hasPatterns}")
                         If hasPatterns Then
                             Dim patterns = itemObj("patterns")
                             If patterns.Type = JTokenType.Array Then
@@ -622,9 +624,9 @@ Public Class TaskAssembler
                         End If
                     End If
                 Next
-                nlpContract.Contracts = New List(Of NLPContractEngine)()
+                nlpContract.Parsers = New List(Of NLPContractEngine)()
 
-                For Each contractItem As JObject In contractsArray
+                For Each contractItem As JObject In parsersArray
                     Dim contractType = If(contractItem("type")?.ToString(), "")
                     Dim contractEnabled = If(contractItem("enabled")?.ToObject(Of Boolean?)(), True)
 
@@ -647,32 +649,6 @@ Public Class TaskAssembler
                                         engine.Patterns.Add(patternToken.ToString())
                                     End If
                                 Next
-                            End If
-
-                            ' Estrai patternModes (opzionale)
-                            If contractItem("patternModes") IsNot Nothing AndAlso contractItem("patternModes").Type = JTokenType.Array Then
-                                Dim patternModesArray = CType(contractItem("patternModes"), JArray)
-                                engine.PatternModes = New List(Of String)()
-                                For Each modeToken In patternModesArray
-                                    If modeToken.Type = JTokenType.String Then
-                                        engine.PatternModes.Add(modeToken.ToString())
-                                    End If
-                                Next
-                            End If
-
-                            ' Estrai ambiguityPattern (opzionale)
-                            If contractItem("ambiguityPattern") IsNot Nothing Then
-                                engine.AmbiguityPattern = contractItem("ambiguityPattern").ToString()
-                            End If
-
-                            ' Estrai ambiguity config (opzionale)
-                            If contractItem("ambiguity") IsNot Nothing Then
-                                Try
-                                    Dim ambiguityJson = contractItem("ambiguity").ToString()
-                                    engine.Ambiguity = JsonConvert.DeserializeObject(Of AmbiguityConfig)(ambiguityJson)
-                                Catch ex As Exception
-                                    ' Ignore
-                                End Try
                             End If
 
                             ' Estrai testCases (opzionale)
@@ -749,13 +725,13 @@ Public Class TaskAssembler
                             End If
                     End Select
 
-                    nlpContract.Contracts.Add(engine)
+                    nlpContract.Parsers.Add(engine)
                 Next
-                Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ✅ Final Contracts count: {nlpContract.Contracts.Count}")
+                Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ✅ Final Parsers count: {nlpContract.Parsers.Count}")
             Else
-                Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ⚠️ contracts is Nothing or not an Array")
-                If contractObj("contracts") IsNot Nothing Then
-                    Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]   contracts type: {contractObj("contracts").Type}")
+                Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ⚠️ parsers is Nothing or not an Array")
+                If contractObj("parsers") IsNot Nothing Then
+                    Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]   parsers type: {contractObj("parsers").Type}")
                 End If
                 Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]   contractObj keys: {String.Join(", ", contractObj.Properties().Select(Function(p) p.Name))}")
             End If
@@ -796,8 +772,8 @@ Public Class TaskAssembler
         If contract Is Nothing Then Return
         If contract.SubDataMapping Is Nothing OrElse contract.SubDataMapping.Count = 0 Then Return
 
-        ' ✅ NEW: Leggi regex contract da Contracts invece di contract.Regex
-        Dim regexContract = contract.Contracts?.FirstOrDefault(Function(c) c.Type = "regex" AndAlso c.Enabled)
+        ' ✅ NEW: Leggi regex contract da Parsers invece di contract.Regex
+        Dim regexContract = contract.Parsers?.FirstOrDefault(Function(c) c.Type = "regex" AndAlso c.Enabled)
         If regexContract Is Nothing OrElse
            regexContract.Patterns Is Nothing OrElse
            regexContract.Patterns.Count = 0 Then

@@ -36,7 +36,6 @@
     <Compile Include="TaskExecutor\TaskExecutorFactory.vb" />
     <Compile Include="TaskExecutor\CompiledTaskAdapter.vb" />
     <!-- TaskEngine (new, simplified, no reflection) -->
-    <Compile Include="TaskEngine\UtteranceTaskInstance.vb" />
     <Compile Include="TaskEngine\ProcessTurnHelpers.vb" />
     <Compile Include="TaskEngine\Types.vb" />
     <Compile Include="TaskEngine\Microtask.vb" />

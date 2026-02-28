@@ -156,9 +156,14 @@ Public Class DialogueState
     Public Property CurrentDataId As String
 
     ''' <summary>
-    ''' ✅ NEW: Current task instance being processed
+    ''' ✅ Current compiled task being processed
     ''' </summary>
-    Public Property CurrentTask As UtteranceTaskInstance
+    Public Property CurrentTask As CompiledUtteranceTask
+
+    ''' <summary>
+    ''' ✅ Root task (main task) - necessario per trovare parent dei subtask
+    ''' </summary>
+    Public Property RootTask As CompiledUtteranceTask
 
     ''' <summary>
     ''' ✅ NEW: Current step type
@@ -182,6 +187,7 @@ Public Class DialogueState
         Context = "CollectingMain"
         CurrentDataId = Nothing
         CurrentTask = Nothing
+        RootTask = Nothing
         CurrentStepType = Global.TaskEngine.DialogueStepType.Start
         IsCompleted = False
         Mode = DialogueMode.ExecutingStep

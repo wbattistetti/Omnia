@@ -994,7 +994,7 @@ Public Class SessionManager
             turnStateBeforeSave = ctx.DialogueState.TurnState.ToString()
         End If
 
-        ' ✅ Risolve il problema del riferimento circolare (Parent property in UtteranceTaskInstance)
+        ' ✅ Serializzazione DialogueState (stateless design)
         ' ✅ Usa StringEnumConverter per serializzare gli enum come stringhe invece che numeri
         ' ✅ Usa ITaskConverter per deserializzare ITask (anche se CanWrite=False, è comunque necessario per la deserializzazione)
         Dim settings As New JsonSerializerSettings() With {
