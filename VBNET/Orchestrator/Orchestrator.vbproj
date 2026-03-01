@@ -16,7 +16,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Common\Common.vbproj" />
     <ProjectReference Include="..\Compiler\Compiler.vbproj" />
+    <ProjectReference Include="..\Engine\Engine.vbproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -37,14 +39,9 @@
     <Compile Include="TaskExecutorFactory.vb" />
     <!-- CompiledTaskAdapter removed: DialogueContext now created directly -->
     <!-- TaskUtterance runtime moved to Engine/Tasks/TaskUtterance -->
-    <!-- TaskEngine (legacy, simplified, no reflection) -->
+    <!-- TaskEngine legacy removed: UtteranceInterpretation uses ProcessTurnEngine, other tasks use TaskExecutor -->
     <!-- TaskStep, Microtask, StepExecutionState removed: not used, legacy from old microtask system -->
-    <Compile Include="TaskEngine\DialogueContext.vb" />
-    <Compile Include="TaskEngine\ITaskEngineCallbacks.vb" />
-    <Compile Include="TaskEngine\ITaskEngineStateStorage.vb" />
-    <Compile Include="TaskEngine\TaskEngineCallbacks.vb" />
-    <Compile Include="TaskEngine\TaskEngineStateStorage.vb" />
-    <Compile Include="TaskEngine\TaskEngine.vb" />
+    <!-- DialogueContext moved to Common (shared between Orchestrator and ApiServer) -->
   </ItemGroup>
 
 </Project>

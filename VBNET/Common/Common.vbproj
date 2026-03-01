@@ -45,6 +45,8 @@
     <Compile Include="PlaceholderUtils.vb" />
     <!-- Turn State Types (moved from Engine to Common for shared access) -->
     <Compile Include="Types.vb" />
+    <!-- Dialogue Context (shared between Orchestrator and ApiServer) -->
+    <Compile Include="DialogueContext.vb" />
   </ItemGroup>
 
 </Project>

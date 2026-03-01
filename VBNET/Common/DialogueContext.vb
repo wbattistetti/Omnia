@@ -1,6 +1,5 @@
 Option Strict On
 Option Explicit On
-Namespace TaskEngine
 
 ''' <summary>
 ''' Dialogue context (minimal, without old engine)
@@ -37,6 +36,5 @@ Public Class DialogueContext
             .CurrentData = If(Me.CurrentData IsNot Nothing, Me.CurrentData, Nothing),
             .LastTurnEvent = Me.LastTurnEvent
         }
-        End Function
-    End Class
-End Namespace
+    End Function
+End Class

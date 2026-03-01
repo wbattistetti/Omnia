@@ -231,9 +231,9 @@ Public Class FlowOrchestrator
     End Sub
 
     ''' <summary>
-    ''' ✅ NEW: Fornisce input utente a un task utterance in attesa usando TaskEngine
+    ''' ✅ NEW: Fornisce input utente a un task utterance in attesa usando ProcessTurnEngine
     ''' </summary>
-    Public Async Function ProvideUserInput(taskId As String, userInput As String) As System.Threading.Tasks.Task(Of Boolean)
+    Public Async Function ProvideUserInput(taskId As String, userInput As String, resolveTranslation As Func(Of String, String)) As System.Threading.Tasks.Task(Of Boolean)
         If Not _state.DialogueContexts.ContainsKey(taskId) Then
             Console.WriteLine($"⚠️ [FlowOrchestrator] No DialogueContext found for task {taskId}")
             Return False
@@ -247,26 +247,56 @@ Public Class FlowOrchestrator
                 Return False
             End If
 
-            ' Create TaskEngine with state storage and callbacks
-            Dim stateStorage As New TaskEngine.TaskEngineStateStorage(_state)
-            Dim callbacks As New TaskEngine.TaskEngineCallbacks(
-                Sub(text, stepType, escalationNumber)
-                    RaiseEvent MessageToShow(Me, text)
-                End Sub)
+            ' Load DialogueContext from state
+            Dim ctxJson As String = CStr(_state.DialogueContexts(taskId))
+            Dim ctx = JsonConvert.DeserializeObject(Of TaskEngine.DialogueContext)(ctxJson)
+            If ctx Is Nothing OrElse ctx.DialogueState Is Nothing Then
+                Console.WriteLine($"⚠️ [FlowOrchestrator] Invalid DialogueContext for task {taskId}")
+                Return False
+            End If
 
-            Dim engine As New TaskEngine.TaskEngine(stateStorage, callbacks)
+            ' Cast task to CompiledUtteranceTask
+            Dim utteranceTask = TryCast(task, CompiledUtteranceTask)
+            If utteranceTask Is Nothing Then
+                Console.WriteLine($"⚠️ [FlowOrchestrator] Task {taskId} is not an UtteranceInterpretation task")
+                Return False
+            End If
 
-            ' Execute task (TaskEngine will load DialogueContext from state and continue)
-            Dim result = Await engine.ExecuteTask(task, _state)
+            ' Ensure CurrentTask and RootTask are set
+            If ctx.DialogueState.CurrentTask Is Nothing Then
+                ctx.DialogueState.CurrentTask = utteranceTask
+            End If
+            If ctx.DialogueState.RootTask Is Nothing Then
+                ctx.DialogueState.RootTask = utteranceTask
+            End If
 
-            ' Access result properties directly
-            Dim requiresInput = result.RequiresInput
+            ' Call ProcessTurnEngine.ProcessTurn (use fully qualified name to avoid namespace conflict)
+            ' ProcessTurnEngine is in TaskEngine namespace from Engine project, but we're in TaskEngine.Orchestrator
+            ' So we need to use the fully qualified name from the root namespace
+            Dim result = Global.TaskEngine.ProcessTurnEngine.ProcessTurn(ctx.DialogueState, userInput, resolveTranslation)
+
+            ' Emit messages via MessageToShow event
+            If result.Messages IsNot Nothing Then
+                For Each msg As String In result.Messages
+                    RaiseEvent MessageToShow(Me, msg)
+                Next
+            End If
+
+            ' Update DialogueState
+            ctx.DialogueState = result.NewState
+
+            ' Save updated DialogueContext to state
+            Dim updatedCtxJson = JsonConvert.SerializeObject(ctx)
+            _state.DialogueContexts(taskId) = updatedCtxJson
 
             ' Save state
             SaveState()
 
+            ' Check if task is completed
+            Dim isCompleted = result.Status = "completed" OrElse result.NewState.IsCompleted
+
             ' If task completed, remove DialogueContext and resume execution
-            If Not requiresInput Then
+            If isCompleted Then
                 _state.DialogueContexts.Remove(taskId)
                 SaveState()
 
@@ -276,7 +306,7 @@ Public Class FlowOrchestrator
                 End If
             End If
 
-            Console.WriteLine($"✅ [FlowOrchestrator] Processed user input for task {taskId}. RequiresInput: {requiresInput}")
+            Console.WriteLine("✅ [FlowOrchestrator] Processed user input for task {0}. Completed: {1}", taskId, isCompleted)
             Return True
 
         Catch ex As Exception

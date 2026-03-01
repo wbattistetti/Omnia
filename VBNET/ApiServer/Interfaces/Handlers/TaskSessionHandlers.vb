@@ -219,15 +219,15 @@ Namespace ApiServer.Handlers
                 ' ✅ Per costruzione, DialogueContext viene creato qui se non esiste
                 Dim session = SessionManager.GetTaskSession(newSessionId)
                 Dim dialogueState As TaskEngine.DialogueState = Nothing
-                Dim dialogueContext As TaskEngine.Orchestrator.TaskEngine.DialogueContext = Nothing
+                Dim dialogueContext As TaskEngine.DialogueContext = Nothing
 
                 Try
                     dialogueContext = SessionManager.GetOrCreateDialogueContext(session)
                     If dialogueContext Is Nothing Then
                         ' ✅ Crea DialogueContext dal compiledTask (prima volta - per costruzione)
-                        dialogueContext = New TaskEngine.Orchestrator.TaskEngine.DialogueContext() With {
+                        dialogueContext = New TaskEngine.DialogueContext() With {
                             .TaskId = compiledTask.Id,
-                            .DialogueState = New TaskEngine.DialogueState(),
+                            .dialogueState = New TaskEngine.DialogueState(),
                             .CurrentData = Nothing,
                             .LastTurnEvent = Nothing
                         }
@@ -245,7 +245,7 @@ Namespace ApiServer.Handlers
                 Catch ex As Exception
                     ' ✅ Fallback: crea DialogueContext e DialogueState da zero
                     dialogueState = New TaskEngine.DialogueState()
-                    dialogueContext = New TaskEngine.Orchestrator.TaskEngine.DialogueContext() With {
+                    dialogueContext = New DialogueContext() With {
                         .TaskId = compiledTask.Id,
                         .DialogueState = dialogueState,
                         .CurrentData = Nothing,
@@ -356,71 +356,9 @@ Namespace ApiServer.Handlers
                     End If
                 End Try
 
-                ' ✅ STEP 7: Crea ExecutionState e TaskEngine per esecuzione diretta (legacy - per ora)
-                ' NOTA: Quando ProcessTurn sarà implementato, questo codice verrà sostituito
-                Dim executionState As New Orchestrator.ExecutionState()
-
-                ' ✅ Crea EventEmitter per SSE (riusa quello già creato per ProcessTurn se disponibile)
-                Dim legacyEmitter As EventEmitter = SessionManager.GetOrCreateEventEmitter(newSessionId)
-
-                ' ❌ RIMOSSO: Callback per salvare DialogueContext nella sessione
-                ' ProcessTurn è ora l'unico responsabile del salvataggio dello stato
-                ' TaskEngine non deve più salvare nulla - il callback appartiene al vecchio modello stateful
-                ' In un motore stateless, ogni salvataggio extra è un bug
-                ' Redis deve contenere solo lo stato prodotto da ProcessTurn
-
-                ' ✅ Usa solo ExecutionState, senza callback
-                Dim stateStorage As New TaskEngine.Orchestrator.TaskEngine.TaskEngineStateStorage(executionState)
-
-                ' ✅ Crea funzione per risolvere traduzioni (per TaskEngineCallbacks - firma diversa)
-                Dim resolveTranslationForCallbacks As Func(Of String, String, String, String) = Function(projId As String, loc As String, key As String) As String
-                                                                                                    Return translationRepository.GetTranslation(projId, loc, key)
-                                                                                                End Function
-
-                ' ✅ Crea TaskEngineCallbacks che risolve traduzioni e emette SSE
-                Dim callbacks As New TaskEngine.Orchestrator.TaskEngine.TaskEngineCallbacks(
-                    resolveTranslationForCallbacks,
-                    projectId,
-                    locale,
-                    Sub(eventType As String, data As Object)
-                        ' Emetti evento SSE
-                        legacyEmitter.Emit(eventType, data)
-                    End Sub
-                )
-
-                ' ✅ Crea TaskEngine e avvia esecuzione in background
-                Dim engine As New TaskEngine.Orchestrator.TaskEngine.TaskEngine(stateStorage, callbacks)
-
-                ' ✅ Avvia esecuzione in background (non bloccare la risposta HTTP)
-                Dim taskExecution As System.Threading.Tasks.Task = System.Threading.Tasks.Task.Run(Async Function() As System.Threading.Tasks.Task
-                                                                                                       Try
-                                                                                                           LogInfo("Starting TaskEngine execution", New With {.sessionId = newSessionId, .taskId = compiledTask.Id})
-                                                                                                           Dim result = Await engine.ExecuteTask(compiledTask, executionState)
-
-                                                                                                           ' ✅ Salva ExecutionState nella sessione
-                                                                                                           Dim executionStateJson = JsonConvert.SerializeObject(executionState)
-                                                                                                           Dim currentSession = SessionManager.GetTaskSession(newSessionId)
-                                                                                                           If currentSession IsNot Nothing Then
-                                                                                                               ' Salva ExecutionStateJson nella sessione (se il campo esiste)
-                                                                                                               ' Per ora, lo stato è già salvato da TaskEngineStateStorage
-                                                                                                           End If
-
-                                                                                                           ' ✅ Se richiede input, emetti evento "waitingForInput"
-                                                                                                           If result.RequiresInput Then
-                                                                                                               Dim waitingData = New With {
-                                .taskId = compiledTask.Id,
-                                .timestamp = DateTime.UtcNow.ToString("O")
-                            }
-                                                                                                               legacyEmitter.Emit("waitingForInput", waitingData)
-                                                                                                               LogInfo("TaskEngine waiting for input", New With {.sessionId = newSessionId, .taskId = compiledTask.Id})
-                                                                                                           Else
-                                                                                                               LogInfo("TaskEngine completed", New With {.sessionId = newSessionId, .taskId = compiledTask.Id})
-                                                                                                           End If
-                                                                                                       Catch ex As Exception
-                                                                                                           LogError("TaskEngine execution error", ex, New With {.sessionId = newSessionId})
-                                                                                                           legacyEmitter.Emit("error", New With {.error = ex.Message, .timestamp = DateTime.UtcNow.ToString("O")})
-                                                                                                       End Try
-                                                                                                   End Function)
+                ' ✅ STEP 7: ProcessTurn già completato per UtteranceInterpretation tasks
+                ' Per altri tipi di task (SayMessage, BackendCall, etc.), vengono gestiti da TaskExecutor nel FlowOrchestrator
+                ' Non serve più TaskEngine legacy
 
                 Dim sessionCreated = New With {
                     .sessionId = newSessionId,
@@ -722,9 +660,9 @@ Namespace ApiServer.Handlers
                     ' ✅ Se non esiste, crea un nuovo DialogueState
                     dialogueState = New TaskEngine.DialogueState()
                     If dialogueContext Is Nothing Then
-                        dialogueContext = New TaskEngine.Orchestrator.TaskEngine.DialogueContext() With {
+                        dialogueContext = New TaskEngine.DialogueContext() With {
                             .TaskId = compiledTask.Id,
-                            .DialogueState = dialogueState,
+                            .dialogueState = dialogueState,
                             .CurrentData = Nothing,
                             .LastTurnEvent = Nothing
                         }
