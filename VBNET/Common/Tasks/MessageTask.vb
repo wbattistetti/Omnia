@@ -66,7 +66,7 @@ Public Class MessageTask
             Throw New InvalidOperationException($"Context has no TranslationResolver. Cannot resolve key '{TextKey}'.")
         End If
 
-        Dim resolver = TryCast(context.TranslationResolver, Interfaces.ITranslationResolver)
+        Dim resolver = TryCast(context.TranslationResolver, ITranslationResolver)
         If resolver Is Nothing Then
             Throw New InvalidOperationException("ITaskContext.TranslationResolver must implement ITranslationResolver for MessageTask.")
         End If

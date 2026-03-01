@@ -28,4 +28,3 @@ Public Class Escalation
         Tasks = New List(Of ITask)()
     End Sub
 End Class
-

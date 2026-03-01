@@ -35,4 +35,3 @@ Public Class ValidationCondition
         Parameters = New Dictionary(Of String, Object)()
     End Sub
 End Class
-

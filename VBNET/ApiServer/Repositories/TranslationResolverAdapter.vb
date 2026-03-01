@@ -7,7 +7,7 @@ Namespace ApiServer.Repositories
     ''' Usa TranslationRepository per risolvere traduzioni
     ''' </summary>
     Public Class TranslationResolverAdapter
-        Implements TaskEngine.Interfaces.ITranslationResolver
+        Implements TaskEngine.ITranslationResolver
 
         Private ReadOnly _translationRepository As ITranslationRepository
 
@@ -24,7 +24,7 @@ Namespace ApiServer.Repositories
         ''' <summary>
         ''' Risolve una traduzione dal repository
         ''' </summary>
-        Public Function ResolveTranslation(projectId As String, locale As String, textKey As String) As String Implements TaskEngine.Interfaces.ITranslationResolver.ResolveTranslation
+        Public Function ResolveTranslation(projectId As String, locale As String, textKey As String) As String Implements TaskEngine.ITranslationResolver.ResolveTranslation
             Return _translationRepository.GetTranslation(projectId, locale, textKey)
         End Function
     End Class

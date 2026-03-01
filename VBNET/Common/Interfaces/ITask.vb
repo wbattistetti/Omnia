@@ -4,7 +4,6 @@
 Option Strict On
 Option Explicit On
 
-
 ''' <summary>
 ''' Defines a single executable micro-task within a dialogue escalation
 ''' (e.g. send a message, close the session, transfer to an operator).

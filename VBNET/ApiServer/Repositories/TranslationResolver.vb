@@ -1,6 +1,6 @@
 Option Strict On
 Option Explicit On
-Imports TaskEngine.Interfaces
+Imports TaskEngine
 
 Namespace ApiServer.Repositories
     ''' <summary>

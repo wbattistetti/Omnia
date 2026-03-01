@@ -16,34 +16,39 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Common interfaces and types used by both Engine and Compiler -->
-    <!-- Enums -->
-    <Compile Include="DialogueStepType.vb" />
-    <Compile Include="ITranslationResolver.vb" />
-    <Compile Include="TaskTypes.vb" />
+    <!-- Types and Enums -->
+    <Compile Include="Types\TaskTypes.vb" />
+    <Compile Include="Types\Types.vb" />
+
     <!-- Interfaces -->
-    <Compile Include="ITaskContext.vb" />
-    <Compile Include="ITask.vb" />
-    <Compile Include="IParsableTask.vb" />
-    <!-- Task Base and Implementations (shared between Compiler and Engine) -->
-    <Compile Include="TaskBase.vb" />
-    <Compile Include="MessageTask.vb" />
-    <Compile Include="CloseSessionTask.vb" />
-    <Compile Include="TaskUtterance.vb" />
-    <Compile Include="TransferTask.vb" />
-    <!-- Runtime Contract Types -->
-    <Compile Include="DialogueStep.vb" />
-    <Compile Include="Escalation.vb" />
-    <Compile Include="ValidationCondition.vb" />
-    <Compile Include="CompiledNlpContract.vb" />
-    <Compile Include="NLPEngine.vb" />
-    <Compile Include="SubDataMappingInfo.vb" />
-    <!-- Variable Context and Utilities -->
-    <Compile Include="IVariableContext.vb" />
-    <Compile Include="GlobalVariableContext.vb" />
-    <Compile Include="PlaceholderUtils.vb" />
-    <!-- Turn State Types (moved from Engine to Common for shared access) -->
-    <Compile Include="Types.vb" />
+    <Compile Include="Interfaces\ITranslationResolver.vb" />
+    <Compile Include="Interfaces\ITaskContext.vb" />
+    <Compile Include="Interfaces\ITask.vb" />
+    <Compile Include="Interfaces\IParsableTask.vb" />
+    <Compile Include="Interfaces\IVariableContext.vb" />
+
+    <!-- Tasks (shared between Compiler and Engine) -->
+    <Compile Include="Tasks\TaskBase.vb" />
+    <Compile Include="Tasks\MessageTask.vb" />
+    <Compile Include="Tasks\CloseSessionTask.vb" />
+    <Compile Include="Tasks\TaskUtterance.vb" />
+    <Compile Include="Tasks\TransferTask.vb" />
+
+    <!-- Dialogue Types -->
+    <Compile Include="Dialogue\DialogueStepType.vb" />
+    <Compile Include="Dialogue\DialogueStep.vb" />
+    <Compile Include="Dialogue\Escalation.vb" />
+    <Compile Include="Dialogue\ValidationCondition.vb" />
+
+    <!-- NLP Types -->
+    <Compile Include="NLP\NLPEngine.vb" />
+    <Compile Include="NLP\CompiledNlpContract.vb" />
+    <Compile Include="NLP\SubDataMappingInfo.vb" />
+
+    <!-- Utilities -->
+    <Compile Include="Utils\GlobalVariableContext.vb" />
+    <Compile Include="Utils\PlaceholderUtils.vb" />
+
     <!-- Dialogue Context moved to Orchestrator (session state, not shared DTO) -->
   </ItemGroup>
 
