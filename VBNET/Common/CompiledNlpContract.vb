@@ -57,4 +57,3 @@ Public Class CompiledNlpContract
         IsValid = True
     End Sub
 End Class
-

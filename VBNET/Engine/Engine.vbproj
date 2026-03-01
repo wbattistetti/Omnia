@@ -33,7 +33,7 @@
     <!-- Enums and primitive models (no dependencies) -->
     <!-- DialogueStepType moved to Compiler/DTO/Runtime (to eliminate circular dependency) -->
     <!-- TaskTypes moved to Common (to eliminate circular dependency) -->
-    <Compile Include="Models\IVariableContext.vb" />
+    <!-- IVariableContext moved to Common (shared with GlobalVariableContext) -->
     <Compile Include="Models\ParseResultType.vb" />
     <Compile Include="Models\ParseResult.vb" />
     <!-- ValidationCondition, CompiledNlpContract, Escalation, DialogueStep moved to Compiler/DTO/Runtime -->
@@ -46,17 +46,11 @@
     <Compile Include="Models\TurnResult.vb" />
     <!-- Deprecated compatibility stub - REMOVED: conflicts with DDTInstance.vb -->
     <!-- <Compile Include="Models\TaskInstance.vb" /> -->
-    <!-- DTOs for JSON deserialization -->
-    <Compile Include="Models\DTO\ResponseDTO.vb" />
-    <Compile Include="Models\DTO\EscalationDTO.vb" />
-    <Compile Include="Models\DTO\DialogueStepDTO.vb" />
-    <!-- Variable context -->
-    <Compile Include="Models\GlobalVariableContext.vb" />
+    <!-- DTOs removed - not used (DialogueStep, Escalation, Response are in Common) -->
+    <!-- GlobalVariableContext removed - duplicate (use Common/GlobalVariableContext.vb) -->
     <!-- Helpers -->
     <Compile Include="Models\Utils.vb" />
-    <!-- Legacy/Deprecated (will be removed later) -->
-    <Compile Include="Models\DDTInstance.vb" />
-    <Compile Include="Models\DDTNode.vb" />
+    <!-- Legacy/Deprecated - REMOVED: DDTInstance and DDTNode (replaced by TaskUtterance in Common) -->
   </ItemGroup>
 
   <!-- Parsers (moved from DDTEngine) -->
@@ -65,23 +59,18 @@
     <!-- IParsableTask moved to Compiler/DTO/Runtime (uses CompiledNlpContract) -->
     <Compile Include="Parsers\Parser.vb" />
     <Compile Include="Parsers\ParserExtraction.vb" />
+    <!-- NLP Engine and Contract moved back to Common (to break Engine ↔ Compiler cycle) -->
   </ItemGroup>
 
   <!-- Tasks/TaskUtterance (moved from Orchestrator/TaskUtterance) -->
   <ItemGroup>
     <!-- Types.vb moved to Common/Types.vb (shared between Engine, Orchestrator, ApiServer) -->
+    <!-- TaskUtterance moved back to Common (used by Common, Compiler, Engine) -->
     <Compile Include="Tasks\TaskUtterance\ProcessTurnHelpers.vb" />
     <Compile Include="Tasks\TaskUtterance\ProcessTurnEngine.vb" />
   </ItemGroup>
 
-  <!-- Placeholder files for other folders -->
-  <ItemGroup>
-    <Compile Include="FlowOrchestrator\FlowOrchestratorPlaceholder.vb" />
-    <Compile Include="Tasks\TaskSayMessage\TaskSayMessagePlaceholder.vb" />
-    <Compile Include="Tasks\TaskBackendCall\TaskBackendCallPlaceholder.vb" />
-  </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Interfaces\" />
-  </ItemGroup>
+  <!-- Placeholder files removed - not implemented -->
+  <!-- Interfaces folder removed - empty -->
 
 </Project>

@@ -1,7 +1,6 @@
 Option Strict On
 Option Explicit On
 
-
 ''' <summary>
 ''' Interfaccia comune per task che possono essere parsati dal Parser
 ''' </summary>

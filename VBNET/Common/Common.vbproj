@@ -36,7 +36,6 @@
     <Compile Include="Escalation.vb" />
     <Compile Include="ValidationCondition.vb" />
     <Compile Include="CompiledNlpContract.vb" />
-    <!-- NLP Contract Types (shared between IDE and Runtime) -->
     <Compile Include="NLPEngine.vb" />
     <Compile Include="SubDataMappingInfo.vb" />
     <!-- Variable Context and Utilities -->

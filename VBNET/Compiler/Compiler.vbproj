@@ -16,9 +16,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Common for common interfaces (ITask, ITaskContext) -->
+    <!-- Common for common interfaces (ITask, ITaskContext), NLP types, and TaskUtterance -->
     <ProjectReference Include="..\Common\Common.vbproj" />
-    <!-- Engine reference removed - all needed types moved to Compiler or Common -->
+    <!-- Engine reference removed - TaskUtterance is now in Common -->
   </ItemGroup>
 
   <ItemGroup>
@@ -84,7 +84,7 @@
     <Compile Include="DTO\Runtime\TaskGroup.vb" />
     <Compile Include="DTO\Runtime\Utils.vb" />
     <!-- Runtime types moved to Common (to eliminate circular dependency) -->
-    <!-- DialogueStep, Escalation, ValidationCondition, CompiledNlpContract, IParsableTask are now in Common -->
+    <!-- CompiledNlpContract, IParsableTask are now in Common -->
   </ItemGroup>
 
 </Project>

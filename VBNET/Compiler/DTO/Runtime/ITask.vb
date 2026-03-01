@@ -3,6 +3,7 @@
 
 Option Strict On
 Option Explicit On
+Imports TaskEngine
 
 Namespace Compiler.DTO.Runtime
 
