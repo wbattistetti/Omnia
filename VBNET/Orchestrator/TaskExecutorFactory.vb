@@ -14,8 +14,7 @@ Public Class TaskExecutorFactory
                 Return New ClassifyProblemTaskExecutor()
             Case TaskTypes.BackendCall
                 Return New BackendCallTaskExecutor()
-            Case TaskTypes.UtteranceInterpretation
-                Return New UtteranceTaskExecutor()
+            ' UtteranceInterpretation tasks use ProcessTurnEngine.ProcessTurn() directly, not an executor
             Case TaskTypes.SayMessage
                 Return New SayMessageTaskExecutor()
             Case TaskTypes.CloseSession

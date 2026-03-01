@@ -225,7 +225,12 @@ Namespace ApiServer.Handlers
                     dialogueContext = SessionManager.GetOrCreateDialogueContext(session)
                     If dialogueContext Is Nothing Then
                         ' ✅ Crea DialogueContext dal compiledTask (prima volta - per costruzione)
-                        dialogueContext = CompiledTaskAdapter.CreateDialogueContextFromTask(compiledTask)
+                        dialogueContext = New TaskEngine.Orchestrator.TaskEngine.DialogueContext() With {
+                            .TaskId = compiledTask.Id,
+                            .DialogueState = New TaskEngine.DialogueState(),
+                            .CurrentData = Nothing,
+                            .LastTurnEvent = Nothing
+                        }
                         ' ✅ Salva il DialogueContext creato
                         SessionManager.SaveDialogueContext(session, dialogueContext)
                     End If
@@ -239,9 +244,13 @@ Namespace ApiServer.Handlers
                     End If
                 Catch ex As Exception
                     ' ✅ Fallback: crea DialogueContext e DialogueState da zero
-                    dialogueContext = CompiledTaskAdapter.CreateDialogueContextFromTask(compiledTask)
                     dialogueState = New TaskEngine.DialogueState()
-                    dialogueContext.DialogueState = dialogueState
+                    dialogueContext = New TaskEngine.Orchestrator.TaskEngine.DialogueContext() With {
+                        .TaskId = compiledTask.Id,
+                        .DialogueState = dialogueState,
+                        .CurrentData = Nothing,
+                        .LastTurnEvent = Nothing
+                    }
                     SessionManager.SaveDialogueContext(session, dialogueContext)
                 End Try
 
@@ -713,9 +722,15 @@ Namespace ApiServer.Handlers
                     ' ✅ Se non esiste, crea un nuovo DialogueState
                     dialogueState = New TaskEngine.DialogueState()
                     If dialogueContext Is Nothing Then
-                        dialogueContext = CompiledTaskAdapter.CreateDialogueContextFromTask(compiledTask)
+                        dialogueContext = New TaskEngine.Orchestrator.TaskEngine.DialogueContext() With {
+                            .TaskId = compiledTask.Id,
+                            .DialogueState = dialogueState,
+                            .CurrentData = Nothing,
+                            .LastTurnEvent = Nothing
+                        }
+                    Else
+                        dialogueContext.DialogueState = dialogueState
                     End If
-                    dialogueContext.DialogueState = dialogueState
                     SessionManager.SaveDialogueContext(session, dialogueContext)
                 End If
 

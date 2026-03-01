@@ -28,19 +28,17 @@
     <!-- TaskExecutor files are now in root, not in TaskExecutor\ subfolder -->
     <Compile Include="TaskExecutorBase.vb" />
     <!-- ProcessTurnEngine moved to Engine/Tasks/TaskUtterance/ -->
-    <Compile Include="UtteranceTaskExecutor.vb" />
+    <!-- UtteranceTaskExecutor removed: UtteranceInterpretation tasks use ProcessTurnEngine.ProcessTurn() directly -->
     <Compile Include="SayMessageTaskExecutor.vb" />
     <Compile Include="ClassifyProblemTaskExecutor.vb" />
     <Compile Include="BackendCallTaskExecutor.vb" />
     <Compile Include="CloseSessionTaskExecutor.vb" />
     <Compile Include="TransferTaskExecutor.vb" />
     <Compile Include="TaskExecutorFactory.vb" />
-    <Compile Include="CompiledTaskAdapter.vb" />
+    <!-- CompiledTaskAdapter removed: DialogueContext now created directly -->
     <!-- TaskUtterance runtime moved to Engine/Tasks/TaskUtterance -->
     <!-- TaskEngine (legacy, simplified, no reflection) -->
-    <Compile Include="TaskEngine\Microtask.vb" />
-    <Compile Include="TaskEngine\TaskStep.vb" />
-    <Compile Include="TaskEngine\StepExecutionState.vb" />
+    <!-- TaskStep, Microtask, StepExecutionState removed: not used, legacy from old microtask system -->
     <Compile Include="TaskEngine\DialogueContext.vb" />
     <Compile Include="TaskEngine\ITaskEngineCallbacks.vb" />
     <Compile Include="TaskEngine\ITaskEngineStateStorage.vb" />

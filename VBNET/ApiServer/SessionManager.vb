@@ -958,7 +958,7 @@ Public Class SessionManager
         End If
 
         ' ✅ REMOVED: CreateDialogueContextFromRuntimeTask - legacy code
-        ' DialogueContext is now created by CompiledTaskAdapter.CreateDialogueContextFromTask()
+        ' DialogueContext is now created directly with minimal properties (TaskId, DialogueState, CurrentData, LastTurnEvent)
         ' which is called by FlowOrchestrator when needed
         ' This function should not be used anymore - DialogueContext is managed by TaskEngine
         _logger.LogInfo("⚠️ [GetOrCreateDialogueContext] Returning Nothing (no context found)", New With {
