@@ -3,29 +3,42 @@ Option Explicit On
 Imports Compiler
 
 ''' <summary>
-''' Esegue task compilati usando executor tipizzati
-''' - Delega l'esecuzione a executor specifici per tipo di task
-''' - Gestisce callback per messaggi
+''' Smistatore unificato: identifica l'executor corretto e lo esegue
+''' Classe statica che combina factory + esecuzione
 ''' </summary>
 Public Class TaskExecutor
-    ' ✅ REMOVED: _taskEngine (Motore) - use StatelessDialogueEngine when needed
-    Private _messageCallback As Action(Of String, String, Integer)
-
-    Public Sub New()
-        ' ✅ REMOVED: taskEngine parameter - use StatelessDialogueEngine when needed
-    End Sub
 
     ''' <summary>
-    ''' Imposta il callback per i messaggi
+    ''' Identifica e crea l'executor appropriato per il tipo di task
     ''' </summary>
-    Public Sub SetMessageCallback(callback As Action(Of String, String, Integer))
-        _messageCallback = callback
-    End Sub
+    Private Shared Function GetExecutor(taskType As TaskTypes) As TaskExecutorBase
+        Select Case taskType
+            Case TaskTypes.ClassifyProblem
+                Return New ClassifyProblemTaskExecutor()
+            Case TaskTypes.BackendCall
+                Return New BackendCallTaskExecutor()
+            Case TaskTypes.SayMessage
+                Return New SayMessageTaskExecutor()
+            Case TaskTypes.CloseSession
+                Return New CloseSessionTaskExecutor()
+            Case TaskTypes.Transfer
+                Return New TransferTaskExecutor()
+            ' UtteranceInterpretation tasks use ProcessTurnEngine.ProcessTurn() directly, not an executor
+            ' TODO: After refactoring, add: Case TaskTypes.UtteranceInterpretation Return New TaskUtteranceStepExecutor()
+            Case Else
+                Console.WriteLine($"⚠️ [TaskExecutor] Unknown TaskType {taskType}")
+                Return Nothing
+        End Select
+    End Function
 
     ''' <summary>
-    ''' Esegue un task compilato
+    ''' Esegue un task: identifica l'executor e lo fa eseguire dal motore
     ''' </summary>
-    Public Async Function ExecuteTask(task As CompiledTask, state As ExecutionState) As System.Threading.Tasks.Task(Of TaskExecutionResult)
+    Public Shared Async Function ExecuteTask(
+        task As CompiledTask,
+        state As ExecutionState,
+        messageCallback As Action(Of String, String, Integer)
+    ) As System.Threading.Tasks.Task(Of TaskExecutionResult)
         If task Is Nothing Then
             Return New TaskExecutionResult() With {
                 .Success = False,
@@ -34,8 +47,8 @@ Public Class TaskExecutor
         End If
 
         Try
-            ' Ottieni l'executor appropriato per il tipo di task
-            Dim executor = TaskExecutorFactory.GetExecutor(task.TaskType)
+            ' Identifica l'executor corretto
+            Dim executor = GetExecutor(task.TaskType)
 
             If executor Is Nothing Then
                 Return New TaskExecutionResult() With {
@@ -44,10 +57,8 @@ Public Class TaskExecutor
                 }
             End If
 
-            ' Imposta il callback per i messaggi
-            executor.SetMessageCallback(_messageCallback)
-
-            ' Esegui il task usando l'executor specifico
+            ' Imposta callback e esegui
+            executor.SetMessageCallback(messageCallback)
             Return Await executor.Execute(task, state)
 
         Catch ex As Exception
@@ -77,4 +88,3 @@ Public Class TaskExecutionResult
     ''' </summary>
     Public Property WaitingTaskId As String = Nothing
 End Class
-

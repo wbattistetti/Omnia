@@ -36,7 +36,7 @@
     <Compile Include="BackendCallTaskExecutor.vb" />
     <Compile Include="CloseSessionTaskExecutor.vb" />
     <Compile Include="TransferTaskExecutor.vb" />
-    <Compile Include="TaskExecutorFactory.vb" />
+    <!-- TaskExecutorFactory removed: unificato in TaskExecutor (statico) -->
     <!-- CompiledTaskAdapter removed: DialogueContext now created directly -->
     <!-- TaskUtterance runtime moved to Engine/Tasks/TaskUtterance -->
     <!-- TaskEngine legacy removed: UtteranceInterpretation uses ProcessTurnEngine, other tasks use TaskExecutor -->

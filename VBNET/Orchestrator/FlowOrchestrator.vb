@@ -17,7 +17,7 @@ Public Class FlowOrchestrator
     Private ReadOnly _compiledTasks As List(Of CompiledTask)
     Private ReadOnly _compilationResult As FlowCompilationResult
     ' ✅ REMOVED: _taskEngine (Motore) - use StatelessDialogueEngine instead when needed
-    Private ReadOnly _taskExecutor As TaskExecutor
+    ' ✅ REMOVED: _taskExecutor (ora TaskExecutor è statico)
     Private ReadOnly _taskGroupExecutor As TaskGroupExecutor
     Private ReadOnly _state As ExecutionState
     Private _isRunning As Boolean = False
@@ -54,8 +54,8 @@ Public Class FlowOrchestrator
         _compiledTasks = compiledTasks
         _compilationResult = Nothing
         ' ✅ REMOVED: taskEngine parameter - use StatelessDialogueEngine when needed
-        _taskExecutor = New TaskExecutor()
-        _taskGroupExecutor = New TaskGroupExecutor(_taskExecutor)
+        ' ✅ REMOVED: _taskExecutor (ora TaskExecutor è statico)
+        _taskGroupExecutor = New TaskGroupExecutor()
         _executionStateStorage = Nothing
         _sessionId = Nothing
         _state = New ExecutionState()
@@ -74,8 +74,8 @@ Public Class FlowOrchestrator
             _entryTaskGroupId = Nothing
         End If
         ' ✅ REMOVED: taskEngine parameter - use StatelessDialogueEngine when needed
-        _taskExecutor = New TaskExecutor()
-        _taskGroupExecutor = New TaskGroupExecutor(_taskExecutor)
+        ' ✅ REMOVED: _taskExecutor (ora TaskExecutor è statico)
+        _taskGroupExecutor = New TaskGroupExecutor()
         _executionStateStorage = executionStateStorage
         _sessionId = sessionId
 
@@ -129,13 +129,11 @@ Public Class FlowOrchestrator
 
                 Console.WriteLine($"[FlowOrchestrator] Executing TaskGroup {taskGroup.NodeId} (iteration {iterationCount})")
 
-                ' ✅ Imposta callback per messaggi
-                _taskExecutor.SetMessageCallback(Sub(text, stepType, escalationNumber)
-                                                     RaiseEvent MessageToShow(Me, text)
-                                                 End Sub)
-
-                ' ✅ Delega esecuzione a TaskGroupExecutor
-                Dim result = Await _taskGroupExecutor.ExecuteTaskGroup(taskGroup, _state)
+                ' ✅ Delega esecuzione a TaskGroupExecutor (callback passato internamente)
+                Dim messageCallback As Action(Of String, String, Integer) = Sub(text, stepType, escalationNumber)
+                                                                                RaiseEvent MessageToShow(Me, text)
+                                                                            End Sub
+                Dim result = Await _taskGroupExecutor.ExecuteTaskGroup(taskGroup, _state, messageCallback)
 
                 If Not result.Success Then
                     Throw New Exception($"TaskGroup execution failed: {result.Err}")

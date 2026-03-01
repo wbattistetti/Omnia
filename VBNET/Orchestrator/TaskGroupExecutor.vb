@@ -16,10 +16,10 @@ Imports Compiler
 ''' - NON valuta ExecCondition (già valutata da FlowOrchestrator)
 ''' </summary>
 Public Class TaskGroupExecutor
-    Private ReadOnly _taskExecutor As TaskExecutor
+    ' ✅ REMOVED: _taskExecutor (ora TaskExecutor è statico)
 
-    Public Sub New(taskExecutor As TaskExecutor)
-        _taskExecutor = taskExecutor
+    Public Sub New()
+        ' ✅ REMOVED: taskExecutor parameter (ora TaskExecutor è statico)
     End Sub
 
     ''' <summary>
@@ -27,10 +27,12 @@ Public Class TaskGroupExecutor
     ''' </summary>
     ''' <param name="taskGroup">TaskGroup da eseguire</param>
     ''' <param name="executionState">Stato esecuzione (modificato durante esecuzione)</param>
+    ''' <param name="messageCallback">Callback per messaggi</param>
     ''' <returns>Risultato esecuzione (Success, RequiresInput, Error)</returns>
     Public Async Function ExecuteTaskGroup(
         taskGroup As TaskGroup,
-        executionState As ExecutionState
+        executionState As ExecutionState,
+        messageCallback As Action(Of String, String, Integer)
     ) As System.Threading.Tasks.Task(Of TaskExecutionResult)
         If taskGroup Is Nothing Then
             Return New TaskExecutionResult() With {
@@ -71,8 +73,8 @@ Public Class TaskGroupExecutor
                 Continue For
             End If
 
-            ' ✅ Esegui task tramite TaskExecutor
-            Dim result = Await _taskExecutor.ExecuteTask(task, executionState)
+            ' ✅ Esegui task tramite TaskExecutor (statico)
+            Dim result = Await TaskExecutor.ExecuteTask(task, executionState, messageCallback)
 
             If Not result.Success Then
                 Console.WriteLine($"[TaskGroupExecutor] ❌ Task {task.Id} execution failed: {result.Err}")
