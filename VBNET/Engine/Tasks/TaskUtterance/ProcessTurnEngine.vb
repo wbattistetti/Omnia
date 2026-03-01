@@ -37,13 +37,13 @@ Public Class ProcessTurnEngine
         ''' </summary>
         Public Shared Function ProcessTurn(state As DialogueState, utterance As String, resolveTranslation As Func(Of String, String)) As DialogueTurnResult
 
-            ' Cast CurrentTask and RootTask to CompiledUtteranceTask (they are Object in DialogueState to avoid Common -> Compiler dependency)
-            Dim currentTask = TryCast(state.CurrentTask, CompiledUtteranceTask)
-            If currentTask Is Nothing Then Throw New InvalidOperationException("CurrentTask must be CompiledUtteranceTask")
-            Dim rootTask = TryCast(state.RootTask, CompiledUtteranceTask)
+        ' Cast CurrentTask and RootTask to CompiledUtteranceTask (they are Object in DialogueState to avoid Common -> Compiler dependency)
+        Dim currentTask = DirectCast(state.CurrentTask, CompiledUtteranceTask)
+        If currentTask Is Nothing Then Throw New InvalidOperationException("CurrentTask must be CompiledUtteranceTask")
+        Dim rootTask = DirectCast(state.RootTask, CompiledUtteranceTask)
 
-            ' 1) LOGICA PURA: aggiornamento dello stato
-            Select Case state.Mode
+        ' 1) LOGICA PURA: aggiornamento dello stato
+        Select Case state.Mode
 
             ' ESECUZIONE STEP (PRIMO TURNO)
                 Case DialogueMode.ExecutingStep
@@ -81,25 +81,23 @@ Public Class ProcessTurnEngine
                                 'c'è stato un match potrebbe essere per il task corrente o per una altro task. quindi devo: se sono in subtask tornare altask parent e rivedere qua'è il porssimo da fillare se non c'è nente da fillare allora devo o conferemare o andare al success .
 
                                 Dim mainTask = ProcessTurnHelpers.MainTask(currentTask, rootTask)
-                                If ProcessTurnHelpers.IsFilled(mainTask, state.Memory) Then
-                                    ' Main task completato → gestisci Confirmation o Success
-                                    If currentTask.StepExists(DialogueStepType.Confirmation) Then
-                                        state.CurrentStepType = DialogueStepType.Confirmation
-                                    ElseIf currentTask.StepExists(DialogueStepType.Success) Then
-                                        state.CurrentStepType = DialogueStepType.Success
-                                    Else
-                                        ' Main task completato senza Confirmation/Success → completa
-                                        state.IsCompleted = True
-                                        state.Mode = DialogueMode.Completed
-                                    End If
+                            If ProcessTurnHelpers.IsFilled(mainTask, state.Memory) Then
+                                ' Main task completato → gestisci Confirmation o Success
+                                If currentTask.StepExists(DialogueStepType.Confirmation) Then
+                                    state.CurrentStepType = DialogueStepType.Confirmation
+                                ElseIf currentTask.StepExists(DialogueStepType.Success) Then
+                                    state.CurrentStepType = DialogueStepType.Success
                                 Else
-                                    ' Main task non ancora completato → vai al prossimo subtask non riempito
-                                    state = SetStateToTheFirstUnfilledSubTask(state)
+                                    ' Main task completato senza Confirmation/Success → completa
+                                    state.IsCompleted = True
+                                    state.Mode = DialogueMode.Completed
                                 End If
+                            Else
+                                ' Main task non ancora completato → vai al prossimo subtask non riempito
+                                SetStateToTheFirstUnfilledSubTask(state)
+                            End If
 
-
-
-                            Case ParseStatus.NoMatch
+                        Case ParseStatus.NoMatch
                                 EnsureCounter(state, currentTask.Id)
                                 state.Counters(currentTask.Id).NoMatch += 1
                                 state.CurrentStepType = DialogueStepType.NoMatch
@@ -128,15 +126,16 @@ Public Class ProcessTurnEngine
             ' 2) RENDERING UNICO: produce i task dello step corrente
             Dim renderedTasks As New List(Of String)
 
-            If state.Mode <> DialogueMode.Completed Then
-                Dim stepToRender = ProcessTurnHelpers.GetStep(currentTask, state.CurrentStepType)
-                renderedTasks = ProcessTurnHelpers.RenderStepTasks(stepToRender, currentTask, state, resolveTranslation)
-                If Not ProcessTurnHelpers.IsFilled(currentTask, state.Memory) OrElse state.CurrentStepType = DialogueStepType.Confirmation Then
-                    state.Mode = DialogueMode.WaitingForUtterance
-                End If
+        If state.Mode <> DialogueMode.Completed Then
+            currentTask = DirectCast(state.CurrentTask, CompiledUtteranceTask)
+            Dim stepToRender = currentTask.GetStep(state.CurrentStepType)
+            renderedTasks = ProcessTurnHelpers.RenderStepTasks(stepToRender, currentTask, state, resolveTranslation)
+            If Not ProcessTurnHelpers.IsFilled(currentTask, state.Memory) OrElse state.CurrentStepType = DialogueStepType.Confirmation Then
+                state.Mode = DialogueMode.WaitingForUtterance
             End If
+        End If
 
-            Return New DialogueTurnResult(renderedTasks, state)
+        Return New DialogueTurnResult(renderedTasks, state)
 
         End Function
 
@@ -152,17 +151,30 @@ Public Class ProcessTurnEngine
             End If
         End Sub
 
-        Private Shared Function SetStateToTheFirstUnfilledSubTask(state As DialogueState) As DialogueState
-            Dim currentTask = TryCast(state.CurrentTask, CompiledUtteranceTask)
-            If currentTask Is Nothing Then Throw New InvalidOperationException("CurrentTask must be CompiledUtteranceTask")
+    'Private Shared Function SetStateToTheFirstUnfilledSubTask(state As DialogueState) As DialogueState
+    '    Dim currentTask = TryCast(state.CurrentTask, CompiledUtteranceTask)
+    '    If currentTask Is Nothing Then Throw New InvalidOperationException("CurrentTask must be CompiledUtteranceTask")
 
-            Dim nextSubTask = ProcessTurnHelpers.GetFirstUnfilledSubTask(currentTask, state.Memory)
-            If nextSubTask IsNot Nothing Then
-                state.CurrentTask = nextSubTask
-                state.CurrentStepType = DialogueStepType.Start
-                state.Mode = DialogueMode.ExecutingStep
-            End If
-            Return state
-        End Function
+    '    Dim nextSubTask = ProcessTurnHelpers.GetFirstUnfilledSubTask(currentTask, state.Memory)
+    '    If nextSubTask IsNot Nothing Then
+    '        state.CurrentTask = nextSubTask
+    '        state.CurrentStepType = DialogueStepType.Start
+    '        state.Mode = DialogueMode.ExecutingStep
+    '    End If
+    '    Return state
+    'End Function
+    Private Shared Sub SetStateToTheFirstUnfilledSubTask(state As DialogueState)
+        ' ✅ FIX: Cerca sempre nel ROOT TASK, non nel current task
+        ' Perché currentTask potrebbe essere già un subtask (es. mese),
+        ' e dobbiamo trovare il prossimo subtask non riempito del main task (es. anno)
+        Dim rootTask = DirectCast(state.RootTask, CompiledUtteranceTask)
+        If rootTask Is Nothing Then Throw New InvalidOperationException("RootTask must be CompiledUtteranceTask")
 
-    End Class
+        Dim nextSubTask = ProcessTurnHelpers.GetFirstUnfilledSubTask(rootTask, state.Memory)
+        If nextSubTask IsNot Nothing Then
+            state.CurrentTask = nextSubTask
+            state.CurrentStepType = DialogueStepType.Start
+            state.Mode = DialogueMode.ExecutingStep
+        End If
+    End Sub
+End Class

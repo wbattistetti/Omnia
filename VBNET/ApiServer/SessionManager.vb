@@ -882,7 +882,9 @@ Public Class SessionManager
 
                 ' ✅ Usa StringEnumConverter per deserializzare gli enum come stringhe invece che numeri
                 ' ✅ Usa ITaskConverter per deserializzare ITask (interfaccia) nelle sue implementazioni concrete
+                ' ✅ Usa TypeNameHandling.Auto per deserializzare correttamente CurrentTask e RootTask come CompiledUtteranceTask
                 Dim deserializeSettings As New JsonSerializerSettings() With {
+                    .TypeNameHandling = TypeNameHandling.Auto,
                     .Converters = New List(Of JsonConverter) From {
                         New Newtonsoft.Json.Converters.StringEnumConverter(),
                         New TaskEngine.ITaskConverter()
@@ -997,9 +999,11 @@ Public Class SessionManager
         ' ✅ Serializzazione DialogueState (stateless design)
         ' ✅ Usa StringEnumConverter per serializzare gli enum come stringhe invece che numeri
         ' ✅ Usa ITaskConverter per deserializzare ITask (anche se CanWrite=False, è comunque necessario per la deserializzazione)
+        ' ✅ Usa TypeNameHandling.Auto per includere informazioni sul tipo per CurrentTask e RootTask (Object -> CompiledUtteranceTask)
         Dim settings As New JsonSerializerSettings() With {
             .ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
             .NullValueHandling = NullValueHandling.Ignore,
+            .TypeNameHandling = TypeNameHandling.Auto,
             .Converters = New List(Of JsonConverter) From {
                 New Newtonsoft.Json.Converters.StringEnumConverter(),
                 New TaskEngine.ITaskConverter()

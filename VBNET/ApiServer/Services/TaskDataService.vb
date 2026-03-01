@@ -4,6 +4,7 @@ Imports System.Net.Http
 Imports Compiler
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
+Imports TaskEngine
 
 ''' <summary>
 ''' Service for accessing task data from Node.js backend
@@ -144,7 +145,28 @@ Namespace Services
                 Console.Out.Flush()
 
                 Try
-                    Dim task = JsonConvert.DeserializeObject(Of Compiler.TaskDefinition)(templateObj.ToString(), settings)
+                    ' ✅ Check task type and deserialize as UtteranceTaskDefinition if needed
+                    Dim typeToken = templateObj("type")
+                    Dim taskType As TaskEngine.TaskTypes? = Nothing
+
+                    If typeToken IsNot Nothing AndAlso typeToken.Type = JTokenType.Integer Then
+                        Dim typeValue = typeToken.Value(Of Integer)()
+                        If [Enum].IsDefined(GetType(TaskEngine.TaskTypes), typeValue) Then
+                            taskType = CType(typeValue, TaskEngine.TaskTypes)
+                        End If
+                    End If
+
+                    Dim task As Compiler.TaskDefinition = Nothing
+                    If taskType.HasValue AndAlso taskType.Value = TaskEngine.TaskTypes.UtteranceInterpretation Then
+                        ' ✅ Deserialize as UtteranceTaskDefinition for UtteranceInterpretation tasks
+                        task = JsonConvert.DeserializeObject(Of Compiler.UtteranceTaskDefinition)(templateObj.ToString(), settings)
+                        Console.WriteLine($"✅ [DeserializeTasks] Template '{templateId}' deserialized as UtteranceTaskDefinition (type=UtteranceInterpretation)")
+                    Else
+                        ' ✅ Deserialize as base TaskDefinition for other types
+                        task = JsonConvert.DeserializeObject(Of Compiler.TaskDefinition)(templateObj.ToString(), settings)
+                        Console.WriteLine($"✅ [DeserializeTasks] Template '{templateId}' deserialized as TaskDefinition (type={If(taskType.HasValue, taskType.Value.ToString(), "unknown")})")
+                    End If
+
                     If task IsNot Nothing Then
                         deserializedTasks.Add(task)
                         Console.WriteLine($"✅ [DeserializeTasks] Template '{templateId}' deserialized successfully")

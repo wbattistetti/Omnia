@@ -14,6 +14,48 @@ Namespace ApiServer.Handlers
     ''' Handles compilation-related API endpoints
     ''' </summary>
     Public Module CompilationHandlers
+
+        ''' <summary>
+        ''' Helper: Deserializes a task JSON string to the correct type (UtteranceTaskDefinition or TaskDefinition)
+        ''' </summary>
+        Private Function DeserializeTaskFromJson(jsonString As String, settings As JsonSerializerSettings) As Compiler.TaskDefinition
+            Dim taskObj = Newtonsoft.Json.Linq.JObject.Parse(jsonString)
+            Dim typeToken = taskObj("type")
+            Dim taskType As TaskEngine.TaskTypes? = Nothing
+
+            If typeToken IsNot Nothing AndAlso typeToken.Type = Newtonsoft.Json.Linq.JTokenType.Integer Then
+                Dim typeValue = CInt(typeToken)
+                If [Enum].IsDefined(GetType(TaskEngine.TaskTypes), typeValue) Then
+                    taskType = CType(typeValue, TaskEngine.TaskTypes)
+                End If
+            End If
+
+            If taskType.HasValue AndAlso taskType.Value = TaskEngine.TaskTypes.UtteranceInterpretation Then
+                ' ✅ Deserialize as UtteranceTaskDefinition for UtteranceInterpretation tasks
+                Return JsonConvert.DeserializeObject(Of Compiler.UtteranceTaskDefinition)(jsonString, settings)
+            Else
+                ' ✅ Deserialize as base TaskDefinition for other types
+                Return JsonConvert.DeserializeObject(Of Compiler.TaskDefinition)(jsonString, settings)
+            End If
+        End Function
+
+        ''' <summary>
+        ''' Helper: Deserializes a list of task JSON strings to the correct types
+        ''' </summary>
+        Private Function DeserializeTaskListFromJson(jsonString As String, settings As JsonSerializerSettings) As List(Of Compiler.TaskDefinition)
+            Dim taskArray = Newtonsoft.Json.Linq.JArray.Parse(jsonString)
+            Dim result As New List(Of Compiler.TaskDefinition)()
+
+            For Each taskToken In taskArray
+                Dim taskJson = taskToken.ToString()
+                Dim task = DeserializeTaskFromJson(taskJson, settings)
+                If task IsNot Nothing Then
+                    result.Add(task)
+                End If
+            Next
+
+            Return result
+        End Function
         ''' <summary>
         ''' Handles POST /api/runtime/compile
         ''' </summary>
@@ -306,10 +348,11 @@ Namespace ApiServer.Handlers
                     ' Deserialize taskInstance
                     Try
                         Dim taskInstanceJson = requestObj("taskInstance").ToString()
-                        taskInstance = JsonConvert.DeserializeObject(Of Compiler.TaskDefinition)(taskInstanceJson, New JsonSerializerSettings() With {
+                        Dim settings = New JsonSerializerSettings() With {
                             .NullValueHandling = NullValueHandling.Ignore,
                             .MissingMemberHandling = MissingMemberHandling.Ignore
-                        })
+                        }
+                        taskInstance = DeserializeTaskFromJson(taskInstanceJson, settings)
                     Catch ex As Exception
                         Console.WriteLine($"❌ [HandleCompileTask] Error deserializing taskInstance: {ex.Message}")
                         Dim errorJson = JsonConvert.SerializeObject(New With {.error = "Failed to deserialize taskInstance", .message = ex.Message})
@@ -323,10 +366,11 @@ Namespace ApiServer.Handlers
                     If requestObj("allTemplates") IsNot Nothing Then
                         Try
                             Dim allTemplatesJson = requestObj("allTemplates").ToString()
-                            allTemplates = JsonConvert.DeserializeObject(Of List(Of Compiler.TaskDefinition))(allTemplatesJson, New JsonSerializerSettings() With {
+                            Dim settings = New JsonSerializerSettings() With {
                                 .NullValueHandling = NullValueHandling.Ignore,
                                 .MissingMemberHandling = MissingMemberHandling.Ignore
-                            })
+                            }
+                            allTemplates = DeserializeTaskListFromJson(allTemplatesJson, settings)
                         Catch ex As Exception
                             Console.WriteLine($"❌ [HandleCompileTask] Error deserializing allTemplates: {ex.Message}")
                             Dim errorJson = JsonConvert.SerializeObject(New With {.error = "Failed to deserialize allTemplates", .message = ex.Message})
@@ -345,10 +389,11 @@ Namespace ApiServer.Handlers
                     ' Console.WriteLine("⚠️ [HandleCompileTask] Detected legacy task input format")
                     Try
                         Dim taskJson = requestObj("task").ToString()
-                        taskInstance = JsonConvert.DeserializeObject(Of Compiler.TaskDefinition)(taskJson, New JsonSerializerSettings() With {
+                        Dim settings = New JsonSerializerSettings() With {
                             .NullValueHandling = NullValueHandling.Ignore,
                             .MissingMemberHandling = MissingMemberHandling.Ignore
-                        })
+                        }
+                        taskInstance = DeserializeTaskFromJson(taskJson, settings)
                         allTemplates = New List(Of Compiler.TaskDefinition) From {taskInstance}
                     Catch ex As Exception
                         Console.WriteLine($"❌ [HandleCompileTask] Error deserializing task: {ex.Message}")
