@@ -152,9 +152,19 @@ export function openLateralChatPanel(
 ): DockNode {
   const { tabId, newTab, position, onExisting } = options;
 
+  // ✅ DEBUG: Log the structure of the dock tree
+  console.log('[openLateralChatPanel] 🔍 DEBUG: Dock tree structure', {
+    rootKind: prev.kind,
+    rootOrientation: prev.kind === 'split' ? prev.orientation : null,
+    rootChildrenCount: prev.kind === 'split' ? prev.children.length : 0,
+    position,
+    tabId
+  });
+
   // ✅ STEP 1: Check if tab already exists (idempotent check)
   const existing = getTab(prev, tabId);
   if (existing) {
+    console.log('[openLateralChatPanel] ✅ Tab already exists, activating');
     if (onExisting) {
       return onExisting(prev, tabId);
     }
@@ -164,26 +174,127 @@ export function openLateralChatPanel(
   // ✅ STEP 2: Check if a lateral tabset already exists (idempotent check)
   const existingLateralTabset = findLateralTabset(prev, position);
   if (existingLateralTabset) {
+    console.log('[openLateralChatPanel] ✅ Lateral tabset already exists, adding tab', {
+      tabsetId: existingLateralTabset
+    });
     // ✅ CRITICAL: Use upsertAddCenter instead of addTabCenter
     // upsertAddCenter is idempotent: removes tab if exists elsewhere, then adds
     // This handles race condition where tab was just added but not yet in prev
     return upsertAddCenter(prev, existingLateralTabset, newTab);
   }
 
-  // ✅ STEP 3: Check if split with same structure already exists (idempotent check)
-  // This prevents creating duplicate splits even with race conditions
-  const rootTabsetId = findRootTabset(prev) || 'ts_main';
-  const existingSplitTabset = findLateralTabsetInSplit(prev, rootTabsetId, position);
-  if (existingSplitTabset) {
-    // Split exists but tabset not found by findLateralTabset (edge case)
-    // Use upsertAddCenter to add tab idempotently
-    return upsertAddCenter(prev, existingSplitTabset, newTab);
+  // ✅ STEP 3: Create new split at root level
+  // CRITICAL: Always wrap the entire root to ensure lateral panel extends full height
+  // This works whether root is a tabset, vertical split (col), or horizontal split (row)
+  const sizes = position === 'left' ? [0.25, 0.75] : [0.75, 0.25];
+
+  // Create new tabset for the chat panel
+  const newTabSet: DockNode = {
+    kind: 'tabset',
+    id: `ts_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    tabs: [newTab],
+    active: 0
+  };
+
+  // If root is already a horizontal split (row), add panel to it
+  // BUT: Only if the main content is a simple tabset (not a split)
+  // If main content is a split (e.g., vertical split with ResponseEditor),
+  // we need to wrap it to ensure full height
+  if (prev.kind === 'split' && prev.orientation === 'row') {
+    console.log('[openLateralChatPanel] 🔍 Root is horizontal split (row), adding panel to it');
+    // Find the main content child (opposite of the desired position)
+    // For left position, main content is the last child; for right, it's the first
+    const mainContentIndex = position === 'left' ? prev.children.length - 1 : 0;
+    const mainContent = prev.children[mainContentIndex];
+
+    console.log('[openLateralChatPanel] 🔍 Main content', {
+      kind: mainContent.kind,
+      orientation: mainContent.kind === 'split' ? mainContent.orientation : null
+    });
+
+    // If main content is a simple tabset (not inside a vertical split), split it
+    if (mainContent.kind === 'tabset') {
+      console.log('[openLateralChatPanel] ✅ Main content is tabset, splitting it');
+      return splitWithTab(prev, mainContent.id, position, newTab, sizes);
+    }
+
+    // If main content is a split (e.g., vertical split with ResponseEditor),
+    // wrap it in a horizontal split to add the lateral panel
+    // This ensures the lateral panel extends full height
+    console.log('[openLateralChatPanel] ✅ Main content is split, wrapping it');
+    const wrappedMainContent = {
+      kind: 'split' as const,
+      id: `split_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      orientation: 'row' as const,
+      children: position === 'left'
+        ? [newTabSet, mainContent]
+        : [mainContent, newTabSet],
+      sizes
+    };
+
+    // Replace the main content with the wrapped version
+    const newChildren = [...prev.children];
+    newChildren[mainContentIndex] = wrappedMainContent;
+    return {
+      ...prev,
+      children: newChildren
+    };
   }
 
-  // ✅ STEP 4: Create new split (only if no split exists)
-  // Multiple concurrent calls may all reach here, but React batching ensures convergence
-  const sizes = position === 'left' ? [0.25, 0.75] : [0.75, 0.25];
-  return splitWithTab(prev, rootTabsetId, position, newTab, sizes);
+  // Root is a tabset or vertical split (col) - ALWAYS wrap it in a horizontal split
+  // This ensures the lateral panel extends full height from toolbar to bottom
+  // CRITICAL: Never use splitWithTab here because it would create the split inside
+  // the vertical split instead of wrapping it
+  console.log('[openLateralChatPanel] ✅ Root is tabset or vertical split, wrapping entire root', {
+    rootKind: prev.kind,
+    rootOrientation: prev.kind === 'split' ? prev.orientation : null
+  });
+  const children = position === 'left'
+    ? [newTabSet, prev]
+    : [prev, newTabSet];
+
+  return {
+    kind: 'split',
+    id: `split_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    orientation: 'row',
+    children,
+    sizes
+  };
+}
+
+/**
+ * ✅ Finds the actual root tabset (not inside vertical splits)
+ * This ensures lateral splits are created at root level for full-height panels
+ *
+ * @param node - The dock tree node to search
+ * @returns The ID of the root tabset, or null if not found
+ */
+function findActualRootTabset(node: DockNode): string | null {
+  if (node.kind === 'tabset') {
+    return node.id;
+  }
+
+  if (node.kind === 'split') {
+    // If it's a vertical split, find the root tabset in the first child (main content area)
+    // This is the tabset that should be split for lateral panels
+    if (node.orientation === 'col') {
+      return findActualRootTabset(node.children[0]);
+    }
+    // If it's a horizontal split, find the root tabset in the main content child
+    // For left/right splits, the main content is usually the first or middle child
+    if (node.orientation === 'row') {
+      // Check if any child is a tabset (that's likely the root)
+      for (const child of node.children) {
+        if (child.kind === 'tabset') {
+          return child.id;
+        }
+      }
+      // Otherwise, recursively search in the first child (main content)
+      return findActualRootTabset(node.children[0]);
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -196,7 +307,8 @@ function findLateralTabset(node: DockNode, position: 'left' | 'right'): string |
   }
 
   if (node.kind === 'split') {
-    // For horizontal splits (row), check if any child is a lateral tabset
+    // ✅ CRITICAL: Only horizontal splits (row) can have lateral tabsets (left/right)
+    // Vertical splits (col) have top/bottom tabsets, not lateral ones
     if (node.orientation === 'row') {
       const targetIndex = position === 'left' ? 0 : node.children.length - 1;
       const targetChild = node.children[targetIndex];
@@ -210,22 +322,17 @@ function findLateralTabset(node: DockNode, position: 'left' | 'right'): string |
       }
     }
 
-    // For vertical splits (col), search in all children
+    // ✅ FIXED: For vertical splits (col), do NOT check children for lateral tabsets
+    // Vertical splits have top/bottom children, not left/right
+    // We should only recursively search in nested horizontal splits
     if (node.orientation === 'col') {
       for (const child of node.children) {
-        if (child.kind === 'tabset') {
-          // Check if this tabset is in a lateral position
-          const childIndex = node.children.indexOf(child);
-          const isLeft = childIndex === 0;
-          const isRight = childIndex === node.children.length - 1;
-          if ((position === 'left' && isLeft) || (position === 'right' && isRight)) {
-            return child.id;
-          }
-        }
+        // Only recursively search in nested splits (which might be horizontal)
         if (child.kind === 'split') {
           const found = findLateralTabset(child, position);
           if (found) return found;
         }
+        // Skip tabsets in vertical splits - they are top/bottom, not left/right
       }
     }
   }

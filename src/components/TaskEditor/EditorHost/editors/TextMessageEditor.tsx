@@ -10,13 +10,6 @@ export default function TextMessageEditor({ task: taskMeta, onClose }: EditorPro
   const instanceId = taskMeta.instanceId || taskMeta.id; // ✅ RINOMINATO: act → taskMeta
   const pdUpdate = useProjectDataUpdate();
 
-  console.log('[TextMessageEditor] Mounted', {
-    instanceId,
-    taskType: taskMeta.type,
-    taskLabel: taskMeta.label,
-    taskId: taskMeta.id
-  });
-
   // FASE 3: Read initial text from Task (create if doesn't exist, like DDTHostAdapter)
   // Use useState initializer function to compute once on mount only
   const [text, setText] = useState(() => {

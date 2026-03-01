@@ -198,21 +198,6 @@ function ToolbarDropdownButton({
 }
 
 export function EditorHeader({ icon, title, subtitle, titleActions, toolbarButtons = [], rightActions, onClose, color = 'orange', className, style }: EditorHeaderProps) {
-  // ✅ DEBUG: Log toolbar buttons received
-  React.useEffect(() => {
-    console.log('[EditorHeader] 📥 Received toolbarButtons', {
-      count: toolbarButtons.length,
-      buttons: toolbarButtons.map((btn, i) => ({
-        index: i,
-        label: btn.label,
-        hasIcon: !!btn.icon,
-        primary: btn.primary,
-        active: btn.active,
-        hasTitle: !!btn.title,
-        iconType: btn.icon?.type?.name || btn.icon?.type || 'unknown'
-      }))
-    });
-  }, [toolbarButtons]);
   const theme = THEMES[color] || THEMES.orange;
   let combinedClass = '';
   try {

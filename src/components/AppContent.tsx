@@ -8,6 +8,7 @@ import Sidebar from './Sidebar/Sidebar';
 import LibraryLabel from './Sidebar/LibraryLabel';
 import { ProjectDataService } from '../services/ProjectDataService';
 import { useProjectData, useProjectDataUpdate } from '../context/ProjectDataContext';
+import { useProjectTranslations } from '../context/ProjectTranslationsContext';
 import { Node, Edge } from 'reactflow';
 import { FlowNode, EdgeData } from './Flowchart/types/flowTypes';
 import { ProjectInfo } from '../types/project';
@@ -19,13 +20,13 @@ import { FlowEditor } from './Flowchart/FlowEditor';
 import { FlowWorkspace } from './FlowWorkspace/FlowWorkspace';
 import { DockWorkspace } from './FlowWorkspace/DockWorkspace';
 import { DockManager } from './Dock/DockManager';
-import { DockNode, DockTab, DockTabResponseEditor, DockTabTaskEditor, ToolbarButton } from '../dock/types'; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
+import { DockNode, DockTab, DockTabResponseEditor, DockTabTaskEditor, DockTabChat, ToolbarButton } from '../dock/types'; // ✅ RINOMINATO: DockTabActEditor → DockTabTaskEditor
 import { FlowCanvasHost } from './FlowWorkspace/FlowCanvasHost';
 import { FlowWorkspaceProvider, useFlowWorkspace } from '../flows/FlowStore.tsx';
 import { useFlowActions } from '../flows/FlowStore.tsx';
 import { upsertAddNextTo, closeTab, activateTab, splitWithTab } from '../dock/ops';
 import { findRootTabset, tabExists } from './AppContent/domain/dockTree';
-import { openBottomDockedTab } from './AppContent/infrastructure/docking/DockingHelpers';
+import { openBottomDockedTab, openLateralChatPanel } from './AppContent/infrastructure/docking/DockingHelpers';
 import { EditorCoordinator } from './AppContent/application/coordinators/EditorCoordinator';
 import { ProjectManager } from './AppContent/application/services/ProjectManager';
 import { TabRenderer } from './AppContent/presentation/TabRenderer';
@@ -344,6 +345,77 @@ export const AppContent: React.FC<AppContentProps> = ({
       };
     }
   }, [isResizing, handleResize, handleResizeEnd]);
+
+  // ✅ Get translations for chat panel
+  const { translations: globalTranslations, isReady: translationsReady, isLoading: translationsLoading, loadAllTranslations } = useProjectTranslations();
+
+  // ✅ Handler to open flow chat as dockable panel (same logic as Response Editor Test button)
+  const handleRunFlowRetryCountRef = React.useRef(0);
+  const handleRunFlow = React.useCallback(() => {
+    // Reset retry count after successful execution
+    handleRunFlowRetryCountRef.current = 0;
+
+    // Check if flow has nodes/edges
+    const nodes = (window as any).__flowNodes || [];
+    const edges = (window as any).__flowEdges || [];
+
+    if (nodes.length === 0 && edges.length === 0) {
+      console.warn('[AppContent] No flow nodes/edges found');
+      return;
+    }
+
+    // Ensure translations are loaded
+    if (!translationsReady && !translationsLoading && loadAllTranslations) {
+      loadAllTranslations().then(() => {
+        handleRunFlow();
+      }).catch((err) => {
+        console.error('[AppContent] Failed to load translations', err);
+      });
+      return;
+    }
+
+    // Prevent infinite retry loop (max 10 retries)
+    if (translationsLoading) {
+      if (handleRunFlowRetryCountRef.current >= 10) {
+        console.error('[AppContent] Max retries reached waiting for translations');
+        return;
+      }
+      handleRunFlowRetryCountRef.current += 1;
+      setTimeout(() => {
+        handleRunFlow();
+      }, 500);
+      return;
+    }
+
+    // Get translations (for flow mode, use all available translations)
+    const allTranslations = globalTranslations || {};
+
+    if (!allTranslations || Object.keys(allTranslations).length === 0) {
+      console.error('[AppContent] ❌ Translations are empty');
+      alert('Translations are not available. Please ensure the project has translations loaded.');
+      return;
+    }
+
+    // Create chat tab for flow mode
+    const chatTabId = 'chat_flow_main';
+    const chatTab: DockTabChat = {
+      id: chatTabId,
+      title: 'Flow Chat',
+      type: 'chat',
+      task: null, // Flow mode, no specific task
+      projectId: currentPid || null,
+      translations: allTranslations, // All translations for flow mode
+      taskTree: null, // Flow mode
+      mode: 'interactive',
+    };
+
+    // Open as right lateral panel (same as Response Editor Test button)
+    setDockTree(prev => openLateralChatPanel(prev, {
+      tabId: chatTabId,
+      newTab: chatTab,
+      position: 'right',
+    }));
+  }, [setDockTree, currentPid, globalTranslations, translationsReady, translationsLoading, loadAllTranslations]);
 
   // Listen to Sidebar wrench
   React.useEffect(() => {
@@ -891,7 +963,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                 setIsCreatingProject(false);
               }
             }}
-            onRun={() => setShowGlobalDebugger(s => !s)}
+            onRun={handleRunFlow}
             onSettings={() => setShowBackendBuilder(true)}
           />
 
