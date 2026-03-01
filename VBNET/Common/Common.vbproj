@@ -49,6 +49,10 @@
     <Compile Include="Utils\GlobalVariableContext.vb" />
     <Compile Include="Utils\PlaceholderUtils.vb" />
 
+    <!-- Execution State (shared between Orchestrator and Engine) -->
+    <Compile Include="ExecutionState.vb" />
+    <Compile Include="TaskExecutionResult.vb" />
+
     <!-- Dialogue Context moved to Orchestrator (session state, not shared DTO) -->
   </ItemGroup>
 

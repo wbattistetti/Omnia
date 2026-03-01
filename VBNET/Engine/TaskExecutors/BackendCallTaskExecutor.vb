@@ -3,9 +3,9 @@ Option Explicit On
 Imports Compiler
 
 ''' <summary>
-''' Executor per task di tipo CloseSession
+''' Executor per task di tipo BackendCall
 ''' </summary>
-Public Class CloseSessionTaskExecutor
+Public Class BackendCallTaskExecutor
     Inherits TaskExecutorBase
 
     Public Sub New()
@@ -13,19 +13,11 @@ Public Class CloseSessionTaskExecutor
     End Sub
 
     Public Overrides Async Function Execute(task As CompiledTask, state As ExecutionState) As System.Threading.Tasks.Task(Of TaskExecutionResult)
-        ' TODO: Implementare chiusura sessione
-        Console.WriteLine($"⚠️ [CloseSessionTaskExecutor] Task type CloseSession not yet implemented, returning success")
+        ' TODO: Implementare chiamata backend
+        Console.WriteLine($"⚠️ [BackendCallTaskExecutor] Task type BackendCall not yet implemented, returning success")
 
         Return New TaskExecutionResult() With {
             .Success = True
         }
     End Function
 End Class
-
-
-
-
-
-
-
-

@@ -3,6 +3,7 @@ Option Explicit On
 
 ''' <summary>
 ''' Stato di esecuzione del flow orchestrator
+''' Spostato in Common per essere condiviso tra Orchestrator e Engine
 ''' </summary>
 Public Class ExecutionState
     ''' <summary>
@@ -51,4 +52,3 @@ Public Class ExecutionState
         DialogueContexts = New Dictionary(Of String, String)()
     End Sub
 End Class
-

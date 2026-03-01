@@ -299,7 +299,7 @@ Namespace ApiServer.Handlers
                     End If
 
                     ' ✅ Chiama ProcessTurn (FASE 1: solo messaggio iniziale)
-                    Dim result = TaskEngine.ProcessTurnEngine.ProcessTurn(dialogueState, "", resolveTranslation)
+                    Dim result = TaskUtteranceStepExecutor.ProcessTurn(dialogueState, "", resolveTranslation)
 
                     ' ✅ Emetti messaggi via SSE
                     Dim processTurnEmitter As EventEmitter = SessionManager.GetOrCreateEventEmitter(newSessionId)
@@ -699,7 +699,7 @@ Namespace ApiServer.Handlers
                 End If
 
                 ' ✅ Chiama ProcessTurn con l'input dell'utente e la funzione di risoluzione
-                Dim processTurnResult = TaskEngine.ProcessTurnEngine.ProcessTurn(
+                Dim processTurnResult = TaskUtteranceStepExecutor.ProcessTurn(
                     dialogueState,
                     request.Input,
                     resolveTranslation

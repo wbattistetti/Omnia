@@ -62,12 +62,19 @@
     <!-- NLP Engine and Contract moved back to Common (to break Engine ↔ Compiler cycle) -->
   </ItemGroup>
 
-  <!-- Tasks/TaskUtterance (moved from Orchestrator/TaskUtterance) -->
+  <!-- TaskExecutors (moved from Orchestrator and renamed from Tasks/TaskUtterance) -->
   <ItemGroup>
-    <!-- Types.vb moved to Common/Types.vb (shared between Engine, Orchestrator, ApiServer) -->
-    <!-- TaskUtterance moved back to Common (used by Common, Compiler, Engine) -->
-    <Compile Include="Tasks\TaskUtterance\ProcessTurnHelpers.vb" />
-    <Compile Include="Tasks\TaskUtterance\ProcessTurnEngine.vb" />
+    <!-- TaskExecutorBase moved from Orchestrator -->
+    <Compile Include="TaskExecutors\TaskExecutorBase.vb" />
+    <!-- TaskUtteranceStepExecutor (renamed from ProcessTurnEngine) -->
+    <Compile Include="TaskExecutors\TaskUtteranceStepExecutor.vb" />
+    <Compile Include="TaskExecutors\ProcessTurnHelpers.vb" />
+    <!-- Executor specifici (moved from Orchestrator) -->
+    <Compile Include="TaskExecutors\SayMessageTaskExecutor.vb" />
+    <Compile Include="TaskExecutors\BackendCallTaskExecutor.vb" />
+    <Compile Include="TaskExecutors\CloseSessionTaskExecutor.vb" />
+    <Compile Include="TaskExecutors\TransferTaskExecutor.vb" />
+    <Compile Include="TaskExecutors\ClassifyProblemTaskExecutor.vb" />
   </ItemGroup>
 
   <!-- Placeholder files removed - not implemented -->

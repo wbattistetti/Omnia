@@ -26,16 +26,9 @@
     <Compile Include="TaskGroupExecutor.vb" />
     <Compile Include="TaskExecutor.vb" />
     <Compile Include="ConditionEvaluator.vb" />
-    <Compile Include="ExecutionState.vb" />
-    <!-- TaskExecutor files are now in root, not in TaskExecutor\ subfolder -->
-    <Compile Include="TaskExecutorBase.vb" />
-    <!-- ProcessTurnEngine moved to Engine/Tasks/TaskUtterance/ -->
-    <!-- UtteranceTaskExecutor removed: UtteranceInterpretation tasks use ProcessTurnEngine.ProcessTurn() directly -->
-    <Compile Include="SayMessageTaskExecutor.vb" />
-    <Compile Include="ClassifyProblemTaskExecutor.vb" />
-    <Compile Include="BackendCallTaskExecutor.vb" />
-    <Compile Include="CloseSessionTaskExecutor.vb" />
-    <Compile Include="TransferTaskExecutor.vb" />
+    <!-- ExecutionState moved to Common (shared with Engine) -->
+    <!-- TaskExecutorBase moved to Engine/TaskExecutors/ -->
+    <!-- All task executors moved to Engine/TaskExecutors/ -->
     <!-- TaskExecutorFactory removed: unificato in TaskExecutor (statico) -->
     <!-- CompiledTaskAdapter removed: DialogueContext now created directly -->
     <!-- TaskUtterance runtime moved to Engine/Tasks/TaskUtterance -->

@@ -1,10 +1,13 @@
 Option Strict On
 Option Explicit On
 Imports Compiler
+Imports TaskEngine
+' Executor specifici sono in Engine/TaskExecutors/ (namespace TaskEngine)
 
 ''' <summary>
 ''' Smistatore unificato: identifica l'executor corretto e lo esegue
 ''' Classe statica che combina factory + esecuzione
+''' Coordina l'esecuzione delegando agli executor specifici in Engine
 ''' </summary>
 Public Class TaskExecutor
 
@@ -23,8 +26,8 @@ Public Class TaskExecutor
                 Return New CloseSessionTaskExecutor()
             Case TaskTypes.Transfer
                 Return New TransferTaskExecutor()
-            ' UtteranceInterpretation tasks use ProcessTurnEngine.ProcessTurn() directly, not an executor
-            ' TODO: After refactoring, add: Case TaskTypes.UtteranceInterpretation Return New TaskUtteranceStepExecutor()
+            Case TaskTypes.UtteranceInterpretation
+                Return New TaskUtteranceStepExecutor()
             Case Else
                 Console.WriteLine($"⚠️ [TaskExecutor] Unknown TaskType {taskType}")
                 Return Nothing
@@ -70,21 +73,4 @@ Public Class TaskExecutor
     End Function
 End Class
 
-''' <summary>
-''' Risultato dell'esecuzione di un task
-''' </summary>
-Public Class TaskExecutionResult
-    Public Property Success As Boolean
-    Public Property Err As String
-
-    ''' <summary>
-    ''' Indica se il task richiede input asincrono (es. GetData)
-    ''' Quando True, l'esecuzione del TaskGroup viene sospesa
-    ''' </summary>
-    Public Property RequiresInput As Boolean = False
-
-    ''' <summary>
-    ''' ID del task che sta attendendo input (se RequiresInput = True)
-    ''' </summary>
-    Public Property WaitingTaskId As String = Nothing
-End Class
+' TaskExecutionResult moved to Common/TaskExecutionResult.vb

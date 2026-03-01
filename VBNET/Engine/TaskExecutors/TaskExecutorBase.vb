@@ -1,6 +1,7 @@
 Option Strict On
 Option Explicit On
 Imports Compiler
+Imports TaskEngine
 
 ''' <summary>
 ''' Base class astratta per tutti i task executor
@@ -26,11 +27,3 @@ Public MustInherit Class TaskExecutorBase
     ''' </summary>
     Public MustOverride Function Execute(task As CompiledTask, state As ExecutionState) As System.Threading.Tasks.Task(Of TaskExecutionResult)
 End Class
-
-
-
-
-
-
-
-

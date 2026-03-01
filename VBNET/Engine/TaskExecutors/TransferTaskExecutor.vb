@@ -3,9 +3,9 @@ Option Explicit On
 Imports Compiler
 
 ''' <summary>
-''' Executor per task di tipo BackendCall
+''' Executor per task di tipo Transfer
 ''' </summary>
-Public Class BackendCallTaskExecutor
+Public Class TransferTaskExecutor
     Inherits TaskExecutorBase
 
     Public Sub New()
@@ -13,19 +13,11 @@ Public Class BackendCallTaskExecutor
     End Sub
 
     Public Overrides Async Function Execute(task As CompiledTask, state As ExecutionState) As System.Threading.Tasks.Task(Of TaskExecutionResult)
-        ' TODO: Implementare chiamata backend
-        Console.WriteLine($"⚠️ [BackendCallTaskExecutor] Task type BackendCall not yet implemented, returning success")
+        ' TODO: Implementare trasferimento
+        Console.WriteLine($"⚠️ [TransferTaskExecutor] Task type Transfer not yet implemented, returning success")
 
         Return New TaskExecutionResult() With {
             .Success = True
         }
     End Function
 End Class
-
-
-
-
-
-
-
-

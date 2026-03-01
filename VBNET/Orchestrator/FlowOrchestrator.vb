@@ -268,10 +268,8 @@ Public Class FlowOrchestrator
                 ctx.DialogueState.RootTask = utteranceTask
             End If
 
-            ' Call ProcessTurnEngine.ProcessTurn (use fully qualified name to avoid namespace conflict)
-            ' ProcessTurnEngine is in TaskEngine namespace from Engine project, but we're in TaskEngine.Orchestrator
-            ' So we need to use the fully qualified name from the root namespace
-            Dim result = Global.TaskEngine.ProcessTurnEngine.ProcessTurn(ctx.DialogueState, userInput, resolveTranslation)
+            ' Call TaskUtteranceStepExecutor.ProcessTurn (executor in Engine/TaskExecutors/)
+            Dim result = TaskUtteranceStepExecutor.ProcessTurn(ctx.DialogueState, userInput, resolveTranslation)
 
             ' Emit messages via MessageToShow event
             If result.Messages IsNot Nothing Then

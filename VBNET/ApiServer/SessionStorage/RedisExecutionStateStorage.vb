@@ -2,7 +2,7 @@ Option Strict On
 Option Explicit On
 Imports ApiServer.Interfaces
 Imports ApiServer.Infrastructure
-Imports TaskEngine.Orchestrator
+Imports TaskEngine
 Imports StackExchange.Redis
 Imports Newtonsoft.Json
 

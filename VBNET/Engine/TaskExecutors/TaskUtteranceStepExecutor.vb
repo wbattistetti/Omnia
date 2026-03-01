@@ -4,11 +4,13 @@ Imports Compiler
 Imports TaskEngine
 
 ''' <summary>
+''' Executor per task di tipo UtteranceInterpretation
 ''' ProcessTurn: Funzione pura stateless per processare un turno di dialogo
 ''' FASE 1: Invio messaggio iniziale (Start step)
 ''' FASE 2: Gestione input utente, parsing NLP, validazione, transizioni di stato
 ''' </summary>
-Public Class ProcessTurnEngine
+Public Class TaskUtteranceStepExecutor
+    Inherits TaskExecutorBase
 
     ''' <summary>
     ''' Risultato di ProcessTurn
@@ -30,6 +32,21 @@ Public Class ProcessTurnEngine
             Me.Status = If(newState.IsCompleted, "completed", "waiting_for_input")
         End Sub
     End Class
+
+    Public Sub New()
+        MyBase.New()
+    End Sub
+
+    ''' <summary>
+    ''' Esegue un task UtteranceInterpretation
+    ''' </summary>
+    Public Overrides Async Function Execute(task As CompiledTask, state As ExecutionState) As System.Threading.Tasks.Task(Of TaskExecutionResult)
+        ' TODO: Implementare esecuzione UtteranceInterpretation usando ProcessTurn
+        ' Per ora, usa ProcessTurn direttamente (legacy)
+        Return New TaskExecutionResult() With {
+            .Success = True
+        }
+    End Function
 
     ''' <summary>
     ''' ProcessTurn: Funzione pura stateless per processare un turno di dialogo
@@ -128,7 +145,7 @@ Public Class ProcessTurnEngine
 
         If state.Mode <> DialogueMode.Completed Then
             currentTask = DirectCast(state.CurrentTask, CompiledUtteranceTask)
-            Dim stepToRender = currentTask.GetStep(state.CurrentStepType)
+            Dim stepToRender = ProcessTurnHelpers.GetStep(currentTask, state.CurrentStepType)
             renderedTasks = ProcessTurnHelpers.RenderStepTasks(stepToRender, currentTask, state, resolveTranslation)
             If Not ProcessTurnHelpers.IsFilled(currentTask, state.Memory) OrElse state.CurrentStepType = DialogueStepType.Confirmation Then
                 state.Mode = DialogueMode.WaitingForUtterance
@@ -151,18 +168,6 @@ Public Class ProcessTurnEngine
         End If
     End Sub
 
-    'Private Shared Function SetStateToTheFirstUnfilledSubTask(state As DialogueState) As DialogueState
-    '    Dim currentTask = TryCast(state.CurrentTask, CompiledUtteranceTask)
-    '    If currentTask Is Nothing Then Throw New InvalidOperationException("CurrentTask must be CompiledUtteranceTask")
-
-    '    Dim nextSubTask = ProcessTurnHelpers.GetFirstUnfilledSubTask(currentTask, state.Memory)
-    '    If nextSubTask IsNot Nothing Then
-    '        state.CurrentTask = nextSubTask
-    '        state.CurrentStepType = DialogueStepType.Start
-    '        state.Mode = DialogueMode.ExecutingStep
-    '    End If
-    '    Return state
-    'End Function
     Private Shared Sub SetStateToTheFirstUnfilledSubTask(state As DialogueState)
         ' ✅ FIX: Cerca sempre nel ROOT TASK, non nel current task
         ' Perché currentTask potrebbe essere già un subtask (es. mese),
