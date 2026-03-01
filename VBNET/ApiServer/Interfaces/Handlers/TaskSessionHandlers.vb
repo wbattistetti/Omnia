@@ -219,13 +219,13 @@ Namespace ApiServer.Handlers
                 ' ✅ Per costruzione, DialogueContext viene creato qui se non esiste
                 Dim session = SessionManager.GetTaskSession(newSessionId)
                 Dim dialogueState As TaskEngine.DialogueState = Nothing
-                Dim dialogueContext As TaskEngine.DialogueContext = Nothing
+                Dim dialogueContext As TaskEngine.Orchestrator.DialogueContext = Nothing
 
                 Try
                     dialogueContext = SessionManager.GetOrCreateDialogueContext(session)
                     If dialogueContext Is Nothing Then
                         ' ✅ Crea DialogueContext dal compiledTask (prima volta - per costruzione)
-                        dialogueContext = New TaskEngine.DialogueContext() With {
+                        dialogueContext = New TaskEngine.Orchestrator.DialogueContext() With {
                             .TaskId = compiledTask.Id,
                             .dialogueState = New TaskEngine.DialogueState(),
                             .CurrentData = Nothing,
@@ -245,9 +245,9 @@ Namespace ApiServer.Handlers
                 Catch ex As Exception
                     ' ✅ Fallback: crea DialogueContext e DialogueState da zero
                     dialogueState = New TaskEngine.DialogueState()
-                    dialogueContext = New DialogueContext() With {
+                    dialogueContext = New TaskEngine.Orchestrator.DialogueContext() With {
                         .TaskId = compiledTask.Id,
-                        .DialogueState = dialogueState,
+                        .dialogueState = dialogueState,
                         .CurrentData = Nothing,
                         .LastTurnEvent = Nothing
                     }
@@ -660,7 +660,7 @@ Namespace ApiServer.Handlers
                     ' ✅ Se non esiste, crea un nuovo DialogueState
                     dialogueState = New TaskEngine.DialogueState()
                     If dialogueContext Is Nothing Then
-                        dialogueContext = New TaskEngine.DialogueContext() With {
+                        dialogueContext = New TaskEngine.Orchestrator.DialogueContext() With {
                             .TaskId = compiledTask.Id,
                             .dialogueState = dialogueState,
                             .CurrentData = Nothing,

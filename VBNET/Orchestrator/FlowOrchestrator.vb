@@ -249,7 +249,7 @@ Public Class FlowOrchestrator
 
             ' Load DialogueContext from state
             Dim ctxJson As String = CStr(_state.DialogueContexts(taskId))
-            Dim ctx = JsonConvert.DeserializeObject(Of TaskEngine.DialogueContext)(ctxJson)
+            Dim ctx = JsonConvert.DeserializeObject(Of TaskEngine.Orchestrator.DialogueContext)(ctxJson)
             If ctx Is Nothing OrElse ctx.DialogueState Is Nothing Then
                 Console.WriteLine($"⚠️ [FlowOrchestrator] Invalid DialogueContext for task {taskId}")
                 Return False

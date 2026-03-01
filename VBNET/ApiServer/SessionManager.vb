@@ -793,7 +793,7 @@ Public Class SessionManager
     ''' <summary>
     ''' ✅ STATELESS: Carica DialogueContext dalla sessione (o lo crea se non esiste)
     ''' </summary>
-    Public Shared Function GetOrCreateDialogueContext(session As TaskSession) As DialogueContext
+    Public Shared Function GetOrCreateDialogueContext(session As TaskSession) As TaskEngine.Orchestrator.DialogueContext
         Console.WriteLine("═══════════════════════════════════════════════════════════")
         Console.WriteLine("🔥🔥🔥 GetOrCreateDialogueContext CALLED")
         System.Diagnostics.Debug.WriteLine("🔥🔥🔥 GetOrCreateDialogueContext CALLED")
@@ -891,7 +891,7 @@ Public Class SessionManager
                         New TaskEngine.ITaskConverter()
                     }
                 }
-                Dim deserialized = Newtonsoft.Json.JsonConvert.DeserializeObject(Of TaskEngine.DialogueContext)(session.DialogueContextJson, deserializeSettings)
+                Dim deserialized = Newtonsoft.Json.JsonConvert.DeserializeObject(Of TaskEngine.Orchestrator.DialogueContext)(session.DialogueContextJson, deserializeSettings)
 
                 ' ✅ Log: Stato DOPO la deserializzazione
                 Console.WriteLine($"🔥🔥🔥 GetOrCreateDialogueContext: AFTER deserialization")
@@ -974,7 +974,7 @@ Public Class SessionManager
     ''' <summary>
     ''' ✅ STATELESS: Salva DialogueContext nella sessione e persiste su Redis
     ''' </summary>
-    Public Shared Sub SaveDialogueContext(session As TaskSession, ctx As TaskEngine.DialogueContext)
+    Public Shared Sub SaveDialogueContext(session As TaskSession, ctx As TaskEngine.Orchestrator.DialogueContext)
         Console.WriteLine("═══════════════════════════════════════════════════════════")
         Console.WriteLine("🔥 SaveDialogueContext CALLED")
         Console.WriteLine($"   SessionId: {If(session IsNot Nothing, session.SessionId, "NULL")}")

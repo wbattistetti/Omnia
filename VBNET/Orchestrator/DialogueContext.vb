@@ -4,6 +4,7 @@ Option Explicit On
 ''' <summary>
 ''' Dialogue context (minimal, without old engine)
 ''' Includes DDT state for complete dialogue logic
+''' Session state for orchestration - manages dialogue state during task execution
 ''' </summary>
 Public Class DialogueContext
     ''' <summary>

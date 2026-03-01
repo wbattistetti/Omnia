@@ -10,32 +10,32 @@ Imports TaskEngine
 ''' </summary>
 Public Class ProcessTurnEngine
 
-        ''' <summary>
-        ''' Risultato di ProcessTurn
-        ''' </summary>
-        Public Class DialogueTurnResult
-            Public Property Messages As List(Of String)
-            Public Property NewState As DialogueState
-            Public Property Status As String ' "waiting_for_input" | "completed"
+    ''' <summary>
+    ''' Risultato di ProcessTurn
+    ''' </summary>
+    Public Class DialogueTurnResult
+        Public Property Messages As List(Of String)
+        Public Property NewState As DialogueState
+        Public Property Status As String ' "waiting_for_input" | "completed"
 
-            Public Sub New()
-                Messages = New List(Of String)()
-                NewState = New DialogueState()
-                Status = "waiting_for_input"
-            End Sub
+        Public Sub New()
+            Messages = New List(Of String)()
+            NewState = New DialogueState()
+            Status = "waiting_for_input"
+        End Sub
 
-            Public Sub New(messages As List(Of String), newState As DialogueState)
-                Me.Messages = messages
-                Me.NewState = newState
-                Me.Status = If(newState.IsCompleted, "completed", "waiting_for_input")
-            End Sub
-        End Class
+        Public Sub New(messages As List(Of String), newState As DialogueState)
+            Me.Messages = messages
+            Me.NewState = newState
+            Me.Status = If(newState.IsCompleted, "completed", "waiting_for_input")
+        End Sub
+    End Class
 
-        ''' <summary>
-        ''' ProcessTurn: Funzione pura stateless per processare un turno di dialogo
-        ''' Versione corretta con DialogueMode per separazione chiara delle fasi
-        ''' </summary>
-        Public Shared Function ProcessTurn(state As DialogueState, utterance As String, resolveTranslation As Func(Of String, String)) As DialogueTurnResult
+    ''' <summary>
+    ''' ProcessTurn: Funzione pura stateless per processare un turno di dialogo
+    ''' Versione corretta con DialogueMode per separazione chiara delle fasi
+    ''' </summary>
+    Public Shared Function ProcessTurn(state As DialogueState, utterance As String, resolveTranslation As Func(Of String, String)) As DialogueTurnResult
 
         ' Cast CurrentTask and RootTask to CompiledUtteranceTask (they are Object in DialogueState to avoid Common -> Compiler dependency)
         Dim currentTask = DirectCast(state.CurrentTask, CompiledUtteranceTask)
@@ -46,41 +46,41 @@ Public Class ProcessTurnEngine
         Select Case state.Mode
 
             ' ESECUZIONE STEP (PRIMO TURNO)
-                Case DialogueMode.ExecutingStep
+            Case DialogueMode.ExecutingStep
 
-                    Dim stepObj = ProcessTurnHelpers.GetStep(currentTask, state.CurrentStepType)
-                    If ProcessTurnHelpers.IsFilled(currentTask, state.Memory) Then
-                        ' Step senza input → transizione immediata allo step successivo
-                        Dim nextStep = ProcessTurnHelpers.GetNextStep(currentTask, stepObj)  'OSSERVAZIONE: In realtà la navigazione Cioè la decisione del prossimo step è Implementata in questa funzione non è esternalizzata quindi questo gap forse non serve più
+                Dim stepObj = ProcessTurnHelpers.GetStep(currentTask, state.CurrentStepType)
+                If ProcessTurnHelpers.IsFilled(currentTask, state.Memory) Then
+                    ' Step senza input → transizione immediata allo step successivo
+                    Dim nextStep = ProcessTurnHelpers.GetNextStep(currentTask, stepObj)  'OSSERVAZIONE: In realtà la navigazione Cioè la decisione del prossimo step è Implementata in questa funzione non è esternalizzata quindi questo gap forse non serve più
 
-                        state.CurrentStepType = nextStep.Type
-                        state.Mode = DialogueMode.ExecutingStep
-                    Else
-                        state.Mode = DialogueMode.WaitingForUtterance
-                    End If
+                    state.CurrentStepType = nextStep.Type
+                    state.Mode = DialogueMode.ExecutingStep
+                Else
+                    state.Mode = DialogueMode.WaitingForUtterance
+                End If
             ' IN ATTESA DELL'UTTERANCE (SECONDO TURNO)
-                Case DialogueMode.WaitingForUtterance
+            Case DialogueMode.WaitingForUtterance
 
-                    If String.IsNullOrEmpty(utterance) Then
-                        ' Nessun input → NoInput escalation
-                        EnsureCounter(state, currentTask.Id)
-                        state.Counters(currentTask.Id).NoInput += 1
-                        state.CurrentStepType = DialogueStepType.NoInput
-                        state.Mode = DialogueMode.ExecutingStep
-                    Else
-                        ' Input ricevuto → parsing
-                        Dim parseResult = ProcessTurnHelpers.RunContractsInCascade(
+                If String.IsNullOrEmpty(utterance) Then
+                    ' Nessun input → NoInput escalation
+                    EnsureCounter(state, currentTask.Id)
+                    state.Counters(currentTask.Id).NoInput += 1
+                    state.CurrentStepType = DialogueStepType.NoInput
+                    state.Mode = DialogueMode.ExecutingStep
+                Else
+                    ' Input ricevuto → parsing
+                    Dim parseResult = ProcessTurnHelpers.RunContractsInCascade(
                             currentTask, utterance, state.CurrentStepType
                         )
 
-                        Select Case parseResult.Status
+                    Select Case parseResult.Status
 
-                            Case ParseStatus.Match
-                                ProcessTurnHelpers.FillTaskFromParseResult(parseResult, state)
+                        Case ParseStatus.Match
+                            ProcessTurnHelpers.FillTaskFromParseResult(parseResult, state)
 
-                                'c'è stato un match potrebbe essere per il task corrente o per una altro task. quindi devo: se sono in subtask tornare altask parent e rivedere qua'è il porssimo da fillare se non c'è nente da fillare allora devo o conferemare o andare al success .
+                            'c'è stato un match potrebbe essere per il task corrente o per una altro task. quindi devo: se sono in subtask tornare altask parent e rivedere qua'è il porssimo da fillare se non c'è nente da fillare allora devo o conferemare o andare al success .
 
-                                Dim mainTask = ProcessTurnHelpers.MainTask(currentTask, rootTask)
+                            Dim mainTask = ProcessTurnHelpers.MainTask(currentTask, rootTask)
                             If ProcessTurnHelpers.IsFilled(mainTask, state.Memory) Then
                                 ' Main task completato → gestisci Confirmation o Success
                                 If currentTask.StepExists(DialogueStepType.Confirmation) Then
@@ -98,33 +98,33 @@ Public Class ProcessTurnEngine
                             End If
 
                         Case ParseStatus.NoMatch
-                                EnsureCounter(state, currentTask.Id)
-                                state.Counters(currentTask.Id).NoMatch += 1
-                                state.CurrentStepType = DialogueStepType.NoMatch
-                                state.Mode = DialogueMode.ExecutingStep
+                            EnsureCounter(state, currentTask.Id)
+                            state.Counters(currentTask.Id).NoMatch += 1
+                            state.CurrentStepType = DialogueStepType.NoMatch
+                            state.Mode = DialogueMode.ExecutingStep
 
-                            Case ParseStatus.NoInput
-                                EnsureCounter(state, currentTask.Id)
-                                state.Counters(currentTask.Id).NoInput += 1
-                                state.CurrentStepType = DialogueStepType.NoInput
-                                state.Mode = DialogueMode.ExecutingStep
+                        Case ParseStatus.NoInput
+                            EnsureCounter(state, currentTask.Id)
+                            state.Counters(currentTask.Id).NoInput += 1
+                            state.CurrentStepType = DialogueStepType.NoInput
+                            state.Mode = DialogueMode.ExecutingStep
 
-                            Case ParseStatus.PartialMatch, ParseStatus.MatchedButInvalid
-                                ' Rimani nello stesso task/step, ma torna in ExecutingStep
-                                state.Mode = DialogueMode.ExecutingStep
+                        Case ParseStatus.PartialMatch, ParseStatus.MatchedButInvalid
+                            ' Rimani nello stesso task/step, ma torna in ExecutingStep
+                            state.Mode = DialogueMode.ExecutingStep
 
-                        End Select
-                    End If
+                    End Select
+                End If
 
 
             ' COMPLETATO
-                Case DialogueMode.Completed
-                    ' Stato terminale: nessuna logica aggiuntiva
+            Case DialogueMode.Completed
+                ' Stato terminale: nessuna logica aggiuntiva
 
-            End Select
+        End Select
 
-            ' 2) RENDERING UNICO: produce i task dello step corrente
-            Dim renderedTasks As New List(Of String)
+        ' 2) RENDERING UNICO: produce i task dello step corrente
+        Dim renderedTasks As New List(Of String)
 
         If state.Mode <> DialogueMode.Completed Then
             currentTask = DirectCast(state.CurrentTask, CompiledUtteranceTask)
@@ -137,19 +137,19 @@ Public Class ProcessTurnEngine
 
         Return New DialogueTurnResult(renderedTasks, state)
 
-        End Function
+    End Function
 
-        ''' <summary>
-        ''' Helper: Inizializza counter per un task se non esiste
-        ''' </summary>
-        Private Shared Sub EnsureCounter(state As DialogueState, taskId As String)
-            If state.Counters Is Nothing Then
-                state.Counters = New Dictionary(Of String, Counters)()
-            End If
-            If Not state.Counters.ContainsKey(taskId) Then
-                state.Counters(taskId) = New Counters()
-            End If
-        End Sub
+    ''' <summary>
+    ''' Helper: Inizializza counter per un task se non esiste
+    ''' </summary>
+    Private Shared Sub EnsureCounter(state As DialogueState, taskId As String)
+        If state.Counters Is Nothing Then
+            state.Counters = New Dictionary(Of String, Counters)()
+        End If
+        If Not state.Counters.ContainsKey(taskId) Then
+            state.Counters(taskId) = New Counters()
+        End If
+    End Sub
 
     'Private Shared Function SetStateToTheFirstUnfilledSubTask(state As DialogueState) As DialogueState
     '    Dim currentTask = TryCast(state.CurrentTask, CompiledUtteranceTask)

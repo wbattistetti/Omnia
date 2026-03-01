@@ -41,7 +41,8 @@
     <!-- TaskUtterance runtime moved to Engine/Tasks/TaskUtterance -->
     <!-- TaskEngine legacy removed: UtteranceInterpretation uses ProcessTurnEngine, other tasks use TaskExecutor -->
     <!-- TaskStep, Microtask, StepExecutionState removed: not used, legacy from old microtask system -->
-    <!-- DialogueContext moved to Common (shared between Orchestrator and ApiServer) -->
+    <!-- Dialogue Context (session state for orchestration) -->
+    <Compile Include="DialogueContext.vb" />
   </ItemGroup>
 
 </Project>
