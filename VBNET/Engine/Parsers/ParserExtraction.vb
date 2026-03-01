@@ -5,6 +5,9 @@ Option Strict On
 Option Explicit On
 Imports System.Linq
 Imports System.Text.RegularExpressions
+Imports Compiler.DTO.IDE
+Imports TaskEngine
+Imports IParsableTask = TaskEngine.IParsableTask
 
 ''' <summary>
 ''' Low-level extraction logic: simple regex and composite regex extraction.

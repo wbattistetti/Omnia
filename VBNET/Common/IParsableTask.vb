@@ -1,9 +1,9 @@
 Option Strict On
 Option Explicit On
 
+
 ''' <summary>
 ''' Interfaccia comune per task che possono essere parsati dal Parser
-''' ✅ Risolve dipendenza circolare: DDTEngine non ha bisogno di riferire Compiler
 ''' </summary>
 Public Interface IParsableTask
     ''' <summary>

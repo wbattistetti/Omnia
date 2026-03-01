@@ -4,6 +4,8 @@
 Option Strict On
 Option Explicit On
 Imports System.Collections.Generic
+Imports TaskEngine
+Imports ITask = TaskEngine.ITask
 
     ''' <summary>
     ''' Rappresenta un'istanza di un Task - Struttura Runtime

@@ -16,6 +16,7 @@ Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
 Imports TaskEngine
 Imports TaskEngine.Orchestrator
+Imports Engine
 
 Namespace ApiServer.Handlers
     ''' <summary>
@@ -156,7 +157,7 @@ Namespace ApiServer.Handlers
 
                 ' ✅ PASSO 2: Carica dialogo da DialogRepository
                 ' ✅ Log rimosso: troppo verboso
-                Dim compiledTask = dialogRepository.GetDialog(projectId, dialogVersion)
+                Dim compiledTask As Compiler.CompiledUtteranceTask = dialogRepository.GetDialog(projectId, dialogVersion)
 
                 If compiledTask Is Nothing Then
                     Return ResponseHelpers.CreateErrorResponse(
@@ -217,7 +218,7 @@ Namespace ApiServer.Handlers
                 ' ✅ PASSO 7: Carica/Crea DialogueState
                 ' ✅ Per costruzione, DialogueContext viene creato qui se non esiste
                 Dim session = SessionManager.GetTaskSession(newSessionId)
-                Dim dialogueState As TaskEngine.Orchestrator.TaskEngine.DialogueState = Nothing
+                Dim dialogueState As TaskEngine.DialogueState = Nothing
                 Dim dialogueContext As TaskEngine.Orchestrator.TaskEngine.DialogueContext = Nothing
 
                 Try
@@ -232,14 +233,14 @@ Namespace ApiServer.Handlers
                     If dialogueContext.DialogueState IsNot Nothing Then
                         dialogueState = dialogueContext.DialogueState
                     Else
-                        dialogueState = New TaskEngine.Orchestrator.TaskEngine.DialogueState()
+                        dialogueState = New TaskEngine.DialogueState()
                         dialogueContext.DialogueState = dialogueState
                         SessionManager.SaveDialogueContext(session, dialogueContext)
                     End If
                 Catch ex As Exception
                     ' ✅ Fallback: crea DialogueContext e DialogueState da zero
                     dialogueContext = CompiledTaskAdapter.CreateDialogueContextFromTask(compiledTask)
-                    dialogueState = New TaskEngine.Orchestrator.TaskEngine.DialogueState()
+                    dialogueState = New TaskEngine.DialogueState()
                     dialogueContext.DialogueState = dialogueState
                     SessionManager.SaveDialogueContext(session, dialogueContext)
                 End Try
@@ -289,7 +290,7 @@ Namespace ApiServer.Handlers
                     End If
 
                     ' ✅ Chiama ProcessTurn (FASE 1: solo messaggio iniziale)
-                    Dim result = TaskEngine.Orchestrator.TaskEngine.ProcessTurnEngine.ProcessTurn(dialogueState, "", resolveTranslation)
+                    Dim result = TaskEngine.ProcessTurnEngine.ProcessTurn(dialogueState, "", resolveTranslation)
 
                     ' ✅ Emetti messaggi via SSE
                     Dim processTurnEmitter As EventEmitter = SessionManager.GetOrCreateEventEmitter(newSessionId)
@@ -704,13 +705,13 @@ Namespace ApiServer.Handlers
                     Console.WriteLine($"   State.TurnState: {dialogueContext.DialogueState.TurnState}")
                 End If
                 Console.Out.Flush()
-                Dim dialogueState As TaskEngine.Orchestrator.TaskEngine.DialogueState = Nothing
+                Dim dialogueState As TaskEngine.DialogueState = Nothing
                 If dialogueContext IsNot Nothing AndAlso dialogueContext.DialogueState IsNot Nothing Then
                     dialogueState = dialogueContext.DialogueState
                 Else
                     ' ⚠️ PROBLEMA: Lo stato non è stato trovato!
                     ' ✅ Se non esiste, crea un nuovo DialogueState
-                    dialogueState = New TaskEngine.Orchestrator.TaskEngine.DialogueState()
+                    dialogueState = New TaskEngine.DialogueState()
                     If dialogueContext Is Nothing Then
                         dialogueContext = CompiledTaskAdapter.CreateDialogueContextFromTask(compiledTask)
                     End If
@@ -745,7 +746,7 @@ Namespace ApiServer.Handlers
                 End If
 
                 ' ✅ Chiama ProcessTurn con l'input dell'utente e la funzione di risoluzione
-                Dim processTurnResult = TaskEngine.Orchestrator.TaskEngine.ProcessTurnEngine.ProcessTurn(
+                Dim processTurnResult = TaskEngine.ProcessTurnEngine.ProcessTurn(
                     dialogueState,
                     request.Input,
                     resolveTranslation

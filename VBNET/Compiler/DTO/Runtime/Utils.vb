@@ -1,4 +1,7 @@
-﻿Imports System.Runtime.CompilerServices
+Option Strict On
+Option Explicit On
+Imports System.Linq
+Imports System.Runtime.CompilerServices
 
 Module Utils
 

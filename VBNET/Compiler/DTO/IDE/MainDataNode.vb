@@ -1,8 +1,9 @@
 Option Strict On
 Option Explicit On
-
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
+
+Namespace Compiler.DTO.IDE
 
 ''' <summary>
 ''' MainDataNode: corrisponde ESATTAMENTE a MainDataNode TypeScript del frontend
@@ -31,10 +32,10 @@ Public Class MainDataNode
 
         <JsonProperty("steps")>
         <JsonConverter(GetType(DialogueStepListConverter))>
-        Public Property Steps As List(Of Compiler.DialogueStep)
+        Public Property Steps As List(Of DialogueStep)
 
         <JsonProperty("subTasks")>
-        Public Property SubTasks As List(Of Compiler.MainDataNode)
+        Public Property SubTasks As List(Of MainDataNode)
 
         <JsonProperty("synonyms")>
         Public Property Synonyms As List(Of String)
@@ -46,9 +47,11 @@ Public Class MainDataNode
         Public Property TemplateId As String
 
         Public Sub New()
-            Steps = New List(Of Compiler.DialogueStep)()
-            SubTasks = New List(Of Compiler.MainDataNode)()
+            Steps = New List(Of DialogueStep)()
+            SubTasks = New List(Of MainDataNode)()
             Synonyms = New List(Of String)()
             Constraints = New List(Of Object)()
         End Sub
-    End Class
+End Class
+
+End Namespace

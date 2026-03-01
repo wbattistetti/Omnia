@@ -20,7 +20,7 @@ Public Class Flow
     ''' <summary>
     ''' Tasks disponibili (mondo IDE)
     ''' </summary>
-    Public Property Tasks As List(Of Task)
+    Public Property Tasks As List(Of TaskDefinition)
 
     ' ❌ RIMOSSO: DDTs property - non più usato, struttura costruita da template usando templateId
     ' Public Property DDTs As List(Of Compiler.AssembledDDT)
@@ -28,7 +28,7 @@ Public Class Flow
     Public Sub New()
         Nodes = New List(Of FlowNode)()
         Edges = New List(Of FlowEdge)()
-        Tasks = New List(Of Task)()
+        Tasks = New List(Of TaskDefinition)()
         ' ❌ RIMOSSO: DDTs initialization - non più usato
     End Sub
 End Class

@@ -5,11 +5,11 @@ Option Strict On
 Option Explicit On
 
 ''' <summary>
-''' Rappresenta uno step di dialogo
+''' Rappresenta uno step di dialogo compilato (runtime)
 ''' Corrisponde a StepGroup nel frontend TypeScript
-''' Ogni DialogueStep corrisponde a un DialogueStepType e contiene multiple escalation (recovery)
+''' Ogni CompiledDialogueStep corrisponde a un DialogueStepType e contiene multiple escalation (recovery)
 ''' </summary>
-Public Class DialogueStep
+Public Class CompiledDialogueStep
     ''' <summary>
     ''' Tipo di step (corrisponde a DialogueStepType)
     ''' </summary>

@@ -1,14 +1,14 @@
-﻿Option Strict On
+Option Strict On
 Option Explicit On
 Imports Compiler
-Namespace TaskEngine
+Imports TaskEngine
 
-    ''' <summary>
-    ''' ProcessTurn: Funzione pura stateless per processare un turno di dialogo
-    ''' FASE 1: Invio messaggio iniziale (Start step)
-    ''' FASE 2: Gestione input utente, parsing NLP, validazione, transizioni di stato
-    ''' </summary>
-    Public Class ProcessTurnEngine
+''' <summary>
+''' ProcessTurn: Funzione pura stateless per processare un turno di dialogo
+''' FASE 1: Invio messaggio iniziale (Start step)
+''' FASE 2: Gestione input utente, parsing NLP, validazione, transizioni di stato
+''' </summary>
+Public Class ProcessTurnEngine
 
         ''' <summary>
         ''' Risultato di ProcessTurn
@@ -37,16 +37,21 @@ Namespace TaskEngine
         ''' </summary>
         Public Shared Function ProcessTurn(state As DialogueState, utterance As String, resolveTranslation As Func(Of String, String)) As DialogueTurnResult
 
+            ' Cast CurrentTask and RootTask to CompiledUtteranceTask (they are Object in DialogueState to avoid Common -> Compiler dependency)
+            Dim currentTask = TryCast(state.CurrentTask, CompiledUtteranceTask)
+            If currentTask Is Nothing Then Throw New InvalidOperationException("CurrentTask must be CompiledUtteranceTask")
+            Dim rootTask = TryCast(state.RootTask, CompiledUtteranceTask)
+
             ' 1) LOGICA PURA: aggiornamento dello stato
             Select Case state.Mode
 
             ' ESECUZIONE STEP (PRIMO TURNO)
                 Case DialogueMode.ExecutingStep
 
-                    Dim stepObj = ProcessTurnHelpers.GetStep(state.CurrentTask, state.CurrentStepType)
-                    If ProcessTurnHelpers.IsFilled(state.CurrentTask, state.Memory) Then
-                        ' Step senza input â†’ transizione immediata allo step successivo
-                        Dim nextStep = ProcessTurnHelpers.GetNextStep(state.CurrentTask, stepObj)  'OSSERVAZIONE: In realtÃ  la navigazione CioÃ¨ la decisione del prossimo step Ã¨ Implementata in questa funzione non Ã¨ esternalizzata quindi questo gap forse non serve piÃ¹
+                    Dim stepObj = ProcessTurnHelpers.GetStep(currentTask, state.CurrentStepType)
+                    If ProcessTurnHelpers.IsFilled(currentTask, state.Memory) Then
+                        ' Step senza input → transizione immediata allo step successivo
+                        Dim nextStep = ProcessTurnHelpers.GetNextStep(currentTask, stepObj)  'OSSERVAZIONE: In realtà la navigazione Cioè la decisione del prossimo step è Implementata in questa funzione non è esternalizzata quindi questo gap forse non serve più
 
                         state.CurrentStepType = nextStep.Type
                         state.Mode = DialogueMode.ExecutingStep
@@ -57,15 +62,15 @@ Namespace TaskEngine
                 Case DialogueMode.WaitingForUtterance
 
                     If String.IsNullOrEmpty(utterance) Then
-                        ' Nessun input â†’ NoInput escalation
-                        EnsureCounter(state, state.CurrentTask.Id)
-                        state.Counters(state.CurrentTask.Id).NoInput += 1
-                        state.CurrentStepType = Global.TaskEngine.DialogueStepType.NoInput
+                        ' Nessun input → NoInput escalation
+                        EnsureCounter(state, currentTask.Id)
+                        state.Counters(currentTask.Id).NoInput += 1
+                        state.CurrentStepType = DialogueStepType.NoInput
                         state.Mode = DialogueMode.ExecutingStep
                     Else
-                        ' Input ricevuto â†’ parsing
+                        ' Input ricevuto → parsing
                         Dim parseResult = ProcessTurnHelpers.RunContractsInCascade(
-                            state.CurrentTask, utterance, state.CurrentStepType
+                            currentTask, utterance, state.CurrentStepType
                         )
 
                         Select Case parseResult.Status
@@ -73,37 +78,37 @@ Namespace TaskEngine
                             Case ParseStatus.Match
                                 ProcessTurnHelpers.FillTaskFromParseResult(parseResult, state)
 
-                                'c'Ã¨ stato un match potrebbe essere per il task corrente o per una altro task. quindi devo: se sono in subtask tornare altask parent e rivedere qua'Ã¨ il porssimo da fillare se non c'Ã¨ nente da fillare allora devo o conferemare o andare al success .
+                                'c'è stato un match potrebbe essere per il task corrente o per una altro task. quindi devo: se sono in subtask tornare altask parent e rivedere qua'è il porssimo da fillare se non c'è nente da fillare allora devo o conferemare o andare al success .
 
-                                Dim mainTask = ProcessTurnHelpers.MainTask(state.CurrentTask, state.RootTask)
+                                Dim mainTask = ProcessTurnHelpers.MainTask(currentTask, rootTask)
                                 If ProcessTurnHelpers.IsFilled(mainTask, state.Memory) Then
-                                    ' Main task completato â†’ gestisci Confirmation o Success
-                                    If state.CurrentTask.StepExists(DialogueStepType.Confirmation) Then
+                                    ' Main task completato → gestisci Confirmation o Success
+                                    If currentTask.StepExists(DialogueStepType.Confirmation) Then
                                         state.CurrentStepType = DialogueStepType.Confirmation
-                                    ElseIf state.CurrentTask.StepExists(DialogueStepType.Success) Then
+                                    ElseIf currentTask.StepExists(DialogueStepType.Success) Then
                                         state.CurrentStepType = DialogueStepType.Success
                                     Else
-                                        ' Main task completato senza Confirmation/Success â†’ completa
+                                        ' Main task completato senza Confirmation/Success → completa
                                         state.IsCompleted = True
                                         state.Mode = DialogueMode.Completed
                                     End If
                                 Else
-                                    ' Main task non ancora completato â†’ vai al prossimo subtask non riempito
+                                    ' Main task non ancora completato → vai al prossimo subtask non riempito
                                     state = SetStateToTheFirstUnfilledSubTask(state)
                                 End If
 
 
 
                             Case ParseStatus.NoMatch
-                                EnsureCounter(state, state.CurrentTask.Id)
-                                state.Counters(state.CurrentTask.Id).NoMatch += 1
-                                state.CurrentStepType = Global.TaskEngine.DialogueStepType.NoMatch
+                                EnsureCounter(state, currentTask.Id)
+                                state.Counters(currentTask.Id).NoMatch += 1
+                                state.CurrentStepType = DialogueStepType.NoMatch
                                 state.Mode = DialogueMode.ExecutingStep
 
                             Case ParseStatus.NoInput
-                                EnsureCounter(state, state.CurrentTask.Id)
-                                state.Counters(state.CurrentTask.Id).NoInput += 1
-                                state.CurrentStepType = Global.TaskEngine.DialogueStepType.NoInput
+                                EnsureCounter(state, currentTask.Id)
+                                state.Counters(currentTask.Id).NoInput += 1
+                                state.CurrentStepType = DialogueStepType.NoInput
                                 state.Mode = DialogueMode.ExecutingStep
 
                             Case ParseStatus.PartialMatch, ParseStatus.MatchedButInvalid
@@ -124,9 +129,9 @@ Namespace TaskEngine
             Dim renderedTasks As New List(Of String)
 
             If state.Mode <> DialogueMode.Completed Then
-                Dim stepToRender = ProcessTurnHelpers.GetStep(state.CurrentTask, state.CurrentStepType)
-                renderedTasks = ProcessTurnHelpers.RenderStepTasks(stepToRender, state.CurrentTask, state, resolveTranslation)
-                If Not ProcessTurnHelpers.IsFilled(state.CurrentTask, state.Memory) OrElse state.CurrentStepType = DialogueStepType.Confirmation Then
+                Dim stepToRender = ProcessTurnHelpers.GetStep(currentTask, state.CurrentStepType)
+                renderedTasks = ProcessTurnHelpers.RenderStepTasks(stepToRender, currentTask, state, resolveTranslation)
+                If Not ProcessTurnHelpers.IsFilled(currentTask, state.Memory) OrElse state.CurrentStepType = DialogueStepType.Confirmation Then
                     state.Mode = DialogueMode.WaitingForUtterance
                 End If
             End If
@@ -148,15 +153,16 @@ Namespace TaskEngine
         End Sub
 
         Private Shared Function SetStateToTheFirstUnfilledSubTask(state As DialogueState) As DialogueState
-            Dim nextSubTask = ProcessTurnHelpers.GetFirstUnfilledSubTask(state.CurrentTask, state.Memory)
+            Dim currentTask = TryCast(state.CurrentTask, CompiledUtteranceTask)
+            If currentTask Is Nothing Then Throw New InvalidOperationException("CurrentTask must be CompiledUtteranceTask")
+
+            Dim nextSubTask = ProcessTurnHelpers.GetFirstUnfilledSubTask(currentTask, state.Memory)
             If nextSubTask IsNot Nothing Then
                 state.CurrentTask = nextSubTask
-                state.CurrentStepType = Global.TaskEngine.DialogueStepType.Start
+                state.CurrentStepType = DialogueStepType.Start
                 state.Mode = DialogueMode.ExecutingStep
             End If
             Return state
         End Function
 
     End Class
-
-End Namespace

@@ -1,5 +1,6 @@
 Option Strict On
 Option Explicit On
+Imports TaskEngine
 
 ''' <summary>
 ''' Rappresenta un nodo del Task (runtime) - Struttura Runtime
@@ -43,7 +44,7 @@ Public Class TaskNode
     ''' </summary>
     Public Property FullLabel As String
 
-    Public Property Steps As List(Of DialogueStep)
+    Public Property Steps As List(Of CompiledDialogueStep)
 
     Public Property ValidationConditions As List(Of ValidationCondition)
 
@@ -69,7 +70,7 @@ Public Class TaskNode
     Public Property NlpContract As CompiledNlpContract
 
     Public Sub New()
-        Steps = New List(Of DialogueStep)()
+        Steps = New List(Of CompiledDialogueStep)()
         ValidationConditions = New List(Of ValidationCondition)()
         SubTasks = New List(Of TaskNode)()
         State = DialogueStepType.Start

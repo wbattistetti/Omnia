@@ -25,13 +25,13 @@ Public Class TaskTreeExpanded
 
     <JsonProperty("nodes")>
     <JsonConverter(GetType(TaskNodeListConverter))>
-    Public Property Nodes As List(Of Compiler.TaskNode)
+    Public Property Nodes As List(Of TaskNode)
 
     <JsonProperty("translations")>
     Public Property Translations As Dictionary(Of String, String)
 
     <JsonProperty("introduction")>
-    Public Property Introduction As Compiler.DialogueStep
+    Public Property Introduction As DialogueStep
 
     ''' <summary>
     ''' Constraints a livello root (opzionale, risolto lazy dal template se mancante)
@@ -41,8 +41,7 @@ Public Class TaskTreeExpanded
 
     Public Sub New()
         Translations = New Dictionary(Of String, String)()
-        Nodes = New List(Of Compiler.TaskNode)()
+        Nodes = New List(Of TaskNode)()
         Constraints = New List(Of Object)()
     End Sub
 End Class
-

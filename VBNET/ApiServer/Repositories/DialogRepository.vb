@@ -94,7 +94,7 @@ Namespace ApiServer.Repositories
                     .TypeNameHandling = TypeNameHandling.Auto,
                     .ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
                     .NullValueHandling = NullValueHandling.Ignore,
-                    .Converters = New List(Of JsonConverter) From {New ITaskConverter()}
+                    .Converters = New List(Of JsonConverter) From {New TaskEngine.ITaskConverter()}
                 }
                 Dim compiledTask = JsonConvert.DeserializeObject(Of CompiledUtteranceTask)(jsonString, settings)
 

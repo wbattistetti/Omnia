@@ -1,7 +1,6 @@
 Option Strict On
 Option Explicit On
-Imports Compiler
-Namespace TaskEngine
+Imports TaskEngine
 
 ''' <summary>
 ''' TurnEvent: Result of user input interpretation
@@ -98,7 +97,7 @@ Public Class Response
     ''' <summary>
     ''' Step or escalation to show
     ''' </summary>
-    Public Property StepOrEscalation As DialogueStep
+    Public Property StepOrEscalation As CompiledDialogueStep
 
     ''' <summary>
     ''' Escalation level (0 = first escalation)
@@ -128,6 +127,8 @@ End Enum
 
 ''' <summary>
 ''' DialogueState: Complete DDT dialogue state
+''' NOTE: CurrentTask and RootTask are Object to avoid Common -> Compiler dependency.
+''' Cast to CompiledUtteranceTask when used (Engine, Orchestrator, ApiServer all reference Compiler).
 ''' </summary>
 Public Class DialogueState
     ''' <summary>
@@ -157,18 +158,22 @@ Public Class DialogueState
 
     ''' <summary>
     ''' ✅ Current compiled task being processed
+    ''' NOTE: Type is Object to avoid Common -> Compiler dependency.
+    ''' Cast to CompiledUtteranceTask when used.
     ''' </summary>
-    Public Property CurrentTask As CompiledUtteranceTask
+    Public Property CurrentTask As Object
 
     ''' <summary>
     ''' ✅ Root task (main task) - necessario per trovare parent dei subtask
+    ''' NOTE: Type is Object to avoid Common -> Compiler dependency.
+    ''' Cast to CompiledUtteranceTask when used.
     ''' </summary>
-    Public Property RootTask As CompiledUtteranceTask
+    Public Property RootTask As Object
 
     ''' <summary>
     ''' ✅ NEW: Current step type
     ''' </summary>
-    Public Property CurrentStepType As Global.TaskEngine.DialogueStepType
+    Public Property CurrentStepType As DialogueStepType
 
     ''' <summary>
     ''' ✅ NEW: Indicates if the dialogue is completed
@@ -188,7 +193,7 @@ Public Class DialogueState
         CurrentDataId = Nothing
         CurrentTask = Nothing
         RootTask = Nothing
-        CurrentStepType = Global.TaskEngine.DialogueStepType.Start
+        CurrentStepType = DialogueStepType.Start
         IsCompleted = False
         Mode = DialogueMode.ExecutingStep
     End Sub
@@ -234,5 +239,3 @@ Public Class Limits
         End Get
     End Property
 End Class
-
-End Namespace

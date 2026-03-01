@@ -10,7 +10,7 @@ Imports System.Linq
 Public Module CompiledTaskAdapter
     ''' <summary>
     ''' Creates DialogueContext from CompiledUtteranceTask
-    ''' Converts CompiledUtteranceTask.Steps (TaskEngine.DialogueStep) to TaskEngine.TaskStep
+    ''' Converts CompiledUtteranceTask.Steps (TaskEngine.CompiledDialogueStep) to TaskEngine.TaskStep
     ''' </summary>
     Public Function CreateDialogueContextFromTask(task As CompiledUtteranceTask) As TaskEngine.DialogueContext
         Dim steps As New List(Of TaskEngine.TaskStep)()

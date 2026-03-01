@@ -3,6 +3,7 @@
 
 Option Strict On
 Option Explicit On
+Imports TaskEngine
 
 ''' <summary>
 ''' Abstract base for all ITask implementations.
@@ -15,5 +16,5 @@ Public MustInherit Class TaskBase
     ''' <summary>
     ''' Executes the task.
     ''' </summary>
-    Public MustOverride Sub Execute(context As TaskUtterance, onMessage As Action(Of String)) Implements ITask.Execute
+    Public MustOverride Sub Execute(context As ITaskContext, onMessage As Action(Of String)) Implements ITask.Execute
 End Class

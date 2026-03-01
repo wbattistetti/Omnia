@@ -1,6 +1,8 @@
 Option Strict On
 Option Explicit On
 Imports Newtonsoft.Json
+Imports TaskEngine
+Imports Compiler.DTO.IDE
 
 ''' <summary>
 ''' TaskNode: corrisponde ESATTAMENTE a TaskTreeNode TypeScript del frontend
@@ -29,10 +31,10 @@ Public Class TaskNode
 
     <JsonProperty("steps")>
     <JsonConverter(GetType(DialogueStepListConverter))>
-    Public Property Steps As List(Of Compiler.DialogueStep)
+    Public Property Steps As List(Of DialogueStep)
 
     <JsonProperty("subTasks")>
-    Public Property SubTasks As List(Of Compiler.TaskNode)
+    Public Property SubTasks As List(Of TaskNode)
 
     <JsonProperty("synonyms")>
     Public Property Synonyms As List(Of String)
@@ -44,11 +46,11 @@ Public Class TaskNode
     Public Property TemplateId As String
 
     <JsonProperty("dataContract")>
-    Public Property DataContract As Object
+    Public Property DataContract As NLPContract
 
     Public Sub New()
-        Steps = New List(Of Compiler.DialogueStep)()
-        SubTasks = New List(Of Compiler.TaskNode)()
+        Steps = New List(Of DialogueStep)()
+        SubTasks = New List(Of TaskNode)()
         Synonyms = New List(Of String)()
         Constraints = New List(Of Object)()
     End Sub

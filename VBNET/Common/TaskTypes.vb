@@ -1,5 +1,5 @@
-' ActionType.vb
-' Enumerato per i tipi di action
+' TaskTypes.vb
+' Enumeration for task types - moved to Common to avoid circular dependency
 
 Option Strict On
 Option Explicit On
@@ -15,4 +15,3 @@ Public Enum TaskTypes
     BackendCall
     ClassifyProblem
 End Enum
-

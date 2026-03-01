@@ -3,6 +3,7 @@
 
 Option Strict On
 Option Explicit On
+Imports TaskEngine
 
 ''' <summary>
 ''' Terminates the current dialogue session.
@@ -19,7 +20,7 @@ Public Class CloseSessionTask
     ''' <summary>
     ''' Signals session closure via the onMessage callback.
     ''' </summary>
-    Public Overrides Sub Execute(context As TaskUtterance, onMessage As Action(Of String))
+    Public Overrides Sub Execute(context As ITaskContext, onMessage As Action(Of String))
         If onMessage IsNot Nothing Then
             onMessage("Session closed.")
         End If

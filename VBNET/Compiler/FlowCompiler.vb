@@ -1,6 +1,7 @@
 Option Strict On
 Option Explicit On
 Imports TaskEngine
+Imports Compiler.DTO.IDE
 
 ''' <summary>
 ''' Flow Compiler: Trasforma struttura IDE (FlowNode, FlowEdge)
@@ -10,7 +11,7 @@ Public Class FlowCompiler
     ''' <summary>
     ''' Crea un CompiledTask type-safe in base al TaskType usando il factory pattern
     ''' </summary>
-    Private Function CreateTypedCompiledTask(taskType As TaskTypes, task As Task, row As TaskRow, node As FlowNode, taskId As String, flow As Flow) As CompiledTask
+    Private Function CreateTypedCompiledTask(taskType As TaskTypes, task As TaskDefinition, row As TaskRow, node As FlowNode, taskId As String, flow As Flow) As CompiledTask
         Console.WriteLine($"🔍 [COMPILER][FlowCompiler] CreateTypedCompiledTask called: taskType={taskType}, taskId={taskId}")
         System.Diagnostics.Debug.WriteLine($"🔍 [COMPILER][FlowCompiler] CreateTypedCompiledTask called: taskType={taskType}, taskId={taskId}")
         ' Usa il factory per ottenere il compiler appropriato
@@ -23,7 +24,7 @@ Public Class FlowCompiler
         ' Compila il task (senza metadata flowchart)
         ' ✅ Passa flow.Tasks come allTemplates (il compiler non ha bisogno di Nodes/Edges)
         ' ✅ Null-safe: flow.Tasks è sempre inizializzato nel costruttore, ma per sicurezza
-        Dim allTemplates = If(flow.Tasks IsNot Nothing, flow.Tasks, New List(Of Task)())
+        Dim allTemplates = If(flow.Tasks IsNot Nothing, flow.Tasks, New List(Of TaskDefinition)())
         Dim result = compiler.Compile(task, taskId, allTemplates)
 
         ' Aggiungi metadata del flowchart dopo la compilazione

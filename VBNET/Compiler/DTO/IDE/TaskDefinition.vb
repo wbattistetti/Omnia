@@ -1,0 +1,67 @@
+Option Strict On
+Option Explicit On
+Imports Newtonsoft.Json
+
+''' <summary>
+''' Task definition base (input from IDE/frontend)
+''' Tipi del mondo IDE - usati solo per deserializzazione JSON
+''' Simplified: Uses templateId (string) directly, no conversion needed
+''' ✅ UNIFIED: Uses Newtonsoft.Json attributes for consistency
+''' ✅ RENAMED: Task → TaskDefinition to avoid conflict with System.Threading.Tasks.Task
+'''
+''' Per task UtteranceInterpretation, usare UtteranceTaskDefinition che eredita da questa classe
+''' e aggiunge campi specifici (DataContract, SubTasksIds, Steps, Constraints, Condition)
+''' </summary>
+Public Class TaskDefinition
+        ''' <summary>
+        ''' Task ID
+        ''' </summary>
+        <JsonProperty("id")>
+        Public Property Id As String
+
+        ''' <summary>
+        ''' Task type (enum numerico, e.g., 0=SayMessage, 3=DataRequest)
+        ''' Determina il comportamento del task
+        ''' PRIORITÀ 1: Usa questo campo se presente
+        ''' </summary>
+        <JsonProperty("type")>
+        Public Property Type As Integer?
+
+        ''' <summary>
+        ''' Task template ID (string, e.g., "SayMessage", "GetData")
+        ''' null = Task standalone, GUID = referenzia un altro Task
+        ''' PRIORITÀ 2: Usa questo campo come fallback se Type non è presente
+        ''' </summary>
+        <JsonProperty("templateId")>
+        Public Property TemplateId As String
+
+        ''' <summary>
+        ''' Task text (for SayMessage tasks) - direct property from frontend
+        ''' </summary>
+        <JsonProperty("text")>
+        Public Property Text As String
+
+        ''' <summary>
+        ''' Task parameters array (for tasks in escalations)
+        ''' Array of { parameterId: string, value: string }
+        ''' </summary>
+        <JsonProperty("parameters")>
+        Public Property Parameters As List(Of TaskParameter)
+
+        ''' <summary>
+        ''' Task value (parameters, DDT reference, etc.) - legacy format
+        ''' </summary>
+        <JsonProperty("value")>
+        Public Property Value As Dictionary(Of String, Object)
+
+        ''' <summary>
+        ''' Task label override (if different from template)
+        ''' </summary>
+        <JsonProperty("label")>
+        Public Property Label As String
+
+        Public Sub New()
+            Parameters = New List(Of TaskParameter)()
+            Value = New Dictionary(Of String, Object)()
+        End Sub
+End Class

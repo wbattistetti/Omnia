@@ -40,7 +40,7 @@ Namespace Validators
         ''' </summary>
         ''' <param name="task">The task to validate.</param>
         ''' <returns>A tuple containing: (IsValid As Boolean, ErrorMessage As String)</returns>
-        Public Function ValidateTaskType(task As Compiler.Task) As (IsValid As Boolean, ErrorMessage As String)
+        Public Function ValidateTaskType(task As Compiler.TaskDefinition) As (IsValid As Boolean, ErrorMessage As String)
             If task Is Nothing Then
                 Return (False, "Task object is null. Cannot validate task type.")
             End If

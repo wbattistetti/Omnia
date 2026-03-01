@@ -2,6 +2,7 @@ Option Strict On
 Option Explicit On
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
+Imports Compiler.DTO.IDE
 
 ''' <summary>
 ''' Custom JSON converter for List(Of TaskNode)
@@ -10,18 +11,18 @@ Imports Newtonsoft.Json.Linq
 ''' - If single object: wrap in list with one element
 ''' </summary>
 Public Class TaskNodeListConverter
-    Inherits JsonConverter(Of List(Of Compiler.TaskNode))
+    Inherits JsonConverter(Of List(Of TaskNode))
 
-    Public Overrides Function ReadJson(reader As JsonReader, objectType As Type, existingValue As List(Of Compiler.TaskNode), hasExistingValue As Boolean, serializer As JsonSerializer) As List(Of Compiler.TaskNode)
+    Public Overrides Function ReadJson(reader As JsonReader, objectType As Type, existingValue As List(Of TaskNode), hasExistingValue As Boolean, serializer As JsonSerializer) As List(Of TaskNode)
         Dim token = JToken.Load(reader)
-        Dim result As New List(Of Compiler.TaskNode)()
+        Dim result As New List(Of TaskNode)()
 
         If token.Type = JTokenType.Array Then
             ' Array: deserialize all elements
             Dim array = CType(token, JArray)
             For Each item In array
                 If item.Type = JTokenType.Object Then
-                    Dim taskNode = item.ToObject(Of Compiler.TaskNode)(serializer)
+                    Dim taskNode = item.ToObject(Of TaskNode)(serializer)
                     If taskNode IsNot Nothing Then
                         result.Add(taskNode)
                     End If
@@ -29,7 +30,7 @@ Public Class TaskNodeListConverter
             Next
         ElseIf token.Type = JTokenType.Object Then
             ' Single object: wrap in list
-            Dim taskNode = token.ToObject(Of Compiler.TaskNode)(serializer)
+            Dim taskNode = token.ToObject(Of TaskNode)(serializer)
             If taskNode IsNot Nothing Then
                 result.Add(taskNode)
             End If
@@ -38,7 +39,7 @@ Public Class TaskNodeListConverter
         Return result
     End Function
 
-    Public Overrides Sub WriteJson(writer As JsonWriter, value As List(Of Compiler.TaskNode), serializer As JsonSerializer)
+    Public Overrides Sub WriteJson(writer As JsonWriter, value As List(Of TaskNode), serializer As JsonSerializer)
         ' Write as array (even if single element)
         serializer.Serialize(writer, value)
     End Sub

@@ -21,7 +21,7 @@ Namespace Services
     ''' <returns>Result of compilation</returns>
     Public Module TaskCompilationService
 
-        Public Function CompileTaskToRuntime(task As Compiler.Task, allTemplates As List(Of Compiler.Task)) As CompileTaskResult
+        Public Function CompileTaskToRuntime(task As Compiler.TaskDefinition, allTemplates As List(Of Compiler.TaskDefinition)) As CompileTaskResult
             Try
                 ' ✅ Pipeline pulita: compila TaskInstance direttamente con allTemplates
                 ' Non serve creare Flow finto - il compiler accetta List(Of Task)
@@ -179,7 +179,11 @@ Namespace Services
                 ' 8. Costruisci steps override da TaskTreeExpanded
                 Dim stepsOverride = TaskTreeConverter.BuildStepsOverrideFromTaskTreeExpanded(taskTreeExpanded)
                 If stepsOverride IsNot Nothing AndAlso stepsOverride.Count > 0 Then
-                    task.Steps = stepsOverride
+                    ' Steps è solo in UtteranceTaskDefinition, non in TaskDefinition base
+                    Dim utteranceTask = TryCast(task, UtteranceTaskDefinition)
+                    If utteranceTask IsNot Nothing Then
+                        utteranceTask.Steps = stepsOverride
+                    End If
                     Console.WriteLine($"✅ [CompileTaskTreeExpandedToCompiledTask] Built steps override with {stepsOverride.Count} entries")
                 End If
 

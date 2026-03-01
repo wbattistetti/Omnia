@@ -19,7 +19,7 @@ Namespace Models
         Public Property Edges As List(Of Compiler.FlowEdge)
 
         <JsonProperty("tasks")>
-        Public Property Tasks As List(Of Compiler.Task)
+        Public Property Tasks As List(Of Compiler.TaskDefinition)
 
         <JsonProperty("translations")>
         Public Property Translations As Dictionary(Of String, String)

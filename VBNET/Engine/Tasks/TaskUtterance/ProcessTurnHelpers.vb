@@ -3,21 +3,19 @@ Option Explicit On
 Imports System.Linq
 Imports System.Runtime.CompilerServices
 Imports Compiler
-Imports TaskEngine.Parsers
 Imports TaskEngine
+Imports IParsableTask = TaskEngine.IParsableTask
 
-Namespace TaskEngine
-
-    ''' <summary>
-    ''' Helper functions per ProcessTurn
-    ''' </summary>
-    Public Module ProcessTurnHelpers
+''' <summary>
+''' Helper functions per ProcessTurn
+''' </summary>
+Public Module ProcessTurnHelpers
 
         ''' <summary>
         ''' Esegue i contratti NLP in cascata e restituisce ParseResult con ParseStatus
         ''' ✅ STATELESS: Usa CompiledUtteranceTask direttamente
         ''' </summary>
-        Public Function RunContractsInCascade(currentTask As CompiledUtteranceTask, utterance As String, currentStepType As Global.TaskEngine.DialogueStepType) As ParseResultWithStatus
+        Public Function RunContractsInCascade(currentTask As CompiledUtteranceTask, utterance As String, currentStepType As DialogueStepType) As ParseResultWithStatus
             If currentTask Is Nothing Then
                 Return New ParseResultWithStatus() With {.Status = ParseStatus.NoMatch}
             End If
@@ -79,7 +77,7 @@ Namespace TaskEngine
         ''' <summary>
         ''' Esegue uno step stateless e restituisce i messaggi
         ''' </summary>
-        Public Function ExecuteStepStateless(currentTask As CompiledUtteranceTask, currentStep As Global.TaskEngine.DialogueStep, resolveTranslation As Func(Of String, String)) As List(Of String)
+        Public Function ExecuteStepStateless(currentTask As CompiledUtteranceTask, currentStep As CompiledDialogueStep, resolveTranslation As Func(Of String, String)) As List(Of String)
             Dim output As New List(Of String)()
 
             If currentStep Is Nothing OrElse currentStep.Escalations Is Nothing OrElse currentStep.Escalations.Count = 0 Then
@@ -96,7 +94,7 @@ Namespace TaskEngine
         ''' <summary>
         ''' Esegue un'escalation stateless e restituisce i messaggi
         ''' </summary>
-        Public Function ExecuteEscalationStateless(currentTask As CompiledUtteranceTask, currentStep As Global.TaskEngine.DialogueStep, escalationIndex As Integer, resolveTranslation As Func(Of String, String)) As List(Of String)
+        Public Function ExecuteEscalationStateless(currentTask As CompiledUtteranceTask, currentStep As CompiledDialogueStep, escalationIndex As Integer, resolveTranslation As Func(Of String, String)) As List(Of String)
             Dim output As New List(Of String)()
 
             If currentStep Is Nothing OrElse currentStep.Escalations Is Nothing OrElse escalationIndex < 0 OrElse escalationIndex >= currentStep.Escalations.Count Then
@@ -128,7 +126,7 @@ Namespace TaskEngine
         ''' <summary>
         ''' Ottiene uno step per tipo (restituisce Nothing se non trovato)
         ''' </summary>
-        Public Function GetStepOrNull(task As CompiledUtteranceTask, stepType As Global.TaskEngine.DialogueStepType) As Global.TaskEngine.DialogueStep
+        Public Function GetStepOrNull(task As CompiledUtteranceTask, stepType As DialogueStepType) As CompiledDialogueStep
             If task Is Nothing OrElse task.Steps Is Nothing Then
                 Return Nothing
             End If
@@ -139,7 +137,7 @@ Namespace TaskEngine
         ''' Ottiene il prossimo step (per ora restituisce lo stesso step)
         ''' TODO: Implementare logica di navigazione
         ''' </summary>
-        Public Function GetNextStep(task As CompiledUtteranceTask, currentStep As Global.TaskEngine.DialogueStep) As Global.TaskEngine.DialogueStep
+        Public Function GetNextStep(task As CompiledUtteranceTask, currentStep As CompiledDialogueStep) As CompiledDialogueStep
             ' Per ora restituisce lo stesso step
             ' TODO: Implementare logica di navigazione tra step
             Return currentStep
@@ -255,7 +253,7 @@ Namespace TaskEngine
         ''' e converte i task "renderizzabili" in stringhe da mostrare in chat.
         ''' </summary>
         Public Function RenderStepTasks(
-        stepObj As Global.TaskEngine.DialogueStep,
+        stepObj As CompiledDialogueStep,
         currentTask As CompiledUtteranceTask,
         state As DialogueState,
         resolveTranslation As Func(Of String, String)
@@ -279,11 +277,11 @@ Namespace TaskEngine
             End If
             Dim taskCounters = state.Counters(currentTask.Id)
 
-            If stepObj.Type = Global.TaskEngine.DialogueStepType.NoMatch Then
+            If stepObj.Type = DialogueStepType.NoMatch Then
                 Dim maxIndex = stepObj.Escalations.Count - 1
                 escalationIndex = Math.Min(Math.Max(taskCounters.NoMatch - 1, 0), maxIndex)
 
-            ElseIf stepObj.Type = Global.TaskEngine.DialogueStepType.NoInput Then
+            ElseIf stepObj.Type = DialogueStepType.NoInput Then
                 Dim maxIndex = stepObj.Escalations.Count - 1
                 escalationIndex = Math.Min(Math.Max(taskCounters.NoInput - 1, 0), maxIndex)
             End If
@@ -326,7 +324,7 @@ Namespace TaskEngine
         ''' </summary>
         ''' <Extension>
         <Extension>
-        Public Function GetStep(task As CompiledUtteranceTask, stepType As Global.TaskEngine.DialogueStepType) As Global.TaskEngine.DialogueStep
+        Public Function GetStep(task As CompiledUtteranceTask, stepType As DialogueStepType) As CompiledDialogueStep
             If task Is Nothing OrElse task.Steps Is Nothing Then
                 Throw New InvalidOperationException($"Task '{If(task IsNot Nothing, task.Id, "null")}' has no steps")
             End If
@@ -340,18 +338,16 @@ Namespace TaskEngine
             Return task.Steps.SingleOrDefault(Function(s) s.Type = stepType) IsNot Nothing
         End Function
 
-    End Module
-    ''' <summary>
-    ''' ParseResult con ParseStatus invece di ParseResultType
-    ''' </summary>
-    Public Class ParseResultWithStatus
-        Public Property Status As ParseStatus
-        Public Property ExtractedData As Dictionary(Of String, Object)
-        Public Property ConditionId As String
+End Module
+''' <summary>
+''' ParseResult con ParseStatus invece di ParseResultType
+''' </summary>
+Public Class ParseResultWithStatus
+    Public Property Status As ParseStatus
+    Public Property ExtractedData As Dictionary(Of String, Object)
+    Public Property ConditionId As String
 
-        Public Sub New()
-            ExtractedData = New Dictionary(Of String, Object)()
-        End Sub
-    End Class
-
-End Namespace
+    Public Sub New()
+        ExtractedData = New Dictionary(Of String, Object)()
+    End Sub
+End Class

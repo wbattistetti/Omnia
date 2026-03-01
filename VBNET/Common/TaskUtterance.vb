@@ -4,9 +4,8 @@
 
 Option Strict On
 Option Explicit On
-Imports System
-Imports System.Collections.Generic
 Imports System.Linq
+Imports TaskEngine
 
 ''' <summary>
 ''' Represents a semantic dialogue unit that acquires data from the user.
@@ -14,6 +13,7 @@ Imports System.Linq
 ''' Carries its own state machine and escalation counters (supports Kubernetes stateless).
 ''' </summary>
 Partial Public Class TaskUtterance
+    Implements ITaskContext
 
     ' --- Identity ---
     Public Property Id As String
@@ -31,7 +31,7 @@ Partial Public Class TaskUtterance
     Public Property InvalidConditionId As String
 
     ' --- Dialogue configuration ---
-    Public Property Steps As List(Of DialogueStep)
+    Public Property Steps As List(Of CompiledDialogueStep)
     Public Property RequiresConfirmation As Boolean
     Public Property RequiresValidation As Boolean
     Public Property ValidationConditions As List(Of ValidationCondition)
@@ -44,13 +44,63 @@ Partial Public Class TaskUtterance
     Public Property IsAggregate As Boolean
     Public Property Introduction As IEnumerable(Of ITask)
     Public Property SuccessResponse As IEnumerable(Of ITask)
-    Public Property ProjectId As String
-    Public Property Locale As String
-    Public Property TranslationResolver As Interfaces.ITranslationResolver
+
+    ' --- ITaskContext implementation (ReadOnly properties) ---
+    Private _projectId As String
+    Private _locale As String
+    Private _translationResolver As Object
+
+    ''' <summary>
+    ''' Project ID for translation resolution
+    ''' </summary>
+    Public ReadOnly Property ProjectId As String Implements ITaskContext.ProjectId
+        Get
+            Return _projectId
+        End Get
+    End Property
+
+    ''' <summary>
+    ''' Locale for translation resolution
+    ''' </summary>
+    Public ReadOnly Property Locale As String Implements ITaskContext.Locale
+        Get
+            Return _locale
+        End Get
+    End Property
+
+    ''' <summary>
+    ''' Translation resolver for message localization
+    ''' </summary>
+    Public ReadOnly Property TranslationResolver As Object Implements ITaskContext.TranslationResolver
+        Get
+            Return _translationResolver
+        End Get
+    End Property
+
+    ''' <summary>
+    ''' Sets the ProjectId (internal setter for initialization)
+    ''' </summary>
+    Public Sub SetProjectId(value As String)
+        _projectId = value
+    End Sub
+
+    ''' <summary>
+    ''' Sets the Locale (internal setter for initialization)
+    ''' </summary>
+    Public Sub SetLocale(value As String)
+        _locale = value
+    End Sub
+
+    ''' <summary>
+    ''' Sets the TranslationResolver (internal setter for initialization)
+    ''' </summary>
+    Public Sub SetTranslationResolver(value As Object)
+        _translationResolver = value
+    End Sub
 
     Public Sub New()
         SubTasks = New List(Of TaskUtterance)()
-        Steps = New List(Of DialogueStep)()
+        Steps = New List(Of CompiledDialogueStep)()
         ValidationConditions = New List(Of ValidationCondition)()
         EscalationCounters = New Dictionary(Of DialogueStepType, Integer)()
         State = DialogueStepType.Start
@@ -94,7 +144,7 @@ Partial Public Class TaskUtterance
 
     ' --- Step helpers ---
 
-    Public Function GetCurrentStep() As DialogueStep
+    Public Function GetCurrentStep() As CompiledDialogueStep
         Dim matching = Steps.Where(Function(st) st.Type = State).ToList()
         If matching.Count = 0 Then Throw New InvalidOperationException($"No step for state {State} in task '{Id}'.")
         If matching.Count > 1 Then Throw New InvalidOperationException($"Duplicate steps for state {State} in task '{Id}'.")

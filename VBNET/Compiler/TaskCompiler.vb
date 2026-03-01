@@ -1,6 +1,7 @@
 Option Strict On
 Option Explicit On
-Imports TaskEngine.Models
+Imports System.Linq
+Imports Compiler.DTO.IDE
 Imports Newtonsoft.Json
 Imports TaskEngine
 
@@ -13,11 +14,9 @@ Imports TaskEngine
 ''' - Pre-compila regex
 ''' </summary>
 Public Class TaskCompiler
-    Private ReadOnly _contractLoader As ContractLoader
     Private ReadOnly _assembler As TaskAssembler
 
     Public Sub New()
-        _contractLoader = New ContractLoader()
         _assembler = New TaskAssembler()
     End Sub
 
@@ -36,17 +35,15 @@ Public Class TaskCompiler
         settings.Converters.Add(New TaskNodeListConverter())
         settings.Converters.Add(New DialogueStepListConverter())
 
-        Dim assembled As Compiler.TaskTreeExpanded = JsonConvert.DeserializeObject(Of Compiler.TaskTreeExpanded)(taskJson, settings)
+        Dim assembled As TaskTreeExpanded = JsonConvert.DeserializeObject(Of TaskTreeExpanded)(taskJson, settings)
         If assembled Is Nothing Then
             Throw New InvalidOperationException("Impossibile deserializzare TaskTreeExpanded dal JSON")
         End If
 
         Dim rootTask As CompiledUtteranceTask = _assembler.Compile(assembled)
 
-        ' 3. Carica nlpContract per tutti i nodi (ricorsivo)
-        LoadContractsForTask(rootTask)
-
-        ' 4. Valida struttura (placeholder, regex, ecc.)
+        ' 3. Valida struttura (placeholder, regex, ecc.)
+        ' NOTE: Contracts are already compiled by TaskAssembler from DataContract in memory
         Dim validationErrors As List(Of String) = ValidateTask(rootTask)
 
         Dim result As New TaskCompilationResult()
@@ -56,29 +53,8 @@ Public Class TaskCompiler
         Return result
     End Function
 
-    ''' <summary>
-    ''' Carica nlpContract per tutti i nodi del Task (ricorsivo)
-    ''' </summary>
-    Private Sub LoadContractsForTask(task As CompiledUtteranceTask)
-        LoadContractForTask(task)
-    End Sub
-
-    ''' <summary>
-    ''' Carica e compila nlpContract per un CompiledUtteranceTask e ricorsivamente per i suoi subTasks
-    ''' </summary>
-    Private Sub LoadContractForTask(task As CompiledUtteranceTask)
-        ' Se il contract non è già presente, prova a caricarlo e compilarlo
-        ' TODO: ContractLoader deve essere modificato per accettare Task invece di TaskNode
-        ' Per ora, se NlpContract è Nothing, non facciamo nulla (verrà caricato a runtime se necessario)
-        ' Il ContractLoader attuale usa TaskNode, quindi dobbiamo adattarlo o creare un nuovo loader
-
-        ' Ricorsivo per subTasks
-        If task.SubTasks IsNot Nothing Then
-            For Each subTask As CompiledUtteranceTask In task.SubTasks
-                LoadContractForTask(subTask)
-            Next
-        End If
-    End Sub
+    ' NOTE: Contracts are already loaded from memory during TaskAssembler.Compile()
+    ' No need for separate contract loading - DataContract is read directly from UtteranceTaskDefinition/TaskNode
 
     ''' <summary>
     ''' Valida la struttura del Task (ricorsivo)
@@ -95,11 +71,11 @@ Public Class TaskCompiler
     Private Sub ValidateTaskRecursive(compiledTask As CompiledUtteranceTask, errors As List(Of String))
         ' Valida placeholder nei messaggi
         If compiledTask.Steps IsNot Nothing Then
-            For Each dstep As TaskEngine.DialogueStep In compiledTask.Steps
+            For Each dstep As TaskEngine.CompiledDialogueStep In compiledTask.Steps
                 If dstep.Escalations IsNot Nothing Then
                     For Each escalation As TaskEngine.Escalation In dstep.Escalations
                         If escalation.Tasks IsNot Nothing Then
-                            For Each itask As ITask In escalation.Tasks
+                            For Each itask As TaskEngine.ITask In escalation.Tasks
                                 If TypeOf itask Is MessageTask Then
                                     Dim msgTask As MessageTask = DirectCast(itask, MessageTask)
 
@@ -154,7 +130,7 @@ Public Class TaskCompiler
     ''' <summary>
     ''' Valida pattern regex nel contract
     ''' </summary>
-    Private Sub ValidateRegexPatterns(regexContract As TaskEngine.NLPContractEngine, task As CompiledUtteranceTask, errors As List(Of String))
+    Private Sub ValidateRegexPatterns(regexContract As NLPEngine, task As CompiledUtteranceTask, errors As List(Of String))
         If regexContract.Patterns IsNot Nothing Then
             For Each pattern As String In regexContract.Patterns
                 Try

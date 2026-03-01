@@ -1,5 +1,8 @@
 Option Strict On
 Option Explicit On
+Imports System.Linq
+Imports Compiler.DTO.IDE
+Imports TaskEngine
 
 ''' <summary>
 ''' Condition Builder: Constructs conditions from flowchart topology

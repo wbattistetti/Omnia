@@ -5,6 +5,9 @@
 Option Strict On
 Option Explicit On
 Imports System.Text.RegularExpressions
+Imports TaskEngine.Models
+Imports TaskEngine
+Imports IParsableTask = TaskEngine.IParsableTask
 
 ''' <summary>
 ''' Interprets user utterances for a given CompiledUtteranceTask.

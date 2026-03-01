@@ -17,9 +17,10 @@ Public Class DialogueStep
     ''' Lista di escalation per questo step
     ''' </summary>
     <JsonProperty("escalations")>
-    Public Property Escalations As List(Of Compiler.Escalation)
+    Public Property Escalations As List(Of Escalation)
 
     Public Sub New()
-        Escalations = New List(Of Compiler.Escalation)()
+        Escalations = New List(Of Escalation)()
     End Sub
 End Class
+

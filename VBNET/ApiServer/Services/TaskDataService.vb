@@ -118,11 +118,11 @@ Namespace Services
         End Sub
 
         ''' <summary>
-        ''' Deserializes a list of JObject tasks into Compiler.Task objects.
+        ''' Deserializes a list of JObject tasks into Compiler.TaskDefinition objects.
         ''' </summary>
         ''' <param name="templatesList">The list of JObject templates to deserialize.</param>
-        ''' <returns>A tuple containing: (Success As Boolean, Tasks As List(Of Compiler.Task), ErrorMessage As String)</returns>
-        Public Function DeserializeTasks(templatesList As List(Of JObject)) As (Success As Boolean, Tasks As List(Of Compiler.Task), ErrorMessage As String)
+        ''' <returns>A tuple containing: (Success As Boolean, Tasks As List(Of Compiler.TaskDefinition), ErrorMessage As String)</returns>
+        Public Function DeserializeTasks(templatesList As List(Of JObject)) As (Success As Boolean, Tasks As List(Of Compiler.TaskDefinition), ErrorMessage As String)
             Console.WriteLine("═══════════════════════════════════════════════════════════════")
             Console.WriteLine($"🔍 [DeserializeTasks] START - Deserializing {templatesList.Count} templates")
             Console.WriteLine("═══════════════════════════════════════════════════════════════")
@@ -134,7 +134,7 @@ Namespace Services
             }
             settings.Converters.Add(New DialogueStepListConverter())
 
-            Dim deserializedTasks As New List(Of Compiler.Task)()
+            Dim deserializedTasks As New List(Of Compiler.TaskDefinition)()
 
             For Each templateObj In templatesList
                 Dim templateIdToken = templateObj("id")
@@ -144,7 +144,7 @@ Namespace Services
                 Console.Out.Flush()
 
                 Try
-                    Dim task = JsonConvert.DeserializeObject(Of Compiler.Task)(templateObj.ToString(), settings)
+                    Dim task = JsonConvert.DeserializeObject(Of Compiler.TaskDefinition)(templateObj.ToString(), settings)
                     If task IsNot Nothing Then
                         deserializedTasks.Add(task)
                         Console.WriteLine($"✅ [DeserializeTasks] Template '{templateId}' deserialized successfully")

@@ -11,9 +11,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DDTEngine\TaskEngine.vbproj" />
     <ProjectReference Include="..\Compiler\Compiler.vbproj" />
     <ProjectReference Include="..\Orchestrator\Orchestrator.vbproj" />
+    <ProjectReference Include="..\Engine\Engine.vbproj" />
+    <ProjectReference Include="..\Common\Common.vbproj" />
   </ItemGroup>
 
   <ItemGroup>

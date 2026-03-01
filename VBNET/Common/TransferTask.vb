@@ -3,6 +3,7 @@
 
 Option Strict On
 Option Explicit On
+Imports TaskEngine
 
 ''' <summary>
 ''' Transfers the conversation to a human operator.
@@ -29,7 +30,7 @@ Public Class TransferTask
     ''' <summary>
     ''' Signals the transfer via the onMessage callback.
     ''' </summary>
-    Public Overrides Sub Execute(context As TaskUtterance, onMessage As Action(Of String))
+    Public Overrides Sub Execute(context As ITaskContext, onMessage As Action(Of String))
         Dim info As String = "Transfer to operator"
         If Not String.IsNullOrEmpty(OperatorId) Then info &= $" (ID: {OperatorId})"
         If Not String.IsNullOrEmpty(Department) Then info &= $" — Dept: {Department}"

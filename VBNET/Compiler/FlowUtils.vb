@@ -1,6 +1,8 @@
 Option Strict On
 Option Explicit On
+Imports System.Linq
 Imports System.Runtime.CompilerServices
+Imports Compiler.DTO.IDE
 
 ''' <summary>
 ''' Extension methods per navigare la struttura Flow
@@ -44,7 +46,7 @@ Module FlowUtils
     ''' Ottiene un task per ID - ERRORE BLOCCANTE se non trovato o duplicato
     ''' </summary>
     <Extension>
-    Public Function GetTaskById(flow As Flow, taskId As String) As Task
+    Public Function GetTaskById(flow As Flow, taskId As String) As TaskDefinition
         If String.IsNullOrEmpty(taskId) Then
             Throw New ArgumentException("taskId cannot be null or empty.", NameOf(taskId))
         End If

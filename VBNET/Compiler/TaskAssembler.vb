@@ -4,8 +4,9 @@ Imports System.Linq
 Imports System.Text.RegularExpressions
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
+Imports Compiler.DTO.IDE
 Imports TaskEngine
-Imports TaskEngine.Models
+Imports Compiler
 
 ''' <summary>
 ''' TaskAssembler: compila strutture IDE (TaskTreeExpanded - AST montato) in strutture Runtime (Task ricorsivo)
@@ -34,7 +35,7 @@ Public Class TaskAssembler
     ''' Compila TaskTreeExpanded (IDE - AST montato) in CompiledUtteranceTask ricorsivo (Runtime)
     ''' Restituisce il CompiledUtteranceTask root dell'albero ricorsivo
     ''' </summary>
-    Public Function Compile(assembled As Compiler.TaskTreeExpanded) As CompiledUtteranceTask
+    Public Function Compile(assembled As TaskTreeExpanded) As CompiledUtteranceTask
         If assembled Is Nothing Then
             Throw New ArgumentNullException(NameOf(assembled), "TaskTreeExpanded cannot be Nothing")
         End If
@@ -47,7 +48,7 @@ Public Class TaskAssembler
         If assembled.Nodes IsNot Nothing AndAlso assembled.Nodes.Count > 0 Then
             If assembled.Nodes.Count = 1 Then
                 ' Un solo nodo: è il root
-                Dim taskNode As Compiler.TaskNode = assembled.Nodes(0)
+                Dim taskNode As TaskNode = assembled.Nodes(0)
                 rootTask = CompileNode(taskNode, Nothing)
                 rootTask.Id = assembled.TaskInstanceId ' ✅ Usa TaskInstanceId del TaskTreeExpanded come ID del root
             Else
@@ -55,13 +56,13 @@ Public Class TaskAssembler
                 rootTask = New CompiledUtteranceTask() With {
                     .Id = assembled.TaskInstanceId, ' ✅ Usa TaskInstanceId invece di Id
                     .Condition = Nothing,
-                    .Steps = New List(Of TaskEngine.DialogueStep)(),
-                    .Constraints = New List(Of ValidationCondition)(),
+                    .Steps = New List(Of TaskEngine.CompiledDialogueStep)(),
+                    .Constraints = New List(Of TaskEngine.ValidationCondition)(),
                     .NlpContract = Nothing,
                     .SubTasks = New List(Of CompiledUtteranceTask)() ' ✅ Necessario perché ci sono più nodi
                 }
                 ' Compila ogni nodo come subTask
-                For Each taskNode As Compiler.TaskNode In assembled.Nodes
+                For Each taskNode As TaskNode In assembled.Nodes
                     If taskNode IsNot Nothing Then
                         Dim subTask = CompileNode(taskNode, rootTask) ' ✅ Passa rootTask come parent
                         rootTask.SubTasks.Add(subTask)
@@ -73,8 +74,8 @@ Public Class TaskAssembler
             rootTask = New CompiledUtteranceTask() With {
                 .Id = assembled.TaskInstanceId, ' ✅ Usa TaskInstanceId invece di Id
                 .Condition = Nothing,
-                .Steps = New List(Of TaskEngine.DialogueStep)(),
-                .Constraints = New List(Of ValidationCondition)(),
+                .Steps = New List(Of TaskEngine.CompiledDialogueStep)(),
+                .Constraints = New List(Of TaskEngine.ValidationCondition)(),
                 .NlpContract = Nothing,
                 .SubTasks = Nothing
             }
@@ -88,7 +89,7 @@ Public Class TaskAssembler
     ''' Costruisce struttura ricorsiva CompiledUtteranceTask → CompiledUtteranceTask → CompiledUtteranceTask
     ''' ✅ Imposta ParentTask durante la compilazione per evitare ricerche ricorsive a runtime
     ''' </summary>
-    Private Function CompileNode(ideNode As Compiler.TaskNode, parentTask As CompiledUtteranceTask) As CompiledUtteranceTask
+    Private Function CompileNode(ideNode As TaskNode, parentTask As CompiledUtteranceTask) As CompiledUtteranceTask
         ' ✅ Copia solo proprietà runtime essenziali:
         ' - Id: necessario per identificare il nodo
         ' - Name: usato per fallback regex hardcoded in Parser.vb
@@ -107,7 +108,7 @@ Public Class TaskAssembler
         Dim task As New CompiledUtteranceTask() With {
             .Id = ideNode.Id,
             .Condition = Nothing, ' Condition viene dall'istanza, non dal template
-            .Steps = New List(Of TaskEngine.DialogueStep)(),
+            .Steps = New List(Of TaskEngine.CompiledDialogueStep)(),
             .Constraints = New List(Of ValidationCondition)(),
             .NlpContract = Nothing, ' Verrà caricato da DDTCompiler
             .SubTasks = Nothing ' ✅ Inizializzato solo se ci sono subTasks
@@ -116,7 +117,7 @@ Public Class TaskAssembler
         If ideNode.Steps IsNot Nothing Then
             ' ✅ Validazione: verifica che non ci siano step duplicati con lo stesso Type
             Dim seenTypes As New HashSet(Of DialogueStepType)()
-            For Each ideStep As Compiler.DialogueStep In ideNode.Steps
+            For Each ideStep As DialogueStep In ideNode.Steps
                 Dim runtimeStep = CompileDialogueStep(ideStep)
 
                 If seenTypes.Contains(runtimeStep.Type) Then
@@ -150,18 +151,20 @@ Public Class TaskAssembler
             Throw New InvalidOperationException($"Invalid task model: Node {ideNode.Id} has a step of type 'invalid' but no constraints. The 'invalid' step is only needed when constraints are present. Remove the 'invalid' step or add constraints.")
         End If
 
-        ' ✅ Converti dataContract in CompiledNlpContract se presente
+        ' ✅ Compila dataContract in CompiledNlpContract se presente
         If ideNode.DataContract IsNot Nothing Then
             Try
-                Dim baseContract = ConvertDataContractToNlpContract(ideNode.DataContract)
-                If baseContract IsNot Nothing Then
-                    task.NlpContract = CompiledNlpContract.Compile(baseContract)
+                ' DataContract è già NLPContract (tipizzato), compila direttamente
+                task.NlpContract = NlpContractCompiler.Compile(ideNode.DataContract)
 
-                    If Not task.NlpContract.IsValid Then
-                        Throw New InvalidOperationException($"NlpContract compilation failed for node {ideNode.Id}: {String.Join(", ", task.NlpContract.ValidationErrors)}")
-                    End If
-                Else
-                    Console.WriteLine($"[TaskAssembler.CompileNode] ⚠️ Node {ideNode.Id}: ConvertDataContractToNlpContract returned Nothing")
+                If Not task.NlpContract.IsValid Then
+                    Throw New InvalidOperationException($"NlpContract compilation failed for node {ideNode.Id}: {String.Join(", ", task.NlpContract.ValidationErrors)}")
+                End If
+
+                ' ✅ Validate group-name coherence: mapping ↔ regex bidirectional check.
+                ' Only runs when a composite mapping exists (leaf contracts are skipped).
+                If ideNode.DataContract.SubDataMapping IsNot Nothing AndAlso ideNode.DataContract.SubDataMapping.Count > 0 Then
+                    ValidateGroupNameCoherence(ideNode.DataContract)
                 End If
             Catch ex As Exception
                 Console.WriteLine($"[TaskAssembler.CompileNode] ❌ Node {ideNode.Id}: Exception during compilation: {ex.Message}")
@@ -177,7 +180,7 @@ Public Class TaskAssembler
             If task.SubTasks Is Nothing Then
                 task.SubTasks = New List(Of CompiledUtteranceTask)()
             End If
-            For Each subNode As Compiler.TaskNode In ideNode.SubTasks
+            For Each subNode As TaskNode In ideNode.SubTasks
                 Dim subTask = CompileNode(subNode, task)
                 task.SubTasks.Add(subTask)
             Next
@@ -189,7 +192,7 @@ Public Class TaskAssembler
     ''' <summary>
     ''' Converte un constraint (Object) in ValidationCondition
     ''' </summary>
-    Private Function ConvertConstraintToValidationCondition(constraintObj As Object) As ValidationCondition
+    Private Function ConvertConstraintToValidationCondition(constraintObj As Object) As TaskEngine.ValidationCondition
         If constraintObj Is Nothing Then
             Return Nothing
         End If
@@ -252,16 +255,16 @@ Public Class TaskAssembler
     End Function
 
     ''' <summary>
-    ''' Compila DialogueStep (IDE) in DialogueStep (Runtime)
+    ''' Compila DialogueStep (IDE) in CompiledDialogueStep (Runtime)
     ''' </summary>
-    Private Function CompileDialogueStep(ideStep As Compiler.DialogueStep) As TaskEngine.DialogueStep
-        Dim runtimeStep As New TaskEngine.DialogueStep() With {
+    Private Function CompileDialogueStep(ideStep As DialogueStep) As TaskEngine.CompiledDialogueStep
+        Dim runtimeStep As New TaskEngine.CompiledDialogueStep() With {
             .Type = CompileStepType(ideStep.Type),
             .Escalations = New List(Of TaskEngine.Escalation)()
         }
 
         If ideStep.Escalations IsNot Nothing Then
-            For Each ideEscalation As Compiler.Escalation In ideStep.Escalations
+            For Each ideEscalation As Escalation In ideStep.Escalations
                 Dim runtimeEscalation = CompileEscalation(ideEscalation)
                 If runtimeEscalation IsNot Nothing Then
                     runtimeStep.Escalations.Add(runtimeEscalation)
@@ -280,7 +283,7 @@ Public Class TaskAssembler
     ''' ✅ "violation" non esiste come step, solo "invalid" per constraints non superati
     ''' ✅ "disambiguation" viene mappato a "start" (non implementato nel runtime)
     ''' </summary>
-    Private Function CompileStepType(typeStr As String) As DialogueStepType
+    Private Function CompileStepType(typeStr As String) As TaskEngine.DialogueStepType
         If String.IsNullOrEmpty(typeStr) Then
             Throw New InvalidOperationException($"Step type cannot be null or empty. This indicates a structural error in the task model. Every DialogueStep must have a valid type.")
         End If
@@ -327,10 +330,10 @@ Public Class TaskAssembler
     ''' <summary>
     ''' Compila Escalation (IDE) in Escalation (Runtime)
     ''' </summary>
-    Private Function CompileEscalation(ideEscalation As Compiler.Escalation) As TaskEngine.Escalation
+    Private Function CompileEscalation(ideEscalation As Escalation) As TaskEngine.Escalation
         Dim runtimeEscalation As New TaskEngine.Escalation() With {
             .EscalationId = ideEscalation.EscalationId,
-            .Tasks = New List(Of ITask)()
+            .Tasks = New List(Of TaskEngine.ITask)()
         }
 
         If ideEscalation.Tasks IsNot Nothing Then
@@ -355,7 +358,7 @@ Public Class TaskAssembler
     ''' UtteranceInterpretation, BackendCall and ClassifyProblem are semantic task types
     ''' and do not produce an ITask; they are handled at the TaskUtterance level.
     ''' </summary>
-    Private Function CompileTask(ideTask As Compiler.Task) As ITask
+    Private Function CompileTask(ideTask As TaskDefinition) As TaskEngine.ITask
         If Not ideTask.Type.HasValue Then
             Throw New InvalidOperationException(
                 $"Task '{ideTask.Id}' has no Type. Every task inside an escalation must have a valid type.")
@@ -397,7 +400,7 @@ Public Class TaskAssembler
     ''' Tries ideTask.Text, then Parameters[parameterId='text'], then Value["parameters"].
     ''' Throws immediately if the key is missing or appears to be literal text.
     ''' </summary>
-    Private Shared Function ExtractTextKeyFromIdeTask(ideTask As Compiler.Task) As String
+    Private Shared Function ExtractTextKeyFromIdeTask(ideTask As TaskDefinition) As String
         Dim textKey As String = ""
 
         If Not String.IsNullOrWhiteSpace(ideTask.Text) Then
@@ -469,14 +472,14 @@ Public Class TaskAssembler
     ''' <summary>
     ''' Compila DialogueStep in List(Of ITask) (per Introduction/SuccessResponse)
     ''' </summary>
-    Private Function CompileDialogueStepToTasks(ideStep As Compiler.DialogueStep) As List(Of ITask)
+    Private Function CompileDialogueStepToTasks(ideStep As CompiledDialogueStep) As List(Of TaskEngine.ITask)
         Dim tasks As New List(Of ITask)()
 
         ' Prendi la prima escalation del primo step
         If ideStep.Escalations IsNot Nothing AndAlso ideStep.Escalations.Count > 0 Then
             Dim firstEscalation = ideStep.Escalations(0)
             If firstEscalation.Tasks IsNot Nothing Then
-                For Each ideTask As Compiler.Task In firstEscalation.Tasks
+                For Each ideTask As TaskDefinition In firstEscalation.Tasks
                     Dim runtimeTask = CompileTask(ideTask)
                     If runtimeTask IsNot Nothing Then
                         tasks.Add(runtimeTask)
@@ -489,265 +492,11 @@ Public Class TaskAssembler
     End Function
 
     ''' <summary>
-    ''' Converte dataContract (JObject o Object) in NLPContract
-    ''' Gestisce il formato dataContract con array "parsers" e lo converte in NLPContract con oggetti "regex", "rules", ecc.
+    ''' ❌ RIMOSSA: ConvertDataContractToNlpContract
+    ''' DataContract è ora tipizzato come NLPContract in TaskDefinition e TaskNode.
+    ''' La deserializzazione JSON gestisce automaticamente la conversione.
+    ''' Non serve più conversione manuale da Object/JObject a NLPContract.
     ''' </summary>
-    Private Function ConvertDataContractToNlpContract(dataContract As Object) As NLPContract
-        If dataContract Is Nothing Then
-            Return Nothing
-        End If
-
-        ' Se è già NLPContract, ritorna direttamente
-        If TypeOf dataContract Is NLPContract Then
-            Return CType(dataContract, NLPContract)
-        End If
-
-        Try
-            ' Converti in JObject se necessario
-            Dim contractObj As JObject = Nothing
-            If TypeOf dataContract Is JObject Then
-                contractObj = CType(dataContract, JObject)
-            ElseIf TypeOf dataContract Is String Then
-                contractObj = JObject.Parse(CType(dataContract, String))
-            Else
-                ' Serializza e deserializza per convertire Object generico in JObject
-                Dim jsonString = JsonConvert.SerializeObject(dataContract)
-                contractObj = JObject.Parse(jsonString)
-            End If
-
-            If contractObj Is Nothing Then
-                Return Nothing
-            End If
-
-            ' Crea NLPContract base
-            Dim nlpContract As New NLPContract()
-
-            ' Estrai campi base
-            If contractObj("templateName") IsNot Nothing Then
-                nlpContract.TemplateName = contractObj("templateName").ToString()
-            End If
-            If contractObj("templateId") IsNot Nothing Then
-                nlpContract.TemplateId = contractObj("templateId").ToString()
-            End If
-            If contractObj("sourceTemplateId") IsNot Nothing Then
-                nlpContract.SourceTemplateId = contractObj("sourceTemplateId").ToString()
-            End If
-
-            ' Estrai subDataMapping
-            ' ❌ RIMOSSO: Catch silente che nascondeva errori di deserializzazione.
-            ' ✅ NUOVO: Fail-fast con messaggio esplicito su ogni percorso di errore.
-            ' ✅ LOG: Inizio estrazione
-            Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] 🔍 Template '{If(nlpContract.TemplateName, "unknown")}': Extracting subDataMapping")
-            Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]   - contractObj('subDataMapping') IsNothing: {contractObj("subDataMapping") Is Nothing}")
-
-            If contractObj("subDataMapping") IsNot Nothing Then
-                Dim subDataMappingToken As JToken = contractObj("subDataMapping")
-                Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]   - subDataMappingToken.Type: {subDataMappingToken.Type}")
-                Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]   - subDataMappingToken.ToString preview: {If(subDataMappingToken.ToString().Length > 200, subDataMappingToken.ToString().Substring(0, 200) & "...", subDataMappingToken.ToString())}")
-
-                Dim subDataMappingDict As Dictionary(Of String, SubDataMappingInfo) = Nothing
-
-                Select Case subDataMappingToken.Type
-                    Case JTokenType.Object
-                        ' ✅ Standard path: frontend sends subDataMapping as a JSON object.
-                        Try
-                            subDataMappingDict = subDataMappingToken.ToObject(Of Dictionary(Of String, SubDataMappingInfo))()
-                            Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ✅ Deserialized as Object: Count = {If(subDataMappingDict IsNot Nothing, subDataMappingDict.Count, 0)}")
-                        Catch ex As Exception
-                            Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ❌ Deserialization failed: {ex.Message}")
-                            Throw New InvalidOperationException(
-                                $"Failed to deserialize dataContract.subDataMapping (JObject path). " &
-                                $"Template: '{If(nlpContract.TemplateName, "unknown")}'. Error: {ex.Message}", ex)
-                        End Try
-
-                    Case JTokenType.String
-                        ' Legacy path: subDataMapping sent as a serialized JSON string.
-                        Try
-                            subDataMappingDict = JsonConvert.DeserializeObject(
-                                Of Dictionary(Of String, SubDataMappingInfo))(subDataMappingToken.ToString())
-                            Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ✅ Deserialized as String: Count = {If(subDataMappingDict IsNot Nothing, subDataMappingDict.Count, 0)}")
-                        Catch ex As Exception
-                            Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ❌ Deserialization failed: {ex.Message}")
-                            Throw New InvalidOperationException(
-                                $"Failed to deserialize dataContract.subDataMapping (String path). " &
-                                $"Template: '{If(nlpContract.TemplateName, "unknown")}'. Error: {ex.Message}", ex)
-                        End Try
-
-                    Case JTokenType.Null
-                        Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ⚠️ subDataMappingToken is Null")
-                        ' null token → treat as absent; leaf tasks may omit the mapping.
-
-                    Case Else
-                        Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ❌ Unsupported type: {subDataMappingToken.Type}")
-                        Throw New InvalidOperationException(
-                            $"dataContract.subDataMapping has unsupported JSON type: {subDataMappingToken.Type}. " &
-                            $"Expected Object or String. Template: '{If(nlpContract.TemplateName, "unknown")}'.")
-                End Select
-
-                If subDataMappingDict IsNot Nothing Then
-                    nlpContract.SubDataMapping = subDataMappingDict
-                    Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ✅ Assigned SubDataMapping: Count = {nlpContract.SubDataMapping.Count}")
-                    For Each kvp In nlpContract.SubDataMapping
-                        Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]     - [{kvp.Key}] → groupName: '{kvp.Value.GroupName}'")
-                    Next
-                Else
-                    Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ⚠️ subDataMappingDict is Nothing after deserialization")
-                End If
-            Else
-                Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ⚠️ contractObj('subDataMapping') is Nothing - subDataMapping missing from JSON")
-            End If
-
-            ' ✅ NEW: Popola Parsers direttamente (fonte di verità unica)
-            ' ❌ RIMOSSO: La conversione parsers[] → nlpContract.Regex/Rules/Ner/Llm
-            ' Ora usiamo direttamente nlpContract.Parsers
-            ' ❌ RIMOSSA retrocompatibilità: accetta solo "parsers" (i template vengono ricreati da zero)
-            If contractObj("parsers") IsNot Nothing AndAlso contractObj("parsers").Type = JTokenType.Array Then
-                Dim parsersArray = CType(contractObj("parsers"), JArray)
-                Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ✅ Found parsers array: Count = {parsersArray.Count}")
-                For i = 0 To parsersArray.Count - 1
-                    Dim item = parsersArray(i)
-                    If TypeOf item Is JObject Then
-                        Dim itemObj = CType(item, JObject)
-                        Dim type = If(itemObj("type")?.ToString(), "unknown")
-                        Dim hasPatterns = itemObj("patterns") IsNot Nothing
-                        Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]   Parser[{i}]: type={type}, hasPatterns={hasPatterns}")
-                        If hasPatterns Then
-                            Dim patterns = itemObj("patterns")
-                            If patterns.Type = JTokenType.Array Then
-                                Dim patternsArray = CType(patterns, JArray)
-                                Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]     Patterns count: {patternsArray.Count}")
-                                For j = 0 To Math.Min(patternsArray.Count - 1, 2)
-                                    Dim patternStr = If(patternsArray(j)?.ToString(), "")
-                                    Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]       Pattern[{j}]: {If(patternStr.Length > 100, patternStr.Substring(0, 100) & "...", patternStr)}")
-                                Next
-                            End If
-                        End If
-                    End If
-                Next
-                nlpContract.Parsers = New List(Of NLPContractEngine)()
-
-                For Each contractItem As JObject In parsersArray
-                    Dim contractType = If(contractItem("type")?.ToString(), "")
-                    Dim contractEnabled = If(contractItem("enabled")?.ToObject(Of Boolean?)(), True)
-
-                    If Not contractEnabled Then
-                        Continue For ' Salta contract disabilitati
-                    End If
-
-                    Dim engine As New NLPContractEngine()
-                    engine.Type = contractType
-                    engine.Enabled = contractEnabled
-
-                    Select Case contractType.ToLower()
-                        Case "regex"
-                            ' Estrai patterns
-                            If contractItem("patterns") IsNot Nothing AndAlso contractItem("patterns").Type = JTokenType.Array Then
-                                Dim patternsArray = CType(contractItem("patterns"), JArray)
-                                engine.Patterns = New List(Of String)()
-                                For Each patternToken In patternsArray
-                                    If patternToken.Type = JTokenType.String Then
-                                        engine.Patterns.Add(patternToken.ToString())
-                                    End If
-                                Next
-                            End If
-
-                            ' Estrai testCases (opzionale)
-                            If contractItem("testCases") IsNot Nothing AndAlso contractItem("testCases").Type = JTokenType.Array Then
-                                Dim testCasesArray = CType(contractItem("testCases"), JArray)
-                                engine.TestCases = New List(Of String)()
-                                For Each testCaseToken In testCasesArray
-                                    If testCaseToken.Type = JTokenType.String Then
-                                        engine.TestCases.Add(testCaseToken.ToString())
-                                    End If
-                                Next
-                            End If
-
-                        Case "rules"
-                            ' Estrai extractorCode (opzionale)
-                            If contractItem("extractorCode") IsNot Nothing Then
-                                engine.ExtractorCode = contractItem("extractorCode").ToString()
-                            End If
-
-                            ' Estrai validators (opzionale)
-                            If contractItem("validators") IsNot Nothing AndAlso contractItem("validators").Type = JTokenType.Array Then
-                                Dim validatorsArray = CType(contractItem("validators"), JArray)
-                                engine.Validators = New List(Of Object)()
-                                For Each validatorToken In validatorsArray
-                                    engine.Validators.Add(validatorToken.ToObject(Of Object)())
-                                Next
-                            End If
-
-                            ' Estrai testCases (opzionale)
-                            If contractItem("testCases") IsNot Nothing AndAlso contractItem("testCases").Type = JTokenType.Array Then
-                                Dim testCasesArray = CType(contractItem("testCases"), JArray)
-                                engine.TestCases = New List(Of String)()
-                                For Each testCaseToken In testCasesArray
-                                    If testCaseToken.Type = JTokenType.String Then
-                                        engine.TestCases.Add(testCaseToken.ToString())
-                                    End If
-                                Next
-                            End If
-
-                        Case "ner"
-                            ' Estrai entityTypes (opzionale)
-                            If contractItem("entityTypes") IsNot Nothing AndAlso contractItem("entityTypes").Type = JTokenType.Array Then
-                                Dim entityTypesArray = CType(contractItem("entityTypes"), JArray)
-                                engine.EntityTypes = New List(Of String)()
-                                For Each entityTypeToken In entityTypesArray
-                                    If entityTypeToken.Type = JTokenType.String Then
-                                        engine.EntityTypes.Add(entityTypeToken.ToString())
-                                    End If
-                                Next
-                            End If
-
-                            ' Estrai confidence (opzionale)
-                            If contractItem("confidence") IsNot Nothing Then
-                                Dim confidenceValue = contractItem("confidence").ToObject(Of Double?)()
-                                If confidenceValue.HasValue Then
-                                    engine.Confidence = confidenceValue.Value
-                                End If
-                            End If
-
-                        Case "llm"
-                            ' Estrai systemPrompt (opzionale)
-                            If contractItem("systemPrompt") IsNot Nothing Then
-                                engine.SystemPrompt = contractItem("systemPrompt").ToString()
-                            End If
-
-                            ' Estrai userPromptTemplate (opzionale)
-                            If contractItem("userPromptTemplate") IsNot Nothing Then
-                                engine.UserPromptTemplate = contractItem("userPromptTemplate").ToString()
-                            End If
-
-                            ' Estrai responseSchema (opzionale)
-                            If contractItem("responseSchema") IsNot Nothing Then
-                                engine.ResponseSchema = contractItem("responseSchema").ToObject(Of Object)()
-                            End If
-                    End Select
-
-                    nlpContract.Parsers.Add(engine)
-                Next
-                Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ✅ Final Parsers count: {nlpContract.Parsers.Count}")
-            Else
-                Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract] ⚠️ parsers is Nothing or not an Array")
-                If contractObj("parsers") IsNot Nothing Then
-                    Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]   parsers type: {contractObj("parsers").Type}")
-                End If
-                Console.WriteLine($"[TaskAssembler.ConvertDataContractToNlpContract]   contractObj keys: {String.Join(", ", contractObj.Properties().Select(Function(p) p.Name))}")
-            End If
-
-            ' ✅ Validate group-name coherence: mapping ↔ regex bidirectional check.
-            ' Only runs when a composite mapping exists (leaf contracts are skipped).
-            If nlpContract.SubDataMapping IsNot Nothing AndAlso nlpContract.SubDataMapping.Count > 0 Then
-                ValidateGroupNameCoherence(nlpContract)
-            End If
-
-            Return nlpContract
-
-        Catch ex As Exception
-            Throw New InvalidOperationException($"Failed to convert dataContract to NLPContract: {ex.Message}", ex)
-        End Try
-    End Function
 
     ' ── Group-name validation helpers ────────────────────────────────────────
 

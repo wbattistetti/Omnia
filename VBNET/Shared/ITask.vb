@@ -4,6 +4,8 @@
 Option Strict On
 Option Explicit On
 
+Namespace TaskEngine
+
 ''' <summary>
 ''' Defines a single executable micro-task within a dialogue escalation
 ''' (e.g. send a message, close the session, transfer to an operator).
@@ -15,9 +17,10 @@ Public Interface ITask
     ''' Executes the task.
     ''' </summary>
     ''' <param name="context">
-    ''' The TaskUtterance currently being processed.
-    ''' Provides ProjectId, Locale and TranslationResolver for message resolution.
+    ''' The task context providing ProjectId, Locale and TranslationResolver for message resolution.
     ''' </param>
     ''' <param name="onMessage">Callback to surface text messages to the UI.</param>
-    Sub Execute(context As TaskUtterance, onMessage As Action(Of String))
+    Sub Execute(context As ITaskContext, onMessage As Action(Of String))
 End Interface
+
+End Namespace

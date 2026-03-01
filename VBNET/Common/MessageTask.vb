@@ -3,6 +3,7 @@
 
 Option Strict On
 Option Explicit On
+Imports TaskEngine
 
 ''' <summary>
 ''' Sends a localised message to the user.
@@ -32,16 +33,21 @@ Public Class MessageTask
     ''' <summary>
     ''' Resolves the translation key and sends the resulting text via onMessage.
     ''' </summary>
-    Public Overrides Sub Execute(context As TaskUtterance, onMessage As Action(Of String))
+    Public Overrides Sub Execute(context As ITaskContext, onMessage As Action(Of String))
         If onMessage Is Nothing Then
             Throw New ArgumentNullException(NameOf(onMessage), "onMessage callback cannot be Nothing.")
         End If
 
         Dim text As String = ResolveTranslation(context)
-        Dim processed As String = Utils.ProcessPlaceholders(text, context)
+        ' ✅ Cast to TaskUtterance for ProcessPlaceholders (Engine-specific)
+        Dim taskUtterance = TryCast(context, TaskUtterance)
+        If taskUtterance Is Nothing Then
+            Throw New InvalidOperationException("ITaskContext must be TaskUtterance for MessageTask placeholder processing.")
+        End If
+        Dim processed As String = PlaceholderUtils.ProcessPlaceholders(text, taskUtterance)
 
         If String.IsNullOrEmpty(processed) Then
-            Throw New InvalidOperationException($"Processed text for key '{TextKey}' is empty after placeholder resolution in task '{context.Id}'.")
+            Throw New InvalidOperationException($"Processed text for key '{TextKey}' is empty after placeholder resolution.")
         End If
 
         onMessage(processed)
@@ -49,18 +55,23 @@ Public Class MessageTask
 
     ' --- Private helpers ---
 
-    Private Function ResolveTranslation(context As TaskUtterance) As String
+    Private Function ResolveTranslation(context As ITaskContext) As String
         If String.IsNullOrWhiteSpace(context.ProjectId) Then
-            Throw New InvalidOperationException($"Context '{context.Id}' has no ProjectId. Cannot resolve key '{TextKey}'.")
+            Throw New InvalidOperationException($"Context has no ProjectId. Cannot resolve key '{TextKey}'.")
         End If
         If String.IsNullOrWhiteSpace(context.Locale) Then
-            Throw New InvalidOperationException($"Context '{context.Id}' has no Locale. Cannot resolve key '{TextKey}'.")
+            Throw New InvalidOperationException($"Context has no Locale. Cannot resolve key '{TextKey}'.")
         End If
         If context.TranslationResolver Is Nothing Then
-            Throw New InvalidOperationException($"Context '{context.Id}' has no TranslationResolver. Cannot resolve key '{TextKey}'.")
+            Throw New InvalidOperationException($"Context has no TranslationResolver. Cannot resolve key '{TextKey}'.")
         End If
 
-        Dim text = context.TranslationResolver.ResolveTranslation(context.ProjectId, context.Locale, TextKey)
+        Dim resolver = TryCast(context.TranslationResolver, Interfaces.ITranslationResolver)
+        If resolver Is Nothing Then
+            Throw New InvalidOperationException("ITaskContext.TranslationResolver must implement ITranslationResolver for MessageTask.")
+        End If
+
+        Dim text = resolver.ResolveTranslation(context.ProjectId, context.Locale, TextKey)
 
         If String.IsNullOrEmpty(text) Then
             Throw New InvalidOperationException($"Translation key '{TextKey}' not found for project '{context.ProjectId}', locale '{context.Locale}'.")

@@ -1,8 +1,6 @@
 Option Strict On
 Option Explicit On
-Imports TaskEngine.Engine
 Imports TaskEngine
-Imports TaskEngine.Parsers
 Imports Newtonsoft.Json
 Imports System.Linq
 
@@ -82,13 +80,13 @@ End Class
 ''' </summary>
 Public Class CompiledUtteranceTask
     Inherits CompiledTask
-    Implements IParsableTask
+    Implements TaskEngine.IParsableTask
 
     ''' <summary>
     ''' Steps di dialogo (solo se il task è atomico o aggregato)
     ''' Provengono SOLO dall'istanza, non dal template
     ''' </summary>
-    Public Property Steps As List(Of TaskEngine.DialogueStep)
+    Public Property Steps As List(Of TaskEngine.CompiledDialogueStep)
 
     ''' <summary>
     ''' Constraints per validazione input
@@ -142,9 +140,20 @@ Public Class CompiledUtteranceTask
     End Function
 
     ' ✅ Implementazione IParsableTask per evitare dipendenza circolare
-    Private ReadOnly Property IParsableTask_Id As String Implements IParsableTask.Id
+    Private ReadOnly Property IParsableTask_Id As String Implements TaskEngine.IParsableTask.Id
         Get
             Return Id
+        End Get
+    End Property
+
+
+    Private ReadOnly Property IParsableTask_SubTasks As List(Of TaskEngine.IParsableTask) Implements TaskEngine.IParsableTask.SubTasks
+        Get
+            If SubTasks Is Nothing Then
+                Return Nothing
+            End If
+            ' ✅ Cast implicito: CompiledUtteranceTask implementa IParsableTask
+            Return SubTasks.Cast(Of TaskEngine.IParsableTask)().ToList()
         End Get
     End Property
 
@@ -154,17 +163,7 @@ Public Class CompiledUtteranceTask
         End Get
     End Property
 
-    Private ReadOnly Property IParsableTask_SubTasks As List(Of IParsableTask) Implements IParsableTask.SubTasks
-        Get
-            If SubTasks Is Nothing Then
-                Return Nothing
-            End If
-            ' ✅ Cast implicito: CompiledUtteranceTask implementa IParsableTask
-            Return SubTasks.Cast(Of IParsableTask)().ToList()
-        End Get
-    End Property
-
-    Private Function IParsableTask_HasSubTasks() As Boolean Implements IParsableTask.HasSubTasks
+    Private Function IParsableTask_HasSubTasks() As Boolean Implements TaskEngine.IParsableTask.HasSubTasks
         Return HasSubTasks()
     End Function
 End Class

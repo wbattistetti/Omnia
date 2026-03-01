@@ -2,6 +2,7 @@ Option Strict On
 Option Explicit On
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
+Imports Compiler.DTO.IDE
 
 ''' <summary>
 ''' Custom JSON converter for List(Of DialogueStep)
@@ -17,11 +18,11 @@ Imports Newtonsoft.Json.Linq
 ''' - Null: ritorna lista vuota
 ''' </summary>
 Public Class DialogueStepListConverter
-    Inherits JsonConverter(Of List(Of Compiler.DialogueStep))
+    Inherits JsonConverter(Of List(Of DialogueStep))
 
-    Public Overrides Function ReadJson(reader As JsonReader, objectType As Type, existingValue As List(Of Compiler.DialogueStep), hasExistingValue As Boolean, serializer As JsonSerializer) As List(Of Compiler.DialogueStep)
+    Public Overrides Function ReadJson(reader As JsonReader, objectType As Type, existingValue As List(Of DialogueStep), hasExistingValue As Boolean, serializer As JsonSerializer) As List(Of DialogueStep)
         Dim token = JToken.Load(reader)
-        Dim result As New List(Of Compiler.DialogueStep)()
+        Dim result As New List(Of DialogueStep)()
 
         If token.Type = JTokenType.Null Then
             Return result
@@ -32,7 +33,7 @@ Public Class DialogueStepListConverter
             Dim array = CType(token, JArray)
             For Each item In array
                 If item.Type = JTokenType.Object Then
-                    Dim dialogueStep = item.ToObject(Of Compiler.DialogueStep)(serializer)
+                    Dim dialogueStep = item.ToObject(Of DialogueStep)(serializer)
                     If dialogueStep IsNot Nothing Then
                         ' ✅ step.Type è già corretto (fonte di verità)
                         result.Add(dialogueStep)
@@ -49,7 +50,7 @@ Public Class DialogueStepListConverter
 
                 If stepValue.Type = JTokenType.Object Then
                     ' ✅ Deserializza l'oggetto step
-                    Dim dialogueStep = stepValue.ToObject(Of Compiler.DialogueStep)(serializer)
+                    Dim dialogueStep = stepValue.ToObject(Of DialogueStep)(serializer)
                     If dialogueStep IsNot Nothing Then
                         ' ✅ CRITICAL: Chiave ELIMINATA - NON usarla mai
                         ' ✅ step.Type è già corretto dall'oggetto (unica fonte di verità)
@@ -63,7 +64,7 @@ Public Class DialogueStepListConverter
         Return result
     End Function
 
-    Public Overrides Sub WriteJson(writer As JsonWriter, value As List(Of Compiler.DialogueStep), serializer As JsonSerializer)
+    Public Overrides Sub WriteJson(writer As JsonWriter, value As List(Of DialogueStep), serializer As JsonSerializer)
         ' ✅ SEMPRE serializza come array (formato ufficiale, chiave eliminata)
         serializer.Serialize(writer, value)
     End Sub

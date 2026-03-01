@@ -7,6 +7,7 @@ Imports Microsoft.AspNetCore.Http
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Serialization
 Imports TaskEngine
+Imports Engine
 
 Namespace ApiServer.Handlers
     ''' <summary>
@@ -124,7 +125,7 @@ Namespace ApiServer.Handlers
                     request.Edges = New List(Of Compiler.FlowEdge)()
                 End If
                 If request.Tasks Is Nothing Then
-                    request.Tasks = New List(Of Compiler.Task)()
+                    request.Tasks = New List(Of Compiler.TaskDefinition)()
                 End If
                 ' ❌ RIMOSSO: request.DDTs - non più usato, struttura costruita da template
 
@@ -148,7 +149,7 @@ Namespace ApiServer.Handlers
                 Dim flow As New Compiler.Flow() With {
                     .Nodes = If(request.Nodes, New List(Of Compiler.FlowNode)()),
                     .Edges = If(request.Edges, New List(Of Compiler.FlowEdge)()),
-                    .Tasks = If(request.Tasks, New List(Of Compiler.Task)())
+                    .Tasks = If(request.Tasks, New List(Of Compiler.TaskDefinition)())
                 }
 
                 ' Log Flow structure after creation
@@ -295,8 +296,8 @@ Namespace ApiServer.Handlers
                 End Try
 
                 ' ✅ NUOVO: Riconosci input.TaskInstance
-                Dim taskInstance As Compiler.Task = Nothing
-                Dim allTemplates As List(Of Compiler.Task) = Nothing
+                Dim taskInstance As Compiler.TaskDefinition = Nothing
+                Dim allTemplates As List(Of Compiler.TaskDefinition) = Nothing
 
                 If requestObj("taskInstance") IsNot Nothing Then
                     ' ✅ NUOVO FORMATO: { taskInstance: {...}, allTemplates: [...] }
@@ -305,7 +306,7 @@ Namespace ApiServer.Handlers
                     ' Deserialize taskInstance
                     Try
                         Dim taskInstanceJson = requestObj("taskInstance").ToString()
-                        taskInstance = JsonConvert.DeserializeObject(Of Compiler.Task)(taskInstanceJson, New JsonSerializerSettings() With {
+                        taskInstance = JsonConvert.DeserializeObject(Of Compiler.TaskDefinition)(taskInstanceJson, New JsonSerializerSettings() With {
                             .NullValueHandling = NullValueHandling.Ignore,
                             .MissingMemberHandling = MissingMemberHandling.Ignore
                         })
@@ -322,7 +323,7 @@ Namespace ApiServer.Handlers
                     If requestObj("allTemplates") IsNot Nothing Then
                         Try
                             Dim allTemplatesJson = requestObj("allTemplates").ToString()
-                            allTemplates = JsonConvert.DeserializeObject(Of List(Of Compiler.Task))(allTemplatesJson, New JsonSerializerSettings() With {
+                            allTemplates = JsonConvert.DeserializeObject(Of List(Of Compiler.TaskDefinition))(allTemplatesJson, New JsonSerializerSettings() With {
                                 .NullValueHandling = NullValueHandling.Ignore,
                                 .MissingMemberHandling = MissingMemberHandling.Ignore
                             })
@@ -336,7 +337,7 @@ Namespace ApiServer.Handlers
                         End Try
                     Else
                         ' ✅ Se allTemplates non è presente, usa solo taskInstance
-                        allTemplates = New List(Of Compiler.Task) From {taskInstance}
+                        allTemplates = New List(Of Compiler.TaskDefinition) From {taskInstance}
                     End If
 
                 ElseIf requestObj("task") IsNot Nothing Then
@@ -344,11 +345,11 @@ Namespace ApiServer.Handlers
                     ' Console.WriteLine("⚠️ [HandleCompileTask] Detected legacy task input format")
                     Try
                         Dim taskJson = requestObj("task").ToString()
-                        taskInstance = JsonConvert.DeserializeObject(Of Compiler.Task)(taskJson, New JsonSerializerSettings() With {
+                        taskInstance = JsonConvert.DeserializeObject(Of Compiler.TaskDefinition)(taskJson, New JsonSerializerSettings() With {
                             .NullValueHandling = NullValueHandling.Ignore,
                             .MissingMemberHandling = MissingMemberHandling.Ignore
                         })
-                        allTemplates = New List(Of Compiler.Task) From {taskInstance}
+                        allTemplates = New List(Of Compiler.TaskDefinition) From {taskInstance}
                     Catch ex As Exception
                         Console.WriteLine($"❌ [HandleCompileTask] Error deserializing task: {ex.Message}")
                         Dim errorJson = JsonConvert.SerializeObject(New With {.error = "Failed to deserialize task", .message = ex.Message})
@@ -512,7 +513,7 @@ Namespace ApiServer.Handlers
                 '     Console.WriteLine($"   CompiledUtteranceTask.Steps IsNothing: {compiledUtteranceTask.Steps Is Nothing}")
                 '     If compiledUtteranceTask.Steps IsNot Nothing Then
                 '         Console.WriteLine($"   CompiledUtteranceTask.Steps.Count: {compiledUtteranceTask.Steps.Count}")
-                '         For Each dstep As TaskEngine.DialogueStep In compiledUtteranceTask.Steps
+                '         For Each dstep As TaskEngine.CompiledDialogueStep In compiledUtteranceTask.Steps
                 '             Dim escalationsCount As Integer = If(dstep.Escalations IsNot Nothing, dstep.Escalations.Count, 0)
                 '             Dim stepInfo As String = "     Step Type: " & dstep.Type & ", Escalations: " & escalationsCount.ToString()
                 '             Console.WriteLine(stepInfo)
@@ -645,7 +646,7 @@ Namespace ApiServer.Handlers
                 Dim flow As New Compiler.Flow() With {
                     .Nodes = If(request.Nodes, New List(Of Compiler.FlowNode)()),
                     .Edges = If(request.Edges, New List(Of Compiler.FlowEdge)()),
-                    .Tasks = If(request.Tasks, New List(Of Compiler.Task)())
+                    .Tasks = If(request.Tasks, New List(Of Compiler.TaskDefinition)())
                 }
 
                 ' Compile flow

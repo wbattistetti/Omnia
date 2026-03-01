@@ -1,5 +1,7 @@
 Option Strict On
 Option Explicit On
+Imports Compiler.DTO.IDE
+Imports TaskEngine
 
 ''' <summary>
 ''' Base class astratta per tutti i task compiler
@@ -14,7 +16,7 @@ Public MustInherit Class TaskCompilerBase
     ''' <param name="task">Il task da compilare</param>
     ''' <param name="taskId">L'ID del task da compilare</param>
     ''' <param name="allTemplates">Lista di tutti i template necessari per la compilazione (incluso il template referenziato e tutti i sub-template)</param>
-    Public MustOverride Function Compile(task As Task, taskId As String, allTemplates As List(Of Task)) As CompiledTask
+    Public MustOverride Function Compile(task As TaskDefinition, taskId As String, allTemplates As List(Of TaskDefinition)) As CompiledTask
 
     ''' <summary>
     ''' Popola i campi comuni di un CompiledTask (solo logica base, senza metadata flowchart)

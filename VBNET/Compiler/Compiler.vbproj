@@ -16,8 +16,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Engine for Models and Parsers -->
-    <ProjectReference Include="..\Engine\Engine.vbproj" />
+    <!-- Common for common interfaces (ITask, ITaskContext) -->
+    <ProjectReference Include="..\Common\Common.vbproj" />
+    <!-- Engine reference removed - all needed types moved to Compiler or Common -->
   </ItemGroup>
 
   <ItemGroup>
@@ -28,7 +29,7 @@
     <!-- Task Compiler e Assembler -->
     <Compile Include="TaskCompiler.vb" />
     <Compile Include="TaskAssembler.vb" />
-    <Compile Include="ContractLoader.vb" />
+    <Compile Include="NlpContractCompiler.vb" />
 
     <!-- Task Compiler (Polymorphic) -->
     <Compile Include="TaskCompiler\TaskCompilerBase.vb" />
@@ -48,7 +49,8 @@
     <!-- NodeData.vb removed - FlowNode now has Label and Rows directly -->
     <Compile Include="DTO\IDE\TaskRow.vb" />
     <Compile Include="DTO\IDE\EdgeData.vb" />
-    <Compile Include="DTO\IDE\Task.vb" />
+    <Compile Include="DTO\IDE\TaskDefinition.vb" />
+    <Compile Include="DTO\IDE\UtteranceTaskDefinition.vb" />
     <!-- TaskTypeConverter.vb (renamed from ActionTypeConverter) - kept for backward compatibility, not actively used -->
 
     <!-- IDE Types (Input from React/TypeScript) - DDT -->
@@ -62,6 +64,8 @@
     <!-- ❌ RIMOSSO: MainDataNode.vb - rinominato in TaskNode.vb -->
     <!-- ❌ RIMOSSO: MainDataNodeListConverter.vb - rinominato in TaskNodeListConverter.vb -->
     <Compile Include="DTO\IDE\TaskTreeExpanded.vb" />
+    <!-- NLP Contract (IDE model, moved from Engine to eliminate circular dependency) -->
+    <Compile Include="DTO\IDE\NLPContract.vb" />
     <!-- ❌ RIMOSSO: DDTCompiler.vb - rinominato in TaskCompiler.vb -->
     <!-- ❌ RIMOSSO: DDTLoader.vb - rinominato in TaskLoader.vb -->
     <!-- ❌ RIMOSSO: AssembledDDT.vb - rinominato in TaskTreeRuntime.vb, poi TaskTreeExpanded.vb -->
@@ -79,6 +83,8 @@
     <Compile Include="DTO\Runtime\FlowCompilationResult.vb" />
     <Compile Include="DTO\Runtime\TaskGroup.vb" />
     <Compile Include="DTO\Runtime\Utils.vb" />
+    <!-- Runtime types moved to Common (to eliminate circular dependency) -->
+    <!-- DialogueStep, Escalation, ValidationCondition, CompiledNlpContract, IParsableTask are now in Common -->
   </ItemGroup>
 
 </Project>

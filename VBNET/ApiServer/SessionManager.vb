@@ -715,7 +715,7 @@ Public Class SessionManager
     Private Shared Sub CollectTranslationKeysRecursive(compiledTask As Compiler.CompiledUtteranceTask, keys As HashSet(Of String))
         ' ✅ Itera tutti gli step e escalation per trovare MessageTask
         If compiledTask.Steps IsNot Nothing Then
-            For Each dstep As TaskEngine.DialogueStep In compiledTask.Steps
+            For Each dstep As TaskEngine.CompiledDialogueStep In compiledTask.Steps
                 If dstep.Escalations IsNot Nothing Then
                     For Each escalation As TaskEngine.Escalation In dstep.Escalations
                         If escalation.Tasks IsNot Nothing Then

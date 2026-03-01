@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <OptionStrict>On</OptionStrict>
+    <OptionExplicit>On</OptionExplicit>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <RootNamespace>TaskEngine</RootNamespace>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DebugType>full</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+    <Optimize>false</Optimize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Common interfaces and types used by both Engine and Compiler -->
+    <!-- Enums -->
+    <Compile Include="DialogueStepType.vb" />
+    <Compile Include="ITranslationResolver.vb" />
+    <Compile Include="TaskTypes.vb" />
+    <!-- Interfaces -->
+    <Compile Include="ITaskContext.vb" />
+    <Compile Include="ITask.vb" />
+    <Compile Include="IParsableTask.vb" />
+    <!-- Task Base and Implementations (shared between Compiler and Engine) -->
+    <Compile Include="TaskBase.vb" />
+    <Compile Include="MessageTask.vb" />
+    <Compile Include="CloseSessionTask.vb" />
+    <Compile Include="TaskUtterance.vb" />
+    <Compile Include="TransferTask.vb" />
+    <!-- Runtime Contract Types -->
+    <Compile Include="DialogueStep.vb" />
+    <Compile Include="Escalation.vb" />
+    <Compile Include="ValidationCondition.vb" />
+    <Compile Include="CompiledNlpContract.vb" />
+    <!-- NLP Contract Types (shared between IDE and Runtime) -->
+    <Compile Include="NLPEngine.vb" />
+    <Compile Include="SubDataMappingInfo.vb" />
+    <!-- Variable Context and Utilities -->
+    <Compile Include="IVariableContext.vb" />
+    <Compile Include="GlobalVariableContext.vb" />
+    <Compile Include="PlaceholderUtils.vb" />
+    <!-- Turn State Types (moved from Engine to Common for shared access) -->
+    <Compile Include="Types.vb" />
+  </ItemGroup>
+
+</Project>

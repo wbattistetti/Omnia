@@ -3,6 +3,7 @@ Option Explicit On
 Imports System.Linq
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
+Imports Compiler.DTO.IDE
 
 ''' <summary>
 ''' Compiler per task di tipo UtteranceInterpretation
@@ -23,29 +24,39 @@ Imports Newtonsoft.Json.Linq
 Public Class UtteranceTaskCompiler
     Inherits TaskCompilerBase
 
-    Public Overrides Function Compile(task As Task, taskId As String, allTemplates As List(Of Task)) As CompiledTask
+    Public Overrides Function Compile(task As TaskDefinition, taskId As String, allTemplates As List(Of TaskDefinition)) As CompiledTask
+        ' ✅ Cast a UtteranceTaskDefinition per accedere ai campi specifici
+        Dim utteranceTask = TryCast(task, UtteranceTaskDefinition)
+        If utteranceTask Is Nothing Then
+            Throw New InvalidOperationException($"Task '{taskId}' must be of type UtteranceTaskDefinition for UtteranceInterpretation tasks. Found type: {task.GetType().Name}")
+        End If
+
         Dim compiledTask As New CompiledUtteranceTask()
 
         ' ✅ NUOVO MODELLO: Costruisci TaskTreeExpanded dal template usando task.templateId e subTasksIds
         ' LOGICA:
         ' 1. Se task.templateId esiste → carica template e costruisci struttura da subTasksIds
         ' 2. Applica task.steps come override
-        Dim taskTreeExpanded As Compiler.TaskTreeExpanded = Nothing
-        Dim template As Compiler.Task = Nothing
+        Dim taskTreeExpanded As TaskTreeExpanded = Nothing
+        Dim template As UtteranceTaskDefinition = Nothing
 
-        If Not String.IsNullOrEmpty(task.TemplateId) Then
-            Dim matchingTemplates = allTemplates.Where(Function(t As Compiler.Task) t.Id = task.TemplateId).ToList()
+        If Not String.IsNullOrEmpty(utteranceTask.TemplateId) Then
+            Dim matchingTemplates = allTemplates.Where(Function(t As TaskDefinition) t.Id = utteranceTask.TemplateId).ToList()
             If matchingTemplates.Count = 0 Then
-                Throw New InvalidOperationException($"Template with ID '{task.TemplateId}' not found in allTemplates for task '{taskId}'. Every task must reference a valid template.")
+                Throw New InvalidOperationException($"Template with ID '{utteranceTask.TemplateId}' not found in allTemplates for task '{taskId}'. Every task must reference a valid template.")
             ElseIf matchingTemplates.Count > 1 Then
-                Throw New InvalidOperationException($"Template with ID '{task.TemplateId}' appears {matchingTemplates.Count} times in allTemplates. Each template ID must be unique.")
+                Throw New InvalidOperationException($"Template with ID '{utteranceTask.TemplateId}' appears {matchingTemplates.Count} times in allTemplates. Each template ID must be unique.")
             End If
-            template = matchingTemplates.Single()
+            Dim templateBase = matchingTemplates.Single()
+            template = TryCast(templateBase, UtteranceTaskDefinition)
+            If template Is Nothing Then
+                Throw New InvalidOperationException($"Template '{templateBase.Id}' must be of type UtteranceTaskDefinition. Found type: {templateBase.GetType().Name}")
+            End If
             Try
-                taskTreeExpanded = BuildTaskTreeExpanded(template, task, allTemplates)
+                taskTreeExpanded = BuildTaskTreeExpanded(template, utteranceTask, allTemplates)
             Catch ex As Exception
-                Console.WriteLine($"[COMPILER] ERROR: Failed to build TaskTreeExpanded from template {task.TemplateId}: {ex.Message}")
-                Throw New InvalidOperationException($"Failed to build TaskTreeExpanded from template {task.TemplateId}: {ex.Message}", ex)
+                Console.WriteLine($"[COMPILER] ERROR: Failed to build TaskTreeExpanded from template {utteranceTask.TemplateId}: {ex.Message}")
+                Throw New InvalidOperationException($"Failed to build TaskTreeExpanded from template {utteranceTask.TemplateId}: {ex.Message}", ex)
             End Try
         Else
             Console.WriteLine($"[COMPILER] ERROR: Task {taskId} has no templateId")
@@ -85,17 +96,17 @@ Public Class UtteranceTaskCompiler
     ''' Supporta profondità arbitraria (ricorsione completa)
     ''' </summary>
     Private Function ExpandDataTreeRecursively(
-        nodes As List(Of Compiler.TaskNode),
-        allTemplates As List(Of Compiler.Task),
+        nodes As List(Of TaskNode),
+        allTemplates As List(Of TaskDefinition),
         visitedTemplates As HashSet(Of String)
-    ) As List(Of Compiler.TaskNode)
+    ) As List(Of TaskNode)
         If nodes Is Nothing OrElse nodes.Count = 0 Then
             Return nodes
         End If
 
-        Dim expandedNodes As New List(Of Compiler.TaskNode)()
+        Dim expandedNodes As New List(Of TaskNode)()
 
-        For Each node As Compiler.TaskNode In nodes
+        For Each node As TaskNode In nodes
             ' ✅ Se il nodo ha templateId, dereferenzia il template
             If Not String.IsNullOrEmpty(node.TemplateId) Then
                 If visitedTemplates.Contains(node.TemplateId) Then
@@ -106,13 +117,17 @@ Public Class UtteranceTaskCompiler
                 visitedTemplates.Add(node.TemplateId)
 
                 ' ✅ NUOVO MODELLO: Cerca il template referenziato e usa subTasksIds
-                Dim matchingTemplates = allTemplates.Where(Function(t As Compiler.Task) t.Id = node.TemplateId).ToList()
+                Dim matchingTemplates = allTemplates.Where(Function(t As TaskDefinition) t.Id = node.TemplateId).ToList()
                 If matchingTemplates.Count = 0 Then
                     Throw New InvalidOperationException($"Template with ID '{node.TemplateId}' not found in allTemplates for node '{node.Id}'. Every node must reference a valid template.")
                 ElseIf matchingTemplates.Count > 1 Then
                     Throw New InvalidOperationException($"Template with ID '{node.TemplateId}' appears {matchingTemplates.Count} times in allTemplates. Each template ID must be unique.")
                 End If
-                Dim referencedTemplate = matchingTemplates.Single()
+                Dim referencedTemplateBase = matchingTemplates.Single()
+                Dim referencedTemplate = TryCast(referencedTemplateBase, UtteranceTaskDefinition)
+                If referencedTemplate Is Nothing Then
+                    Throw New InvalidOperationException($"Template '{referencedTemplateBase.Id}' must be of type UtteranceTaskDefinition. Found type: {referencedTemplateBase.GetType().Name}")
+                End If
 
                 If referencedTemplate.SubTasksIds IsNot Nothing AndAlso referencedTemplate.SubTasksIds.Count > 0 Then
                     If node.SubTasks Is Nothing OrElse node.SubTasks.Count = 0 Then
@@ -141,16 +156,16 @@ Public Class UtteranceTaskCompiler
     ''' <summary>
     ''' Clona un TaskNode (copia superficiale)
     ''' </summary>
-    Private Function CloneTaskNode(source As Compiler.TaskNode) As Compiler.TaskNode
-        Dim cloned As New Compiler.TaskNode() With {
+    Private Function CloneTaskNode(source As TaskNode) As TaskNode
+        Dim cloned As New TaskNode() With {
             .Id = source.Id,
             .Label = source.Label,
             .Type = source.Type,
             .Required = source.Required,
             .Condition = source.Condition,
             .TemplateId = source.TemplateId,
-            .Steps = If(source.Steps IsNot Nothing, New List(Of Compiler.DialogueStep)(source.Steps), New List(Of Compiler.DialogueStep)()),
-            .SubTasks = If(source.SubTasks IsNot Nothing, New List(Of Compiler.TaskNode)(source.SubTasks), New List(Of Compiler.TaskNode)()),
+            .Steps = If(source.Steps IsNot Nothing, New List(Of DialogueStep)(source.Steps), New List(Of DialogueStep)()),
+            .SubTasks = If(source.SubTasks IsNot Nothing, New List(Of TaskNode)(source.SubTasks), New List(Of TaskNode)()),
             .Synonyms = If(source.Synonyms IsNot Nothing, New List(Of String)(source.Synonyms), New List(Of String)()),
             .Constraints = If(source.Constraints IsNot Nothing, New List(Of Object)(source.Constraints), New List(Of Object)())
         }
@@ -162,9 +177,9 @@ Public Class UtteranceTaskCompiler
     ''' ✅ NUOVO MODELLO: Usa subTasksIds invece di Data
     ''' </summary>
     Private Function BuildTaskTreeExpanded(
-        template As Task,
-        instance As Task,
-        allTemplates As List(Of Task)
+        template As UtteranceTaskDefinition,
+        instance As UtteranceTaskDefinition,
+        allTemplates As List(Of TaskDefinition)
     ) As TaskTreeExpanded
         Dim taskTreeExpanded As New TaskTreeExpanded() With {
             .TaskInstanceId = instance.Id, ' ✅ Usa TaskInstanceId invece di Id
@@ -188,10 +203,10 @@ Public Class UtteranceTaskCompiler
             Console.WriteLine($"[BuildTaskTreeExpanded] Using dataContract from template {template.Id}, type: {template.DataContract.GetType().Name}")
 
             ' ✅ FIX: Crea nodo radice con sub-nodi come SubTasks
-            Dim rootNode As New Compiler.TaskNode() With {
+            Dim rootNode As New TaskNode() With {
                 .Id = template.Id,
                 .TemplateId = template.Id,
-                .Steps = New List(Of Compiler.DialogueStep)(),
+                .Steps = New List(Of DialogueStep)(),
                 .SubTasks = subNodes,  ' ✅ Sub-nodi dentro SubTasks
                 .Constraints = If(template.Constraints IsNot Nothing AndAlso template.Constraints.Count > 0,
                                  template.Constraints,
@@ -226,7 +241,7 @@ Public Class UtteranceTaskCompiler
             End If
 
             ' ✅ TaskTreeExpanded.Nodes contiene il nodo radice
-            taskTreeExpanded.Nodes = New List(Of Compiler.TaskNode) From {rootNode}
+            taskTreeExpanded.Nodes = New List(Of TaskNode) From {rootNode}
         Else
             ' ✅ Template atomico → crea nodo root con steps dall'istanza
             ' Un template atomico è un albero con un solo nodo root, non un albero vuoto
@@ -241,11 +256,11 @@ Public Class UtteranceTaskCompiler
             End If
             Console.WriteLine($"[BuildTaskTreeExpanded] Using dataContract from template {template.Id}, type: {template.DataContract.GetType().Name}")
 
-            Dim rootNode As New Compiler.TaskNode() With {
+            Dim rootNode As New TaskNode() With {
                 .Id = template.Id,
                 .TemplateId = template.Id,
-                .Steps = New List(Of Compiler.DialogueStep)(),
-                .SubTasks = New List(Of Compiler.TaskNode)(), ' ✅ Vuoto per template atomico
+                .Steps = New List(Of DialogueStep)(),
+                .SubTasks = New List(Of TaskNode)(), ' ✅ Vuoto per template atomico
                 .Constraints = If(template.Constraints IsNot Nothing AndAlso template.Constraints.Count > 0,
                                  template.Constraints,
                                  New List(Of Object)()), ' ✅ Solo Constraints, non DataContracts
@@ -272,7 +287,7 @@ Public Class UtteranceTaskCompiler
                 Console.WriteLine($"[BuildTaskTreeExpanded] ⚠️ WARNING: instance.Steps is Nothing or empty (atomic template)!")
             End If
 
-            taskTreeExpanded.Nodes = New List(Of Compiler.TaskNode) From {rootNode}
+            taskTreeExpanded.Nodes = New List(Of TaskNode) From {rootNode}
         End If
 
         Return taskTreeExpanded
@@ -284,10 +299,10 @@ Public Class UtteranceTaskCompiler
     ''' </summary>
     Private Function BuildTaskTreeFromSubTasksIds(
         subTasksIds As List(Of String),
-        allTemplates As List(Of Compiler.Task),
+        allTemplates As List(Of TaskDefinition),
         visitedTemplates As HashSet(Of String)
-    ) As List(Of Compiler.TaskNode)
-        Dim nodes As New List(Of Compiler.TaskNode)()
+    ) As List(Of TaskNode)
+        Dim nodes As New List(Of TaskNode)()
 
         For Each subTaskId In subTasksIds
             If visitedTemplates.Contains(subTaskId) Then
@@ -297,13 +312,17 @@ Public Class UtteranceTaskCompiler
             visitedTemplates.Add(subTaskId)
 
             ' Cerca il template referenziato
-            Dim matchingTemplates = allTemplates.Where(Function(t As Compiler.Task) t.Id = subTaskId).ToList()
+            Dim matchingTemplates = allTemplates.Where(Function(t As TaskDefinition) t.Id = subTaskId).ToList()
             If matchingTemplates.Count = 0 Then
                 Throw New InvalidOperationException($"SubTemplate with ID '{subTaskId}' not found in allTemplates. Every subtask must reference a valid template.")
             ElseIf matchingTemplates.Count > 1 Then
                 Throw New InvalidOperationException($"SubTemplate with ID '{subTaskId}' appears {matchingTemplates.Count} times in allTemplates. Each template ID must be unique.")
             End If
-            Dim subTemplate = matchingTemplates.Single()
+            Dim subTemplateBase = matchingTemplates.Single()
+            Dim subTemplate = TryCast(subTemplateBase, UtteranceTaskDefinition)
+            If subTemplate Is Nothing Then
+                Throw New InvalidOperationException($"Template '{subTemplateBase.Id}' must be of type UtteranceTaskDefinition. Found type: {subTemplateBase.GetType().Name}")
+            End If
 
             ' ✅ Crea MainDataNode dal template
             ' NOTA: Steps vengono SOLO dall'istanza, non dal template
@@ -328,17 +347,12 @@ Public Class UtteranceTaskCompiler
                     Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   DataContract JSON (first 800 chars): {If(dcJson.Length > 800, dcJson.Substring(0, 800) & "...", dcJson)}")
 
                     ' Verifica se parsers è presente
-                    If TypeOf subTemplate.DataContract Is JObject Then
-                        Dim dcObj = CType(subTemplate.DataContract, JObject)
-                        If dcObj("parsers") IsNot Nothing Then
-                            Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   ✅ parsers found: type={dcObj("parsers").Type}")
-                            If dcObj("parsers").Type = JTokenType.Array Then
-                                Dim parsersArray = CType(dcObj("parsers"), JArray)
-                                Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   ✅ parsers array count: {parsersArray.Count}")
-                            End If
+                    ' DataContract è NLPContract (tipizzato), non JObject
+                    If subTemplate.DataContract IsNot Nothing Then
+                        If subTemplate.DataContract.Parsers IsNot Nothing Then
+                            Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   ✅ parsers found: count={subTemplate.DataContract.Parsers.Count}")
                         Else
-                            Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   ⚠️ contracts NOT found in DataContract")
-                            Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   DataContract keys: {String.Join(", ", dcObj.Properties().Select(Function(p) p.Name))}")
+                            Console.WriteLine($"[BuildTaskTreeFromSubTasksIds]   ⚠️ parsers NOT found in DataContract")
                         End If
                     End If
                 Catch ex As Exception
@@ -360,11 +374,11 @@ Public Class UtteranceTaskCompiler
             ' NOTA: Steps vengono SOLO dall'istanza, non dal template
             ' Template fornisce: struttura (subTasksIds), constraints, condition, metadata
             ' Label, Type, Required, Synonyms non vengono impostati (non servono nel runtime)
-            Dim node As New Compiler.TaskNode() With {
+            Dim node As New TaskNode() With {
                 .Id = subTemplate.Id,
                 .TemplateId = subTemplate.Id,
-                .Steps = New List(Of Compiler.DialogueStep)(),
-                .SubTasks = New List(Of Compiler.TaskNode)(),
+                .Steps = New List(Of DialogueStep)(),
+                .SubTasks = New List(Of TaskNode)(),
                 .Constraints = templateConstraints, ' ✅ Solo Constraints
                 .DataContract = subTemplate.DataContract, ' ✅ Usa DataContract (singolare) direttamente
                 .Condition = subTemplate.Condition
@@ -390,7 +404,7 @@ Public Class UtteranceTaskCompiler
     ''' DialogueStepListConverter gestisce automaticamente la conversione da oggetto a lista
     ''' </summary>
     Private Sub ApplyStepsOverrides(
-        nodes As List(Of Compiler.TaskNode),
+        nodes As List(Of TaskNode),
         stepsOverrides As Dictionary(Of String, Object)
     )
         Console.WriteLine($"[ApplyStepsOverrides] 🔍 Processing {nodes.Count} nodes...")
@@ -419,14 +433,14 @@ Public Class UtteranceTaskCompiler
 
                             Dim settings As New JsonSerializerSettings()
                             settings.Converters.Add(New DialogueStepListConverter())
-                            Dim overrideSteps = JsonConvert.DeserializeObject(Of List(Of Compiler.DialogueStep))(overrideJson, settings)
+                            Dim overrideSteps = JsonConvert.DeserializeObject(Of List(Of DialogueStep))(overrideJson, settings)
 
                             If overrideSteps IsNot Nothing AndAlso overrideSteps.Count > 0 Then
                                 Console.WriteLine($"   ✅ Deserialized {overrideSteps.Count} steps")
 
                                 ' ✅ Validazione: verifica che non ci siano step duplicati con lo stesso Type
                                 Dim seenTypes As New HashSet(Of String)()
-                                For Each stepItem As Compiler.DialogueStep In overrideSteps
+                                For Each stepItem As DialogueStep In overrideSteps
                                     If stepItem IsNot Nothing AndAlso Not String.IsNullOrEmpty(stepItem.Type) Then
                                         If seenTypes.Contains(stepItem.Type) Then
                                             Console.WriteLine($"═══════════════════════════════════════════════════════════════")
@@ -482,7 +496,7 @@ Public Class UtteranceTaskCompiler
     ''' Applica steps override a un singolo nodo
     ''' </summary>
     Private Sub ApplyStepsToNode(
-        node As Compiler.TaskNode,
+        node As TaskNode,
         stepsOverride As Object
     )
         If node Is Nothing OrElse stepsOverride Is Nothing Then
@@ -493,12 +507,12 @@ Public Class UtteranceTaskCompiler
             Dim overrideJson = JsonConvert.SerializeObject(stepsOverride)
             Dim settings As New JsonSerializerSettings()
             settings.Converters.Add(New DialogueStepListConverter())
-            Dim overrideSteps = JsonConvert.DeserializeObject(Of List(Of Compiler.DialogueStep))(overrideJson, settings)
+            Dim overrideSteps = JsonConvert.DeserializeObject(Of List(Of DialogueStep))(overrideJson, settings)
 
             If overrideSteps IsNot Nothing AndAlso overrideSteps.Count > 0 Then
                 ' ✅ Validazione: verifica che non ci siano step duplicati con lo stesso Type
                 Dim seenTypes As New HashSet(Of String)()
-                For Each stepItem As Compiler.DialogueStep In overrideSteps
+                For Each stepItem As DialogueStep In overrideSteps
                     If stepItem IsNot Nothing AndAlso Not String.IsNullOrEmpty(stepItem.Type) Then
                         If seenTypes.Contains(stepItem.Type) Then
                             Console.WriteLine($"═══════════════════════════════════════════════════════════════")
