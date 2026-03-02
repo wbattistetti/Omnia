@@ -1,23 +1,27 @@
 Option Strict On
 Option Explicit On
-Imports Compiler
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Linq
+Imports Compiler.DTO.IDE
 
 ''' <summary>
-''' Converter utilities for TaskTree transformations
+''' ✅ Helper: Converte TaskTree (JSON) in TaskTreeExpanded (AST montato) per il compilatore
+''' Spostato da ApiServer/Converters a Compiler/Helpers per coerenza architetturale
 ''' </summary>
-Namespace Converters
+Namespace Helpers
 
     ''' <summary>
-    ''' ✅ Helper: Converte TaskTree (JSON) in TaskTreeExpanded (AST montato) per il compilatore
+    ''' Converter utilities for TaskTree transformations
     ''' </summary>
-    ''' <param name="taskTreeJson">Il TaskTree come JObject dal frontend</param>
-    ''' <param name="taskId">L'ID del task (per identificazione)</param>
-    ''' <returns>TaskTreeExpanded pronto per la compilazione</returns>
     Public Module TaskTreeConverter
 
-        Public Function ConvertTaskTreeToTaskTreeExpanded(taskTreeJson As JObject, taskId As String) As Compiler.TaskTreeExpanded
+        ''' <summary>
+        ''' ✅ Helper: Converte TaskTree (JSON) in TaskTreeExpanded (AST montato) per il compilatore
+        ''' </summary>
+        ''' <param name="taskTreeJson">Il TaskTree come JObject dal frontend</param>
+        ''' <param name="taskId">L'ID del task (per identificazione)</param>
+        ''' <returns>TaskTreeExpanded pronto per la compilazione</returns>
+        Public Function ConvertTaskTreeToTaskTreeExpanded(taskTreeJson As JObject, taskId As String) As TaskTreeExpanded
             Try
                 Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
                 Console.WriteLine($"🔍 [ConvertTaskTreeToTaskTreeExpanded] START - Converting TaskTree to TaskTreeExpanded (taskId={taskId})")
@@ -102,9 +106,9 @@ Namespace Converters
                     ' Continua con JSON originale
                 End Try
 
-                Dim taskTreeExpanded As Compiler.TaskTreeExpanded = Nothing
+                Dim taskTreeExpanded As TaskTreeExpanded = Nothing
                 Try
-                    taskTreeExpanded = JsonConvert.DeserializeObject(Of Compiler.TaskTreeExpanded)(jsonWithoutSteps, settings)
+                    taskTreeExpanded = JsonConvert.DeserializeObject(Of TaskTreeExpanded)(jsonWithoutSteps, settings)
                 Catch deserializeEx As JsonSerializationException
                     Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
                     Console.WriteLine($"❌ [ConvertTaskTreeToTaskTreeExpanded] JsonSerializationException during TaskTreeExpanded deserialization:")
@@ -226,9 +230,9 @@ Namespace Converters
         ''' ✅ Helper: Applica steps override ai TaskNode (ricorsivo)
         ''' Usa la stessa logica di UtteranceTaskCompiler.ApplyStepsOverrides
         ''' </summary>
-        Public Sub ApplyStepsToTaskNodes(nodes As List(Of Compiler.TaskNode), stepsDict As Dictionary(Of String, Object))
+        Public Sub ApplyStepsToTaskNodes(nodes As List(Of TaskNode), stepsDict As Dictionary(Of String, Object))
             Console.WriteLine($"🔍 [ApplyStepsToTaskNodes] START - Processing {nodes.Count} nodes, {stepsDict.Count} step overrides available")
-            For Each node As Compiler.TaskNode In nodes
+            For Each node As TaskNode In nodes
                 Console.WriteLine($"🔍 [ApplyStepsToTaskNodes] Processing node: Id={node.Id}, TemplateId={node.TemplateId}, CurrentSteps.Count={If(node.Steps IsNot Nothing, node.Steps.Count, 0)}")
 
                 ' ❌ ERRORE BLOCCANTE: node deve avere templateId, nessun fallback
@@ -285,7 +289,7 @@ Namespace Converters
                         Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
 
                         If overrideValue IsNot Nothing Then
-                            Dim overrideSteps As List(Of Compiler.DialogueStep) = Nothing
+                            Dim overrideSteps As List(Of DialogueStep) = Nothing
 
                             ' ✅ Verifica se è già JObject (evita doppia serializzazione)
                             Dim asJObject = TryCast(overrideValue, JObject)
@@ -293,8 +297,8 @@ Namespace Converters
                                 ' ✅ Usa direttamente JObject senza serializzare
                                 Console.WriteLine($"🔍 [ApplyStepsToTaskNodes] Using JObject directly (avoiding double serialization)")
                                 Dim settings As New JsonSerializerSettings()
-                                settings.Converters.Add(New Compiler.DialogueStepListConverter())
-                                overrideSteps = asJObject.ToObject(Of List(Of Compiler.DialogueStep))(JsonSerializer.Create(settings))
+                                settings.Converters.Add(New DialogueStepListConverter())
+                                overrideSteps = asJObject.ToObject(Of List(Of DialogueStep))(JsonSerializer.Create(settings))
                                 Console.WriteLine($"✅ [ApplyStepsToTaskNodes] Deserialized {If(overrideSteps IsNot Nothing, overrideSteps.Count, 0)} steps from JObject")
                             Else
                                 ' ✅ Fallback: serializza e deserializza
@@ -325,14 +329,14 @@ Namespace Converters
                                 End Try
 
                                 Dim settings As New JsonSerializerSettings()
-                                settings.Converters.Add(New Compiler.DialogueStepListConverter())
+                                settings.Converters.Add(New DialogueStepListConverter())
 
                                 ' ✅ LOGGING DETTAGLIATO: Prima della deserializzazione
                                 Console.WriteLine($"🔍 [ApplyStepsToTaskNodes] About to deserialize with DialogueStepListConverter...")
                                 Console.WriteLine($"   Target type: List(Of DialogueStep)")
 
                                 Try
-                                    overrideSteps = JsonConvert.DeserializeObject(Of List(Of Compiler.DialogueStep))(overrideJson, settings)
+                                    overrideSteps = JsonConvert.DeserializeObject(Of List(Of DialogueStep))(overrideJson, settings)
                                 Catch deserializeEx As JsonSerializationException
                                     Console.WriteLine($"═══════════════════════════════════════════════════════════════════════════")
                                     Console.WriteLine($"❌ [ApplyStepsToTaskNodes] JsonSerializationException DETAILS:")
@@ -359,7 +363,7 @@ Namespace Converters
                             If overrideSteps IsNot Nothing AndAlso overrideSteps.Count > 0 Then
                                 ' ✅ Validazione: verifica che non ci siano step duplicati con lo stesso Type
                                 Dim seenTypes As New HashSet(Of String)()
-                                For Each stepItem As Compiler.DialogueStep In overrideSteps
+                                For Each stepItem As DialogueStep In overrideSteps
                                     If stepItem IsNot Nothing AndAlso Not String.IsNullOrEmpty(stepItem.Type) Then
                                         If seenTypes.Contains(stepItem.Type) Then
                                             Console.WriteLine($"═══════════════════════════════════════════════════════════════")
@@ -414,7 +418,7 @@ Namespace Converters
         ''' <summary>
         ''' Estrae templateId dal primo nodo di TaskTreeExpanded
         ''' </summary>
-        Public Function ExtractTemplateIdFromTaskTreeExpanded(taskTreeExpanded As Compiler.TaskTreeExpanded, taskId As String) As String
+        Public Function ExtractTemplateIdFromTaskTreeExpanded(taskTreeExpanded As TaskTreeExpanded, taskId As String) As String
             If taskTreeExpanded Is Nothing OrElse taskTreeExpanded.Nodes Is Nothing OrElse taskTreeExpanded.Nodes.Count = 0 Then
                 Console.WriteLine($"⚠️ [ExtractTemplateIdFromTaskTreeExpanded] No nodes found, using taskId as templateId: {taskId}")
                 Return taskId
@@ -435,7 +439,7 @@ Namespace Converters
         ''' Formato: { "templateId": { "start": {...}, "noMatch": {...} } }
         ''' UtteranceTaskCompiler serializza e deserializza usando DialogueStepListConverter
         ''' </summary>
-        Public Function BuildStepsOverrideFromTaskTreeExpanded(taskTreeExpanded As Compiler.TaskTreeExpanded) As Dictionary(Of String, Object)
+        Public Function BuildStepsOverrideFromTaskTreeExpanded(taskTreeExpanded As TaskTreeExpanded) As Dictionary(Of String, Object)
             Dim stepsOverride As New Dictionary(Of String, Object)()
 
             If taskTreeExpanded Is Nothing OrElse taskTreeExpanded.Nodes Is Nothing Then
@@ -443,7 +447,7 @@ Namespace Converters
             End If
 
             ' Processa tutti i nodi root (ricorsivo)
-            For Each node As Compiler.TaskNode In taskTreeExpanded.Nodes
+            For Each node As TaskNode In taskTreeExpanded.Nodes
                 ProcessNodeForStepsOverride(node, stepsOverride)
             Next
 
@@ -453,7 +457,7 @@ Namespace Converters
         ''' <summary>
         ''' Helper ricorsivo per processare nodi e costruire steps override
         ''' </summary>
-        Private Sub ProcessNodeForStepsOverride(node As Compiler.TaskNode, ByRef stepsOverride As Dictionary(Of String, Object))
+        Private Sub ProcessNodeForStepsOverride(node As TaskNode, ByRef stepsOverride As Dictionary(Of String, Object))
             If node Is Nothing Then
                 Return
             End If
@@ -462,7 +466,7 @@ Namespace Converters
             If Not String.IsNullOrEmpty(node.TemplateId) AndAlso node.Steps IsNot Nothing AndAlso node.Steps.Count > 0 Then
                 ' Costruisci Dictionary con chiavi tipo step (start, noMatch, ecc.)
                 Dim stepsDict As New Dictionary(Of String, Object)()
-                For Each dlgStep As Compiler.DialogueStep In node.Steps
+                For Each dlgStep As DialogueStep In node.Steps
                     If dlgStep IsNot Nothing Then
                         Dim stepType As String
                         Dim stepTypeValue As String = Nothing
@@ -484,7 +488,7 @@ Namespace Converters
 
             ' Processa ricorsivamente subTasks
             If node.SubTasks IsNot Nothing Then
-                For Each subTask As Compiler.TaskNode In node.SubTasks
+                For Each subTask As TaskNode In node.SubTasks
                     ProcessNodeForStepsOverride(subTask, stepsOverride)
                 Next
             End If

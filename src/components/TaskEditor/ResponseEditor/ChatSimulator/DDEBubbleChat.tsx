@@ -6,6 +6,7 @@ import BotMessage from '@responseEditor/ChatSimulator/BotMessage';
 import { getStepColor } from '@responseEditor/ChatSimulator/chatSimulatorUtils';
 import { useFontContext } from '@context/FontContext';
 import { useMessageEditing } from '@responseEditor/ChatSimulator/hooks/useMessageEditing';
+import { useFlowModeChat } from '@responseEditor/ChatSimulator/hooks/useFlowModeChat';
 import DialogueTaskService from '@services/DialogueTaskService';
 import { v4 as uuidv4 } from 'uuid';
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
@@ -217,6 +218,23 @@ export default function DDEBubbleChat({
   const sessionStartingRef = React.useRef<boolean>(false);
   const lastSessionKeyRef = React.useRef<string | null>(null);
 
+  // ✅ ARCHITECTURAL: Detect flow mode explicitly
+  const isFlowMode = !task && !taskTree && mode === 'interactive';
+
+  // ✅ ARCHITECTURAL: Use dedicated hook for flow mode (encapsulates window globals)
+  const flowModeChat = useFlowModeChat(translations, (message) => {
+    // Add flow mode messages to component messages
+    setMessages(prev => {
+      // Avoid duplicates
+      if (prev.some(m => m.id === message.id)) return prev;
+      return [...prev, message];
+    });
+  });
+
+  // ✅ ARCHITECTURAL: Merge flow mode state with component state
+  const effectiveIsWaitingForInput = isFlowMode ? flowModeChat.isWaitingForInput : isWaitingForInput;
+  const effectiveError = isFlowMode ? flowModeChat.error : backendError;
+
   // Message ID generator
   const messageIdCounter = React.useRef(0);
   const generateMessageId = (prefix: string = 'msg') => {
@@ -249,12 +267,8 @@ export default function DDEBubbleChat({
   // ✅ NEW: In preview mode, use previewMessages instead of SSE
   const displayMessages = mode === 'preview' && previewMessages ? previewMessages : messages;
 
-  // Connect to backend via SSE
-  // ❌ CRITICAL: NO frontend dialogue logic - ALL messages come from backend via SSE
-  // If backend is not reachable, NO messages should be shown, NO dialogue should start
-  // ✅ NEW: Skip SSE in preview mode
+  // ✅ ARCHITECTURAL: Separate useEffect for preview mode
   React.useEffect(() => {
-    // ✅ NEW: Preview mode - no SSE, use previewMessages
     if (mode === 'preview') {
       // Clear any existing SSE state
       if (eventSourceRef.current) {
@@ -265,10 +279,25 @@ export default function DDEBubbleChat({
       setIsWaitingForInput(false);
       sessionStartingRef.current = false;
       lastSessionKeyRef.current = null;
+    }
+  }, [mode]);
+
+  // ✅ ARCHITECTURAL: Separate useEffect for flow mode (handled by useFlowModeChat hook)
+  // Flow mode is handled entirely by useFlowModeChat hook, no SSE needed here
+
+  // ✅ ARCHITECTURAL: Separate useEffect for task mode (SSE)
+  React.useEffect(() => {
+    // Skip if preview mode
+    if (mode === 'preview') {
       return;
     }
 
-    // ✅ EXISTING: Interactive mode - normal behavior (unchanged)
+    // Skip if flow mode (handled by useFlowModeChat hook)
+    if (isFlowMode) {
+      return;
+    }
+
+    // ✅ EXISTING: Interactive mode with task - normal behavior (unchanged)
     if (!task || !projectId || !task.id) {
       // Clear messages when task is not available - NO frontend logic
       setMessages([]);
@@ -1171,7 +1200,7 @@ export default function DDEBubbleChat({
         }).catch(() => { });
       }
     };
-  }, [task?.id, projectId, mode, resetCounter, taskTree, translations]);
+  }, [task?.id, projectId, mode, resetCounter, taskTree, translations, isFlowMode]);
 
   // Clear input when sent text appears as a user message
   React.useEffect(() => {
@@ -1199,10 +1228,30 @@ export default function DDEBubbleChat({
     return () => cancelAnimationFrame(rafId);
   }, [messages.length, ensureInlineFocus]);
 
-  // Handle sending user input to backend or TypeScript engine
+  // ✅ ARCHITECTURAL: Handle user input - branch by mode
   const handleSend = async (text: string) => {
     const trimmed = String(text || '').trim();
 
+    if (!trimmed) {
+      console.warn('[DDEBubbleChat] ⚠️ Empty input, ignoring');
+      return;
+    }
+
+    // ✅ Flow mode: use dedicated hook handler
+    if (isFlowMode) {
+      // Add user message immediately
+      setMessages((prev) => [...prev, {
+        id: generateMessageId('user'),
+        type: 'user',
+        text: trimmed,
+        matchStatus: 'match'
+      }]);
+      sentTextRef.current = trimmed;
+      await flowModeChat.handleUserInput(trimmed);
+      return;
+    }
+
+    // ✅ Task mode: existing SSE logic
     // ✅ LOG: Verifica sessionId prima di inviare
     console.log('[DDEBubbleChat] 🔍 handleSend check:', {
       trimmed,
@@ -1211,11 +1260,6 @@ export default function DDEBubbleChat({
       sessionIdType: typeof sessionId,
       isWaitingForInput
     });
-
-    if (!trimmed) {
-      console.warn('[DDEBubbleChat] ⚠️ Empty input, ignoring');
-      return;
-    }
 
     // Add user message immediately
     setMessages((prev) => [...prev, {
@@ -1283,6 +1327,15 @@ export default function DDEBubbleChat({
 
   // Reset function - restart session with same task
   const handleReset = () => {
+    // ✅ Flow mode: clear messages from hook
+    if (isFlowMode) {
+      flowModeChat.clearMessages();
+      setMessages([]);
+      messageIdCounter.current = 0;
+      return;
+    }
+
+    // ✅ Task mode: existing SSE reset logic
     // Close existing SSE connection
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
@@ -1325,10 +1378,10 @@ export default function DDEBubbleChat({
         >
           Reset
         </button>
-        {backendError && (
+        {effectiveError && (
           <div className="flex items-center gap-2 text-red-600 text-sm">
             <AlertTriangle size={16} />
-            <span>{backendError}</span>
+            <span>{effectiveError}</span>
           </div>
         )}
       </div>
@@ -1442,7 +1495,7 @@ export default function DDEBubbleChat({
                 void handleSend(v);
               }
             }}
-            disabled={!isWaitingForInput}
+            disabled={!effectiveIsWaitingForInput}
             autoFocus
           />
           </div>

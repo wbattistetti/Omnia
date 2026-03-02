@@ -43,6 +43,9 @@
     <Compile Include="Flow.vb" />
     <Compile Include="FlowUtils.vb" />
 
+    <!-- Helpers -->
+    <Compile Include="Helpers\TaskTreeConverter.vb" />
+
     <!-- IDE Types (Input from React/TypeScript) - Flow -->
     <Compile Include="DTO\IDE\FlowNode.vb" />
     <Compile Include="DTO\IDE\FlowEdge.vb" />

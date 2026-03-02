@@ -3,7 +3,6 @@ Option Explicit On
 Imports System.IO
 Imports System.Linq
 Imports System.Threading.Tasks
-Imports ApiServer.Converters
 Imports ApiServer.Helpers
 Imports ApiServer.Interfaces
 Imports ApiServer.Logging
