@@ -20,6 +20,7 @@ type CenterPanelProps = {
   showCorrectionMode?: boolean;
   correctionInput?: string;
   onCorrectionInputChange?: (value: string) => void;
+  onCorrectionSubmit?: () => void; // ✅ NEW: Handler per inviare correzione
   // ✅ NEW: Sotto-stati per parte variabile dinamica
   currentParserSubstep?: string | null;
   currentMessageSubstep?: string | null;
@@ -47,6 +48,7 @@ export function CenterPanel({
   showCorrectionMode = false,
   correctionInput = '',
   onCorrectionInputChange,
+  onCorrectionSubmit,
   currentParserSubstep = null,
   currentMessageSubstep = null,
   phaseCounters // ✅ DEPRECATED: Phase counters now read directly from store via PhaseCardContainer
@@ -431,6 +433,7 @@ export function CenterPanel({
               showCorrectionMode={showCorrectionMode}
               correctionInput={correctionInput}
               onCorrectionInputChange={onCorrectionInputChange}
+              onCorrectionSubmit={onCorrectionSubmit}
             />
           ))}
 

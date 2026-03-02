@@ -1391,16 +1391,22 @@ async def extract_value(body: dict = Body(...)):
 @router.post("/api/nlp/generate-structure")
 async def generate_structure(body: dict = Body(...)):
     """
-    Generate hierarchical data structure for a task.
-    Used by Phase A of the wizard.
+    Unified endpoint for generating or regenerating hierarchical data structures.
+
+    - If feedback and previousStructure are provided → regeneration mode
+    - Otherwise → generation mode
+
+    Used by both Phase A (generation) and Phase B (regeneration) of the wizard.
     """
-    from newBackend.services.ai.ai_structure_service import generate_structure_ai
+    from newBackend.services.ai.ai_structure_service import get_structure_ai
     from newBackend.services.parsing.structure_parser import parse_and_validate_structure
     from newBackend.core.core_settings import OPENAI_KEY
 
     task_label = (body or {}).get("taskLabel")
     task_description = (body or {}).get("taskDescription")
-    locale = (body or {}).get("locale", "it")  # ✅ NEW: locale parameter for language consistency
+    locale = (body or {}).get("locale", "it")
+    feedback = (body or {}).get("feedback")  # Optional: triggers regeneration if provided with previousStructure
+    previous_structure = (body or {}).get("previousStructure")  # Optional: triggers regeneration if provided with feedback
     provider = (body or {}).get("provider", "openai")
     model = (body or {}).get("model")
 
@@ -1410,37 +1416,61 @@ async def generate_structure(body: dict = Body(...)):
     if not OPENAI_KEY:
         return {"success": False, "error": "OPENAI_KEY not configured"}
 
+    # Validate regeneration mode parameters
+    is_regeneration = feedback is not None and previous_structure is not None
+    if is_regeneration:
+        if not feedback:
+            return {"success": False, "error": "feedback is required when previousStructure is provided"}
+        if not previous_structure:
+            return {"success": False, "error": "previousStructure is required when feedback is provided"}
+
     try:
         # Retry with backoff
         from newBackend.services.retry.retry_strategy import retry_sync_with_backoff
         ai_response, error = retry_sync_with_backoff(
-            generate_structure_ai,
+            get_structure_ai,
             max_retries=3,
             base_delay=1.0,
             task_label=task_label,
             task_description=task_description,
+            locale=locale,
+            feedback=feedback,
+            previous_structure=previous_structure,
             provider=provider,
-            model=model,
-            locale=locale  # ✅ NEW: Pass locale to maintain language consistency
+            model=model
         )
 
         if error:
             return {"success": False, "error": error}
 
-        # Parse and validate
+        # Parse and validate (returns 3 values: structure, errors, generalization_info)
         structure, errors, generalization_info = parse_and_validate_structure(ai_response)
 
         if errors:
             return {"success": False, "error": "; ".join(errors), "structure": []}
 
-        return {
+        # Build response based on mode
+        response = {
             "success": True,
-            "structure": structure,
-            "shouldBeGeneral": generalization_info.get("shouldBeGeneral", False),
-            "generalizedLabel": generalization_info.get("generalizedLabel"),
-            "generalizationReason": generalization_info.get("generalizationReason"),
-            "generalizedMessages": generalization_info.get("generalizedMessages")
+            "structure": structure
         }
+
+        # Add generalization info only for generation mode (not regeneration)
+        if not is_regeneration:
+            response.update({
+                "shouldBeGeneral": generalization_info.get("shouldBeGeneral", False),
+                "generalizedLabel": generalization_info.get("generalizedLabel"),
+                "generalizationReason": generalization_info.get("generalizationReason"),
+                "generalizedMessages": generalization_info.get("generalizedMessages")
+            })
+        else:
+            # For regeneration, extract changes if present
+            changes = []
+            if isinstance(ai_response, dict) and "changes" in ai_response:
+                changes = ai_response["changes"]
+            response["changes"] = changes
+
+        return response
 
     except Exception as e:
         print(f"[generate-structure] Error: {str(e)}", flush=True)
@@ -1452,77 +1482,8 @@ async def generate_structure(body: dict = Body(...)):
             "structure": []
         }
 
-@router.post("/api/nlp/regenerate-structure")
-async def regenerate_structure(body: dict = Body(...)):
-    """
-    Regenerate hierarchical data structure based on user feedback.
-    Used by Phase B of the wizard.
-    """
-    from newBackend.services.ai.ai_structure_service import regenerate_structure_ai
-    from newBackend.services.parsing.structure_parser import parse_and_validate_structure
-    from newBackend.core.core_settings import OPENAI_KEY
-
-    task_label = (body or {}).get("taskLabel")
-    feedback = (body or {}).get("feedback")
-    previous_structure = (body or {}).get("previousStructure", [])
-    provider = (body or {}).get("provider", "openai")
-    model = (body or {}).get("model")
-
-    if not task_label:
-        return {"success": False, "error": "taskLabel is required"}
-
-    if not feedback:
-        return {"success": False, "error": "feedback is required"}
-
-    if not previous_structure:
-        return {"success": False, "error": "previousStructure is required"}
-
-    if not OPENAI_KEY:
-        return {"success": False, "error": "OPENAI_KEY not configured"}
-
-    try:
-        # Retry with backoff
-        from newBackend.services.retry.retry_strategy import retry_sync_with_backoff
-        ai_response, error = retry_sync_with_backoff(
-            regenerate_structure_ai,
-            max_retries=3,
-            base_delay=1.0,
-            task_label=task_label,
-            feedback=feedback,
-            previous_structure=previous_structure,
-            provider=provider,
-            model=model
-        )
-
-        if error:
-            return {"success": False, "error": error}
-
-        # Parse and validate
-        structure, errors = parse_and_validate_structure(ai_response)
-
-        if errors:
-            return {"success": False, "error": "; ".join(errors), "structure": []}
-
-        # Extract changes if present
-        changes = []
-        if isinstance(ai_response, dict) and "changes" in ai_response:
-            changes = ai_response["changes"]
-
-        return {
-            "success": True,
-            "structure": structure,
-            "changes": changes
-        }
-
-    except Exception as e:
-        print(f"[regenerate-structure] Error: {str(e)}", flush=True)
-        import traceback
-        traceback.print_exc()
-        return {
-            "success": False,
-            "error": str(e),
-            "structure": []
-        }
+# NOTE: regenerate-structure endpoint has been unified into generate-structure
+# The unified endpoint automatically detects regeneration mode when feedback and previousStructure are provided
 
 @router.post("/api/nlp/generate-contracts")
 def generate_contracts(body: dict = Body(...)):

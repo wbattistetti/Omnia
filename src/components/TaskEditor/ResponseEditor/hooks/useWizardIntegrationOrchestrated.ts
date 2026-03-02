@@ -8,12 +8,13 @@
  * NO direct store access, NO side effects, NO legacy code.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { useWizardOrchestrator } from '../../../../../TaskBuilderAIWizard/core/WizardOrchestrator';
 import { useWizardSync } from '../../../../../TaskBuilderAIWizard/hooks/useWizardSync';
 import { useWizardStore } from '../../../../../TaskBuilderAIWizard/store/wizardStore';
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import { WizardMode } from '../../../../../TaskBuilderAIWizard/types/WizardMode';
+import type { WizardTaskTreeNode } from '../../../../../TaskBuilderAIWizard/types';
 
 const EMPTY_MODULES: any[] = [];
 
@@ -55,6 +56,150 @@ export function useWizardIntegrationOrchestrated(
 
   const hasStartedRef = useRef(false);
 
+  // ✅ Handler per inviare correzione e rigenerare struttura
+  const handleCorrectionSubmit = useCallback(async () => {
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+    console.log('🔄 [handleCorrectionSubmit] CALLED (Orchestrated)');
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+    console.log('[handleCorrectionSubmit] 📊 Initial state:', {
+      hasTaskLabel: !!taskLabel,
+      taskLabel,
+      hasCorrectionInput: !!orchestrator.correctionInput,
+      correctionInputLength: orchestrator.correctionInput?.trim().length || 0,
+      correctionInput: orchestrator.correctionInput,
+      dataSchemaLength: orchestrator.dataSchema.length
+    });
+
+    if (!taskLabel || !orchestrator.correctionInput?.trim()) {
+      console.warn('[handleCorrectionSubmit] ❌ Validation failed:', {
+        missingTaskLabel: !taskLabel,
+        missingCorrectionInput: !orchestrator.correctionInput?.trim()
+      });
+      return;
+    }
+
+    const feedback = orchestrator.correctionInput.trim();
+    const previousStructure = orchestrator.dataSchema;
+
+    if (previousStructure.length === 0) {
+      console.warn('[handleCorrectionSubmit] ❌ No previous structure to regenerate');
+      return;
+    }
+
+    console.log('[handleCorrectionSubmit] ✅ Validation passed, starting regeneration...');
+
+    try {
+      console.log('[handleCorrectionSubmit] 📝 STEP 1: Closing correction form...');
+      // ✅ STEP 1: Chiudi form (esci da DATA_STRUCTURE_CORRECTION → DATA_STRUCTURE_PROPOSED)
+      store.setWizardMode(WizardMode.DATA_STRUCTURE_PROPOSED);
+      console.log('[handleCorrectionSubmit] ✅ STEP 1: Form closed');
+
+      console.log('[handleCorrectionSubmit] 📝 STEP 2: Clearing input...');
+      // ✅ STEP 2: Pulisci input
+      store.setCorrectionInput('');
+      console.log('[handleCorrectionSubmit] ✅ STEP 2: Input cleared');
+
+      console.log('[handleCorrectionSubmit] 📝 STEP 3: Resetting structureConfirmed...');
+      // ✅ STEP 3: Reset struttura confermata (per far apparire Sì/No dopo)
+      store.setStructureConfirmed(false);
+      console.log('[handleCorrectionSubmit] ✅ STEP 3: structureConfirmed reset to false');
+
+      console.log('[handleCorrectionSubmit] 📝 STEP 4: Setting step to running...');
+      // ✅ STEP 4: Imposta step a 'running' con messaggio "sto pensando..." (come in WizardOrchestrator.start())
+      store.updatePipelineStep('structure', 'running', 'sto pensando a qual è la migliore struttura dati per questo task...');
+      console.log('[handleCorrectionSubmit] ✅ STEP 4: Step set to running');
+
+      console.log('[handleCorrectionSubmit] 📝 STEP 5: Converting structure to SchemaNode[]...');
+      // Convert WizardTaskTreeNode[] to SchemaNode[] format
+      const convertToSchemaNodes = (nodes: WizardTaskTreeNode[]): any[] => {
+        return nodes.map(node => ({
+          id: node.id,
+          label: node.label,
+          type: node.type || 'text',
+          icon: node.emoji,
+          subData: node.subNodes ? convertToSchemaNodes(node.subNodes) : [],
+          subTasks: node.subNodes ? convertToSchemaNodes(node.subNodes) : []
+        }));
+      };
+
+      const schemaNodes = convertToSchemaNodes(previousStructure);
+      console.log('[handleCorrectionSubmit] ✅ STEP 5: Structure converted', {
+        schemaNodesCount: schemaNodes.length,
+        firstNodeLabel: schemaNodes[0]?.label
+      });
+
+      console.log('[handleCorrectionSubmit] 📝 STEP 6: Importing regenerateStructure service...');
+      // Import regenerateStructure service
+      const { regenerateStructure } = await import('../../../../wizard/services/structureGenerationService');
+      const provider = (localStorage.getItem('omnia.aiProvider') as 'openai' | 'groq') || 'openai';
+      console.log('[handleCorrectionSubmit] ✅ STEP 6: Service imported', { provider });
+
+      console.log('[handleCorrectionSubmit] 📝 STEP 7: Calling regenerateStructure API...', {
+        taskLabel,
+        feedbackLength: feedback.length,
+        schemaNodesCount: schemaNodes.length,
+        provider
+      });
+      // ✅ STEP 5: Chiama API per rigenerare struttura
+      const result = await regenerateStructure(taskLabel, feedback, schemaNodes, provider);
+      console.log('[handleCorrectionSubmit] ✅ STEP 7: API call completed', {
+        success: result.success,
+        hasStructure: !!result.structure,
+        error: result.error
+      });
+
+      if (result.success && result.structure) {
+        console.log('[handleCorrectionSubmit] 📝 STEP 8: Converting result back to WizardTaskTreeNode[]...');
+        // Convert SchemaNode[] back to WizardTaskTreeNode[]
+        const convertToWizardNodes = (nodes: any[]): WizardTaskTreeNode[] => {
+          return nodes.map((node, index) => ({
+            id: node.id || `node_${Date.now()}_${index}`,
+            templateId: node.id || `template_${Date.now()}_${index}`,
+            label: node.label,
+            type: node.type,
+            emoji: node.icon,
+            subNodes: (node.subData || node.subTasks || []).length > 0
+              ? convertToWizardNodes(node.subData || node.subTasks || [])
+              : undefined
+          }));
+        };
+
+        const newDataSchema = convertToWizardNodes(result.structure);
+        console.log('[handleCorrectionSubmit] ✅ STEP 8: Structure converted back', {
+          newDataSchemaLength: newDataSchema.length,
+          firstNodeLabel: newDataSchema[0]?.label
+        });
+
+        console.log('[handleCorrectionSubmit] 📝 STEP 9: Updating dataSchema...');
+        // ✅ STEP 6: Aggiorna dataSchema (mostra nuova struttura nella sidebar)
+        store.setDataSchema(newDataSchema);
+        console.log('[handleCorrectionSubmit] ✅ STEP 9: dataSchema updated');
+
+        console.log('[handleCorrectionSubmit] 📝 STEP 10: Updating step message...');
+        // ✅ STEP 7: Aggiorna step a 'running' con messaggio "Confermami..." (come in WizardOrchestrator.start())
+        store.updatePipelineStep('structure', 'running', 'Confermami la struttura che vedi sulla sinistra...');
+        console.log('[handleCorrectionSubmit] ✅ STEP 10: Step message updated');
+        console.log('[handleCorrectionSubmit] ✅✅✅ REGENERATION COMPLETED SUCCESSFULLY ✅✅✅');
+      } else {
+        console.error('[handleCorrectionSubmit] ❌ Regeneration failed:', result.error);
+        store.updatePipelineStep('structure', 'failed', result.error || 'Errore durante la rigenerazione');
+      }
+    } catch (error) {
+      console.error('[handleCorrectionSubmit] ❌❌❌ ERROR:', error);
+      console.error('[handleCorrectionSubmit] Error details:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      store.updatePipelineStep('structure', 'failed', error instanceof Error ? error.message : 'Errore sconosciuto');
+    }
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+  }, [
+    taskLabel,
+    orchestrator.correctionInput,
+    orchestrator.dataSchema,
+    store
+  ]);
+
   // ✅ Auto-start wizard when taskLabel is available
   useEffect(() => {
     if (
@@ -95,6 +240,7 @@ export function useWizardIntegrationOrchestrated(
     handleStructureConfirm: orchestrator.confirmStructure,
     handleStructureReject: orchestrator.rejectStructure,
     runGenerationPipeline: orchestrator.start, // For compatibility
+    handleCorrectionSubmit,
 
     // Data
     messages: orchestrator.messages,

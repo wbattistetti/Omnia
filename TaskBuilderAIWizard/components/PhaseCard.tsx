@@ -14,6 +14,7 @@ type PhaseCardProps = {
   showCorrectionForm?: boolean;
   correctionInput?: string;
   onCorrectionInputChange?: (value: string) => void;
+  onCorrectionSubmit?: () => void; // ✅ NEW: Handler per inviare correzione
   dynamicMessage?: string;
 };
 
@@ -31,6 +32,7 @@ export const PhaseCard = React.memo(function PhaseCard({
   showCorrectionForm = false,
   correctionInput = '',
   onCorrectionInputChange,
+  onCorrectionSubmit,
   dynamicMessage,
 }: PhaseCardProps) {
   const isCompleted = state === 'completed';
@@ -126,9 +128,52 @@ export const PhaseCard = React.memo(function PhaseCard({
             value={correctionInput}
             onChange={(e) => onCorrectionInputChange?.(e.target.value)}
             placeholder="Inserisci le tue indicazioni per la correzione..."
-            className="w-full px-4 py-3 border border-orange-300 rounded-xl text-sm text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
+            className="w-full px-4 py-3 border border-orange-300 rounded-xl text-sm text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none mb-3"
             rows={4}
           />
+          {/* ✅ NEW: Pulsante Invia */}
+          <div className="flex justify-end">
+            <button
+              onClick={async () => {
+                console.log('═══════════════════════════════════════════════════════════════════════════');
+                console.log('🖱️ [PhaseCard] "Invia" button CLICKED');
+                console.log('[PhaseCard] Button state:', {
+                  hasOnCorrectionSubmit: !!onCorrectionSubmit,
+                  onCorrectionSubmitType: typeof onCorrectionSubmit,
+                  correctionInput: correctionInput,
+                  correctionInputTrimmed: correctionInput?.trim(),
+                  isDisabled: !correctionInput?.trim()
+                });
+                console.log('[PhaseCard] onCorrectionSubmit function:', onCorrectionSubmit);
+                console.log('═══════════════════════════════════════════════════════════════════════════');
+                if (onCorrectionSubmit) {
+                  try {
+                    console.log('[PhaseCard] ✅ Calling onCorrectionSubmit()...');
+                    const result = onCorrectionSubmit();
+                    if (result instanceof Promise) {
+                      console.log('[PhaseCard] ⏳ onCorrectionSubmit returned a Promise, awaiting...');
+                      await result;
+                      console.log('[PhaseCard] ✅ Promise resolved');
+                    } else {
+                      console.log('[PhaseCard] ✅ onCorrectionSubmit completed synchronously');
+                    }
+                  } catch (error) {
+                    console.error('[PhaseCard] ❌❌❌ ERROR calling onCorrectionSubmit:', error);
+                    console.error('[PhaseCard] Error details:', {
+                      message: error instanceof Error ? error.message : String(error),
+                      stack: error instanceof Error ? error.stack : undefined
+                    });
+                  }
+                } else {
+                  console.error('[PhaseCard] ❌ onCorrectionSubmit is not defined!');
+                }
+              }}
+              disabled={!correctionInput?.trim()}
+              className="px-6 py-2 bg-orange-500 text-white font-semibold rounded-lg hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+            >
+              Invia
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -142,6 +187,7 @@ export const PhaseCard = React.memo(function PhaseCard({
     prevProps.isExpanded === nextProps.isExpanded &&
     prevProps.showCorrectionForm === nextProps.showCorrectionForm &&
     prevProps.correctionInput === nextProps.correctionInput &&
+    prevProps.onCorrectionSubmit === nextProps.onCorrectionSubmit &&
     prevProps.dynamicMessage === nextProps.dynamicMessage &&
     prevProps.icon === nextProps.icon // Icon component reference should be stable
   );

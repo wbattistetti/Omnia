@@ -194,6 +194,7 @@ export function MainContentArea({
               showCorrectionMode={wizardContext.showCorrectionMode}
               correctionInput={wizardContext.correctionInput}
               onCorrectionInputChange={wizardContext.setCorrectionInput}
+              onCorrectionSubmit={wizardContext.handleCorrectionSubmit}
               currentParserSubstep={wizardContext.currentParserSubstep}
               currentMessageSubstep={wizardContext.currentMessageSubstep}
               phaseCounters={wizardContext.phaseCounters} // ✅ NEW: Phase counters (source of truth)

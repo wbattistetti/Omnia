@@ -21,6 +21,7 @@ type PhaseCardContainerProps = {
   showCorrectionMode?: boolean;
   correctionInput?: string;
   onCorrectionInputChange?: (value: string) => void;
+  onCorrectionSubmit?: () => void; // ✅ NEW: Handler per inviare correzione
 };
 
 /**
@@ -36,6 +37,7 @@ export const PhaseCardContainer = React.memo(function PhaseCardContainer({
   showCorrectionMode = false,
   correctionInput = '',
   onCorrectionInputChange,
+  onCorrectionSubmit,
 }: PhaseCardContainerProps) {
   // ✅ GRANULAR SELECTOR: Read ONLY this step from store
   const step = useWizardStore(state =>
@@ -95,6 +97,7 @@ export const PhaseCardContainer = React.memo(function PhaseCardContainer({
       showCorrectionForm={isStructurePhase && showCorrectionMode}
       correctionInput={correctionInput}
       onCorrectionInputChange={onCorrectionInputChange}
+      onCorrectionSubmit={onCorrectionSubmit}
       dynamicMessage={dynamicMessage}
     />
   );
@@ -106,6 +109,7 @@ export const PhaseCardContainer = React.memo(function PhaseCardContainer({
     prevProps.title === nextProps.title &&
     prevProps.showCorrectionMode === nextProps.showCorrectionMode &&
     prevProps.correctionInput === nextProps.correctionInput &&
-    prevProps.onCorrectionInputChange === nextProps.onCorrectionInputChange
+    prevProps.onCorrectionInputChange === nextProps.onCorrectionInputChange &&
+    prevProps.onCorrectionSubmit === nextProps.onCorrectionSubmit
   );
 });

@@ -324,6 +324,29 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     [wizardIntegration?.onPreviewModule]
   );
 
+  const handleCorrectionSubmitStable = React.useCallback(
+    async () => {
+      console.log('[index.tsx] 🔄 handleCorrectionSubmitStable CALLED');
+      console.log('[index.tsx] wizardIntegration:', {
+        hasWizardIntegration: !!wizardIntegration,
+        hasHandleCorrectionSubmit: !!wizardIntegration?.handleCorrectionSubmit,
+        handleCorrectionSubmitType: typeof wizardIntegration?.handleCorrectionSubmit
+      });
+      if (wizardIntegration?.handleCorrectionSubmit) {
+        try {
+          await wizardIntegration.handleCorrectionSubmit();
+          console.log('[index.tsx] ✅ handleCorrectionSubmit completed');
+        } catch (error) {
+          console.error('[index.tsx] ❌ ERROR in handleCorrectionSubmit:', error);
+          throw error;
+        }
+      } else {
+        console.error('[index.tsx] ❌ handleCorrectionSubmit is not available in wizardIntegration');
+      }
+    },
+    [wizardIntegration?.handleCorrectionSubmit]
+  );
+
   // ✅ B1: WizardContext value (only when wizard is active OR shouldBeGeneral is true) - calculated here to avoid race condition
   // ✅ FIX: Usa useMemo con dipendenze MINIME - solo quelle che determinano se il context deve esistere
   // I valori interni vengono letti direttamente da wizardIntegration (che è stabile grazie al useMemo precedente)
@@ -355,6 +378,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
       handleStructureConfirm: handleStructureConfirmStable,
       handleStructureReject: handleStructureRejectStable,
       runGenerationPipeline: runGenerationPipelineStable,
+      handleCorrectionSubmit: handleCorrectionSubmitStable,
       // ✅ Wizard module handlers (stable callbacks)
       onProceedFromEuristica: onProceedFromEuristicaStable,
       onShowModuleList: onShowModuleListStable,
@@ -380,6 +404,7 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     handleStructureConfirmStable,
     handleStructureRejectStable,
     runGenerationPipelineStable,
+    handleCorrectionSubmitStable,
     onProceedFromEuristicaStable,
     onShowModuleListStable,
     onSelectModuleStable,

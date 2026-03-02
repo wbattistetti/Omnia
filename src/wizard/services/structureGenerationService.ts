@@ -65,6 +65,8 @@ export async function generateStructure(
 
 /**
  * Regenerate structure based on user feedback
+ *
+ * Uses the unified /api/nlp/generate-structure endpoint with feedback and previousStructure parameters.
  */
 export async function regenerateStructure(
   taskLabel: string,
@@ -73,7 +75,8 @@ export async function regenerateStructure(
   provider: 'openai' | 'groq' = 'openai'
 ): Promise<StructureGenerationResult> {
   try {
-    const response = await fetch('/api/nlp/regenerate-structure', {
+    // Use unified endpoint: generate-structure with feedback and previousStructure
+    const response = await fetch('/api/nlp/generate-structure', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

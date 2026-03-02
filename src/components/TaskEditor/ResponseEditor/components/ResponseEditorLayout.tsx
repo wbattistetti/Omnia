@@ -894,6 +894,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
       showCorrectionMode: wizardIntegrationProp.showCorrectionMode,
       correctionInput: wizardIntegrationProp.correctionInput,
       onCorrectionInputChange: wizardIntegrationProp.setCorrectionInput,
+      onCorrectionSubmit: wizardIntegrationProp.handleCorrectionSubmit,
       // ✅ NEW: Sotto-stati per parte variabile dinamica
       currentParserSubstep: wizardIntegrationProp.currentParserSubstep,
       currentMessageSubstep: wizardIntegrationProp.currentMessageSubstep,
@@ -920,6 +921,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     wizardIntegrationProp?.onSelectModule,
     wizardIntegrationProp?.onPreviewModule,
     wizardIntegrationProp?.setCorrectionInput,
+    wizardIntegrationProp?.handleCorrectionSubmit,
   ]);
 
   // ✅ NEW: Usa direttamente dataSchema quando taskWizardMode === 'full'

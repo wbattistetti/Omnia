@@ -30,6 +30,7 @@ export interface WizardContextValue {
   handleStructureConfirm: () => Promise<void>;
   handleStructureReject: () => void;
   runGenerationPipeline: (taskLabel: string, taskId?: string) => Promise<void>;
+  handleCorrectionSubmit: () => Promise<void>;
 
   // Wizard module handlers
   onProceedFromEuristica: () => Promise<void>;
