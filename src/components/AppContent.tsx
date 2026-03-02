@@ -965,7 +965,7 @@ export const AppContent: React.FC<AppContentProps> = ({
                         return;
                       }
 
-                      const result = await DialogueTaskService.saveModifiedTemplates();
+                      const result = await DialogueTaskService.saveModifiedTemplates(pid);
                       const tEnd = performance.now();
                       if (result.failed === 0) {
                         console.log('[Save][6-templates] ✅ DONE', {

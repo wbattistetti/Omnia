@@ -15,6 +15,7 @@ import { useWizardStore } from '../../../../../TaskBuilderAIWizard/store/wizardS
 import { useProjectTranslations } from '@context/ProjectTranslationsContext';
 import { WizardMode } from '../../../../../TaskBuilderAIWizard/types/WizardMode';
 import type { WizardTaskTreeNode } from '../../../../../TaskBuilderAIWizard/types';
+import { convertApiStructureToWizardTaskTree } from '../../../../../TaskBuilderAIWizard/utils/convertApiStructureToWizardTaskTree';
 
 const EMPTY_MODULES: any[] = [];
 
@@ -150,28 +151,17 @@ export function useWizardIntegrationOrchestrated(
 
       if (result.success && result.structure) {
         console.log('[handleCorrectionSubmit] 📝 STEP 8: Converting result back to WizardTaskTreeNode[]...');
-        // Convert SchemaNode[] back to WizardTaskTreeNode[]
-        const convertToWizardNodes = (nodes: any[]): WizardTaskTreeNode[] => {
-          return nodes.map((node, index) => ({
-            id: node.id || `node_${Date.now()}_${index}`,
-            templateId: node.id || `template_${Date.now()}_${index}`,
-            label: node.label,
-            type: node.type,
-            emoji: node.icon,
-            subNodes: (node.subData || node.subTasks || []).length > 0
-              ? convertToWizardNodes(node.subData || node.subTasks || [])
-              : undefined
-          }));
-        };
 
-        const newDataSchema = convertToWizardNodes(result.structure);
+        // ✅ FIX: Use convertApiStructureToWizardTaskTree (generates valid UUIDs, ignores AI ids like 'root')
+        const newDataSchema = convertApiStructureToWizardTaskTree(result.structure, rowId || '');
+
         console.log('[handleCorrectionSubmit] ✅ STEP 8: Structure converted back', {
           newDataSchemaLength: newDataSchema.length,
-          firstNodeLabel: newDataSchema[0]?.label
+          firstNodeLabel: newDataSchema[0]?.label,
+          firstNodeId: newDataSchema[0]?.id
         });
 
         console.log('[handleCorrectionSubmit] 📝 STEP 9: Updating dataSchema...');
-        // ✅ STEP 6: Aggiorna dataSchema (mostra nuova struttura nella sidebar)
         store.setDataSchema(newDataSchema);
         console.log('[handleCorrectionSubmit] ✅ STEP 9: dataSchema updated');
 

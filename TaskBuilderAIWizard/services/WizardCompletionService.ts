@@ -12,7 +12,7 @@ import type { WizardTaskTreeNode, WizardConstraint, WizardStepMessages } from '.
 import type { DataContract } from '@components/DialogueDataEngine/parsers/contractLoader';
 import type { SemanticContract } from '@types/semanticContract';
 import type { DataContractItem } from '@components/DialogueDataEngine/parsers/contractLoader';
-import { createTemplatesFromWizardData, createContextualizedInstance } from './TemplateCreationService';
+import { completeTemplateWithWizardData, createContextualizedInstance } from './TemplateCreationService';
 import { DialogueTaskService } from '@services/DialogueTaskService';
 import { taskRepository } from '@services/TaskRepository';
 import { TaskType } from '@types/taskTypes';
@@ -144,6 +144,14 @@ function ensureAllNodesHaveMessages(
 /**
  * Creates templates from wizard data and registers them in memory
  */
+/**
+ * Completes existing templates with wizard data and returns them
+ *
+ * Templates must already exist in DialogueTaskService cache (created by createTemplatesFromStructures in Phase 2).
+ * This function only completes them with constraints, dataContract, messages, and subTasksIds.
+ *
+ * @returns templates Map and nodeIdToTemplateIdMap where nodeId === templateId (because node.id === template.id)
+ */
 async function createAndRegisterTemplates(
   dataSchema: WizardTaskTreeNode[],
   messagesToUse: Map<string, WizardStepMessages>,
@@ -152,38 +160,51 @@ async function createAndRegisterTemplates(
   shouldBeGeneral: boolean,
   addTranslation?: (guid: string, text: string) => void
 ): Promise<{ templates: Map<string, any>; nodeIdToTemplateIdMap: Map<string, string> }> {
-  const { templates, nodeIdToTemplateIdMap } = await createTemplatesFromWizardData(
+  // ✅ Complete existing templates (they must already exist from Phase 2)
+  await completeTemplateWithWizardData(
     dataSchema,
     messagesToUse,
     constraintsMap,
     dataContractsMap,
-    shouldBeGeneral,
     addTranslation
   );
 
-  // Register templates in memory
-  templates.forEach(template => {
-    DialogueTaskService.addTemplate(template);
+  // ✅ Retrieve completed templates from cache
+  const templates = new Map<string, any>();
+  const nodeIdToTemplateIdMap = new Map<string, string>();
 
-    // ✅ DEBUG: Log quando il template viene registrato in memoria
-    console.log(`[createAndRegisterTemplates] ✅ Template registered in memory`, {
-      templateId: template.id,
-      templateLabel: template.label,
-      hasDataContract: !!template.dataContract,
-      parsersCount: template.dataContract?.parsers?.length || 0,
-      contractTypes: template.dataContract?.parsers?.map((c: any) => c.type) || [],
-      fullDataContract: template.dataContract ? {
-        templateName: template.dataContract.templateName,
-        templateId: template.dataContract.templateId,
-        subDataMappingKeys: Object.keys(template.dataContract.subDataMapping || {}),
-        parsersCount: template.dataContract.parsers?.length || 0,
-        parsers: template.dataContract.parsers?.map((c: any) => ({
-          type: c.type,
-          enabled: c.enabled
-        })) || []
-      } : null
-    });
-  });
+  // Helper to collect all nodes recursively
+  const collectNodes = (nodes: WizardTaskTreeNode[]) => {
+    for (const node of nodes) {
+      // ✅ node.id === template.id (no mapping needed)
+      const templateId = node.id;
+      const template = DialogueTaskService.getTemplate(templateId);
+
+      if (template) {
+        templates.set(templateId, template);
+        nodeIdToTemplateIdMap.set(node.id, templateId); // nodeId === templateId, but store for consistency
+
+        console.log(`[createAndRegisterTemplates] ✅ Retrieved completed template from cache`, {
+          templateId: template.id,
+          templateLabel: template.label,
+          hasDataContract: !!template.dataContract,
+          parsersCount: template.dataContract?.parsers?.length || 0,
+          contractTypes: template.dataContract?.parsers?.map((c: any) => c.type) || []
+        });
+      } else {
+        console.warn(`[createAndRegisterTemplates] ⚠️ Template not found in cache for node ${node.id}`, {
+          nodeLabel: node.label
+        });
+      }
+
+      // Recursively collect child nodes
+      if (node.subNodes && node.subNodes.length > 0) {
+        collectNodes(node.subNodes);
+      }
+    }
+  };
+
+  collectNodes(dataSchema);
 
   return { templates, nodeIdToTemplateIdMap };
 }
@@ -326,10 +347,34 @@ export async function buildTaskTreeWithContractsAndEngines(
   const allNodeIds = new Set<string>();
   const collectNodeIds = (nodes: any[]) => {
     nodes.forEach(node => {
-      const nodeId = node.id || node.templateId;
-      if (nodeId) {
-        allNodeIds.add(nodeId);
+      // ✅ FIX: Usa SEMPRE templateId (obbligatorio per costruzione), non node.id
+      // node.templateId è l'ID del template (GUID valido)
+      // node.id potrebbe essere qualsiasi cosa (anche 'root')
+      const nodeId = node.templateId;
+
+      // ✅ Valida che templateId sia presente e valido
+      if (!nodeId || nodeId === 'root' || nodeId === 'UNDEFINED') {
+        console.warn(`[buildTaskTreeWithContractsAndEngines] ⚠️ Skipping node with invalid templateId`, {
+          nodeId: node.id,
+          templateId: node.templateId,
+          label: node.label
+        });
+        return;
       }
+
+      // ✅ Valida che templateId sia un GUID valido
+      const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!guidPattern.test(nodeId)) {
+        console.warn(`[buildTaskTreeWithContractsAndEngines] ⚠️ Skipping node with non-GUID templateId`, {
+          nodeId: node.id,
+          templateId: node.templateId,
+          label: node.label
+        });
+        return;
+      }
+
+      allNodeIds.add(nodeId);
+
       if (node.subNodes && Array.isArray(node.subNodes)) {
         collectNodeIds(node.subNodes);
       }
@@ -341,8 +386,16 @@ export async function buildTaskTreeWithContractsAndEngines(
 
   // Assemble dataContract for each node
   for (const nodeId of allNodeIds) {
+    // ✅ Valida che nodeId sia un GUID valido (doppio controllo)
+    const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!guidPattern.test(nodeId)) {
+      console.warn(`[buildTaskTreeWithContractsAndEngines] ⚠️ Skipping invalid GUID: ${nodeId}`);
+      continue;
+    }
+
     const template = DialogueTaskService.getTemplate(nodeId);
     if (!template) {
+      console.warn(`[buildTaskTreeWithContractsAndEngines] ⚠️ Template not found for nodeId: ${nodeId}`);
       continue;
     }
 

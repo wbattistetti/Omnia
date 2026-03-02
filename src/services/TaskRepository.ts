@@ -431,9 +431,35 @@ class TaskRepository {
 
       // ✅ ARCHITECTURAL FIX: Use provided tasksToSave if available, otherwise use all tasks in repository
       // This allows frontend to filter orphan tasks BEFORE saving to database
-      const allTasks = tasksToSave || Array.from(this.tasks.values());
+      let allTasks = tasksToSave || Array.from(this.tasks.values());
+
+      // ✅ CRITICAL: Filter out templates with source: 'Factory' (they are saved in Factory database, not project)
+      // Only templates with source: 'Project' or no source (backward compatibility) should be saved to project
+      const { TemplateSource } = await import('@types/taskTypes');
+      allTasks = allTasks.filter(task => {
+        // If task is an instance (has templateId), always save it (it references a template)
+        if (task.templateId) {
+          return true;
+        }
+        // If task is a template (templateId === null), check source
+        // Only save templates with source: 'Project' or no source (backward compatibility)
+        if (task.templateId === null) {
+          const source = (task as any).source;
+          if (source === TemplateSource.Factory) {
+            console.log('[TaskRepository] ⏭️ SKIPPING TEMPLATE: source is Factory', {
+              taskId: task.id,
+              source,
+            });
+            return false;
+          }
+          // Save if source is 'Project' or undefined (backward compatibility)
+          return true;
+        }
+        return true;
+      });
+
       if (allTasks.length === 0) {
-        console.log('[TaskRepository] ✅ SAVE TASKS: No tasks to save');
+        console.log('[TaskRepository] ✅ SAVE TASKS: No tasks to save (all filtered out)');
         return true; // Nothing to save
       }
 

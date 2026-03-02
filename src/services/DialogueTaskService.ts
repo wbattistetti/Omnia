@@ -251,7 +251,7 @@ export class DialogueTaskService {
   /**
    * Salva tutti i templates modificati nel database Factory
    */
-  static async saveModifiedTemplates(): Promise<{ saved: number; failed: number }> {
+  static async saveModifiedTemplates(projectId?: string): Promise<{ saved: number; failed: number }> {
     if (this.modifiedTemplates.size === 0) {
       console.log('[DialogueTaskService] ✅ No modified templates to save');
       return { saved: 0, failed: 0 };
@@ -259,7 +259,8 @@ export class DialogueTaskService {
 
     console.log('[DialogueTaskService] 💾 Saving modified templates', {
       count: this.modifiedTemplates.size,
-      templateIds: Array.from(this.modifiedTemplates)
+      templateIds: Array.from(this.modifiedTemplates),
+      projectId
     });
 
     const templateIds = Array.from(this.modifiedTemplates);
@@ -272,38 +273,57 @@ export class DialogueTaskService {
         }
 
         try {
-          // ✅ Prepara payload per salvataggio
-          // ✅ IMPORTANTE: L'endpoint PUT cerca per _id MongoDB, non per id
-          // Devo usare template._id se disponibile, altrimenti templateId potrebbe essere l'id
           const templateForSave = template as any;
           const mongoId = templateForSave._id
             ? (typeof templateForSave._id === 'object' ? templateForSave._id.toString() : String(templateForSave._id))
             : templateId;
 
-          // ✅ Prepara payload (rimuovi _id dal payload ma usalo nell'URL)
+          // Remove _id from payload (used in URL, not in body)
           const { _id, ...templatePayload } = templateForSave;
           const payload = {
             ...templatePayload,
             updatedAt: new Date()
           };
 
+          // Route to correct DB based on template.source:
+          // - source === 'Factory' → PUT /api/factory/tasks/:id
+          // - otherwise (source === 'Project' or undefined) → POST /api/projects/:pid/templates
+          const isFactory = templateForSave.source === 'Factory';
+
           console.log('[DialogueTaskService] 💾 Saving template', {
             templateId,
             mongoId,
-            has_id: !!templateForSave._id,
-            _idType: typeof templateForSave._id,
-            _idValue: templateForSave._id ? (typeof templateForSave._id === 'object' ? templateForSave._id.toString() : String(templateForSave._id)) : null,
-            hasId: !!templateForSave.id,
-            idValue: templateForSave.id
+            source: templateForSave.source,
+            isFactory,
+            hasDataContract: !!templateForSave.dataContract,
+            hasConstraints: !!templateForSave.constraints,
+            hasSteps: !!templateForSave.steps
           });
 
-          // ✅ Usa mongoId (template._id) se disponibile, altrimenti templateId
-          // L'endpoint PUT cerca per _id MongoDB
-          const response = await fetch(`/api/factory/tasks/${mongoId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
+          let response: Response;
+
+          if (isFactory) {
+            // Factory template → PUT /api/factory/tasks/:id
+            response = await fetch(`/api/factory/tasks/${mongoId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+          } else {
+            // Project template (source: 'Project' or undefined) → POST /api/projects/:pid/templates
+            // This endpoint saves the template as-is without any field stripping.
+            if (!projectId) {
+              throw new Error(
+                `Cannot save Project template "${templateId}" without projectId. ` +
+                `Pass projectId to saveModifiedTemplates().`
+              );
+            }
+            response = await fetch(`/api/projects/${projectId}/templates`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+          }
 
           if (!response.ok) {
             const errorText = await response.text().catch(() => 'Unknown error');
@@ -313,6 +333,8 @@ export class DialogueTaskService {
           const saved = await response.json();
           console.log('[DialogueTaskService] ✅ Template saved', {
             templateId,
+            source: templateForSave.source,
+            isFactory,
             hasDataContract: !!saved?.dataContract
           });
           this.clearModifiedTemplate(templateId);
@@ -364,6 +386,43 @@ export class DialogueTaskService {
   }
 
   /**
+   * Registers externally loaded templates (e.g. from project DB) into the in-memory cache.
+   * Unlike addTemplate, this does NOT generate embeddings and does NOT mark templates as modified.
+   * Use this when loading a project to make project templates resolvable via getTemplate().
+   */
+  static registerExternalTemplates(templates: DialogueTask[]): void {
+    let added = 0;
+    let updated = 0;
+
+    templates.forEach(template => {
+      const templateId = String(template.id || template._id || '').trim();
+      if (!templateId) return;
+
+      const existingIdx = this.cache.findIndex(t =>
+        String(t.id || t._id || '').trim() === templateId
+      );
+
+      if (existingIdx >= 0) {
+        this.cache[existingIdx] = template;
+        updated++;
+      } else {
+        this.cache.push(template);
+        added++;
+      }
+    });
+
+    if (!this.cacheLoaded) {
+      this.cacheLoaded = true;
+    }
+
+    console.log('[DialogueTaskService] 📥 Registered external templates into cache', {
+      total: templates.length,
+      added,
+      updated
+    });
+  }
+
+  /**
    * Aggiunge un template alla cache in memoria (senza salvare nel DB)
    * Utile per template generati dal Wizard che devono essere disponibili in memoria
    * ma non ancora salvati nel database
@@ -377,6 +436,33 @@ export class DialogueTaskService {
     // Verifica che non esista già
     const templateId = template.id || template._id || '';
     const templateIdStr = String(templateId).trim();
+
+    // ✅ VALIDATION: Block invalid template IDs (temporary placeholders)
+    if (!templateIdStr || templateIdStr === 'root' || templateIdStr === 'UNDEFINED') {
+      console.error('[DialogueTaskService] ❌ BLOCKED: Attempted to add template with invalid ID', {
+        templateId: templateIdStr,
+        templateLabel: template.label,
+        templateName: template.name,
+        templateIdType: typeof templateId,
+        templateHasId: !!template.id,
+        templateHas_id: !!template._id
+      });
+      throw new Error(`Cannot add template with invalid ID: "${templateIdStr}". Template must have a valid GUID.`);
+    }
+
+    // ✅ VALIDATION: Ensure template ID is a valid GUID (UUID format)
+    const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!guidPattern.test(templateIdStr)) {
+      console.error('[DialogueTaskService] ❌ BLOCKED: Attempted to add template with non-GUID ID', {
+        templateId: templateIdStr,
+        templateLabel: template.label,
+        templateName: template.name,
+        templateIdType: typeof templateId,
+        templateHasId: !!template.id,
+        templateHas_id: !!template._id
+      });
+      throw new Error(`Cannot add template with invalid ID format: "${templateIdStr}". Template ID must be a valid GUID (UUID).`);
+    }
 
     console.log('[DialogueTaskService] 🔍 Adding template to cache', {
       templateId: templateIdStr,

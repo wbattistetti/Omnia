@@ -10,7 +10,6 @@ interface SaveLocationDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onSaveToFactory: () => void;
-  onSaveToProject: () => void;
   onCancel: () => void;
   // ✅ REMOVED: originalLabel, generalizedLabel, generalizationReason, generalizedMessages - now from contexts
   anchorRef?: React.RefObject<HTMLElement> | null;
@@ -28,7 +27,6 @@ export function SaveLocationDialog({
   isOpen,
   onClose,
   onSaveToFactory,
-  onSaveToProject,
   onCancel,
   // ✅ REMOVED: originalLabel, generalizedLabel, generalizationReason, generalizedMessages - now from contexts
   anchorRef,
@@ -236,15 +234,6 @@ export function SaveLocationDialog({
         </div>
 
         <div className="flex gap-2 justify-end p-4 border-t border-gray-200">
-          <button
-            onClick={() => {
-              onSaveToProject();
-              onClose();
-            }}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors text-sm"
-          >
-            Salva nel progetto
-          </button>
           <button
             onClick={async () => {
               console.log('[SaveLocationDialog] 🔍 CLICK su "Salva nella libreria generale"', {

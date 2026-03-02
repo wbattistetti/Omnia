@@ -3,8 +3,9 @@
 
 import type { WizardTaskTreeNode, WizardStepMessages, WizardConstraint } from '../types';
 import type { DialogueTask } from '@services/DialogueTaskService';
+import { DialogueTaskService } from '@services/DialogueTaskService';
 import type { DataContract, DataContractItem } from '@components/DialogueDataEngine/parsers/contractLoader';
-import { TaskType, templateIdToTaskType } from '@types/taskTypes';
+import { TaskType, templateIdToTaskType, TemplateSource } from '@types/taskTypes';
 import { v4 as uuidv4 } from 'uuid';
 import { cloneTemplateSteps } from '@utils/taskUtils';
 import type { TaskTreeNode } from '@types/taskTypes';
@@ -600,148 +601,92 @@ export async function createTemplatesFromStructures(
  * @param shouldBeGeneral - Flag indicating if template is generalizable
  * @returns Map<nodeId, DialogueTask> - One template per node
  */
-export async function createTemplatesFromWizardData(
+/**
+ * Completes existing templates with wizard data (constraints, dataContract, messages, subTasksIds)
+ *
+ * This function does NOT create templates - it only merges data into templates that already exist
+ * in DialogueTaskService cache (created by createTemplatesFromStructures in Phase 2).
+ *
+ * Uses node.id as template.id to find existing templates.
+ *
+ * @param fakeTree Array of root nodes from wizard
+ * @param messagesGeneralized Map of node.id → WizardStepMessages
+ * @param constraintsMap Map of node.id → WizardConstraint[]
+ * @param dataContractsMap Map of node.id → DataContract
+ * @param addTranslation Optional translation callback
+ */
+export async function completeTemplateWithWizardData(
   fakeTree: WizardTaskTreeNode[],
   messagesGeneralized: Map<string, WizardStepMessages>,
   constraintsMap: Map<string, WizardConstraint[]>,
   dataContractsMap: Map<string, DataContract>,
-  shouldBeGeneral: boolean = false,
   addTranslation?: (guid: string, text: string) => void
-): Promise<{ templates: Map<string, DialogueTask>; nodeIdToTemplateIdMap: Map<string, string> }> {
-  const templates = new Map<string, DialogueTask>();
-  // ✅ MAPPING: node.id (Wizard internal) → template.id (new GUID for template)
-  // This ensures template.id is always unique and different from rowId
-  const nodeIdToTemplateIdMap = new Map<string, string>();
-
+): Promise<void> {
   /**
-   * Recursive helper to create template for a node
+   * Recursive helper to complete template for a node
    */
-  const createTemplateForNode = async (node: WizardTaskTreeNode): Promise<DialogueTask> => {
-    // ✅ CRITICAL: Generate NEW GUID for template (not node.id)
-    // node.id is used only internally in Wizard, template.id must be a new unique GUID
-    // This prevents collisions with rowId (which equals task.id)
-    const templateId = uuidv4();
+  async function completeNode(node: WizardTaskTreeNode): Promise<void> {
+    // ✅ Use node.id as template.id (template must already exist in cache)
+    const templateId = node.id;
 
-    // ✅ Store mapping: node.id → template.id
-    nodeIdToTemplateIdMap.set(node.id, templateId);
-
-    // Collect subTasksIds from children
-    // ✅ CRITICAL: Use mapped template IDs (not node.id) for subTasksIds
-    const subTasksIds: string[] = [];
-    if (node.subNodes && node.subNodes.length > 0) {
-      // ✅ Use for...of instead of forEach to support await
-      for (const subNode of node.subNodes) {
-        // Create template for child (recursive) - this will generate new GUID and store mapping
-        const subNodeTemplateId = nodeIdToTemplateIdMap.get(subNode.id);
-        if (!subNodeTemplateId) {
-          // Sub-template not created yet, create it now
-          const subTemplate = await createTemplateForNode(subNode);
-          const mappedSubTemplateId = nodeIdToTemplateIdMap.get(subNode.id);
-          if (mappedSubTemplateId) {
-            subTasksIds.push(mappedSubTemplateId);
-            templates.set(mappedSubTemplateId, subTemplate);
-          }
-        } else {
-          // Sub-template already created, use mapped ID
-          subTasksIds.push(subNodeTemplateId);
-        }
-      }
-    }
-
-    // ✅ Get messages for this specific node from the map
-    const nodeMessages = messagesGeneralized.get(node.id);
-    if (!nodeMessages) {
+    // Get existing template from cache
+    const template = DialogueTaskService.getTemplate(templateId);
+    if (!template) {
       throw new Error(
-        `[TemplateCreationService] CRITICAL: Node "${node.label}" (id: ${node.id}) is missing messages. ` +
-        `This should never happen - checkAndComplete should have prevented this. ` +
-        `Available message IDs: ${Array.from(messagesGeneralized.keys()).join(', ')}.`
+        `[completeTemplateWithWizardData] Template missing for node "${node.label}" (id: ${templateId}). ` +
+        `This should be impossible if confirmStructure() ran correctly and created templates in Phase 2.`
       );
     }
 
-    // ✅ D2: Se arriviamo qui, nodeMessages esiste (garantito da verifiche upstream)
-    const messagesToUse = nodeMessages;
+    // ✅ Merge constraints
+    const constraints = constraintsMap.get(node.id);
+    if (constraints && constraints.length > 0) {
+      template.constraints = constraints;
+      console.log(`[completeTemplateWithWizardData] ✅ Merged constraints for template ${templateId}`, {
+        constraintsCount: constraints.length
+      });
+    }
 
-    // ✅ REMOVED: Translation tracking non più necessario
-    // Le traduzioni vengono già salvate in associateTextsToStructure durante la generazione
-
-    // Convert generalized messages to steps dictionary (per-node messages)
-    // ✅ CRITICAL: Use node.id for steps dictionary key (internal Wizard reference)
-    // The steps dictionary uses node.id as key, not template.id
-    console.log('[createTemplatesFromWizardData] 🔍 Creating template', {
-      nodeId: node.id,
-      templateId,
-      nodeLabel: node.label,
-      hasAddTranslation: !!addTranslation,
-      addTranslationType: typeof addTranslation
-    });
-    const steps = convertMessagesToStepsDictionary(messagesToUse, node.id, addTranslation);
-
-    // Get constraints and data contract for this node
-    const constraints = constraintsMap.get(node.id) || [];
-    // ✅ dataContract is already DataContract (no conversion needed)
+    // ✅ Merge dataContract
     const dataContract = dataContractsMap.get(node.id);
-
-    // ✅ DEBUG: Log quando createTemplatesFromWizardData crea il template con dataContract
-    console.log(`[createTemplatesFromWizardData] 🔍 Creating template with dataContract`, {
-      nodeId: node.id,
-      nodeLabel: node.label,
-      hasDataContract: !!dataContract,
-      dataContractType: typeof dataContract,
-      parsersCount: dataContract?.parsers?.length || 0,
-      contractTypes: dataContract?.parsers?.map((c: any) => c.type) || [],
-      fullDataContract: dataContract ? {
-        templateName: dataContract.templateName,
-        templateId: dataContract.templateId,
-        subDataMappingKeys: Object.keys(dataContract.subDataMapping || {}),
+    if (dataContract) {
+      template.dataContract = dataContract;
+      console.log(`[completeTemplateWithWizardData] ✅ Merged dataContract for template ${templateId}`, {
+        hasDataContract: !!dataContract,
         parsersCount: dataContract.parsers?.length || 0,
-        parsers: dataContract.parsers?.map((c: any) => ({
-          type: c.type,
-          enabled: c.enabled
-        })) || []
-      } : null
-    });
+        contractTypes: dataContract.parsers?.map((c: any) => c.type) || []
+      });
+    }
 
-    // Create template
-    // ✅ generalizeLabel is now async, so we need to await it
-    const generalizedLabel = await generalizeLabel(node.label);
-    const template: DialogueTask = {
-      id: templateId,
-      _id: templateId,  // For MongoDB compatibility
-      templateId: null,  // Template has always templateId === null
-      name: generalizedLabel.toLowerCase().replace(/\s+/g, '_'),  // Canonical name
-      label: generalizedLabel,  // Generalized label
-      type: TaskType.UtteranceInterpretation,  // Default to UtteranceInterpretation
-      // ✅ Map emoji to icon name for DialogueTask (backward compatibility)
-      // DialogueTask.icon expects icon name (e.g. "FileText"), not emoji
-      icon: node.emoji ? mapEmojiToIconName(node.emoji) : (node.icon || 'FileText'),
-      subTasksIds: subTasksIds.length > 0 ? subTasksIds : undefined,
-      steps: steps,  // Dictionary: { "templateId": { "start": {...}, ... } }
-      constraints: constraints.length > 0 ? constraints : undefined,  // Constraints for data validation
-      // ❌ REMOVED: nlpContract (legacy field)
-      // ✅ dataContract is already DataContract (no conversion needed)
-      dataContract: dataContract,
-      shouldBeGeneral: shouldBeGeneral,  // Flag for UI decision
-    };
+    // ✅ Merge messages (convert to steps dictionary)
+    const nodeMessages = messagesGeneralized.get(node.id);
+    if (nodeMessages) {
+      template.steps = convertMessagesToStepsDictionary(nodeMessages, node.id, addTranslation);
+      console.log(`[completeTemplateWithWizardData] ✅ Merged messages/steps for template ${templateId}`);
+    }
 
-    templates.set(templateId, template);
-    return template;
-  };
+    // ✅ Merge subTasksIds (from children)
+    if (node.subNodes && node.subNodes.length > 0) {
+      // Use node.id directly for subTasksIds (node.id === template.id)
+      template.subTasksIds = node.subNodes.map(subNode => subNode.id);
+      console.log(`[completeTemplateWithWizardData] ✅ Merged subTasksIds for template ${templateId}`, {
+        subTasksCount: template.subTasksIds.length
+      });
 
-  // Create template for each root node
-  for (const rootNode of fakeTree) {
-    // ✅ Check if template already created (via mapping)
-    const mappedRootTemplateId = nodeIdToTemplateIdMap.get(rootNode.id);
-    if (!mappedRootTemplateId) {
-      // Create root template (will generate new GUID and store in mapping)
-      const rootTemplate = await createTemplateForNode(rootNode);
-      const finalRootTemplateId = nodeIdToTemplateIdMap.get(rootNode.id);
-      if (finalRootTemplateId) {
-        templates.set(finalRootTemplateId, rootTemplate);
+      // Recursively complete child templates
+      for (const subNode of node.subNodes) {
+        await completeNode(subNode);
       }
     }
+
+    // ✅ Mark template as modified (template is already updated in-place in cache)
+    DialogueTaskService.markTemplateAsModified(templateId);
   }
 
-  return { templates, nodeIdToTemplateIdMap };
+  // Complete templates for each root node
+  for (const rootNode of fakeTree) {
+    await completeNode(rootNode);
+  }
 }
 
 /**

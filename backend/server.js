@@ -1959,22 +1959,27 @@ function isInstance(doc) {
 
 /**
  * Determines if a document is a Factory template
- * Factory Template: templateId === null AND has Factory-specific fields
+ * Factory Template: templateId === null AND source === 'Factory'
+ * Project templates can have the same structure (dataContract, constraints, subTasksIds)
  */
 function isFactoryTemplate(doc) {
   if (doc.templateId !== null && doc.templateId !== undefined) {
     return false; // Instances are not Factory templates
   }
 
-  // Check for Factory-specific fields
+  // ✅ Check source field ONLY (explicit flag)
+  if (doc.source === 'Factory') {
+    return true;
+  }
+  if (doc.source === 'Project') {
+    return false;
+  }
+
+  // ✅ BACKWARD COMPATIBILITY: Check for Factory-specific metadata fields ONLY
+  // dataContract, constraints, subTasksIds are allowed in both Factory and Project templates
   return (
     doc.version !== undefined ||
-    doc.versionNote !== undefined ||
-    doc.dataContract !== undefined ||
-    doc.dataContracts !== undefined ||
-    doc.patterns !== undefined ||
-    doc.valueSchema !== undefined ||
-    doc.subTasksIds !== undefined
+    doc.versionNote !== undefined
   );
 }
 
@@ -1987,20 +1992,58 @@ function isLocalTemplate(doc) {
 }
 
 /**
- * Removes Factory-specific fields from a document
- * Used when saving Local Templates to ensure they don't have Factory fields
+ * Removes Factory-specific metadata fields from a document
+ * Used when saving Local Templates to ensure they don't have Factory metadata
+ * Project templates can have the same structure (dataContract, constraints, subTasksIds)
  */
 function removeFactoryFields(doc) {
   const cleaned = { ...doc };
+  // ✅ Remove ONLY Factory-specific metadata fields
   delete cleaned.version;
   delete cleaned.versionNote;
-  delete cleaned.dataContract;
-  delete cleaned.dataContracts;
-  delete cleaned.patterns;
-  delete cleaned.valueSchema;
-  // Note: subTasksIds is allowed in Local Templates (they can reference other templates)
+  // ✅ DO NOT remove: dataContract, constraints, subTasksIds (allowed in Project templates)
   return cleaned;
 }
+
+// POST /api/projects/:pid/templates - Save a project-scoped template as-is (no field stripping)
+// Used by DialogueTaskService for templates with source: 'Project'
+app.post('/api/projects/:pid/templates', async (req, res) => {
+  const projectId = req.params.pid;
+  const payload = req.body || {};
+
+  if (!payload.id) {
+    return res.status(400).json({ error: 'id_required', message: 'Template id is required' });
+  }
+
+  const client = await getMongoClient();
+  try {
+    const projDb = await getProjectDb(client, projectId);
+    const now = new Date();
+
+    // Save template exactly as received — no classification, no field stripping
+    const { _id, createdAt, ...templateData } = payload;
+    const doc = { projectId, ...templateData, updatedAt: now };
+
+    await projDb.collection('tasks').updateOne(
+      { projectId, id: payload.id },
+      { $set: doc, $setOnInsert: { createdAt: now } },
+      { upsert: true }
+    );
+
+    const saved = await projDb.collection('tasks').findOne({ projectId, id: payload.id });
+    logInfo('Templates.post', {
+      projectId,
+      templateId: payload.id,
+      hasDataContract: !!saved?.dataContract,
+      hasConstraints: !!saved?.constraints,
+      hasSteps: !!saved?.steps
+    });
+    res.json(saved);
+  } catch (e) {
+    logError('Templates.post', e, { projectId, templateId: payload.id });
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
 
 // POST /api/projects/:pid/tasks - Create or update task (upsert)
 app.post('/api/projects/:pid/tasks', async (req, res) => {
@@ -2041,71 +2084,38 @@ app.post('/api/projects/:pid/tasks', async (req, res) => {
     const projDb = await getProjectDb(client, projectId);
     const now = new Date();
 
-    // ✅ Extract all fields except id, templateId, createdAt, updatedAt, and legacy fields
-    // ✅ NUOVO MODELLO: Rimuovi data, steps, constraints dalle istanze (non dai template)
-    const { id, templateId: _templateId, createdAt, updatedAt, data, steps, constraints, ...fields } = payload;
-
-    // ✅ Determina allowedContexts in base al type (se non è già specificato nel payload)
-    const allowedContextsValue = payload.allowedContexts !== undefined
-      ? payload.allowedContexts
-      : getAllowedContexts(type);
-
-    // ✅ CLASSIFICAZIONE: Determina il tipo di documento usando le funzioni di classificazione
+    // Route by document type
     let task;
     if (isInstance(payload)) {
-      // ✅ ISTANZA: Salva SOLO campi permessi (id, type, templateId, templateVersion, labelKey, steps, createdAt, updatedAt)
-      // ✅ type è OBBLIGATORIO anche per istanze (necessario per il caricamento)
-      // ❌ NON salvare: nodes, subNodes, icon, constraints, dataContract, examples, nlpProfile, patterns, valueSchema, allowedContexts
+      // Instance: save only the required instance fields
       task = {
         projectId,
         id: payload.id,
-        type: type,  // ✅ OBBLIGATORIO: type è necessario per il caricamento (TaskRepository lo richiede)
-        templateId: templateId,  // ✅ OBBLIGATORIO per istanze (non può essere null)
-        templateVersion: payload.templateVersion || 1,  // ✅ Versione del template
-        labelKey: payload.labelKey,  // ✅ Chiave di traduzione
-        steps: payload.steps,  // ✅ Array MaterializedStep[] (DEVE essere salvato!)
+        type: type,
+        templateId: templateId,
+        templateVersion: payload.templateVersion || 1,
+        labelKey: payload.labelKey,
+        steps: payload.steps,
         updatedAt: now
       };
-
-      // ✅ Rimuovi esplicitamente campi del template se presenti (per sicurezza)
-      // ❌ NON rimuovere type - è necessario per il caricamento
-      delete task.nodes;
-      delete task.subNodes;
-      delete task.icon;
-      delete task.constraints;
-      delete task.dataContract;
-      delete task.examples;
-      delete task.nlpProfile;
-      delete task.patterns;
-      delete task.valueSchema;
-      delete task.allowedContexts;
-      delete task.data;
-      delete task.introduction;
     } else if (isLocalTemplate(payload)) {
-      // ✅ LOCAL TEMPLATE: Salva nel progetto, ma rimuovi campi da Factory
-      const cleanedFields = removeFactoryFields(fields);
+      // Local template (templateId === null): save all fields as-is, strip only Factory metadata
+      const { _id, createdAt, updatedAt: _updatedAt, ...rest } = payload;
+      const cleanedFields = removeFactoryFields(rest);
       task = {
         projectId,
-        id: payload.id,
-        type: type,              // ✅ type: enum numerico (0-19) - REQUIRED
-        templateId: null,        // ✅ Local Template ha sempre templateId = null
-        allowedContexts: allowedContextsValue,
-        ...cleanedFields,  // ✅ Save fields without Factory-specific ones
+        ...cleanedFields,
         updatedAt: now
       };
     } else {
-      // ❌ CASO NON VALIDO: templateId === null ma non è né Factory né Local Template
-      // (Questo caso non dovrebbe mai verificarsi se isFactoryTemplate è implementato correttamente)
       logError('Tasks.post', new Error('Invalid task classification'), {
         projectId,
         taskId: payload.id,
-        templateId: payload.templateId,
-        hasVersion: payload.version !== undefined,
-        hasVersionNote: payload.versionNote !== undefined
+        templateId: payload.templateId
       });
       return res.status(400).json({
         error: 'invalid_task_classification',
-        message: 'Task cannot be classified as instance, Factory template, or local template'
+        message: 'Task cannot be classified as instance or local template. Use POST /api/projects/:pid/templates for wizard-created templates.'
       });
     }
 
@@ -2333,94 +2343,39 @@ app.post('/api/projects/:pid/tasks/bulk', async (req, res) => {
           return true;
         })
         .map(item => {
-          // ✅ Extract all fields except id, templateId, createdAt, updatedAt, and legacy fields
-          const { id, templateId, createdAt, updatedAt, data, steps, constraints, ...fields } = item;
-
-          // ✅ LOG: Item before classification
-          console.log('[💾 BACKEND_BULK] 🔍 ITEM BEFORE CLASSIFICATION', {
-            projectId,
-            itemId: item.id,
-            itemTemplateId: item.templateId,
-            itemTemplateIdType: typeof item.templateId,
-            isInstance: isInstance(item),
-            isLocalTemplate: isLocalTemplate(item),
-            isFactoryTemplate: isFactoryTemplate(item),
-            hasSubTasksIds: !!item.subTasksIds,
-            hasVersion: !!item.version,
-            hasDataContract: !!item.dataContract,
-            fieldsKeys: Object.keys(fields).slice(0, 20), // First 20 keys
-          });
-
-          // ✅ CLASSIFICAZIONE: Determina il tipo di documento usando le funzioni di classificazione
+          // Route by document type
           let task;
           if (isInstance(item)) {
-            // ✅ ISTANZA: Salva SOLO campi permessi (id, type, templateId, templateVersion, labelKey, steps, createdAt, updatedAt)
-            // ✅ type è OBBLIGATORIO anche per istanze (necessario per il caricamento)
-            // ❌ NON salvare: nodes, subNodes, icon, constraints, dataContract, examples, nlpProfile, patterns, valueSchema, allowedContexts
+            // Instance: save only the required instance fields
             task = {
               projectId,
               id: item.id,
-              type: item.type,  // ✅ OBBLIGATORIO: type è necessario per il caricamento (TaskRepository lo richiede)
-              templateId: templateId,  // ✅ OBBLIGATORIO per istanze (non può essere null)
-              templateVersion: item.templateVersion || 1,  // ✅ Versione del template
-              labelKey: item.labelKey,  // ✅ Chiave di traduzione
-              steps: item.steps,  // ✅ Array MaterializedStep[] (DEVE essere salvato!)
+              type: item.type,
+              templateId: item.templateId,
+              templateVersion: item.templateVersion || 1,
+              labelKey: item.labelKey,
+              steps: item.steps,
               updatedAt: now
             };
-
-            // ✅ NEW: Log per verificare che projectId sia salvato
-            console.log('[💾 BACKEND_BULK] 💾 SAVING INSTANCE', {
-              projectId,
-              taskId: item.id,
-              templateId: templateId,
-              type: item.type,
-              hasSteps: !!item.steps,
-              taskProjectId: task.projectId,  // Verifica che projectId sia nel task
-            });
-
-            // ✅ Rimuovi esplicitamente campi del template se presenti (per sicurezza)
-            // ❌ NON rimuovere type - è necessario per il caricamento
-            delete task.nodes;
-            delete task.subNodes;
-            delete task.icon;
-            delete task.constraints;
-            delete task.dataContract;
-            delete task.examples;
-            delete task.nlpProfile;
-            delete task.patterns;
-            delete task.valueSchema;
-            delete task.allowedContexts;
-            delete task.data;
-            delete task.introduction;
           } else if (isLocalTemplate(item)) {
-            // ✅ LOCAL TEMPLATE: Salva nel progetto, ma rimuovi campi da Factory
-            const cleanedFields = removeFactoryFields(fields);
+            // Local template (templateId === null): save all fields as-is, strip only Factory metadata
+            const { _id, createdAt, updatedAt: _updatedAt, ...rest } = item;
+            const cleanedFields = removeFactoryFields(rest);
             task = {
               projectId,
-              id: item.id,
-              type: item.type,              // ✅ type: enum numerico (0-19) - REQUIRED
-              templateId: null,        // ✅ Local Template ha sempre templateId = null
-              allowedContexts: item.allowedContexts || getAllowedContexts(item.type),
-              ...cleanedFields,  // ✅ Save fields without Factory-specific ones
+              ...cleanedFields,
               updatedAt: now
             };
           } else {
-            // ❌ CASO NON VALIDO: templateId === null ma non è né Factory né Local Template
-            // (Questo caso non dovrebbe mai verificarsi se isFactoryTemplate è implementato correttamente)
-            console.error('[💾 BACKEND_BULK] Invalid task classification', {
-              itemId: item.id,
-              templateId: item.templateId,
-              hasVersion: item.version !== undefined,
-              hasVersionNote: item.versionNote !== undefined
-            });
             logWarn('Tasks.bulk', {
               error: 'invalid_task_classification',
-              itemId: item.id
+              itemId: item.id,
+              templateId: item.templateId
             });
-            return null; // Return null to skip this item
+            return null; // Skip unclassifiable items
           }
 
-          // ✅ Return null se task non è valido (verrà filtrato dopo)
+          // Return null if task is invalid (filtered after)
           if (!task) return null;
 
           const filter = { projectId, id: item.id };

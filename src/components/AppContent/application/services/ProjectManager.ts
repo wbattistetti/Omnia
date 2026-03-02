@@ -229,6 +229,27 @@ export class ProjectManager {
         repositoryReady: true,
       });
 
+      // ✅ Register project-local templates into DialogueTaskService cache so that
+      // TaskTreeOpener can resolve templateId references even for non-Factory templates.
+      // Local templates are tasks with templateId === null stored in the project DB.
+      try {
+        const DialogueTaskServiceModule = await import('@services/DialogueTaskService');
+        const DialogueTaskService = DialogueTaskServiceModule.default;
+        const projectTemplates = taskRepository.getAllTasks().filter(
+          t => (t as any).templateId === null || (t as any).templateId === undefined
+        );
+        if (projectTemplates.length > 0) {
+          DialogueTaskService.registerExternalTemplates(projectTemplates as any[]);
+          console.log('[ProjectManager] ✅ Project templates registered in DialogueTaskService', {
+            projectId: id,
+            count: projectTemplates.length,
+            templateIds: projectTemplates.map(t => t.id)
+          });
+        }
+      } catch (e) {
+        console.warn('[ProjectManager] ⚠️ Failed to register project templates in DialogueTaskService', e);
+      }
+
       // Load flow and variable mappings in parallel (tasks already loaded)
       const parallelStart = performance.now();
       if (showPerfLogs) {

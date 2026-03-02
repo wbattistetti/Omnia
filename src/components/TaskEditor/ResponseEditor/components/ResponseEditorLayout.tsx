@@ -31,7 +31,7 @@ import { DialogueTaskService } from '@services/DialogueTaskService';
 import { ResponseEditorContext, useResponseEditorContext } from '@responseEditor/context/ResponseEditorContext';
 import { generalizeLabel } from '../../../../../TaskBuilderAIWizard/services/TemplateCreationService';
 import { TranslationType } from '@types/translationTypes';
-import { TaskType } from '@types/taskTypes';
+import { TaskType, TemplateSource } from '@types/taskTypes';
 import { useDeploymentDialog } from '@responseEditor/ResponseEditorToolbar';
 
 // ✅ ARCHITECTURE: Props interface with only necessary values (no monolithic editor object)
@@ -718,12 +718,18 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         translationsCount: translationsToSave.length,
       });
 
+      // ✅ CRITICAL: Set source to 'Factory' before saving
+      const templatesWithFactorySource = dematerializedTemplates.map(t => ({
+        ...t,
+        source: TemplateSource.Factory
+      }));
+
       // ✅ CRITICAL: All validations passed - NOW save template
       // This happens AFTER all checks to avoid saving incomplete data
       const response = await fetch('/api/factory/dialogue-templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dematerializedTemplates)
+        body: JSON.stringify(templatesWithFactorySource)
       });
 
       if (!response.ok) {
@@ -791,6 +797,46 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
         timestamp: new Date().toISOString(),
       });
 
+      // ✅ CRITICAL: Save task instance to project database with templateId
+      // After saving to Factory, the task instance must be persisted to project database
+      // This ensures that when reopening, TaskTreeOpener finds the templateId in the database
+      if (dematerializedTemplates.length > 0 && taskMeta?.id && currentProjectId) {
+        const rootTemplateId = dematerializedTemplates[0].id; // First template is the root
+
+        try {
+          const taskRepository = (await import('@services/TaskRepository')).taskRepository;
+          const existingTask = taskRepository.getTask(taskMeta.id);
+
+          if (existingTask) {
+            // Update task instance with templateId
+            taskRepository.updateTask(taskMeta.id, {
+              templateId: rootTemplateId,
+            }, currentProjectId);
+
+            // ✅ CRITICAL: Save to database immediately (not just in memory)
+            await taskRepository.saveAllTasksToDatabase(currentProjectId, [existingTask]);
+
+            console.log('[handleSaveToFactory] ✅ FLOW TRACE - Saved task instance to project database', {
+              taskId: taskMeta.id,
+              templateId: rootTemplateId,
+              projectId: currentProjectId,
+            });
+          } else {
+            console.warn('[handleSaveToFactory] ⚠️ Task instance not found in repository', {
+              taskId: taskMeta.id,
+              projectId: currentProjectId,
+            });
+          }
+        } catch (error) {
+          console.error('[handleSaveToFactory] ❌ Error saving task instance to database', {
+            taskId: taskMeta.id,
+            templateId: rootTemplateId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          // Don't block the save flow - template is already saved to Factory
+        }
+      }
+
       setSaveDecision('factory');
       setSaveDecisionMade(true);
       setIsSaving(false);
@@ -801,16 +847,8 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
       alert(`Error saving to Factory: ${error instanceof Error ? error.message : String(error)}`);
       setIsSaving(false);
     }
-  }, [wizardIntegrationProp, taskTree, generalizedLabel, setSaveDecision, setSaveDecisionMade, setIsSaving, setShowSaveDialog]);
+  }, [wizardIntegrationProp, taskTree, generalizedLabel, taskMeta, currentProjectId, setSaveDecision, setSaveDecisionMade, setIsSaving, setShowSaveDialog]);
 
-  // ✅ NEW: Handler to save only to project
-  const handleSaveToProject = React.useCallback(() => {
-    setSaveDecision('project');
-    setSaveDecisionMade(true);
-    setShowSaveDialog(false);
-    // Template stays in memory, will be saved with "Save project"
-    console.log('[ResponseEditorLayout] ✅ Decision: save only to project (template stays in memory)');
-  }, []);
 
   // ✅ NEW: Handler to cancel save dialog
   const handleCancelSaveDialog = React.useCallback(() => {
@@ -1318,7 +1356,6 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
           setShowSaveDialog(false);
         }}
         onSaveToFactory={handleSaveToFactory}
-        onSaveToProject={handleSaveToProject}
         onCancel={handleCancelSaveDialog}
         // ✅ REMOVED: originalLabel, generalizedLabel, generalizationReason, generalizedMessages - now from contexts
         anchorRef={saveToLibraryButtonRef}

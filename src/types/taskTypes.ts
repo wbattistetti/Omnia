@@ -10,6 +10,16 @@ export enum TaskContext {
 }
 
 /**
+ * TemplateSource: Origin of a template
+ * - Project: Template created in the project (default)
+ * - Factory: Template saved to general library (Factory database)
+ */
+export enum TemplateSource {
+  Project = 'Project',  // Default: template created in project
+  Factory = 'Factory'  // Template saved to general library
+}
+
+/**
  * TaskType: Enum numerato per i tipi di task (allineato con VB.NET TaskTypes)
  * ✅ UNIFICATO: Usato ovunque invece di HeuristicType/InternalType/templateId stringhe
  * Determina il comportamento del task e quale editor usare
@@ -281,6 +291,7 @@ export interface Task {
   type: TaskType;                 // ✅ Enum numerico (0-19) - Determina il comportamento del task
   templateId: string | null;      // ✅ null = crea template automaticamente, GUID = referenzia un template
   templateVersion?: number;       // ✅ Versione del template usata per creare l'istanza (per drift detection)
+  source?: TemplateSource;       // ✅ Origin of template: 'Project' (default) or 'Factory'
   // ✅ Campi diretti (niente wrapper value):
   // Per DataRequest/UtteranceInterpretation:
   labelKey?: string;              // ✅ Translation key per la label (es. "ask_patient_birthdate") - NON testo diretto
