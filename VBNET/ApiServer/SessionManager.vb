@@ -1097,13 +1097,5 @@ Public Class SessionManager
         })
     End Sub
 
-    ''' <summary>
-    ''' ✅ REMOVED: DialogueStepType non esiste più - questa funzione non è più usata
-    ''' </summary>
-    Private Shared Function GetMessageFromStep(compiledTask As Compiler.CompiledUtteranceTask, stepType As Object, projectId As String, locale As String) As String
-        ' ✅ REMOVED: DialogueStepType non esiste più
-        ' TODO: Usa il nuovo TaskEngine per estrarre messaggi
-        Return Nothing
-    End Function
 End Class
 

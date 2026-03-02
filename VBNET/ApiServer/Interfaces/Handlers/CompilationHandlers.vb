@@ -649,65 +649,6 @@ Namespace ApiServer.Handlers
         End Function
 
         ''' <summary>
-        ''' Handles POST /api/runtime/compile using model binding (simpler approach)
-        ''' </summary>
-        Public Async Function HandleCompileFlowWithModel(request As CompileFlowRequest) As Task(Of IResult)
-            Console.WriteLine("📥 [HandleCompileFlowWithModel] Received compilation request via model binding")
-
-            Try
-                If request Is Nothing Then
-                    Console.WriteLine("❌ [HandleCompileFlowWithModel] Request is Nothing")
-                    Return Results.BadRequest(New With {.error = "Request is null"})
-                End If
-
-                Console.WriteLine($"✅ [HandleCompileFlowWithModel] Request received: {If(request.Nodes IsNot Nothing, request.Nodes.Count, 0)} nodes, {If(request.Edges IsNot Nothing, request.Edges.Count, 0)} edges, {If(request.Tasks IsNot Nothing, request.Tasks.Count, 0)} tasks")
-
-                ' Validate request
-                If request.Nodes Is Nothing OrElse request.Nodes.Count = 0 Then
-                    Return Results.BadRequest(New With {.error = "No nodes provided"})
-                End If
-
-                ' Create Flow structure
-                Dim flow As New Compiler.Flow() With {
-                    .Nodes = If(request.Nodes, New List(Of Compiler.FlowNode)()),
-                    .Edges = If(request.Edges, New List(Of Compiler.FlowEdge)()),
-                    .Tasks = If(request.Tasks, New List(Of Compiler.TaskDefinition)())
-                }
-
-                ' Compile flow
-                Dim compiler = New Compiler.FlowCompiler()
-                Dim compilationResult = compiler.CompileFlow(flow)
-
-                Console.WriteLine($"✅ [HandleCompileFlowWithModel] Compilation successful: {If(compilationResult.TaskGroups IsNot Nothing, compilationResult.TaskGroups.Count, 0)} task groups")
-
-                ' Build response object - ASP.NET Core will serialize it using Newtonsoft.Json
-                Dim responseObj = New With {
-                    .taskGroups = compilationResult.TaskGroups,
-                    .entryTaskGroupId = compilationResult.EntryTaskGroupId,
-                    .tasks = compilationResult.Tasks,
-                    .compiledBy = "VB.NET_RUNTIME",
-                    .timestamp = DateTime.UtcNow.ToString("O")
-                }
-
-                Console.WriteLine($"✅ [HandleCompileFlowWithModel] Returning response object (will be serialized by ASP.NET Core)")
-
-                ' Return the object - ASP.NET Core will serialize it using Newtonsoft.Json
-                Return Results.Ok(responseObj)
-            Catch ex As Exception
-                Console.WriteLine($"❌ [HandleCompileFlowWithModel] Exception: {ex.Message}")
-                Console.WriteLine($"Stack trace: {ex.StackTrace}")
-                If ex.InnerException IsNot Nothing Then
-                    Console.WriteLine($"Inner exception: {ex.InnerException.Message}")
-                End If
-                Return Results.Problem(
-                    title:="Compilation failed",
-                    detail:=ex.Message,
-                    statusCode:=500
-                )
-            End Try
-        End Function
-
-        ''' <summary>
         ''' ✅ STATELESS: Salva un dialogo compilato nel DialogRepository
         ''' Endpoint: POST /api/runtime/dialog/save
         ''' </summary>

@@ -26,15 +26,6 @@ Namespace Models
     End Class
 
     ''' <summary>
-    ''' Compile Flow Response
-    ''' </summary>
-    Public Class CompileFlowResponse
-        Public Property TaskGroups As List(Of Compiler.TaskGroup)
-        Public Property EntryTaskGroupId As String
-        Public Property Tasks As List(Of Compiler.CompiledTask)
-    End Class
-
-    ''' <summary>
     ''' Orchestrator Session Start Request
     ''' </summary>
     Public Class OrchestratorSessionStartRequest
