@@ -383,29 +383,9 @@ Namespace ApiServer.Handlers
                         ' ✅ Se allTemplates non è presente, usa solo taskInstance
                         allTemplates = New List(Of Compiler.TaskDefinition) From {taskInstance}
                     End If
-
-                ElseIf requestObj("task") IsNot Nothing Then
-                    ' ⚠️ LEGACY FORMATO: { task: {...} } - mantenuto per retrocompatibilità
-                    ' Console.WriteLine("⚠️ [HandleCompileTask] Detected legacy task input format")
-                    Try
-                        Dim taskJson = requestObj("task").ToString()
-                        Dim settings = New JsonSerializerSettings() With {
-                            .NullValueHandling = NullValueHandling.Ignore,
-                            .MissingMemberHandling = MissingMemberHandling.Ignore
-                        }
-                        taskInstance = DeserializeTaskFromJson(taskJson, settings)
-                        allTemplates = New List(Of Compiler.TaskDefinition) From {taskInstance}
-                    Catch ex As Exception
-                        Console.WriteLine($"❌ [HandleCompileTask] Error deserializing task: {ex.Message}")
-                        Dim errorJson = JsonConvert.SerializeObject(New With {.error = "Failed to deserialize task", .message = ex.Message})
-                        context.Response.ContentType = "application/json"
-                        context.Response.StatusCode = 400
-                        context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
-                        Return
-                    End Try
                 Else
-                    Console.WriteLine("❌ [HandleCompileTask] Missing taskInstance or task in request")
-                    Dim errorJson = JsonConvert.SerializeObject(New With {.error = "Missing taskInstance or task in request"})
+                    Console.WriteLine("❌ [HandleCompileTask] Missing taskInstance in request")
+                    Dim errorJson = JsonConvert.SerializeObject(New With {.error = "Missing taskInstance in request. The request must contain a 'taskInstance' field."})
                     context.Response.ContentType = "application/json"
                     context.Response.StatusCode = 400
                     context.Response.WriteAsync(errorJson).GetAwaiter().GetResult()
