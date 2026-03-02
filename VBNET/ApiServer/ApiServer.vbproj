@@ -53,8 +53,8 @@
     <Compile Include="Helpers\ResponseHelpers.vb" />
     <Compile Include="Validators\RequestValidators.vb" />
     <!-- ✅ SPOSTATO: Converters\TaskTreeConverter.vb → Compiler\Helpers\TaskTreeConverter.vb -->
-    <Compile Include="Services\TaskDataService.vb" />
-    <Compile Include="Services\TaskCompilationService.vb" />
+    <!-- ❌ RIMOSSO: Services\TaskDataService.vb - codice morto, non usato -->
+    <!-- ❌ RIMOSSO: Services\TaskCompilationService.vb - codice morto, non usato -->
     <Compile Include="Streaming\ISseStreamManager.vb" />
     <Compile Include="Streaming\SseStreamManager.vb" />
     <Compile Include="Interfaces\Handlers\CompilationHandlers.vb" />
