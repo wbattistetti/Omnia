@@ -151,8 +151,8 @@ async function createAndRegisterTemplates(
   dataContractsMap: Map<string, DataContract>,
   shouldBeGeneral: boolean,
   addTranslation?: (guid: string, text: string) => void
-): Promise<Map<string, any>> {
-  const templates = await createTemplatesFromWizardData(
+): Promise<{ templates: Map<string, any>; nodeIdToTemplateIdMap: Map<string, string> }> {
+  const { templates, nodeIdToTemplateIdMap } = await createTemplatesFromWizardData(
     dataSchema,
     messagesToUse,
     constraintsMap,
@@ -185,7 +185,7 @@ async function createAndRegisterTemplates(
     });
   });
 
-  return templates;
+  return { templates, nodeIdToTemplateIdMap };
 }
 
 /**
@@ -201,12 +201,33 @@ async function createAndSaveInstance(
   addTranslation?: (guid: string, text: string) => void,
   adaptAllNormalSteps: boolean = false
 ): Promise<any> {
-  // Validate rootNode
+  // ✅ STEP 1: Verificare se istanza esiste già (con rowId)
+  // Se esiste, NON creare nulla (per costruzione, istanza.id = row.id)
+  let taskInstance = taskRepository.getTask(rowId);
+  if (taskInstance) {
+    console.log('[createAndSaveInstance] ✅ Istanza già esistente, non creare nulla', {
+      rowId,
+      taskId: taskInstance.id,
+      templateId: taskInstance.templateId
+    });
+    return taskInstance;
+  }
+
+  // ✅ STEP 2: Validare rootTemplate
   if (!rootTemplate.id || rootTemplate.id === 'root' || rootTemplate.id === 'UNDEFINED') {
     throw new Error(`Invalid rootTemplate.id: ${rootTemplate.id}. Expected a valid GUID.`);
   }
 
-  // Create contextualized instance
+  // ✅ STEP 3: Validare che rootTemplate.id ≠ rowId (per evitare duplicati)
+  if (rootTemplate.id === rowId) {
+    throw new Error(
+      `[createAndSaveInstance] CRITICAL: rootTemplate.id (${rootTemplate.id}) cannot equal rowId (${rowId}). ` +
+      `This would create a duplicate: instance.id === instance.templateId === template.id. ` +
+      `Template must have a unique GUID different from instance ID.`
+    );
+  }
+
+  // ✅ STEP 4: Creare istanza contestualizzata
   const instance = await createContextualizedInstance(
     rootTemplate,
     templates,
@@ -217,26 +238,24 @@ async function createAndSaveInstance(
     adaptAllNormalSteps
   );
 
-  // Get or create task instance
-  let taskInstance = taskRepository.getTask(rowId);
-  if (!taskInstance) {
-    taskInstance = taskRepository.createTask(
-      TaskType.UtteranceInterpretation,
-      rootTemplate.id,
-      undefined,
-      rowId,
-      projectId
-    );
-  }
+  // ✅ STEP 5: Creare task instance con istanza.id = rowId e templateId = rootTemplate.id
+  // rootTemplate.id è ora un nuovo GUID (non node.id), quindi è sicuro
+  taskInstance = taskRepository.createTask(
+    TaskType.UtteranceInterpretation,
+    rootTemplate.id, // ✅ Template ID (nuovo GUID, diverso da rowId)
+    undefined,
+    rowId, // ✅ Istanza ID = row.id (invariante)
+    projectId
+  );
 
-  // Update task with instance data
+  // ✅ STEP 6: Aggiornare task con dati dell'istanza
   taskRepository.updateTask(rowId, {
     ...instance,
     type: TaskType.UtteranceInterpretation,
-    templateId: rootTemplate.id,
+    templateId: rootTemplate.id, // ✅ Template ID (nuovo GUID)
   }, projectId);
 
-  // Reload task instance after update
+  // ✅ STEP 7: Ricaricare task instance dopo l'aggiornamento
   taskInstance = taskRepository.getTask(rowId);
   return taskInstance;
 }
@@ -440,7 +459,7 @@ export async function createTemplateAndInstanceForProposed(
   const messagesContextualizedToUse = messagesContextualized.size > 0 ? messagesContextualized : messages;
 
   // 5. Create and register templates
-  const templates = await createAndRegisterTemplates(
+  const { templates, nodeIdToTemplateIdMap } = await createAndRegisterTemplates(
     dataSchema,
     messagesToUse,
     constraintsMap,
@@ -449,13 +468,18 @@ export async function createTemplateAndInstanceForProposed(
     addTranslation
   );
 
-  // 6. Get root template
+  // 6. Get root template using mapping
   const rootNode = dataSchema[0];
-  const rootNodeTemplateId = rootNode.id;
-  const rootTemplate = templates.get(rootNodeTemplateId);
+  const rootTemplateId = nodeIdToTemplateIdMap.get(rootNode.id);
+
+  if (!rootTemplateId) {
+    throw new Error(`[WizardCompletionService] Root template ID not found in mapping for node.id: ${rootNode.id}`);
+  }
+
+  const rootTemplate = templates.get(rootTemplateId);
 
   if (!rootTemplate) {
-    throw new Error(`[WizardCompletionService] Root template not found for id: ${rootNodeTemplateId}`);
+    throw new Error(`[WizardCompletionService] Root template not found for template.id: ${rootTemplateId}`);
   }
 
   // 7. Create and save instance
@@ -564,7 +588,7 @@ export async function createTemplateAndInstanceForCompleted(
   const messagesContextualizedToUse = messagesContextualized.size > 0 ? messagesContextualized : messages;
 
   // 5. Create and register templates
-  const templates = await createAndRegisterTemplates(
+  const { templates, nodeIdToTemplateIdMap } = await createAndRegisterTemplates(
     dataSchema,
     messagesToUse,
     constraintsMap,
@@ -573,23 +597,18 @@ export async function createTemplateAndInstanceForCompleted(
     addTranslation
   );
 
-  // 6. Get root template
+  // 6. Get root template using mapping
   const rootNode = dataSchema[0];
+  const rootTemplateId = nodeIdToTemplateIdMap.get(rootNode.id);
 
-  // Validate rootNode.id === rootNode.templateId
-  if (rootNode.id !== rootNode.templateId) {
-    throw new Error(
-      `[WizardCompletionService] CRITICAL: rootNode.id (${rootNode.id}) !== rootNode.templateId (${rootNode.templateId})`
-    );
+  if (!rootTemplateId) {
+    throw new Error(`[WizardCompletionService] Root template ID not found in mapping for node.id: ${rootNode.id}`);
   }
 
-  const rootNodeTemplateId = rootNode.id;
-  const rootTemplate = templates.get(rootNodeTemplateId);
+  const rootTemplate = templates.get(rootTemplateId);
 
   if (!rootTemplate) {
-    throw new Error(
-      `[WizardCompletionService] CRITICAL: Root template not found for id: ${rootNodeTemplateId}`
-    );
+    throw new Error(`[WizardCompletionService] Root template not found for template.id: ${rootTemplateId}`);
   }
 
   // 7. Create and save instance

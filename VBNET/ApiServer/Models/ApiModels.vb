@@ -37,6 +37,18 @@ Namespace Models
 
         <JsonProperty("translations")>
         Public Property Translations As Dictionary(Of String, String)
+
+        ''' <summary>
+        ''' ID del progetto - OBBLIGATORIO per risoluzione traduzioni
+        ''' </summary>
+        <JsonProperty("projectId")>
+        Public Property ProjectId As String
+
+        ''' <summary>
+        ''' Locale della sessione (es. "it-IT", "en-US") - OBBLIGATORIO per risoluzione traduzioni
+        ''' </summary>
+        <JsonProperty("locale")>
+        Public Property Locale As String
     End Class
 
     ''' <summary>

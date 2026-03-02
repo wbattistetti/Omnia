@@ -368,8 +368,7 @@ export function Toolbar({
               <Play className="w-4 h-4" />
               <span>Esegui</span>
             </button>
-          );
-        })()}
+        )}
       </div>
 
       {/* ✅ Deployment Dialog */}

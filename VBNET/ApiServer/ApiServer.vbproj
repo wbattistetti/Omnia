@@ -55,6 +55,7 @@
     <!-- ✅ SPOSTATO: Converters\TaskTreeConverter.vb → Compiler\Helpers\TaskTreeConverter.vb -->
     <!-- ❌ RIMOSSO: Services\TaskDataService.vb - codice morto, non usato -->
     <!-- ❌ RIMOSSO: Services\TaskCompilationService.vb - codice morto, non usato -->
+    <Compile Include="Services\TaskDefinitionMaterializer.vb" />
     <Compile Include="Streaming\ISseStreamManager.vb" />
     <Compile Include="Streaming\SseStreamManager.vb" />
     <Compile Include="Interfaces\Handlers\CompilationHandlers.vb" />

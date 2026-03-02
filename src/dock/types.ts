@@ -77,6 +77,7 @@ export type DockTabTaskEditor = DockTabBase & { // ✅ RINOMINATO: DockTabActEdi
 export type DockTabChat = DockTabBase & {
   type: 'chat';
   task?: TaskMeta | null;
+  useBackendMaterialization?: boolean; // ✅ NEW: Flag to use backend materialization instead of frontend
   projectId?: string | null;
   translations?: Record<string, string>;
   taskTree?: any;

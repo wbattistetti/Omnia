@@ -8,6 +8,7 @@ import type { CompiledTask, CompilationResult, ExecutionState } from '../FlowCom
 import { taskRepository } from '../../services/TaskRepository';
 import { getTemplateId } from '../../utils/taskHelpers';
 import { DialogueTaskService } from '../../services/DialogueTaskService';
+import { taskTemplateService } from '../../services/TaskTemplateService';
 import { templateIdToTaskType, TaskType } from '../../types/taskTypes';
 
 interface UseDialogueEngineOptions {
@@ -103,12 +104,86 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       console.log('🚀 [FRONTEND] Calling backend compiler API...');
       console.log('═══════════════════════════════════════════════════════════════════════════');
 
-      // Collect only referenced tasks from node rows (not all tasks in repository)
+      // ✅ OPZIONE B: Invia TUTTO il grafo al backend
+      // Il frontend NON decide quali template servono - invia tutto ciò che ha
+      // Il backend materializer è l'unico che ricostruisce il grafo e decide cosa serve davvero
+
+      // ✅ A. Tutte le TaskInstances del progetto (non solo quelle referenziate)
+      // Il backend potrebbe aver bisogno di qualsiasi TaskInstance per dereferenziare SubTasksIds
+      const allProjectTaskInstances = taskRepository.getAllTasks().filter(task => {
+        if (!task) return false;
+        // ✅ CRITICAL: type is required - skip tasks without type
+        if (task.type === undefined || task.type === null) {
+          console.error(`[useDialogueEngine] Task ${task.id} has no type field - skipping from compilation. This task is invalid.`);
+          return false;
+        }
+        return true;
+      });
+
+      // ✅ B. Tutti i template del progetto (DialogueTaskService cache)
+      // Questi sono i template "smontati" che stanno in memoria
+      // Ogni template è un nodo del grafo, e può avere SubTasksIds → è un grafo, non una lista piatta
+      const allProjectTemplates = DialogueTaskService.getAllTemplates().map(template => {
+        // ✅ CRITICAL: Map semanticContract → dataContract for backend compatibility
+        // DialogueTask has semanticContract (frontend), but backend expects dataContract
+        return {
+          ...template,
+          // ✅ Map semanticContract to dataContract if dataContract is missing
+          dataContract: template.dataContract || template.semanticContract || null,
+          // ✅ Keep semanticContract for frontend compatibility (if needed)
+          semanticContract: template.semanticContract
+        };
+      });
+
+      // ✅ C. Tutti i template di factory
+      // Molti template del progetto derivano da template di factory
+      // I sub-template potrebbero essere definiti lì
+      const allFactoryTemplatesRaw = await taskTemplateService.getAllTemplates();
+
+      // ✅ Convert factory templates (TaskCatalog) to DialogueTask format
+      // Factory templates have nlpContract (not dataContract or semanticContract)
+      const allFactoryTemplates = allFactoryTemplatesRaw.map(factoryTemplate => {
+        const factoryTemplateAny = factoryTemplate as any;
+        // ✅ Map factory template to DialogueTask format expected by backend
+        return {
+          id: factoryTemplate.id,
+          label: factoryTemplate.label,
+          type: factoryTemplate.type,
+          name: factoryTemplateAny.name,
+          // ✅ Map nlpContract → dataContract (factory templates use nlpContract)
+          dataContract: factoryTemplateAny.nlpContract || factoryTemplateAny.dataContract || factoryTemplateAny.semanticContract || null,
+          semanticContract: factoryTemplateAny.semanticContract,
+          // ✅ Include all other fields from factory template
+          ...factoryTemplateAny
+        };
+      });
+
+      // ✅ COMBINA: Unisci tutte le fonti senza deduplicazione
+      // Per costruzione, non dovrebbero esserci duplicati:
+      // - TaskInstances hanno id = row.id (univoco)
+      // - Project Templates hanno id = nuovo GUID (generato nel Wizard)
+      // - Factory Templates hanno id dal database (univoco)
+      // Se ci sono duplicati, è un bug concettuale che deve essere risolto alla fonte
+      const allTasksWithTemplates = [
+        ...allProjectTaskInstances,
+        ...allProjectTemplates,
+        ...allFactoryTemplates
+      ];
+
+      console.log('[useDialogueEngine] 📦 Complete graph payload for backend materialization:', {
+        projectTaskInstancesCount: allProjectTaskInstances.length,
+        projectTemplatesCount: allProjectTemplates.length,
+        factoryTemplatesCount: allFactoryTemplates.length,
+        totalTasksCount: allTasksWithTemplates.length,
+        sampleTaskIds: allTasksWithTemplates.slice(0, 5).map(t => t.id)
+      });
+
+      // ✅ Extract DDTs only from referenced GetData tasks (keep existing logic for DDTs)
+      // DDTs are still extracted only from referenced tasks, as they are flow-specific
       const referencedTaskIds = new Set<string>();
       enrichedNodes.forEach(node => {
         const rows = node.data?.rows || [];
         rows.forEach(row => {
-          // ✅ UNIFIED MODEL: row.id ALWAYS equals task.id (when task exists)
           const taskId = row.id;
           if (taskId) {
             referencedTaskIds.add(taskId);
@@ -116,112 +191,46 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
         });
       });
 
-      // Collect only referenced tasks from repository
-      const allTasks = Array.from(referencedTaskIds)
-        .map(taskId => taskRepository.getTask(taskId))
-        .filter(task => {
-          if (!task) return false;
-          // ✅ CRITICAL: type is required - skip tasks without type
-          if (task.type === undefined || task.type === null) {
-            console.error(`[useDialogueEngine] Task ${task.id} has no type field - skipping from compilation. This task is invalid.`);
-            return false;
-          }
-          return true;
-        });
-
-      // Extract DDTs only from referenced GetData tasks
-      // ✅ MIGRATION: Use getTemplateId() helper
       const allDDTs: any[] = [];
-      allTasks.forEach(task => {
-        const templateId = getTemplateId(task);
-        // ✅ CASE-INSENSITIVE
-        // ✅ Check if task has DDT (data indicates DDT)
-        if (templateId && templateIdToTaskType(templateId) === TaskType.UtteranceInterpretation && task.data && task.data.length > 0) {
-          allDDTs.push({
-            label: task.label,
-            data: task.data,
-            steps: task.steps  // ✅ Steps a root level
-            // ❌ REMOVED: constraints, examples - these should come from template, not instance
-          });
-        }
-      });
-
-      // ✅ Collect referenced templates and add them to allTasks
-      // Templates are needed by the compiler to resolve constraints/examples/nlpContract
-      const referencedTemplateIds = new Set<string>();
-      allTasks.forEach(task => {
-        if (task.templateId) {
-          referencedTemplateIds.add(task.templateId);
-        }
-        // Also check data nodes for templateId references
-        if (task.data && Array.isArray(task.data)) {
-          task.data.forEach((node: any) => {
-            if (node.templateId) {
-              referencedTemplateIds.add(node.templateId);
-            }
-            if (node.subTasks && Array.isArray(node.subTasks)) {
-              node.subTasks.forEach((subNode: any) => {
-                if (subNode.templateId) {
-                  referencedTemplateIds.add(subNode.templateId);
-                }
-              });
-            }
-          });
-        }
-      });
-
-      // Load referenced templates and add them to allTasks
-      const referencedTemplates: any[] = [];
-      referencedTemplateIds.forEach(templateId => {
-        // Skip if template is already in allTasks (as an instance)
-        if (allTasks.some(t => t.id === templateId)) {
-          return;
-        }
-        // Load template from DialogueTaskService
-        try {
-          const template = DialogueTaskService.getTemplate(templateId);
-          if (template) {
-            referencedTemplates.push(template);
-            console.log(`[useDialogueEngine] ✅ Added referenced template to flow.Tasks: ${templateId}`);
-          } else {
-            console.warn(`[useDialogueEngine] ⚠️ Referenced template not found: ${templateId}`);
+      Array.from(referencedTaskIds).forEach(taskId => {
+        const task = taskRepository.getTask(taskId);
+        if (task) {
+          const templateId = getTemplateId(task);
+          if (templateId && templateIdToTaskType(templateId) === TaskType.UtteranceInterpretation && task.data && task.data.length > 0) {
+            allDDTs.push({
+              label: task.label,
+              data: task.data,
+              steps: task.steps
+            });
           }
-        } catch (error) {
-          console.warn(`[useDialogueEngine] ⚠️ Error loading template ${templateId}:`, error);
         }
       });
 
-      // Combine instance tasks and referenced templates
-      const allTasksWithTemplates = [...allTasks, ...referencedTemplates];
-
-      const totalTasksInRepository = taskRepository.getAllTasks().length;
-
-      // ✅ DEBUG: Log tasks to verify type field
-      if (allTasks.length > 0) {
-        console.log('[FRONTEND] Tasks being sent to backend:');
-        allTasks.slice(0, 5).forEach((task, idx) => {
+      // ✅ DEBUG: Log complete graph payload
+      if (allTasksWithTemplates.length > 0) {
+        console.log('[FRONTEND] Complete graph being sent to backend:');
+        allTasksWithTemplates.slice(0, 5).forEach((task, idx) => {
           console.log(`  Task[${idx}]:`, {
             id: task.id,
             type: task.type,
             typeName: task.type !== undefined && task.type !== null ? `TaskType[${task.type}]` : 'MISSING',
             templateId: task.templateId,
+            hasDataContract: !!(task.dataContract),
+            hasSemanticContract: !!(task.semanticContract),
             hasdata: !!(task.data && task.data.length > 0)
           });
         });
       }
 
-      console.log('[FRONTEND] Preparing compilation request:', {
+      console.log('[FRONTEND] Preparing compilation request with complete graph:', {
         nodesCount: enrichedNodes.length,
         edgesCount: options.edges.length,
-        tasksCount: allTasks.length,
-        referencedTaskIdsCount: referencedTaskIds.size,
-        totalTasksInRepository,
+        totalTasksCount: allTasksWithTemplates.length,
+        projectTaskInstancesCount: allProjectTaskInstances.length,
+        projectTemplatesCount: allProjectTemplates.length,
+        factoryTemplatesCount: allFactoryTemplates.length,
         ddtsCount: allDDTs.length
       });
-
-      if (totalTasksInRepository > allTasks.length) {
-        console.log(`[FRONTEND] ⚠️ Filtered out ${totalTasksInRepository - allTasks.length} unused tasks from repository`);
-      }
 
       // ⭐ SEMPRE RUBY (porta 3101) - Unica fonte di verità per interpretare dialoghi
       // ❌ POSTEGGIATO: Node.js (3100) e VB.NET diretto (5000) - non usati per ora
@@ -322,14 +331,15 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
       };
 
       // Log first few tasks to verify type field is present
-      if (allTasks.length > 0) {
-        console.log('[FRONTEND] Tasks in request body (before JSON.stringify):');
-        allTasks.slice(0, 3).forEach((task, idx) => {
+      if (allTasksWithTemplates.length > 0) {
+        console.log('[FRONTEND] Complete graph in request body (before JSON.stringify):');
+        allTasksWithTemplates.slice(0, 3).forEach((task, idx) => {
           console.log(`  Task[${idx}]:`, {
             id: task.id,
             type: task.type,
             typeName: task.type !== undefined && task.type !== null ? `TaskType[${task.type}]` : 'MISSING',
             templateId: task.templateId,
+            hasDataContract: !!(task.dataContract),
             hasdata: !!(task.data && task.data.length > 0)
           });
         });

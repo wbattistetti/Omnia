@@ -475,6 +475,159 @@ export function useResponseEditorToolbar({
     }
   };
 
+  // ✅ NEW: Handler for backend materialization test (similar to handleTestClick but with useBackendMaterialization flag)
+  const handleTestBackendClick = () => {
+    // ✅ NEW: Use dockable chat panel with backend materialization flag
+    if (setDockTree) {
+      // Close global test panel if open (to avoid confusion)
+      if (isGlobalTestPanelOpen) {
+        closeGlobalTestPanel();
+      }
+
+      // Open as dockable tab
+      if (!taskTree || !taskMeta || !currentProjectId) {
+        console.error('[Toolbar] ❌ Cannot open chat panel (backend): missing task data', {
+          hasTaskTree: !!taskTree,
+          hasTaskMeta: !!taskMeta,
+          hasProjectId: !!currentProjectId,
+        });
+        return;
+      }
+
+      // ✅ CRITICAL: Ensure translations are loaded before opening chat panel
+      // If translations are not ready, wait for them or trigger loading
+      if (!translationsReady && !translationsLoading && loadAllTranslations) {
+        console.log('[Toolbar] ⏳ Translations not ready, loading... (backend test)');
+        loadAllTranslations().then(() => {
+          console.log('[Toolbar] ✅ Translations loaded, retrying chat panel open (backend test)');
+          handleTestBackendClick();
+        }).catch((err) => {
+          console.error('[Toolbar] ❌ Failed to load translations', err);
+        });
+        return;
+      }
+
+      // If translations are still loading, wait a bit and retry
+      if (translationsLoading) {
+        console.log('[Toolbar] ⏳ Translations are loading, waiting... (backend test)');
+        setTimeout(() => {
+          handleTestBackendClick();
+        }, 500);
+        return;
+      }
+
+      // ✅ CRITICAL: Get translations from context (must be ready by now)
+      let allTranslations = globalTranslations || {};
+
+      // ✅ NO FALLBACK: Translations must be loaded by design
+      if (!allTranslations || Object.keys(allTranslations).length === 0) {
+        console.error('[Toolbar] ❌ ERROR: Translations are empty after loading - this is a structural error (backend test)');
+        alert('Translations are not available. Please ensure the project has translations loaded.');
+        return;
+      }
+
+      // ✅ CRITICAL: Filter runtime translations BEFORE passing to chat tab
+      const runtimeGuids = new Set<string>();
+      if (taskTree?.steps && typeof taskTree.steps === 'object') {
+        const extractGuidsFromSteps = (steps: Record<string, any>, guids: Set<string>) => {
+          const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          for (const [templateId, stepDict] of Object.entries(steps)) {
+            if (!stepDict || typeof stepDict !== 'object') continue;
+            if (Array.isArray(stepDict)) {
+              for (const step of stepDict) {
+                if (step?.escalations && Array.isArray(step.escalations)) {
+                  for (const escalation of step.escalations) {
+                    if (escalation.tasks && Array.isArray(escalation.tasks)) {
+                      for (const taskItem of escalation.tasks) {
+                        if (taskItem.parameters && Array.isArray(taskItem.parameters)) {
+                          const textParam = taskItem.parameters.find((p: any) =>
+                            p?.parameterId === 'text' || p?.key === 'text'
+                          );
+                          if (textParam?.value && guidPattern.test(textParam.value)) {
+                            guids.add(textParam.value);
+                          }
+                        }
+                        if (taskItem.id && guidPattern.test(taskItem.id)) {
+                          guids.add(taskItem.id);
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              continue;
+            }
+            for (const [stepType, step] of Object.entries(stepDict)) {
+              if (!step || typeof step !== 'object') continue;
+              if (step.escalations && Array.isArray(step.escalations)) {
+                for (const escalation of step.escalations) {
+                  if (escalation.tasks && Array.isArray(escalation.tasks)) {
+                    for (const taskItem of escalation.tasks) {
+                      if (taskItem.parameters && Array.isArray(taskItem.parameters)) {
+                        const textParam = taskItem.parameters.find((p: any) =>
+                          p?.parameterId === 'text' || p?.key === 'text'
+                        );
+                        if (textParam?.value && guidPattern.test(textParam.value)) {
+                          guids.add(textParam.value);
+                        }
+                      }
+                      if (taskItem.id && guidPattern.test(taskItem.id)) {
+                        guids.add(taskItem.id);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        };
+        extractGuidsFromSteps(taskTree.steps, runtimeGuids);
+      }
+
+      // Filter translations: only GUIDs referenced in steps + runtime.* keys
+      const runtimeTranslations: Record<string, string> = {};
+      for (const [guid, text] of Object.entries(allTranslations)) {
+        if (guid.startsWith('runtime.')) {
+          runtimeTranslations[guid] = text;
+        } else if (runtimeGuids.has(guid)) {
+          runtimeTranslations[guid] = text;
+        }
+      }
+
+      // Convert taskMeta to Task format
+      const task = {
+        id: taskMeta.id || taskMeta._id,
+        templateId: taskMeta.templateId || taskMeta.id || taskMeta._id,
+        type: taskMeta.type || 1,
+        label: taskMeta.label || editorContext?.taskLabel || '',
+        ...taskMeta
+      };
+
+      // ✅ NEW: Create chat tab with backend materialization flag and different ID
+      const chatTabId = `chat_backend_${task.id}`;
+      const chatTab: DockTabChat = {
+        id: chatTabId,
+        title: `Chat (Backend): ${task.label || 'Test'}`,
+        type: 'chat',
+        task: task as any,
+        projectId: currentProjectId,
+        translations: runtimeTranslations,
+        taskTree,
+        mode: 'interactive',
+        useBackendMaterialization: true, // ✅ NEW: Flag to use backend materialization
+      };
+
+      // ✅ IDEMPOTENT: openLateralChatPanel is idempotent
+      setDockTree(prev => openLateralChatPanel(prev, {
+        tabId: chatTabId,
+        newTab: chatTab,
+        position: 'right',
+      }));
+    } else {
+      console.warn('[Toolbar] ⚠️ setDockTree not available for backend test');
+    }
+  };
+
   const handleTasksClick = () => {
     // Toggle: se è aperto, chiudi e collassa; se è chiuso, apri e espandi
     if (tasksPanelMode === 'actions') {
@@ -565,8 +718,15 @@ export function useResponseEditorToolbar({
       icon: <MessageSquare size={16} />,
       label: "Test",
       onClick: handleTestClick,
-      title: "Simulate and validate the dialogue flow to ensure correct behavior and data recognition.",
+      title: "Simulate and validate the dialogue flow to ensure correct behavior and data recognition. (Frontend materialization)",
       active: testPanelMode === 'chat'
+    },
+    {
+      icon: <MessageSquare size={16} />,
+      label: "Testa (Backend)",
+      onClick: handleTestBackendClick,
+      title: "Test with backend materialization - uses TaskDefinitionMaterializer in VB.NET backend instead of frontend extraction.",
+      active: false
     },
     {
       icon: <Upload size={16} />,

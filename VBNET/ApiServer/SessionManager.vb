@@ -26,6 +26,9 @@ Public Class OrchestratorSession
     Public Property EventEmitter As EventEmitter
     Public Property IsWaitingForInput As Boolean
     Public Property WaitingForInputData As Object
+    ' ✅ SINGLE POINT OF TRUTH: ProjectId e Locale per risoluzione traduzioni
+    Public Property ProjectId As String
+    Public Property Locale As String
 End Class
 
 ''' <summary>
@@ -301,7 +304,9 @@ Public Class SessionManager
         sessionId As String,
         compilationResult As FlowCompilationResult,
         tasks As List(Of Object),
-        translations As Dictionary(Of String, String)
+        translations As Dictionary(Of String, String),
+        Optional projectId As String = Nothing,
+        Optional locale As String = Nothing
     ) As OrchestratorSession
         SyncLock _lock
             ' ✅ REMOVED: taskEngine (Motore) - FlowOrchestrator no longer requires it
@@ -311,10 +316,39 @@ Public Class SessionManager
                 .Tasks = tasks,
                 .Translations = translations,
                 .EventEmitter = New EventEmitter(),
-                .IsWaitingForInput = False
+                .IsWaitingForInput = False,
+                .ProjectId = projectId,
+                .Locale = locale
             }
-            ' ✅ STATELESS: Crea FlowOrchestrator (no longer requires Motore)
-            session.Orchestrator = New TaskEngine.Orchestrator.FlowOrchestrator(compilationResult, sessionId, _executionStateStorage)
+
+            ' ✅ SINGLE POINT OF TRUTH: Crea resolveTranslation function per risolvere TextKey
+            Dim resolveTranslation As Func(Of String, String) = Nothing
+            If Not String.IsNullOrEmpty(projectId) AndAlso Not String.IsNullOrEmpty(locale) AndAlso _translationRepository IsNot Nothing Then
+                resolveTranslation = Function(textKey As String) As String
+                    If String.IsNullOrEmpty(textKey) Then
+                        Return Nothing
+                    End If
+                    Try
+                        Dim translation = _translationRepository.GetTranslation(projectId, locale, textKey)
+                        ' Se traduzione non trovata, ritorna TextKey stesso (fallback)
+                        Return If(String.IsNullOrEmpty(translation), textKey, translation)
+                    Catch ex As Exception
+                        Console.WriteLine($"[SessionManager] ⚠️ Error resolving translation for key '{textKey}': {ex.Message}")
+                        ' Fallback: ritorna TextKey stesso
+                        Return textKey
+                    End Try
+                End Function
+            End If
+
+            ' ✅ STATELESS: Crea FlowOrchestrator con resolveTranslation
+            session.Orchestrator = New TaskEngine.Orchestrator.FlowOrchestrator(
+                compilationResult,
+                sessionId,
+                _executionStateStorage,
+                projectId,
+                locale,
+                resolveTranslation
+            )
 
             AddHandler session.Orchestrator.MessageToShow, Sub(sender, text)
                                                                Dim msgId = $"{sessionId}-{DateTime.UtcNow.Ticks}-{Guid.NewGuid().ToString().Substring(0, 8)}"
@@ -386,8 +420,34 @@ Public Class SessionManager
         SyncLock _lock
             Dim session = _storage.GetOrchestratorSession(sessionId)
             If session IsNot Nothing AndAlso session.CompilationResult IsNot Nothing AndAlso session.Orchestrator Is Nothing Then
-                ' ✅ STATELESS: Ricrea FlowOrchestrator (no longer requires Motore)
-                session.Orchestrator = New TaskEngine.Orchestrator.FlowOrchestrator(session.CompilationResult, sessionId, _executionStateStorage)
+                ' ✅ SINGLE POINT OF TRUTH: Ricrea resolveTranslation per risolvere TextKey
+                Dim resolveTranslation As Func(Of String, String) = Nothing
+                If Not String.IsNullOrEmpty(session.ProjectId) AndAlso Not String.IsNullOrEmpty(session.Locale) AndAlso _translationRepository IsNot Nothing Then
+                    resolveTranslation = Function(textKey As String) As String
+                        If String.IsNullOrEmpty(textKey) Then
+                            Return Nothing
+                        End If
+                        Try
+                            Dim translation = _translationRepository.GetTranslation(session.ProjectId, session.Locale, textKey)
+                            ' Se traduzione non trovata, ritorna TextKey stesso (fallback)
+                            Return If(String.IsNullOrEmpty(translation), textKey, translation)
+                        Catch ex As Exception
+                            Console.WriteLine($"[SessionManager] ⚠️ Error resolving translation for key '{textKey}': {ex.Message}")
+                            ' Fallback: ritorna TextKey stesso
+                            Return textKey
+                        End Try
+                    End Function
+                End If
+
+                ' ✅ STATELESS: Ricrea FlowOrchestrator con resolveTranslation
+                session.Orchestrator = New TaskEngine.Orchestrator.FlowOrchestrator(
+                    session.CompilationResult,
+                    sessionId,
+                    _executionStateStorage,
+                    session.ProjectId,
+                    session.Locale,
+                    resolveTranslation
+                )
 
                 ' Ricollega eventi
                 AddHandler session.Orchestrator.MessageToShow, Sub(sender, text)

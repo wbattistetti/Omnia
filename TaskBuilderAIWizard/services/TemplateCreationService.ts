@@ -607,45 +607,43 @@ export async function createTemplatesFromWizardData(
   dataContractsMap: Map<string, DataContract>,
   shouldBeGeneral: boolean = false,
   addTranslation?: (guid: string, text: string) => void
-): Promise<Map<string, DialogueTask>> {
+): Promise<{ templates: Map<string, DialogueTask>; nodeIdToTemplateIdMap: Map<string, string> }> {
   const templates = new Map<string, DialogueTask>();
+  // ✅ MAPPING: node.id (Wizard internal) → template.id (new GUID for template)
+  // This ensures template.id is always unique and different from rowId
+  const nodeIdToTemplateIdMap = new Map<string, string>();
 
   /**
    * Recursive helper to create template for a node
    */
   const createTemplateForNode = async (node: WizardTaskTreeNode): Promise<DialogueTask> => {
-    // ✅ INVARIANT CHECK: node.id MUST equal node.templateId (single source of truth)
-    if (node.id !== node.templateId) {
-      throw new Error(
-        `[TemplateCreationService] CRITICAL: node.id (${node.id}) !== node.templateId (${node.templateId}) for node "${node.label}". ` +
-        `This should never happen. The ID must be consistent throughout the wizard lifecycle.`
-      );
-    }
+    // ✅ CRITICAL: Generate NEW GUID for template (not node.id)
+    // node.id is used only internally in Wizard, template.id must be a new unique GUID
+    // This prevents collisions with rowId (which equals task.id)
+    const templateId = uuidv4();
 
-    // ✅ ALWAYS use node.id as the single source of truth (no fallback, no templateId)
-    const templateId = node.id;
+    // ✅ Store mapping: node.id → template.id
+    nodeIdToTemplateIdMap.set(node.id, templateId);
 
     // Collect subTasksIds from children
+    // ✅ CRITICAL: Use mapped template IDs (not node.id) for subTasksIds
     const subTasksIds: string[] = [];
     if (node.subNodes && node.subNodes.length > 0) {
       // ✅ Use for...of instead of forEach to support await
       for (const subNode of node.subNodes) {
-        // ✅ INVARIANT CHECK: subNode.id MUST equal subNode.templateId
-        if (subNode.id !== subNode.templateId) {
-          throw new Error(
-            `[TemplateCreationService] CRITICAL: subNode.id (${subNode.id}) !== subNode.templateId (${subNode.templateId}) for subNode "${subNode.label}". ` +
-            `This should never happen. The ID must be consistent throughout the wizard lifecycle.`
-          );
-        }
-
-        // ✅ ALWAYS use subNode.id (no fallback)
-        const subTemplateId = subNode.id;
-        subTasksIds.push(subTemplateId);
-
-        // Create template for child (recursive)
-        if (!templates.has(subTemplateId)) {
+        // Create template for child (recursive) - this will generate new GUID and store mapping
+        const subNodeTemplateId = nodeIdToTemplateIdMap.get(subNode.id);
+        if (!subNodeTemplateId) {
+          // Sub-template not created yet, create it now
           const subTemplate = await createTemplateForNode(subNode);
-          templates.set(subTemplateId, subTemplate);
+          const mappedSubTemplateId = nodeIdToTemplateIdMap.get(subNode.id);
+          if (mappedSubTemplateId) {
+            subTasksIds.push(mappedSubTemplateId);
+            templates.set(mappedSubTemplateId, subTemplate);
+          }
+        } else {
+          // Sub-template already created, use mapped ID
+          subTasksIds.push(subNodeTemplateId);
         }
       }
     }
@@ -667,13 +665,16 @@ export async function createTemplatesFromWizardData(
     // Le traduzioni vengono già salvate in associateTextsToStructure durante la generazione
 
     // Convert generalized messages to steps dictionary (per-node messages)
+    // ✅ CRITICAL: Use node.id for steps dictionary key (internal Wizard reference)
+    // The steps dictionary uses node.id as key, not template.id
     console.log('[createTemplatesFromWizardData] 🔍 Creating template', {
+      nodeId: node.id,
       templateId,
       nodeLabel: node.label,
       hasAddTranslation: !!addTranslation,
       addTranslationType: typeof addTranslation
     });
-    const steps = convertMessagesToStepsDictionary(messagesToUse, templateId, addTranslation);
+    const steps = convertMessagesToStepsDictionary(messagesToUse, node.id, addTranslation);
 
     // Get constraints and data contract for this node
     const constraints = constraintsMap.get(node.id) || [];
@@ -728,23 +729,19 @@ export async function createTemplatesFromWizardData(
 
   // Create template for each root node
   for (const rootNode of fakeTree) {
-    // ✅ INVARIANT CHECK: rootNode.id MUST equal rootNode.templateId
-    if (rootNode.id !== rootNode.templateId) {
-      throw new Error(
-        `[TemplateCreationService] CRITICAL: rootNode.id (${rootNode.id}) !== rootNode.templateId (${rootNode.templateId}) for rootNode "${rootNode.label}". ` +
-        `This should never happen. The ID must be consistent throughout the wizard lifecycle.`
-      );
-    }
-
-    // ✅ ALWAYS use rootNode.id (no fallback)
-    const rootTemplateId = rootNode.id;
-
-    if (!templates.has(rootTemplateId)) {
-      await createTemplateForNode(rootNode);
+    // ✅ Check if template already created (via mapping)
+    const mappedRootTemplateId = nodeIdToTemplateIdMap.get(rootNode.id);
+    if (!mappedRootTemplateId) {
+      // Create root template (will generate new GUID and store in mapping)
+      const rootTemplate = await createTemplateForNode(rootNode);
+      const finalRootTemplateId = nodeIdToTemplateIdMap.get(rootNode.id);
+      if (finalRootTemplateId) {
+        templates.set(finalRootTemplateId, rootTemplate);
+      }
     }
   }
 
-  return templates;
+  return { templates, nodeIdToTemplateIdMap };
 }
 
 /**

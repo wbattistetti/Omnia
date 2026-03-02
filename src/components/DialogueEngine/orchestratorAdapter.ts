@@ -62,6 +62,19 @@ export async function executeOrchestratorBackend(
   let eventSource: EventSource | null = null;
 
   try {
+    // ✅ SINGLE POINT OF TRUTH: Ottieni projectId e locale per risoluzione traduzioni
+    const projectId = localStorage.getItem('currentProjectId') || undefined;
+    const projectLang = localStorage.getItem('project.lang') || 'it';
+    // Converti formato 'it'/'en'/'pt' in formato BCP 47 'it-IT'/'en-US'/'pt-BR'
+    const localeMap: Record<string, string> = {
+      'it': 'it-IT',
+      'en': 'en-US',
+      'pt': 'pt-BR'
+    };
+    const locale = localeMap[projectLang] || 'it-IT';
+
+    console.log('[ORCHESTRATOR] Translation resolution context:', { projectId, locale, projectLang });
+
     // 1. Create backend session
     console.log('[ORCHESTRATOR] Creating backend session...');
     const startResponse = await fetch(`${baseUrl}/api/runtime/orchestrator/session/start`, {
@@ -71,7 +84,9 @@ export async function executeOrchestratorBackend(
         compilationResult: compilationResultJson, // Pass original JSON from compiler - no transformation!
         tasks,
         ddts,
-        translations
+        translations,
+        projectId, // ✅ SINGLE POINT OF TRUTH: Per risoluzione traduzioni nel backend
+        locale     // ✅ SINGLE POINT OF TRUTH: Per risoluzione traduzioni nel backend
       })
     });
 

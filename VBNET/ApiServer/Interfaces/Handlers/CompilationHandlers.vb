@@ -2,6 +2,7 @@ Option Strict On
 Option Explicit On
 Imports System.IO
 Imports ApiServer.Models
+Imports ApiServer.Services
 Imports Compiler
 Imports Microsoft.AspNetCore.Http
 Imports Newtonsoft.Json
@@ -125,6 +126,31 @@ Namespace ApiServer.Handlers
                     Return
                 End If
 
+                ' ✅ UNIFICAZIONE: Deserializza correttamente i task usando la stessa logica di HandleCompileTask
+                ' Questo risolve il problema dove UtteranceInterpretation tasks vengono deserializzati come TaskDefinition base
+                ' La "presa diretta" del ResponseEditor funziona perché usa DeserializeTaskFromJson - unifichiamo qui
+                If request.Tasks IsNot Nothing AndAlso request.Tasks.Count > 0 Then
+                    Dim correctlyDeserializedTasks As New List(Of Compiler.TaskDefinition)()
+                    Dim settings = New JsonSerializerSettings() With {
+                        .NullValueHandling = NullValueHandling.Ignore,
+                        .MissingMemberHandling = MissingMemberHandling.Ignore
+                    }
+
+                    ' Deserializza ogni task usando DeserializeTaskFromJson (stessa logica di HandleCompileTask)
+                    For Each task In request.Tasks
+                        ' Serializza il task per poi deserializzarlo correttamente con il tipo giusto
+                        Dim taskJson = JsonConvert.SerializeObject(task, settings)
+                        Dim correctlyDeserializedTask = DeserializeTaskFromJson(taskJson, settings)
+                        correctlyDeserializedTasks.Add(correctlyDeserializedTask)
+                    Next
+
+                    ' Sostituisci la lista con quella correttamente deserializzata
+                    request.Tasks = correctlyDeserializedTasks
+
+                    Console.WriteLine($"✅ [HandleCompileFlow] Correctly deserialized {correctlyDeserializedTasks.Count} tasks (UtteranceInterpretation tasks are now UtteranceTaskDefinition)")
+                    System.Diagnostics.Debug.WriteLine($"✅ [HandleCompileFlow] Correctly deserialized {correctlyDeserializedTasks.Count} tasks")
+                End If
+
                 Console.WriteLine($"✅ [HandleCompileFlow] Request deserialized: {If(request.Nodes IsNot Nothing, request.Nodes.Count, 0)} nodes, {If(request.Edges IsNot Nothing, request.Edges.Count, 0)} edges, {If(request.Tasks IsNot Nothing, request.Tasks.Count, 0)} tasks")
                 System.Diagnostics.Debug.WriteLine($"✅ [HandleCompileFlow] Request deserialized: {If(request.Nodes IsNot Nothing, request.Nodes.Count, 0)} nodes")
 
@@ -187,11 +213,20 @@ Namespace ApiServer.Handlers
                     Return
                 End If
 
-                ' Create Flow structure
+                ' ✅ SINGLE POINT OF TRUTH: Materializza tutti i task PRIMA di creare Flow
+                ' request.Tasks contiene sia istanze (incomplete) che template (completi)
+                ' Il materializer unisce istanze + template e produce TaskDefinition completi
+                Dim materializer = New ApiServer.Services.TaskDefinitionMaterializer()
+                Dim materializedTasks = materializer.MaterializeFlowTasks(
+                    If(request.Tasks, New List(Of Compiler.TaskDefinition)()),
+                    If(request.Tasks, New List(Of Compiler.TaskDefinition)())  ' allTemplates = request.Tasks (contiene sia istanze che template)
+                )
+
+                ' Create Flow structure con task materializzati
                 Dim flow As New Compiler.Flow() With {
                     .Nodes = If(request.Nodes, New List(Of Compiler.FlowNode)()),
                     .Edges = If(request.Edges, New List(Of Compiler.FlowEdge)()),
-                    .Tasks = If(request.Tasks, New List(Of Compiler.TaskDefinition)())
+                    .Tasks = materializedTasks  ' ✅ Task materializzati con dataContract
                 }
 
                 ' Log Flow structure after creation
@@ -426,16 +461,33 @@ Namespace ApiServer.Handlers
                 Dim taskType = CType(typeValue, TaskEngine.TaskTypes)
                 ' Console.WriteLine($"✅ [HandleCompileTask] TaskType: {taskType} (value={typeValue})")
 
+                ' ✅ SINGLE POINT OF TRUTH: Materializza TaskDefinition completo PRIMA della compilazione
+                Dim materializer = New ApiServer.Services.TaskDefinitionMaterializer()
+                Dim materializedTask = materializer.MaterializeTaskDefinition(taskInstance, allTemplates)
+
+                ' ✅ Raccogli template referenziati per sub-template
+                Dim allTemplatesWithReferenced = New List(Of Compiler.TaskDefinition)(allTemplates)
+                Dim utteranceTask = TryCast(materializedTask, UtteranceTaskDefinition)
+                If utteranceTask IsNot Nothing AndAlso utteranceTask.SubTasksIds IsNot Nothing Then
+                    For Each subTaskId In utteranceTask.SubTasksIds
+                        If Not String.IsNullOrEmpty(subTaskId) AndAlso Not allTemplatesWithReferenced.Any(Function(t) t.Id = subTaskId) Then
+                            Dim subTemplate = allTemplates.FirstOrDefault(Function(t) t.Id = subTaskId)
+                            If subTemplate IsNot Nothing Then
+                                allTemplatesWithReferenced.Add(subTemplate)
+                            End If
+                        End If
+                    Next
+                End If
+
                 ' Get appropriate compiler based on task type
                 Dim compiler = TaskCompilerFactory.GetCompiler(taskType)
                 ' Console.WriteLine($"✅ [HandleCompileTask] Using compiler: {compiler.GetType().Name}")
 
-                ' ✅ Pipeline pulita: compila TaskInstance direttamente con allTemplates
-                ' NON usa Flow, NON usa rowId
-                ' Console.WriteLine($"🔄 [HandleCompileTask] Calling compiler.Compile for TaskInstance {taskInstance.Id}...")
-                ' Console.WriteLine($"   AllTemplates count: {If(allTemplates IsNot Nothing, allTemplates.Count, 0)}")
+                ' ✅ Pipeline pulita: compila TaskDefinition materializzato con allTemplates
+                ' Console.WriteLine($"🔄 [HandleCompileTask] Calling compiler.Compile for materialized task {materializedTask.Id}...")
+                ' Console.WriteLine($"   AllTemplates count: {If(allTemplatesWithReferenced IsNot Nothing, allTemplatesWithReferenced.Count, 0)}")
 
-                Dim compiledTask = compiler.Compile(taskInstance, taskInstance.Id, allTemplates)
+                Dim compiledTask = compiler.Compile(materializedTask, materializedTask.Id, allTemplatesWithReferenced)
                 ' Console.WriteLine($"✅ [HandleCompileTask] TaskInstance compiled successfully: {compiledTask.GetType().Name}")
 
                 ' ✅ DIAG: Verifica steps nel CompiledTask prima di validare ID - COMMENTATO PER RIDURRE LOG

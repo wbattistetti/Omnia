@@ -494,7 +494,9 @@ Module Program
                     sessionId,
                     compilationResult,
                     request.Tasks,
-                    request.Translations
+                    request.Translations,
+                    request.ProjectId,
+                    request.Locale
                 )
                 Console.WriteLine($"✅ [API][OrchestratorSession] Session created successfully")
                 System.Diagnostics.Debug.WriteLine($"✅ [API][OrchestratorSession] Session created successfully")

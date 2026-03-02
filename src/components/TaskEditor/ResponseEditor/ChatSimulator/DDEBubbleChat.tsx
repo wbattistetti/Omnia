@@ -199,6 +199,8 @@ export default function DDEBubbleChat({
   flowNodes,
   flowEdges,
   flowTasks,
+  // ✅ NEW: Backend materialization flag
+  useBackendMaterialization = false,
 }: {
   task: Task | null;
   projectId: string | null;
@@ -214,6 +216,8 @@ export default function DDEBubbleChat({
   flowNodes?: any[]; // Node<FlowNode>[] - using any[] to avoid circular dependency
   flowEdges?: any[]; // Edge<EdgeData>[] - using any[] to avoid circular dependency
   flowTasks?: any[];
+  // ✅ NEW: Backend materialization flag
+  useBackendMaterialization?: boolean;
 }) {
   const { combinedClass, fontSize } = useFontContext();
   const [messages, setMessages] = React.useState<Message[]>([]);
@@ -502,16 +506,19 @@ export default function DDEBubbleChat({
           parameters: taskInstance.parameters || [],
           subTasksIds: taskInstance.subTasksIds || [],
           constraints: taskInstance.constraints || [],
-          // ✅ CRITICAL: dataContract must come from the TEMPLATE in DialogueTaskService,
-          // not from the task instance in taskRepository.  The instance's dataContract
-          // never contains subDataMapping (that is written by the wizard/editor into the
-          // template).  The compiler looks up allTemplates[taskForCompilation.id] and reads
-          // its DataContract — so we must supply the template's version here.
-          dataContract: (() => {
-            const tplId = taskInstance.templateId || taskInstance.id;
-            const tplSource = DialogueTaskService.getTemplate(tplId);
-            return tplSource?.dataContract ?? taskInstance.dataContract ?? null;
-          })(),
+          // ✅ CRITICAL: dataContract extraction logic
+          // - If useBackendMaterialization = false (default): Extract dataContract from template in frontend (old behavior)
+          // - If useBackendMaterialization = true: Don't extract dataContract, let TaskDefinitionMaterializer handle it in backend
+          dataContract: useBackendMaterialization
+            ? undefined // ✅ NEW: Let backend TaskDefinitionMaterializer extract dataContract from allTemplates
+            : (() => {
+                // ✅ OLD: Frontend materialization - extract dataContract from DialogueTaskService
+                // The instance's dataContract never contains subDataMapping (that is written by the wizard/editor into the template).
+                // The compiler looks up allTemplates[taskForCompilation.id] and reads its DataContract — so we must supply the template's version here.
+                const tplId = taskInstance.templateId || taskInstance.id;
+                const tplSource = DialogueTaskService.getTemplate(tplId);
+                return tplSource?.dataContract ?? taskInstance.dataContract ?? null;
+              })(),
           // ✅ CRITICAL: Steps vengono SOLO dall'istanza come override
           // Formato: { "templateId": { "start": {...}, "noMatch": {...}, ... } }
           // Se manca, il nodo avrà Steps.Count = 0 e la validazione fallirà se ci sono constraints
@@ -643,7 +650,14 @@ export default function DDEBubbleChat({
         // ✅ Combina task instance e template referenziati
         const allTasksWithTemplates = [taskForCompilation, ...referencedTemplates];
 
-        // ✅ Log rimosso: troppo verboso
+        // ✅ Log per distinguere le due modalità di materializzazione
+        if (useBackendMaterialization) {
+          console.log('[DDEBubbleChat] 🔧 Using BACKEND materialization - TaskDefinitionMaterializer will extract dataContract from allTemplates');
+          console.log('[DDEBubbleChat] 📋 taskForCompilation.dataContract:', taskForCompilation.dataContract === undefined ? 'undefined (will be materialized by backend)' : 'present (should not happen)');
+        } else {
+          console.log('[DDEBubbleChat] 🔧 Using FRONTEND materialization - dataContract extracted from DialogueTaskService.getTemplate()');
+          console.log('[DDEBubbleChat] 📋 taskForCompilation.dataContract:', taskForCompilation.dataContract ? 'present' : 'null');
+        }
 
         // ✅ NUOVO: Usa endpoint dedicato per TaskInstance (NON FlowCompiler)
         // ✅ Log rimosso: troppo verboso

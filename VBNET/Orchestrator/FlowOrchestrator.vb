@@ -26,6 +26,10 @@ Public Class FlowOrchestrator
     ' Nota: Usa Object invece di IExecutionStateStorage per evitare dipendenza circolare
     Private ReadOnly _executionStateStorage As Object
     Private ReadOnly _sessionId As String
+    ' ✅ SINGLE POINT OF TRUTH: Campi per risoluzione traduzioni
+    Private ReadOnly _projectId As String
+    Private ReadOnly _locale As String
+    Private ReadOnly _resolveTranslation As Func(Of String, String)
 
     ''' <summary>
     ''' Evento sollevato quando un messaggio deve essere mostrato
@@ -58,13 +62,23 @@ Public Class FlowOrchestrator
         _taskGroupExecutor = New TaskGroupExecutor()
         _executionStateStorage = Nothing
         _sessionId = Nothing
+        _projectId = Nothing
+        _locale = Nothing
+        _resolveTranslation = Nothing
         _state = New ExecutionState()
     End Sub
 
     ''' <summary>
     ''' ✅ STATELESS: Costruttore con storage per salvare/caricare ExecutionState da Redis
     ''' </summary>
-    Public Sub New(compilationResult As FlowCompilationResult, Optional sessionId As String = Nothing, Optional executionStateStorage As Object = Nothing)
+    Public Sub New(
+        compilationResult As FlowCompilationResult,
+        Optional sessionId As String = Nothing,
+        Optional executionStateStorage As Object = Nothing,
+        Optional projectId As String = Nothing,
+        Optional locale As String = Nothing,
+        Optional resolveTranslation As Func(Of String, String) = Nothing
+    )
         _compilationResult = compilationResult
         If compilationResult IsNot Nothing AndAlso compilationResult.Tasks IsNot Nothing Then
             _compiledTasks = compilationResult.Tasks
@@ -78,6 +92,10 @@ Public Class FlowOrchestrator
         _taskGroupExecutor = New TaskGroupExecutor()
         _executionStateStorage = executionStateStorage
         _sessionId = sessionId
+        ' ✅ SINGLE POINT OF TRUTH: Salva parametri per risoluzione traduzioni
+        _projectId = projectId
+        _locale = locale
+        _resolveTranslation = resolveTranslation
 
         ' ✅ STATELESS: Carica ExecutionState da Redis se storage disponibile
         If _executionStateStorage IsNot Nothing AndAlso Not String.IsNullOrEmpty(_sessionId) Then
@@ -129,10 +147,39 @@ Public Class FlowOrchestrator
 
                 Console.WriteLine($"[FlowOrchestrator] Executing TaskGroup {taskGroup.NodeId} (iteration {iterationCount})")
 
-                ' ✅ Delega esecuzione a TaskGroupExecutor (callback passato internamente)
+                ' ✅ SINGLE POINT OF TRUTH: Risolvi TextKey nel messageCallback
+                ' Questo è l'unico punto dove TUTTI i messaggi passano prima di arrivare al frontend
                 Dim messageCallback As Action(Of String, String, Integer) = Sub(text, stepType, escalationNumber)
-                                                                                RaiseEvent MessageToShow(Me, text)
-                                                                            End Sub
+                    ' ✅ Se text è un GUID (TextKey), risolvilo tramite resolveTranslation
+                    ' ✅ Se text è già testo tradotto, usalo così com'è
+                    Dim resolvedText As String = text
+
+                    If _resolveTranslation IsNot Nothing AndAlso Not String.IsNullOrEmpty(text) Then
+                        ' Verifica se è un GUID (TextKey) - formato: 8-4-4-4-12 caratteri esadecimali
+                        Dim isGuid As Boolean = False
+                        Try
+                            ' Pattern GUID: 8-4-4-4-12 caratteri esadecimali separati da trattini
+                            If text.Length = 36 AndAlso text.Count(Function(c) c = "-"c) = 4 Then
+                                Dim guid = New Guid(text)
+                                isGuid = True
+                            End If
+                        Catch
+                            ' Non è un GUID, probabilmente è già testo tradotto
+                        End Try
+
+                        If isGuid Then
+                            ' ✅ Risolvi TextKey → testo tradotto
+                            resolvedText = _resolveTranslation(text)
+                            ' Se risoluzione fallisce (traduzione non trovata), usa TextKey stesso come fallback
+                            If String.IsNullOrEmpty(resolvedText) Then
+                                resolvedText = text
+                            End If
+                        End If
+                        ' Se non è un GUID, text è già testo tradotto, usalo così com'è
+                    End If
+
+                    RaiseEvent MessageToShow(Me, resolvedText)
+                End Sub
                 Dim result = Await _taskGroupExecutor.ExecuteTaskGroup(taskGroup, _state, messageCallback)
 
                 If Not result.Success Then

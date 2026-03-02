@@ -138,18 +138,15 @@ Public Class SimpleTaskCompiler
         If String.IsNullOrWhiteSpace(textKey) Then
             Throw New InvalidOperationException(
                 $"SayMessage task '{task.Id}': no TextKey found. " &
-                $"The IDE must provide a translation key (GUID), not literal text. " &
+                $"The IDE must provide a translation key (GUID) or literal text. " &
                 $"Checked: task.Text, Parameters[parameterId='text'], Value.parameters.")
         End If
 
-        ' ✅ Validazione: TextKey deve essere un GUID (non testo letterale)
-        ' Nota: IsGuid è definito in TaskAssembler, ma per semplicità facciamo una validazione base
-        If textKey.Contains(" ") AndAlso Not IsGuid(textKey) Then
-            Throw New InvalidOperationException(
-                $"SayMessage task '{task.Id}': TextKey '{textKey}' looks like literal text. " &
-                $"Only translation keys (GUIDs) are accepted — not raw text strings.")
-        End If
-
+        ' ✅ ACCETTA sia GUID che testo letterale
+        ' - GUID: viene risolto a runtime tramite TranslationRepository nel messageCallback
+        ' - Testo letterale: usato direttamente (per flow semplici senza traduzioni)
+        ' La validazione rigida è stata rimossa per supportare entrambi i casi d'uso
+        ' La risoluzione TextKey → testo avviene nel messageCallback di FlowOrchestrator (single point of truth)
         Return textKey
     End Function
 

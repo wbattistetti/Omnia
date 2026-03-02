@@ -506,6 +506,8 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
               flowNodes={chatTab.flowNodes}
               flowEdges={chatTab.flowEdges}
               flowTasks={chatTab.flowTasks}
+              // ✅ NEW: Pass backend materialization flag
+              useBackendMaterialization={chatTab.useBackendMaterialization || false}
             />
           </FontProvider>
         </div>
