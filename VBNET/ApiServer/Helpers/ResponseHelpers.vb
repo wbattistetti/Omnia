@@ -34,26 +34,13 @@ Namespace Helpers
         ''' <param name="data">The data object to include in the response.</param>
         ''' <returns>An IResult containing the success response.</returns>
         Public Function CreateSuccessResponse(data As Object) As IResult
-            Console.WriteLine($"🔵 [CreateSuccessResponse] ENTRY - data type: {If(data IsNot Nothing, data.GetType().Name, "Nothing")}")
-            System.Diagnostics.Debug.WriteLine($"🔵 [CreateSuccessResponse] ENTRY - data type: {If(data IsNot Nothing, data.GetType().Name, "Nothing")}")
-            Console.Out.Flush()
-
             Try
                 Dim json = JsonConvert.SerializeObject(data, New JsonSerializerSettings() With {
                     .NullValueHandling = NullValueHandling.Ignore
                 })
-                Console.WriteLine($"🔵 [CreateSuccessResponse] JSON serialized: length={json.Length}, preview={If(json.Length > 100, json.Substring(0, 100) & "...", json)}")
-                Console.Out.Flush()
-
-                Dim result = Results.Content(json, "application/json", Nothing, 200)
-                Console.WriteLine($"🔵 [CreateSuccessResponse] Result created: type={If(result IsNot Nothing, result.GetType().Name, "Nothing")}")
-                Console.Out.Flush()
-
-                Return result
+                Return Results.Content(json, "application/json", Nothing, 200)
             Catch ex As Exception
-                Console.WriteLine($"🔵 [CreateSuccessResponse] EXCEPTION: {ex.GetType().Name} - {ex.Message}")
-                Console.WriteLine($"🔵 [CreateSuccessResponse] StackTrace: {ex.StackTrace}")
-                Console.Out.Flush()
+                Console.WriteLine($"❌ [CreateSuccessResponse] EXCEPTION: {ex.GetType().Name} - {ex.Message}")
                 Throw
             End Try
         End Function
