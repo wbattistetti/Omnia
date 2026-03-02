@@ -77,6 +77,7 @@ export class RowTypeHandler {
         // TaskType enum: use directly
         finalTaskType = selectedTaskType;
 
+        // ✅ Caso 1: Task esiste già → aggiorno solo il tipo
         const existingTask = taskRepository.getTask(taskId);
         if (existingTask) {
           const updateData: any = { type: finalTaskType };
@@ -84,16 +85,40 @@ export class RowTypeHandler {
             updateData.templateId = templateId;
           }
           taskRepository.updateTask(taskId, updateData, projectId);
-        } else {
-          // Create the task if it doesn't exist
-          taskRepository.createTask(
-            finalTaskType,
-            templateId,
-            finalTaskType === TaskType.SayMessage ? { text: this.row.text || '' } : undefined,
+          return {
+            success: true,
             taskId,
-            projectId
-          );
+            taskType: finalTaskType,
+            templateId
+          };
         }
+
+        // ✅ Caso 2: UtteranceInterpretation senza template → NON creare task
+        // Il task verrà creato dal wizard quando si apre ResponseEditor
+        if (finalTaskType === TaskType.UtteranceInterpretation && !templateId) {
+          return {
+            success: true,
+            taskId,
+            taskType: finalTaskType,
+            templateId: null
+          };
+        }
+
+        // ✅ Caso 3: Tutti gli altri tipi (o UtteranceInterpretation con template) → crea task
+        taskRepository.createTask(
+          finalTaskType,
+          templateId,
+          finalTaskType === TaskType.SayMessage ? { text: this.row.text || '' } : undefined,
+          taskId,
+          projectId
+        );
+
+        return {
+          success: true,
+          taskId,
+          taskType: finalTaskType,
+          templateId
+        };
       } else {
         return {
           success: false,

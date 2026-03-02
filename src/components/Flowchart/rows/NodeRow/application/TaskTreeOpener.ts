@@ -34,6 +34,16 @@ export class TaskTreeOpener {
   constructor(private deps: TaskTreeOpenerDependencies) {}
 
   /**
+   * ✅ Helper: Verifica se un task è vuoto (senza templateId e senza steps)
+   * Un task vuoto deve aprire il wizard full, non l'editor normale
+   */
+  private isEmptyTask(task: any): boolean {
+    const hasTemplate = !!task.templateId && task.templateId !== 'UNDEFINED';
+    const hasSteps = !!task.steps && Object.keys(task.steps).length > 0;
+    return !hasTemplate && !hasSteps;
+  }
+
+  /**
    * Opens the TaskTree editor based on the current state of the row.
    * Determines taskWizardMode automatically:
    * - 'none': Task exists
@@ -167,11 +177,22 @@ export class TaskTreeOpener {
         taskPromptsAdapted: taskForType?.metadata?.promptsAdapted
       });
 
-      // STATE 1: Task exists → taskWizardMode = 'none'
+      // STATE 1: Task exists → check if empty or complete
       if (taskForType) {
-        console.log('[🔍 TaskTreeOpener] ✅ STATE 1: Task esiste → taskWizardMode = "none"', {
+        // ✅ FIX: Check if task is empty → open wizard full instead of editor normal
+        if (this.isEmptyTask(taskForType) && taskType === TaskType.UtteranceInterpretation) {
+          console.log('[🔍 TaskTreeOpener] ✅ STATE 1 (EMPTY): Task esiste ma è vuoto → taskWizardMode = "full"', {
+            taskId: taskForType.id,
+            taskTemplateId: taskForType.templateId,
+            hasSteps: false
+          });
+          return await this.handleNoTemplate(projectId);
+        }
+
+        console.log('[🔍 TaskTreeOpener] ✅ STATE 1: Task esiste e completo → taskWizardMode = "none"', {
           taskId: taskForType.id,
           taskTemplateId: taskForType.templateId,
+          hasSteps: !!taskForType.steps && Object.keys(taskForType.steps).length > 0,
           promptsAdapted: taskForType.metadata?.promptsAdapted
         });
         return await this.handleExistingTask(taskForType);
@@ -206,13 +227,35 @@ export class TaskTreeOpener {
       }
 
       // STATE 3: No template, no task → taskWizardMode = 'full'
-      if (
+      // ✅ FIX: Use taskType (from resolveTaskType) in addition to metaTaskType
+      const shouldOpenWizardFull =
         !metaTemplateId &&
-        metaTaskType === TaskType.UtteranceInterpretation &&
-        row.text &&
-        row.text.trim().length >= 3
-      ) {
+        (taskType === TaskType.UtteranceInterpretation ||
+         metaTaskType === TaskType.UtteranceInterpretation) &&
+        row.text?.trim().length >= 3;
+
+      if (shouldOpenWizardFull) {
+        console.log('[🔍 TaskTreeOpener] ✅ STATE 3: Nessun template, nessun task → taskWizardMode = "full"', {
+          rowId: row.id,
+          rowText: row.text,
+          taskType: TaskType[taskType],
+          metaTaskType: TaskType[metaTaskType]
+        });
         return await this.handleNoTemplate(projectId);
+      }
+
+      // ✅ FIX: If task type is UNDEFINED, don't open wizard - require manual type selection
+      if (metaTaskType === TaskType.UNDEFINED) {
+        console.log('[🔍 TaskTreeOpener] ⚠️ STATE 2 (UNDEFINED): Tipo non definito → richiedere selezione manuale', {
+          rowId: row.id,
+          rowText: row.text,
+          metaTaskType: TaskType[metaTaskType]
+        });
+
+        return {
+          success: false,
+          error: new Error('Tipo non definito. Seleziona manualmente il tipo prima di aprire l\'editor.')
+        };
       }
 
       // Fallback: Create base task without preview (legacy behavior)
