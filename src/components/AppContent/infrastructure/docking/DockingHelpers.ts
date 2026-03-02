@@ -3,7 +3,7 @@
 
 import type { DockNode, DockTabChat } from '@dock/types';
 import { findRootTabset, type OpenBottomDockedTabRequest } from '../../domain/dockTree';
-import { activateTab, splitWithTab, getTab, upsertAddCenter, addTabCenter } from '@dock/ops';
+import { activateTab, splitWithTab, getTab, upsertAddCenter, addTabCenter, updateTab } from '@dock/ops';
 
 /**
  * Finds the bottom tabset in a dock tree (if a bottom split exists)
@@ -164,11 +164,14 @@ export function openLateralChatPanel(
   // ✅ STEP 1: Check if tab already exists (idempotent check)
   const existing = getTab(prev, tabId);
   if (existing) {
-    console.log('[openLateralChatPanel] ✅ Tab already exists, activating');
+    console.log('[openLateralChatPanel] ✅ Tab already exists, updating with new data and activating');
+    // ✅ ARCHITECTURAL: Update tab with new data (flowNodes, flowEdges, flowTasks may have changed)
+    // This ensures DDEBubbleChat receives updated props and can start the orchestrator
+    const updatedTree = updateTab(prev, tabId, newTab);
     if (onExisting) {
-      return onExisting(prev, tabId);
+      return onExisting(updatedTree, tabId);
     }
-    return activateTab(prev, tabId);
+    return activateTab(updatedTree, tabId);
   }
 
   // ✅ STEP 2: Check if a lateral tabset already exists (idempotent check)

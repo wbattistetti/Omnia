@@ -31,6 +31,16 @@ export function Toolbar({
   onCloseProject,
   currentProjectId
 }: ToolbarProps) {
+  // ✅ DEBUG: Log component mount and props
+  React.useEffect(() => {
+    console.log('[Toolbar] 🎨 Component mounted/updated:', {
+      hasOnRun: typeof onRun === 'function',
+      onRunType: typeof onRun,
+      currentProjectId,
+      hasCurrentProject: !!currentProject,
+      isProjectEmpty: !currentProject || !currentProjectId,
+    });
+  }, [onRun, currentProjectId, currentProject]);
   const { provider, model, setProvider, setModel, providerConfig, availableModels } = useAIProvider();
   const { fontType, fontSize, setFontType, setFontSize } = useFontStore();
   const { backendType, setBackendType } = useBackendType();
@@ -325,14 +335,41 @@ export function Toolbar({
         </div>
 
         {!isProjectEmpty && (
-          <button
-            onClick={onRun}
-            className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg transition-colors duration-200"
-          >
-            <Play className="w-4 h-4" />
-            <span>Esegui</span>
-          </button>
-        )}
+            <button
+              onClick={() => {
+                console.log('═══════════════════════════════════════════════════════════════════════════');
+                console.log('🖱️ [Toolbar] "Esegui" button CLICKED');
+                console.log('═══════════════════════════════════════════════════════════════════════════');
+                console.log('[Toolbar] 📊 Button state:', {
+                  hasOnRun: typeof onRun === 'function',
+                  onRunType: typeof onRun,
+                  isProjectEmpty,
+                  currentProjectId,
+                });
+
+                if (typeof onRun !== 'function') {
+                  console.error('[Toolbar] ❌ onRun is not a function!', {
+                    onRun,
+                    onRunType: typeof onRun,
+                  });
+                  return;
+                }
+
+                console.log('[Toolbar] ✅ Calling onRun()...');
+                try {
+                  onRun();
+                  console.log('[Toolbar] ✅ onRun() called successfully');
+                } catch (error) {
+                  console.error('[Toolbar] ❌ Error calling onRun():', error);
+                }
+              }}
+              className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg transition-colors duration-200"
+            >
+              <Play className="w-4 h-4" />
+              <span>Esegui</span>
+            </button>
+          );
+        })()}
       </div>
 
       {/* ✅ Deployment Dialog */}

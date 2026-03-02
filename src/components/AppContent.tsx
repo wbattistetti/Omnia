@@ -352,24 +352,62 @@ export const AppContent: React.FC<AppContentProps> = ({
   // ✅ Handler to open flow chat as dockable panel (same logic as Response Editor Test button)
   const handleRunFlowRetryCountRef = React.useRef(0);
   const handleRunFlow = React.useCallback(() => {
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+    console.log('🚀 [AppContent] handleRunFlow CALLED');
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+    console.log('[AppContent] 🔍 handleRunFlow function check:', {
+      functionName: handleRunFlow.name,
+      functionType: typeof handleRunFlow,
+      isFunction: typeof handleRunFlow === 'function',
+      retryCount: handleRunFlowRetryCountRef.current,
+    });
+
     // Reset retry count after successful execution
     handleRunFlowRetryCountRef.current = 0;
 
     // Check if flow has nodes/edges
     const nodes = (window as any).__flowNodes || [];
     const edges = (window as any).__flowEdges || [];
+    const tasks = (window as any).__flowTasks || [];
 
-    if (nodes.length === 0 && edges.length === 0) {
-      console.warn('[AppContent] No flow nodes/edges found');
+    console.log('[AppContent] 📊 Flow data check:', {
+      nodesCount: nodes.length,
+      edgesCount: edges.length,
+      tasksCount: tasks.length,
+      nodesAvailable: !!nodes.length,
+      edgesAvailable: !!edges.length,
+      windowHasFlowNodes: !!(window as any).__flowNodes,
+      windowHasFlowEdges: !!(window as any).__flowEdges,
+      windowHasFlowTasks: !!(window as any).__flowTasks,
+    });
+
+    // ✅ ARCHITECTURAL: Richiede solo nodes (edges sono opzionali - un flow con un solo nodo è valido)
+    if (nodes.length === 0) {
+      console.error('[AppContent] ❌ No flow nodes found - aborting');
+      alert('No flow data found. Please create a flow with at least one node.');
       return;
     }
 
+    // ✅ Un flow con un solo nodo è valido (non servono edges)
+    if (nodes.length === 1 && edges.length === 0) {
+      console.log('[AppContent] ℹ️ Flow with single node (no edges) - this is valid');
+    }
+
     // Ensure translations are loaded
+    console.log('[AppContent] 🔤 Translations state:', {
+      translationsReady,
+      translationsLoading,
+      hasLoadAllTranslations: !!loadAllTranslations,
+      globalTranslationsKeys: globalTranslations ? Object.keys(globalTranslations).length : 0,
+    });
+
     if (!translationsReady && !translationsLoading && loadAllTranslations) {
+      console.log('[AppContent] ⏳ Translations not ready, loading...');
       loadAllTranslations().then(() => {
+        console.log('[AppContent] ✅ Translations loaded, retrying handleRunFlow');
         handleRunFlow();
       }).catch((err) => {
-        console.error('[AppContent] Failed to load translations', err);
+        console.error('[AppContent] ❌ Failed to load translations', err);
       });
       return;
     }
@@ -377,10 +415,11 @@ export const AppContent: React.FC<AppContentProps> = ({
     // Prevent infinite retry loop (max 10 retries)
     if (translationsLoading) {
       if (handleRunFlowRetryCountRef.current >= 10) {
-        console.error('[AppContent] Max retries reached waiting for translations');
+        console.error('[AppContent] ❌ Max retries reached waiting for translations');
         return;
       }
       handleRunFlowRetryCountRef.current += 1;
+      console.log(`[AppContent] ⏳ Translations loading, retry ${handleRunFlowRetryCountRef.current}/10`);
       setTimeout(() => {
         handleRunFlow();
       }, 500);
@@ -390,14 +429,21 @@ export const AppContent: React.FC<AppContentProps> = ({
     // Get translations (for flow mode, use all available translations)
     const allTranslations = globalTranslations || {};
 
+    console.log('[AppContent] 🔤 Final translations check:', {
+      hasTranslations: !!allTranslations,
+      translationsCount: Object.keys(allTranslations).length,
+      translationsSample: Object.keys(allTranslations).slice(0, 5),
+    });
+
     if (!allTranslations || Object.keys(allTranslations).length === 0) {
-      console.error('[AppContent] ❌ Translations are empty');
+      console.error('[AppContent] ❌ Translations are empty - aborting');
       alert('Translations are not available. Please ensure the project has translations loaded.');
       return;
     }
 
     // Create chat tab for flow mode
     const chatTabId = 'chat_flow_main';
+    // ✅ ARCHITECTURAL: Pass flow data as props instead of reading from window in child components
     const chatTab: DockTabChat = {
       id: chatTabId,
       title: 'Flow Chat',
@@ -407,14 +453,54 @@ export const AppContent: React.FC<AppContentProps> = ({
       translations: allTranslations, // All translations for flow mode
       taskTree: null, // Flow mode
       mode: 'interactive',
+      // ✅ NEW: Pass flow data as props
+      flowNodes: nodes,
+      flowEdges: edges,
+      flowTasks: tasks,
     };
 
+    console.log('[AppContent] 📦 Created DockTabChat:', {
+      id: chatTab.id,
+      title: chatTab.title,
+      type: chatTab.type,
+      mode: chatTab.mode,
+      projectId: chatTab.projectId,
+      flowNodesCount: chatTab.flowNodes?.length || 0,
+      flowEdgesCount: chatTab.flowEdges?.length || 0,
+      flowTasksCount: chatTab.flowTasks?.length || 0,
+      translationsCount: chatTab.translations ? Object.keys(chatTab.translations).length : 0,
+      // ✅ DEBUG: Verifica se gli edges sono stati passati correttamente
+      edgesArray: edges,
+      edgesFirstItem: edges[0],
+      nodesArray: nodes,
+      nodesFirstItem: nodes[0],
+    });
+
+    if (edges.length === 0) {
+      console.error('[AppContent] ❌ CRITICAL: No edges passed to DockTabChat!', {
+        windowEdges: (window as any).__flowEdges,
+        edgesVariable: edges,
+        edgesLength: edges.length,
+      });
+    }
+
     // Open as right lateral panel (same as Response Editor Test button)
-    setDockTree(prev => openLateralChatPanel(prev, {
-      tabId: chatTabId,
-      newTab: chatTab,
-      position: 'right',
-    }));
+    console.log('[AppContent] 🚪 Opening lateral chat panel...');
+    setDockTree(prev => {
+      const newTree = openLateralChatPanel(prev, {
+        tabId: chatTabId,
+        newTab: chatTab,
+        position: 'right',
+      });
+      console.log('[AppContent] ✅ Lateral chat panel opened, new tree:', {
+        hasTree: !!newTree,
+        treeKind: newTree?.kind,
+      });
+      return newTree;
+    });
+
+    console.log('[AppContent] ✅ handleRunFlow COMPLETED');
+    console.log('═══════════════════════════════════════════════════════════════════════════');
   }, [setDockTree, currentPid, globalTranslations, translationsReady, translationsLoading, loadAllTranslations]);
 
   // Listen to Sidebar wrench

@@ -39,8 +39,20 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
 
   // Start execution - compiles flow only when Start is clicked
   const start = useCallback(async () => {
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+    console.log('🚀 [useDialogueEngine] start() CALLED');
+    console.log('═══════════════════════════════════════════════════════════════════════════');
+    console.log('[useDialogueEngine] 📊 State check:', {
+      isRunning,
+      hasOptions: !!options,
+      nodesCount: options?.nodes?.length || 0,
+      edgesCount: options?.edges?.length || 0,
+      hasTranslations: !!options?.translations,
+      translationsCount: options?.translations ? Object.keys(options.translations).length : 0,
+    });
+
     if (isRunning) {
-      console.warn('[useDialogueEngine] Already running');
+      console.warn('[useDialogueEngine] ⚠️ Already running - aborting');
       return;
     }
 
@@ -253,10 +265,22 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
 
       const simplifiedNodes = transformNodesToSimplified(enrichedNodes);
 
+      // ✅ FIX: Ensure all rows have taskId field (backend VB.NET requires it)
+      // task.id === row.id ALWAYS, so we set taskId = row.id
+      const nodesWithTaskId = simplifiedNodes.map(node => ({
+        ...node,
+        rows: (node.rows || []).map((row: any) => ({
+          ...row,
+          // ✅ CRITICAL: Backend VB.NET requires explicit taskId field
+          // task.id === row.id ALWAYS (when task exists)
+          taskId: row.taskId || row.id
+        }))
+      }));
+
       // 🔍 DEBUG: Log all rows after transformation
       console.log('═══════════════════════════════════════════════════════════════════════════');
       console.log('🔍 [FRONTEND] Nodes AFTER transformation:');
-      simplifiedNodes.forEach((node, idx) => {
+      nodesWithTaskId.forEach((node, idx) => {
         console.log(`  Node[${idx}]:`, {
           nodeId: node.id,
           label: node.label || '',
@@ -289,7 +313,7 @@ export function useDialogueEngine(options: UseDialogueEngineOptions) {
 
       // ✅ DEBUG: Log tasks before serialization to verify type field
       const requestBody = {
-        nodes: simplifiedNodes,  // ✅ Use simplified structure (rows directly, no data wrapper)
+        nodes: nodesWithTaskId,  // ✅ Use nodes with taskId field (backend VB.NET requires it)
         edges: options.edges,
         tasks: allTasksWithTemplates,  // ✅ Include both instance tasks and referenced templates
         ddts: allDDTs,

@@ -59,6 +59,7 @@
     <Compile Include="Streaming\SseStreamManager.vb" />
     <Compile Include="Interfaces\Handlers\CompilationHandlers.vb" />
     <Compile Include="Interfaces\Handlers\TaskSessionHandlers.vb" />
+    <Compile Include="Middleware\Utf8EncodingMiddleware.vb" />
     <Compile Include="Middleware\ExceptionLoggingMiddleware.vb" />
     <!-- ❌ RIMOSSO: Migration\ContractMigrationRunner.vb - migrazione completata -->
   </ItemGroup>

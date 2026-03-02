@@ -1,5 +1,7 @@
 import React from 'react';
 import type { TaskMeta } from '../components/TaskEditor/EditorHost/types';
+import type { Node } from 'reactflow';
+import type { FlowNode, EdgeData } from '../components/Flowchart/types/flowTypes';
 
 // Base properties for all tabs
 type DockTabBase = {
@@ -79,6 +81,10 @@ export type DockTabChat = DockTabBase & {
   translations?: Record<string, string>;
   taskTree?: any;
   mode?: 'interactive' | 'preview';
+  // ✅ Flow data props (for flow mode)
+  flowNodes?: Node<FlowNode>[];
+  flowEdges?: any[]; // Edge<EdgeData>[] - using any[] to avoid circular dependency
+  flowTasks?: any[];
 };
 
 // Union type for all tab types

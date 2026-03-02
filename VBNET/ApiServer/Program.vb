@@ -137,6 +137,8 @@ Module Program
 
             ' Configure pipeline
             app.UseCors()
+            ' ✅ ENTERPRISE: Garantisci UTF-8 encoding in tutte le risposte JSON (leggero, zero overhead)
+            app.UseMiddleware(Of ApiServer.Middleware.Utf8EncodingMiddleware)()
             ' ✅ FASE 3: Usa logger invece di Console.WriteLine
             logger.LogInfo("Registering ExceptionLoggingMiddleware")
             app.UseMiddleware(Of ApiServer.Middleware.ExceptionLoggingMiddleware)()

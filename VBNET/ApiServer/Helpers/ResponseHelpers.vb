@@ -25,7 +25,8 @@ Namespace Helpers
             Dim errorJson = JsonConvert.SerializeObject(errorObj, New JsonSerializerSettings() With {
                 .NullValueHandling = NullValueHandling.Ignore
             })
-            Return Results.Content(errorJson, "application/json", Nothing, statusCode)
+            ' ✅ ENTERPRISE: Esplicita charset=utf-8 per coerenza (middleware gestisce il resto automaticamente)
+            Return Results.Content(errorJson, "application/json; charset=utf-8", Nothing, statusCode)
         End Function
 
         ''' <summary>
@@ -38,7 +39,8 @@ Namespace Helpers
                 Dim json = JsonConvert.SerializeObject(data, New JsonSerializerSettings() With {
                     .NullValueHandling = NullValueHandling.Ignore
                 })
-                Return Results.Content(json, "application/json", Nothing, 200)
+                ' ✅ ENTERPRISE: Esplicita charset=utf-8 per coerenza (middleware gestisce il resto automaticamente)
+                Return Results.Content(json, "application/json; charset=utf-8", Nothing, 200)
             Catch ex As Exception
                 Console.WriteLine($"❌ [CreateSuccessResponse] EXCEPTION: {ex.GetType().Name} - {ex.Message}")
                 Throw

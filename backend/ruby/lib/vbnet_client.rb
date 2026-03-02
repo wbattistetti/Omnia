@@ -149,6 +149,19 @@ class VBNetClient
 
   private
 
+  # ✅ SEMPLIFICATO: Normalizza sempre a UTF-8, gestisce errori
+  # Defense in depth: anche se il server garantisce UTF-8, normalizziamo comunque
+  def self.response_body_utf8(response)
+    body = response.body.to_s
+    body = body.force_encoding('UTF-8')
+
+    # Se è già UTF-8 valido, ritorna
+    return body if body.valid_encoding?
+
+    # Altrimenti, converti sostituendo caratteri invalidi
+    body.encode('UTF-8', invalid: :replace, undef: :replace)
+  end
+
   # Make HTTP POST request to ApiServer
   def self.call_api(endpoint, data)
     uri = URI.parse("#{API_SERVER_BASE_URL}#{endpoint}")
@@ -171,15 +184,18 @@ class VBNetClient
 
       puts "[VBNetClient] 📥 Response: #{response.code} #{response.message}"
 
+      # ✅ Usa helper per normalizzare encoding (defense in depth)
+      body_utf8 = response_body_utf8(response)
+
       case response.code.to_i
       when 200..299
         # Success
-        result = JSON.parse(response.body)
+        result = JSON.parse(body_utf8)
         puts "[VBNetClient] ✅ Request successful"
         result
       when 400..499
         # Client error
-        error_data = JSON.parse(response.body) rescue { error: response.body }
+        error_data = JSON.parse(body_utf8) rescue { error: body_utf8 }
         raise <<~ERROR
           ❌ ApiServer returned client error (#{response.code})
 
@@ -187,11 +203,11 @@ class VBNetClient
           Error: #{error_data['error'] || error_data['message'] || 'Unknown error'}
 
           Response body:
-          #{response.body}
+          #{body_utf8}
         ERROR
       when 500..599
         # Server error
-        error_data = JSON.parse(response.body) rescue { error: response.body }
+        error_data = JSON.parse(body_utf8) rescue { error: body_utf8 }
         raise <<~ERROR
           ❌ ApiServer returned server error (#{response.code})
 
@@ -199,7 +215,7 @@ class VBNetClient
           Error: #{error_data['error'] || error_data['message'] || 'Internal server error'}
 
           Response body:
-          #{response.body}
+          #{body_utf8}
         ERROR
       else
         raise "Unexpected HTTP response code: #{response.code}"

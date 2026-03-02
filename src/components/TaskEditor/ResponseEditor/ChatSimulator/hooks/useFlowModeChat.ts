@@ -4,13 +4,20 @@ import type { Message } from '@components/ChatSimulator/UserMessage';
 
 /**
  * Hook dedicated to flow mode chat functionality
- * Encapsulates all flow mode logic, isolating DDEBubbleChat from window globals
+ * ✅ ARCHITECTURAL: Receives flow data as props (not from window globals)
+ * This makes the hook testable, predictable, and follows React best practices
  *
+ * @param nodes - Flow nodes (from props, not window)
+ * @param edges - Flow edges (from props, not window)
+ * @param tasks - Flow tasks (from props, not window)
  * @param translations - Translations for the flow
  * @param onMessage - Callback when a new message is received
  * @returns Flow mode chat state and handlers
  */
 export function useFlowModeChat(
+  nodes: any[], // Node<FlowNode>[] - using any[] to avoid circular dependency
+  edges: any[], // Edge<EdgeData>[] - using any[] to avoid circular dependency
+  tasks: any[],
   translations: Record<string, string> | undefined,
   onMessage?: (message: Message) => void
 ) {
@@ -20,29 +27,19 @@ export function useFlowModeChat(
   // ✅ Don't store messages internally - let parent component manage them
   // We only track messages to avoid duplicates when calling onMessage
   const sentMessageIds = React.useRef<Set<string>>(new Set());
+  // ✅ Guard to prevent multiple start() calls
+  const hasStartedRef = React.useRef(false);
 
-  // ✅ Encapsulate access to window globals
-  const flowNodes = React.useMemo(() => {
-    return (window as any).__flowNodes || [];
-  }, []);
-
-  const flowEdges = React.useMemo(() => {
-    return (window as any).__flowEdges || [];
-  }, []);
-
-  const flowTasks = React.useMemo(() => {
-    return (window as any).__flowTasks || [];
-  }, []);
-
-  // ✅ Use dialogue engine for flow mode
-  const flowEngine = useDialogueEngine({
-    nodes: flowNodes,
-    edges: flowEdges,
+  // ✅ ARCHITECTURAL: Memoize engine options (not the engine itself)
+  // This ensures the engine is recreated only when data actually changes
+  const engineOptions = React.useMemo(() => ({
+    nodes,
+    edges,
     getTask: (taskId: string) => {
-      return flowTasks.find((t: any) => t.id === taskId) || null;
+      return tasks.find((t: any) => t.id === taskId) || null;
     },
     getDDT: (taskId: string) => {
-      const task = flowTasks.find((t: any) => t.id === taskId);
+      const task = tasks.find((t: any) => t.id === taskId);
       if (!task || task.templateId !== 'GetData') return null;
       return task.data ? { label: task.label, data: task.data, steps: task.steps } : null;
     },
@@ -86,30 +83,101 @@ export function useFlowModeChat(
       setIsWaitingForInput(true);
       console.log('[useFlowModeChat] Waiting for input', data);
     },
-  });
+  }), [nodes, edges, tasks, translations, onMessage]);
 
-  // ✅ Start flow orchestrator when ready
+  // ✅ ARCHITECTURAL: Call hook at top level (not inside useMemo)
+  // This respects React's Rules of Hooks
+  const flowEngine = useDialogueEngine(engineOptions);
+
+  // ✅ ARCHITECTURAL: Start when data is ready (depend on data, not engine object)
+  // This prevents infinite loops and ensures the engine starts only when data is actually ready
+  // Use a stable key for translations to detect changes without including the whole object
+  const translationsKey = React.useMemo(() => {
+    if (!translations) return '';
+    return Object.keys(translations).sort().join(',');
+  }, [translations]);
+
+  // ✅ Log rimosso dal render - troppo rumoroso, solo nei punti critici
+
   React.useEffect(() => {
-    if (flowNodes.length === 0 || flowEdges.length === 0) {
-      console.warn('[useFlowModeChat] No nodes/edges found');
+    console.log('[useFlowModeChat] ⚙️ useEffect triggered:', {
+      nodesLength: nodes.length,
+      edgesLength: edges.length,
+      translationsKey: translationsKey.substring(0, 50),
+      hasStarted: hasStartedRef.current,
+    });
+
+    // Reset guard if data changes (allows retry after data update)
+    // ✅ ARCHITECTURAL: Richiede solo nodes (edges sono opzionali - un flow con un solo nodo è valido)
+    if (hasStartedRef.current && nodes.length === 0) {
+      console.log('[useFlowModeChat] 🔄 Resetting hasStartedRef because nodes are empty');
+      hasStartedRef.current = false;
+    }
+
+    if (hasStartedRef.current) {
+      console.log('[useFlowModeChat] ⏭️ Already started, skipping');
+      return; // Already started
+    }
+
+    // ✅ ARCHITECTURAL: Richiede solo nodes (edges sono opzionali)
+    if (nodes.length === 0) {
+      console.error('[useFlowModeChat] ❌ Cannot start: no nodes found', {
+        nodesLength: nodes.length,
+      });
+      setError('Cannot start flow: no nodes found');
       return;
     }
+
+    // ✅ Un flow con un solo nodo è valido (non servono edges)
+    if (nodes.length === 1 && edges.length === 0) {
+      console.log('[useFlowModeChat] ℹ️ Flow with single node (no edges) - this is valid');
+    }
+
     if (!translations || Object.keys(translations).length === 0) {
-      console.warn('[useFlowModeChat] No translations found');
+      console.warn('[useFlowModeChat] ❌ No translations found - aborting start', {
+        hasTranslations: !!translations,
+        translationsCount: translations ? Object.keys(translations).length : 0,
+      });
+      return;
+    }
+
+    if (!flowEngine) {
+      console.error('[useFlowModeChat] ❌ flowEngine is not available - aborting start');
+      return;
+    }
+
+    if (typeof flowEngine.start !== 'function') {
+      console.error('[useFlowModeChat] ❌ flowEngine.start is not a function - aborting start', {
+        flowEngineType: typeof flowEngine,
+        flowEngineKeys: Object.keys(flowEngine || {}),
+      });
       return;
     }
 
     console.log('[useFlowModeChat] 🚀 Starting flow orchestrator', {
-      nodesCount: flowNodes.length,
-      edgesCount: flowEdges.length,
-      translationsCount: Object.keys(translations).length
+      nodesCount: nodes.length,
+      edgesCount: edges.length,
+      tasksCount: tasks.length,
+      translationsCount: Object.keys(translations).length,
+      engineType: typeof flowEngine,
+      startType: typeof flowEngine.start,
     });
 
-    flowEngine.start().catch((error) => {
-      console.error('[useFlowModeChat] Failed to start flow orchestrator', error);
+    hasStartedRef.current = true;
+    flowEngine.start().then(() => {
+      console.log('[useFlowModeChat] ✅ flowEngine.start() completed successfully');
+    }).catch((error) => {
+      console.error('[useFlowModeChat] ❌ Failed to start flow orchestrator', {
+        error,
+        errorMessage: error?.message,
+        errorStack: error?.stack,
+      });
       setError(error.message || 'Failed to start flow orchestrator');
+      hasStartedRef.current = false; // Allow retry on error
     });
-  }, [flowNodes, flowEdges, translations, flowEngine]);
+    // ✅ Depend on nodes length and translations key (edges are optional)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes.length, translationsKey]);
 
   // ✅ Handle user input in flow mode
   const handleUserInput = React.useCallback(async (input: string) => {

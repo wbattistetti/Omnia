@@ -195,6 +195,10 @@ export default function DDEBubbleChat({
   previewMessages,
   activeScenario,
   onScenarioChange,
+  // ✅ NEW: Flow data props (for flow mode)
+  flowNodes,
+  flowEdges,
+  flowTasks,
 }: {
   task: Task | null;
   projectId: string | null;
@@ -206,6 +210,10 @@ export default function DDEBubbleChat({
   previewMessages?: Message[];
   activeScenario?: 'happy' | 'partial' | 'error';
   onScenarioChange?: (scenario: 'happy' | 'partial' | 'error') => void;
+  // ✅ NEW: Flow data props
+  flowNodes?: any[]; // Node<FlowNode>[] - using any[] to avoid circular dependency
+  flowEdges?: any[]; // Edge<EdgeData>[] - using any[] to avoid circular dependency
+  flowTasks?: any[];
 }) {
   const { combinedClass, fontSize } = useFontContext();
   const [messages, setMessages] = React.useState<Message[]>([]);
@@ -221,15 +229,28 @@ export default function DDEBubbleChat({
   // ✅ ARCHITECTURAL: Detect flow mode explicitly
   const isFlowMode = !task && !taskTree && mode === 'interactive';
 
-  // ✅ ARCHITECTURAL: Use dedicated hook for flow mode (encapsulates window globals)
-  const flowModeChat = useFlowModeChat(translations, (message) => {
-    // Add flow mode messages to component messages
-    setMessages(prev => {
-      // Avoid duplicates
-      if (prev.some(m => m.id === message.id)) return prev;
-      return [...prev, message];
-    });
-  });
+  // ✅ Log rimosso dal render - troppo rumoroso, solo nei punti critici
+
+  // ✅ ARCHITECTURAL: Use dedicated hook for flow mode (receives data as props, not from window)
+  const flowModeChat = useFlowModeChat(
+    flowNodes || [],
+    flowEdges || [],
+    flowTasks || [],
+    translations,
+    (message) => {
+      console.log('[DDEBubbleChat] 📨 Flow mode message received:', {
+        messageId: message.id,
+        text: message.text?.substring(0, 50),
+        sender: message.sender,
+      });
+      // Add flow mode messages to component messages
+      setMessages(prev => {
+        // Avoid duplicates
+        if (prev.some(m => m.id === message.id)) return prev;
+        return [...prev, message];
+      });
+    }
+  );
 
   // ✅ ARCHITECTURAL: Merge flow mode state with component state
   const effectiveIsWaitingForInput = isFlowMode ? flowModeChat.isWaitingForInput : isWaitingForInput;

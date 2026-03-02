@@ -99,6 +99,21 @@ export function removeTab(tree: DockNode, tabId: string): DockNode {
   return compact(pruned);
 }
 
+/**
+ * Updates an existing tab with new data
+ * If tab doesn't exist, returns tree unchanged
+ */
+export function updateTab(tree: DockNode, tabId: string, updatedTab: DockTab): DockNode {
+  return mapNode(tree, n => {
+    if (n.kind !== 'tabset') return n;
+    const idx = n.tabs.findIndex(t => t.id === tabId);
+    if (idx === -1) return n;
+    const tabs = [...n.tabs];
+    tabs[idx] = updatedTab;
+    return { ...n, tabs };
+  });
+}
+
 export function insertTab(tree: DockNode, targetId: string, region: DockRegion, tab: DockTab, sizes?: number[]): DockNode {
   return region === 'center' ? addTabCenter(tree, targetId, tab) : splitWithTab(tree, targetId, region, tab, sizes);
 }

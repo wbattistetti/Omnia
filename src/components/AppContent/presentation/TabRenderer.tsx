@@ -480,6 +480,8 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
     // Chat Panel tab
     if (tab.type === 'chat') {
       const chatTab = tab as DockTabChat;
+      // ✅ Log rimosso dal render - troppo rumoroso, solo nei punti critici
+
       return (
         <div
           style={{
@@ -493,12 +495,17 @@ export const TabRenderer: React.FC<TabRendererProps> = React.memo(
         >
           <FontProvider>
             <DDEBubbleChat
+              key={`${chatTab.id}-${chatTab.flowNodes?.length || 0}-${chatTab.flowEdges?.length || 0}`}
               task={chatTab.task || null}
               projectId={chatTab.projectId || currentPid || null}
               translations={chatTab.translations}
               taskTree={chatTab.taskTree}
               onUpdateTaskTree={() => {}}
               mode={chatTab.mode || 'interactive'}
+              // ✅ NEW: Pass flow data as props
+              flowNodes={chatTab.flowNodes}
+              flowEdges={chatTab.flowEdges}
+              flowTasks={chatTab.flowTasks}
             />
           </FontProvider>
         </div>
