@@ -344,16 +344,9 @@ export default function TaskTreeHostAdapter({ task: taskMeta, onClose, hideHeade
         // ✅ NO FALLBACKS: Use taskInstance.text as primary, taskMeta.label as fallback, 'Task' as explicit default
         const rowText = taskInstance?.text ?? taskMeta.label ?? 'Task';
 
-        // ✅ BACKWARD COMPATIBILITY: Converti TaskTree in formato legacy per extractVariablesFromDDT
-        const taskTreeForVariables = {
-          label: finalTaskTree.label,
-          data: finalTaskTree.nodes,
-          steps: finalTaskTree.steps
-        };
-
         // Extract variables from TaskTree using row text and TaskTree labels
         const varNames = await flowchartVariablesService.extractVariablesFromDDT(
-          taskTreeForVariables,
+          finalTaskTree,
           taskId, // taskId (ALWAYS equals row.id)
           taskId, // rowId (same as taskId, ALWAYS equals row.id)
           rowText, // Row text (e.g., "chiedi data di nascita")

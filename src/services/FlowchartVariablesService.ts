@@ -35,15 +35,15 @@ class FlowchartVariablesService {
    * Only loads from database if not already initialized for this project
    */
   async init(projectId: string): Promise<void> {
-    // ✅ OPTIMIZATION: Skip reload if already initialized for the same project
-    if (this.isInitialized && this.projectId === projectId) {
-      // Already initialized for this project, skip database call
-      return;
-    }
+    console.log('[VAR-DEBUG] init() called', { projectId });
     this.projectId = projectId;
-    this.isInitialized = false; // Reset flag before loading
     await this.loadFromDatabase();
-    this.isInitialized = true; // Mark as initialized after successful load
+    this.isInitialized = true;
+    console.log('[VAR-DEBUG] init() done', {
+      projectId,
+      totalMappings: this.mappings.size,
+      names: Array.from(this.mappings.keys()).slice(0, 10)
+    });
   }
 
   /**
@@ -167,6 +167,7 @@ class FlowchartVariablesService {
     rowText: string, // Row text (e.g., "chiedi data di nascita")
     nodeId?: string
   ): Promise<string[]> {
+    console.log('[VAR-DEBUG] extractVariablesFromDDT() called', { taskId, rowId, rowText, hasDdt: !!ddt });
     if (!ddt) {
       console.warn('[FlowchartVariables] No DDT provided', { taskId, rowId });
       return [];
@@ -537,6 +538,12 @@ class FlowchartVariablesService {
         taskIdToReadableNames: Array.from(this.taskIdToReadableNames.entries()),
         taskIdToSnapshot: Array.from(this.taskIdToSnapshot.entries())
       };
+
+      console.log('[VAR-DEBUG] saveToDatabase() called', {
+        projectId: pid,
+        totalMappings: this.mappings.size,
+        names: Array.from(this.mappings.keys()).slice(0, 10)
+      });
 
       const response = await fetch(`/api/projects/${pid}/variable-mappings`, {
         method: 'POST',
