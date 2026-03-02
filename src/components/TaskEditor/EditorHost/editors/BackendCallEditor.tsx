@@ -136,18 +136,18 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
         outputs: [{ internalName: '', apiField: '', variable: '' }]
       };
     }
-    let task = taskRepository.getTask(instanceId);
-    if (!task) {
+    let existingTask = taskRepository.getTask(instanceId);
+    if (!existingTask) {
       const action = 'CallBackend';
       const initialConfig = {
         ...DEFAULT_CONFIG,
         inputs: [{ internalName: '', apiParam: '', variable: '' }],
         outputs: [{ internalName: '', apiField: '', variable: '' }]
       };
-      task = taskRepository.createTask(action, { config: initialConfig }, instanceId, projectId);
+      existingTask = taskRepository.createTask(action, { config: initialConfig }, instanceId, projectId);
       return initialConfig;
     }
-    const loaded = task?.value?.config || DEFAULT_CONFIG;
+    const loaded = existingTask?.value?.config || DEFAULT_CONFIG;
     // Ensure at least one empty row exists
     if (!loaded.inputs || loaded.inputs.length === 0) {
       loaded.inputs = [{ internalName: '', apiParam: '', variable: '' }];
@@ -531,7 +531,7 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
     }
   }, [hideHeader, toolbarButtons, onToolbarUpdate, headerColor]);
 
-  const type = String(act?.type || 'BackendCall') as any;
+  const type = String(task?.type || 'BackendCall') as any;
   // ✅ TODO FUTURO: Category System (vedi documentation/TODO_NUOVO.md)
   // Aggiornare per usare getTaskVisuals(type, task?.category, task?.categoryCustom, false)
   const { Icon, color } = getTaskVisualsByType(type, false);
@@ -541,7 +541,7 @@ export default function BackendCallEditor({ task, onClose, onToolbarUpdate, hide
       {!hideHeader && (
         <EditorHeader
           icon={<Server size={18} style={{ color: color || '#94a3b8' }} />}
-          title={String(act?.label || 'Backend Call')}
+          title={String(task?.label || 'Backend Call')}
           color="slate"
           onClose={handleClose}
           toolbarButtons={toolbarButtons}
