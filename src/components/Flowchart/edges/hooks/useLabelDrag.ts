@@ -52,20 +52,21 @@ export function useLabelDrag(
   const [isDragging, setIsDragging] = useState(false);
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
   const [pathSegments, setPathSegments] = useState<any[]>([]);
-  const [mouseSvgPosition, setMouseSvgPosition] = useState<{ x: number; y: number } | null>(null); // ✅ NUOVO
+  const [mouseSvgPosition, setMouseSvgPosition] = useState<{ x: number; y: number } | null>(null);
 
   const dragStartRef = useRef<{
     startScreen: { x: number; y: number };
     startSvg: { x: number; y: number };
     currentSvg: { x: number; y: number };
-    originalSvg: { x: number; y: number }; // ✅ NUOVO: per ripristino
+    originalSvg: { x: number; y: number };
   } | null>(null);
 
-  // ✅ NUOVO: Hook per highlight durante drag
+  // ✅ Hook per highlight durante drag - passa isDragging per non resettare durante il drag
   const highlightResult = useEdgeHoverDuringLabelDrag(
     mouseSvgPosition,
     edgeId,
-    snapThreshold
+    snapThreshold,
+    isDragging // ✅ PULITO: passa isDragging per evitare reset prematuri
   );
 
   // Aggiorna segmenti quando cambia il path
@@ -131,41 +132,64 @@ export function useLabelDrag(
   const handleMouseUp = useCallback(() => {
     if (!isDragging || !dragStartRef.current) return;
 
+    // ✅ PULITO: Snapshot finale PRIMA di resettare qualsiasi cosa
     const currentMouseSvg = dragStartRef.current.currentSvg;
+    const finalHighlight = highlightResult; // ✅ Usa highlightResult direttamente (ancora valido)
+    const originalSvg = dragStartRef.current.originalSvg;
 
-    // ✅ CRITICO: Validazione rilascio con 3 casi
-    if (highlightResult.highlightedSegment && highlightResult.distanceToSegment !== null) {
+    // ✅ DEBUG: Verifica snapshot finale
+    console.log('[LabelDrag] Mouse up - Snapshot finale:', {
+      currentMouseSvg,
+      finalHighlight: {
+        highlightedSegment: finalHighlight.highlightedSegment ? 'ESISTE' : 'NULL',
+        distanceToSegment: finalHighlight.distanceToSegment,
+        distanceToMidpoint: finalHighlight.distanceToMidpoint,
+      },
+      originalSvg,
+    });
+
+    // ✅ PULITO: Validazione rilascio con 3 casi
+    if (finalHighlight.highlightedSegment && finalHighlight.distanceToSegment !== null) {
       // CASO A e B: Rilascio dentro la fascia di un segmento
       let positionToSave: { x: number; y: number };
 
       // CASO B: Se vicino al midpoint → magnetismo
       if (
-        highlightResult.distanceToMidpoint !== null &&
-        highlightResult.distanceToMidpoint < midpointThreshold
+        finalHighlight.distanceToMidpoint !== null &&
+        finalHighlight.distanceToMidpoint < midpointThreshold
       ) {
         // Snap al midpoint
-        const midpoint = getSegmentMidpoint(highlightResult.highlightedSegment);
-        positionToSave = midpoint;
+        positionToSave = getSegmentMidpoint(finalHighlight.highlightedSegment);
+        console.log('[LabelDrag] Snap al midpoint:', positionToSave);
       } else {
         // CASO A: Rilascio dentro fascia ma non vicino al midpoint → posizione esatta del mouse
         positionToSave = currentMouseSvg;
+        console.log('[LabelDrag] Salva posizione mouse:', positionToSave);
       }
 
-      // Salva la posizione
+      // ✅ Salva PRIMA di resettare
       onPositionChange(positionToSave);
     } else {
       // CASO C: Rilascio fuori da qualsiasi fascia → ripristina posizione originale
-      const positionToRestore = dragStartRef.current.originalSvg;
-      if (positionToRestore) {
-        onPositionChange(positionToRestore);
+      console.log('[LabelDrag] Rilascio fuori fascia, ripristino:', originalSvg);
+      if (originalSvg) {
+        onPositionChange(originalSvg);
       }
     }
 
+    // ✅ Reset SOLO DOPO aver salvato
     setIsDragging(false);
     setDragPosition(null);
-    setMouseSvgPosition(null);
+    // ✅ NON resettare mouseSvgPosition qui - sarà resettato quando isDragging diventa false
     dragStartRef.current = null;
-  }, [isDragging, onPositionChange, highlightResult.highlightedSegment, highlightResult.distanceToSegment, highlightResult.distanceToMidpoint, midpointThreshold]);
+  }, [isDragging, onPositionChange, midpointThreshold, highlightResult]);
+
+  // ✅ Reset mouseSvgPosition quando il drag finisce
+  useEffect(() => {
+    if (!isDragging) {
+      setMouseSvgPosition(null);
+    }
+  }, [isDragging]);
 
   // Attach global mouse events
   useEffect(() => {

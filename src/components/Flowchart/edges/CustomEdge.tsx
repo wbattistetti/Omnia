@@ -64,6 +64,12 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   const pathRef = useRef<SVGPathElement>(null);
   const hoverRefs = useEdgeHoverRefs();
 
+  // ✅ PULITO: Ref per onUpdate che è sempre disponibile
+  const onUpdateRef = useRef<((updates: any) => void) | null>(null);
+
+  // ✅ PULITO: Ref per pending position (evita flickering dopo salvataggio)
+  const pendingLabelPositionRef = useRef<{ x: number; y: number } | null>(null);
+
   // Get link style
   const linkStyle = (data as any)?.linkStyle ?? DEFAULT_LINK_STYLE;
   const label = props.data?.label || props.label;
@@ -71,12 +77,31 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   // Get saved label position from data (SVG coordinates)
   const savedLabelSvgPosition = (data as any)?.labelPositionSvg;
 
-  // ✅ Use positioning hook
+  // ✅ PULITO: Usa pending position se esiste, altrimenti saved position
+  // Questo evita flickering quando la nuova posizione è stata salvata ma non è ancora in props.data
+  const effectiveLabelSvgPosition = pendingLabelPositionRef.current || savedLabelSvgPosition;
+
+  // ✅ PULITO: Quando savedLabelSvgPosition corrisponde a pending, resetta pending
+  useEffect(() => {
+    if (pendingLabelPositionRef.current && savedLabelSvgPosition) {
+      const pending = pendingLabelPositionRef.current;
+      const saved = savedLabelSvgPosition;
+      // Confronta con tolleranza (1px)
+      const distance = Math.sqrt(
+        Math.pow(pending.x - saved.x, 2) + Math.pow(pending.y - saved.y, 2)
+      );
+      if (distance < 1) {
+        pendingLabelPositionRef.current = null;
+      }
+    }
+  }, [savedLabelSvgPosition]);
+
+  // ✅ Use positioning hook (usa effectiveLabelSvgPosition per evitare flickering)
   const positions = useEdgePositioning(
     pathRef,
     sourceX,
     sourceY,
-    savedLabelSvgPosition
+    effectiveLabelSvgPosition
   );
 
   // ✅ Use hover hook
@@ -152,22 +177,78 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
       .filter((p): p is { x: number; y: number } => p !== null);
   }, [controlPointsRelative, pathRef, reactFlowInstance, sourceX, sourceY, targetX, targetY]);
 
+  // ✅ PULITO: Inizializza onUpdate immediatamente (sia da props che da window)
+  useEffect(() => {
+    // Se onUpdate è già disponibile in props.data, usalo
+    if (props.data?.onUpdate && typeof props.data.onUpdate === 'function') {
+      onUpdateRef.current = props.data.onUpdate;
+      return;
+    }
+
+    // Altrimenti, crealo usando window.__createOnUpdate
+    const createOnUpdate = (window as any).__createOnUpdate;
+    if (typeof createOnUpdate === 'function') {
+      const onUpdate = createOnUpdate(id);
+      onUpdateRef.current = onUpdate;
+
+      // Aggiorna anche l'edge con onUpdate per consistenza
+      reactFlowInstance.setEdges((eds) =>
+        eds.map((e) =>
+          e.id === id && !e.data?.onUpdate
+            ? {
+                ...e,
+                data: {
+                  ...(e.data || {}),
+                  onUpdate,
+                },
+              }
+            : e
+        )
+      );
+      console.log('[CustomEdge] onUpdate inizializzato per edge:', id);
+    } else {
+      console.warn('[CustomEdge] createOnUpdate non disponibile su window per edge:', id);
+    }
+  }, [id, props.data?.onUpdate, reactFlowInstance]);
+
   // Label drag hook
   const handleLabelPositionChange = useCallback((newSvgPosition: { x: number; y: number }) => {
-    if (props.data && typeof props.data.onUpdate === 'function') {
-      props.data.onUpdate({
+    // ✅ PULITO: Imposta pending position IMMEDIATAMENTE per evitare flickering
+    pendingLabelPositionRef.current = newSvgPosition;
+
+    // ✅ PULITO: Usa onUpdateRef che è sempre disponibile dopo l'inizializzazione
+    if (onUpdateRef.current) {
+      onUpdateRef.current({
         data: {
           labelPositionSvg: newSvgPosition,
         }
       });
+      console.log('[CustomEdge] Posizione label salvata:', newSvgPosition);
+    } else {
+      // ✅ Fallback: prova a inizializzare onUpdate immediatamente
+      const createOnUpdate = (window as any).__createOnUpdate;
+      if (typeof createOnUpdate === 'function') {
+        const onUpdate = createOnUpdate(id);
+        onUpdateRef.current = onUpdate;
+        onUpdate({
+          data: {
+            labelPositionSvg: newSvgPosition,
+          }
+        });
+        console.log('[CustomEdge] onUpdate inizializzato al volo e posizione salvata:', newSvgPosition);
+      } else {
+        console.error('[CustomEdge] onUpdate non disponibile per edge:', id, '- la posizione non verrà salvata');
+        // Se non possiamo salvare, resetta pending
+        pendingLabelPositionRef.current = null;
+      }
     }
-  }, [props.data]);
+  }, [id]);
 
   const labelDrag = useLabelDrag({
     labelRef: hoverRefs.labelRef,
     initialPosition: positions.labelScreenPosition,
     pathRef: pathRef,
-    savedLabelSvgPosition: savedLabelSvgPosition,
+    savedLabelSvgPosition: effectiveLabelSvgPosition,
     onPositionChange: handleLabelPositionChange,
     enabled: !!label,
     snapThreshold: 30,

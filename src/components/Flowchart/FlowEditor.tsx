@@ -132,6 +132,14 @@ const FlowEditorContent: React.FC<FlowEditorProps> = ({
     onDeleteEdgeRef.current = onDeleteEdge;
   }, [createOnUpdate, onDeleteEdge]);
 
+  // ✅ PULITO: Esporta createOnUpdate per inizializzazione edge esistenti
+  useEffect(() => {
+    (window as any).__createOnUpdate = createOnUpdate;
+    return () => {
+      delete (window as any).__createOnUpdate;
+    };
+  }, [createOnUpdate]);
+
   // Deferred apply for labels on just-created edges (avoids race with RF state)
   const { scheduleApplyLabel, pendingApplyRef } = useEdgeLabelScheduler(setEdges, setSelectedEdgeId, connectionMenuRef);
 

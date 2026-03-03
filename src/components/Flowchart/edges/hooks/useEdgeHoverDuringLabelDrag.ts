@@ -13,11 +13,13 @@ export interface EdgeHoverDuringDragResult {
 /**
  * Hook per evidenziare segmenti di edge durante il drag della label
  * Cerca in tutti gli edge della flowchart il segmento più vicino al mouse
+ * PULITO: Non resetta durante il drag, solo quando isDragging === false
  */
 export function useEdgeHoverDuringLabelDrag(
   mouseSvgPosition: { x: number; y: number } | null,
   currentEdgeId: string,
-  snapThreshold: number = 30
+  snapThreshold: number = 30,
+  isDragging: boolean = false // ✅ NUOVO: parametro per sapere se stiamo dragando
 ): EdgeHoverDuringDragResult {
   const reactFlowInstance = useReactFlow();
   const [result, setResult] = useState<EdgeHoverDuringDragResult>({
@@ -29,14 +31,18 @@ export function useEdgeHoverDuringLabelDrag(
   });
 
   useEffect(() => {
+    // ✅ PULITO: Non resettare se stiamo dragando (mouseSvgPosition potrebbe essere null temporaneamente)
     if (!mouseSvgPosition) {
-      setResult({
-        highlightedEdgeId: null,
-        highlightedSegmentIndex: null,
-        highlightedSegment: null,
-        distanceToSegment: null,
-        distanceToMidpoint: null,
-      });
+      // Reset solo se NON stiamo dragando
+      if (!isDragging) {
+        setResult({
+          highlightedEdgeId: null,
+          highlightedSegmentIndex: null,
+          highlightedSegment: null,
+          distanceToSegment: null,
+          distanceToMidpoint: null,
+        });
+      }
       return;
     }
 
@@ -63,9 +69,31 @@ export function useEdgeHoverDuringLabelDrag(
 
     // Cerca in tutti gli edge
     for (const edge of allEdges) {
-      // Trova il path element per questo edge
-      // Usa querySelector per trovare il path con id corrispondente
-      const pathElement = document.getElementById(edge.id) as SVGPathElement;
+      // ✅ MIGLIORATO: Prova più modi per trovare il path
+      let pathElement: SVGPathElement | null = null;
+
+      // Metodo 1: getElementById
+      pathElement = document.getElementById(edge.id) as SVGPathElement;
+
+      // Metodo 2: Se non trovato, cerca nel DOM React Flow
+      if (!pathElement || pathElement.tagName !== 'path') {
+        const reactFlowWrapper = document.querySelector('.react-flow');
+        if (reactFlowWrapper) {
+          pathElement = reactFlowWrapper.querySelector(`path#${edge.id}`) as SVGPathElement;
+        }
+      }
+
+      // Metodo 3: Cerca per classe e id
+      if (!pathElement || pathElement.tagName !== 'path') {
+        const allPaths = document.querySelectorAll('path.react-flow__edge-path');
+        for (const path of allPaths) {
+          if (path.id === edge.id) {
+            pathElement = path as SVGPathElement;
+            break;
+          }
+        }
+      }
+
       if (!pathElement || pathElement.tagName !== 'path') continue;
 
       // Verifica che il path sia valido e abbia lunghezza > 0
@@ -73,7 +101,6 @@ export function useEdgeHoverDuringLabelDrag(
         const pathLength = pathElement.getTotalLength();
         if (pathLength === 0) continue;
       } catch (e) {
-        // Path non valido, salta
         continue;
       }
 
@@ -104,6 +131,20 @@ export function useEdgeHoverDuringLabelDrag(
       }
     }
 
+    // ✅ DEBUG: Verifica se abbiamo trovato un match (solo durante drag)
+    if (isDragging) {
+      if (bestMatch) {
+        console.log('[EdgeHover] Match trovato:', {
+          edgeId: bestMatch.edgeId,
+          distance: bestMatch.distance,
+          distanceToMidpoint: bestMatch.distanceToMidpoint,
+          snapThreshold,
+        });
+      } else {
+        console.log('[EdgeHover] Nessun match trovato per:', mouseSvgPosition);
+      }
+    }
+
     // Aggiorna risultato
     if (bestMatch) {
       setResult({
@@ -122,7 +163,7 @@ export function useEdgeHoverDuringLabelDrag(
         distanceToMidpoint: null,
       });
     }
-  }, [mouseSvgPosition, reactFlowInstance, snapThreshold]);
+  }, [mouseSvgPosition, reactFlowInstance, snapThreshold, isDragging]);
 
   return result;
 }
