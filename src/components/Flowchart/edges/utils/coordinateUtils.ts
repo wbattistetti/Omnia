@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { ControlPointRelative, ControlPointAbsolute } from '../types/edgeTypes';
+import { ControlPointRelative, ControlPointAbsolute, LabelPositionRelative } from '../types/edgeTypes';
 
 export class CoordinateConverter {
   private reactFlowInstance: any;
@@ -105,6 +105,84 @@ export class CoordinateConverter {
    * CRITICO: trova t più vicino e calcola offset
    */
   absoluteToRelative(absolute: ControlPointAbsolute): ControlPointRelative | null {
+    const path = this.pathRef.current;
+    if (!path) return null;
+
+    const pathLength = path.getTotalLength();
+    if (pathLength === 0) return null;
+
+    // Trova il punto più vicino sul path
+    let minDistance = Infinity;
+    let bestT = 0.5;
+    let bestPoint: DOMPoint | null = null;
+
+    // Campiona il path per trovare t ottimale
+    const samples = 100;
+    for (let i = 0; i <= samples; i++) {
+      const t = i / samples;
+      const length = pathLength * t;
+      const point = path.getPointAtLength(length);
+
+      const dist = Math.sqrt(
+        Math.pow(absolute.x - point.x, 2) + Math.pow(absolute.y - point.y, 2)
+      );
+
+      if (dist < minDistance) {
+        minDistance = dist;
+        bestT = t;
+        bestPoint = point;
+      }
+    }
+
+    if (!bestPoint) return null;
+
+    // Calcola normale al path
+    const normal = this.getPathNormal(path, pathLength * bestT);
+
+    // Calcola offset (distanza proiettata sulla normale)
+    const dx = absolute.x - bestPoint.x;
+    const dy = absolute.y - bestPoint.y;
+    const offset = dx * normal.x + dy * normal.y;
+
+    return {
+      t: bestT,
+      offset: offset,
+    };
+  }
+
+  /**
+   * Label position relativa → coordinate SVG assolute
+   * Usa lo stesso meccanismo dei control points
+   */
+  labelRelativeToAbsolute(relative: LabelPositionRelative): { x: number; y: number } | null {
+    const path = this.pathRef.current;
+    if (!path) return null;
+
+    const pathLength = path.getTotalLength();
+    if (pathLength === 0) return null;
+
+    // Clamp t tra 0 e 1
+    const t = Math.max(0, Math.min(1, relative.t));
+    const length = pathLength * t;
+
+    // Punto base sul path
+    const basePoint = path.getPointAtLength(length);
+
+    // Calcola normale al path (perpendicolare)
+    const normal = this.getPathNormal(path, length);
+
+    // Applica offset lungo la normale
+    return {
+      x: basePoint.x + normal.x * relative.offset,
+      y: basePoint.y + normal.y * relative.offset,
+    };
+  }
+
+  /**
+   * Coordinate SVG assolute → label position relativa
+   * Usa lo stesso meccanismo dei control points
+   */
+  labelAbsoluteToRelative(absolute: { x: number; y: number }): LabelPositionRelative | null {
     const path = this.pathRef.current;
     if (!path) return null;
 

@@ -24,7 +24,18 @@ export interface ControlPointAbsolute {
 }
 
 /**
- * Label position in SVG coordinates (PERSISTITO)
+ * Label position in formato relativo (PERSISTITO in edge.data)
+ * t: posizione lungo il path (0 = source, 1 = target)
+ * offset: distanza perpendicolare dal path (positivo = destra, negativo = sinistra)
+ */
+export interface LabelPositionRelative {
+  t: number;        // 0 = source, 1 = target
+  offset: number;   // distanza perpendicolare (positivo = destra, negativo = sinistra)
+}
+
+/**
+ * Label position in SVG coordinates (LEGACY, per migrazione)
+ * @deprecated Usa LabelPositionRelative invece
  */
 export interface LabelPositionSvg {
   x: number;

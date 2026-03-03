@@ -7,9 +7,9 @@ import { useEdgeHoverDuringLabelDrag } from './useEdgeHoverDuringLabelDrag';
 export interface UseLabelDragOptions {
   labelRef: RefObject<HTMLElement>;
   initialPosition: { x: number; y: number };
-  onPositionChange: (position: { x: number; y: number }) => void;
+  onPositionChange: (position: { t: number; offset: number }) => void; // ✅ CAMBIATO: ora accetta { t, offset }
   pathRef: RefObject<SVGPathElement>;
-  savedLabelSvgPosition?: { x: number; y: number } | null;
+  savedLabelSvgPosition?: { x: number; y: number } | null; // ✅ LEGACY: solo per calcolo iniziale
   enabled?: boolean;
   snapThreshold?: number; // Fascia di aggancio (default 30px)
   midpointThreshold?: number; // Soglia per magnetismo al midpoint (default 15px)
@@ -167,13 +167,22 @@ export function useLabelDrag(
         console.log('[LabelDrag] Salva posizione mouse:', positionToSave);
       }
 
-      // ✅ Salva PRIMA di resettare
-      onPositionChange(positionToSave);
+      // ✅ Converti coordinate SVG in { t, offset } e salva
+      const relative = converter.labelAbsoluteToRelative(positionToSave);
+      if (relative) {
+        onPositionChange(relative);
+        console.log('[LabelDrag] Posizione salvata (relativa):', relative);
+      } else {
+        console.error('[LabelDrag] Impossibile convertire posizione SVG in relativa');
+      }
     } else {
       // CASO C: Rilascio fuori da qualsiasi fascia → ripristina posizione originale
       console.log('[LabelDrag] Rilascio fuori fascia, ripristino:', originalSvg);
       if (originalSvg) {
-        onPositionChange(originalSvg);
+        const relative = converter.labelAbsoluteToRelative(originalSvg);
+        if (relative) {
+          onPositionChange(relative);
+        }
       }
     }
 

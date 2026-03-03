@@ -94,8 +94,16 @@ export interface EdgeData extends BaseEdgeData {
    */
   controlPoints?: Array<{ t: number; offset: number } | { x: number; y: number }>;
   /**
-   * Custom label position (SVG coordinates)
+   * Custom label position in relative format (t, offset)
+   * t: position along path (0 = source, 1 = target)
+   * offset: perpendicular distance from path (positive = right, negative = left)
    * If not set, label is positioned at edge midpoint
+   */
+  labelPositionRelative?: { t: number; offset: number };
+
+  /**
+   * Legacy label position (SVG coordinates) - for migration only
+   * @deprecated Use labelPositionRelative instead
    */
   labelPositionSvg?: { x: number; y: number };
   // Eventuali estensioni specifiche per flowchart

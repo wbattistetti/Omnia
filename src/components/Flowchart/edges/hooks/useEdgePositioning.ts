@@ -12,12 +12,13 @@ export interface EdgePositioningResult {
 /**
  * Hook for calculating edge positions (SVG and screen coordinates)
  * DETERMINISTICO: nessun polling, nessun hack globale, listener completi
+ * ✅ PULITO: Usa labelPositionRelative invece di coordinate SVG assolute
  */
 export function useEdgePositioning(
   pathRef: RefObject<SVGPathElement>,
   sourceX: number,
   sourceY: number,
-  savedLabelSvgPosition?: { x: number; y: number } | null
+  labelPositionRelative?: { t: number; offset: number } | null
 ): EdgePositioningResult {
   const reactFlowInstance = useReactFlow();
   const [positions, setPositions] = useState<EdgePositioningResult>({
@@ -41,10 +42,16 @@ export function useEdgePositioning(
     const midPointScreen = converter.svgToScreen(midPoint) || { x: 0, y: 0 };
     const sourceScreen = converter.flowToScreen({ x: sourceX, y: sourceY });
 
-    // Label position
+    // ✅ PULITO: Label position da labelPositionRelative
     let labelScreenPos: { x: number; y: number };
-    if (savedLabelSvgPosition) {
-      labelScreenPos = converter.svgToScreen(savedLabelSvgPosition) || midPointScreen;
+    if (labelPositionRelative) {
+      // Converti { t, offset } → coordinate SVG → coordinate screen
+      const labelSvg = converter.labelRelativeToAbsolute(labelPositionRelative);
+      if (labelSvg) {
+        labelScreenPos = converter.svgToScreen(labelSvg) || midPointScreen;
+      } else {
+        labelScreenPos = midPointScreen;
+      }
     } else {
       labelScreenPos = midPointScreen;
     }
@@ -55,7 +62,7 @@ export function useEdgePositioning(
       labelScreenPosition: labelScreenPos,
       sourceScreenPosition: sourceScreen,
     });
-  }, [pathRef, sourceX, sourceY, savedLabelSvgPosition, reactFlowInstance]);
+  }, [pathRef, sourceX, sourceY, labelPositionRelative, reactFlowInstance]);
 
   // Aggiorna quando cambia il path
   useEffect(() => {
@@ -96,10 +103,10 @@ export function useEdgePositioning(
     return () => window.removeEventListener('resize', handleResize);
   }, [updatePositions]);
 
-  // Aggiorna quando cambia labelPositionSvg
+  // ✅ PULITO: Aggiorna quando cambia labelPositionRelative
   useEffect(() => {
     updatePositions();
-  }, [savedLabelSvgPosition?.x, savedLabelSvgPosition?.y, updatePositions]);
+  }, [labelPositionRelative?.t, labelPositionRelative?.offset, updatePositions]);
 
   return positions;
 }

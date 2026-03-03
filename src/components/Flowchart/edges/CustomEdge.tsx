@@ -67,41 +67,42 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
   // ✅ PULITO: Ref per onUpdate che è sempre disponibile
   const onUpdateRef = useRef<((updates: any) => void) | null>(null);
 
-  // ✅ PULITO: Ref per pending position (evita flickering dopo salvataggio)
-  const pendingLabelPositionRef = useRef<{ x: number; y: number } | null>(null);
-
   // Get link style
   const linkStyle = (data as any)?.linkStyle ?? DEFAULT_LINK_STYLE;
   const label = props.data?.label || props.label;
 
-  // Get saved label position from data (SVG coordinates)
-  const savedLabelSvgPosition = (data as any)?.labelPositionSvg;
+  // ✅ PULITO: Get saved label position in relative format (t, offset)
+  const labelPositionRelative = (data as any)?.labelPositionRelative || null;
 
-  // ✅ PULITO: Usa pending position se esiste, altrimenti saved position
-  // Questo evita flickering quando la nuova posizione è stata salvata ma non è ancora in props.data
-  const effectiveLabelSvgPosition = pendingLabelPositionRef.current || savedLabelSvgPosition;
-
-  // ✅ PULITO: Quando savedLabelSvgPosition corrisponde a pending, resetta pending
+  // ✅ PULITO: Migrazione automatica da labelPositionSvg legacy
   useEffect(() => {
-    if (pendingLabelPositionRef.current && savedLabelSvgPosition) {
-      const pending = pendingLabelPositionRef.current;
-      const saved = savedLabelSvgPosition;
-      // Confronta con tolleranza (1px)
-      const distance = Math.sqrt(
-        Math.pow(pending.x - saved.x, 2) + Math.pow(pending.y - saved.y, 2)
-      );
-      if (distance < 1) {
-        pendingLabelPositionRef.current = null;
+    // Se abbiamo già labelPositionRelative, non serve migrazione
+    if (labelPositionRelative) return;
+
+    // Se abbiamo labelPositionSvg legacy e il path è disponibile, migra
+    const legacySvg = (data as any)?.labelPositionSvg;
+    if (legacySvg && pathRef.current && onUpdateRef.current) {
+      const converter = new CoordinateConverter(reactFlowInstance, pathRef);
+      const migrated = converter.labelAbsoluteToRelative(legacySvg);
+      if (migrated) {
+        // Salva la migrazione (una volta)
+        onUpdateRef.current({
+          data: {
+            labelPositionRelative: migrated,
+            labelPositionSvg: undefined, // Rimuovi legacy
+          }
+        });
+        console.log('[CustomEdge] Migrazione labelPositionSvg → labelPositionRelative:', migrated);
       }
     }
-  }, [savedLabelSvgPosition]);
+  }, [labelPositionRelative, (data as any)?.labelPositionSvg, reactFlowInstance]);
 
-  // ✅ Use positioning hook (usa effectiveLabelSvgPosition per evitare flickering)
+  // ✅ PULITO: Use positioning hook con labelPositionRelative
   const positions = useEdgePositioning(
     pathRef,
     sourceX,
     sourceY,
-    effectiveLabelSvgPosition
+    labelPositionRelative
   );
 
   // ✅ Use hover hook
@@ -211,19 +212,17 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     }
   }, [id, props.data?.onUpdate, reactFlowInstance]);
 
-  // Label drag hook
-  const handleLabelPositionChange = useCallback((newSvgPosition: { x: number; y: number }) => {
-    // ✅ PULITO: Imposta pending position IMMEDIATAMENTE per evitare flickering
-    pendingLabelPositionRef.current = newSvgPosition;
-
+  // ✅ PULITO: Label drag hook - salva labelPositionRelative invece di coordinate SVG
+  const handleLabelPositionChange = useCallback((newRelative: { t: number; offset: number }) => {
     // ✅ PULITO: Usa onUpdateRef che è sempre disponibile dopo l'inizializzazione
     if (onUpdateRef.current) {
       onUpdateRef.current({
         data: {
-          labelPositionSvg: newSvgPosition,
+          labelPositionRelative: newRelative,
+          labelPositionSvg: undefined, // Rimuovi legacy se esiste
         }
       });
-      console.log('[CustomEdge] Posizione label salvata:', newSvgPosition);
+      console.log('[CustomEdge] Posizione label salvata (relativa):', newRelative);
     } else {
       // ✅ Fallback: prova a inizializzare onUpdate immediatamente
       const createOnUpdate = (window as any).__createOnUpdate;
@@ -232,14 +231,13 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
         onUpdateRef.current = onUpdate;
         onUpdate({
           data: {
-            labelPositionSvg: newSvgPosition,
+            labelPositionRelative: newRelative,
+            labelPositionSvg: undefined,
           }
         });
-        console.log('[CustomEdge] onUpdate inizializzato al volo e posizione salvata:', newSvgPosition);
+        console.log('[CustomEdge] onUpdate inizializzato al volo e posizione salvata (relativa):', newRelative);
       } else {
         console.error('[CustomEdge] onUpdate non disponibile per edge:', id, '- la posizione non verrà salvata');
-        // Se non possiamo salvare, resetta pending
-        pendingLabelPositionRef.current = null;
       }
     }
   }, [id]);
@@ -248,11 +246,11 @@ export const CustomEdge: React.FC<CustomEdgeProps> = (props) => {
     labelRef: hoverRefs.labelRef,
     initialPosition: positions.labelScreenPosition,
     pathRef: pathRef,
-    savedLabelSvgPosition: effectiveLabelSvgPosition,
+    savedLabelSvgPosition: null, // ✅ LEGACY: non più usato, solo per compatibilità
     onPositionChange: handleLabelPositionChange,
     enabled: !!label,
     snapThreshold: 30,
-    edgeId: id, // ✅ NUOVO: passa ID edge
+    edgeId: id,
   });
 
   // ✅ NUOVO: Determina se questo edge deve mostrare highlight
