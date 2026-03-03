@@ -131,10 +131,10 @@ function ensureAllNodesHaveMessages(
     if (!messagesToUse.has(node.id)) {
       messagesToUse.set(node.id, {
         ask: { base: [] },
+        noInput: { base: [] },
         confirm: { base: [] },
         notConfirmed: { base: [] },
-        violation: { base: [] },
-        disambiguation: { base: [], options: [] },
+        invalid: { base: [] },
         success: { base: [] }
       });
     }

@@ -22,8 +22,6 @@ export interface ResponseEditorContextValue {
   taskWizardMode: TaskWizardMode;
   setTaskWizardMode: (mode: TaskWizardMode) => void;
   contextualizationTemplateId?: string;
-  // ✅ NEW: Deployment handler
-  onDeploymentClick?: () => void;
 }
 
 export const ResponseEditorContext = createContext<ResponseEditorContextValue | null>(null);

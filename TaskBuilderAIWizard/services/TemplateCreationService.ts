@@ -47,7 +47,7 @@ function countExpectedTranslations(messages: WizardStepMessages): number {
   if (messages.noInput?.base) count += messages.noInput.base.length;
   if (messages.confirm?.base) count += messages.confirm.base.length;
   if (messages.notConfirmed?.base) count += messages.notConfirmed.base.length;
-  if (messages.violation?.base) count += messages.violation.base.length;
+  if (messages.invalid?.base) count += messages.invalid.base.length;
   if (messages.success?.base) count += messages.success.base.length;
 
   return count;
@@ -289,8 +289,7 @@ export function associateTextsToStructure(
   if (messages.noInput?.base) textsByStepType.noInput = messages.noInput.base;
   if (messages.confirm?.base) textsByStepType.confirmation = messages.confirm.base;
   if (messages.notConfirmed?.base) textsByStepType.notConfirmed = messages.notConfirmed.base;
-  if (messages.violation?.base) textsByStepType.violation = messages.violation.base;
-  if (messages.disambiguation?.base) textsByStepType.disambiguation = messages.disambiguation.base;
+  if (messages.invalid?.base) textsByStepType.invalid = messages.invalid.base;
   if (messages.success?.base) textsByStepType.success = messages.success.base;
 
   // Associa testi ai GUID
@@ -345,8 +344,7 @@ export function createTemplateStructure(node: WizardTaskTreeNode): NodeStructure
     noInput: 3,         // 3 escalation
     confirmation: 1,    // 1 messaggio di conferma
     notConfirmed: 1,    // 1 messaggio
-    violation: 2,       // 2 messaggi
-    disambiguation: 1,  // 1 messaggio
+    invalid: 2,         // 2 messaggi (generati automaticamente dai constraints, non dall'AI)
     success: 1,         // 1 messaggio
   };
 
@@ -474,9 +472,9 @@ function convertMessagesToStepsDictionary(
     stepRecord.notConfirmed = createStepWithEscalations('notConfirmed', messages.notConfirmed.base, addTranslation);
   }
 
-  // Violation messages -> violation step
-  if (messages.violation?.base && messages.violation.base.length > 0) {
-    stepRecord.violation = createStepWithEscalations('violation', messages.violation.base, addTranslation);
+  // Invalid messages -> invalid step (generati automaticamente dai constraints, non dall'AI)
+  if (messages.invalid?.base && messages.invalid.base.length > 0) {
+    stepRecord.invalid = createStepWithEscalations('invalid', messages.invalid.base, addTranslation);
   }
 
   // Success messages -> success step
@@ -616,6 +614,7 @@ export async function createTemplatesFromStructures(
  * @param addTranslation Optional translation callback
  */
 export async function completeTemplateWithWizardData(
+
   fakeTree: WizardTaskTreeNode[],
   messagesGeneralized: Map<string, WizardStepMessages>,
   constraintsMap: Map<string, WizardConstraint[]>,
@@ -725,9 +724,9 @@ function convertContextualizedMessagesToSteps(
     stepRecord.notConfirmed = createStepWithEscalations('notConfirmed', messages.notConfirmed.base, addTranslation);
   }
 
-  // Violation messages -> violation step
-  if (messages.violation?.base && messages.violation.base.length > 0) {
-    stepRecord.violation = createStepWithEscalations('violation', messages.violation.base, addTranslation);
+  // Invalid messages -> invalid step (generati automaticamente dai constraints, non dall'AI)
+  if (messages.invalid?.base && messages.invalid.base.length > 0) {
+    stepRecord.invalid = createStepWithEscalations('invalid', messages.invalid.base, addTranslation);
   }
 
   // Success messages -> success step

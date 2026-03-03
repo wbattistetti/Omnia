@@ -280,20 +280,15 @@ Public Class TaskAssembler
     ''' Il compilatore NON fa fallback: se il tipo è invalido, fallisce immediatamente.
     ''' Fallback comportamentali sono gestiti dal motore runtime, non dal compilatore.
     ''' ✅ NORMALIZZAZIONE: "violation" viene normalizzato a "invalid" per compatibilità con frontend
-    ''' ✅ "violation" non esiste come step, solo "invalid" per constraints non superati
-    ''' ✅ "disambiguation" viene mappato a "start" (non implementato nel runtime)
+    ''' ✅ "invalid" è l'unico step per quando i constraints non vengono superati
+    ''' ✅ "disambiguation" non è più supportato (rimosso)
     ''' </summary>
     Private Function CompileStepType(typeStr As String) As TaskEngine.DialogueStepType
         If String.IsNullOrEmpty(typeStr) Then
             Throw New InvalidOperationException($"Step type cannot be null or empty. This indicates a structural error in the task model. Every DialogueStep must have a valid type.")
         End If
 
-        ' ✅ NORMALIZZAZIONE: "violation" → "invalid" (compatibilità con frontend ddt.v2.types.ts)
-        ' "violation" non esiste come step, solo "invalid" per constraints non superati
         Dim normalizedType = typeStr.ToLower().Trim()
-        If normalizedType = "violation" Then
-            normalizedType = "invalid"
-        End If
 
         Select Case normalizedType
             Case "start"
@@ -315,15 +310,10 @@ Public Class TaskAssembler
                 ' ✅ "introduction" è un alias valido per "start" nel modello IDE
                 ' Usato per step introduttivi che si comportano come Start
                 Return DialogueStepType.Start
-            Case "disambiguation"
-                ' ❌ "disambiguation" non è implementato nel runtime VB.NET
-                ' Viene ignorato e mappato a "start" (o potrebbe essere rimosso completamente)
-                ' TODO: Se necessario in futuro, implementare supporto completo per disambiguation
-                Return DialogueStepType.Start
             Case Else
                 ' ❌ RIMOSSO FALLBACK: Il compilatore NON deve indovinare o correggere errori strutturali
                 ' Se il tipo è sconosciuto, il modello è invalido e deve essere corretto a monte
-                Throw New InvalidOperationException($"Unknown step type '{typeStr}'. Valid types are: start, noMatch, noInput, confirmation, notConfirmed, invalid, success, introduction. Note: 'violation' is automatically normalized to 'invalid'. 'disambiguation' is mapped to 'start' (not implemented in runtime).")
+                Throw New InvalidOperationException($"Unknown step type '{typeStr}'. Valid types are: start, noMatch, noInput, confirmation, notConfirmed, invalid, success, introduction.")
         End Select
     End Function
 

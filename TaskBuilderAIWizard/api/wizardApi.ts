@@ -244,27 +244,28 @@ function convertApiConstraintsToWizardConstraints(
 
 /**
  * Convert API messages response to WizardStepMessages
- * API returns: { start, noInput, noMatch, confirmation, success }
- * WizardStepMessages expects: { ask, confirm, notConfirmed, violation, disambiguation, success }
+ * API returns: { start, noInput, noMatch, confirmation, notConfirmed, success }
+ * WizardStepMessages expects: { ask, noInput, confirm, notConfirmed, invalid, success }
+ * Note: 'invalid' is generated automatically from constraints, not from AI messages
  */
 function convertApiMessagesToWizardMessages(apiResponse: any): WizardStepMessages {
-  // API response structure: { success: true, messages: { start, noInput, noMatch, confirmation, success } }
+  // API response structure: { success: true, messages: { start, noInput, noMatch, confirmation, notConfirmed, success } }
   const messages = apiResponse.messages || apiResponse || {};
 
   return {
     ask: {
-      base: Array.isArray(messages.start) ? messages.start : messages.start ? [messages.start] : []
+      base: Array.isArray(messages.start) ? messages.start : messages.start ? [messages.start] : [],
+      reask: Array.isArray(messages.noMatch) ? messages.noMatch : messages.noMatch ? [messages.noMatch] : undefined
     },
+    noInput: messages.noInput ? {
+      base: Array.isArray(messages.noInput) ? messages.noInput : [messages.noInput]
+    } : undefined,
     confirm: messages.confirmation ? {
       base: Array.isArray(messages.confirmation) ? messages.confirmation : [messages.confirmation]
     } : undefined,
-    notConfirmed: messages.noMatch ? {
-      base: Array.isArray(messages.noMatch) ? messages.noMatch : [messages.noMatch]
+    notConfirmed: messages.notConfirmed ? {
+      base: Array.isArray(messages.notConfirmed) ? messages.notConfirmed : [messages.notConfirmed]
     } : undefined,
-    violation: messages.noInput ? {
-      base: Array.isArray(messages.noInput) ? messages.noInput : [messages.noInput]
-    } : undefined,
-    disambiguation: undefined, // API doesn't return disambiguation, can be added later
     success: messages.success ? {
       base: Array.isArray(messages.success) ? messages.success : [messages.success]
     } : undefined
@@ -332,7 +333,8 @@ export async function generateConstraints(
 
 
 /**
- * ✅ NEW: Step types in order (8 total)
+ * ✅ NEW: Step types in order (6 total)
+ * Note: 'invalid' is generated automatically from constraints, not from AI messages
  */
 const STEP_TYPES = [
   'start',
@@ -340,8 +342,6 @@ const STEP_TYPES = [
   'noMatch',
   'confirmation',
   'notConfirmed',
-  'violation',
-  'disambiguation',
   'success'
 ] as const;
 
@@ -408,10 +408,10 @@ function convertGuidMapToWizardStepMessages(
 ): WizardStepMessages {
   const result: WizardStepMessages = {
     ask: { base: [] },
+    noInput: { base: [] },
     confirm: { base: [] },
     notConfirmed: { base: [] },
-    violation: { base: [] },
-    disambiguation: { base: [], options: [] },
+    invalid: { base: [] },
     success: { base: [] }
   };
 
@@ -443,11 +443,8 @@ function convertGuidMapToWizardStepMessages(
   if (messagesByStepType.notConfirmed) {
     result.notConfirmed = { base: messagesByStepType.notConfirmed };
   }
-  if (messagesByStepType.violation) {
-    result.violation = { base: messagesByStepType.violation };
-  }
-  if (messagesByStepType.disambiguation) {
-    result.disambiguation = { base: messagesByStepType.disambiguation };
+  if (messagesByStepType.invalid) {
+    result.invalid = { base: messagesByStepType.invalid };
   }
   if (messagesByStepType.success) {
     result.success = { base: messagesByStepType.success };
@@ -545,16 +542,9 @@ export async function generateMessages(
                 if (!allMessages.notConfirmed) allMessages.notConfirmed = { base: [] };
                 allMessages.notConfirmed.base.push(...messages);
                 break;
-              case 'violation':
-                if (!allMessages.violation) allMessages.violation = { base: [] };
-                allMessages.violation.base.push(...messages);
-                break;
-              case 'disambiguation':
-                if (!allMessages.disambiguation) allMessages.disambiguation = { base: [], options: [] };
-                allMessages.disambiguation.base.push(...messages);
-                if (data.options && Array.isArray(data.options)) {
-                  allMessages.disambiguation.options.push(...data.options);
-                }
+              case 'invalid':
+                if (!allMessages.invalid) allMessages.invalid = { base: [] };
+                allMessages.invalid.base.push(...messages);
                 break;
               case 'success':
                 if (!allMessages.success) allMessages.success = { base: [] };

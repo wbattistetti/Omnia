@@ -32,7 +32,6 @@ import { ResponseEditorContext, useResponseEditorContext } from '@responseEditor
 import { generalizeLabel } from '../../../../../TaskBuilderAIWizard/services/TemplateCreationService';
 import { TranslationType } from '@types/translationTypes';
 import { TaskType, TemplateSource } from '@types/taskTypes';
-import { useDeploymentDialog } from '@responseEditor/ResponseEditorToolbar';
 import { useWizardStore } from '../../../../../TaskBuilderAIWizard/store/wizardStore';
 import { shallow } from 'zustand/shallow';
 import type { WizardTaskTreeNode } from '../../../../../TaskBuilderAIWizard/types';
@@ -282,9 +281,8 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   const generalizedLabel = wizardIntegrationProp?.generalizedLabel ?? null;
   const generalizedMessages = wizardIntegrationProp?.generalizedMessages ?? null;
 
-  // ✅ Deployment dialog
+  // ✅ Project locale (for other uses)
   const projectLocale = 'it-IT'; // TODO: Get from project context
-  const { openDialog: openDeploymentDialog, dialogElement: deploymentDialogElement } = useDeploymentDialog(currentProjectId, projectLocale);
   const generalizationReasonEffective = wizardIntegrationProp?.generalizationReason ?? null;
 
   // ✅ DEBUG: Log per verificare perché contextualizationTemplateId potrebbe essere undefined
@@ -320,9 +318,7 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
     taskWizardMode: taskWizardMode, // ✅ Use prop directly (comes from state in useResponseEditorCore)
     setTaskWizardMode, // ✅ ARCHITECTURE: Setter for updating wizard mode (updates state in useResponseEditorCore)
     contextualizationTemplateId: contextualizationTemplateIdFromMeta || contextualizationTemplateId || undefined,
-    // ✅ NEW: Deployment handler
-    onDeploymentClick: openDeploymentDialog,
-  }), [taskTree, taskMeta, taskLabel, currentProjectId, headerTitle, taskType, taskWizardMode, setTaskWizardMode, contextualizationTemplateIdFromMeta, contextualizationTemplateId, openDeploymentDialog]);
+      }), [taskTree, taskMeta, taskLabel, currentProjectId, headerTitle, taskType, taskWizardMode, setTaskWizardMode, contextualizationTemplateIdFromMeta, contextualizationTemplateId]);
 
   // ✅ B1: WizardContext.Provider moved to ResponseEditorInner to avoid race condition
 
@@ -1460,8 +1456,6 @@ export function ResponseEditorLayout(props: ResponseEditorLayoutProps) {
   return (
     <ResponseEditorContext.Provider value={responseEditorContextValue}>
       {content}
-      {/* ✅ Deployment Dialog */}
-      {deploymentDialogElement}
     </ResponseEditorContext.Provider>
   );
 }

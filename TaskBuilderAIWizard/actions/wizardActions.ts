@@ -362,7 +362,8 @@ export async function runParallelGeneration(
         task,
         engineType as any,
         contract,
-        undefined
+        undefined,
+        locale // Pass locale for boolean task synonyms
       );
 
       if (!parser) {
@@ -430,24 +431,7 @@ export async function runParallelGeneration(
         });
 
         // ✅ DEBUG: Log quando il parser viene salvato nel template in memoria
-        console.log(`[wizardActions] ✅ Parser saved to template.dataContract.parsers (in memory)`, {
-          nodeId,
-          nodeLabel,
-          engineType,
-          parserType: parser.type,
-          parsersCount: template.dataContract.parsers.length,
-          allContractTypes: template.dataContract.parsers.map((c: any) => c.type),
-          escalationOrder: template.dataContract.parsers.map((c: any) => c.type).join(' → '),
-          fullDataContract: {
-            templateName: template.dataContract.templateName,
-            templateId: template.dataContract.templateId,
-            parsersCount: template.dataContract.parsers.length,
-            parsers: template.dataContract.parsers.map((c: any) => ({
-              type: c.type,
-              enabled: c.enabled
-            }))
-          }
-        });
+        console.log(`[wizardActions] ✅ Parser saved: ${engineType} for "${nodeLabel}" (${template.dataContract.parsers.map((c: any) => c.type).join(' → ')})`);
       }
 
       // ✅ FIX 3: Update counter for each ENGINE completed (atomic increment)

@@ -1,8 +1,8 @@
 export type WizardStepMessages = {
   ask: { base: string[]; reask?: string[] };
+  noInput?: { base: string[] };
   confirm?: { base: string[]; reask?: string[] };
   notConfirmed?: { base: string[] };
-  violation?: { base: string[]; reask?: string[] };
-  disambiguation?: { base: string[]; options: string[] };
+  invalid?: { base: string[]; reask?: string[] };
   success?: { base: string[]; reward?: string[] };
 };

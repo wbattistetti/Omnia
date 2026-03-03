@@ -11,6 +11,7 @@ export interface PromptVariables {
   currentText: string;
   testerFeedback: Array<{ value: string; expected: 'match' | 'no_match'; note?: string }>;
   engine: EngineType;
+  locale?: string; // Language code (e.g., 'it', 'en') for boolean task synonyms
 }
 
 /**
@@ -54,7 +55,7 @@ No markdown. No code fences. No text outside the JSON. No comments. Only valid J
  */
 export function buildAIPrompt(vars: PromptVariables): string {
   const contractSection = formatContractSection(vars.contract);
-  const engineSection = getEngineInstructions(vars.engine, vars.contract);
+  const engineSection = getEngineInstructions(vars.engine, vars.contract, vars.locale);
   const outputFormat = getOutputFormatForEngine(vars.engine);
 
   // Support both new structure (entity, subentities) and legacy (mainGroup, subgroups)
@@ -115,15 +116,107 @@ function formatOutputCanonical(keys: string[]): string {
 }
 
 /**
+ * Get boolean task synonyms based on language
+ */
+function getBooleanSynonyms(locale?: string): { yes: string[]; no: string[] } {
+  const lang = (locale || 'it').toLowerCase();
+
+  if (lang.startsWith('it')) {
+    return {
+      yes: ['sì', 'si', 'certo', 'assolutamente', 'ovviamente', 'ok', 'va bene', 'confermo', 'esatto', 'proprio così', 'corretto', 'giusto'],
+      no: ['no', 'non credo', 'non penso', 'assolutamente no', 'direi di no', 'per niente', 'non', 'negativo', 'sbagliato']
+    };
+  } else {
+    // Default to English
+    return {
+      yes: ['yes', 'yep', 'yeah', 'y', 'sure', 'absolutely', 'ok', 'okay', 'correct', 'right', 'true', 'indeed'],
+      no: ['no', 'nope', 'nah', 'n', 'not', 'negative', 'wrong', 'incorrect', 'false']
+    };
+  }
+}
+
+/**
+ * Check if task is boolean based on nodeLabel
+ */
+function isBooleanTask(nodeLabel: string): boolean {
+  const labelLower = nodeLabel.toLowerCase();
+  const booleanKeywords = [
+    'ha', 'possiede', 'esiste', 'è disponibile', 'è presente', 'verifica se', 'chiedi se', 'controlla se',
+    'has', 'possesses', 'exists', 'is available', 'is present', 'verify if', 'ask if', 'check if'
+  ];
+  return booleanKeywords.some(keyword => labelLower.includes(keyword));
+}
+
+/**
  * Get engine-specific instructions
  * All instructions are deterministic and based on the Semantic Contract
  */
-function getEngineInstructions(engine: string, contract: SemanticContract): string {
+function getEngineInstructions(engine: string, contract: SemanticContract, locale?: string): string {
   const subentities = contract.subentities || contract.subgroups || [];
   const outputKeys = contract.outputCanonical.keys || [];
+  const entityLabel = contract.entity?.label || contract.mainGroup?.name || '';
 
   switch (engine) {
     case 'regex':
+      const isBoolean = isBooleanTask(entityLabel);
+      const synonyms = getBooleanSynonyms(locale);
+
+      // For boolean tasks without subentities, use pattern without named groups
+      if (isBoolean && subentities.length === 0) {
+        return `Requirements:
+1. Generate a JavaScript-compatible regular expression.
+2. ✅ CRITICAL: This is a BOOLEAN TASK (yes/no question).
+3. You MUST generate a regex that captures YES/NO answers and their common synonyms,
+   NOT the literal question text.
+
+BOOLEAN TASK RULES (CRITICAL):
+- The regex MUST capture the user's answer (yes/no and synonyms), NOT the question.
+- The regex MUST be case-insensitive.
+- The regex MUST match yes/no and synonyms even inside longer sentences
+  (e.g., "sì, certo che ce l'ho", "no, non ancora").
+- The regex MUST NOT match the question text itself (e.g., "ha un ticket?").
+- The regex MUST allow optional punctuation and surrounding text.
+- ✅ DO NOT use named groups (NO (?<s1>...), NO (?<s2>...), etc.)
+- ✅ Use a simple pattern WITHOUT named groups - the extraction engine will use the full match value.
+- ✅ Since there are no subentities, the engine extracts the entire matched value directly.
+
+YES synonyms to include (${locale?.startsWith('it') ? 'Italian' : 'English'}):
+${synonyms.yes.map(s => `  - ${s}`).join('\n')}
+
+NO synonyms to include:
+${synonyms.no.map(s => `  - ${s}`).join('\n')}
+
+Example structure (to be adapted - NO named groups):
+\\b(${synonyms.yes.join('|')}|${synonyms.no.join('|')})\\b
+
+✅ CORRECT examples (NO named groups):
+- \\b(sì|si|certo|no|nope)\\b
+- (?i)\\b(yes|yep|no|nope)\\b
+
+❌ WRONG examples (with named groups - DO NOT USE):
+- \\b(?<s1>sì|si|no)\\b
+- (?i)\\b(?<s1>yes|no)\\b
+
+The regex should match answers like:
+- "sì" / "yes"
+- "no" / "nope"
+- "sì, certo" / "yes, sure"
+- "no, non ancora" / "no, not yet"
+- "assolutamente sì" / "absolutely yes"
+
+The regex should NOT match:
+- The question itself (e.g., "ha un ticket?")
+- Unrelated text
+
+4. Escape special characters properly for JavaScript (use \\\\ for backslashes).
+5. Respect ALL instructions found in the user text.
+6. Use tester feedback to refine the regex:
+   * If expected = "match" and no note → the string MUST match
+   * If expected = "no_match" → the string MUST NOT match
+   * If expected = "match" but note describes mismatch → adjust accordingly`;
+      }
+
+      // For non-boolean tasks or boolean tasks with subentities, use standard logic
       return `Requirements:
 1. Generate a JavaScript-compatible regular expression
 2. ✅ CRITICAL: Use EXACTLY these deterministic group names (based on index order):

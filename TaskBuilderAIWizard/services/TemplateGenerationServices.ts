@@ -261,8 +261,7 @@ export async function AIGenerateTemplateMessages(
       if (messages.noInput?.base) totalMessagesCount += messages.noInput.base.length;
       if (messages.confirm?.base) totalMessagesCount += messages.confirm.base.length;
       if (messages.notConfirmed?.base) totalMessagesCount += messages.notConfirmed.base.length;
-      if (messages.violation?.base) totalMessagesCount += messages.violation.base.length;
-      if (messages.disambiguation?.base) totalMessagesCount += messages.disambiguation.base.length;
+      if (messages.invalid?.base) totalMessagesCount += messages.invalid.base.length;
       if (messages.success?.base) totalMessagesCount += messages.success.base.length;
 
       console.log(`[AIGenerateTemplateMessages] ✅ Messages generated for "${task.label}" (${task.id})`, {

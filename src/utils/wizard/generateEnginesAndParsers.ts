@@ -131,7 +131,8 @@ export async function generateParserForEngine(
   node: TaskTreeNode,
   engineType: EngineType,
   contract: SemanticContract,
-  onProgress?: (progress: GenerationProgress) => void
+  onProgress?: (progress: GenerationProgress) => void,
+  locale?: string // Language code (e.g., 'it', 'en') for boolean task synonyms
 ): Promise<DataContractItem | null> {
   const nodeId = node.id || node.templateId;
 
@@ -152,7 +153,8 @@ export async function generateParserForEngine(
       contract,
       currentText: '', // Empty for initial generation
       testerFeedback: [],
-      engine: engineType
+      engine: engineType,
+      locale: locale || 'it' // Default to Italian if not provided
     });
 
     // Call AI to generate parser
@@ -197,12 +199,7 @@ export async function generateParserForEngine(
       });
     }
 
-    console.log(`[generateParserForEngine] ✅ Parser generated for ${engineType}`, {
-      nodeId,
-      nodeLabel: node.label,
-      engineType,
-      hasPatterns: engineType === 'regex' ? (contractItem as any).patterns?.length > 0 : true
-    });
+    console.log(`[generateParserForEngine] ✅ Parser generated: ${engineType} for "${node.label}"`);
 
     return contractItem;
   } catch (error) {

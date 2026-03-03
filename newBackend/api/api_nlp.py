@@ -52,26 +52,6 @@ def generate_regex(body: dict = Body(...)):
     provider = (body or {}).get("provider", "openai")
     model = (body or {}).get("model")
 
-    # ✅ LOG DETTAGLIATO DEL MESSAGGIO COMPLETO ALL'AI
-    print("\n" + "="*60)
-    print("[apiNew] MESSAGGIO COMPLETO ALL'AI (Refine Regex)")
-    print("="*60)
-    print(f"[apiNew] PROMPT (from fixed template):")
-    # Sanitize unicode for Windows console
-    safe_desc = description[:200].encode('ascii', 'ignore').decode('ascii')
-    print(f"[apiNew] {safe_desc}...")
-    print("-"*60)
-    print(f"[apiNew] REQUEST BODY COMPLETO:")
-    print(f"[apiNew] {json.dumps(body, indent=2, ensure_ascii=True)}")  # FIX: ensure_ascii=True per Windows
-    print("-"*60)
-    print(f"[apiNew] CONFIGURAZIONE:")
-    print(f"[apiNew]   - Provider: {provider}")
-    print(f"[apiNew]   - Model: {model or '(default)'}")
-    print(f"[apiNew]   - Engine: {engine}")
-    print(f"[apiNew]   - Has Contract: {tree_structure is not None}")
-    print(f"[apiNew]   - Tester Feedback: {len(tester_feedback) if isinstance(tester_feedback, list) else 0} items")
-    print("="*60)
-
     if not description:
         return {"error": "Description is required"}
 
@@ -84,13 +64,6 @@ def generate_regex(body: dict = Body(...)):
 
     # ✅ Get system message based on engine
     system_message = get_system_message_for_engine(engine)
-
-    # ✅ LOG DEL PROMPT COMPLETO PRIMA DELL'INVIO
-    print(f"[apiNew] PROMPT COMPLETO PRIMA DELL'INVIO ALL'AI:")
-    # Sanitize unicode for Windows console
-    safe_prompt = prompt.encode('ascii', 'ignore').decode('ascii')
-    print(f"[apiNew] {safe_prompt}")
-    print("="*60 + "\n")
 
     try:
         ai_response = chat_json([
@@ -798,22 +771,47 @@ The dataStructure is secondary and should only be used to detect:
 Do NOT use the dataStructure as the main driver.
 
 ------------------------------------------------------------
-SELECTION GUIDELINES
+ENGINE SELECTION RULES (CRITICAL)
 ------------------------------------------------------------
 
-- Use regex when the expected answer is predictable, structured,
-  or matches clear patterns (e.g., yes/no, dates, numbers, emails).
+1. BOOLEAN TASKS:
+   If the nodeLabel expresses a yes/no question (e.g., contains verbs like "ha", "possiede", "esiste", "è disponibile", "è presente", "verifica se", "chiedi se", "controlla se"):
+   - You MUST ALWAYS include: ["regex", "llm"] for this node.
+   - Regex is used to capture yes/no answers and their synonyms.
+   - llm is always the final fallback.
 
-- Use rule_based ONLY when the data structure contains multiple fields
-  that require deterministic splitting (e.g., address, personal data).
+2. FREE-TEXT / DISCURSIVE TASKS:
+   If the task expects a free-text or discursive answer (e.g., labels like "motivo", "descrizione", "cosa è successo", "problema", "note", "commento", "racconto", "spiegazione"):
+   - You MUST NOT include the regex engine.
+   - Regex cannot extract free-form natural language.
+   - Use: ["llm"] only (NER is not useful for free-text without specific entities).
 
-- Use ner ONLY when the task requires resolving semantic ambiguity
-  in free-form natural language (e.g., "motivo", "descrizione").
+3. COMPOSITE ENTITIES:
+   If the dataStructure (contract) shows that the node represents a composite entity with multiple subfields
+   (e.g., address, personal data, structured records):
+   - You MUST NOT include the regex engine.
+   - Use: ["rule_based", "llm"].
 
-- Use embedding ONLY when the node contains canonical values
-  explicitly listed in the data structure.
+4. CANONICAL VALUES:
+   If the node has canonical values (a closed list of possible values):
+   - If the values are simple, short, and have few or no synonyms (e.g., "rosso, verde, blu", "passaporto, carta d'identità, patente"):
+     → regex MAY be included together with llm (e.g., ["regex", "llm"]).
+   - If the values require semantic interpretation, synonyms, or many linguistic variants:
+     → DO NOT include regex.
+     → Use: ["embedding", "llm"].
 
-- ALWAYS include llm as the last engine in the list.
+5. RIGID PATTERNS:
+   If the expected answer follows a strict, predictable pattern (e.g., codes, numbers, dates in fixed format, CAP, codice fiscale, email, phone):
+   - You SHOULD include regex (e.g., ["regex", "llm"]).
+
+6. LLM ALWAYS:
+   For EVERY node, llm MUST ALWAYS be included as the final fallback engine.
+   This is NOT optional.
+
+7. NODE INDEPENDENCE:
+   You MUST evaluate each node independently.
+   Nodes MUST NOT influence each other.
+   Do NOT compare nodes or merge logic across nodes.
 
 ------------------------------------------------------------
 INPUT NODES
@@ -854,12 +852,6 @@ OUTPUT FORMAT (strict JSON)
             result = json.loads(ai_response)
         else:
             result = ai_response
-
-        # ✅ LOG: Raw AI response
-        print(f"\n[plan-engines] ========================================", flush=True)
-        print(f"[plan-engines] RAW AI RESPONSE:", flush=True)
-        print(f"[plan-engines] {json.dumps(result, indent=2, ensure_ascii=False)}", flush=True)
-        print(f"[plan-engines] ========================================\n", flush=True)
 
         # Validate response structure
         if not isinstance(result, dict) or "parsersPlan" not in result:
@@ -912,29 +904,6 @@ OUTPUT FORMAT (strict JSON)
                         valid_engines_sorted.append("llm")
 
                     node_label = node_label_map.get(node_id, "unknown")
-
-                    # ✅ LOG: Detailed plan for each node
-                    print(f"[plan-engines] NODE PLAN:", flush=True)
-                    print(f"  - nodeId: {node_id}", flush=True)
-                    print(f"  - nodeLabel: {node_label}", flush=True)
-                    print(f"  - engines (escalation order): {', '.join(valid_engines_sorted)}", flush=True)
-                    print(f"  - engine count: {len(valid_engines_sorted)}", flush=True)
-
-                    # ✅ WARNING: Check if boolean question has too many engines
-                    is_boolean_keywords = any(keyword in node_label.lower() for keyword in [
-                        "chiedi se", "verifica se", "controlla se", "ha", "possiede", "esiste"
-                    ])
-                    if is_boolean_keywords and len(valid_engines_sorted) > 2:
-                        print(f"  ⚠️  WARNING: Boolean question '{node_label}' has {len(valid_engines_sorted)} engines, expected 2 (regex + llm)", flush=True)
-                        print(f"     Expected: ['regex', 'llm']", flush=True)
-                        print(f"     Got: {valid_engines_sorted}", flush=True)
-                    elif is_boolean_keywords and len(valid_engines_sorted) == 2:
-                        if valid_engines_sorted == ["regex", "llm"]:
-                            print(f"  ✅ CORRECT: Boolean question has correct engines in escalation order", flush=True)
-                        else:
-                            print(f"  ⚠️  WARNING: Boolean question engines not in correct order", flush=True)
-                            print(f"     Expected: ['regex', 'llm']", flush=True)
-                            print(f"     Got: {valid_engines_sorted}", flush=True)
 
                     print("", flush=True)
 
@@ -1082,7 +1051,8 @@ def generate_ai_messages(body: dict = Body(...)):
         body: Request body containing:
             - contract: SemanticContract object (required)
             - nodeLabel: Optional node label for context
-            - stepType: Optional step type (start, noInput, noMatch, confirmation, notConfirmed, violation, disambiguation, success)
+            - stepType: Optional step type (start, noInput, noMatch, confirmation, notConfirmed, success)
+            Note: 'invalid' is generated automatically from constraints, not from AI messages
             - locale: Optional locale code (default: "it")
             - provider: Optional AI provider (default: "openai")
             - model: Optional AI model
@@ -1092,7 +1062,7 @@ def generate_ai_messages(body: dict = Body(...)):
             {
                 "success": True,
                 "messages": ["message1", "message2", ...],
-                "options": []  // Only for disambiguation step
+                "options": []
             }
         If stepType not provided (legacy):
             {
@@ -1133,7 +1103,7 @@ def generate_ai_messages(body: dict = Body(...)):
         # ✅ NEW: If stepType is provided, generate only for that step
         if step_type:
             # Validate stepType
-            valid_step_types = ["start", "noInput", "noMatch", "confirmation", "notConfirmed", "violation", "disambiguation", "success"]
+            valid_step_types = ["start", "noInput", "noMatch", "confirmation", "notConfirmed", "success"]
             if step_type not in valid_step_types:
                 return {
                     "success": False,
@@ -1197,8 +1167,6 @@ def generate_ai_messages(body: dict = Body(...)):
                     "noMatch": ["I didn't catch that. Could you repeat?"],
                     "confirmation": ["Is this correct: {{ '{{input}}' }}?"],
                     "notConfirmed": [f"Could you provide the correct {entity_label.lower()}?"],
-                    "violation": [f"Could you provide a valid {entity_label.lower()}?"],
-                    "disambiguation": ["Which one did you mean?"],
                     "success": ["Thanks, got it."]
                 }
                 validated_messages = fallbacks.get(step_type, ["Please provide the information."])
@@ -1206,19 +1174,19 @@ def generate_ai_messages(body: dict = Body(...)):
             return {
                 "success": True,
                 "messages": validated_messages,
-                "options": options if step_type == "disambiguation" else []
+                "options": []
             }
 
         # ✅ LEGACY: If stepType not provided, generate all steps (backward compatibility)
         else:
             # Generate prompt for all steps
-            prompt = get_ai_messages_prompt(contract, node_label)
+            prompt = get_ai_messages_prompt(contract, node_label, locale)
 
             # System message for AI messages generation
             system_message = (
                 "You are a Dialogue Messages Generator. "
                 "Your task is to generate natural, spoken messages for voice-based customer care systems. "
-                "You must generate messages for: start, noInput, noMatch, confirmation, and success. "
+                "You must generate messages for: start, noInput, noMatch, confirmation, notConfirmed, and success. "
                 "Return ONLY valid JSON, no markdown, no code fences, no comments."
             )
 
@@ -1240,7 +1208,7 @@ def generate_ai_messages(body: dict = Body(...)):
                 raise ValueError("AI response is not a dictionary")
 
             # Ensure all required message types exist
-            required_types = ["start", "noInput", "noMatch", "confirmation", "success"]
+            required_types = ["start", "noInput", "noMatch", "confirmation", "notConfirmed", "success"]
             validated = {}
 
             for msg_type in required_types:
@@ -1380,14 +1348,13 @@ def generate_node_messages(body: dict = Body(...)):
         ]
 
         # Aggiungi istruzioni per ogni stepType
+        # Note: 'invalid' is generated automatically from constraints, not from AI messages
         step_descriptions = {
             "start": "Initial message to ask for the data",
             "noMatch": "Escalation messages when user input doesn't match (progressively more polite)",
             "noInput": "Escalation messages when user doesn't respond (progressively more polite)",
             "confirmation": "Message to confirm the input with {{input}} placeholder",
             "notConfirmed": "Message when user doesn't confirm",
-            "violation": "Messages when input violates constraints",
-            "disambiguation": "Message to disambiguate between options",
             "success": "Success message when data is collected"
         }
 
@@ -1468,8 +1435,6 @@ def generate_node_messages(body: dict = Body(...)):
                 "noInput": "Non ho sentito, può ripetere?",
                 "confirmation": f"Confermi: {{input}}?",
                 "notConfirmed": f"Qual è la {entity_label.lower()} corretta?",
-                "violation": f"Il valore non è valido",
-                "disambiguation": "Quale intendi?",
                 "success": "Perfetto, grazie."
             }
 

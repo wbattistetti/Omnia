@@ -48,8 +48,6 @@ export interface UseResponseEditorCoreParams {
   onOpenSaveDialog?: () => void;
   // ✅ NEW: Ref per il pulsante save-to-library
   saveToLibraryButtonRef?: React.RefObject<HTMLButtonElement>;
-  // ✅ NEW: Deployment handler
-  onDeploymentClick?: () => void;
 }
 
 export interface UseResponseEditorCoreResult {
@@ -114,8 +112,6 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     saveDecisionMade,
     onOpenSaveDialog,
     saveToLibraryButtonRef,
-    // ✅ NEW: Deployment handler
-    onDeploymentClick,
   } = params;
 
   // Context hooks
@@ -226,6 +222,7 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
   // ✅ SINGLE SOURCE OF TRUTH: Read taskWizardMode and taskLabel from taskMeta
   // These flags are set when opening ResponseEditor from NodeRow
   // taskLabel is ALWAYS set here - if taskMeta is not available, use empty string temporarily
+  // ✅ NOTE: wizardStore is now reset explicitly in TaskTreeOpener before opening editor
   React.useEffect(() => {
     // ✅ SOLO se task.id è cambiato (nuovo task), inizializza
     // Se task.id è lo stesso, NON fare nulla (anche se taskMeta cambia riferimento)
@@ -236,7 +233,7 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
       return;
     }
 
-    // ✅ Se non c'è task, resetta
+    // ✅ Se non c'è task, resetta solo lo stato locale
     if (!currentTaskId) {
       if (previousTaskIdRef.current !== undefined) {
         setTaskWizardMode('none');
@@ -427,8 +424,6 @@ export function useResponseEditorCore(params: UseResponseEditorCoreParams): UseR
     // ✅ NEW: Pass setDockTree for dockable chat panel
     setDockTree,
     setWizardMode,
-    // ✅ NEW: Deployment handler (optional - can be passed from ResponseEditorLayout)
-    onDeploymentClick: onDeploymentClick || undefined,
     // ✅ NEW: Generalization params (passed from useResponseEditor)
     shouldBeGeneral: shouldBeGeneral,
     saveDecisionMade: saveDecisionMade,

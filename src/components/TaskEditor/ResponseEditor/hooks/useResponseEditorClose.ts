@@ -95,6 +95,10 @@ export function useResponseEditorClose(params: UseResponseEditorCloseParams) {
       return false;  // ✅ Blocca chiusura
     }
 
+    // ✅ CRITICAL: Reset wizard state when closing editor
+    const { useWizardStore } = await import('../../../../../TaskBuilderAIWizard/store/wizardStore');
+    useWizardStore.getState().reset();
+
     // ✅ Verifica se ci sono modifiche ai contracts non salvate
     const contractChange = contractChangeRef.current;
 

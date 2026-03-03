@@ -74,6 +74,16 @@ function ResponseEditorInner({ taskTree, onClose, onWizardComplete, task, isTask
     };
   }, [task?.id, tabId, setDockTree]);
 
+  // ✅ CRITICAL: Reset wizard state when component unmounts (cleanup)
+  useEffect(() => {
+    return () => {
+      // Cleanup: reset wizard state when ResponseEditor unmounts
+      import('../../../../TaskBuilderAIWizard/store/wizardStore').then(({ useWizardStore }) => {
+        useWizardStore.getState().reset();
+      });
+    };
+  }, []);
+
   // ✅ FASE 3.1: Use main composite hook FIRST
   // This hook calls useResponseEditorCore which is the SINGLE SOURCE OF TRUTH for taskLabel
   const editor = useResponseEditor({

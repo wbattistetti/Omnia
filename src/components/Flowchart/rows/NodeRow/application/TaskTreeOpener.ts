@@ -326,6 +326,19 @@ export class TaskTreeOpener {
         }
       );
 
+      // ✅ CRITICAL: Reset wizard state BEFORE opening editor
+      const { useWizardStore } = await import('../../../../../../TaskBuilderAIWizard/store/wizardStore');
+      const wizard = useWizardStore.getState();
+
+      // 1. Reset completo
+      wizard.reset();
+
+      // 2. Initialize from task instance (if exists) - currently does nothing, available for future use
+      const existingTask = taskRepository.getTask(row.id);
+      if (existingTask) {
+        wizard.initializeFromInstance(existingTask);
+      }
+
       const DialogueTaskService = (await import('@services/DialogueTaskService'))
         .default;
 
@@ -361,7 +374,7 @@ export class TaskTreeOpener {
           taskLabel: row.text || ''
         });
 
-        // Open ResponseEditor with taskWizardMode = 'adaptation'
+        // 3. Now open the editor
         taskEditorCtx.open({
           id: row.id,  // ALWAYS equals task.id
           type: metaTaskType,
@@ -406,11 +419,20 @@ export class TaskTreeOpener {
       }
     );
 
-    // ✅ CRITICAL: Use row.id as task ID (task.id === row.id ALWAYS)
-    // The wizard will create the task with this ID when completed
-    // ✅ NOTE: taskWizardMode is just a flag - orchestrator controls when wizard actually starts
-    // TaskTreeOpener does NOT start the wizard directly - it only sets the flag
-    // The orchestrator (via useWizardIntegrationOrchestrated) will start the wizard when it sees taskWizardMode === 'full'
+    // ✅ CRITICAL: Reset wizard state BEFORE opening editor
+    const { useWizardStore } = await import('../../../../../../TaskBuilderAIWizard/store/wizardStore');
+    const wizard = useWizardStore.getState();
+
+    // 1. Reset completo
+    wizard.reset();
+
+    // 2. Initialize from task instance (if exists) - currently does nothing, available for future use
+    const task = taskRepository.getTask(row.id);
+    if (task) {
+      wizard.initializeFromInstance(task);
+    }
+
+    // 3. Now open the editor
     taskEditorCtx.open({
       id: row.id,  // ALWAYS equals task.id (wizard will create task with this ID)
       type: TaskType.UtteranceInterpretation,

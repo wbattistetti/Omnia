@@ -55,6 +55,14 @@ interface WizardStore {
   // ACTIONS - Synchronous state updates
   // ============================================
 
+  // ✅ Reset wizard state to initial values
+  reset: () => void;
+
+  // ✅ Initialize wizard state from task instance (if exists)
+  // Note: Currently, task instances don't store wizard state directly.
+  // This function is available for future use when wizard state needs to be restored.
+  initializeFromInstance: (instance: any) => void;
+
   setWizardMode: (mode: WizardMode) => void;
   setCurrentStep: (step: WizardStep) => void;
   setDataSchema: (schema: WizardTaskTreeNode[] | ((prev: WizardTaskTreeNode[]) => WizardTaskTreeNode[])) => void;
@@ -75,7 +83,6 @@ interface WizardStore {
   setStructureConfirmed: (confirmed: boolean) => void;
   // ✅ NEW: Update phase counter (source of truth for progress)
   updatePhaseCounter: (phase: 'constraints' | 'parsers' | 'messages', completed: number, total: number) => void;
-  reset: () => void;
 
   // ============================================
   // SELECTORS - Computed values
@@ -146,6 +153,47 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
   // ============================================
   // ACTIONS
   // ============================================
+
+  // ✅ Reset wizard state to initial values
+  reset: () => set({
+    wizardMode: WizardMode.START,
+    currentStep: 'idle',
+    dataSchema: [],
+    constraints: [],
+    // ❌ REMOVED: nlpContract - dataContract is now in node.dataContract
+    messages: new Map(),
+    messagesGeneralized: new Map(),
+    messagesContextualized: new Map(),
+    shouldBeGeneral: false,
+    activeNodeId: null,
+    selectedModuleId: null,
+    correctionInput: '',
+    currentParserSubstep: null,
+    currentMessageSubstep: null,
+    pipelineSteps: initialPipelineSteps,
+    structureConfirmed: false,
+    phaseCounters: {
+      constraints: { completed: 0, total: 0 },
+      parsers: { completed: 0, total: 0 },
+      messages: { completed: 0, total: 0 }
+    }
+  }),
+
+  // ✅ Initialize wizard state from task instance (if exists)
+  // Note: Currently, task instances don't store wizard state directly.
+  // This function is available for future use when wizard state needs to be restored.
+  // For now, it does nothing (reset() is sufficient for clean state).
+  initializeFromInstance: (instance) => {
+    // ✅ Future: Extract dataSchema, constraints, messages from instance if needed
+    // For now, wizard always starts fresh (reset is sufficient)
+    if (instance) {
+      // TODO: If instance contains wizard state, restore it here
+      // Example:
+      // if (instance.dataSchema) set({ dataSchema: instance.dataSchema });
+      // if (instance.constraints) set({ constraints: instance.constraints });
+      // if (instance.messages) set({ messages: new Map(Object.entries(instance.messages)) });
+    }
+  },
 
   setWizardMode: (mode) => {
     // ✅ POINT OF NO RETURN: If structure is confirmed, NEVER go back to DATA_STRUCTURE_PROPOSED
@@ -325,30 +373,6 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
   }),
 
   setStructureConfirmed: (confirmed) => set({ structureConfirmed: confirmed }),
-
-  reset: () => set({
-    wizardMode: WizardMode.START,
-    currentStep: 'idle',
-    dataSchema: [],
-    constraints: [],
-    // ❌ REMOVED: nlpContract - dataContract is now in node.dataContract
-    messages: new Map(),
-    messagesGeneralized: new Map(),
-    messagesContextualized: new Map(),
-    shouldBeGeneral: false,
-    activeNodeId: null,
-    selectedModuleId: null,
-    correctionInput: '',
-    currentParserSubstep: null,
-    currentMessageSubstep: null,
-    pipelineSteps: initialPipelineSteps,
-    structureConfirmed: false,
-    phaseCounters: {
-      constraints: { completed: 0, total: 0 },
-      parsers: { completed: 0, total: 0 },
-      messages: { completed: 0, total: 0 }
-    }
-  }),
 
   // ============================================
   // SELECTORS
